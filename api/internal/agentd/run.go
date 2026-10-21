@@ -91,8 +91,10 @@ type Daemon struct {
 	// attempt gets a copy of and gives back refreshed (codexlogin.go).
 	CodexHome string
 	// TestDB is the programs a test database needs on this host (TD-403,
-	// testdb.go); nil: no attempt gets one, and its log says so.
-	TestDB *TestDBTools
+	// testdb.go); nil: no attempt gets one, and its log says so. testDBSwept
+	// is when Recover last swept what test databases left.
+	TestDB      *TestDBTools
+	testDBSwept time.Time
 	// Confined, in tests, says which attempts may share the host instead of
 	// the wall (share.go).
 	Confined func(cl *Claimed, prep TaskSpec) bool

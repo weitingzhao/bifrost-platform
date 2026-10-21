@@ -71,7 +71,7 @@ func TestAPlatformAttemptHasATestDatabaseOfItsOwn(t *testing.T) {
 				}
 				return
 			}
-			sock := filepath.Join(root, "s")
+			sock := filepath.Join(root, "d")
 			for _, want := range []string{"AGENTRT_TEST_PG=host=" + sock + "/", " port=5432 ", "AGENTRT_TEST_REDIS=unix://" + sock + "/",
 				"AGENTRT_TEST_REQUIRED=1\n"} {
 				if !strings.Contains(string(got), want) {

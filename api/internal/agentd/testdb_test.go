@@ -112,39 +112,114 @@ func probeTestDB() int {
 	return 0
 }
 
-// A stop ends the whole group, as agentd ends an attempt's: the executor,
-// Postgres and Redis go, and the stage removes the directory on its way out.
-func TestTestDBStageEndsWithItsGroup(t *testing.T) {
-	tools := testDBTools(t)
-	out := filepath.Join(shortDir(t), "a1.out")
-	must(t, os.MkdirAll(attemptTmp(out), 0o700))
-	dir := testDBDir(out)
-	argv := append(testDBArgv(os.Args[0], tools, "", out, false), "sh", "-c", "sleep 60")
+// eventually waits, up to limit, for cond, and fails the test with what if
+// it never holds.
+func eventually(t *testing.T, limit time.Duration, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(limit); !cond(); time.Sleep(100 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s, after %s", what, limit)
+		}
+	}
+}
+
+// startStage starts the stage over out in a process group of its own, as
+// agentd's launcher does, with an executor that waits, and returns once the
+// database is up; done receives the stage's end.
+func startStage(t *testing.T, tools *TestDBTools, root, out string) (*exec.Cmd, chan error) {
+	t.Helper()
+	sock := testDBSockDir(root, out)
+	argv := append(testDBArgv(os.Args[0], tools, root, out, false), "sh", "-c", "sleep 60")
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = out, launcherEnv()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	must(t, cmd.Start())
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	for deadline := time.Now().Add(time.Minute); !redisUp(filepath.Join(dir, "redis.sock")) || !postgresOf(t, dir); time.Sleep(100 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("the database did not come up")
-		}
-	}
+	t.Cleanup(func() { KillGroup(cmd.Process.Pid) })
+	eventually(t, time.Minute, "the database did not come up", func() bool {
+		return redisUp(filepath.Join(sock, "redis.sock")) && postgresOf(t, testDBDir(out))
+	})
+	return cmd, done
+}
+
+// A stop ends the whole group, as agentd ends an attempt's (Terminate: TERM,
+// then KILL after the grace): the executor, Postgres and Redis go, and the
+// stage stops the database at once. What it has not removed by the time the
+// group is gone (on a loaded host the grace can run out first; coordinator
+// 2026-10-20), settle removes, as it does after every end; so the directory
+// is gone once both have run, whichever removed it.
+func TestTestDBStageEndsWithItsGroup(t *testing.T) {
+	tools := testDBTools(t)
+	out := filepath.Join(shortDir(t), "a1.out")
+	must(t, os.MkdirAll(attemptTmp(out), 0o700))
+	dir := testDBDir(out)
+	cmd, done := startStage(t, tools, "", out)
 	Terminate(cmd.Process.Pid, 10*time.Second)
 	select {
 	case <-done:
-	case <-time.After(15 * time.Second):
+	case <-time.After(time.Minute):
 		t.Fatal("the stage did not end")
 	}
-	if gone, _ := groupGone(cmd.Process.Pid); !gone {
-		t.Fatal("the group is not gone")
-	}
-	if postgresOf(t, dir) {
-		t.Fatal("Postgres outlived the stop")
-	}
+	eventually(t, 30*time.Second, "the group is not gone", func() bool { gone, _ := groupGone(cmd.Process.Pid); return gone })
+	removeTestDB("", out, t.Logf) // settle, once the group is gone
+	eventually(t, 30*time.Second, "Postgres outlived the stop", func() bool { return !postgresOf(t, dir) })
 	if _, serr := os.Stat(dir); !errors.Is(serr, os.ErrNotExist) {
 		t.Fatalf("the database's directory is still there: %v", serr)
+	}
+}
+
+// An agentd that never got to settle (killed with the group, or stopped
+// between the kill and settle): its next start sweeps what the killed stage
+// left, the database's directory and its sockets', and keeps those of an
+// attempt the registry still holds.
+func TestAKilledStageIsSweptUp(t *testing.T) {
+	tools := testDBTools(t)
+	root := shortDir(t)
+	reg, err := OpenRegistry(filepath.Join(root, "registry.json"))
+	must(t, err)
+	d := &Daemon{Root: root, Registry: reg, Logf: t.Logf}
+	work := filepath.Join(root, "tasks", "t_01M5E53AASSQBNFFHH29B3S79P", "a1")
+	out := work + ".out"
+	must(t, os.MkdirAll(attemptTmp(out), 0o700))
+	a := &Attempt{Out: out, root: root}
+	_, err = withTestDB(os.Args[0], tools, a, Spawn{Argv: []string{"sh"}}, false) // makes the sockets' directory, as Run does
+	must(t, err)
+	cmd, done := startStage(t, tools, root, out)
+	KillGroup(cmd.Process.Pid) // no grace: nothing of the stage's own cleanup runs
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("the stage did not end")
+	}
+	eventually(t, 30*time.Second, "the killed group is not gone", func() bool { gone, _ := groupGone(cmd.Process.Pid); return gone })
+	dir, sock := testDBDir(out), testDBSockDir(root, out)
+	for _, p := range []string{dir, sock} {
+		if _, serr := os.Stat(p); serr != nil {
+			t.Fatalf("the kill left no %s to sweep (%v): the test proves nothing", p, serr)
+		}
+	}
+	// Another attempt's, which the registry holds, stays.
+	keep := filepath.Join(root, "tasks", "t_01M5E53AASSQBNFFHH29B3S79Q", "a1")
+	keepDB, keepSock := testDBDir(keep+".out"), testDBSockDir(root, keep+".out")
+	for _, p := range []string{keepDB, keepSock} {
+		must(t, os.MkdirAll(p, 0o700))
+	}
+	must(t, reg.Put(Entry{AttemptID: "a_keep", TaskID: "t_keep", Workdir: keep, Phase: "running"}))
+	d.Hold("a_keep") // a Run of this agentd's: Recover leaves it alone
+	must(t, d.Recover(context.Background()))
+	for _, p := range []string{dir, sock} {
+		if _, serr := os.Stat(p); !errors.Is(serr, os.ErrNotExist) {
+			t.Fatalf("%s was not swept: %v", p, serr)
+		}
+	}
+	for _, p := range []string{keepDB, keepSock} {
+		if _, serr := os.Stat(p); serr != nil {
+			t.Fatalf("the sweep took %s of an attempt the registry holds: %v", p, serr)
+		}
+	}
+	if postgresOf(t, dir) {
+		t.Fatal("Postgres outlived the kill")
 	}
 }
 

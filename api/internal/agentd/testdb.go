@@ -20,6 +20,8 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -110,18 +112,23 @@ func isProgram(p string) bool {
 func testDBDir(out string) string { return filepath.Join(attemptTmp(out), "db") }
 
 // testDBSockDir is where its sockets are: a short directory of the
-// attempt's own under root, as cursor's data directory is (cursorDataDir),
-// named by a digest of out. A socket path is short (sockMax), and one under
-// the attempt's output on the agent host was within two bytes of it (06,
-// 2026-10-20: 105 of 107 for STG's root). With no root (a test) it is in the
-// database's directory.
+// attempt's own under root, named by a digest of out, as cursor's data
+// directory is (cursorDataDir), but in a directory of the test databases'
+// own (testDBSockRoot), which the sweep reads (sweepTestDBs). A socket path
+// is short (sockMax), and one under the attempt's output on the agent host
+// was within two bytes of it (06, 2026-10-20: 105 of 107 for STG's root).
+// With no root (a test) it is in the database's directory.
 func testDBSockDir(root, out string) string {
 	if root == "" {
 		return testDBDir(out)
 	}
 	sum := sha256.Sum256([]byte("testdb\x00" + filepath.Clean(out)))
-	return filepath.Join(root, "s", hex.EncodeToString(sum[:])[:24])
+	return filepath.Join(root, testDBSockRoot, hex.EncodeToString(sum[:])[:24])
 }
+
+// testDBSockRoot is the directory under agentd's root that holds the test
+// databases' sockets' directories and nothing else.
+const testDBSockRoot = "d"
 
 // sockMax is the longest path of a unix socket: the size of sun_path less
 // its NUL. Postgres refuses a longer one.
@@ -251,8 +258,11 @@ func RunTestDB(args []string) int {
 		return 127
 	}
 	// The group's TERM reaches the executor and the database as well as
-	// this stage, which goes on to stop the database once the executor has
-	// ended. A caught signal is the default again in what it starts.
+	// this stage. The attempt is ending, within agentd's grace, so the stage
+	// stops the database at once rather than after the executor, and removes
+	// its directories once the executor has ended; what an end that kills it
+	// first leaves, settle or the sweep removes (sweepTestDBs). A caught
+	// signal is the default again in what the stage starts.
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	ctx, cancel := context.WithTimeout(context.Background(), testDBLimit)
@@ -287,8 +297,19 @@ func RunTestDB(args []string) int {
 		fmt.Fprintln(os.Stderr, "agentd testdb:", err)
 		return 127
 	}
+	var once sync.Once
+	stop := func() { once.Do(db.stop) }
+	ended := make(chan struct{})
+	safego.Go("agentd-testdb-signal", func() {
+		select {
+		case <-sigs:
+			stop()
+		case <-ended:
+		}
+	})
 	_ = cmd.Wait()
-	db.stop()
+	close(ended)
+	stop()
 	if err = gone(); err != nil {
 		fmt.Fprintln(os.Stderr, "agentd testdb:", err)
 	}
@@ -451,9 +472,11 @@ func logTail(dir, name string) string {
 // before they are killed: within agentd's grace for a group it ends.
 var testDBStop = 8 * time.Second
 
-// stop ends what started: Postgres by its fast shutdown and Redis by TERM,
-// both told at once, and whatever has not stopped by one deadline killed
-// (review td404-3 B2: one after the other, the two waits made 16 s).
+// stop ends what started: Postgres by its immediate shutdown (SIGQUIT: the
+// database is thrown away, and it still releases its shared memory; measured
+// 0.02 s on this Mac, PostgreSQL 17.11) and Redis by TERM, both told at once,
+// and whatever has not stopped by one deadline killed (review td404-3 B2:
+// one after the other, the two waits made 16 s).
 func (db *testDB) stop() {
 	if db == nil {
 		return
@@ -466,7 +489,7 @@ func (db *testDB) stop() {
 	for _, p := range []struct {
 		prog
 		sig syscall.Signal
-	}{{prog{db.postgres, db.pgDone}, syscall.SIGINT}, {prog{db.redis, db.rdDone}, syscall.SIGTERM}} {
+	}{{prog{db.postgres, db.pgDone}, syscall.SIGQUIT}, {prog{db.redis, db.rdDone}, syscall.SIGTERM}} {
 		if p.cmd != nil {
 			_ = p.cmd.Process.Signal(p.sig)
 			started = append(started, p.prog)
@@ -538,5 +561,72 @@ func removeTestDB(root, out string, logf func(format string, args ...any)) {
 	defer func() { _ = s.Close() }()
 	if err = removeIn(s, filepath.Base(sock)); err != nil {
 		logf("agentd: the test database's sockets of %s: %v", out, err)
+	}
+}
+
+// testDBSweepEvery is how often the sweep runs, once at agentd's start and
+// then at most this often (Recover runs between claims).
+const testDBSweepEvery = 10 * time.Minute
+
+// sweepTestDBs removes what test databases left that belongs to no attempt
+// in the registry: an attempt's directories, in its output and under
+// testDBSockRoot, go with its end (the stage, or settle once its group is
+// gone); this is for what such an end could not remove (a removal that
+// failed, an agentd that stopped between the kill and settle, a registry
+// written by an agentd from before). What is there is read before the
+// registry: an attempt makes its directories after its entry is written
+// (Run), and settle removes them before the entry, so a directory listed here
+// whose attempt is not in the registry read after is no attempt's.
+func (d *Daemon) sweepTestDBs() {
+	if d.Root == "" {
+		return
+	}
+	socks, _ := os.ReadDir(filepath.Join(d.Root, testDBSockRoot))
+	dbs, _ := filepath.Glob(filepath.Join(d.Root, "tasks", "*", "*.out", "tmp", "db"))
+	if len(socks) == 0 && len(dbs) == 0 {
+		return
+	}
+	d.mu.Lock()
+	entries, err := d.Registry.Load()
+	d.mu.Unlock()
+	if err != nil {
+		d.logf("agentd: the test databases' sweep: %v", err)
+		return
+	}
+	ownSock, ownDB := map[string]bool{}, map[string]bool{}
+	for _, e := range entries {
+		out := e.Workdir + ".out"
+		ownSock[filepath.Base(testDBSockDir(d.Root, out))] = true
+		ownDB[testDBDir(out)] = true
+	}
+	n := 0
+	if s, oerr := openWithin(d.Root, filepath.Join(d.Root, testDBSockRoot)); oerr == nil {
+		for _, e := range socks {
+			if !ownSock[e.Name()] {
+				if err = removeIn(s, e.Name()); err != nil {
+					d.logf("agentd: the test databases' sweep: %s: %v", e.Name(), err)
+				} else {
+					n++
+				}
+			}
+		}
+		_ = s.Close()
+	}
+	for _, db := range dbs {
+		if ownDB[db] {
+			continue
+		}
+		out := strings.TrimSuffix(db, string(filepath.Separator)+filepath.Join("tmp", "db"))
+		if r, oerr := ownDirAt(d.Root, out); oerr == nil {
+			if err = removeIn(r, filepath.Join("tmp", "db")); err != nil {
+				d.logf("agentd: the test databases' sweep: %s: %v", db, err)
+			} else {
+				n++
+			}
+			_ = r.Close()
+		}
+	}
+	if n > 0 {
+		d.logf("agentd: removed %d directories of test databases no attempt holds", n)
 	}
 }

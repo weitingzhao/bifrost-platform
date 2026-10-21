@@ -637,6 +637,10 @@ func (d *Daemon) Recover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if d.testDBSwept.IsZero() || time.Since(d.testDBSwept) >= testDBSweepEvery {
+		d.testDBSwept = time.Now()
+		d.sweepTestDBs() // what killed stages left (testdb.go)
+	}
 	// What an exam sitting cut short left running is ended as well, before
 	// anything is sent; one not known gone blocks the host (Blocked; review
 	// 417 A1).
