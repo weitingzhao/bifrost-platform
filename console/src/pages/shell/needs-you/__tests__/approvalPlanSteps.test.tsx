@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import approvals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
-import { approvalNumbers, approvalsByStep, stepsOfApproval } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalNumbers, approvalsByStep, stepsOfApproval } from '@/api/agentRuntimePlan'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { ApprovalPlanSteps } from '@/pages/shell/needs-you/ApprovalPlanSteps'
@@ -30,8 +30,8 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   if (source.plan === 'not a tree') return json({ root: 'R2', nodes: null })
   return json(plan)
 })
-function show(node: ReactNode) {
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{node}</QueryClientProvider>)
+function show(node: ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>)
 }
 beforeEach(() => {
   source.plan = 'approvals'
@@ -81,8 +81,10 @@ describe('a request and its plan step', () => {
 
   it('says nothing under a row until the plan is read, when it could not be read, or when not asked to', async () => {
     source.plan = 'fail'
-    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} planSteps />)
-    await vi.waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes('/agentrt/plan?'))).toBe(true), { timeout: 5000 })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} planSteps />, client)
+    // The read has failed (not still loading) when the row is looked at (review 484 C1).
+    await vi.waitFor(() => expect(client.getQueryState(['agent-runtime-plan', PLAN_ROOT])?.status).toBe('error'), { timeout: 5000 })
     expect(screen.queryByRole('link', { name: /^Plan step/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/The plan could not be read/)).not.toBeInTheDocument()
     cleanup()
