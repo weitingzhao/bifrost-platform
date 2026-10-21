@@ -192,7 +192,8 @@ const RULE_DEPTH = 8
 
 /**
  * The approvals a done rule waits on: every approval_executed number in it, an atom or nested in all / any as
- * plan/rule.go reads it, each once, in the order the rule names them. Anything else in the rule is passed over.
+ * plan/rule.go reads it, each once, in the order the rule names them. Anything else in the rule is passed over. A number
+ * past JavaScript's safe integers is not read: it would round to another request's (review 476 C1).
  */
 export function approvalNumbers(rule: unknown, depth = 0): number[] {
   if (depth > RULE_DEPTH || rule === null || typeof rule !== 'object' || Array.isArray(rule)) return []

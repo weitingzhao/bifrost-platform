@@ -20,13 +20,14 @@ const plan = approvals.plan
 const STEP_16 = 'Plan step 2.1-3 (yours): （你）批 PROD 迁移作业（O10、O11） — item 2.1 数据层：状态库'
 const STEP_16_TOO = 'Plan step 2.4-2: （补强）★（你）批准 — item 2.4 缩进用不换行空格'
 
-const source = vi.hoisted(() => ({ plan: 'approvals' as 'approvals' | 'absent' | 'fail' }))
+const source = vi.hoisted(() => ({ plan: 'approvals' as 'approvals' | 'absent' | 'fail' | 'not a tree' }))
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
 const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input)
   if (!url.includes('/agentrt/plan?')) throw new Error(`Unexpected URL ${url}`)
   if (source.plan === 'absent') return json(imported.absent.body, imported.absent.status)
   if (source.plan === 'fail') return json({ error: 'unavailable', message: 'the runtime is not connected' }, 503)
+  if (source.plan === 'not a tree') return json({ root: 'R2', nodes: null })
   return json(plan)
 })
 function show(node: ReactNode) {
@@ -46,7 +47,8 @@ describe('the approvals a done rule waits on', () => {
     expect(approvalNumbers({ any: [{ approval_executed: 16 }, { all: [{ approval_executed: 18 }, { approval_executed: 16 }] }] })).toEqual([16, 18])
     // Not an approval: another atom, a gate rule, a number that is not a positive integer, a string, a list at the top.
     for (const rule of [{ manual: 'by hand' }, { gates_passed: [{ test: 'T05' }], env: 'prod' }, { approval_executed: 0 },
-      { approval_executed: 1.5 }, { approval_executed: '16' }, [{ approval_executed: 16 }], null, undefined, {}]) {
+      { approval_executed: 1.5 }, { approval_executed: '16' }, { approval_executed: 9007199254740993 }, [{ approval_executed: 16 }],
+      null, undefined, {}]) {
       expect(approvalNumbers(rule)).toEqual([])
     }
     // Deeper than plan/rule.go reads (8) is passed over.
@@ -86,10 +88,14 @@ describe('a request and its plan step', () => {
     show(<ApprovalPlanSteps number={16} />)
     expect(await screen.findByText('No step of the plan waits on this request.')).toBeInTheDocument()
     cleanup()
-    source.plan = 'fail'
-    show(<ApprovalPlanSteps number={16} />)
-    expect(await screen.findByText('The plan could not be read: which step waits on this request is not known.')).toBeInTheDocument()
-    expect(screen.queryByText('No step of the plan waits on this request.')).not.toBeInTheDocument()
+    for (const answer of ['fail', 'not a tree'] as const) {
+      // A failed read, and a 200 that is not the round's tree (review 476 C2), are said as unread, never as no step.
+      cleanup()
+      source.plan = answer
+      show(<ApprovalPlanSteps number={16} />)
+      expect(await screen.findByText('The plan could not be read: which step waits on this request is not known.')).toBeInTheDocument()
+      expect(screen.queryByText('No step of the plan waits on this request.')).not.toBeInTheDocument()
+    }
   })
 
   it('says nothing for a request without a number', () => {

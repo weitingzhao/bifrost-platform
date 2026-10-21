@@ -8,6 +8,7 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
+import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 
 const ADMIN_CAPS: AuthCapabilities = {
   authenticated: true,
@@ -37,6 +38,8 @@ let client: QueryClient
 let read: (id: string) => Promise<Response>
 let post: (init: RequestInit) => Promise<Response>
 let reads: string[]
+let posts: string[]
+let plan: () => Response
 let moduleScript: HTMLScriptElement | undefined
 
 beforeEach(() => {
@@ -52,15 +55,20 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['platform', 'auth', 'capabilities', 'fixture-only'], ADMIN_CAPS)
   reads = []
+  posts = []
   read = async id => json(row('pending', id === '58' || id === 'record-b' ? 'record-b' : 'record-a'))
   post = async () => json({ status: 'executed' })
+  // The runtime holds no plan here (its route's own 404).
+  plan = () => json({ error: 'not_found', message: 'no such record' }, 404)
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (init?.method === 'POST') return post(init)
+    if (init?.method === 'POST') { posts.push(url); return post(init) }
     if (url === '/index.html') return Promise.resolve(new Response('<script type="module" src="/same.js"></script>'))
     if (url.includes('?status=')) return Promise.resolve(json({ approvals: [] }))
     // The request's AI assessment (TD-391) is read beside it; none here.
     if (url.includes('/agentrt/events?')) return Promise.resolve(json([]))
+    // So is the plan, for the step the request is the approval for (W-31 2.5 slice 5 gap 4).
+    if (url.includes('/agentrt/plan?')) return Promise.resolve(plan())
     const id = url.split('/').at(-1)!
     reads.push(id)
     return read(id)
@@ -400,4 +408,19 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     expect(button.hasAttribute('disabled')).toBe(false)
     expect(screen.queryByText(/A newer Console/)).toBeNull()
   })
+})
+
+// A plan step's "Request #16" opens the request by its number (W-31 2.5 slice 5 gap 4, v4 §20.5 scenario 10): the page
+// says which step waits on it, from the runtime's plan, and decides the record the number names, by its own id.
+it('opened by its number from the plan, says its plan step and approves the record by its id', async () => {
+  read = async () => json(buildPlatformApproval({ id: 'record-a', number: 16, status: 'pending' }))
+  plan = () => json(planApprovals.plan)
+  const button = await open('16')
+  const step = await screen.findByRole('link', { name: 'Plan step 2.1-3 (yours): （你）批 PROD 迁移作业（O10、O11） — item 2.1 数据层：状态库' })
+  expect(step.getAttribute('href')).toBe('#work?section=plan')
+  expect(screen.getByRole('link', { name: 'Plan step 2.4-2: （补强）★（你）批准 — item 2.4 缩进用不换行空格' })).toBeTruthy()
+  fireEvent.click(button)
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+  expect(posts).toHaveLength(1)
+  expect(posts[0]).toContain('/approvals/record-a/')
 })

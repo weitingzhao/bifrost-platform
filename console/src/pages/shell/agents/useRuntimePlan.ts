@@ -4,6 +4,7 @@ import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
 import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
+import { record } from '@/api/agentRuntime'
 
 /** The one line a plan pane shows while the runtime holds no plan. */
 export const PLAN_NOT_IMPORTED = 'The plan is not in the agent runtime here yet.'
@@ -108,6 +109,8 @@ export function useApprovalSteps(enabled = true): ApprovalStepsRead {
     if (isError || isPaused) return { read: 'error' }
     if (data === undefined) return { read: 'loading' }
     const doc = data.found ? data.doc : null
+    // An answer that is not this round's tree is a failed read, never one with no steps (review 476 C2).
+    if (doc != null && (record(doc).root !== PLAN_ROOT || !Array.isArray(record(doc).nodes))) return { read: 'error' }
     return { read: 'ok', stepsOf: n => doc == null || n == null || n <= 0 ? [] : stepsOfApproval(doc, n) }
   }, [data, isError, isPaused])
 }
