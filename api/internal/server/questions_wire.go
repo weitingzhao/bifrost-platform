@@ -140,6 +140,16 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			"owner_duty":      "goal",
 			"idempotency_key": card.Key,
 		}
+		// A plan change's card recommends applying it when its rules say so
+		// (TD-397 F-T33-rec: the catalog's first gates, gatesRecommend), with
+		// why beside that option; STG's rule takes it, PROD's Owner reads it.
+		if card.Recommended > 0 && len(card.Options) == 0 {
+			options := []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}}
+			if card.Recommended <= len(options) && card.RecommendedWhy != "" {
+				options[card.Recommended-1]["detail"] = card.RecommendedWhy
+			}
+			req["options"], req["recommended"] = options, card.Recommended
+		}
 		// A planner's card (W-31 2.2b): its own options and default; the
 		// work goes on with the default meanwhile. A mission's card: its own
 		// options, no default, and how soon it says (missiondecide.go).
@@ -191,6 +201,18 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			// it names the same task and options (review 439 A3).
 			q, ok, lerr := rt.svc.LookupKey(agentRuntimeRequester, card.Key)
 			if lerr != nil || !ok || !sameCard(q, card) {
+				return "", fmt.Errorf("the question store answered %d: %v (the card under its key is not this one: %v)", res.Code, res.Body, lerr)
+			}
+			return q.ID, nil
+		case len(card.Options) == 0 && res.Code == http.StatusConflict && msg == questions.KeyReused:
+			// A plan change's card made by an earlier try whose transaction
+			// then failed, when what the runtime recommends has changed since
+			// (the plan moved; review td397-rec-1 A1): the card under its key
+			// is this card when it asks the same in all else. Whether a
+			// recommendation still holds is read again where a rule's answer
+			// is used (gatesStillRecommended).
+			q, ok, lerr := rt.svc.LookupKey(agentRuntimeRequester, card.Key)
+			if lerr != nil || !ok || !sameAsked(q, raw) {
 				return "", fmt.Errorf("the question store answered %d: %v (the card under its key is not this one: %v)", res.Code, res.Body, lerr)
 			}
 			return q.ID, nil
@@ -301,6 +323,24 @@ func sameCard(q questions.Question, c store.Card) bool {
 	}
 	for i, o := range q.Options {
 		if o.Label != c.Options[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// sameAsked says whether a question the store holds asks what the request
+// raw asks, as the store cleans it: the same title, body, option labels,
+// urgency, meanwhile, duty and task. Only the recommendation and the
+// options' details may differ.
+func sameAsked(q questions.Question, raw []byte) bool {
+	c, err := questions.CanonicalizeRequestJSON(raw)
+	if err != nil || q.Title != c.Title || q.Body != c.Body || q.Urgency != c.Urgency || q.Meanwhile != c.Meanwhile ||
+		q.OwnerDuty != c.OwnerDuty || q.TaskID != c.TaskID || len(q.Options) != len(c.Options) {
+		return false
+	}
+	for i, o := range q.Options {
+		if o.Label != c.Options[i].Label {
 			return false
 		}
 	}
