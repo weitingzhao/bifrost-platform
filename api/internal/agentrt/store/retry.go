@@ -25,6 +25,13 @@ import (
 // An attempt that ended any other way (a stop, a restart of agentd or of the
 // host, a lost lease, capacity, or a result taken) does not count and ends
 // the run: a run is what the task's latest attempts failed in a row.
+//
+// Once every executor on a ready task's route is withdrawn, the controller
+// blocks it and it gets the blocked card (withdrawn.go, TD-395). "Give it one
+// more round" there offers the task once more to each executor withdrawn from
+// it: one more failure withdraws it again, and the task is blocked again
+// with a new card. The round starts at the task's move back to ready, whose
+// reason carries liftMark; the failures leased after it are the ones since.
 
 const (
 	// retryBackoff is how long an executor waits after its first failure
@@ -43,11 +50,17 @@ var executorEnds = []string{"exit", "hard_limit"}
 type failureRun struct {
 	now time.Time
 	by  map[string]runOf
+	// lifted: the task was given one more round past its withdrawals, and
+	// each run's since counts its failures leased after that.
+	lifted bool
 }
 
 type runOf struct {
-	n    int
-	last time.Time
+	n     int
+	last  time.Time
+	nos   []int  // the attempts of the run, newest first
+	how   string // how the newest ended
+	since int    // failures leased after the latest round past the withdrawals
 }
 
 // readFailureRun reads the task's attempts newest first while each failed
@@ -88,16 +101,60 @@ func readFailureRun(ctx context.Context, tx pgx.Tx, taskID string) (failureRun, 
 			}
 			r := run.by[*executor]
 			if r.n == 0 {
-				r.last = *ended
+				r.last, r.how = *ended, *endHow
 			}
 			r.n++
+			r.nos = append(r.nos, *no)
 			run.by[*executor] = r
 		}
 		rows.Close()
-		if err = rows.Err(); err != nil || broken || n < runRows {
+		if err = rows.Err(); err != nil {
 			return run, err
 		}
+		if broken || n < runRows {
+			return run, run.readLift(ctx, tx, taskID)
+		}
 	}
+}
+
+// liftMark is in the reason of a task's move back to ready that gives it one
+// more round past its withdrawals (decideBlocked).
+const liftMark = ", offering it once more to each executor withdrawn from it"
+
+// readLift finds the task's latest round past its withdrawals and counts
+// each run's failures leased after it. It reads nothing while no executor
+// has been withdrawn, so a claim reads no more than before (TD-381).
+func (run *failureRun) readLift(ctx context.Context, tx pgx.Tx, taskID string) error {
+	withdrawn := false
+	for _, r := range run.by {
+		withdrawn = withdrawn || r.n >= failuresToStop
+	}
+	if !withdrawn {
+		return nil
+	}
+	// By event order, not by clock: the attempt numbers leased before the
+	// move (the task is locked by both, so their events are in order).
+	var before *int
+	err := tx.QueryRow(ctx, `SELECT (SELECT max((l.body_json->>'attempt_no')::int) FROM agentrt.event l
+	    WHERE l.task_id = $1 AND l.event_type = 'attempt_leased' AND l.event_id < r.event_id)
+	  FROM agentrt.event r WHERE r.task_id = $1 AND r.event_type = 'task_state_changed' AND r.body_json->>'to' = 'ready'
+	    AND strpos(r.body_json->>'reason', $2) > 0 ORDER BY r.event_id DESC LIMIT 1`, taskID, liftMark).Scan(&before)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	run.lifted = true
+	for executor, r := range run.by {
+		for _, no := range r.nos {
+			if before == nil || no > *before {
+				r.since++
+			}
+		}
+		run.by[executor] = r
+	}
+	return nil
 }
 
 // runRows is how many attempts a page of a run reads.
@@ -113,14 +170,27 @@ func backoff(n int) time.Duration {
 
 // holdsBack says why the run keeps executor from the task now, or "".
 func (run failureRun) holdsBack(executor string) string {
+	why, _ := run.hold(executor)
+	return why
+}
+
+// hold is holdsBack, and whether the executor is withdrawn: not offered the
+// task again (unlike a wait, which ends) until the task is given one more
+// round past its withdrawals. An executor withdrawn before that round is
+// offered the task at once, and withdrawn again by one more failure.
+func (run failureRun) hold(executor string) (string, bool) {
 	r := run.by[executor]
 	switch {
+	case run.lifted && r.n-r.since >= failuresToStop && r.since == 0:
+		return "", false
+	case run.lifted && r.n-r.since >= failuresToStop:
+		return "failed the task " + strconv.Itoa(r.n) + " times in a row, once more after it was offered it again", true
 	case r.n >= failuresToStop:
-		return "failed the task " + strconv.Itoa(r.n) + " times in a row"
+		return "failed the task " + strconv.Itoa(r.n) + " times in a row", true
 	case r.n > 0 && run.now.Before(r.last.Add(backoff(r.n))):
-		return "waiting after " + strconv.Itoa(r.n) + " failures in a row"
+		return "waiting after " + strconv.Itoa(r.n) + " failures in a row", false
 	}
-	return ""
+	return "", false
 }
 
 // Policy alert phrases of this file: the closed phrases the event records.

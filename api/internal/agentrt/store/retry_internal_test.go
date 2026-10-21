@@ -48,3 +48,26 @@ func TestBackoff(t *testing.T) {
 		}
 	}
 }
+
+// After one more round past the withdrawals (TD-395): an executor withdrawn
+// before it is offered the task at once and withdrawn again by one more
+// failure; one that was not withdrawn before it keeps its run as it was.
+func TestHoldPastTheWithdrawals(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
+	run := failureRun{now: now, lifted: true, by: map[string]runOf{
+		"exec:codex":  {n: failuresToStop, last: now.Add(-time.Hour)},
+		"exec:cursor": {n: failuresToStop + 1, since: 1, last: now.Add(-time.Hour)},
+		"exec:claude": {n: 2, since: 2, last: now.Add(-time.Hour)},
+		"exec:other":  {n: failuresToStop, since: 1, last: now.Add(-time.Hour)},
+	}}
+	for executor, want := range map[string]bool{"exec:codex": false, "exec:cursor": true, "exec:claude": false, "exec:other": true} {
+		if why, withdrawn := run.hold(executor); withdrawn != want || (why != "") != want {
+			t.Errorf("%s: %q withdrawn %v; want withdrawn %v", executor, why, withdrawn, want)
+		}
+	}
+	run.by["exec:claude"] = runOf{n: 1, since: 1, last: now.Add(-10 * time.Second)}
+	if why, withdrawn := run.hold("exec:claude"); withdrawn || why == "" {
+		t.Errorf("a first failure after the round: %q withdrawn %v; want a wait", why, withdrawn)
+	}
+}

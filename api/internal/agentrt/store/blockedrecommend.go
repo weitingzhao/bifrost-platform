@@ -29,6 +29,13 @@ import (
 //	R4 its last round's review failed and its deterministic check passed: no
 //	   recommendation, the Owner judges.
 //	R5 its last round's deterministic check failed: do not do this task.
+//	R6 every executor on its route was withdrawn after failing it in a row
+//	   (withdrawn.go, TD-395): do not do this task. A failure every executor
+//	   repeats is the task's or its setup's, and one more round only repeats
+//	   it until that is fixed; on STG, where a rule answers the card with
+//	   what it recommends, one more round would offer it to each executor
+//	   again, block it again and ask again, spending the mission's budget
+//	   round after round.
 //
 // R1 comes first so a mission left behind (STG's walks of 10-15 to 10-19) is
 // closed whole whatever blocked its task. A recommendation is only shown:
@@ -67,6 +74,7 @@ const (
 	blockChain      = "chain"      // the Owner dropped its only check (DecideBlocked)
 	blockDependency = "dependency" // a task it depends on was rejected or cancelled (Dispatch)
 	blockLost       = "lost"       // an external task whose attempt ended on its host
+	blockWithdrawn  = "withdrawn"  // every executor on its route was withdrawn by its failures (BlockWithdrawn)
 	blockOther      = "other"
 )
 
@@ -85,6 +93,8 @@ func blockKind(reason string, failed bool, effect string) string {
 		return blockChain
 	case strings.HasSuffix(reason, budgetBlockSuffix):
 		return blockBudget
+	case strings.HasPrefix(reason, withdrawnBlockMark):
+		return blockWithdrawn
 	case strings.HasPrefix(reason, "dependency "):
 		return blockDependency
 	case effect == "external":
@@ -106,6 +116,7 @@ type recFacts struct {
 	// is of this round (no move to ready after it).
 	check, verdict, determined string
 	checkedThisRound           bool
+	withdrawn                  []string // R6: the executors withdrawn, as its reason names them
 }
 
 // recommend applies the rules in order.
@@ -116,6 +127,9 @@ func recommend(f recFacts) recommendation {
 	case age > recOldMission && f.budgetHours > 0 && age.Hours() >= float64(recOverHours*f.budgetHours):
 		return rec(recClose, "R1", fmt.Sprintf("started %s, used %d× its %d hours, %s", ago(age), int(age.Hours())/f.budgetHours,
 			f.budgetHours, lastWorkText(f)))
+	case f.kind == blockWithdrawn:
+		return rec(recDrop, "R6", fmt.Sprintf("every executor on its route failed it in a row (%s); another round is worth it only once what failed is fixed",
+			strings.Join(f.withdrawn, ", ")))
 	case f.kind == blockChain && quiet:
 		return rec(recClose, "R2", "its only check was dropped on its card, and "+quietText(f))
 	case f.kind == blockChain:
@@ -208,6 +222,9 @@ func (r recommendation) line(labels []string) string {
 // false for none).
 func recommendBlocked(ctx context.Context, tx pgx.Tx, t taskRow, d taskDetail, reason string, failed bool, s spend, ok bool) (recommendation, error) {
 	f := recFacts{mission: t.mission, role: t.role, kind: blockKind(reason, failed, t.effect), round: d.round, maxRounds: d.maxRounds}
+	if f.kind == blockWithdrawn {
+		f.withdrawn = withdrawnOf(reason)
+	}
 	if ok {
 		f.budgetHours = s.budget.MaxWallHours
 	}
@@ -244,4 +261,16 @@ func recommendBlocked(ctx context.Context, tx pgx.Tx, t taskRow, d taskDetail, r
 	}
 	f.checkedThisRound = !readied
 	return recommend(f), nil
+}
+
+// withdrawnOf is the executors a withdrawn block's reason names, without
+// "exec:" (noneLeft writes it).
+func withdrawnOf(reason string) []string {
+	var out []string
+	for _, part := range strings.Split(strings.TrimPrefix(reason, withdrawnBlockMark), "; ") {
+		if name, _, ok := strings.Cut(part, " failed attempts "); ok {
+			out = append(out, strings.TrimPrefix(name, "exec:"))
+		}
+	}
+	return out
 }

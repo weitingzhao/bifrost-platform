@@ -332,8 +332,9 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 // that have ended are withdrawn, and so are cards asked before the third
 // option (store.WithdrawStaleCards: the other cards of a mission closed on a
 // card, so their places in the question store are free for this pass), a
-// ready task its mission's budget no longer lets run
-// is blocked with the reason (store.BlockOverBudget, TD-384), then every
+// ready task no executor may take any more (store.BlockWithdrawn, TD-395)
+// and one its mission's budget no longer lets run
+// are blocked with the reason (store.BlockOverBudget, TD-384), then every
 // blocked task that needs a card and has none open gets one
 // (store.AskBlocked), the tasks blocked before this pass included. Without a
 // question store there are no cards, and nothing is blocked for want of
@@ -346,9 +347,12 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
 	late, lerr := store.CancelAfterClose(ctx, c.DB)
 	withdrawn, werr := store.WithdrawStaleCards(ctx, c.DB, c.question, c.boundedWithdraw())
+	// Withdrawn before budget: a task nobody may take is blocked for that,
+	// not given budget on a card first (R3) only to be blocked again.
+	gone, gerr := store.BlockWithdrawn(ctx, c.DB)
 	spent, serr := store.BlockOverBudget(ctx, c.DB)
 	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + late + withdrawn + spent + asked, errors.Join(derr, lerr, werr, serr, aerr)
+	return decided + late + withdrawn + gone + spent + asked, errors.Join(derr, lerr, werr, gerr, serr, aerr)
 }
 
 // CardRuleEvery is how often the cards are answered by rule: a loop of its

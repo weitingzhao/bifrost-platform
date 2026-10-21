@@ -418,6 +418,8 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		more = "it goes back to ready, where it waits: no host takes external work yet"
 	case c.failed:
 		more = fmt.Sprintf("it goes back to ready for round %d of %d, and a host takes it as usual", c.round+1, c.round+1)
+	case blockKind(c.reason, c.failed, c.task.effect) == blockWithdrawn:
+		more = "it goes back to ready, offered once more to each executor withdrawn from it; one more failure withdraws it again"
 	}
 	if c.budget != "" {
 		more += ". " + strings.TrimSuffix(c.budget, ".")
@@ -630,7 +632,11 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			if err = grantRound(ctx, tx, t, c.question, by); err != nil {
 				return err
 			}
-			if err = moveTask(ctx, tx, "controller", t, "ready", fmt.Sprintf("%s gave it one more round (question %s)", by.who, c.question)); err != nil {
+			lift := "" // past its withdrawals, for a task no executor could take (retry.go)
+			if blockKind(reason, failed, t.effect) == blockWithdrawn {
+				lift = liftMark
+			}
+			if err = moveTask(ctx, tx, "controller", t, "ready", fmt.Sprintf("%s gave it one more round%s (question %s)", by.who, lift, c.question)); err != nil {
 				return err
 			}
 			if failed {
