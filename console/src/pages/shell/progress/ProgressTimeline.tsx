@@ -11,7 +11,7 @@ import { earliestAt, mergeEvents, releasesFrom, taskTitles, timelineRows, trimEv
 /** A read on stops after this many full pages; the next poll goes on from where it stopped. */
 const READ_ON_PAGES = 5
 const TONE: Partial<Record<TimelineKind, string>> = {
-  alert: 'var(--color-danger)', failed: 'var(--color-danger)', rejected: 'var(--color-warning)', stop: 'var(--color-warning)',
+  alert: 'var(--color-danger)', failed: 'var(--color-danger)', rejected: 'var(--color-warning)', stop: 'var(--color-warning)', wait: 'var(--color-warning)',
   accepted: 'var(--color-success)', step: 'var(--color-success)', release: 'var(--color-info)',
 }
 /** What is on screen: `seq` orders what the forward and the backward reads published. */

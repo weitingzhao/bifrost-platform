@@ -148,6 +148,13 @@ var bodies = map[string][]field{
 	// ended (blockedcard.go); by names the rule that answered it for the
 	// Owner (cardauto.go, TD-390), never present when he answered.
 	"owner_wait_opened": {{"question_id", kID, false}, {"blocked_event_id", kInt, false}, {"card", kInt, false}},
+	// wait_limit_passed: a wait the controller keeps the clock of passed its
+	// limit (waits.go): which wait, the attempt, task or message waited on
+	// (ref), since when, the limit in seconds and what it came from, how long
+	// it had waited when recorded, whom it calls, and the usual time when one
+	// was known.
+	"wait_limit_passed": {{"wait", kStr, false}, {"ref", kID, false}, {"since", kStr, false}, {"limit_s", kInt, false},
+		{"basis", kStr, false}, {"waited_s", kInt, false}, {"calls", kID, false}, {"usual_s", kInt, true}},
 	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}, {"by", kStr, true}},
 }
 
@@ -185,6 +192,13 @@ func checkBody(eventType string, body map[string]any) error {
 	}
 	if _, named := body["artifact_id"]; eventType == "policy_alert" && !named && body["rule"] != "repeated_failure" {
 		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
+	}
+	if eventType == "wait_limit_passed" {
+		wait, _ := body["wait"].(string)
+		ref, _ := body["ref"].(string)
+		if want := waitRefPrefix[wait]; len(ref) < 2 || ref[:2] != want {
+			return invalid("wait_limit_passed: a %s wait waits on a %s… id, not %q", wait, want, ref)
+		}
 	}
 	return nil
 }
@@ -355,7 +369,16 @@ var fieldValues = map[string]map[string]value{
 	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef},
 	"route_decided":            {"fingerprint": fingerprint},
 	"legacy_imported":          {"digest": fingerprint},
+	"wait_limit_passed": {"wait": oneOf(WaitAttemptRunning, WaitTaskReady, WaitMessageUnread), "ref": waitRef, "since": instant,
+		"basis": oneOf(basisTaskUsual, basisHistoryUsual, basisFloor)},
 }
+
+// waitRef is what a wait waits on: an attempt, a task or a message
+// (checkBody holds it to its wait).
+var waitRef = shaped("an attempt, task or message id", regexp.MustCompile(`^[atm]_`+ulid+`$`))
+
+// waitRefPrefix is the id each wait's ref has.
+var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "t_", WaitMessageUnread: "m_"}
 
 // badValue is why v, of its field's kind already, is refused, or "". A list
 // is checked element by element.

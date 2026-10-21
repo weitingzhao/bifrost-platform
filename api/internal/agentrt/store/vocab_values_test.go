@@ -85,6 +85,10 @@ func TestEventFieldValues(t *testing.T) {
 		{"note", "prune_failed", "refs/heads/agent/t_" + ulid + "/a3", "refs/heads/agent/t_" + ulid + "/a0"},
 		{"note", "voided", "appr_0123456789abcdef", "#212"},
 		{"route_decided", "fingerprint", sha, "05851c9c"},
+		{"wait_limit_passed", "wait", "task_ready", "ready"},
+		{"wait_limit_passed", "ref", "m_" + ulid, "M-12"},
+		{"wait_limit_passed", "since", "2026-10-21T12:00:00.123456Z", "12:00"},
+		{"wait_limit_passed", "basis", "history_usual", "usual"},
 	} {
 		covered[c.event+"."+c.field] = true
 		if why := badValue(c.event, c.field, c.good); why != "" {
@@ -124,6 +128,21 @@ func TestEventFieldValues(t *testing.T) {
 	}
 	if err = checkBody("task_state_changed", map[string]any{"from": "ready", "to": "leased"}); err != nil {
 		t.Fatalf("a good state: %v", err)
+	}
+	// A wait's ref is the id of what it waits on (waits.go).
+	wait := func(w, ref string) error {
+		return checkBody("wait_limit_passed", map[string]any{"wait": w, "ref": ref, "since": "2026-10-21T12:00:00Z", "limit_s": 1800,
+			"basis": "floor", "waited_s": 1801, "calls": "thread:s1"})
+	}
+	for w, ref := range map[string]string{"attempt_running": "a_" + ulid, "task_ready": "t_" + ulid, "message_unread": "m_" + ulid} {
+		if err = wait(w, ref); err != nil {
+			t.Errorf("%s on %s: %v", w, ref, err)
+		}
+	}
+	for w, ref := range map[string]string{"attempt_running": "t_" + ulid, "task_ready": "m_" + ulid, "message_unread": "a_" + ulid} {
+		if err = wait(w, ref); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s on %s was taken: %v", w, ref, err)
+		}
 	}
 }
 

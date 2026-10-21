@@ -65,8 +65,8 @@ type Controller struct {
 	FactsEvery  time.Duration
 	ReadTimeout time.Duration // per source read; zero means 10 seconds
 	// Briefs has the controller leave the chief of staff its scheduled briefs
-	// and nudges (W-31 2.4 slice ④); Now is the clock they read, time.Now
-	// when nil.
+	// and nudges (W-31 2.4 slice ④); Now is the clock they and the waits
+	// (Waits) read, time.Now when nil.
 	Briefs bool
 	// FailFirstVerify honours store.TestNeedFailFirstVerify: on STG only
 	// (T26's rework path, the Owner 2026-10-18).
@@ -497,6 +497,17 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 	return moved, errors.Join(errs...)
 }
 
+// Waits is one pass recording the waits that passed their limit
+// (store.WaitLimits: RULE-waits 总则 4, the platform keeps the clock), read
+// at Now.
+func (c *Controller) Waits(ctx context.Context) (int, error) {
+	now := time.Now()
+	if c.Now != nil {
+		now = c.Now()
+	}
+	return store.WaitLimits(ctx, c.DB, now)
+}
+
 // Activate is one pass moving to active the planned steps whose work has
 // started, while the plan-standing rule in force says so
 // (store.ActivateLeasedSteps).
@@ -512,7 +523,9 @@ func (c *Controller) Activate(ctx context.Context) (int, error) {
 // steps whose work has started, then rules, so a change seen or a task
 // accepted is
 // evaluated at once, a task whose last dependency was just accepted is
-// ready in the same pass, and a step a decision added is evaluated with it.
+// ready in the same pass, and a step a decision added is evaluated with it;
+// last, the waits past their limit (Waits), read after the pass moved what
+// it moves.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -535,7 +548,8 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, merr := c.MissionDecisions(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
+		_, werr := c.Waits(ctx)
+		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr, werr)
 	})
 	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
 		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {

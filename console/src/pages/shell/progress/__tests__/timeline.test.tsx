@@ -6,6 +6,7 @@ import latest from '@/api/__fixtures__/agentrt-events-across.testdb.json'
 import afterPage from '@/api/__fixtures__/agentrt-events-after-page.testdb.json'
 import progressFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
 import prodStream from '@/api/__fixtures__/agentrt-events-mission-M-2.prod.json'
+import waits from '@/api/__fixtures__/agentrt-events-waits.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseEventPage } from '@/api/agentRuntimeEvents'
 import type { ReleaseRecord } from '@/api/releases'
@@ -92,6 +93,25 @@ describe('the timeline from the runtime\'s events (2.5 G6)', () => {
     expect(say(hostRow, { rule: 'workspace_ref', source: 'report', phrase: "another task's workspace", artifact_id: 'sha256:aa' })).toBe("Host h1 had a report refused: it named another task's workspace")
     expect(say(missionRow)).toBe('An executor failed t three times in a row; it is not offered that task again')
   })
+  // The controller's records of waits past their limit (W-31 2.3, store/waits.go) as GET /events answered them
+  // on a test database (agentrtapi TestWaitsThroughTheEvents): an attempt running, a task ready, a message unread.
+  it('says each wait past its limit: what waited, how long, the limit and whom it calls', () => {
+    const events = parseEventPage(waits).events
+    const named = new Map(events.filter(e => e.task_id).map(e => [e.task_id, `task ${e.task_id.slice(-4)}`] as [string, string]))
+    const byWait = Object.fromEntries(events.map(e => [String(e.body.wait), eventRow(e, named)]))
+    const attempt = events.find(e => e.body.wait === 'attempt_running')!, ready = events.find(e => e.body.wait === 'task_ready')!
+    expect(byWait.attempt_running).toMatchObject({ kind: 'wait', label: 'Waited past limit',
+      text: `task ${attempt.task_id.slice(-4)} has run 31 min, past its limit of 30 min`, detail: 'calls controller · limit from the floor of its kind' })
+    expect(byWait.task_ready).toMatchObject({ kind: 'wait',
+      text: `task ${ready.task_id.slice(-4)} has been ready 31 min with no host taking it, past its limit of 30 min` })
+    expect(byWait.message_unread).toMatchObject({ kind: 'wait',
+      text: 'A message to thread:s1 has not been read in 31 min, past its limit of 10 min', detail: 'calls thread:s1 · limit from the floor of its kind' })
+    // A limit from a usual time says so; a wait the Console does not know is still said, not dropped.
+    const say = (body: Record<string, unknown>) => eventRow({ ...attempt, body }, named)
+    expect(say({ ...attempt.body, basis: 'history_usual' })?.detail).toBe('calls controller · limit from twice the usual time of its kind')
+    expect(say({ ...attempt.body, basis: 'task_usual' })?.detail).toBe('calls controller · limit from twice its usual time')
+    expect(say({ wait: 'host_asleep', waited_s: 120 })).toMatchObject({ kind: 'wait', text: 'host_asleep: 2 min', detail: '' })
+  })
   it('says each plan change decision, with its error when it failed', () => {
     const planRow = latest.events.find(e => e.event_type === 'plan_node_state_changed')!
     const decided = (body: Record<string, unknown>) => eventRow(parseEventPage({ events: [{ ...planRow, event_type: 'plan_change_decided', plan_node_id: null, body_json: body }], next: '1.0' }).events[0], titles)
@@ -128,7 +148,7 @@ describe('ProgressTimeline', () => {
     render(<QueryClientProvider client={client}><ProgressTimeline runtime={runtime} now={Date.parse('2026-10-19T23:40:00Z')} /></QueryClientProvider>)
     const list = await screen.findByRole('list', { name: 'Timeline' })
     await waitFor(() => expect(within(list).getAllByRole('listitem').map(li => li.getAttribute('data-kind'))).toEqual(['alert', 'stop', 'lifted', 'stop', 'release', 'step']))
-    expect(calls[0]).toEqual({ limit: '5', types: 'plan_node_state_changed,task_state_changed,attempt_computed,decision_recorded,plan_change_decided,legacy_imported,control_set,control_cleared,policy_alert' })
+    expect(calls[0]).toEqual({ limit: '5', types: 'plan_node_state_changed,task_state_changed,attempt_computed,decision_recorded,plan_change_decided,legacy_imported,control_set,control_cleared,policy_alert,wait_limit_passed' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Show older' }))
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(8))

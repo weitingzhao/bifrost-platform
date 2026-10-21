@@ -1,0 +1,80 @@
+{
+  "events": [
+    {
+      "actor_id": "controller",
+      "at": "2026-10-21T12:50:12.729569-05:00",
+      "attempt_id": null,
+      "body_json": {
+        "basis": "floor",
+        "calls": "thread:s1",
+        "limit_s": 600,
+        "ref": "m_01M5FSBGQ5D2YDB1VR95PXVEZH",
+        "since": "2026-10-21T17:50:12.708901Z",
+        "wait": "message_unread",
+        "waited_s": 1860
+      },
+      "cause_event_id": null,
+      "event_id": 24,
+      "event_stream_id": "waits",
+      "event_type": "wait_limit_passed",
+      "mission_id": null,
+      "plan_node_id": null,
+      "prev_sha256": "2b1a2b9d6efaffc539d2d4fd12bc48a511e06e8f078f5630852fb13904ce65c8",
+      "seq": 3,
+      "sha256": "36752f0bb3cbb9aa41fe6689f8f3d092218f115c08dbaaa42cf42ed8b49936df",
+      "task_id": null,
+      "txid": 5144413
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-21T12:50:12.727488-05:00",
+      "attempt_id": null,
+      "body_json": {
+        "basis": "floor",
+        "calls": "controller",
+        "limit_s": 1800,
+        "ref": "t_01M5FSBGNKM77GSY5KNMJ36ATJ",
+        "since": "2026-10-21T17:50:12.669461Z",
+        "wait": "task_ready",
+        "waited_s": 1860
+      },
+      "cause_event_id": null,
+      "event_id": 23,
+      "event_stream_id": "waits",
+      "event_type": "wait_limit_passed",
+      "mission_id": "M-1",
+      "plan_node_id": null,
+      "prev_sha256": "73521c69732dfe4c68de6a7560908c82366ad11bb8946d110c748c10ff5107eb",
+      "seq": 2,
+      "sha256": "2b1a2b9d6efaffc539d2d4fd12bc48a511e06e8f078f5630852fb13904ce65c8",
+      "task_id": "t_01M5FSBGNKM77GSY5KNMJ36ATJ",
+      "txid": 5144412
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-21T12:50:12.725699-05:00",
+      "attempt_id": "a_01M5FSBGMW0E6XTBJCKXB2657A",
+      "body_json": {
+        "basis": "floor",
+        "calls": "controller",
+        "limit_s": 1800,
+        "ref": "a_01M5FSBGMW0E6XTBJCKXB2657A",
+        "since": "2026-10-21T17:50:12.652698Z",
+        "wait": "attempt_running",
+        "waited_s": 1860
+      },
+      "cause_event_id": null,
+      "event_id": 22,
+      "event_stream_id": "waits",
+      "event_type": "wait_limit_passed",
+      "mission_id": "M-1",
+      "plan_node_id": null,
+      "prev_sha256": "",
+      "seq": 1,
+      "sha256": "73521c69732dfe4c68de6a7560908c82366ad11bb8946d110c748c10ff5107eb",
+      "task_id": "t_01M5FSBGKNVEYZ5ASDBWHFG1CF",
+      "txid": 5144411
+    }
+  ],
+  "next": "5144414.0"
+}

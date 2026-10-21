@@ -6,20 +6,37 @@ import type { ReleaseRecord } from '@/api/releases'
  * What History is made of (2.5 G6, CUT-round2-2.5 §2; Owner 2026-10-19 「2.5 八条照建议」): the runtime's
  * events across streams, in place of the board's hand-written "done today" lines and its feed — steps
  * done, tasks accepted or rejected, attempts failed, decisions, plan changes decided, imports, stops and
- * lifts, and policy alerts (a report a host had refused, an executor that failed a task three times in a
- * row) — with the platform's release records merged in.
+ * lifts, policy alerts (a report a host had refused, an executor that failed a task three times in a
+ * row) and waits past their limit (the controller's clock, W-31 2.3) — with the platform's release
+ * records merged in.
  */
 export const TIMELINE_TYPES = ['plan_node_state_changed', 'task_state_changed', 'attempt_computed', 'decision_recorded',
-  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert'] as const
+  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert', 'wait_limit_passed'] as const
 /** Events per read: the types above include every task move, of which only accepted and rejected are shown. */
 export const TIMELINE_PAGE = 200
 
-export type TimelineKind = 'step' | 'accepted' | 'rejected' | 'failed' | 'decision' | 'plan' | 'import' | 'stop' | 'lifted' | 'alert' | 'release'
+export type TimelineKind = 'step' | 'accepted' | 'rejected' | 'failed' | 'decision' | 'plan' | 'import' | 'stop' | 'lifted' | 'alert' | 'wait' | 'release'
 export type TimelineRow = { key: string; at: string; kind: TimelineKind; label: string; text: string; detail: string; mission: string; order: number }
 
 const CONTROL: Record<string, string> = { stop: 'Stop', pause: 'Pause', drain: 'Drain' }
 /** The kinds of report agentd uploads that the platform may refuse (store reportKinds). */
 const REPORT: Record<string, string> = { report: 'a report', verify: 'a verification report', review: 'a review report' }
+
+/** What a wait's limit came from (store/waits.go basis). */
+const LIMIT_FROM: Record<string, string> = { floor: 'the floor of its kind', task_usual: 'twice its usual time',
+  history_usual: 'twice the usual time of its kind' }
+const minutes = (v: unknown) => `${typeof v === 'number' ? Math.round(v / 60) : '?'} min`
+
+/** A wait past its limit (store/waits.go): what waited, how long, the limit. */
+function waitText(e: RuntimeEventRow, task: string): string {
+  const b = e.body, waited = minutes(b.waited_s), limit = minutes(b.limit_s)
+  switch (text(b.wait)) {
+    case 'attempt_running': return `${task || 'An attempt'} has run ${waited}, past its limit of ${limit}`
+    case 'task_ready': return `${task || 'A task'} has been ready ${waited} with no host taking it, past its limit of ${limit}`
+    case 'message_unread': return `A message to ${text(b.calls) || 'a thread'} has not been read in ${waited}, past its limit of ${limit}`
+    default: return [text(b.wait), waited].filter(Boolean).join(': ') || 'Waited past its limit'
+  }
+}
 
 /** Task titles the runtime's progress names: an event names a task by its id only. */
 export function taskTitles(runtime: RuntimeProgress | undefined): Map<string, string> {
@@ -70,6 +87,9 @@ export function eventRow(e: RuntimeEventRow, titles: Map<string, string>): Timel
       return row('lifted', 'Lifted', `${text(b.control_id)} by ${e.actor_id}`)
     case 'policy_alert':
       return row('alert', 'Alert', alertText(e, task), e.attempt_id ? `attempt ${e.attempt_id}` : '')
+    case 'wait_limit_passed':
+      return row('wait', 'Waited past limit', waitText(e, task),
+        [text(b.calls) && `calls ${text(b.calls)}`, LIMIT_FROM[text(b.basis)] && `limit from ${LIMIT_FROM[text(b.basis)]}`].filter(Boolean).join(' · '))
     default:
       return null
   }
