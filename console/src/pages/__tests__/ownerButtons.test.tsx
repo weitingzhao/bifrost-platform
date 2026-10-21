@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import cards from '@/api/__fixtures__/question-cards.testdb.json'
+import { recommendedLine, type Question } from '@/api/questions'
 import type { AuthCapabilities } from '@/api/matrixTypes'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
@@ -108,6 +109,13 @@ describe("the Owner's buttons on every kind of runtime card", () => {
     expect(KINDS.blocked!.body.options.map(o => o.label)).toEqual(['Give it one more round', 'Do not do this task', 'Close mission M-5'])
     expect(KINDS.mission!.body.options.map(o => o.label)).toEqual(['Start the mission', 'Do not start it'])
     expect(KINDS.plan_change!.body.options.map(o => o.label)).toEqual(['Apply the change', 'Do not apply it'])
+    // A recorder import's card recommends importing, with why (W-31 2.3; review 482 C1): what STG's card
+    // rule takes and the Owner reads on PROD. A plan import's recommends nothing.
+    const recorder = KINDS.recorder_import!.body as unknown as Question
+    expect(recorder.recommended).toBe('a')
+    expect(recommendedLine(recorder)).toBe('Recommended: Import the log — the trial import checked the hash chain from the first line to ' +
+      'the last and kept the log; it is history, so no plan or mission waits on it, and once imported it is fixed')
+    expect(recommendedLine(KINDS.plan_import!.body as unknown as Question)).toBeNull()
   })
 
   for (const [kind, card] of Object.entries(KINDS)) {
