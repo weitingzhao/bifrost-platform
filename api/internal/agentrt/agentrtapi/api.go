@@ -83,7 +83,7 @@ const claimPollLimit = 8 * time.Second
 // (and hand in a rule the Owner signed: the signature is the authority); they
 // and agentd upload artifacts; anyone authenticated reads and may stop, pause,
 // drain or tighten a rule; operators and the Owner drain hosts; only the Owner
-// lifts a control and reads a vendor pool by hand.
+// lifts a control, reads a vendor pool by hand and signs a step off.
 var abilities = []struct {
 	name  string
 	roles []actuation.Role
@@ -96,6 +96,7 @@ var abilities = []struct {
 	{"drain", []actuation.Role{actuation.RoleOperator, actuation.RoleAdmin}},
 	{"lift", []actuation.Role{actuation.RoleAdmin}},
 	{"measure", []actuation.Role{actuation.RoleAdmin}},
+	{"signoff", []actuation.Role{actuation.RoleAdmin}},
 }
 
 func may(name string) []actuation.Role {
@@ -144,6 +145,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
 		r.With(propose, cfg).Post("/plan/proposals", a.proposePlanChange)
 		r.With(propose, cfg).Post("/plan/{id}/notes", a.postPlanNote)
+		r.With(gate("signoff"), cfg).Post("/plan/{id}/signoff", a.signOffStep)
 		r.With(propose, cfg).Post("/plan/imports", a.proposePlanImport)
 		r.With(read, cfg).Get("/controls", a.listControls)
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
@@ -210,6 +212,8 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrOtherHost):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
+	case errors.Is(err, store.ErrNotOwner):
+		writeError(w, http.StatusForbidden, "not_owner", err.Error())
 	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):

@@ -181,13 +181,17 @@ func stepRoot(ctx context.Context, tx pgx.Tx, stepID string) (string, error) {
 // SignOff records the Owner's sign-off on a step (owner_signoff, carrying
 // the step), the fact an owner_signoff atom waits for.
 func SignOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string) error {
+	_, err := signOff(ctx, tx, actor, stepID, ref)
+	return err
+}
+
+func signOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string) (Appended, error) {
 	root, err := stepRoot(ctx, tx, stepID)
 	if err != nil {
-		return err
+		return Appended{}, err
 	}
-	_, err = Append(ctx, tx, Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID,
+	return Append(ctx, tx, Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID,
 		Body: map[string]any{"ref": ref}})
-	return err
 }
 
 // RecordManual records a manual atom of a step as done: a note on the step

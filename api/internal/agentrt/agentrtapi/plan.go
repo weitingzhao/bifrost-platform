@@ -27,9 +27,16 @@ const stateEvent = `(SELECT jsonb_build_object('event_id', e.event_id, 'event_ty
 const taskCounts = `COALESCE((SELECT jsonb_object_agg(state, k) FROM (SELECT state, count(*) AS k FROM agentrt.task
 	  WHERE plan_node_id = n.plan_node_id GROUP BY state) s), '{}'::jsonb)`
 
+// signoffs is a step's sign-offs (owner_signoff events: ref, by, at,
+// event_id, oldest first) under "signoffs", merged into its node; a node with
+// none gets no key.
+const signoffs = `COALESCE((SELECT jsonb_build_object('signoffs', jsonb_agg(jsonb_build_object('ref', e.body_json->>'ref',
+	  'by', e.actor_id, 'at', e.at, 'event_id', e.event_id) ORDER BY e.event_id)) FROM agentrt.event e
+	  WHERE e.plan_node_id = n.plan_node_id AND e.event_type = 'owner_signoff' HAVING count(*) > 0), '{}'::jsonb)`
+
 // getPlan is GET /plan: without root, the roots (rounds and the architecture
 // root); with root, that node and everything under it, depth first in
-// ordinal order, each with its depth, state event and task counts. A root
+// ordinal order, each with its depth, state event, task counts and sign-offs. A root
 // there is not is 404.
 func (a *API) getPlan(w http.ResponseWriter, r *http.Request) {
 	root := r.URL.Query().Get("root")
@@ -44,13 +51,13 @@ func (a *API) getPlan(w http.ResponseWriter, r *http.Request) {
 	    SELECT c.plan_node_id, t.path || c.ordinal, t.depth + 1
 	      FROM agentrt.plan_node c JOIN tree t ON c.parent_plan_node_id = t.plan_node_id)
 	  SELECT jsonb_build_object('root', $1::text, 'nodes', jsonb_agg(to_jsonb(n) || jsonb_build_object('depth', t.depth,
-	      'state_event', `+stateEvent+`, 'task_counts', `+taskCounts+`) ORDER BY t.path))
+	      'state_event', `+stateEvent+`, 'task_counts', `+taskCounts+`) || `+signoffs+` ORDER BY t.path))
 	  FROM tree t JOIN agentrt.plan_node n USING (plan_node_id)
 	  HAVING count(*) > 0`, root)
 }
 
 // getPlanNode is GET /plan/{id}: the node with its state event, its
-// children, its tasks, what it is bound to and its last 50 events.
+// children, its tasks, what it is bound to, its sign-offs and its last 50 events.
 func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
 	a.getRow(w, r, `SELECT to_jsonb(n) || jsonb_build_object(
 	    'state_event', `+stateEvent+`,
@@ -65,7 +72,7 @@ func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
 	      FROM agentrt.plan_node_binding b WHERE b.plan_node_id = n.plan_node_id), '[]'::jsonb),
 	    'events', COALESCE((SELECT jsonb_agg(jsonb_build_object('event_id', e.event_id, 'event_type', e.event_type,
 	        'actor_id', e.actor_id, 'at', e.at, 'body', e.body_json) ORDER BY e.event_id)
-	      FROM (SELECT * FROM agentrt.event WHERE plan_node_id = n.plan_node_id ORDER BY event_id DESC LIMIT 50) e), '[]'::jsonb))
+	      FROM (SELECT * FROM agentrt.event WHERE plan_node_id = n.plan_node_id ORDER BY event_id DESC LIMIT 50) e), '[]'::jsonb)) || `+signoffs+`
 	  FROM agentrt.plan_node n WHERE n.plan_node_id = $1`, chi.URLParam(r, "id"))
 }
 
@@ -119,6 +126,36 @@ func (a *API) postPlanNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := store.PostPlanNote(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type signoffBody struct {
+	Ref string `json:"ref"`
+}
+
+// signOffStep is POST /plan/{id}/signoff: the Owner signs a step off (the
+// Owner 2026-10-21), the owner_signoff event its done rule's owner_signoff
+// atom waits for; the controller's next rules pass moves the step. The admin
+// role only (the "signoff" ability): the tokens agents hold (agentd, reporter,
+// operator, viewer) are refused before this runs, and no MCP tool calls it.
+// The body may name the ref; it must when the
+// rule waits on more than one. A second press answers the first sign-off
+// (already_signed) and writes nothing.
+func (a *API) signOffStep(w http.ResponseWriter, r *http.Request) {
+	var b signoffBody
+	if !decode(w, r, &b) {
+		return
+	}
+	who, err := writer(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	out, err := store.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref)
 	if err != nil {
 		a.fail(w, err)
 		return
