@@ -335,7 +335,9 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 	ask("fedcba9876543210", true)
 	read := rt.agentRuntimeQuestion()
 	q1, ok := read(ctx, "1")
-	if !ok || q1.Status != "open" || q1.Option != "" {
+	// TD-401 (review 460 B1): an open one says when it expires, which the
+	// store marks only at its next sweep.
+	if !ok || q1.Status != "open" || q1.Option != "" || !q1.ExpiresAt.After(time.Now()) {
 		t.Fatalf("open = %+v %v", q1, ok)
 	}
 	answer := func(ref string, body map[string]any) {

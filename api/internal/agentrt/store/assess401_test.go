@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -24,21 +26,22 @@ func answeredAsks(t *testing.T, w *world, card string) (events, missions int) {
 }
 
 // A card answered after it is listed and before its assessment's task is
-// made gets no task; one the question store cannot read now gets none until
-// it reads open.
+// made gets no task; nor does one past its expiry that the store has not
+// swept yet (review 460 B1); one the question store cannot read now gets
+// none until it reads open.
 func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	answered, unread := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	answered, unread, lapsed := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4"), w.ledgerMission(t, "M-5")
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 3 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
-	if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 2 {
+	if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 3 {
 		t.Fatalf("asked %d (%v)", n, err)
 	}
-	// Both listed open, as the pass lists them before it reads their evidence.
-	first, second := s.item(s.cardOf(t, answered)), s.item(s.cardOf(t, unread))
+	// All listed open, as the pass lists them before it reads their evidence.
+	first, second, third := s.item(s.cardOf(t, answered)), s.item(s.cardOf(t, unread)), s.item(s.cardOf(t, lapsed))
 	ok(t, s.answer(ctx, first.ID, first.Recommended, "the Owner", time.Now().Add(time.Hour), ""))
 	if task, err := store.GiveAssessment(ctx, w.rt, first, ratchetEvidence(), s.question); err != nil || task != "" {
 		t.Fatalf("the answered card was asked: %q (%v)", task, err)
@@ -46,9 +49,22 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 	if events, missions := answeredAsks(t, w, first.ID); events != 0 || missions != 0 {
 		t.Fatalf("the answered card left %d events and %d missions", events, missions)
 	}
+	expired := func(ctx context.Context, id string) (store.Question, bool) {
+		q, ok := s.question(ctx, id)
+		q.ExpiresAt = time.Now().Add(-time.Second) // still open in the store: its sweep has not come
+		return q, ok
+	}
+	if task, err := store.GiveAssessment(ctx, w.rt, third, ratchetEvidence(), expired); err != nil || task != "" {
+		t.Fatalf("a card past its expiry was asked: %q (%v)", task, err)
+	}
 	unreadable := func(context.Context, string) (store.Question, bool) { return store.Question{}, false }
 	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), unreadable); err != nil || task != "" {
 		t.Fatalf("a card the store cannot read was asked: %q (%v)", task, err)
+	}
+	for _, id := range []string{third.ID, second.ID} {
+		if events, missions := answeredAsks(t, w, id); events != 0 || missions != 0 {
+			t.Fatalf("%s left %d events and %d missions", id, events, missions)
+		}
 	}
 	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), s.question); err != nil || task == "" {
 		t.Fatalf("the open card was not asked once it reads open: %q (%v)", task, err)
@@ -85,15 +101,15 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 			task, err := store.GiveAssessment(ctx, pass, item, ratchetEvidence(), s.question)
 			asked <- ask{task, err}
 		}()
-		// The ask waits on a lock the rule's transaction holds.
+		// The ask's connection waits on the rule's transaction.
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-			var waiting int
-			if err := probe.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
-			  AND wait_event_type = 'Lock'`).Scan(&waiting); err != nil {
+			var waiting bool
+			if err := probe.QueryRow(ctx, `SELECT $2::int = ANY(pg_blocking_pids($1::int))`,
+				int32(pass.PgConn().PID()), int32(w.rt.PgConn().PID())).Scan(&waiting); err != nil {
 				t.Error(err)
 				return
 			}
-			if waiting > 0 {
+			if waiting {
 				return
 			}
 			if time.Now().After(deadline) {
@@ -105,8 +121,13 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 {
 		t.Fatalf("answered %d (%v)", n, err)
 	}
-	if a := <-asked; a.err != nil || a.task != "" {
-		t.Fatalf("the ask after the rule's answer made %q (%v)", a.task, a.err)
+	select {
+	case a := <-asked:
+		if a.err != nil || a.task != "" {
+			t.Fatalf("the ask after the rule's answer made %q (%v)", a.task, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the ask never ended")
 	}
 	if events, missions := answeredAsks(t, w, card); events != 0 || missions != 0 {
 		t.Fatalf("the answered card left %d events and %d missions", events, missions)
@@ -115,7 +136,9 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 
 // Capability scoring skips an assessment asked of a card the runtime had
 // recorded answered (as M-79 was, before the read again): its run counts for
-// nobody; an assessment asked while its card was open counts.
+// nobody; an assessment asked while its card was open counts, whatever notes
+// others wrote with an answer's words (review 460 A1: the Owner's, or the
+// controller's on a stream where the card was not asked).
 func TestAnAssessmentOfAnAnsweredCardIsNotScored(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -130,7 +153,21 @@ func TestAnAssessmentOfAnAnsweredCardIsNotScored(t *testing.T) {
 	reasons := func(task string) [][2]string {
 		return [][2]string{{"任务停了一天多。", w.waitEvent(t, task)}, {"台账没有更多要做的。", "ledger:TD-378"}}
 	}
-	inTime, _ := w.askAndReady(t, s.item(s.cardOf(t, open)), ratchetEvidence())
+	q := s.cardOf(t, open)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		for _, n := range []struct{ stream, actor, text string }{
+			{store.MissionStream("M-3"), "owner", "acknowledged question " + q},
+			{store.MissionStream("M-3"), "owner", "rule card-auto-answer v1 answered question " + q + " with c"},
+			{store.MissionStream("M-1"), "controller", "acknowledged question " + q},
+		} {
+			if _, err := store.Append(ctx, tx, store.Event{Stream: n.stream, Type: "note", Actor: n.actor,
+				Body: map[string]any{"text": n.text}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	inTime, _ := w.askAndReady(t, s.item(q), ratchetEvidence())
 	w.work(t, inTime, report("c", reasons(open)), "done")
 	if did, err := store.AcceptBrief(ctx, w.rt, inTime); err != nil || did != "assessed" {
 		t.Fatalf("accept the one asked in time: %q %v", did, err)
@@ -151,8 +188,8 @@ func TestAnAssessmentOfAnAnsweredCardIsNotScored(t *testing.T) {
 	_, err := store.ComputeScores(ctx, w.rt)
 	ok(t, err)
 	var attempts, firstPass int
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempts, first_pass FROM agentrt.capability_score WHERE job_id = 'chief_of_staff'
-	  AND task_class = 'assessment' ORDER BY window_end DESC LIMIT 1`).Scan(&attempts, &firstPass))
+	ok(t, w.rt.QueryRow(ctx, `SELECT COALESCE(max(attempts), 0), COALESCE(max(first_pass), 0) FROM agentrt.capability_score
+	  WHERE job_id = 'chief_of_staff' AND task_class = 'assessment'`).Scan(&attempts, &firstPass))
 	if attempts != 1 || firstPass != 1 {
 		t.Fatalf("the seat's assessments scored %d attempts, %d first pass; want only the one asked in time", attempts, firstPass)
 	}

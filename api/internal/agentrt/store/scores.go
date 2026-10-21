@@ -253,20 +253,34 @@ func ComputeScores(ctx context.Context, db DB) (int, error) {
 
 // answeredBeforeAsked holds for a task t of a mission that assesses a card
 // the runtime had recorded answered before the assessment was asked (TD-401):
-// a rule's note of its answer (noteRuleAnswer) or the runtime's
-// acknowledgement of it ("acknowledged question …"), before the ask (the
-// assessment stream's first event) and within ten minutes of it, well over
-// what a pass takes from its list to an ask. Such an assessment could
-// inform nothing; GiveAssessment no longer asks one, and this keeps those
-// asked before it (STG M-79, 2026-10-21) out of the scores.
+// the controller's note, on the stream where the card was asked (its
+// owner_wait_opened, plan_change_proposed or mission_state_changed names the
+// question), that a rule answered it (noteRuleAnswer) or that the runtime
+// used its answer ("acknowledged question …"), before the ask (the
+// assessment stream's first event). Such an assessment could inform nothing;
+// GiveAssessment no longer asks one, and this keeps those asked before it
+// (STG M-79, 2026-10-21) out of the scores. Only the controller writes those
+// notes on those streams (review 460 A1: a thread's plan note with the same
+// words is no answer).
+//
+// The note is looked for from ten minutes before the ask to a minute after,
+// by event id within that, so the event index bounds the read: well over
+// what a pass takes from its list to an ask, with a minute for the writers'
+// clocks (an event's at is its writer's). An answer recorded earlier, or by
+// a writer whose clock is over a minute ahead, is not seen, and the
+// assessment counts as before; a planner's question has no event naming it
+// on its mission's stream, so an assessment of one always counts.
 const answeredBeforeAsked = `EXISTS (SELECT 1 FROM agentrt.mission am
 	  JOIN agentrt.event ask ON ask.event_stream_id = am.scope_json->>'assessment_of' AND ask.seq = 1
 	  WHERE am.mission_id = t.mission_id AND am.scope_json->>'assessment_of' LIKE 'assess:card:%'
-	    AND EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.event_id < ask.event_id
+	    AND EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.actor_id = 'controller' AND n.event_id < ask.event_id
 	      AND n.at BETWEEN ask.at - interval '10 minutes' AND ask.at + interval '1 minute'
 	      AND (n.body_json->>'text' = 'acknowledged question ' || substr(am.scope_json->>'assessment_of', 13)
 	        OR (n.body_json->>'text' LIKE 'rule %'
-	          AND strpos(n.body_json->>'text', ' answered question ' || substr(am.scope_json->>'assessment_of', 13) || ' with ') > 0))))`
+	          AND strpos(n.body_json->>'text', ' answered question ' || substr(am.scope_json->>'assessment_of', 13) || ' with ') > 0))
+	      AND EXISTS (SELECT 1 FROM agentrt.event a WHERE a.event_stream_id = n.event_stream_id
+	        AND a.event_type IN ('owner_wait_opened', 'plan_change_proposed', 'mission_state_changed')
+	        AND a.body_json->>'question_id' = substr(am.scope_json->>'assessment_of', 13))))`
 
 // countOutcomes groups the outcomes of tasks that ended since then, and
 // returns when the earliest of them ended. An assessment of a card answered

@@ -360,9 +360,13 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 // (TD-402, the coordinating thread 2026-10-21; TD-393's 「循环每 5 秒」 ran it
 // with the facts loop, so a card the facts loop asked, a blocked card or a
 // planner's question, was first seen just under five seconds old and
-// answered on the next pass, about ten seconds after it opened): a card is
-// answered within its rule's wait and a second. With no card open a pass is
-// one read of the question store. Only STG wires it (server/agentrt_wire.go).
+// answered on the next pass, about ten seconds after it opened): the loop
+// adds at most about a second to a card's wait, plus what a pass takes (the
+// question store's read, the cards answered before it). With no card for the
+// rule to look at (none open, none it answered and the runtime has not
+// read), a pass is one read of the question store's state (the whole state,
+// decoded) and no database work; a pass that fails logs once. Only STG wires
+// it (server/agentrt_wire.go).
 const CardRuleEvery = time.Second
 
 // AnswerByRule answers the runtime's cards by the card-auto-answer rule in

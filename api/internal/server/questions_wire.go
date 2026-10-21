@@ -111,7 +111,7 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
 		}
 		f, ok := questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
-		f.Options = len(q.Options)
+		f.Options, f.ExpiresAt = len(q.Options), q.ExpiresAt
 		if q.Answer != nil {
 			f.Channel = q.Answer.Channel
 		}

@@ -383,13 +383,17 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 //
 // A card is read again under its stream, after the lists and the evidence
 // (TD-401: STG 2026-10-21 M-79, the rule answered a card at 00:10:52.540 and
-// its assessment was asked at 52.605, a paid run that could change nothing).
-// The card-auto-answer rule holds the same stream from its read of the
-// assessment to its answer's commit (answerOne, cardAssessment), so the
-// rule's answer and an ask are one after the other: an answer first leaves
-// no ask; an ask first is beside the card when the rule answers. A card the
-// question store cannot read now is not asked; the next pass lists it again
-// while it is open. nil question reads nothing again.
+// its assessment was asked at 52.605, a paid run that could change nothing):
+// one answered, withdrawn or expired (past its expiry though the store's
+// sweep has not marked it yet, review 460 B1) is not asked, and neither is
+// one the store cannot read now (the next pass lists it again while it is
+// open). The card-auto-answer rule's transaction holds the same stream from
+// its read of the assessment to its commit, the answer written in between
+// (answerOne, cardAssessment), so the rule's answer and an ask are one after
+// the other: an answer first leaves no ask; an ask first is beside the card
+// when the rule answers. The Owner's answer takes no lock here: one that
+// lands between this read and the commit still leaves an ask (its window is
+// that read and the writes after it). nil question reads nothing again.
 // Locks: the controller as a writer (every write's first), the item's stream,
 // then the mission's numbering (proposeMissionTx).
 func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool)) (string, error) {
@@ -408,7 +412,7 @@ func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, qu
 			return err
 		}
 		if item.Kind == AssessCard && question != nil {
-			if q, ok := question(ctx, item.ID); !ok || q.Status != "open" {
+			if q, ok := question(ctx, item.ID); !ok || q.Status != "open" || (!q.ExpiresAt.IsZero() && !time.Now().Before(q.ExpiresAt)) {
 				return nil
 			}
 		}
