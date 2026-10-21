@@ -8,6 +8,7 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
+import { DRILL_BANNER } from '@/pages/approvalDecision'
 import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 
 const ADMIN_CAPS: AuthCapabilities = {
@@ -408,6 +409,18 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     expect(button.hasAttribute('disabled')).toBe(false)
     expect(screen.queryByText(/A newer Console/)).toBeNull()
   })
+})
+
+// A drill (W-31 2.5 gap 2; v4 §20.3 rule 8, §20.5 scenario 9): its page says what it is and has no approve button;
+// reject, which closes it, stays.
+it('shows a drill with no approve button, saying nothing runs and it cannot be approved', async () => {
+  read = async () => json(buildPlatformApproval({ id: 'record-a', number: 9, status: 'pending', drill: true }))
+  window.location.hash = '#approvals?id=record-a'
+  render(<QueryClientProvider client={client}><PlatformAuthProvider><ApprovalsPage /></PlatformAuthProvider></QueryClientProvider>)
+  expect(await screen.findByRole('button', { name: /Reject/ })).toBeTruthy()
+  expect(screen.getByText(DRILL_BANNER)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
+  expect(screen.queryByText('Waiting for your decision.')).toBeNull()
 })
 
 // A plan step's "Request #16" opens the request by its number (W-31 2.5 slice 5 gap 4, v4 §20.5 scenario 10): the page

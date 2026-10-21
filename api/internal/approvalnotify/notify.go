@@ -94,6 +94,8 @@ type Item struct {
 	Reason string
 	// Error is the one-line, redacted reason for failed / not executed.
 	Error string
+	// Drill: a request that is never approved (approvals.Approval.Drill).
+	Drill bool
 }
 
 // Delivery is one notice to one target. The relay record lives in notice.
@@ -143,12 +145,22 @@ func Notify(ctx context.Context, msg Message) error {
 // agent's text. Send posts it when the composed title or body is hidden.
 func fallbackTitle(kind string, it Item) string {
 	verb := kindVerb[kind]
+	if it.Drill {
+		verb = DrillVerb
+	}
 	ref := "#" + fmt.Sprint(it.Number)
 	if it.Number == 0 {
 		ref = it.ID
 	}
 	return verb + " · " + ref
 }
+
+// DrillVerb leads a drill's notice in place of the verb, and DrillAsk is its
+// first body line: a drill is never approved and nothing runs.
+const (
+	DrillVerb = "Drill"
+	DrillAsk  = "A drill: nothing runs, and it cannot be approved."
+)
 
 // kindVerb is what the push asks of the Owner. A kind that is not in this
 // table asks nothing, Compose returns no message, and Send does not post it.
@@ -168,6 +180,9 @@ func Compose(kind string, it Item, now time.Time) Message {
 	verb, ok := kindVerb[kind]
 	if !ok {
 		return Message{}
+	}
+	if it.Drill {
+		verb = DrillVerb
 	}
 	it.Env = Redact(it.Env)
 	it.Summary = Redact(it.Summary)
@@ -189,6 +204,10 @@ func Compose(kind string, it Item, now time.Time) Message {
 	m := Message{ClickURL: ConsoleClickPrefix + url.QueryEscape(it.ID), Priority: 4}
 	if it.Tier == "D" {
 		m.Priority = 5
+	}
+	// A drill asks for nothing: no decision, the lowest priority that still shows (v4 §20.3 rule 8).
+	if it.Drill {
+		ask, m.Priority = DrillAsk, 3
 	}
 	switch kind {
 	case KindFailed:

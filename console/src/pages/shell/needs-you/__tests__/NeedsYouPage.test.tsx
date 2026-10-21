@@ -226,6 +226,20 @@ describe('NeedsYouPage', () => {
     expect(within(rows[1]).getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['#approvals?id=ap-99'])
   })
 
+  it('lists a drill apart, labelled, with nothing to approve, and does not count it (v4 §20.5 scenario 9)', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(() => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-real' }), buildPlatformApproval({ id: 'ap-drill', number: 9, drill: true })])))
+    render(wrapper(<NeedsYouPage />))
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
+    const decide = screen.getByRole('region', { name: 'Decide' })
+    expect(within(decide).getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['#approvals?id=ap-real'])
+    const drills = screen.getByRole('region', { name: 'Drills' })
+    expect(within(drills).getByText('Not counted: a drill shows what a request looks like. Nothing runs, and it cannot be approved.')).toBeTruthy()
+    expect(within(drills).getByText('Drill')).toBeTruthy()
+    expect(within(drills).getByText('Drill · nothing runs, nothing to approve')).toBeTruthy()
+    expect(within(drills).getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['#approvals?id=ap-drill'])
+  })
+
   it('says nothing needs you when the list is empty', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(() => json(buildApprovalListResponse([])))

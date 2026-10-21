@@ -52,6 +52,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Rollback        string         `json:"rollback"`
 		RequesterThread string         `json:"requester_thread"`
 		WorkID          string         `json:"work_id"`
+		Drill           bool           `json:"drill"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -65,11 +66,12 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Params:    body.Params,
 		Thread:    body.RequesterThread,
 		WorkID:    body.WorkID,
+		Drill:     body.Drill,
 	})
 	if res.Status == http.StatusCreated {
 		a := res.Approval
 		s.writeAudit(r, []event{{"approval.create", a.ID, StatusPending,
-			fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s", a.Number, a.Action, a.Tier, a.Runner, a.Requester)}})
+			fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s drill=%t", a.Number, a.Action, a.Tier, a.Runner, a.Requester, a.Drill)}})
 		// A down relay must not fail create; the failed delivery is on the record.
 		s.deliver(r.Context(), approvalnotify.KindCreated, a)
 		writeJSON(w, http.StatusCreated, map[string]any{
@@ -84,6 +86,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			"env":         a.Env,
 			"summary":     a.Summary,
 			"runner":      a.Runner,
+			"drill":       a.Drill,
 		})
 		return
 	}

@@ -18,12 +18,21 @@ export function approveHint(id: string, number?: number, tier?: string, env: Nod
   return `Owner approves ${ref} on the phone or at ${url}. In a Claude chat, 批 ${ref} opens the bifrost-approve permission prompt; chat text alone is not an approval.`
 }
 
-/** Adds approve_hint to a created approval body (one with an id). */
+/**
+ * A drill's hint (v4 §20.3 rule 8; W-31 2.5 gap 2): the platform refuses to approve it, so there is no approval to ask
+ * for; it waits until it is rejected or expires.
+ */
+export function drillHint(id: string, number?: number, env: NodeJS.ProcessEnv = process.env): string {
+  const ref = number ? `#${number}` : id
+  return `${ref} is a drill: nothing runs and it cannot be approved. It shows at ${consoleApprovalUrl(id, env)} and waits until it is rejected or expires.`
+}
+
+/** Adds approve_hint to a created approval body (one with an id); a drill's says there is nothing to approve. */
 export function withApproveHint(body: unknown, env: NodeJS.ProcessEnv = process.env): unknown {
   if (body == null || typeof body !== 'object' || Array.isArray(body)) return body
-  const rec = body as { id?: unknown; number?: unknown; tier?: unknown }
+  const rec = body as { id?: unknown; number?: unknown; tier?: unknown; drill?: unknown }
   if (typeof rec.id !== 'string' || rec.id === '') return body
   const number = typeof rec.number === 'number' ? rec.number : undefined
   const tier = typeof rec.tier === 'string' ? rec.tier : undefined
-  return { ...rec, approve_hint: approveHint(rec.id, number, tier, env) }
+  return { ...rec, approve_hint: rec.drill === true ? drillHint(rec.id, number, env) : approveHint(rec.id, number, tier, env) }
 }

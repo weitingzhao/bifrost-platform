@@ -118,13 +118,18 @@ export function youClosedLine(outcome: string | undefined): string | null {
  * An exit code replaces the executed / failed sentences: 0 finished, anything
  * else (or failed with a code) failed.
  */
+/** What a pending drill's page says in place of "Waiting for your decision." */
+export const DRILL_BANNER = 'A drill: nothing runs, and it cannot be approved. Reject it to close it.'
+
 export function decisionBanner(
   item: Pick<ApprovalItem, 'status' | 'runner'> &
-    Partial<Pick<ApprovalItem, 'execution' | 'resolution'>>,
+    Partial<Pick<ApprovalItem, 'execution' | 'resolution' | 'drill'>>,
 ): string {
   const closed = youClosedLine(item.resolution?.outcome)
   if (closed != null) return `${closed}.`
   const status = item.status.trim().toLowerCase()
+  // A drill is never approved (v4 §20.3 rule 8): nothing to decide, nothing runs.
+  if (item.drill === true && status === 'pending') return DRILL_BANNER
   const runner = runnerOf(item.runner)
   switch (status) {
     case 'pending':

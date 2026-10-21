@@ -539,9 +539,10 @@ reg(
     rollback: z.string().describe('How to undo it if the approval is executed'),
     work_id: z.string().optional().describe('Work item this request belongs to: W-n, TD-n or LANE-name'),
     requester_thread: z.string().optional().describe('One line naming the requesting thread'),
+    drill: z.boolean().optional().describe('A drill: shown on the pages and in the notice as one, never approved, nothing runs'),
   },
-  async ({ action, params, reason, rollback, work_id, requester_thread }) =>
-    jsonResult(await requestAction({ action, params, reason, rollback, work_id, requester_thread })),
+  async ({ action, params, reason, rollback, work_id, requester_thread, drill }) =>
+    jsonResult(await requestAction({ action, params, reason, rollback, work_id, requester_thread, drill })),
 )
 
 reg(

@@ -21,6 +21,8 @@ export type PlatformApprovalRecord = {
   runner?: string
   requester_thread?: string
   work_id?: string
+  /** A drill: never approved, nothing runs (v4 §20.3 rule 8; W-31 2.5 gap 2). Unset on a request that is not one. */
+  drill?: boolean
   execution?: unknown
   deliveries?: unknown
   status: string

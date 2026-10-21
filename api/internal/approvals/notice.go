@@ -34,6 +34,7 @@ func noticeItem(a Approval) approvalnotify.Item {
 		Thread:    Redact(a.RequesterThread),
 		WorkID:    Redact(a.WorkID),
 		Runner:    a.Runner,
+		Drill:     a.Drill,
 		CreatedAt: a.CreatedAt,
 		ExpiresAt: a.ExpiresAt,
 		Reason:    a.Reason,
@@ -371,7 +372,8 @@ func (s *Service) remindDue(ctx context.Context) {
 }
 
 func reminderDue(a Approval, now time.Time) string {
-	if a.Status != StatusPending || !now.Before(a.ExpiresAt) {
+	// A drill asks nothing of the Owner after its first notice.
+	if a.Status != StatusPending || !now.Before(a.ExpiresAt) || a.Drill {
 		return ""
 	}
 	left := a.ExpiresAt.Sub(now)

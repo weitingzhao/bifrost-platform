@@ -11,6 +11,7 @@ import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
 import { needsYouCountText, type NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import {
+  DRILL_LINE,
   EARLIER_NOTIFICATIONS,
   TERMINAL_NOT_RUN,
   checkLines,
@@ -111,6 +112,7 @@ export function NeedsYouPage() {
     decide,
     terminal,
     check,
+    drills,
     recent,
     silent,
     lost,
@@ -220,6 +222,17 @@ export function NeedsYouPage() {
           <ApprovalList>
             {check.map(item => (
               <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} steps={stepsOf(item.number)} />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {drills.length > 0 ? (
+        // Drills (v4 §20.3 rule 8): shown as they would be, not counted; nothing runs and there is nothing to approve.
+        <Group label="Drills" count={String(drills.length)}>
+          <Note>Not counted: a drill shows what a request looks like. Nothing runs, and it cannot be approved.</Note>
+          <ApprovalList>
+            {drills.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={[DRILL_LINE]} />
             ))}
           </ApprovalList>
         </Group>

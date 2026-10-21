@@ -38,6 +38,18 @@ function thread(over: Partial<AgentThread> = {}): AgentThread {
 }
 
 describe('needs you groups', () => {
+  it('lists a pending drill apart and never counts it (W-31 2.5 gap 2, v4 §20.3 rule 8)', () => {
+    const groups = groupOpenApprovals([
+      buildPlatformApproval({ id: 'real' }),
+      buildPlatformApproval({ id: 'drill', drill: true }),
+      buildPlatformApproval({ id: 'old-drill', drill: true, expires_at: at(60_000) }),
+      buildPlatformApproval({ id: 'closed-drill', drill: true, status: 'rejected' }),
+    ], now)
+    expect(groups.decide.map(i => i.id)).toEqual(['real'])
+    expect(groups.drills.map(i => i.id)).toEqual(['drill'])
+    expect(waitingCount(groups, 0)).toBe(1)
+  })
+
   it('splits open approvals into decide, run, and check, and leaves the rest out', () => {
     const groups = groupOpenApprovals(
       [

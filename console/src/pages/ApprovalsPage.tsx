@@ -437,17 +437,20 @@ function ApprovalCard({
             />
           </label>
           <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              className="h-11 w-full sm:h-auto sm:w-auto"
-              disabled={!canDecide}
-              title={blockedReason}
-              aria-describedby={staleBuild ? buildReasonId : undefined}
-              aria-label={sending === 'approve' ? 'Sending…' : `Approve ${item.action}`}
-              onClick={() => onApprove(item.id)}
-            >
-              {sending === 'approve' ? 'Sending…' : 'Approve'}
-            </Button>
+            {/* A drill has no approval to give (v4 §20.5 scenario 9): no button for one; reject closes it. */}
+            {item.drill === true ? null : (
+              <Button
+                type="button"
+                className="h-11 w-full sm:h-auto sm:w-auto"
+                disabled={!canDecide}
+                title={blockedReason}
+                aria-describedby={staleBuild ? buildReasonId : undefined}
+                aria-label={sending === 'approve' ? 'Sending…' : `Approve ${item.action}`}
+                onClick={() => onApprove(item.id)}
+              >
+                {sending === 'approve' ? 'Sending…' : 'Approve'}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"

@@ -54,6 +54,7 @@ export function ApprovalRow({
           {approvalRowTitle(item)}
         </span>
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          {item.drill === true ? <DenseTag variant="neutral">Drill</DenseTag> : null}
           <DenseTag variant={item.tier === 'D' ? 'danger' : 'warning'}>{item.tier || '—'}</DenseTag>
           {words !== '' ? (
             <span className="text-[var(--text-dense-caption)] text-muted-foreground">{words}</span>

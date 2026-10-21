@@ -23,6 +23,7 @@ export function buildPlatformApproval(
     runner: 'platform',
     requester_thread: '',
     work_id: '',
+    drill: false,
     execution: null,
     deliveries: [],
     reason: 'prod drift',

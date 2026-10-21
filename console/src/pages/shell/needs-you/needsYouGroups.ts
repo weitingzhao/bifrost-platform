@@ -5,6 +5,9 @@ import { visibleTimestamp, youClosedLine } from '@/pages/approvalDecision'
 
 export const TERMINAL_NOT_RUN = 'Approved. It has not run yet.'
 
+/** A pending drill's row: nothing runs and there is nothing to approve (v4 §20.3 rule 8). */
+export const DRILL_LINE = 'Drill · nothing runs, nothing to approve'
+
 export const CHECK_SAY_WHAT_HAPPENED = 'Open it and say what happened.'
 
 export const EARLIER_NOTIFICATIONS =
@@ -20,6 +23,8 @@ export type NeedsYouGroups = {
   decide: ApprovalItem[]
   terminal: ApprovalItem[]
   check: ApprovalItem[]
+  /** Pending drills: shown, never counted; there is nothing to decide (v4 §20.3 rule 8). */
+  drills: ApprovalItem[]
 }
 
 export type HandledRow =
@@ -64,10 +69,11 @@ export function groupOpenApprovals(items: readonly ApprovalItem[], now = Date.no
   const decide: ApprovalItem[] = []
   const terminal: ApprovalItem[] = []
   const check: ApprovalItem[] = []
+  const drills: ApprovalItem[] = []
   for (const item of items) {
     const status = item.status.trim().toLowerCase()
     if (status === 'pending') {
-      if (isAwaitingDecision(item, now)) decide.push(item)
+      if (isAwaitingDecision(item, now)) (item.drill === true ? drills : decide).push(item)
       continue
     }
     if (status === 'approved' && runnerOf(item) === 'owner' && !hasRun(item)) {
@@ -76,7 +82,7 @@ export function groupOpenApprovals(items: readonly ApprovalItem[], now = Date.no
     }
     if (status === 'unknown') check.push(item)
   }
-  return { decide, terminal, check }
+  return { decide, terminal, check, drills }
 }
 
 /** Sidebar and the page heading: the three approval groups, silent threads, and open questions. */

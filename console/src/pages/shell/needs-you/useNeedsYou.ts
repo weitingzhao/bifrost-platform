@@ -152,6 +152,7 @@ export function useNeedsYou() {
     decide: groups.decide,
     terminal: groups.terminal,
     check: groups.check,
+    drills: groups.drills,
     recent,
     silent,
     lost,

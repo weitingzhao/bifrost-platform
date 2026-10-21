@@ -63,11 +63,16 @@ type Approval struct {
 	Summary   string            `json:"summary,omitempty"`
 	KeyParams map[string]string `json:"key_params,omitempty"`
 	// Runner is who executes after approval: platform, host or owner.
-	Runner          string     `json:"runner,omitempty"`
-	RequesterThread string     `json:"requester_thread,omitempty"`
-	WorkID          string     `json:"work_id,omitempty"`
-	Execution       *Execution `json:"execution,omitempty"`
-	Deliveries      []Delivery `json:"deliveries,omitempty"`
+	Runner          string `json:"runner,omitempty"`
+	RequesterThread string `json:"requester_thread,omitempty"`
+	WorkID          string `json:"work_id,omitempty"`
+	// Drill marks a request made to exercise the pages and the notices (v4
+	// §20.3 rule 8, §20.5 scenario 9; W-31 2.5 gap 2, Owner 2026-10-21): it
+	// is never approved (approve answers 409), so it never runs; it says so
+	// in its notice and is sent no reminder. It can be rejected to close it.
+	Drill      bool       `json:"drill,omitempty"`
+	Execution  *Execution `json:"execution,omitempty"`
+	Deliveries []Delivery `json:"deliveries,omitempty"`
 	// extra is the JSON object keys this binary does not know. The store
 	// writes them back. They are not part of the API.
 	extra map[string]json.RawMessage

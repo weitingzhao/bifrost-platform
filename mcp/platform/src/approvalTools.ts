@@ -12,6 +12,8 @@ export interface RequestActionInput {
   work_id?: string
   /** One line naming the requesting thread. */
   requester_thread?: string
+  /** A drill: never approved, nothing runs (v4 §20.3 rule 8). */
+  drill?: boolean
 }
 
 /** An approval is addressed by its id (appr_…) or its number (57 or #57). */
@@ -35,6 +37,7 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
     rollback: input.rollback,
     ...(input.work_id ? { work_id: input.work_id } : {}),
     ...(input.requester_thread ? { requester_thread: input.requester_thread } : {}),
+    ...(input.drill === true ? { drill: true } : {}),
   })
   return withApproveHint(created)
 }

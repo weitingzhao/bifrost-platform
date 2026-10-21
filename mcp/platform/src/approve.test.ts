@@ -214,6 +214,11 @@ test('sessions without bifrost-approve get the number and a Console link; tier D
   const createdD = withApproveHint({ id: 'appr_y', number: 4, tier: 'D' }, env) as Record<string, unknown>
   assert.match(String(createdD.approve_hint), /^Tier D: .*Console only/)
   assert.deepEqual(withApproveHint({ error: 'forbidden' }, env), { error: 'forbidden' })
+  // A drill has nothing to approve (W-31 2.5 gap 2): its hint never asks for an approval.
+  const drill = withApproveHint({ id: 'appr_z', number: 5, tier: 'C', drill: true }, env) as Record<string, unknown>
+  assert.equal(String(drill.approve_hint),
+    '#5 is a drill: nothing runs and it cannot be approved. It shows at http://console.example/#approvals?id=appr_z and waits until it is rejected or expires.')
+  assert.doesNotMatch(String(drill.approve_hint), /批|Owner approves/)
 })
 
 test('no tool posts the resolve route of an approval', () => {

@@ -107,6 +107,8 @@ type createInput struct {
 	Params    map[string]any
 	Thread    string
 	WorkID    string
+	// Drill: a request that is never approved (Approval.Drill).
+	Drill bool
 }
 
 var workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
@@ -166,7 +168,8 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		s.mu.Lock()
 		auto := s.auto
 		s.mu.Unlock()
-		if auto != nil {
+		// A drill is never approved, by a policy either: it is made to be seen waiting.
+		if auto != nil && !in.Drill {
 			if policyID := auto(ctx, act.ID, tier, norm); policyID != "" {
 				return failFields(400, map[string]any{
 					"error":            "call directly",
@@ -204,6 +207,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		Runner:          act.RunnerOf(norm),
 		RequesterThread: thread,
 		WorkID:          work,
+		Drill:           in.Drill,
 	}
 	err = s.store.update(func(doc *file) error {
 		rec.Number = doc.nextNumber()
@@ -372,6 +376,11 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 		}
 		if found.Status == StatusExpired {
 			refusal = &decided{Status: 409, Body: map[string]any{"error": "expired", "status": StatusExpired}}
+			return keepSwept(evs)
+		}
+		// A drill has no approval to give (v4 §20.5 scenario 9): whoever asks, on any channel.
+		if found.Drill {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "a drill cannot be approved", "drill": true, "status": found.Status}}
 			return keepSwept(evs)
 		}
 		if found.Status != StatusPending {
