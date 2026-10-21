@@ -75,7 +75,22 @@ func TestProgressSaysTheSchemaAndTheFailingLoops(t *testing.T) {
 		ok(t, merr)
 		ok(t, os.WriteFile(consoleSchemaFixture, append(raw, '\n'), 0o644))
 	}
+	// Review 466 B-1: another loop alerted and answered a hundred times over
+	// does not push the standing alert out of what Progress reads.
+	for range 101 {
+		ok(t, store.AlertFailingLoop(ctx, w.rt, "agentrt-assess", store.FailuresToAlert, "the evidence read failed"))
+		ok(t, store.NoteLoopPasses(ctx, w.rt, "agentrt-assess", store.FailuresToAlert))
+	}
+	if still, _ := progressOf(t, w.rt); len(still.Alerts) != 1 || still.Alerts[0].Loop != "agentrt-facts-rules" {
+		t.Fatalf("after another loop's 202 records: %+v", still.Alerts)
+	}
+	if open, oerr := store.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || !open {
+		t.Fatalf("the standing alert reads open %v (%v)", open, oerr)
+	}
 	ok(t, store.NoteLoopPasses(ctx, w.rt, "agentrt-facts-rules", 6))
+	if open, oerr := store.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || open {
+		t.Fatalf("an answered alert reads open %v (%v)", open, oerr)
+	}
 	if passed, _ := progressOf(t, w.rt); len(passed.Alerts) != 0 {
 		t.Fatalf("after it passes again: %+v", passed.Alerts)
 	}

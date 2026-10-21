@@ -2,10 +2,14 @@ package controller_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -98,5 +102,83 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 	run("agentrt-landings", append(append(same(3), nil), same(3)...), nil)
 	if a := events("policy_alert"); len(a) != 1 {
 		t.Fatalf("alerts %q; want still the one", a)
+	}
+}
+
+// flakyDB fails the next fail transactions it is asked to begin.
+type flakyDB struct {
+	store.DB
+	fail atomic.Int32
+}
+
+func (f *flakyDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	if f.fail.Load() > 0 {
+		f.fail.Add(-1)
+		return nil, errors.New("the database is away")
+	}
+	return f.DB.BeginTx(ctx, o)
+}
+
+// Review 466 A-1: an alert in the database is answered by a note once its
+// loop passes, whatever happened between: the error changed before it
+// passed; the note could not be written at the first pass; the workers
+// restarted, so the loop that passes is a new one.
+func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
+	pool := setup(t)
+	db := &flakyDB{DB: pool}
+	c := &controller.Controller{DB: db, Logf: func(string, ...any) {}}
+	run := func(name string, results []error, before map[int]func()) {
+		t.Helper()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		i := 0
+		c.RunLoopForTest(ctx, name, time.Millisecond, func() error {
+			if i >= len(results) {
+				cancel()
+				return nil
+			}
+			if f := before[i]; f != nil {
+				f()
+			}
+			i++
+			return results[i-1]
+		})
+	}
+	same := func(n int, what string) []error {
+		var out []error
+		for i := range n {
+			out = append(out, fmt.Errorf("%s %d", what, i))
+		}
+		return out
+	}
+	open := func(loop string) bool {
+		t.Helper()
+		o, err := store.LoopAlertOpen(ctx, pool, loop)
+		must(t, err)
+		return o
+	}
+	// The error changes after the alert, then the loop passes.
+	run("agentrt-card-rule", append(append(same(4, "the store is away"), errors.New("another error")), nil), nil)
+	if open("agentrt-card-rule") {
+		t.Fatal("changed error: the alert stays open after the loop passed")
+	}
+	// The note cannot be written at the first pass; it is at the next.
+	run("agentrt-leases", append(same(4, "the lease read failed"), nil, nil), map[int]func(){4: func() { db.fail.Store(1) }})
+	if open("agentrt-leases") {
+		t.Fatal("a note that failed once: the alert stays open")
+	}
+	// Alerted, then the workers restart: the new loop answers it at its first pass.
+	run("agentrt-landings", same(4, "Gitea is away"), nil)
+	if !open("agentrt-landings") {
+		t.Fatal("the alert was not recorded")
+	}
+	run("agentrt-landings", []error{nil}, nil)
+	if open("agentrt-landings") {
+		t.Fatal("after a restart: the alert stays open")
+	}
+	doc, err := store.Progress(ctx, pool)
+	must(t, err)
+	if alerts := doc["controller_alerts"].([]map[string]any); len(alerts) != 0 {
+		t.Fatalf("Progress lists %v", alerts)
 	}
 }

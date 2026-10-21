@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
@@ -79,8 +82,28 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 		t.Fatalf("after the Job: %v", current)
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	if len(lines) != 2 || lines[1][:4] != "INFO" || !slices.ContainsFunc(lines, func(l string) bool { return l[:5] == "ERROR" }) {
 		t.Fatalf("the log: %q", lines)
 	}
+	mu.Unlock()
+
+	// Review 466 C-1: a read that fails says so once and makes the schema
+	// unknown; the next good read says the state again, the same as before.
+	w.check(ctx, unreadable{})
+	if h := health(); h["agentrt_schema"] != "unknown" {
+		t.Fatalf("after a failed read: %v", h)
+	}
+	w.check(ctx, runtime)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(lines) != 4 || lines[2][:4] != "WARN" || lines[3][:4] != "INFO" || health()["agentrt_schema"] != migrate.SchemaCurrent {
+		t.Fatalf("the log after a failed read and a good one: %q", lines)
+	}
+}
+
+// unreadable is a database that cannot be read.
+type unreadable struct{}
+
+func (unreadable) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("connection refused")
 }

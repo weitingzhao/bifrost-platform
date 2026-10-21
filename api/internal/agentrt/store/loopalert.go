@@ -2,8 +2,9 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -60,73 +61,90 @@ func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText st
 	})
 }
 
-// NoteLoopPasses records that loop passed again after n failures in a row.
+// NoteLoopPasses records that loop passed again after n failures in a row
+// (n 0: the count is not known, as after a restart).
 func NoteLoopPasses(ctx context.Context, db DB, loop string, n int) error {
+	text := loop + passesAgain
+	if n > 0 {
+		text += fmt.Sprintf(" after %d failures in a row", n)
+	}
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := Append(ctx, tx, Event{Stream: ControllerStream, Type: "note", Actor: "controller",
-			Body: map[string]any{"text": fmt.Sprintf("%s passes again after %d failures in a row", loop, n)}})
+		_, err := Append(ctx, tx, Event{Stream: ControllerStream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 		return err
 	})
 }
 
-// failingWindow bounds the controller stream's records read for Progress:
-// two per loop and run, far more than a loop's latest needs.
-const failingWindow = 200
+// passesAgain follows the loop's name in the note that it passes again.
+const passesAgain = " passes again"
+
+// loopRecord is a loop's latest record on the controller stream: an alert
+// (when, and the artifact of its error) or the note that it passes again.
+type loopRecord struct {
+	found, alert bool
+	at           time.Time
+	artifact     string
+}
+
+// latestLoopRecord reads loop's latest record: the controller's
+// controller_failing alert naming it, or its note that it passes again
+// (review 466 B-1: by loop, not out of a window of the whole stream, which
+// another loop's alerts and notes could fill).
+func latestLoopRecord(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, loop string) (loopRecord, error) {
+	var r loopRecord
+	var kind string
+	err := q.QueryRow(ctx, `SELECT event_type, at, COALESCE(body_json->>'artifact_id', '') FROM agentrt.event
+	  WHERE event_stream_id = $1 AND actor_id = 'controller' AND (
+	    (event_type = 'policy_alert' AND body_json->>'rule' = 'controller_failing' AND body_json->>'line_digest' = $2)
+	    OR (event_type = 'note' AND starts_with(body_json->>'text', $3)))
+	  ORDER BY seq DESC LIMIT 1`, ControllerStream, lineDigest(loop), loop+passesAgain).Scan(&kind, &r.at, &r.artifact)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return r, nil
+	}
+	r.found, r.alert = err == nil, kind == "policy_alert"
+	return r, err
+}
+
+// LoopAlertOpen says whether loop's latest record is an alert no note has
+// answered: a loop starting again (a restart) writes the note once it passes
+// (review 466 A-1).
+func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
+	var open bool
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		r, err := latestLoopRecord(ctx, tx, loop)
+		open = r.alert
+		return err
+	})
+	return open, err
+}
 
 // failingLoops are the loops whose latest record on the controller stream is
 // an alert: the loop, when it was alerted and its error as kept, oldest
 // alert first.
 func failingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT event_type, at, COALESCE(body_json->>'line_digest', ''), COALESCE(body_json->>'text', ''),
-	    COALESCE(body_json->>'artifact_id', '') FROM agentrt.event
-	  WHERE event_stream_id = $1 AND event_type IN ('policy_alert','note') ORDER BY seq DESC LIMIT $2`, ControllerStream, failingWindow)
-	if err != nil {
-		return nil, err
-	}
 	type alert struct {
-		loop     string
-		at       time.Time
-		artifact string
+		loop string
+		rec  loopRecord
 	}
-	byDigest := map[string]string{}
-	for _, l := range ControllerLoops {
-		byDigest[lineDigest(l)] = l
-	}
-	decided := map[string]bool{}
 	var failing []alert
-	for rows.Next() {
-		var kind, digest, text, artifact string
-		var at time.Time
-		if err = rows.Scan(&kind, &at, &digest, &text, &artifact); err != nil {
-			rows.Close()
+	for _, l := range ControllerLoops {
+		r, err := latestLoopRecord(ctx, tx, l)
+		if err != nil {
 			return nil, err
 		}
-		loop := byDigest[digest]
-		if kind == "note" {
-			if i := strings.Index(text, " passes again"); i > 0 {
-				loop = text[:i]
-			}
-		}
-		if loop == "" || decided[loop] {
-			continue
-		}
-		decided[loop] = true
-		if kind == "policy_alert" {
-			failing = append(failing, alert{loop, at, artifact})
+		if r.alert {
+			failing = append(failing, alert{l, r})
 		}
 	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
+	sort.SliceStable(failing, func(i, j int) bool { return failing[i].rec.at.Before(failing[j].rec.at) })
 	out := make([]map[string]any, 0, len(failing))
-	for i := len(failing) - 1; i >= 0; i-- {
-		a := failing[i]
+	for _, a := range failing {
 		var body []byte
-		if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, a.artifact).Scan(&body); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, a.rec.artifact).Scan(&body); err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"loop": a.loop, "since": a.at.UTC().Format(time.RFC3339Nano), "error": string(body)})
+		out = append(out, map[string]any{"loop": a.loop, "since": a.rec.at.UTC().Format(time.RFC3339Nano), "error": string(body)})
 	}
 	return out, nil
 }

@@ -67,7 +67,7 @@ func (w *schemaWatch) check(ctx context.Context, q migrate.Querier) {
 	case err != nil && prevErr == "":
 		w.logf(slog.LevelWarn, "agentrt: the database's schema could not be read", "err", err)
 	case err != nil:
-	case prev != nil && sameSchema(*prev, st):
+	case prev != nil && prevErr == "" && sameSchema(*prev, st): // after a failed read, the state is said again (review 466 C-1)
 	case st.State == migrate.SchemaBehind || st.State == migrate.SchemaEdited:
 		w.logf(slog.LevelError, "agentrt: the database's schema is "+st.State+" this binary's migrations; the controller "+
 			"fails where it needs them. Run the agentrt-migrate Job for this environment first",
