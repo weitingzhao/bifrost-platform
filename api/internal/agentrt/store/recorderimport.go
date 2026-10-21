@@ -39,6 +39,13 @@ const OpRecorderImport = "recorder_import"
 const (
 	RecorderApply  = "Import the log"
 	RecorderRefuse = "Do not import it"
+	// RecorderRecommendWhy is why a recorder import's card recommends
+	// importing (the Owner 2026-10-21 「2.3 的四条都照推荐 A」, CUT-round2-2.3-rest
+	// §3 第 4 条: STG's card rule answers these cards, PROD's Owner reads
+	// it; as a plan change's card recommends applying, TD-397): the trial
+	// import has checked the log whole, and the log is history.
+	RecorderRecommendWhy = "the trial import checked the hash chain from the first line to the last and kept the log; " +
+		"it is history, so no plan or mission waits on it, and once imported it is fixed"
 )
 
 // RecorderStream is the stream a work's recorder log is imported into.
@@ -146,7 +153,8 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 			return nil, err
 		}
 		q, err := ask(ctx, Card{Key: cardKey, Title: "Import recorder log " + work + ": " + firstLine(reason), Body: body,
-			Options: []string{RecorderApply, RecorderRefuse}, Meanwhile: "the log is not imported; the recorder keeps it as it is",
+			Options: []string{RecorderApply, RecorderRefuse}, Recommended: 1, RecommendedWhy: RecorderRecommendWhy,
+			Meanwhile: "the log is not imported; the recorder keeps it as it is",
 			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you", ByRule: byRule})
 		if errors.Is(err, ErrInvalid) {
 			return nil, err

@@ -142,9 +142,11 @@ func TestEveryKindIsAnsweredAfterItsWait(t *testing.T) {
 	}
 }
 
-// A plan import's and a recorder import's cards are answered as plan changes
+// A plan import's card recommends nothing and is answered as plan changes
 // are: b ("Do not apply it" by any name), the import refused and named the
-// rule's.
+// rule's. A recorder import's card recommends importing (the Owner
+// 2026-10-21 「2.3 的四条都照推荐 A」: STG's rule answers these cards), so the
+// rule answers a and the log is imported, named the rule's.
 func TestImportCardsAreAnsweredByRule(t *testing.T) {
 	t.Parallel()
 	pool, req := importDB(t)
@@ -155,6 +157,9 @@ func TestImportCardsAreAnsweredByRule(t *testing.T) {
 	out, err = store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k2", "retire the recorder", tdLog(t), s.ask)
 	ok(t, err)
 	recorderCard, _ := out["question_id"].(string)
+	if rec := s.cards[recorderCard].card.Recommended; rec != "a" || s.cards[importCard].card.Recommended != "" {
+		t.Fatalf("the recorder import's card recommends %q, the plan import's %q", rec, s.cards[importCard].card.Recommended)
+	}
 	signCardAutoSeconds(t, pool, "0", "[plan_import, recorder_import]")
 	if n, err := store.AnswerByRule(ctx, pool, s.rule()); err != nil || n != 2 {
 		t.Fatalf("answered %d (%v)", n, err)
@@ -162,16 +167,16 @@ func TestImportCardsAreAnsweredByRule(t *testing.T) {
 	if n, err := store.DecidePlanChanges(ctx, pool, s.question, s.ack); err != nil || n != 2 {
 		t.Fatalf("decided %d (%v)", n, err)
 	}
-	for _, q := range []string{importCard, recorderCard} {
+	for q, want := range map[string][2]string{importCard: {"b", "refused"}, recorderCard: {"a", "applied"}} {
 		var decision, by string
 		ok(t, pool.QueryRow(ctx, `SELECT body_json->>'decision', body_json->>'by' FROM agentrt.event WHERE event_type = 'plan_change_decided'
 		  AND body_json->>'question_id' = $1`, q).Scan(&decision, &by))
-		if got := s.cards[q]; got.option != "b" || decision != "refused" || by != "rule card-auto-answer v1" {
-			t.Errorf("card %s answered %q, decided %s by %q", q, got.option, decision, by)
+		if got := s.cards[q]; got.option != want[0] || decision != want[1] || by != "rule card-auto-answer v1" {
+			t.Errorf("card %s answered %q, decided %s by %q; want %s, %s", q, got.option, decision, by, want[0], want[1])
 		}
 	}
-	if heads := streamEvents(t, pool, store.RecorderStream("td-336"), "legacy_imported"); heads != 0 {
-		t.Fatalf("the refused recorder log was imported: %d", heads)
+	if heads := streamEvents(t, pool, store.RecorderStream("td-336"), "legacy_imported"); heads == 0 {
+		t.Fatal("the recorder log the rule answered Import for was not imported")
 	}
 }
 
