@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,15 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 	}
 	if len(m.tasks) == 0 {
 		return unknownETA("no unfinished task: nothing proposed to estimate")
+	}
+	// A task maybe stuck, on a lost host or of unknown status makes the time
+	// one that cannot be told; the time from before is not kept (v4 §20.3
+	// rule 7, §20.5: suspend a task and its goal's time is unknown).
+	for _, t := range m.tasks {
+		switch t.Status {
+		case StatusMaybeStuck, StatusHostLost, StatusUnknown:
+			return unknownETA(fmt.Sprintf("task %s is %s: no time can be told until it is heard from", t.TaskID, strings.ReplaceAll(t.Status, "_", " ")))
+		}
 	}
 	var low, high time.Duration
 	var late []string

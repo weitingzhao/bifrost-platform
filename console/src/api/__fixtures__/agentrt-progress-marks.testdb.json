@@ -1,0 +1,455 @@
+{
+  "as_of_event_id": 62,
+  "controller_alerts": [],
+  "controls": [],
+  "generated_at": "2026-10-21T17:30:43.323934Z",
+  "hosts": [
+    {
+      "state": "active",
+      "online": true,
+      "host_id": "h1",
+      "version": 0,
+      "actor_id": "host:h1",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": 0,
+      "tools_json": {},
+      "last_poll_at": "2026-10-21T12:30:43.167709-05:00",
+      "capacity_json": {},
+      "live_attempts": 1,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h2",
+      "version": 0,
+      "actor_id": "host:h2",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": 600,
+      "tools_json": {},
+      "last_poll_at": "2026-10-21T12:20:43.307552-05:00",
+      "capacity_json": {},
+      "live_attempts": 1,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": true,
+      "host_id": "h3",
+      "version": 0,
+      "actor_id": "host:h3",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": 0,
+      "tools_json": {},
+      "last_poll_at": "2026-10-21T12:30:43.243449-05:00",
+      "capacity_json": {},
+      "live_attempts": 1,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": true,
+      "host_id": "h4",
+      "version": 0,
+      "actor_id": "host:h4",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": 0,
+      "tools_json": {},
+      "last_poll_at": "2026-10-21T12:30:43.271214-05:00",
+      "capacity_json": {},
+      "live_attempts": 1,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h5",
+      "version": 0,
+      "actor_id": "host:h5",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h6",
+      "version": 0,
+      "actor_id": "host:h6",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h7",
+      "version": 0,
+      "actor_id": "host:h7",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h8",
+      "version": 0,
+      "actor_id": "host:h8",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    }
+  ],
+  "live": [
+    {
+      "attempt_id": "a_01M5FR7TMR8XDXFSPMS4TH40R8",
+      "attempt_no": 1,
+      "task_id": "t_01M5FR7TM3QS0NEKN75RW3789J",
+      "mission_id": "M-1",
+      "host_id": "h2",
+      "executor": "exec:codex",
+      "model": "gpt-x",
+      "state": "stale",
+      "started_at": "2026-10-21T17:30:42.230084Z",
+      "elapsed_s": 1,
+      "heartbeat_age_s": 0,
+      "status": "host_lost",
+      "reason": "host h2 last polled 10 minutes ago; result not persisted (last checkpoint 1 at 2026-10-21T17:30:43.233499Z, nothing persisted for 0 s)",
+      "persisted": false,
+      "last_checkpoint_seq": 1,
+      "last_checkpoint_at": "2026-10-21T17:30:43.233499Z",
+      "unpersisted_for_s": 0
+    },
+    {
+      "attempt_id": "a_01M5FR7TPDJJJY70BK7QH7V0TR",
+      "attempt_no": 1,
+      "task_id": "t_01M5FR7TNZKQ3YASNHVCT4MF95",
+      "mission_id": "M-1",
+      "host_id": "h4",
+      "executor": "exec:codex",
+      "model": "gpt-x",
+      "state": "stale",
+      "started_at": "2026-10-21T17:30:42.283869Z",
+      "elapsed_s": 1,
+      "heartbeat_age_s": 0,
+      "status": "maybe_stuck",
+      "reason": "the lease lapsed and was not renewed; result not persisted (no checkpoint, nothing persisted for 1 s)",
+      "persisted": false,
+      "unpersisted_for_s": 1
+    },
+    {
+      "attempt_id": "a_01M5FR7TKKQMRFSS3DTF32FK11",
+      "attempt_no": 1,
+      "task_id": "t_01M5FR7TJ7BPSZKD91QH2Y76G4",
+      "mission_id": "M-1",
+      "host_id": "h1",
+      "executor": "exec:codex",
+      "model": "gpt-x",
+      "state": "running",
+      "started_at": "2026-10-21T17:30:43.200229Z",
+      "elapsed_s": 0,
+      "heartbeat_age_s": 0,
+      "status": "working",
+      "reason": "attempt a_01M5FR7TKKQMRFSS3DTF32FK11 on h1",
+      "persisted": false,
+      "unpersisted_for_s": 0
+    },
+    {
+      "attempt_id": "a_01M5FR7TNHQXV7D3K687CNZ4XJ",
+      "attempt_no": 1,
+      "task_id": "t_01M5FR7TN2276W9JHB0NJWN0TQ",
+      "mission_id": "M-1",
+      "host_id": "h3",
+      "executor": "exec:codex",
+      "model": "gpt-x",
+      "state": "running",
+      "started_at": "2026-10-21T17:30:43.256169Z",
+      "elapsed_s": 0,
+      "heartbeat_age_s": 0,
+      "status": "working",
+      "reason": "attempt a_01M5FR7TNHQXV7D3K687CNZ4XJ on h3",
+      "persisted": false,
+      "unpersisted_for_s": 0
+    }
+  ],
+  "needs_you": {
+    "count": 0,
+    "items": [],
+    "truncated": false
+  },
+  "plan": [
+    {
+      "count": {
+        "done": 1,
+        "manual": 1,
+        "state": "active",
+        "stopped": 0,
+        "total": 4
+      },
+      "items": [
+        {
+          "active_steps": [],
+          "count": {
+            "done": 1,
+            "manual": 1,
+            "state": "active",
+            "stopped": 0,
+            "total": 4
+          },
+          "label": "2.1",
+          "plan_node_id": "R2:2.1",
+          "title": "data layer"
+        }
+      ],
+      "kind": "round",
+      "plan_node_id": "R2",
+      "title": "round 2"
+    }
+  ],
+  "recent": {
+    "failed_attempts": [],
+    "tasks": []
+  },
+  "schema": {
+    "state": "current"
+  },
+  "work": {
+    "missions": [
+      {
+        "deadline_at": "2026-10-28T17:30:43Z",
+        "eta": {
+          "reason": "task t_01M5FR7TM3QS0NEKN75RW3789J is host lost: no time can be told until it is heard from",
+          "state": "unknown"
+        },
+        "goal": "test",
+        "mission_id": "M-1",
+        "next_steps": [
+          {
+            "owner_step": false,
+            "plan_node_id": "R2:2.1-1",
+            "title": "s1"
+          },
+          {
+            "owner_step": false,
+            "plan_node_id": "R2:2.1-3",
+            "title": "s3"
+          }
+        ],
+        "reason": "host h2 last polled 10 minutes ago; result not persisted (last checkpoint 1 at 2026-10-21T17:30:43.233499Z, nothing persisted for 0 s)",
+        "since": "2026-10-21T17:30:43.230484Z",
+        "slices": {
+          "done": 1,
+          "manual": 1,
+          "state": "active",
+          "stopped": 0,
+          "total": 3
+        },
+        "state": "active",
+        "status": "host_lost",
+        "tasks": [
+          {
+            "task_id": "t_01M5FR7TJ7BPSZKD91QH2Y76G4",
+            "title": "t",
+            "role": "implement",
+            "plan_node_id": "R2:2.1-1",
+            "off_plan": false,
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "running",
+            "status": "working",
+            "reason": "attempt a_01M5FR7TKKQMRFSS3DTF32FK11 on h1",
+            "since": "2026-10-21T17:30:43.201548Z",
+            "depends_on": [],
+            "attempt": {
+              "attempt_id": "a_01M5FR7TKKQMRFSS3DTF32FK11",
+              "attempt_no": 1,
+              "task_id": "t_01M5FR7TJ7BPSZKD91QH2Y76G4",
+              "mission_id": "M-1",
+              "host_id": "h1",
+              "executor": "exec:codex",
+              "model": "gpt-x",
+              "state": "running",
+              "started_at": "2026-10-21T17:30:43.200229Z",
+              "elapsed_s": 0,
+              "heartbeat_age_s": 0,
+              "status": "working",
+              "reason": "attempt a_01M5FR7TKKQMRFSS3DTF32FK11 on h1",
+              "persisted": false,
+              "unpersisted_for_s": 0
+            },
+            "computed_not_persisted": false
+          },
+          {
+            "task_id": "t_01M5FR7TM3QS0NEKN75RW3789J",
+            "title": "t",
+            "role": "implement",
+            "plan_node_id": "R2:2.1-1",
+            "off_plan": false,
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "running",
+            "status": "host_lost",
+            "reason": "host h2 last polled 10 minutes ago; result not persisted (last checkpoint 1 at 2026-10-21T17:30:43.233499Z, nothing persisted for 0 s)",
+            "since": "2026-10-21T17:30:43.230484Z",
+            "depends_on": [],
+            "attempt": {
+              "attempt_id": "a_01M5FR7TMR8XDXFSPMS4TH40R8",
+              "attempt_no": 1,
+              "task_id": "t_01M5FR7TM3QS0NEKN75RW3789J",
+              "mission_id": "M-1",
+              "host_id": "h2",
+              "executor": "exec:codex",
+              "model": "gpt-x",
+              "state": "stale",
+              "started_at": "2026-10-21T17:30:42.230084Z",
+              "elapsed_s": 1,
+              "heartbeat_age_s": 0,
+              "status": "host_lost",
+              "reason": "host h2 last polled 10 minutes ago; result not persisted (last checkpoint 1 at 2026-10-21T17:30:43.233499Z, nothing persisted for 0 s)",
+              "persisted": false,
+              "last_checkpoint_seq": 1,
+              "last_checkpoint_at": "2026-10-21T17:30:43.233499Z",
+              "unpersisted_for_s": 0
+            },
+            "computed_not_persisted": false
+          },
+          {
+            "task_id": "t_01M5FR7TN2276W9JHB0NJWN0TQ",
+            "title": "t",
+            "role": "implement",
+            "plan_node_id": "R2:2.1-1",
+            "off_plan": false,
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "running",
+            "status": "working",
+            "reason": "attempt a_01M5FR7TNHQXV7D3K687CNZ4XJ on h3",
+            "since": "2026-10-21T17:30:43.256851Z",
+            "depends_on": [],
+            "attempt": {
+              "attempt_id": "a_01M5FR7TNHQXV7D3K687CNZ4XJ",
+              "attempt_no": 1,
+              "task_id": "t_01M5FR7TN2276W9JHB0NJWN0TQ",
+              "mission_id": "M-1",
+              "host_id": "h3",
+              "executor": "exec:codex",
+              "model": "gpt-x",
+              "state": "running",
+              "started_at": "2026-10-21T17:30:43.256169Z",
+              "elapsed_s": 0,
+              "heartbeat_age_s": 0,
+              "status": "working",
+              "reason": "attempt a_01M5FR7TNHQXV7D3K687CNZ4XJ on h3",
+              "persisted": false,
+              "unpersisted_for_s": 0
+            },
+            "computed_not_persisted": true
+          },
+          {
+            "task_id": "t_01M5FR7TNZKQ3YASNHVCT4MF95",
+            "title": "t",
+            "role": "implement",
+            "plan_node_id": "R2:2.1-1",
+            "off_plan": false,
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "running",
+            "status": "maybe_stuck",
+            "reason": "the lease lapsed and was not renewed; result not persisted (no checkpoint, nothing persisted for 1 s)",
+            "since": "2026-10-21T17:30:43.284604Z",
+            "depends_on": [],
+            "attempt": {
+              "attempt_id": "a_01M5FR7TPDJJJY70BK7QH7V0TR",
+              "attempt_no": 1,
+              "task_id": "t_01M5FR7TNZKQ3YASNHVCT4MF95",
+              "mission_id": "M-1",
+              "host_id": "h4",
+              "executor": "exec:codex",
+              "model": "gpt-x",
+              "state": "stale",
+              "started_at": "2026-10-21T17:30:42.283869Z",
+              "elapsed_s": 1,
+              "heartbeat_age_s": 0,
+              "status": "maybe_stuck",
+              "reason": "the lease lapsed and was not renewed; result not persisted (no checkpoint, nothing persisted for 1 s)",
+              "persisted": false,
+              "unpersisted_for_s": 1
+            },
+            "computed_not_persisted": false
+          },
+          {
+            "task_id": "t_01M5FR7TQBVWRT7PBY3MR93SAW",
+            "title": "t",
+            "role": "implement",
+            "off_plan": true,
+            "off_plan_reason": "T24 drill: an errand outside the plan",
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "ready",
+            "status": "queued",
+            "reason": "ready for a host to claim",
+            "since": "2026-10-21T17:30:43.309078Z",
+            "depends_on": [],
+            "computed_not_persisted": false
+          }
+        ],
+        "title": "M-1",
+        "waiting_on": "coordinator",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      },
+      {
+        "deadline_at": "2026-10-28T17:30:43Z",
+        "eta": {
+          "reason": "the mission is proposed: a wait for a decision has no usual time",
+          "state": "unknown"
+        },
+        "goal": "test",
+        "mission_id": "M-2",
+        "next_steps": [],
+        "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
+        "since": "2026-10-21T17:30:43.055967Z",
+        "slices": {
+          "done": 0,
+          "manual": 0,
+          "state": "planned",
+          "stopped": 0,
+          "total": 0
+        },
+        "state": "proposed",
+        "status": "waiting_owner",
+        "tasks": [],
+        "title": "M-2",
+        "waiting_on": "owner",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      }
+    ],
+    "truncated": false
+  }
+}

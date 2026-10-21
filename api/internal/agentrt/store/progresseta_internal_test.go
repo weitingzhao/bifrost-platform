@@ -77,6 +77,14 @@ func TestMissionETA(t *testing.T) {
 		"proposed, waiting on the Owner": {&progressMission{state: "active", tasks: []*ProgressTask{
 			{TaskID: "t11", Role: "implement", class: "go", State: "proposed", Status: StatusWaitingOwner}}}, "t11 is proposed"},
 		"awaiting the Owner": {&progressMission{state: "awaiting_owner", tasks: m.tasks}, "the mission is awaiting_owner"},
+		// v4 §20.3 rule 7: a task maybe stuck, on a lost host or of unknown status makes the time unknown, whatever
+		// the others' usual times; it says which (T24, §20.5: suspend a task).
+		"maybe stuck": {&progressMission{state: "active", tasks: []*ProgressTask{task("t12", "implement", "go", "ready", nil),
+			{TaskID: "t13", Role: "implement", class: "go", State: "running", Status: StatusMaybeStuck, Attempt: spent(60)}}}, "task t13 is maybe stuck"},
+		"host lost": {&progressMission{state: "active", tasks: []*ProgressTask{
+			{TaskID: "t14", Role: "implement", class: "python", State: "running", Status: StatusHostLost, Attempt: spent(60)}}}, "task t14 is host lost"},
+		"status unknown": {&progressMission{state: "active", tasks: []*ProgressTask{
+			{TaskID: "t15", Role: "implement", class: "go", State: "running", Status: StatusUnknown}}}, "task t15 is unknown"},
 	} {
 		eta := missionETA(c.m, usual, now)
 		if eta["state"] != "unknown" || !strings.Contains(eta["reason"].(string), c.want) {
