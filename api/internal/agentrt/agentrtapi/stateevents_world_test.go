@@ -48,6 +48,7 @@ var routeExpect = map[string]string{
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
 	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites, "POST hosts/{id}/drain": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
+	"POST plan/{id}/signoff":     expectWrites,
 	"POST rules/{rule_id}/check": expectAnswers, "POST rules/{rule_id}/proposals": expectWrites,
 	"POST rules/{rule_id}/sign": expectWrites, "POST rules/{rule_id}/tighten": expectWrites,
 	"POST pools/{id}/reading": expectWrites, "POST benchmark": expectWrites,
@@ -245,11 +246,15 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	must(t, err)
 	arch, err := planimport.ParseArch(string(text), []planimport.ArchRow{{Label: "release-guard"}, {Label: "state-db"}}, planimport.LedgerOptions{File: "WORK.md"})
 	must(t, err)
+	// A step the Owner signs off: its rule set by a plan change on his card (decided with the import's).
+	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6-signoff", "root": "R2", "reason": "fuzz",
+		"changes": []any{map[string]any{"op": "set_done_rule", "node": "R2:1-1", "rule": map[string]any{"owner_signoff": "fuzz"}}}})
 	ok("POST plan/imports", "reporter", "POST", "plan/imports", importBody("v-import", arch))
 	if _, err = store.DecidePlanChanges(ctx, f.pool, answer(store.CardApplyKey), nil); err != nil {
 		t.Fatal(err)
 	}
 	ok("POST plan/{id}/notes", "operator", "POST", "plan/ARCH:state-db/notes", map[string]any{"idempotency_key": "v7", "text": "in use on STG"})
+	ok("POST plan/{id}/signoff", "admin", "POST", "plan/R2:1-1/signoff", map[string]any{"ref": "fuzz"})
 
 	v1 := "rule_id: routing:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
 		"tenant: dev\norder: [capability, quota]\nquota_stop_percent: 90\n"
@@ -524,6 +529,8 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 			"parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}}
 	case rt.pattern == "plan/{id}/notes":
 		return map[string]any{"idempotency_key": key, "text": "fuzz"}
+	case rt.pattern == "plan/{id}/signoff":
+		return map[string]any{"ref": f.pick([]string{"fuzz", "", "x"})}
 	case rt.pattern == "controls":
 		return map[string]any{"idempotency_key": key, "scope": f.pick([]string{"task", "mission", "global", "host"}),
 			"scope_ref": f.pick(append(f.ids(t, idsTasks), "M-1", "h1")), "kind": f.pick([]string{"stop", "pause"}), "reason": "fuzz"}

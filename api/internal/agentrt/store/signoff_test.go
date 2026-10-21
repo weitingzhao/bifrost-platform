@@ -13,7 +13,8 @@ import (
 // write one sign-off: the second waits for the first and answers it
 // (SignOffStep). The first is held after it found the step unsigned; the case
 // counts only once the second waits for its lock or has reached the same
-// point. Serial: it holds the package's test hook (SetHook).
+// point. It holds the package's test hook:
+// Serial: SetHook.
 func TestSignOffStepOnceAtATime(t *testing.T) {
 	w := newWorld(t)
 	w.rule(t, s1, `{"owner_signoff":"x"}`)
