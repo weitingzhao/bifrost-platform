@@ -68,7 +68,8 @@ func TestSearchArtifactsRoute(t *testing.T) {
 	if code, out = call(t, s, "viewer", "GET", "artifacts?limit=1&before="+out["next"].(string), nil); code != http.StatusOK || len(ids(out)) != 1 {
 		t.Fatalf("the next page: %d %v", code, out)
 	}
-	for _, q := range []string{"kind=patch", "task=t1", "mission=M1", "author=nobody", "since=yesterday", "limit=0", "limit=101", "before=x"} {
+	for _, q := range []string{"kind=patch", "task=t1", "mission=M1", "author=nobody", "author=thread:%00", "author=thread:%FF", "since=yesterday",
+		"limit=0", "limit=101", "before=x"} {
 		if code, out = call(t, s, "viewer", "GET", "artifacts?"+q, nil); code != http.StatusBadRequest || out["error"] != "bad_request" {
 			t.Errorf("%s: %d %v", q, code, out)
 		}

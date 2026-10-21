@@ -200,6 +200,8 @@ func TestSearchArtifactsRefusals(t *testing.T) {
 		"task":     {Task: "t1"},
 		"mission":  {Mission: "M-0"},
 		"author":   {Author: "someone"},
+		"nul":      {Author: "thread:a\x00b"},
+		"utf8":     {Author: "thread:\xff"},
 		"limit":    {Limit: store.ArtifactSearchLimit + 1},
 		"negative": {Limit: -1},
 		"before":   {Before: "2026-10-21T00:00:00Z"},
@@ -208,5 +210,66 @@ func TestSearchArtifactsRefusals(t *testing.T) {
 		if _, _, err := store.SearchArtifacts(ctx, w.rt, q); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("%s: %v, want invalid", name, err)
 		}
+	}
+}
+
+// Review 478: since to the nanosecond against times stored to the
+// microsecond; two artifacts stored in the same microsecond, paged one at a
+// time, in their digests' order; exam artifacts never on any page of a host's.
+func TestSearchArtifactsEdges(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	// One transaction: created_at is its start, the same microsecond for all three.
+	var a, b, exam string
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		var err error
+		for _, x := range []struct {
+			id         *string
+			kind, body string
+		}{{&a, "report", "the first of a microsecond"}, {&b, "report", "the second of it"}, {&exam, "exam", "an answer of the same time"}} {
+			if *x.id, err = store.PutArtifact(ctx, tx, "controller", x.kind, "text/plain", []byte(x.body)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	var at time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT created_at FROM agentrt.artifact WHERE artifact_id = $1`, a).Scan(&at))
+	var same int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.artifact WHERE created_at = $1`, at).Scan(&same))
+	if same != 3 {
+		t.Fatalf("%d artifacts at %s, want the three", same, at.Format(time.RFC3339Nano))
+	}
+	for _, c := range []struct {
+		since time.Time
+		in    bool
+	}{
+		{at.Add(-time.Nanosecond), true}, {at, true}, {at.Add(time.Nanosecond), false}, {at.Add(time.Microsecond), false},
+	} {
+		got, _ := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: c.since})
+		if in := slices.Contains(got, a) && slices.Contains(got, b); in != c.in || (!c.in && len(got) != 0) {
+			t.Errorf("since %s: %v, want listed %v", c.since.Format(time.RFC3339Nano), got, c.in)
+		}
+	}
+	// The same microsecond: by digest, descending, one a page.
+	want := []string{a, b}
+	slices.Sort(want)
+	slices.Reverse(want)
+	first, next := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1})
+	second, last := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1, Before: next})
+	if !slices.Equal(append(first, second...), want) || next == "" || last != "" {
+		t.Fatalf("one a page: %v then %v (next %q, last %q), want %v", first, second, next, last, want)
+	}
+	// A host's pages, one at a time over everything, never show the exam.
+	before := ""
+	for i := 0; i < 100; i++ {
+		got, n := search(t, w, store.ArtifactQuery{HideExams: true, Limit: 1, Before: before})
+		if slices.Contains(got, exam) {
+			t.Fatalf("page %d of a host's shows the exam: %v", i, got)
+		}
+		if n == "" {
+			break
+		}
+		before = n
 	}
 }

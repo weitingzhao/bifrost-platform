@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -14,9 +15,10 @@ import (
 // Searching the artifacts (W-31 2.3, search_artifacts; the Owner 2026-10-21
 // 「2.3 的四条都照推荐 A」, CUT-round2-2.3-rest §3 第 1 条): their metadata,
 // newest first, never a body (GET /artifacts/{id} reads one). A listing, not
-// a feed: an artifact committed after a page was read, earlier than that
-// page's last, is not listed on the next; every artifact in order is the
-// artifact_put events'.
+// a feed: an artifact committed after a page was read whose place is among
+// the pages already read is not listed later; one whose place is past the
+// cursor may be on a later page (review 478 C1). Every artifact in order is
+// the artifact_put events'.
 //
 // An artifact is content-addressed and may serve many records, and its own
 // task_id and attempt_id columns are not written, so a task's artifacts are
@@ -31,6 +33,7 @@ import (
 const (
 	ArtifactSearchLimit   = 100
 	ArtifactSearchDefault = 50
+	maxActorName          = 256
 )
 
 // ArtifactQuery is a search: each field given narrows it.
@@ -92,7 +95,10 @@ func (q *ArtifactQuery) check() error {
 		return invalid("task is a task id (t_…), not %q", q.Task)
 	case q.Mission != "" && !missionIDRE.MatchString(q.Mission):
 		return invalid("mission is a mission id (M-n), not %q", q.Mission)
-	case q.Author != "" && kindOf(q.Author) == "":
+	case q.Author != "" && (kindOf(q.Author) == "" || len(q.Author) > maxActorName || !utf8.ValidString(q.Author) ||
+		strings.ContainsRune(q.Author, 0)):
+		// What the database cannot hold as text is refused here, not left
+		// to fail there (review 478 B1).
 		return invalid("author is an actor's name, not %q", q.Author)
 	case q.Limit < 0 || q.Limit > ArtifactSearchLimit:
 		return invalid("limit is 1 to %d", ArtifactSearchLimit)
@@ -120,7 +126,14 @@ func SearchArtifacts(ctx context.Context, db DB, q ArtifactQuery) ([]ArtifactMet
 	}
 	var since any
 	if !q.Since.IsZero() {
-		since = q.Since
+		// created_at is stored to the microsecond, and a bound is sent to
+		// it truncated: rounded up, ">= since" holds of exactly the times
+		// at or after it (review 478 A1).
+		at := q.Since.Truncate(time.Microsecond)
+		if at.Before(q.Since) {
+			at = at.Add(time.Microsecond)
+		}
+		since = at
 	}
 	kinds := q.Kinds
 	if kinds == nil {
