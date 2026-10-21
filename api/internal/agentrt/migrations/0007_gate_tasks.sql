@@ -2,7 +2,8 @@
 -- on 2026-10-20: after a release the runtime dispatches each architecture
 -- row's gate tests, the deterministic executor runs them on the deployed
 -- commit, and they are recorded as gate verifications;
--- CUT-td397-gate-runs-2026-10-20.md §7①). A verification or a review still
+-- CUT-td397-gate-runs-2026-10-20.md §7① 甲, the Owner 2026-10-21 「全按推荐：
+-- TD-397 ① 甲、② A」). A verification or a review still
 -- names the task it checks; the one exception is a gate task: role verify,
 -- no subject, class gate, effect none, off the plan, made by the controller.
 -- Which tasks are gate tasks of which batch is the controller's own record
