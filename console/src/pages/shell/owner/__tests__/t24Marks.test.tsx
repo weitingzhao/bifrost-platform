@@ -108,6 +108,17 @@ describe('T24: attempts on a stopped host are not doing', () => {
     expect(stalledStage({ label: 'Implement', state: 'done', tasks: data.tasks, completed: 1, dropped: 0 }, progress.live)).toBe('')
   })
 
+  it('keeps a blocked goal\'s lamp failed when its stalled words follow its status (review 472 B2-R1)', () => {
+    const gone = taskOn('h2')
+    const data: GoalData = { mission: { mission_id: 'M-1', state: 'paused', goal: 'test', created_at: '2026-10-21T17:20:00Z', created_by_actor_id: 'controller' },
+      events: [], tasks: [{ ...gone, created_at: '2026-10-21T17:20:00Z', updated_at: '2026-10-21T17:20:00Z', subject_task_id: '' }] }
+    const c = client()
+    c.setQueryData(['agent-runtime-goal', 'M-1'], data)
+    const { container } = render(<QueryClientProvider client={c}><GoalCard id="M-1" runtime={progress} updatedAt={1} questions={[]} /></QueryClientProvider>)
+    expect(screen.getByText('Blocked · 1 host lost')).toBeInTheDocument()
+    expect(container.querySelector('header .status-lamp')).toHaveClass('lamp-fail')
+  })
+
   it('shows the host that stopped polling with its attempt host lost, not running, and its result not persisted', () => {
     render(<QueryClientProvider client={client()}><OwnerCrew hosts={progress.hosts} live={progress.live} missions={progress.work.missions} now={now} read="ok" /></QueryClientProvider>)
     const row = (host: string) => screen.getAllByRole('listitem').find(li => within(li).queryByText(host, { selector: 'strong' }))!

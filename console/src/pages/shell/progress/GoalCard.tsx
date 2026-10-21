@@ -102,14 +102,16 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   // A stage none of whose work the runtime can tell is moving says the runtime's words, not running (T24, review 471 B2).
   const live = runtime?.live ?? []
   const activeStalled = stalledStage(stages.find(s => s.state === 'running') ?? stages[0] ?? { label: '', state: 'future', tasks: [], completed: 0, dropped: 0 }, live)
-  const status = (data ? goalStatus(data, links.length > 0) : 'Planning') + (activeStalled ? ` · ${activeStalled}` : '')
+  // The lamp reads the status alone; the stalled words only follow it in the head (review 472 B2-R1).
+  const status = data ? goalStatus(data, links.length > 0) : 'Planning'
+  const head = status + (activeStalled ? ` · ${activeStalled}` : '')
   const done = data ? goalDone(data) : false
   const start = text(data?.mission.created_at)
   const accepted = data?.events.filter(e => e.event_type === 'task_state_changed' && e.body_json.to === 'accepted').at(-1)?.at
   const end = done ? accepted : finished ? data?.events.at(-1)?.at : undefined
   return <article id={`goal-${id}`} aria-label={`Goal ${id}`} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${highlighted ? 'border-[var(--color-info)] ring-2 ring-[var(--color-info)]' : 'border-[var(--card-border)]'}`}>
     <header className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : 'degraded'} /><strong className="text-lg">{status}</strong></div>
+      <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : 'degraded'} /><strong className="text-lg">{head}</strong></div>
       <h3 className="break-words text-base font-semibold">{goal.split('\n')[0]}</h3>
       <p className="text-xs text-muted-foreground">Given by {data?.mission.created_by_actor_id === 'owner' ? 'You' : text(data?.mission.created_by_actor_id) || 'Unknown'} · <time title={start}>started {relative(start, now)}</time>{start && <span title={[start, end].filter(Boolean).join(' → ')}> · {end ? 'took' : 'elapsed'} {duration(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000)}</span>}</p>
       <details><summary className="cursor-pointer text-sm">Full goal</summary><p className="whitespace-pre-wrap break-words text-sm">{goal}</p></details>
