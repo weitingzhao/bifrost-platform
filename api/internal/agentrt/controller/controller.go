@@ -78,6 +78,10 @@ type Controller struct {
 	// card is assessed, whatever rule is in force.
 	SkipCardsTheRuleAnswers bool
 	Now                     func() time.Time
+	// Env is the platform's own environment and GateRepo the repository its
+	// deployments are of: the architecture table's gates run there
+	// (Gates, TD-397). Either empty, no gate runs.
+	Env, GateRepo string
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -521,6 +525,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		_, ferr := c.Facts(ctx)
+		_, gerr := c.Gates(ctx)
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
 		_, berr := c.BlockedCards(ctx)
@@ -530,7 +535,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, merr := c.MissionDecisions(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
+		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
 	})
 	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
 		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {

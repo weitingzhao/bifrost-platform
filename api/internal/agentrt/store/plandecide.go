@@ -195,6 +195,11 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 			if err := lockChanges(ctx, tx, p.root, p.changes); err != nil {
 				return err
 			}
+			if by.rule != "" {
+				if err := gatesStillRecommended(ctx, tx, p.root, p.changes); err != nil {
+					return err
+				}
+			}
 		}
 		var done bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'plan_change_decided'

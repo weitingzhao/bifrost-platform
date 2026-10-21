@@ -103,7 +103,7 @@ const latestBlock = `JOIN LATERAL (SELECT e.event_id, e.body_json FROM agentrt.e
 
 // needsCard is a blocked task (t, its mission m, its block b) that needs a
 // card now: as the comment above says, with no card of this block open.
-const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('active','paused')
+const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('active','paused') AND NOT ` + gateMember + `
   AND (t.effect_class <> 'external' OR NOT EXISTS (SELECT 1 FROM agentrt.attempt a WHERE a.task_id = t.task_id
     AND (a.state IN ('leased','running','stale') OR (a.state IN ('lost','failed') AND NOT EXISTS (SELECT 1 FROM agentrt.event x
       WHERE x.task_id = t.task_id AND x.attempt_id = a.attempt_id AND x.event_type = 'attempt_ended'

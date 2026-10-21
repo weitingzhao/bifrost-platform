@@ -25,7 +25,8 @@ import (
 // it, so a task left this way before the pass existed is blocked by its
 // first run.
 //
-// Not blocked here: a task with no candidate left that was never withdrawn
+// Not blocked here: a gate task (gates.go ends one that cannot run itself),
+// a task with no candidate left that was never withdrawn
 // (an empty route, candidates retired or excluded: no answer on a card makes
 // one), a brief (its sender is answered by brief.go, and briefs get no
 // card), a task or mission a stop or pause holds, and work of a mission
@@ -52,6 +53,7 @@ func BlockWithdrawn(ctx context.Context, db DB) (int, error) {
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
 			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 			  WHERE t.state = 'ready' AND m.state = 'active' AND t.role <> 'brief' AND t.effect_class = ANY($1) AND t.task_id > $2
+			    AND NOT `+gateMember+`
 			    AND (SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
 			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = ANY($4)) = $3
 			  ORDER BY t.task_id LIMIT $5`, dispatched, after, failuresToStop, executorEnds, page)

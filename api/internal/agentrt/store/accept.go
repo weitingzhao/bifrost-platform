@@ -237,6 +237,15 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 		if role != "verify" && role != "review" {
 			return nil
 		}
+		if subject == "" {
+			// A gate task checks no task: its result is a gate's (gateconclude.go).
+			if role != "verify" {
+				return nil
+			}
+			var err error
+			did, err = concludeGate(ctx, tx, taskID)
+			return err
+		}
 		step, err := lockStep(ctx, tx, taskID)
 		if err != nil {
 			return err

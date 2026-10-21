@@ -337,6 +337,11 @@ func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
 // review where its subject is, a rule naming only what its step binds
 // (some at commit).
 func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided int64, changes []PlanChange) ([]string, error) {
+	for _, c := range changes {
+		if err := gateGuard(ctx, tx, c); err != nil { // gatesplan.go
+			return nil, err
+		}
+	}
 	type newNode struct {
 		id, parent, kind, label, title, stepKind, mission string
 		ordinal                                           int
@@ -724,6 +729,9 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		card := Card{Key: canonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
 			Body: cardBody(root, reason, changes)}
 		if card.ByRule, err = ruleAnswers(ctx, tx, CardPlanChange, ""); err != nil {
+			return nil, err
+		}
+		if card.Recommended, card.RecommendedWhy, err = gatesRecommend(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}
 		if ask == nil {

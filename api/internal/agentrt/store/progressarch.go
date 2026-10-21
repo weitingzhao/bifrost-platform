@@ -110,10 +110,21 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 		return plan.Unknown.String(), ReasonNotGates, nil
 	}
 	facts := &stepFacts{ctx: ctx, tx: tx, step: id, deployed: deploys.read}
-	seen := &explained{Facts: facts, gates: gates}
+	var statusErr error
+	seen := &explained{Facts: facts, gates: gates, status: func(env, test, spec string) string {
+		if statusErr != nil {
+			return ""
+		}
+		s, err := gateStatus(ctx, tx, deploys.get(env), test, spec)
+		statusErr = err
+		return s
+	}}
 	res := rule.Eval(seen)
 	if facts.err != nil {
 		return "", "", facts.err
+	}
+	if statusErr != nil {
+		return "", "", statusErr
 	}
 	if deploys.err != nil {
 		return "", "", deploys.err
@@ -206,6 +217,9 @@ type explained struct {
 	// gates is the projection's readings of gates, by environment, test and
 	// spec: the deployment they are read against is the projection's.
 	gates map[string]plan.Tri
+	// status is what became of a gate that has not passed (gateStatus); nil
+	// for none.
+	status func(env, test, spec string) string
 }
 
 type atomReading struct {
@@ -255,7 +269,13 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 			e.gates[key] = v
 		}
 	}
-	e.atoms = append(e.atoms, atomReading{what: test, env: env, value: v})
+	what := test
+	if v == plan.False && e.status != nil {
+		if s := e.status(env, test, specSHA256); s != "" {
+			what = test + " (" + s + ")"
+		}
+	}
+	e.atoms = append(e.atoms, atomReading{what: what, env: env, value: v})
 	return v
 }
 

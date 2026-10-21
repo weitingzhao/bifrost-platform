@@ -250,6 +250,8 @@ type MissionProposal struct {
 	// assessmentOf is the stream of the item an assessment's mission
 	// assesses (assess.go, TD-391); no route sets it.
 	assessmentOf string
+	// gateRun is a batch of gate tasks (gates.go, TD-397); no route sets it.
+	gateRun map[string]any
 }
 
 // DefaultMissionDays is how long a mission runs when the proposal names no
@@ -385,7 +387,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
 		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, NeedsOwner: p.NeedsOwner, AssessmentOf: p.assessmentOf,
-		Token: w.Token}); err != nil {
+		GateRun: p.gateRun, Token: w.Token}); err != nil {
 		return nil, err
 	}
 	inside, why := envelopeFit(env, p)
@@ -583,10 +585,15 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 	}
 	var state string
 	var maxAction *string
-	err := tx.QueryRow(ctx, `SELECT state, scope_json->>'max_action' FROM agentrt.mission WHERE mission_id = $1`,
-		missionID).Scan(&state, &maxAction)
+	var gates bool
+	err := tx.QueryRow(ctx, `SELECT state, scope_json->>'max_action', scope_json ? 'gate_run' FROM agentrt.mission WHERE mission_id = $1`,
+		missionID).Scan(&state, &maxAction, &gates)
 	if err != nil {
 		return nil, err
+	}
+	if gates {
+		// The controller's alone (gates.go, review td397-2 A3).
+		return nil, invalid("mission %s is a batch of gates and takes no proposed tasks", missionID)
 	}
 	if !slices.Contains([]string{"proposed", "awaiting_owner", "active", "paused"}, state) {
 		return nil, fmt.Errorf("%w: mission %s is %s and takes no new tasks", ErrState, missionID, state)

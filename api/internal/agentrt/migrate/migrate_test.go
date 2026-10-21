@@ -191,6 +191,56 @@ func TestUpgradeTo0006KeepsEvents(t *testing.T) {
 	}
 }
 
+// TD-397: 0007 replaces the CHECK that ties verify and review to a subject
+// with one that also takes a gate task (role verify, no subject, class
+// gate, effect none, off the plan, made by the controller), and changes
+// nothing else; a second run applies nothing.
+func TestUpgradeTo0007TakesGateTasks(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.New(t)
+	conn := db.Connect(t, db.Owner)
+	files, err := migrate.Files()
+	if err != nil || len(files) < 7 || files[6].ID != 7 {
+		t.Fatalf("files = %d %v", len(files), err)
+	}
+	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:6]); err != nil {
+		t.Fatal(err)
+	}
+	checks := `SELECT string_agg(conname || '=' || pg_get_constraintdef(oid), E'\n' ORDER BY conname) FROM pg_constraint
+	  WHERE conrelid = 'agentrt.task'::regclass AND contype = 'c'`
+	var before, after string
+	if err = conn.QueryRow(ctx, checks).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := migrate.RunFiles(ctx, conn, "dev", files)
+	if err != nil || len(applied) != len(files)-6 || applied[0] != 7 {
+		t.Fatalf("applied %v %v", applied, err)
+	}
+	if err = conn.QueryRow(ctx, checks).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	old := "task_check2=CHECK (((role = ANY (ARRAY['verify'::text, 'review'::text])) = (subject_task_id IS NOT NULL)))"
+	if !strings.Contains(before, old) || strings.Contains(after, old) || !strings.Contains(after, "task_subject_by_role=CHECK") ||
+		!strings.Contains(after, "task_class = 'gate'::text") || !strings.Contains(after, "created_by_actor_id = 'controller'::text") {
+		t.Fatalf("before:\n%s\nafter:\n%s", before, after)
+	}
+	same := func(defs string) string {
+		var keep []string
+		for _, l := range strings.Split(defs, "\n") {
+			if !strings.HasPrefix(l, "task_check2=") && !strings.HasPrefix(l, "task_subject_by_role=") {
+				keep = append(keep, l)
+			}
+		}
+		return strings.Join(keep, "\n")
+	}
+	if same(before) != same(after) {
+		t.Fatalf("0007 changed another CHECK:\n%s\n---\n%s", same(before), same(after))
+	}
+	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files); rerr != nil || len(again) != 0 {
+		t.Fatalf("a second run applied %v %v", again, rerr)
+	}
+}
+
 // T19, the three environments (review 145 B7): a database migrated for an
 // environment grants its own runtime role, platform_agentrt_<env>, the same
 // privileges on every table of the schema whichever the environment, and the

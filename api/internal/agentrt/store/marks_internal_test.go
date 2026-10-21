@@ -23,7 +23,7 @@ func TestMarksHaveTheirWriters(t *testing.T) {
 		name, text string
 		in         []string // the files that may name it
 	}{
-		{"withdrawnBlockMark", withdrawnBlockMark, []string{"withdrawn.go", "blockedrecommend.go"}},
+		{"withdrawnBlockMark", withdrawnBlockMark, []string{"withdrawn.go", "blockedrecommend.go", "gateend.go"}},
 		{"liftMark", liftMark, []string{"retry.go", "blockedcard.go"}},
 	} {
 		for _, f := range files {

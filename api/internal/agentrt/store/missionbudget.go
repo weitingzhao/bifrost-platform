@@ -285,7 +285,9 @@ func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 		if err != nil || !ok || m.state != "active" || s.why() == "" {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1 AND state = 'ready' ORDER BY task_id`, mission)
+		// A gate task is ended by its batch, not blocked (gateend.go).
+		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+		  WHERE t.mission_id = $1 AND t.state = 'ready' AND NOT `+gateMember+` ORDER BY t.task_id`, mission)
 		if err != nil {
 			return err
 		}

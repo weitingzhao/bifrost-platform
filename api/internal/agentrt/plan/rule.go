@@ -411,6 +411,45 @@ func (r Rule) Watches() []Watch {
 	return out
 }
 
+// GateRef is one gate a rule names: the environment, the test id and the
+// spec's sha256.
+type GateRef struct{ Env, Test, Spec string }
+
+// Gates lists the gates the rule names, sorted, each once: what the runtime
+// runs for it (TD-397).
+func (r Rule) Gates() []GateRef {
+	seen := map[GateRef]bool{}
+	var walk func(*node)
+	walk = func(n *node) {
+		if n.kind == kGates {
+			for _, g := range n.gates {
+				seen[GateRef{n.s1, g.test, g.spec}] = true
+			}
+		}
+		for _, c := range n.children {
+			walk(c)
+		}
+	}
+	if r.node != nil {
+		walk(r.node)
+	}
+	out := make([]GateRef, 0, len(seen))
+	for g := range seen {
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Env != b.Env {
+			return a.Env < b.Env
+		}
+		if a.Test != b.Test {
+			return a.Test < b.Test
+		}
+		return a.Spec < b.Spec
+	})
+	return out
+}
+
 // Eval evaluates the rule with Kleene logic: all is false if any child is
 // false, else unknown if any is unknown; any is true if any child is true,
 // else unknown if any is unknown. An empty rule is never true. One rule over

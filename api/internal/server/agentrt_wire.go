@@ -157,7 +157,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
 	stg := env == "stg"
 	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg,
-		SkipCardsTheRuleAnswers: stg, Logf: func(format string, args ...any) {
+		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 }

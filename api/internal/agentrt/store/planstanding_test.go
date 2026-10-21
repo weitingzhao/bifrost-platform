@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -76,7 +75,10 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	}
 	// Not within it (review 313 A2): binding something new, even an
 	// approval long executed; a CI run, a gate, a manual atom; a rule that
-	// holds already; a step with a rule; a step done.
+	// holds already; a step with a rule; a step done. A gate's spec is stored
+	// before a rule names it (TD-397).
+	_, gateBody, gateSum := gateOf(t, "T19", "TestGrammarIsClosed")
+	w.artifact(t, "task_spec", string(gateBody))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
 			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted}}); aerr != nil {
@@ -90,7 +92,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	}{
 		"a new binding":   {s1, `{"approval_executed":16}`, []store.Binding{{Kind: "approval", Ref: "16"}}},
 		"a CI run":        {s1, `{"ci_succeeded":{"repo":"bifrost-platform","commit":"2333e00753f91c74c8b2f4d693a803f8e89e7892"}}`, nil},
-		"a gate":          {s1, `{"gates_passed":[{"test":"T19","spec_sha256":"` + strings.Repeat("a", 64) + `"}],"env":"prod"}`, nil},
+		"a gate":          {s1, `{"gates_passed":[{"test":"T19","spec_sha256":"` + gateSum + `"}],"env":"prod"}`, nil},
 		"a manual atom":   {s1, `{"manual":"by hand"}`, nil},
 		"already holding": {s1, `{"owner_signoff":"TD-1"}`, nil},
 		// Bound already but outside records the runtime may not have read:
