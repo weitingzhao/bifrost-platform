@@ -48,6 +48,11 @@ vi.mock('@/api/lineage', async importOriginal => ({
   fetchBranches: vi.fn(() => Promise.resolve({ generated_at: '2026-10-14T12:00:00Z', reachability: 'ok', branches: [], errors: [] })),
 }))
 vi.mock('@/hooks/usePlatformAuth', () => ({ usePlatformAuth: () => ({ canOperate: false }) }))
+const taskDetail = vi.hoisted(() => vi.fn())
+vi.mock('@/api/agentRuntime', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/api/agentRuntime')>()),
+  fetchRuntimeTaskDetail: taskDetail,
+}))
 
 function page() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -137,3 +142,23 @@ describe('commit lineage page, primary repositories (CUT-gitea-primary 0d)', () 
   })
 })
 
+
+describe('commit lineage page, a task on its goal card (T36, F-T36b)', () => {
+  it('links a commit’s task to its details on its goal card, beside the filter; a task the runtime does not place has none', async () => {
+    taskDetail.mockImplementation(async (id: string) => {
+      if (id !== X) throw new Error('Agent task: 404')
+      return { task_id: X, title: 'the work of x', role: 'implement', mission_id: 'M-2', subject_task_id: '' }
+    })
+    const view = page()
+    try {
+      fireEvent.click(await screen.findByText('No session (Cursor / agentd / manual)'))
+      const link = await screen.findByRole('link', { name: 'M-2 ↗' })
+      expect(link.getAttribute('href')).toBe(`#work?goal=M-2&task=${X}`)
+      expect(screen.getAllByRole('link', { name: /↗/ })).toHaveLength(1)
+      expect(screen.getByTitle(`${X} — show only the commits of this task`)).toBeTruthy()
+      expect(screen.getByTitle(`${Y} — show only the commits of this task`)).toBeTruthy()
+    } finally {
+      view.unmount()
+    }
+  })
+})

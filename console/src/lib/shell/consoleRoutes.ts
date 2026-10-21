@@ -59,9 +59,10 @@ export const GOALS_SECTION = 'goals'
 /** Every waiting item, in full: For you, at its waiting section. */
 export const NEEDS_YOU_HREF = `#${NEEDS_YOU_ROUTE}?section=${WAITING_SECTION}`
 
-/** Work, at the goal cards; with an id, that goal's card. */
-export function goalHref(id?: string): string {
-  return id ? `#work?goal=${encodeURIComponent(id)}` : `#work?section=${GOALS_SECTION}`
+/** Work, at the goal cards; with an id, that goal's card; with a task of it too, that task's details on the card (T36). */
+export function goalHref(id?: string, task?: string): string {
+  if (!id) return `#work?section=${GOALS_SECTION}`
+  return `#work?goal=${encodeURIComponent(id)}${task ? `&task=${encodeURIComponent(task)}` : ''}`
 }
 
 /** The list of detail pages, for a phone or a tablet (a desktop lists them in the side nav). */

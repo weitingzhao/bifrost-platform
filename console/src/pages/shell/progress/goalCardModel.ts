@@ -173,3 +173,6 @@ export function missionIds(runtime?: RuntimeProgress, submitted = ''): string[] 
     .filter(id => id === submitted || !assessmentMission(runtime, id))
     .sort((a, b) => a === submitted ? -1 : b === submitted ? 1 : b.localeCompare(a, undefined, { numeric: true }))
 }
+
+/** A task's details on its goal card: the element `#work?goal=M-n&task=t_…` brings into view (T36). */
+export const goalTaskId = (goal: string, task: string) => `goal-${goal}-task-${task}`

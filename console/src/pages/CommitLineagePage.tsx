@@ -24,6 +24,8 @@ import {
   type LineageResponse,
   type LineageThread,
 } from '@/api/lineage'
+import { fetchRuntimeTaskDetail } from '@/api/agentRuntime'
+import { goalHref } from '@/lib/shell/consoleRoutes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip, type OpsVerdictLamp, type OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
@@ -215,6 +217,22 @@ function LandedTag({ c }: { c: LineageCommit }) {
   )
 }
 
+/**
+ * A commit's task on its goal card (T36, F-T36b: the task number only filtered this page). The card is its mission's,
+ * which the runtime says for the task; with no answer there is no link, and the filter stays.
+ */
+function TaskLink({ task }: { task: string }) {
+  const q = useQuery({ queryKey: ['agent-runtime-task', task], queryFn: ({ signal }) => fetchRuntimeTaskDetail(task, signal),
+    staleTime: 10 * 60_000, retry: false })
+  const mission = q.data?.mission_id
+  if (!mission) return null
+  return (
+    <a href={goalHref(mission, task)} className="ml-2 underline" title={`${task} on the card of ${mission}`}>
+      {mission} ↗
+    </a>
+  )
+}
+
 function ThreadCommits({ thread, onTask }: { thread: LineageThread; onTask: (task: string) => void }) {
   const rows = thread.repos.flatMap(r => r.commits).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
   return (
@@ -262,14 +280,17 @@ function ThreadCommits({ thread, onTask }: { thread: LineageThread; onTask: (tas
               </DenseTableCell>
               <DenseTableCell className="font-mono-tabular whitespace-nowrap">
                 {c.task != null ? (
-                  <button
-                    type="button"
-                    className="underline decoration-dotted"
-                    title={`${c.task} — show only the commits of this task`}
-                    onClick={() => onTask(c.task ?? '')}
-                  >
-                    {c.task.slice(0, 12)}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="underline decoration-dotted"
+                      title={`${c.task} — show only the commits of this task`}
+                      onClick={() => onTask(c.task ?? '')}
+                    >
+                      {c.task.slice(0, 12)}
+                    </button>
+                    <TaskLink task={c.task} />
+                  </>
                 ) : (
                   '—'
                 )}

@@ -1,4 +1,5 @@
-import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF, hashQueryParam } from '@/lib/shell/consoleRoutes'
+import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -10,7 +11,7 @@ import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
 import { useNow } from './progressClock'
 import { unpersistedWords } from '../owner/crewModel'
-import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
+import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
 const budgetLabels: Record<string, string> = { owner_granted_attempts: 'attempts granted on its cards', owner_granted_wall_hours: 'hours granted on its cards' }
@@ -60,6 +61,11 @@ function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Qu
     </div>
   </details>
 }
+/** The task of goal the address points at (`#work?goal=M-n&task=t_…`, T36: a commit's task on Commit lineage), or ''. */
+function taskInHash(goal: string): string {
+  const q = canonicalQuery(window.location.hash), task = hashQueryParam(q, 'task')
+  return hashQueryParam(q, 'goal') === goal && task && /^t_[0-9A-Za-z]+$/.test(task) ? task : ''
+}
 export function GoalCard({ id, runtime, updatedAt, questions, highlighted = false, submittedGoal = '' }: {
   id: string; runtime?: RuntimeProgress; updatedAt: number; questions: Question[]; highlighted?: boolean; submittedGoal?: string
 }) {
@@ -75,6 +81,17 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     if (!finished) void refetch()
   }, [updatedAt, finished, refetch])
   const now = useNow() || Date.now()
+  // The task the address points at: its details open and come into view once the card has its tasks.
+  const [target, setTarget] = useState(() => taskInHash(id))
+  useEffect(() => {
+    const change = () => setTarget(taskInHash(id))
+    window.addEventListener('hashchange', change)
+    return () => window.removeEventListener('hashchange', change)
+  }, [id])
+  const targeted = !!target && !!data?.tasks.some(t => t.task_id === target)
+  useEffect(() => {
+    if (targeted) document.getElementById(goalTaskId(id, target))?.scrollIntoView?.({ block: 'center' })
+  }, [targeted, id, target])
   const summary = runtime?.work.missions.find(m => m.mission_id === id)
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'
   const links = data ? goalWaitingLinks(id, data, questions, runtime) : []
@@ -110,7 +127,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
       </li>)}</ol>
       {done && <GoalResult data={data} />}
       <ChiefOfStaff data={data} questions={questions} done={done} />
-      <details><summary className="cursor-pointer text-sm">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id}><summary className="break-all text-xs">{t.role} · {t.task_id} · {t.state}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>
+      <details open={targeted || undefined}><summary className="cursor-pointer text-sm">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="break-all text-xs">{t.role} · {t.task_id} · {t.state}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>
     </div>}
   </article>
 }

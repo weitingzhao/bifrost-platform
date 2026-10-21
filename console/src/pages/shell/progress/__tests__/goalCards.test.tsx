@@ -11,7 +11,7 @@ import { parseGoalTasks, type GoalData } from '@/api/agentRuntimeGoals'
 import type { Question } from '@/api/questions'
 import { questionHref, resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 import { GoalCard } from '../GoalCard'
-import { goalDone, goalStages, goalStatus, goalWaitingLinks, missionIds, relative, taskTiming } from '../goalCardModel'
+import { goalDone, goalStages, goalStatus, goalTaskId, goalWaitingLinks, missionIds, relative, taskTiming } from '../goalCardModel'
 import { whoseMove } from '../mergedProgressModel'
 import { ProgressPage } from '../ProgressPage'
 import { GoalForm } from '../../agents/GoalForm'
@@ -380,4 +380,24 @@ it('fails when a later event page fails, and the card says so', async () => {
   wrap(<GoalCard id="M-2" questions={[]} updatedAt={0} />)
   expect(await screen.findByText(/could not|unavailable|failed/i)).toBeInTheDocument()
   expect(screen.queryByText('Done')).not.toBeInTheDocument()
+})
+
+describe('a task the address names on its goal card (T36: a commit’s task on Commit lineage)', () => {
+  afterEach(() => { window.location.hash = ''; vi.restoreAllMocks() })
+  it('opens that task’s details and brings them into view; another goal’s card opens nothing', async () => {
+    const impl = 't_01M51EHZ92V5F2PRB7JCZVHTQ3'
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    window.location.hash = `#work?goal=M-2&task=${impl}`
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['agent-runtime-goal', 'M-2'], full)
+    client.setQueryData(['agent-runtime-goal', 'M-3'], full)
+    wrap(<><GoalCard id="M-2" updatedAt={1} questions={[]} /><GoalCard id="M-3" updatedAt={1} questions={[]} /></>, client)
+    const task = document.getElementById(goalTaskId('M-2', impl)) as HTMLDetailsElement
+    expect(task.open).toBe(true)
+    expect((task.parentElement as HTMLDetailsElement).open).toBe(true)
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(scroll.mock.contexts).toContain(task)
+    expect((document.getElementById(goalTaskId('M-3', impl)) as HTMLDetailsElement).open).toBe(false)
+  })
 })
