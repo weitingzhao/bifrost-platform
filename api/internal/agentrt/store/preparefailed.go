@@ -85,7 +85,7 @@ func lastPrepare(ctx context.Context, tx pgx.Tx, taskID string) (*checkSummary, 
 		taskID, c.attempt).Scan(&body)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		c.excerpt = checkExcerpt{lead: "It handed in no report of what failed (its agentd is from before TD-394)."}
+		c.excerpt = checkExcerpt{lead: "No report of what failed was handed in (its upload or its checkpoint may have been refused, or the agentd is from before TD-394)."}
 	case err != nil:
 		return nil, err
 	default:

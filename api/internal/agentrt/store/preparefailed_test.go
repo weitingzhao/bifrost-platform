@@ -10,7 +10,7 @@ import (
 
 // prepFail leases task to tl on h1 and ends the attempt as agentd ends one
 // whose preparation failed (agentd prepare.go): started, a checkpoint naming
-// its report, computed and ended prepare_failed.
+// its report (none when report is ""), computed and ended prepare_failed.
 func (w *world) prepFail(t *testing.T, task string, tl store.Tool, report string) *store.Claim {
 	t.Helper()
 	c := w.claim(t, "h1", store.LeaseTTL, tl)
@@ -19,10 +19,12 @@ func (w *world) prepFail(t *testing.T, task string, tl store.Tool, report string
 	}
 	f := fence(c, "h1")
 	ok(t, store.Start(ctx, w.rt, f, "", ""))
-	_, err := store.Checkpoint(ctx, w.rt, f, 1, []string{w.artifact(t, "report", report)}, false)
-	ok(t, err)
+	if report != "" {
+		_, err := store.Checkpoint(ctx, w.rt, f, 1, []string{w.artifact(t, "report", report)}, false)
+		ok(t, err)
+	}
 	exit := 3
-	_, err = store.Computed(ctx, w.rt, f, &exit, "prepare_failed", "failed")
+	_, err := store.Computed(ctx, w.rt, f, &exit, "prepare_failed", "failed")
 	ok(t, err)
 	_, err = store.Ended(ctx, w.rt, c.AttemptID, "h1", "prepare_failed", true)
 	ok(t, err)
@@ -100,5 +102,28 @@ func TestPreparationFailuresBlockWithTheirOwnCard(t *testing.T) {
 	}
 	if reason = w.blockReason(t, task); !strings.Contains(reason, "attempts 6, 7, 8 in a row") {
 		t.Fatalf("the second block's reason: %q", reason)
+	}
+}
+
+// Review td404-3 C3: when no report of what failed came (an upload or a
+// checkpoint refused), the card says so without guessing why.
+func TestAPreparationCardWithNoReport(t *testing.T) {
+	t.Parallel()
+	w := newWorldOf(t, cursor)
+	w.goalMission(t, "M-3")
+	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	for range 3 {
+		w.prepFail(t, task, cursor, "")
+	}
+	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+		t.Fatalf("asked %d (%v)", n, err)
+	}
+	if body := a.cards[0].Body; !strings.Contains(body, "Last preparation: failed on attempt 3 (") ||
+		!strings.Contains(body, "No report of what failed was handed in") {
+		t.Fatalf("the card:\n%s", body)
 	}
 }
