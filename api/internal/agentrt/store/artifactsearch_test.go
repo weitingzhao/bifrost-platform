@@ -260,16 +260,32 @@ func TestSearchArtifactsEdges(t *testing.T) {
 	if !slices.Equal(append(first, second...), want) || next == "" || last != "" {
 		t.Fatalf("one a page: %v then %v (next %q, last %q), want %v", first, second, next, last, want)
 	}
-	// A host's pages, one at a time over everything, never show the exam.
-	before := ""
-	for i := 0; i < 100; i++ {
-		got, n := search(t, w, store.ArtifactQuery{HideExams: true, Limit: 1, Before: before})
-		if slices.Contains(got, exam) {
-			t.Fatalf("page %d of a host's shows the exam: %v", i, got)
+	// A host's pages, one at a time over everything, list every artifact but
+	// the exam, in order, each page one, and end (review 481 B1: a page
+	// emptied by hiding after the limit, or a paging that never ends, fails).
+	var visible []string
+	for _, id := range allArtifacts(t, w, "true") {
+		if id != exam {
+			visible = append(visible, id)
 		}
+	}
+	var paged []string
+	before := ""
+	for i := 0; ; i++ {
+		if i > len(visible) {
+			t.Fatalf("a host's paging did not end after %d pages: %v", i, paged)
+		}
+		got, n := search(t, w, store.ArtifactQuery{HideExams: true, Limit: 1, Before: before})
+		if len(got) != 1 {
+			t.Fatalf("page %d of a host's: %v (next %q), want one", i, got, n)
+		}
+		paged = append(paged, got...)
 		if n == "" {
 			break
 		}
 		before = n
+	}
+	if !slices.Equal(paged, visible) || !slices.Contains(paged, a) || !slices.Contains(paged, b) {
+		t.Fatalf("a host's pages %v, want %v", paged, visible)
 	}
 }
