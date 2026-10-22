@@ -354,6 +354,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
+	srv.approvals.SetCreateCheck(srv.approvalCreateCheck)
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)

@@ -26,6 +26,7 @@ type Service struct {
 	audit *actuation.AuditLog
 	now   func() time.Time
 	auto  AutoApprover
+	check CreateCheck
 	// runnerID names this platform-api process as the executor of platform runs.
 	runnerID string
 	// requireConfirm makes confirm_number mandatory for tier D approvals from
@@ -46,6 +47,19 @@ type Service struct {
 // a tier C request, or "" when the request must wait for the Owner. The
 // direct call is re-checked by the route guard, which runs and audits it.
 type AutoApprover func(ctx context.Context, action string, tier actions.Tier, params map[string]any) string
+
+// CreateCheck refuses a request before its approval row is written, with the
+// reason, when what it signs cannot run (TD-420: a pipeline run's mistyped
+// commit). nil lets it be made.
+type CreateCheck func(ctx context.Context, action string, params map[string]any) error
+
+// SetCreateCheck installs the check every request goes through before its
+// approval row is written.
+func (s *Service) SetCreateCheck(fn CreateCheck) {
+	s.mu.Lock()
+	s.check = fn
+	s.mu.Unlock()
+}
 
 // SetAutoApprover installs the release policy check. Tier D never consults it.
 func (s *Service) SetAutoApprover(fn AutoApprover) {
@@ -182,6 +196,17 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	case actions.TierD:
 	default:
 		return fail(400, "action cannot be requested")
+	}
+	s.mu.Lock()
+	check := s.check
+	s.mu.Unlock()
+	if check != nil {
+		if err := check(ctx, act.ID, norm); err != nil {
+			return failFields(422, map[string]any{
+				"error":  "refused at creation: " + err.Error(),
+				"action": act.ID,
+			})
+		}
 	}
 	hash, err := actions.ParamsHash(norm)
 	if err != nil {

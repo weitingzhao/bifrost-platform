@@ -330,15 +330,35 @@ func sortedKeysString(values map[string]string) []string {
 }
 
 func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo string, spec map[string]any, pipe *unstructured.Unstructured) string {
+	repos, refs := runRefsOf(name, revision, ciRepo, spec, pipe)
+	if msg := platformRefIsUIRef(name, refs); msg != "" {
+		return msg
+	}
+	return s.refsPresent(ctx, name, revision, ciRepo, repos, refs)
+}
+
+// runRefsOf is the repositories a run clones and the ref of each.
+func runRefsOf(name, revision, ciRepo string, spec map[string]any, pipe *unstructured.Unstructured) ([]string, map[string]string) {
 	repos := reposForPipeline(name)
 	if ciRepo != "" {
 		repos = []string{ciRepo}
 	}
-	refs := runRepoRefs(name, revision, spec, pipe, repos)
-	// A platform commit cannot be the UI commit. Reject before any mirror request.
+	return repos, runRepoRefs(name, revision, spec, pipe, repos)
+}
+
+// platformRefIsUIRef: a platform commit cannot be the UI commit. Rejected
+// before any mirror request.
+func platformRefIsUIRef(name string, refs map[string]string) string {
 	if isPlatformDelivery(name) && callerParamSHA.MatchString(refs["bifrost-platform"]) && refs["bifrost-ui"] == refs["bifrost-platform"] {
 		return fmt.Sprintf("bifrost-ui (ref %q) — pass uiRevision for bifrost-ui", refs["bifrost-ui"])
 	}
+	return ""
+}
+
+// refsPresent says which of repos lack their ref in Gitea after one mirror
+// sync and a bounded wait, or "" when every one has it or Gitea could not be
+// asked (an unknown is not a missing).
+func (s *Service) refsPresent(ctx context.Context, name, revision, ciRepo string, repos []string, refs map[string]string) string {
 	pf := s.refPreflightAtRefs(ctx, name, revision, repos, refs)
 	if len(pf.Missing) == 0 {
 		return ""
