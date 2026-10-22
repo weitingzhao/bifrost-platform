@@ -138,6 +138,11 @@ func TestProposeTasksRoute(t *testing.T) {
 		"bad commit":  {func() map[string]any { m := task("x", "R2:1-1"); m["base_commit"] = "main"; return m }(), http.StatusUnprocessableEntity, "constraint", "base_commit"},
 		"a review":    {func() map[string]any { m := task("x", "R2:1-1"); m["role"] = "review"; return m }(), http.StatusUnprocessableEntity, "invalid", "role"},
 		"no such dep": {task("x", "R2:1-1", "nope"), http.StatusUnprocessableEntity, "invalid", "nope"},
+		// TD-421 (STG M-113): agentd would start a branch task's executor in an empty directory.
+		"a branch without its base": {func() map[string]any { m := task("x", "R2:1-1"); delete(m, "base_commit"); return m }(),
+			http.StatusUnprocessableEntity, "invalid", "a branch task names its repo and base_commit (the commit agentd checks out); it has no base_commit"},
+		"a branch without its repo": {func() map[string]any { m := task("x", "R2:1-1"); delete(m, "repo"); return m }(),
+			http.StatusUnprocessableEntity, "invalid", "it has no repo"},
 	} {
 		got, out := call(t, s, "operator", "POST", "missions/M-1/tasks",
 			map[string]any{"idempotency_key": "r-" + name, "tasks": []any{task("fine", "R2:1-1"), c.task}}, session, "s1")
@@ -239,7 +244,7 @@ func TestHardLimitBounds(t *testing.T) {
 	} {
 		body := map[string]any{"idempotency_key": fmt.Sprint("k", i), "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1",
 			"role": "implement", "task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec), "effect_class": "branch",
-			"hard_limit_s": c.limit}}}
+			"repo": "bifrost-platform", "base_commit": commitA, "hard_limit_s": c.limit}}}
 		code, out := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1")
 		if code != c.code {
 			t.Errorf("hard_limit_s %v: %d %v", c.limit, code, out)
@@ -269,7 +274,7 @@ func TestBusyIs503(t *testing.T) {
 	must(t, err)
 	code, out := call(t, s, "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "k", "tasks": []any{map[string]any{
 		"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a",
-		"spec_artifact_id": artifactID(spec), "effect_class": "branch"}}}, session, "s1")
+		"spec_artifact_id": artifactID(spec), "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}}, session, "s1")
 	if code != http.StatusServiceUnavailable || out["error"] != "busy" {
 		t.Fatalf("a batch on a held step: %d %v", code, out)
 	}
@@ -286,7 +291,8 @@ func TestProposeAgainAfterCancel(t *testing.T) {
 		t.Fatalf("spec: %d %v", code, out)
 	}
 	body := map[string]any{"idempotency_key": "p-1", "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement",
-		"task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec), "effect_class": "branch"}}}
+		"task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec), "effect_class": "branch",
+		"repo": "bifrost-platform", "base_commit": commitA}}}
 	_, first := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1")
 	old := first["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", old, "cancelled", "test") }))

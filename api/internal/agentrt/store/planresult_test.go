@@ -444,8 +444,8 @@ func acceptPlanAndABatchTogether(t *testing.T, report string) {
 	go func() {
 		defer wg.Done()
 		_, batchErr = store.ProposeTasks(ctx, other, store.Writer{Actor: "owner", Token: "admin"}, "b1", "M-3", []store.TaskProposal{
-			{Ref: "a", OffPlanReason: "by hand", Role: "implement", Class: "go", Title: "a", SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform"},
-			{Ref: "b", OffPlanReason: "by hand", Role: "implement", Class: "go", Title: "b", SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", DependsOn: []string{"a"}}})
+			{Ref: "a", OffPlanReason: "by hand", Role: "implement", Class: "go", Title: "a", SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
+			{Ref: "b", OffPlanReason: "by hand", Role: "implement", Class: "go", Title: "b", SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA, DependsOn: []string{"a"}}})
 	}()
 	<-held
 	wg.Add(1)

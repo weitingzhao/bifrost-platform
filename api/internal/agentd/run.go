@@ -342,6 +342,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		if ws, err = d.checkout(ctx, a, repo, base); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
+	case cl.EffectClass == "branch":
+		// A branch task's result is a branch pushed from a checkout; with no repo
+		// or base commit there is none to make, and its executor would start in
+		// an empty directory and hand in nothing (TD-421, STG M-113).
+		return d.failBefore(ctx, a, ws, &waiting, l, fmt.Errorf("%w: it names no %s", ErrNoCheckout, missingCheckout(repo, base)))
 	default:
 		if _, err = os.Stat(a.Dir); err == nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, ErrWorkspaceExists)

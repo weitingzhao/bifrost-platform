@@ -95,8 +95,8 @@ func TestCrossPropagationChangesNothing(t *testing.T) {
 	m2 := w.state(t, "mission", "M-2")
 
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{
-		{Ref: "clean", PlanNode: s1, Role: "implement", Class: "go", Title: "clean", SpecArtifact: clean, Effect: "branch", Repo: "bifrost-platform"},
-		{Ref: "spliced", PlanNode: s1, Role: "implement", Class: "go", Title: "spliced", SpecArtifact: spliced, Effect: "branch", Repo: "bifrost-platform"},
+		{Ref: "clean", PlanNode: s1, Role: "implement", Class: "go", Title: "clean", SpecArtifact: clean, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
+		{Ref: "spliced", PlanNode: s1, Role: "implement", Class: "go", Title: "spliced", SpecArtifact: spliced, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
 	})
 	ok(t, err)
 	ids := map[string]string{}

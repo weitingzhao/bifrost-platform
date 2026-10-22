@@ -92,8 +92,8 @@ func TestWorkspaceRefRefused(t *testing.T) {
 	leaky := w.artifact(t, "task_spec", "# task\nstart from tasks/"+someTask+"/a1, it is nearly done")
 	before := w.lastSeq(t, "mission:M-1")
 	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{
-		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch"},
-		{Ref: "b", PlanNode: s1, Role: "implement", Class: "go", Title: "b", SpecArtifact: leaky, Effect: "branch"},
+		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
+		{Ref: "b", PlanNode: s1, Role: "implement", Class: "go", Title: "b", SpecArtifact: leaky, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
 	})
 	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "workspace") {
 		t.Fatalf("a batch with a spec naming a workspace: %v", err)
@@ -102,7 +102,7 @@ func TestWorkspaceRefRefused(t *testing.T) {
 		t.Fatalf("the refused batch wrote %d events", after-before)
 	}
 	if _, perr := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{
-		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch"},
+		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
 	}); perr != nil {
 		t.Fatalf("a spec naming a task by its id: %v", perr)
 	}
@@ -117,7 +117,7 @@ func TestWorkspaceRefRefused(t *testing.T) {
 	}
 	onBranch := w.artifact(t, "task_spec", "# task\n"+branch)
 	if _, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k3", "M-1", []store.TaskProposal{
-		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: onBranch, Effect: "branch"},
+		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: onBranch, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
 	}); err != nil {
 		t.Fatalf("a spec naming a branch: %v", err)
 	}

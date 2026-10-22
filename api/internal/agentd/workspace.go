@@ -29,6 +29,23 @@ import (
 // for salvage, not for a new run.
 var ErrWorkspaceExists = errors.New("agentd: the attempt's workspace already exists")
 
+// ErrNoCheckout ends a branch attempt before its executor starts: the claim
+// names no repository or base commit to check out (TD-421).
+var ErrNoCheckout = errors.New("agentd: a branch task needs a checkout of its repo at its base commit, and its executor is not started without one")
+
+// missingCheckout names what a claim lacks for a checkout: "repo",
+// "base_commit" or both.
+func missingCheckout(repo, base string) string {
+	var m []string
+	if repo == "" {
+		m = append(m, "repo")
+	}
+	if base == "" {
+		m = append(m, "base_commit")
+	}
+	return strings.Join(m, " and ")
+}
+
 // Workspace is one attempt's checkout.
 type Workspace struct {
 	Dir  string

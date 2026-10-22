@@ -260,7 +260,7 @@ func TestStartDispatches(t *testing.T) {
 		return err
 	}))
 	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
-		Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch"}})
+		Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}})
 	must(t, err)
 	task := out["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
 	c := &controller.Controller{DB: pool, Sources: (&world{}).sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}

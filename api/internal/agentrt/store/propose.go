@@ -470,9 +470,31 @@ func checkBatch(tasks []TaskProposal) error {
 				return invalid("task %s: %v", t.Ref, err)
 			}
 		}
+		// A branch task's result is a branch pushed from a checkout of its repo
+		// at its base commit; without both agentd has nothing to check out, and
+		// the executor would start in an empty directory and hand in nothing
+		// (TD-421, STG M-113).
+		if t.Effect == "branch" {
+			if missing := missingCheckout(t.Repo, t.BaseCommit); missing != "" {
+				return invalid("task %s: a branch task names its repo and base_commit (the commit agentd checks out); it has no %s", t.Ref, missing)
+			}
+		}
 		refs[t.Ref] = true
 	}
 	return nil
+}
+
+// missingCheckout names what a checkout lacks: "repo", "base_commit", both, or
+// nothing.
+func missingCheckout(repo, base string) string {
+	var m []string
+	if repo == "" {
+		m = append(m, "repo")
+	}
+	if base == "" {
+		m = append(m, "base_commit")
+	}
+	return strings.Join(m, " and ")
 }
 
 func batchRequest(missionID string, tasks []TaskProposal) map[string]any {

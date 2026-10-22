@@ -33,7 +33,8 @@ func TestSlowMainDoesNotHoldUpDispatch(t *testing.T) {
 	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{
 		{Ref: "a", PlanNode: "R2:1-1", Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch",
 			Repo: "bifrost-platform", BaseCommit: base},
-		{Ref: "b", PlanNode: "R2:1-1", Role: "implement", Class: "go", Title: "b", SpecArtifact: spec, Effect: "branch"}})
+		{Ref: "b", PlanNode: "R2:1-1", Role: "implement", Class: "go", Title: "b", SpecArtifact: spec, Effect: "branch",
+			Repo: "bifrost-platform", BaseCommit: base}})
 	must(t, err)
 	tasks := out["tasks"].([]any)
 	accepted, next := tasks[0].(map[string]any)["task_id"].(string), tasks[1].(map[string]any)["task_id"].(string)

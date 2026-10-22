@@ -13,7 +13,7 @@ func TestBatchHoldsCoreToImplementations(t *testing.T) {
 	t.Parallel()
 	task := func(role, repo string) TaskProposal {
 		return TaskProposal{Ref: "t1", OffPlanReason: "x", Role: role, Class: "go", Title: "t", SpecArtifact: "sha256:x",
-			Effect: "branch", Repo: repo, Core: true}
+			Effect: "branch", Repo: repo, BaseCommit: "2333e00753f91c74c8b2f4d693a803f8e89e7892", Core: true}
 	}
 	if err := checkBatch([]TaskProposal{task("implement", "bifrost-platform")}); err != nil {
 		t.Fatalf("a core implementation in the platform: %v", err)
@@ -34,7 +34,7 @@ func TestBatchHoldsCoreToImplementations(t *testing.T) {
 		}
 	}
 	plain := task("brief", "")
-	plain.Core = false
+	plain.Core, plain.Effect = false, "none" // a brief pushes nothing: no repo, no checkout (TD-421)
 	if err := checkBatch([]TaskProposal{plain}); err != nil {
 		t.Fatalf("a brief that is not core: %v", err)
 	}

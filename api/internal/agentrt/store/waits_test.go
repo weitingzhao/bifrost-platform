@@ -419,7 +419,7 @@ func TestAChecksWaitCallsTheWorksProposer(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	p := proposal("impl", w.spec)
-	p.BaseCommit = "" // the run pushes commitA: a change only against no base
+	p.BaseCommit = commitB // the run pushes commitA: a change against another base (a branch task names one, TD-421)
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{p})
 	ok(t, err)
 	impl := taskIDs(out)["impl"]
