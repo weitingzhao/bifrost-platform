@@ -34,6 +34,17 @@ type SchemaStatus struct {
 	Missing []string `json:"missing,omitempty"` // this binary's migrations the database has not applied, by file name
 	Unknown []int    `json:"unknown,omitempty"` // applied migrations this binary does not carry
 	Edited  []string `json:"edited,omitempty"`  // applied with other bytes than this binary's file
+	// Applied is every migration the database has applied, by number: what a
+	// release of another binary is checked against before it rolls out
+	// (TD-411, the PROD deliver pipeline), whatever this binary carries.
+	Applied []Applied `json:"applied"`
+}
+
+// Applied is a migration the database has applied: its number and the
+// sha256 of the file it ran.
+type Applied struct {
+	ID     int    `json:"id"`
+	SHA256 string `json:"sha256"`
 }
 
 // Querier is what Check reads with: a connection, a pool or a transaction.
@@ -92,12 +103,15 @@ func compare(files []File, applied map[int]string) SchemaStatus {
 			s.Edited = append(s.Edited, f.Name[:len(f.Name)-len(".sql")])
 		}
 	}
-	for id := range applied {
+	s.Applied = []Applied{}
+	for id, sum := range applied {
 		if !carried[id] {
 			s.Unknown = append(s.Unknown, id)
 		}
+		s.Applied = append(s.Applied, Applied{ID: id, SHA256: sum})
 	}
 	sort.Ints(s.Unknown)
+	sort.Slice(s.Applied, func(i, j int) bool { return s.Applied[i].ID < s.Applied[j].ID })
 	switch {
 	case len(s.Edited) > 0:
 		s.State = SchemaEdited

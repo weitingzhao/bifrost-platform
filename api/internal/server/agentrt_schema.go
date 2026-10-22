@@ -93,7 +93,10 @@ func (w *schemaWatch) logf(level slog.Level, msg string, args ...any) {
 
 // health is what /health says of the schema: agentrt_schema is off without
 // the runtime, unknown until it is read (or when the read failed), else the
-// state, with the migrations missing, edited or unknown named.
+// state, with the migrations missing, edited or unknown named, and every
+// migration the database has applied (agentrt_schema_applied, number and
+// sha256), which the PROD deliver pipeline checks the next build's
+// migrations against before it rolls out (TD-411).
 func (w *schemaWatch) health() map[string]any {
 	if w == nil {
 		return map[string]any{"agentrt_schema": "off"}
@@ -103,7 +106,7 @@ func (w *schemaWatch) health() map[string]any {
 	if w.status == nil || w.err != "" {
 		return map[string]any{"agentrt_schema": "unknown"}
 	}
-	out := map[string]any{"agentrt_schema": w.status.State}
+	out := map[string]any{"agentrt_schema": w.status.State, "agentrt_schema_applied": w.status.Applied}
 	if len(w.status.Missing) > 0 {
 		out["agentrt_schema_missing"] = w.status.Missing
 	}

@@ -24,5 +24,21 @@ func TestCompareOrdersTheStates(t *testing.T) {
 			!slices.Equal(got.Edited, c.want.Edited) {
 			t.Errorf("%s: %+v; want %+v", name, got, c.want)
 		}
+		// TD-411: every applied migration, by number, with the sha256 it ran,
+		// carried by this binary or not.
+		var want []Applied
+		for id := 1; id <= 3; id++ {
+			if sum, ok := c.applied[id]; ok {
+				want = append(want, Applied{ID: id, SHA256: sum})
+			}
+		}
+		if !slices.Equal(got.Applied, want) {
+			t.Errorf("%s: applied %+v; want %+v", name, got.Applied, want)
+		}
+	}
+	// None applied is an empty list, not an absent one: a pipeline reading
+	// health tells it apart from a binary that does not say.
+	if got := compare(files, map[int]string{}); got.Applied == nil || len(got.Applied) != 0 {
+		t.Errorf("none applied: %#v", got.Applied)
 	}
 }

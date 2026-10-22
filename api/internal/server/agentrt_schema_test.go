@@ -67,6 +67,22 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 		missing[0] != "0007_gate_tasks" || missing[1] != "0008_attempt_prepare_failed" {
 		t.Fatalf("behind: %v", behind)
 	}
+	// What the PROD deliver pipeline compares the next build's migrations
+	// with (TD-411): every applied migration, by number, with its sha256.
+	appliedIs := func(h map[string]any, n int) {
+		t.Helper()
+		list, _ := h["agentrt_schema_applied"].([]any)
+		if len(list) != n {
+			t.Fatalf("applied: %v; want %d", h["agentrt_schema_applied"], n)
+		}
+		for i, e := range list {
+			m, _ := e.(map[string]any)
+			if m["id"] != float64(files[i].ID) || m["sha256"] != files[i].SHA256 {
+				t.Fatalf("applied %d: %v; want %d %s", i, e, files[i].ID, files[i].SHA256)
+			}
+		}
+	}
+	appliedIs(behind, 6)
 	mu.Lock()
 	if len(lines) != 1 || lines[0][:5] != "ERROR" {
 		t.Fatalf("the log: %q; want one ERROR", lines)
@@ -81,6 +97,7 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	if current["agentrt_schema"] != migrate.SchemaCurrent || current["agentrt_schema_missing"] != nil {
 		t.Fatalf("after the Job: %v", current)
 	}
+	appliedIs(current, len(files))
 	mu.Lock()
 	if len(lines) != 2 || lines[1][:4] != "INFO" || !slices.ContainsFunc(lines, func(l string) bool { return l[:5] == "ERROR" }) {
 		t.Fatalf("the log: %q", lines)
@@ -90,7 +107,7 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	// Review 466 C-1: a read that fails says so once and makes the schema
 	// unknown; the next good read says the state again, the same as before.
 	w.check(ctx, unreadable{})
-	if h := health(); h["agentrt_schema"] != "unknown" {
+	if h := health(); h["agentrt_schema"] != "unknown" || h["agentrt_schema_applied"] != nil {
 		t.Fatalf("after a failed read: %v", h)
 	}
 	w.check(ctx, runtime)
