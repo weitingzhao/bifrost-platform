@@ -27,10 +27,16 @@ type Client struct {
 	Host  string
 	Token string
 	HTTP  *http.Client
-	// noDisk: the platform refused a claim's free disk (from before TD-415);
-	// later claims leave it out (Claim).
-	noDisk atomic.Bool
+	// noDiskUntil: the platform refused a claim's free disk (from before
+	// TD-415): claims leave it out until then (unix nanoseconds), and the next
+	// one after tries it again (ClaimWith).
+	noDiskUntil atomic.Int64
 }
+
+// DiskRetryAfter is how long claims leave the free disk out after a platform
+// refused it, before they try it again: a platform released since takes it
+// (review 497 A1).
+var DiskRetryAfter = 10 * time.Minute
 
 // The platform's refusals agentd acts on (409 and its code), and a platform
 // it cannot use now (unreachable, 5xx, 503): the latter is retried, the
@@ -226,19 +232,20 @@ func (c *Client) Claim(ctx context.Context, freeSlots int, tools []Tool) (*Claim
 
 // ClaimWith is Claim with the host's free disk, when measured (TD-415). A
 // platform from before TD-415 refuses a body with the disk (400, unknown
-// field): the claim is sent again at once without it, and no later claim of
-// this client carries it, so the host keeps taking work while the platform
-// and agentd are on different versions.
+// field): the claim is sent again at once without it, and the client's claims
+// leave it out for DiskRetryAfter, then try it again, so the host keeps
+// taking work while the platform and agentd are on different versions and
+// reports its disk again once the platform is released.
 func (c *Client) ClaimWith(ctx context.Context, freeSlots int, tools []Tool, disk *Disk) (*Claimed, error) {
 	var cl Claimed
 	body := map[string]any{"free_slots": freeSlots, "tools": tools}
-	if disk != nil && !c.noDisk.Load() {
+	if disk != nil && time.Now().UnixNano() >= c.noDiskUntil.Load() {
 		body["disk_free_bytes"], body["root_free_bytes"] = disk.Host, disk.Root
 	}
 	code, err := c.post(ctx, "/claim", body, &cl)
 	// only the refusal of the field itself (review 267 B6, as Heartbeat)
 	if err != nil && body["disk_free_bytes"] != nil && code == http.StatusBadRequest && strings.Contains(err.Error(), `unknown field "disk_free_bytes"`) {
-		c.noDisk.Store(true)
+		c.noDiskUntil.Store(time.Now().Add(DiskRetryAfter).UnixNano())
 		delete(body, "disk_free_bytes")
 		delete(body, "root_free_bytes")
 		code, err = c.post(ctx, "/claim", body, &cl)

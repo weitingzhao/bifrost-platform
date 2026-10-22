@@ -34,7 +34,7 @@ const controllerFailingPhrase = "a controller loop failed the same way several t
 
 // ControllerLoops are the controller's loops (controller.Start), the names an
 // alert's line_digest is read back to.
-var ControllerLoops = []string{"agentrt-leases", "agentrt-facts-rules", "agentrt-card-rule", "agentrt-assess", "agentrt-landings"}
+var ControllerLoops = []string{"agentrt-leases", "agentrt-facts-rules", "agentrt-card-rule", "agentrt-assess", "agentrt-landings", "agentrt-disk-pages"}
 
 // errorKept bounds the error an alert keeps.
 const errorKept = 4096

@@ -153,8 +153,8 @@ func (d *Daemon) failBefore(ctx context.Context, a *Attempt, ws *Workspace, e *E
 		return out, errors.Join(err, serr)
 	}
 	d.logf("agentd: %s ends before its executor started: %v", e.AttemptID, err)
-	// Why goes to the platform first (TD-394); the attempt ends however that goes.
-	if rerr := d.reportPrepare(ctx, a, e, beforeReport(err)); rerr != nil {
+	rerr := d.reportPrepare(ctx, a, e, beforeReport(err)) // why goes first (TD-394); once taken, it is all the attempt left, unless the workspace is an earlier run's (R2)
+	if e.HandedOver = rerr == nil && !errors.Is(err, ErrWorkspaceExists); rerr != nil {
 		d.logf("agentd: %s: what failed before its executor started was not handed in: %v", e.AttemptID, rerr)
 	}
 	return Outcome{EndHow: prepareEnd, Conclusion: "none"}, errors.Join(err, d.end(ctx, e, prepareEnd))

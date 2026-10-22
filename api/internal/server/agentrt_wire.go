@@ -75,7 +75,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
-		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv(), NotifyOwner: diskPage}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
@@ -164,7 +164,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
 	stg := env == "stg"
 	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg,
-		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, Logf: func(format string, args ...any) {
+		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, PageOwner: diskPage, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 }

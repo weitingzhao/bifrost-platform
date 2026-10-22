@@ -92,8 +92,16 @@ type Entry struct {
 	// sent; it is resent as it is), submitted; lost (salvage only);
 	// restarted (a previous agentd's group, ended at takeover); ending (the
 	// ended request is written); uncleared (ended was reported, but the
-	// group is not gone: kept until it is, and the host takes no new work).
+	// group is not gone: kept until it is, and the host takes no new work);
+	// unswept (settled, its workspace not yet emptied: retried, never run
+	// again; TD-415).
 	Phase string `json:"phase"`
+	// HandedOver: what the attempt left that matters is the platform's, so
+	// its workspace may go once it is settled (TD-415, review 497 A2): its
+	// submit or its salvage was taken, its last checkpoint at a takeover was
+	// confirmed, or why it failed before its executor started was handed in.
+	// An attempt ended any other way keeps its workspace.
+	HandedOver bool `json:"handed_over,omitempty"`
 	// CheckpointSeq is the last checkpoint number issued; Confirmed the last
 	// the platform confirmed (review 142 R2). Pending is the sample issued
 	// and not yet confirmed: its request is resent as it is until it is, and

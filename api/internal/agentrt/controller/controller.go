@@ -82,6 +82,10 @@ type Controller struct {
 	// deployments are of: the architecture table's gates run there
 	// (Gates, TD-397). Either empty, no gate runs.
 	Env, GateRepo string
+	// PageOwner pages the Owner's phone and says how the relay took it
+	// ("sent", or "skipped" with no target), an error when it did not
+	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
+	PageOwner func(ctx context.Context, title, body, id string) (string, error)
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -575,6 +579,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	if c.Sources.MainResults != nil {
 		c.every(ctx, &wg, "agentrt-landings", LandingsEvery, func() error {
 			_, err := c.Landings(ctx)
+			return err
+		})
+	}
+	if c.PageOwner != nil {
+		c.every(ctx, &wg, "agentrt-disk-pages", DiskPagesEvery, func() error {
+			_, err := c.DiskPages(ctx)
 			return err
 		})
 	}

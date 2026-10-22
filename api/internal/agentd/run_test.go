@@ -84,9 +84,6 @@ func daemon(t *testing.T, base string, exec agentd.Executor, remote string, env 
 		GitEnv:    env,
 		Beat:      100 * time.Millisecond, Retry: 50 * time.Millisecond, SalvageEvery: 50 * time.Millisecond, KillGrace: time.Second,
 		Logf: t.Logf,
-		// The tests read what an attempt left after its end; that a settled
-		// attempt's workspace goes is TestASettledAttemptsWorkspaceGoes.
-		KeepWorkspaces: true,
 	}
 }
 
@@ -181,6 +178,7 @@ func specRun(t *testing.T, spec, body string) (agentd.Outcome, string, string, e
 	}
 	_, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json", []byte(spec))
 	d := daemon(t, base, script(body), bare, env)
+	d.KeepWorkspaces = true // its callers read what the attempt left after its end (TD-415)
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
 	if err != nil || cl == nil {
 		t.Fatalf("claim = %+v %v", cl, err)
@@ -422,6 +420,7 @@ func TestRunTakesCheckpoints(t *testing.T) {
 func TestRunClearsTheGroup(t *testing.T) {
 	pool, _, base := platform(t)
 	d := daemon(t, base, script(`sleep 30 >/dev/null 2>&1 & echo $! > "$OUT/bg.pid"; printf '# done\n' > "$OUT/report.md"`), "", nil)
+	d.KeepWorkspaces = true // the test reads what the attempt left after its end (TD-415)
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
 	if err != nil || cl == nil {
 		t.Fatalf("claim = %+v %v", cl, err)

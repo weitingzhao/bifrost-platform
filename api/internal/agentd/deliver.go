@@ -290,7 +290,7 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 		case "submitting":
 			err = d.retry(ctx, func() error { return d.Client.Submit(ctx, cl.AttemptID, cl.Epoch) })
 			if err == nil {
-				e.Phase = "submitted"
+				e.Phase, e.HandedOver = "submitted", true
 			}
 		case "submitted":
 			if l != nil {
@@ -502,7 +502,7 @@ func (d *Daemon) lost(ctx context.Context, a *Attempt, ws *Workspace, e *Entry) 
 	err := d.retry(ctx, func() error { return d.Client.Salvage(ctx, e.AttemptID, e.result()) })
 	switch {
 	case err == nil:
-		out.Salvaged = true
+		out.Salvaged, e.HandedOver = true, true
 	case errors.Is(err, ErrInGrace), transient(err):
 		return out, fmt.Errorf("%w: %s: salvage: %v", ErrPending, e.AttemptID, err)
 	default:
@@ -570,10 +570,10 @@ func (d *Daemon) settle(e *Entry) error {
 		// So does what a test database left when its stage was ended with
 		// the group (TD-403).
 		removeTestDB(d.Root, e.Workdir+".out", d.logf)
-		// And the workspace and its output: the platform has the end, its
-		// report and artifacts (TD-415).
-		if !d.KeepWorkspaces {
-			removeWorkspace(d.Root, e.Workdir, d.logf)
+		// And its workspace, once what it left is the platform's (TD-415).
+		if d.sweep(e) {
+			e.Phase = "unswept"
+			return d.Registry.Put(*e)
 		}
 		return d.Registry.Delete(e.AttemptID)
 	}
@@ -659,8 +659,25 @@ func (d *Daemon) Recover(ctx context.Context) error {
 	if why := BenchRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
 		d.logf("%v; this host takes no new work until then", why)
 	}
+	if d.next == nil {
+		d.next = map[string]time.Time{}
+	}
 	for _, id := range ids {
 		e := entries[id]
+		if e.Phase == "unswept" { // a settled attempt's workspace to empty again (TD-415)
+			if time.Now().Before(d.next[id]) {
+				continue
+			}
+			if d.sweep(&e) {
+				d.next[id] = time.Now().Add(orDefault(d.SalvageEvery, 60*time.Second))
+				continue
+			}
+			delete(entries, id)
+			if err := d.Registry.Delete(id); err != nil {
+				return err
+			}
+			continue
+		}
 		switch {
 		case e.Phase == "running" || e.Phase == "launching":
 			d.clear(&e, time.Time{})
@@ -673,8 +690,13 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		if e.Phase == "uncleared" && e.Group == GroupCleared {
 			removeCursorData(d.Root, e.Workdir+".out", d.logf)
 			removeTestDB(d.Root, e.Workdir+".out", d.logf) // as settle does (review td404-3 B1)
-			if !d.KeepWorkspaces {
-				removeWorkspace(d.Root, e.Workdir, d.logf) // as settle does (TD-415)
+			if d.sweep(&e) {                               // as settle does (TD-415)
+				e.Phase = "unswept"
+				entries[id] = e
+				if err := d.Registry.Put(e); err != nil {
+					return err
+				}
+				continue
 			}
 			delete(entries, id)
 			if err := d.Registry.Delete(id); err != nil {
@@ -687,12 +709,9 @@ func (d *Daemon) Recover(ctx context.Context) error {
 			return err
 		}
 	}
-	if d.next == nil {
-		d.next = map[string]time.Time{}
-	}
 	for _, id := range ids {
 		e, ok := entries[id]
-		if !ok || e.Phase == "uncleared" || time.Now().Before(d.next[id]) {
+		if !ok || e.Phase == "uncleared" || e.Phase == "unswept" || time.Now().Before(d.next[id]) {
 			continue
 		}
 		tctx, cancel := context.WithTimeout(ctx, orDefault(d.TakeOverLimit, 5*time.Minute))
@@ -729,8 +748,13 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 	switch e.Phase {
 	case "restarted":
 		sctx, cancel := context.WithTimeout(ctx, orDefault(d.SampleLimit, 2*time.Minute))
+		before := e.CheckpointSeq
 		d.checkpoint(sctx, a, ws, e) // the last sample, then the end
 		cancel()
+		// Its workspace may go only once that last sample, taken now, is the
+		// platform's (review 497 A2): one whose upload failed, or an older
+		// one resent, leaves it as it is.
+		e.HandedOver = e.CheckpointSeq > before && e.Pending == nil && e.Confirmed == e.CheckpointSeq
 		err = d.end(ctx, e, "daemon_restart")
 	case "exited", "computed", "persisted", "submitting", "submitted":
 		l := d.keepLease(ctx, e.AttemptID, e.Epoch)

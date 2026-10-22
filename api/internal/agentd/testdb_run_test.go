@@ -48,6 +48,7 @@ func TestAPlatformAttemptHasATestDatabaseOfItsOwn(t *testing.T) {
 				sp.Env = slices.DeleteFunc(sp.Env, func(kv string) bool { k, _, _ := strings.Cut(kv, "="); return agentd.BusinessKey(k) })
 				return sp, err
 			}, bare, env)
+			d.KeepWorkspaces = true // the test reads what the attempt left after its end (TD-415)
 			// A root short enough for the sockets under it (a test's own
 			// temporary directory, named after it, is not, on macOS).
 			root, err := os.MkdirTemp("", "a")

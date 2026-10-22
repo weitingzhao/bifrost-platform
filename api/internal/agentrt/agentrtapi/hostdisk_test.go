@@ -2,42 +2,26 @@ package agentrtapi_test
 
 import (
 	"net/http"
-	"slices"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// diskPages are the ids of the pages the server sent the Owner of a host's
-// disk (API.NotifyOwner in server).
-var (
-	diskPagesMu sync.Mutex
-	diskPages   []string
-)
-
-func pagedDisk(id string) bool {
-	diskPagesMu.Lock()
-	defer diskPagesMu.Unlock()
-	return slices.Contains(diskPages, id)
-}
 
 // diskRecords counts host h1's disk_low alerts and its notes that it is back
 // above the floor.
 func diskRecords(t *testing.T, pool *pgxpool.Pool) (alerts, back int) {
 	t.Helper()
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE event_type = 'policy_alert' AND body_json->>'rule' = 'disk_low'),
-	    count(*) FILTER (WHERE event_type = 'note' AND starts_with(body_json->>'text', 'h1 has free disk above the floor again'))
+	    count(*) FILTER (WHERE event_type = 'note' AND starts_with(body_json->>'text', 'h1 has free disk at or above the floor again'))
 	  FROM agentrt.event WHERE event_stream_id = 'host:h1'`).Scan(&alerts, &back))
 	return alerts, back
 }
 
 // TD-415: a host whose claim reports free disk below the floor (15 GiB by
 // default) on its root's volume or agentd's is given no new work, and the
-// platform records it once and pages the Owner; once the host reports room
-// again it takes the ready task, and that is recorded and paged once. Each
-// value goes with the other.
+// platform records it once (the controller pages it, DiskPages); once the
+// host reports room again it takes the ready task, and that is recorded
+// once. Each value goes with the other.
 func TestAHostLowOnDiskTakesNoWorkUntilItHasRoom(t *testing.T) {
 	pool, task := world(t)
 	s := server(t, pool)
@@ -64,12 +48,5 @@ func TestAHostLowOnDiskTakesNoWorkUntilItHasRoom(t *testing.T) {
 	}
 	if alerts, back := diskRecords(t, pool); alerts != 1 || back != 1 {
 		t.Fatalf("back above: %d alerts, %d notes", alerts, back)
-	}
-	for deadline := time.Now().Add(5 * time.Second); !pagedDisk("disk:h1:below") || !pagedDisk("disk:h1:above"); time.Sleep(20 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			diskPagesMu.Lock()
-			defer diskPagesMu.Unlock()
-			t.Fatalf("pages %v", diskPages)
-		}
 	}
 }

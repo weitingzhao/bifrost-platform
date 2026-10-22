@@ -197,13 +197,7 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 			}
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
-		}, Anchor: anchor, Actions: actionStore, Exams: examSet,
-		NotifyOwner: func(_ context.Context, _, _, id string) error {
-			diskPagesMu.Lock()
-			defer diskPagesMu.Unlock()
-			diskPages = append(diskPages, id)
-			return nil
-		}}
+		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
 	if agentHeads != nil {
 		heads := agentHeads
 		api.AgentHeads = func(ctx context.Context, repo string) ([]store.AgentHead, error) {

@@ -39,11 +39,10 @@ type API struct {
 	// 25 seconds, as the approvals executor); ClaimPoll how often it looks.
 	ClaimWait, ClaimPoll time.Duration
 	// DiskFloor is the free disk below which a host is given no new work
-	// (TD-415; 0: store.DefaultDiskFloor), and NotifyOwner pages the Owner's
-	// phone when a host goes below it or back above (nil: no page).
-	DiskFloor   int64
-	NotifyOwner func(ctx context.Context, title, body, id string) error
-	Logf        func(format string, args ...any)
+	// (TD-415; 0: store.DefaultDiskFloor); the controller pages the Owner of
+	// a host going below or back above (store.DiskPage).
+	DiskFloor int64
+	Logf      func(format string, args ...any)
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization (nil answers such a proposal 503) and for a
 	// mission outside the standing envelope (nil leaves it proposed).
@@ -365,15 +364,13 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Free disk is judged once a request, before its polls (TD-415): a
-	// change is recorded and paged; below the floor every poll leases
-	// nothing (store.ClaimRequest.Disk).
+	// change is recorded, for the controller to page; below the floor every
+	// poll leases nothing (store.ClaimRequest.Disk).
 	if cr.Disk != nil {
-		changed, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor)
-		if err != nil {
+		if _, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor); err != nil {
 			a.fail(w, err)
 			return
 		}
-		a.pageDisk(req.HostID, changed, *cr.Disk)
 	}
 	for {
 		if r.Context().Err() != nil {

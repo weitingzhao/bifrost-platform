@@ -180,6 +180,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 		return sp, perr
 	}
 	d := daemon(t, s.URL+"/api/v1/agentrt", nil, platformBare, env)
+	d.KeepWorkspaces = true // the test reads what the attempt left after its end (TD-415)
 	d.Remote = func(repo string) string { return remotes[repo] }
 	d.Executors["exec:deterministic"] = deterministic
 	run := func(tool agentd.Tool, role, repo string, ex agentd.Executor) *agentd.Claimed {
