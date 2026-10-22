@@ -295,11 +295,15 @@ describe('Needs you questions', () => {
     const group = await screen.findByRole('region', { name: 'Answer' })
     expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
     const list = group.querySelector('[data-answer-group]')
-    const paints = list?.getAttribute('data-paints')
+    expect(list).not.toBeNull()
+    const paints = list!.getAttribute('data-paints')
+    expect(paints).toMatch(/^\d+$/)
     release()
     // No request, no step to name under a row; the Sign off group counts the steps waiting (none in this plan).
     expect(await within(screen.getByRole('region', { name: 'Sign off' })).findByText('No step waits for your sign-off.', undefined, { timeout: 5000 })).toBeTruthy()
-    expect(list?.getAttribute('data-paints')).toBe(paints)
+    // The same list, not drawn again (review 502 C1).
+    expect(screen.getByRole('region', { name: 'Answer' }).querySelector('[data-answer-group]')).toBe(list)
+    expect(list!.getAttribute('data-paints')).toBe(paints)
   })
 
   it('does not repaint the Answer group when another read lands after it without changing its questions', async () => {

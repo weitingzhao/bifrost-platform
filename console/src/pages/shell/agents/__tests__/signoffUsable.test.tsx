@@ -30,6 +30,9 @@ vi.mock('@/api/cluster', async () => {
 
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
 let plan: { root: string; nodes: Node[] } = prod.plan as unknown as { root: string; nodes: Node[] }
+// How the plan read answers: as the platform does, failed (503), or held until released.
+let planRead: 'ok' | 'fail' | 'late' = 'ok'
+let releasePlan = () => {}
 const signed: string[] = []
 // The round's counts as /progress gives them, from the same nodes (the plan pane reads both).
 function progress() {
@@ -50,7 +53,11 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
     plan = { ...plan, nodes: plan.nodes.map(n => n.plan_node_id === node ? { ...n, signoffs: [{ ref, by: 'owner', at: '2026-10-21T23:00:00Z', event_id: 1 }] } : n) }
     return json({ plan_node_id: node, ref, by: 'owner', at: '2026-10-21T23:00:00Z', event_id: 1, already_signed: false })
   }
-  if (url.includes('/agentrt/plan?')) return json(plan)
+  if (url.includes('/agentrt/plan?')) {
+    if (planRead === 'fail') return json({ error: 'unavailable', message: 'the runtime is not connected' }, 503)
+    if (planRead === 'late') await new Promise<void>(resolve => { releasePlan = resolve })
+    return json(plan)
+  }
   if (url.includes('/agentrt/events?stream=plan')) return json([])
   if (url.includes('/agentrt/progress')) return json(progress())
   if (url.includes('/agentrt/events')) return json([])
@@ -62,6 +69,7 @@ function show(node: ReactNode) {
 }
 beforeEach(() => {
   plan = prod.plan as unknown as { root: string; nodes: Node[] }
+  planRead = 'ok'
   signed.length = 0
   const mem = new Map<string, string>([[PLATFORM_TOKEN_KEY, 'fixture-admin-token']])
   Object.defineProperty(window, 'localStorage', { configurable: true, value: {
@@ -99,8 +107,9 @@ describe('the steps waiting on the Owner\'s sign-off, on PROD\'s plan', () => {
 
   it('shows them at the top of the plan with a Sign off each, and a signed step leaves the block', async () => {
     show(<SignoffWaiting />)
-    const block = await screen.findByRole('region', { name: 'Waiting for your sign-off' })
-    expect(within(block).getByRole('heading', { name: 'Waiting for your sign-off · 10' })).toBeInTheDocument()
+    // Reading first, then the steps.
+    expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 10' })).toBeInTheDocument()
+    const block = screen.getByRole('region', { name: 'Waiting for your sign-off' })
     expect([...block.querySelectorAll('[data-step-badge]')].map(b => b.textContent)).toEqual(WAITING)
     expect(block.textContent).not.toMatch(/\*\*|`/)
     const row = block.querySelector('[data-signoff-wait="R2:2.4-1"]') as HTMLElement
@@ -129,5 +138,33 @@ describe('the steps waiting on the Owner\'s sign-off, on PROD\'s plan', () => {
     expect(badges.sort()).toEqual(steps.map(s => s.label).sort())
     for (const li of container.querySelectorAll('[data-step]')) expect(li.querySelector('button[aria-expanded]')?.textContent).not.toMatch(/\*\*|`/)
     expect(container.querySelector('summary')?.textContent).not.toMatch(/\*\*|`/)
+  })
+
+  it('says the plan could not be read, never that none waits, in the block and on For you (review 502 B1)', async () => {
+    planRead = 'fail'
+    show(<><SignoffWaiting /><SignoffWaitingLink /></>)
+    const block = await screen.findByRole('region', { name: 'Waiting for your sign-off' })
+    expect(await within(block).findByRole('alert')).toHaveTextContent('The plan could not be read: which steps wait for your sign-off is not known.')
+    expect(block.querySelector('[data-signoff-wait]')).toBeNull()
+    const forYou = document.querySelector('p[data-signoff-link]') as HTMLElement
+    expect(forYou).toHaveTextContent(/^The plan could not be read: which steps wait for your sign-off is not known\./)
+    expect(within(forYou).getByRole('link', { name: 'Work › Plan' })).toHaveAttribute('href', '#work?section=signoff')
+  })
+
+  it('is in place while the plan is read, and is brought into view when its steps arrive at #work?section=signoff (review 502 B2)', async () => {
+    planRead = 'late'
+    window.location.hash = '#work?section=signoff'
+    const into = vi.fn()
+    Element.prototype.scrollIntoView = into
+    show(<SignoffWaiting />)
+    // A target from the first paint, so the page's own scroll finds it.
+    expect(await screen.findByText('Reading which steps wait for your sign-off…')).toBeInTheDocument()
+    expect(document.getElementById('signoff')).not.toBeNull()
+    expect(into).not.toHaveBeenCalled()
+    releasePlan()
+    expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 10' })).toBeInTheDocument()
+    await waitFor(() => expect(into).toHaveBeenCalledTimes(1))
+    expect(into.mock.contexts[0]).toBe(document.getElementById('signoff'))
+    window.location.hash = ''
   })
 })

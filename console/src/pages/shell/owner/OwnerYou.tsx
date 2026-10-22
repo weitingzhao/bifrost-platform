@@ -52,7 +52,7 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
         <SignoffWaitingLink />
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
-          : count.state === 'known' && <p className="m-0 text-sm">Nothing is yours right now.</p>}
+          : count.state === 'known' && <p className="m-0 text-sm">No request, question or alert is yours right now.</p>}
         {next && <p data-owner-next className="m-0 text-sm [overflow-wrap:anywhere]"><strong>Next time you are needed:</strong>{' '}
           {next.mission ? <a href={goalHref(next.mission)}>{next.text}</a> : next.text}</p>}
         <div className="flex flex-wrap justify-between gap-2 border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">
