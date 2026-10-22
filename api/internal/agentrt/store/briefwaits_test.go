@@ -58,8 +58,14 @@ func TestAScheduledBriefReadsTheWaitsThatPassed(t *testing.T) {
 	}
 	task, _ := takeAndReady(t, w, mail[0])
 	spec := specText(t, w, task)
-	if !strings.Contains(spec, "which waits passed their limit") || !strings.Contains(spec, "(waits_passed_since)") {
-		t.Fatalf("the instructions do not ask for the waits: %.1500s", spec)
+	// The platform's own waits, told apart from what waits for the Owner, and
+	// an empty part that need not take a line of the 15 (the exam line,
+	// 2026-10-22: the seat's briefs ran 9 to 14 lines).
+	for _, want := range []string{"which of the platform's own", "waits passed their limit from since to until (not what waits for him)",
+		"(waits_passed_since)", "Say plainly when a part is empty; empty parts may share one line."} {
+		if !strings.Contains(spec, want) {
+			t.Fatalf("the instructions lack %q: %.1500s", want, spec)
+		}
 	}
 	data := briefData(t, spec)
 	list, _ := data["waits_passed_since"].([]any)

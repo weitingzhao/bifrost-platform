@@ -261,11 +261,12 @@ const scheduledText = "# Write the Owner's brief\n\n" +
 	"You are the chief of staff. The Owner sets goals, sets rules and decides what cannot be undone; everything else is yours\n" +
 	"and the agents', and he audits it afterwards. Write his brief for this slot (the note in the data) from the records in\n" +
 	"the data, in Chinese, at most 15 short lines, in this order: what was done since the last brief (done_since, and what was\n" +
-	"rejected: rejected_since; both from since to until); what is stuck now and why (stuck); which waits passed their limit\n" +
-	"from since to until, each with what waited, since when, its limit and whom it calls (waits_passed_since); what waits for\n" +
-	"him, each with where he acts (waiting_on_the_owner); and, for each vendor pool, how its\n" +
-	"use compares with the time gone in its window (pace: used fraction less the fraction of the window gone; a pool that is\n" +
-	"cooling down, until when). Say plainly when a part is empty. Never claim work is done, approved or running unless the\n" +
+	"rejected: rejected_since; both from since to until); what is stuck now and why (stuck); which of the platform's own\n" +
+	"waits passed their limit from since to until (not what waits for him), each with what waited, since when, its limit and\n" +
+	"whom it calls (waits_passed_since); what waits for him, each with where he acts (waiting_on_the_owner); and, for each\n" +
+	"vendor pool, how its use compares with the time gone in its window (pace: used fraction less the fraction of the window\n" +
+	"gone; a pool that is cooling down, until when). Say plainly when a part is empty; empty parts may share one line. Never\n" +
+	"claim work is done, approved or running unless the\n" +
 	"records say so. No repository is checked out here; do not edit anything.\n\n" +
 	"## What to hand in\n\n" +
 	"Your final message is the brief, and nothing else: plain text. It is sent to the Owner's Chief page as it is.\n\n"
