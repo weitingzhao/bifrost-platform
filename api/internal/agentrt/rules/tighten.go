@@ -47,9 +47,14 @@ func Tightens(prev, next Rule) error {
 			return errors.New("the plan's standing authorization grants more")
 		}
 	case KindCardAuto:
-		// It waits no less long and answers no new kind of card.
+		// It waits no less long, answers no new kind of card, and keeps an
+		// AI assessment to a veto once it has (a card's assessment choosing
+		// the option again is more the rule does without the Owner).
 		if next.CardAuto.AfterSeconds < prev.CardAuto.AfterSeconds {
 			return errors.New("the wait goes down")
+		}
+		if prev.CardAuto.AssessmentVeto && !next.CardAuto.AssessmentVeto {
+			return errors.New("an AI assessment may choose the option again")
 		}
 		return subset(next.CardAuto.Kinds, prev.CardAuto.Kinds, "kinds")
 	case KindRouting:

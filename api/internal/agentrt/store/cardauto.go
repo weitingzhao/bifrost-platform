@@ -32,7 +32,11 @@ import (
 //     when an assessment that has come recommends another; a card that
 //     recommends nothing takes the option of an assessment that has come,
 //     else the option that changes nothing (ruleChoice); an option it does
-//     not recommend says why on the card's answer.
+//     not recommend says why on the card's answer. Under a rule that says
+//     assessment: veto (rules.CardAuto.AssessmentVeto), a card that
+//     recommends nothing takes the option that changes nothing whatever its
+//     assessment says, and a card without the option the rule would take is
+//     left open for the Owner.
 //
 // The answer is the rule's, never the Owner's: the question store records it
 // as answered by "rule <id> v<version>" on the rule channel, a note on the
@@ -52,8 +56,12 @@ import (
 type RuntimeCard struct {
 	ID, TaskID, Recommended string
 	CreatedAt               time.Time
-	Answered                bool
-	By, Option              string // a rule's answer: the rule and the option it took
+	// Options is the keys of the card's options in order, as the question
+	// store gave them (a, b, …): a rule under assessment: veto answers only
+	// with one of them.
+	Options    []string
+	Answered   bool
+	By, Option string // a rule's answer: the rule and the option it took
 }
 
 // CardRule is what answering cards by rule reads and writes beyond the
@@ -148,7 +156,12 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 		if err != nil {
 			return err
 		}
-		option, why, said := ruleChoice(on.kind, card.Recommended, st, now)
+		veto := rule.CardAuto.AssessmentVeto
+		option, why, said := ruleChoice(on.kind, card.Recommended, st, now, veto, card.Options)
+		if veto && option == "" {
+			// No option the rule may take: the card stays the Owner's.
+			return nil
+		}
 		// The rule holds until it expires or a later version stored already
 		// takes effect (review 443 A2: the question store may be reached
 		// after that instant).

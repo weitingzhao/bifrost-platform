@@ -184,7 +184,13 @@ func ruleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, er
 }
 
 // inaction is the option of a card of kind that changes nothing; rec is the
-// option the card recommends.
+// option the card recommends. It is known by its key, never by its label: on
+// the five decision cards, which the platform asks with it second, the key
+// the question store gives the second option (CardRefuseKey, b: do not do
+// the task, do not apply the change, do not import, do not start the
+// mission); on a planner's question, the option the card recommends, which
+// the work goes on with. A planner's question that recommends nothing has
+// none ("").
 func inaction(kind, rec string) string {
 	if kind == CardPlanQuestion {
 		return rec
@@ -204,10 +210,40 @@ func inaction(kind, rec string) string {
 //   - The card recommends nothing: the assessment's option when one has come
 //     with it; otherwise the option that changes nothing.
 //
+// Under a rule that says assessment: veto (veto; review 489 A1 on T12, the
+// coordinating thread 2026-10-22 for the Owner: A1) the assessment only ever
+// keeps the rule from the card's recommendation:
+//   - The card recommends an option: as above.
+//   - The card recommends nothing: the option that changes nothing, whatever
+//     the assessment says.
+//   - The option so chosen is not one of the card's (options: a planner's
+//     question that recommends nothing has no option that changes nothing):
+//     no option (""), and the card is left to the Owner.
+//
 // why is what the card's answer says of an option the card does not
 // recommend ("" for the one it does); said is what the note adds: which case
 // it was.
-func ruleChoice(kind, rec string, st assessState, now time.Time) (option, why, said string) {
+func ruleChoice(kind, rec string, st assessState, now time.Time, veto bool, options []string) (option, why, said string) {
+	if veto && rec == "" {
+		why = "the card recommends nothing: the rule takes the option that changes nothing"
+		if st.done && st.recommended != "" {
+			why += ", not the one its AI assessment recommends (" + st.recommended + ")"
+			option, said = inaction(kind, rec), why
+		} else {
+			option, said = inaction(kind, rec), why+"; "+assessmentSaid(st, now)
+		}
+	} else {
+		option, why, said = choiceOf(kind, rec, st, now)
+	}
+	if veto && !slices.Contains(options, option) {
+		return "", "", ""
+	}
+	return option, why, said
+}
+
+// choiceOf is ruleChoice of a rule without assessment: veto (versions 1 to
+// 3 read so).
+func choiceOf(kind, rec string, st assessState, now time.Time) (option, why, said string) {
 	nothing := inaction(kind, rec)
 	ai := st.done && st.recommended != ""
 	switch {

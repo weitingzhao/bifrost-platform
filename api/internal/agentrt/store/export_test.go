@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// RuleChoiceForTest is ruleChoice for a card of kind that recommends rec,
+// whose AI assessment came recommending assessed ("": none asked), under a
+// rule with or without assessment: veto, on a card with options.
+func RuleChoiceForTest(kind, rec, assessed string, veto bool, options []string) (option, why string) {
+	st := assessState{asked: assessed != "", done: assessed != "", recommended: assessed}
+	option, why, _ = ruleChoice(kind, rec, st, time.Now(), veto, options)
+	return option, why
+}
+
 // ClaimFor is ClaimNext with a lease of the test's choosing, so a test can
 // start from a lease that has lapsed, or is past its grace, without waiting.
 func ClaimFor(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*Claim, error) {

@@ -55,7 +55,12 @@ func (s *cardStore) ask(_ context.Context, c store.Card) (string, error) {
 		if c.Recommended > 0 {
 			rec = string(rune('a' + c.Recommended - 1))
 		}
-		s.put(store.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now()})
+		// The question store keys the options a, b, … in order.
+		var keys []string
+		for i := range c.Options {
+			keys = append(keys, string(rune('a'+i)))
+		}
+		s.put(store.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
 	}
 	return id, nil
 }

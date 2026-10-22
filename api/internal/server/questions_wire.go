@@ -249,6 +249,9 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		cards := make([]store.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
 			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
+			for _, o := range q.Options {
+				c.Options = append(c.Options, o.Key)
+			}
 			if q.Status == questions.StatusAnswered && q.Answer != nil {
 				c.Answered, c.By, c.Option = true, q.Answer.By, q.Answer.Option
 			}

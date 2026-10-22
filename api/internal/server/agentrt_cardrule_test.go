@@ -42,7 +42,8 @@ func TestCardRuleOnTheStore(t *testing.T) {
 		t.Fatalf("a thread's question: %d %v", res.Code, res.Body)
 	}
 	list, err := cards(ctx)
-	if err != nil || len(list) != 1 || list[0].ID != id || list[0].TaskID != task || list[0].Recommended != "c" || list[0].CreatedAt.IsZero() {
+	if err != nil || len(list) != 1 || list[0].ID != id || list[0].TaskID != task || list[0].Recommended != "c" || list[0].CreatedAt.IsZero() ||
+		strings.Join(list[0].Options, ",") != "a,b,c" {
 		t.Fatalf("the runtime's cards: %+v %v", list, err)
 	}
 	until := time.Now().Add(time.Hour)

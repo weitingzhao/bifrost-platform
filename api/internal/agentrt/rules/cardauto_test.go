@@ -136,3 +136,49 @@ func TestCardAutoRuleInSeconds(t *testing.T) {
 		t.Errorf("fewer kinds: %v", err)
 	}
 }
+
+// Review 489 A1 on T12 (the coordinating thread 2026-10-22 for the Owner:
+// A1): assessment: veto keeps a card's AI assessment to a veto. Optional,
+// one value; written back when given, absent from the body of a rule that
+// does not give it (versions 1 to 3 read as signed). Giving it tightens;
+// dropping it again loosens and needs the Owner's signature.
+func TestCardAutoAssessmentVeto(t *testing.T) {
+	all := "[blocked, plan_question, plan_change, plan_import, recorder_import, mission]"
+	v3 := cardAutoSeconds(3, "loosen", "5", all)
+	v4 := strings.Replace(cardAutoSeconds(3, "tighten", "5", all), "rule_version: 3", "rule_version: 4", 1) + "assessment: veto\n"
+	parse := func(text string) rules.Rule {
+		t.Helper()
+		r, err := rules.Parse([]byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	prev, next := parse(v3), parse(v4)
+	if prev.CardAuto.AssessmentVeto || !next.CardAuto.AssessmentVeto {
+		t.Fatalf("v3 %+v, v4 %+v", prev.CardAuto, next.CardAuto)
+	}
+	if body, err := prev.BodyJSON(); err != nil || strings.Contains(string(body), "assessment") {
+		t.Fatalf("v3's body = %s (%v)", body, err)
+	}
+	if body, err := next.BodyJSON(); err != nil || !strings.Contains(string(body), `"assessment":"veto"`) {
+		t.Fatalf("v4's body = %s (%v)", body, err)
+	}
+	if err := rules.Tightens(prev, next); err != nil {
+		t.Fatalf("v3 to v4: %v", err)
+	}
+	back := parse(strings.Replace(cardAutoSeconds(3, "loosen", "5", all), "rule_version: 3", "rule_version: 5", 1))
+	if err := rules.Tightens(next, back); err == nil || !strings.Contains(err.Error(), "may choose the option again") {
+		t.Fatalf("v4 to a version without the veto: %v", err)
+	}
+	for name, text := range map[string]string{
+		"another value": strings.Replace(v4, "assessment: veto", "assessment: choose", 1),
+		"empty":         strings.Replace(v4, "assessment: veto", `assessment: ""`, 1),
+		"a flag":        strings.Replace(v4, "assessment: veto", "assessment: true", 1),
+		"a list":        strings.Replace(v4, "assessment: veto", "assessment: [veto]", 1),
+	} {
+		if _, err := rules.Parse([]byte(text)); err == nil {
+			t.Errorf("%s: parsed", name)
+		}
+	}
+}

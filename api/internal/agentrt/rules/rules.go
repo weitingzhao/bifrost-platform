@@ -45,7 +45,8 @@ const (
 // a mission's card outside the standing envelope (missiondecide.go). TD-393
 // (the Owner 2026-10-20 「STG 上所有种类的运行时卡都归规则管」) added all but the
 // first two; a rule answers a card with its recommendation, or with the
-// option that changes nothing when it has none or its AI assessment differs.
+// option that changes nothing when it has none or its AI assessment differs
+// (before assessment: veto, a card with none took its assessment's option).
 var cardKinds = []string{"blocked", "mission", "plan_change", "plan_import", "plan_question", "recorder_import"}
 
 // Bounds of a card-auto-answer rule's wait: after_seconds from 0 to a week
@@ -171,6 +172,14 @@ type PlanStanding struct {
 type CardAuto struct {
 	AfterSeconds int
 	Kinds        []string
+	// AssessmentVeto: the rule says assessment: veto (review 489 A1 on T12,
+	// the coordinating thread 2026-10-22 for the Owner: A1). A card's AI
+	// assessment may then only keep the rule from the card's recommendation,
+	// never give it an option of its own: a card that recommends nothing is
+	// answered with the option that changes nothing, and left to the Owner
+	// when it has none (store.ruleChoice). Without it (versions before),
+	// such a card takes the option of an assessment that has come.
+	AssessmentVeto bool
 	// minutes: the rule says after_minutes (versions before TD-393), and
 	// its canonical body says so again.
 	minutes bool
@@ -324,8 +333,9 @@ func (r *Rule) envelope(o *object, arg string) error {
 }
 
 // cardAuto reads a card-auto-answer rule: after_seconds (or, as the first
-// versions say it, after_minutes; one of them), and kinds, a list of the
-// card kinds it answers, at least one, none twice (kept sorted).
+// versions say it, after_minutes; one of them), kinds, a list of the card
+// kinds it answers, at least one, none twice (kept sorted), and, optional,
+// assessment, which says veto or is absent.
 func (r *Rule) cardAuto(o *object) error {
 	c := &CardAuto{}
 	var err error
@@ -357,9 +367,23 @@ func (r *Rule) cardAuto(o *object) error {
 		}
 	}
 	slices.Sort(c.Kinds)
+	if _, given := o.fields["assessment"]; given {
+		a, err := o.str("assessment", false)
+		if err != nil {
+			return err
+		}
+		if a != CardAssessmentVeto {
+			return fmt.Errorf("%s.assessment says %q; the one value it takes is %q", o.where, a, CardAssessmentVeto)
+		}
+		c.AssessmentVeto = true
+	}
 	r.CardAuto = c
 	return nil
 }
+
+// CardAssessmentVeto is the one value of a card-auto-answer rule's
+// assessment (CardAuto.AssessmentVeto).
+const CardAssessmentVeto = "veto"
 
 func (r *Rule) plan(o *object) error {
 	p := &PlanStanding{}
@@ -591,6 +615,9 @@ func (r Rule) Doc() map[string]any {
 			doc["after_seconds"] = r.CardAuto.AfterSeconds
 		}
 		doc["kinds"] = anyList(r.CardAuto.Kinds)
+		if r.CardAuto.AssessmentVeto {
+			doc["assessment"] = CardAssessmentVeto
+		}
 	case KindRouting:
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
 		if c := r.Routing.Competence; c != nil {
