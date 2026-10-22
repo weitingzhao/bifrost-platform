@@ -393,10 +393,15 @@ func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("the seat's M-1 task onto M-1's step: %d %v", code, out)
 	}
-	var by string
-	must(t, pool.QueryRow(ctx, `SELECT created_by_actor_id FROM agentrt.task WHERE task_id = $1`,
-		out["tasks"].([]any)[0].(map[string]any)["task_id"]).Scan(&by))
-	if by != seat {
-		t.Fatalf("the seat's task is recorded as %s", by)
+	// The task, its task_proposed event and the key are all the seat's (review 505 C).
+	id := out["tasks"].([]any)[0].(map[string]any)["task_id"]
+	var by, evBy string
+	var keys int
+	must(t, pool.QueryRow(ctx, `SELECT t.created_by_actor_id, e.actor_id,
+	  (SELECT count(*) FROM agentrt.idempotency_key WHERE idempotency_key_id LIKE $2 || '|%|seat-k2')
+	  FROM agentrt.task t JOIN agentrt.event e ON e.task_id = t.task_id AND e.event_type = 'task_proposed'
+	  WHERE t.task_id = $1`, id, seat).Scan(&by, &evBy, &keys))
+	if by != seat || evBy != seat || keys != 1 {
+		t.Fatalf("the seat's task is recorded as %s, its event as %s; %d keys of the seat's", by, evBy, keys)
 	}
 }
