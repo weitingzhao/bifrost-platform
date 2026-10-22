@@ -113,10 +113,12 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 	return nil
 }
 
-// signedPresent looks each repository's signed full SHA up as a commit in
-// Gitea and refuses the ones it does not have; a lookup that fails, or a Gitea
-// that cannot be asked, is unknown and does not refuse (review 510 B2: the
-// legacy status takes a failed commit lookup for a missing commit).
+// signedPresent asks Gitea for each repository's signed full SHA as the run
+// of a legacy or CI pipeline does (a branch or a tag of that name, then a
+// commit; review 511 B3) and refuses only when every repository answered and
+// some lack it, as the run's gate does (review 511 C2). A failed commit lookup
+// is unknown, not missing (review 510 B2), and so is a Gitea or a cluster that
+// cannot be asked.
 func (s *Service) signedPresent(ctx context.Context, repos []string, refOf func(string) string) error {
 	clientset, _, err := s.cluster.KubernetesClient()
 	if err != nil {
@@ -126,14 +128,35 @@ func (s *Service) signedPresent(ctx context.Context, repos []string, refOf func(
 	var missing []string
 	for _, repo := range repos {
 		ref := refOf(repo)
-		if st := s.repoRefStatus(ctx, repo, ref, user, pass); !st.Exists && st.Kind == "missing" {
+		switch st := s.createRefStatus(ctx, repo, ref, user, pass); {
+		case st.Exists:
+		case st.Kind == "missing":
 			missing = append(missing, fmt.Sprintf("%s (ref %q)", repo, ref))
+		default:
+			return nil // one repository could not be asked: the run lets it through
 		}
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("revision is missing in: %s", strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+// createRefStatus is the legacy status, which the run of a legacy or CI
+// pipeline uses, except that a commit lookup that failed is an error: the
+// legacy status takes one for a missing commit, and a request made while Gitea
+// is degraded is not to be refused for it (review 510 B2).
+func (s *Service) createRefStatus(ctx context.Context, repo, ref, user, pass string) RepoRefStatus {
+	st := s.legacyRepoRefStatus(ctx, repo, ref, user, pass)
+	if st.Exists || st.Kind != "missing" || !shaRefPattern.MatchString(ref) {
+		return st
+	}
+	if sha, ok, err := s.giteaCommitExists(ctx, repo, ref, user, pass); ok {
+		return RepoRefStatus{Repo: repo, Exists: true, Kind: "commit", Commit: sha}
+	} else if err != nil {
+		return RepoRefStatus{Repo: repo, Kind: "error", Detail: err.Error()}
+	}
+	return st
 }
 
 // CheckRequestRefs is the service's, for the approvals' creation check.

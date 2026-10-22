@@ -16,12 +16,19 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
-// TD-420 at creation, the legacy and CI pipelines (review 510 B2): a signed
-// full SHA Gitea answers for is fine, one it does not have is refused with the
-// repository and the SHA, and one whose lookup fails is unknown and does not
-// refuse (the legacy status would call it missing). A branch is not looked up.
+// TD-420 at creation, the legacy and CI pipelines, as their runs see refs: a
+// signed full SHA Gitea answers for is fine, one it does not have is refused
+// with the repository and the SHA, one whose lookup fails is unknown and does
+// not refuse (review 510 B2; the legacy status would call it missing), a
+// branch named like a SHA is taken (review 511 B3), and one repository that
+// cannot be asked lets the request through, as the run's gate does (review
+// 511 C2). A branch is not looked up.
 func TestRequestRefsLegacyAndCIAtCreation(t *testing.T) {
 	const present, missing, failing = factSHA1, factSHA2, "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+	// a branch named like a full SHA, which the legacy and CI runs take (review 511 B3)
+	const branchNamed = "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d"
+	// one repository whose commit lookup fails while the others answer (review 511 C2)
+	const partly = "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e"
 	for _, name := range []string{"bifrost-deliver-stg", "bifrost-ci-platform"} {
 		pipe := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
 			"metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
@@ -33,10 +40,14 @@ func TestRequestRefsLegacyAndCIAtCreation(t *testing.T) {
 		s.httpClient = &http.Client{Transport: contractTransport(func(r *http.Request) (*http.Response, error) {
 			paths = append(paths, r.URL.Path)
 			code, body := http.StatusOK, "[]"
+			first := "/api/v1/repos/bifrost/" + reposForPipeline(name)[0] + "/"
 			switch {
+			case strings.HasSuffix(r.URL.Path, "/branches"):
+				body = `[{"name":"` + branchNamed + `","commit":{"id":"` + present + `"}}]`
 			case strings.HasSuffix(r.URL.Path, "/git/commits/"+present):
 				body = `{"sha":"` + present + `"}`
-			case strings.HasSuffix(r.URL.Path, "/git/commits/"+failing):
+			case strings.HasSuffix(r.URL.Path, "/git/commits/"+failing),
+				strings.HasSuffix(r.URL.Path, "/git/commits/"+partly) && strings.HasPrefix(r.URL.Path, first):
 				code, body = http.StatusServiceUnavailable, "busy"
 			case strings.Contains(r.URL.Path, "/git/commits/"):
 				code, body = http.StatusNotFound, "{}"
@@ -55,6 +66,12 @@ func TestRequestRefsLegacyAndCIAtCreation(t *testing.T) {
 		}
 		if err := check(failing); err != nil {
 			t.Errorf("%s, a commit whose lookup fails: %v (unknown is not missing)", name, err)
+		}
+		if err := check(branchNamed); err != nil {
+			t.Errorf("%s, a branch named like a SHA, which the run takes: %v", name, err)
+		}
+		if err := check(partly); err != nil {
+			t.Errorf("%s, one repository unknown and the rest without it, which the run lets through: %v", name, err)
 		}
 		paths = nil
 		err := check("main")
