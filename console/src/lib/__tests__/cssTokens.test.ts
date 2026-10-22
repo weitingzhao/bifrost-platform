@@ -7,6 +7,7 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const CSS_FILES = [
   path.join(SRC, 'index.css'),
   path.join(SRC, 'styles/taskModeChrome.css'),
+  path.join(SRC, 'styles/opsAppearance.css'),
   path.resolve(SRC, '../../../bifrost-ui/src/styles/bifrost-ui.css'),
 ]
 

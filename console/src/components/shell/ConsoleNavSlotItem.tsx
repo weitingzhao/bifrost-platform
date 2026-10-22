@@ -40,7 +40,7 @@ export function ConsoleNavBadgeMark({ badge, collapsed }: { badge: ConsoleNavBad
           ? 'absolute -right-1 -top-1 h-3.5 min-w-3.5 px-0.5 text-[9px]'
           : 'h-4 min-w-4 px-1 text-[10px]',
         badge.tone === 'attention'
-          ? 'bg-[var(--color-lamp-red)] text-white'
+          ? 'bg-[var(--ops-attention-fill)] text-[var(--ops-attention-text)]'
           : 'bg-muted text-muted-foreground',
       )}
     >
@@ -96,6 +96,8 @@ export function ConsoleNavSlotItem({
           <div className="relative">
             <button
               type="button"
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(shellNavCollapsedIconButtonClass(isActive), signalClass)}
               title={signalTitle}
               onClick={() => onSelect(item.id)}

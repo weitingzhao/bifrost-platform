@@ -1,0 +1,132 @@
+/* Console-owned Soft UI tokens. No changes to the shared @bifrost/ui package. */
+html[data-ops-theme] {
+  --background: #e9edf0;
+  --foreground: #293440;
+  --card: #edf1f4;
+  --muted: #e0e6eb;
+  --muted-foreground: #53616d;
+  --border: #cbd4dc;
+  --primary: #374657;
+  --primary-foreground: #fff;
+  --ring: #4269a2;
+  --ops-canvas: linear-gradient(120deg, #e9edf0, #e9edf0);
+  --ops-panel: linear-gradient(120deg, #edf1f4, #edf1f4);
+  --ops-control: linear-gradient(120deg, #e9edf0, #e9edf0);
+  --ops-selection: #dfe6ed;
+  --ops-nav: #d9e2ec;
+  --ops-accent: linear-gradient(120deg, #374657, #293440);
+  --ops-shadow: 6px 7px 17px #a0acb745, -5px -5px 15px #ffffff9c;
+  --ops-raised: 3px 4px 9px #a0acb740, -3px -3px 9px #ffffff94;
+  --ops-inset: inset 2px 2px 6px #a6afbb4d, inset -2px -2px 6px #ffffff80;
+  --ops-edge: #ffffff70;
+  --ops-attention-fill: #ead8ad;
+  --ops-attention-text: #6b501f;
+  --color-lamp-green: #237449;
+  --color-lamp-yellow: #88601c;
+  --color-lamp-red: #b33d49;
+  --color-lamp-gray: #606b80;
+  --color-info: #3e648f;
+}
+html[data-ops-theme='dark'] {
+  --background: #242d36;
+  --foreground: #e7edf3;
+  --card: #2b3540;
+  --muted: #34404c;
+  --muted-foreground: #b4c0cc;
+  --border: #465461;
+  --primary: #b3cceb;
+  --primary-foreground: #233043;
+  --ring: #b3cceb;
+  --ops-canvas: linear-gradient(120deg, #242d36, #242d36);
+  --ops-panel: linear-gradient(120deg, #2b3540, #2b3540);
+  --ops-control: linear-gradient(120deg, #34404c, #34404c);
+  --ops-selection: #303d49;
+  --ops-nav: #394856;
+  --ops-accent: linear-gradient(120deg, #b3cceb, #bacce3);
+  --ops-shadow: 6px 7px 18px #0c142264, -4px -4px 14px #586c7e26;
+  --ops-raised: 3px 4px 10px #10182780, -3px -3px 9px #748c9e20;
+  --ops-inset: inset 2px 2px 7px #101a2b80, inset -2px -2px 7px #728b9c26;
+  --ops-edge: #859fb02e;
+  --ops-attention-fill: #4b3e29;
+  --ops-attention-text: #f0d193;
+  --color-lamp-green: #8ec8a5;
+  --color-lamp-yellow: #e3c99e;
+  --color-lamp-red: #ee9aa3;
+  --color-lamp-gray: #a7b0c3;
+  --color-info: #abc9e9;
+}
+html[data-ops-style='gradient'][data-ops-theme='light'] {
+  --background: #e1e8f6;
+  --foreground: #29314c;
+  --card: #eeedf9;
+  --muted: #e3e7f4;
+  --muted-foreground: #57627e;
+  --border: #d2d6e8;
+  --primary: #5548aa;
+  --ring: #6045b5;
+  --ops-canvas: linear-gradient(120deg, #e1e8f6, #e8e4f4);
+  --ops-panel: linear-gradient(120deg, #edf1fb, #eeebf8);
+  --ops-control: linear-gradient(120deg, #edf0fb, #e8e7f7);
+  --ops-selection: linear-gradient(120deg, #e3e8f8, #e8e4f6);
+  --ops-nav: linear-gradient(120deg, #dce3f6, #e2def4);
+  --ops-accent: linear-gradient(120deg, #4265cf, #6055c5 53%, #7950b5);
+  --ops-shadow: 6px 7px 17px #9ba8c33d, -5px -5px 15px #ffffff8c;
+  --ops-raised: 3px 4px 9px #9da9c340, -3px -3px 9px #ffffff94;
+  --ops-inset: inset 2px 2px 6px #a6afd04d, inset -2px -2px 6px #ffffff80;
+}
+html[data-ops-style='gradient'][data-ops-theme='dark'] {
+  --background: #232b40;
+  --foreground: #edf0fc;
+  --card: #2d3049;
+  --muted: #363952;
+  --muted-foreground: #b4bdd8;
+  --border: #41465d;
+  --primary: #bdcaff;
+  --primary-foreground: #232b4b;
+  --ring: #bdcaff;
+  --ops-canvas: linear-gradient(120deg, #232b40, #2a273f);
+  --ops-panel: linear-gradient(120deg, #2b334b, #302d47);
+  --ops-control: linear-gradient(120deg, #343d57, #3a3452);
+  --ops-selection: linear-gradient(120deg, #303a53, #38334e);
+  --ops-nav: linear-gradient(120deg, #35415d, #403858);
+  --ops-accent: linear-gradient(120deg, #b1cbf7, #b9c8fc 52%, #c6b9ef);
+  --ops-shadow: 6px 7px 18px #0c102264, -4px -4px 14px #58617e26;
+  --ops-raised: 3px 4px 10px #10142780, -3px -3px 9px #747d9e20;
+  --ops-inset: inset 2px 2px 7px #10162b80, inset -2px -2px 7px #727b9c26;
+  --ops-edge: #8590b02e;
+}
+html[data-ops-theme] {
+  --card-foreground: var(--foreground);
+  --card-fill: var(--card);
+  --card-border: var(--ops-edge);
+  --control-fill: var(--muted);
+  --field-fill: var(--muted);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --input: var(--border);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--primary);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-ring: var(--ring);
+  --vib-mute: var(--muted-foreground);
+  --vib-mute2: var(--muted-foreground);
+  --vib-soft: var(--foreground);
+  --table-rule: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --color-surface-elevated: var(--muted);
+  --color-border-strong: var(--border);
+  --destructive: var(--color-lamp-red);
+  --glass-base: var(--card);
+  --glass-base-float: var(--card);
+  --popper-bg: var(--card);
+  --popper-filter: none;
+  --popper-shadow: var(--ops-shadow);
+  --card-radius: 20px;
+  --control-radius: 12px;
+}
+html[data-ops-theme] body { background: var(--ops-canvas); background-attachment: fixed; }

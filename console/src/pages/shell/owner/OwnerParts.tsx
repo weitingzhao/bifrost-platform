@@ -9,7 +9,7 @@ export function Dot({ tone, size = 'size-2.5' }: { tone: Tone; size?: string }) 
 export function Card({ title, more, children, label, accent = false }: {
   title: ReactNode; more?: { href: string; text: string }; children: ReactNode; label: string; accent?: boolean
 }) {
-  return <section aria-label={label} className={`flex min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${accent ? 'border-[var(--color-warning)]' : 'border-[var(--card-border)]'}`}>
+  return <section aria-label={label} data-owner-card className={`flex min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${accent ? 'border-[var(--color-warning)]' : 'border-[var(--card-border)]'}`}>
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="m-0 text-base font-semibold">{title}</h3>
       {more && <a href={more.href} className="-my-2 inline-flex min-h-11 items-center text-sm underline-offset-2 hover:underline">{more.text} ›</a>}
@@ -40,5 +40,5 @@ export function Stat({ value, label, tone }: { value: ReactNode; label: string; 
 
 /** A tappable link styled as a button: at least 44px high for a finger. */
 export function ActionLink({ href, children, primary = false }: { href: string; children: ReactNode; primary?: boolean }) {
-  return <a href={href} className={`inline-flex min-h-11 shrink-0 items-center rounded-[var(--control-radius)] px-3 text-sm font-semibold no-underline ${primary ? 'bg-foreground text-background' : 'border border-[var(--card-border)] text-foreground'}`}>{children}</a>
+  return <a href={href} data-owner-action={primary ? 'primary' : 'secondary'} className={`inline-flex min-h-11 shrink-0 items-center rounded-[var(--control-radius)] px-3 text-sm font-semibold no-underline ${primary ? 'bg-foreground text-background' : 'border border-[var(--card-border)] text-foreground'}`}>{children}</a>
 }

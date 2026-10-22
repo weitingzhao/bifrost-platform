@@ -12,7 +12,7 @@ import type { OwnerConsoleData } from './useOwnerConsole'
 const WORTH_SHOWN = 6
 
 function Row({ row, onGoal }: { row: OwnerRow; onGoal?: (draft: string) => void }) {
-  return <li className="flex flex-wrap items-start gap-3 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-3">
+  return <li className="ops-owner-row flex flex-wrap items-start gap-3 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-3">
     <span className="mt-1.5"><Dot tone={row.tone} /></span>
     <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
       <span className="break-words font-semibold">{row.title}</span>
@@ -43,13 +43,10 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   // After what waits now: when he is next needed, from the runtime (v4 §20.2's top line; W-31 2.5 gap 1).
   const next = ownerNextLine(data.runtime?.owner_next, data.now)
   return <section aria-label="For you" className="flex flex-col gap-3">
-    <h2 className="m-0 text-lg font-semibold">For you</h2>
-    <div className="grid gap-4 @3xl:grid-cols-2">
-      <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
+    <h2 className="sr-only">For you</h2>
+    <div className="ops-you-grid">
       <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
         {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
-        {/* First in the card: the steps waiting on his sign-off, signed on Work's plan (the Owner 2026-10-21). */}
-        <SignoffWaitingLink />
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
           : count.state === 'known' && <p className="m-0 text-sm">No request, question or alert is yours right now.</p>}
@@ -64,6 +61,11 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
           <span>Handled recently: {recent} · <a href="#records">Records</a></span>
         </div>
       </Card>
+      <Card label="Plan sign-offs" title="Plan sign-offs" more={{ href: '#work?section=signoff', text: 'Review steps' }}>
+        <p className="m-0 text-sm text-muted-foreground">Tracked in Work; separate from Needs you.</p>
+        <SignoffWaitingLink />
+      </Card>
+      <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
       <Card label="Worth a look" title={`Worth a look · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
         <p className="m-0 text-sm text-muted-foreground">Not yours to fix. Hand one to the chief of staff when it should be worked on.</p>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}

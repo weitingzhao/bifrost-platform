@@ -186,7 +186,7 @@ function ConsolePageInner() {
         <SidebarInset
           data-shell-layout={layout}
           className={cn(
-            'min-w-0 overflow-x-clip',
+            'ops-console-main min-w-0 overflow-x-clip',
             local && layout !== 'tabs' && 'pb-14',
             layout === 'tabs' && 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]',
           )}
@@ -210,7 +210,7 @@ function ConsolePageInner() {
               moreHref={back == null && location.kind !== 'more' ? formatShellHash(MORE_ROUTE) : undefined}
             />
           </div>
-          <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
+          <PageShell padding="compact" className="ops-page-content flex w-full min-w-0 flex-col gap-4">
             {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}

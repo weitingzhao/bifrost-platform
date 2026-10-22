@@ -134,6 +134,25 @@ function stubRuntimeReads() {
 }
 
 describe('Owner Console entries', () => {
+  it('keeps sign-offs separate from Yours and full waiting information available in Detail', async () => {
+    stubRuntimeReads()
+    show('#you')
+    const yours = screen.getByRole('region', { name: 'Yours' })
+    expect(yours.querySelector('[data-signoff-link]')).toBeNull()
+    const signoffs = screen.getByRole('region', { name: 'Plan sign-offs' })
+    expect(signoffs).toHaveTextContent('separate from Needs you')
+    expect(within(signoffs).getByRole('link', { name: /Review steps/ })).toHaveAttribute('href', '#work?section=signoff')
+    const detail = screen.getByRole('region', { name: 'Everything waiting on you' }).querySelector('details')!
+    expect(detail.open).toBe(false)
+    const allWaiting = within(yours).getByRole('link', { name: /All waiting/ })
+    allWaiting.addEventListener('click', event => event.preventDefault())
+    fireEvent.click(allWaiting)
+    await waitFor(() => expect(detail.open).toBe(true))
+    detail.open = false
+    fireEvent.click(allWaiting)
+    expect(detail.open).toBe(true)
+    expect(within(detail).getByTestId('needs-you-page')).toBeInTheDocument()
+  })
   // TD-411 (STG 2026-10-20: a platform needing 0007 and 0008 on a database at 0006, the controller failing quietly):
   // Work and System say the database misses them, from Progress as a database at 0006 answered it; For you does not.
   it('Work and System say the agent runtime database misses migrations', async () => {

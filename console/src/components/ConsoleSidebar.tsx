@@ -60,13 +60,12 @@ export function ConsoleSidebar({
       ) : (
         <SidebarMenu>
           <SidebarMenuSub>{entries.map(item => row(item, false))}</SidebarMenuSub>
-          <p
-            id="console-detail-pages"
-            className="m-0 mt-4 px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
-          >
-            Detail pages
-          </p>
-          <SidebarMenuSub aria-labelledby="console-detail-pages">{details.map(item => row(item, false))}</SidebarMenuSub>
+          <li className="list-none mt-4">
+            <details className="ops-detail-pages" open={details.some(item => item.id === activeTab) || undefined}>
+              <summary id="console-detail-pages">Detail pages</summary>
+              <SidebarMenuSub aria-labelledby="console-detail-pages">{details.map(item => row(item, false))}</SidebarMenuSub>
+            </details>
+          </li>
         </SidebarMenu>
       )}
     </nav>

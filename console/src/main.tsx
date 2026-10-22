@@ -5,6 +5,9 @@ import { App } from './App'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { registerServiceWorker } from '@/pwa/serviceWorker'
 import './index.css'
+import './styles/opsAppearance.css'
+import './styles/opsShell.css'
+import './styles/opsForYou.css'
 
 registerServiceWorker()
 

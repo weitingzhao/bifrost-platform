@@ -13,6 +13,7 @@ import {
   type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot'
 import { UserMenu } from '@/components/UserMenu'
+import { AppearanceMenu } from '@/components/shell/AppearanceMenu'
 import { ToolsMenu } from '@/components/ToolsMenu'
 import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
 import type { ShellLayout } from '@/lib/shell/useShellLayout'
@@ -87,7 +88,7 @@ export function ConsoleHeader({
     <header
       className={cn(
         SHELL_TOP_BAR_HEIGHT_CLASS,
-        'flex items-center gap-2 border-b border-[var(--table-rule)] bg-card px-3',
+        'ops-console-header flex items-center gap-2 border-b border-[var(--table-rule)] bg-card px-3',
       )}
     >
       {side ? <SidebarTrigger /> : null}
@@ -146,7 +147,9 @@ export function ConsoleHeader({
 
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
 
-      {showDevSessions ? <DevSessionsIndicator onOpen={onOpenDevSessions} /> : null}
+      <AppearanceMenu />
+
+      {showDevSessions ? <span className="ops-local-session"><DevSessionsIndicator onOpen={onOpenDevSessions} /></span> : null}
 
       {!side && moreHref != null ? (
         <a

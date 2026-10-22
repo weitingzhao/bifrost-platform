@@ -1,0 +1,68 @@
+/* The shell shares its canvas; surfaces do not introduce unrelated color planes. */
+html[data-ops-theme] .ops-console-main,
+html[data-ops-theme] .console-shell-chrome { background: transparent; }
+html[data-ops-theme] .console-shell-chrome { background: var(--background); }
+html[data-ops-theme] .ops-console-header {
+  height: auto; min-height: 76px; padding: 12px 24px;
+  background: transparent; border: 0;
+}
+.ops-console-header h1 { font-size: 22px; line-height: 1.3; }
+.ops-console-header [data-shell-status-line] { font-size: 12px; }
+.ops-console-header [data-viewer-env] {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 10px; border: 1px solid var(--ops-edge); border-radius: 12px;
+  font-weight: 700; letter-spacing: .07em; background: var(--ops-control);
+}
+.ops-console-header :is(button, a[aria-label='More pages']) { min-width: 44px; min-height: 44px; }
+.ops-console-header [data-viewer-env] span { background: transparent; color: var(--foreground); border: 0; }
+html[data-ops-theme] .ops-page-content { padding: 8px 24px 32px; }
+html[data-ops-theme] [data-shell-chrome='floating'] { padding: 0; }
+html[data-ops-theme] [data-shell-chrome='floating'] > [data-slot='sidebar-inner'] {
+  background: transparent; box-shadow: none; backdrop-filter: none;
+  border: 0; border-right: 1px solid var(--table-rule); border-radius: 0;
+}
+html[data-ops-theme] [data-shell-chrome='floating'] :is([data-sidebar='menu-button'], [data-sidebar='menu-sub-button']) {
+  min-height: 44px; border-radius: 12px; font-size: 14px;
+}
+html[data-ops-theme] [data-shell-chrome='floating'] [data-active='true'],
+html[data-ops-theme] [data-entry-nav] [aria-current='page'] {
+  background: var(--ops-nav); box-shadow: var(--ops-inset); color: var(--primary);
+}
+html[data-ops-theme] [data-entry-nav='rail'] { background: transparent; padding-top: 20px; }
+html[data-ops-theme] [data-entry-nav='tabs'] { background: var(--card); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); }
+.ops-appearance-trigger {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 44px; border: 1px solid var(--ops-edge); border-radius: 12px;
+  background: var(--ops-control); box-shadow: var(--ops-raised); color: var(--foreground); cursor: pointer;
+}
+html[data-ops-theme] .ops-appearance-menu { width: 224px; padding: 10px; background: var(--card); backdrop-filter: none; }
+.ops-detail-pages > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 4px 12px; cursor: pointer; color: var(--muted-foreground); font-weight: 600; font-size: 12px; }
+.ops-detail-pages > summary::after { content: '+'; margin-left: auto; }
+.ops-detail-pages[open] > summary::after { content: '−'; }
+.ops-appearance-menu [role='menuitemradio'] {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px;
+  color: var(--foreground); border-radius: 10px; cursor: pointer; font-size: 14px;
+}
+.ops-appearance-menu [data-state='checked'] { background: var(--ops-selection); box-shadow: var(--ops-inset); }
+.ops-appearance-menu [data-highlighted] { outline: 2px solid var(--ring); outline-offset: -2px; }
+.ops-console-header :focus-visible, [data-entry-nav] :focus-visible,
+[data-shell-chrome] :focus-visible, #owner-console[data-entry='you'] :focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 3px;
+}
+@media (max-width: 1023px) {
+  html[data-ops-theme] .ops-console-header { min-height: 72px; padding: 12px 20px; gap: 8px; flex-wrap: wrap; }
+  .ops-console-header h1 { font-size: 20px; }
+  .ops-console-header [data-shell-status-line] { display: none; }
+  html[data-ops-theme] .ops-page-content { padding: 8px 20px 24px; }
+}
+@media (max-width: 420px) {
+  html[data-ops-theme] .ops-console-header { padding-inline: 14px; gap: 6px; }
+  .ops-console-header h1 { font-size: 18px; }
+  .ops-console-header [data-viewer-env] { padding-inline: 6px; }
+  .ops-local-session { order: 10; flex-basis: 100%; }
+  .ops-local-session button { width: 100%; justify-content: flex-start; }
+  html[data-ops-theme] .ops-page-content { padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-ops-theme] [data-shell-chrome] { transition: none; }
+}
