@@ -153,8 +153,8 @@ func (d *Daemon) failBefore(ctx context.Context, a *Attempt, ws *Workspace, e *E
 		return out, errors.Join(err, serr)
 	}
 	d.logf("agentd: %s ends before its executor started: %v", e.AttemptID, err)
-	rerr := d.reportPrepare(ctx, a, e, beforeReport(err)) // why goes first (TD-394); once taken, it is all the attempt left, unless the workspace is an earlier run's (R2)
-	if e.HandedOver = rerr == nil && !errors.Is(err, ErrWorkspaceExists); rerr != nil {
+	whole, rerr := d.reportPrepare(ctx, a, e, beforeReport(err)) // why goes first (TD-394); taken whole, it is all the attempt left, unless the workspace is an earlier run's (R2; review 499 A-1)
+	if e.HandedOver = whole && !errors.Is(err, ErrWorkspaceExists); rerr != nil {
 		d.logf("agentd: %s: what failed before its executor started was not handed in: %v", e.AttemptID, rerr)
 	}
 	return Outcome{EndHow: prepareEnd, Conclusion: "none"}, errors.Join(err, d.end(ctx, e, prepareEnd))
@@ -715,68 +715,6 @@ func retryUnavailable(ctx context.Context, pause time.Duration, step func() erro
 		}
 	}
 	return err
-}
-
-// patchLimit: a checkpoint's patch over 1 MiB is recorded as too large, not
-// kept (design v5 §5.2 检查点).
-const patchLimit = 1 << 20
-
-// checkpoint samples a running attempt (design v5 §5.2 检查点): the log's
-// tail and the workspace's patch against the base, which is its net change,
-// the executor's own commits included. A sample's request (its number, the
-// artifacts it names, whether the patch was too large) is written to the
-// registry before it is sent and resent as it is, until the platform
-// confirms it; only then is the next sample taken (review 164 A6). A sample
-// that cannot be taken now is left for the next tick.
-func (d *Daemon) checkpoint(ctx context.Context, a *Attempt, ws *Workspace, entry *Entry) {
-	if entry.Pending == nil {
-		p := &PendingCheckpoint{Seq: entry.CheckpointSeq + 1}
-		if tail, _ := readTail(filepath.Join(a.Out, "log.txt"), logTailBytes); len(tail) > 0 {
-			id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", a.handText("log_tail", tail))
-			switch {
-			case err == nil:
-				p.Artifacts = append(p.Artifacts, id)
-			case transient(err):
-				d.logf("agentd: checkpoint %s: log tail: %v", entry.AttemptID, err)
-				return
-			}
-		}
-		if ws != nil {
-			patch, tooLarge, err := ws.Diff(ctx, patchLimit)
-			switch {
-			case err != nil:
-				d.logf("agentd: checkpoint %s: patch: %v", entry.AttemptID, err)
-				return
-			case tooLarge:
-				p.TooLarge = true
-			case len(patch) > 0:
-				id, err := d.Client.PutArtifact(ctx, "checkpoint_patch", "text/x-diff", patch)
-				switch {
-				case err == nil:
-					p.Artifacts = append(p.Artifacts, id)
-				case transient(err):
-					d.logf("agentd: checkpoint %s: patch: %v", entry.AttemptID, err)
-					return
-				}
-			}
-		}
-		entry.Pending, entry.CheckpointSeq = p, p.Seq
-	}
-	// The request is on disk before it is sent, every time: a pending one
-	// whose first write failed is written again first (review 165 A1).
-	if err := d.Registry.Put(*entry); err != nil {
-		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
-		return
-	}
-	p := entry.Pending
-	if err := d.Client.Checkpoint(ctx, entry.AttemptID, entry.Epoch, p.Seq, p.Artifacts, p.TooLarge); err != nil {
-		d.logf("agentd: checkpoint %s #%d: %v", entry.AttemptID, p.Seq, err)
-		return
-	}
-	entry.Confirmed, entry.Pending = p.Seq, nil
-	if err := d.Registry.Put(*entry); err != nil {
-		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
-	}
 }
 
 // The verdict line a review's report ends with (review 163 A2): the platform

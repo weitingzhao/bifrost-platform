@@ -244,7 +244,7 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			}
 			// A failed setup's record goes in while the attempt is live (TD-394).
 			if e.SetupFailed {
-				if err = d.reportPrepare(ctx, a, e, setupReportOf(e.Workdir+".out")); err != nil {
+				if _, err = d.reportPrepare(ctx, a, e, setupReportOf(e.Workdir+".out")); err != nil {
 					break
 				}
 			}
@@ -748,13 +748,12 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 	switch e.Phase {
 	case "restarted":
 		sctx, cancel := context.WithTimeout(ctx, orDefault(d.SampleLimit, 2*time.Minute))
-		before := e.CheckpointSeq
-		d.checkpoint(sctx, a, ws, e) // the last sample, then the end
-		cancel()
-		// Its workspace may go only once that last sample, taken now, is the
-		// platform's (review 497 A2): one whose upload failed, or an older
+		// The last sample, then the end. Its workspace may go only once that
+		// sample, taken now and whole, is the platform's (reviews 497 A2,
+		// 499 A-1): one with a part refused, unread or too large, or an older
 		// one resent, leaves it as it is.
-		e.HandedOver = e.CheckpointSeq > before && e.Pending == nil && e.Confirmed == e.CheckpointSeq
+		e.HandedOver = d.checkpoint(sctx, a, ws, e)
+		cancel()
 		err = d.end(ctx, e, "daemon_restart")
 	case "exited", "computed", "persisted", "submitting", "submitted":
 		l := d.keepLease(ctx, e.AttemptID, e.Epoch)

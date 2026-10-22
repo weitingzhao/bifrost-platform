@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"strings"
 )
@@ -101,13 +102,18 @@ func beforeReport(err error) []byte {
 // one try, best effort: a transient failure there, or a restart before it is
 // sent, loses the report, and the attempt ends all the same (review td404-3
 // B3). PrepareReported says it was taken or given up, not that it arrived.
-func (d *Daemon) reportPrepare(ctx context.Context, a *Attempt, e *Entry, body []byte) error {
+//
+// whole says this call handed in all of it and the platform confirmed it
+// (TD-415, review 499 A-1): the report and the log's tail (or no log) taken,
+// none refused or unread, and the checkpoint naming them confirmed. A report
+// sent before, given up, or refused in part is not.
+func (d *Daemon) reportPrepare(ctx context.Context, a *Attempt, e *Entry, body []byte) (whole bool, err error) {
 	if e.PrepareReported {
-		return nil
+		return false, nil
 	}
 	if e.PrepareSeq == 0 {
-		if err := d.sendPending(ctx, e); err != nil {
-			return err
+		if err = d.sendPending(ctx, e); err != nil {
+			return false, err
 		}
 		var ids []string
 		id, err := d.putRetried(ctx, "report", "text/markdown; charset=utf-8", a.handText("report", body))
@@ -115,37 +121,40 @@ func (d *Daemon) reportPrepare(ctx context.Context, a *Attempt, e *Entry, body [
 		case err == nil:
 			ids = append(ids, id)
 		case transient(err):
-			return err
+			return false, err
 		default:
 			d.logf("agentd: the report of %s's preparation refused: %v", e.AttemptID, err)
 		}
-		if tail, _ := readTail(filepath.Join(a.Out, "log.txt"), logTailBytes); len(tail) > 0 {
+		tail, rerr := readTail(filepath.Join(a.Out, "log.txt"), logTailBytes)
+		whole = len(ids) == 1 && (rerr == nil || errors.Is(rerr, fs.ErrNotExist))
+		if len(tail) > 0 {
 			id, err = d.putRetried(ctx, "log_tail", "text/plain; charset=utf-8", a.handText("log_tail", tail))
 			switch {
 			case err == nil:
 				ids = append(ids, id)
 			case transient(err):
-				return err
+				return false, err
 			default:
+				whole = false
 				d.logf("agentd: the log tail of %s refused: %v", e.AttemptID, err)
 			}
 		}
 		if len(ids) == 0 {
 			e.PrepareReported = true
-			return d.Registry.Put(*e)
+			return false, d.Registry.Put(*e)
 		}
 		e.CheckpointSeq++
 		e.PrepareSeq, e.Pending = e.CheckpointSeq, &PendingCheckpoint{Seq: e.CheckpointSeq, Artifacts: ids}
 		if err = d.Registry.Put(*e); err != nil {
-			return err
+			return false, err
 		}
 	}
-	if err := d.sendPending(ctx, e); err != nil {
-		return err
+	if err = d.sendPending(ctx, e); err != nil {
+		return false, err
 	}
 	e.PrepareReported = true
 	d.logf("agentd: %s: handed in what failed before its executor started (checkpoint %d)", e.AttemptID, e.PrepareSeq)
-	return d.Registry.Put(*e)
+	return whole && e.Confirmed == e.PrepareSeq, d.Registry.Put(*e)
 }
 
 // sendPending sends the entry's pending checkpoint, if any, until the

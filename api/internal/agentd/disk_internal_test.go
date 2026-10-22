@@ -1,6 +1,7 @@
 package agentd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -52,40 +53,107 @@ func TestARefusedDiskIsTriedAgainLater(t *testing.T) {
 	}
 }
 
-// Review 497 A2: an attempt a takeover ends is settled whatever the platform
-// has of it; its workspace goes only when its last sample, taken at the
-// takeover, is the platform's. When the log's upload fails, the output
-// (the only copy of it) stays; when it is taken, the workspace is emptied.
+// Reviews 497 A2, 499 A-1: an attempt a takeover ends is settled whatever
+// the platform has of it; its workspace goes only when its last sample,
+// taken at the takeover, is whole and the platform's. A log tail or a patch
+// the platform did not take (for now or for good), a patch too large to
+// take, and an attempt without a repo (no patch of it is taken) leave the
+// workspace and the log, the only copies, as they are.
 func TestARestartsLastSampleDecidesTheWorkspace(t *testing.T) {
-	for _, taken := range []bool{false, true} {
-		f := newFake()
-		d := fakeDaemon(t, f)
-		d.KeepWorkspaces = false
-		e, _ := entryFor(t, d, "restart", "restarted")
-		must := func(err error) {
-			t.Helper()
-			if err != nil {
-				t.Fatal(err)
+	for _, c := range []struct {
+		name, refuse string
+		status       int
+		big, noRepo  bool
+		taken        bool
+	}{
+		{name: "taken", taken: true},
+		{name: "log unavailable", refuse: "put:log_tail", status: 503},
+		{name: "log refused", refuse: "put:log_tail", status: 400},
+		{name: "patch refused", refuse: "put:checkpoint_patch", status: 400},
+		{name: "patch too large", big: true},
+		{name: "no repo", noRepo: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFake()
+			d := fakeDaemon(t, f)
+			d.KeepWorkspaces = false
+			must := func(err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		must(os.MkdirAll(filepath.Join(e.Workdir, "build"), 0o700))
-		log := filepath.Join(e.Workdir+".out", "log.txt")
-		must(os.WriteFile(log, []byte("only here"), 0o600))
-		if !taken {
-			f.set("put:log_tail", always(503, "unavailable"))
-		}
-		must(d.takeOver(bg, &e))
-		_, lerr := os.Stat(log)
-		entries, rerr := os.ReadDir(e.Workdir)
-		switch {
-		case !taken && (lerr != nil || len(entries) != 1):
-			t.Fatalf("a sample not taken: the log %v, the workspace %d entries %v", lerr, len(entries), rerr)
-		case taken && (!errors.Is(lerr, fs.ErrNotExist) || rerr != nil || len(entries) != 0):
-			t.Fatalf("a sample taken: the log %v, the workspace %d entries %v", lerr, len(entries), rerr)
-		}
-		if _, ok := registered(t, d, "restart"); ok {
-			t.Fatalf("taken %v: the entry is left", taken)
-		}
+			var e Entry
+			if c.noRepo {
+				e, _ = entryFor(t, d, "a1", "restarted")
+				must(os.MkdirAll(e.Workdir, 0o700))
+			} else {
+				e, _, _, _, _ = unchangedEntry(t, d, "restarted")
+			}
+			change := []byte("package x\n")
+			if c.big {
+				change = bytes.Repeat([]byte("// a line the executor wrote\n"), 2*patchLimit/29)
+			}
+			must(os.WriteFile(filepath.Join(e.Workdir, "x.go"), change, 0o600))
+			log := filepath.Join(e.Workdir+".out", "log.txt")
+			must(os.WriteFile(log, []byte("only here"), 0o600))
+			if c.refuse != "" {
+				f.set(c.refuse, always(c.status, "refused"))
+			}
+			must(d.takeOver(bg, &e))
+			_, lerr := os.Stat(log)
+			entries, rerr := os.ReadDir(e.Workdir)
+			_, xerr := os.Stat(filepath.Join(e.Workdir, "x.go"))
+			switch {
+			case !c.taken && (lerr != nil || xerr != nil):
+				t.Fatalf("not whole: the log %v, the change %v", lerr, xerr)
+			case c.taken && (!errors.Is(lerr, fs.ErrNotExist) || rerr != nil || len(entries) != 0):
+				t.Fatalf("whole and taken: the log %v, the workspace %d entries %v", lerr, len(entries), rerr)
+			}
+			if _, ok := registered(t, d, e.AttemptID); ok {
+				t.Fatal("the entry is left")
+			}
+		})
+	}
+}
+
+// Review 499 A-1: an attempt that failed before its executor started gives
+// up its workspace only when why it failed, and its log's tail, were taken
+// whole; a report or a log tail the platform refused leaves them as they are.
+func TestAFailureNotHandedInKeepsItsWorkspace(t *testing.T) {
+	for _, c := range []struct {
+		name, refuse string
+		taken        bool
+	}{
+		{name: "taken", taken: true},
+		{name: "report refused", refuse: "put:report"},
+		{name: "log refused", refuse: "put:log_tail"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFake()
+			d := fakeDaemon(t, f)
+			d.KeepWorkspaces = false
+			e, a := entryFor(t, d, "prep", "launching")
+			for _, p := range []string{filepath.Join(e.Workdir, "kept.txt"), filepath.Join(a.Out, "log.txt")} {
+				if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte("only here"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.refuse != "" {
+				f.set(c.refuse, always(400, "refused"))
+			}
+			l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: func() {}, done: make(chan struct{})}
+			if _, err := d.failBefore(bg, a, nil, &e, l, errors.New("the setup failed")); err == nil {
+				t.Fatal("the failure is not returned")
+			}
+			_, kerr := os.Stat(filepath.Join(e.Workdir, "kept.txt"))
+			if c.taken != errors.Is(kerr, fs.ErrNotExist) {
+				t.Fatalf("taken %v: the workspace's file %v", c.taken, kerr)
+			}
+		})
 	}
 }
 
