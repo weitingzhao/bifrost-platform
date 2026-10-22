@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -347,5 +348,55 @@ func TestPlanProposalRoute(t *testing.T) {
 	code, out = call(t, s, "operator", "POST", "plan/proposals", body("k5", map[string]any{"op": "add_node", "parent": "R2", "kind": "item", "title": "z"}), session, "s1")
 	if code != http.StatusServiceUnavailable || out["error"] != "owner_unreachable" {
 		t.Fatalf("a card the store refuses: %d %v", code, out)
+	}
+}
+
+// Gate A T32, the chief of staff's seat, through the interface: the seat's
+// task proposed to one mission onto another mission's step is refused with the
+// rule it broke and writes nothing; onto its own mission's step it lands as the
+// seat's. (STG gives no agent thread a seat token, so this is that case's
+// route; the rule itself is the database's, whoever proposes.)
+func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "m2", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
+			return err
+		}
+		return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test")
+	}))
+	const seat = "seat:chief_of_staff"
+	spec := []byte("# the seat's task\n")
+	if code, out := call(t, s, seat, "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec"); code != http.StatusOK {
+		t.Fatalf("the seat uploads a spec: %d %v", code, out)
+	}
+	body := func(key string) map[string]any {
+		return map[string]any{"idempotency_key": key, "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1",
+			"role": "implement", "task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec),
+			"effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}}
+	}
+	footprint := func() (n [3]int) {
+		must(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.task), (SELECT count(*) FROM agentrt.event),
+		  (SELECT count(*) FROM agentrt.idempotency_key)`).Scan(&n[0], &n[1], &n[2]))
+		return n
+	}
+	before := footprint()
+	code, out := call(t, s, seat, "POST", "missions/M-2/tasks", body("seat-k1"))
+	if msg, _ := out["message"].(string); code != http.StatusUnprocessableEntity || out["error"] != "constraint" ||
+		!strings.Contains(msg, "belongs to M-1") {
+		t.Fatalf("the seat's M-2 task onto M-1's step: %d %v", code, out)
+	}
+	if after := footprint(); after != before {
+		t.Fatalf("the refused proposal wrote (tasks, events, keys) %v -> %v", before, after)
+	}
+	code, out = call(t, s, seat, "POST", "missions/M-1/tasks", body("seat-k2"))
+	if code != http.StatusOK {
+		t.Fatalf("the seat's M-1 task onto M-1's step: %d %v", code, out)
+	}
+	var by string
+	must(t, pool.QueryRow(ctx, `SELECT created_by_actor_id FROM agentrt.task WHERE task_id = $1`,
+		out["tasks"].([]any)[0].(map[string]any)["task_id"]).Scan(&by))
+	if by != seat {
+		t.Fatalf("the seat's task is recorded as %s", by)
 	}
 }
