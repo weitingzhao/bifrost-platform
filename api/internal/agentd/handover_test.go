@@ -129,6 +129,7 @@ func fakeDaemon(t *testing.T, f *fakePlatform) *Daemon {
 		Client:   &Client{Base: "http://platform.invalid/api/v1/agentrt", Host: "h1", Token: "fixture", HTTP: &http.Client{Transport: f}},
 		Registry: reg, Root: t.TempDir(), Self: os.Args[0], Logf: t.Logf,
 		Beat: 10 * time.Millisecond, Retry: 5 * time.Millisecond, KillGrace: 500 * time.Millisecond, SalvageEvery: time.Hour,
+		KeepWorkspaces: true, // the tests read what an attempt left after its end (TD-415)
 	}
 }
 

@@ -570,6 +570,11 @@ func (d *Daemon) settle(e *Entry) error {
 		// So does what a test database left when its stage was ended with
 		// the group (TD-403).
 		removeTestDB(d.Root, e.Workdir+".out", d.logf)
+		// And the workspace and its output: the platform has the end, its
+		// report and artifacts (TD-415).
+		if !d.KeepWorkspaces {
+			removeWorkspace(d.Root, e.Workdir, d.logf)
+		}
 		return d.Registry.Delete(e.AttemptID)
 	}
 	e.Phase = "uncleared"
@@ -668,6 +673,9 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		if e.Phase == "uncleared" && e.Group == GroupCleared {
 			removeCursorData(d.Root, e.Workdir+".out", d.logf)
 			removeTestDB(d.Root, e.Workdir+".out", d.logf) // as settle does (review td404-3 B1)
+			if !d.KeepWorkspaces {
+				removeWorkspace(d.Root, e.Workdir, d.logf) // as settle does (TD-415)
+			}
 			delete(entries, id)
 			if err := d.Registry.Delete(id); err != nil {
 				return err

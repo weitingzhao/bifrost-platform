@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
@@ -26,6 +27,9 @@ type Client struct {
 	Host  string
 	Token string
 	HTTP  *http.Client
+	// noDisk: the platform refused a claim's free disk (from before TD-415);
+	// later claims leave it out (Claim).
+	noDisk atomic.Bool
 }
 
 // The platform's refusals agentd acts on (409 and its code), and a platform
@@ -215,9 +219,30 @@ func (c *Client) ExamAnswers(ctx context.Context, sub store.ExamSubmission) (map
 
 // Claim asks for one attempt; nil when the platform had none for the whole
 // long poll (204).
+// Claim asks for work with the host's free slots and its tools.
 func (c *Client) Claim(ctx context.Context, freeSlots int, tools []Tool) (*Claimed, error) {
+	return c.ClaimWith(ctx, freeSlots, tools, nil)
+}
+
+// ClaimWith is Claim with the host's free disk, when measured (TD-415). A
+// platform from before TD-415 refuses a body with the disk (400, unknown
+// field): the claim is sent again at once without it, and no later claim of
+// this client carries it, so the host keeps taking work while the platform
+// and agentd are on different versions.
+func (c *Client) ClaimWith(ctx context.Context, freeSlots int, tools []Tool, disk *Disk) (*Claimed, error) {
 	var cl Claimed
-	code, err := c.post(ctx, "/claim", map[string]any{"free_slots": freeSlots, "tools": tools}, &cl)
+	body := map[string]any{"free_slots": freeSlots, "tools": tools}
+	if disk != nil && !c.noDisk.Load() {
+		body["disk_free_bytes"], body["root_free_bytes"] = disk.Host, disk.Root
+	}
+	code, err := c.post(ctx, "/claim", body, &cl)
+	// only the refusal of the field itself (review 267 B6, as Heartbeat)
+	if err != nil && body["disk_free_bytes"] != nil && code == http.StatusBadRequest && strings.Contains(err.Error(), `unknown field "disk_free_bytes"`) {
+		c.noDisk.Store(true)
+		delete(body, "disk_free_bytes")
+		delete(body, "root_free_bytes")
+		code, err = c.post(ctx, "/claim", body, &cl)
+	}
 	if err != nil || code == http.StatusNoContent {
 		return nil, err
 	}

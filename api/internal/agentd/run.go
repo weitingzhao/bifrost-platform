@@ -91,7 +91,8 @@ type Daemon struct {
 	Wall *Wall
 	// CodexHome is the host user's codex home, whose login each codex
 	// attempt gets a copy of and gives back refreshed (codexlogin.go).
-	CodexHome string
+	CodexHome      string
+	KeepWorkspaces bool // settled attempts' workspaces stay as they were (removeWorkspace, TD-415)
 	// TestDB is the programs a test database needs on this host (TD-403,
 	// testdb.go); nil: no attempt gets one, and its log says so. testDBSwept
 	// is when Recover last swept what test databases left.

@@ -161,6 +161,7 @@ func run() error {
 	var runs sync.WaitGroup
 	defer runs.Wait()
 	var lastPrune time.Time
+	diskErr := "" // the last free-disk reading that failed, logged once
 	for ctx.Err() == nil {
 		// what a previous run left, and hand-overs that waited for the platform
 		if err := d.Recover(ctx); err != nil {
@@ -191,7 +192,17 @@ func run() error {
 		if free < 0 || overloaded() {
 			free = 0
 		}
-		cl, err := d.Client.Claim(ctx, free, offered)
+		// The host's free disk goes with every claim; below the platform's
+		// floor it gives no new work (TD-415). One that cannot be read is
+		// not sent, and the log says so once.
+		var disk *agentd.Disk
+		if m, derr := agentd.MeasureDisk(cfg.root); derr == nil {
+			disk, diskErr = &m, ""
+		} else if derr.Error() != diskErr {
+			diskErr = derr.Error()
+			log.Printf("agentd: %v; claims go without the free disk until it reads", derr)
+		}
+		cl, err := d.Client.ClaimWith(ctx, free, offered, disk)
 		if err != nil {
 			log.Printf("agentd: claim: %v", err)
 			sleep(ctx, 15*time.Second)

@@ -84,6 +84,9 @@ func daemon(t *testing.T, base string, exec agentd.Executor, remote string, env 
 		GitEnv:    env,
 		Beat:      100 * time.Millisecond, Retry: 50 * time.Millisecond, SalvageEvery: 50 * time.Millisecond, KillGrace: time.Second,
 		Logf: t.Logf,
+		// The tests read what an attempt left after its end; that a settled
+		// attempt's workspace goes is TestASettledAttemptsWorkspaceGoes.
+		KeepWorkspaces: true,
 	}
 }
 
