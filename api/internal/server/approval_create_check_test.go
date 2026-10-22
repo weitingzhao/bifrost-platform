@@ -65,13 +65,15 @@ func TestPipelineRunRequestChecksItsCommitsWhenMade(t *testing.T) {
 		"a uiRevision": {good, wrongUI, "bifrost-ui", wrongUI},
 		// the platform's commit in the UI's repository is missing there
 		"the platform's commit as the UI's": {good, good, "bifrost-ui", good},
-		// the run's input rules hold at creation too
-		"a short SHA": {good[:12], goodUI, "full 40-character", good[:12]},
+		// the run's input rules hold at creation too, its param rules with them,
+		// whether or not a full SHA is signed (review 510 B1)
+		"a short SHA":         {good[:12], goodUI, "full 40-character", good[:12]},
+		"a uiRevision branch": {"main", "main", "uiRevision must be a 40-character", "uiRevision"},
 	} {
 		rec := request(c.revision, c.ui)
 		if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "refused at creation") ||
 			!strings.Contains(rec.Body.String(), c.repo) || !strings.Contains(rec.Body.String(), c.sha) {
-			t.Fatalf("%s one character off: %d %s", name, rec.Code, rec.Body.String())
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body.String())
 		}
 		if n := len(svc.Pending()); n != 0 {
 			t.Fatalf("%s: %d approval rows after a refused request", name, n)
@@ -89,7 +91,7 @@ func TestPipelineRunRequestChecksItsCommitsWhenMade(t *testing.T) {
 	}
 	// A branch is not a signed commit: it may move before the run, which checks it.
 	asked = nil
-	if rec := request("main", "main"); rec.Code != http.StatusCreated || len(asked) != 0 {
+	if rec := request("main", ""); rec.Code != http.StatusCreated || len(asked) != 0 {
 		t.Fatalf("a branch: %d %s, Gitea asked %v", rec.Code, rec.Body.String(), asked)
 	}
 }

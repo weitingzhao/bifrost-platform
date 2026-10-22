@@ -16,11 +16,12 @@ import (
 // mistyped full SHA, the Owner approved it, and the run refused it half an
 // hour later). params are the request's normalized params (name, revision,
 // tag, who, params), read as the run reads its body. The run's own input
-// rules apply as they do at the run, and every full SHA the request signs,
-// its revision and each *Revision param, goes through the run's per-repository
-// ref check (one mirror sync and a bounded wait for a missing one). A branch
-// or tag name is not checked here: it may move or appear before the run, which
-// checks it again. A Gitea or cluster that cannot be asked does not refuse.
+// rules apply as they do at the run, its param rules included (review 510
+// B1), and every full SHA the request signs, its revision and each *Revision
+// param, is looked up in the repository the run clones it into. A branch or
+// tag name is not looked up here: it may move or appear before the run, which
+// checks it again. A Gitea, a lookup or a cluster that cannot be asked does
+// not refuse.
 func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) error {
 	name := strings.TrimSpace(fmt.Sprint(params["name"]))
 	raw, err := json.Marshal(map[string]any{"revision": params["revision"], "tag": params["tag"], "who": params["who"],
@@ -62,19 +63,13 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 			signed[strings.TrimSpace(value)] = true
 		}
 	}
-	if len(signed) == 0 {
-		return nil
-	}
 	if !isPlatformDelivery(name) && !isCIPipeline(name) {
-		// The run's legacy check: one revision in every repository, no sync,
-		// and no *Revision param of its own.
+		// The run's legacy check: the one top-level revision in every
+		// repository; it reads no *Revision param.
 		if !signed[rev] {
 			return nil
 		}
-		if msg := s.legacyRunRefPreflight(ctx, name, rev); msg != "" {
-			return errors.New(msg)
-		}
-		return nil
+		return s.signedPresent(ctx, reposForPipeline(name), func(string) string { return rev })
 	}
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
@@ -84,6 +79,9 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 	if err != nil {
 		return nil // unknown here; the run refuses a pipeline that is not there
 	}
+	// The run's spec, built whatever the refs are: its param rules (a uiRevision
+	// that must be a full SHA, a param the pipeline does not declare) refuse here
+	// as they would at the run.
 	spec, rev, err := buildPipelineRunSpec(name, rev, req.Tag, req.Params, pipe)
 	if err != nil {
 		return err
@@ -102,8 +100,38 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 	if len(check) == 0 {
 		return nil
 	}
+	if ciRepo != "" {
+		// CI's run looks once and never syncs; at creation an unknown does not
+		// refuse (review 510 B2).
+		return s.signedPresent(ctx, check, func(repo string) string { return refs[repo] })
+	}
+	// The platform deliveries: the run's own check, one mirror sync and the same
+	// bounded wait for a missing commit.
 	if msg := s.refsPresent(ctx, name, rev, ciRepo, check, refs); msg != "" {
 		return errors.New(msg)
+	}
+	return nil
+}
+
+// signedPresent looks each repository's signed full SHA up as a commit in
+// Gitea and refuses the ones it does not have; a lookup that fails, or a Gitea
+// that cannot be asked, is unknown and does not refuse (review 510 B2: the
+// legacy status takes a failed commit lookup for a missing commit).
+func (s *Service) signedPresent(ctx context.Context, repos []string, refOf func(string) string) error {
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return nil
+	}
+	user, pass := s.giteaCredentials(ctx, clientset, s.PipelinesNamespace())
+	var missing []string
+	for _, repo := range repos {
+		ref := refOf(repo)
+		if st := s.repoRefStatus(ctx, repo, ref, user, pass); !st.Exists && st.Kind == "missing" {
+			missing = append(missing, fmt.Sprintf("%s (ref %q)", repo, ref))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("revision is missing in: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

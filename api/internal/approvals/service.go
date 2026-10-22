@@ -201,9 +201,9 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	check := s.check
 	s.mu.Unlock()
 	if check != nil {
-		if err := check(ctx, act.ID, norm); err != nil {
+		if cerr := check(ctx, act.ID, norm); cerr != nil {
 			return failFields(422, map[string]any{
-				"error":  "refused at creation: " + err.Error(),
+				"error":  "refused at creation: " + cerr.Error(),
 				"action": act.ID,
 			})
 		}
