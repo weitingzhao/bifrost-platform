@@ -196,8 +196,9 @@ func fromController(from string) bool { return from == "controller" }
 
 // controllerBrief is the instructions and the data of a brief made from a
 // note of the controller's: a scheduled brief reads what happened since the
-// slot before, what is stuck, what waits on the Owner and the vendor pools; a
-// nudge reads the item it names.
+// slot before, what is stuck, the waits that passed their limits since then
+// (waitsPassed), what waits on the Owner and the vendor pools; a nudge reads
+// the item it names.
 func controllerBrief(ctx context.Context, tx pgx.Tx, body string) (string, map[string]any, error) {
 	var now time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
@@ -236,6 +237,11 @@ func controllerBrief(ctx context.Context, tx pgx.Tx, body string) (string, map[s
 			return "", nil, err
 		}
 		data["stuck"] = stuck
+		passed, err := waitsPassed(ctx, tx, since, until)
+		if err != nil {
+			return "", nil, err
+		}
+		data["waits_passed_since"] = passed
 		pools, err := listPools(ctx, tx)
 		if err != nil {
 			return "", nil, err
@@ -255,7 +261,9 @@ const scheduledText = "# Write the Owner's brief\n\n" +
 	"You are the chief of staff. The Owner sets goals, sets rules and decides what cannot be undone; everything else is yours\n" +
 	"and the agents', and he audits it afterwards. Write his brief for this slot (the note in the data) from the records in\n" +
 	"the data, in Chinese, at most 15 short lines, in this order: what was done since the last brief (done_since, and what was\n" +
-	"rejected: rejected_since; both from since to until); what is stuck now and why (stuck); what waits for him, each with where he acts (waiting_on_the_owner); and, for each vendor pool, how its\n" +
+	"rejected: rejected_since; both from since to until); what is stuck now and why (stuck); which waits passed their limit\n" +
+	"from since to until, each with what waited, since when, its limit and whom it calls (waits_passed_since); what waits for\n" +
+	"him, each with where he acts (waiting_on_the_owner); and, for each vendor pool, how its\n" +
 	"use compares with the time gone in its window (pace: used fraction less the fraction of the window gone; a pool that is\n" +
 	"cooling down, until when). Say plainly when a part is empty. Never claim work is done, approved or running unless the\n" +
 	"records say so. No repository is checked out here; do not edit anything.\n\n" +

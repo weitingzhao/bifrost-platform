@@ -226,6 +226,17 @@ func scheduledSpec(rec map[string]any) ([]byte, error) {
 		}
 		data[k] = list
 	}
+	// The waits past their limits (W-31 2.3 slice 6), a list of its own: a
+	// set's record of one may carry numbers (limit_s, waited_s), which the
+	// lists above, strings only, would refuse.
+	var waits []map[string]any
+	if err := roundTrip(rec["waits_passed_since"], &waits); err != nil {
+		return nil, fmt.Errorf("exam: waits_passed_since: %w", err)
+	}
+	if waits == nil {
+		waits = []map[string]any{}
+	}
+	data["waits_passed_since"] = waits
 	return store.ScheduledBriefSpecFor(data)
 }
 

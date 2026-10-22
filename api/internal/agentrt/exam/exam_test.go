@@ -264,7 +264,7 @@ func TestRender(t *testing.T) {
 	}
 	_, b := text("B1", t0)
 	for _, want := range []string{"# Write the Owner's brief", `"note": "Scheduled brief: the evening brief of Monday 2026-10-19, 21:00`,
-		`"since": "2026-10-19T13:00:00Z"`, `"cooldown_until": "2026-10-20T13:00:00Z"`, `"rejected_since": []`,
+		`"since": "2026-10-19T13:00:00Z"`, `"cooldown_until": "2026-10-20T13:00:00Z"`, `"rejected_since": []`, `"waits_passed_since": []`,
 		`"vendor_pool_id": "codex:x:weekly",` + "\n" + `      "tool": "codex"`} {
 		if !strings.Contains(b, want) {
 			t.Errorf("the brief lacks %q:\n%s", want, b)

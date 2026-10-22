@@ -33,7 +33,8 @@ import (
 // and the runtime records nothing of external waits (class 6) in round 2.
 // The record is the first of the rule's three steps; it names whom the wait
 // calls (calls) and changes nothing else: no state, no message, no notice.
-// One wait is told apart from its record: a brief of the chief of staff's
+// The Owner reads the records in the scheduled brief that covers them
+// (waitsPassed). One wait is told apart from its record: a brief of the chief of staff's
 // ready past its limit is told to the Owner by the platform, for the seat
 // that would tell him is what does not run (briefwait.go; review 487 A1).
 
@@ -255,3 +256,45 @@ const mailPastLimit = `SELECT m.message_id, COALESCE(m.mission_id, ''), COALESCE
 	    AND w.at >= m.created_at - interval '` + waitsLookBack + `'
 	    AND w.body_json->>'wait' = 'message_unread' AND w.body_json->>'ref' = m.message_id)
 	ORDER BY m.created_at, m.message_id LIMIT $4`
+
+// waitsPassed lists the waits recorded past their limits in [since, until)
+// (RULE-waits 总则 3, the record and then whom it calls: the scheduled brief is
+// where the record reaches the Owner; W-31 2.3 slice 6): what waited (the
+// wait, its ref, and its mission, task and the task's title when it has one),
+// since when, its limit, how long it had waited when recorded and whom it
+// calls. At most 30, the earliest; the last item says when there were more.
+func waitsPassed(ctx context.Context, tx pgx.Tx, since, until time.Time) ([]map[string]string, error) {
+	rows, err := tx.Query(ctx, `SELECT e.body_json->>'wait', e.body_json->>'ref', e.body_json->>'since', e.body_json->>'limit_s',
+	    e.body_json->>'waited_s', e.body_json->>'calls', COALESCE(e.mission_id, ''), COALESCE(e.task_id, ''), COALESCE(t.title, ''), e.at
+	  FROM agentrt.event e LEFT JOIN agentrt.task t ON t.task_id = e.task_id
+	  WHERE e.event_stream_id = $1 AND e.event_type = 'wait_limit_passed' AND e.at >= $2 AND e.at < $3
+	  ORDER BY e.at, e.event_id LIMIT 31`, WaitsStream, since, until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]string{}
+	for rows.Next() {
+		var wait, ref, from, limit, waited, calls, mission, task, title string
+		var at time.Time
+		if err = rows.Scan(&wait, &ref, &from, &limit, &waited, &calls, &mission, &task, &title, &at); err != nil {
+			return nil, err
+		}
+		if len(out) == 30 {
+			out = append(out, map[string]string{"more": "there are more than 30; these are the earliest"})
+			break
+		}
+		if t, perr := time.Parse(time.RFC3339Nano, from); perr == nil {
+			from = t.UTC().Format(time.RFC3339)
+		}
+		item := map[string]string{"wait": wait, "ref": ref, "since": from, "limit_s": limit, "waited_s": waited, "calls": calls,
+			"at": at.UTC().Format(time.RFC3339)}
+		for k, v := range map[string]string{"mission": mission, "task": task, "title": oneLineRunes(title, snapTitleRunes)} {
+			if v != "" {
+				item[k] = v
+			}
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
