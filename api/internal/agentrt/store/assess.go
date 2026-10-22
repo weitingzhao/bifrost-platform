@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
@@ -175,7 +176,27 @@ func ruleAnswersItem(ctx context.Context, tx pgx.Tx, item AssessItem) (bool, err
 	if err != nil || !ok {
 		return false, err
 	}
-	return ruleAnswers(ctx, tx, on.kind, on.mission)
+	answers, err := ruleAnswers(ctx, tx, on.kind, on.mission)
+	if err != nil || !answers {
+		return false, err
+	}
+	// Under assessment: veto the rule leaves a card that has no option it
+	// may take (ruleChoice): that card is the Owner's, and is assessed as
+	// his are (review 507 B1). With no assessment to come, the rule takes
+	// the card's recommendation, or the option that changes nothing.
+	r, err := inForce(ctx, tx, rules.KindCardAuto)
+	if err != nil || r == nil {
+		return false, err
+	}
+	if !r.CardAuto.AssessmentVeto {
+		return true, nil
+	}
+	keys := make([]string, 0, len(item.Options))
+	for _, o := range item.Options {
+		keys = append(keys, o.Key)
+	}
+	option, _, _ := ruleChoice(on.kind, item.Recommended, assessState{}, time.Time{}, true, keys)
+	return option != "", nil
 }
 
 // AssessmentQuery is what the item's assessment reads outside the runtime;

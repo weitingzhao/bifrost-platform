@@ -42,6 +42,7 @@ func TestRuleChoiceUnderAVeto(t *testing.T) {
 	}{
 		"no recommendation, the assessment's a":      {store.CardBlocked, "", "a", true, abc, "b", "not the one its AI assessment recommends (a)"},
 		"no recommendation, no assessment":           {store.CardBlocked, "", "", true, abc, "b", "the card recommends nothing: the rule takes the option that changes nothing"},
+		"no recommendation, the assessment's b too":  {store.CardBlocked, "", "b", true, abc, "b", ", which its AI assessment recommends too"},
 		"a recorder import, no recommendation":       {"recorder_import", "", "a", true, ab, "b", "the option that changes nothing"},
 		"recommended and agreed":                     {store.CardBlocked, "a", "a", true, abc, "a", ""},
 		"recommended, the assessment differs":        {store.CardBlocked, "a", "c", true, abc, "b", "the rule takes the option that changes nothing"},
@@ -56,6 +57,11 @@ func TestRuleChoiceUnderAVeto(t *testing.T) {
 		option, why := store.RuleChoiceForTest(c.kind, c.rec, c.assessed, c.veto, c.options)
 		if option != c.want || (c.why == "" && why != "" && c.rec != "") || !strings.Contains(why, c.why) {
 			t.Errorf("%s: %q (%q), want %q (%q)", name, option, why, c.want, c.why)
+		}
+		// Review 507 C1: the reason never says the assessment recommends
+		// another option when it recommends the one taken.
+		if c.veto && c.assessed == option && strings.Contains(why, "not the one") {
+			t.Errorf("%s: %q says %q", name, option, why)
 		}
 	}
 }
@@ -113,5 +119,40 @@ func TestAVetoRuleNeverTakesTheAssessmentsOption(t *testing.T) {
 	s.mu.Unlock()
 	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 || s.cards["q_plannerquestion2"].option != "b" {
 		t.Fatalf("answered %d (%v): %+v", n, err, s.cards["q_plannerquestion2"])
+	}
+}
+
+// Review 507 B1: STG asks no assessment for a card the rule answers
+// (SkipCardsTheRuleAnswers). Under assessment: veto a card the rule leaves
+// (a planner's question that recommends nothing) is the Owner's, so it is
+// assessed; one the rule answers (a blocked card that recommends nothing: b)
+// is still left out. Under a rule without the veto both are left out, as
+// before.
+func TestAVetoRuleAssessesTheCardsItLeaves(t *testing.T) {
+	t.Parallel()
+	for _, veto := range []bool{true, false} {
+		w := newKernelWorld(t)
+		blocked := w.ready(t, store.Task{})
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, blocked) }))
+		var s seenCards
+		if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 1 {
+			t.Fatalf("asked %d (%v)", n, err)
+		}
+		planTask := w.ready(t, store.Task{MissionID: "M-1", Role: "plan", Effect: "none", OffPlanReason: "a goal"})
+		question := store.AssessItem{Kind: store.AssessCard, ID: "q_plannerquestion3", Title: "Which way?", Body: "two ways",
+			Options: []store.AssessOption{{Key: "a", Label: "this way"}, {Key: "b", Label: "that way"}}, TaskID: planTask, CreatedAt: time.Now()}
+		if veto {
+			signCardAutoVeto(t, w.rt, "0", "[blocked, plan_question]")
+		} else {
+			signCardAutoSeconds(t, w.rt, "0", "[blocked, plan_question]")
+		}
+		_, fresh, err := store.AssessmentQuery(ctx, w.rt, s.item(s.cardOf(t, blocked)), true)
+		if err != nil || fresh {
+			t.Fatalf("veto %v: the blocked card the rule answers: fresh %v (%v)", veto, fresh, err)
+		}
+		_, fresh, err = store.AssessmentQuery(ctx, w.rt, question, true)
+		if err != nil || fresh != veto {
+			t.Fatalf("veto %v: the planner's question that recommends nothing: fresh %v (%v)", veto, fresh, err)
+		}
 	}
 }

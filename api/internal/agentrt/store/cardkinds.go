@@ -225,12 +225,18 @@ func inaction(kind, rec string) string {
 // it was.
 func ruleChoice(kind, rec string, st assessState, now time.Time, veto bool, options []string) (option, why, said string) {
 	if veto && rec == "" {
+		option = inaction(kind, rec)
 		why = "the card recommends nothing: the rule takes the option that changes nothing"
-		if st.done && st.recommended != "" {
+		switch {
+		case st.done && st.recommended != "" && st.recommended == option:
+			// Review 507 C1: what the assessment recommends is that option.
+			why += ", which its AI assessment recommends too"
+			said = why
+		case st.done && st.recommended != "":
 			why += ", not the one its AI assessment recommends (" + st.recommended + ")"
-			option, said = inaction(kind, rec), why
-		} else {
-			option, said = inaction(kind, rec), why+"; "+assessmentSaid(st, now)
+			said = why
+		default:
+			said = why + "; " + assessmentSaid(st, now)
 		}
 	} else {
 		option, why, said = choiceOf(kind, rec, st, now)

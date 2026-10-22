@@ -31,8 +31,8 @@ func briefData(t *testing.T, spec string) map[string]any {
 // scheduled brief reads the waits recorded past their limits from the slot
 // before it to its own, with what waited, since when, its limit and whom it
 // calls, and says so in its instructions; a wait recorded before that is the
-// brief before's, not this one's. Serial: it freezes the package's event
-// clock (FreezeEventClock).
+// brief before's, not this one's.
+// Serial: FreezeEventClock (it freezes the package's event clock).
 func TestAScheduledBriefReadsTheWaitsThatPassed(t *testing.T) {
 	w := newKernelWorld(t)
 	// A ready task no host takes, its wait recorded 31 minutes on, every
