@@ -1513,21 +1513,35 @@ func (s *Service) fetchGiteaCompareFiles(ctx context.Context, repo, from, to, us
 	return files, nil
 }
 
-// Only name the source gate once the installed Pipeline declares it. Tekton
-// rejects taskRunSpecs naming absent tasks, so the API can ship before the Pipeline.
+// platformDeclaredDeliverTasks are the platform pipelines' tasks that run as
+// tekton-deliver once the installed Pipeline declares them: PROD's source gate
+// (W-56) and STG's agentrt migration Job (TD-411; its Role in bifrost-platform-stg
+// binds tekton-deliver, and on cicd's default ServiceAccount the first real run
+// was refused creating the Job, 2026-10-22 02:01Z).
+var platformDeclaredDeliverTasks = map[string][]string{
+	"bifrost-deliver-platform-prod": {"check-source"},
+	"bifrost-deliver-platform":      {"agentrt-migrate"},
+}
+
+// Only name such a task once the installed Pipeline declares it. Tekton rejects
+// taskRunSpecs naming absent tasks, so the API can ship before the Pipeline.
 func platformTaskRunSpecs(pipelineName string, pipe *unstructured.Unstructured) []map[string]any {
 	overrides := []map[string]any{
 		{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
 		{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 	}
-	if pipelineName == "bifrost-deliver-platform-prod" {
-		tasks, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "tasks")
-		for _, raw := range tasks {
-			task, ok := raw.(map[string]any)
-			if ok && task["name"] == "check-source" {
-				overrides = append(overrides, map[string]any{"pipelineTaskName": "check-source", "serviceAccountName": "tekton-deliver"})
-				break
+	declared := map[string]bool{}
+	tasks, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "tasks")
+	for _, raw := range tasks {
+		if task, ok := raw.(map[string]any); ok {
+			if name, ok := task["name"].(string); ok {
+				declared[name] = true
 			}
+		}
+	}
+	for _, name := range platformDeclaredDeliverTasks[pipelineName] {
+		if declared[name] {
+			overrides = append(overrides, map[string]any{"pipelineTaskName": name, "serviceAccountName": "tekton-deliver"})
 		}
 	}
 	return overrides
