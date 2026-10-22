@@ -66,6 +66,11 @@ function SignOffButton({ node, label, signoffRef, named }: { node: string; label
  * Under a step whose done rule waits on the Owner's sign-off: each sign-off it holds (who, when), and a Sign off button
  * for each ref not signed yet while the step can still move (not done, stopped or dropped).
  */
+/** The Sign off buttons of a step's refs not signed yet; each one named by its ref when the rule waits on more than one. */
+export function SignOffButtons({ node, label, refs, named }: { node: string; label: string; refs: readonly string[]; named: boolean }) {
+  return <div className="flex min-w-0 flex-col gap-1">{refs.map(ref => <SignOffButton key={ref} node={node} label={label} signoffRef={ref} named={named} />)}</div>
+}
+
 export function StepSignoffControls({ label, state, signoffs }: { label: string; state: string; signoffs: StepSignoffs }) {
   const open = CLOSED.has(state) ? [] : unsignedRefs(signoffs)
   return <div data-step-signoffs={signoffs.node} className="mt-1 flex w-full min-w-0 flex-col gap-1">

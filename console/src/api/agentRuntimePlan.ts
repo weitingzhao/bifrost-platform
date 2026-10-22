@@ -316,3 +316,42 @@ export async function postStepSignoff(node: string, ref: string, token: string):
   const body = record(await r.json())
   return { node: text(body.plan_node_id), ref: text(body.ref), by: text(body.by), at: text(body.at), alreadySigned: body.already_signed === true }
 }
+
+/**
+ * A step's title as one line of plain text: the ledger's markdown (** and __ emphasis, backticks) taken out, its first
+ * line only, spaces collapsed (2026-10-21: the Owner saw "**" on the plan page and could not tell steps apart).
+ */
+export function plainTitle(title: string): string {
+  const first = title.split('\n').find(line => line.trim() !== '') ?? ''
+  return first.replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/** A step's number: its node id without the round's prefix (R2:2.4-1 → 2.4-1). */
+export function stepNumber(node: string): string {
+  const i = node.indexOf(':')
+  return i < 0 ? node : node.slice(i + 1)
+}
+
+/** Step numbers in the plan's order: 2.4-1 before 2.4-2, 2.9-1 before 2.10-1, 2.2-6 before 2.2b-1. */
+export const byStepNumber = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true })
+
+/** A step waiting on the Owner's sign-off: its number, its plain title, and the refs of its rule not signed yet. */
+export type SignoffWait = { node: string; label: string; title: string; state: string; refs: string[]; named: boolean }
+
+/**
+ * The steps of a GET /plan?root= answer waiting on the Owner's sign-off, by number: a done rule with an owner_signoff
+ * ref not signed yet, on a step that can still move (not done, stopped or dropped; the platform refuses those).
+ */
+export function signoffWaits(doc: unknown): SignoffWait[] {
+  const by = signoffsByStep(doc)
+  const out: SignoffWait[] = []
+  for (const node of records(record(doc).nodes)) {
+    const s = by.get(text(node.plan_node_id))
+    const state = text(node.state)
+    if (s === undefined || state === 'done' || state === 'stopped' || state === 'dropped') continue
+    const refs = unsignedRefs(s)
+    if (refs.length === 0) continue
+    out.push({ node: s.node, label: text(node.label) || stepNumber(s.node), title: plainTitle(text(node.title)), state, refs, named: s.refs.length > 1 })
+  }
+  return out.sort((a, b) => byStepNumber(a.label, b.label))
+}

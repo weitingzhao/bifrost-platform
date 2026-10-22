@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
-import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 import { record } from '@/api/agentRuntime'
 
@@ -127,5 +127,24 @@ export function useApprovalSteps(enabled = true): ApprovalStepsRead {
     // An answer that is not this round's tree is a failed read, never one with no steps (review 476 C2).
     if (doc != null && (record(doc).root !== PLAN_ROOT || !Array.isArray(record(doc).nodes))) return { read: 'error' }
     return { read: 'ok', stepsOf: n => doc == null || n == null || n <= 0 ? [] : stepsOfApproval(doc, n) }
+  }, [data, isError, isPaused])
+}
+
+/**
+ * The steps waiting on the Owner's sign-off (the Owner 2026-10-21), from the same GET /plan?root= read the plan panes
+ * make; read is 'ok' with them by number, or the read is not done yet or failed and nothing is listed.
+ */
+export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[] } | { read: 'loading' | 'error' }
+export function useSignoffWaits(enabled = true): SignoffWaitsRead {
+  const planQ = useQuery({ queryKey: ['agent-runtime-plan', PLAN_ROOT], queryFn: ({ signal }) => fetchRuntimePlan(PLAN_ROOT, signal),
+    enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
+  const { data, isError, isPaused } = planQ
+  return useMemo((): SignoffWaitsRead => {
+    if (isError || isPaused) return { read: 'error' }
+    if (data === undefined) return { read: 'loading' }
+    if (!data.found) return { read: 'ok', waits: [] }
+    const doc = record(data.doc)
+    if (doc.root !== PLAN_ROOT || !Array.isArray(doc.nodes)) return { read: 'error' }
+    return { read: 'ok', waits: signoffWaits(data.doc) }
   }, [data, isError, isPaused])
 }

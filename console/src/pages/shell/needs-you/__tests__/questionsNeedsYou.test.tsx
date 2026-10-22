@@ -287,13 +287,19 @@ describe('Needs you questions', () => {
     expect(list?.getAttribute('data-paints')).toBe(paints)
   })
 
-  it('reads the plan only under the requests it shows', async () => {
-    stub(() => json({ questions: [openQuestion(12)] }), undefined, async () => json(planApprovals.plan))
+  it('reads the plan only where it is shown: the Sign off group, whose answer repaints that group alone', async () => {
+    let release!: () => void
+    const late = new Promise<void>(resolve => { release = resolve })
+    stub(() => json({ questions: [openQuestion(12)] }), undefined, async () => { await late; return json(planApprovals.plan) })
     render(wrapper(<NeedsYouPage />))
     const group = await screen.findByRole('region', { name: 'Answer' })
     expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
-    // No request, no step to name: the page itself does not read the plan, so its answer cannot repaint the page.
-    expect(vi.mocked(fetch).mock.calls.map(call => String(call[0])).filter(url => url.includes('/api/v1/agentrt/plan?'))).toEqual([])
+    const list = group.querySelector('[data-answer-group]')
+    const paints = list?.getAttribute('data-paints')
+    release()
+    // No request, no step to name under a row; the Sign off group counts the steps waiting (none in this plan).
+    expect(await within(screen.getByRole('region', { name: 'Sign off' })).findByText('No step waits for your sign-off.', undefined, { timeout: 5000 })).toBeTruthy()
+    expect(list?.getAttribute('data-paints')).toBe(paints)
   })
 
   it('does not repaint the Answer group when another read lands after it without changing its questions', async () => {

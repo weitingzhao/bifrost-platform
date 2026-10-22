@@ -1,12 +1,17 @@
 import type { ApprovalStep } from '@/api/agentRuntimePlan'
 import { useApprovalSteps } from '@/pages/shell/agents/useRuntimePlan'
+import { plainTitle } from '@/api/agentRuntimePlan'
+import { StepBadge } from '@/pages/shell/agents/StepText'
 import { PLAN_SECTION_HREF, planStepLine } from '@/pages/shell/progress/progressPart'
 
 /** Each plan step a request is the approval for, as a link to the plan (v4 §20.5 scenario 10). Nothing for none. */
 export function PlanStepLinks({ steps, className = '' }: { steps: readonly ApprovalStep[]; className?: string }) {
   return <>{steps.map(step => (
-    <a key={step.id} href={PLAN_SECTION_HREF} data-plan-step={step.id} title={step.id}
-      className={`block min-w-0 max-w-full break-words underline pointer-coarse:py-3 ${className}`}>{planStepLine(step)}</a>
+    // The step's number as a badge and one line of its title, as on the plan (the Owner 2026-10-21); the link's name
+    // stays the whole line, with the item.
+    <a key={step.id} href={PLAN_SECTION_HREF} data-plan-step={step.id} title={planStepLine(step)} aria-label={planStepLine(step)}
+      className={`flex min-w-0 max-w-full items-center gap-2 underline pointer-coarse:py-3 ${className}`}>
+      <StepBadge label={step.label} /><span className="min-w-0 truncate">{step.owner ? '(yours) ' : ''}{plainTitle(step.title)}</span></a>
   ))}</>
 }
 

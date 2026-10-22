@@ -1,0 +1,2930 @@
+{
+  "plan": {
+    "root": "R2",
+    "nodes": [
+      {
+        "depth": 0,
+        "label": "2",
+        "state": null,
+        "title": "第 2 轮",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "round",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.083908+00:00",
+          "body": {
+            "label": "2",
+            "title": "第 2 轮",
+            "ordinal": 2,
+            "node_kind": "round"
+          },
+          "actor_id": "controller",
+          "event_id": 1331,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": null
+      },
+      {
+        "depth": 1,
+        "label": "2.0",
+        "state": null,
+        "title": "设计对齐：v4 到 v5",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.086433+00:00",
+          "body": {
+            "label": "2.0",
+            "title": "设计对齐：v4 到 v5",
+            "ordinal": 0,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1332,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.0",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.0-1",
+        "state": "done",
+        "title": "起草 v5：v4 对照第 1 轮已有的、厂商现成的、运行位置改为先开发机；每一步写验收测试（`work/multi-agent/DESIGN-agent-runtime-v5-2026-10-14.md`，834 行，Claude 子代理起草、统筹方通读）",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.194917+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1415,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.0-1",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.0-1"
+        },
+        "state_event_id": 1415,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.0"
+      },
+      {
+        "depth": 2,
+        "label": "2.0-2",
+        "state": "done",
+        "title": "Codex 独立复核 v5（两轮 + 一轮确认，剩 1 项 A 交 Owner）",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.199923+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1417,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.0-2",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.0-2"
+        },
+        "state_event_id": 1417,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.0"
+      },
+      {
+        "depth": 2,
+        "label": "2.0-3",
+        "state": "done",
+        "title": "（你）确认 v5 和 §7 八条",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.204385+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1419,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.0-3",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.0-3"
+        },
+        "state_event_id": 1419,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.0"
+      },
+      {
+        "depth": 1,
+        "label": "2.1",
+        "state": null,
+        "title": "数据层：状态库和 redis-agents",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.092263+00:00",
+          "body": {
+            "label": "2.1",
+            "title": "数据层：状态库和 redis-agents",
+            "ordinal": 1,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1336,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-1",
+        "state": "done",
+        "title": "迁移器与存储包骨架：pgx 接入，`platform-api agentrt-migrate`（只往前、文件 sha256 不许变、`pg_advisory_lock`）",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.208689+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1421,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-1",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-1"
+        },
+        "state_event_id": 1421,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-2",
+        "state": "done",
+        "title": "表、触发器、种子：5.1.2 的全部表；同事务事件、存活列例外、绑定固定、步骤锁、依赖图锁、只追加；空库种子",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.213379+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1423,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-2",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-2"
+        },
+        "state_event_id": 1423,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-3",
+        "state": "done",
+        "title": "存储包：写事件的唯一路径、计数规则、`done_rule` 解释器、幂等键",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.217493+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1425,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-3",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-3"
+        },
+        "state_event_id": 1425,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-4",
+        "state": "done",
+        "title": "中继与重建：outbox → Redis（持有者令牌），从 PG 重建；`redis-agents` 清单（PROD、STG）",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.221345+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1427,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-4",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-4"
+        },
+        "state_event_id": 1427,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-5",
+        "state": "done",
+        "title": "Codex 复核（两轮 + 一轮确认）",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.22523+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1429,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-5",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-5"
+        },
+        "state_event_id": 1429,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-6",
+        "state": "done",
+        "title": "（补强）复核 145 的 B6、B7：正文值的枚举和格式；测试缺口（T19 三环境身份、T20 事务中断线、T23b 单删链尾、T30 ordinal 与重复批量写、T31 反向完整性、T32 反向迁移与死锁夹具、host 存活正例）——2.2 写路由时一起补",
+        "ordinal": 5,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T21:13:08.717909+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2554,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-6",
+        "done_rule_json": {
+          "ci_succeeded": {
+            "repo": "bifrost-platform",
+            "commit": "c21c62dba308452ea7fa46ed036206525b8c50fc"
+          }
+        },
+        "state_event_id": 2554,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-7",
+        "state": "done",
+        "title": "（你）建 8 个 Secret；同意拉 postgres、redis 两个镜像；应用平台 CI 流水线（加 sidecar）（v5 O5、O8、O9）",
+        "ordinal": 6,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.23039+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1432,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-7",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-7"
+        },
+        "state_event_id": 1432,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-8",
+        "state": "done",
+        "title": "（你）批三个库的清单和建六个角色的 db-step、`redis-agents` 清单（O6、O7）",
+        "ordinal": 7,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.234143+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1434,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-8",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-8"
+        },
+        "state_event_id": 1434,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-9",
+        "state": "done",
+        "title": "测试环境：迁移作业跑通，T19–T23、T30–T32 在 STG 过",
+        "ordinal": 8,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.23804+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1436,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-9",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.1-9"
+        },
+        "state_event_id": 1436,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-10",
+        "state": "done",
+        "title": "（你）批 PROD 迁移作业（正式 DDL 随单）和恢复演练（O10、O11）",
+        "ordinal": 9,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T19:27:38.477555+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2537,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-10",
+        "done_rule_json": {
+          "approval_executed": 50
+        },
+        "state_event_id": 2537,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 2,
+        "label": "2.1-11",
+        "state": "done",
+        "title": "（补强）★ PROD 库和 redis-agents 可用：T19 的 PROD 部分、T21 重建、T31 中继在 PROD 过",
+        "ordinal": 10,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T16:57:08.240923+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2276,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.1-11",
+        "done_rule_json": {
+          "question_answered": {
+            "option": "a",
+            "question": "q_1a036e32e2facf64"
+          }
+        },
+        "state_event_id": 2276,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.1"
+      },
+      {
+        "depth": 1,
+        "label": "2.2",
+        "state": null,
+        "title": "接口层与 agentd",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.107306+00:00",
+          "body": {
+            "label": "2.2",
+            "title": "接口层与 agentd",
+            "ordinal": 2,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1348,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-1",
+        "state": "done",
+        "title": "CI 能跑库测试：平台 CI 加 postgres、redis 两个 sidecar（钉摘要）和 AGENTRT_TEST_*（O8 你同意拉镜像、O9 你应用流水线）",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.243553+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1439,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-1",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-1"
+        },
+        "state_event_id": 1439,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-2",
+        "state": "done",
+        "title": "内核写路径（存储层）：mission / 任务 / 尝试的状态机，领活（`FOR UPDATE SKIP LOCKED`）、心跳续租、检查点 / 算完 / 落到平台 / 提交 / 保全 / 结束，幂等键，同事务隔离检查",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.247507+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1441,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-2",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-2"
+        },
+        "state_event_id": 1441,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-3",
+        "state": "done",
+        "title": "控制器循环（platform-workers）：租约过期 → stale → lost（按副作用类别）、任务挂步骤、完成规则求值（Facts 的实现）、外部事实、验收编排、发布前提",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.251514+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1443,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-3",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-3"
+        },
+        "state_event_id": 1443,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-4",
+        "state": "done",
+        "title": "（你）定：保全结果怎么被采纳",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.255525+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1445,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-4",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-4"
+        },
+        "state_event_id": 1445,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-5",
+        "state": "done",
+        "title": "（你）定：交付失败或没记录、",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.259525+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1447,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-5",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-5"
+        },
+        "state_event_id": 1447,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-6",
+        "state": "done",
+        "title": "接口与鉴权：`/api/v1/agentrt/*` 路由、新角色 `agentd`（令牌绑主机）、产物上传（本机路径扫描）、规则验签与收紧、`/progress`、平台连 PG 和 redis-agents 的接线",
+        "ordinal": 5,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.263851+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1449,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-6",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-6"
+        },
+        "state_event_id": 1449,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-7",
+        "state": "done",
+        "title": "（你）定：Agent 执行者怎么和本",
+        "ordinal": 6,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.267849+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1451,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-7",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-7"
+        },
+        "state_event_id": 1451,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-8",
+        "state": "done",
+        "title": "MCP 工具、提问加 `owner_duty` / `task_id`、血缘认 `Agentrt-Task`",
+        "ordinal": 7,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.27188+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1453,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-8",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-8"
+        },
+        "state_event_id": 1453,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-9",
+        "state": "done",
+        "title": "agentd 守护进程（`cmd/agentd`）：领活、本地登记（全机锁、进程组、放行字节）、工作区、执行者（deterministic / codex / cursor）、心跳与死人开关、检查点、收尾、保全",
+        "ordinal": 8,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.27611+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1455,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-9",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-9"
+        },
+        "state_event_id": 1455,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-10",
+        "state": "done",
+        "title": "Codex 复核（两轮，按 10-14 签的规矩可加一轮确认）",
+        "ordinal": 9,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.280011+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1457,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-10",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-10"
+        },
+        "state_event_id": 1457,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-11",
+        "state": "done",
+        "title": "（你）定：agentd 线窄确认后还剩 1 个 A",
+        "ordinal": 10,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.283846+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1459,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-11",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-11"
+        },
+        "state_event_id": 1459,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-12",
+        "state": "done",
+        "title": "路由第二批",
+        "ordinal": 11,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.288115+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1461,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-12",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-12"
+        },
+        "state_event_id": 1461,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-13",
+        "state": "done",
+        "title": "（你）定：计划变更线窄确认后还剩 1 个 A",
+        "ordinal": 12,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.292026+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1463,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-13",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-13"
+        },
+        "state_event_id": 1463,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-14",
+        "state": "done",
+        "title": "（你）定：agentd 线确认复核后还剩 3 个 A 怎么办",
+        "ordinal": 13,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.295973+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1465,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-14",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-14"
+        },
+        "state_event_id": 1465,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-15",
+        "state": "done",
+        "title": "（你）定规则：确认复核还有 A 时怎么办",
+        "ordinal": 14,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.299816+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1467,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-15",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-15"
+        },
+        "state_event_id": 1467,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-16",
+        "state": "done",
+        "title": "（你）定：运行时规则的正文怎么写（挡着 mission 自动成立、O19 签初始规则、规则路由与 T35）",
+        "ordinal": 15,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.303684+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1469,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-16",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-16"
+        },
+        "state_event_id": 1469,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-17",
+        "state": "done",
+        "title": "（你）定：STG 平台接上运行时库谁来推",
+        "ordinal": 16,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.307528+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1471,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-17",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-17"
+        },
+        "state_event_id": 1471,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-18",
+        "state": "done",
+        "title": "规则（你 20:10「规则 A」）",
+        "ordinal": 17,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.31171+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1473,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-18",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-18"
+        },
+        "state_event_id": 1473,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-19",
+        "state": "done",
+        "title": "（你）定：授权外 mission 的决策卡这条线停在哪",
+        "ordinal": 18,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.315609+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1475,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-19",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-19"
+        },
+        "state_event_id": 1475,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-20",
+        "state": "done",
+        "title": "（补强）决策卡 A 的实现（分支 `w31/agentrt-22-mission-card` `3418f2d` 之上）",
+        "ordinal": 19,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T21:13:08.746167+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2555,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-20",
+        "done_rule_json": {
+          "ci_succeeded": {
+            "repo": "bifrost-platform",
+            "commit": "0423a7ed1082a4296b27c0e7b3f12886733b8ca9"
+          }
+        },
+        "state_event_id": 2555,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-21",
+        "state": "done",
+        "title": "（你）**接下来要做的五件事，按顺序**：`agent-config/work/multi-agent/OWNER-NEXT-gate-a.md`（STG 迁移补第 5 个、agentd 用户、agentd 令牌、Gitea、签名密钥指纹），每步末尾写了怎么回",
+        "ordinal": 20,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.3197+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1477,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-21",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-21"
+        },
+        "state_event_id": 1477,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-22",
+        "state": "done",
+        "title": "（你）定：agent 的分支推到 Gitea 哪里",
+        "ordinal": 21,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.323601+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1479,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-22",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-22"
+        },
+        "state_event_id": 1479,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-23",
+        "state": "done",
+        "title": "平台核对已推分支（结果检查的 Gitea 一半）",
+        "ordinal": 22,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.32755+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1481,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-23",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-23"
+        },
+        "state_event_id": 1481,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-24",
+        "state": "done",
+        "title": "（你）定：STG 上的主机怎么登记",
+        "ordinal": 23,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.331701+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1483,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-24",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-24"
+        },
+        "state_event_id": 1483,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-25",
+        "state": "done",
+        "title": "（你）定：平台 STG 发版（主线最新的 CI 绿提交，现在是 `c68e11f`：计划变更 + 进度投影）这一次由谁起，以及以后 STG 的发版和清单改动要不要你点头",
+        "ordinal": 24,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.335741+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1485,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-25",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-25"
+        },
+        "state_event_id": 1485,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-26",
+        "state": "done",
+        "title": "（你）（补强）agentd 令牌、Gitea 用户与分支保护、LaunchAgent、规则签名私钥、签初始规则、PROD 发布单（v5 O15–O20）",
+        "ordinal": 25,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T19:27:38.517646+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2538,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-26",
+        "done_rule_json": {
+          "approval_executed": 53
+        },
+        "state_event_id": 2538,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-27",
+        "state": "done",
+        "title": "STG 走查（2.2 验收前的一件小活）",
+        "ordinal": 26,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.341223+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1488,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-27",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-27"
+        },
+        "state_event_id": 1488,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-28",
+        "state": "active",
+        "title": "Gate A 在测试环境过：T01、T02、T05、T06、T08、T10、T22、T25、T32（经接口）、T33、T34、T35、T36、6 道基准题",
+        "ordinal": 27,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.342623+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1489,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-28",
+        "done_rule_json": {
+          "owner_signoff": "gate-a-stg"
+        },
+        "state_event_id": 1489,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-29",
+        "state": "done",
+        "title": "（你）定：Gate A 里要你参与的部分",
+        "ordinal": 28,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.346507+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1491,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-29",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2-29"
+        },
+        "state_event_id": 1491,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-30",
+        "state": "done",
+        "title": "（补强，10-16 晚提到 2.3 之前）agentd 工作区能跑 Console 的检查（npm ci、lint、test、build），一句目标能选 Console",
+        "ordinal": 29,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-21T20:27:50.068337+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 3407,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {
+          "accepted": 3,
+          "cancelled": 1
+        },
+        "plan_node_id": "R2:2.2-30",
+        "done_rule_json": {
+          "task_accepted": "t_01M5FV0BVYGD02MZNXJN6YGKY5"
+        },
+        "state_event_id": 3407,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2-31",
+        "state": "done",
+        "title": "（补强）★ 正式环境：开发机上的 agentd 领正式环境的任务，6 道基准题从领到结论全程无人插手",
+        "ordinal": 30,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T16:57:08.281749+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2277,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2-31",
+        "done_rule_json": {
+          "question_answered": {
+            "option": "a",
+            "question": "q_1a036e32e2facf64"
+          }
+        },
+        "state_event_id": 2277,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2"
+      },
+      {
+        "depth": 1,
+        "label": "2.2b",
+        "state": null,
+        "title": "第一版拉通",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.146964+00:00",
+          "body": {
+            "label": "2.2b",
+            "title": "第一版拉通",
+            "ordinal": 3,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1380,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-1",
+        "state": "done",
+        "title": "台账对齐：2.2 勾掉已在 STG 跑通的步骤，架构对照按 STG / PROD 重核，补强的步骤原位标「（补强）」",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.351637+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1494,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-1",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-1"
+        },
+        "state_event_id": 1494,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-2",
+        "state": "done",
+        "title": "评审岗位加 Cursor（试用期）：Codex、Cursor 都能实现、都能评审，谁写就由另一家评；Claude 等执行者做好再加",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.355542+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1496,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-2",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-2"
+        },
+        "state_event_id": 1496,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-3",
+        "state": "done",
+        "title": "（你）签评审岗位的规则",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.359498+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1498,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-3",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-3"
+        },
+        "state_event_id": 1498,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-4",
+        "state": "done",
+        "title": "「一句目标」入口 `POST /api/v1/agentrt/goals`（10-15 你同意加这条路由）：建 mission 和一件实现任务，验收命令按仓库给默认值",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.36376+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1500,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-4",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-4"
+        },
+        "state_event_id": 1500,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-5",
+        "state": "done",
+        "title": "Console 的 Agents 页：提目标、运行时现场、计划栏与架构对照",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.367722+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1502,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-5",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-5"
+        },
+        "state_event_id": 1502,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-6",
+        "state": "done",
+        "title": "（你）在 Console 上提一句小目标",
+        "ordinal": 5,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.371787+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1504,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-6",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-6"
+        },
+        "state_event_id": 1504,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-7",
+        "state": "done",
+        "title": "你提的那一件走到 accepted，这期间这个 mission 里没有统筹线程的写入，页面上每一步看得到",
+        "ordinal": 6,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.376285+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1506,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-7",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-7"
+        },
+        "state_event_id": 1506,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-8",
+        "state": "done",
+        "title": "协作进展合成一页：Progress 和 Agents 合成一页、7 块按你的四个问题排；三份「需要你」并成一份、侧栏 / 首页 / Progress 一个数",
+        "ordinal": 7,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.38052+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1508,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-8",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-8"
+        },
+        "state_event_id": 1508,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-9",
+        "state": "done",
+        "title": "参谋长薄版：Console 的目标先进参谋长，由它写成 mission（目标、什么算好、不做什么、预算）、决定拆不拆，只把目标层的问题出成决策卡（带默认）",
+        "ordinal": 8,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.384541+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1510,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-9",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-9"
+        },
+        "state_event_id": 1510,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-10",
+        "state": "done",
+        "title": "Progress 上半页「一件目标一张卡」（你 10-15 23:2x 按五点定）：编号与大状态、阶段条（谁做、用时）、参谋长写了什么、做完的结果；需要你分来源、静默线程不再算该你了；下半页默认收起；目标类 mission 做完自动收尾",
+        "ordinal": 9,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.388304+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1512,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-10",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-10"
+        },
+        "state_event_id": 1512,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-11",
+        "state": "done",
+        "title": "总控台第一版（你 10-16 定稿线框 `https://claude.ai/artifact/4m58gzdJmk3QESnAk8ovcz` 第 7 版）：Console 首页 `#owner`，先一句结论，For you / 参谋长 / Work / System / Data 六个 tab，iPhone、Fire HD 10、电脑三种排法；只用现有接口；复杂的放进 Detail（你 10-16「主次有序，隐藏不等于看不到」）",
+        "ordinal": 10,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.392225+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1514,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-11",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-11"
+        },
+        "state_event_id": 1514,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-12",
+        "state": "done",
+        "title": "导航框架第一片（你 10-16 晚「按这个走」；线框 `https://claude.ai/artifact/3rbkDJV7hMjcTg6byK2vVz`）：手机和平板竖屏用底部 4 个 tab（For you / Chief of staff / Work / System），「更多」在页头；全站「要你做」一个数（Yours，不含静默线程）；电脑与平板横屏侧栏改成 4 个入口 + 「详情页」分组；Needs you、Progress 并入 For you、Work，做完的进 Records",
+        "ordinal": 11,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.396164+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1516,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-12",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-12"
+        },
+        "state_event_id": 1516,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-13",
+        "state": "done",
+        "title": "导航第二片：Needs you 的内容并进 For you、Progress 的内容并进 Work（做完的进 Records），两个详情页再退役；四个入口换成 v2 的 comfortable 字阶和单行结论样式",
+        "ordinal": 12,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T19:27:38.541058+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2539,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-13",
+        "done_rule_json": {
+          "ci_succeeded": {
+            "repo": "bifrost-platform",
+            "commit": "05b2c2da779ee5dbda00e5062d303e73fc839453"
+          }
+        },
+        "state_event_id": 2539,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 2,
+        "label": "2.2b-14",
+        "state": "done",
+        "title": "Ops 设计系统 v2（Claude Design，在本线程做）：「Bifrost Ops Console」设计系统 `https://claude.ai/artifact/WAXPKFjtR85QrcCutX1rYc` 加手机与平板字号和 44px、导航组件、Owner 的结论 / Yours / 值得一看 / 目标卡、参谋长对话组件；强调色只给当前入口和唯一主操作",
+        "ordinal": 13,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.399993+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1518,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.2b-14",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.2b-14"
+        },
+        "state_event_id": 1518,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.2b"
+      },
+      {
+        "depth": 1,
+        "label": "2.3",
+        "state": null,
+        "title": "交互总线与叫停",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.166748+00:00",
+          "body": {
+            "label": "2.3",
+            "title": "交互总线与叫停",
+            "ordinal": 4,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1395,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-1",
+        "state": "done",
+        "title": "**第一件（你 10-17 00:20 定）：06 出集群当 Agent 主机**，PROD、STG 各一个 agentd（`agent-06`、`agent-06-stg`，各一个系统用户，按用户的出站规则）；mini 管带外和参谋长；Mac Pro 只做开发，它的 agentd 在切换后停掉。取代原先「同一台 Mac 上再起一个 STG agentd」的建议",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.404424+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1520,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-1",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.3-1"
+        },
+        "state_event_id": 1520,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-2",
+        "state": "active",
+        "title": "**（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入 Agent 不再手工：你 10-17 10:0x「每次加了新项目、建了新 Repo，都要在 Gitea 的 Agent 组织下建镜像，麻烦死」",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.405835+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1521,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-2",
+        "done_rule_json": {
+          "owner_signoff": "2.3-2"
+        },
+        "state_event_id": 1521,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-3",
+        "state": "active",
+        "title": "（补强）实现：信箱、唤醒、在线状态、叫停广播；隔离、根目录只读、注入防护；本机文件迁进平台",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.407319+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1522,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-3",
+        "done_rule_json": {
+          "owner_signoff": "2.3-3"
+        },
+        "state_event_id": 1522,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-4",
+        "state": "active",
+        "title": "（补强）独立复核",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.408733+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1523,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-4",
+        "done_rule_json": {
+          "owner_signoff": "2.3-4"
+        },
+        "state_event_id": 1523,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-5",
+        "state": "done",
+        "title": "（你）（补强）批发布单",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.412608+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1525,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-5",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.3-5"
+        },
+        "state_event_id": 1525,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-6",
+        "state": "done",
+        "title": "（补强）★ Gate B",
+        "ordinal": 5,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T16:57:08.337691+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2278,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-6",
+        "done_rule_json": {
+          "question_answered": {
+            "option": "a",
+            "question": "q_1a036e32e2facf64"
+          }
+        },
+        "state_event_id": 2278,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 2,
+        "label": "2.3-7",
+        "state": "done",
+        "title": "（补强）★ 手机上问参谋长一句，收到回答；Work 里有你按得到的「全部叫停」（10-16 晚加：参谋长对话页靠信箱）",
+        "ordinal": 6,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.417849+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1528,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.3-7",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.3-7"
+        },
+        "state_event_id": 1528,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.3"
+      },
+      {
+        "depth": 1,
+        "label": "2.4",
+        "state": null,
+        "title": "多厂商与参谋长",
+        "ordinal": 5,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.176533+00:00",
+          "body": {
+            "label": "2.4",
+            "title": "多厂商与参谋长",
+            "ordinal": 5,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1403,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.4",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.4-1",
+        "state": "active",
+        "title": "（补强）实现：Claude 执行者、按能力和额度分流（先看谁能胜任，按岗位用资格考试和历史成绩量；再在能胜任的里按额度挑）、并发 2 到 3、参谋长席位",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.419309+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1529,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.4-1",
+        "done_rule_json": {
+          "owner_signoff": "chief-exam-pass"
+        },
+        "state_event_id": 1529,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.4"
+      },
+      {
+        "depth": 2,
+        "label": "2.4-2",
+        "state": "active",
+        "title": "（补强）独立复核",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.420698+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1530,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.4-2",
+        "done_rule_json": {
+          "owner_signoff": "2.4-2"
+        },
+        "state_event_id": 1530,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.4"
+      },
+      {
+        "depth": 2,
+        "label": "2.4-3",
+        "state": "done",
+        "title": "（你）（补强）批发布单",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T19:27:38.56274+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2540,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.4-3",
+        "done_rule_json": {
+          "approval_executed": 53
+        },
+        "state_event_id": 2540,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.4"
+      },
+      {
+        "depth": 2,
+        "label": "2.4-4",
+        "state": "done",
+        "title": "（补强）★ 一件活从派出到验收，全程没有统筹线程手工插手",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.426011+00:00",
+          "body": {
+            "to": "done",
+            "from": "planned",
+            "cause": "done_rule_manual"
+          },
+          "actor_id": "controller",
+          "event_id": 1533,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.4-4",
+        "done_rule_json": {
+          "manual": "imported from the work ledger: R2:2.4-4"
+        },
+        "state_event_id": 1533,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.4"
+      },
+      {
+        "depth": 2,
+        "label": "2.4-5",
+        "state": "done",
+        "title": "（补强，你 10-19「T26 ④ A」挪出）★ Claude 写核心代码：agentd 隔离线做完后，一件核心类实现由 Claude 执行者写、另一家评审、收下",
+        "ordinal": 4,
+        "usual_s": null,
+        "version": 3,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T18:40:23.36555+00:00",
+          "body": {
+            "to": "done",
+            "from": "active",
+            "cause": "done_rule"
+          },
+          "actor_id": "controller",
+          "event_id": 2471,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {
+          "accepted": 3
+        },
+        "plan_node_id": "R2:2.4-5",
+        "done_rule_json": {
+          "task_accepted": "t_01M5D3K2YYDHJ4JWBBQXKEMFF0"
+        },
+        "state_event_id": 2471,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.4"
+      },
+      {
+        "depth": 1,
+        "label": "2.5",
+        "state": null,
+        "title": "界面：协作进展在正式环境，完全由接口生成",
+        "ordinal": 6,
+        "usual_s": null,
+        "version": 0,
+        "work_id": "W-31",
+        "node_kind": "item",
+        "step_kind": null,
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.183707+00:00",
+          "body": {
+            "label": "2.5",
+            "title": "界面：协作进展在正式环境，完全由接口生成",
+            "ordinal": 6,
+            "node_kind": "item"
+          },
+          "actor_id": "controller",
+          "event_id": 1409,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.5",
+        "done_rule_json": {},
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2"
+      },
+      {
+        "depth": 2,
+        "label": "2.5-1",
+        "state": "active",
+        "title": "（补强）实现：按新框架（For you / Work / System，10-16 晚改写；原写 Progress 页）由内核接口生成：把总控台上 ✎ 手写的计划、统筹线程留言、额度换成运行时记录；本机看板退役",
+        "ordinal": 0,
+        "usual_s": null,
+        "version": 2,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.427408+00:00",
+          "body": {
+            "to": "active",
+            "from": "planned",
+            "cause": "legacy_imported"
+          },
+          "actor_id": "controller",
+          "event_id": 1534,
+          "event_type": "plan_node_state_changed"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.5-1",
+        "done_rule_json": {
+          "owner_signoff": "2.5-1"
+        },
+        "state_event_id": 1534,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.5"
+      },
+      {
+        "depth": 2,
+        "label": "2.5-2",
+        "state": "planned",
+        "title": "（补强）独立复核",
+        "ordinal": 1,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "review",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.186161+00:00",
+          "body": {
+            "label": "2.5-2",
+            "title": "（补强）独立复核",
+            "ordinal": 1,
+            "node_kind": "step"
+          },
+          "actor_id": "controller",
+          "event_id": 1411,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.5-2",
+        "done_rule_json": {
+          "owner_signoff": "2.5-2"
+        },
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.5"
+      },
+      {
+        "depth": 2,
+        "label": "2.5-3",
+        "state": "planned",
+        "title": "（你）（补强）批发布单",
+        "ordinal": 2,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "owner",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": true,
+        "effect_step": false,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.187346+00:00",
+          "body": {
+            "label": "2.5-3",
+            "title": "（你）（补强）批发布单",
+            "ordinal": 2,
+            "node_kind": "step"
+          },
+          "actor_id": "controller",
+          "event_id": 1412,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.5-3",
+        "done_rule_json": {
+          "owner_signoff": "2.5-3"
+        },
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.5"
+      },
+      {
+        "depth": 2,
+        "label": "2.5-4",
+        "state": "planned",
+        "title": "（补强）★ 停掉 Agent 主机上的看板程序，PROD Progress 页仍显示正确的计划和现场",
+        "ordinal": 3,
+        "usual_s": null,
+        "version": 1,
+        "work_id": "W-31",
+        "node_kind": "step",
+        "step_kind": "agent",
+        "created_at": "2026-10-20T04:02:20.059017+00:00",
+        "mission_id": null,
+        "owner_step": false,
+        "effect_step": true,
+        "state_event": {
+          "at": "2026-10-20T04:02:20.188559+00:00",
+          "body": {
+            "label": "2.5-4",
+            "title": "（补强）★ 停掉 Agent 主机上的看板程序，PROD Progress 页仍显示正确的计划和现场",
+            "ordinal": 3,
+            "node_kind": "step"
+          },
+          "actor_id": "controller",
+          "event_id": 1413,
+          "event_type": "plan_node_created"
+        },
+        "task_counts": {},
+        "plan_node_id": "R2:2.5-4",
+        "done_rule_json": {
+          "owner_signoff": "2.5-4"
+        },
+        "state_event_id": null,
+        "created_by_actor_id": "controller",
+        "parent_plan_node_id": "R2:2.5"
+      }
+    ]
+  }
+}

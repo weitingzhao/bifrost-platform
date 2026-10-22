@@ -1,6 +1,6 @@
 import type { ProgressDocument } from '@/api/agentProgress'
 import type { ApprovalItem } from '@/api/approvals'
-import type { ApprovalStep } from '@/api/agentRuntimePlan'
+import { plainTitle, type ApprovalStep } from '@/api/agentRuntimePlan'
 
 export type ProgressPart = { work: string; step: string }
 
@@ -81,6 +81,8 @@ export function partOfLine(part: ProgressPart): string {
 
 /** Where the plan pane opens (Work's "Plan ›"). */
 export const PLAN_SECTION_HREF = '#work?section=plan'
+/** Work's block of the steps waiting on the Owner's sign-off, at the top of the plan (the Owner 2026-10-21). */
+export const SIGNOFF_SECTION_HREF = '#work?section=signoff'
 
 /**
  * A plan step a request is the approval for, in one line of at most 160 characters: its label, the Owner's mark, its
@@ -88,6 +90,6 @@ export const PLAN_SECTION_HREF = '#work?section=plan'
  * says.
  */
 export function planStepLine(step: ApprovalStep): string {
-  const item = [step.item, step.itemTitle].filter(Boolean).join(' ')
-  return boundDocumentText(`Plan step ${step.label}${step.owner ? ' (yours)' : ''}: ${step.title}${item ? ` — item ${item}` : ''}`, 160)
+  const item = [step.item, plainTitle(step.itemTitle)].filter(Boolean).join(' ')
+  return boundDocumentText(`Plan step ${step.label}${step.owner ? ' (yours)' : ''}: ${plainTitle(step.title)}${item ? ` — item ${item}` : ''}`, 160)
 }

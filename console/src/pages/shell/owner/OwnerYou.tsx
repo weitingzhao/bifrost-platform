@@ -1,4 +1,5 @@
 import { OwnerStop } from './OwnerStop'
+import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
 import { useState } from 'react'
 import { NEEDS_YOU_HREF, goalHref } from '@/lib/shell/consoleRoutes'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
@@ -47,6 +48,8 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
       <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
         {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
+        {/* First in the card: the steps waiting on his sign-off, signed on Work's plan (the Owner 2026-10-21). */}
+        <SignoffWaitingLink />
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
           : count.state === 'known' && <p className="m-0 text-sm">Nothing is yours right now.</p>}

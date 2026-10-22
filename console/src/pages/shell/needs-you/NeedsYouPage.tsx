@@ -19,7 +19,9 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
-import { PLAN_SECTION_HREF, approvalPart } from '@/pages/shell/progress/progressPart'
+import { SIGNOFF_SECTION_HREF, approvalPart } from '@/pages/shell/progress/progressPart'
+import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
+import { useSignoffWaits } from '@/pages/shell/agents/useRuntimePlan'
 import { NowClock, Tick } from '@/pages/shell/progress/progressClock'
 import { runtimeUnreadLine } from '@/pages/shell/owner/ownerModel'
 
@@ -47,6 +49,26 @@ function Group({
 
 function Note({ children }: { children: ReactNode }) {
   return <p className="m-0 text-sm text-muted-foreground">{children}</p>
+}
+
+/**
+ * How many steps wait on the Owner's sign-off, and the way to them (the Owner 2026-10-21); they are signed on Work's
+ * plan, not here. It reads the plan itself, so the plan's answer repaints this group only (CI 2026-10-21).
+ */
+function SignoffGroup() {
+  const read = useSignoffWaits()
+  const count = read.read === 'ok' ? String(read.waits.length) : read.read === 'error' ? 'Unknown' : '…'
+  return (
+    <Group label="Sign off" count={count}>
+      {read.read === 'ok' && read.waits.length > 0 ? <SignoffWaitingLink /> : null}
+      {read.read === 'ok' && read.waits.length === 0 ? <Note>No step waits for your sign-off.</Note> : null}
+      {read.read === 'error' ? <Note>The plan could not be read: which steps wait on your sign-off is not known.</Note> : null}
+      {read.read === 'loading' ? <Note>Reading the plan…</Note> : null}
+      <Note>
+        Steps are signed on <a className="underline" href={SIGNOFF_SECTION_HREF}>Work › Plan</a>.
+      </Note>
+    </Group>
+  )
 }
 
 function ApprovalList({ children }: { children: ReactNode }) {
@@ -275,12 +297,7 @@ export function NeedsYouPage() {
         <Note>Claude sessions that went quiet.</Note>
         {stalled}
       </Group>
-      {/* Steps the Owner signs off are signed on the plan; this list does not gather them (progress spec §4, review 488 C1). */}
-      <Group label="Sign off" count="—">
-        <Note>
-          Steps waiting on your sign-off are signed on <a className="underline" href={PLAN_SECTION_HREF}>Work › Plan</a>; they are not listed here.
-        </Note>
-      </Group>
+      <SignoffGroup />
       <Note>
         Closed requests, audit, and patrol runs are in{' '}
         <a href="#records?tab=closed" className="underline">

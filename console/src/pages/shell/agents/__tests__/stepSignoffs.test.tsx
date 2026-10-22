@@ -130,7 +130,10 @@ describe('Sign off on the plan page', () => {
       if (part != null) expect(within(part).queryByRole('button')).toBeNull()
     }
     expect(under('R2:2.4-2')).toBeNull()
-    expect(container.querySelectorAll('button[data-signoff-ref], [data-signoff-ref] button').length).toBe(3)
+    // Under the steps of the plan: a, b and race; the block at the top lists the same three steps again (signoffUsable).
+    expect([...container.querySelectorAll('[data-step-signoffs] button')].length).toBe(3)
+    expect([...(container.querySelector('#signoff')?.querySelectorAll('[data-signoff-wait]') ?? [])].map(r => r.getAttribute('data-signoff-wait')))
+      .toEqual(['R2:2.1-3', 'R2:2.3-2'])
     expect(sent).toEqual([])
   })
 
