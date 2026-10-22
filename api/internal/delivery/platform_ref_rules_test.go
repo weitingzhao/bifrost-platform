@@ -199,20 +199,7 @@ func TestPlatformCloneRefParamsFollowInfra(t *testing.T) {
 				if resultKey[result] != key {
 					t.Fatalf("%s/%s clone result %s does not select %s", name, repo, result, key)
 				}
-				found := false
-				for _, sourceRaw := range tasks {
-					source := sourceRaw.(map[string]any)
-					if source["name"] != "check-source" {
-						continue
-					}
-					for _, p := range source["params"].([]any) {
-						m := p.(map[string]any)
-						if m["name"] == key && m["value"] == expected {
-							found = true
-						}
-					}
-				}
-				if !found {
+				if !sourceGateTakes(tasks, key) {
 					t.Fatalf("%s source gate does not take %s", name, expected)
 				}
 			} else if values["revision"] != expected {
@@ -220,8 +207,38 @@ func TestPlatformCloneRefParamsFollowInfra(t *testing.T) {
 			}
 			seen[repo] = true
 		}
-		assertJSONEqual(t, seen, map[string]bool{"bifrost-platform": true, "bifrost-ui": true})
+		// PROD builds nothing since W-31 3.4 ① (infra b63fa49): it deploys the digests STG built and
+		// clones bifrost-platform alone. A signed ref with no clone must still reach its source gate.
+		assertJSONEqual(t, seen, platformDeliveryClones[name])
+		for repo, key := range pipelineRepoRefParams[name] {
+			if !seen[repo] && !sourceGateTakes(tasks, key) {
+				t.Fatalf("%s: %s's signed ref %s is neither cloned nor taken by check-source", name, repo, key)
+			}
+		}
 	}
+}
+
+// The repositories each platform delivery clones.
+var platformDeliveryClones = map[string]map[string]bool{
+	"bifrost-deliver-platform":      {"bifrost-platform": true, "bifrost-ui": true},
+	"bifrost-deliver-platform-prod": {"bifrost-platform": true},
+}
+
+// sourceGateTakes reports whether the pipeline's check-source task takes $(params.<key>) as its <key>.
+func sourceGateTakes(tasks []any, key string) bool {
+	for _, raw := range tasks {
+		source := raw.(map[string]any)
+		if source["name"] != "check-source" {
+			continue
+		}
+		for _, p := range source["params"].([]any) {
+			m := p.(map[string]any)
+			if m["name"] == key && m["value"] == "$(params."+key+")" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestPlatformPollingErrorRequiresSeenPresent(t *testing.T) {
