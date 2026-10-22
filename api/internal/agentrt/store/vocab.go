@@ -103,7 +103,10 @@ var bodies = map[string][]field{
 	// TD-381, TD-382), or a controller loop that failed the same way
 	// FailuresToAlert times in a row (controller_failing, source controller,
 	// on the controller stream: line_digest names the loop, the artifact
-	// holds its error; TD-411, loopalert.go). Every rule but repeated_failure
+	// holds its error; TD-411, loopalert.go), or a host whose claim reported
+	// free disk below the floor (disk_low, source controller, on the host's
+	// stream: the artifact says how much and the floor; TD-415, hostdisk.go).
+	// Every rule but repeated_failure
 	// names its artifact (checkBody), but an approval claim in a plan note
 	// (source plan_note, review 489 B3), whose text is in the note it is
 	// caused by.
@@ -352,11 +355,11 @@ var fieldValues = map[string]map[string]value{
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
-	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing"),
+	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
 			"plan_note", "assessment"),
 		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
-			controllerFailingPhrase)...),
+			controllerFailingPhrase, diskLowPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},

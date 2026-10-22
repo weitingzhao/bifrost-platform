@@ -38,7 +38,12 @@ type API struct {
 	// ClaimWait is how long a claim waits for work (long poll; v5: at most
 	// 25 seconds, as the approvals executor); ClaimPoll how often it looks.
 	ClaimWait, ClaimPoll time.Duration
-	Logf                 func(format string, args ...any)
+	// DiskFloor is the free disk below which a host is given no new work
+	// (TD-415; 0: store.DefaultDiskFloor), and NotifyOwner pages the Owner's
+	// phone when a host goes below it or back above (nil: no page).
+	DiskFloor   int64
+	NotifyOwner func(ctx context.Context, title, body, id string) error
+	Logf        func(format string, args ...any)
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization (nil answers such a proposal 503) and for a
 	// mission outside the standing envelope (nil leaves it proposed).
@@ -311,6 +316,10 @@ type claimRequest struct {
 	hostBody
 	FreeSlots int    `json:"free_slots"`
 	Tools     []tool `json:"tools"`
+	// The free bytes of the volumes the host's root and agentd's root are
+	// on (TD-415); an agentd from before it sends neither.
+	DiskFree *int64 `json:"disk_free_bytes,omitempty"`
+	RootFree *int64 `json:"root_free_bytes,omitempty"`
 }
 
 // claim is the long poll for work: it tries until a task is leased or the
@@ -321,7 +330,17 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) || !boundHost(w, r, req.HostID) {
 		return
 	}
-	cr := store.ClaimRequest{HostID: req.HostID, FreeSlots: req.FreeSlots}
+	cr := store.ClaimRequest{HostID: req.HostID, FreeSlots: req.FreeSlots, DiskFloor: a.DiskFloor}
+	switch {
+	case (req.DiskFree == nil) != (req.RootFree == nil):
+		writeError(w, http.StatusBadRequest, "bad_request", "disk_free_bytes and root_free_bytes go together")
+		return
+	case req.DiskFree != nil && (*req.DiskFree < 0 || *req.RootFree < 0):
+		writeError(w, http.StatusBadRequest, "bad_request", "free disk is not negative")
+		return
+	case req.DiskFree != nil:
+		cr.Disk = &store.HostDisk{Host: *req.DiskFree, Root: *req.RootFree}
+	}
 	for _, t := range req.Tools {
 		if t.Executor == "" || t.Provider == "" {
 			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
@@ -344,6 +363,17 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	if err := store.RegisterAgentdHost(ctx, a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
 		a.fail(w, err)
 		return
+	}
+	// Free disk is judged once a request, before its polls (TD-415): a
+	// change is recorded and paged; below the floor every poll leases
+	// nothing (store.ClaimRequest.Disk).
+	if cr.Disk != nil {
+		changed, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		a.pageDisk(req.HostID, changed, *cr.Disk)
 	}
 	for {
 		if r.Context().Err() != nil {

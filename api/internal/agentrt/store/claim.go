@@ -25,6 +25,11 @@ type ClaimRequest struct {
 	HostID    string
 	FreeSlots int
 	Tools     []Tool // in the host's order of preference
+	// Disk is the free disk the host reports, nil when it reports none (an
+	// agentd from before TD-415); below DiskFloor (0: DefaultDiskFloor) the
+	// claim leases nothing, as with no free slot (hostdisk.go).
+	Disk      *HostDisk
+	DiskFloor int64
 }
 
 // Claim is a leased attempt and what agentd needs to run it.
@@ -97,7 +102,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
 		}
-		if err != nil || state != "active" || r.FreeSlots <= 0 || len(r.Tools) == 0 {
+		if err != nil || state != "active" || r.FreeSlots <= 0 || len(r.Tools) == 0 || (r.Disk != nil && r.Disk.Below(r.DiskFloor)) {
 			return err
 		}
 		// A global control takes this lock exclusively (SetControl), and a
