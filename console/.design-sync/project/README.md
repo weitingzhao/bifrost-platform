@@ -1,5 +1,9 @@
 # Designing the Bifrost Ops Console
 
+> **Read [BUSINESS.md](BUSINESS.md) first** (2026-10-21): since 2026-10-16 the Console is the Owner's cockpit for directing the agent crew
+> (For you · Chief · Work · System), not an operator's monitoring desk. What follows still holds for the visual system and for
+> System's detail pages (Data, IB, Releases …); where it and BUSINESS.md disagree on what a page is for, BUSINESS.md wins.
+
 The **Ops Console** is the control plane of Bifrost: the screens an operator uses to
 see whether the machinery that feeds a trading system is doing its job — market-data
 feeds (Massive), broker statements (IB Flex), the research batch, clusters,
