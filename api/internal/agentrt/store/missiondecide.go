@@ -38,6 +38,12 @@ const (
 // the card was made leaves a card no mission names; its retry gets that card
 // back.
 func askMission(ctx context.Context, tx pgx.Tx, w Writer, key, id string, asked MissionProposal, why string, ask Ask) (string, error) {
+	// A business issue's mission is not put on this card: its card carries
+	// the issue's identity and no text of it (DESIGN-crew-intake §5.3), and
+	// comes with slice 2 (review 522 A1).
+	if strings.HasPrefix(asked.WorkID, issueWorkPrefix) {
+		return "", invalid("mission %s is business issue %s's: its card is not this one", id, asked.WorkID)
+	}
 	cardKey := canonKey(w.Actor, "mission:"+key)
 	body := missionCardBody(w, cardKey, asked)
 	if n := questions.BodyBytes(body); n > questions.BodyLimit {

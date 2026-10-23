@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -36,12 +35,15 @@ type IssueTake struct {
 
 // TakeIssue takes an issue: the take predicate holds, by the intake-gates
 // rule in force, or nothing is written. A mission inside the standing
-// envelope starts at once; one outside it waits for the Owner (ask, as any
-// mission's card), and either way the work holds the product's slot until
-// the mission ends. The standing exception for a small fault takes no
-// priority from the Owner, and then only a mission inside
-// standing-envelope:dev (§4.3).
-func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake, ask Ask) (map[string]any, error) {
+// envelope starts at once; one outside it stays proposed, waiting for the
+// Owner, and either way the work holds the product's slot until the mission
+// ends. Slice 1 puts no card up for it: a card of a BI- mission comes with
+// slice 2, carrying the issue's identity, the neutral template of §5.3 and
+// no AI assessment (review 522 A1; askMission refuses one before that). The
+// standing exception for a small fault in what the person served uses takes
+// no priority from the Owner, and then only a mission inside
+// standing-envelope:dev (§4.3); an agent's own proposal never takes it.
+func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake) (map[string]any, error) {
 	if _, err := crewWriter(w); err != nil {
 		return nil, err
 	}
@@ -88,11 +90,7 @@ func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake, as
 			return nil, fmt.Errorf("%w: %s is taken without the Owner's priority only inside standing-envelope:dev", ErrState, r.ID)
 		}
 		hook("taking", r.ID)
-		missionAsk := ask
-		if g.exception != "" {
-			missionAsk = nil // inside the envelope or not at all
-		}
-		m, err := proposeMissionTx(ctx, tx, w, p, key, missionAsk)
+		m, err := proposeMissionTx(ctx, tx, w, p, key, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -134,8 +132,8 @@ func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake, as
 		}
 		extra := map[string]any{"mission_id": mission, "mission_state": state, "commitment": commitment,
 			"rule": map[string]any{"rule_id": g.rule.ID, "rule_version": g.rule.Version}}
-		if q, ok := m["question_id"]; ok {
-			extra["question_id"] = q
+		if why, ok := m["waiting"]; ok {
+			extra["waiting"] = why
 		}
 		if g.exception != "" {
 			extra["exception"] = g.exception
@@ -193,7 +191,7 @@ func takePredicate(ctx context.Context, tx pgx.Tx, r issueRow) (takeGates, error
 		switch {
 		case ev.priorityGiven:
 			missing = append(missing, "3 owner_priority: the Owner set "+ev.priority+" for the current brief")
-		case gates.Allows(rules.IntakeFaultSmall) && r.RiskClass == "small" && ev.category == "fault":
+		case gates.Allows(rules.IntakeFaultSmall) && r.ServedPerson != "" && r.RiskClass == "small" && ev.category == "fault":
 			g.exception = rules.IntakeFaultSmall
 		default:
 			missing = append(missing, "3 owner_priority: the Owner has set no priority for the current brief")
@@ -254,14 +252,22 @@ type checkRow struct {
 	brief, design, result, cat string
 	by, question, channel      string
 	round                      int
+	id                         int64
 }
 
 func latestCheck(ctx context.Context, tx pgx.Tx, issue, kind, cat string) (checkRow, error) {
+	return latestCheckAfter(ctx, tx, issue, kind, cat, 0)
+}
+
+// latestCheckAfter is latestCheck among the checks recorded after the one
+// with id after.
+func latestCheckAfter(ctx context.Context, tx pgx.Tx, issue, kind, cat string, after int64) (checkRow, error) {
 	var c checkRow
 	err := tx.QueryRow(ctx, `SELECT brief_sha256, COALESCE(design_sha256, ''), result, COALESCE(category, ''), created_by_actor_id,
-	  COALESCE(question_id, ''), COALESCE(answer_channel, ''), COALESCE(review_round, 0)
-	  FROM agentrt.issue_check WHERE issue_id = $1 AND check_kind = $2 AND ($3 = '' OR category = $3)
-	  ORDER BY issue_check_id DESC LIMIT 1`, issue, kind, cat).Scan(&c.brief, &c.design, &c.result, &c.cat, &c.by, &c.question, &c.channel, &c.round)
+	  COALESCE(question_id, ''), COALESCE(answer_channel, ''), COALESCE(review_round, 0), issue_check_id
+	  FROM agentrt.issue_check WHERE issue_id = $1 AND check_kind = $2 AND ($3 = '' OR category = $3) AND issue_check_id > $4
+	  ORDER BY issue_check_id DESC LIMIT 1`, issue, kind, cat, after).Scan(&c.brief, &c.design, &c.result, &c.cat, &c.by, &c.question,
+		&c.channel, &c.round, &c.id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, nil
 	}
@@ -304,41 +310,39 @@ func issueEvidence(ctx context.Context, tx pgx.Tx, r issueRow) (evidence, error)
 	if D == "" {
 		return ev, nil
 	}
-	// 5: the newest review, of (B, D): passed; or asking for fixes after two
-	// rounds, and the Owner let the work go on (review_dispute: proceed).
+	// 5: the newest review, of (B, D) (D covers the decision table too,
+	// issuedesign.go): passed in round 1 or 2, or in a later round the
+	// Owner let happen (another_round); or asking for fixes after two
+	// rounds, and the Owner's newest review_dispute decision since chose
+	// proceed (review 522 A7).
 	rv, err := latestCheck(ctx, tx, r.ID, checkReview, "")
 	if err != nil {
 		return ev, err
 	}
 	if rv.ok && rv.brief == B && rv.design == D {
 		switch {
-		case rv.result == "pass":
+		case rv.result == "pass" && rv.round <= MaxReviewRounds:
 			ev.reviewed = true
-		case rv.result == "fix" && rv.round >= 2:
-			d, err := latestCheck(ctx, tx, r.ID, checkOwnerDecision, "review_dispute")
+		case rv.result == "pass":
+			_, prevID, err := latestReview(ctx, tx, r.ID, rv.id)
+			if err != nil {
+				return ev, err
+			}
+			if ev.reviewed, err = anotherRoundAllowed(ctx, tx, r.ID, B, D, prevID, rv.id); err != nil {
+				return ev, err
+			}
+		case rv.result == "fix" && rv.round >= MaxReviewRounds:
+			d, err := latestCheckAfter(ctx, tx, r.ID, checkOwnerDecision, "review_dispute", rv.id)
 			if err != nil {
 				return ev, err
 			}
 			ev.reviewed = d.ok && d.brief == B && d.design == D && d.result == "proceed" && ownersOwn(d.by, d.question, d.channel)
 		}
 	}
-	// 6: each point the design lists, the Owner's newest choice of it, of
-	// (B, D), one the design says the work goes on under.
-	var raw []byte
-	err = tx.QueryRow(ctx, `SELECT COALESCE(body_json->'decisions', '[]') FROM agentrt.event WHERE event_stream_id = $1
-	  AND event_type = 'issue_design_put' AND (body_json->>'text_id')::bigint = $2 ORDER BY event_id DESC LIMIT 1`,
-		IssueStream(r.ID), r.designText).Scan(&raw)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ev, fmt.Errorf("store: %s's design %d has no issue_design_put", r.ID, r.designText)
-	}
+	// 6: each point the design's own document lists, the Owner's newest
+	// choice of it, of (B, D), one the design says the work goes on under.
+	points, err := designPoints(ctx, tx, r)
 	if err != nil {
-		return ev, err
-	}
-	var points []struct {
-		Key     string   `json:"key"`
-		Proceed []string `json:"proceed"`
-	}
-	if err := json.Unmarshal(raw, &points); err != nil {
 		return ev, err
 	}
 	for _, pt := range points {

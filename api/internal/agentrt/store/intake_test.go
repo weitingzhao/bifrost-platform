@@ -201,7 +201,7 @@ func TestIssueTextNeverInGenericReads(t *testing.T) {
 	ok(t, err)
 	ok(t, iw.prioritize(t, id, "p1"))
 	taken, err := store.TakeIssue(ctx, iw.rt, iw.crew, iw.key(), store.IssueTake{IssueID: id, ExpectedVersion: iw.state(t, id).Version,
-		Commitment: "commitment " + marker, Mission: fitting}, nil)
+		Commitment: "commitment " + marker, Mission: fitting})
 	ok(t, err)
 	m := taken["mission_id"].(string)
 	trial, err := iw.trial(t, id, 1, m)
@@ -385,7 +385,7 @@ func TestIssueTextsStayWithTheirIssue(t *testing.T) {
 	wantErr(t, iw.issueEvent(t, h, "issue_added", iw.dots.Actor, map[string]any{"channel": "intake_local", "text_ids": []any{int64(9002)}},
 		`INSERT INTO agentrt.issue_text (issue_text_id, issue_id, text_kind, channel, body, sha256, created_by_actor_id)
 		  OVERRIDING SYSTEM VALUE VALUES (9002, '`+h+`', 'reading', 'intake_local', 'r', encode(sha256('r'), 'hex'), '`+iw.dots.Actor+`')`),
-		"writes only on issues it brings")
+		"writes only on issues it sees")
 	wantErr(t, words(hers, "thread:crew-1", store.OwnerPerson, "thread"), "are those of the person it serves")
 	ok(t, words(hers, iw.dots.Actor, "person:p2", "intake_local"))
 }

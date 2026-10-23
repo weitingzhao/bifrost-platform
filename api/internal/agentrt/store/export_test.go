@@ -257,3 +257,16 @@ func ReworkSpecAsRefused(ctx context.Context, db DB, specID string, round int, w
 func ParseAssessmentForTest(text string, options []string, refs map[string]any) (map[string]any, string) {
 	return parseAssessment(text, options, refs)
 }
+
+// ProposeIssueMissionForTest proposes a mission as take_issue would (its
+// work id an issue's, outside the dev envelope) but passing ask, which
+// take_issue never does: askMission refuses a BI- mission's card (review
+// 522 A1).
+func ProposeIssueMissionForTest(ctx context.Context, tx pgx.Tx, w Writer, workID string, ask Ask) (map[string]any, error) {
+	p, err := MissionProposal{WorkID: workID, Title: "t", Goal: "g", Success: []string{"s"}, MaxAttempts: 100, MaxWallHours: 48,
+		issueTake: true}.check()
+	if err != nil {
+		return nil, err
+	}
+	return proposeMissionTx(ctx, tx, w, p, "k-ask", ask)
+}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -99,188 +98,6 @@ func ClassifyIssue(ctx context.Context, db DB, w Writer, key string, c IssueClas
 			return nil, err
 		}
 		return written(ctx, tx, r.ID, map[string]any{"check_id": checks[0]})
-	})
-}
-
-// DesignDecision is one point of a design the Owner decides (§4.3 item 6):
-// its key (D<n>) and the options (letters) under which the design says the
-// work may go on. What each letter means is in the design's text.
-type DesignDecision struct {
-	Key     string
-	Proceed []string
-}
-
-// IssueDesign is put_design: the design's text and the points in its head
-// that are the Owner's to decide.
-type IssueDesign struct {
-	IssueID         string
-	ExpectedVersion int
-	Text            string
-	Decisions       []DesignDecision
-}
-
-// PutDesign records a design for the current, confirmed brief. First batch:
-// not while the issue's work is live (a design is not changed under work in
-// progress either; the design does not settle this, so the stricter way).
-func PutDesign(ctx context.Context, db DB, w Writer, key string, d IssueDesign) (map[string]any, error) {
-	if err := checkText("the design", d.Text, 0); err != nil {
-		return nil, err
-	}
-	decisions := make([]any, 0, len(d.Decisions))
-	seen := map[string]bool{}
-	for _, dd := range d.Decisions {
-		if !decisionRE.MatchString(dd.Key) || seen[dd.Key] {
-			return nil, invalid("a design's points are D1, D2, …, each once; not %q", dd.Key)
-		}
-		seen[dd.Key] = true
-		if len(dd.Proceed) == 0 {
-			return nil, invalid("point %s names the options under which the work goes on", dd.Key)
-		}
-		proceed := slices.Clone(dd.Proceed)
-		slices.Sort(proceed)
-		for i, l := range proceed {
-			if !letterRE.MatchString(l) || (i > 0 && proceed[i-1] == l) {
-				return nil, invalid("point %s's options are letters A to Z, each once", dd.Key)
-			}
-		}
-		decisions = append(decisions, map[string]any{"key": dd.Key, "proceed": proceed})
-	}
-	req := map[string]any{"issue_id": d.IssueID, "expected_version": d.ExpectedVersion, "text": d.Text, "decisions": decisions}
-	return issueOp(ctx, db, w, "issue-design", key, req, func(tx pgx.Tx, channel string) (map[string]any, error) {
-		r, err := lockIssue(ctx, tx, d.IssueID, d.ExpectedVersion)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.open(); err != nil {
-			return nil, err
-		}
-		if !r.BriefConfirmed {
-			return nil, fmt.Errorf("%w: %s has no confirmed brief: no design before the person confirms what is asked", ErrState, r.ID)
-		}
-		if m, err := liveWork(ctx, tx, r.ID); err != nil || m != "" {
-			return nil, orState(err, "%s has live work (%s): its design changes once that work has ended", r.ID, m)
-		}
-		ids, err := nextIDs(ctx, tx, "issue_text", 1)
-		if err != nil {
-			return nil, err
-		}
-		sum := textSHA(d.Text)
-		body := map[string]any{"text_id": ids[0], "design_sha256": sum}
-		if len(decisions) > 0 {
-			body["decisions"] = decisions
-		}
-		if _, err := appendIssue(ctx, tx, "issue_design_put", w.Actor, r.ID, "", body); err != nil {
-			return nil, err
-		}
-		if _, err := insertText(ctx, tx, r.ID, w.Actor, issueText{id: ids[0], kind: "design", channel: channel, body: d.Text}); err != nil {
-			return nil, err
-		}
-		state := r.State
-		if slices.Contains([]string{"brief_confirmed", "classified", "in_review", "owner_deciding"}, state) {
-			state = "designing"
-		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.issue SET design_text_id = $2, state = $3, version = version + 1 WHERE issue_id = $1`,
-			r.ID, ids[0], state); err != nil {
-			return nil, err
-		}
-		return written(ctx, tx, r.ID, map[string]any{"design_sha256": sum})
-	})
-}
-
-// IssueReview is record_review: the reviewer's report, whole, which tool
-// reviewed and which wrote the design, and the round.
-type IssueReview struct {
-	IssueID         string
-	ExpectedVersion int
-	Report          string
-	ReviewerTool    string
-	AuthorTool      string
-	Round           int
-}
-
-// ReviewResult reads a review's conclusion from its report (§2.2: from the
-// last line, not from what a thread says): the last line that is not blank
-// and not the report's own end mark ("END OF REPORT"), starting 通过 (pass)
-// or 先修 (fix). Anything else is no conclusion.
-func ReviewResult(report string) (string, error) {
-	lines := strings.Split(strings.TrimSpace(report), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if l == "" || l == "END OF REPORT" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(l, "通过"):
-			return "pass", nil
-		case strings.HasPrefix(l, "先修"):
-			return "fix", nil
-		}
-		return "", invalid("the report's last line says neither 通过 nor 先修: %q", cutBytes(l, 80))
-	}
-	return "", invalid("the report is empty")
-}
-
-// RecordReview records an independent review of the current brief and
-// design: the reviewer is another tool than the author (0009 checks it too).
-func RecordReview(ctx context.Context, db DB, w Writer, key string, rv IssueReview) (map[string]any, error) {
-	if err := checkText("the report", rv.Report, 0); err != nil {
-		return nil, err
-	}
-	result, err := ReviewResult(rv.Report)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case !toolRE.MatchString(rv.ReviewerTool) || !toolRE.MatchString(rv.AuthorTool):
-		return nil, invalid("a review names the reviewer's tool and the author's (codex, claude, …)")
-	case rv.ReviewerTool == rv.AuthorTool:
-		return nil, invalid("a review is independent: %s does not review its own design", rv.ReviewerTool)
-	case rv.Round < 1:
-		return nil, invalid("a review names its round, from 1")
-	}
-	req := map[string]any{"issue_id": rv.IssueID, "expected_version": rv.ExpectedVersion, "report": rv.Report,
-		"reviewer_tool": rv.ReviewerTool, "author_tool": rv.AuthorTool, "round": rv.Round}
-	return issueOp(ctx, db, w, "issue-review", key, req, func(tx pgx.Tx, channel string) (map[string]any, error) {
-		r, err := lockIssue(ctx, tx, rv.IssueID, rv.ExpectedVersion)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.open(); err != nil {
-			return nil, err
-		}
-		if r.designSHA == "" {
-			return nil, fmt.Errorf("%w: %s has no design to review", ErrState, r.ID)
-		}
-		ids, err := nextIDs(ctx, tx, "issue_text", 1)
-		if err != nil {
-			return nil, err
-		}
-		checks, err := nextIDs(ctx, tx, "issue_check", 1)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := appendIssue(ctx, tx, "issue_reviewed", w.Actor, r.ID, "", map[string]any{"check_id": checks[0], "check_kind": checkReview,
-			"result": result, "brief_sha256": r.briefSHA, "design_sha256": r.designSHA, "text_id": ids[0], "round": rv.Round,
-			"reviewer_tool": rv.ReviewerTool, "author_tool": rv.AuthorTool}); err != nil {
-			return nil, err
-		}
-		if _, err := insertText(ctx, tx, r.ID, w.Actor, issueText{id: ids[0], kind: "review", channel: channel, body: rv.Report}); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.issue_check (issue_check_id, issue_id, check_kind, brief_sha256, design_sha256, result,
-		    report_text_id, reviewer_tool, author_tool, review_round, created_by_actor_id)
-		  OVERRIDING SYSTEM VALUE VALUES ($1, $2, 'review', $3, $4, $5, $6, $7, $8, $9, $10)`,
-			checks[0], r.ID, r.briefSHA, r.designSHA, result, ids[0], rv.ReviewerTool, rv.AuthorTool, rv.Round, w.Actor); err != nil {
-			return nil, err
-		}
-		state := r.State
-		if slices.Contains([]string{"brief_confirmed", "classified", "designing", "in_review"}, state) {
-			state = "in_review"
-		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.issue SET state = $2, version = version + 1 WHERE issue_id = $1`, r.ID, state); err != nil {
-			return nil, err
-		}
-		return written(ctx, tx, r.ID, map[string]any{"check_id": checks[0], "result": result})
 	})
 }
 
@@ -398,8 +215,8 @@ func RecordOwnerEvidence(ctx context.Context, db DB, w Writer, key string, e Own
 		return nil, invalid("one decision at a time: a priority or a point's option")
 	case priority && !slices.Contains(priorities, e.Priority):
 		return nil, invalid("a priority is one of %v, not %q", priorities, e.Priority)
-	case !priority && e.Decision == "review_dispute" && e.Option != "proceed" && e.Option != "stop":
-		return nil, invalid("a review dispute is decided proceed or stop")
+	case !priority && e.Decision == "review_dispute" && e.Option != "proceed" && e.Option != "stop" && e.Option != AnotherRound:
+		return nil, invalid("a review dispute is decided proceed, stop or another_round")
 	case !priority && e.Decision != "review_dispute" && (!decisionRE.MatchString(e.Decision) || !letterRE.MatchString(e.Option)):
 		return nil, invalid("a design's point is D<n>, its option a letter")
 	case !hex64RE.MatchString(e.BriefSHA256) || (!priority && !hex64RE.MatchString(e.DesignSHA256)):
@@ -427,6 +244,15 @@ func RecordOwnerEvidence(ctx context.Context, db DB, w Writer, key string, e Own
 		}
 		if e.BriefSHA256 != r.briefSHA || (!priority && e.DesignSHA256 != r.designSHA) {
 			return nil, &StaleError{Why: fmt.Sprintf("the decision was made on another version of %s's brief or design", r.ID), Issue: r.IssueView}
+		}
+		if !priority && e.Decision != "review_dispute" {
+			points, err := designPoints(ctx, tx, r)
+			if err != nil {
+				return nil, err
+			}
+			if !slices.ContainsFunc(points, func(p DesignDecision) bool { return p.Key == e.Decision }) {
+				return nil, invalid("the design of %s has no point %s", r.ID, e.Decision)
+			}
 		}
 		checks, err := nextIDs(ctx, tx, "issue_check", 1)
 		if err != nil {

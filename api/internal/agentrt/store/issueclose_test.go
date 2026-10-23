@@ -52,7 +52,7 @@ func TestIssueCloseNeedsTheServedPersonsAnswer(t *testing.T) {
 	id := iw.submit(t, "the filter is lost")
 	iw.readySmall(t, id, "improvement")
 	confirm := iw.askOf(t, id, store.AskConfirmBrief)
-	out, err := iw.take(t, id, fitting, nil)
+	out, err := iw.take(t, id, fitting)
 	ok(t, err)
 	m := out["mission_id"].(string)
 	wantIs(t, iw.close(t, iw.crew, id, store.ConclusionResolved, confirm, ""), store.ErrState, "not a trial")
@@ -96,7 +96,7 @@ func TestIssueOldAnswersDoNotClose(t *testing.T) {
 	iw := newIssueWorld(t)
 	id := iw.submit(t, "the sort is wrong")
 	iw.readySmall(t, id, "improvement")
-	out, err := iw.take(t, id, fitting, nil)
+	out, err := iw.take(t, id, fitting)
 	ok(t, err)
 	m := out["mission_id"].(string)
 	first, err := iw.trial(t, id, 1, m)
@@ -130,7 +130,7 @@ func TestIssueOldAnswersDoNotClose(t *testing.T) {
 	// New work for B2: classified and prioritized again, taken, tried, closed.
 	ok(t, iw.classify(t, id, "small", "improvement"))
 	ok(t, iw.prioritize(t, id, "p2"))
-	out, err = iw.take(t, id, fitting, nil)
+	out, err = iw.take(t, id, fitting)
 	ok(t, err)
 	if inum(t, out, "commitment") != 2 {
 		t.Fatalf("the second work: %v", out)
@@ -183,7 +183,7 @@ func TestIssueAnswersAreBound(t *testing.T) {
 		"verdict": "confirmed", "channel": "intake_local", "person": "person:p2"},
 		`INSERT INTO agentrt.issue_text (issue_text_id, issue_id, text_kind, person, channel, body, sha256, created_by_actor_id)
 		  OVERRIDING SYSTEM VALUE VALUES (9999, '`+a+`', 'response', 'person:p2', 'intake_local', 'yes', encode(sha256('yes'), 'hex'), 'agent:dots-owner')`),
-		"writes only on issues it brings")
+		"writes only on issues it sees")
 	// A re-brief while she reads: the version she read and the ask are gone.
 	v := iw.state(t, a).Version
 	iw.brief(t, a, "brief of hers, again")
@@ -224,7 +224,7 @@ func TestIssueAnswersAreBound(t *testing.T) {
 	ok(t, iw.close(t, iw.crew, w, store.ConclusionDeclined, askW, "she withdrew it"))
 	taken := iw.submit(t, "taken")
 	iw.readySmall(t, taken, "improvement")
-	out, err := iw.take(t, taken, fitting, nil)
+	out, err := iw.take(t, taken, fitting)
 	ok(t, err)
 	trial, err := iw.trial(t, taken, 1, out["mission_id"].(string))
 	ok(t, err)
@@ -318,7 +318,7 @@ func TestIssueRiskOnlyRisesAndMergesStayWithOnePerson(t *testing.T) {
 	// An issue ever taken is not merged (first batch).
 	c, d := iw.submit(t, "c"), iw.submit(t, "d")
 	iw.readySmall(t, c, "improvement")
-	_, err = iw.take(t, c, fitting, nil)
+	_, err = iw.take(t, c, fitting)
 	ok(t, err)
 	wantIs(t, merge(d, c), store.ErrState, "work was taken for")
 }

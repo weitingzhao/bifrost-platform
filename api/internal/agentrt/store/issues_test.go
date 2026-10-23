@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -234,10 +233,10 @@ func (iw *issueWorld) readySmall(t *testing.T, id, category string) {
 
 var fitting = store.MissionProposal{Title: "work on the issue", Goal: "make it work", Success: []string{"it works"}, MaxAttempts: 40, MaxWallHours: 48}
 
-func (iw *issueWorld) take(t *testing.T, id string, m store.MissionProposal, ask store.Ask) (map[string]any, error) {
+func (iw *issueWorld) take(t *testing.T, id string, m store.MissionProposal) (map[string]any, error) {
 	t.Helper()
 	return store.TakeIssue(ctx, iw.rt, iw.crew, iw.key(), store.IssueTake{IssueID: id, ExpectedVersion: iw.state(t, id).Version,
-		Commitment: "C: we fix " + id, Mission: m}, ask)
+		Commitment: "C: we fix " + id, Mission: m})
 }
 
 func (iw *issueWorld) liveWork(t *testing.T, product string) int {
@@ -250,8 +249,6 @@ func (iw *issueWorld) endMission(t *testing.T, mission, to string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, iw.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, to, "test") }))
 }
-
-func askOwner(_ context.Context, c store.Card) (string, error) { return "q-" + c.Key[:8], nil }
 
 func wantIs(t *testing.T, err, target error, contains string) {
 	t.Helper()
@@ -275,7 +272,7 @@ func TestIssueDoubleTakeRefused(t *testing.T) {
 	v := iw.state(t, id).Version
 	key := iw.key()
 	take := func(k string, version int) (map[string]any, error) {
-		return store.TakeIssue(ctx, iw.rt, iw.crew, k, store.IssueTake{IssueID: id, ExpectedVersion: version, Commitment: "C1", Mission: fitting}, nil)
+		return store.TakeIssue(ctx, iw.rt, iw.crew, k, store.IssueTake{IssueID: id, ExpectedVersion: version, Commitment: "C1", Mission: fitting})
 	}
 	out, err := take(key, v)
 	ok(t, err)
@@ -308,7 +305,7 @@ func TestIssueDoubleTakeRefused(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, errs[i] = store.TakeIssue(ctx, pool, iw.crew, iw.key(), store.IssueTake{IssueID: other, ExpectedVersion: v, Commitment: "C1",
-				Mission: fitting}, nil)
+				Mission: fitting})
 		}()
 	}
 	wg.Wait()
@@ -402,7 +399,7 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	t.Parallel()
 	iw := newIssueWorld(t)
 	id := iw.submit(t, "the totals are wrong")
-	_, err := iw.take(t, id, fitting, nil)
+	_, err := iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "not classified")
 	// Nothing is classified or designed before the person confirms the brief.
 	ask := iw.brief(t, id, "brief B1")
@@ -411,12 +408,12 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	_, err = iw.answer(t, iw.dots, id, ask, "confirmed")
 	ok(t, err)
 	ok(t, iw.classify(t, id, "small", "improvement"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "3 owner_priority: the Owner has set no priority")
 	// later is no go; the Owner's own priority only; a seat's report must be
 	// a brief task's.
 	ok(t, iw.prioritize(t, id, "later"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "the Owner set later")
 	_, err = store.RecordOwnerEvidence(ctx, iw.rt, iw.crew, iw.key(), store.OwnerEvidence{IssueID: id, Priority: "p1", BriefSHA256: iw.state(t, id).BriefSHA256})
 	wantIs(t, err, store.ErrInvalid, "the Owner decides")
@@ -438,7 +435,7 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	none := issueWorldOf(t, newWorld(t), false)
 	nid := none.submit(t, "no rule at all")
 	none.readySmall(t, nid, "improvement")
-	_, err = none.take(t, nid, fitting, nil)
+	_, err = none.take(t, nid, fitting)
 	wantIs(t, err, store.ErrState, "no intake-gates rule is in force")
 	other := newIssueWorld(t)
 	oid := other.submit(t, "no rule")
@@ -446,7 +443,7 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	other.putRule(t, strings.NewReplacer("rule_version: 1", "rule_version: 2", "direction: initial", "direction: tighten",
 		"effective_at: 2026-01-01T00:00:00Z", "effective_at: 2026-01-02T00:00:00Z", "expires_at: 2100-01-01T00:00:00Z",
 		"expires_at: 2026-01-03T00:00:00Z").Replace(intakeGatesText))
-	_, err = other.take(t, oid, fitting, nil)
+	_, err = other.take(t, oid, fitting)
 	wantIs(t, err, store.ErrState, "no intake-gates rule is in force")
 	// A rule that does not read is none either: its stored body is not what
 	// its text says.
@@ -457,26 +454,26 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	  effective_at, expires_at) SELECT rule_id, 2, jsonb_set(body_json, '{max_live_per_product}', '20'), replace(body_text, 'rule_version: 1', 'rule_version: 2'),
 	  'loosen', 'test', 'test', '2026-01-02T00:00:00Z', expires_at FROM agentrt.rule WHERE rule_id = 'intake-gates'`)
 	ok(t, err)
-	_, err = third.take(t, tid, fitting, nil)
+	_, err = third.take(t, tid, fitting)
 	wantIs(t, err, store.ErrState, "no intake-gates rule is in force")
 
 	// A new brief leaves the old evidence counting for nothing.
 	ask = iw.brief(t, id, "brief B2")
 	wantIs(t, iw.classify(t, id, "small", "improvement"), store.ErrState, "no confirmed brief")
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "1 brief_confirmed")
 	_, err = iw.answer(t, iw.dots, id, ask, "confirmed")
 	ok(t, err)
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "2 classified")
 	if !strings.Contains(err.Error(), "3 owner_priority") {
 		t.Fatalf("B1's priority counted for B2: %v", err)
 	}
 	ok(t, iw.classify(t, id, "small", "improvement"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "3 owner_priority")
 	ok(t, iw.prioritize(t, id, "p2"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	ok(t, err)
 }
 
@@ -491,10 +488,10 @@ func TestIssueTakeNeedsTheDesignsEvidence(t *testing.T) {
 	ok(t, err)
 	ok(t, iw.classify(t, id, "medium", "improvement"))
 	ok(t, iw.prioritize(t, id, "p1"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "4 design")
 	ok(t, iw.design(t, id, "design D1"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "5 review")
 	// A review by the author's own tool is no review, in the store and in the
 	// database.
@@ -504,13 +501,13 @@ func TestIssueTakeNeedsTheDesignsEvidence(t *testing.T) {
 		Report: "通过 so far, but\nmore to say\n", ReviewerTool: "codex", AuthorTool: "claude", Round: 1})
 	wantIs(t, err, store.ErrInvalid, "neither 通过 nor 先修")
 	ok(t, iw.review(t, id, "先修：A1", 1, "codex"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "5 review")
 	ok(t, iw.review(t, id, "先修：A1", 2, "codex"))
-	_, err = iw.take(t, id, fitting, nil)
+	_, err = iw.take(t, id, fitting)
 	wantIs(t, err, store.ErrState, "5 review")
 	ok(t, iw.decide(t, id, "review_dispute", "proceed"))
-	if _, err = iw.take(t, id, fitting, nil); err != nil {
+	if _, err = iw.take(t, id, fitting); err != nil {
 		t.Fatalf("fix after two rounds, the Owner's proceed: %v", err)
 	}
 
@@ -524,25 +521,25 @@ func TestIssueTakeNeedsTheDesignsEvidence(t *testing.T) {
 	ok(t, iw.design(t, lg, "design with a point", store.DesignDecision{Key: "D1", Proceed: []string{"A"}}))
 	ok(t, iw.review(t, lg, "通过", 1, "codex"))
 	ok(t, iw.decide(t, lg, "D1", "B"))
-	_, err = iw.take(t, lg, fitting, nil)
+	_, err = iw.take(t, lg, fitting)
 	wantIs(t, err, store.ErrState, "6 owner_decisions: the Owner has not chosen to go on at D1")
 	ok(t, iw.decide(t, lg, "D1", "A"))
 	// A new design: the review and the choice were of the old one.
 	ok(t, iw.design(t, lg, "design, second version", store.DesignDecision{Key: "D1", Proceed: []string{"A"}}))
-	_, err = iw.take(t, lg, fitting, nil)
+	_, err = iw.take(t, lg, fitting)
 	wantIs(t, err, store.ErrState, "5 review")
 	if !strings.Contains(err.Error(), "6 owner_decisions") {
 		t.Fatalf("the old choice counted for the new design: %v", err)
 	}
-	ok(t, iw.review(t, lg, "通过", 1, "codex"))
+	ok(t, iw.review(t, lg, "通过", 2, "codex")) // the issue's second round
 	ok(t, iw.decide(t, lg, "D1", "A"))
 	// The product's one slot is the medium issue's: stop its mission first.
-	_, err = iw.take(t, lg, fitting, nil)
+	_, err = iw.take(t, lg, fitting)
 	wantIs(t, err, store.ErrState, "7 quota")
 	var m string
 	ok(t, iw.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.issue_work WHERE issue_id = $1`, id).Scan(&m))
 	iw.endMission(t, m, "stopped")
-	_, err = iw.take(t, lg, fitting, nil)
+	_, err = iw.take(t, lg, fitting)
 	ok(t, err)
 }
 
@@ -560,12 +557,12 @@ func TestIssueFaultExceptionStaysInsideTheEnvelope(t *testing.T) {
 	big := fitting
 	big.MaxAttempts = 100
 	missions := iw.count(t, `SELECT count(*) FROM agentrt.mission`)
-	_, err = iw.take(t, id, big, askOwner)
+	_, err = iw.take(t, id, big)
 	wantIs(t, err, store.ErrState, "not inside standing-envelope:dev")
 	if n := iw.count(t, `SELECT count(*) FROM agentrt.mission`); n != missions {
 		t.Fatalf("a refused take left %d missions", n-missions)
 	}
-	out, err := iw.take(t, id, fitting, nil)
+	out, err := iw.take(t, id, fitting)
 	ok(t, err)
 	if out["exception"] != rules.IntakeFaultSmall || out["mission_state"] != "active" {
 		t.Fatalf("taken: %v", out)
@@ -588,10 +585,10 @@ func TestIssueQuotaCountsLiveWork(t *testing.T) {
 	for _, id := range []string{a, b, c} {
 		iw.readySmall(t, id, "improvement")
 	}
-	out, err := iw.take(t, a, fitting, nil)
+	out, err := iw.take(t, a, fitting)
 	ok(t, err)
 	ma := out["mission_id"].(string)
-	_, err = iw.take(t, b, fitting, nil)
+	_, err = iw.take(t, b, fitting)
 	wantIs(t, err, store.ErrState, "7 quota: screening has live work for 1 issues, its limit 1")
 	// Parking the live one is refused, and so is the same state written past
 	// the store.
@@ -607,18 +604,22 @@ func TestIssueQuotaCountsLiveWork(t *testing.T) {
 	if iw.liveWork(t, "screening") != 0 || iw.count(t, `SELECT count(*) FROM agentrt.issue_work WHERE ended_at IS NOT NULL`) != 1 {
 		t.Fatal("the done mission's work did not end")
 	}
-	// A mission waiting for the Owner holds the slot.
+	// A mission waiting for the Owner holds the slot. Slice 1 puts up no
+	// card for it (review 522 A1): it stays proposed, waiting, no card asked.
 	big := fitting
 	big.MaxAttempts = 100
-	out, err = iw.take(t, b, big, askOwner)
+	out, err = iw.take(t, b, big)
 	ok(t, err)
-	if out["mission_state"] != "awaiting_owner" || out["question_id"] == nil {
+	if out["mission_state"] != "proposed" || out["question_id"] != nil || out["waiting"] == nil {
 		t.Fatalf("outside the envelope: %v", out)
 	}
-	_, err = iw.take(t, c, fitting, nil)
+	if n := iw.count(t, `SELECT count(*) FROM agentrt.mission WHERE mission_id = $1 AND state = 'proposed'`, out["mission_id"]); n != 1 {
+		t.Fatalf("the mission outside the envelope is not waiting: %v", out)
+	}
+	_, err = iw.take(t, c, fitting)
 	wantIs(t, err, store.ErrState, "7 quota")
 	iw.endMission(t, out["mission_id"].(string), "stopped")
-	_, err = iw.take(t, c, fitting, nil)
+	_, err = iw.take(t, c, fitting)
 	ok(t, err)
 	// Another product has its own slot.
 	fin, err := store.SubmitIssue(ctx, iw.rt, iw.dotsOwner, iw.key(), store.IssueSubmission{Product: "finance", Kind: "request", Title: "a report",
@@ -630,7 +631,7 @@ func TestIssueQuotaCountsLiveWork(t *testing.T) {
 	ok(t, err)
 	ok(t, iw.classify(t, fid, "small", "improvement"))
 	ok(t, iw.prioritize(t, fid, "p3"))
-	_, err = iw.take(t, fid, fitting, nil)
+	_, err = iw.take(t, fid, fitting)
 	ok(t, err)
 	// Work ends only with its mission: not written past the trigger.
 	wantErr(t, iw.issueEvent(t, c, "issue_state_changed", "thread:crew-1", map[string]any{"change": "close"},

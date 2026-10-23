@@ -264,7 +264,8 @@ CREATE TABLE agentrt.issue_check (
   CHECK (check_kind <> 'review' OR (reviewer_tool IS NOT NULL AND author_tool IS NOT NULL AND reviewer_tool <> author_tool
          AND report_text_id IS NOT NULL AND design_sha256 IS NOT NULL AND result IN ('pass','fix') AND review_round IS NOT NULL)),
   CHECK (check_kind <> 'owner_decision' OR (design_sha256 IS NOT NULL
-         AND ((category = 'review_dispute' AND result IN ('proceed','stop')) OR (category ~ '^D[1-9][0-9]*$' AND result ~ '^[A-Z]$')))),
+         AND ((category = 'review_dispute' AND result IN ('proceed','stop','another_round'))
+              OR (category ~ '^D[1-9][0-9]*$' AND result ~ '^[A-Z]$')))),
   CHECK (check_kind NOT IN ('priority','owner_decision')
          OR (created_by_actor_id = 'owner' AND question_id IS NULL AND answered_by IS NULL AND answer_channel IS NULL)
          OR (created_by_actor_id = 'controller' AND question_id IS NOT NULL AND answered_by IS NOT NULL
@@ -420,6 +421,17 @@ CREATE FUNCTION agentrt.intake_voice_ok(actor text, channel text, person text) R
   END
 $$;
 
+-- Whether an external agent sees an issue (§5.2, §5.3; review 522 A6): its
+-- client is not revoked, the issue's product is one of its products, and
+-- the issue serves the person it is bound to or is its own proposal. An
+-- agent writes only on an issue it sees, a text or a change of the issue.
+CREATE FUNCTION agentrt.intake_sees(actor text, i agentrt.issue) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM agentrt.intake_client c WHERE c.intake_client_id = actor AND c.revoked_at IS NULL
+                   AND i.product = ANY (c.products)
+                   AND ((i.served_person IS NOT NULL AND i.served_person IS NOT DISTINCT FROM c.on_behalf_of)
+                        OR (i.served_person IS NULL AND i.created_by_actor_id = actor)))
+$$;
+
 -- The issue event of this transaction, on the issue's own stream, naming the
 -- issue in its body, written by a writer allowed for its type.
 CREATE FUNCTION agentrt.issue_event(issue text) RETURNS agentrt.event LANGUAGE plpgsql AS $$
@@ -477,6 +489,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  IF ev.actor_id LIKE 'agent:%' AND NOT agentrt.intake_sees(ev.actor_id, OLD) THEN
+    RAISE EXCEPTION 'agentrt: % writes only on issues it sees (its person''s, of its products, while not revoked)', ev.actor_id
+      USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW.version <> OLD.version + 1 THEN
     RAISE EXCEPTION 'agentrt: issue % moves from version % to %; one at a time', OLD.issue_id, OLD.version, NEW.version
       USING ERRCODE = 'check_violation';
@@ -605,8 +621,7 @@ $$;
 -- Texts: written by their event's writer, of a kind its type writes, on a
 -- channel that writer speaks on, someone's words only as §1 allows and only
 -- the words of the person the issue serves; an agent writes only on the
--- issues it sees (its person's, or its own proposals); the sha256 is the
--- body's.
+-- issues it sees (intake_sees); the sha256 is the body's.
 CREATE FUNCTION agentrt.guard_issue_text() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   ev agentrt.event := agentrt.issue_event(NEW.issue_id);
@@ -617,10 +632,9 @@ BEGIN
     RAISE EXCEPTION 'agentrt: the words on % are those of the person it serves, %', NEW.issue_id, COALESCE(i.served_person, 'nobody')
       USING ERRCODE = 'check_violation';
   END IF;
-  IF ev.actor_id LIKE 'agent:%' AND NOT ((i.served_person IS NOT NULL AND i.served_person IS NOT DISTINCT FROM
-       (SELECT c.on_behalf_of FROM agentrt.intake_client c WHERE c.intake_client_id = ev.actor_id))
-       OR (i.served_person IS NULL AND i.created_by_actor_id = ev.actor_id)) THEN
-    RAISE EXCEPTION 'agentrt: % writes only on issues it brings for its person or its own', ev.actor_id USING ERRCODE = 'check_violation';
+  IF ev.actor_id LIKE 'agent:%' AND NOT agentrt.intake_sees(ev.actor_id, i) THEN
+    RAISE EXCEPTION 'agentrt: % writes only on issues it sees (its person''s, of its products, while not revoked)', ev.actor_id
+      USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.created_by_actor_id <> ev.actor_id THEN
     RAISE EXCEPTION 'agentrt: a text is written by the writer of its event' USING ERRCODE = 'check_violation';
@@ -681,10 +695,13 @@ BEGIN
     RAISE EXCEPTION 'agentrt: what ask % asks never changes', OLD.issue_ask_id USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.superseded_at IS DISTINCT FROM OLD.superseded_at THEN
+    -- Superseding changes superseded_at and nothing else: never who
+    -- answered, by which channel or when she said it (review 522 A8).
     IF OLD.superseded_at IS NOT NULL OR NEW.superseded_at IS NULL
        OR ev.event_type NOT IN ('issue_brief_drafted','issue_asked','issue_state_changed')
-       OR (NEW.verdict, NEW.words_text_id, NEW.answered_at) IS DISTINCT FROM (OLD.verdict, OLD.words_text_id, OLD.answered_at) THEN
-      RAISE EXCEPTION 'agentrt: ask % is superseded once, by itself', OLD.issue_ask_id USING ERRCODE = 'check_violation';
+       OR (to_jsonb(NEW) - 'superseded_at') IS DISTINCT FROM (to_jsonb(OLD) - 'superseded_at') THEN
+      RAISE EXCEPTION 'agentrt: ask % is superseded once, and nothing else of it changes', OLD.issue_ask_id
+        USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
   END IF;
@@ -755,12 +772,33 @@ END $$;
 -- the brief and design current now (evidence for a version that is gone is
 -- never written); a review's report is a review text, a classification's
 -- reason and a seat check's excerpt a note and a check text; a seat's answer
--- is the report of a brief task (§2.2); a seat checks an answer given.
+-- is the report of a brief task (§2.2); a seat checks an answer given. A
+-- review is the issue's next round (the first is 1); a third round and any
+-- after it only when the Owner's newest review_dispute decision on this
+-- brief and design since the round before chose another_round (§7.2: at
+-- most two rounds, then the Owner decides; review 522 A7).
 CREATE FUNCTION agentrt.guard_issue_check() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  ev agentrt.event := agentrt.issue_event(NEW.issue_id);
-  i  agentrt.issue;
+  ev         agentrt.event := agentrt.issue_event(NEW.issue_id);
+  i          agentrt.issue;
+  prev_round int;
+  prev_id    bigint;
 BEGIN
+  IF NEW.check_kind = 'review' THEN
+    SELECT review_round, issue_check_id INTO prev_round, prev_id FROM agentrt.issue_check
+      WHERE issue_id = NEW.issue_id AND check_kind = 'review' ORDER BY issue_check_id DESC LIMIT 1;
+    IF NEW.review_round IS DISTINCT FROM COALESCE(prev_round, 0) + 1 THEN
+      RAISE EXCEPTION 'agentrt: the next review of % is round %, not %', NEW.issue_id, COALESCE(prev_round, 0) + 1, NEW.review_round
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.review_round >= 3 AND (SELECT d.result FROM agentrt.issue_check d WHERE d.issue_id = NEW.issue_id
+         AND d.check_kind = 'owner_decision' AND d.category = 'review_dispute' AND d.issue_check_id > prev_id
+         AND d.brief_sha256 = NEW.brief_sha256 AND d.design_sha256 = NEW.design_sha256
+         ORDER BY d.issue_check_id DESC LIMIT 1) IS DISTINCT FROM 'another_round' THEN
+      RAISE EXCEPTION 'agentrt: round % of % needs the Owner''s another_round on this design since round %', NEW.review_round,
+        NEW.issue_id, prev_round USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
   IF (NEW.check_kind, ev.event_type) NOT IN (('classification','issue_classified'),('review','issue_reviewed'),
        ('close_check','issue_reviewed'),('owner_decision','issue_owner_decided'),('priority','issue_priority_set')) THEN
     RAISE EXCEPTION 'agentrt: a % event records no % evidence', ev.event_type, NEW.check_kind USING ERRCODE = 'check_violation';
@@ -947,6 +985,7 @@ BEGIN
     EXECUTE format('GRANT USAGE ON SEQUENCE %s TO %I', pg_get_serial_sequence('agentrt.' || t, t || '_id'), rt);
   END LOOP;
   FOREACH t IN ARRAY ARRAY['issue_text_sha(bigint)','issue_writer_ok(text,text)','intake_voice_ok(text,text,text)',
+                           'intake_sees(text,agentrt.issue)',
                            'issue_event(text)','guard_issue()','issue_text_kind_ok(text,text)','guard_issue_text()',
                            'guard_issue_ask()','guard_issue_work()','guard_issue_check()','guard_person()',
                            'guard_intake_client()','end_issue_work()','check_issue_mission()'] LOOP
