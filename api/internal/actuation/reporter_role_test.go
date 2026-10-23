@@ -39,9 +39,14 @@ func TestTheExistingLadderIsUnchanged(t *testing.T) {
 	}
 }
 
-func TestAnUnknownRoleIsTreatedAsViewer(t *testing.T) {
-	if roleLevel(Role("nonsense")) != roleLevel(RoleViewer) {
-		t.Fatal("an unrecognised role must not outrank viewer")
+// The ladder fails closed (DESIGN-crew-intake §5.2): a role it does not
+// list, intake among them, is below viewer, so no Require(min) route takes
+// it. Until W-31 BI-1 slice 2 an unknown role counted as viewer.
+func TestAnUnknownRoleIsBelowViewer(t *testing.T) {
+	for _, r := range []Role{"nonsense", "", RoleIntake, RoleExecutor, RoleAgentd} {
+		if roleLevel(r) >= roleLevel(RoleViewer) {
+			t.Fatalf("role %q passes a Require(viewer) route", r)
+		}
 	}
 }
 
