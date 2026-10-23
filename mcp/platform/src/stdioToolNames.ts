@@ -80,6 +80,25 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'wait_for_messages',
   'ack_messages',
   'get_attempt_actions',
+  // Business issues (W-31 BI-1 slice 2): the crew's tools, registerIssues.ts.
+  'file_issue',
+  'add_to_issue',
+  'relay_user_response',
+  'list_issues',
+  'get_issue_full',
+  'draft_brief',
+  'classify_issue',
+  'put_design',
+  'record_review',
+  'record_close_check',
+  'request_owner',
+  'take_issue',
+  'reply_to_requester',
+  'close_issue',
+  'park_issue',
+  'resume_issue',
+  'reopen_issue',
+  'merge_issues',
 ] as const
 
 export type PlatformStdioToolName = (typeof PLATFORM_STDIO_TOOL_NAMES)[number]

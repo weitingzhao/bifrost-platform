@@ -44,6 +44,7 @@ import {
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
+import { registerIssueTools } from './registerIssues.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -706,6 +707,7 @@ reg(
 
 registerMessageTools(reg)
 registerPlanImportTools(reg)
+registerIssueTools(reg)
 
 reg(
   'propose_plan_change',
