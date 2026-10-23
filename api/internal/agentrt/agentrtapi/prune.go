@@ -195,11 +195,15 @@ func (a *API) reportPrunes(w http.ResponseWriter, r *http.Request) {
 }
 
 // touchEvery is how often a host's call that is still being answered counts
-// as its contact.
-const touchEvery = 10 * time.Second
+// as its contact. touchLast bounds the last record, made after the call is
+// answered or cancelled (review 527 B3): it never holds the call up longer.
+var (
+	touchEvery = 10 * time.Second
+	touchLast  = 3 * time.Second
+)
 
 // keepTouching records host's contact now and every touchEvery until the
-// returned function is called, and once more then.
+// returned function is called, and once more then, within touchLast.
 func (a *API) keepTouching(ctx context.Context, host string) func() {
 	a.touch(ctx, host)
 	done := make(chan struct{})
@@ -222,6 +226,8 @@ func (a *API) keepTouching(ctx context.Context, host string) func() {
 	return func() {
 		close(done)
 		<-stopped
-		a.touch(context.WithoutCancel(ctx), host)
+		last, cancel := context.WithTimeout(context.WithoutCancel(ctx), touchLast)
+		defer cancel()
+		a.touch(last, host)
 	}
 }
