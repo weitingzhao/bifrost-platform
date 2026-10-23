@@ -30,6 +30,10 @@ func writer(r *http.Request) (store.Writer, error) {
 	w := store.Writer{Token: p.Name}
 	var err error
 	switch {
+	case p.Role == actuation.RoleIntake:
+		// Defence only: an intake token is in no route's ability but the
+		// intake routes', which write as intakeWriter says (§5.2, R2-A1).
+		return w, fmt.Errorf("%w: an intake token writes only on the intake routes", store.ErrNotYours)
 	case p.Role == actuation.RoleAdmin:
 		w.Actor = "owner"
 	case strings.HasPrefix(p.Name, "seat:"):

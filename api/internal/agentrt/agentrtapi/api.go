@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -167,6 +168,10 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/pools", a.listPools)
 		r.With(read, cfg).Get("/capabilities", a.capabilities)
 		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
+		// Business issues (W-31 BI-1 slice 2): the crew's routes, for the
+		// issue readers only, and the seven an intake token opens.
+		a.mountIssues(r, auth, cfg)
+		a.mountIntake(r, auth, cfg)
 	})
 }
 
@@ -679,6 +684,19 @@ func hiddenFrom(r *http.Request) []string {
 	return []string{}
 }
 
+// hiddenPrefixes start the streams no role reads by GET /events, in either
+// form: a business issue's history (issue:BI-n) and its intake records
+// (intake:…) are read only by the issue routes (DESIGN-crew-intake §5.3).
+var hiddenPrefixes = []string{"issue:", "intake:"}
+
+// streamHidden says whether r may not read stream by GET /events.
+func streamHidden(r *http.Request, stream string) bool {
+	if slices.Contains(hiddenFrom(r), stream) {
+		return true
+	}
+	return slices.ContainsFunc(hiddenPrefixes, func(p string) bool { return strings.HasPrefix(stream, p) })
+}
+
 // getEvents lists a stream's events after a sequence number, at most 500.
 func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 	stream := r.URL.Query().Get("stream")
@@ -686,7 +704,7 @@ func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 		a.getRecentEvents(w, r)
 		return
 	}
-	if slices.Contains(hiddenFrom(r), stream) {
+	if streamHidden(r, stream) {
 		writeError(w, http.StatusForbidden, "forbidden", "this token may not read stream "+stream)
 		return
 	}

@@ -57,6 +57,17 @@ var routeExpect = map[string]string{
 	// finished tasks: no world here finishes one, so the valid report is the
 	// empty one (TestPruneRoutes records real ones).
 	"GET prunes": expectAnswers, "POST prunes": expectAnswers,
+	// Business issues (W-31 BI-1 slice 2, issues_world_test.go): the
+	// crew's writes and an intake client's; reading its updates moves only
+	// how far it was served, without an event.
+	"POST issues": expectWrites, "POST issues/merge": expectWrites, "POST issues/{id}/additions": expectWrites,
+	"POST issues/{id}/responses": expectWrites, "POST issues/{id}/brief": expectWrites, "POST issues/{id}/classification": expectWrites,
+	"POST issues/{id}/design": expectWrites, "POST issues/{id}/reviews": expectWrites, "POST issues/{id}/close-checks": expectWrites,
+	"POST issues/{id}/owner-cards": expectWrites, "POST issues/{id}/take": expectWrites, "POST issues/{id}/replies": expectWrites,
+	"POST issues/{id}/close": expectWrites, "POST issues/{id}/park": expectWrites, "POST issues/{id}/resume": expectWrites,
+	"POST issues/{id}/reopen": expectWrites,
+	"POST intake/issues": expectWrites, "POST intake/issues/{id}/additions": expectWrites, "POST intake/issues/{id}/responses": expectWrites,
+	"POST intake/updates": expectAnswers,
 }
 
 var fuzzAttemptActions = []string{"heartbeat", "start", "checkpoint", "computed", "persist", "submit", "salvage", "ended"}
@@ -141,8 +152,10 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		return out
 	}
 
+	seat := issueFixture(t, f.pool)
 	if name == "base" {
 		f.validRoutes(t, s, ok, key)
+		f.validIssueRoutes(t, ok, seat)
 		return s
 	}
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
@@ -321,7 +334,8 @@ var fuzzStates = []string{"proposed", "awaiting_owner", "ready", "leased", "runn
 var fuzzStateKeys = []string{"state", "to", "from", "status", "task_state", "mission_state", "attempt_state", "plan_state",
 	"phase", "verdict", "accepted", "set_state", "new_state"}
 
-var fuzzCallers = []string{"agentd:h1", "agentd:h2", "reporter", "operator", "admin", "seat:chief_of_staff", "viewer", ""}
+var fuzzCallers = []string{"agentd:h1", "agentd:h2", "reporter", "operator", "admin", "seat:chief_of_staff", "viewer", "",
+	"intake:dots-p2", "trade-satellite"}
 
 func (f *stateFuzz) pick(xs []string) string { return xs[f.r.Intn(len(xs))] }
 
@@ -411,7 +425,8 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 			pool = []string{"chief_of_staff", "implementer", "x"}
 		default:
 			pool = f.ids(t, map[string]string{"attempts": idsAttempts, "missions": idsMissions, "tasks": idsTasks, "plan": idsNodes,
-				"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`}[parts[i-1]])
+				"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`,
+				"issues": `SELECT issue_id FROM agentrt.issue ORDER BY substr(issue_id, 4)::int`}[parts[i-1]])
 		}
 		// The world's ids three times over: most requests name a real row.
 		pool = append(slices.Concat(pool, pool, pool), "x_nope", strings.Repeat("9", 40))

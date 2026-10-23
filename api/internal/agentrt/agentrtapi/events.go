@@ -80,7 +80,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 			types = append(types, t)
 		}
 	}
-	filter := store.EventFilter{Types: types, Hidden: hiddenFrom(r)}
+	filter := store.EventFilter{Types: types, Hidden: hiddenFrom(r), HiddenPrefixes: hiddenPrefixes}
 	var doc []byte
 	var next store.EventCursor
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {

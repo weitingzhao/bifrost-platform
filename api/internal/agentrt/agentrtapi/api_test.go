@@ -105,7 +105,10 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 // Tokens of the fixture auth file, by caller name.
 var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "agentd:h3": "fixture-agentd-h3", "viewer": "fixture-viewer-1",
 	"reporter": "fixture-reporter-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
-	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2"}
+	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2",
+	// An operator not on the issue readers list (W-31 BI-1 slice 2) and an
+	// intake client's token, read from its environment variable.
+	"trade-satellite": "fixture-satellite-1", "intake:dots-p2": fixtureIntakeToken}
 
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
@@ -181,6 +184,12 @@ func server(t *testing.T, db store.DB) *httptest.Server {
   - name: seat:ghost
     role: reporter
     token: fixture-seat-2
+  - name: trade-satellite
+    role: operator
+    token: fixture-satellite-1
+intake_tokens:
+  - name: intake:dots-p2
+    token_env: `+fixtureIntakeEnv+`
 `), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
