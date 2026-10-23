@@ -2,7 +2,7 @@ import { DecisionEnvironment } from '@/pages/DecisionEnvironment'
 import { useDecisionEnvironment } from '@/pages/useDecisionEnvironment'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { PLAN_ROOT, postStepSignoff, unsignedRefs, type SignoffAnswer, type StepSignoffs } from '@/api/agentRuntimePlan'
+import { postStepSignoff, unsignedRefs, type SignoffAnswer, type StepSignoffs } from '@/api/agentRuntimePlan'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import { SIGNOFF_PRESS_AGAIN, signedLine } from './stepSignoffText'
@@ -44,7 +44,8 @@ function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node
     try {
       const answer = await postStepSignoff(node, signoffRef, auth.token)
       setPhase({ kind: 'signed', answer })
-      void qc.invalidateQueries({ queryKey: ['agent-runtime-plan', PLAN_ROOT] })
+      // Every round's tree: a step of any round may be signed here, and the waits list reads them all.
+      void qc.invalidateQueries({ queryKey: ['agent-runtime-plan'] })
       void qc.invalidateQueries({ queryKey: ['agent-runtime-progress'] })
     } catch (e) {
       setPhase({ kind: 'failed', error: scrubSecret(e instanceof Error ? e.message : String(e), auth.token) })

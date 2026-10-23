@@ -96,8 +96,26 @@ export function archCounts(table: RuntimeArchTable): { passed: number; notYet: n
   return { passed: n('true'), notYet: n('false'), noGate: n('nogate'), unknown: n('unknown') }
 }
 
-/** The round the plan panes read from the runtime (CUT-round2-2.5-interface §2: GET /plan?root=R2). */
+/**
+ * The round the plan panes read when GET /progress counts none (CUT-round2-2.5-interface §2 read R2 only). The panes
+ * follow the newest round GET /progress counts (currentRound); sign-off waits and approval steps read every round.
+ */
 export const PLAN_ROOT = 'R2'
+
+/** The rounds GET /progress counts (its plan entries of kind round), by number: R2, R3, …, R10. */
+export function planRounds(plan: unknown): string[] {
+  const ids = records(Array.isArray(plan) ? plan : []).filter(r => r.kind === 'round').map(r => text(r.plan_node_id))
+  return [...new Set(ids.filter(id => /^R\d+$/.test(id)))].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))
+}
+
+/**
+ * The round the plan panes show: the newest GET /progress counts, else PLAN_ROOT. The Owner 2026-10-22: with the
+ * panes fixed on R2, round 3's steps could not be seen or signed on PROD.
+ */
+export function currentRound(plan: unknown): string {
+  const rounds = planRounds(plan)
+  return rounds.length > 0 ? rounds[rounds.length - 1] : PLAN_ROOT
+}
 export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
 
 /** GET /plan?root=: the answer, or not found when the runtime holds no such root (the plan is not imported). */

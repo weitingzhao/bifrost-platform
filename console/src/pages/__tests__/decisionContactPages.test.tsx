@@ -154,8 +154,11 @@ describe('decision page connection truth', () => {
     const at = Date.now()
     let reply!: (response: Response) => void
     const abort = vi.fn()
+    // The decision's POST is the one answered by reply; the page's reads beside it (the plan's rounds, then each
+    // round's plan) stay pending and never take its place.
     vi.mocked(fetch).mockImplementation((_input, init) => {
-      init?.signal?.addEventListener('abort', abort)
+      if (init?.method !== 'POST') return new Promise(() => undefined)
+      init.signal?.addEventListener('abort', abort)
       return new Promise(resolve => { reply = resolve })
     })
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })

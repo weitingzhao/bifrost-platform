@@ -161,6 +161,8 @@ describe('the steps waiting on the Owner\'s sign-off, on PROD\'s plan', () => {
     expect(await screen.findByText('Reading which steps wait for your sign-off…')).toBeInTheDocument()
     expect(document.getElementById('signoff')).not.toBeNull()
     expect(into).not.toHaveBeenCalled()
+    // The waits read GET /progress first (which rounds there are), then each round's plan: release the plan once it is asked for.
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes('/agentrt/plan?'))).toBe(true))
     releasePlan()
     expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 10' })).toBeInTheDocument()
     await waitFor(() => expect(into).toHaveBeenCalledTimes(1))

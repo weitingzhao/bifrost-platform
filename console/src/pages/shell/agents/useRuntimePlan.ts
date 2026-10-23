@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
-import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRuntimePlan, planRounds, runtimeArch, runtimeRound, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 import { record } from '@/api/agentRuntime'
 
@@ -36,8 +36,8 @@ const wholeAt = (...updatedAt: number[]): number | null => (updatedAt.every(at =
 type Read<T> = { data: T | undefined; error: unknown; isError: boolean; isPaused: boolean }
 const failure = (q: Read<unknown>) => q.isError ? (q.error instanceof Error ? q.error.message : 'Request failed') : q.isPaused ? 'offline' : null
 
-/** The plan from the three reads: GET /plan?root=, the import request its head names, and GET /progress. */
-export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | null>, progress: Read<RuntimeProgress>): PlanRead {
+/** The plan of round root from the three reads: GET /plan?root=, the import request its head names, and GET /progress. */
+export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | null>, progress: Read<RuntimeProgress>, root = PLAN_ROOT): PlanRead {
   const failed = failure(plan)
   if (failed !== null) return { from: 'error', error: failed }
   if (plan.data === undefined) return { from: 'loading' }
@@ -51,7 +51,7 @@ export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | nul
   if (progress.data === undefined || (ledger === null && request.data === undefined)) return { from: 'loading' }
   try {
     const req = ledger === null ? request.data ?? null : null
-    const round = runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, req, ledger !== null), progress.data.plan, PLAN_ROOT, req,
+    const round = runtimeRound(fromPlanWithRequest(plan.data.doc, root, req, ledger !== null), progress.data.plan, root, req,
       approvalsByStep(plan.data.doc), signoffsByStep(plan.data.doc))
     return { from: 'runtime', round: ledger === null ? round : { ...round, ledgerUnread: ledger } }
   } catch (e) {
@@ -60,25 +60,36 @@ export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | nul
 }
 
 /**
- * The plan for a pane. GET /progress is read under the key Needs you reads it with; the request is
- * content-addressed and read once, again only after a failed read.
+ * The round the panes read: the newest GET /progress counts; PLAN_ROOT when that read failed (it then reports the
+ * failure itself); null until it has answered.
+ */
+function roundOf(progress: Read<RuntimeProgress>): string | null {
+  if (progress.data !== undefined) return currentRound(progress.data.plan)
+  return progress.isError || progress.isPaused ? PLAN_ROOT : null
+}
+
+/**
+ * The plan for a pane: the newest round GET /progress counts. GET /progress is read under the key Needs you reads
+ * it with; the request is content-addressed and read once, again only after a failed read.
  */
 export function useRuntimePlan(enabled = true): PlanRead {
-  const planQ = useQuery({ queryKey: ['agent-runtime-plan', PLAN_ROOT], queryFn: ({ signal }) => fetchRuntimePlan(PLAN_ROOT, signal),
-    enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
-  const requestQ = useQuery({ queryKey: ['agent-runtime-plan-request', PLAN_ROOT], queryFn: ({ signal }) => fetchImportRequest(PLAN_ROOT, signal),
-    enabled: enabled && planQ.data?.found === true, staleTime: Infinity, retry: false,
-    refetchInterval: q => q.state.status === 'error' ? AGENT_PROGRESS_POLL_MS : false })
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
     enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+  const { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused } = progressQ
+  const root = roundOf({ data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused })
+  const planQ = useQuery({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }) => fetchRuntimePlan(root ?? PLAN_ROOT, signal),
+    enabled: enabled && root !== null, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
+  const requestQ = useQuery({ queryKey: ['agent-runtime-plan-request', root], queryFn: ({ signal }) => fetchImportRequest(root ?? PLAN_ROOT, signal),
+    enabled: enabled && root !== null && planQ.data?.found === true, staleTime: Infinity, retry: false,
+    refetchInterval: q => q.state.status === 'error' ? AGENT_PROGRESS_POLL_MS : false })
   const { data: plan, error: planError, isError: planFailed, isPaused: planPaused } = planQ
   const { data: request, error: requestError, isError: requestFailed, isPaused: requestPaused } = requestQ
-  const { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused } = progressQ
   const read = useMemo(() => planRead(
     { data: plan, error: planError, isError: planFailed, isPaused: planPaused },
     { data: request, error: requestError, isError: requestFailed, isPaused: requestPaused },
     { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused },
-  ), [plan, planError, planFailed, planPaused, request, requestError, requestFailed, requestPaused, progress, progressError, progressFailed, progressPaused])
+    root ?? PLAN_ROOT,
+  ), [plan, planError, planFailed, planPaused, request, requestError, requestFailed, requestPaused, progress, progressError, progressFailed, progressPaused, root])
   // A failed read says when the plan was last read whole (review 488 B1); a good one stays the same object across
   // polls, so a pane does not repaint for a read that changed nothing.
   const readAt = wholeAt(planQ.dataUpdatedAt, progressQ.dataUpdatedAt)
@@ -117,17 +128,44 @@ export function useRuntimeArch(enabled = true): ArchRead {
  */
 export type ApprovalStepsRead = { read: 'ok'; stepsOf: (n: number | undefined) => ApprovalStep[] } | { read: 'loading' | 'error' }
 export function useApprovalSteps(enabled = true): ApprovalStepsRead {
-  const planQ = useQuery({ queryKey: ['agent-runtime-plan', PLAN_ROOT], queryFn: ({ signal }) => fetchRuntimePlan(PLAN_ROOT, signal),
-    enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
-  const { data, isError, isPaused } = planQ
+  const plans = useRoundPlans(enabled)
   return useMemo((): ApprovalStepsRead => {
-    if (isError || isPaused) return { read: 'error' }
-    if (data === undefined) return { read: 'loading' }
-    const doc = data.found ? data.doc : null
-    // An answer that is not this round's tree is a failed read, never one with no steps (review 476 C2).
-    if (doc != null && (record(doc).root !== PLAN_ROOT || !Array.isArray(record(doc).nodes))) return { read: 'error' }
-    return { read: 'ok', stepsOf: n => doc == null || n == null || n <= 0 ? [] : stepsOfApproval(doc, n) }
-  }, [data, isError, isPaused])
+    if (plans.read !== 'ok') return plans
+    const docs = plans.docs
+    return { read: 'ok', stepsOf: n => n == null || n <= 0 ? [] : docs.flatMap(doc => stepsOfApproval(doc, n)) }
+  }, [plans])
+}
+
+/**
+ * Every round's plan tree, one GET /plan?root= per round GET /progress counts (PLAN_ROOT alone when that read failed
+ * or counts none): read is 'ok' with the trees the runtime holds, in round order; 'loading' until each has answered;
+ * 'error' when any read failed, or answered a tree that is not the round asked for (review 476 C2).
+ */
+type RoundPlans = { read: 'ok'; docs: unknown[] } | { read: 'loading' | 'error' }
+function useRoundPlans(enabled: boolean): RoundPlans {
+  const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
+    enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+  const { data: progress, isError: progressFailed, isPaused: progressPaused } = progressQ
+  const roundsKey = progress !== undefined ? planRounds(progress.plan).join(',') || PLAN_ROOT : progressFailed || progressPaused ? PLAN_ROOT : ''
+  const rounds = useMemo(() => (roundsKey === '' ? [] : roundsKey.split(',')), [roundsKey])
+  const combine = useCallback((results: UseQueryResult<PlanAnswer>[]): RoundPlans => {
+    if (rounds.length === 0) return { read: 'loading' }
+    if (results.some(q => q.isError || q.isPaused)) return { read: 'error' }
+    if (results.some(q => q.data === undefined)) return { read: 'loading' }
+    const docs: unknown[] = []
+    for (const [i, q] of results.entries()) {
+      if (!q.data?.found) continue
+      const doc = record(q.data.doc)
+      if (doc.root !== rounds[i] || !Array.isArray(doc.nodes)) return { read: 'error' }
+      docs.push(q.data.doc)
+    }
+    return { read: 'ok', docs }
+  }, [rounds])
+  return useQueries({
+    queries: rounds.map(root => ({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }: { signal: AbortSignal }) => fetchRuntimePlan(root, signal),
+      enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })),
+    combine,
+  })
 }
 
 /**
@@ -136,15 +174,7 @@ export function useApprovalSteps(enabled = true): ApprovalStepsRead {
  */
 export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[] } | { read: 'loading' | 'error' }
 export function useSignoffWaits(enabled = true): SignoffWaitsRead {
-  const planQ = useQuery({ queryKey: ['agent-runtime-plan', PLAN_ROOT], queryFn: ({ signal }) => fetchRuntimePlan(PLAN_ROOT, signal),
-    enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
-  const { data, isError, isPaused } = planQ
-  return useMemo((): SignoffWaitsRead => {
-    if (isError || isPaused) return { read: 'error' }
-    if (data === undefined) return { read: 'loading' }
-    if (!data.found) return { read: 'ok', waits: [] }
-    const doc = record(data.doc)
-    if (doc.root !== PLAN_ROOT || !Array.isArray(doc.nodes)) return { read: 'error' }
-    return { read: 'ok', waits: signoffWaits(data.doc) }
-  }, [data, isError, isPaused])
+  const plans = useRoundPlans(enabled)
+  // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
+  return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)) }), [plans])
 }

@@ -69,7 +69,9 @@ beforeEach(() => {
     if (url.includes('?status=')) return Promise.resolve(json({ approvals: [] }))
     // The request's AI assessment (TD-391) is read beside it; none here.
     if (url.includes('/agentrt/events?')) return Promise.resolve(json([]))
-    // So is the plan, for the step the request is the approval for (W-31 2.5 slice 5 gap 4).
+    // So is the plan, for the step the request is the approval for (W-31 2.5 slice 5 gap 4), after GET /progress
+    // names its rounds (none here: the plan read is the one round the panes fall back to).
+    if (url.includes('/agentrt/progress')) return Promise.resolve(json({ plan: [] }))
     if (url.includes('/agentrt/plan?')) return Promise.resolve(plan())
     const id = url.split('/').at(-1)!
     reads.push(id)
