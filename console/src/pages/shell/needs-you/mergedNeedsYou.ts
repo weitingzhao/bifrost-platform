@@ -1,4 +1,4 @@
-import { record, text } from '@/api/agentRuntime'
+import { record, text, type RuntimeHost } from '@/api/agentRuntime'
 import { recommendedLine, type Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 import type { NeedsYouCount } from './needsYouModel'
@@ -26,4 +26,20 @@ export function mergedWaitingCount(sources: readonly NeedsYouCount[]): NeedsYouC
   if (failed) return failed
   if (sources.some(s => s.state === 'loading')) return { state: 'loading' }
   return { state: 'known', count: sources.reduce((n, s) => n + (s.state === 'known' ? s.count : 0), 0) }
+}
+
+/**
+ * The agent hosts the runtime reports offline (W-31 3.5: 30 seconds after their last poll, active, no stop or drain),
+ * For you's host entries: the ones that never polled first, then the longest silent.
+ */
+export function offlineHosts(hosts: readonly RuntimeHost[] | undefined): RuntimeHost[] {
+  const at = (h: RuntimeHost) => h.last_poll_at ? Date.parse(h.last_poll_at) : -Infinity
+  return (hosts ?? []).filter(h => h.reported_offline === true)
+    .sort((a, b) => at(a) - at(b) || (a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0))
+}
+
+/** For you's entry of an offline host: what to do about it. */
+export function offlineHostItem(h: RuntimeHost): WaitingItem {
+  return { id: h.host_id, title: `${h.host_id} stopped polling`, href: NEEDS_YOU_HREF,
+    instruction: 'For you · Start its agentd again, or drain the host on Work if it is down on purpose' }
 }

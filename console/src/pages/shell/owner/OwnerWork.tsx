@@ -59,6 +59,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
       </Card>
       <OwnerGoals missions={data.missions ?? []} now={now} read={data.controlsReadable ? 'ok' : data.runtimeError ? { error: runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, now) } : 'loading'} />
       <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}
+        executors={data.runtime?.executors} unserved={data.runtime?.jobs_without_executor}
         read={data.controlsReadable ? 'ok' : data.runtimeError ? { error: runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, now) } : 'loading'} />
       <Card label="The plan" title={<>The plan{round?.n != null && ` · Round ${round.n}`}</>} more={{ href: '#work?section=plan', text: 'Plan' }}>
         {source.from === 'absent' && <p className="m-0 text-sm text-muted-foreground">{PLAN_NOT_IMPORTED}</p>}

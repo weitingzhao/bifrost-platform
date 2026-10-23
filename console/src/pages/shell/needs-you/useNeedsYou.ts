@@ -1,10 +1,10 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
-import { mergedWaitingCount, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
+import { mergedWaitingCount, offlineHostItem, offlineHosts, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
+import { capacityRefusalActive, capacityRefusalText, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
 import { fetchQuestionList, type Question } from '@/api/questions'
 import { useAgentThreads } from '@/hooks/useAgentThreads'
@@ -78,13 +78,14 @@ export function useNeedsYou() {
   const questionsLoading = questionsQ.data == null && !questionsFailed
   const questionsStale = questionsFailed && questionsQ.data != null
   const silent = silentThreads(threadsQuery.data?.threads ?? [])
-  const lost = hostsNeedingYou(threadsQuery.data?.hosts)
+  // The agent hosts are the runtime's (W-31 3.5): the retired heartbeat route's hosts are no longer read.
+  const lost = offlineHosts(runtimeQuery.data?.hosts)
   const capacityActive = threadsQuery.data != null && capacityRefusalActive(threadsQuery.data)
   const capacityText =
     capacityActive && threadsQuery.data?.last_thread_refusal
       ? capacityRefusalText(threadsQuery.data.threads_refused ?? 0, threadsQuery.data.last_thread_refusal)
       : ''
-  const silentSectionCount = silent.length + lost.length + (capacityActive ? 1 : 0)
+  const silentSectionCount = silent.length + (capacityActive ? 1 : 0)
 
   const openCount = knownOrPending(
     openQ.isError || openQ.isPaused,
@@ -112,7 +113,7 @@ export function useNeedsYou() {
 
   const runtimeItems = runtimeWaiting(runtimeQuery.data?.needs_you.items ?? [], questions)
   const runtimeCount = knownOrPending(runtimeQuery.isError || runtimeQuery.isPaused || runtimeQuery.data?.needs_you.truncated === true,
-    runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length)
+    runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length + lost.length)
   // What waits for the Owner comes only from items with a way in: approvals, questions, the runtime.
   // The board's hand-written owner_now is not read (2.5 slice 3): the coordinator asks with a card or a request.
   count = mergedWaitingCount([count, runtimeCount])
@@ -123,7 +124,7 @@ export function useNeedsYou() {
     }))),
     ...openQuestions.map(openQuestionItem),
     ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: NEEDS_YOU_HREF, kind: 'silent_thread', instruction: 'For you · Check the silent thread' })),
-    ...lost.map(h => ({ id: h.host, title: h.host, href: NEEDS_YOU_HREF, instruction: 'For you · Check the host heartbeat' })),
+    ...lost.map(offlineHostItem),
     ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: NEEDS_YOU_HREF, instruction: 'For you · Restore thread monitoring capacity' }] : []),
     ...runtimeItems,
   ]

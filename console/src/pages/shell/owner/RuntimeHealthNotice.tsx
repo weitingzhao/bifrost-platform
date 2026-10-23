@@ -1,11 +1,14 @@
 import type { RuntimeProgress } from '@/api/agentRuntime'
+import { offlineWords, unservedWords } from './crewModel'
 import { ago } from './ownerModel'
 
 /**
  * What stops the agent runtime's controller without anything else saying so (TD-411: STG ran a platform needing
  * migrations 0007 and 0008 on a database at 0006; the facts pass failed every 15 seconds for two hours, a warning in
  * the workers log): the database's schema behind (or edited, or ahead of) the platform's migrations, and controller
- * loops failing the same way. Said at the top of Work and System; nothing when all is well or the runtime is not read.
+ * loops failing the same way; and what keeps work from being taken (W-31 3.5): a host the controller reports offline
+ * (30 seconds after its last poll) and an executor that cannot take work now, with the jobs left with none. Said at the
+ * top of Work and System; nothing when all is well or the runtime is not read.
  */
 export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgress | undefined; now: number }) {
   if (!progress) return null
@@ -23,6 +26,14 @@ export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgre
   } else if (schema.state === 'unknown') {
     lines.push({ key: 'schema', text: `The agent runtime's database schema could not be read${schema.reason ? `: ${schema.reason}` : '.'}` })
   }
+  for (const h of progress.hosts) {
+    if (h.reported_offline === true) lines.push({ key: `host-${h.host_id}`, text: offlineWords(h, now) })
+  }
+  for (const e of progress.executors ?? []) {
+    if (e.available === false) lines.push({ key: `executor-${e.executor}`, text: `${e.executor} is unavailable: ${e.why}.` })
+  }
+  const unserved = unservedWords(progress.jobs_without_executor ?? [])
+  if (unserved) lines.push({ key: 'jobs', text: unserved })
   for (const a of alerts) {
     lines.push({ key: `loop-${a.loop}`, text: `The controller's ${a.loop} has failed the same way since ${ago(a.since, now)}.`,
       detail: a.error })

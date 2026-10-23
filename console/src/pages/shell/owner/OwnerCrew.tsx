@@ -1,9 +1,9 @@
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useQueries } from '@tanstack/react-query'
-import { fetchRuntimeTaskDetail, type RuntimeAttempt, type RuntimeHost, type RuntimeMission, type RuntimeTaskDetail } from '@/api/agentRuntime'
+import { fetchRuntimeTaskDetail, type RuntimeAttempt, type RuntimeExecutor, type RuntimeHost, type RuntimeMission, type RuntimeTaskDetail } from '@/api/agentRuntime'
 import { AttemptActionLine } from './AttemptActionLine'
 import { activityCounts, stalledWords } from './attemptActivity'
-import { crewRows, duration, firstLine, unpersistedWords } from './crewModel'
+import { crewRows, duration, executorWords, firstLine, offeredWords, unpersistedWords, unservedWords } from './crewModel'
 import { Card, Dot } from './OwnerParts'
 import { ago, type Tone } from './ownerModel'
 
@@ -34,8 +34,10 @@ export type CrewRead = 'ok' | 'loading' | { error: string }
  * platform's runtime is shown: threads on the Mac (the coordinator and the reviews it runs) work
  * outside it.
  */
-export function OwnerCrew({ hosts, live, missions, now, read }: {
+export function OwnerCrew({ hosts, live, missions, now, read, executors, unserved = [] }: {
   hosts: RuntimeHost[]; live: RuntimeAttempt[]; missions: RuntimeMission[]; now: number; read: CrewRead
+  /** What each host offers and which executors can take work (W-31 3.5); unset by a platform before it. */
+  executors?: RuntimeExecutor[]; unserved?: string[]
 }) {
   const goals = new Map(missions.map(m => [m.mission_id, firstLine(m.title || m.goal)]))
   const listed = new Map<string, { title: string; role: string }>()
@@ -75,6 +77,7 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
           {/* An attempt on a lost host, or maybe stuck, is not counted as running (T24). */}
           <span className="text-xs font-semibold">{row.attempts.length ? activityCounts(row.attempts) : 'Idle'}{row.lost.length > 0 && ` · ${row.lost.length} lost`}</span>
         </div>
+        {h && offeredWords(h) && <span className="min-w-0 [overflow-wrap:anywhere] text-xs text-muted-foreground">{offeredWords(h)}</span>}
         {row.attempts.map(a => {
           const n = name(a)
           const late = a.heartbeat_age_s != null && a.heartbeat_age_s > LATE_HEARTBEAT_S
@@ -103,6 +106,12 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
         })}
       </li>
     })}</ul>}
+    {read === 'ok' && executors && executors.length > 0 && <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">Executors</span>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{executors.map(e => <li key={e.executor}
+        className={`min-w-0 [overflow-wrap:anywhere] text-xs ${e.available === false ? 'font-semibold text-[var(--color-danger)]' : 'text-muted-foreground'}`}>{executorWords(e)}</li>)}</ul>
+      {unserved.length > 0 && <span className="min-w-0 [overflow-wrap:anywhere] text-xs font-semibold text-[var(--color-danger)]">{unservedWords(unserved)}</span>}
+    </div>}
     <p className="m-0 text-xs text-muted-foreground">Threads on the Mac (the coordinator and the reviews it runs) work outside the runtime and are not shown.</p>
   </Card>
 }

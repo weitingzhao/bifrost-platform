@@ -1,4 +1,5 @@
 import { DenseTag } from '@bifrost/ui'
+import type { RuntimeHost } from '@/api/agentRuntime'
 import { formatSeconds, notMonitoredVendors, type AgentHost } from '@/api/agentThreads'
 
 /** One reporting machine: heartbeat age, lost or alive, and vendors that are not monitored. */
@@ -24,6 +25,25 @@ export function HostHeartbeatRow({ host }: { host: AgentHost }) {
         {never ? 'no heartbeat yet' : `heartbeat ${formatSeconds(host.age_seconds)} ago`}
       </span>
       {dark.length > 0 ? <DenseTag variant="warning">{`not monitored: ${dark.join(', ')}`}</DenseTag> : null}
+    </li>
+  )
+}
+
+/** An agent host the runtime reports offline (W-31 3.5), as the row above shows a reporting machine: when it last polled. */
+export function RuntimeHostRow({ host }: { host: RuntimeHost }) {
+  const never = !host.last_poll_at
+  return (
+    <li
+      className="flex w-full min-w-0 list-none flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5"
+      data-agent-host={host.host_id}
+      data-agent-host-status={never ? 'never_polled' : 'offline'}
+    >
+      <span className="truncate font-mono text-sm text-foreground">{host.host_id}</span>
+      <DenseTag variant="danger">{never ? 'Never polled' : 'Offline'}</DenseTag>
+      <span className="text-[var(--text-dense-caption)] text-muted-foreground">
+        {never ? 'no poll yet' : `last poll ${formatSeconds(host.poll_age_s ?? 0)} ago`}
+      </span>
+      {host.live_attempts ? <DenseTag variant="warning">{`${host.live_attempts} attempt${host.live_attempts === 1 ? '' : 's'} on it`}</DenseTag> : null}
     </li>
   )
 }

@@ -33,9 +33,21 @@ export type RuntimeMission = {
   since: string; deadline_at: string; eta: MissionEta; next_steps: unknown[]
   waiting_on: string; waiting_roles: string[]; tasks: RuntimeTask[]
 }
+/** A tool a host's latest claim offered (W-31 3.5; store/presence.go). */
+export type RuntimeOffer = { executor: string; provider: string; model: string }
 export type RuntimeHost = {
   host_id: string; state: string; online?: boolean; poll_age_s?: number; last_poll_at: string; live_attempts?: number
+  /**
+   * What its latest claim offered, null while none is recorded, and whether the controller reports it offline (not online,
+   * active, no stop or drain) or its disk low (W-31 3.5). Unset by a platform before 3.5.
+   */
+  offered?: RuntimeOffer[] | null; offered_at?: string; reported_offline?: boolean; disk_low?: boolean
 }
+/**
+ * An executor some job's candidate names (W-31 3.5; store/presence.go): available, or not with why, or not known (null)
+ * while a host that could take work has not said what it offers; the hosts that offer it and its jobs.
+ */
+export type RuntimeExecutor = { executor: string; available: boolean | null; why: string; hosts: string[]; jobs: string[] }
 export type RuntimeAttempt = {
   attempt_id: string; attempt_no?: number; task_id: string; mission_id: string; host_id: string; executor: string
   model: string; state: string; elapsed_s?: number; heartbeat_age_s?: number; status: string; reason: string
@@ -72,6 +84,8 @@ export type RuntimeProgress = {
   /** Unset by a platform before owner_next. */
   owner_next?: OwnerNext
   schema: RuntimeSchema; controller_alerts: RuntimeLoopAlert[]
+  /** The executors and the jobs no executor can take now (W-31 3.5); unset by a platform before it. */
+  executors?: RuntimeExecutor[]; jobs_without_executor?: string[]
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
   controls: RuntimeRecord[]; plan: unknown[]
@@ -156,9 +170,10 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
   return {
     owner_next: parseOwnerNext(r.owner_next),
     as_of_event_id: number(r.as_of_event_id), generated_at: text(r.generated_at),
-    hosts: records(r.hosts).map(h => ({ host_id: text(h.host_id), state: text(h.state),
-      online: typeof h.online === 'boolean' ? h.online : undefined, poll_age_s: number(h.poll_age_s),
-      last_poll_at: text(h.last_poll_at), live_attempts: number(h.live_attempts) })),
+    hosts: records(r.hosts).map(parseRuntimeHost),
+    ...(Array.isArray(r.executors) ? { executors: records(r.executors).map(e => ({ executor: text(e.executor),
+      available: typeof e.available === 'boolean' ? e.available : null, why: text(e.why), hosts: strings(e.hosts), jobs: strings(e.jobs) })) } : {}),
+    ...(Array.isArray(r.jobs_without_executor) ? { jobs_without_executor: strings(r.jobs_without_executor) } : {}),
     live: records(r.live).map(parseRuntimeAttempt),
     needs_you: { count: number(needs.count), items: Array.isArray(needs.items) ? needs.items : [],
       truncated: typeof needs.truncated === 'boolean' ? needs.truncated : undefined },
@@ -172,6 +187,20 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     schema: parseRuntimeSchema(r.schema),
     controller_alerts: records(r.controller_alerts).map(a => ({ loop: text(a.loop), since: text(a.since), error: text(a.error) })),
   }
+}
+export function parseRuntimeHost(v: unknown): RuntimeHost {
+  const h = record(v)
+  const host: RuntimeHost = { host_id: text(h.host_id), state: text(h.state),
+    online: typeof h.online === 'boolean' ? h.online : undefined, poll_age_s: number(h.poll_age_s),
+    last_poll_at: text(h.last_poll_at), live_attempts: number(h.live_attempts) }
+  if (h.offered === null) host.offered = null
+  else if (Array.isArray(h.offered)) {
+    host.offered = records(h.offered).map(o => ({ executor: text(o.executor), provider: text(o.provider), model: text(o.model) }))
+  }
+  if (text(h.offered_at)) host.offered_at = text(h.offered_at)
+  if (typeof h.reported_offline === 'boolean') host.reported_offline = h.reported_offline
+  if (typeof h.disk_low === 'boolean') host.disk_low = h.disk_low
+  return host
 }
 const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const
 export function parseRuntimeSchema(v: unknown): RuntimeSchema {
