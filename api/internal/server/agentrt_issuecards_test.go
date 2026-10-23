@@ -15,7 +15,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // W-31 BI-1 slice 2 on the real question store and a real database
@@ -109,7 +108,7 @@ func TestIssueCardsOnTheQuestionStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := chi.NewRouter()
-	r.Route("/api/v1", func(r chi.Router) { questions.Mount(r, auth, rt.svc) })
+	r.Route("/api/v1", func(r chi.Router) { (&Server{auth: auth, questionRuntime: rt}).mountQuestions(r) })
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	for _, caller := range []string{"viewer", "reporter", "trade-satellite"} {
@@ -153,7 +152,7 @@ func TestIssueCardsOnTheQuestionStore(t *testing.T) {
 	}
 	for _, q := range cards {
 		got, ok, err := rt.svc.Lookup(q)
-		if err != nil || !ok || got.WorkID != id || !questions.BusinessIssueCard(got) || got.Link != store.IssuePageLink(id) {
+		if err != nil || !ok || got.WorkID != id || got.Link != store.IssuePageLink(id) || got.AllowText {
 			t.Fatalf("card %s: %+v %v %v", q, got, ok, err)
 		}
 	}
@@ -166,7 +165,17 @@ func TestIssueCardsOnTheQuestionStore(t *testing.T) {
 	if level.Code != http.StatusOK {
 		t.Fatalf("open cards: %v", level)
 	}
-	open := level.Body.(map[string]any)["questions"].([]questions.Question)
+	raw, _ := json.Marshal(level.Body)
+	var listed struct {
+		Questions []struct {
+			ID, Title string
+			WorkID    string `json:"work_id"`
+		} `json:"questions"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatal(err)
+	}
+	open := listed.Questions
 	if len(open) != 1 || open[0].Title != id+" · priority, step 2" || open[0].WorkID != id {
 		t.Fatalf("open after the first step: %+v", open)
 	}
