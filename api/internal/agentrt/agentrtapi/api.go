@@ -377,6 +377,12 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// What the host offers is recorded once a request too, when it changed
+	// (W-31 3.5): the controller judges the executors from it.
+	if _, err := store.RecordHostOffered(ctx, a.DB, req.HostID, cr.Tools); err != nil {
+		a.fail(w, err)
+		return
+	}
 	for {
 		if r.Context().Err() != nil {
 			return // the client went away: start no poll for it (one running may still lease it a task)

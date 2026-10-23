@@ -452,7 +452,8 @@ func TestHostsAndControlEdges(t *testing.T) {
 	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '29 seconds' WHERE host_id = 'h1'`,
 		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '31 seconds' WHERE host_id = 'h2'`)
 	_, hosts := call(t, s, "viewer", "GET", "hosts", nil)
-	if h1, h2 := hostOf(t, hosts, "h1"), hostOf(t, hosts, "h2"); h1["online"] != true || h2["online"] != false {
+	if h1, h2 := hostOf(t, hosts, "h1"), hostOf(t, hosts, "h2"); h1["online"] != true || h2["online"] != false ||
+		h1["reported_offline"] != false || h2["reported_offline"] != true {
 		t.Fatalf("29 and 31 seconds since the last poll: %v %v", h1, h2)
 	}
 	body := map[string]any{"idempotency_key": "k", "scope": "global", "kind": "pause", "reason": "one"}

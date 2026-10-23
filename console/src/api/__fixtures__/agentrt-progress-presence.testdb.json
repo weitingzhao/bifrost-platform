@@ -1,0 +1,248 @@
+{
+  "as_of_event_id": 20,
+  "controller_alerts": [],
+  "controls": [],
+  "executors": [
+    {
+      "executor": "exec:claude",
+      "available": false,
+      "why": "the claude account's pools cool down until 2026-10-23T21:08:55Z",
+      "hosts": [
+        "h1"
+      ],
+      "jobs": [
+        "chief_of_staff",
+        "implementer",
+        "planner",
+        "reviewer",
+        "verifier"
+      ]
+    },
+    {
+      "executor": "exec:codex",
+      "available": false,
+      "why": "host h2 offers it but has not polled since 2026-10-23T20:08:10Z",
+      "hosts": [],
+      "jobs": [
+        "chief_of_staff",
+        "implementer",
+        "planner",
+        "reviewer",
+        "verifier"
+      ]
+    }
+  ],
+  "generated_at": "2026-10-23T20:08:55.248606Z",
+  "hosts": [
+    {
+      "state": "active",
+      "online": true,
+      "host_id": "h1",
+      "offered": [
+        {
+          "model": "opus",
+          "executor": "exec:claude",
+          "provider": "anthropic"
+        }
+      ],
+      "version": 0,
+      "actor_id": "host:h1",
+      "controls": [],
+      "disk_low": false,
+      "host_kind": "dev",
+      "offered_at": "2026-10-23T20:08:55.234808+00:00",
+      "poll_age_s": 0,
+      "tools_json": {},
+      "last_poll_at": "2026-10-23T20:08:55.235235+00:00",
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null,
+      "reported_offline": false
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h2",
+      "offered": [
+        {
+          "model": "gpt-x",
+          "executor": "exec:codex",
+          "provider": "openai"
+        }
+      ],
+      "version": 0,
+      "actor_id": "host:h2",
+      "controls": [],
+      "disk_low": false,
+      "host_kind": "dev",
+      "offered_at": "2026-10-23T20:08:55.235643+00:00",
+      "poll_age_s": 45,
+      "tools_json": {},
+      "last_poll_at": "2026-10-23T20:08:10.236185+00:00",
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null,
+      "reported_offline": true
+    }
+  ],
+  "jobs_without_executor": [
+    "chief_of_staff",
+    "implementer",
+    "planner",
+    "reviewer",
+    "verifier"
+  ],
+  "live": [],
+  "needs_you": {
+    "count": 0,
+    "items": [],
+    "truncated": false
+  },
+  "owner_next": {
+    "candidates": [],
+    "reason": "no open goal's next step is yours",
+    "state": "none"
+  },
+  "plan": [
+    {
+      "count": {
+        "done": 0,
+        "manual": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 3
+      },
+      "items": [
+        {
+          "active_steps": [],
+          "count": {
+            "done": 0,
+            "manual": 0,
+            "state": "planned",
+            "stopped": 0,
+            "total": 3
+          },
+          "label": "2.1",
+          "plan_node_id": "R2:2.1",
+          "title": "data layer"
+        }
+      ],
+      "kind": "round",
+      "plan_node_id": "R2",
+      "title": "round 2"
+    }
+  ],
+  "recent": {
+    "failed_attempts": [],
+    "tasks": []
+  },
+  "schema": {
+    "state": "current",
+    "applied": [
+      {
+        "id": 1,
+        "sha256": "8a0f7c87dddbf46c8a3167116b65c114de6aafc864440fd398edaa7891cb3d82"
+      },
+      {
+        "id": 2,
+        "sha256": "3ab3c249660fc151ff27798155685897d8aab35636405041667121426db513d3"
+      },
+      {
+        "id": 3,
+        "sha256": "c7b0195afe9bd9512b3da82b254de504e85850217f74f4cee6c0af82ef42c2dd"
+      },
+      {
+        "id": 4,
+        "sha256": "f78df73fd4727a337a5c04766bf23193530f856794e822402b1979dc2b64e78a"
+      },
+      {
+        "id": 5,
+        "sha256": "f455909bbffe42f61c1b1e12c7a2d943c1ee026efeb2f8f899bba980615cf34d"
+      },
+      {
+        "id": 6,
+        "sha256": "ba55f34da37a78c584e95e18ea03a9e34524e3186c99b8cd88956f3ff5f855d7"
+      },
+      {
+        "id": 7,
+        "sha256": "8be8e9bc90d053b233b1288205d29d9ea12fe80ab58413db212fb66f377a0447"
+      },
+      {
+        "id": 8,
+        "sha256": "b0d36b7cc6a289c4f7f0429c5cc7210006b8f2152fea2c39cdb3fdeee7c9221d"
+      },
+      {
+        "id": 9,
+        "sha256": "5ed1426c921af55b7de2b730c16547d872b94273859b775df2d54b21f0bb914a"
+      }
+    ]
+  },
+  "work": {
+    "missions": [
+      {
+        "deadline_at": "2026-10-30T20:08:55Z",
+        "eta": {
+          "reason": "the mission is proposed: a wait for a decision has no usual time",
+          "state": "unknown"
+        },
+        "goal": "test",
+        "mission_id": "M-1",
+        "next_steps": [
+          {
+            "owner_step": false,
+            "plan_node_id": "R2:2.1-1",
+            "title": "s1"
+          },
+          {
+            "owner_step": false,
+            "plan_node_id": "R2:2.1-3",
+            "title": "s3"
+          }
+        ],
+        "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
+        "since": "2026-10-23T20:08:55.223401Z",
+        "slices": {
+          "done": 0,
+          "manual": 0,
+          "state": "planned",
+          "stopped": 0,
+          "total": 2
+        },
+        "state": "proposed",
+        "status": "waiting_owner",
+        "tasks": [],
+        "title": "M-1",
+        "waiting_on": "owner",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      },
+      {
+        "deadline_at": "2026-10-30T20:08:55Z",
+        "eta": {
+          "reason": "the mission is proposed: a wait for a decision has no usual time",
+          "state": "unknown"
+        },
+        "goal": "test",
+        "mission_id": "M-2",
+        "next_steps": [],
+        "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
+        "since": "2026-10-23T20:08:55.225417Z",
+        "slices": {
+          "done": 0,
+          "manual": 0,
+          "state": "planned",
+          "stopped": 0,
+          "total": 0
+        },
+        "state": "proposed",
+        "status": "waiting_owner",
+        "tasks": [],
+        "title": "M-2",
+        "waiting_on": "owner",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      }
+    ],
+    "truncated": false
+  }
+}

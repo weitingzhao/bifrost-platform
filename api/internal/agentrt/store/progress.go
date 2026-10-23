@@ -258,7 +258,9 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	hosts, err := hostsView(ctx, tx, now)
+	// The hosts, and the executors and jobs presence judges from them
+	// (presence.go), at the projection's moment.
+	pr, err := readPresence(ctx, tx, now)
 	if err != nil {
 		return nil, err
 	}
@@ -280,8 +282,8 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 		return nil, err
 	}
 	return map[string]any{"generated_at": now.UTC().Format(time.RFC3339Nano), "as_of_event_id": asOf, "needs_you": needs,
-		"work": work, "owner_next": next, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(hosts), "controls": rawJSON(controls), "recent": recent,
-		"controller_alerts": alerts, "schema": schema}, nil
+		"work": work, "owner_next": next, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(pr.doc), "controls": rawJSON(controls), "recent": recent,
+		"controller_alerts": alerts, "schema": schema, "executors": pr.executors, "jobs_without_executor": pr.unserved}, nil
 }
 
 // rawJSON is a document the database built, passed through as it is.
@@ -732,28 +734,6 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 		out = append(out, doc)
 	}
 	return out, nil
-}
-
-// HostsSQL is the hosts document at the moment the SQL expression now names,
-// with $1 HostLostAfter in seconds: GET /hosts and the projection both read
-// it, so a host is online in one exactly when it is in the other (a host is
-// lost past HostLostAfter, as TaskStatus has it).
-func HostsSQL(now string) string {
-	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
-	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
-	    'online', COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false),
-	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
-	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
-	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb))
-	  ORDER BY h.host_id), '[]'::jsonb)
-	  FROM agentrt.host h`
-}
-
-// hostsView is GET /hosts's document, at the projection's moment.
-func hostsView(ctx context.Context, tx pgx.Tx, now time.Time) ([]byte, error) {
-	var doc []byte
-	err := tx.QueryRow(ctx, HostsSQL("$2::timestamptz"), HostLostAfter.Seconds(), now).Scan(&doc)
-	return doc, err
 }
 
 // recentView is the last ended tasks, by the event that ended them, and the

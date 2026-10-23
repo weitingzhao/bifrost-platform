@@ -156,8 +156,10 @@ func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
 // listHosts is GET /hosts: every host with how long since it last polled,
 // whether that counts as online (v5 §5.2: online is not stored, it is read
 // from last_poll_at; W-31 3.5: lost past 30 seconds, store.HostLostAfter),
-// its live attempts and the controls on it. The document is the progress
-// projection's, at the statement's moment.
+// its live attempts, the controls on it, what its latest claim offered,
+// whether its disk is low and whether the controller reports it offline
+// (store.HostsSQL). The document is the progress projection's, at the
+// statement's moment.
 func (a *API) listHosts(w http.ResponseWriter, r *http.Request) {
 	a.list(w, r, `SELECT jsonb_build_object('hosts', (`+store.HostsSQL("statement_timestamp()")+`))`, store.HostLostAfter.Seconds())
 }

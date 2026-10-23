@@ -82,6 +82,10 @@ type Controller struct {
 	// deployments are of: the architecture table's gates run there
 	// (Gates, TD-397). Either empty, no gate runs.
 	Env, GateRepo string
+	// WatchPresence has the controller watch the hosts and executors every
+	// PresenceEvery (presence.go, W-31 3.5); the server sets it, and a test
+	// that runs Start without it leaves the loop off.
+	WatchPresence bool
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
@@ -591,6 +595,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	if c.Sources.MainResults != nil {
 		c.every(ctx, &wg, "agentrt-landings", LandingsEvery, func() error {
 			_, err := c.Landings(ctx)
+			return err
+		})
+	}
+	if c.WatchPresence {
+		c.every(ctx, &wg, "agentrt-presence", PresenceEvery, func() error {
+			_, err := c.Presence(ctx)
 			return err
 		})
 	}

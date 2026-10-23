@@ -111,7 +111,12 @@ var bodies = map[string][]field{
 	// on the controller stream: line_digest names the loop, the artifact
 	// holds its error; TD-411, loopalert.go), or a host whose claim reported
 	// free disk below the floor (disk_low, source controller, on the host's
-	// stream: the artifact says how much and the floor; TD-415, hostdisk.go).
+	// stream: the artifact says how much and the floor; TD-415, hostdisk.go),
+	// or a host that stopped polling (host_offline, source controller, on the
+	// host's stream) or an executor that cannot take work now
+	// (executor_unavailable, source controller, on the controller stream:
+	// line_digest names the executor); the artifact says when and why
+	// (W-31 3.5, presencepass.go).
 	// Every rule but repeated_failure
 	// names its artifact (checkBody), but an approval claim in a plan note
 	// (source plan_note, review 489 B3), whose text is in the note it is
@@ -155,7 +160,10 @@ var bodies = map[string][]field{
 		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
-		{"card", kAny, true}},
+		{"card", kAny, true},
+		// offered: on a host's stream, what its claim offers, when that
+		// changed (executor, provider, model each; presence.go, W-31 3.5).
+		{"offered", kAny, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -424,11 +432,12 @@ var fieldValues = map[string]map[string]value{
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
-	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low"),
+	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
+		"host_offline", "executor_unavailable"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
 			"plan_note", "assessment"),
 		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
-			controllerFailingPhrase, diskLowPhrase)...),
+			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},

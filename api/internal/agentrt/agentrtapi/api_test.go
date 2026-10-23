@@ -420,6 +420,19 @@ func TestAgentdPath(t *testing.T) {
 	if code, out := call(t, s, "agentd:h1", "POST", "claim", claimBody); code != http.StatusNoContent {
 		t.Fatalf("an empty queue answered %d %v", code, out)
 	}
+	// What h1 offers is recorded once, whatever the claims (W-31 3.5), and
+	// GET /hosts says it.
+	_, hosts := call(t, s, "viewer", "GET", "hosts", nil)
+	h1 := hostOf(t, hosts, "h1")
+	if offered, _ := h1["offered"].([]any); len(offered) != 1 || offered[0].(map[string]any)["executor"] != "exec:cursor" ||
+		h1["offered_at"] == nil || h1["reported_offline"] != false {
+		t.Fatalf("h1: %v", h1)
+	}
+	var notes int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'host:h1' AND body_json ? 'offered'`).Scan(&notes))
+	if notes != 1 {
+		t.Fatalf("%d records of what h1 offers", notes)
+	}
 }
 
 // With no database the routes answer 503 and nothing else happens.
