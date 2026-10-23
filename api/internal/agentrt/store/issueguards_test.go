@@ -65,6 +65,9 @@ func (iw *issueWorld) textOf(t *testing.T, issue, kind string) int64 {
 //	D  her issue, declined by the Owner (closed)
 //	E  her issue, open, untaken
 //	P  her agent's own proposal, briefed (askP open)
+//	F  her issue, merged into G (both hers, never taken)
+//	H  her issue, asked a needs_info before any brief (askH open, no B)
+//	and her agent's client served up to 100.5
 func TestIssueGuardMatrix(t *testing.T) {
 	t.Parallel()
 	iw := newIssueWorld(t)
@@ -86,6 +89,17 @@ func TestIssueGuardMatrix(t *testing.T) {
 	ok(t, err)
 	P := prop["issue_id"].(string)
 	askP := iw.brief(t, P, "brief p")
+	F, G, H := iw.submit(t, "f"), iw.submit(t, "g"), iw.submit(t, "h")
+	_, err = store.MergeIssues(ctx, iw.rt, iw.crew, iw.key(), store.IssueMerge{From: F, Into: G, FromVersion: iw.state(t, F).Version,
+		IntoVersion: iw.state(t, G).Version})
+	ok(t, err)
+	needs, err := store.Reply(ctx, iw.rt, iw.crew, iw.key(), store.IssueReply{IssueID: H, ExpectedVersion: iw.state(t, H).Version,
+		Purpose: store.AskNeedsInfo, Text: "which page was it?"})
+	ok(t, err)
+	askH := inum(t, needs, "ask_id")
+	ok(t, store.InTx(ctx, iw.rt, func(tx pgx.Tx) error {
+		return store.MarkServed(ctx, tx, "agent:dots-p2", store.EventCursor{TxID: 100, EventID: 5})
+	}))
 	bB, bC := iw.state(t, B).BriefSHA256, iw.state(t, C)
 	textB, wordsB, briefC := iw.textOf(t, B, "brief"), iw.textOf(t, B, "words"), iw.textOf(t, C, "brief")
 	notBrief := iw.report(t, "implement")
@@ -155,6 +169,10 @@ func TestIssueGuardMatrix(t *testing.T) {
 			[]string{upd(E, "state = 'closed', conclusion = 'merged', duplicate_of = '"+D+"'")}}}, "merged into an open issue"},
 		{"merged into a taken issue", []guardStep{{ie(E, "issue_merged", crew, "", map[string]any{"into": A}),
 			[]string{upd(E, "state = 'closed', conclusion = 'merged', duplicate_of = '"+A+"'")}}}, "only issues no work was taken for"},
+		{"a merged issue reopened", []guardStep{{ie(F, "issue_state_changed", crew, "", map[string]any{"change": "reopen"}),
+			[]string{upd(F, "state = 'clarifying', conclusion = NULL, duplicate_of = NULL")}}}, "and stays merged"},
+		{"a merge moved to another issue", []guardStep{{ie(F, "issue_merged", crew, "", map[string]any{"into": H}),
+			[]string{upd(F, "duplicate_of = '"+H+"'")}}}, "only a merge sets duplicate_of, once"},
 		// guard_issue_text
 		{"a text by another writer", []guardStep{{ie(B, "issue_added", dots, "", map[string]any{"channel": "intake_local",
 			"text_ids": []any{int64(9703)}}), []string{textSQL(9703, B, "reading", "", "intake_local", "r", crew)}}}, "written by the writer of its event"},
@@ -211,6 +229,22 @@ func TestIssueGuardMatrix(t *testing.T) {
 			"verdict": "withdrawn", "channel": "intake_local", "person": "person:p2"}), []string{textSQL(9701, A, "response", "person:p2",
 			"intake_local", "never mind", dots), `UPDATE agentrt.issue_ask SET verdict = 'withdrawn', words_text_id = 9701, answered_by_actor_id = '` +
 			dots + `', answer_channel = 'intake_local', answered_at = now() WHERE issue_ask_id = ` + itoa(askT)}}}, "withdrawn only before it is taken"},
+		{"a needs_info without the brief there is", []guardStep{{ie(B, "issue_asked", crew, "", map[string]any{"text_id": textB,
+			"ask_id": 9731, "purpose": "needs_info"}), []string{fmt.Sprintf(`INSERT INTO agentrt.issue_ask (issue_ask_id, issue_id, person,
+			purpose, bound_text_id, bound_sha256) OVERRIDING SYSTEM VALUE VALUES (9731, '%s', 'person:p2', 'needs_info', %d, '%s')`, B, textB, bB)}}},
+			"names its current brief"},
+		{"an answer on a channel that is not her voice", []guardStep{{ie(B, "issue_answered", crew, "", answered(askB, "person:p2", "owner_relay")),
+			[]string{textSQL(9701, B, "response", "person:p2", "owner_relay", "yes", crew),
+				`UPDATE agentrt.issue_ask SET verdict = 'confirmed', words_text_id = 9701, answered_by_actor_id = '` + crew +
+					`', answer_channel = 'thread', answered_at = now() WHERE issue_ask_id = ` + itoa(askB)}}}, "does not answer for person:p2 on channel thread"},
+		{"an answer after the brief changed under the ask", []guardStep{
+			{ie(H, "issue_brief_drafted", crew, "", map[string]any{"text_id": 9732, "brief_sha256": zeros, "ask_id": 1}),
+				[]string{textSQL(9732, H, "brief", "", "thread", "a brief", crew), upd(H, "brief_text_id = 9732")}},
+			{ie(H, "issue_answered", dots, "", map[string]any{"ask_id": askH, "text_ids": []any{int64(9701)}, "verdict": "answered",
+				"channel": "intake_local", "person": "person:p2"}), []string{textSQL(9701, H, "response", "person:p2", "intake_local", "the list", dots),
+				`UPDATE agentrt.issue_ask SET verdict = 'answered', words_text_id = 9701, answered_by_actor_id = '` + dots +
+					`', answer_channel = 'intake_local', answered_at = now() WHERE issue_ask_id = ` + itoa(askH)}}},
+			"was asked of another brief than the current one"},
 		// guard_issue_work
 		{"work of an earlier brief", []guardStep{{ie(C, "issue_taken", crew, "M-1", map[string]any{"commitment": 1, "brief_sha256": zeros,
 			"rule_id": "intake-gates", "rule_version": 1, "risk_class": "small", "mission_state": "active", "live": 0, "limit": 1}),
@@ -293,6 +327,10 @@ func TestIssueGuardMatrix(t *testing.T) {
 		{"a token renamed", []guardStep{{store.Event{Stream: store.IntakeStream(dots), Type: "intake_client_set", Actor: "owner",
 			Body: map[string]any{"change": "client", "intake_client_id": dots}}, []string{`UPDATE agentrt.intake_client SET token_name =
 			'intake:other' WHERE intake_client_id = '` + dots + `'`}}}, "keeps its token name"},
+		{"served moved back beside a setting", []guardStep{{store.Event{Stream: store.IntakeStream(dots), Type: "intake_client_set",
+			Actor: "owner", Body: map[string]any{"change": "client", "intake_client_id": dots}}, []string{`UPDATE agentrt.intake_client SET
+			products = '{screening,finance}', served_txid = 100, served_event = 1 WHERE intake_client_id = '` + dots + `'`}}},
+			"served cursor only moves forward"},
 		{"settings by an acknowledgement", []guardStep{{store.Event{Stream: store.IntakeStream(dots), Type: "intake_acked", Actor: dots,
 			Body: map[string]any{"intake_client_id": dots, "cursor": "1.1"}}, []string{`UPDATE agentrt.intake_client SET daily_adds = 5
 			WHERE intake_client_id = '` + dots + `'`}}}, "changes an intake client's settings"},
