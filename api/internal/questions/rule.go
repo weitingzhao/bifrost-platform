@@ -45,7 +45,8 @@ func (s *Service) RuleCards(requester string) ([]Question, error) {
 // AnswerAsRule answers question ref of requester with option, as rule, while
 // the rule holds (until) and ctx has not ended: both are checked when the
 // answer is written (review 442 A2, B2). It refuses a question another
-// requester asked and one that is not open. The option is the one the
+// requester asked, one that is not open, and a business issue's card, which
+// is the Owner's alone (issuecard.go). The option is the one the
 // question recommends, or, with why (TD-393: the runtime's option that
 // changes nothing, when the card recommends none or its AI assessment
 // differs), another of the question's options; why is kept as the answer's
@@ -73,6 +74,9 @@ func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option
 			return applied{res: fail(http.StatusForbidden, "a rule answers only its own runtime's questions", nil)}
 		case q.Status != StatusOpen:
 			return applied{res: fail(http.StatusConflict, "not open", map[string]any{"status": q.Status})}
+		case q.businessIssueCard():
+			// The Owner's alone, with or without why (issuecard.go).
+			return applied{res: fail(http.StatusConflict, issueCardNoRule, nil)}
 		case option == q.Recommended && option != "":
 		case strings.TrimSpace(why) == "":
 			return applied{res: fail(http.StatusConflict, "a rule answers with the option the question recommends, or says why it takes another", nil)}
