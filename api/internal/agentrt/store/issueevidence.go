@@ -283,12 +283,12 @@ func RecordOwnerEvidence(ctx context.Context, db DB, w Writer, key string, e Own
 		// again, unless another of its cards is open (issuecarddecide.go).
 		state, waiting := r.State, r.WaitingOn
 		if card {
-			s, ok, err := afterOwnerCard(ctx, tx, r, e.QuestionID)
+			s, wo, ok, err := afterOwnerCard(ctx, tx, r, e.QuestionID)
 			if err != nil {
 				return nil, err
 			}
 			if ok {
-				state, waiting = s, "crew"
+				state, waiting = s, wo
 			}
 		}
 		value := r.Priority

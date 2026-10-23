@@ -227,41 +227,46 @@ func cardCurrent(ctx context.Context, db DB, c *issueCardRec) (bool, error) {
 }
 
 // afterOwnerCard is the state an issue waiting on the Owner shows once its
-// card question is settled: unchanged while another of its cards is open;
-// otherwise the step its evidence has reached (§4.3's table; the state only
-// shows where it is).
-func afterOwnerCard(ctx context.Context, tx pgx.Tx, r issueRow, question string) (string, bool, error) {
+// card question is settled, and whom it waits on: unchanged while another of
+// its cards is open; otherwise the step its evidence has reached (§4.3's
+// table; the state only shows where it is). The reads apply the same rule
+// (issueshown.go).
+func afterOwnerCard(ctx context.Context, tx pgx.Tx, r issueRow, question string) (string, string, bool, error) {
 	if r.State != "owner_deciding" {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	recs, err := issueCardRecords(ctx, tx, r.ID)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	for _, c := range recs {
 		if !c.settled && c.question != question {
-			return "", false, nil
+			return "", "", false, nil
 		}
 	}
 	if !r.BriefConfirmed {
-		return "clarifying", true, nil
+		asked, err := openAsk(ctx, tx, r.ID, AskConfirmBrief)
+		if err != nil || !asked {
+			return "clarifying", "crew", err == nil, err
+		}
+		return "clarifying", r.waitsOn(), true, nil
 	}
 	var classified, reviewed bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.issue_check WHERE issue_id = $1 AND check_kind = 'classification'
 	    AND brief_sha256 = $2),
 	  EXISTS (SELECT 1 FROM agentrt.issue_check WHERE issue_id = $1 AND check_kind = 'review' AND brief_sha256 = $2 AND design_sha256 = $3)`,
 		r.ID, r.briefSHA, r.designSHA).Scan(&classified, &reviewed); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	switch {
 	case !classified:
-		return "brief_confirmed", true, nil
+		return "brief_confirmed", "crew", true, nil
 	case r.designText == 0:
-		return "classified", true, nil
+		return "classified", "crew", true, nil
 	case !reviewed:
-		return "designing", true, nil
+		return "designing", "crew", true, nil
 	}
-	return "in_review", true, nil
+	return "in_review", "crew", true, nil
 }
 
 // isRuleChannel says whether a card was answered by a rule, which never

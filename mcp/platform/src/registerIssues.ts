@@ -129,7 +129,7 @@ export function registerIssueTools(reg: McpServer['tool']): void {
 
   reg(
     'close_issue',
-    `Business issue: close it with a conclusion and the ask it rests on, by the close predicate (resolved and partial need her answer to the newest trial and the seat's latest check supporting it). ${ISSUE_KEY_RULE}`,
+    `Business issue: close it with a conclusion and the ask it rests on, by the close predicate (resolved and partial need her answer to the newest trial and the seat's latest check supporting it). declined: a person's issue once the Owner answered Decline on its priority card for the current brief (list_issues shows it as next for the crew; no ask needed), or on her own withdrawal (that ask); the crew's own proposal with a reason. ${ISSUE_KEY_RULE}`,
     CLOSE_INPUT,
     async (input) => jsonResult(await w('close_issue')(input)),
   )

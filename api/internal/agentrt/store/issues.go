@@ -414,6 +414,10 @@ func written(ctx context.Context, tx pgx.Tx, id string, extra map[string]any) (m
 		return nil, err
 	}
 	out := r.Doc()
+	// As every read shows it (issueshown.go).
+	if out["state"], out["waiting_on"], err = shownOf(ctx, tx, id); err != nil {
+		return nil, err
+	}
 	for k, v := range extra {
 		out[k] = v
 	}

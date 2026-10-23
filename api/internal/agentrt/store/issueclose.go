@@ -62,8 +62,11 @@ func latestAsk(ctx context.Context, tx pgx.Tx, issue string) (askRow, bool, erro
 //     classification of the current brief, the intake-gates rule in force;
 //     the Owner's priority too unless that rule opens answer_only.
 //   - declined: for a person, only the Owner, or her own withdrawal as the
-//     newest answer before any work; an agent's own proposal, the crew with a
-//     reason.
+//     newest answer before any work, or the crew closing it on the Owner's
+//     decline on his card (review 524 A2: the newest priority evidence of the
+//     current brief is "declined", recorded by the runtime from a card he
+//     answered on the Console, never a rule's; the close names that card);
+//     an agent's own proposal, the crew with a reason.
 //
 // merged is MergeIssues'. Open asks are superseded with the close.
 func CloseIssue(ctx context.Context, db DB, w Writer, key string, c IssueClose) (map[string]any, error) {
@@ -97,6 +100,12 @@ func CloseIssue(ctx context.Context, db DB, w Writer, key string, c IssueClose) 
 			return fmt.Errorf("%w: %s is not closed %s: %s", ErrState, r.ID, c.Conclusion, fmt.Sprintf(format, args...))
 		}
 		basis := c.AskID != 0
+		declinedOn := ""
+		if c.Conclusion == ConclusionDeclined && r.ServedPerson != "" && !basis && w.Actor != "owner" {
+			if declinedOn, err = cardDecline(ctx, tx, r.ID); err != nil {
+				return nil, err
+			}
+		}
 		switch c.Conclusion {
 		case ConclusionResolved, ConclusionPartial:
 			want := map[string]string{ConclusionResolved: "confirmed", ConclusionPartial: "partly"}[c.Conclusion]
@@ -157,8 +166,9 @@ func CloseIssue(ctx context.Context, db DB, w Writer, key string, c IssueClose) 
 				}
 			case w.Actor == "owner":
 			case basis && has && a.id == c.AskID && !a.superseded && a.verdict == "withdrawn":
+			case declinedOn != "":
 			default:
-				return nil, refuse("a person's issue is declined by the Owner, or on her own withdrawal")
+				return nil, refuse("a person's issue is declined by the Owner (his token, or his Decline on its card for the current brief), or on her own withdrawal")
 			}
 			if basis && (!has || a.id != c.AskID) {
 				return nil, refuse("ask %d is not its newest ask", c.AskID)
@@ -170,6 +180,9 @@ func CloseIssue(ctx context.Context, db DB, w Writer, key string, c IssueClose) 
 		body := map[string]any{"change": "close", "from": r.State, "to": "closed", "conclusion": c.Conclusion}
 		if basis {
 			body["basis_ask"] = c.AskID
+		}
+		if declinedOn != "" {
+			body["question_id"] = declinedOn // the Owner's card the decline rests on
 		}
 		var note int64
 		if c.Reason != "" {

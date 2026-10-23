@@ -76,15 +76,14 @@ const issueRowSQL = `jsonb_build_object('issue_id', i.issue_id, 'product', i.pro
   'asks_person', i.asks_person,
   'via', jsonb_build_object('actor', i.created_by_actor_id, 'channel', (SELECT s.body_json->>'channel' FROM agentrt.event s
     WHERE s.event_stream_id = 'issue:' || i.issue_id AND s.event_type = 'issue_submitted' ORDER BY s.event_id LIMIT 1)),
-  'state', i.state, 'waiting_on', i.waiting_on, 'conclusion', i.conclusion, 'risk_class', i.risk_class, 'priority', i.priority,
+  'state', `+shownStateSQL+`, 'waiting_on', `+shownWaitingSQL+`, 'conclusion', i.conclusion, 'risk_class', i.risk_class, 'priority', i.priority,
   'duplicate_of', i.duplicate_of, 'version', i.version,
   'raised_times', 1 + (SELECT count(*) FROM agentrt.issue d WHERE d.duplicate_of = i.issue_id),
   'review', (SELECT jsonb_build_object('round', c.review_round, 'result', c.result) FROM agentrt.issue_check c
     WHERE c.issue_id = i.issue_id AND c.check_kind = 'review' ORDER BY c.issue_check_id DESC LIMIT 1),
   'received_at', i.created_at,
   'updated_at', (SELECT max(e.at) FROM agentrt.event e WHERE e.event_stream_id = 'issue:' || i.issue_id),
-  'next', CASE WHEN i.next_step IS NULL AND i.next_by IS NULL AND i.next_due_at IS NULL THEN NULL
-    ELSE jsonb_build_object('by', i.next_by, 'what', i.next_step, 'due_at', i.next_due_at) END,
+  'next', `+shownNextSQL+`,
   'work', (SELECT COALESCE(jsonb_agg(jsonb_build_object('mission_id', w.mission_id, 'commitment', w.commitment, 'state', m.state,
       'live', w.ended_at IS NULL) ORDER BY w.issue_work_id), '[]'::jsonb)
     FROM agentrt.issue_work w JOIN agentrt.mission m ON m.mission_id = w.mission_id WHERE w.issue_id = i.issue_id),
@@ -138,7 +137,7 @@ func ListIssues(ctx context.Context, db DB, f IssueListFilter) (map[string]any, 
 		    'truncated', COALESCE(max(x.k) > $5, false))
 		  FROM (SELECT substr(i.issue_id, 4)::int AS n, row_number() OVER (ORDER BY substr(i.issue_id, 4)::int DESC) AS k, `+issueRowSQL+` AS r
 		    FROM agentrt.issue i LEFT JOIN agentrt.person p ON p.person_id = i.served_person
-		    WHERE ($1::text[] IS NULL OR i.state = ANY($1)) AND ($2 = '' OR i.product = $2) AND ($3 = '' OR i.waiting_on = $3)
+		    WHERE ($1::text[] IS NULL OR `+shownStateSQL+` = ANY($1)) AND ($2 = '' OR i.product = $2) AND ($3 = '' OR `+shownWaitingSQL+` = $3)
 		      AND ($4 = 0 OR substr(i.issue_id, 4)::int < $4)
 		    ORDER BY substr(i.issue_id, 4)::int DESC LIMIT $5 + 1) x`, states, f.Product, f.WaitingOn, before, limit).Scan(&doc)
 	})
@@ -251,7 +250,7 @@ func IssueSeen(ctx context.Context, db DB, w Writer, id string) (map[string]any,
 		}
 		var doc []byte
 		err = tx.QueryRow(ctx, `SELECT jsonb_strip_nulls(jsonb_build_object('issue_id', i.issue_id, 'product', i.product, 'kind', i.kind,
-		    'title', i.title, 'served_person', i.served_person, 'state', i.state, 'waiting_on', i.waiting_on, 'conclusion', i.conclusion,
+		    'title', i.title, 'served_person', i.served_person, 'state', `+shownStateSQL+`, 'waiting_on', `+shownWaitingSQL+`, 'conclusion', i.conclusion,
 		    'duplicate_of', i.duplicate_of, 'version', i.version,
 		    'updated_at', (SELECT max(e.at) FROM agentrt.event e WHERE e.event_stream_id = 'issue:' || i.issue_id),
 		    'texts', (SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('text_id', t.issue_text_id, 'kind', t.text_kind,
@@ -308,13 +307,13 @@ func MyIssues(ctx context.Context, db DB, w Writer, f MyIssuesFilter) (map[strin
 		    'truncated', COALESCE(max(x.k) > $5, false))
 		  FROM (SELECT substr(i.issue_id, 4)::int AS n, row_number() OVER (ORDER BY substr(i.issue_id, 4)::int DESC) AS k,
 		      jsonb_strip_nulls(jsonb_build_object('issue_id', i.issue_id, 'product', i.product, 'kind', i.kind, 'title', i.title,
-		        'state', i.state, 'conclusion', i.conclusion, 'waiting_on', i.waiting_on, 'version', i.version, 'duplicate_of', i.duplicate_of,
+		        'state', `+shownStateSQL+`, 'conclusion', i.conclusion, 'waiting_on', `+shownWaitingSQL+`, 'version', i.version, 'duplicate_of', i.duplicate_of,
 		        'updated_at', (SELECT max(e.at) FROM agentrt.event e WHERE e.event_stream_id = 'issue:' || i.issue_id),
 		        'open_ask', (SELECT jsonb_build_object('ask_id', k.issue_ask_id, 'purpose', k.purpose) FROM agentrt.issue_ask k
 		          WHERE k.issue_id = i.issue_id AND k.verdict IS NULL AND k.superseded_at IS NULL ORDER BY k.issue_ask_id DESC LIMIT 1))) AS r
 		    FROM agentrt.issue i
 		    WHERE i.product = ANY($2) AND ((i.served_person IS NOT NULL AND i.served_person = $3) OR (i.served_person IS NULL AND i.created_by_actor_id = $1))
-		      AND ($4 = '' OR i.state = $4) AND ($6 = '' OR i.product = $6)
+		      AND ($4 = '' OR `+shownStateSQL+` = $4) AND ($6 = '' OR i.product = $6)
 		    ORDER BY substr(i.issue_id, 4)::int DESC LIMIT $5 + 1) x`, w.Actor, c.products, c.behalfOf, f.State, limit, f.Product).Scan(&doc)
 		if err != nil {
 			return err
