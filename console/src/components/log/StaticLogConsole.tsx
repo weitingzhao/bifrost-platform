@@ -20,22 +20,22 @@ const LEVEL_ROW_CLASS: Record<StaticLogLevel, string> = {
 }
 
 const LEVEL_BADGE_CLASS: Record<StaticLogLevel, string> = {
-  ERROR: 'bg-[rgba(239,68,68,0.18)] text-[#fca5a5]',
-  WARN: 'bg-[rgba(234,179,8,0.15)] text-[#fde047]',
-  INFO: 'bg-[rgba(56,189,248,0.12)] text-[#7dd3fc]',
-  DEBUG: 'bg-[rgba(161,161,170,0.12)] text-[#a1a1aa]',
-  OTHER: 'bg-[rgba(161,161,170,0.08)] text-[#71717a]',
+  ERROR: 'bg-[rgba(239,68,68,0.18)] text-[var(--color-danger)]',
+  WARN: 'bg-[rgba(234,179,8,0.15)] text-[var(--color-warning)]',
+  INFO: 'bg-[rgba(56,189,248,0.12)] text-[var(--color-info)]',
+  DEBUG: 'bg-[rgba(161,161,170,0.12)] text-muted-foreground',
+  OTHER: 'bg-[rgba(161,161,170,0.08)] text-muted-foreground',
 }
 
 function LogLineRow({ line }: { line: StaticLogLine }) {
   return (
     <div
       className={cn(
-        'flex min-w-0 items-baseline gap-2 px-3 py-[2px] font-mono text-[11px] leading-4 hover:bg-white/[0.03]',
+        'flex min-w-0 items-baseline gap-2 px-3 py-[2px] font-mono text-[11px] leading-4 hover:bg-[var(--control-fill)]',
         LEVEL_ROW_CLASS[line.level],
       )}
     >
-      <span className="w-[62px] shrink-0 tabular-nums text-[#6b7280]">
+      <span className="w-[62px] shrink-0 tabular-nums text-muted-foreground">
         {line.ts || '—'}
       </span>
       <span
@@ -46,7 +46,7 @@ function LogLineRow({ line }: { line: StaticLogLine }) {
       >
         {STATIC_LOG_LEVEL_LABEL[line.level]}
       </span>
-      <span className="min-w-0 flex-1 break-all text-[#e5e7eb]/90">{line.message}</span>
+      <span className="min-w-0 flex-1 break-all text-foreground">{line.message}</span>
     </div>
   )
 }
@@ -82,7 +82,7 @@ export function StaticLogConsole({
   return (
     <div
       className={cn(
-        'min-w-0 overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[#0a0c0f]',
+        'min-w-0 overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]',
         className,
       )}
     >
@@ -121,11 +121,11 @@ export function StaticLogConsole({
         className="overflow-x-hidden overflow-y-auto"
       >
         {loading ? (
-          <p className="p-4 text-center text-[11px] text-[#9ca3af]">Loading logs…</p>
+          <p className="p-4 text-center text-[11px] text-muted-foreground">Loading logs…</p>
         ) : error != null ? (
-          <p className="p-4 text-[11px] text-[#fca5a5]">{error}</p>
+          <p className="p-4 text-[11px] text-[var(--color-danger)]">{error}</p>
         ) : filtered.length === 0 ? (
-          <p className="p-4 text-center text-[11px] text-[#9ca3af]">
+          <p className="p-4 text-center text-[11px] text-muted-foreground">
             {parsed.length === 0 ? emptyMessage : 'No lines match filters'}
           </p>
         ) : (

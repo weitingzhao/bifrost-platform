@@ -44,7 +44,7 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
     <ChiefConversation active={active} />
     <div className="grid gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <GoalForm key={draftKey} draft={draft} />
-      <div className="flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
+      <div className="ops-chief-latest flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
         {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
           : <p className="m-0 text-muted-foreground">{data.runtimeError ? runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, data.now) : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}

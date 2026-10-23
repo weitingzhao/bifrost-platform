@@ -1,0 +1,60 @@
+/* Batch 3: existing workspace blocks, in place. Decision pages keep their own skin. */
+.ops-workspace { line-height: 1.55; overflow-wrap: anywhere; }
+.ops-workspace > *, .ops-workspace .ops-section-body { min-width: 0; }
+.ops-workspace #owner-console { max-width: 1480px; margin-inline: auto; gap: 24px; }
+.ops-workspace :is(.panel-elevated, [data-owner-card], .ops-chief-latest) {
+  background: var(--ops-panel);
+  box-shadow: var(--ops-shadow);
+  border-radius: 20px;
+}
+/* Keep the original border colors: attention and failure are business signals. */
+.ops-workspace [data-owner-card], .ops-workspace .ops-chief-latest { padding: 24px; gap: 16px; }
+.ops-workspace [data-owner-card] h3 { font-size: 18px; letter-spacing: -.02em; }
+.ops-workspace .ops-section-header { padding: 16px 20px; }
+.ops-workspace .ops-section-header .ops-section-title { font-size: 14px; line-height: 1.5; }
+.ops-workspace .ops-section-description { line-height: 1.6; }
+.ops-workspace .ops-section--flat { background: transparent; box-shadow: none; }
+.ops-workspace .ops-section-body:not(.p-0) { padding: 16px 20px; }
+.ops-workspace .ops-page-toolbar { gap: 12px; padding-block: 8px; }
+.ops-workspace [data-slot='dense-table-frame'] {
+  max-width: 100%; min-width: 0; border-radius: 14px;
+  background: var(--card); box-shadow: var(--ops-inset);
+}
+.ops-workspace :is(.dense-scroll-x, .overflow-x-auto) { max-width: 100%; }
+.ops-workspace table { color: var(--foreground); overflow-wrap: normal; }
+.ops-workspace th { color: var(--muted-foreground); }
+/* Only neutral and primary controls get material treatment; destructive stays semantic. */
+.ops-workspace [data-slot='button']:is([data-variant='outline'], [data-variant='secondary']),
+.ops-workspace [data-owner-action='secondary'] {
+  background: var(--ops-control); color: var(--foreground); box-shadow: var(--ops-raised); border-radius: 12px;
+}
+.ops-workspace [data-slot='button'][data-variant='default'], .ops-workspace [data-owner-action='primary'] {
+  background: var(--ops-accent); color: var(--primary-foreground); box-shadow: var(--ops-raised); border-radius: 12px;
+}
+.ops-workspace :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), textarea, select) {
+  min-width: 0; max-width: 100%; color: var(--foreground); background: var(--field-fill);
+  border-radius: 12px; box-shadow: var(--ops-inset);
+}
+.ops-workspace :is(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 3px;
+}
+.ops-workspace #owner-chief ol > li { background: var(--ops-control); border-radius: 14px; padding: 16px; }
+.ops-workspace :is(pre, [data-prose]) { max-width: 100%; }
+.ops-workspace pre { overflow-x: auto; }
+@media (max-width: 1023px), (pointer: coarse) {
+  .ops-workspace :is(button, summary, select, input:not([type='checkbox']):not([type='radio']):not([type='range'])) { min-height: 44px; }
+  .ops-workspace [data-slot='button'][data-size^='icon'] { min-width: 44px; }
+  .ops-workspace :is(input:not([type='checkbox']):not([type='radio']), textarea, select) { font-size: 16px; }
+  .ops-workspace :is(button, [data-owner-action]) { white-space: normal; overflow-wrap: anywhere; }
+}
+@media (max-width: 640px) {
+  /* Dense tables retain legible columns inside their existing sideways scroll frame. */
+  .ops-workspace .dense-scroll-x { overflow-x: auto; }
+  .ops-workspace .dense-scroll-x > table { min-width: 560px; }
+  .ops-workspace .dense-scroll-x > table:has(th:nth-child(6)) { min-width: 720px; }
+  .ops-workspace [data-owner-card], .ops-workspace .ops-chief-latest { padding: 18px; }
+  .ops-workspace .ops-section-header { padding: 14px 16px; }
+  .ops-workspace .ops-section-body:not(.p-0) { padding: 14px 16px; }
+  .ops-workspace .ops-page-toolbar { justify-content: flex-start; }
+  .ops-workspace .ops-section-header > div > div { flex-wrap: wrap; }
+}

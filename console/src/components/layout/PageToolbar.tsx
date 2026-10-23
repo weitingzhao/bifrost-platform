@@ -18,7 +18,7 @@ export function PageToolbar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2',
+        'ops-page-toolbar flex flex-wrap items-center gap-2',
         align === 'end' && 'justify-end',
         align === 'start' && 'justify-start',
         align === 'between' && 'justify-between',

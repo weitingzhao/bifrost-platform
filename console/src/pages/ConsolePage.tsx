@@ -210,7 +210,7 @@ function ConsolePageInner() {
               moreHref={back == null && location.kind !== 'more' ? formatShellHash(MORE_ROUTE) : undefined}
             />
           </div>
-          <PageShell padding="compact" className="ops-page-content flex w-full min-w-0 flex-col gap-4">
+          <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'you' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>
             {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
