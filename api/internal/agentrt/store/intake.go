@@ -175,6 +175,14 @@ func SetIntakeClient(ctx context.Context, db DB, w Writer, s IntakeClientSetup) 
 			return err
 		case kind != "agent":
 			return invalid("%s is a %s, not an agent", s.ClientID, kind)
+		default:
+			c, err := readIntakeClient(ctx, tx, s.ClientID, true)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			if err == nil && c.revoked {
+				return invalid("%s is revoked and stays so: set up a client of another name", s.ClientID)
+			}
 		}
 		if _, err := Append(ctx, tx, Event{Stream: IntakeStream(s.ClientID), Type: "intake_client_set", Actor: w.Actor,
 			Body: map[string]any{"change": "client", "intake_client_id": s.ClientID}}); err != nil {

@@ -366,7 +366,7 @@ func supersede(ctx context.Context, tx pgx.Tx, actor, issue, cond string, args .
 	for _, m := range missions {
 		ids := byMission[m]
 		if _, err := appendIssue(ctx, tx, "issue_state_changed", actor, issue, m,
-			map[string]any{"change": "supersede", "ask_ids": ids}); err != nil {
+			map[string]any{"change": "supersede", "ask_ids": anyInts(ids)}); err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE agentrt.issue_ask SET superseded_at = clock_timestamp() WHERE issue_ask_id = ANY($1)`, ids); err != nil {
@@ -418,4 +418,13 @@ func written(ctx context.Context, tx pgx.Tx, id string, extra map[string]any) (m
 		out[k] = v
 	}
 	return out, nil
+}
+
+// anyInts is ids as an event body holds a list (canonical JSON takes []any).
+func anyInts(ids []int64) []any {
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = id
+	}
+	return out
 }
