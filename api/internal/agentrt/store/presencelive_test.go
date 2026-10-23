@@ -407,3 +407,126 @@ func TestAHostThatOnlyHeartbeatsTakesNoWork(t *testing.T) {
 		t.Fatalf("notes %+v", notes)
 	}
 }
+
+// headAt is the moment of the last record of stream.
+func (w *world) headAt(t *testing.T, stream string) time.Time {
+	t.Helper()
+	var at time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`, stream).Scan(&at))
+	return at
+}
+
+// Review 527 A1b: one recovery point for every reader, the moment the
+// platform could take agentd's calls again (the head of PlatformStream), and
+// for the controller its own start too. On the clock of the records:
+//
+//   - the API connects 60 s after it was wired (and after the controller
+//     started): a host silent through it is not shown or told lost until it
+//     stays silent 30 s after the API connected, one that polls within them
+//     never is;
+//   - the API goes down (the controller up all along, as a controller up
+//     before the API): nothing is told while it is down, nor until 30 s
+//     after the next API is up;
+//   - an API replaced in a rolling update records no down after its
+//     successor's up;
+//   - a down no up follows holds the hosts' silence for PlatformDownLimit at
+//     most;
+//   - the controller restarted alone, the API up long since: a host silent
+//     since before its start is told 30 s after it, not before.
+func TestTheHostsWaitForThePlatformsRecovery(t *testing.T) {
+	t.Parallel()
+	w := presenceWorld(t, "h1", "h2", "h3")
+	for _, h := range []string{"h1", "h2", "h3"} {
+		w.poll(t, h, claude, codex)
+	}
+	var t0 time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+	for _, h := range []string{"h1", "h2", "h3"} {
+		w.pollAt(t, h, t0.Add(-61*time.Second))
+	}
+	ok(t, store.MarkPlatformUp(ctx, w.rt, "api-1"))
+	up := w.headAt(t, store.PlatformStream)
+	started := up.Add(-60 * time.Second)
+	pass := func(now, since time.Time) int {
+		t.Helper()
+		n, err := store.Presence(ctx, w.rt, now, since)
+		ok(t, err)
+		return n
+	}
+	reported := func(at time.Time, id string) bool {
+		t.Helper()
+		doc, _ := w.presenceDocAt(t, at, time.Time{}, "")
+		_, r, _ := doc.host(t, id)
+		return r
+	}
+	// The API connected 60 s after its wiring.
+	if reported(up.Add(10*time.Second), "h1") || pass(up.Add(10*time.Second), started) != 0 {
+		t.Fatal("a host silent through the API's start is lost 10 s after it connected")
+	}
+	w.pollAt(t, "h2", up.Add(20*time.Second))
+	w.pollAt(t, "h3", up.Add(25*time.Second))
+	if n := pass(up.Add(30*time.Second), started); n != 0 || reported(up.Add(30*time.Second), "h1") {
+		t.Fatalf("%d turns 30 s after the API connected", n)
+	}
+	if n := pass(up.Add(30*time.Second+time.Millisecond), started); n != 1 || !reported(up.Add(31*time.Second), "h1") || reported(up.Add(31*time.Second), "h2") {
+		t.Fatalf("%d turns just past 30 s after the API connected; want h1 alone", n)
+	}
+	// The API goes down; the controller, up all along, tells nothing until
+	// 30 s after the next API is up.
+	if did, err := store.MarkPlatformDown(ctx, w.rt, "api-1"); err != nil || !did {
+		t.Fatalf("down: %v %v", did, err)
+	}
+	down := w.headAt(t, store.PlatformStream)
+	w.pollAt(t, "h3", down.Add(-5*time.Second))
+	for _, d := range []time.Duration{40 * time.Second, 5 * time.Minute, 9 * time.Minute} {
+		if n := pass(down.Add(d), started); n != 0 || reported(down.Add(d), "h3") {
+			t.Fatalf("%d turns %v after the API went down", n, d)
+		}
+	}
+	ok(t, store.MarkPlatformUp(ctx, w.rt, "api-2"))
+	up2 := w.headAt(t, store.PlatformStream)
+	w.pollAt(t, "h2", up2.Add(10*time.Second))
+	if n := pass(up2.Add(30*time.Second), started); n != 0 {
+		t.Fatalf("%d turns 30 s after the next API came up", n)
+	}
+	if n := pass(up2.Add(30*time.Second+time.Millisecond), started); n != 1 {
+		t.Fatalf("%d turns just past 30 s after the next API came up; want h3 alone", n)
+	}
+	// A rolling update: the new API is up before the old one goes.
+	ok(t, store.MarkPlatformUp(ctx, w.rt, "api-3"))
+	if did, err := store.MarkPlatformDown(ctx, w.rt, "api-2"); err != nil || did {
+		t.Fatalf("the replaced API's down: %v %v", did, err)
+	}
+	// A down no up follows holds for PlatformDownLimit at most.
+	if did, err := store.MarkPlatformDown(ctx, w.rt, "api-3"); err != nil || !did {
+		t.Fatalf("down: %v %v", did, err)
+	}
+	down3 := w.headAt(t, store.PlatformStream)
+	w.pollAt(t, "h2", down3.Add(-time.Second))
+	limit := down3.Add(store.PlatformDownLimit)
+	if n := pass(limit.Add(30*time.Second), started); n != 0 {
+		t.Fatalf("%d turns 30 s past the down limit", n)
+	}
+	if n := pass(limit.Add(31*time.Second), started); n != 3 {
+		t.Fatalf("%d turns 31 s past the down limit; want h2 and its executors", n)
+	}
+	// The controller restarted alone, the API up long since.
+	ok(t, store.MarkPlatformUp(ctx, w.rt, "api-4"))
+	up4 := w.headAt(t, store.PlatformStream)
+	restarted := up4.Add(10 * time.Minute)
+	for _, h := range []string{"h1", "h2", "h3"} {
+		w.pollAt(t, h, restarted.Add(-time.Second))
+	}
+	if n := pass(restarted.Add(-500*time.Millisecond), started); n != 5 {
+		t.Fatalf("%d turns with every host polling; want h1, h2, h3 and the two executors back", n)
+	}
+	w.pollAt(t, "h1", restarted.Add(-10*time.Second))
+	w.pollAt(t, "h2", restarted.Add(20*time.Second))
+	w.pollAt(t, "h3", restarted.Add(20*time.Second))
+	if n := pass(restarted.Add(30*time.Second), restarted); n != 0 {
+		t.Fatalf("%d turns 30 s after the controller's start", n)
+	}
+	if n := pass(restarted.Add(30*time.Second+time.Millisecond), restarted); n != 1 {
+		t.Fatalf("%d turns just past 30 s after the controller's start; want h1", n)
+	}
+}

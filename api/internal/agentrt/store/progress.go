@@ -236,15 +236,10 @@ func worst(statuses []string) string {
 }
 
 // Progress computes the projection. A read that fails returns an error and
-// nothing else.
+// nothing else. A host's silence counts from no earlier than the platform's
+// coming back (presencelive.go).
 func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	return progressAt(ctx, db, time.Time{}, time.Time{})
-}
-
-// ProgressSince is Progress with a host's silence counted from no earlier
-// than since, the reader's start (review 526 A1b).
-func ProgressSince(ctx context.Context, db DB, since time.Time) (map[string]any, error) {
-	return progressAt(ctx, db, time.Time{}, since)
 }
 
 // progressAt is the projection at at (zero: the database's clock).

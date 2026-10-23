@@ -70,11 +70,6 @@ type API struct {
 	AgentHeads  AgentHeads
 	MainResults store.MainResults
 	Now         func() time.Time
-	// Started is when this platform started (the server sets it): GET /hosts
-	// and /progress count a host's silence from no earlier than it, so a
-	// release of the platform does not show every host lost (review 526
-	// A1b). Zero counts from the host's last contact alone.
-	Started time.Time
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller

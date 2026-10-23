@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -75,7 +77,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
-		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv(), Started: time.Now()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
@@ -120,8 +122,19 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// Both processes say whether the database has this binary's
 		// migrations (TD-411), in their health and their log.
 		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
+		// The API takes agentd's calls from now on: every reader counts a
+		// host's silence from no earlier (review 527 A1b); and, on its
+		// shutdown, stops taking them.
+		down := func() {}
+		if role.RunsAPI() {
+			instance := platformInstance()
+			up := make(chan struct{})
+			safego.Go("agentrt-platform-up", func() { defer close(up); markPlatformUp(ctx, pool, instance, agentrtRetry) })
+			down = func() { <-up; markPlatformDown(pool, instance) }
+		}
 		if !role.RunsWorkers() {
 			<-ctx.Done()
+			down()
 			pool.Close()
 			if rdb != nil {
 				_ = rdb.Close()
@@ -144,6 +157,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		<-ctx.Done()
 		wait()
 		<-relayDone
+		down()
 		pool.Close()
 		if rdb != nil {
 			_ = rdb.Close()
@@ -421,5 +435,54 @@ func (s *Server) mountAgentRuntime(r chi.Router) {
 func (s *Server) closeAgentRuntime() {
 	if s.agentRuntime != nil && s.agentRuntime.stop != nil {
 		s.agentRuntime.stop()
+	}
+}
+
+// platformInstance names this API among the platform's: its host name and a
+// random suffix, so a restarted pod of the same name is another instance.
+func platformInstance() string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "platform"
+	}
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	return host + "-" + hex.EncodeToString(b[:])
+}
+
+// markPlatformUp records that this API takes agentd's calls
+// (store.MarkPlatformUp), trying again until it can or ctx ends.
+func markPlatformUp(ctx context.Context, db store.DB, instance string, retry [2]time.Duration) {
+	wait := retry[0]
+	for {
+		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := store.MarkPlatformUp(wctx, db, instance)
+		cancel()
+		if err == nil {
+			slog.Info("agentrt: the platform takes agentd's calls", "instance", instance)
+			return
+		}
+		slog.Error("agentrt: could not record that the platform takes agentd's calls; hosts may be judged from an older start", "err", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, retry[1])
+	}
+}
+
+// platformDownLimit bounds recording this API's shutdown: it never holds up
+// the shutdown longer.
+var platformDownLimit = 3 * time.Second
+
+// markPlatformDown records that this API stops taking agentd's calls
+// (store.MarkPlatformDown), within platformDownLimit; a shutdown it cannot
+// record is logged.
+func markPlatformDown(db store.DB, instance string) {
+	ctx, cancel := context.WithTimeout(context.Background(), platformDownLimit)
+	defer cancel()
+	if _, err := store.MarkPlatformDown(ctx, db, instance); err != nil {
+		slog.Warn("agentrt: could not record that the platform stops taking agentd's calls", "err", err)
 	}
 }

@@ -168,7 +168,11 @@ var bodies = map[string][]field{
 		// prune_round: on a host's prune stream, a round of deleting the
 		// attempt branches it was handed, opened or closed (presencelive.go,
 		// review 526 A1).
-		{"prune_round", kStr, true}},
+		{"prune_round", kStr, true},
+		// platform_api: on the platform's presence stream, an API that can
+		// take agentd's calls (up) or stopped (down; presencelive.go, review
+		// 527 A1b).
+		{"platform_api", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -457,7 +461,7 @@ var fieldValues = map[string]map[string]value{
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"note": {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
-		"prune_round": oneOf("opened", "closed")},
+		"prune_round": oneOf("opened", "closed"), "platform_api": oneOf("up", "down")},
 	"route_decided":   {"fingerprint": fingerprint},
 	"legacy_imported": {"digest": fingerprint},
 	"wait_limit_passed": {"wait": oneOf(WaitAttemptRunning, WaitTaskReady, WaitMessageUnread), "ref": waitRef, "since": instant,

@@ -86,7 +86,7 @@ func TestPresenceReadsAreBounded(t *testing.T) {
 	}
 	now := time.Now()
 	reads := []read{
-		{"hosts", store.HostsSQL("$4::timestamptz"), append(store.LivenessArgs(time.Time{}), now)},
+		{"hosts", store.HostsSQL("$4::timestamptz"), append(store.HostsArgs(), now)},
 		{"presence heads", store.OpenAlertsSQL, []any{streams}},
 		{"latest claim h1", store.LatestClaimSQL, []any{store.HostOffersStream("h1")}},
 		{"latest claim h2 (never recorded)", store.LatestClaimSQL, []any{store.HostOffersStream("h2")}},

@@ -456,6 +456,13 @@ func TestHostsAndControlEdges(t *testing.T) {
 		h1["reported_offline"] != false || h2["reported_offline"] != true {
 		t.Fatalf("29 and 31 seconds since the last poll: %v %v", h1, h2)
 	}
+	// The platform takes agentd's calls again from now (review 527 A1b): h2,
+	// 31 s silent, is not lost until it stays so 30 s more.
+	must(t, store.MarkPlatformUp(ctx, pool, "test-api"))
+	_, hosts = call(t, s, "viewer", "GET", "hosts", nil)
+	if h2 := hostOf(t, hosts, "h2"); h2["online"] != false || h2["reported_offline"] != false || h2["claiming"] != nil {
+		t.Fatalf("h2 31 s silent, the platform just back: %v", h2)
+	}
 	body := map[string]any{"idempotency_key": "k", "scope": "global", "kind": "pause", "reason": "one"}
 	_, set := call(t, s, "viewer", "POST", "controls", body, session, "s1")
 	body["reason"] = "two"

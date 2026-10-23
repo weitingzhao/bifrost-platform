@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 const agentRuntimeAuthYAML = `
@@ -316,5 +317,45 @@ func TestAgentRuntimePoolsFitTheRoleLimit(t *testing.T) {
 		if n := agentrtMaxConns(env); n < 2 || 2*n >= limit {
 			t.Errorf("%s: two pools of %d against a limit of %d", env, n, limit)
 		}
+	}
+}
+
+// Review 527 A1b: the API records that the platform takes agentd's calls
+// once its runtime database connects, and that it stops on its shutdown,
+// within platformDownLimit; an API a newer one replaced records no down.
+func TestAgentRuntimeSaysWhenThePlatformTakesCalls(t *testing.T) {
+	db := agentrttest.Migrated(t)
+	if _, err := store.Seed(context.Background(), db.Connect(t, db.Owner)); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := pgxpool.New(context.Background(), db.Runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	head := func() string {
+		var s string
+		if err := pool.QueryRow(context.Background(), `SELECT COALESCE((SELECT body_json->>'platform_api' || ' ' || (body_json->>'text')
+		  FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1), '')`, store.PlatformStream).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	old, next := platformInstance(), platformInstance()
+	if old == next {
+		t.Fatalf("two instances named alike: %s", old)
+	}
+	markPlatformUp(context.Background(), pool, old, [2]time.Duration{time.Millisecond, time.Millisecond})
+	if h := head(); !strings.HasPrefix(h, "up Platform API "+old) {
+		t.Fatalf("after up: %q", h)
+	}
+	markPlatformUp(context.Background(), pool, next, [2]time.Duration{time.Millisecond, time.Millisecond})
+	markPlatformDown(pool, old)
+	if h := head(); !strings.HasPrefix(h, "up Platform API "+next) {
+		t.Fatalf("after the replaced API's shutdown: %q", h)
+	}
+	markPlatformDown(pool, next)
+	if h := head(); !strings.HasPrefix(h, "down Platform API "+next) {
+		t.Fatalf("after the API's shutdown: %q", h)
 	}
 }

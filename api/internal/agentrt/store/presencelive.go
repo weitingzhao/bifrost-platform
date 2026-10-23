@@ -25,7 +25,10 @@ import (
 // prune budget, so a prune round opened by the list (OpenPruneRound) keeps it
 // alive and taking work for PruneSilence, until it reports or claims again
 // (ClosePruneRound). And a host's silence is counted from no earlier than the
-// moment the reader started (since): a release of the platform stops it for
+// moment the platform could take agentd's calls again (review 527 A1b): the
+// head of PlatformStream, which the API writes when its runtime database
+// connects (up) and when it closes on shutdown (down), and, for the
+// controller, its own start (since). A release of the platform stops it for
 // tens of seconds, and a gap the platform made itself is not the host's.
 
 // PruneSilence is how long a host handed attempt branches to delete may stay
@@ -64,12 +67,22 @@ func hostClaimingSQL(now string) string {
 	return `(COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false) OR ` + pruneOpenSQL(now) + `)`
 }
 
+// platformBackSQL is when, at now, the platform could last take agentd's
+// calls again: the head of PlatformStream, up at its moment; down, now (the
+// API is not taking calls: no host's silence counts), for at most
+// PlatformDownLimit after it; NULL with no head.
+func platformBackSQL(now string) string {
+	return `(SELECT CASE WHEN p.head->'body'->>'platform_api' = 'down'
+	    THEN LEAST(` + now + `, (p.head->>'at')::timestamptz + make_interval(secs => ` + strconv.Itoa(int(PlatformDownLimit/time.Second)) + `))
+	    ELSE (p.head->>'at')::timestamptz END FROM (SELECT ` + headSQL(`'`+PlatformStream+`'`) + ` AS head) p)`
+}
+
 // hostSilentSQL is whether host h is lost at now: not alive, and silent past
-// $1 seconds counted from the later of its contact and $2 (the reader's
-// start; NULL for none).
+// $1 seconds counted from the latest of its contact, $2 (the reader's start;
+// NULL for none) and the platform's coming back.
 func hostSilentSQL(now string) string {
 	return `(NOT ` + hostOnlineSQL(now) + `
-	    AND COALESCE(` + now + ` - GREATEST(hc.at, $2::timestamptz) > make_interval(secs => $1), true))`
+	    AND COALESCE(` + now + ` - GREATEST(hc.at, $2::timestamptz, ` + platformBackSQL(now) + `) > make_interval(secs => $1), true))`
 }
 
 // hostClaimLostSQL is whether host h is known not to take work at now: not
@@ -77,7 +90,63 @@ func hostSilentSQL(now string) string {
 // counts. Neither this nor claiming: not known yet.
 func hostClaimLostSQL(now string) string {
 	return `(NOT ` + hostClaimingSQL(now) + `
-	    AND COALESCE(` + now + ` - GREATEST(h.last_poll_at, $2::timestamptz) > make_interval(secs => $1), true))`
+	    AND COALESCE(` + now + ` - GREATEST(h.last_poll_at, $2::timestamptz, ` + platformBackSQL(now) + `) > make_interval(secs => $1), true))`
+}
+
+// PlatformStream holds when the platform could take agentd's calls: a note
+// when an API's runtime database connected (platform_api up) and one when
+// it closed on that API's shutdown (down), the API's instance in its text.
+// Its head is the platform's recovery point; nothing else is written there.
+const PlatformStream = "presence:platform"
+
+// PlatformDownLimit bounds how long a down head holds every host's silence:
+// an API gone down that never came back holds it no longer.
+const PlatformDownLimit = 10 * time.Minute
+
+func platformUpText(instance string) string {
+	return "Platform API " + instance + " can take agentd's calls: its runtime database connected."
+}
+
+// MarkPlatformUp records that instance, an API of the platform, can take
+// agentd's calls from now: each host's silence counts from no earlier.
+func MarkPlatformUp(ctx context.Context, db DB, instance string) error {
+	return InTx(ctx, db, func(tx pgx.Tx) error {
+		_, err := Append(ctx, tx, Event{Stream: PlatformStream, Type: "note", Actor: "controller",
+			Body: map[string]any{"platform_api": "up", "text": platformUpText(instance)}})
+		return err
+	})
+}
+
+// MarkPlatformDown records that instance stops taking agentd's calls (its
+// shutdown), when the platform's latest record is instance's own coming up:
+// an API that a newer one already replaced (a rolling update starts the new
+// one first) records nothing. It reports whether it recorded.
+func MarkPlatformDown(ctx context.Context, db DB, instance string) (bool, error) {
+	did := false
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		did = false
+		if err := lockStream(ctx, tx, PlatformStream); err != nil {
+			return err
+		}
+		var head []byte
+		if err := tx.QueryRow(ctx, `SELECT `+headSQL("$1::text"), PlatformStream).Scan(&head); err != nil || head == nil {
+			return err
+		}
+		var h struct {
+			Body struct {
+				Up   string `json:"platform_api"`
+				Text string `json:"text"`
+			} `json:"body"`
+		}
+		if err := json.Unmarshal(head, &h); err != nil || h.Body.Up != "up" || h.Body.Text != platformUpText(instance) {
+			return err
+		}
+		_, err := Append(ctx, tx, Event{Stream: PlatformStream, Type: "note", Actor: "controller", Body: map[string]any{"platform_api": "down",
+			"text": "Platform API " + instance + " stopped taking agentd's calls: it shut down. No host's silence counts until an API is up again."}})
+		did = err == nil
+		return err
+	})
+	return did && err == nil, err
 }
 
 // livenessArgs are $1–$3 of the SQL above.
@@ -85,8 +154,9 @@ func livenessArgs(since time.Time) []any {
 	return []any{HostLostAfter.Seconds(), nullTime(since), PruneSilence.Seconds()}
 }
 
-// LivenessArgs are $1–$3 of HostsSQL, for a reader started at since.
-func LivenessArgs(since time.Time) []any { return livenessArgs(since) }
+// HostsArgs are $1–$3 of HostsSQL for a reader with no start of its own
+// (the API: the platform's coming back is its own).
+func HostsArgs() []any { return livenessArgs(time.Time{}) }
 
 // nullTime is t, or SQL NULL for the zero time.
 func nullTime(t time.Time) any {
