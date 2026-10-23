@@ -398,3 +398,47 @@ func TestIssueMissionCardIsTheTemplate(t *testing.T) {
 		t.Fatalf("the issue cards' pass settled %d", n)
 	}
 }
+
+// An agent's own proposal (I-D6 A): its brief asks the Owner, who confirms
+// it on his card; the answer is recorded as his, on the card's channel, and
+// the agent itself may not confirm it.
+func TestOwnerConfirmsAProposalByCard(t *testing.T) {
+	t.Parallel()
+	iw := newIssueWorld(t)
+	d := newCardDesk()
+	out, err := store.SubmitIssue(ctx, iw.rt, iw.dots, iw.key(), store.IssueSubmission{Product: "screening", Kind: "proposal",
+		Title: "TITLE-7f3a", OnBehalfOf: store.SelfIssue, Proposal: "PROPOSAL of the agent"})
+	ok(t, err)
+	id := out["issue_id"].(string)
+	ask := iw.brief(t, id, "BRIEF-7f3a")
+	_, err = iw.answer(t, iw.dots, id, ask, "confirmed")
+	wantIs(t, err, store.ErrInvalid, "the Owner himself confirms")
+	q, err := iw.requestOwner(t, d, id, store.OwnerCardConfirmBrief, "", 0)
+	ok(t, err)
+	noMarkers(t, d.last())
+	d.answer(q, "b", "console") // not this version
+	d.decide(t, iw)
+	if v := iw.state(t, id); v.BriefConfirmed || v.State != "clarifying" {
+		t.Fatalf("after not this version: %+v", v)
+	}
+	var verdict, by string
+	ok(t, iw.rt.QueryRow(ctx, `SELECT verdict, answered_by_actor_id FROM agentrt.issue_ask WHERE issue_ask_id = $1`, ask).Scan(&verdict, &by))
+	if verdict != "rejected" || by != "owner" {
+		t.Fatalf("the answer: %s by %s", verdict, by)
+	}
+	// A new brief, a new card; this time confirmed.
+	iw.brief(t, id, "BRIEF-7f3a, again")
+	q, err = iw.requestOwner(t, d, id, store.OwnerCardConfirmBrief, "", 0)
+	ok(t, err)
+	d.answer(q, "a", "console")
+	d.decide(t, iw)
+	if v := iw.state(t, id); !v.BriefConfirmed || v.State != "brief_confirmed" {
+		t.Fatalf("after confirm: %+v", v)
+	}
+	// A card the Owner answers that a rule could only have answered on a
+	// writer before slice 1b: never an answer of his.
+	_, err = store.AnswerAsk(ctx, iw.rt, store.Writer{Actor: "controller", Token: "controller"}, iw.key(), store.AskAnswer{IssueID: id,
+		ExpectedVersion: iw.state(t, id).Version, AskID: ask, Words: "x", Verdict: "confirmed", Channel: store.ChannelCard, QuestionID: q,
+		AnsweredBy: "rule card-auto-answer v1", AnswerChannel: "rule"})
+	wantIs(t, err, store.ErrInvalid, "not a rule's")
+}

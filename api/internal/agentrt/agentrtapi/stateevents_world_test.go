@@ -570,6 +570,18 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 		return map[string]any{"idempotency_key": key, "used_fraction": 0.5, "resets_at": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}
 	case rt.pattern == "prunes":
 		return map[string]any{"host_id": host, "results": []any{}}
+	case rt.pattern == "intake/issues" || rt.pattern == "issues":
+		return map[string]any{"idempotency_key": key, "product": "screening", "kind": f.pick([]string{"complaint", "request", "proposal"}),
+			"on_behalf_of": f.pick([]string{"person:p2", store.OwnerPerson, "self"}), "title": "fuzz",
+			"person_words": []any{map[string]any{"text": "fuzz words"}}, "agent_reading": "fuzz", "channel": f.pick([]string{"thread", "owner_relay", ""})}
+	case rt.pattern == "intake/updates":
+		cursor := f.pick([]string{"", "0.0", "1.1", "x"})
+		return map[string]any{"cursor": cursor, "ack_cursor": f.pick([]string{"", cursor}), "limit": f.r.Intn(4)}
+	case strings.HasPrefix(rt.pattern, "issues/{id}/") || strings.HasPrefix(rt.pattern, "intake/issues/{id}/"):
+		var version int
+		_ = f.pool.QueryRow(ctx, `SELECT version FROM agentrt.issue WHERE issue_id = $1`, strings.Split(path, "/")[len(strings.Split(rt.pattern, "/"))-2]).Scan(&version)
+		return map[string]any{"idempotency_key": key, "expected_version": version, "purpose": f.pick([]string{"priority", "confirm_brief", "reply"}),
+			"text": "fuzz", "agent_reading": "fuzz", "reason": "fuzz"}
 	}
 	return map[string]any{"idempotency_key": key, "reason": "fuzz"}
 }
