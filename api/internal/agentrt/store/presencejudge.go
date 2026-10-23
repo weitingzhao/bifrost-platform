@@ -213,8 +213,9 @@ func turnSwitch(ctx context.Context, db DB, sw presenceSwitch, on bool, why stri
 // PresenceDeferral judges whether host presence is deferred at now (zero:
 // the database's clock), the hosts' silence counted from since, given the
 // platform's recent recovery points as the controller saw them: a watched
-// host, not alive, neither judged lost nor already told offline, silent
-// longer than PresenceDeferredAfter and across at least two recoveries (one
+// host once heard from, not alive, neither judged lost nor already told
+// offline, silent longer than PresenceDeferredAfter and across at least two
+// recoveries (one
 // is an outage the hosts are given their 30 s after, as they should be;
 // several are a floor that keeps moving). It turns the deferred switch on or
 // off accordingly, naming the probe; it reports whether it turned it.
@@ -250,13 +251,15 @@ func PresenceDeferral(ctx context.Context, db DB, now, since time.Time, recoveri
 			if _, told := open[HostPresenceStream(h.HostID)]; told || !h.watched() || h.Online || h.ReportedOffline {
 				continue
 			}
-			s, across := PresenceDeferredAfter+time.Hour, len(recoveries) // never heard from: as silent as can be
-			if h.ContactAt != nil {
-				s, across = now.Sub(*h.ContactAt), 0
-				for _, r := range recoveries {
-					if r.After(*h.ContactAt) {
-						across++
-					}
+			// A host never heard from is not being deferred by recoveries:
+			// what presence says of it stays as it is.
+			if h.ContactAt == nil {
+				continue
+			}
+			s, across := now.Sub(*h.ContactAt), 0
+			for _, r := range recoveries {
+				if r.After(*h.ContactAt) {
+					across++
 				}
 			}
 			if s > PresenceDeferredAfter && across >= 2 {

@@ -560,3 +560,42 @@ func TestADeferredJudgmentIsTold(t *testing.T) {
 		t.Fatalf("%d turns; notes %+v; progress %v", n, notes, view())
 	}
 }
+
+// A watched host that never polled is not being deferred by the platform's
+// recoveries: h2, registered and never heard from, raises no deferral
+// though the controller sees three recoveries (an outage every 30 s) while
+// h1 claims all along.
+func TestANeverPolledHostIsNotDeferred(t *testing.T) {
+	pool := setup(t)
+	for _, h := range []string{"h1", "h2"} {
+		must(t, store.RegisterHost(ctx, pool, "owner", h, "dev"))
+	}
+	chiefOnly(t, pool)
+	var t0 time.Time
+	must(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+	pollAt(t, pool, "h1", t0)
+	now := t0
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0, PlatformProbe: "http://platform-api:8780/health",
+		PlatformUp: func(context.Context) error {
+			if d := now.Sub(t0); d >= 25*time.Second && d <= 85*time.Second && (d-25*time.Second)%(30*time.Second) == 0 {
+				return errors.New("connect: connection refused")
+			}
+			return nil
+		}}
+	for now = t0; !now.After(t0.Add(4 * time.Minute)); now = now.Add(controller.PresenceEvery) {
+		pollAt(t, pool, "h1", now.Add(-time.Second))
+		if _, err := c.Presence(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1`, store.DeferredStream).Scan(&n))
+	if n != 0 {
+		t.Fatalf("%d records of a deferral for a host that never polled", n)
+	}
+	for _, m := range ownerNotes(t, pool) {
+		if strings.Contains(m.Body, "deferred") {
+			t.Fatalf("told: %s", m.Body)
+		}
+	}
+}
