@@ -29,8 +29,10 @@
 -- migrator refuses a database that has it). An older platform still starts
 -- (it reports the schema ahead) and keeps working: it writes no issue, the
 -- vocabulary only grows, its mission moves end issue work through the same
--- trigger, and a POST /missions with a BI- work id fails at commit. The
--- ALTERs take strong locks on actor and event while they check the rows.
+-- trigger, and a POST /missions with a BI- work id fails at commit; its GET
+-- /events shows the issue streams' metadata, never a text (§4.6; checked
+-- with the code of the commit before this file). The ALTERs take strong
+-- locks on actor and event while they check the rows.
 
 -- Who: an external agent is an actor of its own kind (§5.2); its tool stays
 -- NULL (only an executor has one).
@@ -601,11 +603,25 @@ CREATE FUNCTION agentrt.issue_text_kind_ok(event_type text, text_kind text) RETU
 $$;
 
 -- Texts: written by their event's writer, of a kind its type writes, on a
--- channel that writer speaks on, someone's words only as §1 allows; the
--- sha256 is the body's.
+-- channel that writer speaks on, someone's words only as §1 allows and only
+-- the words of the person the issue serves; an agent writes only on the
+-- issues it sees (its person's, or its own proposals); the sha256 is the
+-- body's.
 CREATE FUNCTION agentrt.guard_issue_text() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE ev agentrt.event := agentrt.issue_event(NEW.issue_id);
+DECLARE
+  ev agentrt.event := agentrt.issue_event(NEW.issue_id);
+  i  agentrt.issue;
 BEGIN
+  SELECT * INTO i FROM agentrt.issue WHERE issue_id = NEW.issue_id;
+  IF NEW.text_kind = 'words' AND NEW.person IS DISTINCT FROM i.served_person THEN
+    RAISE EXCEPTION 'agentrt: the words on % are those of the person it serves, %', NEW.issue_id, COALESCE(i.served_person, 'nobody')
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF ev.actor_id LIKE 'agent:%' AND NOT ((i.served_person IS NOT NULL AND i.served_person IS NOT DISTINCT FROM
+       (SELECT c.on_behalf_of FROM agentrt.intake_client c WHERE c.intake_client_id = ev.actor_id))
+       OR (i.served_person IS NULL AND i.created_by_actor_id = ev.actor_id)) THEN
+    RAISE EXCEPTION 'agentrt: % writes only on issues it brings for its person or its own', ev.actor_id USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW.created_by_actor_id <> ev.actor_id THEN
     RAISE EXCEPTION 'agentrt: a text is written by the writer of its event' USING ERRCODE = 'check_violation';
   END IF;

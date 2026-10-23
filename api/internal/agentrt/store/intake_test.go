@@ -365,3 +365,27 @@ func TestEventsAfterKeepsLateCommits(t *testing.T) {
 		t.Fatalf("read on: %v; want [%d %d]", got, small, big)
 	}
 }
+
+// Past the store, too, a person's words go only on the issue that serves
+// her, and an agent writes only on the issues it sees.
+func TestIssueTextsStayWithTheirIssue(t *testing.T) {
+	t.Parallel()
+	iw := newIssueWorld(t)
+	hers := iw.submit(t, "hers")
+	his, err := store.SubmitIssue(ctx, iw.rt, iw.dotsOwner, iw.key(), store.IssueSubmission{Product: "screening", Kind: "request",
+		Title: "his", OnBehalfOf: store.OwnerPerson, Words: []store.IssueWords{{Text: "his words"}}})
+	ok(t, err)
+	h := his["issue_id"].(string)
+	words := func(issue, actor, person, channel string) error {
+		return iw.issueEvent(t, issue, "issue_added", actor, map[string]any{"channel": channel, "text_ids": []any{int64(9001)}},
+			`INSERT INTO agentrt.issue_text (issue_text_id, issue_id, text_kind, person, channel, body, sha256, created_by_actor_id)
+			  OVERRIDING SYSTEM VALUE VALUES (9001, '`+issue+`', 'words', '`+person+`', '`+channel+`', 'w', encode(sha256('w'), 'hex'), '`+actor+`')`)
+	}
+	wantErr(t, words(h, iw.dots.Actor, "person:p2", "intake_local"), "are those of the person it serves")
+	wantErr(t, iw.issueEvent(t, h, "issue_added", iw.dots.Actor, map[string]any{"channel": "intake_local", "text_ids": []any{int64(9002)}},
+		`INSERT INTO agentrt.issue_text (issue_text_id, issue_id, text_kind, channel, body, sha256, created_by_actor_id)
+		  OVERRIDING SYSTEM VALUE VALUES (9002, '`+h+`', 'reading', 'intake_local', 'r', encode(sha256('r'), 'hex'), '`+iw.dots.Actor+`')`),
+		"writes only on issues it brings")
+	wantErr(t, words(hers, "thread:crew-1", store.OwnerPerson, "thread"), "are those of the person it serves")
+	ok(t, words(hers, iw.dots.Actor, "person:p2", "intake_local"))
+}

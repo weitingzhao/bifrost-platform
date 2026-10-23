@@ -183,7 +183,7 @@ func TestIssueAnswersAreBound(t *testing.T) {
 		"verdict": "confirmed", "channel": "intake_local", "person": "person:p2"},
 		`INSERT INTO agentrt.issue_text (issue_text_id, issue_id, text_kind, person, channel, body, sha256, created_by_actor_id)
 		  OVERRIDING SYSTEM VALUE VALUES (9999, '`+a+`', 'response', 'person:p2', 'intake_local', 'yes', encode(sha256('yes'), 'hex'), 'agent:dots-owner')`),
-		"does not write response on channel intake_local for person:p2")
+		"writes only on issues it brings")
 	// A re-brief while she reads: the version she read and the ask are gone.
 	v := iw.state(t, a).Version
 	iw.brief(t, a, "brief of hers, again")

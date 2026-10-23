@@ -58,7 +58,13 @@ type issueWorld struct {
 
 func newIssueWorld(t *testing.T) *issueWorld {
 	t.Helper()
-	iw := &issueWorld{world: newWorld(t),
+	return issueWorldOn(t, newWorld(t))
+}
+
+// issueWorldOn sets the issue fixture up on a world.
+func issueWorldOn(t *testing.T, w *world) *issueWorld {
+	t.Helper()
+	iw := &issueWorld{world: w,
 		crew:      store.Writer{Actor: "thread:crew-1", Token: "operator"},
 		owner:     store.Writer{Actor: "owner", Token: "admin"},
 		dots:      store.Writer{Actor: "agent:dots-p2", Token: "intake:dots-p2"},
