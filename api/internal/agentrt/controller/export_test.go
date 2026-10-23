@@ -13,3 +13,11 @@ func (c *Controller) RunLoopForTest(ctx context.Context, name string, d time.Dur
 	c.every(ctx, &wg, name, d, pass)
 	wg.Wait()
 }
+
+// SetPresencePassLimitForTest sets the presence pass's bound and returns the
+// function that restores it.
+func SetPresencePassLimitForTest(d time.Duration) func() {
+	old := presencePassLimit
+	presencePassLimit = d
+	return func() { presencePassLimit = old }
+}

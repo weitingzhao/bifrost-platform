@@ -91,6 +91,12 @@ func presenceJudging(ctx context.Context, db DB, judged bool, why string) (bool,
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = false
+		// Each lock it waits for is bounded, as the presence pass's are
+		// (review 529 B-1): a lock held elsewhere fails the pass, and the
+		// next one tries again.
+		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+waitsLockTimeout+`'`); err != nil {
+			return err
+		}
 		if open, _, _, err := unjudgedOpen(ctx, tx); err != nil || open != judged {
 			return err
 		}

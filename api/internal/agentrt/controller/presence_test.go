@@ -415,3 +415,82 @@ func TestPresenceCannotBeJudgedIsTold(t *testing.T) {
 		t.Fatalf("%d alerts after recovery", alerts())
 	}
 }
+
+// Review 529 A-1: an outage the probe saw is an outage, though the hosts'
+// claims from just before it still say the platform takes calls: the first
+// pass the probe answers again is a recovery point, and a host gets its 30 s
+// from it. All three hosts claim at t0 and then stay silent (h1 told when
+// its 30 s from the recovery are past); the probe says no over the outages
+// below, yes otherwise.
+func TestAnOutageTheProbeSawIsARecoveryPoint(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		down    func(d time.Duration) bool // whether the probe says no d after t0
+		back    time.Duration              // the pass the probe answers again
+		quietTo time.Duration              // nothing told up to here
+	}{
+		{"a 25 s outage, its last claim at its start", func(d time.Duration) bool { return d >= 5*time.Second && d < 25*time.Second }, 25 * time.Second, 55 * time.Second},
+		{"a 5 s outage", func(d time.Duration) bool { return d == 10*time.Second }, 15 * time.Second, 45 * time.Second},
+		{"back-to-back outages", func(d time.Duration) bool { return d == 10*time.Second || d == 20*time.Second }, 25 * time.Second, 55 * time.Second},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			pool := setup(t)
+			must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+			chiefOnly(t, pool)
+			var t0 time.Time
+			must(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+			pollAt(t, pool, "h1", t0)
+			now := t0
+			ctl := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0,
+				PlatformUp: func(context.Context) error {
+					if c.down(now.Sub(t0)) {
+						return errors.New("connect: connection refused")
+					}
+					return nil
+				}}
+			if n, _ := ticks(t, ctl, &now, t0, t0.Add(c.quietTo)); n != 0 {
+				t.Fatalf("%d turns up to %v (the probe answered again at %v)", n, c.quietTo, c.back)
+			}
+			n, first := ticks(t, ctl, &now, t0.Add(c.quietTo+controller.PresenceEvery), t0.Add(c.quietTo+controller.PresenceEvery))
+			if n != 2 || first.Sub(t0.Add(c.back)) > 35*time.Second {
+				t.Fatalf("%d turns %v after the probe answered again; want h1 and its executor within 35 s", n, first.Sub(t0.Add(c.back)))
+			}
+		})
+	}
+}
+
+// Review 529 B-1: what a pass does before judging the hosts is bounded by
+// the pass's limit. A pool that gives no connection, and the chief's seat
+// lock held elsewhere while the pass would clear "cannot be judged", each
+// make the pass fail within it; it does not hang.
+func TestAPresencePassIsBounded(t *testing.T) {
+	defer controller.SetPresencePassLimitForTest(500 * time.Millisecond)()
+	stuck := &controller.Controller{DB: stuckDB{}, PlatformUp: func(context.Context) error { return errors.New("connect: connection refused") }}
+	start := time.Now()
+	if _, err := stuck.Presence(ctx); err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("a pool that gives no connection: %v after %v", err, time.Since(start))
+	}
+	pool := setup(t)
+	if _, err := store.PresenceUnjudged(ctx, pool, "test: the platform did not answer."); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := pool.Begin(ctx)
+	must(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, store.Seat)
+	must(t, err)
+	held := &controller.Controller{DB: pool, PlatformUp: func(context.Context) error { return nil }}
+	start = time.Now()
+	if _, err := held.Presence(ctx); err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("the seat's lock held: %v after %v", err, time.Since(start))
+	}
+}
+
+// stuckDB is a database whose every transaction waits until its context
+// ends, as a pool that gives no connection does.
+type stuckDB struct{ store.DB }
+
+func (stuckDB) BeginTx(ctx context.Context, _ pgx.TxOptions) (pgx.Tx, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
