@@ -113,10 +113,9 @@ var bodies = map[string][]field{
 	// free disk below the floor (disk_low, source controller, on the host's
 	// stream: the artifact says how much and the floor; TD-415, hostdisk.go),
 	// or a host that stopped polling (host_offline, source controller, on the
-	// host's stream) or an executor that cannot take work now
-	// (executor_unavailable, source controller, on the controller stream:
-	// line_digest names the executor); the artifact says when and why
-	// (W-31 3.5, presencepass.go).
+	// host's presence stream) or an executor that cannot take work now
+	// (executor_unavailable, source controller, on the executor's presence
+	// stream); the artifact says when and why (W-31 3.5, presencepass.go).
 	// Every rule but repeated_failure
 	// names its artifact (checkBody), but an approval claim in a plan note
 	// (source plan_note, review 489 B3), whose text is in the note it is
@@ -161,9 +160,11 @@ var bodies = map[string][]field{
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
 		{"card", kAny, true},
-		// offered: on a host's stream, what its claim offers, when that
-		// changed (executor, provider, model each; presence.go, W-31 3.5).
-		{"offered", kAny, true}},
+		// offered, disk_below: on a host's offers stream, what its claim
+		// offers (executor, provider, model each) and whether the free disk
+		// it reports is below the floor, when either changed (presence.go,
+		// W-31 3.5).
+		{"offered", kAny, true}, {"disk_below", kBool, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card

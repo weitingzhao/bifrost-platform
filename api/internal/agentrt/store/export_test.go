@@ -270,3 +270,9 @@ func ProposeIssueMissionForTest(ctx context.Context, tx pgx.Tx, w Writer, workID
 	}
 	return proposeMissionTx(ctx, tx, w, p, "k-ask", ask)
 }
+
+// The presence reads' SQL, for EXPLAIN (review 526 B2).
+var (
+	OpenAlertsSQL  = openAlertsSQL
+	LatestClaimSQL = latestClaimSQL
+)

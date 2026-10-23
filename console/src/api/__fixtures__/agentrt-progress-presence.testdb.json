@@ -6,7 +6,7 @@
     {
       "executor": "exec:claude",
       "available": false,
-      "why": "the claude account's pools cool down until 2026-10-23T21:08:55Z",
+      "why": "the claude account's pools cool down until 2026-10-23T21:40:51Z",
       "hosts": [
         "h1"
       ],
@@ -21,7 +21,7 @@
     {
       "executor": "exec:codex",
       "available": false,
-      "why": "host h2 offers it but has not polled since 2026-10-23T20:08:10Z",
+      "why": "host h2 offers it but has not polled since 2026-10-23T20:40:06Z",
       "hosts": [],
       "jobs": [
         "chief_of_staff",
@@ -32,7 +32,7 @@
       ]
     }
   ],
-  "generated_at": "2026-10-23T20:08:55.248606Z",
+  "generated_at": "2026-10-23T20:40:51.929331Z",
   "hosts": [
     {
       "state": "active",
@@ -50,10 +50,10 @@
       "controls": [],
       "disk_low": false,
       "host_kind": "dev",
-      "offered_at": "2026-10-23T20:08:55.234808+00:00",
+      "offered_at": "2026-10-23T20:40:51.910947+00:00",
       "poll_age_s": 0,
       "tools_json": {},
-      "last_poll_at": "2026-10-23T20:08:55.235235+00:00",
+      "last_poll_at": "2026-10-23T20:40:51.911705+00:00",
       "capacity_json": {},
       "live_attempts": 0,
       "agentd_version": null,
@@ -75,10 +75,10 @@
       "controls": [],
       "disk_low": false,
       "host_kind": "dev",
-      "offered_at": "2026-10-23T20:08:55.235643+00:00",
+      "offered_at": "2026-10-23T20:40:51.912643+00:00",
       "poll_age_s": 45,
       "tools_json": {},
-      "last_poll_at": "2026-10-23T20:08:10.236185+00:00",
+      "last_poll_at": "2026-10-23T20:40:06.914039+00:00",
       "capacity_json": {},
       "live_attempts": 0,
       "agentd_version": null,
@@ -180,7 +180,7 @@
   "work": {
     "missions": [
       {
-        "deadline_at": "2026-10-30T20:08:55Z",
+        "deadline_at": "2026-10-30T20:40:51Z",
         "eta": {
           "reason": "the mission is proposed: a wait for a decision has no usual time",
           "state": "unknown"
@@ -200,7 +200,7 @@
           }
         ],
         "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
-        "since": "2026-10-23T20:08:55.223401Z",
+        "since": "2026-10-23T20:40:51.882868Z",
         "slices": {
           "done": 0,
           "manual": 0,
@@ -217,7 +217,7 @@
         "work_id": "W-31"
       },
       {
-        "deadline_at": "2026-10-30T20:08:55Z",
+        "deadline_at": "2026-10-30T20:40:51Z",
         "eta": {
           "reason": "the mission is proposed: a wait for a decision has no usual time",
           "state": "unknown"
@@ -226,7 +226,7 @@
         "mission_id": "M-2",
         "next_steps": [],
         "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
-        "since": "2026-10-23T20:08:55.225417Z",
+        "since": "2026-10-23T20:40:51.887045Z",
         "slices": {
           "done": 0,
           "manual": 0,

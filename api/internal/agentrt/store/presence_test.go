@@ -32,7 +32,7 @@ func presenceWorld(t *testing.T, hosts ...string) *world {
 // and its poll counted, and it takes nothing (no free slot).
 func (w *world) poll(t *testing.T, host string, tools ...store.Tool) time.Time {
 	t.Helper()
-	_, err := store.RecordHostOffered(ctx, w.rt, host, tools)
+	_, err := store.RecordHostOffered(ctx, w.rt, host, tools, false)
 	ok(t, err)
 	_, err = store.ClaimNext(ctx, w.rt, store.ClaimRequest{HostID: host, FreeSlots: 0, Tools: tools})
 	ok(t, err)
@@ -148,32 +148,39 @@ func TestAHostThatStopsIsToldOnceAfterThirtySeconds(t *testing.T) {
 		t.Fatalf("told again: %d", n)
 	}
 	var hostNotes int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'host:h1' AND event_type = 'note'
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'presence:host:h1' AND event_type = 'note'
 	  AND starts_with(body_json->>'text', 'h1 is back online')`).Scan(&hostNotes))
 	if hostNotes != 1 {
 		t.Fatalf("%d back-online notes", hostNotes)
 	}
 }
 
-// What a host offers is recorded once a change: its first claim, and a claim
-// that offers something else; the order of its preference is no change.
+// What a host offers, and whether its free disk is below the floor, is
+// recorded once a change: its first claim, and a claim that offers something
+// else or reports the disk on the other side of the floor; the order of its
+// preference is no change. GET /progress says the latest.
 func TestAHostsOffersAreRecordedOnceAChange(t *testing.T) {
 	t.Parallel()
 	w := presenceWorld(t, "h1")
 	for i, step := range []struct {
 		tools []store.Tool
+		low   bool
 		want  bool
-	}{{[]store.Tool{claude, codex}, true}, {[]store.Tool{codex, claude}, false}, {[]store.Tool{claude}, true},
-		{[]store.Tool{claude}, false}, {nil, true}, {nil, false}} {
-		got, err := store.RecordHostOffered(ctx, w.rt, "h1", step.tools)
+	}{{[]store.Tool{claude, codex}, false, true}, {[]store.Tool{codex, claude}, false, false}, {[]store.Tool{claude}, false, true},
+		{[]store.Tool{claude}, false, false}, {[]store.Tool{claude}, true, true}, {[]store.Tool{claude}, true, false},
+		{nil, true, true}, {nil, true, false}} {
+		got, err := store.RecordHostOffered(ctx, w.rt, "h1", step.tools, step.low)
 		ok(t, err)
 		if got != step.want {
 			t.Fatalf("step %d: recorded %v", i, got)
 		}
 	}
 	doc, _ := w.presence(t)
-	if len(doc.Hosts) != 1 || doc.Hosts[0].Offered == nil || len(doc.Hosts[0].Offered) != 0 || doc.Hosts[0].OfferedAt == nil {
+	if len(doc.Hosts) != 1 || doc.Hosts[0].Offered == nil || len(doc.Hosts[0].Offered) != 0 || doc.Hosts[0].OfferedAt == nil || !doc.Hosts[0].DiskLow {
 		t.Fatalf("hosts %+v", doc.Hosts)
+	}
+	if n := w.lastSeq(t, store.HostOffersStream("h1")); n != 4 {
+		t.Fatalf("%d records of what h1 offers", n)
 	}
 }
 

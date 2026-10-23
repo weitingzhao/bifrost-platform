@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,26 +14,53 @@ import (
 // Presence (W-31 round 3, 3.5; CUT-online-status-2026-10-23 option A: the
 // Owner's 「主机掉线或执行者不可用，Console 和参谋长简报 1 分钟内说出来」). A
 // host is online while its last poll is at most HostLostAfter old; what it
-// offers is what its latest claim said (RecordHostOffered: a note on its
-// stream when that changed, the way its disk is recorded, no table or
-// column). From those, the controls, the disk records, the accounts' pools
-// and the jobs' candidates, an executor is available when some candidate of
-// it may take work now: a host that is online, active, under no stop, pause
-// or drain and with room on disk offers a tool the candidate fits, and its
-// account neither cools down nor reads at its tenant's quota stop. GET
-// /hosts and GET /progress read the hosts' document (HostsSQL), and Progress
-// and the controller's presence pass (presencepass.go) read the same view
+// offers, and whether its free disk is below the floor, is what its latest
+// claim said (RecordHostOffered: a note when that changed, no table or
+// column). From those, the controls, the accounts' pools and the jobs'
+// candidates, an executor is available when some candidate of it may take
+// work now: a host that is online, active, under no stop, pause or drain and
+// with room on disk offers a tool the candidate fits, and its account neither
+// cools down nor reads at its tenant's quota stop. GET /hosts and GET
+// /progress read the hosts' document (HostsSQL), and Progress and the
+// controller's presence pass (presencepass.go) read the same view
 // (readPresence), so the Console and the Owner's conversation say the same
 // thing.
+//
+// Each kind of presence record of one host or executor has a stream of its
+// own (review 526 B2), so its latest state is the stream's last event, read
+// through the stream's head (headSQL): two index probes, whatever else the
+// runtime has recorded and however long ago the state was set. Nothing else
+// is written to these streams.
+
+// HostOffersStream holds what a host's claims offer (RecordHostOffered).
+func HostOffersStream(host string) string { return "offers:host:" + host }
+
+// HostPresenceStream holds a host's presence turns (presencepass.go).
+func HostPresenceStream(host string) string { return "presence:host:" + host }
+
+// ExecutorPresenceStream holds an executor's presence turns, executor
+// named as its actor (exec:claude).
+func ExecutorPresenceStream(executor string) string { return "presence:" + executor }
+
+// headSQL is the SQL of the last event of the stream the SQL expression
+// stream names, as one jsonb value {"type", "at", "body"}, NULL while the
+// stream has none. It is a scalar subquery, so it is read by the stream's
+// head and the event's key for each row it is asked for, never joined
+// against the events at large (review 526 B2: a LATERAL join of the same
+// was planned as a hash join over every event).
+func headSQL(stream string) string {
+	return `(SELECT jsonb_build_object('type', e.event_type, 'at', e.at, 'body', e.body_json) FROM agentrt.event e
+	    WHERE e.event_stream_id = ` + stream + ` AND e.seq = (SELECT s.last_seq FROM agentrt.event_stream s WHERE s.event_stream_id = ` + stream + `))`
+}
 
 // HostsSQL is the hosts document at the moment the SQL expression now names,
 // with $1 HostLostAfter in seconds: GET /hosts and the projection both read
 // it, so a host is online in one exactly when it is in the other (a host is
 // lost past HostLostAfter, as TaskStatus has it). Each host also carries what
 // its latest claim offered (offered, null until one is recorded, with
-// offered_at), whether its free disk is below the floor (disk_low), and
-// whether the controller reports it offline (reported_offline: not online,
-// active, and no stop or drain on it or on every host).
+// offered_at) and whether its free disk was then below the floor (disk_low),
+// and whether the controller reports it offline (reported_offline: not
+// online, active, and no stop or drain on it or on every host).
 func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
@@ -42,22 +68,14 @@ func HostsSQL(now string) string {
 	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
-	    'offered', o.offered, 'offered_at', o.at, 'disk_low', COALESCE(d.event_type = 'policy_alert', false),
+	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
 	    'reported_offline', h.state = 'active' AND NOT COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false)
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
 	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))))
 	  ORDER BY h.host_id), '[]'::jsonb)
 	  FROM agentrt.host h
-	  LEFT JOIN LATERAL (SELECT e.body_json->'offered' AS offered, e.at FROM agentrt.event e WHERE e.event_stream_id = 'host:' || h.host_id
-	    AND e.event_type = 'note' AND e.actor_id = 'controller' AND e.body_json ? 'offered' ORDER BY e.seq DESC LIMIT 1) o ON true
-	  LEFT JOIN LATERAL (SELECT e.event_type FROM agentrt.event e WHERE e.event_stream_id = 'host:' || h.host_id AND e.actor_id = 'controller'
-	    AND ((e.event_type = 'policy_alert' AND e.body_json->>'rule' = 'disk_low')
-	      OR (e.event_type = 'note' AND starts_with(e.body_json->>'text', h.host_id || ` + sqlText(diskBackAbove) + `)))
-	    ORDER BY e.seq DESC LIMIT 1) d ON true`
+	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o`
 }
-
-// sqlText is s as an SQL string literal.
-func sqlText(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 // Offer is a tool a host offers, as its claim named it and its stream records
 // it.
@@ -92,32 +110,46 @@ func offersOf(tools []Tool) []Offer {
 	return out
 }
 
-// latestOffers reads what host's stream last recorded it offers; nil when
-// nothing is recorded.
-func latestOffers(ctx context.Context, tx pgx.Tx, host string) ([]Offer, error) {
-	var raw []byte
-	err := tx.QueryRow(ctx, `SELECT body_json->'offered' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-	  AND actor_id = 'controller' AND body_json ? 'offered' ORDER BY seq DESC LIMIT 1`, "host:"+host).Scan(&raw)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	out := []Offer{}
-	return out, json.Unmarshal(raw, &out)
+// claimSaid is what a host's latest claim said as its offers stream records
+// it; found false while nothing is recorded.
+type claimSaid struct {
+	found     bool
+	offers    []Offer
+	diskBelow bool
 }
 
-// RecordHostOffered records what host's claim offers when it differs from
-// what its stream last recorded (or nothing is recorded yet): a note with
-// the offers. It reports whether it recorded one. A claim request calls it
-// once, before its polls; the stream is locked before the record is read
-// again, so two claims of one host record a change once.
-func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool) (bool, error) {
+var latestClaimSQL = `SELECT ` + headSQL("$1::text")
+
+// latestClaim reads the head of host's offers stream.
+func latestClaim(ctx context.Context, tx pgx.Tx, host string) (claimSaid, error) {
+	var c claimSaid
+	var head []byte
+	if err := tx.QueryRow(ctx, latestClaimSQL, HostOffersStream(host)).Scan(&head); err != nil || head == nil {
+		return c, err
+	}
+	var h struct {
+		Body struct {
+			Offered   []Offer `json:"offered"`
+			DiskBelow bool    `json:"disk_below"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal(head, &h); err != nil {
+		return c, err
+	}
+	return claimSaid{found: true, offers: h.Body.Offered, diskBelow: h.Body.DiskBelow}, nil
+}
+
+// RecordHostOffered records what host's claim offers, and whether the free
+// disk it reports is below the floor (false when it reports none), when that
+// differs from what its offers stream last recorded (or nothing is recorded
+// yet): a note with both. It reports whether it recorded one. A claim
+// request calls it once, before its polls; the stream is locked before its
+// head is read again, so two claims of one host record a change once.
+func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool, diskBelow bool) (bool, error) {
 	offers := offersOf(tools)
 	same := func(tx pgx.Tx) (bool, error) {
-		last, err := latestOffers(ctx, tx, host)
-		return last != nil && slices.Equal(last, offers), err
+		last, err := latestClaim(ctx, tx, host)
+		return last.found && slices.Equal(last.offers, offers) && last.diskBelow == diskBelow, err
 	}
 	recorded := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -125,7 +157,7 @@ func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool) (b
 		if s, err := same(tx); err != nil || s {
 			return err
 		}
-		stream := "host:" + host
+		stream := HostOffersStream(host)
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
@@ -137,11 +169,15 @@ func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool) (b
 			list = append(list, map[string]any{"executor": o.Executor, "provider": o.Provider, "model": o.Model})
 			words = append(words, o.words())
 		}
-		text := "Host " + host + " offers no executor."
+		text := "Host " + host + " offers no executor"
 		if len(words) > 0 {
-			text = "Host " + host + " offers " + strings.Join(words, ", ") + "."
+			text = "Host " + host + " offers " + strings.Join(words, ", ")
 		}
-		_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": text, "offered": list}})
+		if diskBelow {
+			text += "; its free disk is below the floor"
+		}
+		_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
+			Body: map[string]any{"text": text + ".", "offered": list, "disk_below": diskBelow}})
 		recorded = err == nil
 		return err
 	})

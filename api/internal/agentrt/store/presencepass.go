@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -91,18 +90,26 @@ func Presence(ctx context.Context, db DB, now time.Time) (int, error) {
 }
 
 // presenceTurns compares the view with each host's and executor's latest
-// record. Not known is no turn.
+// record, the head of its presence stream. Not known is no turn.
 func presenceTurns(ctx context.Context, tx pgx.Tx, p presence) ([]presenceTurn, error) {
+	streams := make([]string, 0, len(p.hosts)+len(p.executors))
+	for _, h := range p.hosts {
+		streams = append(streams, HostPresenceStream(h.HostID))
+	}
+	for _, e := range p.executors {
+		streams = append(streams, ExecutorPresenceStream(e.Executor))
+	}
+	open, err := openAlerts(ctx, tx, streams)
+	if err != nil {
+		return nil, err
+	}
 	var turns []presenceTurn
 	for _, h := range p.hosts {
-		open, since, err := latestPresence(ctx, tx, "host:"+h.HostID, `body_json->>'rule' = 'host_offline'`, h.HostID+hostBackOnline)
-		if err != nil {
-			return nil, err
-		}
+		since, alerted := open[HostPresenceStream(h.HostID)]
 		switch {
-		case h.ReportedOffline && !open:
+		case h.ReportedOffline && !alerted:
 			turns = append(turns, presenceTurn{host: h.HostID, down: true})
-		case open && h.Online:
+		case alerted && h.Online:
 			turns = append(turns, presenceTurn{host: h.HostID, since: since})
 		}
 	}
@@ -110,34 +117,34 @@ func presenceTurns(ctx context.Context, tx pgx.Tx, p presence) ([]presenceTurn, 
 		if e.Available == nil {
 			continue
 		}
-		open, since, err := latestPresence(ctx, tx, ControllerStream,
-			`body_json->>'rule' = 'executor_unavailable' AND body_json->>'line_digest' = `+sqlText(lineDigest(e.Executor)), e.Executor+executorAvailableAgain)
-		if err != nil {
-			return nil, err
-		}
+		since, alerted := open[ExecutorPresenceStream(e.Executor)]
 		switch {
-		case !*e.Available && !open:
+		case !*e.Available && !alerted:
 			turns = append(turns, presenceTurn{executor: e.Executor, down: true})
-		case *e.Available && open:
+		case *e.Available && alerted:
 			turns = append(turns, presenceTurn{executor: e.Executor, since: since})
 		}
 	}
 	return turns, nil
 }
 
-// latestPresence reads whether the latest of stream's presence records of one
-// host or executor (the controller's policy_alert matching alert, or its note
-// starting with back) is an alert, and when it was recorded.
-func latestPresence(ctx context.Context, tx pgx.Tx, stream, alert, back string) (bool, time.Time, error) {
-	var kind string
-	var at time.Time
-	err := tx.QueryRow(ctx, `SELECT event_type, at FROM agentrt.event WHERE event_stream_id = $1 AND actor_id = 'controller' AND (
-	    (event_type = 'policy_alert' AND `+alert+`) OR (event_type = 'note' AND starts_with(body_json->>'text', $2)))
-	  ORDER BY seq DESC LIMIT 1`, stream, back).Scan(&kind, &at)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, at, nil
+var openAlertsSQL = `SELECT x.stream, (x.head->>'at')::timestamptz FROM (SELECT stream, ` + headSQL("stream") + ` AS head
+	  FROM unnest($1::text[]) AS stream OFFSET 0) x WHERE x.head->>'type' = 'policy_alert'`
+
+// openAlerts reads the head of each presence stream: those whose last
+// record is an alert (a turn down no later record answered), with when it
+// was recorded. One probe of the stream's head and one of its last event
+// each, however long the runtime's history (review 526 B2).
+func openAlerts(ctx context.Context, tx pgx.Tx, streams []string) (map[string]time.Time, error) {
+	rows, err := tx.Query(ctx, openAlertsSQL, streams)
+	if err != nil {
+		return nil, err
 	}
-	return kind == "policy_alert", at, err
+	out := map[string]time.Time{}
+	var stream string
+	var at time.Time
+	_, err = pgx.ForEachRow(rows, []any{&stream, &at}, func() error { out[stream] = at; return nil })
+	return out, err
 }
 
 // recordTurns writes each turn's record and the Owner's note.
@@ -155,7 +162,7 @@ func recordTurns(ctx context.Context, tx pgx.Tx, p presence, turns []presenceTur
 					return err
 				}
 				line = "Host " + t.host + " is offline: " + lastPollWords(h, p.now) + "." + running
-				if err = presenceAlert(ctx, tx, "host:"+t.host, "host_offline", hostOfflinePhrase, "", line); err != nil {
+				if err = presenceAlert(ctx, tx, HostPresenceStream(t.host), "host_offline", hostOfflinePhrase, line); err != nil {
 					return err
 				}
 			} else {
@@ -165,7 +172,7 @@ func recordTurns(ctx context.Context, tx pgx.Tx, p presence, turns []presenceTur
 				}
 				text := t.host + hostBackOnline + ": " + polled + "; it was reported offline at " + stamp(t.since) + "."
 				line = "Host " + text
-				if _, err := Append(ctx, tx, Event{Stream: "host:" + t.host, Type: "note", Actor: "controller",
+				if _, err := Append(ctx, tx, Event{Stream: HostPresenceStream(t.host), Type: "note", Actor: "controller",
 					Body: map[string]any{"text": text}}); err != nil {
 					return err
 				}
@@ -174,13 +181,12 @@ func recordTurns(ctx context.Context, tx pgx.Tx, p presence, turns []presenceTur
 			e := p.executor(t.executor)
 			if t.down {
 				line = t.executor + " is unavailable: " + e.Why + ". It is a candidate of " + strings.Join(e.Jobs, ", ") + "."
-				if err := presenceAlert(ctx, tx, ControllerStream, "executor_unavailable", executorUnavailablePhrase,
-					lineDigest(t.executor), line); err != nil {
+				if err := presenceAlert(ctx, tx, ExecutorPresenceStream(t.executor), "executor_unavailable", executorUnavailablePhrase, line); err != nil {
 					return err
 				}
 			} else {
 				line = t.executor + executorAvailableAgain + ": " + e.Why + "."
-				if _, err := Append(ctx, tx, Event{Stream: ControllerStream, Type: "note", Actor: "controller",
+				if _, err := Append(ctx, tx, Event{Stream: ExecutorPresenceStream(t.executor), Type: "note", Actor: "controller",
 					Body: map[string]any{"text": line + " It was reported unavailable at " + stamp(t.since) + "."}}); err != nil {
 					return err
 				}
@@ -234,16 +240,13 @@ func runningOn(ctx context.Context, tx pgx.Tx, host string) (string, error) {
 
 // presenceAlert writes a policy_alert of rule on stream, its text kept as an
 // artifact.
-func presenceAlert(ctx context.Context, tx pgx.Tx, stream, rule, phrase, digest, text string) error {
+func presenceAlert(ctx context.Context, tx pgx.Tx, stream, rule, phrase, text string) error {
 	art, err := PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"rule": rule, "source": "controller", "phrase": phrase, "artifact_id": art}
-	if digest != "" {
-		body["line_digest"] = digest
-	}
-	_, err = Append(ctx, tx, Event{Stream: stream, Type: "policy_alert", Actor: "controller", Body: body})
+	_, err = Append(ctx, tx, Event{Stream: stream, Type: "policy_alert", Actor: "controller",
+		Body: map[string]any{"rule": rule, "source": "controller", "phrase": phrase, "artifact_id": art}})
 	return err
 }
 

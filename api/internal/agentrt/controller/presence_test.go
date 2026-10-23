@@ -41,7 +41,7 @@ func chiefOnly(t *testing.T, pool *pgxpool.Pool) {
 func pollAs(t *testing.T, pool *pgxpool.Pool) time.Time {
 	t.Helper()
 	tools := []store.Tool{{Executor: "exec:claude", Provider: "anthropic", Model: "claude-opus-5-5"}}
-	_, err := store.RecordHostOffered(ctx, pool, "h1", tools)
+	_, err := store.RecordHostOffered(ctx, pool, "h1", tools, false)
 	must(t, err)
 	_, err = store.ClaimNext(ctx, pool, store.ClaimRequest{HostID: "h1", FreeSlots: 0, Tools: tools})
 	must(t, err)

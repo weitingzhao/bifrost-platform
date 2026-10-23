@@ -379,7 +379,7 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	// What the host offers is recorded once a request too, when it changed
 	// (W-31 3.5): the controller judges the executors from it.
-	if _, err := store.RecordHostOffered(ctx, a.DB, req.HostID, cr.Tools); err != nil {
+	if _, err := store.RecordHostOffered(ctx, a.DB, req.HostID, cr.Tools, cr.Disk != nil && cr.Disk.Below(a.DiskFloor)); err != nil {
 		a.fail(w, err)
 		return
 	}

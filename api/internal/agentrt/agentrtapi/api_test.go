@@ -429,7 +429,7 @@ func TestAgentdPath(t *testing.T) {
 		t.Fatalf("h1: %v", h1)
 	}
 	var notes int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'host:h1' AND body_json ? 'offered'`).Scan(&notes))
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'offers:host:h1' AND body_json ? 'offered'`).Scan(&notes))
 	if notes != 1 {
 		t.Fatalf("%d records of what h1 offers", notes)
 	}
