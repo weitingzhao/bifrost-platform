@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -250,5 +251,71 @@ func TestProberWaitsForItsOwnListener(t *testing.T) {
 	p.waitReady(context.Background(), 3*time.Second)
 	if time.Since(start) < 2*time.Second {
 		t.Fatalf("waitReady returned after %s against a closed port", time.Since(start))
+	}
+}
+
+// A release rolls platform-api with Recreate, so its Service has no ready
+// endpoint for ~30s, and the workers' first run lands there. The item must
+// ride that gap out instead of standing red for a whole interval.
+func TestProberSelfHealthRidesOutARolloutGap(t *testing.T) {
+	srv := fakePlatform(t, nil)
+	defer srv.Close()
+	var hits atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer api.Close()
+	p := testProber(srv)
+	p.APIHealth = api.URL + "/health"
+	p.SelfRetry, p.SelfRetryEvery = 5*time.Second, 20*time.Millisecond
+	got := bySignalID(p.Probe(context.Background()))
+	if s := got["platform-api"]; s.Signal != SignalOK {
+		t.Fatalf("platform-api = %s (%s), want ok after the gap", s.Signal, s.Detail)
+	}
+	if n := hits.Load(); n != 3 {
+		t.Errorf("platform-api asked %d times, want 3 (two misses, then 200)", n)
+	}
+}
+
+func TestProberSelfHealthRedWhenItStaysDown(t *testing.T) {
+	srv := fakePlatform(t, nil)
+	defer srv.Close()
+	p := testProber(srv)
+	p.APIHealth = "http://127.0.0.1:1/health" // refused, like a Service with no endpoint
+	p.SelfRetry, p.SelfRetryEvery = 300*time.Millisecond, 50*time.Millisecond
+	got := bySignalID(p.Probe(context.Background()))
+	s := got["platform-api"]
+	if s.Signal != SignalFail {
+		t.Fatalf("platform-api = %s, want fail when it never answers", s.Signal)
+	}
+	if !strings.Contains(s.Detail, "refused") || !strings.Contains(s.Detail, "tries over 300ms") {
+		t.Errorf("detail = %q, want the refusal and how long it was tried", s.Detail)
+	}
+	if got["platform-console"].Signal != SignalOK {
+		t.Errorf("platform-console = %s", got["platform-console"].Signal)
+	}
+}
+
+// A target that hangs costs at most SelfRetry, not the client timeout per try.
+func TestProberSelfHealthBoundedByItsWindow(t *testing.T) {
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	defer hang.Close()
+	p := &Prober{Client: &http.Client{Timeout: 5 * time.Second}, SelfRetry: 300 * time.Millisecond, SelfRetryEvery: 50 * time.Millisecond}
+	start := time.Now()
+	sig, _ := p.httpOKWithin(context.Background(), hang.URL)
+	if sig != SignalFail {
+		t.Fatalf("signal = %s, want fail", sig)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("a hung target took %s; the window is 300ms", d)
 	}
 }

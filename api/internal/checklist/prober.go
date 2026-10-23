@@ -52,6 +52,15 @@ type Prober struct {
 	ConsoleURL string
 	Env        string // matrix environment the Trade items describe
 	Client     *http.Client
+	// SelfRetry is how long the platform-api and platform-console items keep
+	// asking before they read red; SelfRetryEvery is the spacing. platform-api
+	// rolls with Recreate, so a release leaves its Service with no ready
+	// endpoint for ~30s and kube-proxy refuses the ClusterIP. The workers pod
+	// rolls in the same release and its first run lands in that gap: one
+	// refused read then stood as red on Status for a whole interval (10-22
+	// 21:27 CDT, 10-23 15:18 UTC). Zero means one try.
+	SelfRetry      time.Duration
+	SelfRetryEvery time.Duration
 }
 
 // NewProberFromEnv builds a Prober for the in-cluster workers pod.
@@ -65,11 +74,13 @@ func NewProberFromEnv() *Prober {
 		env = "dev"
 	}
 	return &Prober{
-		Base:       base,
-		APIHealth:  envOr("CHECKLIST_PROBER_API_HEALTH_URL", "http://platform-api:8780/health"),
-		ConsoleURL: envOr("CHECKLIST_PROBER_CONSOLE_URL", "http://platform-console/"),
-		Env:        env,
-		Client:     &http.Client{Timeout: 45 * time.Second},
+		Base:           base,
+		APIHealth:      envOr("CHECKLIST_PROBER_API_HEALTH_URL", "http://platform-api:8780/health"),
+		ConsoleURL:     envOr("CHECKLIST_PROBER_CONSOLE_URL", "http://platform-console/"),
+		Env:            env,
+		Client:         &http.Client{Timeout: 45 * time.Second},
+		SelfRetry:      45 * time.Second,
+		SelfRetryEvery: 5 * time.Second,
 	}
 }
 
@@ -165,10 +176,11 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 		add("failing-pods", okIf(cl.FailingPods == 0, SignalDegraded), pods)
 	}
 
-	// platform-api · platform-console: plain HTTP 200.
-	sig, detail := p.httpOK(ctx, p.APIHealth)
+	// platform-api · platform-console: plain HTTP 200, retried through a
+	// rollout gap (see SelfRetry).
+	sig, detail := p.httpOKWithin(ctx, p.APIHealth)
 	add("platform-api", sig, detail)
-	sig, detail = p.httpOK(ctx, p.ConsoleURL)
+	sig, detail = p.httpOKWithin(ctx, p.ConsoleURL)
 	add("platform-console", sig, detail)
 
 	// argo-apps
@@ -374,6 +386,34 @@ func (p *Prober) httpOK(ctx context.Context, url string) (string, string) {
 		return SignalFail, fmt.Sprintf("%s: HTTP %d", url, resp.StatusCode)
 	}
 	return SignalOK, url + ": HTTP 200"
+}
+
+// httpOKWithin is httpOK asked again every SelfRetryEvery until it reads 200
+// or SelfRetry has passed since the first try. Every try, the first included,
+// ends by that deadline, so one item costs at most SelfRetry.
+func (p *Prober) httpOKWithin(ctx context.Context, url string) (string, string) {
+	if p.SelfRetry <= 0 {
+		return p.httpOK(ctx, url)
+	}
+	every := p.SelfRetryEvery
+	if every <= 0 {
+		every = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, p.SelfRetry)
+	defer cancel()
+	tries := 0
+	for {
+		tries++
+		sig, detail := p.httpOK(ctx, url)
+		if sig != SignalFail {
+			return sig, detail
+		}
+		select {
+		case <-ctx.Done():
+			return sig, fmt.Sprintf("%s (%d tries over %s)", detail, tries, p.SelfRetry)
+		case <-time.After(every):
+		}
+	}
 }
 
 func (p *Prober) client() *http.Client {
