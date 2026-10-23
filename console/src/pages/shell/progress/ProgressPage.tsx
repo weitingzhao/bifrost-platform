@@ -1,3 +1,4 @@
+import { useSettledSignoffTarget } from './useSettledSignoffTarget'
 import { runtimeUnreadLine } from '../owner/ownerModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -84,6 +85,8 @@ export function ProgressPage() {
   const unreadable = runtimeQ.isError || runtimeQ.isPaused
   const runtime = unreadable ? undefined : runtimeQ.data
   const ids = missionIds(runtimeQ.data, submitted?.id)
+  useSettledSignoffTarget(ids.slice(0, WORK_GOAL_CARDS),
+    (!runtimeQ.isPending || runtimeQ.isPaused) && plan.from !== 'loading')
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
       {runtime && <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime.generated_at}><Tick text={now => relative(runtime.generated_at || '', now)} /></time></p>}
@@ -100,7 +103,7 @@ export function ProgressPage() {
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
     <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={unreadable} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} openedAt={openedAt.current} /></section>
-    <section id="plan" aria-label="Plan and architecture" className="scroll-mt-4"><AgentsPlan /></section>
+    <section id="plan" aria-label="Plan and architecture" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
       <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>

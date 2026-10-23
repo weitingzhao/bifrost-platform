@@ -63,10 +63,13 @@ const DUTY_WORDS: Record<string, string> = {
 }
 
 /** Title, body, the two labelled lines, and a decision card's duty and task. Record text is text nodes only. */
-export function QuestionBody({ question }: { question: Question }) {
+export function QuestionBody({ question, environment }: { question: Question; environment?: string }) {
   const link = question.link != null && question.link !== '' ? questionLink(question.link, question.link_text) : null
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
+    <div className="ops-decision-card flex w-full min-w-0 flex-col gap-3">
+      {environment ? <p className="ops-decision-context">{environment}</p> : null}
+      <p className="ops-decision-context">Question #{question.number} · {question.requester} · {question.status}</p>
+      <p className="m-0 text-sm text-muted-foreground">Expires {question.expires_at}</p>
       <h2 className="m-0 whitespace-pre-wrap break-words text-base font-medium">{question.title}</h2>
       {question.body != null && question.body !== '' ? <Prose value={question.body} /> : null}
       <Field label="If you do not answer" value={question.urgency} />
@@ -83,7 +86,7 @@ export function QuestionBody({ question }: { question: Question }) {
 export function StoredAnswer({ question, answer }: { question: Question; answer: QuestionAnswer }) {
   const label = question.options.find(option => option.key === answer.option)?.label
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2" data-stored-answer="">
+    <div role="status" className="ops-decision-receipt flex w-full min-w-0 flex-col gap-2" data-stored-answer="">
       <p className="m-0 break-words text-sm">{storedAnswerWords(answer)}</p>
       {label != null && label !== '' ? <p className="m-0 break-words text-sm">{label}</p> : null}
       {answer.channel === 'rule' ? (

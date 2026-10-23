@@ -1,3 +1,4 @@
+import { useDecisionEnvironment } from '@/pages/useDecisionEnvironment'
 import { useQuery } from '@tanstack/react-query'
 import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
@@ -40,7 +41,7 @@ function Frame({
   children?: ReactNode
 }) {
   return (
-    <div data-testid="question-page" data-question-state={state} className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
+    <div data-testid="question-page" data-question-state={state} className="ops-decision-page flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline pointer-coarse:py-3">
         ← For you
       </a>
@@ -57,7 +58,9 @@ function Frame({
 function QuestionSession({ id }: { id: string }) {
   useDecisionPageResume()
   const send = useAnswerSend(id)
-  const blocked = decisionBlockReason(usePlatformAuth())
+  const auth = usePlatformAuth()
+  const blocked = decisionBlockReason(auth)
+  const environment = useDecisionEnvironment()
   const acceptRef = send.acceptRef
   useEffect(() => {
     clearLegacyApprovalToken()
@@ -113,7 +116,7 @@ function QuestionSession({ id }: { id: string }) {
       {shown != null ? (
         <NowClock>
           <div className="flex w-full min-w-0 flex-col gap-3">
-            <QuestionBody question={shown} />
+            <QuestionBody question={shown} environment={environment} />
             {showStored && answer != null ? <StoredAnswer question={shown} answer={answer} /> : null}
             {showClosed ? <ClosedLine question={shown} /> : null}
             {runtimeCard ? (
@@ -127,6 +130,7 @@ function QuestionSession({ id }: { id: string }) {
             <p className="m-0 text-sm">{SECRETS_LINE}</p>
             {showForm ? (
               <QuestionAnswerForm
+                reviewContext={JSON.stringify([auth.token, auth.caps?.role, blocked, environment])}
                 question={shown}
                 phase={send.state.phase}
                 blocked={blocked}

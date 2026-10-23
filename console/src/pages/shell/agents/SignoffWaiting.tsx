@@ -6,7 +6,7 @@ import { SignOffButtons } from './StepSignoffs'
 import { StepBadge, StepTitle } from './StepText'
 import { useSignoffWaits } from './useRuntimePlan'
 
-const box = 'flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-3'
+const box = 'ops-signoff-queue flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-3'
 
 /**
  * At the top of the plan: the steps waiting on the Owner's sign-off, by number, each with its one-line title and its
@@ -15,13 +15,13 @@ const box = 'flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-[var(--card-radius)
  * says so in its place (review 502 B1), so `#work?section=signoff` has a target from the first paint (B2); when its
  * steps arrive and the address names it, it is brought into view again. Nothing is drawn when none waits.
  */
-export function SignoffWaiting() {
+export function SignoffWaiting({ deferScroll = false }: { deferScroll?: boolean }) {
   const read = useSignoffWaits()
   const ref = useRef<HTMLElement>(null)
   const ready = read.read === 'ok' && read.waits.length > 0
   useEffect(() => {
-    if (ready && typeof window !== 'undefined' && hashNamesSection(window.location.hash, 'signoff')) ref.current?.scrollIntoView?.({ block: 'start' })
-  }, [ready])
+    if (!deferScroll && ready && typeof window !== 'undefined' && hashNamesSection(window.location.hash, 'signoff')) ref.current?.scrollIntoView?.({ block: 'start' })
+  }, [ready, deferScroll])
   if (read.read === 'ok' && read.waits.length === 0) return null
   if (read.read !== 'ok') {
     return <section ref={ref} id="signoff" aria-label="Waiting for your sign-off" className={`${box} border-[var(--card-border)]`}>
@@ -35,7 +35,7 @@ export function SignoffWaiting() {
       <li key={w.node} data-signoff-wait={w.node}
         className="flex min-w-0 flex-col gap-2 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-sm"><StepBadge label={w.label} /><StepTitle text={w.title} /></div>
-        <SignOffButtons node={w.node} label={w.label} refs={w.refs} named={w.named} />
+        <SignOffButtons node={w.node} label={w.label} refs={w.refs} named={w.named} state={w.state} title={w.title} />
       </li>)}</ul>
   </section>
 }

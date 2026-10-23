@@ -1,0 +1,80 @@
+/* Decision surfaces share the shell's four palettes; status colors remain semantic. */
+.ops-decision-page { margin-inline: auto; padding-bottom: 24px; }
+.ops-decision-card, .ops-signoff-queue {
+  background: var(--ops-panel);
+  box-shadow: var(--ops-shadow);
+  border: 1px solid var(--ops-edge);
+  border-radius: 24px;
+  padding: clamp(18px, 3vw, 30px);
+}
+.ops-decision-card h2 { font-size: clamp(20px, 2.3vw, 26px); line-height: 1.35; }
+.ops-decision-context { margin: 0 0 8px; color: var(--muted-foreground); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.ops-decision-card [data-prose], .ops-decision-card > div { line-height: 1.65; }
+.ops-decision-card [data-decision-banner], .ops-decision-receipt {
+  background: var(--ops-selection);
+  border: 1px solid var(--ops-edge);
+  box-shadow: var(--ops-inset);
+  border-radius: 16px;
+  padding: 16px;
+  line-height: 1.55;
+}
+.ops-decision-actions, .ops-decision-review {
+  background: var(--ops-control);
+  border: 1px solid var(--ops-edge);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: var(--ops-raised);
+  min-width: 0;
+}
+.ops-decision-review { margin-bottom: 12px; box-shadow: var(--ops-inset); }
+.ops-approval-review { width: 100%; min-width: 0; }
+.ops-decision-page :is(button, input, summary), .ops-signoff-action button { min-height: 44px; }
+.ops-decision-page :is(input, textarea) {
+  color: var(--foreground);
+  background: var(--field-fill);
+  border-radius: 12px;
+  border: 1px solid var(--ops-edge);
+  box-shadow: var(--ops-inset);
+  padding: 12px;
+}
+.ops-decision-page textarea { min-height: 96px; }
+.ops-decision-page :is(button, input, textarea, a, summary):focus-visible, .ops-signoff-action button:focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 3px;
+}
+.ops-answer-form { gap: 12px; }
+.ops-answer-form [data-option] {
+  color: var(--foreground);
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-edge);
+  box-shadow: var(--ops-raised);
+  padding: 16px;
+  border-radius: 16px;
+  line-height: 1.55;
+}
+.ops-answer-form [data-option][data-recommended] { border-color: var(--primary); }
+.ops-answer-form [data-option][aria-pressed='true'] { background: var(--ops-selection); box-shadow: var(--ops-inset); outline: 2px solid var(--ring); outline-offset: 1px; }
+.ops-answer-form [data-confirm-row] > button, .ops-approval-review > button, .ops-signoff-action .ops-decision-actions button:first-child {
+  color: var(--primary-foreground); background: var(--ops-accent); border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 600;
+}
+.ops-decision-page button:disabled, .ops-signoff-action button:disabled { opacity: .55; cursor: not-allowed; }
+.ops-signoff-queue [data-signoff-wait] { background: var(--ops-control); border-radius: 16px; padding: 16px; align-items: start; }
+.ops-signoff-action { gap: 8px; }
+.ops-signoff-action .ops-decision-actions { display: flex; flex-direction: column; gap: 12px; }
+.ops-signoff-action button { background: var(--ops-control); color: var(--foreground); }
+.ops-review-cancel { text-decoration: underline; padding: 6px 0; }
+@media (min-width: 1024px) {
+  .ops-decision-page { max-width: 960px; }
+  .ops-signoff-queue [data-signoff-wait] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr); }
+}
+@media (max-width: 640px) {
+  .ops-decision-page .text-sm, .ops-decision-card [data-prose] { font-size: 16px; }
+  .ops-decision-actions { padding: 16px; }
+  .ops-signoff-action button { width: 100%; }
+}
+
+/* Both phone header rows must clear the linked sign-off, including cold-load final positioning. */
+.ops-signoff-queue { scroll-margin-top: 160px; }
+.ops-signoff-queue [data-step-badge] { align-self: flex-start; margin-top: 12px; }
+.ops-signoff-queue [data-step-badge] + button {
+  min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+}

@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -84,7 +85,7 @@ async function untilEnabled(name: string | RegExp) {
 
 async function clickEnabled(name: string | RegExp) {
   const button = await untilEnabled(name)
-  fireEvent.click(button)
+  clickDecisionControl(button)
   return button
 }
 
@@ -158,7 +159,7 @@ describe('one sign-in for decisions', () => {
     openApproval()
     await untilEnabled('Approve gitops_sync_app')
     fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'not now' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Reject gitops_sync_app' }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Reject gitops_sync_app' }))
     await waitFor(() => expect(decisionPosts().some(post => post.url.endsWith('/reject'))).toBe(true))
     expect(decisionPosts().find(post => post.url.endsWith('/reject'))?.auth).toBe(`Bearer ${TOP}`)
   })
@@ -167,7 +168,7 @@ describe('one sign-in for decisions', () => {
     openApproval('ap-unknown', buildPlatformApproval({ id: 'ap-unknown', status: 'unknown', error: 'lease lost' }))
     await screen.findByLabelText('It did not run')
     await waitFor(() => expect(screen.queryByText(CHECKING)).toBeNull())
-    fireEvent.click(screen.getByLabelText('It did not run'))
+    clickDecisionControl(screen.getByLabelText('It did not run'))
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked' } })
     await clickEnabled('Close this request')
     await waitFor(() => expect(decisionPosts().some(post => post.url.endsWith('/resolve'))).toBe(true))
@@ -222,7 +223,7 @@ describe('one sign-in for decisions', () => {
     expect(await screen.findByText(ABSENT)).toBeTruthy()
     expect(approve.hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: 'Reject gitops_sync_app' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -236,7 +237,7 @@ describe('one sign-in for decisions', () => {
     const approve = await screen.findByRole('button', { name: 'Approve gitops_sync_app' })
     expect(await screen.findByText(UNRECOGNIZED)).toBeTruthy()
     expect(approve.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -251,7 +252,7 @@ describe('one sign-in for decisions', () => {
     expect(await screen.findByText(OPERATOR)).toBeTruthy()
     expect(approve.hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: 'Reject gitops_sync_app' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -272,7 +273,7 @@ describe('one sign-in for decisions', () => {
     expect(await screen.findByText(OPERATOR)).toBeTruthy()
     const close = await screen.findByRole('button', { name: 'Close this request' })
     expect(close.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(await screen.findByLabelText('It did not run'))
+    clickDecisionControl(await screen.findByLabelText('It did not run'))
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked' } })
     const form = close.closest('form')
     expect(form).toBeTruthy()
@@ -290,7 +291,7 @@ describe('one sign-in for decisions', () => {
     const approve = await screen.findByRole('button', { name: 'Approve gitops_sync_app' })
     expect(await screen.findByText(CHECKING)).toBeTruthy()
     expect(approve.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -306,7 +307,7 @@ describe('one sign-in for decisions', () => {
     expect(screen.queryByText(ABSENT)).toBeNull()
     expect(screen.queryByText(UNRECOGNIZED)).toBeNull()
     expect(approve.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -323,7 +324,7 @@ describe('one sign-in for decisions', () => {
     render(wrapper(<ApprovalsPage />))
     await untilEnabled('Approve gitops_sync_app')
     const before = vi.mocked(fetchAuthCapabilities).mock.calls.length
-    fireEvent.click(screen.getByRole('button', { name: 'Approve gitops_sync_app' }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Approve gitops_sync_app' }))
     expect(await screen.findByText(REJECTED)).toBeTruthy()
     expect(document.body.innerHTML).not.toContain(TOP)
     expect(document.body.innerHTML).not.toContain(LEGACY)
@@ -368,10 +369,10 @@ describe('one sign-in for decisions', () => {
     render(wrapper(<UserMenu opsApiHealthy onRefresh={() => undefined} />))
     const menu = screen.getByRole('button', { name: 'User menu' })
     fireEvent.pointerDown(menu, { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 })
-    fireEvent.click(menu)
-    fireEvent.click(await screen.findByRole('button', { name: 'Authenticate' }))
+    clickDecisionControl(menu)
+    clickDecisionControl(await screen.findByRole('button', { name: 'Authenticate' }))
     fireEvent.change(screen.getByPlaceholderText('Platform operator token…'), { target: { value: TOP } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Connect' }))
     await waitFor(() => expect(window.localStorage.getItem(PLATFORM_TOKEN_KEY)).toBe(TOP))
     expect(document.body.innerHTML).not.toContain(TOP)
   })
@@ -390,7 +391,7 @@ describe('one sign-in for decisions', () => {
       return json(questionBody())
     })
     render(wrapper(<QuestionPage />))
-    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    clickDecisionControl(await screen.findByRole('button', { name: /b Wait/ }))
     await clickEnabled('Confirm answer')
     await waitFor(() => expect(decisionPosts().some(post => post.url.endsWith('/answer'))).toBe(true))
     expect(decisionPosts().find(post => post.url.endsWith('/answer'))?.auth).toBe(`Bearer ${TOP}`)
@@ -405,11 +406,11 @@ describe('one sign-in for decisions', () => {
     vi.mocked(fetchAuthCapabilities).mockResolvedValue(OPERATOR_CAPS)
     vi.mocked(fetch).mockResolvedValue(json(questionBody()))
     render(wrapper(<QuestionPage />))
-    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    clickDecisionControl(await screen.findByRole('button', { name: /b Wait/ }))
     expect(await screen.findByText(OPERATOR)).toBeTruthy()
     const confirm = screen.getByRole('button', { name: 'Confirm answer' })
     expect(confirm.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(confirm)
+    clickDecisionControl(confirm)
     expect(decisionPosts()).toEqual([])
   })
 
@@ -420,10 +421,10 @@ describe('one sign-in for decisions', () => {
     vi.mocked(fetchAuthCapabilities).mockResolvedValue(GUEST)
     vi.mocked(fetch).mockResolvedValue(json(questionBody()))
     render(wrapper(<QuestionPage />))
-    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    clickDecisionControl(await screen.findByRole('button', { name: /b Wait/ }))
     expect(await screen.findByText(ABSENT)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Confirm answer' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Confirm answer' }))
     expect(decisionPosts()).toEqual([])
   })
 
@@ -458,7 +459,7 @@ describe('one sign-in for decisions', () => {
       expect(approve.hasAttribute('disabled')).toBe(false)
     })
     expect(screen.queryByText(NEWER_CONSOLE_BANNER)).toBeNull()
-    fireEvent.click(approve)
+    clickDecisionControl(approve)
     expect(await screen.findByRole('button', { name: 'Sending…' })).toBeTruthy()
     newer = true
     await waitFor(() => {
@@ -467,7 +468,7 @@ describe('one sign-in for decisions', () => {
     })
     const reloadButton = screen.getByRole('button', { name: 'Reload' })
     expect(reloadButton.hasAttribute('disabled')).toBe(true)
-    fireEvent.click(reloadButton)
+    clickDecisionControl(reloadButton)
     expect(reload).not.toHaveBeenCalled()
   })
 })

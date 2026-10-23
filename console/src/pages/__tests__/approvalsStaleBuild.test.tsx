@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import type { ComponentProps, MouseEvent } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -112,7 +113,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
   }
   async function sendA() {
     recordServerContact()
-    fireEvent.click(approve())
+    clickDecisionControl(approve())
     await waitFor(() => expect(posts()).toHaveLength(1))
   }
   async function answerHanging(body: unknown = {}) {
@@ -151,8 +152,8 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     expectBuildReason(reject(), DECISION_AFTER_RELOAD)
     expect(screen.getByText(DECISION_AFTER_RELOAD).getAttribute('role')).toBe('status')
     expect(screen.getByText(DECISION_IN_FLIGHT_BANNER)).toBeTruthy()
-    fireEvent.click(approve())
-    fireEvent.click(reject())
+    clickDecisionControl(approve())
+    clickDecisionControl(reject())
     expect(posts()).toHaveLength(1)
     expect(String(posts()[0][0])).toContain('/a/')
   })
@@ -169,6 +170,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'Do not run' } })
     const button = label === 'Approve' ? approve() : reject()
     expect(disabled(button)).toBe(false)
+    if (label === 'Approve') fireEvent.click(button) // Review without sending.
     const clickBeforeDrift = callbacks.get(button.getAttribute('aria-label') ?? '')
     expect(clickBeforeDrift).toBeTypeOf('function')
     await drift()
@@ -176,6 +178,13 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     expect(click).toBeTypeOf('function')
     await act(async () => { click?.() })
     expect(posts()).toHaveLength(1)
+    if (when === 'current' && label === 'Approve') {
+      // The new review layer invalidates this confirmation before the send guard is entered.
+      expect(disabled(approve())).toBe(true)
+      expect(approve().textContent).toBe('Review approval')
+      expect(screen.getByText(DECISION_AFTER_RELOAD)).toBeTruthy()
+      return
+    }
     // The card's notice proves the entry guard spoke, independently of the disabled-button reason.
     expect(document.getElementById('approval-b')?.lastElementChild?.textContent).toBe(DECISION_AFTER_RELOAD)
     expect(document.getElementById('approval-b')?.lastElementChild?.getAttribute('role')).toBe('status')
@@ -249,6 +258,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
   // reload now. The in-flight sentence would tell the Owner to wait for a decision that does not exist.
   it('a callback kept from before the drift, with nothing in flight, says to reload and sends nothing', async () => {
     await page()
+    fireEvent.click(approve()) // Capture the reviewed approval callback, without sending.
     const clickBeforeDrift = callbacks.get(approve().getAttribute('aria-label') ?? '')
     expect(clickBeforeDrift).toBeTypeOf('function')
     await drift()
@@ -267,7 +277,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     await sendA()
     await openRecord('b')
     recordServerContact()
-    fireEvent.click(approve())
+    clickDecisionControl(approve())
     await waitFor(() => expect(posts()).toHaveLength(2))
     await drift()
     await openRecord('c')
@@ -297,7 +307,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     await page()
     holdHealth = true
     vi.setSystemTime(new Date('2026-10-13T12:00:30Z')) // the last contact is now 30 seconds old: the click checks first
-    fireEvent.click(approve())
+    clickDecisionControl(approve())
     await waitFor(() => expect(screen.getByText(CHECKING_CONNECTION)).toBeTruthy())
     await drift()
     await act(async () => {
@@ -320,7 +330,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     await openRecord('b')
     expect(disabled(approve())).toBe(false)
     recordServerContact()
-    fireEvent.click(approve())
+    clickDecisionControl(approve())
     await waitFor(() => expect(posts()).toHaveLength(2))
     expect(String(posts()[1][0])).toContain('/b/')
     expect(screen.queryByText(DECISION_AFTER_RELOAD)).toBeNull()

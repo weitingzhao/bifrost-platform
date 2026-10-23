@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -106,7 +107,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     let signal: AbortSignal | null | undefined
     let aborted = false
     post = init => { signal = init.signal; signal?.addEventListener('abort', () => { aborted = true }); return new Promise(resolve => { finish = resolve }) }
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await tick()
     expect(screen.getByText(waiting)).toBeTruthy()
     await tick()
@@ -123,7 +124,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     post = async () => { throw new TypeError('connection lost') }
     read = async () => json(row('running'))
-    fireEvent.click(button); await tick(1)
+    clickDecisionControl(button); await tick(1)
     expect(screen.getByText('Approved. Running now.')).toBeTruthy()
     read = async () => json(row('failed'))
     await tick()
@@ -138,7 +139,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     post = async () => { throw new TypeError('connection lost') }
     read = async () => json(row('approved'))
-    fireEvent.click(button); await tick(1)
+    clickDecisionControl(button); await tick(1)
     expect(screen.getByText('Approved. Running now.')).toBeTruthy()
     expect(reads).toEqual([id, id])
     await tick(29_999)
@@ -159,7 +160,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it('keeps successful POST cached under the read key when refresh fails (review 2)', async () => {
     const button = await open(id)
     read = async () => json({ error: 'unavailable' }, 503)
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText('This has run.')
     expect(client.getQueryData(['approvals', 'item', id])).toMatchObject({ status: 'executed' })
     expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
@@ -169,7 +170,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id)
     post = async () => { throw new TypeError('connection lost') }
     read = async () => json(row('approved'))
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText('Approved. Running now.')
     expect(client.getQueryData(['approvals', 'item', id])).toMatchObject({ status: 'approved' })
     expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
@@ -178,7 +179,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it('keeps the record lock when changing between its number and id', async () => {
     const button = await open(id); clock()
     post = () => new Promise(() => undefined)
-    fireEvent.click(button); await tick()
+    clickDecisionControl(button); await tick()
     await navigate(id === '57' ? 'record-a' : '57')
     expect(screen.getByText(waiting)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
@@ -188,7 +189,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     let finish!: (r: Response) => void
     post = () => new Promise(resolve => { finish = resolve })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await navigate(id === '57' ? 'record-a' : '57')
     read = async () => json({ error: 'read unavailable' }, 503)
     await act(async () => { finish(json({ status: 'executed' })) })
@@ -201,7 +202,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     let fail!: (error: Error) => void
     post = () => new Promise((_resolve, reject) => { fail = reject })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await navigate(id === '57' ? 'record-a' : '57')
     read = async () => json(row('approved'))
     await act(async () => { fail(new TypeError('lost response')) })
@@ -213,7 +214,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it('allows terminal GETs to add execution details without regressing status', async () => {
     const button = await open(id)
     read = async () => json({ ...row('executed'), execution: { exit_code: 0, duration_ms: 2000 } })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText('It ran and finished.')
     expect(screen.getByText(/Exit code 0 · took 2 s/)).toBeTruthy()
   })
@@ -222,7 +223,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     let finish!: (r: Response) => void
     post = () => new Promise(resolve => { finish = resolve })
-    fireEvent.click(button); await tick()
+    clickDecisionControl(button); await tick()
     read = async key => json(row('executed', key === id ? 'record-a' : 'record-b'))
     await navigate(id === '57' ? '58' : 'record-b')
     expect(screen.queryByText(waiting)).toBeNull()
@@ -237,7 +238,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it('puts A waiting notice on A when its 30 second timer fires while viewing B', async () => {
     const button = await open(id); clock()
     post = () => new Promise(() => undefined)
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await navigate(id === '57' ? '58' : 'record-b')
     await tick(29_999)
     expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-b')
@@ -256,7 +257,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     let fail!: (error: Error) => void
     post = () => new Promise((_resolve, reject) => { fail = reject })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await navigate(id === '57' ? '58' : 'record-b')
     read = async key => json(row(key === id ? 'approved' : 'pending', key === id ? 'record-a' : 'record-b'))
     await act(async () => { fail(new TypeError('A late failure')) })
@@ -284,7 +285,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     clock()
     let fail!: (error: Error) => void
     post = () => new Promise((_resolve, reject) => { fail = reject })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await navigate(id === '57' ? '58' : 'record-b')
     read = async key => json(row('pending', key === id ? 'record-a' : 'record-b'))
     await act(async () => { fail(new TypeError('A late failure')) })
@@ -307,7 +308,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'not needed' } })
     post = async () => json({ error: 'reject storage unavailable' }, 500)
     read = async () => json(row('rejected'))
-    fireEvent.click(screen.getByRole('button', { name: /Reject gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Reject gitops/ }))
     await screen.findByText('This was rejected.')
     expect(screen.getByText(/reject storage unavailable/)).toBeTruthy()
     expect(reads).toEqual([id, id])
@@ -320,7 +321,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     post = mode === 'sending' ? () => new Promise(() => undefined) : async () => { throw new TypeError('A error') }
     read = async key => key === id ? json({ error: 'missing' }, 404) : json(row(bStatus, 'record-b'))
-    fireEvent.click(button); await tick(30_001)
+    clickDecisionControl(button); await tick(30_001)
     await navigate(id === '57' ? '58' : 'record-b')
     expect(screen.queryByText(waiting)).toBeNull()
     expect(screen.queryByText(/Could not read this request/)).toBeNull()
@@ -335,7 +336,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it('clears pending retry advice after a poll sees approved (review 4)', async () => {
     const button = await open(id); clock()
     post = async () => { throw new TypeError('lost') }
-    fireEvent.click(button); await tick(1)
+    clickDecisionControl(button); await tick(1)
     expect(screen.getByText(retry)).toBeTruthy()
     read = async () => json(row('approved'))
     await tick()
@@ -347,7 +348,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
   it.each([409, 500])('retains the server reason for HTTP %s while restoring pending buttons (review 5)', async status => {
     const button = await open(id)
     post = async () => json({ error: 'store approvals: read-only file system' }, status)
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText(retry)
     expect(screen.getByRole('alert').textContent).toContain('store approvals: read-only file system')
     expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
@@ -358,7 +359,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id); clock()
     post = async () => { throw new TypeError('network down') }
     read = async () => json({ error: 'missing' }, 404)
-    fireEvent.click(button); await tick(1)
+    clickDecisionControl(button); await tick(1)
     expect(screen.getByText(/Could not read this request\. Last attempt: .+Refresh this page/)).toBeTruthy()
     expect(screen.getByText('network down')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(true)
@@ -371,7 +372,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     const button = await open(id)
     let finish!: (r: Response) => void
     read = () => new Promise(resolve => { finish = resolve })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText('This has run.')
     await act(async () => { finish(json(row(status))) })
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
@@ -384,7 +385,7 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     let finish!: (r: Response) => void
     read = () => new Promise(resolve => { finish = resolve })
     post = async () => json({ status: 'approved' })
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText('Approved. Running now.')
     await act(async () => { finish(json(row())) })
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
@@ -432,7 +433,7 @@ it('opened by its number from the plan, says its plan step and approves the reco
   const step = await screen.findByRole('link', { name: 'Plan step 2.1-3 (yours): （你）批 PROD 迁移作业（O10、O11） — item 2.1 数据层：状态库' })
   expect(step.getAttribute('href')).toBe('#work?section=plan')
   expect(screen.getByRole('link', { name: 'Plan step 2.4-2: （补强）★（你）批准 — item 2.4 缩进用不换行空格' })).toBeTruthy()
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
   expect(posts).toHaveLength(1)
   expect(posts[0]).toContain('/approvals/record-a/')

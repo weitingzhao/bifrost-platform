@@ -57,13 +57,13 @@ function Architecture({ table }: { table: RuntimeArchTable }) {
   </div>
 }
 /** The round's plan (GET /plan?root=R2 with GET /progress's counts) and the architecture table (GET /progress), both from the agent runtime. */
-export function AgentsPlan() {
+export function AgentsPlan({ deferSignoffScroll = false }: { deferSignoffScroll?: boolean }) {
   const openedAt = useRef(Date.now())
   const plan = useRuntimePlan()
   const arch = useRuntimeArch()
   // Opened when the address names it (Work's "Plan ›", `#work?section=plan`). Above it, always in view, the steps
   // waiting on the Owner's sign-off (`#work?section=signoff`, For you's link).
-  return <div className="flex min-w-0 flex-col gap-3"><SignoffWaiting /><OpsSection title="Plan and architecture" description="From the agent runtime; each architecture row is ticked by its gate tests" collapsible
+  return <div className="flex min-w-0 flex-col gap-3"><SignoffWaiting deferScroll={deferSignoffScroll} /><OpsSection title="Plan and architecture" description="From the agent runtime; each architecture row is ticked by its gate tests" collapsible
     defaultCollapsed={typeof window === 'undefined' || !hashNamesSection(window.location.hash, 'plan')} bodyPadding="compact">
     {plan.from === 'loading' && <p role="status">Reading the plan from the agent runtime…</p>}
     {plan.from === 'error' && <p role="alert">Plan unavailable: {reasonText(plan.error)}; <LastRead readAt={plan.readAt} openedAt={openedAt.current} />.</p>}

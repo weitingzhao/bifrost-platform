@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -91,19 +92,19 @@ const approve = () => screen.getByRole('button', { name: 'Approve gitops_sync_ap
 const userMenu = () => screen.getByRole('button', { name: 'User menu', hidden: true })
 function openUserMenu() {
   fireEvent.pointerDown(userMenu(), { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 })
-  fireEvent.click(userMenu())
+  clickDecisionControl(userMenu())
 }
 async function saveAtTopRight(value: string) {
   openUserMenu()
-  fireEvent.click(await screen.findByRole('button', { name: 'Change token' }))
+  clickDecisionControl(await screen.findByRole('button', { name: 'Change token' }))
   fireEvent.change(screen.getByPlaceholderText('Platform operator token…'), { target: { value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  clickDecisionControl(screen.getByRole('button', { name: 'Connect' }))
 }
 const unknownResult = () => json(buildPlatformApproval({ id: 'ap-recovery', status: 'unknown', error: 'lease lost' }))
 async function submitClose() {
-  fireEvent.click(await screen.findByLabelText('It did not run'))
+  clickDecisionControl(await screen.findByLabelText('It did not run'))
   fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked' } })
-  fireEvent.click(await enabled('Close this request'))
+  clickDecisionControl(await enabled('Close this request'))
 }
 
 beforeEach(() => {
@@ -134,11 +135,11 @@ describe('roles belong to one sign-in', () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, first)
     const client = mount()
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent(admin ? 'admin' : 'operator'))
-    fireEvent.click(screen.getByText(second === A ? 'Login A' : 'Login B'))
+    clickDecisionControl(screen.getByText(second === A ? 'Login A' : 'Login B'))
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent(admin ? 'operator' : 'admin'))
     expect(client.getQueryCache().findAll({ queryKey: ['platform', 'auth', 'capabilities', first] })).toHaveLength(0)
     const before = vi.mocked(fetch).mock.calls.length
-    fireEvent.click(screen.getByText(first === A ? 'Login A' : 'Login B'))
+    clickDecisionControl(screen.getByText(first === A ? 'Login A' : 'Login B'))
     expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent(admin ? 'admin' : 'operator'))
     expect(vi.mocked(fetch).mock.calls.slice(before).some(call => bearer(call[1]) === `Bearer ${first}`)).toBe(true)
@@ -150,7 +151,7 @@ describe('roles belong to one sign-in', () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
     installFetch((url, init) => url.includes('/auth/capabilities') && bearer(init) === `Bearer ${B}` ? old.promise : undefined)
     const client = mount()
-    fireEvent.click(screen.getByText('Login A'))
+    clickDecisionControl(screen.getByText('Login A'))
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
     await act(async () => { old.resolve(json(caps(true))) })
     expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
@@ -167,7 +168,7 @@ describe('roles belong to one sign-in', () => {
       if (init?.method === 'POST') return json({ error: 'denied' }, status)
     })
     mount(<ApprovalsPage />)
-    fireEvent.click(await enabled('Approve gitops_sync_app'))
+    clickDecisionControl(await enabled('Approve gitops_sync_app'))
     await screen.findByText('The request is still pending. That attempt did not take effect. Try again.')
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' })).toBeDisabled()
     expect(screen.getAllByText('Checking your sign-in…').length).toBeGreaterThan(0)
@@ -194,7 +195,7 @@ describe('roles belong to one sign-in', () => {
     // After a failed read the next one comes ten seconds later, not a minute.
     await act(async () => { await vi.advanceTimersByTimeAsync(10_010) })
     expect(reads).toBe(2)
-    fireEvent.click(screen.getByText('Check role'))
+    clickDecisionControl(screen.getByText('Check role'))
     await flush()
     expect(reads).toBe(3)
     expect(signals[1]?.aborted).toBe(true)
@@ -223,9 +224,9 @@ describe('the same sign-in saved again', () => {
     installFetch(url => url.includes('/auth/capabilities') ? (++reads === 1 ? json(caps(true)) : next.promise) : undefined)
     const client = mount(<RenderBelow />)
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
-    fireEvent.click(screen.getByText(/Render below/))
+    clickDecisionControl(screen.getByText(/Render below/))
     const watched = client.getQueryCache().find({ queryKey: ['platform', 'auth', 'capabilities', B] })
-    fireEvent.click(screen.getByText('Login B'))
+    clickDecisionControl(screen.getByText('Login B'))
     await screen.findByText(CHECKING)
     expect(screen.getByTestId('role')).toHaveTextContent('none')
     expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
@@ -257,7 +258,7 @@ describe('the same sign-in saved again', () => {
     const fresh = roleReads().slice(before)
     expect(fresh.length).toBeGreaterThan(0)
     expect(fresh.every(call => bearer(call[1]) === `Bearer ${B}`)).toBe(true)
-    fireEvent.click(approve())
+    clickDecisionControl(approve())
     expect(posts()).toHaveLength(0)
   })
 
@@ -272,7 +273,7 @@ describe('the same sign-in saved again', () => {
     mount(<>{topRight}<ApprovalsPage /></>)
     const button = await enabled('Approve gitops_sync_app')
     known = false // the server starts refusing this token
-    fireEvent.click(button)
+    clickDecisionControl(button)
     await screen.findByText(REJECTED)
     await screen.findByText(STILL_PENDING)
     await waitFor(() => expect(screen.getAllByText(UNRECOGNIZED).length).toBeGreaterThan(0))
@@ -285,7 +286,7 @@ describe('the same sign-in saved again', () => {
     expect(posts()).toHaveLength(1)
     // The role on the page is the live one: the next read is sent and its answer shows.
     known = true
-    fireEvent.click(screen.getByText('Check role'))
+    clickDecisionControl(screen.getByText('Check role'))
     await waitFor(() => expect(approve()).not.toBeDisabled())
   })
 
@@ -311,13 +312,13 @@ describe('the same sign-in saved again', () => {
     const client = mount()
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
     let before = roleReads().length
-    fireEvent.click(screen.getByText('Check role'))
+    clickDecisionControl(screen.getByText('Check role'))
     await pause()
     expect(roleReads().length - before).toBe(1)
     act(() => client.removeQueries({ queryKey: ['platform', 'auth', 'capabilities'] }))
     admin = false
     before = roleReads().length
-    fireEvent.click(screen.getByText('Check role'))
+    clickDecisionControl(screen.getByText('Check role'))
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
     await pause()
     expect(roleReads().length - before).toBe(1)
@@ -329,11 +330,11 @@ describe('the same sign-in saved again', () => {
     installFetch(url => url.includes('/auth/capabilities') ? json(caps(admin)) : undefined)
     mount(<RenderBelow />)
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
-    fireEvent.click(screen.getByText(/Render below/))
-    fireEvent.click(screen.getByText('Logout'))
+    clickDecisionControl(screen.getByText(/Render below/))
+    clickDecisionControl(screen.getByText('Logout'))
     admin = true
     const before = roleReads().length
-    fireEvent.click(screen.getByText('Check role'))
+    clickDecisionControl(screen.getByText('Check role'))
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
     expect(roleReads().length - before).toBe(1)
   })
@@ -423,7 +424,7 @@ describe('login rereads page data', () => {
     await waitFor(() => expect(progressRead().length).toBeGreaterThan(0))
     for (const [action, token] of [['Login B', B], ['Login A', A], ['Logout', '']] as const) {
       const before = vi.mocked(fetch).mock.calls.length
-      fireEvent.click(screen.getByText(action))
+      clickDecisionControl(screen.getByText(action))
       await waitFor(() => {
         const fresh = vi.mocked(fetch).mock.calls.slice(before)
         for (const path of roots) {
@@ -443,7 +444,7 @@ describe('login rereads page data', () => {
     else if (page === 'approval') await screen.findByText(/Could not read approvals/)
     else await screen.findByText(/Could not read questions/)
     await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
-    fireEvent.click(screen.getByText('Login B'))
+    clickDecisionControl(screen.getByText('Login B'))
     if (page === 'approval') await screen.findByText('Waiting for your decision.')
     else await screen.findByText(/Recovery question/)
     await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
@@ -456,7 +457,7 @@ describe('login rereads page data', () => {
     mount(<QuestionPage />)
     const retry = await screen.findByRole('button', { name: 'Retry' })
     failed = false
-    fireEvent.click(retry)
+    clickDecisionControl(retry)
     await screen.findByText('Recovery question')
   })
 })
@@ -522,10 +523,10 @@ describe('errors never reflect the sending sign-in', () => {
     const answer = deferred<Response>()
     installFetch(url => url.endsWith('/answer') ? answer.promise : undefined)
     mount(<QuestionPage />)
-    fireEvent.click(await screen.findByRole('button', { name: /a Continue/ }))
-    fireEvent.click(await enabled('Confirm answer'))
+    clickDecisionControl(await screen.findByRole('button', { name: /a Continue/ }))
+    clickDecisionControl(await enabled('Confirm answer'))
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/answer'))).toBe(true))
-    fireEvent.click(screen.getByText('Logout'))
+    clickDecisionControl(screen.getByText('Logout'))
     await act(async () => { answer.resolve(json({ error: `reflected ${leak}` }, 400)) })
     await waitFor(() => expect(document.body.textContent).toContain('details are hidden'))
     expect(document.body.innerHTML).not.toContain(leak)
@@ -546,9 +547,9 @@ describe('errors never reflect the sending sign-in', () => {
     const response = deferred<Response>()
     installFetch((_url, init) => init?.method === 'POST' ? response.promise : undefined)
     mount(<ApprovalsPage />)
-    fireEvent.click(await enabled('Approve gitops_sync_app'))
+    clickDecisionControl(await enabled('Approve gitops_sync_app'))
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(call => call[1]?.method === 'POST')).toBe(true))
-    fireEvent.click(screen.getByText('Logout'))
+    clickDecisionControl(screen.getByText('Logout'))
     await act(async () => { response.resolve(json({ error: `reflected ${leak}` }, 400)) })
     await screen.findByText(/details are hidden/)
     expect(document.body.innerHTML).not.toContain(leak)
@@ -562,7 +563,7 @@ describe('errors never reflect the sending sign-in', () => {
     mount(<ApprovalsPage />)
     await submitClose()
     await waitFor(() => expect(posts()).toHaveLength(1))
-    fireEvent.click(screen.getByText('Logout'))
+    clickDecisionControl(screen.getByText('Logout'))
     await act(async () => { response.resolve(json({ error: `reflected ${leak}` }, 400)) })
     await screen.findByText(/details are hidden/)
     expect(document.body.innerHTML).not.toContain(leak)
@@ -606,9 +607,9 @@ describe('errors never reflect the sending sign-in', () => {
     window.location.hash = `#questions?id=${ID}`
     installFetch((url, init) => url.endsWith('/answer') && init?.method === 'POST' ? json({ error: 'denied' }, status) : undefined)
     mount(<QuestionPage />)
-    fireEvent.click(await screen.findByRole('button', { name: /a Continue/ }))
+    clickDecisionControl(await screen.findByRole('button', { name: /a Continue/ }))
     const before = vi.mocked(fetch).mock.calls.filter(call => String(call[0]).includes('/auth/capabilities')).length
-    fireEvent.click(await enabled('Confirm answer'))
+    clickDecisionControl(await enabled('Confirm answer'))
     await screen.findByText(/The server did not accept this sign-in as admin/)
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(call => String(call[0]).includes('/auth/capabilities')).length).toBeGreaterThan(before))
   })

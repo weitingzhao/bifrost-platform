@@ -1,3 +1,4 @@
+import { SIGNOFF_SECTION_HREF } from '@/pages/shell/progress/progressPart'
 import { OwnerStop } from './OwnerStop'
 import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
 import { useState } from 'react'
@@ -45,6 +46,7 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="sr-only">For you</h2>
     <div className="ops-you-grid">
+      <div className="ops-you-primary">
       <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
         {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
         {yours.length > 0
@@ -61,11 +63,12 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
           <span>Handled recently: {recent} · <a href="#records">Records</a></span>
         </div>
       </Card>
-      <Card label="Plan sign-offs" title="Plan sign-offs" more={{ href: '#work?section=signoff', text: 'Review steps' }}>
+      <Card label="Plan sign-offs" title="Plan sign-offs" more={{ href: SIGNOFF_SECTION_HREF, text: 'Review steps' }}>
         <p className="m-0 text-sm text-muted-foreground">Tracked in Work; separate from Needs you.</p>
         <SignoffWaitingLink />
       </Card>
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
+      </div>
       <Card label="Worth a look" title={`Worth a look · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
         <p className="m-0 text-sm text-muted-foreground">Not yours to fix. Hand one to the chief of staff when it should be worked on.</p>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}

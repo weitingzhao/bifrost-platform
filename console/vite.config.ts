@@ -7,6 +7,7 @@ const uiRoot = path.resolve(__dirname, '../../bifrost-ui')
 // Default loopback-only. run_platform.py sets PLATFORM_CONSOLE_HOST=0.0.0.0 for LAN.
 const consoleHost = (process.env.PLATFORM_CONSOLE_HOST || '127.0.0.1').trim() || '127.0.0.1'
 const consolePort = Number(process.env.PLATFORM_CONSOLE_PORT || 5180)
+const apiTarget = (process.env.PLATFORM_API_TARGET || 'http://127.0.0.1:8780').trim()
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -31,12 +32,12 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8780',
+        target: apiTarget,
         changeOrigin: true,
         ws: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:8780',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

@@ -1,3 +1,4 @@
+import { DecisionEnvironment } from '@/pages/DecisionEnvironment'
 import { useState } from 'react'
 import { ServerContactStatus } from '@/pages/ServerContactStatus'
 import { RUNTIME_REQUESTER, type Question } from '@/api/questions'
@@ -39,8 +40,10 @@ export function QuestionAnswerForm({
   onConfirm,
   onCheckAgain,
   aiRecommended = null,
+  reviewContext = '',
 }: {
   question: Question
+  reviewContext?: string
   phase: AnswerPhase
   /** The option the card's AI assessment recommends (TD-391), null for none. */
   aiRecommended?: string | null
@@ -53,12 +56,16 @@ export function QuestionAnswerForm({
 }) {
   const now = useNow()
   const [text, setText] = useState('')
+  const [chosenContext, setChosenContext] = useState<string | null>(reviewContext)
+  // Only the local review is invalidated; sending and unknown lifecycle states remain intact.
+  if (chosenContext !== null && chosenContext !== reviewContext) setChosenContext(null)
   const expired = question.status !== 'open' || pastExpiry(question.expires_at, now)
   const locked = expired || phase.kind === 'sending' || phase.kind === 'unknown' || phase.kind === 'saved' || phase.kind === 'closed'
   const active = rowSnapshot(phase)
   const selected = active?.letter ?? null
   const sendable = confirmIsSendable({ questionId: question.id, phase })
   const canConfirm =
+    chosenContext === reviewContext &&
     blocked == null &&
     sendable &&
     !expired &&
@@ -67,17 +74,19 @@ export function QuestionAnswerForm({
     (active.letter !== 'none' || active.text !== '')
 
   function choose(letter: string) {
+    setChosenContext(reviewContext)
     onChoose(takeSnapshot(question, letter, text))
   }
 
   function editText(value: string) {
+    setChosenContext(reviewContext)
     setText(value)
     if (phase.kind !== 'confirming') return
     onChoose(takeSnapshot(question, phase.snapshot.letter, value))
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2" data-question-form={expired ? 'disabled' : 'open'}>
+    <div className="ops-answer-form flex w-full min-w-0 flex-col gap-2" data-question-form={expired ? 'disabled' : 'open'}>
       <ServerContactStatus />
       {contactNotice != null ? <p role="status" className="m-0 text-sm">{contactNotice}</p> : null}
       {blocked != null ? (
@@ -131,6 +140,7 @@ export function QuestionAnswerForm({
         None of these
       </button>
       <label className="flex w-full min-w-0 flex-col gap-1 text-sm">
+        <span>Additional context{selected === 'none' ? ' (required)' : ' (optional)'}</span>
         <textarea
           value={text}
           disabled={locked || selected == null || (selected !== 'none' && !question.allow_text)}
@@ -140,7 +150,9 @@ export function QuestionAnswerForm({
         />
       </label>
       {active != null ? (
-        <div data-confirm-row className="flex w-full min-w-0 flex-col gap-2" style={{ minHeight: 44 }}>
+        <div data-confirm-row className="ops-decision-actions flex w-full min-w-0 flex-col gap-2" style={{ minHeight: 44 }}>
+          <DecisionEnvironment />
+          {chosenContext !== reviewContext ? <p role="status">The sign-in or environment changed. Choose your answer again.</p> : null}
           <p className="m-0 text-sm">{CONFIRMS_NOTHING}</p>
           <p className="m-0 break-words text-sm" data-confirm-option>
             {active.letter} {active.label}

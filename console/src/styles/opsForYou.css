@@ -6,10 +6,8 @@
 #owner-console[data-entry='you'] [data-owner-verdict] > span { margin-top: 10px; }
 #owner-console[data-entry='you'] [data-owner-verdict] strong { font-size: 28px; letter-spacing: -.035em; }
 .ops-you-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; align-items: start; }
-.ops-you-grid > [aria-label='Yours'] { grid-area: 1 / 1; }
-.ops-you-grid > [aria-label='Worth a look'] { grid-area: 1 / 2 / 3; }
-.ops-you-grid > [aria-label='Plan sign-offs'] { grid-area: 2 / 1; }
-.ops-you-grid > [aria-label='Stop all work'] { grid-area: 3 / 1; }
+.ops-you-primary { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.ops-you-grid > * { min-width: 0; }
 #owner-console[data-entry='you'] [data-owner-card], .ops-waiting-detail {
   padding: 24px; border: 1px solid var(--ops-edge); border-radius: 20px;
   background: var(--ops-panel); box-shadow: var(--ops-shadow);
@@ -37,10 +35,6 @@
 #owner-console[data-entry='you'] [data-testid='needs-you-page'] { max-width: none; }
 @media (max-width: 1023px) {
   .ops-you-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
-  .ops-you-grid > [aria-label='Yours'] { grid-area: 1 / 1; }
-  .ops-you-grid > [aria-label='Plan sign-offs'] { grid-area: 2 / 1; }
-  .ops-you-grid > [aria-label='Stop all work'] { grid-area: 3 / 1; }
-  .ops-you-grid > [aria-label='Worth a look'] { grid-area: 4 / 1; }
   #owner-console[data-entry='you'] { font-size: 16px; }
   #owner-console[data-entry='you'] [data-owner-card] { padding: 22px; }
   #owner-console[data-entry='you'] [data-owner-verdict] strong { font-size: 26px; }

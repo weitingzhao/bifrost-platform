@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -55,7 +56,7 @@ describe('decision page connection truth', () => {
     page()
     recordServerContact()
     vi.mocked(fetch).mockResolvedValue(json({ status: 'approved' }))
-    fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Approve gitops/ }))
     await waitFor(() => expect(posts()).toHaveLength(1))
     expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/health'))).toBe(false)
   })
@@ -69,7 +70,7 @@ describe('decision page connection truth', () => {
       if (init?.method === 'POST') order.push('decision')
       return json({ status: 'approved' })
     })
-    fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Approve gitops/ }))
     await waitFor(() => expect(posts()).toHaveLength(1))
     expect(order.slice(0, 2)).toEqual(['probe', 'decision'])
   })
@@ -81,7 +82,7 @@ describe('decision page connection truth', () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
       vi.mocked(fetch).mockImplementation(() => new Promise(() => undefined))
     }
-    fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Approve gitops/ }))
     if (failure === 'timeout') await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     else await act(async () => { await Promise.resolve() })
     expect(posts()).toHaveLength(0)
@@ -89,7 +90,7 @@ describe('decision page connection truth', () => {
     const button = screen.getByRole('button', { name: /Approve gitops/ })
     expect(button.hasAttribute('disabled')).toBe(false)
     vi.mocked(fetch).mockResolvedValue(json({ status: 'approved' }))
-    await act(async () => { fireEvent.click(button) })
+    await act(async () => { clickDecisionControl(button) })
     expect(posts()).toHaveLength(1)
   })
 
@@ -97,7 +98,7 @@ describe('decision page connection truth', () => {
     page()
     oldContact()
     fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'No' } })
-    fireEvent.click(screen.getByRole('button', { name: /Reject gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Reject gitops/ }))
     expect(await screen.findByText(text => text.includes(NOT_SENT))).toBeTruthy()
     expect(posts()).toHaveLength(0)
   })
@@ -105,9 +106,9 @@ describe('decision page connection truth', () => {
   it('close unknown does not send after a failed probe', async () => {
     page('a', 'unknown')
     oldContact()
-    fireEvent.click(screen.getByLabelText('It did not run'))
+    clickDecisionControl(screen.getByLabelText('It did not run'))
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Checked' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Close this request' }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Close this request' }))
     expect(await screen.findByText(text => text.includes(NOT_SENT))).toBeTruthy()
     expect(posts()).toHaveLength(0)
   })
@@ -119,8 +120,8 @@ describe('decision page connection truth', () => {
     client.setQueryData(['questions', 'item', QID], parsed.question)
     render(<QueryClientProvider client={client}><PlatformAuthProvider><QuestionPage /></PlatformAuthProvider></QueryClientProvider>)
     oldContact()
-    fireEvent.click(screen.getByRole('button', { name: /b Wait/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    clickDecisionControl(screen.getByRole('button', { name: /b Wait/ }))
+    clickDecisionControl(screen.getByRole('button', { name: 'Confirm answer' }))
     expect(await screen.findByText(text => text.includes(NOT_SENT))).toBeTruthy()
     expect(posts()).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Confirm answer' }).hasAttribute('disabled')).toBe(false)
@@ -129,7 +130,7 @@ describe('decision page connection truth', () => {
   it('a failed probe belongs to one record, not the next one', async () => {
     page()
     oldContact()
-    fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Approve gitops/ }))
     expect(await screen.findByText(text => text.includes(NOT_SENT))).toBeTruthy()
     client.setQueryData(['approvals', 'item', 'b'], buildPlatformApproval({ id: 'b' }))
     await act(async () => { window.location.hash = '#approvals?id=b'; window.dispatchEvent(new Event('hashchange')) })
@@ -158,7 +159,7 @@ describe('decision page connection truth', () => {
       return new Promise(resolve => { reply = resolve })
     })
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-    fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
+    clickDecisionControl(screen.getByRole('button', { name: /Approve gitops/ }))
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(screen.getByText(sentNotice(at))).toBeTruthy()
     await act(async () => { await vi.advanceTimersByTimeAsync(25_000) })

@@ -248,3 +248,42 @@ describe('Sign off on the plan page', () => {
     }
   })
 })
+
+
+describe('sign-off review environment', () => {
+  it('shows the shell environment and invalidates confirmation if it changes', async () => {
+    const { client } = show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
+    await act(async () => { client.setQueryData(['shell', 'self-health'], { viewer_env: 'stg' }) })
+    const start = await screen.findByRole('button', { name: 'Sign off' })
+    await vi.waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    expect(screen.getByText('STG')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeEnabled()
+    await act(async () => { client.setQueryData(['shell', 'self-health'], { viewer_env: 'prod' }) })
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeDisabled())
+    expect(screen.getByText('PROD')).toBeInTheDocument()
+    await act(async () => { client.setQueryData(['shell', 'self-health'], { viewer_env: 'stg' }) })
+    await vi.waitFor(() => expect(screen.getByText('STG')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm sign-off' }))
+    expect(sent).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign off' }))
+    expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeEnabled()
+  })
+})
+
+it('invalidates sign-off confirmation when the step state changes', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const viewFor = (state: string) => <QueryClientProvider client={client}><PlatformAuthProvider><StepSignoffControls label="2.3-2" state={state} signoffs={stepOf('R2:2.3-2')} /></PlatformAuthProvider></QueryClientProvider>
+  const view = render(viewFor('planned'))
+  const start = await screen.findByRole('button', { name: 'Sign off' })
+  await vi.waitFor(() => expect(start).toBeEnabled())
+  fireEvent.click(start)
+  expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeEnabled()
+  view.rerender(viewFor('active'))
+  expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeDisabled()
+  view.rerender(viewFor('planned'))
+  expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeDisabled()
+  expect(sent).toHaveLength(0)
+})

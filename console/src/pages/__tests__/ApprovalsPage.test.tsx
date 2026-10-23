@@ -152,6 +152,7 @@ describe('ApprovalsPage (request page)', () => {
     })
     render(wrapper(<ApprovalsPage />))
     fireEvent.click(await screen.findByRole('button', { name: 'Approve gitops_sync_app' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve gitops_sync_app' }))
     await waitFor(() => {
       expect(posts).toEqual([
         {

@@ -1,6 +1,5 @@
 /* The shell shares its canvas; surfaces do not introduce unrelated color planes. */
-html[data-ops-theme] .ops-console-main,
-html[data-ops-theme] .console-shell-chrome { background: transparent; }
+html[data-ops-theme] .ops-console-main { background: transparent; }
 html[data-ops-theme] .console-shell-chrome { background: var(--background); }
 html[data-ops-theme] .ops-console-header {
   height: auto; min-height: 76px; padding: 12px 24px;

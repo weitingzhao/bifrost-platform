@@ -1,3 +1,4 @@
+import { ApprovalReviewButton } from '@/pages/ApprovalReviewButton'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
@@ -316,7 +317,7 @@ function ApprovalCard({
         id={`approval-${item.id}`}
         data-open="true"
         aria-current="true"
-        className="flex w-full min-w-0 max-w-full flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3"
+        className="ops-decision-card flex w-full min-w-0 max-w-full flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3"
       >
         <h2 className="m-0 break-words text-base font-medium" data-approval-ref>
           {title}
@@ -415,7 +416,8 @@ function ApprovalCard({
         ) : null}
       </article>
       {pending ? (
-        <div className="flex w-full min-w-0 flex-col gap-2">
+        <div className="ops-decision-actions flex w-full min-w-0 flex-col gap-2">
+          <p className="ops-decision-context">{env || 'Environment not specified'} · {title}</p>
           <ServerContactStatus />
           {waitingForReload ? (
             <p id={buildReasonId} role="status" className="m-0 text-sm">
@@ -439,7 +441,8 @@ function ApprovalCard({
           <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row">
             {/* A drill has no approval to give (v4 §20.5 scenario 9): no button for one; reject closes it. */}
             {item.drill === true ? null : (
-              <Button
+              <ApprovalReviewButton
+                item={item}
                 type="button"
                 className="h-11 w-full sm:w-auto"
                 disabled={!canDecide}
@@ -449,7 +452,7 @@ function ApprovalCard({
                 onClick={() => onApprove(item.id)}
               >
                 {sending === 'approve' ? 'Sending…' : 'Approve'}
-              </Button>
+              </ApprovalReviewButton>
             )}
             <Button
               type="button"
@@ -713,7 +716,7 @@ export function ApprovalsPage() {
   }
 
   return (
-    <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
+    <div data-testid="approvals-page" className="ops-decision-page flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <ConsoleBuildBanner stale={staleBuild} holdReload={reloadHeld} />
       <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline hover:text-foreground pointer-coarse:py-3">
         ← For you

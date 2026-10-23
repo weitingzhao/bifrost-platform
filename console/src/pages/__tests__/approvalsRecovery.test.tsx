@@ -1,3 +1,4 @@
+import { clickDecisionControl } from './clickDecisionControl'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -81,7 +82,7 @@ async function open() {
 it('retains successful POST status when subsequent queries pause offline', async () => {
   const button = await open()
   post = async () => { onlineManager.setOnline(false); return json({ status: 'executed' }) }
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await screen.findByText('executed')
   expect(screen.queryByText('Waiting for your decision.')).toBeNull()
   expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
@@ -89,7 +90,7 @@ it('retains successful POST status when subsequent queries pause offline', async
 it('retains successful POST status after refresh returns 503', async () => {
   const button = await open()
   read = async () => json({ error: 'unavailable' }, 503)
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await screen.findByText('executed')
   expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
 })
@@ -98,7 +99,7 @@ it('keeps a failed POST locked after unreadable confirmation and retries the rec
   post = async () => { throw new TypeError('offline') }
   read = async () => json({ error: 'unavailable' }, 503)
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await act(async () => { await vi.advanceTimersByTimeAsync(1) })
   expect(screen.getByText(checking)).toBeTruthy()
   expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(true)
@@ -113,7 +114,7 @@ it('cannot replace a confirmed decision with an earlier GET arriving late', asyn
   void client.refetchQueries({ queryKey: ['approvals', 'item', 'ap-recovery'] })
   post = async () => { throw new TypeError('offline') }
   read = async () => json({ ...pending(), status: 'approved' })
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await screen.findByText('Approved. Running now.')
   await act(async () => { finish(json(pending())) })
   // Query notifications are scheduled; wait for the stale response's render too.
@@ -126,7 +127,7 @@ it.each([409, 500])('immediately reconciles a %s response including a status fie
   const button = await open()
   post = async () => json({ error: 'already decided', status: 'approved' }, status)
   read = async () => json({ ...pending(), status: 'approved' })
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await screen.findByText('Approved. Running now.')
   expect(reads).toBe(2)
 })
@@ -140,7 +141,7 @@ it('shows still waiting at 30 seconds while POST is still hanging', async () => 
     return Promise.resolve(json({ approvals: [] }))
   })
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
   expect(screen.getByText(APPROVAL_WAITING_NOTICE)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
@@ -148,13 +149,14 @@ it('shows still waiting at 30 seconds while POST is still hanging', async () => 
 it('restores the button only after confirmation reads pending', async () => {
   const button = await open()
   post = async () => { throw new TypeError('offline') }
-  fireEvent.click(button)
+  clickDecisionControl(button)
   await screen.findByText(retry)
   expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
 })
 it('synchronously guards two clicks before React commits disabled state', async () => {
   const button = await open()
   post = () => new Promise(() => undefined)
+  fireEvent.click(button) // Review first; the following pair are both actual approvals.
   act(() => { button.click(); button.click() })
   expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
 })

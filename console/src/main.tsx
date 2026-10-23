@@ -8,6 +8,7 @@ import './index.css'
 import './styles/opsAppearance.css'
 import './styles/opsShell.css'
 import './styles/opsForYou.css'
+import './styles/opsDecisions.css'
 
 registerServiceWorker()
 
