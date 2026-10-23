@@ -35,9 +35,13 @@ const (
 var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusBlocked, StatusSlow,
 	StatusWorking, StatusWaitingRole, StatusQueued}
 
-// HostLostAfter is how long since its last poll a host counts as lost (T24:
-// shown lost within 3 to 4 minutes).
-const HostLostAfter = 3 * time.Minute
+// HostLostAfter is how long since its last poll a host counts as lost: 30
+// seconds (W-31 round 3, 3.5: 「主机掉线或执行者不可用，Console 和参谋长简报 1
+// 分钟内说出来」; CUT-online-status-2026-10-23 option A). A host's claim polls
+// about every second within its long poll, and agentd sleeps 15 seconds after
+// a claim that failed, so 30 seconds holds one such failure (T24 had 3
+// minutes).
+const HostLostAfter = 30 * time.Second
 
 // SlowFactor: a working attempt is slow past this many times the usual.
 const SlowFactor = 1.5
@@ -136,8 +140,7 @@ func TaskStatus(in StatusInput) (string, string) {
 		case a.hostPolled == nil:
 			return StatusHostLost, "host " + a.HostID + " has never polled" + notPersisted(a)
 		case in.Now.Sub(*a.hostPolled) > HostLostAfter:
-			return StatusHostLost, fmt.Sprintf("host %s last polled %d minutes ago", a.HostID, int(in.Now.Sub(*a.hostPolled)/time.Minute)) +
-				notPersisted(a)
+			return StatusHostLost, "host " + a.HostID + " last polled " + agoWords(in.Now.Sub(*a.hostPolled)) + notPersisted(a)
 		case a.State == "stale":
 			return StatusMaybeStuck, "the lease lapsed and was not renewed" + notPersisted(a)
 		}
@@ -181,6 +184,19 @@ func TaskStatus(in StatusInput) (string, string) {
 		return StatusQueued, "ready for a host to claim"
 	}
 	return StatusUnknown, "state " + in.TaskState + " has no status"
+}
+
+// agoWords is how long ago d was, in seconds under a minute and in whole
+// minutes from then on.
+func agoWords(d time.Duration) string {
+	n, unit := int(d/time.Minute), "minute"
+	if d < time.Minute {
+		n, unit = int(d/time.Second), "second"
+	}
+	if n != 1 {
+		unit += "s"
+	}
+	return fmt.Sprintf("%d %s ago", n, unit)
 }
 
 // byMission says the mission's state, not the task's, decided status: the

@@ -442,18 +442,18 @@ func readyTask(t *testing.T, pool *pgxpool.Pool) string {
 	return id
 }
 
-// Review 176 part 2 B2: online is a poll within three minutes; a same key
-// with another control is a conflict; a lift at the same time is recorded
-// once.
+// Review 176 part 2 B2: online is a poll within store.HostLostAfter (30
+// seconds since W-31 3.5); a same key with another control is a conflict; a
+// lift at the same time is recorded once.
 func TestHostsAndControlEdges(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
 	must(t, store.RegisterHost(ctx, pool, "owner", "h2", "dev"))
-	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '179 seconds' WHERE host_id = 'h1'`,
-		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '181 seconds' WHERE host_id = 'h2'`)
+	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '29 seconds' WHERE host_id = 'h1'`,
+		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '31 seconds' WHERE host_id = 'h2'`)
 	_, hosts := call(t, s, "viewer", "GET", "hosts", nil)
 	if h1, h2 := hostOf(t, hosts, "h1"), hostOf(t, hosts, "h2"); h1["online"] != true || h2["online"] != false {
-		t.Fatalf("179 and 181 seconds since the last poll: %v %v", h1, h2)
+		t.Fatalf("29 and 31 seconds since the last poll: %v %v", h1, h2)
 	}
 	body := map[string]any{"idempotency_key": "k", "scope": "global", "kind": "pause", "reason": "one"}
 	_, set := call(t, s, "viewer", "POST", "controls", body, session, "s1")
