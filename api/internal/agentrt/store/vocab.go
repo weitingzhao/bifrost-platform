@@ -115,7 +115,9 @@ var bodies = map[string][]field{
 	// or a host that stopped polling (host_offline, source controller, on the
 	// host's presence stream) or an executor that cannot take work now
 	// (executor_unavailable, source controller, on the executor's presence
-	// stream); the artifact says when and why (W-31 3.5, presencepass.go).
+	// stream), or host presence that cannot be judged (presence_unjudged, on
+	// the presence:judging stream); the artifact says when and why (W-31 3.5,
+	// presencepass.go, presencejudge.go).
 	// Every rule but repeated_failure
 	// names its artifact (checkBody), but an approval claim in a plan note
 	// (source plan_note, review 489 B3), whose text is in the note it is
@@ -438,11 +440,11 @@ var fieldValues = map[string]map[string]value{
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
-		"host_offline", "executor_unavailable"),
+		"host_offline", "executor_unavailable", "presence_unjudged"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
 			"plan_note", "assessment"),
 		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
-			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase)...),
+			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},

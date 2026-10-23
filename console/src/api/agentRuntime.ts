@@ -93,6 +93,8 @@ export type RuntimeProgress = {
   schema: RuntimeSchema; controller_alerts: RuntimeLoopAlert[]
   /** The executors and the jobs no executor can take now (W-31 3.5); unset by a platform before it. */
   executors?: RuntimeExecutor[]; jobs_without_executor?: string[]
+  /** Since when, and why, host presence cannot be judged (the platform not seen taking agentd's calls); null while it can. */
+  presence_unjudged?: { since: string; why: string } | null
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
   controls: RuntimeRecord[]; plan: unknown[]
@@ -181,6 +183,8 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     ...(Array.isArray(r.executors) ? { executors: records(r.executors).map(e => ({ executor: text(e.executor),
       available: typeof e.available === 'boolean' ? e.available : null, why: text(e.why), hosts: strings(e.hosts), jobs: strings(e.jobs) })) } : {}),
     ...(Array.isArray(r.jobs_without_executor) ? { jobs_without_executor: strings(r.jobs_without_executor) } : {}),
+    ...(r.presence_unjudged === null ? { presence_unjudged: null }
+      : r.presence_unjudged !== undefined ? { presence_unjudged: { since: text(record(r.presence_unjudged).since), why: text(record(r.presence_unjudged).why) } } : {}),
     live: records(r.live).map(parseRuntimeAttempt),
     needs_you: { count: number(needs.count), items: Array.isArray(needs.items) ? needs.items : [],
       truncated: typeof needs.truncated === 'boolean' ? needs.truncated : undefined },

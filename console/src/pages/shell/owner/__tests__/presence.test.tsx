@@ -50,6 +50,17 @@ describe('presence', () => {
     expect(alert).toHaveTextContent('No executor can take these jobs now: chief_of_staff (the chief of staff cannot answer you), implementer, planner, reviewer, verifier.')
   })
 
+  it('says in red that host presence cannot be judged, and nothing of it from a platform before it or while it can', () => {
+    const since = '2026-10-23T20:00:00Z'
+    render(<RuntimeHealthNotice progress={parseRuntimeProgress({ ...presenceFixture, presence_unjudged: { since,
+      why: 'the platform has not answered its health probe (http://platform-api:8780/health) since 2026-10-23T20:00:00Z.' } })}
+      now={Date.parse(since) + 3 * 60_000} />)
+    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(
+      'Host presence cannot be judged since 3 min ago: the platform has not answered its health probe (http://platform-api:8780/health)')
+    expect(progress.presence_unjudged ?? null).toBeNull()
+    expect(parseRuntimeProgress({}).presence_unjudged).toBeUndefined()
+  })
+
   it('lists on the Crew card what each host offers, and the executors', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={client}><OwnerCrew hosts={progress.hosts} live={progress.live} missions={progress.work.missions}

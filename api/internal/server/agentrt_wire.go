@@ -138,7 +138,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
-		c.PlatformUp = platformProbe(role, late)
+		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})
 		if rdb == nil {
@@ -453,36 +453,49 @@ func (s *Server) closeAgentRuntime() {
 }
 
 // platformProbe is how the controller of a process asks whether the platform
-// takes agentd's calls now (review 528 A1b): a process that is the API
-// itself asks its own routes; platform-workers asks the API through its
-// in-cluster Service, AGENTRT_API_HEALTH_URL (by default
+// takes agentd's calls now, and its name (review 528 A1b): a process that is
+// the API itself asks its own routes; platform-workers asks the API through
+// its in-cluster Service, AGENTRT_API_HEALTH_URL (by default
 // http://platform-api:8780/health, where the checklist prober reaches it),
 // whose /health says agentrt_ready once the API's runtime routes are.
-func platformProbe(role config.Role, late *lateDB) func(context.Context) bool {
+func platformProbe(role config.Role, late *lateDB) (func(context.Context) error, string) {
 	if role.RunsAPI() {
-		return func(context.Context) bool { return late.Ready() }
+		return func(context.Context) error {
+			if !late.Ready() {
+				return errNotConnected
+			}
+			return nil
+		}, "this process's own agentrt routes"
 	}
 	url := strings.TrimSpace(os.Getenv("AGENTRT_API_HEALTH_URL"))
 	if url == "" {
 		url = "http://platform-api:8780/health"
 	}
-	return func(ctx context.Context) bool { return apiTakesCalls(ctx, http.DefaultClient, url) }
+	return func(ctx context.Context) error { return apiTakesCalls(ctx, http.DefaultClient, url) }, url
 }
 
-// apiTakesCalls says whether the API at url answers that its runtime routes
-// are ready; no answer, another status or another body is no.
-func apiTakesCalls(ctx context.Context, client *http.Client, url string) bool {
+// apiTakesCalls asks the API at url whether its runtime routes are ready:
+// nil for yes, else why not (no answer, another status or another body).
+func apiTakesCalls(ctx context.Context, client *http.Client, url string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return false
+		return err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var body struct {
-		Ready bool `json:"agentrt_ready"`
+		Ready *bool `json:"agentrt_ready"`
 	}
-	return resp.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&body) == nil && body.Ready
+	switch {
+	case resp.StatusCode != http.StatusOK:
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	case json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&body) != nil || body.Ready == nil:
+		return errors.New("its answer does not say agentrt_ready")
+	case !*body.Ready:
+		return errors.New("its agentrt routes are not ready")
+	}
+	return nil
 }

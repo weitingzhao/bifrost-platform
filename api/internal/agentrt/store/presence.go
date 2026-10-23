@@ -271,6 +271,7 @@ type presence struct {
 	executors []ExecutorPresence
 	unserved  []string
 	unknown   []string
+	unjudged  map[string]any // presencejudge.go
 }
 
 func (p presence) executor(id string) *ExecutorPresence {
@@ -338,7 +339,8 @@ func readPresence(ctx context.Context, tx pgx.Tx, now, since time.Time) (presenc
 		}
 	}
 	p.executors, p.unserved, p.unknown = judgeExecutors(p.hosts, cp.candidates, tenants, cooling, quota, stops)
-	return p, nil
+	p.unjudged, err = unjudgedView(ctx, tx)
+	return p, err
 }
 
 // judged is a candidate judged: available or not (nil: not known), why, and

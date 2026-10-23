@@ -402,7 +402,7 @@ func TestTheWorkersAskTheAPIThroughItsService(t *testing.T) {
 	ask := func(url string, limit time.Duration) bool {
 		ctx, cancel := context.WithTimeout(context.Background(), limit)
 		defer cancel()
-		return apiTakesCalls(ctx, http.DefaultClient, url)
+		return apiTakesCalls(ctx, http.DefaultClient, url) == nil
 	}
 	if !ask(service.URL+"/health", time.Second) {
 		t.Fatal("two instances up: no")
@@ -434,12 +434,17 @@ func TestTheWorkersAskTheAPIThroughItsService(t *testing.T) {
 		t.Fatalf("the probes took %v", took)
 	}
 	late := &lateDB{}
-	self := platformProbe(config.RoleAll, late)
-	if self(context.Background()) {
+	self, name := platformProbe(config.RoleAll, late)
+	if self(context.Background()) == nil || name == "" {
 		t.Fatal("the API itself, not connected: yes")
 	}
 	late.open(&pgxpool.Pool{}, time.Now())
-	if !self(context.Background()) {
+	if self(context.Background()) != nil {
 		t.Fatal("the API itself, connected: no")
+	}
+	t.Setenv("AGENTRT_API_HEALTH_URL", notReady.URL)
+	other, name := platformProbe(config.RoleWorkers, late)
+	if err := other(context.Background()); err == nil || name != notReady.URL || !strings.Contains(err.Error(), "not ready") {
+		t.Fatalf("the workers asking an API not ready: %v (%s)", err, name)
 	}
 }

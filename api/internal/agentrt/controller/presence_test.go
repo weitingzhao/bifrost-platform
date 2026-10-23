@@ -2,7 +2,9 @@ package controller_test
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -195,7 +197,12 @@ func TestPresenceWaitsForThePlatform(t *testing.T) {
 	}
 	now, up := t0, true
 	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0,
-		PlatformUp: func(context.Context) bool { return up }}
+		PlatformUp: func(context.Context) error {
+			if up {
+				return nil
+			}
+			return errors.New("connect: connection refused")
+		}}
 	if n, _ := ticks(t, c, &now, t0, t0.Add(5*time.Second)); n != 0 {
 		t.Fatalf("%d turns with every host polling", n)
 	}
@@ -252,7 +259,7 @@ func TestPresenceWaitsForThePlatform(t *testing.T) {
 	pollAt(t, pool, "h2", restart.Add(10*time.Second))
 	pollAt(t, pool, "h3", restart.Add(10*time.Second))
 	again := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: restart,
-		PlatformUp: func(context.Context) bool { return true }}
+		PlatformUp: func(context.Context) error { return nil }}
 	if n, _ := ticks(t, again, &now, restart, restart.Add(30*time.Second)); n != 0 {
 		t.Fatalf("%d turns within 30 s of the controller's start", n)
 	}
@@ -263,5 +270,148 @@ func TestPresenceWaitsForThePlatform(t *testing.T) {
 	pollAt(t, pool, "h3", restart.Add(40*time.Second))
 	if n, _ = ticks(t, again, &now, restart.Add(40*time.Second), restart.Add(time.Minute)); n != 0 {
 		t.Fatalf("told again: %d", n)
+	}
+}
+
+// loopAlerts counts the controller's alerts that a loop keeps failing, and
+// returns the text of the last.
+func loopAlerts(t *testing.T, pool *pgxpool.Pool) (int, string) {
+	t.Helper()
+	var n int
+	var text string
+	must(t, pool.QueryRow(ctx, `SELECT count(*), COALESCE(max(convert_from(b.body, 'UTF8')), '') FROM agentrt.event e
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = e.body_json->>'artifact_id'
+	  WHERE e.event_stream_id = 'controller' AND e.event_type = 'policy_alert' AND e.body_json->>'rule' = 'controller_failing'`).Scan(&n, &text))
+	return n, text
+}
+
+// The coordinating thread on review 528: a probe that says no while hosts
+// claim does not silence presence. The claims are the evidence the platform
+// takes calls; h1, silent, is told within 35 s of its last poll, judged as of
+// the latest claim; and the presence loop fails naming the probe and its
+// error, so its alert (controller_failing) is raised once, and answered when
+// the probe agrees again.
+func TestAWrongProbeDoesNotSilencePresence(t *testing.T) {
+	pool := setup(t)
+	for _, h := range []string{"h1", "h2"} {
+		must(t, store.RegisterHost(ctx, pool, "owner", h, "dev"))
+	}
+	chiefOnly(t, pool)
+	var t0 time.Time
+	must(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+	pollAt(t, pool, "h1", t0)
+	pollAt(t, pool, "h2", t0)
+	const probe = "http://platform-api:8780/health"
+	var wrong atomic.Bool
+	wrong.Store(true)
+	now := t0
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0, PlatformProbe: probe,
+		PlatformUp: func(context.Context) error {
+			if wrong.Load() {
+				return errors.New(`Get "` + probe + `": dial tcp: lookup platform-api: no such host`)
+			}
+			return nil
+		}}
+	var told time.Time
+	run := func(passes int) {
+		t.Helper()
+		run, cancel := context.WithCancel(ctx)
+		done := 0
+		c.RunLoopForTest(run, "agentrt-presence", time.Millisecond, func() error {
+			now = now.Add(controller.PresenceEvery)
+			pollAt(t, pool, "h2", now.Add(-time.Second)) // h2 keeps claiming
+			n, err := c.Presence(ctx)
+			if n > 0 && told.IsZero() {
+				told = now
+			}
+			if done++; done == passes {
+				cancel()
+			}
+			return err
+		})
+	}
+	run(12)
+	if told.IsZero() || told.Sub(t0) <= store.HostLostAfter || told.Sub(t0) > 35*time.Second {
+		t.Fatalf("h1 told %v after its last poll; want within 35 s", told.Sub(t0))
+	}
+	if n, text := loopAlerts(t, pool); n != 1 || !strings.Contains(text, probe) || !strings.Contains(text, "no such host") {
+		t.Fatalf("%d loop alerts: %q", n, text)
+	}
+	if open, err := store.LoopAlertOpen(ctx, pool, "agentrt-presence"); err != nil || !open {
+		t.Fatalf("the probe's alert open: %v %v", open, err)
+	}
+	wrong.Store(false)
+	run(3)
+	if open, err := store.LoopAlertOpen(ctx, pool, "agentrt-presence"); err != nil || open {
+		t.Fatalf("the probe agreeing again, its alert open: %v %v", open, err)
+	}
+	if n, _ := loopAlerts(t, pool); n != 1 {
+		t.Fatalf("%d loop alerts after the probe agreed", n)
+	}
+}
+
+// The coordinating thread on review 528: the probe says no and no host
+// claims (a long outage, or a broken probe with every host down). Nothing is
+// told of the hosts; past UnjudgedAfter the Owner is told once that host
+// presence cannot be judged, and GET /progress says it; when the platform
+// takes calls again that is cleared, and he is told so.
+func TestPresenceCannotBeJudgedIsTold(t *testing.T) {
+	pool := setup(t)
+	for _, h := range []string{"h1", "h2"} {
+		must(t, store.RegisterHost(ctx, pool, "owner", h, "dev"))
+	}
+	chiefOnly(t, pool)
+	var t0 time.Time
+	must(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+	pollAt(t, pool, "h1", t0)
+	pollAt(t, pool, "h2", t0)
+	now, up := t0, false
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0, PlatformProbe: "http://platform-api:8780/health",
+		PlatformUp: func(context.Context) error {
+			if up {
+				return nil
+			}
+			return errors.New("connect: connection refused")
+		}}
+	alerts := func() int {
+		t.Helper()
+		var n int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'policy_alert'`,
+			store.PresenceStream).Scan(&n))
+		return n
+	}
+	unjudged := func() map[string]any {
+		t.Helper()
+		out, err := store.Progress(ctx, pool)
+		must(t, err)
+		u, _ := out["presence_unjudged"].(map[string]any)
+		return u
+	}
+	// Claims within 30 s until t0+30: judged as of the latest claim, nothing
+	// told; from t0+35 nothing takes calls.
+	if n, _ := ticks(t, c, &now, t0.Add(5*time.Second), t0.Add(35*time.Second+controller.UnjudgedAfter-time.Second)); n != 0 || alerts() != 0 {
+		t.Fatalf("%d turns, %d alerts within the wait", n, alerts())
+	}
+	if n, _ := ticks(t, c, &now, t0.Add(35*time.Second+controller.UnjudgedAfter), t0.Add(4*time.Minute)); n != 0 || alerts() != 1 {
+		t.Fatalf("%d turns, %d alerts past the wait", n, alerts())
+	}
+	notes := ownerNotes(t, pool)
+	if len(notes) != 1 || !strings.Contains(notes[0].Body, "host presence cannot be judged: the platform has not answered its health probe "+
+		"(http://platform-api:8780/health) since") || strings.Contains(notes[0].Body, "is offline") {
+		t.Fatalf("notes %+v", notes)
+	}
+	if u := unjudged(); u == nil || !strings.Contains(u["why"].(string), "has not answered its health probe") {
+		t.Fatalf("progress: %v", u)
+	}
+	up = true
+	back := t0.Add(5 * time.Minute)
+	if n, _ := ticks(t, c, &now, back, back.Add(30*time.Second)); n != 0 {
+		t.Fatalf("%d turns within 30 s of the platform taking calls again", n)
+	}
+	if notes = ownerNotes(t, pool); len(notes) != 2 || !strings.Contains(notes[1].Body, "host presence can be judged again") || unjudged() != nil {
+		t.Fatalf("notes %+v; progress %v", notes, unjudged())
+	}
+	if alerts() != 1 {
+		t.Fatalf("%d alerts after recovery", alerts())
 	}
 }

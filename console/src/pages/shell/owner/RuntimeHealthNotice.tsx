@@ -26,6 +26,9 @@ export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgre
   } else if (schema.state === 'unknown') {
     lines.push({ key: 'schema', text: `The agent runtime's database schema could not be read${schema.reason ? `: ${schema.reason}` : '.'}` })
   }
+  if (progress.presence_unjudged) {
+    lines.push({ key: 'presence', text: `Host presence cannot be judged since ${ago(progress.presence_unjudged.since, now)}: ${progress.presence_unjudged.why}` })
+  }
   for (const h of progress.hosts) {
     if (h.reported_offline === true) lines.push({ key: `host-${h.host_id}`, text: offlineWords(h, now) })
   }
