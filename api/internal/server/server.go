@@ -622,6 +622,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	for k, v := range s.agentRuntimeSchema() {
 		body[k] = v
 	}
+	// Whether this process's runtime routes take agentd's calls: the
+	// workers' controller asks it through the Service (review 528 A1b).
+	body["agentrt_ready"] = s.agentRuntime != nil && s.agentRuntime.late != nil && s.agentRuntime.late.Ready()
 	writeJSON(w, http.StatusOK, body)
 }
 

@@ -85,7 +85,6 @@ func TestEventFieldValues(t *testing.T) {
 		{"note", "prune_failed", "refs/heads/agent/t_" + ulid + "/a3", "refs/heads/agent/t_" + ulid + "/a0"},
 		{"note", "voided", "appr_0123456789abcdef", "#212"},
 		{"note", "prune_round", "opened", "open"},
-		{"note", "platform_api", "down", "ready"},
 		{"route_decided", "fingerprint", sha, "05851c9c"},
 		{"wait_limit_passed", "wait", "task_ready", "ready"},
 		{"wait_limit_passed", "ref", "m_" + ulid, "M-12"},

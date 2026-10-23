@@ -153,7 +153,7 @@ var (
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin and two seat tokens (one registered).
-func server(t *testing.T, db store.DB) *httptest.Server {
+func server(t *testing.T, db store.DB, with ...func(*agentrtapi.API)) *httptest.Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "auth.yaml")
 	must(t, os.WriteFile(path, []byte(`tokens:
@@ -242,6 +242,9 @@ intake_tokens:
 			}
 			return mainAt, nil
 		}
+	}
+	for _, f := range with {
+		f(api)
 	}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })

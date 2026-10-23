@@ -70,6 +70,19 @@ type API struct {
 	AgentHeads  AgentHeads
 	MainResults store.MainResults
 	Now         func() time.Time
+	// Back is when this API's runtime routes became ready, the server's
+	// record of it: GET /hosts and /progress count a host's silence from no
+	// earlier, the API taking agentd's calls only since then (review 528
+	// A1b). nil counts from the host's contact alone.
+	Back func() time.Time
+}
+
+// back is Back, or the zero time.
+func (a *API) back() time.Time {
+	if a.Back == nil {
+		return time.Time{}
+	}
+	return a.Back()
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller

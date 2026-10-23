@@ -89,6 +89,12 @@ type Controller struct {
 	// from no earlier than it.
 	WatchPresence bool
 	Started       time.Time
+	// PlatformUp says whether the platform takes agentd's calls now (the
+	// server probes the API; review 528 A1b): while it says no the presence
+	// pass tells nothing, and a host's silence counts from no earlier than
+	// the moment it said yes again. nil: as if always.
+	PlatformUp func(ctx context.Context) bool
+	platform   platformSeen
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.

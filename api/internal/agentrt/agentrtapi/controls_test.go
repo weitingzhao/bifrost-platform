@@ -6,10 +6,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -456,12 +458,20 @@ func TestHostsAndControlEdges(t *testing.T) {
 		h1["reported_offline"] != false || h2["reported_offline"] != true {
 		t.Fatalf("29 and 31 seconds since the last poll: %v %v", h1, h2)
 	}
-	// The platform takes agentd's calls again from now (review 527 A1b): h2,
-	// 31 s silent, is not lost until it stays so 30 s more.
-	must(t, store.MarkPlatformUp(ctx, pool, "test-api"))
-	_, hosts = call(t, s, "viewer", "GET", "hosts", nil)
+	// An API whose runtime routes became ready just now (review 528 A1b): h2,
+	// 31 s silent, is not lost until it stays so 30 s more, on GET /hosts and
+	// on GET /progress alike.
+	back := time.Now()
+	fresh := server(t, pool, func(a *agentrtapi.API) { a.Back = func() time.Time { return back } })
+	_, hosts = call(t, fresh, "viewer", "GET", "hosts", nil)
 	if h2 := hostOf(t, hosts, "h2"); h2["online"] != false || h2["reported_offline"] != false || h2["claiming"] != nil {
-		t.Fatalf("h2 31 s silent, the platform just back: %v", h2)
+		t.Fatalf("h2 31 s silent, the API just ready: %v", h2)
+	}
+	_, prog := call(t, fresh, "viewer", "GET", "progress", nil)
+	for _, h := range prog["hosts"].([]any) {
+		if h := h.(map[string]any); h["host_id"] == "h2" && h["reported_offline"] != false {
+			t.Fatalf("progress, the API just ready: %v", h)
+		}
 	}
 	body := map[string]any{"idempotency_key": "k", "scope": "global", "kind": "pause", "reason": "one"}
 	_, set := call(t, s, "viewer", "POST", "controls", body, session, "s1")

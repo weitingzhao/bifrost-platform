@@ -3,14 +3,17 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
 const agentRuntimeAuthYAML = `
@@ -320,42 +323,123 @@ func TestAgentRuntimePoolsFitTheRoleLimit(t *testing.T) {
 	}
 }
 
-// Review 527 A1b: the API records that the platform takes agentd's calls
-// once its runtime database connects, and that it stops on its shutdown,
-// within platformDownLimit; an API a newer one replaced records no down.
-func TestAgentRuntimeSaysWhenThePlatformTakesCalls(t *testing.T) {
+// Review 528 A1b: the routes open with the moment they did already recorded,
+// and /health says agentrt_ready only then: no reader sees the routes ready
+// without the moment the API's silence counting starts from.
+func TestTheRoutesOpenWithTheirMoment(t *testing.T) {
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(context.Background(), db.Connect(t, db.Owner)); err != nil {
-		t.Fatal(err)
-	}
 	pool, err := pgxpool.New(context.Background(), db.Runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	head := func() string {
-		var s string
-		if err := pool.QueryRow(context.Background(), `SELECT COALESCE((SELECT body_json->>'platform_api' || ' ' || (body_json->>'text')
-		  FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1), '')`, store.PlatformStream).Scan(&s); err != nil {
-			t.Fatal(err)
+	srv := newTestServer(t, newTestConfig(t))
+	late := &lateDB{}
+	srv.agentRuntime = &agentRuntime{schema: &schemaWatch{}, late: late}
+	ready := func() any {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		srv.Router().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+		var body map[string]any
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
+			t.Fatalf("health %d %s", rec.Code, rec.Body.String())
 		}
-		return s
+		return body["agentrt_ready"]
 	}
-	old, next := platformInstance(), platformInstance()
-	if old == next {
-		t.Fatalf("two instances named alike: %s", old)
+	if late.Ready() || !late.Back().IsZero() || ready() != false {
+		t.Fatalf("before connecting: ready %v back %v health %v", late.Ready(), late.Back(), ready())
 	}
-	markPlatformUp(context.Background(), pool, old, [2]time.Duration{time.Millisecond, time.Millisecond})
-	if h := head(); !strings.HasPrefix(h, "up Platform API "+old) {
-		t.Fatalf("after up: %q", h)
+	// Whatever moment a reader catches between the two stores, it never sees
+	// the routes ready with no moment recorded.
+	at := time.Now()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for !late.Ready() {
+		}
+		if late.Back().IsZero() {
+			t.Error("the routes were ready before their moment was recorded")
+		}
+	}()
+	late.open(pool, at)
+	<-done
+	if !late.Ready() || !late.Back().Equal(at) || ready() != true {
+		t.Fatalf("after connecting: ready %v back %v health %v", late.Ready(), late.Back(), ready())
 	}
-	markPlatformUp(context.Background(), pool, next, [2]time.Duration{time.Millisecond, time.Millisecond})
-	markPlatformDown(pool, old)
-	if h := head(); !strings.HasPrefix(h, "up Platform API "+next) {
-		t.Fatalf("after the replaced API's shutdown: %q", h)
+}
+
+// Review 528 A1b: platform-workers asks the API through its Service whether
+// it takes agentd's calls: yes only for a 200 whose body says agentrt_ready.
+// Two API instances behind the Service, one exits: the Service sends the
+// probe to the other, and the answer stays yes, so detection is not
+// suppressed; both gone, no; a hung API is no within the probe's limit. A
+// process that is the API itself asks its own routes.
+func TestTheWorkersAskTheAPIThroughItsService(t *testing.T) {
+	instance := func(ready bool) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "agentrt_ready": ready})
+		}))
 	}
-	markPlatformDown(pool, next)
-	if h := head(); !strings.HasPrefix(h, "down Platform API "+next) {
-		t.Fatalf("after the API's shutdown: %q", h)
+	a, b := instance(true), instance(true)
+	defer b.Close()
+	var aGone atomic.Bool
+	// The Service: an instance gone has no endpoint, the other one answers.
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := a.URL
+		if aGone.Load() {
+			target = b.URL
+		}
+		resp, err := http.Get(target + r.URL.Path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	defer service.Close()
+	ask := func(url string, limit time.Duration) bool {
+		ctx, cancel := context.WithTimeout(context.Background(), limit)
+		defer cancel()
+		return apiTakesCalls(ctx, http.DefaultClient, url)
+	}
+	if !ask(service.URL+"/health", time.Second) {
+		t.Fatal("two instances up: no")
+	}
+	a.Close()
+	aGone.Store(true)
+	if !ask(service.URL+"/health", time.Second) {
+		t.Fatal("one instance exited, the other serving: no")
+	}
+	b.Close()
+	if ask(service.URL+"/health", time.Second) {
+		t.Fatal("both gone: yes")
+	}
+	notReady := instance(false)
+	defer notReady.Close()
+	unavailable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "starting", http.StatusServiceUnavailable)
+	}))
+	defer unavailable.Close()
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer hung.Close()
+	defer close(release)
+	start := time.Now()
+	if ask(notReady.URL, time.Second) || ask(unavailable.URL, time.Second) || ask(hung.URL, 100*time.Millisecond) {
+		t.Fatal("an API not ready, unavailable or hung said yes")
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("the probes took %v", took)
+	}
+	late := &lateDB{}
+	self := platformProbe(config.RoleAll, late)
+	if self(context.Background()) {
+		t.Fatal("the API itself, not connected: yes")
+	}
+	late.open(&pgxpool.Pool{}, time.Now())
+	if !self(context.Background()) {
+		t.Fatal("the API itself, connected: no")
 	}
 }

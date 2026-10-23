@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -49,6 +50,9 @@ type agentRuntime struct {
 	// schema is what the platform last read of the database's agentrt
 	// schema (TD-411, agentrt_schema.go); nil without AGENTRT_DSN.
 	schema *schemaWatch
+	// late is the runtime's database as it connects: its routes are ready
+	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
+	late *lateDB
 }
 
 // wireAgentRuntime connects the agent runtime (design v5 §5.2) when
@@ -90,7 +94,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	// the network policy does not know yet, a database restarting) heals by
 	// itself instead of leaving the runtime off until the next restart.
 	late := &lateDB{}
-	rt.api.DB = late
+	rt.api.DB, rt.api.Back, rt.late = late, late.Back, late
 	rdb, prefix, rerr := agentrtRedisFromEnv()
 	switch {
 	case rerr != nil:
@@ -118,23 +122,15 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			}
 			return
 		}
-		late.pool.Store(pool)
+		// The routes open, and /health says agentrt_ready, with the moment
+		// they did already recorded: the API's readers count a host's silence
+		// from no earlier (review 528 A1b).
+		late.open(pool, time.Now())
 		// Both processes say whether the database has this binary's
 		// migrations (TD-411), in their health and their log.
 		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
-		// The API takes agentd's calls from now on: every reader counts a
-		// host's silence from no earlier (review 527 A1b); and, on its
-		// shutdown, stops taking them.
-		down := func() {}
-		if role.RunsAPI() {
-			instance := platformInstance()
-			up := make(chan struct{})
-			safego.Go("agentrt-platform-up", func() { defer close(up); markPlatformUp(ctx, pool, instance, agentrtRetry) })
-			down = func() { <-up; markPlatformDown(pool, instance) }
-		}
 		if !role.RunsWorkers() {
 			<-ctx.Done()
-			down()
 			pool.Close()
 			if rdb != nil {
 				_ = rdb.Close()
@@ -142,6 +138,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
+		c.PlatformUp = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})
 		if rdb == nil {
@@ -157,7 +154,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		<-ctx.Done()
 		wait()
 		<-relayDone
-		down()
 		pool.Close()
 		if rdb != nil {
 			_ = rdb.Close()
@@ -319,7 +315,25 @@ func connectAgentRuntime(ctx context.Context, open func(context.Context) (*pgxpo
 }
 
 // lateDB is the runtime's database before and after it is connected.
-type lateDB struct{ pool atomic.Pointer[pgxpool.Pool] }
+type lateDB struct {
+	pool atomic.Pointer[pgxpool.Pool]
+	back atomic.Pointer[time.Time]
+}
+
+// open makes the routes ready on pool, at, the moment recorded first: no
+// reader sees them ready without it (review 528 A1b).
+func (l *lateDB) open(pool *pgxpool.Pool, at time.Time) {
+	l.back.Store(&at)
+	l.pool.Store(pool)
+}
+
+// Back is when the routes became ready; zero before.
+func (l *lateDB) Back() time.Time {
+	if t := l.back.Load(); t != nil {
+		return *t
+	}
+	return time.Time{}
+}
 
 // errNotConnected is a use of the database before it is connected (the
 // routes check Ready first).
@@ -438,51 +452,37 @@ func (s *Server) closeAgentRuntime() {
 	}
 }
 
-// platformInstance names this API among the platform's: its host name and a
-// random suffix, so a restarted pod of the same name is another instance.
-func platformInstance() string {
-	host, err := os.Hostname()
-	if err != nil || host == "" {
-		host = "platform"
+// platformProbe is how the controller of a process asks whether the platform
+// takes agentd's calls now (review 528 A1b): a process that is the API
+// itself asks its own routes; platform-workers asks the API through its
+// in-cluster Service, AGENTRT_API_HEALTH_URL (by default
+// http://platform-api:8780/health, where the checklist prober reaches it),
+// whose /health says agentrt_ready once the API's runtime routes are.
+func platformProbe(role config.Role, late *lateDB) func(context.Context) bool {
+	if role.RunsAPI() {
+		return func(context.Context) bool { return late.Ready() }
 	}
-	var b [4]byte
-	_, _ = rand.Read(b[:])
-	return host + "-" + hex.EncodeToString(b[:])
+	url := strings.TrimSpace(os.Getenv("AGENTRT_API_HEALTH_URL"))
+	if url == "" {
+		url = "http://platform-api:8780/health"
+	}
+	return func(ctx context.Context) bool { return apiTakesCalls(ctx, http.DefaultClient, url) }
 }
 
-// markPlatformUp records that this API takes agentd's calls
-// (store.MarkPlatformUp), trying again until it can or ctx ends.
-func markPlatformUp(ctx context.Context, db store.DB, instance string, retry [2]time.Duration) {
-	wait := retry[0]
-	for {
-		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := store.MarkPlatformUp(wctx, db, instance)
-		cancel()
-		if err == nil {
-			slog.Info("agentrt: the platform takes agentd's calls", "instance", instance)
-			return
-		}
-		slog.Error("agentrt: could not record that the platform takes agentd's calls; hosts may be judged from an older start", "err", err)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-		wait = min(2*wait, retry[1])
+// apiTakesCalls says whether the API at url answers that its runtime routes
+// are ready; no answer, another status or another body is no.
+func apiTakesCalls(ctx context.Context, client *http.Client, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
 	}
-}
-
-// platformDownLimit bounds recording this API's shutdown: it never holds up
-// the shutdown longer.
-var platformDownLimit = 3 * time.Second
-
-// markPlatformDown records that this API stops taking agentd's calls
-// (store.MarkPlatformDown), within platformDownLimit; a shutdown it cannot
-// record is logged.
-func markPlatformDown(db store.DB, instance string) {
-	ctx, cancel := context.WithTimeout(context.Background(), platformDownLimit)
-	defer cancel()
-	if _, err := store.MarkPlatformDown(ctx, db, instance); err != nil {
-		slog.Warn("agentrt: could not record that the platform stops taking agentd's calls", "err", err)
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
 	}
+	defer func() { _ = resp.Body.Close() }()
+	var body struct {
+		Ready bool `json:"agentrt_ready"`
+	}
+	return resp.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&body) == nil && body.Ready
 }

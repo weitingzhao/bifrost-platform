@@ -228,7 +228,7 @@ func strictly(w http.ResponseWriter, raw json.RawMessage, v any) bool {
 // SPEC-agentrt-progress-2026-10-14.md, computed on every read. A read that
 // fails is 503, never an old copy (review 181 B1).
 func (a *API) progress(w http.ResponseWriter, r *http.Request) {
-	out, err := store.Progress(r.Context(), a.DB)
+	out, err := store.ProgressSince(r.Context(), a.DB, a.back())
 	if err != nil {
 		// Unknown, never an old copy or half of one (SPEC §1).
 		a.logf("agentrt progress: %v", err)
