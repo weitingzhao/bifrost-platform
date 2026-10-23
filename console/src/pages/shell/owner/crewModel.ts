@@ -84,3 +84,10 @@ export function offlineWords(h: RuntimeHost, now: number): string {
   const live = h.live_attempts ? `; ${h.live_attempts} attempt${h.live_attempts === 1 ? '' : 's'} were running on it` : ''
   return `Host ${h.host_id} is offline: ${last}${live}.`
 }
+
+/** A host's state on the Crew card: online, online deleting branches, online taking no work, or why it is not online. */
+export function hostStateWords(h: RuntimeHost, now: number, lost: (h: RuntimeHost) => string): string {
+  if (!h.online) return lost(h)
+  if (h.claiming === false) return `online · not taking work · last claim ${h.last_poll_at ? ago(h.last_poll_at, now) : 'never'}`
+  return h.pruning ? 'online · deleting attempt branches' : 'online'
+}

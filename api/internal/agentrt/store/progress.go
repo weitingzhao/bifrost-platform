@@ -350,7 +350,7 @@ func liveAttempts(ctx context.Context, tx pgx.Tx, now, since time.Time) (map[str
 	    h.last_poll_at, `+hostSilentSQL("$4::timestamptz")+`, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at,
 	    a.heartbeat_at, t.role, t.task_class, t.state, a.persisted_at IS NOT NULL, cp.seq, cp.at
 	  FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
-	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id CROSS JOIN LATERAL `+pruneHead+`
+	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id `+hostLiveJoins+`
 	  `+checkpointOf+`
 	  WHERE a.state IN ('leased','running','stale')`, append(livenessArgs(since), now)...)
 	if err != nil {

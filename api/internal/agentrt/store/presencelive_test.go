@@ -316,3 +316,94 @@ func TestAHostTakenOutOfWorkIsNotToldBack(t *testing.T) {
 		})
 	}
 }
+
+// heartbeatAt sets attempt's last heartbeat to at, as its own goroutine's
+// heartbeat at that moment would.
+func (w *world) heartbeatAt(t *testing.T, attempt string, at time.Time) {
+	t.Helper()
+	_, err := w.rt.Exec(ctx, `UPDATE agentrt.attempt SET heartbeat_at = $2 WHERE attempt_id = $1`, attempt, at)
+	ok(t, err)
+}
+
+func (d presenceDoc) claiming(t *testing.T, id string) *bool {
+	t.Helper()
+	for _, h := range d.Hosts {
+		if h.HostID == id {
+			return h.Claiming
+		}
+	}
+	t.Fatalf("no host %s", id)
+	return nil
+}
+
+// Review 527 A3: h1's claim loop stops while an attempt of it keeps
+// reporting. It is alive (online, not reported offline, its attempt not
+// host_lost) and takes no work (claiming false): the executors only it
+// offers are told unavailable once, 30 s after its last claim, and back when
+// its claims resume. In a prune round nothing is told within its budget, and
+// they are told unavailable once the budget has passed though the attempt
+// still reports.
+func TestAHostThatOnlyHeartbeatsTakesNoWork(t *testing.T) {
+	t.Parallel()
+	w := presenceWorld(t, "h1")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	task := w.ready(t, store.Task{Effect: "none"})
+	w.poll(t, "h1", claude, codex)
+	c := w.claim(t, "h1", time.Hour, codex)
+	if c == nil || c.TaskID != task {
+		t.Fatalf("claim %+v", c)
+	}
+	ok(t, store.Start(ctx, w.rt, fence(c, "h1"), "", ""))
+	var p time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p))
+	w.pollAt(t, "h1", p)
+	w.heartbeatAt(t, c.AttemptID, p.Add(28*time.Second))
+	if n := presenceAt(t, w, p.Add(30*time.Second)); n != 0 {
+		t.Fatalf("%d turns 30 s after the last claim", n)
+	}
+	doc, status := w.presenceDocAt(t, p.Add(31*time.Second), time.Time{}, task)
+	online, reported, _ := doc.host(t, "h1")
+	if claiming := doc.claiming(t, "h1"); !online || reported || claiming == nil || *claiming || status == store.StatusHostLost {
+		t.Fatalf("its claims stopped, its attempt reporting: online %v reported %v claiming %v, attempt %s", online, reported, claiming, status)
+	}
+	for _, e := range []string{"exec:claude", "exec:codex"} {
+		if x := doc.executor(t, e); !isBool(x.Available, false) || !strings.Contains(x.Why, "host h1 offers it but has not claimed work since") {
+			t.Fatalf("%s %+v", e, x)
+		}
+	}
+	if n := presenceAt(t, w, p.Add(31*time.Second)); n != 2 {
+		t.Fatalf("%d turns 31 s after the last claim; want claude and codex", n)
+	}
+	if n := presenceAt(t, w, p.Add(36*time.Second)); n != 0 {
+		t.Fatalf("told again: %d", n)
+	}
+	notes := platformNotes(t, w)
+	if len(notes) != 1 || !containsAll(notes[0].Body, "exec:claude is unavailable: host h1 offers it but has not claimed work since",
+		"No executor can take these jobs now") || strings.Contains(notes[0].Body, "Host h1 is offline") {
+		t.Fatalf("notes %+v", notes)
+	}
+	w.pollAt(t, "h1", p.Add(40*time.Second))
+	if n := presenceAt(t, w, p.Add(41*time.Second)); n != 2 {
+		t.Fatalf("%d turns once its claims resume", n)
+	}
+	// In a prune round: nothing within its budget, unavailable past it.
+	ok(t, store.OpenPruneRound(ctx, w.rt, "h1", 2))
+	var opened time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE event_stream_id = $1`, store.HostPruneStream("h1")).Scan(&opened))
+	w.pollAt(t, "h1", opened)
+	w.heartbeatAt(t, c.AttemptID, opened.Add(2*time.Minute))
+	if n := presenceAt(t, w, opened.Add(2*time.Minute)); n != 0 {
+		t.Fatalf("%d turns within a prune round's budget", n)
+	}
+	w.heartbeatAt(t, c.AttemptID, opened.Add(store.PruneSilence-2*time.Second))
+	past := opened.Add(store.PruneSilence + time.Second)
+	if n := presenceAt(t, w, past); n != 2 {
+		t.Fatalf("%d turns past the prune budget, its attempt reporting; want claude and codex", n)
+	}
+	if doc, _ = w.presenceDocAt(t, past, time.Time{}, task); func() bool { o, r, _ := doc.host(t, "h1"); return !o || r }() {
+		t.Fatalf("h1 past the prune budget, its attempt reporting: %+v", doc.Hosts)
+	}
+	if notes = platformNotes(t, w); len(notes) != 3 || strings.Contains(notes[2].Body, "Host h1 is offline") {
+		t.Fatalf("notes %+v", notes)
+	}
+}

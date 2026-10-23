@@ -64,6 +64,7 @@ type presenceDoc struct {
 		Online          bool          `json:"online"`
 		ReportedOffline bool          `json:"reported_offline"`
 		Pruning         bool          `json:"pruning"`
+		Claiming        *bool         `json:"claiming"`
 		DiskLow         bool          `json:"disk_low"`
 		Offered         []store.Offer `json:"offered"`
 		OfferedAt       *string       `json:"offered_at"`

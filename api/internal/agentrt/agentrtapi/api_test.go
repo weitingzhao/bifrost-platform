@@ -331,16 +331,17 @@ func TestAgentdPath(t *testing.T) {
 		map[string]any{"host_id": "h1", "lease_epoch": 999}); code != http.StatusConflict || out["error"] != "fenced" {
 		t.Fatalf("an old epoch: %d %v", code, out)
 	}
-	// A heartbeat is h1's contact, whatever its claim loop does (review 526
-	// A1): a host whose last poll is 10 minutes old polled just now after it.
+	// A heartbeat is h1's contact, not a call of its claim loop (review 527
+	// A3): with its last claim 10 minutes old and its attempt reporting, h1 is
+	// online, takes no work, and is not reported offline.
 	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h1'`)
 	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); code != http.StatusOK {
 		t.Fatalf("heartbeat: %d %v", code, out)
 	}
-	var silent float64
-	must(t, pool.QueryRow(ctx, `SELECT extract(epoch FROM clock_timestamp() - last_poll_at) FROM agentrt.host WHERE host_id = 'h1'`).Scan(&silent))
-	if silent > 5 {
-		t.Fatalf("h1's last contact is %.0f s old after a heartbeat", silent)
+	_, beat := call(t, s, "viewer", "GET", "hosts", nil)
+	if h1 := hostOf(t, beat, "h1"); h1["online"] != true || h1["claiming"] != false || h1["reported_offline"] != false ||
+		h1["poll_age_s"].(float64) < 590 {
+		t.Fatalf("h1 heartbeating, its claims 10 minutes old: %v", h1)
 	}
 	for _, field := range []string{"phase", "line"} {
 		if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{field: "x"})); code != http.StatusBadRequest {

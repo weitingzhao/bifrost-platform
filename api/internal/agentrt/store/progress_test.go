@@ -205,6 +205,9 @@ func TestProgress(t *testing.T) {
 	ok(t, err)
 	w.legacy(t,
 		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h3'`,
+		// Its attempts stopped reporting with it (review 527 A3: a heartbeat is
+		// the host's contact).
+		`UPDATE agentrt.attempt SET heartbeat_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h3'`,
 		fmt.Sprintf(`UPDATE agentrt.attempt SET started_at = clock_timestamp() - interval '200 seconds' WHERE attempt_id = '%s'`, slowClaim.AttemptID))
 	var blockedSince string
 	ok(t, w.rt.QueryRow(ctx, `SELECT to_char(max(at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') FROM agentrt.event

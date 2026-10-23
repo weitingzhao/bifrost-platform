@@ -60,9 +60,10 @@ func headSQL(stream string) string {
 // latest claim offered (offered, null until one is recorded, with
 // offered_at) and whether its free disk was then below the floor
 // (disk_low), whether it is deleting attempt branches it was handed
-// (pruning), and whether the controller reports it offline
-// (reported_offline: lost, active, and no stop or drain on it or on every
-// host).
+// (pruning), whether it takes work (claiming: true, false, or null while
+// not known yet; review 527 A3), and whether the controller reports it
+// offline (reported_offline: lost, active, and no stop or drain on it or on
+// every host).
 func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
@@ -71,14 +72,15 @@ func HostsSQL(now string) string {
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
-	    'pruning', COALESCE(ph.head->'body'->>'prune_round' = 'opened' AND ` + now + ` - (ph.head->>'at')::timestamptz <= make_interval(secs => $3), false),
+	    'pruning', ` + pruneOpenSQL(now) + `,
+	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
 	    'reported_offline', h.state = 'active' AND ` + hostSilentSQL(now) + `
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
 	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))))
 	  ORDER BY h.host_id), '[]'::jsonb)
 	  FROM agentrt.host h
 	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o
-	  CROSS JOIN LATERAL ` + pruneHead
+	  ` + hostLiveJoins
 }
 
 // Offer is a tool a host offers, as its claim named it and its stream records
@@ -196,6 +198,7 @@ type HostPresence struct {
 	Online          bool       `json:"online"`
 	ReportedOffline bool       `json:"reported_offline"`
 	Pruning         bool       `json:"pruning"`
+	Claiming        *bool      `json:"claiming"`
 	DiskLow         bool       `json:"disk_low"`
 	LiveAttempts    int        `json:"live_attempts"`
 	Offered         *[]Offer   `json:"offered"`
@@ -216,8 +219,11 @@ func (h HostPresence) held() string {
 	return ""
 }
 
+// usable is a host that takes work now: its claim loop calls (alive alone
+// is not enough: review 527 A3), it is active, under no stop, pause or drain,
+// with room on disk.
 func (h HostPresence) usable() bool {
-	return h.Online && h.State == "active" && h.held() == "" && !h.DiskLow
+	return h.Claiming != nil && *h.Claiming && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
 // watched says whether the presence pass tells this host's turns: an active
@@ -235,10 +241,11 @@ func (h HostPresence) watched() bool {
 	return true
 }
 
-// waited is a host not online that is not lost yet: its silence is counted
-// from the reader's start (review 526 A1b). What it can take is not known.
+// waited is a host whose claim loop is silent but not known to have stopped
+// yet: its silence is counted from the reader's start (review 526 A1b). What
+// it can take is not known.
 func (h HostPresence) waited() bool {
-	return !h.Online && !h.ReportedOffline && h.State == "active" && h.held() == "" && !h.DiskLow
+	return h.Claiming == nil && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
 // ExecutorPresence is an executor some job's candidate names: whether it is
@@ -516,6 +523,9 @@ func notOffered(jc jobCandidate, hosts []HostPresence) []string {
 			why = append(why, who+"has never polled")
 		case !h.Online:
 			why = append(why, who+"has not polled since "+h.LastPollAt.UTC().Format(time.RFC3339))
+		case h.Claiming != nil && !*h.Claiming:
+			why = append(why, who+"has not claimed work since "+h.LastPollAt.UTC().Format(time.RFC3339)+
+				" (it is alive: its attempts still report)")
 		case h.State != "active":
 			why = append(why, who+"is "+h.State)
 		case h.held() != "":

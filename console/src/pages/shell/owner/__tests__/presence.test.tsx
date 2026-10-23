@@ -7,7 +7,7 @@ import { AGENT_RUNTIME_POLL_MS, parseRuntimeProgress } from '@/api/agentRuntime'
 import { offlineHostItem, offlineHosts } from '@/pages/shell/needs-you/mergedNeedsYou'
 import { OwnerCrew } from '../OwnerCrew'
 import { RuntimeHealthNotice } from '../RuntimeHealthNotice'
-import { executorWords, offeredWords } from '../crewModel'
+import { executorWords, hostStateWords, offeredWords } from '../crewModel'
 
 // W-31 3.5. The fixture is GET /agentrt/progress from real rows (store TestConsolePresenceFixture, written with
 // CONSOLE_PRESENCE_FIXTURE_WRITE=1) after one presence pass: h1 online offering claude, h2 offering codex and stopped
@@ -30,6 +30,11 @@ describe('presence', () => {
     expect(offeredWords(before.hosts[0])).toBe('')
     expect(before.hosts[0].pruning).toBeUndefined()
     expect(parseRuntimeProgress({ hosts: [{ host_id: 'h1', online: true, pruning: true }] }).hosts[0].pruning).toBe(true)
+    const words = (h: object) => hostStateWords(parseRuntimeProgress({ hosts: [h] }).hosts[0], Date.parse('2026-10-23T20:01:00Z'), () => 'lost')
+    expect(words({ host_id: 'h1', online: true, claiming: false, last_poll_at: '2026-10-23T20:00:00Z' })).toMatch(/^online · not taking work · last claim /)
+    expect(words({ host_id: 'h1', online: true, claiming: null, pruning: true })).toBe('online · deleting attempt branches')
+    expect(words({ host_id: 'h1', online: true, claiming: true })).toBe('online')
+    expect(words({ host_id: 'h1', online: false })).toBe('lost')
     expect(offeredWords(parseRuntimeProgress({ hosts: [{ host_id: 'h1', offered: null }] }).hosts[0])).toBe('What it offers is not recorded yet')
     expect(executorWords({ executor: 'exec:cursor', available: null, why: 'what h1 offers is not recorded yet', hosts: [], jobs: [] }))
       .toBe('cursor not known: what h1 offers is not recorded yet')

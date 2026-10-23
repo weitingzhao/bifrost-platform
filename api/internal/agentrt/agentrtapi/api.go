@@ -447,9 +447,9 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// touch records a call of host's agentd as its last contact
-// (store.TouchHost, review 526 A1); one that cannot be recorded is logged,
-// never the call's failure.
+// touch records a call of host's agentd claim loop other than a claim as
+// its last poll (store.TouchHost, review 526 A1); one that cannot be
+// recorded is logged, never the call's failure.
 func (a *API) touch(ctx context.Context, host string) {
 	if err := store.TouchHost(ctx, a.DB, host); err != nil && ctx.Err() == nil {
 		a.logf("agentrt: the contact of host %s could not be recorded: %v", host, err)
@@ -519,7 +519,6 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
 		return
 	}
-	a.touch(r.Context(), b.HostID)
 	if action != "heartbeat" && len(b.Actions) > 0 && string(b.Actions) != "null" {
 		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
 		return
