@@ -134,13 +134,26 @@ export function registerIssueTools(reg: McpServer['tool']): void {
     async (input) => jsonResult(await w('close_issue')(input)),
   )
 
-  for (const [tool, what] of [
-    ['park_issue', 'park it, with why and when it comes back (refused while its work is live)'],
-    ['resume_issue', 'resume a parked issue at the step it left'],
-    ['reopen_issue', 'reopen a closed issue (its trials and answers asked before count no more)'],
-  ] as const) {
-    reg(tool, `Business issue: ${what}. ${ISSUE_KEY_RULE}`, NOTE_INPUT, async (input) => jsonResult(await w(tool)(input)))
-  }
+  reg(
+    'park_issue',
+    `Business issue: park it, with why and when it comes back (refused while its work is live). ${ISSUE_KEY_RULE}`,
+    NOTE_INPUT,
+    async (input) => jsonResult(await w('park_issue')(input)),
+  )
+
+  reg(
+    'resume_issue',
+    `Business issue: resume a parked issue at the step it left. ${ISSUE_KEY_RULE}`,
+    NOTE_INPUT,
+    async (input) => jsonResult(await w('resume_issue')(input)),
+  )
+
+  reg(
+    'reopen_issue',
+    `Business issue: reopen a closed issue (its trials and answers asked before count no more). ${ISSUE_KEY_RULE}`,
+    NOTE_INPUT,
+    async (input) => jsonResult(await w('reopen_issue')(input)),
+  )
 
   reg(
     'merge_issues',

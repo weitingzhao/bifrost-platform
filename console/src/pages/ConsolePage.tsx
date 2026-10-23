@@ -8,6 +8,7 @@ import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
+import { IssuePage } from '@/pages/IssuePage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import {
   DataPage,
@@ -72,6 +73,9 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
   if (location.kind === 'question') {
     return { title: 'Question', description: 'Answer one question. Answering approves nothing.' }
   }
+  if (location.kind === 'issue') {
+    return { title: 'Issue', description: 'Read one business issue. Its cards are answered on their own pages.' }
+  }
   if (location.kind === 'more') {
     return { title: 'More', description: 'Every detail page, with the question it answers.' }
   }
@@ -85,7 +89,7 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
  * its place).
  */
 function backFor(location: ConsoleLocation): HeaderBack | undefined {
-  if (location.kind === 'approval' || location.kind === 'question') {
+  if (location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue') {
     return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: NEEDS_YOU_HREF }
   }
   if (location.kind !== 'shell' || isEntryRoute(location.id)) return undefined
@@ -157,7 +161,7 @@ function ConsolePageInner() {
   const activeTab =
     location.kind === 'dev-sessions'
       ? 'dev-sessions'
-      : location.kind === 'approval' || location.kind === 'question'
+      : location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue'
         ? NEEDS_YOU_ROUTE
         : locationId(location)
   const yoursBadge = yoursNavBadge(yours)
@@ -215,6 +219,7 @@ function ConsolePageInner() {
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
+            {location.kind === 'issue' ? <IssuePage /> : null}
             {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}
             {/* One slot for the four entries: moving between them keeps the Owner Console mounted. */}
             {entry != null ? <OwnerConsolePage entry={entry} /> : Page != null ? <Page /> : null}

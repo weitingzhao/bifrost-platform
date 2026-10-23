@@ -77,6 +77,14 @@ export const QUESTION_ROUTE = 'questions'
 /** Server question ids. Anything else is not requested. */
 export const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
 
+/** A business issue's read-only page (`#issue?id=BI-n`, W-31 BI-1 slice 2): the link on its Owner's cards. */
+export const ISSUE_ROUTE = 'issue'
+
+/** Link to one business issue's page. */
+export function issueHref(id: string): string {
+  return formatShellHash(ISSUE_ROUTE, new URLSearchParams({ id }).toString())
+}
+
 /** Tabs that used to be real pages. `dev-sessions` stays a local-only route. */
 export const FORMER_CONSOLE_TABS = [
   'maintenance',
@@ -132,6 +140,7 @@ export type ConsoleLocation =
   | { kind: 'shell'; id: ShellRouteId }
   | { kind: 'approval' }
   | { kind: 'question' }
+  | { kind: 'issue' }
   | { kind: 'more' }
   | { kind: 'dev-sessions' }
 
@@ -263,7 +272,7 @@ export function isEntryRoute(value: string): value is EntryRouteId {
  */
 export function entryOf(location: ConsoleLocation): EntryRouteId | null {
   if (location.kind === 'more' || location.kind === 'dev-sessions') return null
-  if (location.kind === 'approval' || location.kind === 'question') return 'you'
+  if (location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue') return 'you'
   if (isEntryRoute(location.id)) return location.id
   return 'system'
 }
@@ -315,6 +324,7 @@ export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy
   if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
   if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
   if (tab === QUESTION_ROUTE) return { location: { kind: 'question' }, legacy: false }
+  if (tab === ISSUE_ROUTE) return { location: { kind: 'issue' }, legacy: false }
   if (tab === MORE_ROUTE) return { location: { kind: 'more' }, legacy: false }
   if (isShellRouteId(tab)) return { location: { kind: 'shell', id: tab }, legacy: false }
   const target = LEGACY_HASH_REDIRECTS[tab]
@@ -339,6 +349,12 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
       return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: NEEDS_YOU_HREF }
     }
     return { location: { kind: 'question' }, canonical: formatShellHash(QUESTION_ROUTE, query) }
+  }
+  if (tab === ISSUE_ROUTE) {
+    if (hashQueryParam(query, 'id') == null) {
+      return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: NEEDS_YOU_HREF }
+    }
+    return { location: { kind: 'issue' }, canonical: formatShellHash(ISSUE_ROUTE, query) }
   }
   if (tab === APPROVAL_ROUTE || tab === 'maintenance') {
     if (approvalId != null) {
@@ -367,6 +383,7 @@ export function locationId(location: ConsoleLocation): string {
   if (location.kind === 'dev-sessions') return 'dev-sessions'
   if (location.kind === 'approval') return APPROVAL_ROUTE
   if (location.kind === 'question') return QUESTION_ROUTE
+  if (location.kind === 'issue') return ISSUE_ROUTE
   if (location.kind === 'more') return MORE_ROUTE
   return location.id
 }
