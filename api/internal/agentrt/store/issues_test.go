@@ -64,13 +64,21 @@ func newIssueWorld(t *testing.T) *issueWorld {
 // issueWorldOn sets the issue fixture up on a world.
 func issueWorldOn(t *testing.T, w *world) *issueWorld {
 	t.Helper()
+	return issueWorldOf(t, w, true)
+}
+
+// issueWorldOf is issueWorldOn, the intake-gates rule stored or not.
+func issueWorldOf(t *testing.T, w *world, gates bool) *issueWorld {
+	t.Helper()
 	iw := &issueWorld{world: w,
 		crew:      store.Writer{Actor: "thread:crew-1", Token: "operator"},
 		owner:     store.Writer{Actor: "owner", Token: "admin"},
 		dots:      store.Writer{Actor: "agent:dots-p2", Token: "intake:dots-p2"},
 		dotsOwner: store.Writer{Actor: "agent:dots-owner", Token: "intake:dots-owner"},
 	}
-	iw.putRule(t, intakeGatesText)
+	if gates {
+		iw.putRule(t, intakeGatesText)
+	}
 	iw.putRule(t, devEnvelopeText)
 	for id, name := range map[string]string{store.OwnerPerson: "Owner", "person:p2": "Person two"} {
 		_, err := store.PutPerson(ctx, iw.rt, iw.owner, id, name)
@@ -415,6 +423,11 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	ok(t, iw.prioritize(t, id, "p1"))
 
 	// The rule: missing, the take is refused; expired too.
+	none := issueWorldOf(t, newWorld(t), false)
+	nid := none.submit(t, "no rule at all")
+	none.readySmall(t, nid, "improvement")
+	_, err = none.take(t, nid, fitting, nil)
+	wantIs(t, err, store.ErrState, "no intake-gates rule is in force")
 	other := newIssueWorld(t)
 	oid := other.submit(t, "no rule")
 	other.readySmall(t, oid, "improvement")
