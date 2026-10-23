@@ -220,6 +220,21 @@ func (h HostPresence) usable() bool {
 	return h.Online && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
+// watched says whether the presence pass tells this host's turns: an active
+// host under no stop or drain (on it, or on every host). A host taken out of
+// work on purpose is not reported, either way (review 526 B1).
+func (h HostPresence) watched() bool {
+	if h.State != "active" {
+		return false
+	}
+	for _, c := range h.Controls {
+		if c.Kind == "stop" || c.Kind == "drain" {
+			return false
+		}
+	}
+	return true
+}
+
 // waited is a host not online that is not lost yet: its silence is counted
 // from the reader's start (review 526 A1b). What it can take is not known.
 func (h HostPresence) waited() bool {
@@ -239,14 +254,16 @@ type ExecutorPresence struct {
 }
 
 // presence is the view at one moment: the hosts' document as read, its hosts,
-// the executors, and the jobs no executor can take now (each has candidates
-// and none of them is available).
+// the executors, the jobs no executor can take now (each has candidates and
+// each of them is known not to be available) and the jobs it is not known of
+// (none of their candidates is known available, some is not known).
 type presence struct {
 	now       time.Time
 	doc       []byte
 	hosts     []HostPresence
 	executors []ExecutorPresence
 	unserved  []string
+	unknown   []string
 }
 
 func (p presence) executor(id string) *ExecutorPresence {
@@ -313,7 +330,7 @@ func readPresence(ctx context.Context, tx pgx.Tx, now, since time.Time) (presenc
 			}
 		}
 	}
-	p.executors, p.unserved = judgeExecutors(p.hosts, cp.candidates, tenants, cooling, quota, stops)
+	p.executors, p.unserved, p.unknown = judgeExecutors(p.hosts, cp.candidates, tenants, cooling, quota, stops)
 	return p, nil
 }
 
@@ -341,9 +358,10 @@ func rank(ok *bool) int {
 
 // judgeExecutors judges each candidate of each job, then each executor (the
 // best of its candidates: available over not known over not) and each job
-// (unserved when every candidate of it is known not to be available).
+// (unserved when every candidate of it is known not to be available, not
+// known when none is known available and some is not known).
 func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenants map[string]string, cooling map[string]time.Time,
-	quota map[string]toolQuota, stops map[string]float64) ([]ExecutorPresence, []string) {
+	quota map[string]toolQuota, stops map[string]float64) ([]ExecutorPresence, []string, []string) {
 	type acc struct {
 		e      ExecutorPresence
 		judged []judged
@@ -354,9 +372,9 @@ func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenan
 		jobs = append(jobs, j)
 	}
 	slices.Sort(jobs)
-	unserved := []string{}
+	unserved, unknown := []string{}, []string{}
 	for _, j := range jobs {
-		none := len(cands[j]) > 0
+		best := -1
 		for _, jc := range cands[j] {
 			a := byExec[jc.executor]
 			if a == nil {
@@ -368,12 +386,13 @@ func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenan
 			}
 			jd := judgeCandidate(jc, hosts, tenants[j], cooling, quota, stops)
 			a.judged = append(a.judged, jd)
-			if jd.ok == nil || *jd.ok {
-				none = false
-			}
+			best = max(best, rank(jd.ok))
 		}
-		if none {
+		switch best {
+		case 0:
 			unserved = append(unserved, j)
+		case 1:
+			unknown = append(unknown, j)
 		}
 	}
 	out := make([]ExecutorPresence, 0, len(byExec))
@@ -412,7 +431,7 @@ func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenan
 		out = append(out, e)
 	}
 	slices.SortFunc(out, func(a, b ExecutorPresence) int { return strings.Compare(a.Executor, b.Executor) })
-	return out, unserved
+	return out, unserved, unknown
 }
 
 // judgeCandidate judges one candidate of a job of tenant: its account's

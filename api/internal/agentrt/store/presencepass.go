@@ -12,23 +12,28 @@ import (
 
 // The presence pass (the controller's agentrt-presence loop, every five
 // seconds; presence.go has the view). A host the controller reports offline
-// (HostPresence.ReportedOffline) gets a policy_alert on its stream (rule
-// host_offline, its artifact saying when it last polled and what was running
-// on it); once it polls again, a note there that it is back online. An
-// executor that is known not to be available gets a policy_alert on the
-// controller stream (rule executor_unavailable, line_digest naming the
-// executor, its artifact saying why); once it is available again, a note
-// there. Each turn is recorded once, as a host's disk is (hostdisk.go): the
-// latest record of each host and executor is its state, so a pass after a
-// restart says nothing it said before. Each pass that records a turn also
-// tells the Owner in his conversation with the chief of staff, as the
-// platform and not the seat (TellWaitingBriefs' precedent, briefwait.go): the
-// chief of staff runs on the hosts it would report, so only the platform can
-// say it within the minute. The note names the jobs no executor can take now
-// (chief_of_staff among them: the chief of staff cannot answer). The records
-// and the note are one transaction, written under the seat's lock (taken
-// first, as AcceptBrief and TellWaitingBriefs take it), and the view and the
-// records are read again under it, so two passes never record a turn twice.
+// (HostPresence.ReportedOffline) gets a policy_alert on its presence stream
+// (HostPresenceStream; rule host_offline, its artifact saying when it last
+// polled and what was running on it); once it polls again, a note there that
+// it is back online. Only active hosts under no stop or drain are watched,
+// both ways: an alert of a host taken out of work since is closed by a note
+// and not told, and nothing is told of it while it is out (review 526 B1).
+// An executor that is known not to be available gets a policy_alert on its
+// own presence stream (ExecutorPresenceStream; rule executor_unavailable,
+// its artifact saying why); once it is available again, a note there. Each
+// turn is recorded once: the last record of each presence stream is its
+// state (openAlerts), so a pass after a restart says nothing it said before.
+// Each pass that records a turn it tells also tells the Owner in his
+// conversation with the chief of staff, as the platform and not the seat
+// (TellWaitingBriefs' precedent, briefwait.go): the chief of staff runs on
+// the hosts it would report, so only the platform can say it within the
+// minute. The note names the jobs no executor can take now (chief_of_staff
+// among them: the chief of staff cannot answer) and those not known of; it
+// says every job is covered again only when each has an executor known to be
+// available (review 526 A2). The records and the note are one transaction,
+// written under the seat's lock (taken first, as AcceptBrief and
+// TellWaitingBriefs take it), and the view and the records are read again
+// under it, so two passes never record a turn twice.
 
 // The alerts' phrases, and the notes' words after the host or executor.
 const (
@@ -36,6 +41,7 @@ const (
 	executorUnavailablePhrase = "an executor cannot take work now"
 	hostBackOnline            = " is back online"
 	executorAvailableAgain    = " is available again"
+	hostSetAside              = " was taken out of work"
 )
 
 // presencePassTimeout bounds a pass, and waitsLockTimeout each lock it waits
@@ -44,10 +50,12 @@ const presencePassTimeout = 20 * time.Second
 
 // presenceTurn is a turn of a host or an executor: offline or unavailable
 // (down), or back; since is when the open alert a turn back answers was
-// recorded.
+// recorded. A quiet turn closes the open alert of a host taken out of work
+// on purpose since (drained, stopped or retired): recorded, not told (review
+// 526 B1).
 type presenceTurn struct {
 	host, executor string
-	down           bool
+	down, quiet    bool
 	since          time.Time
 }
 
@@ -105,9 +113,15 @@ func presenceTurns(ctx context.Context, tx pgx.Tx, p presence) ([]presenceTurn, 
 		return nil, err
 	}
 	var turns []presenceTurn
+	// One scope both ways (review 526 B1): a host the pass does not watch is
+	// neither reported offline nor back, and an alert of it that is open is
+	// closed without telling.
 	for _, h := range p.hosts {
 		since, alerted := open[HostPresenceStream(h.HostID)]
 		switch {
+		case alerted && !h.watched():
+			turns = append(turns, presenceTurn{host: h.HostID, quiet: true, since: since})
+		case !h.watched():
 		case h.ReportedOffline && !alerted:
 			turns = append(turns, presenceTurn{host: h.HostID, down: true})
 		case alerted && h.Online:
@@ -155,6 +169,18 @@ func recordTurns(ctx context.Context, tx pgx.Tx, p presence, turns []presenceTur
 	for _, t := range turns {
 		var line string
 		switch {
+		case t.quiet:
+			h := hostIn(p, t.host)
+			why := "its state is " + h.State
+			if h.State == "active" {
+				why = "a stop or a drain holds it"
+			}
+			if _, err := Append(ctx, tx, Event{Stream: HostPresenceStream(t.host), Type: "note", Actor: "controller",
+				Body: map[string]any{"text": t.host + hostSetAside + ": " + why + "; its offline, reported at " + stamp(t.since) +
+					", is closed without telling, and it is not reported while it is out of work."}}); err != nil {
+				return err
+			}
+			continue
 		case t.host != "":
 			h := hostIn(p, t.host)
 			if t.down {
@@ -194,6 +220,9 @@ func recordTurns(ctx context.Context, tx pgx.Tx, p presence, turns []presenceTur
 			}
 		}
 		lines = append(lines, "- "+line)
+	}
+	if len(lines) == 0 {
+		return nil // only quiet turns: nothing to tell
 	}
 	_, err := postMessageAs(ctx, tx, Seat, "owner", "note", []byte(presenceNote(p, turns, lines)), "", "", false)
 	return err
@@ -259,8 +288,7 @@ func presenceNote(p presence, turns []presenceTurn, lines []string) string {
 	s.WriteString(strings.Join(lines, "\n"))
 	s.WriteString("\n\n")
 	back := slices.ContainsFunc(turns, func(t presenceTurn) bool { return t.executor != "" && !t.down })
-	switch {
-	case len(p.unserved) > 0:
+	if len(p.unserved) > 0 {
 		jobs := slices.Clone(p.unserved)
 		for i, j := range jobs {
 			if j == "chief_of_staff" {
@@ -268,7 +296,14 @@ func presenceNote(p presence, turns []presenceTurn, lines []string) string {
 			}
 		}
 		s.WriteString("No executor can take these jobs now: " + strings.Join(jobs, ", ") + ".\n\n")
-	case back:
+	}
+	// Every job covered is said only when each has a candidate known to be
+	// available: a job not known of is not counted as covered (review 526 A2).
+	if len(p.unknown) > 0 {
+		s.WriteString("Not known yet whether an executor can take these jobs: " + strings.Join(p.unknown, ", ") +
+			" (a host that may offer one has not been heard from since the platform started, or has not said what it offers).\n\n")
+	}
+	if back && len(p.unserved) == 0 && len(p.unknown) == 0 {
 		s.WriteString("Every job has an executor that can take it again.\n\n")
 	}
 	s.WriteString("The platform says so here again when this changes.")

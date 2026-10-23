@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -182,4 +183,136 @@ func containsAll(s string, parts ...string) bool {
 		}
 	}
 	return true
+}
+
+// splitWorld is a world where the planner's one candidate is claude and the
+// implementer's codex, with hosts h1 and h2.
+func splitWorld(t *testing.T) *world {
+	t.Helper()
+	w := newWorld(t)
+	for _, h := range []string{"h1", "h2"} {
+		ok(t, store.RegisterHost(ctx, w.rt, "owner", h, "dev"))
+	}
+	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
+	ok(t, err)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: one candidate a job"}}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, agentrttest.TestJobRule); err != nil {
+			return err
+		}
+		for job, tl := range map[string]store.Tool{"planner": claude, "implementer": codex} {
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ($1, 'dev', 'job:test', 1)`, job); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider,
+			  model_pattern, status, rule_id, rule_version) VALUES ($1, $1, $2, $3, '*', 'active', 'job:test', 1)`, job, tl.Executor, tl.Provider); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	return w
+}
+
+// Review 526 A2: one executor available again while another job's is not
+// known says that one back, and that job not known, never that every job
+// has an executor again. Once both are known available it does.
+func TestAnExecutorBackIsNotEveryJobCovered(t *testing.T) {
+	t.Parallel()
+	w := splitWorld(t)
+	w.poll(t, "h1", claude)
+	w.poll(t, "h2", codex)
+	var p time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p))
+	w.pollAt(t, "h1", p)
+	w.pollAt(t, "h2", p.Add(35*time.Second))
+	if n, err := store.Presence(ctx, w.rt, p.Add(40*time.Second), time.Time{}); err != nil || n != 2 {
+		t.Fatalf("h1 lost: %d turns (%v)", n, err)
+	}
+	// The platform comes back at p+90 s: h1 polls at p+100 s, h2 has not been
+	// heard from since p+35 s, which is not yet lost (counted from p+90 s).
+	w.pollAt(t, "h1", p.Add(100*time.Second))
+	if n, err := store.Presence(ctx, w.rt, p.Add(101*time.Second), p.Add(90*time.Second)); err != nil || n != 2 {
+		t.Fatalf("h1 back: %d turns (%v)", n, err)
+	}
+	notes := platformNotes(t, w)
+	if len(notes) != 2 || !containsAll(notes[1].Body, "exec:claude is available again", "Not known yet whether an executor can take these jobs: implementer") ||
+		containsAll(notes[1].Body, "Every job has an executor") {
+		t.Fatalf("notes %+v", notes)
+	}
+	// Both known: a later turn may say every job is covered.
+	w.pollAt(t, "h2", p.Add(110*time.Second))
+	w.pollAt(t, "h1", p.Add(80*time.Second))
+	if n, err := store.Presence(ctx, w.rt, p.Add(115*time.Second), time.Time{}); err != nil || n != 2 {
+		t.Fatalf("h1 lost again: %d turns (%v)", n, err)
+	}
+	w.pollAt(t, "h1", p.Add(116*time.Second))
+	if n, err := store.Presence(ctx, w.rt, p.Add(117*time.Second), time.Time{}); err != nil || n != 2 {
+		t.Fatalf("h1 back again: %d turns (%v)", n, err)
+	}
+	if notes = platformNotes(t, w); len(notes) != 4 || !containsAll(notes[3].Body, "Every job has an executor that can take it again.") ||
+		containsAll(notes[3].Body, "Not known yet") {
+		t.Fatalf("notes %+v", notes)
+	}
+}
+
+// Review 526 B1: one host scope both ways. h1, told offline, is then taken
+// out of work (drained, stopped or retired): its offline is closed quietly
+// (a note, nothing told), its polling during that is not told, and, the
+// drain or stop lifted while it polls, nothing stale is told either. h2
+// offers what h1 does, so only h1's turns are in play.
+func TestAHostTakenOutOfWorkIsNotToldBack(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"drain", "stop", "retired"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			w := presenceWorld(t, "h1", "h2")
+			w.poll(t, "h1", claude, codex)
+			w.poll(t, "h2", claude, codex)
+			var p time.Time
+			ok(t, w.rt.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p))
+			w.pollAt(t, "h1", p)
+			w.pollAt(t, "h2", p.Add(40*time.Second))
+			if n := presenceAt(t, w, p.Add(41*time.Second)); n != 1 || len(platformNotes(t, w)) != 1 {
+				t.Fatalf("h1 lost: %d turns", n)
+			}
+			control := store.NewControlID()
+			if kind == "retired" {
+				w.legacy(t, `UPDATE agentrt.host SET state = 'retired' WHERE host_id = 'h1'`)
+			} else {
+				ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+					return store.SetControl(ctx, tx, "owner", control, "host", "h1", kind, "test: maintenance")
+				}))
+			}
+			if n := presenceAt(t, w, p.Add(42*time.Second)); n != 1 || len(platformNotes(t, w)) != 1 {
+				t.Fatalf("taken out of work: %d turns, %d notes", n, len(platformNotes(t, w)))
+			}
+			var head string
+			ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'text' FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`,
+				store.HostPresenceStream("h1")).Scan(&head))
+			if !strings.HasPrefix(head, "h1 was taken out of work") {
+				t.Fatalf("h1's presence head %q", head)
+			}
+			w.pollAt(t, "h1", p.Add(43*time.Second))
+			w.pollAt(t, "h2", p.Add(43*time.Second))
+			if n := presenceAt(t, w, p.Add(44*time.Second)); n != 0 {
+				t.Fatalf("polling while out of work: %d turns", n)
+			}
+			if kind != "retired" {
+				ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.ClearControl(ctx, tx, "owner", control) }))
+				if n := presenceAt(t, w, p.Add(45*time.Second)); n != 0 {
+					t.Fatalf("back in work and online: %d turns", n)
+				}
+			}
+			if notes := platformNotes(t, w); len(notes) != 1 || containsAll(notes[0].Body, "back online") {
+				t.Fatalf("notes %+v", notes)
+			}
+		})
+	}
 }
