@@ -38,9 +38,10 @@ const (
 // the card was made leaves a card no mission names; its retry gets that card
 // back.
 func askMission(ctx context.Context, tx pgx.Tx, w Writer, key, id string, asked MissionProposal, why string, ask Ask) (string, error) {
-	// A business issue's mission is not put on this card: its card carries
-	// the issue's identity and no text of it (DESIGN-crew-intake §5.3), and
-	// comes with slice 2 (review 522 A1).
+	// A business issue's mission is not put on this card: take_issue puts
+	// it on the issue's own card, by its template, once the issue is taken
+	// (askIssueMission; DESIGN-crew-intake §5.3; review 522 A1). No other
+	// path asks a card for a BI- mission.
 	if strings.HasPrefix(asked.WorkID, issueWorkPrefix) {
 		return "", invalid("mission %s is business issue %s's: its card is not this one", id, asked.WorkID)
 	}

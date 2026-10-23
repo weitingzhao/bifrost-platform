@@ -621,6 +621,8 @@ type Card struct {
 	// (ruleAnswers, TD-393), so the question store may take it past its
 	// quotas: the rule, not the Owner, answers it within seconds.
 	ByRule bool
+	// WorkID is a business issue's number (BI-<n>); Link, LinkText its page (issuecard.go).
+	WorkID, Link, LinkText string
 }
 
 // Options of a plan change's card, as the Owner reads them, and the keys

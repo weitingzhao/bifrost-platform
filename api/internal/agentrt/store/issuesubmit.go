@@ -60,7 +60,7 @@ func timeOr(t time.Time) string {
 // writerChannel is the channel a writer brings texts by, checked against
 // what it asked for: an external agent its local bridge (the other two are
 // the later connections, §6), a thread itself or the Owner's relay, the
-// Owner the Console.
+// Owner the Console, the runtime his card.
 func writerChannel(w Writer, asked string) (string, error) {
 	var allowed []string
 	switch kindOf(w.Actor) {
@@ -70,6 +70,10 @@ func writerChannel(w Writer, asked string) (string, error) {
 		allowed = []string{ChannelThread, ChannelOwnerRelay}
 	case "owner":
 		allowed = []string{ChannelConsole}
+	case "controller":
+		// The runtime only records what the Owner chose on his card
+		// (issuecarddecide.go); a rule's answer never comes this way.
+		allowed = []string{ChannelCard}
 	default:
 		return "", invalid("%s does not bring issues: an intake client, a crew thread or the Owner does", w.Actor)
 	}
@@ -135,8 +139,8 @@ func SubmitIssue(ctx context.Context, db DB, w Writer, key string, s IssueSubmis
 		return nil, invalid("an idempotency key is required")
 	}
 	channel, err := writerChannel(w, s.Channel)
-	if err != nil {
-		return nil, err
+	if err != nil || channel == ChannelCard {
+		return nil, orInvalid(err, "an issue is not brought on the Owner's card")
 	}
 	switch {
 	case !productRE.MatchString(s.Product):
@@ -266,6 +270,14 @@ func agentSees(ctx context.Context, w Writer, issue string) func(pgx.Tx) error {
 	}
 }
 
+// orInvalid is err, or ErrInvalid saying why when there is none.
+func orInvalid(err error, why string) error {
+	if err != nil {
+		return err
+	}
+	return invalid("%s", why)
+}
+
 func orNobody(p string) string {
 	if p == "" {
 		return "nobody but itself"
@@ -333,8 +345,8 @@ func AddToIssue(ctx context.Context, db DB, w Writer, key string, a IssueAdditio
 		return nil, invalid("an idempotency key is required")
 	}
 	channel, err := writerChannel(w, a.Channel)
-	if err != nil {
-		return nil, err
+	if err != nil || channel == ChannelCard {
+		return nil, orInvalid(err, "nothing is added to an issue on the Owner's card")
 	}
 	if len(a.Words) == 0 && a.Reading == "" && a.Proposal == "" {
 		return nil, invalid("an addition carries words, a reading or a proposal")

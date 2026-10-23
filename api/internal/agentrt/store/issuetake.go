@@ -31,15 +31,19 @@ type IssueTake struct {
 	ExpectedVersion int
 	Commitment      string
 	Mission         MissionProposal
+	// Ask puts a mission outside the standing envelope on the Owner's card,
+	// by the template of an issue's cards (issuecard.go, slice 2); nil
+	// leaves it proposed, waiting for him. Not part of the request.
+	Ask Ask
 }
 
 // TakeIssue takes an issue: the take predicate holds, by the intake-gates
 // rule in force, or nothing is written. A mission inside the standing
-// envelope starts at once; one outside it stays proposed, waiting for the
-// Owner, and either way the work holds the product's slot until the mission
-// ends. Slice 1 puts no card up for it: a card of a BI- mission comes with
-// slice 2, carrying the issue's identity, the neutral template of §5.3 and
-// no AI assessment (review 522 A1; askMission refuses one before that). The
+// envelope starts at once; one outside it waits for the Owner on his card
+// (with t.Ask; without, it stays proposed), and either way the work holds
+// the product's slot until the mission ends. Its card is an issue's card
+// (askIssueMission): the issue's identity, the neutral template of §5.3,
+// no AI assessment, never a rule's answer (review 522 A1). The
 // standing exception for a small fault in what the person served uses takes
 // no priority from the Owner, and then only a mission inside
 // standing-envelope:dev (§4.3); an agent's own proposal never takes it.
@@ -100,6 +104,17 @@ func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake) (m
 			return nil, fmt.Errorf("%w: %s has no priority from the Owner, and its mission is not inside standing-envelope:dev (%v): "+
 				"a small fault is taken without him only inside it", ErrState, r.ID, m["waiting"])
 		}
+		if state == "proposed" && t.Ask != nil {
+			// Outside the envelope: the Owner starts it or not, on the
+			// issue's card (issuecard.go), asked only here, for the issue
+			// taken.
+			why, _ := m["waiting"].(string)
+			q, err := askIssueMission(ctx, tx, w, key, mission, r, why, t.Ask)
+			if err != nil {
+				return nil, err
+			}
+			m["question_id"], state = q, "awaiting_owner"
+		}
 		var commitment int
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(max(commitment), 0) + 1 FROM agentrt.issue_work WHERE issue_id = $1`, r.ID).Scan(&commitment); err != nil {
 			return nil, err
@@ -115,6 +130,9 @@ func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake) (m
 		}
 		if g.exception != "" {
 			body["exception"] = g.exception
+		}
+		if q, ok := m["question_id"].(string); ok {
+			body["question_id"] = q
 		}
 		if _, err := appendIssue(ctx, tx, "issue_taken", w.Actor, r.ID, mission, body); err != nil {
 			return nil, err
@@ -134,6 +152,9 @@ func TakeIssue(ctx context.Context, db DB, w Writer, key string, t IssueTake) (m
 			"rule": map[string]any{"rule_id": g.rule.ID, "rule_version": g.rule.Version}}
 		if why, ok := m["waiting"]; ok {
 			extra["waiting"] = why
+		}
+		if q, ok := m["question_id"]; ok {
+			extra["question_id"] = q
 		}
 		if g.exception != "" {
 			extra["exception"] = g.exception

@@ -28,10 +28,11 @@ func textSQL(id int64, issue, kind, person, channel, body, actor string) string 
 		id, issue, kind, p, channel, body, body, actor)
 }
 
-// A1: slice 1 puts no card up for a BI- mission. take_issue passes no ask:
-// a mission outside the envelope stays proposed, waiting for the Owner, and
-// holds the product's slot (TestIssueQuotaCountsLiveWork); a path that
-// passes an ask for a BI- mission is refused before any card is asked.
+// A1: no ordinary mission card for a BI- mission. take_issue without an ask
+// leaves a mission outside the envelope proposed, waiting for the Owner, and
+// holding the product's slot (TestIssueQuotaCountsLiveWork); with one it asks
+// the issue's own card (slice 2, TestIssueMissionCardIsTheTemplate); any other
+// path that passes an ask for a BI- mission is refused before a card is asked.
 func TestIssueMissionGetsNoCard(t *testing.T) {
 	t.Parallel()
 	iw := newIssueWorld(t)

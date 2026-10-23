@@ -240,7 +240,9 @@ func Reply(ctx context.Context, db DB, w Writer, key string, rp IssueReply) (map
 // AskAnswer is relay_user_response (and the Owner's own answer on the
 // Console): the person's own words, verbatim, to one ask (in_reply_to), and
 // what they say (verdict); an agent's own remark goes in Note, never as her
-// words.
+// words. The runtime (controller) records the Owner's answer on his card
+// (issuecarddecide.go): channel card, the card's question, who answered it
+// and by which channel of the question store, never a rule's.
 type AskAnswer struct {
 	IssueID         string
 	ExpectedVersion int
@@ -250,6 +252,9 @@ type AskAnswer struct {
 	Verdict         string
 	Note            string
 	Channel         string
+	QuestionID      string
+	AnsweredBy      string
+	AnswerChannel   string
 }
 
 // AnswerAsk records the person's answer to an open ask of the issue (§2.1):
@@ -278,8 +283,18 @@ func AnswerAsk(ctx context.Context, db DB, w Writer, key string, a AskAnswer) (m
 	if !issueIDRE.MatchString(a.IssueID) {
 		return nil, invalid("%q is not an issue id (BI-<n>)", a.IssueID)
 	}
+	card := channel == ChannelCard
+	switch {
+	case card && (a.QuestionID == "" || a.AnsweredBy == "" || a.AnswerChannel == "" || isRuleChannel(a.AnswerChannel) || a.Note != ""):
+		return nil, invalid("an answer on the Owner's card names the card and who answered it, and is not a rule's")
+	case !card && (a.QuestionID != "" || a.AnsweredBy != "" || a.AnswerChannel != ""):
+		return nil, invalid("only an answer on the Owner's card names a card")
+	}
 	req := map[string]any{"issue_id": a.IssueID, "expected_version": a.ExpectedVersion, "ask_id": a.AskID, "words": a.Words,
 		"said_at": timeOr(a.SaidAt), "verdict": a.Verdict, "note": a.Note, "channel": a.Channel}
+	if card {
+		req["question_id"], req["answered_by"], req["answer_channel"] = a.QuestionID, a.AnsweredBy, a.AnswerChannel
+	}
 	return idempotentHeld(ctx, db, w, "issue-answer", key, req, agentSees(ctx, w, a.IssueID), func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
@@ -310,8 +325,10 @@ func AnswerAsk(ctx context.Context, db DB, w Writer, key string, a AskAnswer) (m
 			return nil, &StaleError{Why: fmt.Sprintf("ask %d was asked of an earlier brief of %s", a.AskID, r.ID), Issue: r.IssueView}
 		case purpose == AskConfirmBrief && a.Verdict == "confirmed" && bound != r.briefSHA:
 			return nil, &StaleError{Why: fmt.Sprintf("ask %d confirms a brief of %s that is no longer current", a.AskID, r.ID), Issue: r.IssueView}
-		case r.ServedPerson == "" && (purpose == AskConfirmBrief || purpose == AskReadyToTry) && w.Actor != "owner":
+		case r.ServedPerson == "" && (purpose == AskConfirmBrief || purpose == AskReadyToTry) && w.Actor != "owner" && !card:
 			return nil, invalid("%s is an agent's own proposal: the Owner himself confirms its brief and tries it", r.ID)
+		case card && (person != OwnerPerson || purpose != AskConfirmBrief):
+			return nil, invalid("the Owner's card answers only the confirmation of a brief that asks him")
 		}
 		if kindOf(w.Actor) == "thread" && channel == ChannelThread && person != OwnerPerson {
 			return nil, invalid("a thread relays %s's answer as the Owner's relay (channel owner_relay)", person)
@@ -333,8 +350,13 @@ func AnswerAsk(ctx context.Context, db DB, w Writer, key string, a AskAnswer) (m
 		if err != nil {
 			return nil, err
 		}
-		ev, err := appendIssue(ctx, tx, "issue_answered", w.Actor, r.ID, mission, map[string]any{"ask_id": a.AskID, "text_ids": anyInts(ids),
-			"verdict": a.Verdict, "channel": channel, "person": person})
+		body := map[string]any{"ask_id": a.AskID, "text_ids": anyInts(ids), "verdict": a.Verdict, "channel": channel, "person": person}
+		answerer := w.Actor
+		if card {
+			// The Owner answered, on his card; the runtime records it.
+			body["question_id"], answerer = a.QuestionID, "owner"
+		}
+		ev, err := appendIssue(ctx, tx, "issue_answered", w.Actor, r.ID, mission, body)
 		if err != nil {
 			return nil, err
 		}
@@ -352,7 +374,7 @@ func AnswerAsk(ctx context.Context, db DB, w Writer, key string, a AskAnswer) (m
 			saidAt = a.SaidAt
 		}
 		if _, err := tx.Exec(ctx, `UPDATE agentrt.issue_ask SET verdict = $2, words_text_id = $3, said_at = $4, answered_by_actor_id = $5,
-		  answer_channel = $6, answered_at = clock_timestamp() WHERE issue_ask_id = $1`, a.AskID, a.Verdict, ids[0], saidAt, w.Actor, channel); err != nil {
+		  answer_channel = $6, answered_at = clock_timestamp() WHERE issue_ask_id = $1`, a.AskID, a.Verdict, ids[0], saidAt, answerer, channel); err != nil {
 			return nil, err
 		}
 		state, confirmed := r.State, any(nil)

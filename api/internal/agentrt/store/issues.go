@@ -62,7 +62,7 @@ var (
 	riskClasses     = rules.IntakeClasses
 	issueCategories = []string{"guidance", "improvement", "method_change", "data_not_shown", "fault", "out_of_scope"}
 	priorities      = []string{"p1", "p2", "p3", "later", "declined"}
-	issueChanges    = []string{"park", "resume", "reopen", "close", "supersede"}
+	issueChanges    = []string{"park", "resume", "reopen", "close", "supersede", "ask_owner"}
 	issueStates     = []string{"clarifying", "brief_confirmed", "classified", "designing", "in_review", "owner_deciding",
 		"active", "awaiting_user", "parked", "closed"}
 	conclusions = []string{ConclusionResolved, ConclusionPartial, ConclusionAlreadyPossible, ConclusionDeclined, ConclusionMerged}

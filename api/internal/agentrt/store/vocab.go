@@ -152,7 +152,10 @@ var bodies = map[string][]field{
 	// that voided the paper, which no run was handed in for.
 	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
-		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true}},
+		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
+		// card: on an issue's stream, the runtime's record of an Owner's
+		// card on it (issuecard.go): opened or settled, ids and enums only.
+		{"card", kAny, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -181,7 +184,7 @@ var bodies = map[string][]field{
 	"issue_asked": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"ask_id", kInt, false}, {"purpose", kStr, false},
 		{"brief_sha256", kStr, true}, {"commitment", kInt, true}, {"env", kStr, true}},
 	"issue_answered": {{"issue_id", kID, false}, {"ask_id", kInt, false}, {"text_ids", kInts, false}, {"verdict", kStr, false},
-		{"channel", kStr, false}, {"person", kID, false}},
+		{"channel", kStr, false}, {"person", kID, false}, {"question_id", kID, true}},
 	"issue_classified": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"risk_class", kStr, false}, {"category", kStr, false},
 		{"brief_sha256", kStr, false}, {"seat_report", kID, false}, {"text_id", kInt, true}},
 	"issue_design_put": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"design_sha256", kStr, false}, {"decisions", kAny, true}},
@@ -195,15 +198,19 @@ var bodies = map[string][]field{
 		{"question_id", kID, true}, {"answered_by", kStr, true}, {"channel", kStr, true}},
 	"issue_taken": {{"issue_id", kID, false}, {"commitment", kInt, false}, {"brief_sha256", kStr, false}, {"design_sha256", kStr, true},
 		{"rule_id", kID, false}, {"rule_version", kInt, false}, {"risk_class", kStr, false}, {"mission_state", kStr, false},
-		{"live", kInt, false}, {"limit", kInt, false}, {"exception", kStr, true}, {"text_id", kInt, true}},
+		{"live", kInt, false}, {"limit", kInt, false}, {"exception", kStr, true}, {"text_id", kInt, true}, {"question_id", kID, true}},
 	"issue_replied": {{"issue_id", kID, false}, {"text_id", kInt, false}},
 	// issue_state_changed: change says what (park, resume, reopen, close,
-	// supersede, display); from and to the display states; a close names its
-	// conclusion and the ask it rests on (basis_ask); ask_ids are the asks it
-	// supersedes, all of one mission (the envelope's), so one event per
-	// mission (issues.go supersede).
+	// supersede, ask_owner); from and to the display states; a close names
+	// its conclusion and the ask it rests on (basis_ask); ask_ids are the
+	// asks it supersedes, all of one mission (the envelope's), so one event
+	// per mission (issues.go supersede). ask_owner names the Owner's card it
+	// opened (question_id), its purpose, the point (decision), the versions
+	// it is bound to and, for a brief's confirmation, its ask (basis_ask).
 	"issue_state_changed": {{"issue_id", kID, false}, {"change", kStr, false}, {"from", kStr, true}, {"to", kStr, true},
-		{"conclusion", kStr, true}, {"basis_ask", kInt, true}, {"text_id", kInt, true}, {"ask_ids", kInts, true}},
+		{"conclusion", kStr, true}, {"basis_ask", kInt, true}, {"text_id", kInt, true}, {"ask_ids", kInts, true},
+		{"question_id", kID, true}, {"purpose", kStr, true}, {"decision", kStr, true}, {"brief_sha256", kStr, true},
+		{"design_sha256", kStr, true}},
 	"issue_merged":      {{"issue_id", kID, false}, {"into", kID, true}, {"merged_from", kID, true}, {"risk_class", kStr, true}},
 	"intake_client_set": {{"change", kStr, false}, {"intake_client_id", kID, true}, {"person_id", kID, true}},
 	"intake_acked":      {{"intake_client_id", kID, false}, {"cursor", kStr, false}},
@@ -459,7 +466,8 @@ var fieldValues = map[string]map[string]value{
 		"mission_state": oneOf("proposed", "awaiting_owner", "active"), "exception": oneOf(rules.IntakeFaultSmall)},
 	"issue_replied": {"issue_id": issueRef},
 	"issue_state_changed": {"issue_id": issueRef, "change": oneOf(issueChanges...), "from": oneOf(issueStates...),
-		"to": oneOf(issueStates...), "conclusion": oneOf(conclusions...)},
+		"to": oneOf(issueStates...), "conclusion": oneOf(conclusions...), "purpose": oneOf(RequestablePurposes...),
+		"decision": decisionKey, "brief_sha256": hex64, "design_sha256": hex64},
 	"issue_merged":      {"issue_id": issueRef, "into": issueRef, "merged_from": issueRef, "risk_class": oneOf(riskClasses...)},
 	"intake_client_set": {"change": oneOf("person", "client", "revoke"), "intake_client_id": intakeAgentRef, "person_id": personRef},
 	"intake_acked":      {"intake_client_id": intakeAgentRef, "cursor": cursorRef},

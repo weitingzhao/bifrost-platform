@@ -279,12 +279,24 @@ func RecordOwnerEvidence(ctx context.Context, db DB, w Writer, key string, e Own
 			w.Actor); err != nil {
 			return nil, err
 		}
-		if priority && e.Priority != "declined" {
-			_, err = tx.Exec(ctx, `UPDATE agentrt.issue SET priority = $2, version = version + 1 WHERE issue_id = $1`, r.ID, e.Priority)
-		} else {
-			_, err = tx.Exec(ctx, `UPDATE agentrt.issue SET version = version + 1 WHERE issue_id = $1`, r.ID)
+		// The Owner's card settled, the issue shows the step it is at
+		// again, unless another of its cards is open (issuecarddecide.go).
+		state, waiting := r.State, r.WaitingOn
+		if card {
+			s, ok, err := afterOwnerCard(ctx, tx, r, e.QuestionID)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				state, waiting = s, "crew"
+			}
 		}
-		if err != nil {
+		value := r.Priority
+		if priority && e.Priority != "declined" {
+			value = e.Priority
+		}
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.issue SET priority = NULLIF($2, ''), state = $3, waiting_on = $4, version = version + 1
+		  WHERE issue_id = $1`, r.ID, value, state, waiting); err != nil {
 			return nil, err
 		}
 		return written(ctx, tx, r.ID, map[string]any{"check_id": checks[0]})
