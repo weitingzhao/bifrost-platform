@@ -1,4 +1,6 @@
-import { authedFetch, pathSegment } from '@/api/client'
+import { parseError, pathSegment } from '@/api/client'
+import { serverFetch } from '@/api/serverContact'
+import { signInSafeError } from '@/lib/signInError'
 
 /**
  * One business issue, as the crew and the Owner read it (W-31 BI-1 slice 2;
@@ -10,7 +12,15 @@ import { authedFetch, pathSegment } from '@/api/client'
  *
  * Fields of the wrong type read as missing, never as a stand-in that looks
  * healthy; an answer that is not an issue at all is an error.
+ *
+ * Its text is the issue readers' alone (review 524 A1): a read belongs to the
+ * sign-in that made it. It is sent with the token it is cached under, never
+ * whatever storage holds when it runs, and a change of sign-in drops every
+ * issue read (ISSUE_QUERY_KEY, PlatformAuthProvider).
  */
+
+/** The query key of every issue read; the sign-in's token and the issue follow it. */
+export const ISSUE_QUERY_KEY = ['agentrt', 'issue'] as const
 
 export const ISSUE_ID_PATTERN = /^BI-[1-9][0-9]*$/
 
@@ -66,6 +76,8 @@ export type IssueDetail = {
   priority?: string
   riskClass?: string
   servedPerson?: { id: string; name: string }
+  /** What comes next and whose it is, when the platform says (the crew's close of a declined issue, review 524 A2). */
+  next?: { by: string; what: string }
   via: { actor: string; channel: string }
   brief?: { textId: number; sha256: string; confirmed: boolean }
   design?: { textId: number; sha256: string; decisions: IssueDecision[] }
@@ -103,6 +115,7 @@ export function parseIssueDetail(value: unknown): IssueDetail {
     priority: opt(issue.priority),
     riskClass: opt(issue.risk_class),
     servedPerson: str(served.id) !== '' ? { id: str(served.id), name: str(served.name) } : undefined,
+    next: str(rec(issue.next).what) !== '' ? { by: str(rec(issue.next).by), what: str(rec(issue.next).what) } : undefined,
     via: { actor: str(via.actor), channel: str(via.channel) },
     brief: str(brief.sha256) !== '' ? { textId: num(brief.text_id), sha256: str(brief.sha256), confirmed: brief.confirmed === true } : undefined,
     design:
@@ -155,7 +168,17 @@ export function parseIssueDetail(value: unknown): IssueDetail {
   }
 }
 
-export async function fetchIssue(id: string): Promise<IssueDetail> {
-  const response = await authedFetch('issue', `/api/v1/agentrt/issues/${pathSegment(id)}`)
-  return parseIssueDetail(await response.json())
+/** Reads one issue with the given sign-in's token; signal cancels it. */
+export async function fetchIssue(id: string, token: string, signal?: AbortSignal): Promise<IssueDetail> {
+  const headers = new Headers()
+  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  let r: Response
+  try {
+    r = await serverFetch(`/api/v1/agentrt/issues/${pathSegment(id)}`, { headers, signal })
+  } catch (error) {
+    if (error instanceof Error) error.message = signInSafeError(error.message, token)
+    throw error
+  }
+  if (!r.ok) throw await parseError('issue', r, token)
+  return parseIssueDetail(await r.json())
 }

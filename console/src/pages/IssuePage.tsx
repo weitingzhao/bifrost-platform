@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
-import { ISSUE_ID_PATTERN, fetchIssue, type IssueAsk, type IssueCard, type IssueDetail, type IssueText } from '@/api/issues'
+import { ISSUE_ID_PATTERN, ISSUE_QUERY_KEY, fetchIssue, type IssueAsk, type IssueCard, type IssueDetail, type IssueText } from '@/api/issues'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
 /**
@@ -12,6 +13,13 @@ import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
  * link to answer it on its own page. Nothing is answered here. Her words,
  * the agent's reading and the agent's proposal stay apart; an answer is her
  * words as relayed by the agent that relayed them, never more.
+ *
+ * What it shows belongs to the sign-in that read it (review 524 A1): the read
+ * is keyed and sent by that sign-in's token, so another sign-in finds no
+ * data under its key and shows none; it is kept nowhere once it is not shown
+ * (gcTime 0); and a change of sign-in drops every other sign-in's read,
+ * cancelling one still on its way (here and in PlatformAuthProvider), so the
+ * text of one sign-in is never shown, or filled in late, under another.
  */
 
 const PURPOSES: Record<string, string> = {
@@ -146,6 +154,7 @@ function IssueView({ issue }: { issue: IssueDetail }) {
           ['Waiting on', issue.waitingOn],
           ['For', issue.servedPerson ? `${issue.servedPerson.name} (${issue.servedPerson.id})` : 'an agent’s own proposal'],
           ['Brought by', `${issue.via.actor} (${issue.via.channel})`],
+          ['Next', issue.next ? `${issue.next.by}: ${issue.next.what}` : undefined],
           ['Priority', issue.priority],
           ['Risk class', issue.riskClass],
         ]}
@@ -215,8 +224,28 @@ function Frame({ state, children }: { state: string; children?: ReactNode }) {
   )
 }
 
-function IssueSession({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ['agentrt', 'issue', id], queryFn: () => fetchIssue(id), retry: false })
+function IssueSession({ id, token }: { id: string; token: string }) {
+  const qc = useQueryClient()
+  // Any read of another sign-in goes, a request still on its way included.
+  useEffect(() => {
+    const others = { queryKey: ISSUE_QUERY_KEY, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[2] !== token }
+    void qc.cancelQueries(others)
+    qc.removeQueries(others)
+  }, [qc, token])
+  const q = useQuery({
+    queryKey: [...ISSUE_QUERY_KEY, token, id],
+    queryFn: ({ queryKey, signal }) => fetchIssue(id, queryKey[2] as string, signal),
+    enabled: token !== '',
+    retry: false,
+    gcTime: 0,
+  })
+  if (token === '') {
+    return (
+      <Frame state="signed-out">
+        <p className="m-0 text-sm">Sign in with an issue reader's token to read this issue.</p>
+      </Frame>
+    )
+  }
   if (q.isLoading) return <Frame state="loading"><p className="m-0 text-sm">{`Opening ${id}…`}</p></Frame>
   if (q.isError || q.data == null) {
     return (
@@ -234,6 +263,7 @@ function IssueSession({ id }: { id: string }) {
 
 export function IssuePage() {
   const id = useIssueId()
+  const { token } = usePlatformAuth()
   if (id == null) return <Frame state="ready" />
   if (!ISSUE_ID_PATTERN.test(id)) {
     return (
@@ -242,5 +272,5 @@ export function IssuePage() {
       </Frame>
     )
   }
-  return <IssueSession key={id} id={id} />
+  return <IssueSession key={id} id={id} token={token} />
 }

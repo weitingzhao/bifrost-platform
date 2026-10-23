@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchAuthCapabilities } from '@/api/cluster'
+import { ISSUE_QUERY_KEY } from '@/api/issues'
 import { CAPABILITIES_QUERY_KEY, PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
 
@@ -40,6 +41,10 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
     for (const queryKey of [['approvals'], ['questions'], ['agent-runtime-progress'], ['agent-threads'], ['lineage']] as const) {
       void qc.cancelQueries({ queryKey }).then(() => qc.invalidateQueries({ queryKey }))
     }
+    // A business issue's text is its readers' alone: every read of it goes with the sign-in it was made by, a request
+    // still on its way cancelled (review 524 A1).
+    void qc.cancelQueries({ queryKey: ISSUE_QUERY_KEY })
+    qc.removeQueries({ queryKey: ISSUE_QUERY_KEY })
   }, [qc])
 
   // Every role result is dropped, for every sign-in: a request still in flight is cancelled, so it cannot fill the
