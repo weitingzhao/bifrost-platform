@@ -84,8 +84,11 @@ type Controller struct {
 	Env, GateRepo string
 	// WatchPresence has the controller watch the hosts and executors every
 	// PresenceEvery (presence.go, W-31 3.5); the server sets it, and a test
-	// that runs Start without it leaves the loop off.
+	// that runs Start without it leaves the loop off. Started is when this
+	// controller started (Start sets it when unset): a host's silence counts
+	// from no earlier than it.
 	WatchPresence bool
+	Started       time.Time
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
@@ -561,6 +564,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	}
 	if facts <= 0 {
 		facts = 15 * time.Second
+	}
+	if c.Started.IsZero() {
+		c.Started = time.Now()
+		if c.Now != nil {
+			c.Started = c.Now()
+		}
 	}
 	var wg sync.WaitGroup
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })

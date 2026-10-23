@@ -70,6 +70,11 @@ type API struct {
 	AgentHeads  AgentHeads
 	MainResults store.MainResults
 	Now         func() time.Time
+	// Started is when this platform started (the server sets it): GET /hosts
+	// and /progress count a host's silence from no earlier than it, so a
+	// release of the platform does not show every host lost (review 526
+	// A1b). Zero counts from the host's last contact alone.
+	Started time.Time
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -378,8 +383,13 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// What the host offers is recorded once a request too, when it changed
-	// (W-31 3.5): the controller judges the executors from it.
+	// (W-31 3.5): the controller judges the executors from it. A host that
+	// claims again has ended the prune round it was in (review 526 A1).
 	if _, err := store.RecordHostOffered(ctx, a.DB, req.HostID, cr.Tools, cr.Disk != nil && cr.Disk.Below(a.DiskFloor)); err != nil {
+		a.fail(w, err)
+		return
+	}
+	if err := store.ClosePruneRound(ctx, a.DB, req.HostID, "it claims again"); err != nil {
 		a.fail(w, err)
 		return
 	}
@@ -434,6 +444,15 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-time.After(poll):
 		}
+	}
+}
+
+// touch records a call of host's agentd as its last contact
+// (store.TouchHost, review 526 A1); one that cannot be recorded is logged,
+// never the call's failure.
+func (a *API) touch(ctx context.Context, host string) {
+	if err := store.TouchHost(ctx, a.DB, host); err != nil && ctx.Err() == nil {
+		a.logf("agentrt: the contact of host %s could not be recorded: %v", host, err)
 	}
 }
 
@@ -500,6 +519,7 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
 		return
 	}
+	a.touch(r.Context(), b.HostID)
 	if action != "heartbeat" && len(b.Actions) > 0 && string(b.Actions) != "null" {
 		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
 		return

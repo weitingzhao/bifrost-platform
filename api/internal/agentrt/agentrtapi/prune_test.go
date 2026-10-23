@@ -160,6 +160,17 @@ func TestPruneRoutes(t *testing.T) {
 	}
 	restoreCollect()
 	restore()
+	// Handed branches, h1 is in a prune round until it reports (review 526
+	// A1); the round is opened once a list hands any out.
+	round := func() string {
+		var r string
+		must(t, pool.QueryRow(ctx, `SELECT COALESCE((SELECT body_json->>'prune_round' FROM agentrt.event e JOIN agentrt.event_stream s
+		  ON s.event_stream_id = e.event_stream_id AND s.last_seq = e.seq WHERE s.event_stream_id = $1), '')`, store.HostPruneStream("h1")).Scan(&r))
+		return r
+	}
+	if r := round(); r != "opened" {
+		t.Fatalf("h1's prune round after lists that handed branches out: %q", r)
+	}
 	report := func(results ...map[string]any) (int, map[string]any) {
 		return call(t, s, "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": results})
 	}
@@ -180,6 +191,9 @@ func TestPruneRoutes(t *testing.T) {
 		map[string]any{"repo": "bifrost-platform", "ref": ref, "commit": commitA, "outcome": "refused",
 			"detail": "remote: Gitea: branch is protected"}); code != http.StatusOK || out["recorded"] != float64(2) {
 		t.Fatalf("a report: %d %v", code, out)
+	}
+	if r := round(); r != "closed" {
+		t.Fatalf("h1's prune round after its report: %q", r)
 	}
 	var pruned string
 	must(t, pool.QueryRow(ctx, `SELECT body_json->>'pruned' FROM agentrt.event WHERE event_type = 'note' AND task_id = $1

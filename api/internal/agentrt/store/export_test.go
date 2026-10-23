@@ -276,3 +276,9 @@ var (
 	OpenAlertsSQL  = openAlertsSQL
 	LatestClaimSQL = latestClaimSQL
 )
+
+// ProgressAtForTest is the projection at at, a host's silence counted from no
+// earlier than since.
+func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
+	return progressAt(ctx, db, at, since)
+}

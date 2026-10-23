@@ -42,6 +42,8 @@ export type RuntimeHost = {
    * active, no stop or drain) or its disk low (W-31 3.5). Unset by a platform before 3.5.
    */
   offered?: RuntimeOffer[] | null; offered_at?: string; reported_offline?: boolean; disk_low?: boolean
+  /** Deleting the attempt branches it was handed: silent then for up to agentd's prune budget (review 526 A1). */
+  pruning?: boolean
 }
 /**
  * An executor some job's candidate names (W-31 3.5; store/presence.go): available, or not with why, or not known (null)
@@ -200,6 +202,7 @@ export function parseRuntimeHost(v: unknown): RuntimeHost {
   if (text(h.offered_at)) host.offered_at = text(h.offered_at)
   if (typeof h.reported_offline === 'boolean') host.reported_offline = h.reported_offline
   if (typeof h.disk_low === 'boolean') host.disk_low = h.disk_low
+  if (typeof h.pruning === 'boolean') host.pruning = h.pruning
   return host
 }
 const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const

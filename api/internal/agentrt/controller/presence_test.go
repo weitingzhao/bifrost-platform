@@ -117,3 +117,25 @@ func TestPresenceIsToldWithinTheBudget(t *testing.T) {
 		}
 	}
 }
+
+// Review 526 A1b, on the controller's clock: the platform was released (its
+// workers down a minute) and the controller started at started; h1 last
+// polled a minute before that. Until 30 seconds after the start nothing is
+// told, though h1 has been silent 90; past them, h1 is.
+func TestPresenceCountsFromTheControllersStart(t *testing.T) {
+	pool := setup(t)
+	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+	chiefOnly(t, pool)
+	last := pollAs(t, pool)
+	started := last.Add(time.Minute)
+	now := started
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: started}
+	for ; !now.After(started.Add(store.HostLostAfter)); now = now.Add(controller.PresenceEvery) {
+		if n, err := c.Presence(ctx); err != nil || n != 0 {
+			t.Fatalf("%v after the controller started: %d turns (%v)", now.Sub(started), n, err)
+		}
+	}
+	if n, err := c.Presence(ctx); err != nil || n != 2 || now.Sub(started) > 35*time.Second {
+		t.Fatalf("%v after the controller started: %d turns (%v)", now.Sub(started), n, err)
+	}
+}

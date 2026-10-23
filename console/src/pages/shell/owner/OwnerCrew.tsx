@@ -73,7 +73,7 @@ export function OwnerCrew({ hosts, live, missions, now, read, executors, unserve
       return <li key={row.id} className="flex min-w-0 flex-col gap-2 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2"><Dot tone={hostTone(h)} /><strong className="truncate font-mono text-sm" title={row.id}>{row.id}</strong>
-            <span className="text-xs text-muted-foreground">{!h ? 'not a registered host' : h.online ? 'online' : hostWords(h, now)}</span></span>
+            <span className="text-xs text-muted-foreground">{!h ? 'not a registered host' : h.online ? (h.pruning ? 'online · deleting attempt branches' : 'online') : hostWords(h, now)}</span></span>
           {/* An attempt on a lost host, or maybe stuck, is not counted as running (T24). */}
           <span className="text-xs font-semibold">{row.attempts.length ? activityCounts(row.attempts) : 'Idle'}{row.lost.length > 0 && ` · ${row.lost.length} lost`}</span>
         </div>

@@ -161,7 +161,7 @@ func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
 // (store.HostsSQL). The document is the progress projection's, at the
 // statement's moment.
 func (a *API) listHosts(w http.ResponseWriter, r *http.Request) {
-	a.list(w, r, `SELECT jsonb_build_object('hosts', (`+store.HostsSQL("statement_timestamp()")+`))`, store.HostLostAfter.Seconds())
+	a.list(w, r, `SELECT jsonb_build_object('hosts', (`+store.HostsSQL("statement_timestamp()")+`))`, store.LivenessArgs(a.Started)...)
 }
 
 // list answers the one JSON document a query returns.

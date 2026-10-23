@@ -331,6 +331,17 @@ func TestAgentdPath(t *testing.T) {
 		map[string]any{"host_id": "h1", "lease_epoch": 999}); code != http.StatusConflict || out["error"] != "fenced" {
 		t.Fatalf("an old epoch: %d %v", code, out)
 	}
+	// A heartbeat is h1's contact, whatever its claim loop does (review 526
+	// A1): a host whose last poll is 10 minutes old polled just now after it.
+	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h1'`)
+	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); code != http.StatusOK {
+		t.Fatalf("heartbeat: %d %v", code, out)
+	}
+	var silent float64
+	must(t, pool.QueryRow(ctx, `SELECT extract(epoch FROM clock_timestamp() - last_poll_at) FROM agentrt.host WHERE host_id = 'h1'`).Scan(&silent))
+	if silent > 5 {
+		t.Fatalf("h1's last contact is %.0f s old after a heartbeat", silent)
+	}
 	for _, field := range []string{"phase", "line"} {
 		if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{field: "x"})); code != http.StatusBadRequest {
 			t.Fatalf("a %s nothing keeps was answered %d", field, code)
@@ -432,6 +443,17 @@ func TestAgentdPath(t *testing.T) {
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'offers:host:h1' AND body_json ? 'offered'`).Scan(&notes))
 	if notes != 1 {
 		t.Fatalf("%d records of what h1 offers", notes)
+	}
+	// A claim ends the prune round h1 was in (review 526 A1).
+	must(t, store.OpenPruneRound(ctx, pool, "h1", 1))
+	if code, out := call(t, s, "agentd:h1", "POST", "claim", claimBody); code != http.StatusNoContent {
+		t.Fatalf("a claim: %d %v", code, out)
+	}
+	var round string
+	must(t, pool.QueryRow(ctx, `SELECT body_json->>'prune_round' FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`,
+		store.HostPruneStream("h1")).Scan(&round))
+	if round != "closed" {
+		t.Fatalf("h1's prune round after a claim: %q", round)
 	}
 }
 

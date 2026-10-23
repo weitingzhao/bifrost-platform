@@ -90,6 +90,7 @@ type ProgressAttempt struct {
 	started           time.Time
 	hostKnown         bool
 	hostPolled        *time.Time
+	hostSilent        *bool // as HostsSQL has it (presencelive.go); nil: judged from hostPolled alone
 	role, class       string
 	taskState         string
 }
@@ -137,9 +138,9 @@ func TaskStatus(in StatusInput) (string, string) {
 		switch {
 		case !a.hostKnown:
 			return StatusUnknown, "the attempt names no host the runtime knows"
-		case a.hostPolled == nil:
+		case a.hostPolled == nil && a.hostLost(in.Now):
 			return StatusHostLost, "host " + a.HostID + " has never polled" + notPersisted(a)
-		case in.Now.Sub(*a.hostPolled) > HostLostAfter:
+		case a.hostLost(in.Now):
 			return StatusHostLost, "host " + a.HostID + " last polled " + agoWords(in.Now.Sub(*a.hostPolled)) + notPersisted(a)
 		case a.State == "stale":
 			return StatusMaybeStuck, "the lease lapsed and was not renewed" + notPersisted(a)
@@ -186,6 +187,15 @@ func TaskStatus(in StatusInput) (string, string) {
 	return StatusUnknown, "state " + in.TaskState + " has no status"
 }
 
+// hostLost says whether the attempt's host is lost at now: as the hosts'
+// document judges it when read with it, else by its last contact alone.
+func (a *ProgressAttempt) hostLost(now time.Time) bool {
+	if a.hostSilent != nil {
+		return *a.hostSilent
+	}
+	return a.hostPolled == nil || now.Sub(*a.hostPolled) > HostLostAfter
+}
+
 // agoWords is how long ago d was, in seconds under a minute and in whole
 // minutes from then on.
 func agoWords(d time.Duration) string {
@@ -228,6 +238,17 @@ func worst(statuses []string) string {
 // Progress computes the projection. A read that fails returns an error and
 // nothing else.
 func Progress(ctx context.Context, db DB) (map[string]any, error) {
+	return progressAt(ctx, db, time.Time{}, time.Time{})
+}
+
+// ProgressSince is Progress with a host's silence counted from no earlier
+// than since, the reader's start (review 526 A1b).
+func ProgressSince(ctx context.Context, db DB, since time.Time) (map[string]any, error) {
+	return progressAt(ctx, db, time.Time{}, since)
+}
+
+// progressAt is the projection at at (zero: the database's clock).
+func progressAt(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, err
@@ -235,14 +256,15 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	var now time.Time
 	var asOf int64
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp(), COALESCE((SELECT max(event_id) FROM agentrt.event), 0)`).Scan(&now, &asOf); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT COALESCE($1, clock_timestamp()), COALESCE((SELECT max(event_id) FROM agentrt.event), 0)`,
+		nullTime(at)).Scan(&now, &asOf); err != nil {
 		return nil, err
 	}
 	usual, err := usualTimes(ctx, tx, now)
 	if err != nil {
 		return nil, err
 	}
-	live, err := liveAttempts(ctx, tx, now)
+	live, err := liveAttempts(ctx, tx, now, since)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +282,7 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	}
 	// The hosts, and the executors and jobs presence judges from them
 	// (presence.go), at the projection's moment.
-	pr, err := readPresence(ctx, tx, now)
+	pr, err := readPresence(ctx, tx, now, since)
 	if err != nil {
 		return nil, err
 	}
@@ -323,14 +345,14 @@ func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]usual
 	return out, rows.Err()
 }
 
-func liveAttempts(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]*ProgressAttempt, error) {
+func liveAttempts(ctx context.Context, tx pgx.Tx, now, since time.Time) (map[string]*ProgressAttempt, error) {
 	rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.attempt_no, a.task_id, t.mission_id, COALESCE(a.host_id, ''), h.host_id IS NOT NULL,
-	    h.last_poll_at, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at, a.heartbeat_at, t.role, t.task_class, t.state,
-	    a.persisted_at IS NOT NULL, cp.seq, cp.at
+	    h.last_poll_at, `+hostSilentSQL("$4::timestamptz")+`, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at,
+	    a.heartbeat_at, t.role, t.task_class, t.state, a.persisted_at IS NOT NULL, cp.seq, cp.at
 	  FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
-	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id
+	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id CROSS JOIN LATERAL `+pruneHead+`
 	  `+checkpointOf+`
-	  WHERE a.state IN ('leased','running','stale')`)
+	  WHERE a.state IN ('leased','running','stale')`, append(livenessArgs(since), now)...)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +364,7 @@ func liveAttempts(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]*Pr
 		var heartbeat time.Time
 		var persisted bool
 		var seq *int64
-		if err = rows.Scan(&a.AttemptID, &a.AttemptNo, &a.TaskID, &a.MissionID, &a.HostID, &a.hostKnown, &a.hostPolled, &a.Executor,
+		if err = rows.Scan(&a.AttemptID, &a.AttemptNo, &a.TaskID, &a.MissionID, &a.HostID, &a.hostKnown, &a.hostPolled, &a.hostSilent, &a.Executor,
 			&a.Model, &a.State, &started, &heartbeat, &a.role, &a.class, &a.taskState, &persisted, &seq, &checkpoint); err != nil {
 			return nil, err
 		}

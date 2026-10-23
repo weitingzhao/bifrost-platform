@@ -18,11 +18,13 @@ const PresenceEvery = 5 * time.Second
 // offline or back, each executor become unavailable or available again, is
 // recorded once and told to the Owner in his conversation with the chief of
 // staff. It reads at Now when one is set, else at the database's clock (the
-// clock GET /progress reads). It returns how many turns it recorded.
+// clock GET /progress reads), and counts a host's silence from no earlier
+// than Started: a gap the platform's own release made is not the host's
+// (review 526 A1b). It returns how many turns it recorded.
 func (c *Controller) Presence(ctx context.Context) (int, error) {
 	var now time.Time
 	if c.Now != nil {
 		now = c.Now()
 	}
-	return store.Presence(ctx, c.DB, now)
+	return store.Presence(ctx, c.DB, now, c.Started)
 }

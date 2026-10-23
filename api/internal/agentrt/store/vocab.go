@@ -164,7 +164,11 @@ var bodies = map[string][]field{
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
 		// W-31 3.5).
-		{"offered", kAny, true}, {"disk_below", kBool, true}},
+		{"offered", kAny, true}, {"disk_below", kBool, true},
+		// prune_round: on a host's prune stream, a round of deleting the
+		// attempt branches it was handed, opened or closed (presencelive.go,
+		// review 526 A1).
+		{"prune_round", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -452,9 +456,10 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
-	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef},
-	"route_decided":            {"fingerprint": fingerprint},
-	"legacy_imported":          {"digest": fingerprint},
+	"note": {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
+		"prune_round": oneOf("opened", "closed")},
+	"route_decided":   {"fingerprint": fingerprint},
+	"legacy_imported": {"digest": fingerprint},
 	"wait_limit_passed": {"wait": oneOf(WaitAttemptRunning, WaitTaskReady, WaitMessageUnread), "ref": waitRef, "since": instant,
 		"basis": oneOf(basisTaskUsual, basisHistoryUsual, basisFloor)},
 	"issue_submitted": {"issue_id": issueRef, "product": productKey, "kind": oneOf(issueKinds...), "channel": oneOf(textChannels...),

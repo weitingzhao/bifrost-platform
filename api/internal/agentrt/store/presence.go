@@ -54,27 +54,31 @@ func headSQL(stream string) string {
 }
 
 // HostsSQL is the hosts document at the moment the SQL expression now names,
-// with $1 HostLostAfter in seconds: GET /hosts and the projection both read
-// it, so a host is online in one exactly when it is in the other (a host is
-// lost past HostLostAfter, as TaskStatus has it). Each host also carries what
-// its latest claim offered (offered, null until one is recorded, with
-// offered_at) and whether its free disk was then below the floor (disk_low),
-// and whether the controller reports it offline (reported_offline: not
-// online, active, and no stop or drain on it or on every host).
+// with $1–$3 livenessArgs: GET /hosts and the projection both read it, so a
+// host is online in one exactly when it is in the other, and lost when
+// TaskStatus has it lost (presencelive.go). Each host also carries what its
+// latest claim offered (offered, null until one is recorded, with
+// offered_at) and whether its free disk was then below the floor
+// (disk_low), whether it is deleting attempt branches it was handed
+// (pruning), and whether the controller reports it offline
+// (reported_offline: lost, active, and no stop or drain on it or on every
+// host).
 func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
-	    'online', COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false),
+	    'online', ` + hostOnlineSQL(now) + `,
 	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
-	    'reported_offline', h.state = 'active' AND NOT COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false)
+	    'pruning', COALESCE(ph.head->'body'->>'prune_round' = 'opened' AND ` + now + ` - (ph.head->>'at')::timestamptz <= make_interval(secs => $3), false),
+	    'reported_offline', h.state = 'active' AND ` + hostSilentSQL(now) + `
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
 	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))))
 	  ORDER BY h.host_id), '[]'::jsonb)
 	  FROM agentrt.host h
-	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o`
+	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o
+	  CROSS JOIN LATERAL ` + pruneHead
 }
 
 // Offer is a tool a host offers, as its claim named it and its stream records
@@ -191,6 +195,7 @@ type HostPresence struct {
 	LastPollAt      *time.Time `json:"last_poll_at"`
 	Online          bool       `json:"online"`
 	ReportedOffline bool       `json:"reported_offline"`
+	Pruning         bool       `json:"pruning"`
 	DiskLow         bool       `json:"disk_low"`
 	LiveAttempts    int        `json:"live_attempts"`
 	Offered         *[]Offer   `json:"offered"`
@@ -213,6 +218,12 @@ func (h HostPresence) held() string {
 
 func (h HostPresence) usable() bool {
 	return h.Online && h.State == "active" && h.held() == "" && !h.DiskLow
+}
+
+// waited is a host not online that is not lost yet: its silence is counted
+// from the reader's start (review 526 A1b). What it can take is not known.
+func (h HostPresence) waited() bool {
+	return !h.Online && !h.ReportedOffline && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
 // ExecutorPresence is an executor some job's candidate names: whether it is
@@ -247,15 +258,16 @@ func (p presence) executor(id string) *ExecutorPresence {
 	return nil
 }
 
-// readPresence reads the view at now (zero: the database's clock).
-func readPresence(ctx context.Context, tx pgx.Tx, now time.Time) (presence, error) {
+// readPresence reads the view at now (zero: the database's clock), a host's
+// silence counted from no earlier than since (zero: its last contact).
+func readPresence(ctx context.Context, tx pgx.Tx, now, since time.Time) (presence, error) {
 	p := presence{now: now}
 	if p.now.IsZero() {
 		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p.now); err != nil {
 			return p, err
 		}
 	}
-	if err := tx.QueryRow(ctx, HostsSQL("$2::timestamptz"), HostLostAfter.Seconds(), p.now).Scan(&p.doc); err != nil {
+	if err := tx.QueryRow(ctx, HostsSQL("$4::timestamptz"), append(livenessArgs(since), p.now)...).Scan(&p.doc); err != nil {
 		return p, err
 	}
 	if err := json.Unmarshal(p.doc, &p.hosts); err != nil {
@@ -426,18 +438,15 @@ func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, coolin
 	}
 	var by, unknown []string
 	for _, h := range hosts {
-		if !h.usable() {
-			continue
+		fits := h.Offered == nil
+		for _, o := range offeredBy(h) {
+			fits = fits || jc.fits(o.tool())
 		}
-		if h.Offered == nil {
+		switch {
+		case h.usable() && h.Offered != nil && fits:
+			by = append(by, h.HostID)
+		case (h.usable() || h.waited()) && fits:
 			unknown = append(unknown, h.HostID)
-			continue
-		}
-		for _, o := range *h.Offered {
-			if jc.fits(o.tool()) {
-				by = append(by, h.HostID)
-				break
-			}
 		}
 	}
 	switch {
@@ -446,8 +455,8 @@ func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, coolin
 	case len(by) > 0:
 		return judged{ok: yes(), hosts: by}
 	case len(unknown) > 0:
-		return judged{why: []string{"what " + strings.Join(unknown, ", ") + " offer" + plural(len(unknown), "s", "") +
-			" is not recorded yet (it is recorded at a host's next claim)"}}
+		return judged{why: []string{"not known yet: " + strings.Join(unknown, ", ") + " (a host not yet heard from since the platform " +
+			"started, or whose claim has not said what it offers) may offer it"}}
 	}
 	return judged{ok: no(), why: notOffered(jc, hosts)}
 }
@@ -500,6 +509,13 @@ func notOffered(jc jobCandidate, hosts []HostPresence) []string {
 		return []string{"no host offers it (a host offers what its AGENTD_TOOLS say)"}
 	}
 	return why
+}
+
+func offeredBy(h HostPresence) []Offer {
+	if h.Offered == nil {
+		return nil
+	}
+	return *h.Offered
 }
 
 func cmpOr(s, or string) string {

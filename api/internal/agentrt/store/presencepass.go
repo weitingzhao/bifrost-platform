@@ -51,10 +51,11 @@ type presenceTurn struct {
 	since          time.Time
 }
 
-// Presence is one pass at now (zero: the database's clock): it records each
-// turn and tells the Owner of the pass's turns in one note. It returns how
-// many turns it recorded.
-func Presence(ctx context.Context, db DB, now time.Time) (int, error) {
+// Presence is one pass at now (zero: the database's clock), a host's silence
+// counted from no earlier than since (the controller's start; zero: its last
+// contact): it records each turn and tells the Owner of the pass's turns in
+// one note. It returns how many turns it recorded.
+func Presence(ctx context.Context, db DB, now, since time.Time) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, presencePassTimeout)
 	defer cancel()
 	n := 0
@@ -63,7 +64,7 @@ func Presence(ctx context.Context, db DB, now time.Time) (int, error) {
 		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+waitsLockTimeout+`'`); err != nil {
 			return err
 		}
-		p, err := readPresence(ctx, tx, now)
+		p, err := readPresence(ctx, tx, now, since)
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ func Presence(ctx context.Context, db DB, now time.Time) (int, error) {
 		if err = ensureWriter(ctx, tx, Writer{Actor: Seat}, false); err != nil {
 			return err
 		}
-		if p, err = readPresence(ctx, tx, now); err != nil {
+		if p, err = readPresence(ctx, tx, now, since); err != nil {
 			return err
 		}
 		if turns, err = presenceTurns(ctx, tx, p); err != nil || len(turns) == 0 {

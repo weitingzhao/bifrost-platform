@@ -28,6 +28,8 @@ describe('presence', () => {
     expect(before.executors).toBeUndefined()
     expect(before.hosts[0].offered).toBeUndefined()
     expect(offeredWords(before.hosts[0])).toBe('')
+    expect(before.hosts[0].pruning).toBeUndefined()
+    expect(parseRuntimeProgress({ hosts: [{ host_id: 'h1', online: true, pruning: true }] }).hosts[0].pruning).toBe(true)
     expect(offeredWords(parseRuntimeProgress({ hosts: [{ host_id: 'h1', offered: null }] }).hosts[0])).toBe('What it offers is not recorded yet')
     expect(executorWords({ executor: 'exec:cursor', available: null, why: 'what h1 offers is not recorded yet', hosts: [], jobs: [] }))
       .toBe('cursor not known: what h1 offers is not recorded yet')

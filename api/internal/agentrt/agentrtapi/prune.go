@@ -51,6 +51,9 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	if !boundHost(w, r, host) {
 		return
 	}
+	// The host is in contact while it waits for its list (review 526 A1):
+	// the reads of Gitea may take most of pruneCollect.
+	defer a.keepTouching(r.Context(), host)()
 	now := time.Now()
 	if a.Now != nil {
 		now = a.Now()
@@ -120,6 +123,12 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	}
 	if ps != nil {
 		out["prunes"] = ps
+		// agentd deletes them before it claims again: its host may be silent
+		// for its whole prune budget (store.PruneSilence).
+		if err = store.OpenPruneRound(r.Context(), a.DB, host, len(ps)); err != nil {
+			a.fail(w, err)
+			return
+		}
 	}
 	if len(unread) > 0 {
 		out["unread"] = unread
@@ -164,6 +173,12 @@ func (a *API) reportPrunes(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
 		return
 	}
+	// The report ends the host's prune round, whatever is made of it
+	// (review 526 A1); a round that cannot be closed now ends at its budget.
+	defer a.keepTouching(r.Context(), b.HostID)()
+	if err := store.ClosePruneRound(r.Context(), a.DB, b.HostID, "it reported what it deleted"); err != nil && r.Context().Err() == nil {
+		a.logf("agentrt prunes: the prune round of host %s could not be closed: %v", b.HostID, err)
+	}
 	if len(b.Results) > store.MaxPrunes {
 		writeError(w, http.StatusBadRequest, "bad_request", "more results than prunes are handed out at once")
 		return
@@ -177,4 +192,36 @@ func (a *API) reportPrunes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recorded": len(b.Results)})
+}
+
+// touchEvery is how often a host's call that is still being answered counts
+// as its contact.
+const touchEvery = 10 * time.Second
+
+// keepTouching records host's contact now and every touchEvery until the
+// returned function is called, and once more then.
+func (a *API) keepTouching(ctx context.Context, host string) func() {
+	a.touch(ctx, host)
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	safego.Go("agentrt-touch", func() {
+		defer close(stopped)
+		t := time.NewTicker(touchEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				a.touch(ctx, host)
+			}
+		}
+	})
+	return func() {
+		close(done)
+		<-stopped
+		a.touch(context.WithoutCancel(ctx), host)
+	}
 }

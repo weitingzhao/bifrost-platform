@@ -43,7 +43,7 @@ func (w *world) poll(t *testing.T, host string, tools ...store.Tool) time.Time {
 
 func presenceAt(t *testing.T, w *world, now time.Time) int {
 	t.Helper()
-	n, err := store.Presence(ctx, w.rt, now)
+	n, err := store.Presence(ctx, w.rt, now, time.Time{})
 	ok(t, err)
 	return n
 }
@@ -63,6 +63,7 @@ type presenceDoc struct {
 		HostID          string        `json:"host_id"`
 		Online          bool          `json:"online"`
 		ReportedOffline bool          `json:"reported_offline"`
+		Pruning         bool          `json:"pruning"`
 		DiskLow         bool          `json:"disk_low"`
 		Offered         []store.Offer `json:"offered"`
 		OfferedAt       *string       `json:"offered_at"`
@@ -271,7 +272,7 @@ func TestPresenceSaysNothingItDoesNotKnow(t *testing.T) {
 	w.legacy(t, `UPDATE agentrt.host SET state = 'retired' WHERE host_id = 'h3'`)
 	doc, _ := w.presence(t)
 	for _, e := range doc.Executors {
-		if e.Available != nil || !strings.Contains(e.Why, "what h1 offers is not recorded yet") {
+		if e.Available != nil || !strings.Contains(e.Why, "not known yet: h1") {
 			t.Fatalf("executor %+v", e)
 		}
 	}
@@ -298,7 +299,7 @@ func TestTwoPassesAtOnceRecordATurnOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			n, err := store.Presence(ctx, pool, last.Add(time.Minute))
+			n, err := store.Presence(ctx, pool, last.Add(time.Minute), time.Time{})
 			if err != nil {
 				t.Error(err)
 			}
