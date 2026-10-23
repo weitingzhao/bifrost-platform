@@ -87,6 +87,40 @@ func TestRuleAnswerLeavesAnIssueCardOpen(t *testing.T) {
 	}
 }
 
+// Review 520 A1 on the wire the runtime withdraws its cards through (a
+// blocked card whose task moved on, a plan's card whose round was refused):
+// a business issue's card is withdrawn, never left open, but the reason the
+// runtime gives is not kept on it; a card on other work keeps it, as before.
+func TestRuntimeWithdrawsAnIssueCardWithoutItsReason(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "questions")
+	rt := newQuestionRuntime(path, nil)
+	ctx := context.Background()
+	ask, withdraw := rt.agentRuntimeAsk(), rt.agentRuntimeWithdraw()
+	const reason = "the task moved on: withdraw-marker-5b1e"
+	for i, work := range []string{"BI-7", ""} {
+		id, err := ask(ctx, store.Card{Key: strings.Repeat(string(rune('e'+i)), 32), Title: "BI-7 · priority", Body: "No words of the issue here."})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if work != "" {
+			markIssueCard(t, path, id, work)
+		}
+		if err = withdraw(ctx, id, reason); err != nil {
+			t.Fatal(err)
+		}
+		q, ok, err := rt.svc.Lookup(id)
+		if err != nil || !ok || q.Status != "withdrawn" || q.Withdrawal == nil || q.Withdrawal.Reason == "" {
+			t.Fatalf("%q: %+v %v %v", work, q, ok, err)
+		}
+		if kept := q.Withdrawal.Reason == reason; kept != (work == "") {
+			t.Fatalf("%q: the reason kept is %q", work, q.Withdrawal.Reason)
+		}
+	}
+	if raw, err := os.ReadFile(path); err != nil || strings.Count(string(raw), "withdraw-marker-5b1e") != 1 {
+		t.Fatalf("the runtime's reason is kept on more than the card on other work: %v", err)
+	}
+}
+
 // The same on the runtime's card-auto-answer loop, on the real question store
 // and a real database: under a rule that answers plan change cards at once,
 // a pass answers the plain card and refuses the business issue's (the pass

@@ -163,7 +163,13 @@ func (s *Service) Withdraw(ctx context.Context, session, principal, role, ref st
 			return applied{res: fail(http.StatusForbidden, "session is not the requester", nil)}
 		}
 		q.Status = StatusWithdrawn
-		q.Withdrawal = &Withdrawal{Session: session, Principal: c.principal, At: now, Reason: reason}
+		kept := reason
+		if q.businessIssueCard() {
+			// Withdrawn, but with the fixed reason, never the caller's
+			// (issuecard.go).
+			kept = issueCardWithdrawn
+		}
+		q.Withdrawal = &Withdrawal{Session: session, Principal: c.principal, At: now, Reason: kept}
 		doc.Questions[i] = q
 		return applied{
 			res:     Result{Code: http.StatusOK, Body: q.public(session)},
