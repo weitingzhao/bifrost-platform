@@ -483,10 +483,12 @@ func platformProbe(role config.Role, late *lateDB) (func(context.Context) error,
 // still answers /health, and the Service may send a probe to it while
 // another instance serves. Any ready answer means the platform takes
 // agentd's calls; only a pass whose every probe fails is an outage. With
-// one ready and one unready endpoint, chosen at random for each connection,
-// a pass is all unready one time in 32, and an outage moves the hosts'
-// floor once (by 30 s), so a lone unlucky pass cannot keep detection
-// suppressed.
+// several API instances this is probabilistic, not a guarantee: with one
+// ready and one unready endpoint, chosen at random for each connection, a
+// pass is all unready one time in 32, and each such pass restarts the hosts'
+// 30 s. Runs of them can defer a host's judgment; the controller tells a
+// deferral past two minutes (store.PresenceDeferral, review 530 A-2), so it
+// is never silent. The platform runs one API instance.
 const probeConnections = 5
 
 // serviceTakesCalls asks the API's Service n times at once, each probe on a

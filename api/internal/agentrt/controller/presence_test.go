@@ -494,3 +494,69 @@ func (stuckDB) BeginTx(ctx context.Context, _ pgx.TxOptions) (pgx.Tx, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
+
+// Review 530 A-2, the reviewer's sequence: one API instance serves all
+// along, but every 30 s a pass's five probes all land on instances that are
+// not ready (with several instances the probe's sampling is probabilistic),
+// and h1 has really stopped. Each recovery restarts the hosts' 30 s, so h1
+// is never judged; once it has been silent past PresenceDeferredAfter that
+// is told once (presence_deferred, a note to the Owner, GET /progress), and
+// when the failing batches stop h1 is judged and the deferral is cleared,
+// with a note.
+func TestADeferredJudgmentIsTold(t *testing.T) {
+	pool := setup(t)
+	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+	chiefOnly(t, pool)
+	var t0 time.Time
+	must(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t0))
+	pollAt(t, pool, "h1", t0)
+	now, batches := t0, true
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, Started: t0, PlatformProbe: "http://platform-api:8780/health",
+		PlatformUp: func(context.Context) error {
+			if d := now.Sub(t0); batches && d >= 25*time.Second && (d-25*time.Second)%(30*time.Second) == 0 {
+				return errors.New("none of 5 probes found the API's agentrt routes ready: its agentrt routes are not ready")
+			}
+			return nil
+		}}
+	deferred := func() int {
+		t.Helper()
+		var n int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'policy_alert'`,
+			store.DeferredStream).Scan(&n))
+		return n
+	}
+	view := func() map[string]any {
+		t.Helper()
+		out, err := store.Progress(ctx, pool)
+		must(t, err)
+		d, _ := out["presence_deferred"].(map[string]any)
+		return d
+	}
+	if n, _ := ticks(t, c, &now, t0, t0.Add(store.PresenceDeferredAfter)); n != 0 || deferred() != 0 {
+		t.Fatalf("%d turns, %d deferrals up to 2 min", n, deferred())
+	}
+	if n, _ := ticks(t, c, &now, t0.Add(store.PresenceDeferredAfter+controller.PresenceEvery), t0.Add(store.PresenceDeferredAfter+controller.PresenceEvery)); n != 0 || deferred() != 1 {
+		t.Fatalf("%d turns, %d deferrals one pass past 2 min", n, deferred())
+	}
+	notes := ownerNotes(t, pool)
+	if len(notes) != 1 || !strings.Contains(notes[0].Body, "host presence judgment is deferred: h1 silent for up to 2m5s but not judged") ||
+		!strings.Contains(notes[0].Body, "probabilistic") {
+		t.Fatalf("notes %+v", notes)
+	}
+	if d := view(); d == nil || !strings.Contains(d["why"].(string), "keeps failing every few passes") {
+		t.Fatalf("progress: %v", d)
+	}
+	if n, _ := ticks(t, c, &now, t0.Add(130*time.Second), t0.Add(240*time.Second)); n != 0 || deferred() != 1 || len(ownerNotes(t, pool)) != 1 {
+		t.Fatalf("%d turns, %d deferrals, %d notes while the batches go on", n, deferred(), len(ownerNotes(t, pool)))
+	}
+	// The batches stop; the last recovery was at +240 s.
+	batches = false
+	if n, _ := ticks(t, c, &now, t0.Add(245*time.Second), t0.Add(270*time.Second)); n != 0 {
+		t.Fatalf("%d turns within 30 s of the last recovery", n)
+	}
+	n, _ := ticks(t, c, &now, t0.Add(275*time.Second), t0.Add(275*time.Second))
+	if notes = ownerNotes(t, pool); n != 2 || len(notes) != 3 || !strings.Contains(notes[1].Body, "Host h1 is offline") ||
+		!strings.Contains(notes[2].Body, "host presence is judged as usual again") || view() != nil || deferred() != 1 {
+		t.Fatalf("%d turns; notes %+v; progress %v", n, notes, view())
+	}
+}

@@ -95,6 +95,8 @@ export type RuntimeProgress = {
   executors?: RuntimeExecutor[]; jobs_without_executor?: string[]
   /** Since when, and why, host presence cannot be judged (the platform not seen taking agentd's calls); null while it can. */
   presence_unjudged?: { since: string; why: string } | null
+  /** Since when, and why, hosts silent past two minutes are not judged: the platform's recoveries keep moving their floor. */
+  presence_deferred?: { since: string; why: string } | null
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
   controls: RuntimeRecord[]; plan: unknown[]
@@ -183,8 +185,8 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     ...(Array.isArray(r.executors) ? { executors: records(r.executors).map(e => ({ executor: text(e.executor),
       available: typeof e.available === 'boolean' ? e.available : null, why: text(e.why), hosts: strings(e.hosts), jobs: strings(e.jobs) })) } : {}),
     ...(Array.isArray(r.jobs_without_executor) ? { jobs_without_executor: strings(r.jobs_without_executor) } : {}),
-    ...(r.presence_unjudged === null ? { presence_unjudged: null }
-      : r.presence_unjudged !== undefined ? { presence_unjudged: { since: text(record(r.presence_unjudged).since), why: text(record(r.presence_unjudged).why) } } : {}),
+    ...presenceSwitch('presence_unjudged', r.presence_unjudged),
+    ...presenceSwitch('presence_deferred', r.presence_deferred),
     live: records(r.live).map(parseRuntimeAttempt),
     needs_you: { count: number(needs.count), items: Array.isArray(needs.items) ? needs.items : [],
       truncated: typeof needs.truncated === 'boolean' ? needs.truncated : undefined },
@@ -198,6 +200,12 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     schema: parseRuntimeSchema(r.schema),
     controller_alerts: records(r.controller_alerts).map(a => ({ loop: text(a.loop), since: text(a.since), error: text(a.error) })),
   }
+}
+/** A presence switch of /progress: on with since and why, null while off, absent from a platform before it. */
+function presenceSwitch<K extends 'presence_unjudged' | 'presence_deferred'>(key: K, v: unknown): Partial<Record<K, { since: string; why: string } | null>> {
+  if (v === undefined) return {}
+  if (v === null) return { [key]: null } as Partial<Record<K, null>>
+  return { [key]: { since: text(record(v).since), why: text(record(v).why) } } as Partial<Record<K, { since: string; why: string }>>
 }
 export function parseRuntimeHost(v: unknown): RuntimeHost {
   const h = record(v)

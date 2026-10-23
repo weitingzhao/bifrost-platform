@@ -61,6 +61,18 @@ describe('presence', () => {
     expect(parseRuntimeProgress({}).presence_unjudged).toBeUndefined()
   })
 
+  it('says in red that host presence judgment is deferred, and nothing of it while it is not', () => {
+    const since = '2026-10-23T20:00:00Z'
+    const deferred = parseRuntimeProgress({ ...presenceFixture, presence_deferred: { since,
+      why: "h1 silent for up to 2m5s but not judged: the platform's health probe keeps failing every few passes" } })
+    render(<RuntimeHealthNotice progress={deferred} now={Date.parse(since) + 60_000} />)
+    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(
+      "Host presence judgment is deferred since 1 min ago: h1 silent for up to 2m5s but not judged: the platform's health probe keeps failing every few passes")
+    expect(progress.presence_deferred ?? null).toBeNull()
+    expect(parseRuntimeProgress({}).presence_deferred).toBeUndefined()
+    expect(parseRuntimeProgress({ presence_deferred: null }).presence_deferred).toBeNull()
+  })
+
   it('lists on the Crew card what each host offers, and the executors', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={client}><OwnerCrew hosts={progress.hosts} live={progress.live} missions={progress.work.missions}

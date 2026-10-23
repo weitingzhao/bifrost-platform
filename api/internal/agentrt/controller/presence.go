@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -43,6 +44,30 @@ type platformSeen struct {
 	// probeNo is since when the probe has said no (zero while it says yes);
 	// probeBack the last pass in which it said yes after an outage it saw.
 	probeNo, probeBack time.Time
+	// edges are the recent recovery points (either kind), oldest first: a
+	// host silent across several of them, not judged, is deferred.
+	edges []time.Time
+}
+
+// maxEdges bounds the recovery points kept.
+const maxEdges = 64
+
+// edge records a recovery point at now, once a moment.
+func (p *platformSeen) edge(now time.Time) {
+	if n := len(p.edges); n > 0 && p.edges[n-1].Equal(now) {
+		return
+	}
+	p.edges = append(p.edges, now)
+	if len(p.edges) > maxEdges {
+		p.edges = p.edges[len(p.edges)-maxEdges:]
+	}
+}
+
+// recoveries are the recent recovery points.
+func (p *platformSeen) recoveries() []time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.edges)
 }
 
 // probed records the probe's answer at now; it returns since when the probe
@@ -57,6 +82,7 @@ func (p *platformSeen) probed(yes bool, now time.Time) (time.Time, time.Time, bo
 	switch {
 	case yes && !p.probeNo.IsZero():
 		p.probeNo, p.probeBack, ended = time.Time{}, now, true
+		p.edge(now)
 	case !yes && p.probeNo.IsZero():
 		p.probeNo = now
 	}
@@ -79,6 +105,7 @@ func (p *platformSeen) see(up bool, now time.Time) (time.Time, bool, bool) {
 		p.up, p.back = true, time.Time{}
 	case up && turned:
 		p.up, p.back = true, now
+		p.edge(now)
 	case !up && turned:
 		p.up, p.since = false, now
 	}
@@ -167,6 +194,13 @@ func (c *Controller) Presence(ctx context.Context) (int, error) {
 		}
 	}
 	n, err := store.Presence(ctx, c.DB, judge, since)
+	if err == nil && c.PlatformUp != nil {
+		// A floor the platform's recoveries keep moving defers the hosts'
+		// judgment; past PresenceDeferredAfter that is told (store.PresenceDeferral).
+		// With several API instances the probe's sampling is probabilistic
+		// (server.serviceTakesCalls): this makes a long deferral visible.
+		_, err = store.PresenceDeferral(ctx, c.DB, judge, since, c.platform.recoveries(), c.probeName())
+	}
 	return n, errors.Join(err, wrong)
 }
 

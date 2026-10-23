@@ -306,7 +306,7 @@ func progressAt(ctx context.Context, db DB, at, since time.Time) (map[string]any
 	}
 	return map[string]any{"generated_at": now.UTC().Format(time.RFC3339Nano), "as_of_event_id": asOf, "needs_you": needs,
 		"work": work, "owner_next": next, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(pr.doc), "controls": rawJSON(controls), "recent": recent,
-		"controller_alerts": alerts, "schema": schema, "executors": pr.executors, "jobs_without_executor": pr.unserved, "presence_unjudged": pr.unjudged}, nil
+		"controller_alerts": alerts, "schema": schema, "executors": pr.executors, "jobs_without_executor": pr.unserved, "presence_unjudged": pr.unjudged, "presence_deferred": pr.deferred}, nil
 }
 
 // rawJSON is a document the database built, passed through as it is.

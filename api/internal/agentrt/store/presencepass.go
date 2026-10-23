@@ -67,7 +67,7 @@ func Presence(ctx context.Context, db DB, now, since time.Time) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, presencePassTimeout)
 	defer cancel()
 	n := 0
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := inPresenceTx(ctx, db, func(tx pgx.Tx) error {
 		n = 0
 		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+waitsLockTimeout+`'`); err != nil {
 			return err

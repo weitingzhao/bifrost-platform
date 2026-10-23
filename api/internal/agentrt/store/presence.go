@@ -60,7 +60,8 @@ func headSQL(stream string) string {
 // latest claim offered (offered, null until one is recorded, with
 // offered_at) and whether its free disk was then below the floor
 // (disk_low), whether it is deleting attempt branches it was handed
-// (pruning), whether it takes work (claiming: true, false, or null while
+// (pruning), its last contact (contact_at), whether it takes work
+// (claiming: true, false, or null while
 // not known yet; review 527 A3), and whether the controller reports it
 // offline (reported_offline: lost, active, and no stop or drain on it or on
 // every host).
@@ -72,7 +73,7 @@ func HostsSQL(now string) string {
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
-	    'pruning', ` + pruneOpenSQL(now) + `,
+	    'pruning', ` + pruneOpenSQL(now) + `, 'contact_at', hc.at,
 	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
 	    'reported_offline', h.state = 'active' AND ` + hostSilentSQL(now) + `
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
@@ -199,6 +200,7 @@ type HostPresence struct {
 	ReportedOffline bool       `json:"reported_offline"`
 	Pruning         bool       `json:"pruning"`
 	Claiming        *bool      `json:"claiming"`
+	ContactAt       *time.Time `json:"contact_at"`
 	DiskLow         bool       `json:"disk_low"`
 	LiveAttempts    int        `json:"live_attempts"`
 	Offered         *[]Offer   `json:"offered"`
@@ -272,6 +274,7 @@ type presence struct {
 	unserved  []string
 	unknown   []string
 	unjudged  map[string]any // presencejudge.go
+	deferred  map[string]any
 }
 
 func (p presence) executor(id string) *ExecutorPresence {
@@ -339,7 +342,10 @@ func readPresence(ctx context.Context, tx pgx.Tx, now, since time.Time) (presenc
 		}
 	}
 	p.executors, p.unserved, p.unknown = judgeExecutors(p.hosts, cp.candidates, tenants, cooling, quota, stops)
-	p.unjudged, err = unjudgedView(ctx, tx)
+	if p.unjudged, err = unjudgedView(ctx, tx); err != nil {
+		return p, err
+	}
+	p.deferred, err = deferredView(ctx, tx)
 	return p, err
 }
 

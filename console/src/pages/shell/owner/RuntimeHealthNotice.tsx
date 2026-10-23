@@ -29,6 +29,9 @@ export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgre
   if (progress.presence_unjudged) {
     lines.push({ key: 'presence', text: `Host presence cannot be judged since ${ago(progress.presence_unjudged.since, now)}: ${progress.presence_unjudged.why}` })
   }
+  if (progress.presence_deferred) {
+    lines.push({ key: 'deferred', text: `Host presence judgment is deferred since ${ago(progress.presence_deferred.since, now)}: ${progress.presence_deferred.why}` })
+  }
   for (const h of progress.hosts) {
     if (h.reported_offline === true) lines.push({ key: `host-${h.host_id}`, text: offlineWords(h, now) })
   }
