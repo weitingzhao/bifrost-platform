@@ -38,7 +38,10 @@ type Canonical struct {
 }
 
 var (
-	workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
+	// A business issue's number (BI-<n>) names the cards the agent runtime
+	// asks the Owner on it (W-31 BI-1 slice 2, issuecard.go); create takes
+	// it from the runtime's own session only.
+	workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+|BI-[1-9][0-9]*)$`)
 	// taskIDPattern is an agent runtime task id: t_ and a 128-bit ULID.
 	taskIDPattern  = regexp.MustCompile(`^t_[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
 	keyPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)

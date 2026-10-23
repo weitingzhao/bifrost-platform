@@ -37,6 +37,12 @@ func (s *Service) create(ctx context.Context, session, principal, role string, r
 	if err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
+	if businessIssue(canon.WorkID) && session != RuntimeSession {
+		// A business issue's card is the runtime's, by its template, and
+		// carries no text of the issue (issuecard.go); a thread's ask_owner
+		// names no issue.
+		return fail(http.StatusBadRequest, "work_id is invalid: a business issue's card is asked by the agent runtime only", nil)
+	}
 	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "create"}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		if prev, ok := protectedByKey(doc, session, canon.Key, now); ok {

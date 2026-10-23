@@ -34,10 +34,10 @@ import "strings"
 // by hand).
 //
 // The test is wider than the work id business issues are created with
-// (^BI-[1-9][0-9]*$, from a later slice): any work id that starts "BI-", in
-// any case, past surrounding space, so a card a later version names a little
-// differently is held too. No card has had such a work id: the store has
-// taken only W-, TD- and LANE- ids (workIDPattern) since it began.
+// (^BI-[1-9][0-9]*$, slice 2's workIDPattern, from the runtime's session
+// only, create.go): any work id that starts "BI-", in any case, past
+// surrounding space, so a card a later version names a little differently
+// is held too. Before slice 2 the store took only W-, TD- and LANE- ids.
 func businessIssue(workID string) bool {
 	w := strings.TrimSpace(workID)
 	return len(w) >= 3 && strings.EqualFold(w[:3], "BI-")
@@ -47,6 +47,11 @@ func businessIssue(workID string) bool {
 func (q Question) businessIssueCard() bool {
 	return businessIssue(q.WorkID)
 }
+
+// BusinessIssueCard says whether q is a business issue's card: the agent
+// runtime keeps such a card from its AI assessment and from its
+// card-auto-answer rule (W-31 BI-1 slice 2; DESIGN-crew-intake §5.3).
+func BusinessIssueCard(q Question) bool { return q.businessIssueCard() }
 
 // The refusals, as the answer's writers give them, and the one reason a
 // business issue's card is withdrawn with.

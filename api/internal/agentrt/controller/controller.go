@@ -455,6 +455,17 @@ func (c *Controller) MissionDecisions(ctx context.Context) (int, error) {
 	return store.DecideMissions(ctx, c.DB, c.question, c.ack())
 }
 
+// IssueCards is one pass over the Owner's cards on business issues: an
+// answer he gave on the Console becomes the issue's evidence, the level of a
+// priority he took on is asked, and a card the issue moved past is withdrawn
+// (store.DecideIssueCards, W-31 BI-1 slice 2).
+func (c *Controller) IssueCards(ctx context.Context) (int, error) {
+	if c.Sources.Question == nil {
+		return 0, nil
+	}
+	return store.DecideIssueCards(ctx, c.DB, c.question, c.boundedAsk(), c.boundedWithdraw(), c.ack())
+}
+
 // question reads a question with the per-read timeout.
 func (c *Controller) question(ctx context.Context, id string) (store.Question, bool) {
 	type r struct {
@@ -559,10 +570,11 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, merr := c.MissionDecisions(ctx)
+		_, ierr := c.IssueCards(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
 		_, werr := c.Waits(ctx)
-		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr, werr)
+		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, ierr, verr, rerr, werr)
 	})
 	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
 		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {

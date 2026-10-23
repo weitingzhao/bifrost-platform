@@ -123,9 +123,11 @@ func TestRuntimeWithdrawsAnIssueCardWithoutItsReason(t *testing.T) {
 
 // The same on the runtime's card-auto-answer loop, on the real question store
 // and a real database: under a rule that answers plan change cards at once,
-// a pass answers the plain card and refuses the business issue's (the pass
-// reports it), writes no note of an answer on it, and leaves its proposal
-// undecided; the Owner's option then decides it.
+// a pass answers the plain card and leaves the business issue's alone, writes
+// no note of an answer on it, and leaves its proposal undecided; the Owner's
+// option then decides it. Since slice 2 the loop does not even try the
+// issue's card (agentRuntimeCards lists no business issue's card, so no pass
+// fails on it every second); the store's own refusal stays, tested above.
 func TestCardRuleLoopLeavesAnIssueCardOpen(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
@@ -179,19 +181,26 @@ func TestCardRuleLoopLeavesAnIssueCardOpen(t *testing.T) {
 	markIssueCard(t, path, issue, "BI-7")
 
 	cr := store.CardRule{Cards: rt.agentRuntimeCards(), Answer: rt.agentRuntimeRuleAnswer(), Ack: rt.agentRuntimeAck()}
-	answered, refused := 0, false
-	for deadline := time.Now().Add(10 * time.Second); (answered < 1 || !refused) && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
-		n, err := store.AnswerByRule(ctx, conn, cr)
-		answered += n
-		if err != nil {
-			if !strings.Contains(err.Error(), issue) || !strings.Contains(err.Error(), "business issue") {
-				t.Fatal(err)
-			}
-			refused = true
-		}
+	if cards, err := cr.Cards(ctx); err != nil || len(cards) != 1 || cards[0].ID != plain {
+		t.Fatalf("the cards the rule lists: %+v %v", cards, err)
 	}
-	if answered != 1 || !refused {
-		t.Fatalf("the rule answered %d, refused the issue card: %v", answered, refused)
+	answered := 0
+	for deadline := time.Now().Add(10 * time.Second); answered < 1 && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		n, err := store.AnswerByRule(ctx, conn, cr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		answered += n
+	}
+	for i := 0; i < 3; i++ {
+		n, err := store.AnswerByRule(ctx, conn, cr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		answered += n
+	}
+	if answered != 1 {
+		t.Fatalf("the rule answered %d", answered)
 	}
 	if q, ok, err := rt.svc.Lookup(plain); err != nil || !ok || q.Answer == nil || q.Answer.Channel != "rule" || q.Answer.Option != store.CardRefuseKey {
 		t.Fatalf("the plain card: %+v %v %v", q.Answer, ok, err)

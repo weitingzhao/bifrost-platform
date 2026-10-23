@@ -171,6 +171,15 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 				req["urgency"] = card.Urgency
 			}
 		}
+		// A business issue's card (W-31 BI-1 slice 2, store/issuecard.go):
+		// its number as the work id, so the question store takes options
+		// only on it, and its page as the link.
+		if card.WorkID != "" {
+			req["work_id"] = card.WorkID
+			if card.Link != "" {
+				req["link"], req["link_text"] = card.Link, card.LinkText
+			}
+		}
 		raw, err := json.Marshal(req)
 		if err != nil {
 			return "", err
@@ -248,6 +257,9 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		}
 		cards := make([]store.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
+			if questions.BusinessIssueCard(q) {
+				continue // the Owner's alone: no rule answers it (DESIGN-crew-intake §5.3)
+			}
 			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
 			for _, o := range q.Options {
 				c.Options = append(c.Options, o.Key)
@@ -286,7 +298,9 @@ func (rt *questionRuntime) agentRuntimeOpenCards() func(context.Context) ([]stor
 		}
 		var items []store.AssessItem
 		for _, q := range x.qs {
-			if q.Status != questions.StatusOpen {
+			// A business issue's card is not assessed (DESIGN-crew-intake
+			// §5.3): nothing of it becomes an assessment's task_spec.
+			if q.Status != questions.StatusOpen || questions.BusinessIssueCard(q) {
 				continue
 			}
 			it := store.AssessItem{Kind: store.AssessCard, ID: q.ID, Title: q.Title, Body: q.Body, Recommended: q.Recommended,
