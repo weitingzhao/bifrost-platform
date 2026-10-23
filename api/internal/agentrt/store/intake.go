@@ -69,6 +69,17 @@ func holdsIntakeTx(ctx context.Context, tx pgx.Tx, w Writer) error {
 	return nil
 }
 
+// holdsWriter is the hold CheckWriter checks a registered thread or agent
+// by: a thread's session is its first token's (holdsToken); an external
+// agent's token is the one bound to it and not revoked (holdsIntakeTx), for
+// its reads, writes and replays alike (DESIGN-crew-intake §2.1, §5.2).
+func holdsWriter(ctx context.Context, tx pgx.Tx, w Writer) error {
+	if kindOf(w.Actor) == "agent" {
+		return holdsIntakeTx(ctx, tx, w)
+	}
+	return holdsToken(ctx, tx, w)
+}
+
 // intakeSees says whether an external agent may read and add to an issue
 // (§2.1, §5.3): of its products, and serving the person it is bound to, or
 // its own proposal.

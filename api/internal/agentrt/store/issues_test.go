@@ -360,11 +360,23 @@ func TestIssueMissionOnlyByTake(t *testing.T) {
 		_, err := store.ProposeMission(ctx, iw.rt, iw.crew, iw.key(), p, nil)
 		wantIs(t, err, store.ErrInvalid, "only by take_issue")
 	}
-	// The older binary's POST /missions: mission_proposed and the row, then
-	// active inside the envelope, with no issue work.
 	err := store.InTx(ctx, iw.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-50", WorkID: id, Title: "t", Goal: "g",
-			Deadline: time.Now().Add(time.Hour)}); err != nil {
+		_, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-50", WorkID: id, Title: "t", Goal: "g",
+			Deadline: time.Now().Add(time.Hour)})
+		return err
+	})
+	wantIs(t, err, store.ErrInvalid, "only by take_issue")
+	// The older binary's POST /missions, which has no such check:
+	// mission_proposed and the row, then active inside the envelope, with no
+	// issue work. The database refuses it at commit.
+	err = store.InTx(ctx, iw.rt, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-50"), Type: "mission_proposed", Actor: "controller",
+			MissionID: "M-50", Body: map[string]any{"title": "t"}}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.mission (mission_id, work_id, title, goal, success_json, scope_json, tenant, state,
+		  deadline_at, budget_json, created_by_actor_id) VALUES ('M-50', $1, 't', 'g', '{}', '{"max_action":"branch"}', 'dev', 'proposed',
+		  now() + interval '1 hour', '{}', 'controller')`, id); err != nil {
 			return err
 		}
 		return store.MoveMission(ctx, tx, "controller", "M-50", "active", "inside the envelope")

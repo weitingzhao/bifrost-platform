@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -125,14 +126,25 @@ type Mission struct {
 	GateRun                 map[string]any // a batch of gate tasks, the controller's own (scope_json.gate_run, gates.go, TD-397)
 	AssessmentOf            string         // the stream of the item it assesses, "" for none (scope_json.assessment_of, TD-391)
 	Token                   string         // the token that proposed it, when a route did (review 176 B2)
+	issueTake               bool           // take_issue's mission for its issue (MissionProposal.issueTake)
 }
+
+// issueWorkPrefix starts a business issue's work id (BI-<n>): the whole
+// prefix is reserved for the missions take_issue makes (DESIGN-crew-intake
+// §4.4; the database checks it again at commit, 0009 check_issue_mission).
+const issueWorkPrefix = "BI-"
 
 // defaultHardLimitS is an attempt's hard limit when its task states none: a
 // verification's and a review's always (proposeChecker states none).
 const defaultHardLimitS = 3600
 
-// CreateMission writes mission_proposed and the mission row.
+// CreateMission writes mission_proposed and the mission row. A business
+// issue's work id is refused here, on every path (a proposal, a goal, a
+// brief, an assessment, a gate run), but take_issue's.
 func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
+	if strings.HasPrefix(m.WorkID, issueWorkPrefix) && !m.issueTake {
+		return Appended{}, invalid("work id %s is a business issue's: its mission is made only by take_issue, with the issue's work", m.WorkID)
+	}
 	if m.Tenant == "" {
 		m.Tenant = "dev"
 	}
