@@ -264,6 +264,8 @@ func (a *API) failIssue(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, "quota", err.Error())
 	case errors.Is(err, store.ErrRevoked):
 		writeError(w, http.StatusForbidden, "revoked", err.Error())
+	case errors.Is(err, store.ErrBadCursor):
+		writeError(w, http.StatusBadRequest, "bad_cursor", err.Error())
 	default:
 		a.fail(w, err)
 	}

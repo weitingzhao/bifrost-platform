@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -29,15 +30,27 @@ type UpdatesRequest struct {
 	Limit       int
 }
 
-// IntakeUpdates acknowledges, then reads on. The acknowledgement goes first
-// and is held to what was served before this read; an older one changes
-// nothing.
+// ErrBadCursor: a cursor the client was never handed (§2.1, review 524 B2):
+// past how far it was served. Nothing is read, served or acknowledged.
+var ErrBadCursor = errors.New("store: a cursor this client was not handed")
+
+// IntakeUpdates acknowledges, then reads on. A cursor past how far the client
+// was served is refused before anything else (review 524 B2: a caller's
+// future cursor would otherwise be served and acknowledged, and its updates
+// read past for good). The acknowledgement goes first and is held to what
+// was served before this read; an older one changes nothing. How far it was
+// served moves only to what the read returned or the horizon it computed.
 func IntakeUpdates(ctx context.Context, db DB, w Writer, req UpdatesRequest) (map[string]any, error) {
 	if req.Limit < 0 || req.Limit > MaxUpdates {
 		return nil, invalid("limit is 0 to %d", MaxUpdates)
 	}
 	if kindOf(w.Actor) != "agent" {
 		return nil, invalid("%s is no intake client", w.Actor)
+	}
+	if req.Cursor != nil {
+		if err := intakeTx(ctx, db, w, func(_ pgx.Tx, c intakeClient) error { return handedCursor(c, *req.Cursor) }); err != nil {
+			return nil, err
+		}
 	}
 	out := map[string]any{"updates": []any{}}
 	if req.Ack != nil {
@@ -51,6 +64,9 @@ func IntakeUpdates(ctx context.Context, db DB, w Writer, req UpdatesRequest) (ma
 		from := EventCursor{}
 		switch {
 		case req.Cursor != nil:
+			if err := handedCursor(c, *req.Cursor); err != nil {
+				return err
+			}
 			from = *req.Cursor
 		case c.hasAcked:
 			from = c.acked
@@ -132,12 +148,24 @@ func IntakeUpdates(ctx context.Context, db DB, w Writer, req UpdatesRequest) (ma
 			updates = append(updates, u)
 		}
 		out["updates"], out["next_cursor"] = updates, next.String()
+		if next == from {
+			return nil // nothing read and no horizon passed: served stays where it is
+		}
 		return MarkServed(ctx, tx, w.Actor, next)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// handedCursor checks that a cursor is one the client was handed: at most
+// how far it was served (the start, before it was served anything).
+func handedCursor(c intakeClient, cur EventCursor) error {
+	if (!c.hasServed && cur != EventCursor{}) || (c.hasServed && c.served.Less(cur)) {
+		return fmt.Errorf("%w: %s is past how far %s was served (%s)", ErrBadCursor, cur, c.id, servedText(c))
+	}
+	return nil
 }
 
 // updateTexts are the texts the page's events name that the crew wrote for
