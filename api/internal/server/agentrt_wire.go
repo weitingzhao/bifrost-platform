@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -471,7 +472,51 @@ func platformProbe(role config.Role, late *lateDB) (func(context.Context) error,
 	if url == "" {
 		url = "http://platform-api:8780/health"
 	}
-	return func(ctx context.Context) error { return apiTakesCalls(ctx, http.DefaultClient, url) }, url
+	// No connection is kept: each probe is a connection of its own, which
+	// the Service sends to any of its endpoints.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	return func(ctx context.Context) error { return serviceTakesCalls(ctx, client, url, probeConnections) }, url
+}
+
+// probeConnections is how many probes a pass sends the API's Service at once
+// (review 529 A-1, A-2): an instance whose agentrt routes are not ready yet
+// still answers /health, and the Service may send a probe to it while
+// another instance serves. Any ready answer means the platform takes
+// agentd's calls; only a pass whose every probe fails is an outage. With
+// one ready and one unready endpoint, chosen at random for each connection,
+// a pass is all unready one time in 32, and an outage moves the hosts'
+// floor once (by 30 s), so a lone unlucky pass cannot keep detection
+// suppressed.
+const probeConnections = 5
+
+// serviceTakesCalls asks the API's Service n times at once, each probe on a
+// connection of its own: nil once one answers that its agentrt routes are
+// ready, else why none did (each distinct reason once).
+func serviceTakesCalls(ctx context.Context, client *http.Client, url string, n int) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	answers := make(chan error, n)
+	for range n {
+		safego.Go("agentrt-platform-probe", func() {
+			err := errors.New("the probe failed")
+			defer func() { answers <- err }()
+			err = apiTakesCalls(ctx, client, url)
+		})
+	}
+	seen := map[string]bool{}
+	var why []string
+	for range n {
+		err := <-answers
+		if err == nil {
+			return nil
+		}
+		if !seen[err.Error()] {
+			seen[err.Error()] = true
+			why = append(why, err.Error())
+		}
+	}
+	sort.Strings(why)
+	return fmt.Errorf("none of %d probes found the API's agentrt routes ready: %s", n, strings.Join(why, "; "))
 }
 
 // apiTakesCalls asks the API at url whether its runtime routes are ready:
