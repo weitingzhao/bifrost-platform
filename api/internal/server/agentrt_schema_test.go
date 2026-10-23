@@ -29,7 +29,7 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	db := agentrttest.New(t)
 	owner := db.Connect(t, db.Owner)
 	files, err := migrate.Files()
-	if err != nil || len(files) < 8 {
+	if err != nil || len(files) < 9 {
 		t.Fatalf("files = %d %v", len(files), err)
 	}
 	if _, err = migrate.RunFiles(ctx, owner, "dev", files[:6]); err != nil {
@@ -63,8 +63,8 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	srv.agentRuntime = &agentRuntime{schema: w}
 	behind := health()
 	missing, _ := behind["agentrt_schema_missing"].([]any)
-	if behind["status"] != "ok" || behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != 2 ||
-		missing[0] != "0007_gate_tasks" || missing[1] != "0008_attempt_prepare_failed" {
+	if behind["status"] != "ok" || behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != 3 ||
+		missing[0] != "0007_gate_tasks" || missing[1] != "0008_attempt_prepare_failed" || missing[2] != "0009_issues" {
 		t.Fatalf("behind: %v", behind)
 	}
 	// What the PROD deliver pipeline compares the next build's migrations

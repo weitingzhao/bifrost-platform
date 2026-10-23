@@ -24,41 +24,14 @@ import (
 // vocabulary; limit is 1 to 500 (default 100). The form with stream= is
 // unchanged.
 //
-// Event ids are not commit order across streams: a transaction can take an
-// id and commit after another that took a larger one (the stream form has
-// no such gap, its seq is taken under the stream's lock). So reading on is
-// by transaction, as the scores' computation does (store/scores.go): a read
-// lists the events of transactions older than every transaction still
-// running (its snapshot's xmin), ordered by (txid, event_id), and the cursor
-// is the last one listed, "<txid>.<event_id>". An event shows once every
-// transaction older than its own has ended; none is skipped, none listed
-// twice. The latest form's next is its snapshot's xmin: reading on from it
-// lists again the events it showed from transactions not older than that,
-// so a reader keeps each event once by its id. An event committed after a
-// latest read, with an id below the ones it showed, is read on, not back.
+// Reading on across streams is by transaction, not by event id: the cursor
+// "<txid>.<event_id>" and its rules are the store's (store/eventcursor.go),
+// shared with an intake client's updates (DESIGN-crew-intake §4.3).
 
 const (
 	recentEventsDefault = 100
 	recentEventsMax     = 500
 )
-
-// eventCursor is a read-on position: every event of a transaction below
-// txid, and of txid itself up to event, has been listed.
-type eventCursor struct{ txid, event int64 }
-
-func (c eventCursor) String() string {
-	return strconv.FormatInt(c.txid, 10) + "." + strconv.FormatInt(c.event, 10)
-}
-
-func parseEventCursor(s string) (eventCursor, bool) {
-	t, e, found := strings.Cut(s, ".")
-	txid, err1 := strconv.ParseInt(t, 10, 64)
-	event, err2 := strconv.ParseInt(e, 10, 64)
-	if !found || err1 != nil || err2 != nil || txid < 0 || event < 0 {
-		return eventCursor{}, false
-	}
-	return eventCursor{txid, event}, true
-}
 
 func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -84,9 +57,9 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
-	var after *eventCursor
+	var after *store.EventCursor
 	if s := q.Get("after"); s != "" {
-		c, ok := parseEventCursor(s)
+		c, ok := store.ParseEventCursor(s)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "bad_request", "after is a cursor a read gave as next (<txid>.<event_id>)")
 			return
@@ -107,39 +80,15 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 			types = append(types, t)
 		}
 	}
-	hidden := hiddenFrom(r)
+	filter := store.EventFilter{Types: types, Hidden: hiddenFrom(r)}
 	var doc []byte
-	var next eventCursor
+	var next store.EventCursor
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+		var err error
 		if after == nil {
-			// One statement: the horizon and the page from the same snapshot.
-			return tx.QueryRow(r.Context(), `SELECT txid_snapshot_xmin(txid_current_snapshot()),
-			  COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.event_id DESC) FROM (
-			    SELECT * FROM agentrt.event WHERE ($1::text[] IS NULL OR event_type = ANY($1)) AND ($2::bigint = 0 OR event_id < $2)
-			      AND NOT (event_stream_id = ANY($4::text[]))
-			    ORDER BY event_id DESC LIMIT $3) e), '[]')`, types, before, limit, hidden).Scan(&next.txid, &doc)
-		}
-		var n int
-		var horizon int64
-		err := tx.QueryRow(r.Context(), `WITH h AS (SELECT txid_snapshot_xmin(txid_current_snapshot()) AS x),
-		  page AS (SELECT e.* FROM agentrt.event e WHERE ($1::text[] IS NULL OR e.event_type = ANY($1))
-		    AND e.txid >= $2 AND (e.txid, e.event_id) > ($2::bigint, $3::bigint) AND e.txid < (SELECT x FROM h)
-		    AND NOT (e.event_stream_id = ANY($5::text[]))
-		    ORDER BY e.txid, e.event_id LIMIT $4)
-		  SELECT (SELECT x FROM h), COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.txid, p.event_id) FROM page p), '[]'),
-		    (SELECT count(*) FROM page),
-		    COALESCE((SELECT txid FROM page ORDER BY txid DESC, event_id DESC LIMIT 1), 0),
-		    COALESCE((SELECT event_id FROM page ORDER BY txid DESC, event_id DESC LIMIT 1), 0)`,
-			types, after.txid, after.event, limit, hidden).Scan(&horizon, &doc, &n, &next.txid, &next.event)
-		switch {
-		case err != nil:
-		case n == limit:
-			// There may be more below the horizon: on from the last listed.
-		case horizon > after.txid:
-			// Everything below the horizon is listed.
-			next = eventCursor{txid: horizon}
-		default:
-			next = *after
+			doc, next, err = store.LatestEvents(r.Context(), tx, before, limit, filter)
+		} else {
+			doc, next, err = store.EventsAfter(r.Context(), tx, *after, limit, filter)
 		}
 		return err
 	})

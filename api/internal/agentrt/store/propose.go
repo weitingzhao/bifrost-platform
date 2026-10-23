@@ -97,7 +97,19 @@ func holdsToken(ctx context.Context, tx pgx.Tx, w Writer) error {
 // checked. Its callers take no lock a writer waits on while holding the
 // writer's lock: a key's lock comes before it, as in a write.
 func holdsSessionTx(ctx context.Context, tx pgx.Tx, w Writer) error {
-	if kindOf(w.Actor) != "thread" {
+	switch kindOf(w.Actor) {
+	case "thread":
+	case "agent":
+		// An external agent's replay is checked as its write is: its token
+		// still bound to it, not revoked (DESIGN-crew-intake §2.1, §5.2).
+		if err := writerLock(ctx, tx, w.Actor); err != nil {
+			return err
+		}
+		if _, err := CheckWriter(ctx, tx, w); err != nil {
+			return err
+		}
+		return holdsIntakeTx(ctx, tx, w)
+	default:
 		return nil
 	}
 	if err := writerLock(ctx, tx, w.Actor); err != nil {
@@ -121,6 +133,8 @@ func kindOf(actor string) string {
 		return "host"
 	case strings.HasPrefix(actor, "exec:"):
 		return "executor"
+	case strings.HasPrefix(actor, "agent:"):
+		return "agent" // an external agent bringing issues (0009, intake.go)
 	}
 	return ""
 }
@@ -186,6 +200,9 @@ func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error 
 		return err
 	}
 	registered, err := CheckWriter(ctx, tx, w)
+	if err == nil && kindOf(w.Actor) == "agent" {
+		err = holdsIntakeTx(ctx, tx, w)
+	}
 	if err != nil || registered {
 		return err
 	}
@@ -252,6 +269,25 @@ type MissionProposal struct {
 	assessmentOf string
 	// gateRun is a batch of gate tasks (gates.go, TD-397); no route sets it.
 	gateRun map[string]any
+	// issueTake: take_issue makes this mission for the business issue its
+	// WorkID names, in the transaction that binds the issue's work
+	// (issuetake.go, DESIGN-crew-intake §4.4); no route sets it. Only such a
+	// mission may have a work id starting BI-.
+	issueTake bool
+}
+
+// issueWorkPrefix starts a business issue's work id (BI-<n>): reserved, the
+// whole prefix, for the missions take_issue makes (§4.4; the database checks
+// it again at commit, 0009 check_issue_mission).
+const issueWorkPrefix = "BI-"
+
+// reservedWork refuses a work id of a business issue on any path but
+// take_issue's.
+func (p MissionProposal) reservedWork() error {
+	if strings.HasPrefix(p.WorkID, issueWorkPrefix) && !p.issueTake {
+		return invalid("work id %s is a business issue's: its mission is made only by take_issue, with the issue's work", p.WorkID)
+	}
+	return nil
 }
 
 // DefaultMissionDays is how long a mission runs when the proposal names no
@@ -261,6 +297,9 @@ const DefaultMissionDays = 7
 // check is everything about a proposal that does not depend on when it is
 // made, with the defaults that do not either.
 func (p MissionProposal) check() (MissionProposal, error) {
+	if err := p.reservedWork(); err != nil {
+		return p, err
+	}
 	if p.Title == "" || p.Goal == "" {
 		return p, invalid("a mission has a title and a goal")
 	}
@@ -348,6 +387,10 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 // Owner's card; a goal's or a brief's mission passes no ask and stays
 // proposed there.
 func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposal, key string, ask Ask) (map[string]any, error) {
+	// Every path, a goal's, a brief's, an assessment's and a gate run's too.
+	if err := p.reservedWork(); err != nil {
+		return nil, err
+	}
 	// Only a new proposal is held to the clock (review 175 A4).
 	now := time.Now()
 	deadline := p.Deadline

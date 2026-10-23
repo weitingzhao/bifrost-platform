@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // A body field's kind. Values are what canon.Parse or a Go caller produce.
@@ -19,6 +21,7 @@ const (
 	kIDs              // a non-empty list of row ids
 	kAny              // any canonical JSON value
 	kBool             // true or false
+	kInts             // a non-empty list of integers (row ids of an identity column)
 )
 
 type field struct {
@@ -28,7 +31,7 @@ type field struct {
 }
 
 // eventTypes is the closed vocabulary, as the database's event_type_closed
-// constraint has it (migrations 0006); TestEventTypesAreTheDatabases holds
+// constraint has it (migrations 0009); TestEventTypesAreTheDatabases holds
 // the two together. bodies below covers only the types the store writes.
 var eventTypes = map[string]bool{
 	"plan_node_created": true, "plan_node_retitled": true, "plan_node_state_changed": true,
@@ -45,7 +48,10 @@ var eventTypes = map[string]bool{
 	"rule_tightened": true, "rule_expired": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "message_posted": true,
 	"message_acked": true, "policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
-	"legacy_imported": true,
+	"legacy_imported": true, "issue_submitted": true, "issue_added": true, "issue_brief_drafted": true, "issue_asked": true,
+	"issue_answered": true, "issue_classified": true, "issue_design_put": true, "issue_reviewed": true,
+	"issue_owner_decided": true, "issue_priority_set": true, "issue_taken": true, "issue_replied": true,
+	"issue_state_changed": true, "issue_merged": true, "intake_client_set": true, "intake_acked": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
@@ -161,6 +167,46 @@ var bodies = map[string][]field{
 	"wait_limit_passed": {{"wait", kStr, false}, {"ref", kID, false}, {"since", kStr, false}, {"limit_s", kInt, false},
 		{"basis", kStr, false}, {"waited_s", kInt, false}, {"calls", kID, false}, {"usual_s", kInt, true}},
 	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}, {"by", kStr, true}},
+	// The issue events (migrations 0009; DESIGN-crew-intake-2026-10-22.md
+	// §4.3): ids, enums and hashes, never text. A text is named by its id
+	// (text_id, text_ids), never by the keys artifact search follows
+	// (artifact_id, text_artifact_id, artifacts, evidence); a seat's report,
+	// which is an artifact, by seat_report. Each names the issue its stream
+	// is about (issue_id) and the rows it writes, by the ids the store takes
+	// from their sequences first (issues.go).
+	"issue_submitted": {{"issue_id", kID, false}, {"product", kStr, false}, {"kind", kStr, false}, {"channel", kStr, false},
+		{"text_ids", kInts, false}, {"served_person", kID, true}},
+	"issue_added":         {{"issue_id", kID, false}, {"channel", kStr, false}, {"text_ids", kInts, false}},
+	"issue_brief_drafted": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"brief_sha256", kStr, false}, {"ask_id", kInt, false}},
+	"issue_asked": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"ask_id", kInt, false}, {"purpose", kStr, false},
+		{"brief_sha256", kStr, true}, {"commitment", kInt, true}, {"env", kStr, true}},
+	"issue_answered": {{"issue_id", kID, false}, {"ask_id", kInt, false}, {"text_ids", kInts, false}, {"verdict", kStr, false},
+		{"channel", kStr, false}, {"person", kID, false}},
+	"issue_classified": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"risk_class", kStr, false}, {"category", kStr, false},
+		{"brief_sha256", kStr, false}, {"seat_report", kID, false}, {"text_id", kInt, true}},
+	"issue_design_put": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"design_sha256", kStr, false}, {"decisions", kAny, true}},
+	"issue_reviewed": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"check_kind", kStr, false}, {"result", kStr, false},
+		{"brief_sha256", kStr, false}, {"design_sha256", kStr, true}, {"text_id", kInt, true}, {"round", kInt, true},
+		{"reviewer_tool", kStr, true}, {"author_tool", kStr, true}, {"checked_ask", kInt, true}, {"seat_report", kID, true}},
+	"issue_owner_decided": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"decision", kStr, false}, {"option", kStr, false},
+		{"brief_sha256", kStr, false}, {"design_sha256", kStr, false}, {"question_id", kID, true}, {"answered_by", kStr, true},
+		{"channel", kStr, true}},
+	"issue_priority_set": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"priority", kStr, false}, {"brief_sha256", kStr, false},
+		{"question_id", kID, true}, {"answered_by", kStr, true}, {"channel", kStr, true}},
+	"issue_taken": {{"issue_id", kID, false}, {"commitment", kInt, false}, {"brief_sha256", kStr, false}, {"design_sha256", kStr, true},
+		{"rule_id", kID, false}, {"rule_version", kInt, false}, {"risk_class", kStr, false}, {"mission_state", kStr, false},
+		{"live", kInt, false}, {"limit", kInt, false}, {"exception", kStr, true}, {"text_id", kInt, true}},
+	"issue_replied": {{"issue_id", kID, false}, {"text_id", kInt, false}},
+	// issue_state_changed: change says what (park, resume, reopen, close,
+	// supersede, display); from and to the display states; a close names its
+	// conclusion and the ask it rests on (basis_ask); ask_ids are the asks it
+	// supersedes, all of one mission (the envelope's), so one event per
+	// mission (issues.go supersede).
+	"issue_state_changed": {{"issue_id", kID, false}, {"change", kStr, false}, {"from", kStr, true}, {"to", kStr, true},
+		{"conclusion", kStr, true}, {"basis_ask", kInt, true}, {"text_id", kInt, true}, {"ask_ids", kInts, true}},
+	"issue_merged":      {{"issue_id", kID, false}, {"into", kID, true}, {"merged_from", kID, true}, {"risk_class", kStr, true}},
+	"intake_client_set": {{"change", kStr, false}, {"intake_client_id", kID, true}, {"person_id", kID, true}},
+	"intake_acked":      {{"intake_client_id", kID, false}, {"cursor", kStr, false}},
 }
 
 func checkBody(eventType string, body map[string]any) error {
@@ -250,6 +296,22 @@ func ofKind(v any, k kind) bool {
 	case kBool:
 		_, ok := v.(bool)
 		return ok
+	case kInts:
+		switch l := v.(type) {
+		case []any:
+			if len(l) == 0 {
+				return false
+			}
+			for _, e := range l {
+				if !ofKind(e, kInt) {
+					return false
+				}
+			}
+			return true
+		case []int64:
+			return len(l) > 0
+		}
+		return false
 	}
 	return true
 }
@@ -378,7 +440,41 @@ var fieldValues = map[string]map[string]value{
 	"legacy_imported":          {"digest": fingerprint},
 	"wait_limit_passed": {"wait": oneOf(WaitAttemptRunning, WaitTaskReady, WaitMessageUnread), "ref": waitRef, "since": instant,
 		"basis": oneOf(basisTaskUsual, basisHistoryUsual, basisFloor)},
+	"issue_submitted": {"issue_id": issueRef, "product": productKey, "kind": oneOf(issueKinds...), "channel": oneOf(textChannels...),
+		"served_person": personRef},
+	"issue_added":         {"issue_id": issueRef, "channel": oneOf(textChannels...)},
+	"issue_brief_drafted": {"issue_id": issueRef, "brief_sha256": hex64},
+	"issue_asked": {"issue_id": issueRef, "purpose": oneOf(askPurposes...), "brief_sha256": hex64,
+		"env": oneOf("dev", "stg", "prod")},
+	"issue_answered": {"issue_id": issueRef, "verdict": oneOf(askVerdicts...), "channel": oneOf(textChannels...),
+		"person": personRef},
+	"issue_classified": {"issue_id": issueRef, "risk_class": oneOf(riskClasses...), "category": oneOf(issueCategories...),
+		"brief_sha256": hex64, "seat_report": artifactID},
+	"issue_design_put": {"issue_id": issueRef, "design_sha256": hex64},
+	"issue_reviewed": {"issue_id": issueRef, "check_kind": oneOf(checkReview, checkClose), "result": oneOf("pass", "fix", "supports", "does_not"),
+		"brief_sha256": hex64, "design_sha256": hex64, "seat_report": artifactID},
+	"issue_owner_decided": {"issue_id": issueRef, "decision": decisionKey, "brief_sha256": hex64, "design_sha256": hex64},
+	"issue_priority_set":  {"issue_id": issueRef, "priority": oneOf(priorities...), "brief_sha256": hex64},
+	"issue_taken": {"issue_id": issueRef, "brief_sha256": hex64, "design_sha256": hex64, "risk_class": oneOf(riskClasses...),
+		"mission_state": oneOf("proposed", "awaiting_owner", "active"), "exception": oneOf(rules.IntakeFaultSmall)},
+	"issue_replied": {"issue_id": issueRef},
+	"issue_state_changed": {"issue_id": issueRef, "change": oneOf(issueChanges...), "from": oneOf(issueStates...),
+		"to": oneOf(issueStates...), "conclusion": oneOf(conclusions...)},
+	"issue_merged":      {"issue_id": issueRef, "into": issueRef, "merged_from": issueRef, "risk_class": oneOf(riskClasses...)},
+	"intake_client_set": {"change": oneOf("person", "client", "revoke"), "intake_client_id": intakeAgentRef, "person_id": personRef},
+	"intake_acked":      {"intake_client_id": intakeAgentRef, "cursor": cursorRef},
 }
+
+// The shapes of the issue events' ids and keys (migrations 0009).
+var (
+	issueRef       = shaped("an issue id (BI-<n>)", issueIDRE)
+	personRef      = shaped("a person (person:<name>)", regexp.MustCompile(`^person:[a-z0-9-]{1,32}$`))
+	intakeAgentRef = shaped("an intake client (agent:<name>)", agentIDRE)
+	productKey     = shaped("a product key", productRE)
+	hex64          = shaped("a sha256 (64 hex)", regexp.MustCompile(`^[0-9a-f]{64}$`))
+	decisionKey    = shaped("a decision (D<n> or review_dispute)", regexp.MustCompile(`^(D[1-9][0-9]*|review_dispute)$`))
+	cursorRef      = shaped("a cursor (<txid>.<event_id>)", regexp.MustCompile(`^[0-9]+\.[0-9]+$`))
+)
 
 // waitRef is what a wait waits on: an attempt, a task or a message
 // (checkBody holds it to its wait).

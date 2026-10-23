@@ -53,7 +53,7 @@ func TestProgressSaysTheSchemaAndTheFailingLoops(t *testing.T) {
 	_, err = migrate.RunFiles(ctx, at6.Connect(t, at6.Owner), "dev", files[:6])
 	ok(t, err)
 	behind, behindRaw := progressOf(t, at6.Connect(t, at6.Runtime))
-	if behind.Schema.State != migrate.SchemaBehind || strings.Join(behind.Schema.Missing, ",") != "0007_gate_tasks,0008_attempt_prepare_failed" ||
+	if behind.Schema.State != migrate.SchemaBehind || strings.Join(behind.Schema.Missing, ",") != "0007_gate_tasks,0008_attempt_prepare_failed,0009_issues" ||
 		behind.Alerts == nil || len(behind.Alerts) != 0 {
 		t.Fatalf("a database at 0006: %+v", behind)
 	}
