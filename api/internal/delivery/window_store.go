@@ -43,6 +43,13 @@ func (e *WindowNotHolder) Error() string {
 	return fmt.Sprintf("only the holder can release the window (who=%s)", e.Who)
 }
 
+// WindowChanged is returned when the window changes during a release.
+type WindowChanged struct{}
+
+func (e *WindowChanged) Error() string {
+	return "release window changed; read it again before releasing"
+}
+
 type windowRecord struct {
 	Who       string `json:"who"`
 	What      string `json:"what"`
@@ -190,7 +197,21 @@ func getReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns string, n
 	}
 	rec, ok := parseWindowCM(cm)
 	if !ok || !rec.live(now) {
-		_ = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, metav1.DeleteOptions{})
+		err = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, windowDeleteOptions(cm))
+		if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+			// Read once more without deleting: another caller may now hold the window.
+			cm, err = cs.CoreV1().ConfigMaps(ns).Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return windowRecord{}, false, nil
+			}
+			if err != nil {
+				return windowRecord{}, false, err
+			}
+			rec, ok = parseWindowCM(cm)
+			if ok && rec.live(now) {
+				return rec, true, nil
+			}
+		}
 		return windowRecord{}, false, nil
 	}
 	return rec, true, nil
@@ -208,11 +229,22 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	if ok && rec.live(now) && !force && rec.Who != strings.TrimSpace(who) {
 		return &WindowNotHolder{Who: rec.Who}
 	}
-	err = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, metav1.DeleteOptions{})
+	err = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, windowDeleteOptions(cm))
+	if apierrors.IsConflict(err) {
+		return &WindowChanged{}
+	}
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
 	return err
+}
+
+func windowDeleteOptions(cm *corev1.ConfigMap) metav1.DeleteOptions {
+	preconditions := &metav1.Preconditions{ResourceVersion: &cm.ResourceVersion}
+	if cm.UID != "" {
+		preconditions.UID = &cm.UID
+	}
+	return metav1.DeleteOptions{Preconditions: preconditions}
 }
 
 func parseWindowCM(cm *corev1.ConfigMap) (windowRecord, bool) {

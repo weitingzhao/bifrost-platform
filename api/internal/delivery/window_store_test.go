@@ -2,6 +2,14 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	clienttesting "k8s.io/client-go/testing"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -108,5 +116,107 @@ func TestExpiredWindowIsEmptyAndReplaceable(t *testing.T) {
 	}
 	if _, open, err := getReleaseWindow(context.Background(), cs, "cicd", later); err != nil || open {
 		t.Fatalf("force delete left the window open: open=%v err=%v", open, err)
+	}
+}
+
+// replaceWindowBeforeDelete simulates an update between the read and delete.
+// The fake tracker needs explicit enforcement of delete preconditions.
+func replaceWindowBeforeDelete(t *testing.T, cs *fake.Clientset, replacement windowRecord) {
+	t.Helper()
+	first := true
+	resource := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	cs.PrependReactor("delete", "configmaps", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		deletion := action.(clienttesting.DeleteAction)
+		if deletion.GetName() != releaseWindowConfigMap {
+			return false, nil, nil
+		}
+		obj, err := cs.Tracker().Get(resource, action.GetNamespace(), deletion.GetName())
+		if err != nil {
+			return true, nil, err
+		}
+		cm := obj.(*corev1.ConfigMap).DeepCopy()
+		if first {
+			first = false
+			body, err := json.Marshal(replacement)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cm.Data = map[string]string{releaseWindowDataKey: string(body)}
+			cm.ResourceVersion = "2"
+			if err := cs.Tracker().Update(resource, cm, action.GetNamespace()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		pre := deletion.GetDeleteOptions().Preconditions
+		if pre != nil && ((pre.ResourceVersion != nil && *pre.ResourceVersion != cm.ResourceVersion) || (pre.UID != nil && *pre.UID != cm.UID)) {
+			return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "configmaps"}, cm.Name, nil)
+		}
+		return false, nil, nil
+	})
+}
+
+func TestReleaseWindowConditionalDelete(t *testing.T) {
+	now := time.Date(2026, 10, 9, 15, 0, 0, 0, time.UTC)
+	for _, operation := range []string{"read", "release"} {
+		for _, race := range []bool{false, true} {
+			name := operation + "/no-race"
+			if race {
+				name = operation + "/race"
+			}
+			t.Run(name, func(t *testing.T) {
+				ctx := context.Background()
+				original := windowRecord{Who: "a@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
+				if operation == "read" {
+					original.ExpiresAt = now.Add(-time.Minute).Format(time.RFC3339)
+				}
+				body, err := json.Marshal(original)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cs := fake.NewSimpleClientset(&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd", ResourceVersion: "1", UID: "window-uid"},
+					Data:       map[string]string{releaseWindowDataKey: string(body)},
+				})
+				replacement := windowRecord{Who: "b@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
+				if operation == "read" {
+					replacement.Who = "other@host"
+				}
+				if race {
+					replaceWindowBeforeDelete(t, cs, replacement)
+				}
+				if operation == "read" {
+					rec, live, err := getReleaseWindow(ctx, cs, "cicd", now)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if live != race || (race && rec.Who != replacement.Who) {
+						t.Fatalf("read: live=%v who=%s", live, rec.Who)
+					}
+				} else {
+					err := deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now)
+					if race {
+						if _, ok := err.(*WindowChanged); !ok || !strings.Contains(err.Error(), "changed") {
+							t.Fatalf("expected window changed error, got %v", err)
+						}
+					} else if err != nil {
+						t.Fatal(err)
+					}
+				}
+				cm, err := cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
+				if !race {
+					if !apierrors.IsNotFound(err) {
+						t.Fatalf("expected removed ConfigMap, got %v", err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				rec, ok := parseWindowCM(cm)
+				if !ok || !rec.live(now) || rec.Who != replacement.Who || cm.ResourceVersion != "2" {
+					t.Fatalf("replacement was lost: %+v", cm)
+				}
+			})
+		}
 	}
 }

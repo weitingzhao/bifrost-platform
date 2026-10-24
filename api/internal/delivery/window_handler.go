@@ -84,6 +84,10 @@ func (h *Handler) HandleDeleteReleaseWindow(w http.ResponseWriter, r *http.Reque
 	}
 	err = deleteReleaseWindow(r.Context(), cs, h.svc.PipelinesNamespace(), body.Who, force, time.Now().UTC())
 	if err != nil {
+		if _, ok := err.(*WindowChanged); ok {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
 		if held, ok := err.(*WindowNotHolder); ok {
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error": "only the holder can release the window",
