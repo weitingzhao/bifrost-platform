@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -407,10 +408,31 @@ func (s *Service) TriggerMirrorSync(ctx context.Context) (cluster.ActuationRespo
 	return s.createSupplyChainTaskRun(ctx, "bifrost-gitea-mirror-sync", "mirror-sync", nil)
 }
 
+// refreshRevision is the shape of a branch or tag name the Dockerfile refresh
+// accepts. Task bifrost-refresh-dockerfile-cms runs as tekton-deliver, which
+// may write ConfigMaps in cicd, and pastes the revision into its shell script
+// (git clone --branch "$(params.revision)"): a quote, $(…), ; or a leading -
+// would be a command or an option there (TD-432 review 542 A3). Only letters,
+// digits and . _ / - pass, starting with a letter or digit.
+var refreshRevision = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
+
+// validRefreshRevision refuses a revision the refresh task could not take
+// safely as a branch or tag name.
+func validRefreshRevision(rev string) error {
+	if !refreshRevision.MatchString(rev) || strings.Contains(rev, "..") || strings.HasSuffix(rev, "/") || strings.HasSuffix(rev, ".lock") {
+		return fmt.Errorf("revision %q is not a branch or tag name (letters, digits and . _ / -)", rev)
+	}
+	return nil
+}
+
 func (s *Service) RefreshDockerfileConfigMaps(ctx context.Context, revision string) (cluster.ActuationResponse, SupplyChainTaskRunView, error) {
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
 		rev = "main"
+	}
+	if err := validRefreshRevision(rev); err != nil {
+		return cluster.ActuationResponse{OK: false, Action: "delivery.supply-chain.dockerfile-configmaps",
+			Message: err.Error(), GeneratedAt: time.Now().UTC()}, SupplyChainTaskRunView{}, err
 	}
 	return s.createSupplyChainTaskRun(ctx, "bifrost-refresh-dockerfile-cms", "dockerfile-configmaps", map[string]string{
 		"revision": rev,

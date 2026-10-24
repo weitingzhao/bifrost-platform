@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
@@ -263,5 +265,31 @@ func TestNoGiteaAdminTokenInPlatformCode(t *testing.T) {
 	}
 	if scanned < 50 {
 		t.Fatalf("scanned %d Go files under %s; the walk is not seeing the module", scanned, root)
+	}
+}
+
+// The Dockerfile refresh runs as tekton-deliver and pastes the revision into
+// a shell script, so only plain branch or tag names reach it (review 542 A3).
+func TestRefreshRevisionIsAPlainRefName(t *testing.T) {
+	for _, ok := range []string{"main", "release/v1.2", "v0.24.0", "w31/td432-gitea-reader", "a_b-c.d"} {
+		if err := validRefreshRevision(ok); err != nil {
+			t.Fatalf("%q refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{`x";id;"`, "$(id)", "`id`", "a b", "main;id", "--upload-pack=x", "-x", "../x", "a..b",
+		"main\n", "x/", "x.lock", "a|b", "a&b", "a>b", "", strings.Repeat("a", 129)} {
+		if err := validRefreshRevision(bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	asked := false
+	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) {
+		asked = true
+		return nil, errors.New("no cluster in this test")
+	})
+	resp, _, err := s.RefreshDockerfileConfigMaps(context.Background(), `main";id;"`)
+	if err == nil || resp.OK || !strings.Contains(resp.Message, "not a branch or tag name") || asked {
+		t.Fatalf("refresh with an injected revision: %+v %v (cluster asked: %v)", resp, err, asked)
 	}
 }
