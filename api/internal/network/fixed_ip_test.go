@@ -1,15 +1,19 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network/unifi"
 )
 
@@ -17,6 +21,8 @@ import (
 type fixedIPController struct {
 	t              *testing.T
 	known, current []ClientRecord
+	devices        []ClientRecord
+	failStatus     int
 	writes         int
 	mismatch       string
 	failPath       string
@@ -39,6 +45,9 @@ func (f *fixedIPController) RoundTrip(r *http.Request) (*http.Response, error) {
 		f.t.Fatal("missing session or CSRF")
 	}
 	if f.failPath == path && r.Method == http.MethodGet {
+		if f.failStatus != 0 {
+			rec.WriteHeader(f.failStatus)
+		}
 		_, _ = rec.WriteString(f.failBody)
 		return rec.Result(), nil
 	}
@@ -48,6 +57,8 @@ func (f *fixedIPController) RoundTrip(r *http.Request) (*http.Response, error) {
 		data = f.known
 	case r.Method == http.MethodGet && path == "/stat/sta":
 		data = f.current
+	case r.Method == http.MethodGet && path == "/stat/device":
+		data = f.devices
 	case r.Method == http.MethodPut && path == "/rest/user/client-1":
 		f.writes++
 		if err := json.NewDecoder(r.Body).Decode(&f.lastBody); err != nil {
@@ -79,6 +90,9 @@ func (f *fixedIPController) RoundTrip(r *http.Request) (*http.Response, error) {
 			after.ID = "wrong"
 		}
 		data = []ClientRecord{after}
+		if f.mismatch == "two" {
+			data = append(data, after)
+		}
 		if f.mismatch == "empty" {
 			data = []ClientRecord{}
 		}
@@ -91,7 +105,7 @@ func (f *fixedIPController) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func newFixedIPController(t *testing.T, cfg unifi.Config) (*fixedIPController, ServiceOption) {
 	t.Helper()
-	f := &fixedIPController{t: t, known: []ClientRecord{{ID: "client-1", MAC: "68:1d:ef:5f:29:dd", IP: "192.168.10.41", Name: "old-name"}}, current: []ClientRecord{}}
+	f := &fixedIPController{t: t, known: []ClientRecord{{ID: "client-1", MAC: "68:1d:ef:5f:29:dd", IP: "192.168.10.41", Name: "old-name"}}, current: []ClientRecord{}, devices: []ClientRecord{}}
 	cfg.Host, cfg.Site = "controller.invalid", "default"
 	client := unifi.New(cfg)
 	client.SetHTTPClient(&http.Client{Transport: f})
@@ -135,6 +149,21 @@ func TestFixedIPRefusalsDoNotWrite(t *testing.T) {
 		name, reason string
 		change       func(*FixedIPRequest, *fixedIPController, *unifi.Config)
 	}{
+
+		{"device-conflict", "device", func(r *FixedIPRequest, f *fixedIPController, _ *unifi.Config) { f.devices = []ClientRecord{{IP: r.IP}} }},
+		{"subnet-host-bits", "UNIFI_SERVER_SUBNET", func(_ *FixedIPRequest, _ *fixedIPController, c *unifi.Config) { c.ServerSubnet = "192.168.10.5/24" }},
+		{"subnet-31", "UNIFI_SERVER_SUBNET", func(_ *FixedIPRequest, _ *fixedIPController, c *unifi.Config) { c.ServerSubnet = "192.168.10.0/31" }},
+		{"gateway-broadcast", "UNIFI_SERVER_GATEWAY", func(_ *FixedIPRequest, _ *fixedIPController, c *unifi.Config) { c.ServerGateway = "192.168.10.255" }},
+		{"custom-network", "network or broadcast", func(r *FixedIPRequest, _ *fixedIPController, c *unifi.Config) {
+			c.ServerSubnet = "10.20.30.0/23"
+			c.ServerGateway = "10.20.30.1"
+			r.IP = "10.20.30.0"
+		}},
+		{"custom-broadcast", "network or broadcast", func(r *FixedIPRequest, _ *fixedIPController, c *unifi.Config) {
+			c.ServerSubnet = "10.20.30.0/23"
+			c.ServerGateway = "10.20.30.1"
+			r.IP = "10.20.31.255"
+		}},
 		{"mac", "48-bit", func(r *FixedIPRequest, _ *fixedIPController, _ *unifi.Config) { r.MAC = "nope" }},
 		{"eui64", "48-bit", func(r *FixedIPRequest, _ *fixedIPController, _ *unifi.Config) { r.MAC = "00:11:22:33:44:55:66:77" }},
 		{"missing", "not found", func(r *FixedIPRequest, _ *fixedIPController, _ *unifi.Config) { r.MAC = "00:11:22:33:44:55" }},
@@ -191,7 +220,7 @@ func TestFixedIPCustomSubnet(t *testing.T) {
 }
 
 func TestFixedIPReadbackMismatch(t *testing.T) {
-	for _, field := range []string{"ip", "name", "flag", "mac", "id", "empty"} {
+	for _, field := range []string{"ip", "name", "flag", "mac", "id", "empty", "two"} {
 		t.Run(field, func(t *testing.T) {
 			f, opt := newFixedIPController(t, unifi.Config{})
 			f.mismatch = field
@@ -204,7 +233,7 @@ func TestFixedIPReadbackMismatch(t *testing.T) {
 }
 
 func TestFixedIPControllerErrors(t *testing.T) {
-	for _, path := range []string{"/rest/user", "/stat/sta", "/rest/user/client-1", "write"} {
+	for _, path := range []string{"/rest/user", "/stat/sta", "/stat/device", "/rest/user/client-1", "write"} {
 		for _, body := range []string{`{"meta":{"rc":"error","msg":"required"}}`, `{"meta":{"rc":"ok"}}`, `not-json`} {
 			if path == "write" && body == `{"meta":{"rc":"ok"}}` {
 				continue
@@ -223,7 +252,11 @@ func TestFixedIPControllerErrors(t *testing.T) {
 				if path == "/rest/user/client-1" || path == "write" {
 					wantWrites = 1
 				}
-				if rec.Code != 502 || f.writes != wantWrites {
+				wantStatus := 502
+				if wantWrites > 0 {
+					wantStatus = 504
+				}
+				if rec.Code != wantStatus || f.writes != wantWrites {
 					t.Fatalf("status=%d writes=%d body=%s", rec.Code, f.writes, rec.Body.String())
 				}
 			})
@@ -248,5 +281,105 @@ func TestFixedIPMatchingValuesWithFlagOffStillWrites(t *testing.T) {
 	out, err := NewService(opt).SetClientFixedIP(context.Background(), req)
 	if err != nil || f.writes != 1 || out["no_op"] != false {
 		t.Fatalf("out=%v err=%v writes=%d", out, err, f.writes)
+	}
+}
+
+func TestFixedIPReservedTargetsFromEnv(t *testing.T) {
+	t.Setenv("UNIFI_USER", "fake")
+	t.Setenv("UNIFI_PASS", "fake")
+	t.Setenv("UNIFI_SERVER_SUBNET", "192.168.10.0/24")
+	t.Setenv("UNIFI_SERVER_GATEWAY", "192.168.10.1")
+	for _, list := range []string{"192.168.10.80", " 192.168.10.100, 192.168.10.80 ", "not-an-ip", "::1"} {
+		t.Run(list, func(t *testing.T) {
+			t.Setenv("UNIFI_RESERVED_IPS", list)
+			cfg, err := unifi.ConfigFromEnv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, opt := newFixedIPController(t, cfg)
+			_, err = NewService(opt).SetClientFixedIP(context.Background(), fixedIPRequest())
+			if err == nil || !strings.Contains(err.Error(), "reserved") || f.writes != 0 {
+				t.Fatalf("err=%v writes=%d", err, f.writes)
+			}
+		})
+	}
+	t.Setenv("UNIFI_RESERVED_IPS", "192.168.10.100, 192.168.10.101")
+	cfg, _ := unifi.ConfigFromEnv()
+	f, opt := newFixedIPController(t, cfg)
+	_, err := NewService(opt).SetClientFixedIP(context.Background(), fixedIPRequest())
+	if err != nil || f.writes != 1 {
+		t.Fatalf("unreserved host: err=%v writes=%d", err, f.writes)
+	}
+}
+
+func TestFixedIPBoundarySuccess(t *testing.T) {
+	for _, mode := range []string{"name-63", "own-uppercase-mac"} {
+		t.Run(mode, func(t *testing.T) {
+			f, opt := newFixedIPController(t, unifi.Config{})
+			req := fixedIPRequest()
+			if mode == "name-63" {
+				req.Name = strings.Repeat("a", 63)
+			} else {
+				f.current = []ClientRecord{{MAC: strings.ToUpper(req.MAC), IP: req.IP}}
+			}
+			_, err := NewService(opt).SetClientFixedIP(context.Background(), req)
+			if err != nil || f.writes != 1 {
+				t.Fatalf("err=%v writes=%d", err, f.writes)
+			}
+		})
+	}
+}
+
+func TestFixedIPErrorsDoNotExposeControllerBody(t *testing.T) {
+	const private = "controller-private-response-marker"
+	for _, mode := range []string{"read", "prewrite", "readback"} {
+		t.Run(mode, func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+			f, opt := newFixedIPController(t, unifi.Config{})
+			f.failPath, f.failBody, f.failStatus = "/rest/user", private, 500
+			wantStatus, wantWrites := 502, 0
+			if mode == "readback" {
+				f.failPath = "/rest/user/client-1"
+				wantStatus, wantWrites = 504, 1
+			}
+			audit := actuation.NewAuditLog(filepath.Join(t.TempDir(), "audit.json"))
+			h := NewHandler(audit, opt)
+			w := httptest.NewRecorder()
+			if mode == "read" {
+				router := chi.NewRouter()
+				router.Get("/api/v1/network/clients/{mac}", h.HandleClientByMAC)
+				router.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/network/clients/"+fixedIPRequest().MAC, nil))
+			} else {
+				body, _ := json.Marshal(fixedIPRequest())
+				h.HandleClientFixedIP(w, httptest.NewRequest("POST", "/", bytes.NewReader(body)))
+			}
+			var response struct {
+				Error string `json:"error"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &response)
+			if w.Code != wantStatus || f.writes != wantWrites || strings.Contains(w.Body.String(), private) {
+				t.Errorf("status=%d writes=%d body=%s", w.Code, f.writes, w.Body)
+			}
+			if mode != "readback" && response.Error != "UniFi read failed" {
+				t.Errorf("error=%q", response.Error)
+			}
+			out := httptest.NewRecorder()
+			audit.HandleList(out, httptest.NewRequest("GET", "/", nil))
+			if strings.Contains(out.Body.String(), private) {
+				t.Errorf("audit leaked: %s", out.Body)
+			}
+			if mode == "prewrite" && !strings.Contains(out.Body.String(), "UniFi read failed") {
+				t.Errorf("audit missing safe detail: %s", out.Body)
+			}
+			if mode == "readback" && !strings.Contains(out.Body.String(), `"status":"unknown"`) {
+				t.Errorf("audit missing unknown: %s", out.Body)
+			}
+			if !strings.Contains(logs.String(), private) {
+				t.Error("controller detail missing from server log")
+			}
+		})
 	}
 }

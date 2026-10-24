@@ -3,9 +3,12 @@ package unifi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -87,3 +90,70 @@ func TestFixedIPConfigFromEnv(t *testing.T) {
 		t.Fatalf("overrides not loaded: %v", err)
 	}
 }
+
+// Assert the request boundary as well as uncertainty: login, encoding and an
+// already-cancelled context cannot have sent a PUT and keep their old errors.
+func TestLegacyPutUncertaintyBoundary(t *testing.T) {
+	for _, mode := range []string{"login", "encode", "cancelled", "transport", "timeout", "5xx", "body", "4xx"} {
+		t.Run(mode, func(t *testing.T) {
+			puts := 0
+			c := New(Config{Host: "controller.invalid", Site: "default"})
+			c.SetHTTPClient(&http.Client{Transport: memoryTransport(func(r *http.Request) (*http.Response, error) {
+				w := httptest.NewRecorder()
+				if r.URL.Path == "/api/auth/login" {
+					if mode == "login" {
+						w.WriteHeader(500)
+					} else {
+						w.Header().Set("Set-Cookie", "TOKEN=fake")
+					}
+					_, _ = w.WriteString(`{}`)
+					return w.Result(), nil
+				}
+				puts++
+				switch mode {
+				case "transport":
+					return nil, errors.New("lost response")
+				case "timeout":
+					return nil, context.DeadlineExceeded
+				case "5xx":
+					w.WriteHeader(503)
+					_, _ = w.WriteString("previous HTTP 401")
+				case "4xx":
+					w.WriteHeader(400)
+				case "body":
+					return &http.Response{StatusCode: 200, Header: http.Header{}, Body: failingPutBody{}}, nil
+				default:
+					t.Fatalf("unexpected PUT in %s", mode)
+				}
+				return w.Result(), nil
+			})})
+			ctx := context.Background()
+			var body any = map[string]any{"name": "host"}
+			if mode == "encode" {
+				body = make(chan int)
+			}
+			if mode == "cancelled" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			_, err := c.LegacyPut(ctx, "/rest/user/id", body)
+			uncertain := mode == "transport" || mode == "timeout" || mode == "5xx" || mode == "body"
+			wantPuts := 0
+			if uncertain || mode == "4xx" {
+				wantPuts = 1
+			}
+			if err == nil || errors.Is(err, ErrWriteUncertain) != uncertain || puts != wantPuts {
+				t.Fatalf("err=%v puts=%d wantUncertain=%v wantPuts=%d", err, puts, uncertain, wantPuts)
+			}
+			if mode == "5xx" && !strings.Contains(err.Error(), "HTTP 503") {
+				t.Fatalf("lost detail: %v", err)
+			}
+		})
+	}
+}
+
+type failingPutBody struct{}
+
+func (failingPutBody) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (failingPutBody) Close() error             { return nil }

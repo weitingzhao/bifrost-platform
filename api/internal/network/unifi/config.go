@@ -17,6 +17,7 @@ type Config struct {
 	Site          string
 	ServerSubnet  string
 	ServerGateway string
+	ReservedIPs   string
 }
 
 const (
@@ -26,7 +27,7 @@ const (
 	DefaultServerGateway = "192.168.10.1"
 )
 
-// ConfigFromEnv reads credentials, site and the server subnet/gateway from UNIFI_* variables.
+// ConfigFromEnv reads credentials, site and the server subnet/gateway and optional reserved IP list from UNIFI_* variables.
 func ConfigFromEnv() (Config, error) {
 	cfg := Config{
 		Host:          envOrDefault("UNIFI_HOST", defaultHost),
@@ -36,6 +37,7 @@ func ConfigFromEnv() (Config, error) {
 		Site:          envOrDefault("UNIFI_SITE", defaultSite),
 		ServerSubnet:  envOrDefault("UNIFI_SERVER_SUBNET", DefaultServerSubnet),
 		ServerGateway: envOrDefault("UNIFI_SERVER_GATEWAY", DefaultServerGateway),
+		ReservedIPs:   os.Getenv("UNIFI_RESERVED_IPS"),
 	}
 	if cfg.User == "" || cfg.Pass == "" {
 		return Config{}, ErrNotConfigured

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -96,6 +97,12 @@ func TestFixedIPWriteMatchesFirewallApprovalBoundary(t *testing.T) {
 // in-memory controller. In particular, malformed direct bodies must not escape
 // the guard via its missing-parameter validation path.
 func TestFixedIPApprovalEndToEnd(t *testing.T) {
+	for _, outcome := range []string{"success", "transport", "timeout", "write-5xx", "readback"} {
+		t.Run(outcome, func(t *testing.T) { fixedIPApprovalEndToEnd(t, outcome) })
+	}
+}
+
+func fixedIPApprovalEndToEnd(t *testing.T, outcome string) {
 	cfg := newTestConfig(t)
 	t.Setenv("PLATFORM_ROLE", "api")
 	t.Setenv("APPROVAL_NOTIFY_URL", "")
@@ -132,9 +139,24 @@ func TestFixedIPApprovalEndToEnd(t *testing.T) {
 			for k, v := range body {
 				record[k] = v
 			}
+			switch outcome {
+			case "transport":
+				return nil, errors.New("connection lost after applying PUT")
+			case "timeout":
+				return nil, context.DeadlineExceeded
+			case "write-5xx":
+				w.WriteHeader(503)
+				_, _ = w.WriteString("controller-private-response")
+				return w.Result(), nil
+			}
 		case r.Method == "GET" && (path == "/rest/user" || path == "/rest/user/client-1"):
 			reads++
-		case r.Method == "GET" && path == "/stat/sta":
+			if outcome == "readback" && path == "/rest/user/client-1" {
+				w.WriteHeader(500)
+				_, _ = w.WriteString("controller-private-response")
+				return w.Result(), nil
+			}
+		case r.Method == "GET" && (path == "/stat/sta" || path == "/stat/device"):
 			reads++
 			data = []any{}
 		default:
@@ -209,12 +231,22 @@ func TestFixedIPApprovalEndToEnd(t *testing.T) {
 		}
 	}
 	approved := call("POST", approvePath, approveBody("console", approval.Hash), "fake-admin")
-	if approved.Code != 200 || !strings.Contains(approved.Body.String(), `"status":"executed"`) || writes != 1 {
+	wantStatus := "executed"
+	if outcome != "success" {
+		wantStatus = "unknown"
+	}
+	if approved.Code != 200 || !strings.Contains(approved.Body.String(), `"status":"`+wantStatus+`"`) || writes != 1 {
 		t.Fatalf("approved=%d writes=%d %s", approved.Code, writes, approved.Body.String())
 	}
-	for _, field := range []string{`"before"`, `"after"`, `"no_op":false`} {
-		if !strings.Contains(approved.Body.String(), field) {
-			t.Fatalf("missing %s: %s", field, approved.Body.String())
+	stored := call("GET", "/api/v1/approvals/"+created.ID, "", "fake-viewer")
+	if !strings.Contains(stored.Body.String(), `"status":"`+wantStatus+`"`) || strings.Contains(stored.Body.String(), "controller-private-response") {
+		t.Fatalf("stored approval=%s", stored.Body)
+	}
+	if outcome == "success" {
+		for _, field := range []string{`"before"`, `"after"`, `"no_op":false`} {
+			if !strings.Contains(approved.Body.String(), field) {
+				t.Fatalf("missing %s: %s", field, approved.Body.String())
+			}
 		}
 	}
 	again := call("POST", approvePath, approveBody("console", approval.Hash), "fake-admin")
@@ -232,7 +264,7 @@ func TestFixedIPApprovalEndToEnd(t *testing.T) {
 }
 
 func TestFixedIPPostWriteErrorsAreNotRequeued(t *testing.T) {
-	for _, failAt := range []string{"write", "readback", "mismatch"} {
+	for _, failAt := range []string{"write", "transport", "timeout", "readback", "mismatch"} {
 		t.Run(failAt, func(t *testing.T) {
 			writes := 0
 			client := unifi.New(unifi.Config{Host: "controller.invalid", Site: "default"})
@@ -245,11 +277,17 @@ func TestFixedIPPostWriteErrorsAreNotRequeued(t *testing.T) {
 				}
 				if r.Method == "PUT" {
 					writes++
+					if failAt == "transport" {
+						return nil, errors.New("connection lost after PUT")
+					}
+					if failAt == "timeout" {
+						return nil, context.DeadlineExceeded
+					}
 				}
 				if (failAt == "write" && r.Method == "PUT") || (failAt == "readback" && writes > 0 && r.Method == "GET") {
 					w.WriteHeader(http.StatusServiceUnavailable)
 					_, _ = w.WriteString(`{"error":"UNIFI_USER required"}`)
-				} else if strings.HasSuffix(r.URL.Path, "/stat/sta") {
+				} else if strings.HasSuffix(r.URL.Path, "/stat/sta") || strings.HasSuffix(r.URL.Path, "/stat/device") {
 					_, _ = w.WriteString(`{"meta":{"rc":"ok"},"data":[]}`)
 				} else {
 					_, _ = w.WriteString(`{"meta":{"rc":"ok"},"data":[{"_id":"client-1","mac":"68:1d:ef:5f:29:dd","name":"old"}]}`)
@@ -260,7 +298,7 @@ func TestFixedIPPostWriteErrorsAreNotRequeued(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.HandleClientFixedIP(w, httptest.NewRequest("POST", "/", strings.NewReader(`{"mac":"68:1d:ef:5f:29:dd","ip":"192.168.10.80","name":"ubt-k3s-07"}`)))
 			_, err := interpretAction(w.Code, w.Body.Bytes())
-			if w.Code != 502 || err == nil || actions.IsTransient(err) || writes != 1 {
+			if w.Code != 504 || !actions.IsUncertain(err) || actions.IsTransient(err) || writes != 1 {
 				t.Fatalf("status=%d err=%v writes=%d", w.Code, err, writes)
 			}
 		})

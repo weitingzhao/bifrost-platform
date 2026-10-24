@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"regexp"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/network/unifi"
 )
@@ -72,6 +73,17 @@ func validateFixedIP(req FixedIPRequest, cfg unifi.Config) error {
 	}
 	if ip == gateway {
 		return fmt.Errorf("%w: ip is the server gateway", ErrFixedIPRefused)
+	}
+	if strings.TrimSpace(cfg.ReservedIPs) != "" {
+		for _, value := range strings.Split(cfg.ReservedIPs, ",") {
+			reserved, err := netip.ParseAddr(strings.TrimSpace(value))
+			if err != nil || !reserved.Is4() {
+				return fmt.Errorf("%w: reserved IP list UNIFI_RESERVED_IPS must contain IPv4 addresses", ErrFixedIPRefused)
+			}
+			if ip == reserved {
+				return fmt.Errorf("%w: ip is reserved by UNIFI_RESERVED_IPS", ErrFixedIPRefused)
+			}
+		}
 	}
 	return nil
 }
@@ -193,6 +205,15 @@ func (s *Service) SetClientFixedIP(ctx context.Context, req FixedIPRequest) (map
 			return nil, fmt.Errorf("%w: ip %s is held by another known client (%s)", ErrFixedIPRefused, req.IP, record.MAC)
 		}
 	}
+	devices, err := readClientRecords(ctx, client, "/stat/device")
+	if err != nil {
+		return nil, err
+	}
+	for _, device := range devices {
+		if device.IP == req.IP {
+			return nil, fmt.Errorf("%w: ip %s is held by a UniFi device", ErrFixedIPRefused, req.IP)
+		}
+	}
 	result := map[string]any{"before": before, "no_op": false}
 	if before.UseFixedIP && before.FixedIP == req.IP && before.Name == req.Name {
 		result["after"], result["no_op"] = before, true
@@ -202,23 +223,25 @@ func (s *Service) SetClientFixedIP(ctx context.Context, req FixedIPRequest) (map
 	// Only these three fields may leave the platform in a write.
 	raw, err := client.LegacyPut(ctx, path, map[string]any{"use_fixedip": true, "fixed_ip": req.IP, "name": req.Name})
 	if err == nil {
-		err = checkLegacyResponse(raw)
+		if responseErr := checkLegacyResponse(raw); responseErr != nil {
+			err = fmt.Errorf("%w: %v", unifi.ErrWriteUncertain, responseErr)
+		}
 	}
 	if err != nil {
-		return result, fmt.Errorf("fixed IP write failed; controller state may have changed: %v", err)
+		return result, fmt.Errorf("fixed IP write failed: %w", err)
 	}
 	records, err := readClientRecords(ctx, client, path)
 	if err != nil {
-		return result, fmt.Errorf("fixed IP readback failed after write: %v", err)
+		return result, fmt.Errorf("%w: fixed IP readback failed after write: %v", unifi.ErrWriteUncertain, err)
 	}
 	if len(records) != 1 {
-		return result, errors.New("fixed IP readback mismatch: expected exactly one record")
+		return result, fmt.Errorf("%w: fixed IP readback mismatch: expected exactly one record", unifi.ErrWriteUncertain)
 	}
 	after := records[0]
 	result["after"] = after
 	afterMAC, _ := normalizedMAC(after.MAC)
 	if after.ID != before.ID || afterMAC != mac || !after.UseFixedIP || after.FixedIP != req.IP || after.Name != req.Name {
-		return result, errors.New("fixed IP readback mismatch: saved record does not match the approved request")
+		return result, fmt.Errorf("%w: fixed IP readback mismatch: saved record does not match the approved request", unifi.ErrWriteUncertain)
 	}
 	return result, nil
 }

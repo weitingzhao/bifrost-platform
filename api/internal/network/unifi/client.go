@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,9 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrWriteUncertain means a dispatched PUT may have changed controller state.
+var ErrWriteUncertain = errors.New("UniFi write outcome unknown")
 
 const defaultTimeout = 45 * time.Second
 
@@ -206,7 +210,7 @@ func (c *Client) doAuthed(ctx context.Context, method, path string, body any) (j
 	if err == nil {
 		return raw, nil
 	}
-	if !isUnauthorized(err) {
+	if errors.Is(err, ErrWriteUncertain) || !isUnauthorized(err) {
 		return nil, err
 	}
 	c.InvalidateSession()
@@ -253,8 +257,15 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 		}
 	}
 
+	// A cancelled context before dispatch proves this request has not written.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		if method == http.MethodPut {
+			return nil, fmt.Errorf("%w: %v", ErrWriteUncertain, err)
+		}
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -277,10 +288,17 @@ func (c *Client) do(ctx context.Context, method, path string, body any, opts req
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if method == http.MethodPut {
+			return nil, fmt.Errorf("%w: %v", ErrWriteUncertain, err)
+		}
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("%s %s -> HTTP %d: %s", method, path, resp.StatusCode, truncate(string(raw), 900))
+		err := fmt.Errorf("%s %s -> HTTP %d: %s", method, path, resp.StatusCode, truncate(string(raw), 900))
+		if method == http.MethodPut && resp.StatusCode >= 500 {
+			return nil, fmt.Errorf("%w: %v", ErrWriteUncertain, err)
+		}
+		return nil, err
 	}
 	if len(raw) == 0 {
 		return json.RawMessage("{}"), nil

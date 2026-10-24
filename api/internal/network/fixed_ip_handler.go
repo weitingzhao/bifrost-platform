@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -50,7 +51,11 @@ func (h *Handler) HandleClientFixedIP(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.SetClientFixedIP(r.Context(), req)
 	status, detail := "ok", "fixed IP and name verified"
 	if err != nil {
-		status, detail = "failed", err.Error()
+		_, detail = fixedIPErrorResponse(err)
+		status = "failed"
+		if errors.Is(err, unifi.ErrWriteUncertain) {
+			status = "unknown"
+		}
 	} else if result["no_op"] == true {
 		detail = "no-op: fixed IP and name already match"
 	}
@@ -65,14 +70,23 @@ func (h *Handler) HandleClientFixedIP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) writeFixedIPError(w http.ResponseWriter, err error, result map[string]any) {
-	status := http.StatusBadGateway
+	status, detail := fixedIPErrorResponse(err)
+	slog.Error("UniFi client operation failed", "error", err)
+	writeJSON(w, status, map[string]any{"error": detail, "result": result})
+}
+
+// Only locally generated validation errors are safe for callers and audit storage.
+func fixedIPErrorResponse(err error) (int, string) {
+	status, detail := http.StatusBadGateway, "UniFi read failed"
 	switch {
+	case errors.Is(err, unifi.ErrWriteUncertain):
+		status, detail = http.StatusGatewayTimeout, "UniFi write outcome unknown; verify client settings before retrying"
 	case errors.Is(err, ErrFixedIPRefused):
-		status = http.StatusBadRequest
+		status, detail = http.StatusBadRequest, err.Error()
 	case errors.Is(err, ErrClientNotFound):
-		status = http.StatusNotFound
+		status, detail = http.StatusNotFound, err.Error()
 	case errors.Is(err, unifi.ErrNotConfigured):
-		status = http.StatusServiceUnavailable
+		status, detail = http.StatusServiceUnavailable, unifi.ErrNotConfigured.Error()
 	}
-	writeJSON(w, status, map[string]any{"error": err.Error(), "result": result})
+	return status, detail
 }
