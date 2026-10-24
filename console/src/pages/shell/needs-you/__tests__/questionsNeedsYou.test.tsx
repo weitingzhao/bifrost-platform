@@ -14,6 +14,7 @@ import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
+import planProd from '@/api/__fixtures__/agentrt-plan-r2.prod.json'
 
 const CONTRACT = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -304,6 +305,15 @@ describe('Needs you questions', () => {
     // The same list, not drawn again (review 502 C1).
     expect(screen.getByRole('region', { name: 'Answer' }).querySelector('[data-answer-group]')).toBe(list)
     expect(list!.getAttribute('data-paints')).toBe(paints)
+  })
+
+  it('counts in the Sign off group only the steps whose work has started, as the plan\'s block does (TD-425)', async () => {
+    // PROD's round 2 of 2026-10-21: ten steps have an unsigned owner_signoff, three of them planned (not started).
+    stub(() => json({ questions: [] }), undefined, async () => json(planProd.plan))
+    render(wrapper(<NeedsYouPage />))
+    const group = await screen.findByRole('region', { name: 'Sign off' }, { timeout: 5000 })
+    expect(await within(group).findByText('Sign off · 7', undefined, { timeout: 5000 })).toBeTruthy()
+    expect(within(group).getByRole('link', { name: '7 steps wait for your sign-off ›' }).getAttribute('href')).toBe('#work?section=signoff')
   })
 
   it('does not repaint the Answer group when another read lands after it without changing its questions', async () => {

@@ -236,9 +236,9 @@ describe('the plan pane on Progress', () => {
     source.artifact = 'fail'
     show(<PlatformAuthProvider><AgentsPlan /></PlatformAuthProvider>)
     expect(await screen.findByText(/^The ledger lines could not be read: /)).toBeInTheDocument()
-    // In the block at the top and under each step of the plan.
+    // In the block at the top and under each step of the plan; 2.3-2 is planned, so the block does not count it (TD-425).
     for (const name of ['Sign off a', 'Sign off b', 'Sign off']) expect(screen.getAllByRole('button', { name }).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Waiting for your sign-off · 2' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Waiting for your sign-off · 1' })).toBeInTheDocument()
     expect(screen.getByText(/^Signed off exam-2\.4-1 by the Owner, /)).toBeInTheDocument()
     expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
   })

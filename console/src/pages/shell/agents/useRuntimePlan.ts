@@ -2,7 +2,7 @@ import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query
 import { useCallback, useMemo } from 'react'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
-import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRuntimePlan, planRounds, runtimeArch, runtimeRound, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRuntimePlan, planRounds, runtimeArch, runtimeRound, signoffNotStarted, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 import { record } from '@/api/agentRuntime'
 
@@ -170,11 +170,14 @@ function useRoundPlans(enabled: boolean): RoundPlans {
 
 /**
  * The steps waiting on the Owner's sign-off (the Owner 2026-10-21), from the same GET /plan?root= read the plan panes
- * make; read is 'ok' with them by number, or the read is not done yet or failed and nothing is listed.
+ * make; read is 'ok' with them by number, or the read is not done yet or failed and nothing is listed. Every count of
+ * them uses waits; notStarted are the steps with a sign-off rule whose work has not started, kept apart and never
+ * counted (TD-425).
  */
-export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[] } | { read: 'loading' | 'error' }
+export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[] } | { read: 'loading' | 'error' }
 export function useSignoffWaits(enabled = true): SignoffWaitsRead {
   const plans = useRoundPlans(enabled)
   // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
-  return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)) }), [plans])
+  return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans
+    : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)) }), [plans])
 }

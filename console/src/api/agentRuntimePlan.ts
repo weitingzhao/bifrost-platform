@@ -357,10 +357,30 @@ export const byStepNumber = (a: string, b: string): number => a.localeCompare(b,
 export type SignoffWait = { node: string; label: string; title: string; state: string; refs: string[]; named: boolean }
 
 /**
- * The steps of a GET /plan?root= answer waiting on the Owner's sign-off, by number: a done rule with an owner_signoff
- * ref not signed yet, on a step that can still move (not done, stopped or dropped; the platform refuses those).
+ * A step no work on has started: the runtime moves a planned step to active once a task on it is leased
+ * (store/planactivate.go). A sign-off rule may be set on one ahead of the work (TD-425).
+ */
+const NOT_STARTED = 'planned'
+
+/**
+ * The steps waiting on the Owner's sign-off, by number: an unsigned owner_signoff on a step whose work has started.
+ * A step not started is not one (the Owner 2026-10-23: rules set ahead of the work put five unstarted steps on For
+ * you; TD-425); signoffNotStarted lists those.
  */
 export function signoffWaits(doc: unknown): SignoffWait[] {
+  return unsignedSteps(doc).filter(w => w.state !== NOT_STARTED)
+}
+
+/** The steps whose done rule waits on an unsigned owner_signoff but whose work has not started, by number (TD-425). */
+export function signoffNotStarted(doc: unknown): SignoffWait[] {
+  return unsignedSteps(doc).filter(w => w.state === NOT_STARTED)
+}
+
+/**
+ * The steps of a GET /plan?root= answer whose done rule has an owner_signoff ref not signed yet, by number, on a step
+ * that can still move (not done, stopped or dropped; the platform refuses those).
+ */
+function unsignedSteps(doc: unknown): SignoffWait[] {
   const by = signoffsByStep(doc)
   const out: SignoffWait[] = []
   for (const node of records(record(doc).nodes)) {

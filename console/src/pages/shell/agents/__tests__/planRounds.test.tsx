@@ -117,10 +117,12 @@ describe('the steps waiting on the Owner\'s sign-off, from every round', () => {
   it('lists round 2\'s and round 3\'s, round by round, each by number', async () => {
     show(<SignoffWaiting />)
     const block = await screen.findByRole('region', { name: 'Waiting for your sign-off' })
-    await waitFor(() => expect(within(block).getByRole('heading', { name: 'Waiting for your sign-off · 20' })).toBeInTheDocument())
-    const text = block.textContent ?? ''
-    expect(text.indexOf('2.2-28')).toBeGreaterThanOrEqual(0)
-    expect(text.indexOf('3.2-28')).toBeGreaterThan(text.lastIndexOf('2.5-4'))
+    // Seven started steps wait in each round; the three planned ones of each are under Not started, not counted (TD-425).
+    await waitFor(() => expect(within(block).getByRole('heading', { name: 'Waiting for your sign-off · 14' })).toBeInTheDocument())
+    const badges = (rows: string) => [...block.querySelectorAll(`${rows} [data-step-badge]`)].map(b => b.textContent)
+    const waiting = ['2.2-28', '2.3-2', '2.3-3', '2.3-4', '2.4-1', '2.4-2', '2.5-1']
+    expect(badges('[data-signoff-wait]')).toEqual([...waiting, ...waiting.map(l => l.replace(/^2/, '3'))])
+    expect(badges('[data-signoff-not-started]')).toEqual(['2.5-2', '2.5-3', '2.5-4', '3.5-2', '3.5-3', '3.5-4'])
     expect(planReads().some(u => u.includes('root=R2'))).toBe(true)
     expect(planReads().some(u => u.includes('root=R3'))).toBe(true)
   })
@@ -128,7 +130,7 @@ describe('the steps waiting on the Owner\'s sign-off, from every round', () => {
   it('lists round 2\'s alone while it is the only round', async () => {
     rounds = [r2]
     show(<SignoffWaiting />)
-    expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 10' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 7' })).toBeInTheDocument()
   })
 
   it('a round whose plan cannot be read makes the list a failed read, not a shorter list', async () => {
