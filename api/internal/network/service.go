@@ -50,6 +50,7 @@ type Service struct {
 
 	// Cached UniFi session — reuse cookie across /api/v1/network/* calls to avoid
 	// UniFi OS login rate limits (AUTHENTICATION_FAILED_LIMIT_REACHED / HTTP 429).
+	fixedIPMu sync.Mutex // Serialize reservation validation, write and readback in this service.
 	sessionMu sync.Mutex
 	client    *unifi.Client
 	tracker   *probeTracker

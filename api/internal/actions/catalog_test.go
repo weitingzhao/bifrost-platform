@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -136,7 +137,7 @@ func TestCatalogIDsUniqueAndLeveled(t *testing.T) {
 		"drain_node", "poweroff_compute_node", "wake_compute_node",
 		"trigger_cnpg_backup", "repair_cnpg_wal_store", "trigger_data_clone", "market_data_heal",
 		"ib_reconnect", "ib_mode", "ib_maintenance", "ib_self_heal",
-		"unifi_firewall_apply",
+		"unifi_firewall_apply", "unifi_client_fixed_ip",
 		"sweep_failed_backups", "ensure_metrics_server", "ensure_kube_prometheus_stack",
 		"sync_kubeconfig", "ensure_kubeconfig_secret", "update_data_clone_schedule",
 		"market_data_delete",
@@ -144,5 +145,31 @@ func TestCatalogIDsUniqueAndLeveled(t *testing.T) {
 		if !seen[id] {
 			t.Fatalf("catalog missing %s", id)
 		}
+	}
+}
+
+func TestUniFiFixedIPCatalogAndCard(t *testing.T) {
+	a, ok := ByID("unifi_client_fixed_ip")
+	if !ok || a.Tier != TierD || a.Method != "POST" || a.Pattern != "/api/v1/network/clients/fixed-ip" || len(a.Params) != 3 {
+		t.Fatalf("action=%+v", a)
+	}
+	params := map[string]any{"mac": "68:1d:ef:5f:29:dd", "ip": "192.168.10.80", "name": "ubt-k3s-07"}
+	for _, p := range a.Params {
+		if p.Type != "string" || !p.Required || p.In != "body" {
+			t.Fatalf("param=%+v", p)
+		}
+		missing := map[string]any{}
+		for k, v := range params {
+			if k != p.Name {
+				missing[k] = v
+			}
+		}
+		if a.Missing(missing) != p.Name {
+			t.Fatalf("missing %s accepted", p.Name)
+		}
+	}
+	d := a.Describe(context.Background(), params, "reserve new node")
+	if d.Env != "network" || len(d.KeyParams) != 3 || d.Summary != "Set UniFi client 68:1d:ef:5f:29:dd to fixed IP 192.168.10.80 and name ubt-k3s-07" {
+		t.Fatalf("card=%+v", d)
 	}
 }

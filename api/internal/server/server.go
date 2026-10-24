@@ -427,6 +427,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/network/audit", s.network.HandleAudit)
 		r.Get("/network/devices", s.network.HandleDevices)
 		r.Get("/network/clients", s.network.HandleClients)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/network/clients/{mac}", s.network.HandleClientByMAC)
 		r.Get("/network/health", s.network.HandleHealth)
 		r.Get("/network/bandwidth", s.network.HandleBandwidth)
 		r.Get("/network/anomalies", s.network.HandleAnomalies)
@@ -525,6 +526,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/mirrors/sync", s.guard("sync_mirrors", s.delivery.HandleSyncMirrors))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
+			r.Post("/network/clients/fixed-ip", s.guard("unifi_client_fixed_ip", s.network.HandleClientFixedIP))
 			r.Post("/network/firewall/apply", s.guard("unifi_firewall_apply", s.network.HandleFirewallApply))
 			r.Post("/plugins/ib-gateway/control/{action}", s.guardIB(s.ibgateway.HandleControl))
 			// Ingest enqueue (and other Plugin API writes) — operator auth.

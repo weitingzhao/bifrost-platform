@@ -56,6 +56,7 @@ var notifySafeKeys = map[string][]string{
 	"ib_maintenance":             {"account_id", "enabled"},
 	"ib_self_heal":               {"enabled"},
 	"unifi_firewall_apply":       {"include_default_deny"},
+	"unifi_client_fixed_ip":      {"mac", "ip", "name"},
 	"ensure_kubeconfig_secret":   {"namespaces", "sync_first"},
 	"update_data_clone_schedule": {"enabled", "interval", "source", "targets", "mode"},
 	"market_data_delete":         {"path"},
@@ -137,6 +138,8 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = "ib-gateway", "Switch IB gateway mode to "+p("mode")
 	case "ib_maintenance":
 		d.Env, d.Summary = "ib-gateway", "Set IB gateway maintenance"
+	case "unifi_client_fixed_ip":
+		d.Env, d.Summary = "network", fmt.Sprintf("Set UniFi client %s to fixed IP %s and name %s", p("mac"), p("ip"), p("name"))
 	case "unifi_firewall_apply":
 		d.Env, d.Summary = "network", "Apply the UniFi firewall policy"
 	case "ensure_metrics_server":

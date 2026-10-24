@@ -26,7 +26,7 @@ import (
 //  3. the old roles: each reaches what it reached on the base commit
 //     (testdata/route_reach_base.txt, the same walk run there), the issue
 //     readers (operator, admin) and only they reaching the crew's issue
-//     routes besides.
+//     routes besides, plus the explicit intended additions below.
 //
 // With ROUTE_REACH_OUT set, the old roles' reach is written there instead of
 // checked (run on a base commit to remake the file).
@@ -36,6 +36,16 @@ import (
 var issueReaderRoutes = regexp.MustCompile(`^(GET|POST) /api/v1/agentrt/issues(/merge|/\{id\}(/(additions|responses|brief|classification|design|reviews|close-checks|owner-cards|take|replies|close|park|resume|reopen))?)?$`)
 
 var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"}
+
+// Intended new routes are exact route/principal additions to the historical
+// base, not a regenerated snapshot or a prefix exemption. Both extra reach and
+// missing expected reach remain failures. The write route matches firewall/apply:
+// this walk reaches the guarded handler, not the controller operation; the
+// handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
+var intendedRouteAdditions = map[string][]string{
+	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},
+}
 
 func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	srv := reachServer(t)
@@ -71,7 +81,7 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	}
 
 	// The old roles reach what they did on the base commit; the readers add
-	// the crew's issue routes, nothing else changes.
+	// the crew's issue routes and the exact intended additions, nothing else changes.
 	raw, err := os.ReadFile(filepath.Join("testdata", "route_reach_base.txt"))
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +98,12 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 		t.Fatalf("the base file holds %d principals", len(base))
 	}
 	for _, p := range oldPrincipals {
-		now, then := reach[p], base[p]
+		now, then := reach[p], slices.Clone(base[p])
+		for route, principals := range intendedRouteAdditions {
+			if slices.Contains(principals, p) {
+				then = append(then, route)
+			}
+		}
 		for _, r := range now {
 			if !slices.Contains(then, r) && !(issueReaderRoutes.MatchString(r) && (p == "operator" || p == "admin")) {
 				t.Errorf("%q reaches %s, which it did not on the base commit", p, r)

@@ -38,6 +38,7 @@
     "trigger_cnpg_backup",
     "trigger_data_clone",
     "uncordon_node",
+    "unifi_client_fixed_ip",
     "unifi_firewall_apply",
     "update_data_clone_schedule",
     "void_exam_paper",

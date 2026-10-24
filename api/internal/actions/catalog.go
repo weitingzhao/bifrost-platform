@@ -319,6 +319,16 @@ var catalog = []Action{
 		Params:      []Param{{Name: "enabled", Type: "boolean", In: "body"}},
 	},
 	{
+		ID: "unifi_client_fixed_ip", Tier: TierD,
+		Description: "Set a UniFi client's fixed IPv4 address and host name, then verify the saved record. Tier D; Owner approval in Console required.",
+		Method:      "POST", Pattern: "/api/v1/network/clients/fixed-ip",
+		Params: []Param{
+			{Name: "mac", Type: "string", In: "body", Required: true},
+			{Name: "ip", Type: "string", In: "body", Required: true},
+			{Name: "name", Type: "string", In: "body", Required: true},
+		},
+	},
+	{
 		ID: "unifi_firewall_apply", Tier: TierD,
 		Description: "Apply the UniFi firewall policy. Tier D.",
 		Method:      "POST", Pattern: "/api/v1/network/firewall/apply",

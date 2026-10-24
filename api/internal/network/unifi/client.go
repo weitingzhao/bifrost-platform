@@ -15,7 +15,7 @@ import (
 
 const defaultTimeout = 45 * time.Second
 
-// Client is the shared UniFi REST client for platform-api (Session v2 + legacy v1 reads).
+// Client is the shared UniFi REST client for platform-api (Session v2 + legacy v1 reads/writes).
 // Cookie/CSRF are reused across requests; Login is only called when needed (or after 401).
 type Client struct {
 	cfg      Config
@@ -27,7 +27,7 @@ type Client struct {
 	loggedIn bool
 }
 
-// New builds a client. Call Login (or EnsureLogin) before LegacyGet/V2Get/V2Write.
+// New builds a client. Call Login (or EnsureLogin) before LegacyGet/LegacyPut/V2Get/V2Write.
 func New(cfg Config) *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // UCG uses self-signed cert
@@ -99,6 +99,14 @@ func (c *Client) LegacyGet(ctx context.Context, path string) (json.RawMessage, e
 		path = "/" + path
 	}
 	return c.doAuthed(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/api/s/%s%s", c.cfg.Site, path), nil)
+}
+
+// LegacyPut updates a legacy client record using the shared session and CSRF retry.
+func (c *Client) LegacyPut(ctx context.Context, path string, body any) (json.RawMessage, error) {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return c.doAuthed(ctx, http.MethodPut, fmt.Sprintf("/proxy/network/api/s/%s%s", c.cfg.Site, path), body)
 }
 
 // V2Get calls GET /proxy/network/v2/api/site/{site}{path}.
@@ -189,7 +197,7 @@ type requestOpts struct {
 	integration bool
 }
 
-// doAuthed ensures a session, then retries once after 401 with a fresh login.
+// doAuthed ensures a session, then retries once after 401/403 with a fresh login.
 func (c *Client) doAuthed(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
 	if err := c.EnsureLogin(ctx); err != nil {
 		return nil, err

@@ -350,6 +350,9 @@ func (s *Server) bindActionExecutors() {
 	reg("ib_self_heal", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/plugins/ib-gateway/control/self-heal" },
 		fixed("action", "self-heal"), all, s.ibgateway.HandleControl)
+	reg("unifi_client_fixed_ip", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/network/clients/fixed-ip" },
+		nil, fields("mac", "ip", "name"), s.network.HandleClientFixedIP)
 	reg("unifi_firewall_apply", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/network/firewall/apply" },
 		nil, fields("include_default_deny"), s.network.HandleFirewallApply)

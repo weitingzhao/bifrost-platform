@@ -27,6 +27,7 @@ func TestDirectCDRequiresApproval(t *testing.T) {
 		{http.MethodPost, "/api/v1/cluster/nodes/node-a/drain", `{"force":true}`, "drain_node", "admin-test-token"},
 		{http.MethodPost, "/api/v1/cluster/workloads/scale", `{"namespace":"bifrost-dev","kind":"Deployment","name":"api","replicas":2}`, "scale_deployment", "operator-test-token"},
 		{http.MethodPost, "/api/v1/network/firewall/apply", `{}`, "unifi_firewall_apply", "operator-test-token"},
+		{http.MethodPost, "/api/v1/network/clients/fixed-ip", `{"mac":"68:1d:ef:5f:29:dd","ip":"192.168.10.80","name":"ubt-k3s-07"}`, "unifi_client_fixed_ip", "operator-test-token"},
 	} {
 		rec := call(t, h, tc.method, tc.path, tc.body, tc.token)
 		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"error":"approval required"`) || !strings.Contains(rec.Body.String(), tc.action) {
