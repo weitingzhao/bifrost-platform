@@ -178,14 +178,12 @@ func (s *Service) refPreflightAtRefs(ctx context.Context, pipelineName, revision
 		return out
 	}
 
-	ns := s.PipelinesNamespace()
-
-	clientset, _, err := s.cluster.KubernetesClient()
+	user, pass, err := s.giteaCredentials(ctx)
 	if err != nil {
-		out.Detail = "cluster client: " + err.Error()
+		// Gitea cannot be asked: unknown, like an unreachable Gitea (fail).
+		out.Detail = err.Error()
 		return out
 	}
-	user, pass := s.giteaCredentials(ctx, clientset, ns)
 
 	missing := []string{}
 	errored := []string{}

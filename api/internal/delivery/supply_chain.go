@@ -124,8 +124,9 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 		return out
 	}
 
-	_, err = clientset.CoreV1().Secrets(out.CicdNamespace).Get(ctx, "gitea-bootstrap", metav1.GetOptions{})
-	out.MirrorCredentialsConfigured = err == nil
+	// The platform's own read-only Gitea credential (TD-432); the platform
+	// reads no Secret for it.
+	out.MirrorCredentialsConfigured = s.giteaReaderConfigured(ctx)
 
 	for _, name := range dockerfileConfigMapNames {
 		cm, cmErr := clientset.CoreV1().ConfigMaps(out.CicdNamespace).Get(ctx, name, metav1.GetOptions{})

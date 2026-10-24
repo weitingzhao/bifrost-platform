@@ -120,11 +120,10 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 // is unknown, not missing (review 510 B2), and so is a Gitea or a cluster that
 // cannot be asked.
 func (s *Service) signedPresent(ctx context.Context, repos []string, refOf func(string) string) error {
-	clientset, _, err := s.cluster.KubernetesClient()
+	user, pass, err := s.giteaCredentials(ctx)
 	if err != nil {
-		return nil
+		return nil // no reader credential: Gitea cannot be asked, the run's gate decides
 	}
-	user, pass := s.giteaCredentials(ctx, clientset, s.PipelinesNamespace())
 	var missing []string
 	for _, repo := range repos {
 		ref := refOf(repo)

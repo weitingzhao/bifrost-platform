@@ -103,15 +103,7 @@ func (s *Service) SyncMirrors(ctx context.Context, repos []string, commits map[s
 }
 
 func (s *Service) giteaAuth(ctx context.Context) (string, string, error) {
-	if s.mirrorCreds != nil {
-		return s.mirrorCreds(ctx)
-	}
-	clientset, _, err := s.cluster.KubernetesClient()
-	if err != nil {
-		return "", "", err
-	}
-	user, pass := s.giteaCredentials(ctx, clientset, s.PipelinesNamespace())
-	return user, pass, nil
+	return s.giteaCredentials(ctx)
 }
 
 func (s *Service) giteaRoot() string {

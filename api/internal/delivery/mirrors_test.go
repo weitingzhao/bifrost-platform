@@ -42,7 +42,7 @@ func TestSyncMirrorsPollsFakeGitea(t *testing.T) {
 	s := &Service{
 		policy:    &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"allowed-repo"}}},
 		giteaBase: srv.URL,
-		mirrorCreds: func(context.Context) (string, string, error) {
+		readerCreds: func(context.Context) (string, string, error) {
 			return "user", "secret", nil
 		},
 		httpClient: &http.Client{Timeout: 2 * time.Second},
@@ -88,7 +88,7 @@ func TestSyncMirrorsPrimaryRepository(t *testing.T) {
 	s := &Service{
 		policy:    &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"primary", "silent", "gone"}}},
 		giteaBase: srv.URL,
-		mirrorCreds: func(context.Context) (string, string, error) {
+		readerCreds: func(context.Context) (string, string, error) {
 			return "user", "secret", nil
 		},
 		httpClient: &http.Client{Timeout: 2 * time.Second},

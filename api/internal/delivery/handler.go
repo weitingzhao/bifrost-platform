@@ -31,10 +31,13 @@ func NewHandlerForTest(svc *Service, audit *actuation.AuditLog) *Handler {
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	entry := cfg.DefaultCluster()
-	return &Handler{svc: NewService(entry), audit: audit}
+	svc := NewService(entry)
+	svc.readerCreds = giteaReaderFromEnv // TD-432: the platform's own read-only Gitea account
+	return &Handler{svc: svc, audit: audit}
 }
 
-// GiteaAccess exposes the delivery service's Gitea base URL and credentials.
+// GiteaAccess exposes the delivery service's Gitea base URL and read-only
+// credential (TD-432).
 func (h *Handler) GiteaAccess(ctx context.Context) (GiteaAccess, error) {
 	return h.svc.GiteaAccess(ctx)
 }

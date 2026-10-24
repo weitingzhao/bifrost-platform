@@ -61,9 +61,11 @@ type Service struct {
 	dynamicFactory func() (dynamic.Interface, error)
 	httpClient     *http.Client
 	policy         *actuationpolicy.Policy
-	// giteaBase and mirrorCreds are test hooks. Production leaves them empty.
-	giteaBase   string
-	mirrorCreds func(ctx context.Context) (string, string, error)
+	// giteaBase is a test hook; production leaves it empty.
+	giteaBase string
+	// readerCreds is the platform's read-only Gitea credential (gitea_reader.go):
+	// nil reads anonymously; NewHandler sets giteaReaderFromEnv.
+	readerCreds func(ctx context.Context) (string, string, error)
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
@@ -1145,7 +1147,6 @@ func (s *Service) SetClientsetForTest(clientset kubernetes.Interface) {
 const (
 	giteaInClusterBase = "http://gitea.cicd.svc.cluster.local:3000"
 	giteaOrg           = "bifrost"
-	giteaSecretName    = "gitea-bootstrap"
 )
 
 // giteaBaseURL returns the Gitea API base. In-cluster it resolves the internal
@@ -1194,7 +1195,6 @@ func intersectRefSets(sets []map[string]bool) []string {
 
 func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsResponse {
 	now := time.Now().UTC()
-	ns := s.PipelinesNamespace()
 	out := RevisionsResponse{
 		ClusterID:    s.clusterID(),
 		Repos:        repos,
@@ -1211,13 +1211,11 @@ func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsRespon
 		out.Repos = repos
 	}
 
-	clientset, _, err := s.cluster.KubernetesClient()
+	user, pass, err := s.giteaCredentials(ctx)
 	if err != nil {
-		out.Detail = "cluster client: " + err.Error()
+		out.Detail = err.Error()
 		return out
 	}
-
-	user, pass := s.giteaCredentials(ctx, clientset, ns)
 
 	seenTag := map[string]bool{}
 	var allTags []GiteaTagView
@@ -1289,25 +1287,6 @@ func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsRespon
 	return out
 }
 
-// giteaCredentials resolves basic-auth credentials for the Gitea REST API.
-// The gitea-bootstrap secret stores an admin token (no username/password), so we
-// fall back to using the token as the basic-auth username, which Gitea accepts.
-// Without this, REST calls are unauthenticated and Gitea returns 404 for private
-// repos — which previously left branch/tag listings and ref preflight empty.
-func (s *Service) giteaCredentials(ctx context.Context, clientset kubernetes.Interface, ns string) (string, string) {
-	secret, err := clientset.CoreV1().Secrets(ns).Get(ctx, giteaSecretName, metav1.GetOptions{})
-	if err != nil {
-		return "", ""
-	}
-	if user := string(secret.Data["username"]); user != "" {
-		return user, string(secret.Data["password"])
-	}
-	if token := strings.TrimSpace(string(secret.Data["gitea_admin_token"])); token != "" {
-		return token, "x-oauth-basic"
-	}
-	return "", ""
-}
-
 // GiteaAccess is what a read-only consumer of the Gitea REST API needs.
 type GiteaAccess struct {
 	Base string // e.g. http://gitea.cicd.svc.cluster.local:3000 (no /api/v1)
@@ -1316,14 +1295,14 @@ type GiteaAccess struct {
 	Pass string
 }
 
-// GiteaAccess resolves the Gitea base URL, org and basic-auth credentials the
-// delivery service itself uses, so other read-only views share one auth path.
+// GiteaAccess resolves the Gitea base URL, org and the read-only credential
+// the delivery service itself uses (TD-432), so other read-only views share
+// one auth path. No reader credential is an error, never another credential.
 func (s *Service) GiteaAccess(ctx context.Context) (GiteaAccess, error) {
-	clientset, _, err := s.cluster.KubernetesClient()
+	user, pass, err := s.giteaCredentials(ctx)
 	if err != nil {
-		return GiteaAccess{}, fmt.Errorf("cluster client: %w", err)
+		return GiteaAccess{}, err
 	}
-	user, pass := s.giteaCredentials(ctx, clientset, s.PipelinesNamespace())
 	return GiteaAccess{Base: giteaBaseURL(), Org: giteaOrg, User: user, Pass: pass}, nil
 }
 
@@ -1446,13 +1425,11 @@ func (s *Service) Compare(ctx context.Context, repo, from, to string) CompareRes
 		return out
 	}
 
-	clientset, _, err := s.cluster.KubernetesClient()
+	user, pass, err := s.giteaCredentials(ctx)
 	if err != nil {
-		out.Detail = "cluster client: " + err.Error()
+		out.Detail = err.Error()
 		return out
 	}
-	ns := s.PipelinesNamespace()
-	user, pass := s.giteaCredentials(ctx, clientset, ns)
 
 	files, fetchErr := s.fetchGiteaCompareFiles(ctx, repo, from, to, user, pass)
 	if fetchErr != nil {
