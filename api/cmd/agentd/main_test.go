@@ -38,45 +38,26 @@ func TestSecretRefusesAnOpenFile(t *testing.T) {
 	}
 }
 
-func TestConfigReadsWhereBranchesGo(t *testing.T) {
+// The push base is gone (cut §9.8): Gitea is the primary, so attempt
+// branches go back to where work is cloned from. A host whose settings still
+// name one, even on another server (refused before, review 195 B), starts,
+// and the setting is not read.
+func TestConfigIgnoresALeftoverPushBase(t *testing.T) {
 	token := filepath.Join(t.TempDir(), "agentd.token")
 	if err := os.WriteFile(token, []byte("fixture\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for k, v := range map[string]string{"AGENTD_PLATFORM": "https://p.example/api/v1/agentrt", "AGENTD_HOST": "h1",
 		"AGENTD_TOKEN_FILE": token, "AGENTD_TOOLS": "exec:codex=openai", "AGENTD_GIT_BASE": "https://g.example/bifrost",
-		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_GIT_PUSH_BASE": " https://g.example/bifrost-agents/ "} {
+		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_GIT_PUSH_BASE": "https://evil.example/bifrost-agents"} {
 		t.Setenv(k, v)
 	}
 	cfg, err := config()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("a leftover AGENTD_GIT_PUSH_BASE stops agentd: %v", err)
 	}
-	if got := remoteAt(cfg.pushBase)("bifrost-platform"); got != "https://g.example/bifrost-agents/bifrost-platform.git" {
-		t.Fatalf("push remote = %q", got)
-	}
-	t.Setenv("AGENTD_GIT_PUSH_BASE", "")
-	if cfg, err = config(); err != nil || remoteAt(cfg.pushBase) != nil {
-		t.Fatalf("no push base: %q %v", cfg.pushBase, err)
-	}
-}
-
-func TestPushBaseStaysOnTheGitServer(t *testing.T) {
-	for _, c := range []struct {
-		git, push string
-		ok        bool
-	}{
-		{"https://g.example/bifrost", "", true},
-		{"https://g.example/bifrost", "https://G.example/bifrost-agents", true},
-		{"http://192.168.10.73:30300/bifrost", "http://192.168.10.73:30300/bifrost-agents", true},
-		{"https://g.example/bifrost", "https://evil.example/bifrost-agents", false},
-		{"https://g.example/bifrost", "http://g.example/bifrost-agents", false},
-		{"http://192.168.10.73:30300/bifrost", "http://192.168.10.73:30301/bifrost-agents", false},
-		{"https://g.example/bifrost", "/srv/agents", false},
-	} {
-		if err := sameServer(c.git, c.push); (err == nil) != c.ok {
-			t.Errorf("%q %q: %v", c.git, c.push, err)
-		}
+	if cfg.gitBase != "https://g.example/bifrost" {
+		t.Fatalf("git base = %q", cfg.gitBase)
 	}
 }
 
@@ -88,7 +69,7 @@ func TestConfigReadsCursorsKeyFile(t *testing.T) {
 	}
 	for k, v := range map[string]string{"AGENTD_PLATFORM": "https://p.example/api/v1/agentrt", "AGENTD_HOST": "h1",
 		"AGENTD_TOKEN_FILE": token, "AGENTD_TOOLS": "exec:cursor=cursor-mix", "AGENTD_GIT_BASE": "https://g.example/bifrost",
-		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_GIT_PUSH_BASE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_CURSOR_KEY_FILE": ""} {
+		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_CURSOR_KEY_FILE": ""} {
 		t.Setenv(k, v)
 	}
 	if cfg, err := config(); err != nil || cfg.cursorKey != "" {

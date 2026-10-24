@@ -58,6 +58,9 @@ func TestInstallScriptRenders(t *testing.T) {
 		}
 		return strings.TrimSuffix(string(out), "\n")
 	}
+	named := func(key string) bool {
+		return exec.Command("plutil", "-extract", key, "raw", "-o", "-", plist).Run() == nil
+	}
 
 	if out, rerr := render("./agentd"); rerr != nil {
 		t.Fatalf("render: %v\n%s", rerr, out)
@@ -82,9 +85,6 @@ func TestInstallScriptRenders(t *testing.T) {
 	}
 	if value("EnvironmentVariables.AGENTD_GIT_TOKEN_FILE") != "" {
 		t.Error("no git token file, yet one is named")
-	}
-	if value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE") != "" {
-		t.Error("no push base given, yet one is named")
 	}
 	if value("EnvironmentVariables.AGENTD_CURSOR_KEY_FILE") != "" {
 		t.Error("no cursor key file, yet one is named")
@@ -150,15 +150,18 @@ func TestInstallScriptRenders(t *testing.T) {
 	if out, rerr := render(bin); rerr != nil {
 		t.Fatalf("render again: %v\n%s", rerr, out)
 	}
-	// Branches go elsewhere when the git base is a mirror: the push base
-	// goes in as it came.
+	// The push base is gone (cut §9.8): branches go back to the git base, so
+	// one left in the installer's environment does not reach the plist.
 	push := exec.Command("bash", script, "--render", plist, me.Username, bin, platform, "h1", "exec:codex=openai", "https://git.example/x&y")
-	push.Env = append(os.Environ(), "AGENTD_CONFIG_DIR="+config, "AGENTD_ROOT_DIR="+root, "AGENTD_GIT_PUSH_BASE=https://git.example/agents & <z>")
+	push.Env = append(os.Environ(), "AGENTD_CONFIG_DIR="+config, "AGENTD_ROOT_DIR="+root, "AGENTD_GIT_PUSH_BASE=https://git.example/agents")
 	if out, perr := push.CombinedOutput(); perr != nil {
-		t.Fatalf("render with a push base: %v\n%s", perr, out)
+		t.Fatalf("render with a leftover push base: %v\n%s", perr, out)
 	}
-	if got := value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE"); got != "https://git.example/agents & <z>" {
-		t.Errorf("AGENTD_GIT_PUSH_BASE = %q", got)
+	if named("EnvironmentVariables.AGENTD_GIT_PUSH_BASE") {
+		t.Errorf("AGENTD_GIT_PUSH_BASE = %q: a leftover push base reached the plist", value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE"))
+	}
+	if got := value("EnvironmentVariables.AGENTD_GIT_BASE"); got != "https://git.example/x&y" {
+		t.Errorf("AGENTD_GIT_BASE = %q", got)
 	}
 
 	// A credential another can read, a link, or none: refused, the plist

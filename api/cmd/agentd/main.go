@@ -10,9 +10,8 @@
 //	AGENTD_HOST            this host's id (its token is bound to it)
 //	AGENTD_TOKEN_FILE      a file holding the host's agentd token (mode 0600)
 //	AGENTD_TOOLS           executors here: exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto,exec:claude=anthropic:opus,exec:deterministic=local
-//	AGENTD_GIT_BASE        where repositories live: <base>/<repo>.git
-//	AGENTD_GIT_PUSH_BASE   optional: where attempt branches go, <base>/<repo>.git, when the
-//	                       repositories work is cloned from take no push (a mirror)
+//	AGENTD_GIT_BASE        where repositories live: <base>/<repo>.git; work is cloned from
+//	                       there and attempt branches (agent/<task>/a<n>) are pushed back there
 //	AGENTD_GIT_TOKEN_FILE  optional: a token git sends to that base (as an http header, never on a command line)
 //	AGENTD_CURSOR_KEY_FILE optional: cursor's API key (mode 0600), given to the cursor executor alone
 //	AGENTD_CLAUDE_TOKEN_FILE optional: Claude's OAuth token (mode 0600), given to the claude executor alone
@@ -29,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -115,7 +113,6 @@ func run() error {
 		GitEnv:   cfg.gitEnv,
 		Logf:     log.Printf,
 	}
-	d.PushRemote = remoteAt(cfg.pushBase)
 	// The programs a test database needs (TD-403): without them, no attempt
 	// gets one, and its database tests skip as before.
 	if d.TestDB, err = agentd.FindTestDBTools(os.Getenv("AGENTD_PG_BIN")); err != nil {
@@ -223,23 +220,15 @@ func run() error {
 	return nil
 }
 
-// remoteAt is <base>/<repo>.git, or nil for no base.
-func remoteAt(base string) func(string) string {
-	if base == "" {
-		return nil
-	}
-	return func(repo string) string { return strings.TrimRight(base, "/") + "/" + repo + ".git" }
-}
-
 type settings struct {
-	platform, host, token, gitBase, pushBase, root, cursorKey, claudeToken string
-	gitEnv                                                                 []string
-	tools                                                                  []agentd.Tool
+	platform, host, token, gitBase, root, cursorKey, claudeToken string
+	gitEnv                                                       []string
+	tools                                                        []agentd.Tool
 }
 
 func config() (settings, error) {
 	s := settings{platform: os.Getenv("AGENTD_PLATFORM"), host: os.Getenv("AGENTD_HOST"), gitBase: os.Getenv("AGENTD_GIT_BASE"),
-		pushBase: strings.TrimSpace(os.Getenv("AGENTD_GIT_PUSH_BASE")), root: os.Getenv("AGENTD_ROOT")}
+		root: os.Getenv("AGENTD_ROOT")}
 	if s.platform == "" || s.host == "" {
 		return s, errors.New("AGENTD_PLATFORM and AGENTD_HOST are required")
 	}
@@ -274,27 +263,10 @@ func config() (settings, error) {
 			return s, fmt.Errorf("AGENTD_CLAUDE_TOKEN_FILE: %v", err)
 		}
 	}
-	if err = sameServer(s.gitBase, s.pushBase); err != nil {
-		return s, err
-	}
 	if s.tools, err = tools(os.Getenv("AGENTD_TOOLS")); err != nil {
 		return s, err
 	}
 	return s, nil
-}
-
-// sameServer: the git token goes to every remote (http.extraHeader), so the
-// push base must be on the server of the git base (review 195 B).
-func sameServer(gitBase, pushBase string) error {
-	if pushBase == "" {
-		return nil
-	}
-	g, gerr := url.Parse(gitBase)
-	p, perr := url.Parse(pushBase)
-	if gerr != nil || perr != nil || p.Host == "" || !strings.EqualFold(g.Scheme, p.Scheme) || !strings.EqualFold(g.Host, p.Host) {
-		return fmt.Errorf("AGENTD_GIT_PUSH_BASE %q is not on the server of AGENTD_GIT_BASE %q", pushBase, gitBase)
-	}
-	return nil
 }
 
 // secret reads a token file that only its owner may read.

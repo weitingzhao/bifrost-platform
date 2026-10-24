@@ -23,7 +23,7 @@ func TestConfigReadsClaudeTokenFile(t *testing.T) {
 	for k, v := range map[string]string{
 		"AGENTD_PLATFORM": "https://p.example/api/v1/agentrt", "AGENTD_HOST": "h1", "AGENTD_TOKEN_FILE": hostToken,
 		"AGENTD_TOOLS": "exec:codex=openai", "AGENTD_ROOT": dir, "AGENTD_GIT_BASE": "https://g.example/bifrost",
-		"AGENTD_GIT_PUSH_BASE": "", "AGENTD_GIT_TOKEN_FILE": "", "AGENTD_CURSOR_KEY_FILE": "", "AGENTD_CLAUDE_TOKEN_FILE": "",
+		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_CURSOR_KEY_FILE": "", "AGENTD_CLAUDE_TOKEN_FILE": "",
 	} {
 		t.Setenv(k, v)
 	}
