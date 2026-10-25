@@ -27,7 +27,9 @@ import (
 type MainHead func(ctx context.Context, repo string) (string, error)
 
 // GoalRepo and GoalRepos are the repositories a goal may name and their
-// checks (store.Repos).
+// checks (store.Repos). To let a goal name another repository, add it to
+// store.Repos: that comment says what an entry needs and why the default
+// checks stop short of the full test suite.
 type GoalRepo = store.Repo
 
 var GoalRepos = store.Repos
