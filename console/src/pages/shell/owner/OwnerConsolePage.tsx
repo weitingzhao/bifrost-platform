@@ -1,3 +1,4 @@
+import { CrewOverview } from '../crew/CrewOverview'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
 import { ServiceVersions } from '../services/ServiceVersions'
@@ -96,6 +97,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
     {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>
+      <CrewOverview now={data.now} />
       <section id="roles" aria-label="Roles and performance"><OwnerCapabilities now={data.now} /></section>
       <section id="capacity" aria-label="Capacity and cost"><PoolReadings now={data.now} /><OwnerQuota now={data.now} /></section>
       <DomainSection id="capability-evidence" label="Capability evidence"><CapabilityEvidence /></DomainSection>

@@ -4,7 +4,7 @@ import { resolveConsoleHash, type EntryRouteId } from '@/lib/shell/consoleRoutes
 
 const LINKS: Record<EntryRouteId, readonly [string, string][]> = {
   command: [['Inbox', '#command'], ['Decisions & questions', '#command?section=waiting'], ['Conversation', '#command?section=owner-chief'], ['Give a goal', '#command?section=new-goal'], ['History', '#records?tab=closed']],
-  crew: [['Roles & performance', '#crew?section=roles'], ['Capacity & cost', '#crew?section=capacity'], ['Capability evidence', '#crew?section=capability-evidence'], ['Rules & reference', '#crew?section=references']],
+  crew: [['Overview', '#crew?section=overview'], ['Roles & performance', '#crew?section=roles'], ['Capacity & cost', '#crew?section=capacity'], ['Capability evidence', '#crew?section=capability-evidence'], ['Rules & reference', '#crew?section=references']],
   work: [['Goals', '#work?section=goals'], ['Activity', '#work?section=activity'], ['Plan', '#work?section=plan'], ['Releases', '#releases'], ['History', '#records?tab=work'], ['Code health', '#work?section=code-health'], ['Commit lineage', '#work?section=commit-lineage']],
   services: [['Overview', '#services'], ['Versions', '#services?section=versions'], ['Applications', '#services?section=applications'], ['Plugins', '#data?section=plugins'], ['Market data', '#data?section=market-data'], ['IB Flex', '#data?section=flex'], ['Research', '#data?section=research'], ['IB connectivity', '#ib']],
   system: [['Overview', '#system'], ['Status', '#status'], ['Cluster', '#infrastructure?section=cluster'], ['Network', '#infrastructure?section=network'], ['Hosts', '#infrastructure?section=hosts'], ['Storage & backup', '#infrastructure?section=backup'], ['Audit', '#records?tab=audit'], ['Patrol', '#records?tab=patrol']],
@@ -17,7 +17,7 @@ export function DomainNav({ entry, local = false, vertical = false }: { entry: E
   const links = [...LINKS[entry], ...(entry === 'system' && local ? [['Local tools', '#dev-sessions'] as const] : [])]
   const trade = resolveTradeFrontendUrls()
   const current = (href: string) => {
-    if (canonical === href) return true
+    if (canonical === href || (canonical === '#crew' && href === '#crew?section=overview')) return true
     const [path, query] = href.split('?')
     if (!query || canonical.split('?')[0] !== path) return false
     const params = new URLSearchParams(canonical.split('?')[1])

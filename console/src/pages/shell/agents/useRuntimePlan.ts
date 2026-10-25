@@ -1,5 +1,6 @@
 import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
 import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRuntimePlan, planRounds, runtimeArch, runtimeRound, signoffNotStarted, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
@@ -68,6 +69,14 @@ function roundOf(progress: Read<RuntimeProgress>): string | null {
   return progress.isError || progress.isPaused ? PLAN_ROOT : null
 }
 
+/** Work can name a historical round; other domains continue following the newest round. */
+function requestedPlanRoot(): string | null {
+  const resolved = resolveConsoleHash(window.location.hash.replace(/^#/, ''))
+  if (resolved.location.kind !== 'shell' || resolved.location.id !== 'work') return null
+  const root = new URLSearchParams(resolved.canonical.split('?')[1]).get('round')
+  return root && /^R[1-9]\d*$/.test(root) ? root : null
+}
+
 /**
  * The plan for a pane: the newest round GET /progress counts. GET /progress is read under the key Needs you reads
  * it with; the request is content-addressed and read once, again only after a failed read.
@@ -76,7 +85,13 @@ export function useRuntimePlan(enabled = true): PlanRead {
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
     enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
   const { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused } = progressQ
-  const root = roundOf({ data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused })
+  const [requestedRoot, setRequestedRoot] = useState(requestedPlanRoot)
+  useEffect(() => {
+    const update = () => setRequestedRoot(requestedPlanRoot())
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
+  }, [])
+  const root = requestedRoot ?? roundOf({ data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused })
   const planQ = useQuery({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }) => fetchRuntimePlan(root ?? PLAN_ROOT, signal),
     enabled: enabled && root !== null, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
   const requestQ = useQuery({ queryKey: ['agent-runtime-plan-request', root], queryFn: ({ signal }) => fetchImportRequest(root ?? PLAN_ROOT, signal),
