@@ -14,7 +14,7 @@ export const SHELL_NAV = [
   {
     id: 'releases',
     label: 'Releases',
-    question: 'What version is running in each environment?',
+    question: 'What is delivering, what finished, and what needs approval?',
     group: 'detail',
   },
   {
@@ -161,11 +161,11 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'control-room': 'status',
   observability: 'status',
   'rocket-health': 'status',
-  'satellite-health': 'status',
-  'satellite-telemetry': 'status',
-  'satellite-api': 'status',
+  'satellite-health': 'services',
+  'satellite-telemetry': 'services',
+  'satellite-api': 'services',
   telemetry: 'status',
-  'task-cc': 'status',
+  'task-cc': 'work',
   'runtime-map': 'infrastructure',
   'code-health': 'work',
   'commit-lineage': 'work',
@@ -244,6 +244,20 @@ export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
 /** The section or Records tab a legacy hash lands on. */
 export const LEGACY_HASH_QUERY: Record<string, string> = {
   chief: 'section=owner-chief',
+  'satellite-health': 'section=applications',
+  'satellite-telemetry': 'section=applications',
+  'satellite-api': 'section=applications',
+  'task-cc': 'section=activity',
+  'runtime-map': 'section=hosts',
+  'operator-plane': 'section=hosts',
+  'agent-release': 'section=hosts',
+  'agent-capability': 'section=hosts',
+  cluster: 'section=cluster',
+  network: 'section=network',
+  'plugin-gallery': 'section=plugins',
+  'market-data-manage': 'section=market-data',
+  'flex-query-manage': 'section=flex',
+  'research-engine': 'section=research',
   ...Object.fromEntries(GOVERNANCE_REFERENCES.map(item => [item.id, `section=references&reference=${item.id}`])),
   'needs-you': `section=${WAITING_SECTION}`,
   progress: `section=${GOALS_SECTION}`,
@@ -280,8 +294,9 @@ export function entryOf(location: ConsoleLocation, query = ''): EntryRouteId | n
   if (location.id === 'releases') return 'work'
   if (location.id === 'records') {
     const tab = hashQueryParam(query, 'tab')
-    if (tab === 'closed' || tab == null) return 'command'
     if (tab === 'work') return 'work'
+    if (tab === 'audit' || tab === 'patrol') return 'system'
+    return 'command'
   }
   return 'system'
 }
@@ -378,6 +393,16 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
     const params = new URLSearchParams(query)
     params.delete('tab')
     return { location: { kind: 'shell', id: entry }, canonical: formatShellHash(entry, mergeLegacyQuery(tab === 'chief' ? 'section=owner-chief' : '', params.toString())) }
+  }
+  const section = hashQueryParam(query, 'section')
+  const moved = tab === 'work' && section === 'hosts' ? 'infrastructure'
+    : tab === 'work' && section === 'architecture' ? 'crew'
+    : tab === 'data' && section === 'backup' ? 'infrastructure'
+    : tab === 'releases' && section === 'versions' ? 'services' : null
+  if (moved) {
+    const params = new URLSearchParams(query)
+    if (section === 'architecture') params.set('section', 'capability-evidence')
+    return { location: { kind: 'shell', id: moved }, canonical: formatShellHash(moved, params.toString()) }
   }
   if (tab === 'work' && hashQueryParam(query, 'section') === 'references') {
     return { location: { kind: 'shell', id: 'crew' }, canonical: formatShellHash('crew', query) }

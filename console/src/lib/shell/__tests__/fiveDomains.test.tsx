@@ -12,7 +12,7 @@ describe('P2 five-domain compatibility', () => {
     ['owner?tab=work&goal=M-143&task=t_1', '#work?goal=M-143&task=t_1'],
     ['work?section=references&reference=blueprint', '#crew?section=references&reference=blueprint'],
     ['blueprint', '#crew?section=references&reference=blueprint'],
-    ['market-data-manage?tab=coverage&panel=blueprint', '#data?tab=coverage&panel=blueprint'],
+    ['market-data-manage?tab=coverage&panel=blueprint', '#data?section=market-data&tab=coverage&panel=blueprint'],
     ['progress?goal=M-143&task=t_1', '#work?goal=M-143&task=t_1'],
   ])('preserves the destination and parameters of %s', (old, canonical) => {
     expect(resolveConsoleHash(old).canonical).toBe(canonical)

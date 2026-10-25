@@ -1,3 +1,4 @@
+import { RuntimeHosts } from '../../infrastructure/RuntimeHosts'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -187,7 +188,7 @@ describe('Merged Progress page', () => {
   it('redirects the former Agents route and renders hosts and the published plan', async () => {
     expect(SHELL_NAV.map(n => n.id).slice(-2)).toEqual(['infrastructure', 'records'])
     expect(resolveConsoleHash('agents')).toEqual({ location: { kind: 'shell', id: 'work' }, canonical: '#work' })
-    wrap(<ProgressPage />)
+    wrap(<><ProgressPage /><RuntimeHosts /></>)
     expect(await screen.findByText(/mbp-dev · Online/)).toBeInTheDocument()
     expect((await screen.findAllByText(PLAN_NOT_IMPORTED)).length).toBeGreaterThan(0)
     expect((await screen.findAllByText(ARCH_NOT_IMPORTED)).length).toBeGreaterThan(0)
@@ -200,17 +201,17 @@ describe('Merged Progress page', () => {
   })
   it('shows source failures and an incomplete count', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'unavailable' }, 503)))
-    wrap(<ProgressPage />)
+    wrap(<><ProgressPage /><RuntimeHosts /></>)
     expect((await screen.findAllByText(/The agent runtime could not be read; not read since this page opened at/)).length).toBeGreaterThan(0)
     // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
     expect(await screen.findAllByText(unavailableLine('Plan unavailable: Plan: unavailable'))).toHaveLength(2)
-    expect(await screen.findAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(1)
   })
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('/agentrt/plan?') ? json({ error: 'not_found', message: 'no such record' }, 404)
       // An empty runtime answers an empty plan list (store.Progress), not no list.
       : json(String(url).includes('/agentrt/progress') ? { generated_at: 'now', plan: [] } : String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
-    wrap(<ProgressPage />)
+    wrap(<><ProgressPage /><RuntimeHosts /></>)
     expect(await screen.findByText('No goals yet.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()
     expect((await screen.findAllByText(PLAN_NOT_IMPORTED)).length).toBeGreaterThan(0)

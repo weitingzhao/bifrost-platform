@@ -1,3 +1,4 @@
+import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -141,7 +142,7 @@ describe('StatusPage health requests', () => {
       }),
     )
 
-    const view = render(wrapper(<StatusPage />))
+    const view = render(wrapper(<><StatusPage /><SatelliteHealthPage lockToViewer /></>))
 
     await waitFor(
       () => {

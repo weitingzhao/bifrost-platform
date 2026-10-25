@@ -128,13 +128,21 @@ describe('RecordsPage', () => {
     expect(screen.queryByRole('button', { name: /Approve|Reject/ })).toBeNull()
   })
 
+  it('does not describe failed audit reads as an empty history', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({error:'unavailable'}, 503)))
+    window.location.hash = '#records?tab=audit'
+    render(wrapper(<RecordsPage />))
+    expect((await screen.findByRole('alert')).textContent).toContain('Records are unknown')
+    expect(screen.queryByText('No actuation records yet')).toBeNull()
+  })
+
   it('keeps the Autopilot patrol content and the audit history, and writes the tab to the address', async () => {
-    window.location.hash = '#records?tab=patrol'
+    window.location.hash = '#records?tab=patrol&entity=host-1'
     render(wrapper(<RecordsPage />))
     expect(await screen.findByText('Patrol Skills')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Audit' }))
-    expect(window.location.hash).toBe('#records?tab=audit')
+    expect(window.location.hash).toBe('#records?tab=audit&entity=host-1')
     expect(await screen.findByText('ACTUATION HISTORY')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Download JSON' })).toBeTruthy()
     expect(screen.queryByText('Patrol Skills')).toBeNull()

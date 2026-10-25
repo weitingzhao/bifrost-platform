@@ -183,8 +183,8 @@ describe('Owner Console entries', () => {
 
   it('System carries the data and the way into every detail page', () => {
     show('#system')
-    expect(headings()).toEqual(['System'])
-    expect(screen.getByRole('region', { name: 'Release lane' })).toHaveTextContent('nobody holds it; nothing delivering')
+    expect(headings()).toEqual(['System', 'Storage and copies'])
+    expect(screen.queryByRole('region', { name: 'Release lane' })).toBeNull()
     expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
     expect(screen.queryByRole('region', { name: 'Data' })).toBeNull()
   })
@@ -209,7 +209,7 @@ describe('Owner Console entries', () => {
     show('#work')
     expect(headings()).toEqual(['Work'])
     const progress = screen.getByTestId('merged-progress')
-    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan', 'Activity', 'History', 'Commit lineage', 'Code health'])
     expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
   })
@@ -387,17 +387,14 @@ describe('Owner Console entries', () => {
   it('shows each pool\'s last reading from the runtime with when, an old one marked; no hand-kept quota (2.5 G7 A)', async () => {
     stubRuntimeReads()
     nowValue.value = Date.parse('2026-10-19T21:00:00Z')
-    show('#work')
-    const quota = screen.getByRole('region', { name: 'Quota' })
+    show('#crew')
+    const quota = screen.getByRole('region', { name: 'Capacity and cost' })
     expect(await within(quota).findByText('claude · weekly')).toBeInTheDocument()
     expect(within(quota).getAllByText('old')).toHaveLength(3)
     expect(within(quota).getAllByText('read 25 h ago')).toHaveLength(3)
     expect(within(quota).getAllByText('old')[0]).toHaveAttribute('title', 'its window has reset since it was read')
     expect(within(quota).getByText('no reading yet')).toBeInTheDocument()
-    expect(within(quota).getByRole('link', { name: /System/ })).toHaveAttribute('href', '#system')
     expect(quota).not.toHaveTextContent('✎')
-    expect(screen.getByRole('region', { name: 'The plan' })).not.toHaveTextContent('✎')
-    expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent('M-2 Add a comment above Repos.')
   })
 
   it('gives each open goal when it should be done, as a range with its basis, or unknown with why (2.5 G8)', () => {

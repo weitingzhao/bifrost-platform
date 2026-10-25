@@ -17,6 +17,7 @@ function ClosedRequests() {
     queryFn: () => fetchApprovalList('all'),
     retry: false,
   })
+  if (q.isPaused) return <p role="alert">Closed requests could not be read (offline).</p>
   if (q.isLoading) return <p className="m-0 text-sm text-muted-foreground">Loading…</p>
   if (q.error != null) {
     return (
@@ -42,10 +43,10 @@ function Audit() {
     queryFn: fetchAudit,
     retry: false,
   })
-  const message = audit.error instanceof Error ? audit.error.message : null
+  const message = audit.isPaused ? 'Offline' : audit.error instanceof Error ? audit.error.message : null
+  if (message != null) return <p role="alert" className="m-0 text-sm text-destructive">Audit could not be read: {message}. Records are unknown.</p>
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      {message != null ? <p className="m-0 text-sm text-destructive">{message}</p> : null}
       <AuditPage records={audit.data?.records ?? []} isLoading={audit.isLoading} />
     </div>
   )
@@ -61,8 +62,10 @@ export function RecordsPage() {
     return () => window.removeEventListener('hashchange', sync)
   }, [])
 
+  const context = tab === 'closed' ? 'Command · Closed requests' : tab === 'work' ? 'Work · History' : tab === 'audit' ? 'System · Audit' : 'System · Patrol'
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <p className="m-0 text-sm font-semibold">{context}</p>
       <SegmentControl
         ariaLabel="Records sections"
         value={tab}
@@ -70,7 +73,9 @@ export function RecordsPage() {
         onChange={value => {
           const next = value as RecordsTab
           setTab(next)
-          window.location.hash = formatShellHash('records', `tab=${next}`)
+          const params = new URLSearchParams(window.location.hash.split('?')[1])
+          params.set('tab', next)
+          window.location.hash = formatShellHash('records', params.toString())
         }}
       />
       {tab === 'closed' ? <ClosedRequests /> : null}

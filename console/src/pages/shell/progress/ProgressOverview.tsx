@@ -7,7 +7,6 @@ import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, type ArchRead, type PlanRead } fr
 import type { NeedsYouCount } from '../needs-you/needsYouModel'
 import { LastRead } from '../owner/LastRead'
 import { reasonText } from '../owner/ownerModel'
-import { PoolReadings } from '../owner/PoolReadings'
 import { activityCounts, attemptActivity } from '../owner/attemptActivity'
 import { whoseMove } from './mergedProgressModel'
 
@@ -34,9 +33,9 @@ export function ProgressOverview({ count, runtime, plan, arch, failed, unread, s
       <div className={card}><strong>Running</strong><span className="text-2xl tabular-nums">{runtime ? runtime.live.length - stalled.length : '?'}</span><span>Agent attempts</span>
         {stalled.length > 0 && <span className="font-semibold text-[var(--color-warning)]" data-stalled>Not confirmed running: {activityCounts(stalled)}</span>}</div>
       <div className={card}><strong>Round progress</strong>{items ? <><Meter label="items" done={items.filter(i => i.state === 'done').length} total={items.length} /><Meter label="steps" done={items.reduce((n, i) => n + (i.done ?? i.steps.filter(s => s.state === 'done').length), 0)} total={items.reduce((n, i) => n + (i.total ?? i.steps.length), 0)} />{manual > 0 && <span className="text-xs text-muted-foreground">{manual} of the done steps manual</span>}</> : <span>{plan.from === 'error' ? <>Plan unavailable: {reasonText(plan.error)}; <LastRead readAt={plan.readAt} openedAt={opened} />.</> : plan.from === 'loading' ? 'Reading the plan from the agent runtime…' : round?.unknown !== undefined ? `Plan unavailable: ${round.unknown}` : plan.from === 'runtime' ? 'No items in the runtime\'s plan.' : plan.from === 'absent' ? PLAN_NOT_IMPORTED : 'Round unknown'}</span>}</div>
-      <div className={card}><strong>Architecture</strong>{counts ? <><Meter label="passed" done={counts.passed} total={rows} /><Meter label="not yet" done={counts.notYet} total={rows} /><Meter label="no gate yet" done={counts.noGate} total={rows} /><Meter label="unknown" done={counts.unknown} total={rows} /></>
+      <div className={card}><strong>Architecture</strong><a href="#crew?section=capability-evidence">Gate evidence · Crew</a>{counts ? <><Meter label="passed" done={counts.passed} total={rows} /><Meter label="not yet" done={counts.notYet} total={rows} /><Meter label="no gate yet" done={counts.noGate} total={rows} /><Meter label="unknown" done={counts.unknown} total={rows} /></>
         : <span>{arch.from === 'error' ? <>Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} openedAt={opened} />.</> : arch.from === 'loading' ? 'Reading the architecture table…' : ARCH_NOT_IMPORTED}</span>}</div>
-      <div className={card}><strong>Quota</strong><PoolReadings now={Date.now()} /></div>
+      <div className={card}><strong>Quota</strong><a href="#crew?section=capacity">Pool readings and reset times · Crew</a></div>
     </div>
   </OpsSection>
 }

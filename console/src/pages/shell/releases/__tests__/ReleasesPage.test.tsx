@@ -1,3 +1,4 @@
+import { ServiceVersions } from '../../services/ServiceVersions'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -281,7 +282,7 @@ describe('ReleasesPage', () => {
   })
 
   it('shows versions, attention runs, smoke, records, and only a PROD rollback request', async () => {
-    render(wrapper(<ReleasesPage />))
+    render(wrapper(<><ServiceVersions /><ReleasesPage /></>))
 
     await waitFor(() => {
       expect(screen.getAllByText('platform abcd123').length).toBeGreaterThan(0)

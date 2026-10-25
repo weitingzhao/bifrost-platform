@@ -1,6 +1,12 @@
+import { DomainSection } from '@/components/shell/DomainSection'
+import { CapabilityEvidence } from '../agents/CapabilityEvidence'
+import { ServiceVersions } from '../services/ServiceVersions'
+import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
+import { OwnerReleaseLane } from './OwnerReleaseLane'
 import { ChiefConversation } from './ChiefConversation'
 import { useEffect, useState } from 'react'
 import { GovernanceReferences } from '../progress/GovernanceReferences'
+import { PoolReadings } from './PoolReadings'
 import { OwnerQuota } from './OwnerQuota'
 import { OwnerCapabilities } from './OwnerCapabilities'
 import { canonicalQuery, scrollAfterShell } from '@/lib/shell/useHashSection'
@@ -17,7 +23,7 @@ import { OwnerYou } from './OwnerYou'
 import { TONE_COLOR, ago, lastResultLine, runtimeUnreadLine, type Verdict } from './ownerModel'
 import { useOwnerConsole, type OwnerConsoleData } from './useOwnerConsole'
 
-/** Which blocks an entry shows. System carries the data tiles and the way into every detail page. */
+/** Each entry mounts its own facts; shared Command drafts remain mounted across routes. */
 function entryBlocks(entry: EntryRouteId | null) {
   return { you: entry === 'command', chief: entry === 'command', work: entry === 'work', system: entry === 'system', crew: entry === 'crew', services: entry === 'services' }
 }
@@ -86,12 +92,13 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief active={blocks.chief} data={data} draft={draft.text} draftKey={draft.key} /></div>
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
-    {blocks.work && <ProgressPage />}
-    {blocks.system && <OwnerSystem data={data} />}
-    {blocks.services && <OwnerData data={data} />}
+    {blocks.work && <><OwnerReleaseLane data={data} /><ProgressPage /></>}
+    {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
+    {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>
       <section id="roles" aria-label="Roles and performance"><OwnerCapabilities now={data.now} /></section>
-      <section id="capacity" aria-label="Capacity and cost"><OwnerQuota now={data.now} /></section>
+      <section id="capacity" aria-label="Capacity and cost"><PoolReadings now={data.now} /><OwnerQuota now={data.now} /></section>
+      <DomainSection id="capability-evidence" label="Capability evidence"><CapabilityEvidence /></DomainSection>
       <GovernanceReferences />
     </>}
   </div>

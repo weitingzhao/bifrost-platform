@@ -242,7 +242,7 @@ describe('Progress composition', () => {
     expect(document.getElementById('code-health')).not.toHaveAttribute('open')
     // Finished work is in Records (W-31 2.2b): Work's History points there.
     expect(screen.getByRole('link', { name: 'Records › Work history' })).toHaveAttribute('href', '#records?tab=work')
-    expect(screen.getByText('Plan and architecture').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Plan').closest('details')).not.toHaveAttribute('open')
     expect(resolveConsoleHash('commit-lineage').canonical).toBe('#work?section=commit-lineage')
     expect(resolveConsoleHash('code-health').canonical).toBe('#work?section=code-health')
     await act(async () => { window.location.hash = '#work?section=code-health'; window.dispatchEvent(new Event('hashchange')) })

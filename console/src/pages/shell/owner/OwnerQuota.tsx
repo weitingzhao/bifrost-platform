@@ -14,7 +14,7 @@ export function OwnerQuota({ now }: { now: number }) {
   const auth = useContext(PlatformAuthContext)
   const owner = auth != null && !auth.capsLoading && !auth.capsError && auth.canAdmin
   const client = useQueryClient()
-  // This card mounts only in the System entry; unmounting removes its polling observer.
+  // This card mounts only in the Crew entry; unmounting removes its polling observer.
   const query = useQuery({ queryKey: POOLS_QUERY_KEY, queryFn: ({ signal }) => fetchPools(signal), refetchInterval: 30_000 })
   const [pool, setPool] = useState(KNOWN_POOLS[0])
   const [percent, setPercent] = useState('')

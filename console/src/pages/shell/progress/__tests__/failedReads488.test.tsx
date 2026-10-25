@@ -1,3 +1,4 @@
+import { RuntimeHosts } from '../../infrastructure/RuntimeHosts'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
@@ -60,7 +61,7 @@ const runningCard = () => within(screen.getByRole('region', { name: 'Overview' }
 
 describe('Work while the runtime cannot be read (A1)', () => {
   it('tells what runs and the hosts from a good read, and nothing of it once a read fails', async () => {
-    const { client } = show(<ProgressPage />)
+    const { client } = show(<><ProgressPage /><section aria-label="Hosts"><RuntimeHosts /></section></>)
     await waitFor(() => expect(within(runningCard()).getByText('2')).toBeInTheDocument())
     expect(within(runningCard()).getByText('Not confirmed running: 1 host lost · 1 maybe stuck')).toBeInTheDocument()
     const hosts = screen.getByRole('region', { name: 'Hosts' })

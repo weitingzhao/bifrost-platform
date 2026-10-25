@@ -6,7 +6,6 @@ import { LastRead } from './LastRead'
 import { Bar, Card, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
 import { OwnerGoals } from './OwnerGoals'
-import { PoolReadings } from './PoolReadings'
 import { ago, reasonText, runtimeUnreadLine } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
@@ -79,14 +78,15 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           </div>
           <span className="text-right font-mono text-xs text-muted-foreground">{row.done}/{row.total}</span>
         </li>)}</ol>
+        <a href="#crew?section=capability-evidence">Capability evidence</a>
         {/* Each architecture row is ticked by its gate tests against what is deployed now (2.5 ⑤ G2). */}
         {counts && arch.from === 'runtime' && <p className="m-0 flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2 text-sm" data-arch-summary>
           <strong>Architecture, {arch.table.rows.length} rows:</strong><span>{counts.passed} passed</span><span>{counts.notYet} not yet</span><span>{counts.noGate} no gate yet</span><span>{counts.unknown} unknown</span></p>}
         {arch.from === 'absent' && <p className="m-0 border-t border-[var(--table-rule)] pt-2 text-xs text-muted-foreground">{ARCH_NOT_IMPORTED}</p>}
         {arch.from === 'error' && <p role="alert" className="m-0 break-words border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} openedAt={data.runtimeOpenedAt} />.</p>}
       </Card>
-      <Card label="Quota" title="Quota" more={{ href: '#system', text: 'System' }}>
-        <PoolReadings now={now} />
+      <Card label="Quota" title="Quota" more={{ href: '#crew?section=capacity', text: 'Crew capacity' }}>
+        <p className="m-0 text-sm">Quota holds stay on the affected goals and attempts. Pool readings and reset times are in Crew.</p>
       </Card>
     </div>
   </section>

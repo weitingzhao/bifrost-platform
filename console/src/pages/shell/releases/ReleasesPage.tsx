@@ -5,7 +5,7 @@ import { operatorToken } from '@/api/client'
 import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
 import { fetchGitOpsApps } from '@/api/gitOps'
 import { fetchStgSmoke } from '@/api/promote'
-import { fetchReleaseRecords, fetchRunningImages } from '@/api/releases'
+import { fetchReleaseRecords } from '@/api/releases'
 import { RequestActionButton } from '@/components/shell/RequestActionButton'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -17,8 +17,6 @@ import {
   RELEASE_RECORD_LIMIT,
   RELEASE_ROLLBACK_ACTION,
   REQUEST_ROLLBACK_LABEL,
-  LIVE_IMAGE_LANES,
-  VERSION_ROWS,
   isReleasePipeline,
   pendingReleaseApprovals,
   prodRollbackApps,
@@ -27,7 +25,6 @@ import {
   rollbackUndo,
   shortSha,
   splitReleaseRuns,
-  versionCell,
 } from '@/pages/shell/releases/releaseView'
 
 function errorText(error: unknown): string | null {
@@ -38,11 +35,6 @@ export function ReleasesPage() {
   const releases = useQuery({
     queryKey: ['releases', 'records', RELEASE_RECORD_LIMIT],
     queryFn: () => fetchReleaseRecords(RELEASE_RECORD_LIMIT),
-    refetchInterval: 30_000,
-  })
-  const runningImages = useQuery({
-    queryKey: ['releases', 'running-images'],
-    queryFn: fetchRunningImages,
     refetchInterval: 30_000,
   })
   const gitops = useQuery({
@@ -107,58 +99,13 @@ export function ReleasesPage() {
   })
   const runError = runQueries.map(query => errorText(query.error)).find(message => message != null) ?? null
   const runsLoading = pipelines.isLoading || runQueries.some(query => query.isLoading)
-  const releaseError = errorText(releases.error) ?? releases.data?.error ?? releases.data?.status.rules_error ?? null
   const runErrors = [errorText(pipelines.error), runError].filter((message): message is string => message != null)
 
   return (
     <div className="flex flex-col gap-3">
       <p className="m-0 max-w-3xl text-sm text-muted-foreground">{shellNavEntry('releases').question}</p>
 
-      <OpsSection
-        title="Versions"
-        description="Platform and Trade use the newest deploying release, falling back to the Argo CD revision. Research, Plugins, and Mac mini agent show the live image or operator-plane version."
-        bodyPadding="none"
-        overflow="visible"
-        bodyClassName="ops-section-body--table"
-      >
-        {releaseError != null && releaseError !== '' && (
-          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{releaseError}</p>
-        )}
-        {errorText(runningImages.error) != null && (
-          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{errorText(runningImages.error)}</p>
-        )}
-        {errorText(gitops.error) != null && (
-          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{errorText(gitops.error)}</p>
-        )}
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Application</DenseTableHead>
-              <DenseTableHead>STG</DenseTableHead>
-              <DenseTableHead>PROD</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {VERSION_ROWS.map(row => {
-              const imageCells = runningImages.data?.cells
-              const stg = versionCell({ records, lane: row.lane, env: 'stg', apps, runningImages: imageCells })
-              const prod = versionCell({ records, lane: row.lane, env: 'prod', apps, runningImages: imageCells })
-              const loading = LIVE_IMAGE_LANES.has(row.lane) ? runningImages.isLoading : releases.isLoading
-              return (
-                <DenseTableRow key={row.lane}>
-                  <DenseTableCell className="font-medium">{row.label}</DenseTableCell>
-                  <DenseTableCell className="max-w-[280px] truncate font-mono-tabular" title={stg.title}>
-                    {loading && stg.text === '—' ? '…' : stg.text}
-                  </DenseTableCell>
-                  <DenseTableCell className="max-w-[280px] truncate font-mono-tabular" title={prod.title}>
-                    {loading && prod.text === '—' ? '…' : prod.text}
-                  </DenseTableCell>
-                </DenseTableRow>
-              )
-            })}
-          </DenseTableBody>
-        </DenseDataTable>
-      </OpsSection>
+      <a href="#services?section=versions">Running versions · Services</a>
 
       <ReleaseNeedsYouSection
         hasToken={hasToken}

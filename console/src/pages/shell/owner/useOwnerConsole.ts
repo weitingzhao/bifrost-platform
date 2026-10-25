@@ -32,7 +32,7 @@ import { current, errorText, useOwnerYours } from './useOwnerYours'
 
 /**
  * Every read the Owner Console makes. Query keys are the ones the detail pages use, so a page
- * opened after this one reads from the same cache. Release runs are read only while System is on
+ * opened after this one reads from the same cache. Release runs are read only while Work is on
  * screen; everything that feeds the verdict is always read.
  */
 export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean; services?: boolean }) {
@@ -42,16 +42,16 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const hasToken = operatorToken() !== ''
   const windowQ = useQuery({ queryKey: ['delivery', 'release-window'], queryFn: fetchReleaseWindow, enabled: hasToken, refetchInterval: 15_000 })
   const recordsQ = useQuery({ queryKey: ['releases', 'records', RELEASE_RECORD_LIMIT], queryFn: () => fetchReleaseRecords(RELEASE_RECORD_LIMIT),
-    enabled: blocks.system, refetchInterval: 30_000 })
-  const pipelinesQ = useQuery({ queryKey: ['delivery', 'pipelines'], queryFn: fetchDeliveryPipelines, enabled: blocks.system, refetchInterval: 15_000 })
+    enabled: blocks.work, refetchInterval: 30_000 })
+  const pipelinesQ = useQuery({ queryKey: ['delivery', 'pipelines'], queryFn: fetchDeliveryPipelines, enabled: blocks.work, refetchInterval: 15_000 })
   const pipelineNames = (current(pipelinesQ)?.pipelines ?? []).map(p => p.name).filter(isReleasePipeline).sort()
   const runQs = useQueries({ queries: pipelineNames.map(name => ({ queryKey: ['delivery', 'runs', name], queryFn: () => fetchPipelineRuns(name),
-    enabled: blocks.system, refetchInterval: 15_000 })) })
+    enabled: blocks.work, refetchInterval: 15_000 })) })
 
-  // The data tiles are on System only: nothing they read is fetched while another entry is open (review 226 B-226-2).
-  const tiles = blocks.services ?? blocks.system
-  const backupQ = useQuery({ queryKey: ['cluster', 'postgres', 'backup-status'], queryFn: fetchClusterPostgresBackupStatus, enabled: tiles, refetchInterval: 60_000, retry: false })
-  const copiesQ = useQuery({ queryKey: ['cluster', 'data-freshness'], queryFn: fetchDataFreshness, enabled: tiles, refetchInterval: 60_000, retry: false })
+  // Business probes belong to Services; infrastructure summaries belong to System.
+  const tiles = blocks.services ?? false
+  const backupQ = useQuery({ queryKey: ['cluster', 'postgres', 'backup-status'], queryFn: fetchClusterPostgresBackupStatus, enabled: blocks.system, refetchInterval: 60_000, retry: false })
+  const copiesQ = useQuery({ queryKey: ['cluster', 'data-freshness'], queryFn: fetchDataFreshness, enabled: blocks.system, refetchInterval: 60_000, retry: false })
   const researchQ = useQuery({ queryKey: ['research-engine-orchestration'], queryFn: fetchOrchestrationStatus, enabled: tiles, refetchInterval: 60_000, retry: 1 })
   // The session moves while the page stays open on a phone; read it again every minute (review 221 B6).
   const dimsQ = useQuery({ queryKey: ['market-data', 'coverage', 'dimensions'], queryFn: fetchCoverageDimensions, enabled: tiles, staleTime: 60_000, refetchInterval: 60_000 })
@@ -87,9 +87,9 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const runs = splitReleaseRuns(pipelineNames.map((pipeline, i) => ({ pipeline, runs: current(runQs[i])?.runs ?? [] })), records)
   // "Nothing delivering" needs every run list read now: an error, an offline pause or no answer yet is unread (review 221 A6, 222 A-R3).
   const runSources = [pipelinesQ, recordsQ, ...runQs]
-  const runsRead = blocks.system && runSources.every(q => q.data !== undefined && !q.isError && !q.isPaused)
+  const runsRead = blocks.work && runSources.every(q => q.data !== undefined && !q.isError && !q.isPaused)
   const runsError = runSources.map(q => (q.isError ? errorText(q.error) : q.isPaused ? 'offline' : null)).find(e => e != null) ?? null
-  const runsLoading = blocks.system && !runsRead && runsError == null
+  const runsLoading = blocks.work && !runsRead && runsError == null
 
   const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null,
     running: work ? work.running : null, stalled: work ? work.stalled : null, stalledWords: work?.stalledWords, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })

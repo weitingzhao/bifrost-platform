@@ -1,3 +1,4 @@
+import { AgentThreadsInProgress } from '../status/AgentThreadsInProgress'
 import { useSettledSignoffTarget } from './useSettledSignoffTarget'
 import { runtimeUnreadLine } from '../owner/ownerModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -37,7 +38,7 @@ function addressTarget(): (() => HTMLElement | null) | null {
 
 /**
  * Work's detail, below its cards (it was the Progress page; W-31 2.2b): the goal cards, the
- * overview, plan and architecture, hosts, history, commit lineage and code health. What waits on
+ * overview, plan, activity, history, commit lineage and code health. What waits on
  * the Owner is For you's; new goals are given on Chief of staff. `#work?goal=M-n` puts that goal's
  * card first and brings it into view.
  */
@@ -104,8 +105,8 @@ export function ProgressPage() {
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
     <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={unreadable} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} openedAt={openedAt.current} /></section>
-    <section id="plan" aria-label="Plan and architecture" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>
-    <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
+    <section id="plan" aria-label="Plan" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>
+    <section id="activity" aria-label="Activity"><AgentThreadsInProgress /><a href="#infrastructure?section=hosts">Host health and capacity · System</a></section>
     <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
       <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>
     </OpsSection></section>

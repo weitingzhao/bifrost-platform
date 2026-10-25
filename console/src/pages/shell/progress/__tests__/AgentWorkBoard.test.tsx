@@ -655,7 +655,7 @@ describe('AgentWorkBoard', () => {
     const page = await screen.findByTestId('merged-progress')
     expect(screen.queryByText('No progress has been published.')).toBeNull()
     expect(Array.from(page.children).filter(child => child.tagName === 'SECTION').map(child => child.getAttribute('aria-label'))).toEqual([
-      'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History',
+      'Goals', 'Overview', 'Plan', 'Activity', 'History',
       'Commit lineage', 'Code health',
     ])
   })

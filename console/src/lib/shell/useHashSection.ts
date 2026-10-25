@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import { hashQueryParam, resolveConsoleHash } from './consoleRoutes'
 
 /**
@@ -26,7 +26,12 @@ export function scrollAfterShell(target: () => Element | null | undefined, optio
   let timer = 0
   const attempt = () => {
     const element = target()
-    if (element != null) element.scrollIntoView?.(options)
+    if (element != null) {
+      // Domain navigation wraps on phones; keep the destination below the whole sticky chrome.
+      const chrome = document.querySelector('.console-shell-chrome')
+      if (element instanceof HTMLElement && chrome) element.style.scrollMarginTop = `${chrome.getBoundingClientRect().height + 16}px`
+      element.scrollIntoView?.(options)
+    }
     else if (++tries < 20) timer = window.setTimeout(attempt, 50)
   }
   timer = window.setTimeout(attempt, 0)
@@ -52,4 +57,16 @@ export function useHashSection(id: string, ref: RefObject<HTMLElement | null>): 
       window.removeEventListener('hashchange', go)
     }
   }, [id, ref])
+}
+
+/** Selected domain detail; unselected siblings stay mounted so their filters and drafts survive. */
+export function useDomainSection(): string | null {
+  const read = () => hashQueryParam(canonicalQuery(window.location.hash), 'section')
+  const [section, setSection] = useState(read)
+  useEffect(() => {
+    const sync = () => setSection(read())
+    sync(); window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  return section
 }

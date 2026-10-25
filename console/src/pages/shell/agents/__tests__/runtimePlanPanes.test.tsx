@@ -1,3 +1,4 @@
+import { CapabilityEvidence } from '../CapabilityEvidence'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
@@ -97,7 +98,7 @@ describe('the plan pane on Progress', () => {
   it('reads an imported plan from the runtime: its items, counts, each step\'s ledger date and line, nothing kept by hand', async () => {
     const { container } = show(<AgentsPlan />)
     expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText('From the agent runtime; each architecture row is ticked by its gate tests')).toBeInTheDocument()
+    expect(screen.getByText('Execution steps, evidence and sign-off from the agent runtime')).toBeInTheDocument()
     // Imported done steps are done by their manual atom: counted as done and marked manual (v5 §5.1.2, T24).
     expect(screen.getByText('2.0 设计对齐：v4 到 v5 · 3/3 · 3 manual · done')).toBeInTheDocument()
     expect(screen.getByText('2.1 数据层：状态库 · 2/5 · 2 manual · doing')).toBeInTheDocument()
@@ -108,7 +109,7 @@ describe('the plan pane on Progress', () => {
     expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
     expect(container).not.toHaveTextContent('✎')
     // This runtime holds no architecture root: said so, not read from the board.
-    expect(await screen.findByText(ARCH_NOT_IMPORTED)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Capability evidence · runtime architecture gates' })).toHaveAttribute('href', '#crew?section=capability-evidence')
     expect(boardRead()).toBe(false)
   })
 
@@ -280,7 +281,7 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
 
   it('shows each row ticked by its gate tests, why, and its latest note', async () => {
     source.arch = true
-    const { container } = show(<AgentsPlan />)
+    const { container } = show(<CapabilityEvidence />)
     expect(await screen.findByText('架构对照 · 1 passed · 1 not yet · 1 no gate yet · 1 unknown')).toBeInTheDocument()
     for (const row of rows) {
       const el = container.querySelector(`[data-arch-row="${row.plan_node_id}"]`) as HTMLElement
@@ -312,11 +313,11 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
 
   it('a read that fails after a good one is unavailable, never the rows read before', async () => {
     source.arch = true
-    const { client } = show(<><Overview /><AgentsPlan /></>)
+    const { client } = show(<><Overview /><CapabilityEvidence /></>)
     expect(await screen.findByText('1/4 passed')).toBeInTheDocument()
     source.progressFails = true
     await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
-    expect(await screen.findAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2)
+    await waitFor(() => expect(screen.getAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2))
     expect(screen.queryByText('1/4 passed')).not.toBeInTheDocument()
     expect(document.querySelector('[data-arch-row]')).toBeNull()
   })
