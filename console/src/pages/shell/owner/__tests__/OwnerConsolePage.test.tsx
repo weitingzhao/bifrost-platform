@@ -175,7 +175,7 @@ describe('Owner Console entries', () => {
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {
     show('#work')
-    expect(headings()).toEqual(['Work'])
+    expect(headings()).toEqual(['Work', 'Governance references'])
     expect(screen.queryByRole('region', { name: 'Verdict' })).toBeNull()
     expect(screen.getByRole('link', { name: /2 things are yours/ })).toHaveAttribute('href', '#you')
   })
@@ -207,9 +207,9 @@ describe('Owner Console entries', () => {
   it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', () => {
     stubRuntimeReads()
     show('#work')
-    expect(headings()).toEqual(['Work'])
+    expect(headings()).toEqual(['Work', 'Governance references'])
     const progress = screen.getByTestId('merged-progress')
-    expect(Array.from(progress.children).map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health', 'Governance references'])
     expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
   })
