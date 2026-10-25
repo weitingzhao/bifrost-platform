@@ -23,6 +23,8 @@ func Tightens(prev, next Rule) error {
 		return errors.New("it takes effect earlier")
 	}
 	switch next.Kind {
+	case KindLanding:
+		return landingTightens(prev.Landing, next.Landing)
 	case KindEnvelope:
 		return envelopeTightens(prev.Envelope, next.Envelope)
 	case KindConcurrency:

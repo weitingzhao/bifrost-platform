@@ -105,6 +105,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		return Appended{}, err
 	}
 	at := eventClock().UTC().Truncate(time.Microsecond)
+	if err := checkLandingAppend(ctx, tx, ev, at); err != nil {
+		return Appended{}, err
+	}
 	seq := lastSeq + 1
 	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
 	if err != nil {

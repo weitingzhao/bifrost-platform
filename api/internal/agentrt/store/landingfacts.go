@@ -1,0 +1,153 @@
+package store
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+)
+
+// LandingSource reads trusted external evidence anew. It must distinguish a
+// full history with no result from an unreadable or reverted history. It does
+// not use MainResults, whose effective-only projection loses that distinction.
+// S2 supplies git/CI adapters; S3 supplies the full STG snapshot diff.
+type LandingSource struct {
+	Result         func(ctx context.Context, repo, task, attempt, base, commit string) (singleCommit bool, changes []rules.LandingChange, err error)
+	History        func(ctx context.Context, repo, task, commit, snapshot string) (landing.MainHistory, error)
+	DeploymentDiff func(ctx context.Context, repo, snapshot string) ([]rules.LandingChange, error)
+}
+
+// LandingFacts is the common reader for all three gates. The caller supplies
+// a fresh transaction; the final gate must first hold the locks specified by
+// the cut (capabilities, rule, step, task, mission, quota, repository stream).
+// This function opens no network and never replaces an error with Never.
+func LandingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op, snapshot string, now time.Time) (landing.Facts, error) {
+	f := landing.Facts{Environment: environment, Mode: mode, Task: taskID}
+	var mission, step, offPlan, role, class string
+	err := tx.QueryRow(ctx, `SELECT t.mission_id, COALESCE(t.plan_node_id,''), COALESCE(t.off_plan_reason,''), t.role,t.task_class,
+  COALESCE(t.repo,''),COALESCE(t.base_commit,''),t.state,m.tenant,m.state,m.version,m.created_at,
+  COALESCE(m.scope_json->>'no_merge','') <> '',COALESCE(p.state,''),COALESCE(p.version,0)
+  FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) LEFT JOIN agentrt.plan_node p ON p.plan_node_id=t.plan_node_id
+  WHERE t.task_id=$1`, taskID).Scan(&mission, &step, &offPlan, &role, &class, &f.Repo, &f.Base, &f.TaskState, &f.Tenant, &f.MissionState, &f.MissionVersion, &f.MissionCreated, &f.NoMerge, &f.StepState, &f.StepVersion)
+	if err != nil {
+		return f, err
+	}
+	if role != "implement" {
+		return f, fmt.Errorf("landing only implements")
+	}
+	if step != "" && f.StepState == "" {
+		return f, fmt.Errorf("unreadable plan node")
+	}
+	f.GoalTask = class == "goal" || strings.HasPrefix(offPlan, "planned by task ")
+	if f.GoalTask {
+		f.ProducingPlan = strings.TrimPrefix(offPlan, "planned by task ")
+		if f.ProducingPlan == offPlan {
+			f.ProducingPlan = ""
+		}
+		// Acceptance of a used plan orders adoption, not task creation time.
+		err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT e.task_id FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.task_id
+   WHERE t.mission_id=$1 AND t.role='plan' AND t.state='accepted' AND e.event_type='task_state_changed'
+   AND e.body_json->>'to'='accepted' AND e.body_json->>'reason' LIKE 'plan used:%' ORDER BY e.event_id DESC LIMIT 1),'')`, mission).Scan(&f.LatestUsedPlan)
+		if err != nil {
+			return f, err
+		}
+	}
+	var accepted *time.Time
+	err = tx.QueryRow(ctx, `SELECT COALESCE(a.attempt_id,''),COALESCE(a.pushed_commit,''),
+  (SELECT max(e.at) FROM agentrt.event e WHERE e.task_id=t.task_id AND e.event_type='task_state_changed' AND e.body_json->>'to'='accepted')
+  FROM agentrt.task t LEFT JOIN LATERAL (SELECT attempt_id FROM agentrt.verification WHERE task_id=t.task_id AND accepts_attempt ORDER BY created_at DESC,verification_id DESC LIMIT 1) v ON true
+  LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id WHERE t.task_id=$1`, taskID).Scan(&f.Attempt, &f.A, &accepted)
+	if err != nil {
+		return f, err
+	}
+	if accepted != nil {
+		f.AcceptedAt = *accepted
+	}
+	current, err := CurrentRule(ctx, tx, "landing:"+f.Tenant, now)
+	if err != nil {
+		return f, err
+	}
+	if current != nil {
+		f.Rule = &current.Rule
+	}
+	state, err := LandingState(ctx, tx, "landing:"+f.Repo)
+	if err != nil {
+		return f, err
+	}
+	f.EnabledAt = state.EnabledAt
+	f.Operation = state.Operations[op]
+	for id, o := range state.Operations {
+		if id != op && o.Task != "" && o.Active() {
+			f.OtherInFlight++
+		}
+		if o.Task == taskID && o.BlocksClaim() {
+			f.Terminal = true
+		}
+	}
+	quota, err := LandingState(ctx, tx, "landing-quota:"+f.Tenant+":"+now.UTC().Format("2006-01-02"))
+	if err != nil {
+		return f, err
+	}
+	f.ReservedToday = len(quota.Reservations)
+	if _, reserved := quota.Reservations[taskID]; reserved {
+		f.ReservedToday--
+	}
+	if src.Result == nil || src.History == nil {
+		return f, fmt.Errorf("landing source unavailable")
+	}
+	f.SingleCommit, f.Changes, err = src.Result(ctx, f.Repo, taskID, f.Attempt, f.Base, f.A)
+	if err != nil {
+		return f, err
+	}
+	f.History, err = src.History(ctx, f.Repo, taskID, f.A, "")
+	if err != nil {
+		return f, err
+	}
+	rows, err := tx.Query(ctx, `SELECT t.task_id,COALESCE(t.repo,''),COALESCE(a.pushed_commit,'') FROM agentrt.task_dependency d JOIN agentrt.task t ON t.task_id=d.depends_on_task_id
+  LEFT JOIN LATERAL (SELECT attempt_id FROM agentrt.verification WHERE task_id=t.task_id AND accepts_attempt ORDER BY created_at DESC,verification_id DESC LIMIT 1) v ON true
+  LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id WHERE d.task_id=$1`, taskID)
+	if err != nil {
+		return f, err
+	}
+	type dep struct{ task, repo, commit string }
+	deps, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (dep, error) {
+		var d dep
+		err := r.Scan(&d.task, &d.repo, &d.commit)
+		return d, err
+	})
+	if err != nil {
+		return f, err
+	}
+	f.DependenciesEffective = true
+	for _, d := range deps {
+		if d.repo == "" || d.commit == "" {
+			f.DependenciesEffective = false
+			continue
+		}
+		h, err := src.History(ctx, d.repo, d.task, d.commit, "")
+		if err != nil {
+			return f, err
+		}
+		if h.State != landing.Effective || h.Commit == "" {
+			f.DependenciesEffective = false
+		}
+	}
+	if snapshot != "" {
+		f.SnapshotHistory, err = src.History(ctx, f.Repo, taskID, f.A, snapshot)
+		if err != nil {
+			return f, err
+		}
+		if src.DeploymentDiff == nil {
+			return f, fmt.Errorf("deployment diff unavailable")
+		}
+		f.DeployChanges, err = src.DeploymentDiff(ctx, f.Repo, snapshot)
+		if err != nil {
+			return f, err
+		}
+	}
+	return f, nil
+}

@@ -198,13 +198,14 @@ type Rule struct {
 	Plan     *PlanStanding
 	CardAuto *CardAuto
 	Intake   *IntakeGates
+	Landing  *Landing
 }
 
 // KindOf is the kind a rule_id names, and the tenant or job it is for.
 func KindOf(id string) (kind, arg string, err error) {
 	kind, arg, _ = strings.Cut(id, ":")
 	switch kind {
-	case KindEnvelope, KindBudget, KindRouting:
+	case KindEnvelope, KindBudget, KindRouting, KindLanding:
 		if slices.Contains(tenants, arg) {
 			return kind, arg, nil
 		}
@@ -217,7 +218,7 @@ func KindOf(id string) (kind, arg string, err error) {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -257,6 +258,8 @@ func Parse(text []byte) (Rule, error) {
 		return Rule{}, errors.New("expires_at is after effective_at")
 	}
 	switch kind {
+	case KindLanding:
+		err = r.landing(o, arg)
 	case KindEnvelope:
 		err = r.envelope(o, arg)
 	case KindConcurrency:
@@ -576,6 +579,10 @@ func (r Rule) Doc() map[string]any {
 	doc := map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction,
 		"effective_at": stamp(r.Effective), "expires_at": stamp(r.Expires)}
 	switch r.Kind {
+	case KindLanding:
+		for k, v := range r.Landing.doc() {
+			doc[k] = v
+		}
 	case KindEnvelope:
 		e := r.Envelope
 		doc["tenant"], doc["max_action"], doc["executors"], doc["hosts"] = e.Tenant, e.MaxAction, anyList(e.Executors), anyList(e.Hosts)
