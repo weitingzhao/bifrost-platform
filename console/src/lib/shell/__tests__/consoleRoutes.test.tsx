@@ -66,11 +66,11 @@ describe('legacy hash redirects', () => {
     }
   })
 
-  it('drops the Agent Protocol redirect; the old hash lands on the home page', () => {
-    expect(LEGACY_HASH_REDIRECTS['agent-protocol']).toBeUndefined()
+  it('restores the Agent Protocol reference without reviving its former API', () => {
+    expect(LEGACY_HASH_REDIRECTS['agent-protocol']).toBe('work')
     expect(resolveConsoleHash('agent-protocol')).toEqual({
-      location: { kind: 'shell', id: 'you' },
-      canonical: '#you',
+      location: { kind: 'shell', id: 'work' },
+      canonical: '#work?section=references&reference=agent-protocol',
     })
   })
 

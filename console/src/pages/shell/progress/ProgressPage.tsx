@@ -1,3 +1,4 @@
+import { GovernanceReferences } from './GovernanceReferences'
 import { useSettledSignoffTarget } from './useSettledSignoffTarget'
 import { runtimeUnreadLine } from '../owner/ownerModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -97,6 +98,7 @@ export function ProgressPage() {
     </>
   }
   return <NowClock><div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
+    <a href="#work?section=references" className="self-start text-sm underline">Governance references · Blueprint, Standards, MCP and protocols</a>
     <section id={GOALS_SECTION} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
       <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
       {runtimeState(null, !ids.length, 'No goals yet.')}
@@ -110,6 +112,7 @@ export function ProgressPage() {
     </OpsSection></section>
     <section aria-label="Commit lineage" className="flex w-full min-w-0 flex-col"><ProgressReference id="commit-lineage" title="Commit lineage"><CommitLineagePage /></ProgressReference></section>
     <section aria-label="Code health" className="flex w-full min-w-0 flex-col"><ProgressReference id="code-health" title="Code health"><CodeHealthPage /></ProgressReference></section>
+    <GovernanceReferences />
   </div></NowClock>
 }
 

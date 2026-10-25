@@ -654,9 +654,9 @@ describe('AgentWorkBoard', () => {
     // Work's lower half reads the runtime only: the board is retired (2.5 ⑤), so nothing on it says the board published nothing.
     const page = await screen.findByTestId('merged-progress')
     expect(screen.queryByText('No progress has been published.')).toBeNull()
-    expect(Array.from(page.children).map(child => child.getAttribute('aria-label'))).toEqual([
+    expect(Array.from(page.children).filter(child => child.tagName === 'SECTION').map(child => child.getAttribute('aria-label'))).toEqual([
       'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History',
-      'Commit lineage', 'Code health',
+      'Commit lineage', 'Code health', 'Governance references',
     ])
   })
 })

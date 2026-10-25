@@ -1,3 +1,5 @@
+import { GOVERNANCE_REFERENCES } from './governanceReferences'
+
 /**
  * Ops Console shell routes (Owner 2026-10-16, design system v2 §10): four entries — For you
  * (home), Chief of staff, Work, System — then the detail pages, which hang off an entry and are
@@ -200,6 +202,7 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   roadmap: 'work',
   'platform-standards': 'work',
   'agent-system': 'work',
+  'agent-protocol': 'work',
   'mcp-contract': 'work',
   'design-system': 'work',
   'ai-compute': 'work',
@@ -244,6 +247,7 @@ export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
 
 /** The section or Records tab a legacy hash lands on. */
 export const LEGACY_HASH_QUERY: Record<string, string> = {
+  ...Object.fromEntries(GOVERNANCE_REFERENCES.map(item => [item.id, `section=references&reference=${item.id}`])),
   'needs-you': `section=${WAITING_SECTION}`,
   progress: `section=${GOALS_SECTION}`,
   queue: `section=${WAITING_SECTION}`,
