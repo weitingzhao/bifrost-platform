@@ -212,7 +212,7 @@ describe('goal cards and source links', () => {
   it('matches only planning questions and runtime blocks for this mission', () => {
     const q = { id: 'q_123', title: 'Confirm scope', task_id: full.tasks[0]!.task_id, status: 'open' } as Question
     const runtime = parseRuntimeProgress({ needs_you: { items: [{ title: 'Change plan', blocks: { missions: ['M-2'] }, action: {} }] } })
-    expect(goalWaitingLinks('M-2', full, [q], runtime)).toEqual([{ title: q.title, href: '#questions?id=q_123' }, { title: 'Change plan', href: '#you?section=waiting' }])
+    expect(goalWaitingLinks('M-2', full, [q], runtime)).toEqual([{ title: q.title, href: '#questions?id=q_123' }, { title: 'Change plan', href: '#command?section=waiting' }])
     expect(goalStatus(full, true)).toBe('Waiting for you')
     expect(goalWaitingLinks('M-1', full, [{ ...q, task_id: 'unrelated' }], runtime)).toEqual([])
   })

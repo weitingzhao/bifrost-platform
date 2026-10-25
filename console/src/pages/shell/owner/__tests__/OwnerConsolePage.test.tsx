@@ -83,11 +83,12 @@ const submit = vi.hoisted(() => vi.fn(async () => ({ mission_id: 'M-9', mission_
 vi.mock('@/api/agentRuntime', async importOriginal => ({ ...(await importOriginal<object>()), submitRuntimeGoal: submit }))
 
 const { OwnerConsolePage } = await import('../OwnerConsolePage')
-const { isEntryRoute } = await import('@/lib/shell/consoleRoutes')
+const { isEntryRoute, resolveConsoleHash } = await import('@/lib/shell/consoleRoutes')
 
 function entryFromHash() {
-  const id = window.location.hash.replace(/^#/, '').split('?')[0] ?? ''
-  return isEntryRoute(id) ? id : 'you'
+  const location = resolveConsoleHash(window.location.hash.slice(1)).location
+  const id = location.kind === 'shell' ? location.id : ''
+  return isEntryRoute(id) ? id : null
 }
 
 /** The shell's one slot for the entries: the hash picks the entry, the component stays mounted. */
@@ -170,23 +171,22 @@ describe('Owner Console entries', () => {
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {
     show('#you')
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')
-    expect(headings()).toEqual(['For you'])
+    expect(headings()).toEqual(['For you', 'Chief of staff'])
   })
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {
     show('#work')
-    expect(headings()).toEqual(['Work', 'Governance references'])
+    expect(headings()).toEqual(['Work'])
     expect(screen.queryByRole('region', { name: 'Verdict' })).toBeNull()
-    expect(screen.getByRole('link', { name: /2 things are yours/ })).toHaveAttribute('href', '#you')
+    expect(screen.getByRole('link', { name: /2 things are yours/ })).toHaveAttribute('href', '#command')
   })
 
   it('System carries the data and the way into every detail page', () => {
     show('#system')
-    expect(headings()).toEqual(['System', 'Data', 'Detail pages'])
+    expect(headings()).toEqual(['System'])
     expect(screen.getByRole('region', { name: 'Release lane' })).toHaveTextContent('nobody holds it; nothing delivering')
     expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
-    const details = within(screen.getByRole('navigation', { name: 'Detail pages' })).getAllByRole('link')
-    expect(details.map(a => a.getAttribute('href'))).toEqual(['#status', '#data', '#ib', '#releases', '#infrastructure', '#records'])
+    expect(screen.queryByRole('region', { name: 'Data' })).toBeNull()
   })
 
   // Navigation, second slice (W-31 2.2b): what was Needs you is For you's lower half, what was Progress is Work's.
@@ -199,7 +199,7 @@ describe('Owner Console entries', () => {
     expect(waiting).toHaveAttribute('id', 'waiting')
     expect(within(waiting).getByTestId('needs-you-page')).toBeInTheDocument()
     expect(within(waiting).getByRole('region', { name: 'Sign off' })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Yours' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#you?section=waiting')
+    expect(within(screen.getByRole('region', { name: 'Yours' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#command?section=waiting')
     await waitFor(() => expect(scroll).toHaveBeenCalled())
     expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
   })
@@ -207,9 +207,9 @@ describe('Owner Console entries', () => {
   it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', () => {
     stubRuntimeReads()
     show('#work')
-    expect(headings()).toEqual(['Work', 'Governance references'])
+    expect(headings()).toEqual(['Work'])
     const progress = screen.getByTestId('merged-progress')
-    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health', 'Governance references'])
+    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
     expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
   })
@@ -251,8 +251,8 @@ describe('Owner Console entries', () => {
     show('#you')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
-    expect(window.location.hash).toBe('#chief')
+    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
+    expect(window.location.hash).toBe('#command?section=new-goal')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toContain('kube-prometheus-stack-grafana targets down')
     expect(submit).not.toHaveBeenCalled()
   })
@@ -260,10 +260,10 @@ describe('Owner Console entries', () => {
   it('a second draft replaces the first, and only Submit sends it', async () => {
     show('#you')
     fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
+    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
     await go('#you', 'For you')
     fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[1])
-    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
+    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
     const box = screen.getByLabelText('Goal') as HTMLTextAreaElement
     expect(box.value).toContain('Job logical-backup-drill-manual-1 failed')
     expect(box.value).not.toContain('grafana')
@@ -276,15 +276,15 @@ describe('Owner Console entries', () => {
   it('an edited draft and a goal just sent outlive moving to another entry (review 224 B-224-1)', async () => {
     show('#you')
     fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
+    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'My own words' } })
     await go('#work', 'Work')
-    await go('#chief', 'Chief of staff')
+    await go('#chief', 'For you')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('My own words')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
     expect(submit).toHaveBeenCalledTimes(1)
     await go('#work', 'Work')
-    await go('#chief', 'Chief of staff')
+    await go('#chief', 'For you')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('')
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
@@ -415,9 +415,9 @@ describe('Owner Console entries', () => {
     expect(m1).not.toHaveTextContent('unknown')
   })
 
-  it('System puts the capability scores beside the quota, from GET /capabilities (2.5 G9)', async () => {
+  it('Crew puts the capability scores beside the quota, from GET /capabilities (2.5 G9)', async () => {
     stubRuntimeReads()
-    show('#system')
+    show('#crew')
     const card = screen.getByRole('region', { name: 'Capabilities' })
     const implementer = await within(card).findByRole('region', { name: 'Scores for implementer' })
     expect(within(implementer).getAllByRole('listitem').map(li => li.textContent)).toEqual([
@@ -429,4 +429,16 @@ describe('Owner Console entries', () => {
     expect(within(card).getByText('Capability facts · 6')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Quota' })).toBeInTheDocument()
   })
+})
+
+it('P2 keeps the same draft through a detail route and sends a created goal to its Work entity', async () => {
+  show('#chief')
+  fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Keep this across a detail page' } })
+  await act(async () => { window.location.hash = '#records?tab=closed' })
+  await waitFor(() => expect(screen.getByLabelText('Goal')).not.toBeVisible())
+  await go('#chief', 'For you')
+  expect(screen.getByLabelText('Goal')).toHaveValue('Keep this across a detail page')
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
+  await waitFor(() => expect(window.location.hash).toBe('#work?goal=M-9'))
+  expect(submit).toHaveBeenCalledTimes(1)
 })

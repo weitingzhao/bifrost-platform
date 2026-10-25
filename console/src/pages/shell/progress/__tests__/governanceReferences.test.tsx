@@ -35,7 +35,7 @@ describe('P1 reference reachability', () => {
   })
 
   it('keeps the four-entry shell, entity links and the separate Market Data blueprint', () => {
-    expect(ENTRY_ROUTE_IDS).toEqual(['you', 'chief', 'work', 'system'])
+    expect(ENTRY_ROUTE_IDS).toEqual(['command', 'crew', 'work', 'services', 'system'])
     for (const hash of ['work?goal=M-143&task=t_test', 'approvals?id=ap-1', 'questions?id=q_0123456789abcdef', 'issue?id=BI-1', 'records?tab=work']) {
       expect(resolveConsoleHash(hash).canonical).toBe(`#${hash}`)
     }
@@ -47,7 +47,7 @@ describe('P1 reference reachability', () => {
     open(referenceHref('blueprint'))
     act(() => { window.history.replaceState({}, '', referenceHref('agent-protocol')); window.dispatchEvent(new HashChangeEvent('hashchange')) })
     expect(screen.getByRole('heading', { name: 'Agent Protocol' })).toBeTruthy()
-    act(() => { window.history.replaceState({}, '', '#work?section=references&reference=missing'); window.dispatchEvent(new HashChangeEvent('hashchange')) })
+    act(() => { window.history.replaceState({}, '', '#crew?section=references&reference=missing'); window.dispatchEvent(new HashChangeEvent('hashchange')) })
     expect(screen.getByRole('status').textContent).toContain('Unknown reference')
   })
 

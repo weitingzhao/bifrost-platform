@@ -1,6 +1,9 @@
 import { ChiefConversation } from './ChiefConversation'
-import { useState } from 'react'
-import { DetailPageLinks } from '@/components/shell/DetailPageLinks'
+import { useEffect, useState } from 'react'
+import { GovernanceReferences } from '../progress/GovernanceReferences'
+import { OwnerQuota } from './OwnerQuota'
+import { OwnerCapabilities } from './OwnerCapabilities'
+import { canonicalQuery, scrollAfterShell } from '@/lib/shell/useHashSection'
 import { formatShellHash, goalHref, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { GoalForm } from '@/pages/shell/agents/GoalForm'
 import { ProgressPage } from '@/pages/shell/progress/ProgressPage'
@@ -15,16 +18,16 @@ import { TONE_COLOR, ago, lastResultLine, runtimeUnreadLine, type Verdict } from
 import { useOwnerConsole, type OwnerConsoleData } from './useOwnerConsole'
 
 /** Which blocks an entry shows. System carries the data tiles and the way into every detail page. */
-function entryBlocks(entry: EntryRouteId) {
-  return { you: entry === 'you', chief: entry === 'chief', work: entry === 'work', system: entry === 'system' }
+function entryBlocks(entry: EntryRouteId | null) {
+  return { you: entry === 'command', chief: entry === 'command', work: entry === 'work', system: entry === 'system', crew: entry === 'crew', services: entry === 'services' }
 }
 
 function VerdictBanner({ verdict, compact, updatedAt, now }: { verdict: Verdict; compact: boolean; updatedAt: number; now: number }) {
   const tinted = verdict.tone === 'attention'
   const box = tinted ? 'border-[var(--color-warning)] bg-[color-mix(in_srgb,var(--color-warning)_12%,transparent)]' : 'border-[var(--card-border)] bg-[var(--card-fill)]'
   if (compact) {
-    return <a href={formatShellHash('you')} className={`flex min-h-11 items-center gap-2.5 rounded-[var(--card-radius)] border px-3 text-left text-foreground no-underline ${box}`}>
-      <Dot tone={verdict.tone} /><span className="flex-1 font-semibold">{verdict.headline}</span><span className="text-sm font-semibold" style={{ color: TONE_COLOR[verdict.tone] }}>{tinted ? 'See them ›' : 'For you ›'}</span>
+    return <a href={formatShellHash('command')} className={`flex min-h-11 items-center gap-2.5 rounded-[var(--card-radius)] border px-3 text-left text-foreground no-underline ${box}`}>
+      <Dot tone={verdict.tone} /><span className="flex-1 font-semibold">{verdict.headline}</span><span className="text-sm font-semibold" style={{ color: TONE_COLOR[verdict.tone] }}>{tinted ? 'See them ›' : 'Command ›'}</span>
     </a>
   }
   return <section aria-label="Verdict" data-owner-verdict={verdict.tone} className={`flex items-center gap-3 rounded-[var(--card-radius)] border px-4 py-3 ${box}`}>
@@ -43,7 +46,7 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
     <h2 className="m-0 text-lg font-semibold">Chief of staff</h2>
     <ChiefConversation active={active} />
     <div className="grid gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <GoalForm key={draftKey} draft={draft} />
+      <div id="new-goal"><GoalForm key={draftKey} draft={draft} onCreated={result => { window.location.hash = goalHref(result.mission_id) }} /></div>
       <div className="ops-chief-latest flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
         {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
@@ -54,26 +57,29 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
   </section>
 }
 
-/**
- * The Owner's four entries (Owner 2026-10-16; design system v2 §10): For you, Chief of staff,
- * Work and System are one page each, with the verdict first — whole on For you, one line that
- * goes there on the others. The shell keeps this component mounted while the Owner moves between
- * entries, so a goal drafted from "Make it a goal" is still in the chief's box on arrival. For you
- * goes on to everything waiting (what was Needs you), Work to the goal cards and the rest of what
- * was Progress (W-31 2.2b); the other details stay on their own pages.
- */
-export function OwnerConsolePage({ entry = 'you' }: { entry?: EntryRouteId }) {
+/** Command keeps conversation and goal drafts mounted across domains and detail pages. */
+export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId | null }) {
+  useEffect(() => {
+    let cancel = () => {}
+    const scroll = () => {
+      const section = new URLSearchParams(canonicalQuery(window.location.hash)).get('section')
+      if (!section || (entry !== 'command' && entry !== 'crew')) return
+      cancel(); cancel = scrollAfterShell(() => document.getElementById(section))
+    }
+    scroll(); window.addEventListener('hashchange', scroll)
+    return () => { cancel(); window.removeEventListener('hashchange', scroll) }
+  }, [entry])
   const blocks = entryBlocks(entry)
-  const data = useOwnerConsole({ system: blocks.system, work: blocks.work, chief: blocks.chief })
+  const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: blocks.work, chief: blocks.chief })
   const [draft, setDraft] = useState({ text: '', key: 0 })
 
   const makeGoal = (text: string) => {
     setDraft(d => ({ text, key: d.key + 1 }))
-    if (typeof window !== 'undefined') window.location.hash = formatShellHash('chief')
+    if (typeof window !== 'undefined') window.location.hash = formatShellHash('command', 'section=new-goal')
   }
 
   return <div id="owner-console" data-testid="owner-console" data-entry={entry} className="@container flex w-full min-w-0 flex-col gap-5 pb-8">
-    <VerdictBanner verdict={data.verdict} compact={entry !== 'you'} updatedAt={data.updatedAt} now={data.now} />
+    <VerdictBanner verdict={data.verdict} compact={entry !== 'command'} updatedAt={data.updatedAt} now={data.now} />
     {blocks.you && <OwnerYou data={data} onGoal={makeGoal} />}
     {blocks.you && <OwnerWaiting />}
     {/* Hidden, not unmounted, on the other entries: an edited draft and a goal just sent outlive moving away (review 224 B-224-1). */}
@@ -82,7 +88,11 @@ export function OwnerConsolePage({ entry = 'you' }: { entry?: EntryRouteId }) {
     {blocks.work && <OwnerWork data={data} />}
     {blocks.work && <ProgressPage />}
     {blocks.system && <OwnerSystem data={data} />}
-    {blocks.system && <OwnerData data={data} />}
-    {blocks.system && <DetailPageLinks />}
+    {blocks.services && <OwnerData data={data} />}
+    {blocks.crew && <>
+      <section id="roles" aria-label="Roles and performance"><OwnerCapabilities now={data.now} /></section>
+      <section id="capacity" aria-label="Capacity and cost"><OwnerQuota now={data.now} /></section>
+      <GovernanceReferences />
+    </>}
   </div>
 }

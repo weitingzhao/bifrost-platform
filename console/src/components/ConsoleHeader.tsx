@@ -161,7 +161,7 @@ export function ConsoleHeader({
         </a>
       ) : null}
 
-      {layout !== 'tabs' ? <ToolsMenu /> : null}
+      <ToolsMenu />
 
       <UserMenu opsApiHealthy={healthy} onRefresh={onRefresh} />
     </header>

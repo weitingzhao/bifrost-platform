@@ -127,7 +127,7 @@ describe('the read-only issue page', () => {
   it('is a route of its own under For you', () => {
     expect(issueHref('BI-3')).toBe('#issue?id=BI-3')
     expect(resolveConsoleHash('issue?id=BI-3').location).toEqual({ kind: 'issue' })
-    expect(resolveConsoleHash('issue').location).toEqual({ kind: 'shell', id: 'you' })
+    expect(resolveConsoleHash('issue').location).toEqual({ kind: 'shell', id: 'command' })
   })
 
   it('shows the brief and the design in full with their whole sha256, the cards, and the three voices apart', async () => {

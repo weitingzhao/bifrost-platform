@@ -1,6 +1,4 @@
 import { Bar, Card, Dot, Stat } from './OwnerParts'
-import { OwnerCapabilities } from './OwnerCapabilities'
-import { OwnerQuota } from './OwnerQuota'
 import { ago, plural, type Tone } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
@@ -46,10 +44,6 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
             <span className="font-semibold text-[var(--color-success)]">OK</span></li>)}
         </ul>
       </Card>
-    </div>
-    <div className="grid gap-4 @3xl:grid-cols-2">
-      <OwnerQuota now={now} />
-      <OwnerCapabilities now={now} />
     </div>
     <Card label="Nodes" title={nodeCount ? `Nodes · ${nodeCount.ready} of ${nodeCount.total} ready${nodeCount.standby ? `, ${nodeCount.standby} on standby` : ''}` : 'Nodes'} more={{ href: '#infrastructure', text: 'Infrastructure' }}>
       {data.nodesError && <p role="alert" className="m-0 text-sm">Nodes could not be read: {data.nodesError}</p>}

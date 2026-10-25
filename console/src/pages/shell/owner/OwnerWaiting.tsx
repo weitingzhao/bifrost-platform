@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { WAITING_SECTION } from '@/lib/shell/consoleRoutes'
+import { WAITING_SECTION, NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { hashNamesSection, scrollAfterShell, useHashSection } from '@/lib/shell/useHashSection'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 
@@ -19,7 +19,7 @@ export function OwnerWaiting() {
     const follow = (event: MouseEvent) => {
       if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
       const link = event.target instanceof Element ? event.target.closest('a') : null
-      if (link?.getAttribute('href') === '#you?section=waiting') open()
+      if (link?.getAttribute('href') === NEEDS_YOU_HREF) open()
     }
     sync()
     window.addEventListener('hashchange', sync)

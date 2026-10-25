@@ -6,7 +6,8 @@ import {
   Gauge,
   Inbox,
   ListChecks,
-  MessageSquare,
+  Users,
+  Boxes,
   Plug,
   Rocket,
   Server,
@@ -14,8 +15,9 @@ import {
 import { SHELL_NAV, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
-  you: Inbox,
-  chief: MessageSquare,
+  command: Inbox,
+  crew: Users,
+  services: Boxes,
   work: ListChecks,
   system: Activity,
   status: Gauge,

@@ -4,6 +4,7 @@ import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
+import { DomainNav } from '@/components/shell/DomainNav'
 import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
@@ -93,7 +94,7 @@ function backFor(location: ConsoleLocation): HeaderBack | undefined {
     return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: NEEDS_YOU_HREF }
   }
   if (location.kind !== 'shell' || isEntryRoute(location.id)) return undefined
-  const entry = entryOf(location)
+  const entry = entryOf(location, window.location.hash.split('?')[1])
   return entry == null ? undefined : { label: shellNavEntry(entry).label, href: formatShellHash(entry) }
 }
 
@@ -166,8 +167,9 @@ function ConsolePageInner() {
         : locationId(location)
   const yoursBadge = yoursNavBadge(yours)
   const back = layout === 'side' ? undefined : backFor(location)
+  const domain = entryOf(location, window.location.hash.split('?')[1])
   const nav: EntryNavProps = {
-    active: entryOf(location),
+    active: domain,
     onSelect: select,
     yoursBadge,
     systemTone: status.statusTone,
@@ -179,11 +181,12 @@ function ConsolePageInner() {
       <SidebarProvider>
         {layout === 'side' ? (
           <ConsoleSidebar
+            local={local}
             activeTab={activeTab}
             onSelect={select}
             viewerEnv={status.viewerEnv}
             viewerEnvLoading={status.viewerEnvLoading}
-            badges={yoursBadge != null ? { you: yoursBadge } : undefined}
+            badges={yoursBadge != null ? { command: yoursBadge } : undefined}
           />
         ) : null}
         {layout === 'rail' ? <EntryRail {...nav} /> : null}
@@ -211,18 +214,20 @@ function ConsolePageInner() {
               onOpenDevSessions={() => select('dev-sessions')}
               layout={layout}
               back={back}
-              moreHref={back == null && location.kind !== 'more' ? formatShellHash(MORE_ROUTE) : undefined}
+              moreHref={undefined}
             />
+            {layout !== 'side' && domain && <DomainNav entry={domain} local={local} />}
           </div>
-          <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'you' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>
+          <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'command' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>
             {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
             {location.kind === 'issue' ? <IssuePage /> : null}
             {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}
-            {/* One slot for the four entries: moving between them keeps the Owner Console mounted. */}
-            {entry != null ? <OwnerConsolePage entry={entry} /> : Page != null ? <Page /> : null}
+            {/* Keep the Owner Console mounted across domains and details so Command drafts survive. */}
+            <div hidden={entry == null}><OwnerConsolePage entry={entry} /></div>
+            {Page != null ? <Page /> : null}
           </PageShell>
         </SidebarInset>
         {layout === 'tabs' ? <EntryTabBar {...nav} /> : null}

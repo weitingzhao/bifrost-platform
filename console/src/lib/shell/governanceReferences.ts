@@ -44,7 +44,7 @@ export const GOVERNANCE_REFERENCES = [
     body: 'Model capacity and hardware capacity are different resources. Subscription quota and its freshness inform routing; role qualification and signed scope still constrain who may work. A low token cost cannot override a permission boundary.\n\nUse current quota and performance readings for Crew decisions, and Infrastructure for host readiness. Research inference usage and Crew engineering usage have different accounting scopes; do not add them into one ROI without a deduplication rule.',
     history: 'The old compute strategy page and catalog were retired. Historical model rankings, prices, procurement recommendations and machine placement are not current configuration. This entry does not reinstate them.',
     sources: [platform('console/src/pages/shell/owner/OwnerQuota.tsx'), platform('console/src/pages/shell/owner/OwnerCapabilities.tsx'), infra('ADR-ops-architecture.md')],
-    related: [{ label: 'Current capacity and scores', href: '#system' }, { label: 'Hosts and infrastructure', href: '#infrastructure' }],
+    related: [{ label: 'Current capacity and scores', href: '#crew?section=capacity' }, { label: 'Hosts and infrastructure', href: '#infrastructure' }],
   },
   {
     id: 'flywheel-vision', title: 'Dual Flywheel Vision', status: 'Historical vision + current boundaries', owner: 'Crew reference',
@@ -78,7 +78,7 @@ export const GOVERNANCE_REFERENCES = [
 
 export type GovernanceReferenceId = (typeof GOVERNANCE_REFERENCES)[number]['id']
 export function referenceHref(id?: GovernanceReferenceId): string {
-  return `#work?section=references${id ? `&reference=${id}` : ''}`
+  return `#crew?section=references${id ? `&reference=${id}` : ''}`
 }
 
 export function findReference(id: string | null) {

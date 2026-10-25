@@ -65,3 +65,8 @@ html[data-ops-theme] .ops-appearance-menu { width: 224px; padding: 10px; backgro
 @media (prefers-reduced-motion: reduce) {
   html[data-ops-theme] [data-shell-chrome] { transition: none; }
 }
+
+/* Five domains leave the page identity on its own line on narrow phones. */
+@media (max-width: 479px) {
+  .ops-console-header nav[aria-label='Breadcrumb'] { order: -1; flex: 1 0 100%; max-width: none; }
+}

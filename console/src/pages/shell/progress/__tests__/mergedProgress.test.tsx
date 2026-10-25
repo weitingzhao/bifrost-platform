@@ -80,7 +80,7 @@ describe('one Needs you list', () => {
     expect(screen.queryByText(boardFixture.owner_now[0]!.actions[0]!.text)).not.toBeInTheDocument()
     expect(screen.queryByText('Already an approval')).not.toBeInTheDocument()
     const blocks = Array.from(screen.getByTestId('merged-progress').children)
-    expect(blocks.filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health', 'Governance references'])
+    expect(blocks.filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
     // The question it previewed is listed, to answer, in the waiting section.
     expect(within(screen.getByTestId('needs-you-page')).getAllByText(/Where is the quota/).length).toBeGreaterThan(0)
   })

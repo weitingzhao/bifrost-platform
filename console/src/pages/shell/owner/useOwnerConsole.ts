@@ -35,7 +35,7 @@ import { current, errorText, useOwnerYours } from './useOwnerYours'
  * opened after this one reads from the same cache. Release runs are read only while System is on
  * screen; everything that feeds the verdict is always read.
  */
-export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean }) {
+export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean; services?: boolean }) {
   const openedAt = useRef(Date.now())
   const now = Date.now()
   const { needsYou, alertsQ, nodesQ, nodes, standby, alerts, alertsError, standbyEvidence, yours } = useOwnerYours(now)
@@ -49,7 +49,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     enabled: blocks.system, refetchInterval: 15_000 })) })
 
   // The data tiles are on System only: nothing they read is fetched while another entry is open (review 226 B-226-2).
-  const tiles = blocks.system
+  const tiles = blocks.services ?? blocks.system
   const backupQ = useQuery({ queryKey: ['cluster', 'postgres', 'backup-status'], queryFn: fetchClusterPostgresBackupStatus, enabled: tiles, refetchInterval: 60_000, retry: false })
   const copiesQ = useQuery({ queryKey: ['cluster', 'data-freshness'], queryFn: fetchDataFreshness, enabled: tiles, refetchInterval: 60_000, retry: false })
   const researchQ = useQuery({ queryKey: ['research-engine-orchestration'], queryFn: fetchOrchestrationStatus, enabled: tiles, refetchInterval: 60_000, retry: 1 })

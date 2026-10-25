@@ -5,7 +5,7 @@ import { shellEntryItems } from '@/lib/shell/shellNavItems'
 import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine'
 
 /** The short labels the tab bar and the rail use; the side nav and page titles use the full ones. */
-const SHORT: Record<EntryRouteId, string> = { you: 'For you', chief: 'Chief', work: 'Work', system: 'System' }
+const SHORT: Record<EntryRouteId, string> = { command: 'Command', crew: 'Crew', work: 'Work', services: 'Services', system: 'System' }
 
 /** System carries a lamp, never a second number, and only when the system verdict is not all clear. */
 function lampTone(tone: VerdictTone): VerdictTone | null {
@@ -34,10 +34,10 @@ function EntryButtons({ active, onSelect, yoursBadge, systemTone, systemLine, ra
         type="button"
         data-entry={id}
         aria-current={on ? 'page' : undefined}
-        aria-label={id === 'you' && yoursBadge ? `${item.label}, ${yoursBadge.title}` : item.label}
+        aria-label={id === 'command' && yoursBadge ? `${item.label}, ${yoursBadge.title}` : item.label}
         onClick={() => onSelect(id)}
         className={cn(
-          'relative flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-transparent text-[11px] font-semibold leading-tight',
+          'relative flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-transparent text-[10px] sm:text-[11px] font-semibold leading-tight',
           rail ? 'min-h-[60px] w-full' : 'min-h-[54px] min-w-0',
           on ? 'text-primary' : 'text-muted-foreground',
           on && rail && 'bg-[var(--control-fill)]',
@@ -45,7 +45,7 @@ function EntryButtons({ active, onSelect, yoursBadge, systemTone, systemLine, ra
       >
         {Icon != null && <Icon className="size-6" aria-hidden />}
         <span className="max-w-full truncate">{SHORT[id]}</span>
-        {id === 'you' && yoursBadge != null && (
+        {id === 'command' && yoursBadge != null && (
           <span className={cn('absolute', rail ? 'right-3 top-1.5' : 'left-[calc(50%+6px)] top-1')}>
             <ConsoleNavBadgeMark badge={yoursBadge} />
           </span>
@@ -63,13 +63,13 @@ function EntryButtons({ active, onSelect, yoursBadge, systemTone, systemLine, ra
   })
 }
 
-/** Phone and tablet held upright: the four entries at the bottom, under the thumb. */
+/** Phone and tablet held upright: the five domains at the bottom, under the thumb. */
 export function EntryTabBar(props: EntryNavProps) {
   return (
     <nav
       aria-label="Main"
       data-entry-nav="tabs"
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-1 border-t border-[var(--table-rule)] bg-card px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))]"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 gap-1 border-t border-[var(--table-rule)] bg-card px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))]"
     >
       <EntryButtons {...props} rail={false} />
     </nav>
