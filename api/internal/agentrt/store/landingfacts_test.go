@@ -69,12 +69,13 @@ func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
 	}
 	use(newer)
 	use(old)
-	impl := w.ready(t, store.Task{OffPlanReason: "planned by task " + old, BaseCommit: commitA})
+	// passRound pushes commitA, so the task must start from a different base.
+	impl := w.ready(t, store.Task{OffPlanReason: "planned by task " + old, BaseCommit: commitB})
 	w.passRound(t, impl, "h1", "h2", "h3")
 	reads := 0
 	src := store.LandingSource{
 		Result: func(_ context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
-			if task != impl || attempt == "" || commit == "" || base != commitA {
+			if task != impl || attempt == "" || commit != commitA || base != commitB {
 				return false, nil, fmt.Errorf("wrong accepted result")
 			}
 			return true, nil, nil
