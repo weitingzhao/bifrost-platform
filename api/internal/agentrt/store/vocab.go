@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -162,7 +163,7 @@ var bodies = map[string][]field{
 		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
-		{"card", kAny, true},
+		{"card", kAny, true}, {"landing", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -512,6 +513,12 @@ var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "
 // badValue is why v, of its field's kind already, is refused, or "". A list
 // is checked element by element.
 func badValue(eventType, name string, v any) string {
+	if eventType == "note" && name == "landing" {
+		if _, err := landing.Parse(v); err != nil {
+			return err.Error()
+		}
+		return ""
+	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {
 		return ""
