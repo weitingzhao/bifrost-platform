@@ -111,13 +111,51 @@ func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
 	if _, err = read(); err == nil {
 		t.Fatal("unreadable history became never")
 	}
-	w.legacy(t, fmt.Sprintf(`UPDATE agentrt.task SET off_plan=false,off_plan_reason=NULL,plan_node_id='%s' WHERE task_id='%s'`, s1, impl), fmt.Sprintf(`UPDATE agentrt.plan_node SET state='dropped',version=version+1 WHERE plan_node_id='%s'`, s1))
-	src.History = func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-		return landing.MainHistory{State: landing.Never}, nil
+}
+
+func TestLandingFactsReadDroppedStep(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	// Bind the task when it is proposed; an accepted off-plan task cannot be
+	// moved onto a step with a legacy import. Drop through the plan-change API.
+	impl := w.ready(t, store.Task{PlanNode: s1, BaseCommit: commitB})
+	w.passRound(t, impl, "h1", "h2", "h3")
+	src := store.LandingSource{
+		Result: func(_ context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+			if task != impl || attempt == "" || commit != commitA || base != commitB {
+				return false, nil, fmt.Errorf("wrong accepted result")
+			}
+			return true, nil, nil
+		},
+		History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+			return landing.MainHistory{State: landing.Never}, nil
+		},
 	}
-	f, err = read()
+	read := func() landing.Facts {
+		t.Helper()
+		var f landing.Facts
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			var err error
+			f, err = store.LandingFacts(ctx, tx, src, "prod", "live", impl, "", "", time.Now())
+			return err
+		}))
+		return f
+	}
+	before := read()
+	if before.StepState != "planned" || before.TaskState != "accepted" {
+		t.Fatal("wrong initial step facts", before)
+	}
+	a := &asker{}
+	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "landing-drop", root, "test", []store.PlanChange{{Op: "drop_step", Node: s1}}, a.ask)
 	ok(t, err)
-	if f.StepState != "dropped" || f.StepVersion == 0 {
+	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
+	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	ok(t, err)
+	if n != 1 {
+		t.Fatalf("decided %d plan changes; want 1", n)
+	}
+	f := read()
+	if f.StepState != "dropped" || f.StepVersion <= before.StepVersion || f.TaskState != "accepted" {
 		t.Fatal("dropped step hidden", f)
 	}
 }
