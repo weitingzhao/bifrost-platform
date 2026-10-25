@@ -42,7 +42,18 @@ func Recover(name string) {
 	}
 }
 
-// Go runs fn in a goroutine whose panic cannot reach the process.
+// Go runs fn in a goroutine whose panic is logged and contained. platform-api
+// runs Mission Control, Launch Desk, Plugin and Engineer in one process; chi's
+// Recoverer covers only request handlers, so an unrecovered background panic
+// would end the whole process and blind the Console because one worker failed.
+//
+// recover() swallows the panic and the stack trace the runtime would otherwise
+// print. The deferred Recover hands it to record, which logs at error level with
+// the goroutine name, panic value and stack, and increments the counter exposed
+// by Contained and GET /health. Containment must stay visible, or a crash becomes
+// a silent stop nobody sees. The process goes on, but the panicking goroutine
+// does not resume: fn's remaining work is lost. Wrap each iteration of a
+// long-running loop in Do so one bad tick does not end the worker.
 func Go(name string, fn func()) {
 	go func() {
 		defer Recover(name)
