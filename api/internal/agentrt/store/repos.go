@@ -39,6 +39,16 @@ type Sibling struct {
 
 // Repos are the repositories goals and plans may name.
 //
+// Adding a repository is one more entry here, with at least two fields:
+// Verify, the commands every implementation task's deterministic check runs
+// on the commit, from the repository root; and TestDirs, the module
+// directories (the <dir> of go -C <dir> test) where a plan may add its own
+// checks, which checkTest in planparse.go enforces. Setup, Siblings, Core and
+// TestDB are as Repo says. The defaults are what runs in a fresh agentd
+// checkout, not the full test suite, which needs services the workspace lacks
+// and would fail for reasons unrelated to the change: a plan proves its own
+// change with targeted go test [-run <pattern>] ./<package> checks in TestDirs.
+//
 // The platform's checks are CI's (ci-platform): the API module built and
 // vetted (the full Go suite needs databases agentd's workspace has not), and
 // the Console linted, tested and built. The Console's @bifrost/ui is
