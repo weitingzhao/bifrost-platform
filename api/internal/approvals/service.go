@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 
@@ -196,6 +197,11 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	case actions.TierD:
 	default:
 		return fail(400, "action cannot be requested")
+	}
+	// B and signed-policy flows above need no new human decision. All stored
+	// requests (including drills) belong to the PROD approval home.
+	if !approvalhome.IsProd() {
+		return fail(http.StatusForbidden, approvalhome.Required)
 	}
 	s.mu.Lock()
 	check := s.check
