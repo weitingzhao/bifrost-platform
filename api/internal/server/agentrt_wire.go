@@ -139,6 +139,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
+		s.wireLandingDrill(c)
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})

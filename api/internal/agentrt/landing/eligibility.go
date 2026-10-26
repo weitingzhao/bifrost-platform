@@ -26,6 +26,7 @@ type MainHistory struct {
 // Facts is a fresh snapshot, shared by all gates. Unknown is deliberately not
 // Never. Versions let the caller bind its audit record to the rows it locked.
 type Facts struct {
+	Mission, Reviewers                                               string
 	Environment, Mode, Tenant, Repo, Task, Attempt, A, Base          string
 	MissionState, StepState, ProducingPlan, LatestUsedPlan           string
 	ReservedToday, OtherInFlight                                     int

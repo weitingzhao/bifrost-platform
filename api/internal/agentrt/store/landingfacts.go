@@ -36,6 +36,7 @@ func LandingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment
 	if err != nil {
 		return f, err
 	}
+	f.Mission = mission
 	if role != "implement" {
 		return f, fmt.Errorf("landing only implements")
 	}
@@ -62,6 +63,9 @@ func LandingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment
   FROM agentrt.task t LEFT JOIN LATERAL (SELECT attempt_id FROM agentrt.verification WHERE task_id=t.task_id AND accepts_attempt ORDER BY created_at DESC,verification_id DESC LIMIT 1) v ON true
   LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id WHERE t.task_id=$1`, taskID).Scan(&f.Attempt, &f.A, &accepted)
 	if err != nil {
+		return f, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(string_agg(verifier_attempt_id, ',' ORDER BY verifier_attempt_id),'') FROM agentrt.verification WHERE task_id=$1 AND attempt_id=$2 AND method='review' AND verdict='pass'`, taskID, f.Attempt).Scan(&f.Reviewers); err != nil {
 		return f, err
 	}
 	if accepted != nil {

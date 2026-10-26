@@ -206,6 +206,29 @@ type LandingChange struct {
 var presentationImport = regexp.MustCompile(`(?s)\bimport\b[^;]*?\bfrom\s*["'](?:[^"']*/)?(?:api|lib|hooks)/`)
 var presentationEffect = regexp.MustCompile(`\bfetch\s*\(|XMLHttpRequest|useQuery|useMutation|window\s*\.\s*location`)
 
+// LandingPresentationOnly implements CUT §2.3's three display checks without
+// I/O. It is deliberately separate from the immutable floor and size limits.
+// Both sides of a rename and the old path of a deletion are changed paths.
+func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
+	if len(changes) == 0 {
+		return false
+	}
+	for _, c := range changes {
+		if c.OldPath == "" && c.NewPath == "" {
+			return false
+		}
+		for _, p := range []string{c.OldPath, c.NewPath} {
+			if p != "" && (!landingPath(p) || !landingMatches(allow, p)) {
+				return false
+			}
+		}
+		if presentationImport.MatchString(c.AddedText) || presentationEffect.MatchString(c.AddedText) {
+			return false
+		}
+	}
+	return true
+}
+
 func (l *Landing) CheckChanges(repo string, changes []LandingChange) error {
 	r, ok := l.Repo(repo)
 	if !ok {
@@ -244,13 +267,13 @@ func (l *Landing) CheckChanges(repo string, changes []LandingChange) error {
 		if c.Binary || c.Added < 0 || c.Deleted < 0 || (c.OldPath != "" && c.NewPath != "" && c.OldMode != c.NewMode && c.Added+c.Deleted == 0) {
 			return fmt.Errorf("unsupported diff")
 		}
-		if presentationImport.MatchString(c.AddedText) || presentationEffect.MatchString(c.AddedText) {
-			return fmt.Errorf("not presentation-only")
-		}
 		total += int64(c.Added) + int64(c.Deleted)
 	}
 	if total > int64(l.Limits.MaxChangedLines) {
 		return fmt.Errorf("limit")
+	}
+	if !LandingPresentationOnly(r.Allow, changes) {
+		return fmt.Errorf("not presentation-only")
 	}
 	return nil
 }

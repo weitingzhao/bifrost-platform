@@ -58,6 +58,8 @@ type Sources struct {
 // Controller holds what the loops need. Zero intervals take the design's
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
+	Drill       *DrillSources // nil by default; workers opt in on STG only
+	DrillGit    DrillGit
 	DB          store.DB
 	Sources     Sources
 	Logf        func(format string, args ...any)
@@ -581,6 +583,23 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		}
 	}
 	var wg sync.WaitGroup
+	if c.Env == "stg" && c.Drill != nil && c.DrillGit != nil {
+		wg.Add(1)
+		safego.Go("agentrt-landing-drill", func() {
+			defer wg.Done()
+			run := func() error {
+				passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+				defer cancel()
+				return c.LandingDrillPass(passCtx)
+			}
+			if err := run(); err != nil {
+				c.logf("agentrt-landing-drill startup: %v", err)
+			}
+			var loops sync.WaitGroup
+			c.every(ctx, &loops, "agentrt-landing-drill", facts, run)
+			loops.Wait()
+		})
+	}
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		_, ferr := c.Facts(ctx)
