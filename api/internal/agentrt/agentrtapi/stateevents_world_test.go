@@ -268,7 +268,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	// A step the Owner signs off: its rule set by a plan change on his card (decided with the import's).
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6-signoff", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "set_done_rule", "node": "R2:1-1", "rule": map[string]any{"owner_signoff": "fuzz"}}}})
-	ok("POST plan/imports", "reporter", "POST", "plan/imports", importBody("v-import", arch))
+	ok("POST plan/imports", "proposer", "POST", "plan/imports", importBody("v-import", arch))
 	if _, err = store.DecidePlanChanges(ctx, f.pool, answer(store.CardApplyKey), nil); err != nil {
 		t.Fatal(err)
 	}

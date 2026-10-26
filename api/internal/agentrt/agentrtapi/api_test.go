@@ -104,7 +104,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 
 // Tokens of the fixture auth file, by caller name.
 var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "agentd:h3": "fixture-agentd-h3", "viewer": "fixture-viewer-1",
-	"reporter": "fixture-reporter-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
+	"reporter": "fixture-reporter-1", "proposer": "fixture-proposer-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
 	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2",
 	// An operator not on the issue readers list (W-31 BI-1 slice 2) and an
 	// intake client's token, read from its environment variable.
@@ -172,6 +172,9 @@ func server(t *testing.T, db store.DB, with ...func(*agentrtapi.API)) *httptest.
   - name: reporter
     role: reporter
     token: fixture-reporter-1
+  - name: proposer
+    role: operator
+    token: fixture-proposer-1
   - name: operator
     role: operator
     token: fixture-operator-1
@@ -476,22 +479,22 @@ func TestUploadKinds(t *testing.T) {
 	s := server(t, pool)
 	leaky := []byte("input at /home/ci/private-input\n")
 	for _, kind := range []string{"mission_spec", "message", "exam", "report"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusUnprocessableEntity {
-			t.Errorf("a reporter's %s with a local path: %d", kind, code)
+		if code, _ := call(t, s, "proposer", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusUnprocessableEntity {
+			t.Errorf("a proposer's %s with a local path: %d", kind, code)
 		}
 	}
 	for _, kind := range []string{"", "notes"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusBadRequest {
+		if code, _ := call(t, s, "proposer", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusBadRequest {
 			t.Errorf("kind %q: %d", kind, code)
 		}
 	}
-	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief", "X-Bifrost-Session", "s-rep"); code != http.StatusOK || out["created"] != true {
+	if code, out := call(t, s, "proposer", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief", "X-Bifrost-Session", "s-rep"); code != http.StatusOK || out["created"] != true {
 		t.Errorf("a brief, which H8 lets through: %d %v", code, out)
 	}
 	var by string
 	must(t, pool.QueryRow(ctx, `SELECT body_json->>'uploaded_by' FROM agentrt.event WHERE event_type = 'artifact_put'
 	  AND body_json->>'artifact_id' = $1`, artifactID(leaky)).Scan(&by))
-	if by != "reporter" {
+	if by != "proposer" {
 		t.Errorf("uploaded_by = %q", by)
 	}
 }
@@ -503,7 +506,7 @@ func TestUploadRace(t *testing.T) {
 	s := server(t, pool)
 	body := []byte("# race\n")
 	created := make(chan any, 2)
-	for _, who := range []string{"agentd:h1", "reporter"} {
+	for _, who := range []string{"agentd:h1", "proposer"} {
 		go func() {
 			req, err := http.NewRequest("PUT", s.URL+"/api/v1/agentrt/artifacts/"+artifactID(body), bytes.NewReader(body))
 			if err != nil {

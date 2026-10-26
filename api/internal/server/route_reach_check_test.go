@@ -51,6 +51,22 @@ var intendedRouteAdditions = map[string][]string{
 	"POST /api/v1/network/clients/fixed-ip":          {"operator", "admin", "trade-satellite"},
 }
 
+// Work 611 narrows plain reporters to external-work registration and their
+// own observations. Keep the historical snapshot; remove only these exact
+// reporter/proposal pairs, so either restored access or another lost route fails.
+var reporterProposalRemovals = []string{
+	"POST /api/v1/agentrt/missions",
+	"POST /api/v1/agentrt/missions/{id}/tasks",
+	"POST /api/v1/agentrt/goals",
+	"POST /api/v1/agentrt/messages",
+	"POST /api/v1/agentrt/messages/ack",
+	"POST /api/v1/agentrt/plan/proposals",
+	"POST /api/v1/agentrt/plan/imports",
+	"POST /api/v1/agentrt/plan/{id}/notes",
+	"POST /api/v1/agentrt/rules/{rule_id}/proposals",
+	"POST /api/v1/agentrt/rules/{rule_id}/sign",
+}
+
 func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	srv := reachServer(t)
 	reach := routeReach(t, srv)
@@ -103,6 +119,16 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	}
 	for _, p := range oldPrincipals {
 		now, then := reach[p], slices.Clone(base[p])
+		if p == "reporter" {
+			for _, route := range reporterProposalRemovals {
+				if !slices.Contains(then, route) {
+					t.Fatalf("reporter removal %s was not in the base", route)
+				}
+			}
+			then = slices.DeleteFunc(then, func(route string) bool {
+				return slices.Contains(reporterProposalRemovals, route)
+			})
+		}
 		for route, principals := range intendedRouteAdditions {
 			if slices.Contains(principals, p) {
 				then = append(then, route)

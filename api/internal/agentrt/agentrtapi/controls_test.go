@@ -32,6 +32,7 @@ func TestWhoami(t *testing.T) {
 		who, session, actor, kind, problem string
 		may                                []string
 	}{
+		{"reporter", "reporter-s1", "thread:reporter-s1", "thread (registered on its first write)", "", []string{"read", "stop", "external_work"}},
 		{"operator", "s1", "thread:s1", "thread (registered on its first write)", "", []string{"read", "propose", "upload", "stop", "drain"}},
 		{"operator", "", "", "", "X-Bifrost-Session", []string{"read", "propose", "upload", "stop", "drain"}},
 		{"agentd:h1", "", "host:h1", "host", "", []string{"read", "claim", "upload", "stop"}},

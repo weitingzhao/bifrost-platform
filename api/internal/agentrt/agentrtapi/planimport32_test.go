@@ -65,7 +65,7 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 		req := ledger(t, fixtureLedger)
 		body := map[string]any{"idempotency_key": "k-" + name, "reason": "T32 through the import", "request": c.change(&req)}
 		before, rows := len(cards), counts()
-		code, out := call(t, s, "reporter", "POST", "plan/imports", body, "X-Bifrost-Session", "s1")
+		code, out := call(t, s, "proposer", "POST", "plan/imports", body, "X-Bifrost-Session", "s1")
 		msg, _ := out["message"].(string)
 		if code != c.code || !strings.Contains(msg, c.want) {
 			t.Errorf("%s: %d %v; want %d naming %q", name, code, out, c.code, c.want)
@@ -92,7 +92,7 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 	// The counts see a proposal that is taken: the request is stored and its
 	// key kept.
 	rows := counts()
-	if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("k-ok", ledger(t, fixtureLedger)), "X-Bifrost-Session", "s1"); code != http.StatusOK {
+	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("k-ok", ledger(t, fixtureLedger)), "X-Bifrost-Session", "s1"); code != http.StatusOK {
 		t.Fatalf("the plan as it is: %d %v", code, out)
 	}
 	if after := counts(); after[0] == rows[0] || after[2] == rows[2] || after[3] == rows[3] {

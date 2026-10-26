@@ -17,7 +17,7 @@ import (
 func TestEscapedPathsNameTheSameRows(t *testing.T) {
 	pool := seeded(t)
 	s := server(t, pool)
-	if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
+	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
 		t.Fatalf("import = %d %v", code, out)
 	}
 	if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
@@ -47,13 +47,13 @@ func TestEscapedPathsNameTheSameRows(t *testing.T) {
 	// An artifact read by its escaped id, as Work read the plan's import request (PROD's 404), then put by it.
 	report := []byte("# report\nall tests pass\n")
 	id := artifactID(report)
-	if code, body := raw("reporter", "PUT", "artifacts/"+id, report, "X-Artifact-Kind", "report", session, "s1"); code != http.StatusOK && code != http.StatusCreated {
+	if code, body := raw("proposer", "PUT", "artifacts/"+id, report, "X-Artifact-Kind", "report", session, "s1"); code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("PUT artifacts/%s = %d %s", id, code, body)
 	}
 	if code, body := raw("viewer", "GET", "artifacts/"+escape(id), nil); code != http.StatusOK || body != string(report) {
 		t.Fatalf("GET artifacts/%s = %d %q", escape(id), code, body)
 	}
-	if code, body := raw("reporter", "PUT", "artifacts/"+escape(id), report, "X-Artifact-Kind", "report", session, "s1"); code != http.StatusOK && code != http.StatusCreated {
+	if code, body := raw("proposer", "PUT", "artifacts/"+escape(id), report, "X-Artifact-Kind", "report", session, "s1"); code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("PUT artifacts/%s = %d %s", escape(id), code, body)
 	}
 	if code, body := raw("viewer", "GET", "artifacts/"+id, nil); code != http.StatusOK || body != string(report) {
@@ -71,7 +71,7 @@ func TestEscapedPathsNameTheSameRows(t *testing.T) {
 		!strings.Contains(out["message"].(string), "R2:2.0-1") {
 		t.Fatalf("sign off by an escaped id = %d %v", code, out)
 	}
-	if code, out := call(t, s, "reporter", "POST", "plan/"+escape("R2:2.0-1")+"/notes", map[string]any{"idempotency_key": "n1", "text": "x"}, session, "s1"); code != http.StatusUnprocessableEntity ||
+	if code, out := call(t, s, "proposer", "POST", "plan/"+escape("R2:2.0-1")+"/notes", map[string]any{"idempotency_key": "n1", "text": "x"}, session, "s1"); code != http.StatusUnprocessableEntity ||
 		!strings.Contains(out["message"].(string), "only an architecture row takes a note") {
 		t.Fatalf("a note by an escaped id = %d %v", code, out)
 	}

@@ -41,7 +41,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 	s := server(t, pool)
 	propose := func(key string, req planimport.Request) {
 		t.Helper()
-		if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody(key, req), session, "s1"); code != 200 || out["question_id"] == nil {
+		if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody(key, req), session, "s1"); code != 200 || out["question_id"] == nil {
 			t.Fatalf("import %s = %d %v", req.Root.ID, code, out)
 		}
 		if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {

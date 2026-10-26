@@ -39,7 +39,7 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 	if code, _ := call(t, s, "viewer", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1"); code != http.StatusUnauthorized {
 		t.Fatalf("a viewer's import = %d", code)
 	}
-	code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1")
+	code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1")
 	if code != 200 || out["question_id"] == nil || out["decision"] != "" {
 		t.Fatalf("import proposal = %d %v", code, out)
 	}
@@ -59,16 +59,16 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 	}
 	// The same key again, and another key for the same request: the same
 	// proposal, no second card; another request waits behind it.
-	if code, again := call(t, s, "reporter", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1"); code != 200 || again["question_id"] != q {
+	if code, again := call(t, s, "proposer", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1"); code != 200 || again["question_id"] != q {
 		t.Fatalf("the same key again = %d %v", code, again)
 	}
-	if code, again := call(t, s, "reporter", "POST", "plan/imports", importBody("k2", req), "X-Bifrost-Session", "s1"); code != 200 || again["question_id"] != q {
+	if code, again := call(t, s, "proposer", "POST", "plan/imports", importBody("k2", req), "X-Bifrost-Session", "s1"); code != 200 || again["question_id"] != q {
 		t.Fatalf("another key for the same request = %d %v", code, again)
 	}
 	other := ledger(t, fixtureLedger)
 	other.Nodes[1].Evidence.Line = strings.Replace(other.Nodes[1].Evidence.Line, other.Nodes[1].Title, other.Nodes[1].Title+"（改）", 1)
 	other.Nodes[1].Title += "（改）"
-	if code, refused := call(t, s, "reporter", "POST", "plan/imports", importBody("k3", other), "X-Bifrost-Session", "s1"); code != 422 ||
+	if code, refused := call(t, s, "proposer", "POST", "plan/imports", importBody("k3", other), "X-Bifrost-Session", "s1"); code != 422 ||
 		!strings.Contains(fmt.Sprint(refused), "waits on the Owner's card") {
 		t.Fatalf("a second import while one waits = %d %v", code, refused)
 	}
@@ -120,11 +120,11 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 	}
 
 	// Afterwards the same request says it was imported; another is refused.
-	if code, again := call(t, s, "reporter", "POST", "plan/imports", importBody("k4", req), "X-Bifrost-Session", "s1"); code != 200 || again["imported"] != false ||
+	if code, again := call(t, s, "proposer", "POST", "plan/imports", importBody("k4", req), "X-Bifrost-Session", "s1"); code != 200 || again["imported"] != false ||
 		again["decision"] != "applied" {
 		t.Fatalf("the request again after the import = %d %v", code, again)
 	}
-	if code, refused := call(t, s, "reporter", "POST", "plan/imports", importBody("k5", other), "X-Bifrost-Session", "s1"); code != 422 ||
+	if code, refused := call(t, s, "proposer", "POST", "plan/imports", importBody("k5", other), "X-Bifrost-Session", "s1"); code != 422 ||
 		!strings.Contains(fmt.Sprint(refused), "already exists") {
 		t.Fatalf("another request after the import = %d %v", code, refused)
 	}
@@ -136,7 +136,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	pool := seeded(t)
 	s := server(t, pool)
 	req := ledger(t, fixtureLedger)
-	code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1")
+	code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1")
 	if code != 200 {
 		t.Fatalf("import proposal = %d %v", code, out)
 	}
@@ -149,7 +149,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 		t.Fatalf("GET /plan after a refusal = %d", got)
 	}
 	before := len(cards)
-	code, again := call(t, s, "reporter", "POST", "plan/imports", importBody("k2", req), "X-Bifrost-Session", "s1")
+	code, again := call(t, s, "proposer", "POST", "plan/imports", importBody("k2", req), "X-Bifrost-Session", "s1")
 	if code != 200 || again["question_id"] == out["question_id"] || len(cards) != before+1 {
 		t.Fatalf("a new proposal after a refusal = %d %v", code, again)
 	}
@@ -179,7 +179,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 		return err
 	}))
 	before = len(cards)
-	if code, refused := call(t, s2, "reporter", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1"); code != 422 || len(cards) != before {
+	if code, refused := call(t, s2, "proposer", "POST", "plan/imports", importBody("k1", req), "X-Bifrost-Session", "s1"); code != 422 || len(cards) != before {
 		t.Fatalf("a request the database refuses = %d %v, %d cards", code, refused, len(cards)-before)
 	}
 	var proposals int

@@ -71,7 +71,7 @@ func TestProposeMissionRoute(t *testing.T) {
 	if code, out := call(t, s, "operator", "POST", "missions", body, session, "s2"); code != http.StatusOK || out["mission_id"] != "M-3" {
 		t.Fatalf("another thread: %d %v", code, out)
 	}
-	for who, want := range map[string]string{"admin": "owner", "seat:chief_of_staff": "seat:chief_of_staff", "reporter": "thread:s3"} {
+	for who, want := range map[string]string{"admin": "owner", "seat:chief_of_staff": "seat:chief_of_staff", "proposer": "thread:s3"} {
 		body["idempotency_key"] = "k-" + who
 		got, out := call(t, s, who, "POST", "missions", body, session, "s3")
 		if got != http.StatusOK {
@@ -180,7 +180,7 @@ func TestUploadAttribution(t *testing.T) {
 	s := server(t, pool)
 	for i, c := range []struct{ who, session, actor string }{
 		{"operator", "s1", "thread:s1"},
-		{"reporter", "s2", "thread:s2"},
+		{"proposer", "s2", "thread:s2"},
 		{"admin", "", "owner"},
 		{"seat:chief_of_staff", "", "seat:chief_of_staff"},
 		{"agentd:h1", "", "host:h1"},
@@ -208,7 +208,7 @@ func TestUploadAttribution(t *testing.T) {
 	count()
 	before := [2]int{actors, events}
 	body := []byte("# refused\n")
-	for _, c := range []struct{ who, session string }{{"reporter", ""}, {"seat:ghost", ""}, {"operator", "not a session!"}} {
+	for _, c := range []struct{ who, session string }{{"proposer", ""}, {"seat:ghost", ""}, {"operator", "not a session!"}} {
 		if code, out := call(t, s, c.who, "PUT", "artifacts/"+artifactID(body), body, "X-Artifact-Kind", "report", session, c.session); code != http.StatusUnprocessableEntity {
 			t.Errorf("%s/%q: %d %v", c.who, c.session, code, out)
 		}
