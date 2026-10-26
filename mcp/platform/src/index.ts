@@ -33,6 +33,7 @@ import {
   searchArtifacts,
   getMission,
   getPlan,
+  getPlanView, registerExternalWork, recordExternalWorkEvent,
   getTask,
   listTasks,
   proposeMission,
@@ -648,6 +649,20 @@ reg(
   async (input) => jsonResult(await getPlan(input)),
 )
 
+
+reg('get_plan_view', `One read-only plan snapshot, including external work freshness. ${RUNTIME_DATA_NOTE}`,
+  { root: z.string(), recent_cursor: z.string().optional() }, async (input) => jsonResult(await getPlanView(input)))
+reg('register_external_work', 'Register external work before starting it. The other artifact is agentrt.external_work/v1. Registration grants no execution or completion authority.', {
+  idempotency_key: z.string().min(1), root: z.string(), plan_node_id: z.string(), source_run_key: z.string(), artifact_id: z.string(),
+  mission_id: z.string().optional(), task_id: z.string().optional(), observed_at: z.string().optional(),
+}, async (input) => jsonResult(await registerExternalWork(input)))
+reg('record_external_work_event', 'Append an external work observation with monotonic seq. Submitted is not verified or done. Retry the same event with the same key.', {
+  external_work_id: z.string(), idempotency_key: z.string().min(1), seq: z.number().int().min(1),
+  type: z.enum(['started', 'heartbeat', 'submitted', 'cancelled', 'linked']), observed_at: z.string().optional(),
+  root: z.string().optional(), plan_node_id: z.string().optional(), mission_id: z.string().optional(), task_id: z.string().optional(),
+  report_path_digest: z.string().optional(), report_digest: z.string().optional(), commit_shas: z.array(z.string()).optional(), exit_code: z.number().int().optional(),
+}, async (input) => jsonResult(await recordExternalWorkEvent(input)))
+
 reg(
   'get_mission',
   `Agent runtime mission (M-n) with its tasks counted by state. ${RUNTIME_DATA_NOTE}`,
@@ -711,13 +726,13 @@ registerIssueTools(reg)
 
 reg(
   'propose_plan_change',
-  `Propose changes to a plan tree (root R2, …). Ops: add_node (parent, kind item or step; a step needs step_kind and may name mission_id), retitle (node, title), set_done_rule (node, rule, bind: approvals and questions the rule names), rebind_step (node, mission_id: the step and its tasks move), move_task (task, node), drop_step (node: the step leaves the count and keeps its number; refused while it has unfinished tasks), set_marks (node, owner_step, effect_step: either or both). Within the standing authorization (a step added to an item with an active step, the title of a step not started, and while the signed plan-standing rule grants it, the first done rule of a step not done that names no manual atom) the change lands at once; otherwise it is checked, rolled back, and the Owner decides on a card; a change the plan's rules refuse is refused with the reason. ${PROPOSAL_KEY_RULE}`,
+  `Propose changes to a plan tree (root R2, …). Ops: adopt_plan_view (artifact digest, expected_version; dev only, no completion bindings, existing decision path), add_node (parent, kind item or step; a step needs step_kind and may name mission_id), retitle (node, title), set_done_rule (node, rule, bind: approvals and questions the rule names), rebind_step (node, mission_id: the step and its tasks move), move_task (task, node), drop_step (node: the step leaves the count and keeps its number; refused while it has unfinished tasks), set_marks (node, owner_step, effect_step: either or both). Within the standing authorization (a step added to an item with an active step, the title of a step not started, and while the signed plan-standing rule grants it, the first done rule of a step not done that names no manual atom) the change lands at once; otherwise it is checked, rolled back, and the Owner decides on a card; a change the plan's rules refuse is refused with the reason. ${PROPOSAL_KEY_RULE}`,
   {
     root: z.string(),
     reason: z.string(),
     changes: z.array(
       z.object({
-        op: z.enum(['add_node', 'retitle', 'set_done_rule', 'rebind_step', 'move_task', 'drop_step', 'set_marks']),
+        op: z.enum(['add_node', 'retitle', 'set_done_rule', 'rebind_step', 'move_task', 'drop_step', 'set_marks', 'adopt_plan_view']),
         node: z.string().optional(),
         parent: z.string().optional(),
         kind: z.enum(['item', 'step']).optional(),
@@ -729,6 +744,8 @@ reg(
         task: z.string().optional(),
         owner_step: z.boolean().optional(),
         effect_step: z.boolean().optional(),
+        artifact: z.string().optional(),
+        expected_version: z.number().int().min(0).optional(),
       }),
     ),
     idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),

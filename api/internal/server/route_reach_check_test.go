@@ -43,8 +43,12 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
-	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},
+	"GET /api/v1/agentrt/plan-view":                  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"GET /api/v1/agentrt/external-work/{id}":         {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"POST /api/v1/agentrt/external-work":             {"reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/agentrt/external-work/{id}/events": {"reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/network/clients/{mac}":              {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/network/clients/fixed-ip":          {"operator", "admin", "trade-satellite"},
 }
 
 func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {

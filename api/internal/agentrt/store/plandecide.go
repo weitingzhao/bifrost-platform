@@ -187,7 +187,7 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		case p.root == "":
 			return invalid("proposal %d on %s is neither a plan's nor a recorder import", p.event, p.stream)
 		default:
-			if err := lockTree(ctx, tx, p.root); err != nil {
+			if err := lockPlanViewChanges(ctx, tx, p.root, p.changes); err != nil {
 				return err
 			}
 		}
@@ -252,6 +252,6 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 // not a passing failure.
 func refusedByRules(err error) bool {
 	var pg *pgconn.PgError
-	return errors.Is(err, ErrInvalid) || (errors.As(err, &pg) && (pg.Code == "23502" || pg.Code == "23503" || pg.Code == "23505" ||
+	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || (errors.As(err, &pg) && (pg.Code == "23502" || pg.Code == "23503" || pg.Code == "23505" ||
 		pg.Code == "23514" || pg.Code == "P0001"))
 }

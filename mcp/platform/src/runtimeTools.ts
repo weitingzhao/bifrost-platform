@@ -202,7 +202,7 @@ export async function proposeTasks(
 }
 
 export interface PlanChange {
-  op: 'add_node' | 'retitle' | 'set_done_rule' | 'rebind_step' | 'move_task' | 'drop_step' | 'set_marks'
+  op: 'add_node' | 'retitle' | 'set_done_rule' | 'rebind_step' | 'move_task' | 'drop_step' | 'set_marks' | 'adopt_plan_view'
   node?: string
   parent?: string
   kind?: 'item' | 'step'
@@ -214,6 +214,8 @@ export interface PlanChange {
   task?: string
   owner_step?: boolean
   effect_step?: boolean
+  artifact?: string
+  expected_version?: number
 }
 
 /**
@@ -538,4 +540,31 @@ export async function getAttemptActions(
   if (input.last) q.push('last=1')
   else if (input.after) q.push(`after=${encodeURIComponent(input.after)}`)
   return note(await d.get(`${BASE}/attempts/${id(input.attempt_id)}/actions${q.length ? `?${q.join('&')}` : ''}`))
+}
+
+
+export async function getPlanView(input: { root: string; recent_cursor?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  return note(await d.get(`${BASE}/plan-view?root=${id(input.root)}${input.recent_cursor ? `&recent_cursor=${id(input.recent_cursor)}` : ''}`))
+}
+export interface ExternalRegistration {
+  idempotency_key: string; root: string; plan_node_id: string; source_run_key: string; artifact_id: string
+  mission_id?: string; task_id?: string; observed_at?: string
+}
+export interface ExternalWorkEvent {
+  idempotency_key: string; seq: number; type: 'started' | 'heartbeat' | 'submitted' | 'cancelled' | 'linked'
+  observed_at?: string; root?: string; plan_node_id?: string; mission_id?: string; task_id?: string
+  report_path_digest?: string; report_digest?: string; commit_shas?: string[]; exit_code?: number
+}
+export async function registerExternalWork(input: ExternalRegistration, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required' }
+  return d.send('POST', `${BASE}/external-work`, input)
+}
+export async function recordExternalWorkEvent(input: ExternalWorkEvent & { external_work_id: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required' }
+  const { external_work_id, ...body } = input
+  return d.send('POST', `${BASE}/external-work/${id(external_work_id)}/events`, body)
 }
