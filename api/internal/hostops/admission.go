@@ -64,6 +64,9 @@ func (t Trust) EvaluateM(a Admission, now time.Time) Decision {
 	if NeverM(o.Canonical) {
 		return denied("never-M object")
 	}
+	if err := i.matchActionScope(o, x, a.Catalog, a.ForwardEffects, a.RollbackEffects, now); err != nil {
+		return denied(err.Error())
+	}
 	if x.Action == "host_compose_reconcile" && o.Stateful {
 		return denied("stateful recreate requires H")
 	}
@@ -109,7 +112,8 @@ func (t Trust) EvaluateM(a Admission, now time.Time) Decision {
 		}
 	}
 	for _, e := range append(append([]Effect{}, a.ForwardEffects...), a.RollbackEffects...) {
-		if !contains(sources, e.SourceDigest) {
+		target, err := i.effectObject(x.Host, e.Identity, a.Catalog)
+		if err != nil || e.SourceDigest != target.ConfigDigest && !contains(sources, e.SourceDigest) {
 			return denied("effect proof does not bind verified bytes")
 		}
 	}
@@ -134,6 +138,9 @@ func (t Trust) ValidateReadScope(s Signed, mark ArtifactMark, x Request, objectI
 	}
 	o, err := i.InventoryScope(x, objectID, now)
 	if err != nil {
+		return err
+	}
+	if err := i.matchActionScope(o, x, catalog, effects, nil, now); err != nil {
 		return err
 	}
 	if x.Action == "host_logs" {

@@ -175,9 +175,11 @@ func NeverM(canonical string) bool { return contains(neverM, serviceBase(canonic
 // Frozen identities are injected from the application's canonical catalog;
 // this generic platform package does not implement application behavior.
 type Effect struct {
-	Identity     string `json:"identity"`
-	Operation    string `json:"operation"`
-	SourceDigest string `json:"source_digest"`
+	Identity     string            `json:"identity"`
+	Operation    string            `json:"operation"`
+	SourceDigest string            `json:"source_digest"`
+	Parameters   map[string]string `json:"parameters,omitempty"`
+	Host         string            `json:"host"`
 }
 type SafetyCatalog struct {
 	Digest           string
@@ -206,7 +208,7 @@ func (s SafetyCatalog) Boundary(action, tier string, effects []Effect) error {
 	}
 	for _, e := range effects {
 		id, ok := s.identity(e.Identity)
-		if !ok || id == "" || !validDigest(e.SourceDigest) || !contains([]string{"read", "observe", "restart", "state", "recreate", "install", "join_first_start", "enable_execution", "increase_execution", "remove_guard", "access"}, e.Operation) {
+		if !ok || id == "" || e.Host == "" || !validDigest(e.SourceDigest) || !contains([]string{"read", "observe", "restart", "state", "recreate", "install", "remove", "restore", "join_first_start", "enable_execution", "increase_execution", "remove_guard", "access"}, e.Operation) {
 			return errors.New("unproven identity or effect")
 		}
 		if tier == "R" && e.Operation != "read" {

@@ -259,7 +259,7 @@ func TestD10FullContractMatrix(t *testing.T) {
 		for _, v := range vectors {
 			for _, alias := range []string{"daemon", "bifrost-engine", "bifrost-engine.service", "trading_engine"} {
 				t.Run(site+"/"+v.Carrier+"/"+alias, func(t *testing.T) {
-					effects := []Effect{{alias, v.Operation, testDigest}}
+					effects := []Effect{{alias, v.Operation, testDigest, nil, "host-a"}}
 					if err := catalog().Boundary(v.Action, v.Tier, effects); err == nil || !strings.Contains(err.Error(), "D10") {
 						t.Fatalf("D10 not enforced: %v", err)
 					}
@@ -273,6 +273,7 @@ func TestD10FullContractMatrix(t *testing.T) {
 					} else {
 						p.Effects = effects
 					}
+					p.Effects[0].Parameters = map[string]string{"plan": "test-plan"}
 					ctx := planContext(p)
 					raw := canonical(p)
 					sig := k.Sign(t, []byte(Digest(raw)), NamespaceApproval)
@@ -284,14 +285,14 @@ func TestD10FullContractMatrix(t *testing.T) {
 		}
 	}
 	for _, action := range []string{"host_status", "host_logs"} {
-		if e := catalog().Boundary(action, "R", []Effect{{"daemon", "read", testDigest}}); e != nil {
+		if e := catalog().Boundary(action, "R", []Effect{{"daemon", "read", testDigest, nil, "host-a"}}); e != nil {
 			t.Fatal("registered read positive", e)
 		}
 	}
-	if e := catalog().Boundary("host_monitoring_install", "M", []Effect{{"daemon", "observe", testDigest}}); e != nil {
+	if e := catalog().Boundary("host_monitoring_install", "M", []Effect{{"daemon", "observe", testDigest, nil, "host-a"}}); e != nil {
 		t.Fatal("pure observation positive", e)
 	}
-	if e := catalog().Boundary("host_monitoring_install", "M", []Effect{{"unknown", "observe", testDigest}}); e == nil {
+	if e := catalog().Boundary("host_monitoring_install", "M", []Effect{{"unknown", "observe", testDigest, nil, "host-a"}}); e == nil {
 		t.Fatal("unproven bundle")
 	}
 }
@@ -303,25 +304,25 @@ func TestNeverMCanonicalAliasesAndSelfMaintenance(t *testing.T) {
 				t.Fatal(alias)
 			}
 			for _, action := range []string{"host_service_restart", "host_service_state", "host_monitoring_install", "host_agentd_update"} {
-				if e := catalog().Boundary(action, "M", []Effect{{alias, "restart", testDigest}}); e == nil {
+				if e := catalog().Boundary(action, "M", []Effect{{alias, "restart", testDigest, nil, "host-a"}}); e == nil {
 					t.Fatal("never-M indirect", alias)
 				}
 			}
 		}
 	}
-	if e := catalog().Boundary("host_service_restart", "M", []Effect{{"org.example.sshd", "restart", testDigest}}); e == nil {
+	if e := catalog().Boundary("host_service_restart", "M", []Effect{{"org.example.sshd", "restart", testDigest, nil, "host-a"}}); e == nil {
 		t.Fatal("launchd alias")
 	}
-	if e := catalog().Boundary("host_service_restart", "H", []Effect{{"sshd", "restart", testDigest}}); e != nil {
+	if e := catalog().Boundary("host_service_restart", "H", []Effect{{"sshd", "restart", testDigest, nil, "host-a"}}); e != nil {
 		t.Fatal("H maintenance positive", e)
 	}
-	if e := catalog().Boundary("host_access_change", "H", []Effect{{"com.example.host-exec", "access", testDigest}}); e == nil {
+	if e := catalog().Boundary("host_access_change", "H", []Effect{{"com.example.host-exec", "access", testDigest, nil, "host-a"}}); e == nil {
 		t.Fatal("self-maintenance H")
 	}
-	if e := catalog().Boundary("host_new_node_join", "M", []Effect{{"k3s-agent", "join_first_start", testDigest}}); e != nil {
+	if e := catalog().Boundary("host_new_node_join", "M", []Effect{{"k3s-agent", "join_first_start", testDigest, nil, "host-a"}}); e != nil {
 		t.Fatal("first worker join contract", e)
 	}
-	if e := catalog().Boundary("host_new_node_join", "M", []Effect{{"k3s-agent", "restart", testDigest}}); e == nil {
+	if e := catalog().Boundary("host_new_node_join", "M", []Effect{{"k3s-agent", "restart", testDigest, nil, "host-a"}}); e == nil {
 		t.Fatal("join repaired existing service")
 	}
 }

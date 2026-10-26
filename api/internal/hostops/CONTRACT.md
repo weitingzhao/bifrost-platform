@@ -1,18 +1,17 @@
 # Host operations S1 candidate contract
 
-Source of scope: Work 584, amended by Work 592 (2026-10-26); reviewed design `a8eae89`, sections 2–6.1.
+Source of scope: Work 584, amended by Work 592 and Work 601 (2026-10-26); design sections 3.1/3.2 and 6.0, option A.
 This package is shared library code for platform/executor/helper builds in
 the platform repository. It adds no HTTP route, scheduler, SSH client,
 privileged helper, installer, production key, signer or runtime action.
 No external dependency was added. The existing SSHSIG verifier is reused;
 the release-policy Owner fingerprint is **not** used as a host-ops default.
 
-Work 598 (2026-10-26, final repair round): epoch corruption now survives
-Freeze and repeated stops. Review 595 B2 remains an admission blocker:
-actual M and non-log R effects are not fully bound to authorized action/target
-scope. Its permanent regression tests intentionally fail pending the Owner's
-scope/schema decision. This candidate must not be treated as merge-ready or
-as completed S1 admission; no runtime or production capability is authorized.
+Work 598 preserved epoch-corruption evidence across Freeze. Work 601 implements
+Review 595 B2 using the selected typed, signed scope contract (option A).
+The original three-round S1 budget was exhausted; the design records an
+additional 2.5–4 person-days including independent review/rework. These local
+checks do not constitute independent acceptance or authorize runtime use.
 
 ## Signed objects and verification flow
 
@@ -97,6 +96,81 @@ scope and independent hard boundaries. Neither grants execution by itself:
 S2 reserves quota/locks atomically; S3 independently rechecks and durably
 records intent before each permitted step. Later action adapters still
 return unsupported until their implementation and admission evidence exist.
+
+## Work 601 signed action/effect scopes
+
+`Object.ActionScopes` replaces the undefined `MaintenanceScope []string`.
+Each `ActionScope` has `ID`, `Action`, the complete request `Params` constraints,
+and separate complete `Forward`/`Rollback` arrays of `ScopedEffect`. A grant
+pins an inventory `ObjectID`, `Operation`, `SourceDigest` and exact `Parameters`.
+The enclosing inventory signature and M policy inventory digest bind it all.
+`Actions` and `PreinstalledActions` alone never grant scope; absent/unknown
+contracts deny. Every request must match exactly one variant; overlapping
+variants deny instead of choosing whichever effects happen to fit.
+
+`ScopeParameter` is a closed discriminator: `enum` has finite nonempty `Values`
+and no ObjectID; `object` has an exact ObjectID, no Values, and the expected
+registered kind on the same host; `log_since`/`log_lines` retain the existing
+hard bounds. Object request parameters use signed names/aliases, except
+root/endpoint/install IDs, which must be exact IDs. Service points to the
+primary object; compose project is the primary project. A secondary target
+need not repeat the primary action in its own Actions: the primary object's
+explicit signed effect grant is the authorization for that target.
+
+Every observed `Effect` now has a required `Host` and optional `Parameters`
+(empty/absent means only the empty set). Identity must be an exact signed
+canonical name or registered alias, unambiguously resolved through the
+independent catalog. Catalog-only aliases and implicit systemd normalization
+never grant access. All aliases of the resolved object must agree with that
+catalog. Effects must stay on the request host. H effects also bind the Plan
+host; canonical H bytes change and old candidates must be regenerated.
+
+Matching is one-to-one and order independent within each phase: exact object,
+operation, source and parameter set, with no extra, missing or duplicate
+occurrences. A source must additionally bind a verified handler, registered
+config or received bundle entry. R sources are each target's registered config.
+The accepted operation families for the first seven M templates are:
+
+| Action suffix | Forward | Rollback |
+| --- | --- | --- |
+| service_restart / container_restart | restart | restart, state |
+| service_state | state | state |
+| compose_reconcile | recreate, restart, state | recreate, restart, state |
+| monitoring_install | install, state, restart, observe | remove, restore, state, restart, observe |
+| monitoring_remove | remove, state | install, restore, state, restart |
+| agentd_update | install, restore, state, restart | install, restore, state, restart |
+
+These families are only validation bounds, not grants. Each signed variant
+still enumerates the exact effects; access/unknown operations are rejected.
+Service restart/state, container restart and logs only affect the primary
+service. Compose rejects stateful primary and effect targets. R always uses
+read and has an empty rollback set. All seven R templates require scopes.
+Other M templates remain unsupported even if listed as installed capabilities.
+
+A state effect requires `parameters.state=start|stop|disable`; forward state
+must equal the request and rollback state is independently signed. Every
+project-bearing effect has `parameters.project` equal to the signed project
+object ID. Profile/plan are singular selectors and every effect must carry the
+same signed selector. The initial R set exercises profile; plan-bearing M
+is reserved for later templates and remains unsupported. Existing H plans
+bind project/profile/plan separately against each phase's request parameters;
+valid signatures do not excuse contradictory selector/host observations.
+Unknown effect parameter keys in an R/M scope are rejected.
+
+`Dependencies` is exclusively the affected/lock closure, never an operating
+grant. An authorized multi-object compose can touch its project and named
+services while a shared storage dependency remains lock-only. S2/S3 still
+must prove the dependency closure, acquire locks and handle unknown outcomes.
+This check neither computes locks nor proves actual host effects. Each future
+adapter must reconstruct the complete forward AND rollback set, including
+parameters and host, from real bytes/configuration. Opaque templates deny.
+
+Candidate schema_version remains 1 because S1 has no installed consumers.
+There is no compatibility fallback: old maintenance_scope documents are
+unknown-field/missing-field errors; new candidate inventory/policy signatures
+and H plans must be regenerated. No routes, dependencies, production anchors
+or installed handlers are added. The three future consumers must adopt the
+same contract and conformance tests together.
 
 ## H plan and boundaries
 

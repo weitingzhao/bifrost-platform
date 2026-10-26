@@ -45,7 +45,7 @@ func TestReview590ReadScopeBindsRequestedService(t *testing.T) {
 	x := testRequest()
 	x.Action = "host_logs"
 	x.Params = map[string]string{"service": "sshd", "since": "2026-10-26T11:00:00Z", "lines": "10"}
-	err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"sshd", "read", testDigest}}, testNow)
+	err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"sshd", "read", testDigest, nil, "host-a"}}, testNow)
 	if err == nil {
 		t.Fatal("unregistered sshd log request accepted under exporter object authorization")
 	}
@@ -58,7 +58,7 @@ func TestReview590ReadLogLineCap(t *testing.T) {
 			x := testRequest()
 			x.Action = "host_logs"
 			x.Params = map[string]string{"service": "exporter", "since": "2026-10-26T11:00:00Z", "lines": lines}
-			err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest}}, testNow)
+			err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest, nil, "host-a"}}, testNow)
 			if err == nil {
 				t.Fatal("invalid or excessive lines accepted")
 			}
@@ -127,7 +127,7 @@ func TestReview590LogBoundsAndAliases(t *testing.T) {
 		x.Params = map[string]string{"service": service, "since": since, "lines": lines}
 		return tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), effects, testNow)
 	}
-	effects := []Effect{{"exporter", "read", testDigest}}
+	effects := []Effect{{"exporter", "read", testDigest, nil, "host-a"}}
 	since := "2026-10-26T11:00:00Z"
 	for _, service := range []string{"exporter", "com.example.exporter"} {
 		for _, lines := range []string{"1", "200"} {
@@ -136,7 +136,7 @@ func TestReview590LogBoundsAndAliases(t *testing.T) {
 			}
 		}
 	}
-	if err := check("exporter", "2026-10-26T06:00:00-05:00", "200", []Effect{{"com.example.exporter", "read", testDigest}}); err != nil {
+	if err := check("exporter", "2026-10-26T06:00:00-05:00", "200", []Effect{{"com.example.exporter", "read", testDigest, nil, "host-a"}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, lines := range []string{"0", "020", "+1", "1.0", " 1", "1 ", "18446744073709551616", "10\r", "1\x1b[0m"} {
@@ -150,9 +150,9 @@ func TestReview590LogBoundsAndAliases(t *testing.T) {
 		}
 	}
 	for _, effects := range [][]Effect{
-		{{"sshd", "read", testDigest}},
-		{{"exporter", "read", testDigest}, {"sshd", "read", testDigest}},
-		{{"exporter", "read", Digest([]byte("different config"))}},
+		{{"sshd", "read", testDigest, nil, "host-a"}},
+		{{"exporter", "read", testDigest, nil, "host-a"}, {"sshd", "read", testDigest, nil, "host-a"}},
+		{{"exporter", "read", Digest([]byte("different config")), nil, "host-a"}},
 	} {
 		if err := check("exporter", since, "10", effects); err == nil {
 			t.Fatal("substituted log effect accepted")

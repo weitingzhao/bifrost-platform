@@ -66,14 +66,29 @@ func event(outcome string) Event {
 }
 
 func inventory() Inventory {
-	return Inventory{Meta: metadata("test-inventory"), Hosts: []Host{{"host-a", "test", "linux", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "02:00:00:00:00:01", "192.0.2.1", "out-of-cluster", 1, []string{"exec-a"}}}, Objects: []Object{{ID: "exporter", Host: "host-a", Kind: "service", Canonical: "exporter", Aliases: []string{"com.example.exporter"}, ConfigDigest: testDigest, Dependencies: []string{}, Actions: []string{"host_service_restart", "host_status", "host_logs", "host_compose_reconcile", "host_monitoring_install"}, MaintenanceScope: []string{}, Files: []string{}, Ports: []int{}, Methods: []string{}, Repositories: map[string]string{}}}, ProtectedIDs: []string{}}
+	return Inventory{Meta: metadata("test-inventory"), Hosts: []Host{{"host-a", "test", "linux", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "02:00:00:00:00:01", "192.0.2.1", "out-of-cluster", 1, []string{"exec-a"}}}, Objects: []Object{{ID: "exporter", Host: "host-a", Kind: "service", Canonical: "exporter", Aliases: []string{"com.example.exporter"}, ConfigDigest: testDigest, Dependencies: []string{}, Actions: []string{"host_service_restart", "host_status", "host_logs", "host_compose_reconcile", "host_monitoring_install"}, ActionScopes: fixtureScopes(), Files: []string{}, Ports: []int{}, Methods: []string{}, Repositories: map[string]string{}}}, ProtectedIDs: []string{}}
 }
 func catalog() SafetyCatalog {
 	return SafetyCatalog{testDigest, map[string]string{"exporter": "exporter", "other": "other", "com.example.exporter": "exporter", "daemon": "daemon", "bifrost-engine": "daemon", "bifrost-engine.service": "daemon", "trading_engine": "daemon", "bifrost-host-exec": "bifrost-host-exec", "com.example.host-exec": "bifrost-host-exec", "k3s": "k3s", "k3s-agent": "k3s-agent", "containerd": "containerd", "docker": "docker", "postgresql": "postgresql", "sshd": "sshd", "systemd-networkd": "systemd-networkd", "org.example.sshd": "sshd"}, []string{"daemon"}, []string{"bifrost-host-exec"}}
 }
 func testPlan() Plan {
-	return Plan{SchemaVersion: 1, Action: "host_service_restart", Params: map[string]string{"service": "exporter"}, Target: Target{"host-a", "test", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "linux", 1}, BeforeDigest: testDigest, ArtifactDigests: []string{}, InventoryDigest: testDigest, CatalogDigest: testDigest, HandlerDigest: testDigest, ExecutionID: "execution-h", ApprovalID: "approval-h", Nonce: "00000000000000000000000000000001", EffectiveAt: "2026-10-26T11:00:00Z", ExpiresAt: "2026-10-26T13:00:00Z", ExecutorID: "exec-a", FreezeEpoch: 1, RecoveryGeneration: 1, FencingGeneration: 1, Rollback: Rollback{"restore", map[string]string{"state": "running"}, []string{}, "2026-10-26T14:00:00Z", 120, []Effect{{"exporter", "restart", testDigest}}}, Locks: []string{"host:host-a", "dependency:metrics"}, Effects: []Effect{{"exporter", "restart", testDigest}}}
+	return Plan{SchemaVersion: 1, Action: "host_service_restart", Params: map[string]string{"service": "exporter"}, Target: Target{"host-a", "test", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "linux", 1}, BeforeDigest: testDigest, ArtifactDigests: []string{}, InventoryDigest: testDigest, CatalogDigest: testDigest, HandlerDigest: testDigest, ExecutionID: "execution-h", ApprovalID: "approval-h", Nonce: "00000000000000000000000000000001", EffectiveAt: "2026-10-26T11:00:00Z", ExpiresAt: "2026-10-26T13:00:00Z", ExecutorID: "exec-a", FreezeEpoch: 1, RecoveryGeneration: 1, FencingGeneration: 1, Rollback: Rollback{"restore", map[string]string{"state": "running"}, []string{}, "2026-10-26T14:00:00Z", 120, []Effect{{"exporter", "restart", testDigest, nil, "host-a"}}}, Locks: []string{"host:host-a", "dependency:metrics"}, Effects: []Effect{{"exporter", "restart", testDigest, nil, "host-a"}}}
 }
 func planContext(p Plan) PlanContext {
 	return PlanContext{Clock: testFacts().clock(), Target: p.Target, ExecutorID: p.ExecutorID, ExecutionID: p.ExecutionID, ApprovalID: p.ApprovalID, BeforeDigest: p.BeforeDigest, InventoryDigest: p.InventoryDigest, HandlerDigest: p.HandlerDigest, ArtifactDigests: p.ArtifactDigests, Rollback: p.Rollback, Effects: p.Effects, Locks: p.Locks, FencingGeneration: 1, State: SafetyState{Circuits: []Circuit{}, Present: true, Fresh: true, Environment: "test", Epoch: 1, MaxEpoch: 1, MaxRuleVersion: 1, PolicyHead: testDigest, Generation: 1}, Catalog: catalog(), PreinstalledActions: []string{"host_service_restart", "host_access_change"}}
+}
+
+func enumScope(values ...string) ScopeParameter { return ScopeParameter{Kind: "enum", Values: values} }
+func objectScope(id string) ScopeParameter {
+	return ScopeParameter{Kind: "object", ObjectID: id, Values: []string{}}
+}
+func scopedEffect(id, operation, source string) ScopedEffect {
+	return ScopedEffect{ObjectID: id, Operation: operation, SourceDigest: source, Parameters: map[string]string{}}
+}
+func fixtureScopes() []ActionScope {
+	return []ActionScope{
+		{ID: "restart", Action: "host_service_restart", Params: map[string]ScopeParameter{"service": objectScope("exporter")}, Forward: []ScopedEffect{scopedEffect("exporter", "restart", testDigest)}, Rollback: []ScopedEffect{scopedEffect("exporter", "restart", testDigest)}},
+		{ID: "status", Action: "host_status", Params: map[string]ScopeParameter{"check": enumScope("service")}, Forward: []ScopedEffect{scopedEffect("exporter", "read", testDigest)}, Rollback: []ScopedEffect{}},
+		{ID: "logs", Action: "host_logs", Params: map[string]ScopeParameter{"service": objectScope("exporter"), "since": {Kind: "log_since", Values: []string{}}, "lines": {Kind: "log_lines", Values: []string{}}}, Forward: []ScopedEffect{scopedEffect("exporter", "read", testDigest)}, Rollback: []ScopedEffect{}},
+	}
 }

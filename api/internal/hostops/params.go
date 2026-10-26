@@ -46,7 +46,7 @@ var parameterNames = map[string][]string{
 	"host_execution_resolve":       {"execution_id", "evidence_hash", "outcome"},
 }
 
-func validParams[T string | []string](action string, params map[string]T) bool {
+func validParams[T any](action string, params map[string]T) bool {
 	names, ok := parameterNames[action]
 	if !ok || len(names) != len(params) {
 		return false

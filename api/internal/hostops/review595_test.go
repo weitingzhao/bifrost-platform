@@ -71,13 +71,13 @@ func TestReview595MEffectsStayInAuthorizedScope(t *testing.T) {
 			b := a
 			switch where {
 			case "forward":
-				b.ForwardEffects = []Effect{{"other", "restart", testDigest}}
+				b.ForwardEffects = []Effect{{"other", "restart", testDigest, nil, "host-a"}}
 			case "rollback":
-				b.RollbackEffects = []Effect{{"other", "restart", testDigest}}
+				b.RollbackEffects = []Effect{{"other", "restart", testDigest, nil, "host-a"}}
 			case "extra-forward":
-				b.ForwardEffects = []Effect{{"exporter", "restart", testDigest}, {"other", "restart", testDigest}}
+				b.ForwardEffects = []Effect{{"exporter", "restart", testDigest, nil, "host-a"}, {"other", "restart", testDigest, nil, "host-a"}}
 			case "operation":
-				b.ForwardEffects = []Effect{{"exporter", "access", testDigest}}
+				b.ForwardEffects = []Effect{{"exporter", "access", testDigest, nil, "host-a"}}
 			}
 			if got := tr.EvaluateM(b, testNow); got.Allowed {
 				t.Fatalf("M exporter restart accepts effects outside signed object/action: %+v", got)
@@ -91,10 +91,10 @@ func TestReview595ReadStatusBindsEffectScope(t *testing.T) {
 	x := testRequest()
 	x.Action = "host_status"
 	x.Params = map[string]string{"check": "service"}
-	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest}}, testNow); err != nil {
+	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest, nil, "host-a"}}, testNow); err != nil {
 		t.Fatal(err)
 	}
-	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"sshd", "read", testDigest}}, testNow); err == nil {
+	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"sshd", "read", testDigest, nil, "host-a"}}, testNow); err == nil {
 		t.Fatal("R status reads unregistered sshd using exporter registration")
 	}
 }

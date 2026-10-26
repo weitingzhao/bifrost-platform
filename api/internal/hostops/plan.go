@@ -70,8 +70,22 @@ func (p Plan) validate() error {
 		}
 	}
 	for _, e := range append(append([]Effect{}, p.Effects...), p.Rollback.Effects...) {
-		if !validDigest(e.SourceDigest) || e.Identity == "" || e.Operation == "" {
+		if !validDigest(e.SourceDigest) || e.Identity == "" || e.Operation == "" || e.Host != p.Target.Host {
 			return errors.New("invalid effect")
+		}
+	}
+	for _, phase := range []struct {
+		params  map[string]string
+		effects []Effect
+	}{{p.Params, p.Effects}, {p.Rollback.Params, p.Rollback.Effects}} {
+		for _, e := range phase.effects {
+			for _, name := range []string{"project", "profile", "plan"} {
+				want, selected := phase.params[name]
+				got, observed := e.Parameters[name]
+				if selected != observed || want != got {
+					return errors.New("H effect context differs from phase parameters")
+				}
+			}
 		}
 	}
 	return nil

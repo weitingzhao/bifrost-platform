@@ -186,7 +186,7 @@ func admission(t *testing.T) (Trust, Admission) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	return tr, Admission{RequestJSON: canonical(testRequest()), AuthenticatedExecutor: "exec-a", Environment: "test", PreinstalledActions: []string{"host_service_restart"}, ObjectID: "exporter", Inventory: inv, InventoryMark: ArtifactMark{1, Digest([]byte(inv.Text))}, PolicySet: set, State: testState(p), Facts: testFacts(), Catalog: catalog(), ForwardEffects: []Effect{{"exporter", "restart", testDigest}}, RollbackEffects: []Effect{{"exporter", "restart", testDigest}}, Bundles: []ReceivedBundle{}}
+	return tr, Admission{RequestJSON: canonical(testRequest()), AuthenticatedExecutor: "exec-a", Environment: "test", PreinstalledActions: []string{"host_service_restart"}, ObjectID: "exporter", Inventory: inv, InventoryMark: ArtifactMark{1, Digest([]byte(inv.Text))}, PolicySet: set, State: testState(p), Facts: testFacts(), Catalog: catalog(), ForwardEffects: []Effect{{"exporter", "restart", testDigest, nil, "host-a"}}, RollbackEffects: []Effect{{"exporter", "restart", testDigest, nil, "host-a"}}, Bundles: []ReceivedBundle{}}
 }
 func TestAdmissionReference(t *testing.T) {
 	tr, a := admission(t)
@@ -194,7 +194,11 @@ func TestAdmissionReference(t *testing.T) {
 		t.Fatal(d)
 	}
 	for _, mutate := range []func(*Admission){
-		func(a *Admission) { a.AuthenticatedExecutor = "exec-b" }, func(a *Admission) { a.Environment = "prod" }, func(a *Admission) { a.PreinstalledActions = nil }, func(a *Admission) { a.InventoryMark = ArtifactMark{} }, func(a *Admission) { a.PolicySet.Baseline.Text = "" }, func(a *Admission) { a.State.Frozen = true }, func(a *Admission) { a.RollbackEffects = nil }, func(a *Admission) { a.ForwardEffects = []Effect{{"daemon", "enable_execution", testDigest}} }, func(a *Admission) { a.Facts.LockAvailable = false }, func(a *Admission) { a.ObjectID = "unknown" }, func(a *Admission) { a.ForwardEffects = []Effect{{"exporter", "restart", Digest([]byte("unverified"))}} },
+		func(a *Admission) { a.AuthenticatedExecutor = "exec-b" }, func(a *Admission) { a.Environment = "prod" }, func(a *Admission) { a.PreinstalledActions = nil }, func(a *Admission) { a.InventoryMark = ArtifactMark{} }, func(a *Admission) { a.PolicySet.Baseline.Text = "" }, func(a *Admission) { a.State.Frozen = true }, func(a *Admission) { a.RollbackEffects = nil }, func(a *Admission) {
+			a.ForwardEffects = []Effect{{"daemon", "enable_execution", testDigest, nil, "host-a"}}
+		}, func(a *Admission) { a.Facts.LockAvailable = false }, func(a *Admission) { a.ObjectID = "unknown" }, func(a *Admission) {
+			a.ForwardEffects = []Effect{{"exporter", "restart", Digest([]byte("unverified")), nil, "host-a"}}
+		},
 	} {
 		b := a
 		mutate(&b)
@@ -205,12 +209,12 @@ func TestAdmissionReference(t *testing.T) {
 	x := testRequest()
 	x.Action = "host_status"
 	x.Params = map[string]string{"check": "service"}
-	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest}}, testNow); err != nil {
+	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest, nil, "host-a"}}, testNow); err != nil {
 		t.Fatal(err)
 	}
 	// Expired M baseline does not remove registered read diagnostics.
 	a.PolicySet.Baseline.Text = "expired"
-	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest}}, testNow); err != nil {
+	if err := tr.ValidateReadScope(a.Inventory, a.InventoryMark, x, "exporter", catalog(), []Effect{{"exporter", "read", testDigest, nil, "host-a"}}, testNow); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -218,10 +222,12 @@ func TestAdmissionReference(t *testing.T) {
 func TestAdmissionVerifiesBundleAndInventoryBindings(t *testing.T) {
 	k := rptest.NewKey(t)
 	tr := Trust{k.Fingerprint}
-	inv := signed(t, k, inventory(), NamespaceInventory)
 	bundle, files := bundleFixture()
 	manifest := signed(t, k, bundle, NamespaceBundle)
 	md := Digest([]byte(manifest.Text))
+	i := inventory()
+	i.Objects[0].ActionScopes = append(i.Objects[0].ActionScopes, ActionScope{ID: "install", Action: "host_monitoring_install", Params: map[string]ScopeParameter{"bundle": enumScope(md)}, Forward: []ScopedEffect{scopedEffect("exporter", "install", bundle.Entries[0].SHA256)}, Rollback: []ScopedEffect{scopedEffect("exporter", "restart", testDigest)}})
+	inv := signed(t, k, i, NamespaceInventory)
 	r := testRule()
 	r.InventoryDigest = Digest([]byte(inv.Text))
 	r.Clauses[0].Action = "host_monitoring_install"
@@ -236,7 +242,7 @@ func TestAdmissionVerifiesBundleAndInventoryBindings(t *testing.T) {
 	x.Action = "host_monitoring_install"
 	x.Params = map[string]string{"bundle": md}
 	x.BundleDigests = []string{md}
-	a := Admission{RequestJSON: canonical(x), AuthenticatedExecutor: x.ExecutorID, Environment: x.Environment, PreinstalledActions: []string{"host_monitoring_install"}, ObjectID: "exporter", Inventory: inv, InventoryMark: ArtifactMark{1, Digest([]byte(inv.Text))}, PolicySet: set, State: testState(p), Facts: testFacts(), Catalog: catalog(), ForwardEffects: []Effect{{"exporter", "install", bundle.Entries[0].SHA256}}, RollbackEffects: []Effect{{"exporter", "restart", testDigest}}, Bundles: []ReceivedBundle{{manifest, ArtifactMark{1, md}, files}}}
+	a := Admission{RequestJSON: canonical(x), AuthenticatedExecutor: x.ExecutorID, Environment: x.Environment, PreinstalledActions: []string{"host_monitoring_install"}, ObjectID: "exporter", Inventory: inv, InventoryMark: ArtifactMark{1, Digest([]byte(inv.Text))}, PolicySet: set, State: testState(p), Facts: testFacts(), Catalog: catalog(), ForwardEffects: []Effect{{"exporter", "install", bundle.Entries[0].SHA256, nil, "host-a"}}, RollbackEffects: []Effect{{"exporter", "restart", testDigest, nil, "host-a"}}, Bundles: []ReceivedBundle{{manifest, ArtifactMark{1, md}, files}}}
 	if d := tr.EvaluateM(a, testNow); !d.Allowed {
 		t.Fatal(d)
 	}

@@ -91,7 +91,7 @@ type Object struct {
 	Stateful                bool              `json:"stateful"`
 	Dependencies            []string          `json:"dependencies"`
 	Actions                 []string          `json:"actions"`
-	MaintenanceScope        []string          `json:"maintenance_scope"`
+	ActionScopes            []ActionScope     `json:"action_scopes"`
 	Path                    string            `json:"path"`
 	Owner                   string            `json:"owner"`
 	Purpose                 string            `json:"purpose"`
@@ -127,7 +127,7 @@ func (i Inventory) validate() error {
 		return errors.New("invalid inventory")
 	}
 	for _, o := range i.Objects {
-		if o.ID == "" || ids[o.ID] || !hosts[o.Host] || !contains([]string{"service", "project", "root", "install", "endpoint", "repo_set", "protected"}, o.Kind) || o.Canonical == "" || !validDigest(o.ConfigDigest) || !setOK(o.Aliases, true) || !setOK(o.Actions, false) || !setOK(o.Dependencies, true) || !setOK(o.MaintenanceScope, true) {
+		if o.ID == "" || ids[o.ID] || !hosts[o.Host] || !contains([]string{"service", "project", "root", "install", "endpoint", "repo_set", "protected"}, o.Kind) || o.Canonical == "" || !validDigest(o.ConfigDigest) || !setOK(o.Aliases, true) || !setOK(o.Actions, false) || !setOK(o.Dependencies, true) {
 			return errors.New("invalid registered object")
 		}
 		ids[o.ID] = true
@@ -148,6 +148,9 @@ func (i Inventory) validate() error {
 		}
 	}
 	for _, o := range i.Objects {
+		if err := i.validateActionScopes(o); err != nil {
+			return err
+		}
 		for _, dep := range o.Dependencies {
 			if !ids[dep] {
 				return errors.New("unknown dependency")
