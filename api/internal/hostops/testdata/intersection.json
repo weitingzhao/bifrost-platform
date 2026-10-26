@@ -1,0 +1,18 @@
+[
+  {"name":"within-delete-strict-clause","layout":"within","mutation":"delete-clause","expected":false},
+  {"name":"across-delete-strict-rule","layout":"across","mutation":"delete-rule","expected":false},
+  {"name":"within-host-subset","layout":"within","mutation":"hosts","expected":false},
+  {"name":"across-host-subset","layout":"across","mutation":"hosts","expected":false},
+  {"name":"within-executor-subset","layout":"within","mutation":"executors","expected":false},
+  {"name":"across-executor-subset","layout":"across","mutation":"executors","expected":false},
+  {"name":"within-param-subset","layout":"within","mutation":"params","expected":false},
+  {"name":"across-param-subset","layout":"across","mutation":"params","expected":false},
+  {"name":"within-expired-strict","layout":"within","mutation":"expired","expected":false},
+  {"name":"across-expired-strict","layout":"across","mutation":"expired","expected":false},
+  {"name":"within-disabled-strict","layout":"within","mutation":"disabled","expected":false},
+  {"name":"across-disabled-strict","layout":"across","mutation":"disabled","expected":false},
+  {"name":"within-missing-file","layout":"within","mutation":"missing","expected":false},
+  {"name":"across-missing-file","layout":"across","mutation":"missing","expected":false},
+  {"name":"within-disjoint-positive","layout":"within","mutation":"disjoint","expected":true},
+  {"name":"across-disjoint-positive","layout":"across","mutation":"disjoint","expected":true}
+]
