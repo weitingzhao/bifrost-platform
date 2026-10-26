@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// The Owner's decisions on plan changes (planchange.go makes the
+// The Owner's decisions on plan changes (planproposal.go makes the
 // proposals): the controller's pass that applies or refuses a change once
 // its decision card is answered, and acknowledges the answer.
 

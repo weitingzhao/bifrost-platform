@@ -1,5 +1,6 @@
 /**
- * Tools registered with reg() in mcp/platform/src/index.ts (the full server).
+ * Tools registered with reg() or server.registerTool() in index.ts and its
+ * registration modules (the full server).
  * Laptop tools live in registerLocal.ts. Chat approval tools live in registerApprove.ts
  * and must not appear in this list.
  */

@@ -17,9 +17,9 @@ function namesFromStdioToolNamesTs(): string[] {
 
 function serverToolNamesFromIndex(): string[] {
   const index = fs.readFileSync(path.join(mcpSrcDir, 'index.ts'), 'utf8')
-  // index.ts registers through the local `reg()` helper, not `server.tool()`
-  // directly. Matching the old shape silently found zero tools, which made this
-  // parity guard pass vacuously for every tool it was meant to check.
+  // Legacy tools use the scoped reg() helper; strict object schemas use
+  // server.registerTool() so unknown fields are rejected instead of stripped.
+  // Both registration forms must participate in the bidirectional guard.
   // A module index.ts hands its `reg` to (registerMessageTools(reg), W-31 2.3)
   // registers tools too: read each of them as well.
   const sources = [index]
@@ -28,11 +28,18 @@ function serverToolNamesFromIndex(): string[] {
     if (from == null) throw new Error(`${fn}(reg) is called but its module is not imported`)
     sources.push(fs.readFileSync(path.join(mcpSrcDir, `${from[1]}.ts`), 'utf8'))
   }
-  const names = sources.flatMap(src => [...src.matchAll(/^\s*reg\(\s*\n?\s*'([a-z0-9_]+)'/gm)].map(m => m[1]))
+  const names = sources.flatMap(src => [...src.matchAll(/^\s*(?:reg|server\.registerTool)\(\s*'([a-z0-9_]+)'/gm)].map(m => m[1]))
   return [...new Set(names)]
 }
 
 describe('MCP stdio ↔ PLATFORM_STDIO_TOOL_NAMES parity (Post-QA F3)', () => {
+  it('discovers PV1 read and strict write registrations', () => {
+    const registered = serverToolNamesFromIndex()
+    for (const name of ['get_plan_view', 'register_external_work', 'record_external_work_event']) {
+      expect(registered).toContain(name)
+    }
+  })
+
   it('server.tool names equal PLATFORM_STDIO_TOOL_NAMES (bidirectional)', () => {
     const registered = new Set(serverToolNamesFromIndex())
     const listed = new Set(namesFromStdioToolNamesTs())

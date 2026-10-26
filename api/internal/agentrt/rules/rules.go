@@ -41,7 +41,7 @@ const (
 // The kinds of card a card-auto-answer rule may list (store/cardauto.go):
 // a blocked task's card (store/blockedcard.go), a planner's question
 // (store/planresult.go), a plan change's, a plan import's and a recorder
-// import's card (planchange.go, planimportcard.go, recorderimport.go), and
+// import's card (planproposal.go, planimportcard.go, recorderimport.go), and
 // a mission's card outside the standing envelope (missiondecide.go). TD-393
 // (the Owner 2026-10-20 「STG 上所有种类的运行时卡都归规则管」) added all but the
 // first two; a rule answers a card with its recommendation, or with the
