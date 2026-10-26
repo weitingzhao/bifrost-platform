@@ -127,9 +127,29 @@ func ValidateExternalDescription(raw []byte) error {
 
 func parseExternalDescription(raw []byte) (ExternalDescription, error) {
 	var d ExternalDescription
-	var err error
-	if err = strictViewJSON(raw, &d); err != nil {
-		return d, err
+	if len(raw) > maxArtifactBytes {
+		return d, invalid("external description is at most 1 MiB")
+	}
+	v, err := canon.Parse(raw)
+	if err != nil {
+		return d, invalid("invalid JSON: %v", err)
+	}
+	fields, ok := v.(map[string]any)
+	if !ok {
+		return d, invalid("external description must be an object")
+	}
+	// Check the original key set before struct decoding: encoding/json also
+	// matches case/Unicode-folded aliases, which could hide invalid values
+	// behind a later field while the original bytes are stored unchanged.
+	for key := range fields {
+		switch key {
+		case "v", "kind", "task", "executor", "provider", "repo", "branch", "acceptance_refs", "estimate_minutes":
+		default:
+			return d, invalid("invalid external description field: %q", key)
+		}
+	}
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return d, invalid("invalid fields: %v", err)
 	}
 	if d.V != 1 || d.Kind != "agentrt.external_work/v1" || len(d.Acceptance) == 0 || len(d.Estimate) != 2 || d.Estimate[0] < 0 || d.Estimate[1] < d.Estimate[0] {
 		return d, invalid("invalid external description")
