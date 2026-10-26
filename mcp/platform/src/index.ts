@@ -652,16 +652,28 @@ reg(
 
 reg('get_plan_view', `One read-only plan snapshot, including external work freshness. ${RUNTIME_DATA_NOTE}`,
   { root: z.string(), recent_cursor: z.string().optional() }, async (input) => jsonResult(await getPlanView(input)))
-reg('register_external_work', 'Register external work before starting it. The other artifact is agentrt.external_work/v1. Registration grants no execution or completion authority.', {
-  idempotency_key: z.string().min(1), root: z.string(), plan_node_id: z.string(), source_run_key: z.string(), artifact_id: z.string(),
-  mission_id: z.string().optional(), task_id: z.string().optional(), observed_at: z.string().optional(),
-}, async (input) => jsonResult(await registerExternalWork(input)))
-reg('record_external_work_event', 'Append an external work observation with monotonic seq. Submitted is not verified or done. Retry the same event with the same key.', {
-  external_work_id: z.string(), idempotency_key: z.string().min(1), seq: z.number().int().min(1),
-  type: z.enum(['started', 'heartbeat', 'submitted', 'cancelled', 'linked']), observed_at: z.string().optional(),
-  root: z.string().optional(), plan_node_id: z.string().optional(), mission_id: z.string().optional(), task_id: z.string().optional(),
-  report_path_digest: z.string().optional(), report_digest: z.string().optional(), commit_shas: z.array(z.string()).optional(), exit_code: z.number().int().optional(),
-}, async (input) => jsonResult(await recordExternalWorkEvent(input)))
+// registerTool accepts an intact Zod object; legacy tool(rawShape) would
+// recreate a stripping object and silently discard misspelled bindings.
+if (!allow || allow.has('register_external_work')) {
+  server.registerTool('register_external_work', {
+    description: 'Register external work before starting it. The other artifact is agentrt.external_work/v1. Registration grants no execution or completion authority.',
+    inputSchema: z.object({
+      idempotency_key: z.string().min(1), root: z.string(), plan_node_id: z.string(), source_run_key: z.string(), artifact_id: z.string(),
+      mission_id: z.string().optional(), task_id: z.string().optional(), observed_at: z.string().optional(),
+    }).strict(),
+  }, async (input) => jsonResult(await registerExternalWork(input)))
+}
+if (!allow || allow.has('record_external_work_event')) {
+  server.registerTool('record_external_work_event', {
+    description: 'Append an external work observation with monotonic seq. Submitted is not verified or done. Retry the same event with the same key.',
+    inputSchema: z.object({
+      external_work_id: z.string(), idempotency_key: z.string().min(1), seq: z.number().int().min(1),
+      type: z.enum(['started', 'heartbeat', 'submitted', 'cancelled', 'linked']), observed_at: z.string().optional(),
+      root: z.string().optional(), plan_node_id: z.string().optional(), mission_id: z.string().optional(), task_id: z.string().optional(),
+      report_path_digest: z.string().optional(), report_digest: z.string().optional(), commit_shas: z.array(z.string()).optional(), exit_code: z.number().int().optional(),
+    }).strict(),
+  }, async (input) => jsonResult(await recordExternalWorkEvent(input)))
+}
 
 reg(
   'get_mission',
