@@ -134,8 +134,14 @@ func parseExternalDescription(raw []byte) (ExternalDescription, error) {
 	return d, nil
 }
 func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task string) error {
-	var one int
-	if err := tx.QueryRow(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id=$1 FOR SHARE`, node).Scan(&one); err != nil {
+	// Callers hold the root lock. Like view adoption, lock every node before
+	// reading the dev boundary: task proposals hold their step FOR SHARE.
+	// This also protects a linked event claiming a previously unclaimed root.
+	rows, err := tx.Query(ctx, viewTree+`SELECT n.plan_node_id FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
+	if err != nil {
+		return err
+	}
+	if _, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return err
 	}
 	r, err := rootOf(ctx, tx, node)
@@ -170,7 +176,7 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 			return invalid("external work only binds dev")
 		}
 		var bound bool
-		err = tx.QueryRow(ctx, `SELECT mission_id=$2 FROM agentrt.plan_node WHERE plan_node_id=$1`, node, mission).Scan(&bound)
+		err = tx.QueryRow(ctx, `SELECT COALESCE(mission_id=$2, $3) FROM agentrt.plan_node WHERE plan_node_id=$1`, node, mission, task != "").Scan(&bound)
 		if err != nil || !bound {
 			return invalid("mission is not bound to this step")
 		}

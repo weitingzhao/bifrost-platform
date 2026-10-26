@@ -110,12 +110,15 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	working := []any{}
 	ownerWaiting := []any{}
 	finished := []any{}
-	linked := map[string]bool{}
+	linked := map[string][]map[string]any{}
 	for _, e := range ext {
-		if task, _ := e["task_id"].(string); task != "" {
-			linked[task] = true
+		task, _ := e["task_id"].(string)
+		if task != "" {
+			linked[task] = append(linked[task], e)
 		}
-		if e["state"] == "Running" || e["state"] == "Registered" {
+		// An active runtime attempt owns the current execution facts. Keep
+		// external observations as its history, regardless of their state.
+		if live[task] == nil && (e["state"] == "Running" || e["state"] == "Registered") {
 			working = append(working, e)
 		}
 		if end, _ := e["ended_at"].(string); len(end) >= 10 && end[:10] == now.UTC().Format("2006-01-02") {
@@ -128,13 +131,14 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		}
 		if a := live[t["task_id"].(string)]; a != nil {
 			t["attempt"] = a
-			if !linked[a.TaskID] {
-				working = append(working, t)
+			if history := linked[a.TaskID]; len(history) > 0 {
+				t["external_work"] = history
 			}
+			working = append(working, t)
 		}
 	}
 	var doneRaw []byte
-	err = tx.QueryRow(ctx, viewTree+`SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id',a.attempt_id,'task_id',a.task_id,'state',a.state,'ended_at',a.ended_at,'meaning','Execution ended; not plan completion')),'[]') FROM agentrt.attempt a JOIN agentrt.task t USING(task_id) JOIN tree USING(plan_node_id) WHERE a.ended_at >= date_trunc('day',$2::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AND a.ended_at <= $2 AND NOT(t.task_id=ANY($3))`, root, now, mapKeys(linked)).Scan(&doneRaw)
+	err = tx.QueryRow(ctx, viewTree+`SELECT COALESCE(jsonb_agg(jsonb_build_object('attempt_id',a.attempt_id,'task_id',a.task_id,'state',a.state,'ended_at',a.ended_at,'meaning','Execution ended; not plan completion')),'[]') FROM agentrt.attempt a JOIN agentrt.task t USING(task_id) JOIN tree USING(plan_node_id) WHERE a.ended_at >= date_trunc('day',$2::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AND a.ended_at <= $2`, root, now).Scan(&doneRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -181,13 +185,6 @@ func itemIndex(d *planview.Document, node string) int {
 		}
 	}
 	return 0
-}
-func mapKeys(m map[string]bool) []string {
-	out := []string{}
-	for s := range m {
-		out = append(out, s)
-	}
-	return out
 }
 func snapshotExternal(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
 	rows, err := tx.Query(ctx, `SELECT body,at FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body,at FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC) x WHERE body->>'root'=$1 ORDER BY body->>'external_work_id'`, root)
