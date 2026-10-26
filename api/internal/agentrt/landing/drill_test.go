@@ -50,7 +50,7 @@ func TestDrillLatestCIFailureCannotRelease(t *testing.T) {
 	o.Rerun = true
 	s.Operations["land:1"] = o
 	a = NextDrill(s, "land:1", obs, epoch.Add(5*time.Minute))
-	if a.Kind != "failed" || a.Why != "ci_failed" {
+	if a.Kind != "failed" || a.Why != "ci_red" {
 		t.Fatal(a)
 	}
 }

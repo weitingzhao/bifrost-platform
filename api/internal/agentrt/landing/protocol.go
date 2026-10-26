@@ -13,6 +13,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
+// Version is a string because canonical event JSON forbids fractional numbers.
+const Version = "1.1"
+
 type Record map[string]any
 
 func (r Record) String(k string) string { s, _ := r[k].(string); return s }
@@ -29,7 +32,7 @@ var ident = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_:./-]{0,199}$`)
 var task = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
 var attempt = regexp.MustCompile(`^a_[0-9A-HJKMNP-TV-Z]{26}$`)
 var digest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_failed", "floor", "limit", "denied", "bound", "declined", "rule", "main_red", "ci_stuck", "window"}
+var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_failed", "ci_red", "floor", "limit", "denied", "bound", "declined", "rule", "main_red", "ci_stuck", "window"}
 
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
@@ -39,11 +42,12 @@ var fields = map[string]string{
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
 	"main_intent": "R M0", "main_result": "outcome", "landed": "R", "reverted": "R by",
 	"parked": "why retry_at", "unparked": "", "failed": "why", "reserved": "root",
+	"discarded": "why", "rehearsed": "R", "retry": "root after_op reason by",
 	"stg_pending": "R", "stg_snapshot": "P U try not_before", "stg_started": "run try",
 	"stg_result": "run outcome", "stg_verified": "P U digests", "stg_failed": "why",
 }
 
-// Parse accepts only a closed v1 object, normalizing Go integers and JSON
+// Parse accepts closed v1 and v1.1 objects, normalizing Go integers and JSON
 // numbers alike through the same canonical decoder used by event storage.
 func Parse(v any) (Record, error) {
 	if r, ok := v.(Record); ok {
@@ -66,6 +70,9 @@ func Parse(v any) (Record, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown landing kind")
 	}
+	if r.String("v") != Version && slices.Contains([]string{"discarded", "rehearsed", "retry"}, r.String("kind")) {
+		return nil, fmt.Errorf("landing kind requires v1.1")
+	}
 	allowed := strings.Fields("v kind op " + spec)
 	if len(m) != len(allowed) {
 		return nil, fmt.Errorf("landing fields do not match %s", r.String("kind"))
@@ -77,7 +84,10 @@ func Parse(v any) (Record, error) {
 		}
 		valid := false
 		switch k {
-		case "v", "rule_version", "try":
+		case "v":
+			n, ok := v.(json.Number)
+			valid = (ok && n.String() == "1") || r.String("v") == Version
+		case "rule_version", "try":
 			n, ok := v.(json.Number)
 			i, e := n.Int64()
 			valid = ok && e == nil && i > 0 && i <= 1<<30
@@ -119,8 +129,13 @@ func Parse(v any) (Record, error) {
 				s, ok := a[key].(string)
 				valid = valid && ok && digest.MatchString(s)
 			}
+		case "reason":
+			valid = len(r.String(k)) > 0 && len(r.String(k)) <= 1000
 		case "why":
 			valid = slices.Contains(reasons, r.String(k))
+			if r.String("kind") == "discarded" {
+				valid = slices.Contains([]string{"main_changed", "branch_collision"}, r.String(k))
+			}
 		case "status":
 			valid = slices.Contains([]string{"Missing", "Unknown", "Running", "Succeeded", "Failed"}, r.String(k))
 		case "outcome":
@@ -160,10 +175,17 @@ type Operation struct {
 	CI                                                   Record
 	P, U, Run                                            string
 	Try                                                  int
+	ClaimNumber                                          int
+	Retried                                              bool
 	NotBefore                                            time.Time
 	Pending                                              []string
 }
+type Retry struct {
+	At                  time.Time
+	AfterOp, ConsumedBy string
+}
 type State struct {
+	Retries        map[string]Retry
 	Operations     map[string]Operation
 	EnabledAt      time.Time
 	EnabledVersion int
@@ -193,7 +215,21 @@ func (s *State) Apply(e Entry) error {
 	if s.Reservations == nil {
 		s.Reservations = map[string]string{}
 	}
+	if s.Retries == nil {
+		s.Retries = map[string]Retry{}
+	}
 	k, op := r.String("kind"), r.String("op")
+	if k == "retry" {
+		root, after := r.String("root"), r.String("after_op")
+		o, exists := s.Operations[after]
+		if !exists || op != after || o.Task != root || s.LatestOperation(root) != after || o.Phase != "failed" || o.Retried || !slices.Contains([]string{"bound", "stale", "ci_red"}, o.Outcome) {
+			return fmt.Errorf("retry requires latest retryable failure")
+		}
+		o.Retried = true
+		s.Operations[after] = o
+		s.Retries[root] = Retry{At: e.At, AfterOp: after}
+		return nil
+	}
 	if k == "enabled" {
 		if !s.EnabledAt.IsZero() {
 			return fmt.Errorf("landing already enabled")
@@ -219,6 +255,23 @@ func (s *State) Apply(e Entry) error {
 			return bad()
 		}
 		n.Task = r.String("task")
+		for _, existing := range s.Operations {
+			if existing.Task == n.Task {
+				n.ClaimNumber++
+			}
+		}
+		n.ClaimNumber++
+		if r.String("v") == Version {
+			for _, existing := range s.Operations {
+				if existing.Task == n.Task && (existing.BlocksClaim() || !existing.Terminal()) {
+					return bad()
+				}
+			}
+		}
+		if retry, ok := s.Retries[n.Task]; ok && retry.ConsumedBy == "" {
+			retry.ConsumedBy = op
+			s.Retries[n.Task] = retry
+		}
 		n.Attempt = r.String("attempt")
 		n.A = r.String("A")
 		n.RuleVersion = r.Int("rule_version")
@@ -279,6 +332,15 @@ func (s *State) Apply(e Entry) error {
 		n.Phase = old.Phase
 		s.Operations[op] = n
 		return nil
+	case "discarded":
+		if !slices.Contains([]string{"branch_intent", "branch_pushed", "parked"}, old.Phase) {
+			return bad()
+		}
+		n.Outcome = r.String("why")
+	case "rehearsed":
+		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || (old.Rerun && !old.CI.Time("created_at").After(old.RerunAt)) {
+			return bad()
+		}
 	case "main_intent":
 		if old.Phase != "branch_pushed" || old.DryRun || old.CI.String("status") != "Succeeded" || r.String("R") != old.R || r.String("M0") != old.M0 {
 			return bad()
@@ -319,9 +381,11 @@ func (s *State) Apply(e Entry) error {
 		allowed := slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, old.Phase)
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))
+		allowed = allowed || r.String("v") == Version && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op
 		if !allowed {
 			return bad()
 		}
+		n.Retried = false
 		n.Outcome = r.String("why")
 	case "stg_pending":
 		if old.Phase != "" {
@@ -383,7 +447,7 @@ func stgBackoff(previousTry int) time.Duration {
 	return 30 * time.Minute
 }
 func (o Operation) Terminal() bool {
-	return slices.Contains([]string{"landed", "reverted", "failed", "stg_verified", "stg_failed"}, o.Phase) || o.Phase == "main_result" && o.Outcome == "non_ff"
+	return slices.Contains([]string{"landed", "reverted", "failed", "discarded", "rehearsed", "stg_verified", "stg_failed"}, o.Phase) || o.Phase == "main_result" && o.Outcome == "non_ff"
 }
 func (o Operation) Active() bool { return o.Phase != "" && o.Phase != "parked" && !o.Terminal() }
 
@@ -394,10 +458,22 @@ func Bound(first time.Time, attempts int, now time.Time) bool {
 
 // BlocksClaim is a root-task terminal result. A non-FF finishes only this
 // operation: the next operation must still be able to replay on a new main.
-func (o Operation) BlocksClaim() bool { return o.EverLanded || o.Phase == "failed" }
+func (o Operation) BlocksClaim() bool { return o.EverLanded || o.Phase == "failed" && !o.Retried }
 
 // Reservable is checked against the repository state while reserving in the
 // tenant/day stream. A rehearsal never consumes the production quota.
 func (o Operation) Reservable(root string) bool {
 	return o.Task == root && !o.DryRun && o.Phase == "branch_pushed"
+}
+
+// LatestOperation uses stream claim order, including equal event timestamps.
+func (s State) LatestOperation(root string) string {
+	var latest string
+	var number int
+	for id, o := range s.Operations {
+		if o.Task == root && o.ClaimNumber > number {
+			latest, number = id, o.ClaimNumber
+		}
+	}
+	return latest
 }

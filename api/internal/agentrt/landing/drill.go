@@ -56,8 +56,7 @@ type DrillObservation struct {
 type DrillAction struct{ Kind, Why string }
 
 // NextDrill checks main even while parked on an old red main. This pure
-// judgement does not invent a note transition for discarded/rehearsed: v1
-// does not yet define either (Work 570 protocol question).
+// judgement is persisted through the v1.1 discarded/rehearsed transitions.
 func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAction {
 	o := s.Operations[op]
 	if o.Terminal() {
@@ -71,6 +70,9 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		return DrillAction{Kind: "wait"}
 	}
 	if o.R != "" && obs.Main != o.M0 {
+		if n >= 8 {
+			return DrillAction{Kind: "failed", Why: "bound"}
+		}
 		return DrillAction{Kind: "replay"}
 	}
 	d := EligibleToPush(obs.Facts, now)
@@ -121,7 +123,7 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 			if !o.Rerun {
 				return DrillAction{Kind: "ci_rerun"}
 			}
-			return DrillAction{Kind: "failed", Why: "ci_failed"}
+			return DrillAction{Kind: "failed", Why: "ci_red"}
 		}
 	}
 	return DrillAction{Kind: "wait"}
@@ -139,10 +141,11 @@ func RootBudget(s State, task string) (first time.Time, n int) {
 			}
 		}
 	}
+	if retry, ok := s.Retries[task]; ok {
+		first = retry.At
+	}
 	return
 }
-
-var ErrDrillProtocol = fmt.Errorf("landing v1 has no discarded/rehearsed transition; CUT decision required")
 
 // CIName is stable and DNS-safe even when op contains colons or slashes.
 func CIName(op string, attempt int) string {

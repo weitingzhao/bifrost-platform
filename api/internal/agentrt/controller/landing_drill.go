@@ -51,8 +51,8 @@ type DrillSources struct {
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
-// note state. No in-memory checkpoint is authoritative. It is not scheduled
-// until the v1 terminal-state gap is resolved; P0 is a separate run prerequisite.
+// note state. No in-memory checkpoint is authoritative; P0 remains a separate
+// prerequisite to enabling the workers loop.
 func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op string, now time.Time) (landing.DrillAction, error) {
 	if c.Env != "stg" {
 		return landing.DrillAction{}, fmt.Errorf("drill requires stg")
@@ -71,7 +71,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return landing.DrillAction{}, fmt.Errorf("unknown landing operation")
 	}
 	appendRecord := func(kind string, fields map[string]any) error {
-		fields["v"], fields["kind"], fields["op"] = 1, kind, op
+		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "STG landing drill: " + kind, "landing": fields}})
 			return e
@@ -103,7 +103,10 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return landing.DrillAction{Kind: "wait"}, fmt.Errorf("main head unreadable")
 	}
 	if main != o.M0 {
-		return landing.DrillAction{Kind: "replay"}, landing.ErrDrillProtocol
+		if n >= 8 {
+			return landing.DrillAction{Kind: "failed", Why: "bound"}, appendRecord("failed", map[string]any{"why": "bound"})
+		}
+		return landing.DrillAction{Kind: "replay"}, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	}
 	f, _, err := c.LandingDecision(ctx, src.Facts, o.Task, op, "push", now)
 	if err != nil {
@@ -123,14 +126,16 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	blocked, windowErr := src.WindowBlocked(ctx)
 	blocked = blocked || windowErr != nil
 	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked}, now)
-	if o.Phase == "branch_pushed" && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(now) {
+	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(now) {
 		if err = appendRecord("ci_seen", map[string]any{"run": ci.Run, "status": ci.Status, "R": o.R, "created_at": ci.CreatedAt.Format(time.RFC3339Nano)}); err != nil {
 			return a, err
 		}
 	}
 	switch a.Kind {
-	case "ready", "replay":
-		return a, landing.ErrDrillProtocol
+	case "ready":
+		return a, c.finishLandingDrill(ctx, src, op, now)
+	case "replay":
+		return a, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	case "failed":
 		return a, appendRecord("failed", map[string]any{"why": a.Why})
 	case "parked":
@@ -166,4 +171,22 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
 	}
 	return a, nil
+}
+
+func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, op string, now time.Time) error {
+	return store.FinishLandingDrill(ctx, c.DB, src.Facts, op, now, func(ctx context.Context, o landing.Operation) (landing.DrillObservation, error) {
+		main, err := src.Main(ctx)
+		if err != nil {
+			return landing.DrillObservation{}, err
+		}
+		ci, err := src.CI(ctx, o.R, o.PreparedAt)
+		if err != nil {
+			return landing.DrillObservation{}, err
+		}
+		blocked, err := src.WindowBlocked(ctx)
+		if err != nil {
+			return landing.DrillObservation{}, err
+		}
+		return landing.DrillObservation{Main: main, Candidate: ci, WindowBlocked: blocked}, nil
+	})
 }

@@ -54,6 +54,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		return err
 	}
 	k := r.String("kind")
+	if (k == "retry" || k == "rehearsed" || k == "discarded") && ev.Actor != "controller" {
+		return fmt.Errorf("landing v1.1 transition requires controller")
+	}
 	if k == "reserved" {
 		parts := strings.Split(ev.Stream, ":")
 		if len(parts) != 3 || parts[0] != "landing-quota" || (parts[1] != "dev" && parts[1] != "business") || parts[2] != at.UTC().Format("2006-01-02") {
@@ -102,6 +105,6 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, 
 	if !s.EnabledAt.IsZero() {
 		return s.EnabledAt, nil
 	}
-	a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing enabled", "landing": map[string]any{"v": 1, "kind": "enabled", "op": "enabled:" + tenant, "repo": repo, "rule_version": rule.Version}}})
+	a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing enabled", "landing": map[string]any{"v": landing.Version, "kind": "enabled", "op": "enabled:" + tenant, "repo": repo, "rule_version": rule.Version}}})
 	return a.At, err
 }

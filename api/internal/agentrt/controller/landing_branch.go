@@ -71,7 +71,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return fmt.Errorf("unknown operation")
 	}
 	put := func(kind string, fields map[string]any) error {
-		fields["v"], fields["kind"], fields["op"] = 1, kind, op
+		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "STG landing drill: " + kind, "landing": fields}})
 			return e
@@ -86,6 +86,10 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if o.Phase != "claimed" && o.Phase != "prepared" && o.Phase != "branch_intent" {
 		return nil
 	}
+	first, n := landing.RootBudget(s, o.Task)
+	if landing.Bound(first, n-1, now) {
+		return put("failed", map[string]any{"why": "bound"})
+	}
 	// Reconcile a completed push even after a rule expires. If absent, all
 	// eligibility conditions still apply before retrying the external action.
 	if o.Phase == "branch_intent" {
@@ -97,12 +101,12 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			return put("branch_pushed", map[string]any{"ref": o.Ref, "R": o.R})
 		}
 		if tip != "" {
-			return put("failed", map[string]any{"why": "stale"})
+			_, n := landing.RootBudget(s, o.Task)
+			if n >= 8 {
+				return put("failed", map[string]any{"why": "bound"})
+			}
+			return put("discarded", map[string]any{"why": "branch_collision"})
 		}
-	}
-	first, n := landing.RootBudget(s, o.Task)
-	if landing.Bound(first, n-1, now) {
-		return put("failed", map[string]any{"why": "bound"})
 	}
 	f, d, e := c.LandingDecision(ctx, DrillGitFacts(g), o.Task, op, "claim", now)
 	if e != nil {
@@ -174,7 +178,10 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return e
 	}
 	if tip != "" && tip != r {
-		return put("failed", map[string]any{"why": "stale"})
+		if n >= 8 {
+			return put("failed", map[string]any{"why": "bound"})
+		}
+		return put("discarded", map[string]any{"why": "branch_collision"})
 	}
 	if tip == "" {
 		if e = w.Push(ctx, ref, r); e != nil {

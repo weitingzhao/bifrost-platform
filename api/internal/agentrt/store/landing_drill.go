@@ -34,6 +34,14 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 			decision = landing.Decision{Reason: "bound"}
 			return nil
 		}
+		// Completed rehearsals are not repeated by the STG scanner. They
+		// remain non-blocking to production's common eligibility reader.
+		for _, o := range state.Operations {
+			if o.Task == task && o.Phase == "rehearsed" {
+				decision = landing.Decision{Reason: "rehearsed"}
+				return nil
+			}
+		}
 		// A parked operation is resumed, not replaced with a duplicate claim.
 		for _, o := range state.Operations {
 			if o.Task == task && !o.Terminal() {
@@ -43,7 +51,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		}
 		op = fmt.Sprintf("land:%s:%d", task, n+1)
 		_, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", MissionID: f.Mission, TaskID: task, Body: map[string]any{
-			"text": "STG landing drill claimed", "landing": map[string]any{"v": 1, "kind": "claimed", "op": op, "task": task, "attempt": f.Attempt, "A": f.A, "rule_version": f.Rule.Version},
+			"text": "STG landing drill claimed", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": f.Attempt, "A": f.A, "rule_version": f.Rule.Version},
 		}})
 		return err
 	})
