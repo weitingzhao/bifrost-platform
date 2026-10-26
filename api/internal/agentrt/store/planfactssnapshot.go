@@ -1,0 +1,239 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+)
+
+type planFactsSnapshot struct {
+	Landings     map[string]*landing.State
+	Now          time.Time
+	Views        map[string]viewAdoption
+	Docs         map[string]*planview.Document
+	Observations map[string]planObservation
+	Current      map[string]bool
+	External     map[string]externalNote
+}
+
+// One SQL statement gives a committed snapshot even inside the runtime's
+// required READ COMMITTED write transaction. No global event-id watermark is
+// used: each stream's sequence is authoritative (including late commits).
+func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
+	var raw []byte
+	err := tx.QueryRow(ctx, `WITH views AS (
+ SELECT DISTINCT ON(event_stream_id) body_json->'plan_view' a FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id,seq DESC
+ ), docs AS (
+ SELECT a,convert_from(b.body,'UTF8')::jsonb d FROM views JOIN agentrt.artifact_blob b ON b.artifact_id=a->>'artifact_id'
+ ), bindings AS (
+ SELECT x.b FROM docs CROSS JOIN LATERAL jsonb_array_elements(d->'items') i CROSS JOIN LATERAL jsonb_array_elements(i->'bindings') x(b)
+ ), observations AS (
+ SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_observation' AND actor_id='controller'
+ ORDER BY body_json->'plan_observation'->>'binding_sha256',(body_json->'plan_observation'->>'source_version')::bigint DESC
+ ), external AS (
+ SELECT DISTINCT ON(event_stream_id) body_json->'external_work' e FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC
+ ) SELECT jsonb_build_object('now',statement_timestamp(),
+ 'views',COALESCE((SELECT jsonb_agg(a) FROM docs),'[]'),
+ 'docs',COALESCE((SELECT jsonb_agg(d) FROM docs),'[]'),
+ 'observations',COALESCE((SELECT jsonb_agg(o) FROM observations),'[]'),
+ 'external',COALESCE((SELECT jsonb_agg(e) FROM external),'[]'),
+ 'landings',COALESCE((SELECT jsonb_agg(jsonb_build_object('stream',event_stream_id,'at',at,'record',body_json->'landing') ORDER BY event_stream_id,seq) FROM agentrt.event WHERE event_type='note' AND actor_id='controller' AND event_stream_id LIKE 'landing:%' AND body_json ? 'landing'),'[]'),
+ 'current',COALESCE((SELECT jsonb_object_agg(b->>'attempt',EXISTS(
+ SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) JOIN agentrt.attempt a USING(task_id)
+ WHERE t.task_id=b->>'task' AND a.attempt_id=b->>'attempt' AND t.mission_id=b->>'mission' AND t.plan_node_id=b->>'step' AND m.tenant='dev' AND t.repo=b->>'repo' AND a.pushed_commit=b->>'result' AND t.round_no=(b->>'round')::int
+ AND a.attempt_no=(SELECT max(attempt_no) FROM agentrt.attempt WHERE task_id=t.task_id) AND t.state NOT IN ('rework','cancelled','stopped','dropped')
+ )) FROM bindings WHERE b ? 'attempt'),'{}'))`).Scan(&raw)
+	if err != nil {
+		return nil, err
+	}
+	var rows struct {
+		Landings []struct {
+			Stream string
+			At     time.Time
+			Record json.RawMessage
+		}
+		Now          time.Time
+		Views        []viewAdoption
+		Docs         []json.RawMessage
+		Observations []planObservation
+		Current      map[string]bool
+		External     []externalNote
+	}
+	if err = json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	s := &planFactsSnapshot{Landings: map[string]*landing.State{}, Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Observations: map[string]planObservation{}, Current: rows.Current, External: map[string]externalNote{}}
+	for _, v := range rows.Views {
+		s.Views[v.Root] = v
+	}
+	for _, r := range rows.Docs {
+		d, e := planview.Parse(r)
+		if e != nil {
+			return nil, e
+		}
+		s.Docs[d.Root] = d
+	}
+	for _, o := range rows.Observations {
+		s.Observations[o.Digest] = o
+	}
+	for _, e := range rows.External {
+		s.External[e.ID] = e
+	}
+	for _, r := range rows.Landings {
+		v, e := canon.Parse(r.Record)
+		if e != nil {
+			return nil, e
+		}
+		record, e := landing.Parse(v)
+		if e != nil {
+			return nil, e
+		}
+		state := s.Landings[r.Stream]
+		if state == nil {
+			state = &landing.State{}
+			s.Landings[r.Stream] = state
+		}
+		if e = state.Apply(landing.Entry{At: r.At, Record: record}); e != nil {
+			return nil, e
+		}
+	}
+	return s, nil
+}
+func (s *planFactsSnapshot) find(step, atom, id string, version int) (planview.Binding, bool) {
+	for _, d := range s.Docs {
+		bs, _ := d.Bindings()
+		for _, b := range bs {
+			if b.Step == step && b.Atom == atom && b.ID == id && b.Version == version {
+				return b, true
+			}
+		}
+	}
+	return planview.Binding{}, false
+}
+func (s *planFactsSnapshot) reading(b planview.Binding) (plan.Tri, string, planObservation) {
+	o := s.Observations[b.Digest()]
+	if b.Task != "" && !s.Current[b.Attempt] {
+		return plan.Unknown, "Unknown", o
+	}
+	if b.ExternalWork != "" && !externalMatches(s.External[b.ExternalWork], b) {
+		return plan.Unknown, "Unknown", o
+	}
+	if o.Digest == "" {
+		return plan.Unknown, "Unknown", o
+	}
+	at, e := time.Parse(time.RFC3339Nano, o.LastSuccess)
+	if e == nil && s.Now.Before(at) {
+		return plan.Unknown, "Unknown", o
+	}
+	if e == nil && s.Now.Sub(at) > planObservationTTL {
+		return plan.Unknown, "Stale", o
+	}
+	if o.Status != "Fresh" {
+		return plan.Unknown, "Unknown", o
+	}
+	switch o.Value {
+	case "true":
+		return plan.True, "Fresh", o
+	case "false":
+		return plan.False, "Fresh", o
+	}
+	return plan.Unknown, "Unknown", o
+}
+func (s *planFactsSnapshot) bindingValue(b planview.Binding, visiting map[string]bool) plan.Tri {
+	value, _, _ := s.reading(b)
+	if value != plan.True {
+		return value
+	}
+	d := s.Docs[b.Root]
+	if d == nil {
+		return plan.Unknown
+	}
+	for _, n := range d.Items {
+		if n.Node == b.Node {
+			milestone := ""
+			for _, a := range n.Acceptance {
+				if a.ID == b.Acceptance {
+					milestone = a.Milestone
+				}
+			}
+			for _, edge := range n.Dependencies {
+				if edge.Relation == "blocks" && edge.RequiredFor == milestone {
+					v := s.milestone(edge.Root, edge.Node, edge.Milestone, visiting)
+					if v != plan.True {
+						return v
+					}
+				}
+			}
+		}
+	}
+	return value
+}
+func (s *planFactsSnapshot) milestone(root, node, milestone string, visiting map[string]bool) plan.Tri {
+	key := root + "/" + node + "/" + milestone
+	if visiting[key] {
+		return plan.Unknown
+	}
+	visiting[key] = true
+	defer delete(visiting, key)
+	d := s.Docs[root]
+	if d == nil {
+		return plan.Unknown
+	}
+	bs, _ := d.Bindings()
+	result := plan.True
+	found := false
+	for _, n := range d.Items {
+		if n.Node != node {
+			continue
+		}
+		for _, a := range n.Acceptance {
+			if a.Milestone != milestone {
+				continue
+			}
+			found = true
+			bound := false
+			for _, b := range bs {
+				if b.Node != node || b.Acceptance != a.ID {
+					continue
+				}
+				bound = true
+				v := s.bindingValue(b, visiting)
+				if v == plan.False {
+					return plan.False
+				}
+				if v == plan.Unknown {
+					result = plan.Unknown
+				}
+			}
+			if !bound {
+				result = plan.Unknown
+			}
+		}
+	}
+	if !found {
+		return plan.Unknown
+	}
+	return result
+}
+func (f *stepFacts) BoundFact(atom, id string, version int) plan.Tri {
+	if f.err != nil {
+		return plan.Unknown
+	}
+	if f.planFacts == nil {
+		f.planFacts, f.err = readPlanFacts(f.ctx, f.tx)
+		if f.err != nil {
+			return plan.Unknown
+		}
+	}
+	b, ok := f.planFacts.find(f.step, atom, id, version)
+	if !ok {
+		return plan.Unknown
+	}
+	return f.planFacts.bindingValue(b, map[string]bool{})
+}

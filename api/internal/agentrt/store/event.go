@@ -85,6 +85,16 @@ func nullable(s string) any {
 // database's check. The stream is created on first use. Callers write their
 // state rows after Append and their outbox rows with the returned id.
 func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
+	if raw, ok := ev.Body["plan_observation"]; ok {
+		var n planObservation
+		if err := strictViewValue(raw, &n); err != nil {
+			return Appended{}, err
+		}
+		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != observationStream(n.Root) || ev.PlanNode != n.Step {
+			return Appended{}, invalid("plan observations are controller-owned")
+		}
+	}
+
 	if ev.Stream == "" || ev.Type == "" || ev.Actor == "" {
 		return Appended{}, errors.New("store: an event needs a stream, a type and an actor")
 	}

@@ -10,8 +10,8 @@ import (
 )
 
 // PlanView reads every source from one read-only repeatable-read snapshot.
-// Milestone verification is deliberately Unknown in PV1: neither a legacy
-// tick nor an external submission proves one of PV2's completion atoms.
+// Versioned observations, dependencies and freshness share that snapshot.
+// Neither a legacy tick nor an external submission proves completion.
 func PlanView(ctx context.Context, db DB, root string) (map[string]any, error) {
 	return PlanViewPage(ctx, db, root, "")
 }
@@ -83,13 +83,11 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 			n["view"] = item
 		}
 	}
-	mainline, next, ownerLater := viewExecutionSummary(nodes, graph, adoption)
-	waiting := []map[string]any{}
-	for _, edge := range graph.Edges {
-		if edge.Relation == "blocks" {
-			waiting = append(waiting, map[string]any{"edge": edge, "status": "Unknown", "reason": "Milestone verification requires PV2", "responsible": docs[edge.To.Root].Items[itemIndex(docs[edge.To.Root], edge.To.Node)].Responsible})
-		}
+	snap, err := readPlanFacts(ctx, tx)
+	if err != nil {
+		return nil, err
 	}
+	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption)
 	ext, err := snapshotExternal(ctx, tx, root, now)
 	if err != nil {
 		return nil, err
@@ -108,10 +106,11 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	working := []any{}
-	ownerWaiting := []any{}
+	ownerWaiting := acceptanceReady
 	finished := []any{}
 	linked := map[string][]map[string]any{}
 	for _, e := range ext {
+		e["verification"] = snap.externalVerification(e["external_work_id"].(string))
 		task, _ := e["task_id"].(string)
 		if task != "" {
 			linked[task] = append(linked[task], e)
@@ -126,6 +125,12 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		}
 	}
 	for _, t := range tasks {
+		if l := snap.taskLanding(t["task_id"].(string)); l != nil {
+			t["landing"] = l
+		}
+		if t["state"] == "accepted" {
+			t["delivery"] = "Accepted · " + snap.taskDelivery(t["task_id"].(string))
+		}
 		if t["state"] == "awaiting_owner" {
 			ownerWaiting = append(ownerWaiting, map[string]any{"task_id": t["task_id"], "plan_node_id": t["plan_node_id"], "reason": "Runtime task awaits Owner", "source": "agentrt.task"})
 		}
@@ -175,8 +180,10 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	warnings = append(warnings, "PV1 visibility only: milestone, delivery and Owner readiness verification await PV2")
-	return map[string]any{"schema": "agentrt.plan_view_response/v1", "root": root, "plan_version": adoption.Version, "artifact_id": adoption.Artifact, "as_of": timeText(now), "nodes": nodes, "items": items, "edges": graph.Edges, "mainline": mainline, "next": next, "waiting_on": waiting, "owner_waiting": ownerWaiting, "owner_later": ownerLater, "working": working, "finished_today": finished, "day_timezone": "UTC", "tasks": tasks, "external_work": ext, "coverage": map[string]any{"unregistered_work": unregistered, "label": "Unregistered work", "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable", "reconciled": false}, "source_watermarks": watermarks, "freshness": map[string]any{"database": map[string]any{"status": "Fresh", "observed_at": timeText(now)}, "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds", "verification": "Unknown", "owner_waiting": "Partial: runtime task waits only; approval/question/signoff readiness awaits PV2"}, "eta": map[string]any{"status": "Unknown", "reason": "PV1 has no verified milestone or capacity facts"}, "recent_changes": json.RawMessage(recent), "recent_next": nextRecent, "recent_as_of": recentAsOf, "warnings": warnings}, nil
+	if verificationFreshness == "Unknown" {
+		warnings = append(warnings, "Acceptance verification requires adopted bindings and trusted evidence")
+	}
+	return map[string]any{"schema": "agentrt.plan_view_response/v1", "root": root, "plan_version": adoption.Version, "artifact_id": adoption.Artifact, "as_of": timeText(now), "nodes": nodes, "items": items, "edges": graph.Edges, "mainline": mainline, "next": next, "waiting_on": waiting, "owner_waiting": ownerWaiting, "owner_later": ownerLater, "working": working, "finished_today": finished, "day_timezone": "UTC", "tasks": tasks, "external_work": ext, "coverage": map[string]any{"unregistered_work": unregistered, "label": "Unregistered work", "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable", "reconciled": false}, "source_watermarks": watermarks, "freshness": map[string]any{"database": map[string]any{"status": "Fresh", "observed_at": timeText(now)}, "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds", "verification": verificationFreshness, "owner_waiting": "Runtime task waits and versioned acceptance signoffs; legacy readiness remains Unknown"}, "eta": map[string]any{"status": "Unknown", "reason": "Capacity and duration observations are not available"}, "recent_changes": json.RawMessage(recent), "recent_next": nextRecent, "recent_as_of": recentAsOf, "warnings": warnings}, nil
 }
 func itemIndex(d *planview.Document, node string) int {
 	for i, n := range d.Items {

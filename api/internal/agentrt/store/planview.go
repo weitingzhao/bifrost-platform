@@ -216,6 +216,9 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, actor, root string, decision 
 	if _, err = planview.Resolve(root, docs); err != nil {
 		return invalid("plan graph: %v", err)
 	}
+	if err = installPlanBindings(ctx, tx, doc, mapping, actor, decision); err != nil {
+		return err
+	}
 	a := viewAdoption{1, "agentrt.plan_view/v1", root, "dev", doc.Version, c.Artifact, mapping, decision}
 	body, err := jsonObject(a)
 	if err != nil {
@@ -239,6 +242,13 @@ func jsonObject(v any) (map[string]any, error) {
 
 // Subprotocols are closed even when an internal caller uses Append directly.
 func checkViewNote(body map[string]any) error {
+	if raw, ok := body["plan_observation"]; ok {
+		var n planObservation
+		if err := strictViewValue(raw, &n); err != nil {
+			return err
+		}
+		return n.validate()
+	}
 	if raw, ok := body["plan_view"]; ok {
 		var a viewAdoption
 		if err := strictViewValue(raw, &a); err != nil {

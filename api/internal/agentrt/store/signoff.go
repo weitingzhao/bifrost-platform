@@ -75,6 +75,17 @@ func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string) (map[str
 			return fmt.Errorf("store: node %s: %w", stepID, err)
 		}
 		refs := SignoffRefs(rule)
+		if len(rule.BoundRefs()) > 0 {
+			snap, e := readPlanFacts(ctx, tx)
+			if e != nil {
+				return e
+			}
+			for _, r := range rule.BoundRefs() {
+				if b, ok := snap.find(stepID, r.Atom, r.Binding, r.Version); ok && b.Source == "owner_signoff" {
+					refs = append(refs, b.SignoffRef())
+				}
+			}
+		}
 		switch {
 		case len(refs) == 0:
 			return invalid("the done rule of %s waits on no owner_signoff: nothing on it is signed off", stepID)

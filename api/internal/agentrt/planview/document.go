@@ -257,11 +257,6 @@ func (d *Document) Validate() error {
 		if e.WorkDays != nil && (len(e.WorkDays) != 2 || e.WorkDays[0] < 0 || e.WorkDays[1] < e.WorkDays[0]) {
 			return fmt.Errorf("invalid estimate range: %s", n.Node)
 		}
-		// PV0 deliberately defines no nonempty runtime binding format. Do not
-		// accept arbitrary JSON as a new authority to finish a plan step.
-		if len(n.Bindings) != 0 {
-			return fmt.Errorf("runtime binding contract is not defined by PV0")
-		}
 		if len(n.Acceptance) == 0 || len(n.Evidence) == 0 {
 			return fmt.Errorf("missing acceptance or evidence: %s", n.Node)
 		}
@@ -329,7 +324,11 @@ func (d *Document) Validate() error {
 			}
 		}
 	}
-	return acyclic(graph)
+	if err := acyclic(graph); err != nil {
+		return err
+	}
+	_, err := d.Bindings()
+	return err
 }
 
 func acyclic(graph map[string][]string) error {

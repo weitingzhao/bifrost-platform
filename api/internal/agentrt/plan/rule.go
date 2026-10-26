@@ -94,6 +94,7 @@ const (
 	kSignoff
 	kManual
 	kGates
+	kBound
 )
 
 type gate struct{ test, spec string }
@@ -102,6 +103,7 @@ type node struct {
 	kind     nodeKind
 	children []*node
 	s1, s2   string
+	atom     string
 	n        int64
 	gates    []gate
 }
@@ -136,21 +138,33 @@ func (n *node) onlyStanding() bool {
 
 // Atoms a rule may name, for Names.
 const (
-	AtomTask     = "task_accepted"
-	AtomApproval = "approval_executed"
-	AtomQuestion = "question_answered"
-	AtomCI       = "ci_succeeded"
-	AtomSignoff  = "owner_signoff"
-	AtomManual   = "manual"
-	AtomGates    = "gates_passed"
+	AtomTask       = "task_accepted"
+	AtomApproval   = "approval_executed"
+	AtomQuestion   = "question_answered"
+	AtomCI         = "ci_succeeded"
+	AtomSignoff    = "owner_signoff"
+	AtomManual     = "manual"
+	AtomGates      = "gates_passed"
+	AtomMain       = "main_effective"
+	AtomDeployment = "deployment_verified"
+	AtomReview     = "review_valid"
+	AtomExternal   = "external_verified"
 )
 
 var atomKinds = map[string]nodeKind{AtomTask: kTask, AtomApproval: kApproval, AtomQuestion: kQuestion, AtomCI: kCI,
-	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates}
+	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates, AtomMain: kBound, AtomDeployment: kBound, AtomReview: kBound, AtomExternal: kBound}
 
 // Names reports whether the rule names an atom of this kind anywhere.
 func (r Rule) Names(atom string) bool {
 	k, ok := atomKinds[atom]
+	if k == kBound {
+		for _, b := range r.BoundRefs() {
+			if b.Atom == atom {
+				return true
+			}
+		}
+		return false
+	}
 	return ok && r.node != nil && r.node.has(k)
 }
 
@@ -170,7 +184,7 @@ func (n *node) has(k nodeKind) bool {
 }
 
 func (n *node) standing() bool {
-	if n.kind == kGates {
+	if n.kind == kGates || n.kind == kBound {
 		return true
 	}
 	for _, c := range n.children {
@@ -238,6 +252,18 @@ func parseNode(obj map[string]any, depth int) (*node, error) {
 				n.children = append(n.children, c)
 			}
 			return n, nil
+		case AtomMain, AtomDeployment, AtomReview, AtomExternal:
+			m, ok := v.(map[string]any)
+			if !ok || len(m) != 2 {
+				return nil, fmt.Errorf("%w: binding and version required", ErrRule)
+			}
+			id, ok1 := m["binding"].(string)
+			ver, ok2 := m["version"].(json.Number)
+			version, err := ver.Int64()
+			if !ok1 || id == "" || !ok2 || err != nil || version < 1 {
+				return nil, fmt.Errorf("%w: invalid binding version", ErrRule)
+			}
+			return &node{kind: kBound, s1: id, n: version, atom: k}, nil
 		case "task_accepted":
 			s, ok := v.(string)
 			if !ok || !taskIDRe.MatchString(s) {
@@ -455,7 +481,7 @@ func (r Rule) Eval(f Facts) Result {
 	if r.node == nil {
 		return Result{Value: False}
 	}
-	once := &onceFacts{Facts: f, gates: map[[3]string]Tri{}}
+	once := &onceFacts{Facts: f, gates: map[[3]string]Tri{}, bound: map[BoundRef]Tri{}}
 	res := eval(r.node, once)
 	if res.Value == True && gateUnknown(r.node, once) {
 		return Result{Value: Unknown}
@@ -467,6 +493,7 @@ func (r Rule) Eval(f Facts) Result {
 type onceFacts struct {
 	Facts
 	gates map[[3]string]Tri
+	bound map[BoundRef]Tri
 }
 
 func (o *onceFacts) GatePassed(env, test, specSHA256 string) Tri {
@@ -480,6 +507,10 @@ func (o *onceFacts) GatePassed(env, test, specSHA256 string) Tri {
 }
 
 func gateUnknown(n *node, f Facts) bool {
+	if n.kind == kBound {
+		bf, ok := f.(BoundFacts)
+		return !ok || bf.BoundFact(n.atom, n.s1, int(n.n)) == Unknown
+	}
 	if n.kind == kGates {
 		for _, g := range n.gates {
 			if f.GatePassed(n.s1, g.test, g.spec) == Unknown {
@@ -533,6 +564,11 @@ func eval(n *node, f Facts) Result {
 		}
 		res.Manual = res.Value == True && manualOnly
 		return res
+	case kBound:
+		if bound, ok := f.(BoundFacts); ok {
+			return Result{Value: bound.BoundFact(n.atom, n.s1, int(n.n))}
+		}
+		return Result{Value: Unknown}
 	case kTask:
 		return tri(f.TaskAccepted(n.s1), false)
 	case kApproval:
@@ -565,4 +601,42 @@ func tri(ok, manual bool) Result {
 		return Result{Value: True, Manual: manual}
 	}
 	return Result{Value: False}
+}
+
+// BoundFacts is optional so legacy facts readers fail closed for PV2 atoms.
+type BoundFacts interface {
+	BoundFact(atom, binding string, version int) Tri
+}
+type BoundRef struct {
+	Atom, Binding string
+	Version       int
+}
+
+func (r Rule) BoundRefs() []BoundRef {
+	out := []BoundRef{}
+	var walk func(*node)
+	walk = func(n *node) {
+		if n.kind == kBound {
+			out = append(out, BoundRef{n.atom, n.s1, int(n.n)})
+		}
+		for _, c := range n.children {
+			walk(c)
+		}
+	}
+	if r.node != nil {
+		walk(r.node)
+	}
+	return out
+}
+func (o *onceFacts) BoundFact(atom, binding string, version int) Tri {
+	key := BoundRef{atom, binding, version}
+	if v, ok := o.bound[key]; ok {
+		return v
+	}
+	v := Unknown
+	if f, ok := o.Facts.(BoundFacts); ok {
+		v = f.BoundFact(atom, binding, version)
+	}
+	o.bound[key] = v
+	return v
 }

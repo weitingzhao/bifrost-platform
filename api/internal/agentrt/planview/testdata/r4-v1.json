@@ -1141,10 +1141,11 @@
           "id": "self-merge",
           "milestone": "accepted",
           "criterion": "运行时完成并自己合入的 main 代码提交过半",
-          "rule_ref": "external_verified",
+          "rule_ref": "external_verified:4.10:self-merge:owner_signoff",
           "evidence_required": [
             "固定窗口的 main 代码提交分母",
-            "真实 Gitea 推送者和 landed 事件分子"
+            "真实 Gitea 推送者和 landed 事件分子",
+            "Owner 对 4.10/self-merge 的准确节点、验收版本及本项证据签收"
           ],
           "target_environment": "prod",
           "sources": [
@@ -1155,10 +1156,11 @@
           "id": "owner-decisions",
           "milestone": "accepted",
           "criterion": "每周 Owner 决定少于 40 次",
-          "rule_ref": "external_verified",
+          "rule_ref": "external_verified:4.10:owner-decisions:owner_signoff",
           "evidence_required": [
             "七天决定事件",
-            "去重口径与窗口"
+            "去重口径与窗口",
+            "Owner 对 4.10/owner-decisions 的准确节点、验收版本及本项证据签收"
           ],
           "target_environment": "prod",
           "sources": [
@@ -1169,10 +1171,11 @@
           "id": "closed-laptop",
           "milestone": "accepted",
           "criterion": "MacBook 合盖一夜活照常推进",
-          "rule_ref": "external_verified",
+          "rule_ref": "external_verified:4.10:closed-laptop:owner_signoff",
           "evidence_required": [
             "夜间任务与产物",
-            "Owner 演练签收"
+            "Owner 演练签收",
+            "Owner 对 4.10/closed-laptop 的准确节点、验收版本及本项证据签收"
           ],
           "target_environment": "prod",
           "sources": [
@@ -1183,10 +1186,11 @@
           "id": "two-products",
           "milestone": "accepted",
           "criterion": "两个产品同时推进、各自 main 与发布链齐全",
-          "rule_ref": "external_verified",
+          "rule_ref": "external_verified:4.10:two-products:owner_signoff",
           "evidence_required": [
             "两产品任务时间重叠",
-            "两条有效落地与发布链"
+            "两条有效落地与发布链",
+            "Owner 对 4.10/two-products 的准确节点、验收版本及本项证据签收"
           ],
           "target_environment": "prod",
           "sources": [
@@ -1197,10 +1201,11 @@
           "id": "no-cleanup",
           "milestone": "accepted",
           "criterion": "一周不手工清理且磁盘余量和分支数不恶化",
-          "rule_ref": "external_verified",
+          "rule_ref": "external_verified:4.10:no-cleanup:owner_signoff",
           "evidence_required": [
             "七天趋势",
-            "人工清理动作记录"
+            "人工清理动作记录",
+            "Owner 对 4.10/no-cleanup 的准确节点、验收版本及本项证据签收"
           ],
           "target_environment": "prod",
           "sources": [

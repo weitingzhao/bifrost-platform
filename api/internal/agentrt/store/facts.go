@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -190,8 +191,33 @@ func signOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string) (Appende
 	if err != nil {
 		return Appended{}, err
 	}
-	return Append(ctx, tx, Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID,
-		Body: map[string]any{"ref": ref}})
+	body := map[string]any{"ref": ref}
+	if strings.HasPrefix(ref, "plan-acceptance:") {
+		if actor != OwnerActor {
+			return Appended{}, ErrNotOwner
+		}
+		snap, e := readPlanFacts(ctx, tx)
+		if e != nil {
+			return Appended{}, e
+		}
+		found := false
+		for _, d := range snap.Docs {
+			bs, _ := d.Bindings()
+			for _, b := range bs {
+				if b.Step == stepID && b.Source == "owner_signoff" && b.SignoffRef() == ref {
+					found = true
+					body["binding_sha256"] = b.Digest()
+					body["plan_version"] = b.Version
+					body["acceptance_sha256"] = b.AcceptanceSHA256
+					body["evidence"] = b.Evidence
+				}
+			}
+		}
+		if !found {
+			return Appended{}, invalid("unadopted acceptance signoff")
+		}
+	}
+	return Append(ctx, tx, Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID, Body: body})
 }
 
 // RecordManual records a manual atom of a step as done: a note on the step
@@ -254,12 +280,13 @@ type Deployed func(ctx context.Context, env string) (commit string, ref map[stri
 // 「只能引用绑在这一步上的对象」). A database error is kept and ends the
 // evaluation without a state change.
 type stepFacts struct {
-	ctx      context.Context
-	tx       pgx.Tx
-	step     string
-	deployed Deployed
-	deploys  map[string]deployment
-	err      error
+	planFacts *planFactsSnapshot
+	ctx       context.Context
+	tx        pgx.Tx
+	step      string
+	deployed  Deployed
+	deploys   map[string]deployment
+	err       error
 }
 
 type deployment struct {
@@ -396,7 +423,7 @@ func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed Deploy
 		if res.Manual {
 			cause = "done_rule_manual"
 		}
-	case res.Value == plan.False && state == "done" && rule.Standing():
+	case (res.Value == plan.False || res.Value == plan.Unknown && len(rule.BoundRefs()) > 0) && state == "done" && rule.Standing():
 		to, cause = "active", "standing_lapsed"
 	default:
 		return "", nil

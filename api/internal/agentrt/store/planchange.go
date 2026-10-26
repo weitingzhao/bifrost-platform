@@ -511,6 +511,10 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 			}
 			var doc []byte
 			if doc, err = canonRule(c.Rule); err == nil {
+				parsed, _ := plan.Parse(doc)
+				if err = checkBoundRule(ctx, tx, c.Node, parsed); err != nil {
+					return nil, err
+				}
 				_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb, version = version + 1 WHERE plan_node_id = $1`, c.Node, string(doc))
 			}
 			for _, b := range c.Bind {

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -24,6 +25,7 @@ import (
 // record's lock, so it must return when its context ends: each read gets
 // ReadTimeout (review 152 B2).
 type Sources struct {
+	Plan     store.PlanSources
 	Approval func(ctx context.Context, number int64) (status string, ok bool)
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
@@ -170,6 +172,36 @@ func (c *Controller) Facts(ctx context.Context) (int, error) {
 			recorded++
 		}
 	}
+	planSources := c.Sources.Plan
+	if planSources.History != nil {
+		original := planSources.History
+		planSources.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
+			type answer struct {
+				h landing.MainHistory
+				e error
+			}
+			r := bounded(c, ctx, func(ctx context.Context) answer {
+				h, e := original(ctx, repo, task, result, snapshot)
+				return answer{h, e}
+			})
+			return r.h, r.e
+		}
+	}
+	if planSources.Deployed != nil {
+		original := planSources.Deployed
+		planSources.Deployed = func(ctx context.Context, app, env string) (string, map[string]any, bool) {
+			type answer struct {
+				sha string
+				ref map[string]any
+				ok  bool
+			}
+			r := bounded(c, ctx, func(ctx context.Context) answer { sha, ref, ok := original(ctx, app, env); return answer{sha, ref, ok} })
+			return r.sha, r.ref, r.ok
+		}
+	}
+	n, e := store.CollectPlanObservations(ctx, c.DB, planSources)
+	recorded += n
+	errs = append(errs, e)
 	return recorded, errors.Join(errs...)
 }
 

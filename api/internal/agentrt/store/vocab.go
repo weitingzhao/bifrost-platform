@@ -148,7 +148,7 @@ var bodies = map[string][]field{
 	"question_seen":            {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}},
 	"ci_seen":                  {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
 	"deploy_seen":              {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
-	"owner_signoff":            {{"ref", kStr, false}},
+	"owner_signoff":            {{"ref", kStr, false}, {"binding_sha256", kStr, true}, {"plan_version", kInt, true}, {"acceptance_sha256", kStr, true}, {"evidence", kIDs, true}},
 	// note: landed, the commit an accepted result first stood on main as, when
 	// the controller first saw it there; pruned, an attempt branch its host
 	// deleted; prune_refused, one Gitea would not let it delete; prune_failed,
@@ -158,7 +158,7 @@ var bodies = map[string][]field{
 	// refs resolved; unavailable, why there is none. On the exams stream,
 	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
 	// that voided the paper, which no run was handed in for.
-	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
+	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
 		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's

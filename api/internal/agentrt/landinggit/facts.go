@@ -3,7 +3,6 @@ package landinggit
 import (
 	"context"
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -174,44 +173,14 @@ func (w *Workspace) History(ctx context.Context, task, a, snapshot string) (land
 	if e != nil {
 		return unknown, e
 	}
-	ids := changeTrailer.FindAllStringSubmatch(msg, -1)
-	if len(ids) != 1 {
-		return unknown, errors.New("ambiguous change ID")
-	}
 	log, e := w.local(ctx, "log", "--topo-order", "--format=%H%x00%B%x00", tip, "--")
 	if e != nil {
 		return unknown, e
 	}
 	parts := strings.Split(log, "\x00")
-	undone := map[string]bool{}
-	found := landing.MainHistory{State: landing.Never}
+	commits := []HistoryCommit{}
 	for i := 0; i+1 < len(parts); i += 2 {
-		sha, body := strings.TrimSpace(parts[i]), parts[i+1]
-		if !fullSHA.MatchString(sha) {
-			return unknown, fmt.Errorf("malformed history")
-		}
-		if !undone[sha] {
-			subject, _, _ := strings.Cut(body, "\n")
-			rs := revertLine.FindAllStringSubmatch(body, -1)
-			if len(rs) == 1 && (strings.HasPrefix(subject, `Revert "`) || strings.HasPrefix(subject, `Reapply "`)) {
-				undone[rs[0][1]] = true
-			}
-		}
-		matches := false
-		for _, v := range taskTrailer.FindAllStringSubmatch(body, -1) {
-			matches = matches || v[1] == task
-		}
-		for _, v := range changeTrailer.FindAllStringSubmatch(body, -1) {
-			matches = matches || v[1] == ids[0][1]
-		}
-		if matches {
-			if !undone[sha] {
-				return landing.MainHistory{State: landing.Effective, Commit: sha}, nil
-			}
-			if found.State == landing.Never {
-				found = landing.MainHistory{State: landing.Reverted, Commit: sha}
-			}
-		}
+		commits = append(commits, HistoryCommit{strings.TrimSpace(parts[i]), parts[i+1]})
 	}
-	return found, nil
+	return EvaluateHistory(task, a, msg, commits, true)
 }
