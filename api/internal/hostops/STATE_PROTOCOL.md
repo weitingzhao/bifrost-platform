@@ -128,8 +128,13 @@ Recovery carries circuits/tombstones forward and requires an independent
 scoped release afterwards. S2/S3 must fault-test result-plus-latch atomicity,
 release CAS races, restart/old-backup detection and notification durability.
 
-Freeze increments durable epoch under CAS; any authenticated operator can
-stop writes. Local stop and platform freeze are ORed. Only an anchored
+For an intact, non-exhausted epoch, Freeze increments durable epoch under CAS;
+any authenticated operator can stop writes. A zero or inconsistent epoch is
+already unfit for admission: Freeze sets the stop flags but preserves both
+epoch fields and the recovery generation exactly, including on repeated stops.
+Persist that stopped snapshot under CAS; do not normalize its high waters or
+report ordinary thaw readiness. Independent recovery is still required.
+Local stop and platform freeze are ORed. Only an anchored
 `bifrost-host-ops-unfreeze` signature for the current epoch, generation, head,
 minimum version and reason can clear them. Replayed unfreezes fail. A thaw
 uses the same structural integrity check as admission (without the stop flags);

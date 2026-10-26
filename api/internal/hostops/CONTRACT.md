@@ -7,6 +7,13 @@ privileged helper, installer, production key, signer or runtime action.
 No external dependency was added. The existing SSHSIG verifier is reused;
 the release-policy Owner fingerprint is **not** used as a host-ops default.
 
+Work 598 (2026-10-26, final repair round): epoch corruption now survives
+Freeze and repeated stops. Review 595 B2 remains an admission blocker:
+actual M and non-log R effects are not fully bound to authorized action/target
+scope. Its permanent regression tests intentionally fail pending the Owner's
+scope/schema decision. This candidate must not be treated as merge-ready or
+as completed S1 admission; no runtime or production capability is authorized.
+
 ## Signed objects and verification flow
 
 | Object | SSHSIG namespace | Message |

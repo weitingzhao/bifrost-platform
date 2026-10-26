@@ -41,18 +41,21 @@ func (s SafetyState) Freeze(authenticatedOperator bool, local bool) (SafetyState
 		return s, errors.New("operator authentication required")
 	}
 	n := s
-	if n.MaxEpoch > n.Epoch {
-		n.Epoch = n.MaxEpoch
+	n.Frozen = true
+	if local {
+		n.LocalStop = true
+	}
+	// Stop remains available with damaged state. Preserve the evidence that
+	// requires independent recovery: normalizing either epoch would let an
+	// ordinary unfreeze signature turn this stop-only transition into repair.
+	if s.Epoch == 0 || s.Epoch != s.MaxEpoch {
+		return n, nil
 	}
 	if n.Epoch == ^uint64(0) {
 		return s, errors.New("epoch exhausted; recovery required")
 	}
 	n.Epoch++
 	n.MaxEpoch = n.Epoch
-	n.Frozen = true
-	if local {
-		n.LocalStop = true
-	}
 	return n, nil
 }
 
