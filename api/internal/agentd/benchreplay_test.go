@@ -32,7 +32,10 @@ func TestBenchReplay(t *testing.T) {
 	}
 	repos := os.Getenv("BENCH_REPOS")
 	if repos == "" {
-		repos = "/Users/vision-mac-trader/Desktop/stocks"
+		repos = os.Getenv("BIFROST_WORKSPACE")
+	}
+	if repos == "" {
+		t.Skip("BENCH_REPOS or BIFROST_WORKSPACE names the workspace holding the repositories")
 	}
 	qs, sum, err := agentd.ReadBenchQuestions(qfile)
 	must(t, err)
