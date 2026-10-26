@@ -51,7 +51,7 @@ func TestVoidExamPaperApprovalOnTheRealPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.PlatformAuthPath = authFile
-	t.Setenv("AGENTRT_ENV", "stg")
+	t.Setenv("AGENTRT_ENV", "prod")
 	t.Setenv("AGENTRT_DSN", "")
 	srv := newTestServer(t, cfg)
 	db := agentrttest.Migrated(t)
@@ -135,14 +135,17 @@ func TestVoidExamPaperApprovalOnTheRealPath(t *testing.T) {
 
 	// No direct path: an operator's call of the executor without an
 	// approval is refused, as is a chat approval of tier D.
-	if _, err = actions.Execute(ctx, "void_exam_paper", map[string]any{"environment": "stg", "run_id": paper.RunID, "reason": "x"}); err == nil {
+	if _, err = actions.Execute(ctx, "void_exam_paper", map[string]any{"environment": "prod", "run_id": paper.RunID, "reason": "x"}); err == nil {
 		t.Fatal("the executor ran without an approval")
 	}
-	wrongEnv := request("prod", paper.RunID)
-	if out := approve(wrongEnv); !strings.Contains(out, `"status":"failed"`) || !strings.Contains(out, `runs the \"stg\" runtime, not \"prod\"`) {
-		t.Fatalf("another environment's void: %s", out)
+	wrongBody, _ := json.Marshal(map[string]any{"action": "void_exam_paper", "params": map[string]any{"environment": "stg", "run_id": paper.RunID, "reason": "test"}, "reason": "test"})
+	if rec := do(http.MethodPost, "/api/v1/approvals", string(wrongBody), "operator-test-token"); rec.Code != 422 || !strings.Contains(rec.Body.String(), "ops.bifrost.lan") {
+		t.Fatalf("another environment's request: %d %s", rec.Code, rec.Body.String())
 	}
-	id := request("stg", paper.RunID)
+	if _, err := srv.voidExamPaper(actions.WithCreateAttempt(ctx, "appr_stale", 1), map[string]any{"environment": "stg", "run_id": paper.RunID, "reason": "test"}); err == nil {
+		t.Fatal("cross-environment execution accepted")
+	}
+	id := request("prod", paper.RunID)
 	chat := do(http.MethodPost, "/api/v1/approvals/"+id+"/approve", `{"channel":"chat"}`, "admin-test-token")
 	if chat.Code != http.StatusForbidden || notes() != 0 {
 		t.Fatalf("a chat approval of tier D = %d %s", chat.Code, chat.Body.String())
@@ -165,7 +168,7 @@ func TestVoidExamPaperApprovalOnTheRealPath(t *testing.T) {
 		Answers: []store.ExamAnswer{{Item: "V1", RunNo: 1, Round: 1, Text: "an answer", WallS: 30, Conclusion: "done"}}}, voidSet{}); err != nil {
 		t.Fatal(err)
 	}
-	if out := approve(request("stg", next.RunID)); !strings.Contains(out, `"status":"failed"`) || notes() != 1 {
+	if out := approve(request("prod", next.RunID)); !strings.Contains(out, `"status":"failed"`) || notes() != 1 {
 		t.Fatalf("a paper with an answer: %s (%d notes)", out, notes())
 	}
 	if _, err = store.IssueExam(ctx, conn, ask, voidSet{}); !errors.Is(err, store.ErrState) {

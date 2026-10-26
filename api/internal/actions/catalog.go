@@ -449,7 +449,7 @@ var catalog = []Action{
 	{
 		ID: "mark_missions_no_merge", Tier: TierD,
 		Description: "Mark done missions as disposed, not delivered. Tier D: only the Owner approves on the Console. " +
-			"Request on the target runtime's platform (env: stg or prod). missions is an array of {mission_id, expected_version}; " +
+			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod) until the cross-environment execution channel exists. missions is an array of {mission_id, expected_version}; " +
 			"reason is 1 to 200 UTF-8 bytes, archive_manifest_sha256 is the archive manifest's lowercase SHA-256. " +
 			"The whole batch commits or rolls back; each change records mission_amended with this approval and bumps the version. " +
 			"Existing equal values are idempotent; different values and non-done missions are refused. Archived evidence must be checked before requesting; branches are not deleted by this action.",
@@ -463,7 +463,7 @@ var catalog = []Action{
 	{
 		ID: "void_exam_paper", Tier: TierD,
 		Description: "Void a qualifying-exam paper no run was handed in for, so its executor can be handed a new paper (TD-407). Tier D: the Owner approves it on the Console. " +
-			"Request it on the platform whose runtime issued the paper: environment is that runtime's (stg or prod; another platform's executor refuses it), run_id the paper's sha256, reason one line. " +
+			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (environment: prod) until the cross-environment execution channel exists; run_id is the paper's sha256, reason one line. " +
 			"A paper with any answer, a graded one and a lapsed one are refused; the void is recorded with this approval's id, and nothing is graded or scored.",
 		Params: []Param{
 			{Name: "environment", Type: "string", Required: true, In: "body"},

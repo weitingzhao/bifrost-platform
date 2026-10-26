@@ -9,6 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 )
 
 func (s *Server) noMergeRequest(params map[string]any) (store.NoMergeRequest, error) {
@@ -25,12 +26,15 @@ func (s *Server) noMergeRequest(params map[string]any) (store.NoMergeRequest, er
 	if err := req.Validate(); err != nil {
 		return req, err
 	}
+	if !approvalhome.IsProd() || req.Env != "prod" {
+		return req, errors.New("mark_missions_no_merge is PROD only until cross-environment runtime execution is available; " + approvalhome.Required)
+	}
 	rt := s.agentRuntime
 	if rt == nil || rt.api == nil || rt.api.DB == nil {
 		return req, errors.New("this platform runs no agent runtime")
 	}
 	if req.Env != rt.env {
-		return req, fmt.Errorf("this platform runs the %q runtime, not %q: request no_merge on that environment's platform", rt.env, req.Env)
+		return req, fmt.Errorf("this platform runs the %q runtime, not %q: use ops.bifrost.lan; cross-environment execution is not available", rt.env, req.Env)
 	}
 	return req, nil
 }

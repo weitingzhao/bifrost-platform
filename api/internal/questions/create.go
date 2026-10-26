@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 )
 
 func (s *Service) Create(ctx context.Context, session, principal, role string, raw []byte) Result {
@@ -30,6 +32,10 @@ func (s *Service) CreateForRule(ctx context.Context, session, principal, role st
 }
 
 func (s *Service) create(ctx context.Context, session, principal, role string, raw []byte, byRule bool) Result {
+	// Only the internal runtime rule path is non-human; HTTP cannot set byRule.
+	if !byRule && !approvalhome.IsProd() {
+		return fail(http.StatusForbidden, approvalhome.Required, nil)
+	}
 	if err := ValidSession(session); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}

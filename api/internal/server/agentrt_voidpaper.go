@@ -7,6 +7,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 )
 
 // voidExamPaper executes an approved void_exam_paper (TD-407; the Owner
@@ -21,12 +22,15 @@ func (s *Server) voidExamPaper(ctx context.Context, params map[string]any) (any,
 	if !ok {
 		return nil, errors.New("void_exam_paper runs only as an approval's execution")
 	}
+	if !approvalhome.IsProd() || text(params["environment"]) != "prod" {
+		return nil, errors.New("void_exam_paper is PROD only until cross-environment runtime execution is available; " + approvalhome.Required)
+	}
 	rt := s.agentRuntime
 	if rt == nil || rt.api == nil || rt.api.DB == nil {
 		return nil, errors.New("this platform runs no agent runtime: no paper to void")
 	}
 	if env := text(params["environment"]); rt.env == "" || env != rt.env {
-		return nil, fmt.Errorf("this platform runs the %q runtime, not %q: request the void on the platform that issued the paper", rt.env, env)
+		return nil, fmt.Errorf("this platform runs the %q runtime, not %q: use ops.bifrost.lan; cross-environment execution is not available", rt.env, env)
 	}
 	return store.VoidExamPaper(ctx, rt.api.DB, text(params["run_id"]), text(params["reason"]), att.ApprovalID)
 }

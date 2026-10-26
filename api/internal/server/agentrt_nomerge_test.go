@@ -45,7 +45,7 @@ func testNoMergeApproval(t *testing.T, fault string) {
 		t.Fatal(err)
 	}
 	cfg.PlatformAuthPath = authFile
-	t.Setenv("AGENTRT_ENV", "stg")
+	t.Setenv("AGENTRT_ENV", "prod")
 	t.Setenv("AGENTRT_DSN", "")
 	srv := newTestServer(t, cfg)
 	db := agentrttest.Migrated(t)
@@ -96,25 +96,25 @@ func testNoMergeApproval(t *testing.T, fault string) {
 	request := func(p map[string]any) *httptest.ResponseRecorder {
 		return do(http.MethodPost, "/api/v1/approvals", map[string]any{"action": "mark_missions_no_merge", "params": p, "reason": "D-L5 archive verified", "rollback": "separate approved correction required"}, "operator")
 	}
-	if _, err := actions.Execute(ctx, "mark_missions_no_merge", params("stg")); err == nil {
+	if _, err := actions.Execute(ctx, "mark_missions_no_merge", params("prod")); err == nil {
 		t.Fatal("ran without approval")
 	}
 	// Refuse the wrong environment before filing and again at execution.
-	if rec := request(params("prod")); rec.Code != 422 {
+	if rec := request(params("stg")); rec.Code != 422 {
 		t.Fatalf("wrong env: %d %s", rec.Code, rec.Body.String())
 	}
 	execCtx := actions.WithCreateAttempt(ctx, "appr_0123456789abcdef", 1)
-	if _, err := srv.markMissionsNoMerge(execCtx, params("prod")); err == nil {
+	if _, err := srv.markMissionsNoMerge(execCtx, params("stg")); err == nil {
 		t.Fatal("cross-environment execution")
 	}
 	for _, missions := range []any{nil, "M-1", []any{}, []any{map[string]any{"mission_id": "M-1", "expected_version": 1.5}}, []any{map[string]any{"mission_id": "M-1", "expected_version": version, "extra": "silently lost?"}}} {
-		p := params("stg")
+		p := params("prod")
 		p["missions"] = missions
 		if rec := request(p); rec.Code != 400 && rec.Code != 422 {
 			t.Fatalf("invalid missions accepted: %d %s", rec.Code, rec.Body.String())
 		}
 	}
-	rec := request(params("stg"))
+	rec := request(params("prod"))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
 	}
@@ -138,7 +138,7 @@ func testNoMergeApproval(t *testing.T, fault string) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &row); err != nil {
 		t.Fatal(err)
 	}
-	if row.Tier != "D" || row.Env != "stg" || row.Runner != "platform" || !strings.Contains(row.Summary, "no_merge") || row.Params.Validate() != nil || row.Params.Missions[0].ExpectedVersion != version {
+	if row.Tier != "D" || row.Env != "prod" || row.Runner != "platform" || !strings.Contains(row.Summary, "no_merge") || row.Params.Validate() != nil || row.Params.Missions[0].ExpectedVersion != version {
 		t.Fatalf("Console record: %s", rec.Body.String())
 	}
 	decision := map[string]any{"channel": "console", "approval_line": row.ApprovalLine, "params_hash": row.ParamsHash, "confirm_number": row.Number}
@@ -236,7 +236,7 @@ func testNoMergeApproval(t *testing.T, fault string) {
 	assertMissions()
 	if wantStatus == "executed" {
 		srv.agentRuntime.api.DB = conn
-		result, err := srv.markMissionsNoMerge(actions.WithCreateAttempt(ctx, created.ID, 2), params("stg"))
+		result, err := srv.markMissionsNoMerge(actions.WithCreateAttempt(ctx, created.ID, 2), params("prod"))
 		if err != nil {
 			t.Fatal(err)
 		}
