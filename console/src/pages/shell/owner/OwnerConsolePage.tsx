@@ -93,7 +93,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief active={blocks.chief} data={data} draft={draft.text} draftKey={draft.key} /></div>
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
-    {blocks.work && <><OwnerReleaseLane data={data} /><ProgressPage /></>}
+    {blocks.work && <><OwnerReleaseLane data={data} /><ProgressPage planView /></>}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
     {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>

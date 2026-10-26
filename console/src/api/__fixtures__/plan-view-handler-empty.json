@@ -1,0 +1,108 @@
+{
+  "artifact_id": "",
+  "as_of": "2026-10-26T21:45:09.003224Z",
+  "coverage": {
+    "label": "Unregistered work",
+    "reconciled": false,
+    "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable",
+    "unregistered_work": 0
+  },
+  "day_timezone": "UTC",
+  "edges": [],
+  "eta": {
+    "reason": "PV1 has no verified milestone or capacity facts",
+    "status": "Unknown"
+  },
+  "external_work": [],
+  "finished_today": [],
+  "freshness": {
+    "database": {
+      "observed_at": "2026-10-26T21:45:09.003224Z",
+      "status": "Fresh"
+    },
+    "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
+    "owner_waiting": "Partial: runtime task waits only; approval/question/signoff readiness awaits PV2",
+    "verification": "Unknown"
+  },
+  "items": [],
+  "mainline": {
+    "basis": "Existing controller step states",
+    "current": null,
+    "milestone_status": "Unknown",
+    "path": []
+  },
+  "next": [],
+  "nodes": [
+    {
+      "created_at": "2026-10-26T16:45:08.937285-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "3",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "round",
+      "ordinal": 3,
+      "owner_step": false,
+      "parent_plan_node_id": null,
+      "plan_node_id": "R3",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "空计划",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    }
+  ],
+  "owner_later": [],
+  "owner_waiting": [],
+  "plan_version": 0,
+  "recent_as_of": "2026-10-26T21:45:09.003224Z",
+  "recent_changes": [
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.937378-05:00",
+      "body_json": {
+        "label": "3",
+        "node_kind": "round",
+        "ordinal": 3,
+        "title": "空计划"
+      },
+      "event_id": 27,
+      "event_stream_id": "plan:R3",
+      "event_type": "plan_node_created",
+      "seq": 1
+    }
+  ],
+  "recent_next": "",
+  "root": "R3",
+  "schema": "agentrt.plan_view_response/v1",
+  "source_watermarks": {
+    "artifacts": 1,
+    "external-work:ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92": 1,
+    "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb": 24,
+    "external-work:ew_8778cca2ea3686bb23aab94401e559c2a251da5462841321cb69cd1712469228": 3,
+    "host:h1": 1,
+    "mission:M-1": 9,
+    "offers:host:h1": 1,
+    "plan:R2": 3,
+    "plan:R3": 1,
+    "plan:R4": 21,
+    "system": 4
+  },
+  "tasks": [],
+  "waiting_on": [],
+  "warnings": [
+    "Legacy evidence: plan has no adopted view; nodes are Unclassified",
+    "PV1 visibility only: milestone, delivery and Owner readiness verification await PV2"
+  ],
+  "working": []
+}

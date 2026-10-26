@@ -1,0 +1,390 @@
+{
+  "artifact_id": "",
+  "as_of": "2026-10-26T21:45:09.001547Z",
+  "coverage": {
+    "label": "Unregistered work",
+    "reconciled": false,
+    "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable",
+    "unregistered_work": 0
+  },
+  "day_timezone": "UTC",
+  "edges": [],
+  "eta": {
+    "reason": "PV1 has no verified milestone or capacity facts",
+    "status": "Unknown"
+  },
+  "external_work": [
+    {
+      "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+      "backfilled": false,
+      "description": {
+        "acceptance_refs": [
+          "PV4"
+        ],
+        "branch": "w31/pv4",
+        "estimate_minutes": [
+          10,
+          20
+        ],
+        "executor": "codex",
+        "kind": "agentrt.external_work/v1",
+        "provider": "openai",
+        "repo": "platform",
+        "task": "实现全计划与现场视图",
+        "v": 1
+      },
+      "external_work_id": "ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92",
+      "heartbeat_age_s": 0,
+      "heartbeat_at": "2026-10-26T21:45:08.987434Z",
+      "kind": "agentrt.external_work/v1",
+      "mission_id": "M-1",
+      "plan_node_id": "R2:1-1",
+      "recorded_at": "2026-10-26T21:45:08.987517Z",
+      "registered_at": "2026-10-26T21:45:08.987434Z",
+      "registrant": "thread:pv4",
+      "registration_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+      "request_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+      "root": "R2",
+      "seq": 0,
+      "source_run_key": "linked-runtime",
+      "state": "Registered",
+      "status": "Registered",
+      "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+      "type": "registered",
+      "v": 1
+    }
+  ],
+  "finished_today": [],
+  "freshness": {
+    "database": {
+      "observed_at": "2026-10-26T21:45:09.001547Z",
+      "status": "Fresh"
+    },
+    "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
+    "owner_waiting": "Partial: runtime task waits only; approval/question/signoff readiness awaits PV2",
+    "verification": "Unknown"
+  },
+  "items": [],
+  "mainline": {
+    "basis": "Existing controller step states",
+    "current": null,
+    "milestone_status": "Unknown",
+    "path": []
+  },
+  "next": [],
+  "nodes": [
+    {
+      "created_at": "2026-10-26T16:45:08.916747-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "2",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "round",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": null,
+      "plan_node_id": "R2",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "round",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.918141-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "1",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": "R2",
+      "plan_node_id": "R2:1",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "item",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.918827-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "1-1",
+      "lane_kind": "Unclassified",
+      "mission_id": "M-1",
+      "node_kind": "step",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": "R2:1",
+      "plan_node_id": "R2:1-1",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": "agent",
+      "title": "step",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    }
+  ],
+  "owner_later": [],
+  "owner_waiting": [],
+  "plan_version": 0,
+  "recent_as_of": "2026-10-26T21:45:09.001547Z",
+  "recent_changes": [
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.987517-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92",
+          "heartbeat_at": "2026-10-26T21:45:08.987434Z",
+          "kind": "agentrt.external_work/v1",
+          "mission_id": "M-1",
+          "plan_node_id": "R2:1-1",
+          "registered_at": "2026-10-26T21:45:08.987434Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "request_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "root": "R2",
+          "seq": 0,
+          "source_run_key": "linked-runtime",
+          "state": "Registered",
+          "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+          "type": "registered",
+          "v": 1
+        },
+        "text": "External work registered"
+      },
+      "event_id": 68,
+      "event_stream_id": "external-work:ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92",
+      "event_type": "note",
+      "seq": 1
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.919272-05:00",
+      "body_json": {
+        "label": "1-1",
+        "node_kind": "step",
+        "ordinal": 0,
+        "title": "step"
+      },
+      "event_id": 6,
+      "event_stream_id": "plan:R2",
+      "event_type": "plan_node_created",
+      "seq": 3
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.918229-05:00",
+      "body_json": {
+        "label": "1",
+        "node_kind": "item",
+        "ordinal": 0,
+        "title": "item"
+      },
+      "event_id": 5,
+      "event_stream_id": "plan:R2",
+      "event_type": "plan_node_created",
+      "seq": 2
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.916836-05:00",
+      "body_json": {
+        "label": "2",
+        "node_kind": "round",
+        "ordinal": 0,
+        "title": "round"
+      },
+      "event_id": 4,
+      "event_stream_id": "plan:R2",
+      "event_type": "plan_node_created",
+      "seq": 1
+    }
+  ],
+  "recent_next": "",
+  "root": "R2",
+  "schema": "agentrt.plan_view_response/v1",
+  "source_watermarks": {
+    "artifacts": 1,
+    "external-work:ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92": 1,
+    "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb": 24,
+    "external-work:ew_8778cca2ea3686bb23aab94401e559c2a251da5462841321cb69cd1712469228": 3,
+    "host:h1": 1,
+    "mission:M-1": 9,
+    "offers:host:h1": 1,
+    "plan:R2": 3,
+    "plan:R3": 1,
+    "plan:R4": 21,
+    "system": 4
+  },
+  "tasks": [
+    {
+      "attempt": {
+        "attempt_id": "a_01M5X2S9JTF5XPHVWPA23GDC8M",
+        "attempt_no": 1,
+        "elapsed_s": 0,
+        "executor": "exec:cursor",
+        "heartbeat_age_s": 0,
+        "host_id": "h1",
+        "mission_id": "M-1",
+        "persisted": false,
+        "reason": "",
+        "started_at": "2026-10-26T21:45:08.957428Z",
+        "state": "running",
+        "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+        "unpersisted_for_s": 0
+      },
+      "external_work": [
+        {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "backfilled": false,
+          "description": {
+            "acceptance_refs": [
+              "PV4"
+            ],
+            "branch": "w31/pv4",
+            "estimate_minutes": [
+              10,
+              20
+            ],
+            "executor": "codex",
+            "kind": "agentrt.external_work/v1",
+            "provider": "openai",
+            "repo": "platform",
+            "task": "实现全计划与现场视图",
+            "v": 1
+          },
+          "external_work_id": "ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92",
+          "heartbeat_age_s": 0,
+          "heartbeat_at": "2026-10-26T21:45:08.987434Z",
+          "kind": "agentrt.external_work/v1",
+          "mission_id": "M-1",
+          "plan_node_id": "R2:1-1",
+          "recorded_at": "2026-10-26T21:45:08.987517Z",
+          "registered_at": "2026-10-26T21:45:08.987434Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "request_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "root": "R2",
+          "seq": 0,
+          "source_run_key": "linked-runtime",
+          "state": "Registered",
+          "status": "Registered",
+          "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+          "type": "registered",
+          "v": 1
+        }
+      ],
+      "mission_id": "M-1",
+      "plan_node_id": "R2:1-1",
+      "state": "running",
+      "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+      "title": "t"
+    }
+  ],
+  "waiting_on": [],
+  "warnings": [
+    "Legacy evidence: plan has no adopted view; nodes are Unclassified",
+    "PV1 visibility only: milestone, delivery and Owner readiness verification await PV2"
+  ],
+  "working": [
+    {
+      "attempt": {
+        "attempt_id": "a_01M5X2S9JTF5XPHVWPA23GDC8M",
+        "attempt_no": 1,
+        "elapsed_s": 0,
+        "executor": "exec:cursor",
+        "heartbeat_age_s": 0,
+        "host_id": "h1",
+        "mission_id": "M-1",
+        "persisted": false,
+        "reason": "",
+        "started_at": "2026-10-26T21:45:08.957428Z",
+        "state": "running",
+        "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+        "unpersisted_for_s": 0
+      },
+      "external_work": [
+        {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "backfilled": false,
+          "description": {
+            "acceptance_refs": [
+              "PV4"
+            ],
+            "branch": "w31/pv4",
+            "estimate_minutes": [
+              10,
+              20
+            ],
+            "executor": "codex",
+            "kind": "agentrt.external_work/v1",
+            "provider": "openai",
+            "repo": "platform",
+            "task": "实现全计划与现场视图",
+            "v": 1
+          },
+          "external_work_id": "ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92",
+          "heartbeat_age_s": 0,
+          "heartbeat_at": "2026-10-26T21:45:08.987434Z",
+          "kind": "agentrt.external_work/v1",
+          "mission_id": "M-1",
+          "plan_node_id": "R2:1-1",
+          "recorded_at": "2026-10-26T21:45:08.987517Z",
+          "registered_at": "2026-10-26T21:45:08.987434Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "request_digest": "sha256:52fb0f4c0c9a307cd245ca43a1e782dd2ec4029a21bfc32c09dfee7c92507d61",
+          "root": "R2",
+          "seq": 0,
+          "source_run_key": "linked-runtime",
+          "state": "Registered",
+          "status": "Registered",
+          "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+          "type": "registered",
+          "v": 1
+        }
+      ],
+      "mission_id": "M-1",
+      "plan_node_id": "R2:1-1",
+      "state": "running",
+      "task_id": "t_01M5X2S9HVGE1A5S34VCB5R5WT",
+      "title": "t"
+    }
+  ]
+}
