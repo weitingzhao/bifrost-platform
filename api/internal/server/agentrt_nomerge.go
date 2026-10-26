@@ -48,6 +48,9 @@ func (s *Server) markMissionsNoMerge(ctx context.Context, params map[string]any)
 	}
 	results, err := store.MarkMissionsNoMerge(ctx, s.agentRuntime.api.DB, req, att.ApprovalID)
 	if err != nil {
+		if errors.Is(err, store.ErrNoMergeUncertain) {
+			return nil, actions.Uncertain(err.Error())
+		}
 		return nil, err
 	}
 	return map[string]any{"env": req.Env, "approval_id": att.ApprovalID, "missions": results}, nil

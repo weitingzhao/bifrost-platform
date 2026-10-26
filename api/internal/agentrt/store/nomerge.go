@@ -61,6 +61,8 @@ type NoMergeResult struct {
 // one transaction. Only done missions qualify. Matching values at the expected
 // version are no-ops; an exact retry of this approval may also observe the
 // version it wrote. All other stale versions and existing values are refused.
+// Ambiguous commits are checked in a fresh transaction; incomplete or
+// conflicting evidence returns ErrNoMergeUncertain for Owner reconciliation.
 func MarkMissionsNoMerge(ctx context.Context, db DB, r NoMergeRequest, approvalID string) ([]NoMergeResult, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
@@ -70,19 +72,24 @@ func MarkMissionsNoMerge(ctx context.Context, db DB, r NoMergeRequest, approvalI
 	}
 	missions := slices.Clone(r.Missions)
 	slices.SortFunc(missions, func(a, b NoMergeMission) int { return strings.Compare(a.MissionID, b.MissionID) })
-	var out []NoMergeResult
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		for _, m := range missions {
-			result, err := markMissionNoMerge(ctx, tx, m, r, approvalID)
-			if err != nil {
-				return err
-			}
-			out = append(out, result)
-		}
-		return nil
-	})
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	var out []NoMergeResult
+	for _, m := range missions {
+		result, err := markMissionNoMerge(ctx, tx, m, r, approvalID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, result)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		if errors.Is(err, pgx.ErrTxCommitRollback) {
+			return nil, err
+		}
+		return reconcileNoMerge(ctx, db, missions, r, approvalID, err)
 	}
 	return out, nil
 }
@@ -109,11 +116,7 @@ func markMissionNoMerge(ctx context.Context, tx pgx.Tx, m NoMergeMission, r NoMe
 	if version != m.ExpectedVersion {
 		// Only the exact committed write can explain a stale version on retry.
 		if equal && version == m.ExpectedVersion+1 {
-			err = tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE mission_id=$1 AND event_type='mission_amended'
-			  AND body_json->>'approval_id'=$2 AND body_json->>'no_merge'=$3
-			  AND body_json->>'archive_manifest_sha256'=$4 AND body_json->>'env'=$5
-			  AND body_json->>'expected_version'=$6 AND body_json->>'version'=$7 ORDER BY seq DESC LIMIT 1`,
-				m.MissionID, approvalID, r.Reason, r.ArchiveManifestSHA256, r.Env, fmt.Sprint(m.ExpectedVersion), fmt.Sprint(version)).Scan(&out.EventID)
+			out.EventID, err = noMergeEvent(ctx, tx, m, r, approvalID)
 			if err == nil {
 				out.Duplicate = true
 				return out, nil

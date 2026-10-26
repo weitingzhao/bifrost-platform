@@ -192,3 +192,95 @@ func TestNoMergeRefusesAnyPresentUnequalJSON(t *testing.T) {
 		})
 	}
 }
+
+// Exercise recovery against real rows/events while deterministically placing
+// an independent write between the failed commit and its fresh readback.
+func TestNoMergeRecoveryRequiresExactEvidence(t *testing.T) {
+	t.Parallel()
+	for _, mismatch := range []string{"approval", "digest", "env", "reason", "version"} {
+		t.Run(mismatch, func(t *testing.T) {
+			w := newKernelWorld(t)
+			w.finishNoMergeMission(t, "M-1")
+			v := w.noMergeVersion(t, "M-1")
+			r := noMergeRequest(store.NoMergeMission{MissionID: "M-1", ExpectedVersion: v})
+			db := &noMergeCommitFaultDB{DB: w.rt, commit: func(tx pgx.Tx) error {
+				ok(t, tx.Rollback(ctx))
+				other, approval := r, noMergeApproval
+				switch mismatch {
+				case "approval":
+					approval = "appr_1111111111111111"
+				case "digest":
+					other.ArchiveManifestSHA256 = strings.Repeat("cd", 32)
+				case "env":
+					other.Env = "prod"
+				case "reason":
+					other.Reason = "another archive"
+				}
+				_, err := store.MarkMissionsNoMerge(ctx, w.rt, other, approval)
+				ok(t, err)
+				if mismatch == "version" {
+					// Legitimate later mission changes make the old evidence
+					// insufficient even though the approval event still exists.
+					ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+						if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_amended", Actor: "controller", MissionID: "M-1", Body: map[string]any{"max_attempts": 1, "reason": "correct archived budget"}}); err != nil {
+							return err
+						}
+						_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET budget_json=budget_json || '{"max_attempts":1}'::jsonb, version=version+1 WHERE mission_id='M-1'`)
+						return err
+					}))
+				}
+				return errors.New("commit connection lost")
+			}}
+			out, err := store.MarkMissionsNoMerge(ctx, db, r, noMergeApproval)
+			if out != nil || !errors.Is(err, store.ErrNoMergeUncertain) || db.begins != 2 {
+				t.Fatalf("%s recovered without exact evidence: %+v, %v; transactions=%d", mismatch, out, err, db.begins)
+			}
+			_, err = store.VerifyStream(ctx, w.rt, store.MissionStream("M-1"))
+			ok(t, err)
+		})
+	}
+}
+
+func TestNoMergeRecoveryAfterContextCancellation(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.finishNoMergeMission(t, "M-1")
+	v := w.noMergeVersion(t, "M-1")
+	r := noMergeRequest(store.NoMergeMission{MissionID: "M-1", ExpectedVersion: v})
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	db := &noMergeCommitFaultDB{DB: w.rt, commit: func(tx pgx.Tx) error {
+		ok(t, tx.Commit(ctx))
+		cancel()
+		return context.Canceled
+	}}
+	out, err := store.MarkMissionsNoMerge(callCtx, db, r, noMergeApproval)
+	ok(t, err)
+	if len(out) != 1 || out[0].EventID == 0 || out[0].Version != v+1 || db.begins != 2 {
+		t.Fatal("canceled context prevented fresh readback", out, db.begins)
+	}
+	_, err = store.VerifyStream(ctx, w.rt, store.MissionStream("M-1"))
+	ok(t, err)
+}
+
+type noMergeCommitFaultDB struct {
+	store.DB
+	commit func(pgx.Tx) error
+	begins int
+}
+
+func (db *noMergeCommitFaultDB) BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error) {
+	db.begins++
+	tx, err := db.DB.BeginTx(ctx, options)
+	if err != nil || db.begins != 1 {
+		return tx, err
+	}
+	return noMergeCommitFaultTx{Tx: tx, commit: db.commit}, nil
+}
+
+type noMergeCommitFaultTx struct {
+	pgx.Tx
+	commit func(pgx.Tx) error
+}
+
+func (tx noMergeCommitFaultTx) Commit(context.Context) error { return tx.commit(tx.Tx) }
