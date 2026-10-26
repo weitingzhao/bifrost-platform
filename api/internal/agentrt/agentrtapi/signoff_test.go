@@ -38,7 +38,7 @@ type signedNode struct {
 func TestOwnerSignsAStepOff(t *testing.T) {
 	pool := seeded(t)
 	s := server(t, pool)
-	if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
+	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
 		t.Fatalf("import = %d %v", code, out)
 	}
 	if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
@@ -56,7 +56,7 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 		rule("R2:2.3-2", `{"owner_signoff":"race"}`),
 		{"op": "drop_step", "node": "R2:2.1-4"},
 	}
-	code, out := call(t, s, "reporter", "POST", "plan/proposals",
+	code, out := call(t, s, "proposer", "POST", "plan/proposals",
 		map[string]any{"idempotency_key": "signoffs", "root": "R2", "reason": "steps the Owner signs off", "changes": changes}, session, "s1")
 	if code != 200 || out["question_id"] == nil {
 		t.Fatalf("propose the rules = %d %v", code, out)
@@ -89,7 +89,7 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 
 	// Only the Owner: every token an agent holds is refused, with or without a
 	// session, and nothing is written.
-	for _, who := range []string{"", "viewer", "reporter", "operator", "seat:chief_of_staff", "agentd:h1"} {
+	for _, who := range []string{"", "viewer", "reporter", "proposer", "operator", "seat:chief_of_staff", "agentd:h1"} {
 		// Refused by the route's role (the platform's RequireAny: 401 for no token and for another role alike),
 		// before the store's own check of the writer (403 not_owner).
 		code, out := call(t, s, who, "POST", "plan/R2:2.4-1/signoff", map[string]any{}, session, "s1")

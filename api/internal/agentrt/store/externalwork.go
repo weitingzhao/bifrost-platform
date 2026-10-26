@@ -117,6 +117,14 @@ func externalDescription(ctx context.Context, tx pgx.Tx, id string) (ExternalDes
 	}
 	return parseExternalDescription(raw)
 }
+
+// ValidateExternalDescription applies the registration's closed schema at
+// reporter upload, before the general artifact uploader selects a protocol.
+func ValidateExternalDescription(raw []byte) error {
+	_, err := parseExternalDescription(raw)
+	return err
+}
+
 func parseExternalDescription(raw []byte) (ExternalDescription, error) {
 	var d ExternalDescription
 	var err error

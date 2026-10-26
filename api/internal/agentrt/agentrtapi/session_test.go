@@ -43,23 +43,23 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		caller, method, path string
 		body                 any
 	}{
-		"a mission":           {"reporter", "POST", "missions", map[string]any{"idempotency_key": "k2", "title": "m", "goal": "g", "success": []string{"x"}}},
-		"a replay of its key": {"reporter", "POST", "missions", mission},
-		"tasks": {"reporter", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "k3", "tasks": []any{map[string]any{
+		"a mission":           {"proposer", "POST", "missions", map[string]any{"idempotency_key": "k2", "title": "m", "goal": "g", "success": []string{"x"}}},
+		"a replay of its key": {"proposer", "POST", "missions", mission},
+		"tasks": {"proposer", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "k3", "tasks": []any{map[string]any{
 			"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec),
 			"effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA, "depends_on": []string{existing}}}}},
-		"a goal": {"reporter", "POST", "goals", map[string]any{"idempotency_key": "k4", "goal": "do a thing", "repo": "bifrost-platform"}},
-		"a plan change": {"reporter", "POST", "plan/proposals", map[string]any{"idempotency_key": "k5", "root": "R2", "reason": "rename",
+		"a goal": {"proposer", "POST", "goals", map[string]any{"idempotency_key": "k4", "goal": "do a thing", "repo": "bifrost-platform"}},
+		"a plan change": {"proposer", "POST", "plan/proposals", map[string]any{"idempotency_key": "k5", "root": "R2", "reason": "rename",
 			"changes": []any{map[string]any{"op": "retitle", "node": "R2:1", "title": "x"}}}},
-		"a control":            {"reporter", "POST", "controls", map[string]any{"idempotency_key": "k6", "scope": "global", "kind": "pause", "reason": "test"}},
-		"a new upload":         {"reporter", "PUT", "artifacts/" + artifactID(other), other},
-		"an upload it has":     {"reporter", "PUT", "artifacts/" + artifactID(spec), spec},
-		"a message":            {"reporter", "POST", "messages", map[string]any{"to": "owner", "kind": "note", "body": "hi"}},
-		"an acknowledgement":   {"reporter", "POST", "messages/ack", map[string]any{"message_ids": []any{msg}}},
-		"its mail":             {"reporter", "GET", "messages", nil},
+		"a control":            {"proposer", "POST", "controls", map[string]any{"idempotency_key": "k6", "scope": "global", "kind": "pause", "reason": "test"}},
+		"a new upload":         {"proposer", "PUT", "artifacts/" + artifactID(other), other},
+		"an upload it has":     {"proposer", "PUT", "artifacts/" + artifactID(spec), spec},
+		"a message":            {"proposer", "POST", "messages", map[string]any{"to": "owner", "kind": "note", "body": "hi"}},
+		"an acknowledgement":   {"proposer", "POST", "messages/ack", map[string]any{"message_ids": []any{msg}}},
+		"its mail":             {"proposer", "GET", "messages", nil},
 		"its mail by agentd":   {"agentd:h1", "GET", "messages", nil},
 		"its mail by a viewer": {"viewer", "GET", "messages", nil},
-		"a rule proposal": {"reporter", "POST", "rules/routing:dev/proposals", map[string]any{"idempotency_key": "k7", "reason": "test",
+		"a rule proposal": {"proposer", "POST", "rules/routing:dev/proposals", map[string]any{"idempotency_key": "k7", "reason": "test",
 			"text": "rule_id: routing:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
 				"tenant: dev\norder: [capability, quota]\nquota_stop_percent: 90\n"}},
 	} {
@@ -68,7 +68,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			t.Errorf("%s by another token: %d %v; want 403 not_yours", name, code, out)
 		}
 	}
-	if code, out := as("reporter", "GET", "whoami", nil); code != http.StatusOK || !strings.Contains(fmt.Sprint(out["actor_error"]), "another token") {
+	if code, out := as("proposer", "GET", "whoami", nil); code != http.StatusOK || !strings.Contains(fmt.Sprint(out["actor_error"]), "another token") {
 		t.Errorf("whoami for another token: %d %v", code, out)
 	}
 	// The first token goes on: its mail is still unread, and it may write.
@@ -82,7 +82,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		t.Fatalf("its own replay: %d %v", code, out)
 	}
 	// Another session of the second token is its own thread.
-	if code, out := call(t, s, "reporter", "GET", "messages", nil, session, "s2"); code != http.StatusOK {
+	if code, out := call(t, s, "proposer", "GET", "messages", nil, session, "s2"); code != http.StatusOK {
 		t.Fatalf("another session: %d %v", code, out)
 	}
 }

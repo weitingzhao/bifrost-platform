@@ -57,7 +57,7 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 			out["actor_kind"] = "thread (registered on its first write)"
 		}
 	}
-	out["may"] = abilitiesOf(p.Role)
+	out["may"] = abilitiesOf(p)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -75,12 +75,18 @@ func kindName(actor string) string {
 	return actor
 }
 
-func abilitiesOf(role actuation.Role) []string {
+func abilitiesOf(p actuation.Principal) []string {
 	var out []string
 	for _, ab := range abilities {
-		if slices.Contains(ab.roles, role) {
+		if limitedReporter(p) && (ab.name == "propose" || ab.name == "upload") {
+			continue
+		}
+		if slices.Contains(ab.roles, p.Role) {
 			out = append(out, ab.name)
 		}
+	}
+	if limitedReporter(p) {
+		out = append(out, "external_work")
 	}
 	return out
 }

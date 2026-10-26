@@ -41,7 +41,7 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 	req := recorderRequest(t)
 	before := len(cards)
 	body := map[string]any{"idempotency_key": "r1", "reason": "retire the recorder", "request": req}
-	code, out := call(t, s, "reporter", "POST", "plan/imports", body, "X-Bifrost-Session", "s1")
+	code, out := call(t, s, "proposer", "POST", "plan/imports", body, "X-Bifrost-Session", "s1")
 	if code != 200 || out["question_id"] == nil || out["log_artifact_id"] == nil {
 		t.Fatalf("recorder import proposal = %d %v", code, out)
 	}
@@ -62,7 +62,7 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 	broken.Lines[1] = strings.Replace(broken.Lines[1], `"step_id":"a1"`, `"step_id":"a2"`, 1)
 	all := sha256.Sum256([]byte(strings.Join(broken.Lines, "\n") + "\n"))
 	broken.Source.SHA256 = hex.EncodeToString(all[:])
-	code, out = call(t, s, "reporter", "POST", "plan/imports", map[string]any{"idempotency_key": "r2", "reason": "x", "request": broken},
+	code, out = call(t, s, "proposer", "POST", "plan/imports", map[string]any{"idempotency_key": "r2", "reason": "x", "request": broken},
 		"X-Bifrost-Session", "s1")
 	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out), "line 2: the body does not hash to its digest") {
 		t.Fatalf("a broken chain = %d %v", code, out)
@@ -76,13 +76,13 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 	kall := sha256.Sum256([]byte(keyed.Lines[0] + "\n"))
 	keyed.Source.SHA256 = hex.EncodeToString(kall[:])
 	asked := len(cards)
-	code, out = call(t, s, "reporter", "POST", "plan/imports", map[string]any{"idempotency_key": "r4", "reason": "x", "request": keyed},
+	code, out = call(t, s, "proposer", "POST", "plan/imports", map[string]any{"idempotency_key": "r4", "reason": "x", "request": keyed},
 		"X-Bifrost-Session", "s1")
 	if code != http.StatusUnprocessableEntity || !strings.Contains(fmt.Sprint(out), "a key has a path") || len(cards) != asked {
 		t.Fatalf("a log with a path in a key = %d %v (%d cards asked)", code, out, len(cards)-asked)
 	}
 	extra := map[string]any{"format": recorderimport.Format, "source": req.Source, "lines": req.Lines, "nodes": []any{}}
-	code, out = call(t, s, "reporter", "POST", "plan/imports", map[string]any{"idempotency_key": "r3", "reason": "x", "request": extra},
+	code, out = call(t, s, "proposer", "POST", "plan/imports", map[string]any{"idempotency_key": "r3", "reason": "x", "request": extra},
 		"X-Bifrost-Session", "s1")
 	if code != http.StatusBadRequest || !strings.HasPrefix(fmt.Sprint(out["message"]), "body: ") {
 		t.Fatalf("a field the format does not have = %d %v", code, out)

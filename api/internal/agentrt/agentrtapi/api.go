@@ -97,10 +97,12 @@ const claimPollLimit = 8 * time.Second
 
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
 // whoami both read them. agentd, whose token is bound to one host, claims,
-// keeps its leases and hands results over; threads and seats (reporter and
-// operator tokens) and the Owner (admin) propose missions, tasks and rules
+// keeps its leases and hands results over; operator threads, seats and
+// the Owner (admin) propose missions, tasks and rules
 // (and hand in a rule the Owner signed: the signature is the authority); they
-// and agentd upload artifacts; anyone authenticated reads and may stop, pause,
+// and agentd upload artifacts. A plain reporter only registers external work,
+// uploads its description and appends its own observations (reporter.go).
+// Anyone authenticated reads and may stop, pause,
 // drain or tighten a rule; operators and the Owner drain hosts; only the Owner
 // lifts a control, reads a vendor pool by hand and signs a step off.
 var abilities = []struct {
@@ -132,6 +134,8 @@ func may(name string) []actuation.Role {
 func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	gate := func(name string) func(http.Handler) http.Handler { return auth.RequireAny(may(name)...) }
 	read, agentd, propose, upload := gate("read"), gate("claim"), gate("propose"), gate("upload")
+	external := propose
+	propose = func(next http.Handler) http.Handler { return external(proposersOnly(next)) }
 	// Authentication first, so an anonymous write is refused as such even
 	// when the database is not configured. Every route's parameters are read
 	// as the client meant them (pathParams).
@@ -164,8 +168,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
-		r.With(propose, cfg).Post("/external-work", a.registerExternalWork)
-		r.With(propose, cfg).Post("/external-work/{id}/events", a.postExternalEvent)
+		r.With(external, cfg).Post("/external-work", a.registerExternalWork)
+		r.With(external, cfg).Post("/external-work/{id}/events", a.postExternalEvent)
 		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
 		r.With(propose, cfg).Post("/plan/proposals", a.proposePlanChange)
 		r.With(propose, cfg).Post("/plan/{id}/notes", a.postPlanNote)
@@ -598,6 +602,10 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	p := actuation.PrincipalFromContext(r.Context())
 	host, isAgentd := actuation.AgentdHost(p)
 	kind := r.Header.Get("X-Artifact-Kind")
+	if limitedReporter(p) && kind != "other" {
+		writeError(w, http.StatusForbidden, "forbidden", "a reporter may only upload an external work description")
+		return
+	}
 	if p.Role == actuation.RoleAgentd && !isAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
 		return
@@ -614,6 +622,12 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "an artifact is at most 1 MiB")
 		return
+	}
+	if limitedReporter(p) {
+		if err := store.ValidateExternalDescription(body); err != nil {
+			writeError(w, http.StatusForbidden, "forbidden", "a reporter may only upload an external work description")
+			return
+		}
 	}
 	sum := sha256.Sum256(body)
 	if id != "sha256:"+hex.EncodeToString(sum[:]) {

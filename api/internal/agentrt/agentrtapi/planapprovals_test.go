@@ -21,7 +21,7 @@ const consolePlanApprovalsFixture = "../../../../console/src/api/__fixtures__/ag
 func TestPlanStepsNameTheirApprovals(t *testing.T) {
 	pool := seeded(t)
 	s := server(t, pool)
-	if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
+	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
 		t.Fatalf("import = %d %v", code, out)
 	}
 	if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
@@ -46,7 +46,7 @@ func TestPlanStepsNameTheirApprovals(t *testing.T) {
 		{"op": "set_done_rule", "node": "R2:2.4-2", "rule": json.RawMessage(rules["R2:2.4-2"]),
 			"bind": bind([2]string{"approval", "16"}, [2]string{"approval", "18"})},
 	}
-	code, out := call(t, s, "reporter", "POST", "plan/proposals",
+	code, out := call(t, s, "proposer", "POST", "plan/proposals",
 		map[string]any{"idempotency_key": "requests", "root": "R2", "reason": "steps done by their requests", "changes": changes}, session, "s1")
 	if code != 200 || out["question_id"] == nil {
 		t.Fatalf("propose the rules = %d %v", code, out)
