@@ -1,6 +1,6 @@
 # Host operations S1 candidate contract
 
-Source of scope: Work 584, amended by Work 592 and Work 601 (2026-10-26); design sections 3.1/3.2 and 6.0, option A.
+Source of scope: Work 584, amended by Work 592, Work 601 and Work 606 (2026-10-26); design sections 3.1/3.2 and 6.0, option A.
 This package is shared library code for platform/executor/helper builds in
 the platform repository. It adds no HTTP route, scheduler, SSH client,
 privileged helper, installer, production key, signer or runtime action.
@@ -9,8 +9,9 @@ the release-policy Owner fingerprint is **not** used as a host-ops default.
 
 Work 598 preserved epoch-corruption evidence across Freeze. Work 601 implements
 Review 595 B2 using the selected typed, signed scope contract (option A).
-The original three-round S1 budget was exhausted; the design records an
-additional 2.5–4 person-days including independent review/rework. These local
+Work 606 binds bundle selection to the verified manifest set (Review 604 B1).
+The original three-round S1 budget was exhausted; design section 6.0 records
+the subsequent estimates including independent review/rework. These local
 checks do not constitute independent acceptance or authorize runtime use.
 
 ## Signed objects and verification flow
@@ -53,6 +54,18 @@ must match; image purpose additionally requires an immutable OCI digest.
 The receiver must obtain `ReceivedFile` observations through protected file
 descriptors and securely extract archives in S3. This model does not unpack
 archives or establish OS permissions by trusting caller-provided metadata.
+
+For a request with a `bundle` selector, its exact manifest digest must be in
+`Request.BundleDigests` and in the manifests received by this admission.
+The two sets must match exactly without duplicates. Every received manifest,
+including the selected one, must pass signature, installed version/digest,
+environment/host/action/handler, validity and file-byte checks at evaluation.
+A different allowed manifest with identical entry bytes cannot substitute for
+the selected manifest, even if only the selected manifest has expired.
+The policy's `BundleDigests` is an allowlist, not a requirement to receive
+every allowed artifact. Additional verified forward/rollback manifests are
+permitted; selection does not reduce the request to one manifest. Installed
+marks still come from trusted adapters; durable installation remains S2/S3.
 
 ## Complete-set policy semantics
 

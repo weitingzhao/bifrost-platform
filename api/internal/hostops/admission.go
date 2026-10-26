@@ -96,7 +96,6 @@ func (t Trust) EvaluateM(a Admission, now time.Time) Decision {
 		if seen[d] || !contains(x.BundleDigests, d) {
 			return denied("duplicate or unauthorized manifest")
 		}
-		seen[d] = true
 		b, err := t.Bundle(received.Manifest)
 		if err != nil {
 			return denied(err.Error())
@@ -107,9 +106,15 @@ func (t Trust) EvaluateM(a Admission, now time.Time) Decision {
 		if err := b.VerifyFiles(received.Files, x.Environment, x.Host, x.Action, x.HandlerDigest, now); err != nil {
 			return denied(err.Error())
 		}
+		seen[d] = true
 		for _, e := range b.Entries {
 			sources = append(sources, e.SHA256)
 		}
+	}
+	// Selection binds the manifest itself, not merely identical entry bytes
+	// in another allowed bundle. Additional forward/rollback bundles remain valid.
+	if selected, ok := x.Params["bundle"]; ok && !seen[selected] {
+		return denied("selected bundle not in verified manifest set")
 	}
 	for _, e := range append(append([]Effect{}, a.ForwardEffects...), a.RollbackEffects...) {
 		target, err := i.effectObject(x.Host, e.Identity, a.Catalog)
