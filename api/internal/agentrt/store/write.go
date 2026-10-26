@@ -43,6 +43,9 @@ const maxArtifactBytes = 1 << 20
 // PutArtifact stores a body by content and returns its id. Artifacts are
 // append only; the same body stored twice is one row.
 func PutArtifact(ctx context.Context, tx pgx.Tx, actor, kind, mediaType string, body []byte) (string, error) {
+	if err := validateViewArtifact(kind, body); err != nil {
+		return "", err
+	}
 	if len(body) > maxArtifactBytes {
 		return "", errors.New("store: an artifact is at most 1 MiB")
 	}
@@ -71,6 +74,9 @@ const ArtifactStream = "artifacts"
 // spec with task_proposed, a message with message_posted) go through
 // PutArtifact.
 func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string, body []byte) (string, bool, error) {
+	if err := validateViewArtifact(kind, body); err != nil {
+		return "", false, err
+	}
 	if len(body) > maxArtifactBytes {
 		return "", false, errors.New("store: an artifact is at most 1 MiB")
 	}
@@ -213,6 +219,11 @@ type PlanNode struct {
 
 // CreatePlanNode writes plan_node_created and the node. A step starts planned.
 func CreatePlanNode(ctx context.Context, tx pgx.Tx, actor string, n PlanNode) (Appended, error) {
+	if n.Parent != "" && n.MissionID != "" {
+		if err := checkViewBinding(ctx, tx, n.Parent, n.MissionID); err != nil {
+			return Appended{}, err
+		}
+	}
 	ev, err := Append(ctx, tx, Event{Stream: PlanStream(n.Root), Type: "plan_node_created", Actor: actor,
 		PlanNode: n.ID, MissionID: n.MissionID,
 		Body: map[string]any{"node_kind": n.Kind, "label": n.Label, "title": n.Title, "ordinal": n.Ordinal}})
@@ -309,6 +320,9 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	// The locks the insert's guard takes, taken before the event's stream
 	// (review 149 B1): the step, then the subject.
 	if t.PlanNode != "" {
+		if err := checkViewBinding(ctx, tx, t.PlanNode, t.MissionID); err != nil {
+			return Appended{}, err
+		}
 		// A dropped step takes no new work (review 313 A3); read under the
 		// step's lock, so a drop and a new task never interleave.
 		var state *string

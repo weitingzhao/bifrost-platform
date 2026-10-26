@@ -55,7 +55,8 @@ type PlanChange struct {
 	EffectStep *bool           `json:"effect_step,omitempty"`
 	// Artifact is the request an import proposes (op import, only through
 	// POST /plan/imports; planimportcard.go).
-	Artifact string `json:"artifact,omitempty"`
+	Artifact        string `json:"artifact,omitempty"`
+	ExpectedVersion *int   `json:"expected_version,omitempty"`
 }
 
 // MaxChanges is the most changes one proposal holds.
@@ -74,7 +75,17 @@ func checkChanges(root, reason string, changes []PlanChange) error {
 	}
 	for i, c := range changes {
 		var bad string
+		if c.Op != "adopt_plan_view" && (c.Artifact != "" || c.ExpectedVersion != nil) {
+			return invalid("artifact and expected_version belong only to adopt_plan_view")
+		}
 		switch c.Op {
+		case "adopt_plan_view":
+			if c.Node != "" || c.Parent != "" || c.Kind != "" || c.StepKind != "" || c.Title != "" || c.MissionID != "" || len(c.Rule) > 0 || len(c.Bind) > 0 || c.Task != "" || c.OwnerStep != nil || c.EffectStep != nil {
+				return invalid("adopt_plan_view takes only artifact and expected_version")
+			}
+			if len(changes) != 1 || c.Artifact == "" || c.ExpectedVersion == nil || *c.ExpectedVersion < 0 {
+				bad = "requires one artifact adoption and expected_version >= 0"
+			}
 		case "add_node":
 			switch {
 			case c.Parent == "" || c.Title == "":
@@ -337,6 +348,26 @@ func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
 // review where its subject is, a rule naming only what its step binds
 // (some at commit).
 func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided int64, changes []PlanChange) ([]string, error) {
+	if len(changes) == 1 && changes[0].Op == "adopt_plan_view" {
+		return nil, adoptPlanView(ctx, tx, actor, root, decided, changes[0])
+	}
+	for _, c := range changes {
+		node := c.Node
+		if c.Op == "add_node" {
+			node = c.Parent
+		}
+		mission := c.MissionID
+		if c.Op == "move_task" {
+			if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1`, c.Task).Scan(&mission); err != nil {
+				return nil, err
+			}
+		}
+		if node != "" && mission != "" {
+			if err := checkViewBinding(ctx, tx, node, mission); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for _, c := range changes {
 		if err := gateGuard(ctx, tx, c); err != nil { // gatesplan.go
 			return nil, err
@@ -669,7 +700,7 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
-		if err := lockTree(ctx, tx, root); err != nil {
+		if err := lockPlanViewChanges(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}
 		if err := lockChanges(ctx, tx, root, changes); err != nil {

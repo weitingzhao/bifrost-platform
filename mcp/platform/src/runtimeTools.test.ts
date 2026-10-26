@@ -17,6 +17,7 @@ import {
   searchArtifacts,
   getMission,
   getPlan,
+  getPlanView, registerExternalWork, recordExternalWorkEvent,
   getTask,
   listTasks,
   proposeMission,
@@ -469,5 +470,34 @@ describe('wait_for_messages and a server that answers empty at once (review 264 
     const out = (await waitForMessages({ timeout_seconds: 10 }, d, () => t, async (ms) => { t += ms })) as { messages: unknown[] }
     assert.equal(out.messages.length, 0)
     assert.ok(calls <= 11, `${calls} polls in 10 seconds`)
+  })
+})
+
+describe('plan view and external work', () => {
+  it('reads a root snapshot and forwards bounded writes', async () => {
+    const { d, calls } = deps()
+    await getPlanView({ root: 'R4' }, d)
+    const registration = { idempotency_key: 'run', root: 'R4', plan_node_id: 'R4:4.5', source_run_key: 'run', artifact_id: 'sha256:' + 'a'.repeat(64) }
+    await registerExternalWork(registration, d)
+    await recordExternalWorkEvent({ external_work_id: 'ew_1', idempotency_key: 'hb', seq: 2, type: 'heartbeat' }, d)
+    assert.equal(calls[0].path, '/api/v1/agentrt/plan-view?root=R4')
+    assert.deepEqual(calls[1].body, registration)
+    assert.equal(calls[2].path, '/api/v1/agentrt/external-work/ew_1/events')
+    assert.deepEqual(calls[2].body, { idempotency_key: 'hb', seq: 2, type: 'heartbeat' })
+  })
+  it('refuses writes when disabled or no real session exists', async () => {
+    for (const over of [{ mode: 'off' as const }, { fellBack: true }]) {
+      const { d, calls } = deps(over)
+      await registerExternalWork({ idempotency_key: 'k', root: 'R4', plan_node_id: 'n', source_run_key: 'r', artifact_id: 'x' }, d)
+      await recordExternalWorkEvent({ external_work_id: 'x', idempotency_key: 'k', seq: 1, type: 'started' }, d)
+      assert.equal(calls.length, 0)
+    }
+  })
+  it('passes adoption CAS through the existing proposal path', async () => {
+    const { d, calls } = deps()
+    const changes = [{ op: 'adopt_plan_view' as const, artifact: 'sha256:' + 'a'.repeat(64), expected_version: 0 }]
+    await proposePlanChange({ root: 'R4', reason: 'adopt', changes, idempotency_key: 'adopt' }, d)
+    assert.deepEqual((calls[0].body as { changes: unknown }).changes, changes)
+    for (const name of ['get_plan_view', 'register_external_work', 'record_external_work_event'] as const) assert(PLATFORM_STDIO_TOOL_NAMES.includes(name))
   })
 })

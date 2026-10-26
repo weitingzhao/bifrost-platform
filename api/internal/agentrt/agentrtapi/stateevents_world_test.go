@@ -48,7 +48,8 @@ var routeExpect = map[string]string{
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
 	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites, "POST hosts/{id}/drain": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
-	"POST plan/{id}/signoff":     expectWrites,
+	"POST plan/{id}/signoff": expectWrites,
+	"POST external-work":     expectWrites, "POST external-work/{id}/events": expectWrites,
 	"POST rules/{rule_id}/check": expectAnswers, "POST rules/{rule_id}/proposals": expectWrites,
 	"POST rules/{rule_id}/sign": expectWrites, "POST rules/{rule_id}/tighten": expectWrites,
 	"POST pools/{id}/reading": expectWrites, "POST benchmark": expectWrites,
@@ -66,7 +67,7 @@ var routeExpect = map[string]string{
 	"POST issues/{id}/owner-cards": expectWrites, "POST issues/{id}/take": expectWrites, "POST issues/{id}/replies": expectWrites,
 	"POST issues/{id}/close": expectWrites, "POST issues/{id}/park": expectWrites, "POST issues/{id}/resume": expectWrites,
 	"POST issues/{id}/reopen": expectWrites,
-	"POST intake/issues": expectWrites, "POST intake/issues/{id}/additions": expectWrites, "POST intake/issues/{id}/responses": expectWrites,
+	"POST intake/issues":      expectWrites, "POST intake/issues/{id}/additions": expectWrites, "POST intake/issues/{id}/responses": expectWrites,
 	"POST intake/updates": expectAnswers,
 }
 
@@ -253,6 +254,11 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST hosts/{id}/drain", "operator", "POST", "hosts/h2/drain", map[string]any{"idempotency_key": "v5", "reason": "maintenance"})
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "add_node", "parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}})
+
+	extSpec := []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"工作","executor":"codex","provider":"openai","repo":"platform","branch":"test","acceptance_refs":["PV1"],"estimate_minutes":[1,2]}`)
+	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(extSpec), extSpec, "X-Artifact-Kind", "other")
+	ext := ok("POST external-work", "operator", "POST", "external-work", map[string]any{"idempotency_key": "ext", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "fuzz-run", "artifact_id": artifactID(extSpec)})
+	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-start", "seq": 1, "type": "started"})
 
 	// The architecture table: imported through its card, then a note on a row.
 	text, err := os.ReadFile(fixtureLedger)
@@ -542,6 +548,10 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 	case rt.pattern == "plan/proposals":
 		return map[string]any{"idempotency_key": key, "root": "R2", "reason": "fuzz", "changes": []any{map[string]any{"op": "add_node",
 			"parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}}
+	case rt.pattern == "external-work":
+		return map[string]any{"idempotency_key": key, "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": key, "artifact_id": "sha256:bad"}
+	case rt.pattern == "external-work/{id}/events":
+		return map[string]any{"idempotency_key": key, "seq": 1, "type": f.pick([]string{"started", "heartbeat", "verified"})}
 	case rt.pattern == "plan/{id}/notes":
 		return map[string]any{"idempotency_key": key, "text": "fuzz"}
 	case rt.pattern == "plan/{id}/signoff":

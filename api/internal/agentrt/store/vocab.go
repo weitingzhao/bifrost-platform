@@ -163,7 +163,7 @@ var bodies = map[string][]field{
 		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
-		{"card", kAny, true}, {"landing", kAny, true},
+		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -234,6 +234,11 @@ var bodies = map[string][]field{
 }
 
 func checkBody(eventType string, body map[string]any) error {
+	if eventType == "note" {
+		if err := checkViewNote(body); err != nil {
+			return err
+		}
+	}
 	spec, ok := bodies[eventType]
 	if !ok {
 		return fmt.Errorf("store: event type %q has no body defined yet", eventType)

@@ -88,7 +88,7 @@ type planProposalBody struct {
 // rolled back, and put to the Owner as a decision card.
 func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 	var b planProposalBody
-	if !decode(w, r, &b) {
+	if !decodeView(w, r, &b) {
 		return
 	}
 	who, err := writer(r)
