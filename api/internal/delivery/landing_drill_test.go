@@ -95,6 +95,27 @@ func TestLandingDrillCreateIdempotencyAndCollision(t *testing.T) {
 		t.Fatal("floating ref accepted")
 	}
 }
+
+func TestLandingDrillRerunIdentityAtSecondPrecision(t *testing.T) {
+	intent := time.Now().UTC().Truncate(time.Second).Add(100 * time.Millisecond)
+	name := landing.CIName("land:task:1", 2)
+	for _, marked := range []bool{false, true} {
+		obj := drillCI(t, name, "True", intent.Add(100*time.Millisecond))
+		if marked {
+			labels := obj.GetLabels()
+			labels["bifrost.io/trigger"] = "agentrt-landing-drill"
+			obj.SetLabels(labels)
+		}
+		s, _ := drillService(t, obj)
+		ci, err := s.landingCI(context.Background(), factSHA1, intent.Add(-time.Minute))
+		if err != nil || ci.Run != name || !ci.CreatedAt.Equal(intent.Truncate(time.Second)) {
+			t.Fatal(ci, err)
+		}
+		if (ci.Status == "Succeeded") != marked {
+			t.Fatal("unverified attempt identity", marked, ci)
+		}
+	}
+}
 func TestLandingDrillWindowReadOnly(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, tc := range []struct {

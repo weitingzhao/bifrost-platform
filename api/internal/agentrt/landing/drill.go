@@ -92,7 +92,7 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 	if ci.R != o.R || !ci.CreatedAt.After(o.PreparedAt) {
 		ci = CIRun{Status: "Missing"}
 	}
-	if o.Rerun && !o.RerunAt.IsZero() && !ci.CreatedAt.After(o.RerunAt) {
+	if !rerunObserved(op, o, ci.Run, ci.CreatedAt) {
 		return DrillAction{Kind: "wait"}
 	}
 	switch ci.Status {
@@ -127,6 +127,15 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		}
 	}
 	return DrillAction{Kind: "wait"}
+}
+
+// The persisted op/try determines the run name before creation. Kubernetes
+// rounds creationTimestamp to seconds, so it cannot order a same-second
+// creation against the microsecond intent. Identity proves the attempt;
+// the coarse time fence still rejects an object from an earlier second.
+func rerunObserved(op string, o Operation, run string, created time.Time) bool {
+	return !o.Rerun || o.RerunAt.IsZero() ||
+		(run == CIName(op, 2) && !created.Before(o.RerunAt.Truncate(time.Second)))
 }
 
 // RootBudget survives process restarts, parked time and operation changes.

@@ -338,7 +338,7 @@ func (s *State) Apply(e Entry) error {
 		}
 		n.Outcome = r.String("why")
 	case "rehearsed":
-		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || (old.Rerun && !old.CI.Time("created_at").After(old.RerunAt)) {
+		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || !rerunObserved(op, old, old.CI.String("run"), old.CI.Time("created_at")) {
 			return bad()
 		}
 	case "main_intent":
@@ -378,6 +378,30 @@ func (s *State) Apply(e Entry) error {
 		s.Operations[op] = n
 		return nil
 	case "failed":
+		if old.Phase == "" {
+			// A crash may leave discarded as the last record until the root
+			// budget expires. Its successor is born terminal in one event;
+			// the discarded operation itself remains immutable.
+			if r.String("v") != Version || r.String("why") != "bound" {
+				return bad()
+			}
+			for id, previous := range s.Operations {
+				first, count := RootBudget(*s, previous.Task)
+				if previous.Phase == "discarded" && s.LatestOperation(previous.Task) == id &&
+					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && Bound(first, count, e.At) {
+					n.Task, n.Attempt, n.A = previous.Task, previous.Attempt, previous.A
+					n.RuleVersion, n.DryRun = previous.RuleVersion, previous.DryRun
+					n.ClaimNumber, n.ClaimedAt = count+1, e.At
+					break
+				}
+			}
+			if n.Task == "" {
+				return bad()
+			}
+			n.Phase, n.Outcome = "failed", "bound"
+			s.Operations[op] = n
+			return nil
+		}
 		allowed := slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, old.Phase)
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))

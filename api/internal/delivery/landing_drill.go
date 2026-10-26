@@ -42,6 +42,12 @@ func (s *Service) landingCI(ctx context.Context, revision string, after time.Tim
 				continue
 			}
 			status := "Unknown"
+			// Named landing attempts are trusted only with the marker used
+			// by EnsureLandingCI. A colliding name must never prove a rerun.
+			if landingCIName.MatchString(item.GetName()) && item.GetLabels()["bifrost.io/trigger"] != "agentrt-landing-drill" {
+				runs = append(runs, landing.CIRun{Run: item.GetName(), R: revision, Status: status, CreatedAt: item.GetCreationTimestamp().Time})
+				continue
+			}
 			conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")
 			for _, cond := range conds {
 				m, _ := cond.(map[string]any)

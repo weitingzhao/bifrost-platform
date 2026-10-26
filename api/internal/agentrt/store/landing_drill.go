@@ -17,14 +17,6 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 			return err
 		}
-		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", task, "", "", now)
-		if err != nil {
-			return err
-		}
-		decision = landing.EligibleToClaim(f, now)
-		if !decision.Allowed {
-			return nil
-		}
 		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
 		if err != nil {
 			return err
@@ -32,6 +24,14 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		first, n := landing.RootBudget(state, task)
 		if landing.Bound(first, n, now) {
 			decision = landing.Decision{Reason: "bound"}
+			return failDiscardedBound(ctx, tx, state, task, now)
+		}
+		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", task, "", "", now)
+		if err != nil {
+			return err
+		}
+		decision = landing.EligibleToClaim(f, now)
+		if !decision.Allowed {
 			return nil
 		}
 		// Completed rehearsals are not repeated by the STG scanner. They
