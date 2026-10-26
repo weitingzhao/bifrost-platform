@@ -1,6 +1,12 @@
 package hostops
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
+)
 
 // Closed parameter names from the reviewed action catalog. Complex values
 // are registered object/plan IDs, never an inline shell/path/URL. Adapters
@@ -55,9 +61,21 @@ func validParams[T string | []string](action string, params map[string]T) bool {
 
 func nonemptyParams(params map[string]string) bool {
 	for _, v := range params {
-		if strings.TrimSpace(v) == "" || strings.ContainsRune(v, 0) {
+		if strings.TrimSpace(v) == "" || !utf8.ValidString(v) || strings.ContainsFunc(v, unicode.IsControl) {
 			return false
 		}
 	}
 	return true
+}
+
+// Log bounds are protocol values, never journalctl options or relative shell
+// expressions. Adapters translate the parsed values to their fixed argv.
+func validLogParams(params map[string]string, now time.Time) bool {
+	lines := params["lines"]
+	n, err := strconv.ParseUint(lines, 10, 16)
+	if err != nil || !decimal.MatchString(lines) || n < 1 || n > 200 {
+		return false
+	}
+	since, err := time.Parse(time.RFC3339, params["since"])
+	return err == nil && since.Nanosecond() == 0 && !since.After(now) && !strings.HasPrefix(params["service"], "-")
 }

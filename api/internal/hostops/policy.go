@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+	"unicode/utf8"
 )
 
 type Limits struct {
@@ -140,6 +141,13 @@ func (p *Policy) RuleDigests() map[string]string {
 // Load verifies all bytes and every parent link against a persisted head. It
 // never silently evaluates a partial set or falls back to an older baseline.
 func (t Trust) Load(s PolicySet, expectedHead string, minVersion uint64) (*Policy, error) {
+	// Verify the supplied bytes before JSON can normalize malformed UTF-8.
+	if err := t.verify(s.Baseline, NamespacePolicy); err != nil {
+		return nil, err
+	}
+	if !utf8.ValidString(s.Baseline.Text) {
+		return nil, errors.New("policy text must be UTF-8")
+	}
 	// Own the complete chain: callers must not be able to modify slices/maps
 	// after verification and change the supposedly immutable effective rules.
 	var owned PolicySet
@@ -147,9 +155,6 @@ func (t Trust) Load(s PolicySet, expectedHead string, minVersion uint64) (*Polic
 		return nil, err
 	}
 	s = owned
-	if err := t.verify(s.Baseline, NamespacePolicy); err != nil {
-		return nil, err
-	}
 	var b PolicyBundle
 	if err := Decode([]byte(s.Baseline.Text), &b); err != nil {
 		return nil, err

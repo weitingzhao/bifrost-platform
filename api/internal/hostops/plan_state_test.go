@@ -24,15 +24,15 @@ func TestFreezeUnfreezeAndReplay(t *testing.T) {
 	}
 	u := Unfreeze{1, "test", frozen.Epoch, frozen.Generation, p.version, p.head, "test-only thaw", "2026-10-25T00:00:00Z", "2026-11-24T00:00:00Z"}
 	sig := signed(t, k, u, NamespaceUnfreeze)
-	n, e := tr.Unfreeze(frozen, sig, p, testNow)
+	n, e := tr.Unfreeze(frozen, sig, p, testNow, testFacts().clock())
 	if e != nil || n.Check("test", p.version, p.head) != nil {
 		t.Fatal("valid unfreeze", e)
 	}
-	if _, e := tr.Unfreeze(n, sig, p, testNow); e == nil {
+	if _, e := tr.Unfreeze(n, sig, p, testNow, testFacts().clock()); e == nil {
 		t.Fatal("replayed unfreeze")
 	}
 	frozen2, _ := n.Freeze(true, false)
-	if _, e := tr.Unfreeze(frozen2, sig, p, testNow); e == nil {
+	if _, e := tr.Unfreeze(frozen2, sig, p, testNow, testFacts().clock()); e == nil {
 		t.Fatal("old epoch thaw")
 	}
 	if _, e := s.Freeze(false, false); e == nil {
@@ -42,12 +42,12 @@ func TestFreezeUnfreezeAndReplay(t *testing.T) {
 		if bad.Check("test", p.version, p.head) == nil {
 			t.Fatal("missing/rolled-back state")
 		}
-		if _, e := tr.Unfreeze(bad, sig, p, testNow); e == nil {
+		if _, e := tr.Unfreeze(bad, sig, p, testNow, testFacts().clock()); e == nil {
 			t.Fatal("unfreeze repaired missing state")
 		}
 	}
 	frozen.MaxRuleVersion = p.version + 1
-	if _, e := tr.Unfreeze(frozen, sig, p, testNow); e == nil {
+	if _, e := tr.Unfreeze(frozen, sig, p, testNow, testFacts().clock()); e == nil {
 		t.Fatal("version rollback thaw")
 	}
 }
@@ -56,21 +56,21 @@ func TestPermitStopsNextStep(t *testing.T) {
 	_, _, _, p := baseline(t, []Rule{testRule()})
 	s := testState(p)
 	permit := Permit{testDigest, s.Epoch, s.Generation, testNow, testNow.Add(5 * time.Second)}
-	if permit.Check(s, testDigest, testNow) != nil {
+	if permit.Check(s, testDigest, testNow, testFacts().clock()) != nil {
 		t.Fatal("fresh permit")
 	}
 	for _, edit := range []func(*SafetyState){func(s *SafetyState) { s.Frozen = true }, func(s *SafetyState) { s.LocalStop = true }, func(s *SafetyState) { s.Epoch++; s.MaxEpoch++ }, func(s *SafetyState) { s.Generation++ }, func(s *SafetyState) { s.Fresh = false }} {
 		n := s
 		edit(&n)
-		if permit.Check(n, testDigest, testNow) == nil {
+		if permit.Check(n, testDigest, testNow, testFacts().clock()) == nil {
 			t.Fatal("old permission survives revocation")
 		}
 	}
-	if permit.Check(s, testDigest, testNow.Add(5*time.Second)) == nil {
+	if permit.Check(s, testDigest, testNow.Add(5*time.Second), testFacts().clock()) == nil {
 		t.Fatal("permit expiry")
 	}
 	permit.ExpiresAt = testNow.Add(6 * time.Second)
-	if permit.Check(s, testDigest, testNow) == nil {
+	if permit.Check(s, testDigest, testNow, testFacts().clock()) == nil {
 		t.Fatal("long offline permit")
 	}
 }

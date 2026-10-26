@@ -100,6 +100,7 @@ func CanonicalPlan(raw []byte) ([]byte, string, error) {
 // a queue payload. Effects and lock closure must be reconstructed from actual
 // bytes. S3 adapters remain unadmitted until they can supply these proofs.
 type PlanContext struct {
+	Clock               ClockObservation
 	Target              Target
 	ExecutorID          string
 	ExecutionID         string
@@ -123,6 +124,9 @@ type PlanContext struct {
 // newline), not a UI "approved" flag. Boundary checks precede signature use.
 func (t Trust) VerifyApproval(raw []byte, signature string, c PlanContext, now time.Time) (Plan, error) {
 	var p Plan
+	if err := c.Clock.Check(now); err != nil {
+		return p, err
+	}
 	b, hash, err := CanonicalPlan(raw)
 	if err != nil {
 		return p, err

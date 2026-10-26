@@ -57,6 +57,9 @@ type Decision struct {
 	Allowed  bool
 	Reason   string
 	QuotaIDs []string
+	// Circuit is a durable latch proposal, even though the request is denied.
+	// Commit via ObserveSuccesses under the state transaction before retrying.
+	Circuit *Circuit
 }
 
 func denied(reason string) Decision { return Decision{Reason: reason} }
@@ -79,7 +82,7 @@ func (p *Policy) Allow(x Request, now time.Time, state SafetyState, f Facts) Dec
 	if p == nil || state.Check(x.Environment, p.version, p.head) != nil || !f.Fresh || !f.AuditDurable || !f.NotificationHealthy || !f.RollbackAvailable || !f.LockAvailable {
 		return denied("state, freeze, audit, notification, rollback or lock unavailable")
 	}
-	if f.ClockRolledBack || f.ClockSyncedAt.IsZero() || f.ClockSyncedAt.After(now) || now.Sub(f.ClockSyncedAt) > 5*time.Minute || f.ClockOffset > 5*time.Second || f.ClockOffset < -5*time.Second || f.ActiveWrites < 0 || f.HostActiveWrites < 0 || f.RecoveryAttempts < 0 {
+	if f.clock().Check(now) != nil || f.ActiveWrites < 0 || f.HostActiveWrites < 0 || f.RecoveryAttempts < 0 {
 		return denied("clock or counters invalid")
 	}
 	if x.WorkID == "" || x.RequesterThread == "" || !knownM(x.Action) || !validDigest(x.HandlerDigest) || !setOK(x.BundleDigests, true) {
@@ -88,13 +91,14 @@ func (p *Policy) Allow(x Request, now time.Time, state SafetyState, f Facts) Dec
 	if !current(p.bundle.Meta.EffectiveAt, p.bundle.Meta.ExpiresAt, now) {
 		return denied("policy bundle expired or not yet effective")
 	}
-	seen := map[string]bool{}
-	for _, event := range f.History {
-		at, err := time.Parse(time.RFC3339, event.At)
-		if err != nil || at.After(now) || event.ExecutionID == "" || seen[event.ExecutionID] || !setOK(event.QuotaIDs, false) || !contains([]string{"reserved", "running", "succeeded", "failed", "unknown"}, event.Outcome) {
-			return denied("history incomplete or invalid")
+	next, err := p.ObserveSuccesses(x, now, state, f)
+	if err != nil {
+		return denied(err.Error())
+	}
+	for _, circuit := range next.Circuits {
+		if circuit.Host == x.Host && circuit.Action == x.Action && circuit.Open {
+			return Decision{Reason: "repeated-success circuit latched", Circuit: &circuit}
 		}
-		seen[event.ExecutionID] = true
 	}
 	covered := false
 	quotas := []string{}
@@ -120,7 +124,7 @@ func (p *Policy) Allow(x Request, now time.Time, state SafetyState, f Facts) Dec
 			if f.ActiveWrites >= r.Limits.GlobalWrites || f.HostActiveWrites >= r.Limits.PerHostWrites || f.RecoveryAttempts > r.Limits.RecoveryAttempts {
 				return denied("concurrency or recovery limit")
 			}
-			day, week, success := 0, 0, 0
+			day, week := 0, 0
 			for _, event := range f.History {
 				at, _ := time.Parse(time.RFC3339, event.At)
 				// Stable quota IDs aggregate targets; the host/action fallback
@@ -139,13 +143,10 @@ func (p *Policy) Allow(x Request, now time.Time, state SafetyState, f Facts) Dec
 					if now.Sub(at).Seconds() < float64(r.Limits.CooldownS) {
 						return denied("cooldown")
 					}
-					if event.Outcome == "succeeded" && now.Sub(at).Seconds() < float64(c.RepeatedSuccess.WindowS) {
-						success++
-					}
 				}
 			}
-			if day >= c.MaxPerDay || week >= c.MaxPerWeek || success >= c.RepeatedSuccess.MaxCount {
-				return denied("quota or repeated-success circuit open")
+			if day >= c.MaxPerDay || week >= c.MaxPerWeek {
+				return denied("quota exhausted")
 			}
 			if !contains(quotas, c.QuotaID) {
 				quotas = append(quotas, c.QuotaID)
@@ -185,6 +186,14 @@ type SafetyCatalog struct {
 	SelfIdentities   []string
 }
 
+func (s SafetyCatalog) identity(name string) (string, bool) {
+	id, ok := s.Aliases[name]
+	if !ok {
+		id, ok = s.Aliases[serviceBase(name)]
+	}
+	return id, ok && id != ""
+}
+
 // Boundary must be called independently at platform, executor and helper,
 // outside both the M matcher and the H signature check. No Owner signature
 // parameter is accepted, so it cannot exempt a forbidden effect.
@@ -196,10 +205,7 @@ func (s SafetyCatalog) Boundary(action, tier string, effects []Effect) error {
 		return errors.New("unsupported action/tier")
 	}
 	for _, e := range effects {
-		id, ok := s.Aliases[e.Identity]
-		if !ok {
-			id, ok = s.Aliases[serviceBase(e.Identity)]
-		}
+		id, ok := s.identity(e.Identity)
 		if !ok || id == "" || !validDigest(e.SourceDigest) || !contains([]string{"read", "observe", "restart", "state", "recreate", "install", "join_first_start", "enable_execution", "increase_execution", "remove_guard", "access"}, e.Operation) {
 			return errors.New("unproven identity or effect")
 		}

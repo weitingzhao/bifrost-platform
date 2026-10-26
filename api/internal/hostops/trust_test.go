@@ -84,9 +84,9 @@ func TestSignatureNamespacesAndRawBytes(t *testing.T) {
 	if _, e := (Trust{}).Inventory(s); e == nil {
 		t.Fatal("empty trust anchor accepted")
 	}
-	for _, ns := range []string{NamespacePolicy, NamespaceInventory, NamespaceBundle, NamespaceApproval, NamespaceUnfreeze} {
+	for _, ns := range []string{NamespacePolicy, NamespaceInventory, NamespaceBundle, NamespaceApproval, NamespaceUnfreeze, NamespaceCircuitRelease} {
 		s := signed(t, k, inventory(), ns)
-		for _, otherNS := range []string{NamespacePolicy, NamespaceInventory, NamespaceBundle, NamespaceApproval, NamespaceUnfreeze} {
+		for _, otherNS := range []string{NamespacePolicy, NamespaceInventory, NamespaceBundle, NamespaceApproval, NamespaceUnfreeze, NamespaceCircuitRelease} {
 			if err := tr.verify(s, otherNS); (err == nil) != (ns == otherNS) {
 				t.Fatal("namespace isolation")
 			}

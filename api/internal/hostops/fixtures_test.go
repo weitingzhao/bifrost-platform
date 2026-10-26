@@ -25,7 +25,7 @@ func testFacts() Facts {
 	return Facts{InventoryDigest: testDigest, CatalogDigest: testDigest, Conditions: map[string]bool{"identity_matches": true, "config_unchanged": true}, Fresh: true, AuditDurable: true, NotificationHealthy: true, RollbackAvailable: true, LockAvailable: true, ClockSyncedAt: testNow, History: []Event{}}
 }
 func testState(p *Policy) SafetyState {
-	return SafetyState{Present: true, Fresh: true, Environment: "test", Epoch: 1, MaxEpoch: 1, MaxRuleVersion: p.version, PolicyHead: p.head, Generation: 1}
+	return SafetyState{Circuits: []Circuit{}, Present: true, Fresh: true, Environment: "test", Epoch: 1, MaxEpoch: 1, MaxRuleVersion: p.version, PolicyHead: p.head, Generation: 1}
 }
 func signed(t testing.TB, k rptest.Key, v any, ns string) Signed {
 	t.Helper()
@@ -75,5 +75,5 @@ func testPlan() Plan {
 	return Plan{SchemaVersion: 1, Action: "host_service_restart", Params: map[string]string{"service": "exporter"}, Target: Target{"host-a", "test", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "linux", 1}, BeforeDigest: testDigest, ArtifactDigests: []string{}, InventoryDigest: testDigest, CatalogDigest: testDigest, HandlerDigest: testDigest, ExecutionID: "execution-h", ApprovalID: "approval-h", Nonce: "00000000000000000000000000000001", EffectiveAt: "2026-10-26T11:00:00Z", ExpiresAt: "2026-10-26T13:00:00Z", ExecutorID: "exec-a", FreezeEpoch: 1, RecoveryGeneration: 1, FencingGeneration: 1, Rollback: Rollback{"restore", map[string]string{"state": "running"}, []string{}, "2026-10-26T14:00:00Z", 120, []Effect{{"exporter", "restart", testDigest}}}, Locks: []string{"host:host-a", "dependency:metrics"}, Effects: []Effect{{"exporter", "restart", testDigest}}}
 }
 func planContext(p Plan) PlanContext {
-	return PlanContext{Target: p.Target, ExecutorID: p.ExecutorID, ExecutionID: p.ExecutionID, ApprovalID: p.ApprovalID, BeforeDigest: p.BeforeDigest, InventoryDigest: p.InventoryDigest, HandlerDigest: p.HandlerDigest, ArtifactDigests: p.ArtifactDigests, Rollback: p.Rollback, Effects: p.Effects, Locks: p.Locks, FencingGeneration: 1, State: SafetyState{Present: true, Fresh: true, Environment: "test", Epoch: 1, MaxEpoch: 1, MaxRuleVersion: 1, PolicyHead: testDigest, Generation: 1}, Catalog: catalog(), PreinstalledActions: []string{"host_service_restart", "host_access_change"}}
+	return PlanContext{Clock: testFacts().clock(), Target: p.Target, ExecutorID: p.ExecutorID, ExecutionID: p.ExecutionID, ApprovalID: p.ApprovalID, BeforeDigest: p.BeforeDigest, InventoryDigest: p.InventoryDigest, HandlerDigest: p.HandlerDigest, ArtifactDigests: p.ArtifactDigests, Rollback: p.Rollback, Effects: p.Effects, Locks: p.Locks, FencingGeneration: 1, State: SafetyState{Circuits: []Circuit{}, Present: true, Fresh: true, Environment: "test", Epoch: 1, MaxEpoch: 1, MaxRuleVersion: 1, PolicyHead: testDigest, Generation: 1}, Catalog: catalog(), PreinstalledActions: []string{"host_service_restart", "host_access_change"}}
 }

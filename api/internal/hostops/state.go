@@ -9,23 +9,31 @@ import (
 // frozen. S1 only computes transitions; S2/S3 must commit them with fsync/CAS
 // according to STATE_PROTOCOL.md before returning any success/permit.
 type SafetyState struct {
-	Present        bool   `json:"present"`
-	Fresh          bool   `json:"fresh"`
-	Environment    string `json:"environment"`
-	Epoch          uint64 `json:"epoch"`
-	MaxEpoch       uint64 `json:"max_epoch"`
-	Frozen         bool   `json:"frozen"`
-	LocalStop      bool   `json:"local_stop"`
-	MaxRuleVersion uint64 `json:"max_rule_version"`
-	PolicyHead     string `json:"policy_head"`
-	Generation     uint64 `json:"generation"`
+	Present        bool      `json:"present"`
+	Fresh          bool      `json:"fresh"`
+	Environment    string    `json:"environment"`
+	Epoch          uint64    `json:"epoch"`
+	MaxEpoch       uint64    `json:"max_epoch"`
+	Frozen         bool      `json:"frozen"`
+	LocalStop      bool      `json:"local_stop"`
+	MaxRuleVersion uint64    `json:"max_rule_version"`
+	PolicyHead     string    `json:"policy_head"`
+	Generation     uint64    `json:"generation"`
+	Circuits       []Circuit `json:"circuits"`
 }
 
 func (s SafetyState) Check(environment string, version uint64, head string) error {
-	if !s.Present || !s.Fresh || s.Frozen || s.LocalStop || s.Epoch == 0 || s.Epoch != s.MaxEpoch || s.Generation == 0 || s.Environment != environment || s.MaxRuleVersion == 0 || version < s.MaxRuleVersion || head != s.PolicyHead || !validDigest(head) {
+	if s.Frozen || s.LocalStop {
+		return errors.New("safety state frozen or locally stopped")
+	}
+	return s.integrity(environment, version, head)
+}
+
+func (s SafetyState) integrity(environment string, version uint64, head string) error {
+	if !s.Present || !s.Fresh || s.Epoch == 0 || s.Epoch != s.MaxEpoch || s.Generation == 0 || s.Environment != environment || s.MaxRuleVersion == 0 || version < s.MaxRuleVersion || head != s.PolicyHead || !validDigest(head) {
 		return errors.New("frozen, stale, missing or rolled-back safety state")
 	}
-	return nil
+	return validateCircuits(s.Circuits)
 }
 
 func (s SafetyState) Freeze(authenticatedOperator bool, local bool) (SafetyState, error) {
@@ -60,7 +68,10 @@ type Unfreeze struct {
 	ExpiresAt      string `json:"expires_at"`
 }
 
-func (t Trust) Unfreeze(s SafetyState, signed Signed, p *Policy, now time.Time) (SafetyState, error) {
+func (t Trust) Unfreeze(s SafetyState, signed Signed, p *Policy, now time.Time, clock ClockObservation) (SafetyState, error) {
+	if p == nil || s.integrity(p.bundle.Meta.Environment, p.version, p.head) != nil || clock.Check(now) != nil {
+		return s, errors.New("unfreeze requires intact state and healthy clock; recovery is separate")
+	}
 	if err := t.verify(signed, NamespaceUnfreeze); err != nil {
 		return s, err
 	}
@@ -126,8 +137,8 @@ type Permit struct {
 	IssuedAt, ExpiresAt time.Time
 }
 
-func (p Permit) Check(s SafetyState, planHash string, now time.Time) error {
-	if s.Check(s.Environment, s.MaxRuleVersion, s.PolicyHead) != nil || p.PlanHash != planHash || !validDigest(planHash) || p.Epoch != s.Epoch || p.Generation != s.Generation || p.IssuedAt.After(now) || !now.Before(p.ExpiresAt) || !p.ExpiresAt.After(p.IssuedAt) || p.ExpiresAt.Sub(p.IssuedAt) > 5*time.Second {
+func (p Permit) Check(s SafetyState, planHash string, now time.Time, clock ClockObservation) error {
+	if clock.Check(now) != nil || s.Check(s.Environment, s.MaxRuleVersion, s.PolicyHead) != nil || p.PlanHash != planHash || !validDigest(planHash) || p.Epoch != s.Epoch || p.Generation != s.Generation || p.IssuedAt.After(now) || !now.Before(p.ExpiresAt) || !p.ExpiresAt.After(p.IssuedAt) || p.ExpiresAt.Sub(p.IssuedAt) > 5*time.Second {
 		return errors.New("write permit missing, stale or revoked")
 	}
 	return nil

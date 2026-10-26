@@ -132,6 +132,23 @@ func (t Trust) ValidateReadScope(s Signed, mark ArtifactMark, x Request, objectI
 	if mark.Version != i.Meta.Version || mark.Digest != Digest([]byte(s.Text)) {
 		return errors.New("inventory not installed")
 	}
-	_, err = i.InventoryScope(x, objectID, now)
-	return err
+	o, err := i.InventoryScope(x, objectID, now)
+	if err != nil {
+		return err
+	}
+	if x.Action == "host_logs" {
+		name := x.Params["service"]
+		id, known := catalog.identity(o.Canonical)
+		requested, resolved := catalog.identity(name)
+		if !validLogParams(x.Params, now) || !known || !resolved || requested != id || name != o.Canonical && !contains(o.Aliases, name) {
+			return errors.New("invalid log bounds or service outside registered object")
+		}
+		for _, effect := range effects {
+			actual, ok := catalog.identity(effect.Identity)
+			if !ok || actual != id || effect.SourceDigest != o.ConfigDigest {
+				return errors.New("log effect differs from registered service/config")
+			}
+		}
+	}
+	return nil
 }

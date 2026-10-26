@@ -1,6 +1,6 @@
 # Host operations S1 candidate contract
 
-Source of scope: Work 584; reviewed design `a8eae89`, sections 2–6.1.
+Source of scope: Work 584, amended by Work 592 (2026-10-26); reviewed design `a8eae89`, sections 2–6.1.
 This package is shared library code for platform/executor/helper builds in
 the platform repository. It adds no HTTP route, scheduler, SSH client,
 privileged helper, installer, production key, signer or runtime action.
@@ -15,6 +15,7 @@ the release-policy Owner fingerprint is **not** used as a host-ops default.
 | `Bundle` manifest | `bifrost-host-ops-bundle` | exact complete input YAML/JSON bytes |
 | `PolicyBundle` (all baseline rules) | `bifrost-host-ops-policy` | exact complete input YAML/JSON bytes |
 | `Unfreeze` | `bifrost-host-ops-unfreeze` | exact complete input YAML/JSON bytes |
+| `CircuitRelease` | `bifrost-host-ops-circuit-release` | exact complete input YAML/JSON bytes |
 | H `Plan` | `bifrost-host-ops-approval` | ASCII `sha256:<64 lowercase hex>` of canonical plan bytes, no newline |
 
 The caller supplies a protected, independently installed trust anchor to
@@ -54,7 +55,8 @@ mistaken for an intentional omission. Each unsigned `Tightening` carries
 the full previous effective head, the selected rule digest and a strictly
 increasing set version. `Load` verifies every link against a persisted
 expected head/minimum version, owns its memory and exposes an immutable
-snapshot. New/changed Owner baselines must bind `replaces_digest` and all
+snapshot. Signature verification uses the supplied original bytes before any
+JSON snapshot encoding; malformed UTF-8 is rejected. New/changed Owner baselines must bind `replaces_digest` and all
 `replaces_rules` (which include the prior restriction chain in the head).
 
 Unsigned changes preserve baseline rule/clause IDs and domains. Matching
@@ -74,6 +76,13 @@ prevent resets by renaming. The v1 replacement admission conservatively
 refuses conflicting quota IDs on overlapping host/action scopes; reconcile
 such a candidate's stable quota mapping before signing instead of resetting
 history. Signed replacements never modify history, freezes or unknown locks.
+`SafetyState.Circuits` adds mandatory durable environment/host/action latches.
+`ObserveSuccesses` returns a transaction proposal to persist with each result;
+`Allow` returns a circuit proposal on a detected trip, never a write permit.
+Threshold crossings in historical windows still latch after time passes.
+Only a scoped, domain-separated `CircuitRelease` closes a current trip; exact
+cleared execution-ID tombstones preserve replay and late-result safety.
+See `STATE_PROTOCOL.md` for result/release CAS and mandatory retention.
 
 `Allow` is the pure complete-policy reference model. `EvaluateM` composes it
 with anchored inventory/manifests, installed marks, authenticated executor,
@@ -100,7 +109,7 @@ each verifier's trusted adapter, never from the action request or an
 "approved" flag. Forward **and** rollback effects must be reconstructed
 from actual verified bytes; an opaque bundle has no admissible proof.
 `VerifyApproval` checks current observations, installed capability, Owner
-signature, freeze/nonce/generation and independent boundary. Replay is
+signature, freeze/nonce/generation, local clock health and independent boundary. Replay is
 lookup-only. S2/S3 add atomic nonce/step consumption and online revocation.
 
 `SafetyCatalog` is application-independent input from the trusted canonical
@@ -149,3 +158,28 @@ only agentd update. This is scope review, not production authorization.
 S1's planned independent review rounds remain required. S2 uses test anchors
 and synthetic events. Production M/H still requires S2/S3 runtime evidence,
 Owner's isolated signer/installer, and S4 scope approval/signatures.
+
+## Work 592 candidate API and R value constraints
+
+This is an uninstalled S1 schema amendment, with no production compatibility
+claim. Consumers must supply a non-null `SafetyState.Circuits` ledger and
+`PlanContext.Clock`; `Unfreeze` and `Permit.Check` now require an explicit local
+`ClockObservation`. Zero observations deny. M's existing clock fields use the
+same check. Circuit release uses the trusted clock fields in `Facts`.
+
+For `host_logs`, `lines` is a canonical unsigned decimal string from 1 through
+200. `since` is a timezone-qualified RFC3339 whole-second instant no later than
+the evaluation time; relative time expressions/options are unsupported.
+Parameter values reject invalid UTF-8 and control characters. `service` must
+be the signed object's canonical name or explicitly registered alias and
+resolve through the trusted catalog to that same object. Every read effect
+must resolve to the same identity and bind its registered config digest.
+Catalog knowledge of a different service never grants inventory access.
+Adapters still recheck actual service/config, translate values to fixed argv,
+limit output and redact at the target; this package performs no log I/O.
+
+S2/S3/S4 runtime admission requirements remain mandatory, including protected
+file/parent/inode checks, actual OCI digest and forward/rollback effect
+reconstruction, three independent durable stores, Agent permission denial,
+signer isolation and refusal to install test identities into production trust.
+A valid reference signature or three test-role labels is not this evidence.

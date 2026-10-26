@@ -80,12 +80,61 @@ nonce consumption. Nonce AND execution IDs are unique within environment
 and recovery generation. Failure/unknown reservations remain consumed.
 Counters aggregate by stable quota IDs plus host/action history, using UTC
 day and ISO week. Renewal, clause rename, output deletion and restart never
-reset history. Repeated-success counts are host/action based.
+reset history. Repeated-success counts and durable circuits are environment/host/action based;
+rule/clause names, versions, executors and service aliases are not circuit keys.
+
+### Repeated-success latch and scoped release (Work 592, 2026-10-26)
+
+`SafetyState.Circuits` is required: an empty array is a verified initial ledger,
+whereas missing/null state requires recovery. Each target record retains its
+monotonic trip number, open flag, evidence digest and cleared execution-ID
+tombstones. It is authorization state, never output subject to collection.
+
+For every successful result, each verifier runs `Policy.ObserveSuccesses` for
+the executed request under the policy/state/history CAS. Commit the result,
+all resulting latches, audit and notification outbox together before result
+acknowledgement or any subsequent admission. Observe while frozen as well.
+A policy change must reconcile all affected targets against retained history
+under the same CAS before becoming visible. A rename/version change cannot
+remove a target's latch or tombstones. `Allow` also computes this transition;
+a rejection with `Decision.Circuit` must durably latch through the same
+transaction. A denial is not permission to discard the transition.
+
+The reference model checks every historical sliding window since explicitly
+cleared execution IDs, not only the window ending now. Retain all uncleared
+success evidence (or a separately proven equivalent durable summary) while
+needed to establish a trip. No output cleanup, time passage or restart closes
+a circuit. Existing open latches still reject if result output was compacted.
+Loss or uncertain rollback of this ledger/history freezes admission; never
+substitute empty arrays for a failed read.
+
+Only `Trust.ReleaseCircuit` with an anchored signature in the separate
+`bifrost-host-ops-circuit-release` namespace proposes closing one circuit.
+The signed object binds environment, host/action, exact current circuit hash
+(including trip), full history hash, freeze epoch, recovery generation, policy
+head/version, reason and validity. It requires healthy local time, a coherent
+fresh history, durable audit and target lock; reserved/running/unknown target
+executions prohibit release even with a signature. S2/S3 must prove target
+quiescence including remote effects, not merely the global scheduling slot.
+
+Apply release under the same history/state CAS and persist the signed receipt
+and audit before exposing it. Retain the trip number and union of exact
+success execution IDs acknowledged by the signature; do not erase quota,
+history, locks or freeze state. No timestamp cutoff: a late success absent
+from the signed history still counts, even if its timestamp is earlier.
+Subsequent successes can trip again with a higher trip number; old releases
+fail. Freeze/unfreeze, policy renewal and recovery do not release circuits.
+Recovery carries circuits/tombstones forward and requires an independent
+scoped release afterwards. S2/S3 must fault-test result-plus-latch atomicity,
+release CAS races, restart/old-backup detection and notification durability.
 
 Freeze increments durable epoch under CAS; any authenticated operator can
 stop writes. Local stop and platform freeze are ORed. Only an anchored
 `bifrost-host-ops-unfreeze` signature for the current epoch, generation, head,
 minimum version and reason can clear them. Replayed unfreezes fail. A thaw
+uses the same structural integrity check as admission (without the stop flags);
+it cannot repair a zero version high water, mismatched epoch or missing circuit
+ledger. Its signature must match the current recovery generation. A thaw
 is not recovery of missing or untrustworthy state. Retain maximum epoch,
 policy version, fencing and identity/recovery generation independently of
 output records. Each new step needs an online permit for the current epoch
@@ -140,3 +189,25 @@ S2/S3 must provide permission-denial, crash/fsync-boundary, replay after
 cleanup, old-backup and restored-connection evidence. S1 unit/reference
 tests do not satisfy those runtime admission gates. S4 remains blocked until
 the actual storage implementations pass them.
+
+## Mandatory local clock gate and runtime admission evidence
+
+`ClockObservation.Check` is mandatory in `VerifyApproval` via `PlanContext.Clock`,
+`Unfreeze`, `Permit.Check`, circuit release/observation and M admission. No
+signature or valid wall-clock interval substitutes for this observation.
+Each of platform, executor and helper obtains its own protected NTP observation:
+successful sync no older than five minutes, absolute offset at most five seconds,
+no rollback or future sync time. Unknown, stale or unhealthy observations deny
+new authorization, thaw/release and every new step. S2/S3 must wire these entry
+points without an alternate bypass and test clock failures with valid Owner
+signatures; lease/watchdog durations additionally require monotonic clocks.
+
+The three role labels in S1 tests prove shared semantics only. S2/S3/S4 must
+retain independent evidence for actual file/parent-directory owners, modes,
+ACLs, held descriptors and inode substitution; received image OCI digest;
+forward AND rollback effects reconstructed from actual bytes; all three
+private ledgers and recovery; Agent access denial; isolated signer anti-borrow
+and display-A/sign-B rejection; and an installer that rejects test identities
+in production trust directories. None is delivered by this library or by
+`Fresh=true`. Unimplemented/unadmitted templates remain unsupported. No S4
+production signature until all applicable evidence is reviewed.
