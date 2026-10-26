@@ -66,6 +66,7 @@ var notifySafeKeys = map[string][]string{
 	"delete_finished_jobs":       {"namespace", "names", "label_selector"},
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 	"void_exam_paper":            {"environment", "run_id"},
+	"mark_missions_no_merge":     {"env", "archive_manifest_sha256"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -116,6 +117,8 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		if b, ok := asBool(params["force"]); ok && b {
 			d.Summary += " (force)"
 		}
+	case "mark_missions_no_merge":
+		d.Env, d.Summary = p("env"), "Mark done missions no_merge (disposed, not delivered)"
 	case "void_exam_paper":
 		run := p("run_id")
 		if len(run) > 12 {

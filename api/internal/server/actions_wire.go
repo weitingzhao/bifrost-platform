@@ -168,6 +168,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
 	actions.RegisterExecutor("void_exam_paper", s.voidExamPaper)
+	actions.RegisterExecutor("mark_missions_no_merge", s.markMissionsNoMerge)
 	if s.work != nil {
 		svc := s.work.Svc
 		actions.RegisterExecutor("apply_manifest", func(ctx context.Context, params map[string]any) (any, error) {

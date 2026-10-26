@@ -447,6 +447,20 @@ var catalog = []Action{
 		Classify: classifyProbe,
 	},
 	{
+		ID: "mark_missions_no_merge", Tier: TierD,
+		Description: "Mark done missions as disposed, not delivered. Tier D: only the Owner approves on the Console. " +
+			"Request on the target runtime's platform (env: stg or prod). missions is an array of {mission_id, expected_version}; " +
+			"reason is 1 to 200 UTF-8 bytes, archive_manifest_sha256 is the archive manifest's lowercase SHA-256. " +
+			"The whole batch commits or rolls back; each change records mission_amended with this approval and bumps the version. " +
+			"Existing equal values are idempotent; different values and non-done missions are refused. Archived evidence must be checked before requesting; branches are not deleted by this action.",
+		Params: []Param{
+			{Name: "env", Type: "string", Required: true, In: "body"},
+			{Name: "missions", Type: "object[]", Required: true, In: "body"},
+			{Name: "reason", Type: "string", Required: true, In: "body"},
+			{Name: "archive_manifest_sha256", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "void_exam_paper", Tier: TierD,
 		Description: "Void a qualifying-exam paper no run was handed in for, so its executor can be handed a new paper (TD-407). Tier D: the Owner approves it on the Console. " +
 			"Request it on the platform whose runtime issued the paper: environment is that runtime's (stg or prod; another platform's executor refuses it), run_id the paper's sha256, reason one line. " +
