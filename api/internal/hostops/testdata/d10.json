@@ -1,0 +1,16 @@
+[
+  {"carrier":"service-restart","action":"host_service_restart","tier":"M","operation":"enable_execution"},
+  {"carrier":"service-state","action":"host_service_state","tier":"M","operation":"enable_execution"},
+  {"carrier":"container","action":"host_container_restart","tier":"M","operation":"increase_execution"},
+  {"carrier":"compose-replicas","action":"host_compose_reconcile","tier":"M","operation":"increase_execution"},
+  {"carrier":"compose-observe-to-live","action":"host_compose_reconcile","tier":"M","operation":"enable_execution"},
+  {"carrier":"monitoring-unit","action":"host_monitoring_install","tier":"M","operation":"enable_execution"},
+  {"carrier":"agentd-startup","action":"host_agentd_update","tier":"M","operation":"enable_execution"},
+  {"carrier":"toolchain-script","action":"host_toolchain_install","tier":"M","operation":"remove_guard"},
+  {"carrier":"validation-image","action":"host_validation_run","tier":"M","operation":"enable_execution"},
+  {"carrier":"rollback-old-bundle","action":"host_monitoring_install","tier":"M","operation":"remove_guard"},
+  {"carrier":"restore-before-state","action":"host_service_state","tier":"M","operation":"enable_execution"},
+  {"carrier":"H-access","action":"host_access_change","tier":"H","operation":"enable_execution"},
+  {"carrier":"H-manifest-overlay","action":"host_access_change","tier":"H","operation":"remove_guard"},
+  {"carrier":"H-runbook-wiring","action":"host_access_change","tier":"H","operation":"enable_execution"}
+]
