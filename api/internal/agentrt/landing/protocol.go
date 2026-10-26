@@ -154,6 +154,7 @@ type Operation struct {
 	CommitterDate, RetryAt, LastAt                       time.Time
 	Why                                                  string
 	Digests                                              map[string]string
+	KickedAt, RerunAt                                    time.Time
 	ClaimedAt, PreparedAt                                time.Time
 	DryRun, Kicked, Rerun, EverLanded, Reverted          bool
 	CI                                                   Record
@@ -256,12 +257,14 @@ func (s *State) Apply(e Entry) error {
 				return bad()
 			}
 			n.Kicked = true
+			n.KickedAt = e.At
 		}
 		if k == "ci_rerun" {
 			if old.Rerun || r.Int("try") != 2 {
 				return bad()
 			}
 			n.Rerun = true
+			n.RerunAt = e.At
 			n.CI = nil
 		}
 		if k == "ci_seen" {
