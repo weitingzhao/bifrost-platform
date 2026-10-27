@@ -93,7 +93,10 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			held, err := landingHolds(ctx, sp, id, eventClock())
 			if err != nil {
 				holdErrs = append(holdErrs, fmt.Errorf("mission %s: landing: %w", id, err))
-				return sp.Rollback(ctx)
+				if rerr := sp.Rollback(ctx); rerr != nil {
+					return rerr
+				}
+				return nil
 			}
 			if err = sp.Commit(ctx); err != nil || held {
 				return err
@@ -109,7 +112,7 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			return MoveMission(ctx, tx, "controller", id, "stopped",
 				fmt.Sprintf("the Owner dropped its remaining tasks on their cards (%d); nothing the goal asked for was accepted", drops))
 		}); err != nil {
-			return closed, fmt.Errorf("mission %s: %w", id, err)
+			return closed, errors.Join(append(holdErrs, fmt.Errorf("mission %s: %w", id, err))...)
 		}
 		if did {
 			closed = append(closed, id)
@@ -131,7 +134,10 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 //     mission's creation and the task's acceptance), and it was accepted less
 //     than landingClaimGrace ago: the loop (every 15 s) gets its first claim
 //     before the close. A loop that misses the grace misses the drill; the
-//     mission closes as before, nothing is held for good.
+//     mission closes as before, nothing is held for good. A busy pass (an
+//     older operation's external reads, or max_in_flight_per_repo taken for
+//     longer than the grace) can miss it too: one drill task at a time
+//     (review 640; a durable first-claim handoff is TD-447).
 //
 // Without a landing rule (PROD today) nothing holds. The caller holds the
 // mission's lock; ClaimLandingDrill locks the task, then its mission, before
@@ -171,7 +177,8 @@ func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time)
 	}
 	var tenant string
 	var created time.Time
-	if err = tx.QueryRow(ctx, `SELECT tenant, created_at FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&tenant, &created); err != nil {
+	var noMerge bool
+	if err = tx.QueryRow(ctx, `SELECT tenant, created_at, COALESCE(scope_json->>'no_merge','') <> '' FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&tenant, &created, &noMerge); err != nil {
 		return false, err
 	}
 	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, now)
@@ -187,7 +194,8 @@ func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time)
 		if rule != nil {
 			_, enabled = rule.Landing.Repo(repo)
 		}
-		enabled = enabled && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
+		// A no_merge mission is never claimed (the gate reads it stale): no grace.
+		enabled = enabled && !noMerge && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
 		for _, r := range roots[repo] {
 			if latest, ok := state.Operations[state.LatestOperation(r.task)]; ok {
 				first, _ := landing.RootBudget(state, r.task)
