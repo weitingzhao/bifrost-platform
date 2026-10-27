@@ -55,6 +55,9 @@ func AcceptanceDigest(a Acceptance) string {
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 func (b Binding) Digest() string {
+	if b.Source == "owner_signoff" {
+		b.Evidence = nil // Evidence belongs to the signed event, never the adopted identity.
+	}
 	raw, _ := json.Marshal(b)
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
@@ -64,6 +67,11 @@ func ParseBinding(raw []byte) (Binding, error) {
 	if v, err := canon.Parse(raw); err != nil {
 		return b, err
 	} else if obj, ok := v.(map[string]any); ok {
+		if obj["source"] == "owner_signoff" {
+			if _, present := obj["evidence"]; present {
+				return b, fmt.Errorf("Owner evidence must be attached at signing")
+			}
+		}
 		for _, value := range obj {
 			if value == nil {
 				return b, fmt.Errorf("null binding field")
@@ -85,13 +93,8 @@ func ParseBinding(raw []byte) (Binding, error) {
 		return b, fmt.Errorf("runtime round required")
 	}
 	if b.Source == "owner_signoff" {
-		if b.Atom != "external_verified" || len(b.Evidence) == 0 || b.Verification != "" || b.Task != "" || b.Attempt != "" || b.Mission != "" || b.Repo != "" || b.Result != "" {
-			return b, fmt.Errorf("Owner source requires exact acceptance evidence, not a runtime result")
-		}
-		for _, id := range b.Evidence {
-			if !artifact.MatchString(id) {
-				return b, fmt.Errorf("invalid signoff evidence")
-			}
+		if b.ExternalWork != "" || b.ExternalSeq != 0 || b.Report != "" || b.Evidence != nil || b.Atom != "external_verified" || b.Verification != "" || b.Task != "" || b.Attempt != "" || b.Mission != "" || b.Repo != "" || b.Result != "" {
+			return b, fmt.Errorf("Owner source pins an acceptance, not a runtime result")
 		}
 	} else {
 		if b.Source != "git" && b.Source != "verification" && b.Source != "deployment" {

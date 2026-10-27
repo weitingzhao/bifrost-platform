@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -186,36 +185,14 @@ func SignOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string) error {
 	return err
 }
 
-func signOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string) (Appended, error) {
+func signOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string, evidence ...string) (Appended, error) {
 	root, err := stepRoot(ctx, tx, stepID)
 	if err != nil {
 		return Appended{}, err
 	}
-	body := map[string]any{"ref": ref}
-	if strings.HasPrefix(ref, "plan-acceptance:") {
-		if actor != OwnerActor {
-			return Appended{}, ErrNotOwner
-		}
-		snap, e := readPlanFacts(ctx, tx)
-		if e != nil {
-			return Appended{}, e
-		}
-		found := false
-		for _, d := range snap.Docs {
-			bs, _ := d.Bindings()
-			for _, b := range bs {
-				if b.Step == stepID && b.Source == "owner_signoff" && b.SignoffRef() == ref {
-					found = true
-					body["binding_sha256"] = b.Digest()
-					body["plan_version"] = b.Version
-					body["acceptance_sha256"] = b.AcceptanceSHA256
-					body["evidence"] = b.Evidence
-				}
-			}
-		}
-		if !found {
-			return Appended{}, invalid("unadopted acceptance signoff")
-		}
+	body, err := acceptanceSignoffBody(ctx, tx, actor, stepID, ref, evidence)
+	if err != nil {
+		return Appended{}, err
 	}
 	return Append(ctx, tx, Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID, Body: body})
 }

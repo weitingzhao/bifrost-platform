@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -44,6 +45,9 @@ func SignoffRefs(r plan.Rule) []string {
 // whose done rule has no owner_signoff atom, a ref the rule does not name, no
 // ref when it names more than one (ErrInvalid); a step that is done, stopped
 // or dropped (ErrState); a writer who is not the Owner (ErrNotOwner).
+// Acceptance refs additionally require 1..20 existing evidence artifacts.
+// The event hash covers their sorted ids and the adopted binding identity;
+// a retry with different evidence is refused, never silently acknowledged.
 //
 // The step's row is locked for update before anything is read of it and held
 // to the commit (review 485 A1): a plan change, a drop or the controller's
@@ -53,7 +57,7 @@ func SignoffRefs(r plan.Rule) []string {
 // wait on the other in a ring. A second press waits on the same lock and
 // then reads the first (read committed: each statement sees what committed
 // before it).
-func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string) (map[string]any, error) {
+func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string, evidence ...string) (map[string]any, error) {
 	if actor != OwnerActor {
 		return nil, fmt.Errorf("%w: %s may not sign a step off", ErrNotOwner, actor)
 	}
@@ -96,13 +100,25 @@ func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string) (map[str
 		case !slices.Contains(refs, ref):
 			return invalid("the done rule of %s waits on no sign-off %q; it waits on %s", stepID, ref, strings.Join(refs, ", "))
 		}
+		body, err := acceptanceSignoffBody(ctx, tx, actor, stepID, ref, evidence)
+		if err != nil {
+			return err
+		}
+		var previous map[string]any
 		var id int64
 		var by string
 		var at time.Time
-		err = tx.QueryRow(ctx, `SELECT event_id, actor_id, at FROM agentrt.event WHERE event_type = 'owner_signoff' AND plan_node_id = $1
-		  AND body_json @> jsonb_build_object('ref', $2::text) ORDER BY event_id LIMIT 1`, stepID, ref).Scan(&id, &by, &at)
+		err = tx.QueryRow(ctx, `SELECT event_id, actor_id, at, body_json FROM agentrt.event WHERE event_type = 'owner_signoff' AND plan_node_id = $1
+		  AND actor_id='owner' AND body_json @> jsonb_build_object('ref', $2::text) ORDER BY seq DESC LIMIT 1`, stepID, ref).Scan(&id, &by, &at, &previous)
 		switch {
 		case err == nil:
+			if strings.HasPrefix(ref, "plan-acceptance:") {
+				old, _ := json.Marshal(previous)
+				want, _ := json.Marshal(body)
+				if string(old) != string(want) {
+					return fmt.Errorf("%w: this acceptance already has a different sign-off", ErrState)
+				}
+			}
 			out = signoffAnswer(stepID, ref, by, at, id, true)
 			return nil
 		case !errors.Is(err, pgx.ErrNoRows):
@@ -112,7 +128,7 @@ func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string) (map[str
 		if state == "done" || state == "stopped" || state == "dropped" {
 			return fmt.Errorf("%w: %s is %s; a sign-off would move nothing", ErrState, stepID, state)
 		}
-		ev, err := signOff(ctx, tx, actor, stepID, ref)
+		ev, err := signOff(ctx, tx, actor, stepID, ref, evidence...)
 		if err != nil {
 			return err
 		}

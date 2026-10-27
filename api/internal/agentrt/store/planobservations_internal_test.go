@@ -80,7 +80,7 @@ func TestPV2DependencyWithdrawsSameSnapshot(t *testing.T) {
 	// only exercises the evaluator.
 	var bs []planview.Binding
 	for i := range d.Items {
-		b := planview.Binding{V: 1, Kind: planview.BindingKind, ID: d.Items[i].Node, Version: 1, Tenant: "dev", Root: "P", Node: d.Items[i].Node, Step: "P:" + d.Items[i].Node, Acceptance: a.ID, AcceptanceSHA256: planview.AcceptanceDigest(a), Atom: "external_verified", Source: "owner_signoff", Evidence: []string{"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+		b := planview.Binding{V: 1, Kind: planview.BindingKind, ID: d.Items[i].Node, Version: 1, Tenant: "dev", Root: "P", Node: d.Items[i].Node, Step: "P:" + d.Items[i].Node, Acceptance: a.ID, AcceptanceSHA256: planview.AcceptanceDigest(a), Atom: "external_verified", Source: "owner_signoff"}
 		raw, _ := json.Marshal(b)
 		d.Items[i].Bindings = []json.RawMessage{raw}
 		bs = append(bs, b)

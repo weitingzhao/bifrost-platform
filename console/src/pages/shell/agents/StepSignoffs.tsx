@@ -1,3 +1,5 @@
+import type { CandidateEvidence } from '@/api/planSnapshotSchema'
+import { usePlanSnapshot } from './usePlanSnapshot'
 import { DecisionEnvironment } from '@/pages/DecisionEnvironment'
 import { useDecisionEnvironment } from '@/pages/useDecisionEnvironment'
 import { useQueryClient } from '@tanstack/react-query'
@@ -22,12 +24,26 @@ type Phase =
  * deciding a request); one confirmation, then POST /plan/{id}/signoff. What the platform recorded is shown at once;
  * the plan is read again, and the step moves on the runtime's next rules pass.
  */
-function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node: string; label: string; signoffRef: string; named: boolean; reviewContext: string }) {
+type SignOffProps = { node: string; label: string; signoffRef: string; named: boolean; reviewContext: string; candidates?: readonly CandidateEvidence[]; unavailable?: string }
+
+export function SignOffButton(props: SignOffProps) {
+  const acceptance = props.signoffRef.startsWith('plan-acceptance:')
+  const query = usePlanSnapshot(props.node.split(':')[0], acceptance && props.candidates === undefined)
+  const entry = query.data?.owner_waiting.find(s => 'ref' in s && s.ref === props.signoffRef)
+  const candidates = props.candidates ?? (entry && 'candidate_evidence' in entry ? entry.candidate_evidence : [])
+  const unavailable = props.unavailable ?? (acceptance && props.candidates === undefined && (!entry || query.isError || query.isPaused || !query.data || Date.now() - Date.parse(query.data.as_of) > 60_000 || query.data.freshness.database.status !== 'Fresh') ? 'Read the current plan and review the acceptance before signing.' : undefined)
+  return <SignOffAction key={acceptance ? JSON.stringify([props.node, props.signoffRef, props.reviewContext, candidates, unavailable]) : props.signoffRef} {...props} candidates={candidates} unavailable={unavailable} />
+}
+
+function SignOffAction({ node, label, signoffRef, named, reviewContext, candidates = [], unavailable }: SignOffProps) {
   const auth = usePlatformAuth()
   const blocked = decisionBlockReason(auth)
   const qc = useQueryClient()
   const environment = useDecisionEnvironment()
-  const identity = JSON.stringify([auth.token, auth.caps?.role, blocked, environment, node, label, signoffRef, reviewContext])
+  const acceptance = signoffRef.startsWith('plan-acceptance:')
+  const [evidence, setEvidence] = useState<string[]>([])
+  const evidenceBlock = acceptance ? unavailable ?? (environment !== 'PROD' ? 'Acceptance sign-offs are available on the PROD Console only.' : evidence.length === 0 ? 'Select 1–20 evidence artifacts to sign.' : undefined) : undefined
+  const identity = JSON.stringify([auth.token, auth.caps?.role, blocked, environment, node, label, signoffRef, reviewContext, evidence])
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   // Latch invalidation while reviewing, without touching an in-flight or recorded sign-off.
   if (phase.kind === 'confirm' && phase.identity !== null && phase.identity !== identity) {
@@ -39,10 +55,10 @@ function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node
     </p>
   }
   const send = async () => {
-    if (decisionBlockReason(auth) !== null || phase.kind !== 'confirm' || phase.identity !== identity) return
+    if (evidenceBlock || decisionBlockReason(auth) !== null || phase.kind !== 'confirm' || phase.identity !== identity) return
     setPhase({ kind: 'sending' })
     try {
-      const answer = await postStepSignoff(node, signoffRef, auth.token)
+      const answer = await postStepSignoff(node, signoffRef, auth.token, acceptance ? evidence : undefined)
       setPhase({ kind: 'signed', answer })
       // Every round's tree: a step of any round may be signed here, and the waits list reads them all.
       void qc.invalidateQueries({ queryKey: ['agent-runtime-plan'] })
@@ -54,6 +70,15 @@ function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node
   }
   const what = named ? `Sign off ${signoffRef}` : 'Sign off'
   return <div className="ops-signoff-action flex w-full min-w-0 flex-col gap-1" data-signoff-ref={signoffRef}>
+    {acceptance && <fieldset disabled={phase.kind === 'confirm' || phase.kind === 'sending' || blocked !== null || !!unavailable} className="min-w-0">
+      <legend className="text-sm">Evidence · select 1–20 artifacts</legend>
+      {candidates.length === 0 && <p className="text-xs">No submitted evidence is available on this step.</p>}
+      {candidates.map(c => <label key={c.artifact_id} className="flex min-h-11 items-start gap-2 py-2 text-sm [overflow-wrap:anywhere]">
+        <input type="checkbox" className="mt-1" checked={evidence.includes(c.artifact_id)} disabled={!evidence.includes(c.artifact_id) && evidence.length >= 20}
+          onChange={e => setEvidence(ids => e.target.checked ? [...ids, c.artifact_id] : ids.filter(id => id !== c.artifact_id))} />
+        <span>{c.label}<br /><span className="text-xs text-muted-foreground">{c.source}<br />{c.artifact_id}</span></span>
+      </label>)}
+    </fieldset>}
     {phase.kind === 'confirm' || phase.kind === 'sending' ? <div className="ops-decision-actions">
       <DecisionEnvironment />
       {phase.kind === 'confirm' && phase.identity !== identity ? <p role="status">The sign-in or step changed. Cancel and review this sign-off again.</p> : null}
@@ -62,14 +87,15 @@ function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node
         on the runtime's next pass when nothing else in its rule is waited on.</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" style={{ minHeight: 44 }} className="rounded-[var(--card-radius)] border border-foreground bg-foreground px-3 text-sm font-semibold text-background"
-          disabled={phase.kind === 'sending' || blocked !== null || (phase.kind === 'confirm' && phase.identity !== identity)} onClick={() => { void send() }}>
+          disabled={!!evidenceBlock || phase.kind === 'sending' || blocked !== null || (phase.kind === 'confirm' && phase.identity !== identity)} onClick={() => { void send() }}>
           {phase.kind === 'sending' ? 'Signing off…' : 'Confirm sign-off'}
         </button>
         <button type="button" style={{ minHeight: 44 }} className="rounded-[var(--card-radius)] border border-[var(--card-border)] px-3 text-sm"
           disabled={phase.kind === 'sending'} onClick={() => setPhase({ kind: 'idle' })}>Cancel</button>
       </div>
     </div> : <button type="button" style={{ minHeight: 44 }} className="self-start rounded-[var(--card-radius)] border border-[var(--card-border)] px-3 text-sm"
-      disabled={blocked !== null} onClick={() => setPhase({ kind: 'confirm', identity })}>{what}</button>}
+      disabled={blocked !== null || !!evidenceBlock} onClick={() => setPhase({ kind: 'confirm', identity })}>{what}</button>}
+    {evidenceBlock && <p className="m-0 text-xs text-muted-foreground">{evidenceBlock}</p>}
     {blocked !== null ? <p className="m-0 break-words text-xs text-muted-foreground">{blocked}</p> : null}
     {phase.kind === 'failed' ? <p role="alert" className="m-0 break-words text-xs text-destructive">{phase.error} {SIGNOFF_PRESS_AGAIN}</p> : null}
   </div>

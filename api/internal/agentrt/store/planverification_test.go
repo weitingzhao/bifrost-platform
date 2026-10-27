@@ -160,17 +160,18 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	w := newKernelWorld(t)
 	d := pvDocument(t, 1)
 	b := pvBinding(d, s1, "external_verified", "owner_signoff")
-	b.Evidence = []string{w.artifact(t, "report", "drill evidence")}
+	evidence := []string{w.artifact(t, "report", "drill evidence")}
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
 	pvPoll(t, w, store.PlanSources{})
 	pvEvaluate(t, w, s1, "planned")
-	_, err := store.SignOffStep(ctx, w.rt, "thread:pv", s1, b.SignoffRef())
+	_, err := store.SignOffStep(ctx, w.rt, "thread:pv", s1, b.SignoffRef(), evidence...)
 	is(t, err, store.ErrNotOwner)
-	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef())
+	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	pvEvaluate(t, w, s1, "planned")
 	pvPoll(t, w, store.PlanSources{})
 	pvEvaluate(t, w, s1, "done")
+	oldRef := b.SignoffRef()
 	d.Version = 2
 	b.Version = 2
 	d.Items[0].Acceptance[0].Criterion = "A different acceptance"
@@ -178,7 +179,9 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	adoptView(t, w, pvArtifact(t, w, d, b), 1)
 	pvPoll(t, w, store.PlanSources{})
 	pvEvaluate(t, w, s1, "active")
-	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef())
+	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, oldRef, evidence...)
+	is(t, err, store.ErrInvalid)
+	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	pvPoll(t, w, store.PlanSources{})
 	pvEvaluate(t, w, s1, "done")
@@ -408,7 +411,6 @@ func TestPV2RuleDoesNotAdoptBindings(t *testing.T) {
 		var artifact string
 		if binds {
 			b := pvBinding(d, s1, "external_verified", "owner_signoff")
-			b.Evidence = []string{w.artifact(t, "report", "drill evidence")}
 			artifact = pvArtifact(t, w, d, b)
 		} else {
 			artifact = pvArtifact(t, w, d)

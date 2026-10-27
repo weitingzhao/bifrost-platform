@@ -325,11 +325,11 @@ async function signoffError(r: Response, token: string): Promise<Error> {
  * The Owner signs ref of a step off: POST /plan/{id}/signoff with the admin sign-in. The route takes the admin role
  * only; a second press answers the first sign-off.
  */
-export async function postStepSignoff(node: string, ref: string, token: string): Promise<SignoffAnswer> {
+export async function postStepSignoff(node: string, ref: string, token: string, evidence?: readonly string[]): Promise<SignoffAnswer> {
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
-  const r = await serverFetch(`/api/v1/agentrt/plan/${pathSegment(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref }) })
+  const r = await serverFetch(`/api/v1/agentrt/plan/${pathSegment(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref, ...(evidence ? { evidence } : {}) }) })
   if (!r.ok) throw await signoffError(r, token)
   const body = record(await r.json())
   return { node: text(body.plan_node_id), ref: text(body.ref), by: text(body.by), at: text(body.at), alreadySigned: body.already_signed === true }

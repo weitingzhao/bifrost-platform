@@ -5,7 +5,7 @@ import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
 import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRuntimePlan, planRounds, runtimeArch, runtimeRound, signoffNotStarted, signoffWaits, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound, type SignoffWait } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
-import { record } from '@/api/agentRuntime'
+import { record, records, text } from '@/api/agentRuntime'
 
 /** The one line a plan pane shows while the runtime holds no plan. */
 export const PLAN_NOT_IMPORTED = 'The plan is not in the agent runtime here yet.'
@@ -189,10 +189,11 @@ function useRoundPlans(enabled: boolean): RoundPlans {
  * them uses waits; notStarted are the steps with a sign-off rule whose work has not started, kept apart and never
  * counted (TD-425).
  */
-export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[] } | { read: 'loading' | 'error' }
+export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[]; acceptanceRoots: string[] } | { read: 'loading' | 'error' }
 export function useSignoffWaits(enabled = true): SignoffWaitsRead {
   const plans = useRoundPlans(enabled)
   // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
   return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans
-    : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)) }), [plans])
+    : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)),
+      acceptanceRoots: plans.docs.flatMap(doc => records(record(doc).nodes).some(n => (JSON.stringify(n.done_rule_json) ?? '').includes('"external_verified"')) ? [text(record(doc).root)] : []).filter(Boolean) }), [plans])
 }

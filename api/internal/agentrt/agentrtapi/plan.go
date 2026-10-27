@@ -134,7 +134,8 @@ func (a *API) postPlanNote(w http.ResponseWriter, r *http.Request) {
 }
 
 type signoffBody struct {
-	Ref string `json:"ref"`
+	Evidence []string `json:"evidence"`
+	Ref      string   `json:"ref"`
 }
 
 // signOffStep is POST /plan/{id}/signoff: the Owner signs a step off (the
@@ -155,7 +156,7 @@ func (a *API) signOffStep(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref)
+	out, err := store.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref, b.Evidence...)
 	if err != nil {
 		a.fail(w, err)
 		return

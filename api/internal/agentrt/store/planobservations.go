@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -408,15 +409,28 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 	switch b.Source {
 	case "owner_signoff":
 		var id int64
-		e := tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE event_type='owner_signoff' AND plan_node_id=$1 AND actor_id='owner' AND body_json->>'ref'=$2 ORDER BY seq DESC LIMIT 1`, b.Step, b.SignoffRef()).Scan(&id)
+		var raw []byte
+		e := tx.QueryRow(ctx, `SELECT event_id, body_json FROM agentrt.event WHERE event_type='owner_signoff' AND plan_node_id=$1 AND actor_id='owner' AND body_json->>'ref'=$2 ORDER BY seq DESC LIMIT 1`, b.Step, b.SignoffRef()).Scan(&id, &raw)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return nil
 		}
 		if e != nil {
 			return e
 		}
+		var signed acceptanceSignoff
+		if json.Unmarshal(raw, &signed) != nil || !signed.matches(b) {
+			n.Reason = "Owner signoff lacks matching acceptance evidence"
+			return nil
+		}
+		if e := haveArtifacts(ctx, tx, signed.Evidence); e != nil {
+			if !errors.Is(e, ErrState) {
+				return e
+			}
+			n.Reason = "Owner signoff evidence artifacts are missing"
+			return nil
+		}
 		n.Value = "true"
-		n.Evidence = append([]string{fmt.Sprintf("event:%d", id)}, b.Evidence...)
+		n.Evidence = append([]string{fmt.Sprintf("event:%d", id)}, signed.Evidence...)
 		n.Reason = "Owner signed this acceptance version and evidence"
 	case "verification":
 		var verdict, method, evidence string

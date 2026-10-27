@@ -1,9 +1,10 @@
+import { usePlanSnapshot } from './usePlanSnapshot'
 import { useEffect, useRef } from 'react'
 import type { SignoffWait } from '@/api/agentRuntimePlan'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
 import { plural } from '@/pages/shell/owner/ownerModel'
 import { SIGNOFF_SECTION_HREF } from '@/pages/shell/progress/progressPart'
-import { SignOffButtons } from './StepSignoffs'
+import { SignOffButton, SignOffButtons } from './StepSignoffs'
 import { StepBadge, StepTitle } from './StepText'
 import { useSignoffWaits } from './useRuntimePlan'
 
@@ -21,11 +22,11 @@ const box = 'ops-signoff-queue flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-[
 export function SignoffWaiting({ deferScroll = false }: { deferScroll?: boolean }) {
   const read = useSignoffWaits()
   const ref = useRef<HTMLElement>(null)
-  const ready = read.read === 'ok' && read.waits.length + read.notStarted.length > 0
+  const ready = read.read === 'ok' && read.waits.length + read.notStarted.length + read.acceptanceRoots.length > 0
   useEffect(() => {
     if (!deferScroll && ready && typeof window !== 'undefined' && hashNamesSection(window.location.hash, 'signoff')) ref.current?.scrollIntoView?.({ block: 'start' })
   }, [ready, deferScroll])
-  if (read.read === 'ok' && read.waits.length === 0 && read.notStarted.length === 0) return null
+  if (read.read === 'ok' && read.waits.length === 0 && read.notStarted.length === 0 && read.acceptanceRoots.length === 0) return null
   if (read.read !== 'ok') {
     return <section ref={ref} id="signoff" aria-label="Waiting for your sign-off" className={`${box} border-[var(--card-border)]`}>
       <p role={read.read === 'error' ? 'alert' : 'status'} className="m-0 text-sm text-muted-foreground">
@@ -34,13 +35,14 @@ export function SignoffWaiting({ deferScroll = false }: { deferScroll?: boolean 
   }
   const waiting = read.waits.length > 0
   return <section ref={ref} id="signoff" aria-label="Waiting for your sign-off" className={`${box} ${waiting ? 'border-[var(--color-warning)]' : 'border-[var(--card-border)]'}`}>
-    <h3 className="m-0 text-base font-semibold">Waiting for your sign-off · {read.waits.length}</h3>
+    <h3 className="m-0 text-base font-semibold">Waiting for your sign-off{read.acceptanceRoots.length === 0 ? ` · ${read.waits.length}` : ''}</h3>
     {waiting && <ul className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">{read.waits.map(w =>
       <li key={w.node} data-signoff-wait={w.node}
         className="flex min-w-0 flex-col gap-2 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-sm"><StepBadge label={w.label} /><StepTitle text={w.title} /></div>
         <SignOffButtons node={w.node} label={w.label} refs={w.refs} named={w.named} state={w.state} title={w.title} />
       </li>)}</ul>}
+    {read.acceptanceRoots.map(root => <AcceptanceSignoffQueue key={root} root={root} />)}
     {read.notStarted.length > 0 && <NotStarted steps={read.notStarted} />}
   </section>
 }
@@ -71,9 +73,24 @@ export function SignoffWaitingLink() {
   if (read.read === 'error') {
     return <p role="alert" data-signoff-link className="m-0 text-sm">The plan could not be read: which steps wait for your sign-off is not known. <a href={SIGNOFF_SECTION_HREF}>Work › Plan</a></p>
   }
+  if (read.read === 'ok' && read.acceptanceRoots.length > 0) return <a href={SIGNOFF_SECTION_HREF} data-signoff-link className="inline-flex min-h-11 items-center text-sm underline">Review plan acceptance sign-offs ›</a>
   if (read.read !== 'ok' || read.waits.length === 0) return null
   const n = read.waits.length
   return <a href={SIGNOFF_SECTION_HREF} data-signoff-link
     className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-[var(--color-warning)] underline underline-offset-2">
     {plural(n, 'step')} {n === 1 ? 'waits' : 'wait'} for your sign-off ›</a>
+}
+
+/** The existing Plan sign-offs section also reads adopted acceptance bindings. */
+export function AcceptanceSignoffQueue({ root }: { root: string }) {
+  const query = usePlanSnapshot(root)
+  if (!query.data) return <p role="status">{query.isError ? 'Acceptance sign-offs could not be read.' : 'Reading acceptance sign-offs…'}</p>
+  const view = query.data
+  const stale = query.isError || query.isPaused || Date.now() - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
+  return <div className="flex min-w-0 flex-col gap-3">{view.owner_waiting.flatMap(s => {
+    if (!('ref' in s)) return []
+    const node = view.nodes.find(n => n.plan_node_id === s.plan_node_id)
+    return [<div key={s.ref}><p>{node?.label ?? s.plan_node_id} · {node?.title} · acceptance {s.acceptance} · plan v{s.plan_version}</p>
+      <SignOffButton node={s.plan_node_id} label={node?.label ?? s.plan_node_id} signoffRef={s.ref} named={false} candidates={s.candidate_evidence} reviewContext={JSON.stringify([s, node?.state, node?.title])} unavailable={stale ? 'Refresh the plan before signing.' : node && ['done', 'stopped', 'dropped'].includes(node.state ?? '') ? 'This step is closed.' : undefined} /></div>]
+  })}{view.owner_later.flatMap(s => 'candidate_evidence' in s ? [<details key={s.ref}><summary>Blocked · acceptance {s.acceptance}</summary><p>{s.reason}</p><ul>{s.candidate_evidence.map(c => <li key={c.artifact_id}>{c.label} · {c.source}<br />{c.artifact_id}</li>)}</ul></details>] : [])}</div>
 }

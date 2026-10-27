@@ -9,7 +9,7 @@ import (
 func ownerBinding(d *Document) Binding {
 	n := d.Items[0]
 	a := n.Acceptance[0]
-	return Binding{V: 1, Kind: BindingKind, ID: "signoff", Version: d.Version, Tenant: d.Tenant, Root: d.Root, Node: n.Node, Step: "real-step", Acceptance: a.ID, AcceptanceSHA256: AcceptanceDigest(a), Atom: "external_verified", Source: "owner_signoff", Evidence: []string{"sha256:" + strings.Repeat("a", 64)}}
+	return Binding{V: 1, Kind: BindingKind, ID: "signoff", Version: d.Version, Tenant: d.Tenant, Root: d.Root, Node: n.Node, Step: "real-step", Acceptance: a.ID, AcceptanceSHA256: AcceptanceDigest(a), Atom: "external_verified", Source: "owner_signoff"}
 }
 func TestBindingIdentityAndClosedProtocol(t *testing.T) {
 	d := document(t)
@@ -20,7 +20,7 @@ func TestBindingIdentityAndClosedProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*Binding){
-		"tenant": func(b *Binding) { b.Tenant = "business" }, "root": func(b *Binding) { b.Root = "R2" }, "node": func(b *Binding) { b.Node = "4.2" }, "version": func(b *Binding) { b.Version++ }, "acceptance": func(b *Binding) { b.AcceptanceSHA256 = strings.Repeat("b", 64) }, "untrusted": func(b *Binding) { b.Source = "registrant" }, "empty evidence": func(b *Binding) { b.Evidence = nil }, "unknown atom": func(b *Binding) { b.Atom = "submitted" }, "extra identity": func(b *Binding) { b.Verification = "v_unknown" },
+		"tenant": func(b *Binding) { b.Tenant = "business" }, "root": func(b *Binding) { b.Root = "R2" }, "node": func(b *Binding) { b.Node = "4.2" }, "version": func(b *Binding) { b.Version++ }, "acceptance": func(b *Binding) { b.AcceptanceSHA256 = strings.Repeat("b", 64) }, "untrusted": func(b *Binding) { b.Source = "registrant" }, "evidence": func(b *Binding) { b.Evidence = []string{"sha256:" + strings.Repeat("a", 64)} }, "unknown atom": func(b *Binding) { b.Atom = "submitted" }, "extra identity": func(b *Binding) { b.Verification = "v_unknown" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			x := b
@@ -38,8 +38,8 @@ func TestBindingIdentityAndClosedProtocol(t *testing.T) {
 	}
 	old := b.SignoffRef()
 	b.Evidence = []string{"sha256:" + strings.Repeat("b", 64)}
-	if old == b.SignoffRef() {
-		t.Fatal("signoff ignored evidence version")
+	if old != b.SignoffRef() {
+		t.Fatal("binding digest covers signing evidence")
 	}
 }
 func TestR410HasFiveDistinctVerificationSources(t *testing.T) {

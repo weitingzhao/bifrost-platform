@@ -67,7 +67,9 @@ const working: Parser<ReturnType<typeof external> | ReturnType<typeof task>> = (
 const finished: Parser<ReturnType<typeof external> | { attempt_id: string; task_id: string; state: string; ended_at: string; meaning: string }> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : object({ attempt_id: str, task_id: str, state: str, ended_at: timestamp, meaning: str })(v, p)
 // PV1 entries carry the execution state; PV2 entries (a view with bindings) the verified milestone and current validity.
 const mainlineEntry = object({ ref, plan_node_id: str, execution_state: optional(one('planned', 'active', 'done', 'stopped')), milestone_status: one('Unknown', 'true', 'false', 'unknown'), current_validity: optional(tri) })
-const signoff = { plan_node_id: str, ref: str, acceptance: str, plan_version: nonnegative, evidence: nullable(strings), reason: str, source: str }
+const candidateEvidence = object({ artifact_id: str, label: str, source: str })
+export type CandidateEvidence = ReturnType<typeof candidateEvidence>
+const signoff = { plan_node_id: str, ref: str, acceptance: str, plan_version: nonnegative, evidence: nullable(strings), candidate_evidence: array(candidateEvidence), reason: str, source: str }
 const snapshot = object({
   schema: one('agentrt.plan_view_response/v1'), root: str, plan_version: nonnegative, artifact_id: str, as_of: timestamp,
   nodes: array(node), items: array(item), edges: array(edge),
@@ -90,6 +92,7 @@ const snapshot = object({
   recent_next: str, recent_as_of: timestamp, warnings: strings,
 })
 export type PlanSnapshot = ReturnType<typeof snapshot>
+export type AcceptanceSignoff = Extract<PlanSnapshot['owner_waiting'][number] | PlanSnapshot['owner_later'][number], { ref: string }>
 export type PlanNode = PlanSnapshot['nodes'][number]
 export type PlanItem = PlanSnapshot['items'][number]
 export type PlanEdge = PlanSnapshot['edges'][number]

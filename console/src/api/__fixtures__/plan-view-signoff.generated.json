@@ -1,0 +1,682 @@
+{
+  "artifact_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "as_of": "2026-10-26T22:00:00.000000Z",
+  "coverage": {
+    "label": "Unregistered work",
+    "reconciled": false,
+    "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable",
+    "unregistered_work": 0
+  },
+  "day_timezone": "UTC",
+  "edges": [
+    {
+      "from": {
+        "root": "R4",
+        "node": "4.2"
+      },
+      "to": {
+        "root": "R4",
+        "node": "4.1"
+      },
+      "milestone": "s0",
+      "required_for": "s0",
+      "relation": "blocks",
+      "reason": "First acceptance must be verified",
+      "sources": [
+        "work"
+      ]
+    }
+  ],
+  "eta": {
+    "reason": "Capacity and duration observations are not available",
+    "status": "Unknown"
+  },
+  "external_work": [],
+  "finished_today": [],
+  "freshness": {
+    "database": {
+      "observed_at": "2026-10-26T22:00:00.000000Z",
+      "status": "Fresh"
+    },
+    "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
+    "owner_waiting": "Runtime task waits and versioned acceptance signoffs; legacy readiness remains Unknown",
+    "verification": "Partial"
+  },
+  "items": [
+    {
+      "plan_node_id": "4.1",
+      "parent": "R4",
+      "ordinal": 1,
+      "title": "交房：运行时自己合入 main 并交付 STG",
+      "work_id": "W-31",
+      "lane_kind": "mainline",
+      "mainline_order": 1,
+      "anchor_node_id": null,
+      "milestones": [
+        "s0"
+      ],
+      "depends_on": [],
+      "next_responsible": {
+        "kind": "crew_seat",
+        "actor_ref": null,
+        "seat_ref": "coordinator",
+        "provider": null
+      },
+      "acceptance": [
+        {
+          "id": "landing-p0",
+          "milestone": "s0",
+          "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+          "rule_ref": "landing:S0",
+          "evidence_required": [
+            "P0 逐行五项权限结果",
+            "CI vet 种错失败 run",
+            "PipelineRun 的 platform/ui/infra commit",
+            "Gitea 实际推送者实证"
+          ],
+          "target_environment": "stg+prod",
+          "sources": [
+            "landing"
+          ]
+        }
+      ],
+      "estimate": {
+        "work_days": null,
+        "review_rounds": 1,
+        "source": "work",
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知"
+      },
+      "bindings": [
+        {
+          "v": 1,
+          "kind": "agentrt.plan_binding/v1",
+          "id": "signoff-0",
+          "version": 1,
+          "tenant": "dev",
+          "root": "R4",
+          "node": "4.1",
+          "step": "R4:4.1-1",
+          "acceptance": "landing-p0",
+          "acceptance_sha256": "6ddeedf2a2dd94b41e3049c56f8336f89c6ee06072b5eba66f9bed756786dfe6",
+          "atom": "external_verified",
+          "source": "owner_signoff"
+        }
+      ],
+      "evidence": [
+        {
+          "source": "work",
+          "milestone": "s0",
+          "classification": "repository_evidence",
+          "assessment": "Fixture input only",
+          "observed_at": "2026-10-26",
+          "live_verified": false
+        }
+      ]
+    },
+    {
+      "plan_node_id": "4.2",
+      "parent": "R4",
+      "ordinal": 1,
+      "title": "Blocked acceptance",
+      "work_id": "W-31",
+      "lane_kind": "mainline",
+      "mainline_order": 2,
+      "anchor_node_id": null,
+      "milestones": [
+        "s0"
+      ],
+      "depends_on": [
+        {
+          "root": "R4",
+          "node": "4.1",
+          "milestone": "s0",
+          "required_for": "s0",
+          "relation": "blocks",
+          "reason": "First acceptance must be verified",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "next_responsible": {
+        "kind": "crew_seat",
+        "actor_ref": null,
+        "seat_ref": "coordinator",
+        "provider": null
+      },
+      "acceptance": [
+        {
+          "id": "landing-p0",
+          "milestone": "s0",
+          "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+          "rule_ref": "landing:S0",
+          "evidence_required": [
+            "P0 逐行五项权限结果",
+            "CI vet 种错失败 run",
+            "PipelineRun 的 platform/ui/infra commit",
+            "Gitea 实际推送者实证"
+          ],
+          "target_environment": "stg+prod",
+          "sources": [
+            "landing"
+          ]
+        }
+      ],
+      "estimate": {
+        "work_days": null,
+        "review_rounds": 1,
+        "source": "work",
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知"
+      },
+      "bindings": [
+        {
+          "v": 1,
+          "kind": "agentrt.plan_binding/v1",
+          "id": "signoff-1",
+          "version": 1,
+          "tenant": "dev",
+          "root": "R4",
+          "node": "4.2",
+          "step": "R4:4.2-1",
+          "acceptance": "landing-p0",
+          "acceptance_sha256": "6ddeedf2a2dd94b41e3049c56f8336f89c6ee06072b5eba66f9bed756786dfe6",
+          "atom": "external_verified",
+          "source": "owner_signoff"
+        }
+      ],
+      "evidence": [
+        {
+          "source": "work",
+          "milestone": "s0",
+          "classification": "repository_evidence",
+          "assessment": "Fixture input only",
+          "observed_at": "2026-10-26",
+          "live_verified": false
+        }
+      ]
+    }
+  ],
+  "mainline": {
+    "basis": "Versioned acceptance observations",
+    "current": {
+      "current_validity": "unknown",
+      "milestone_status": "unknown",
+      "plan_node_id": "R4:4.1",
+      "ref": {
+        "root": "R4",
+        "node": "4.1"
+      }
+    },
+    "path": [
+      {
+        "current_validity": "unknown",
+        "milestone_status": "unknown",
+        "plan_node_id": "R4:4.1",
+        "ref": {
+          "root": "R4",
+          "node": "4.1"
+        }
+      },
+      {
+        "current_validity": "unknown",
+        "milestone_status": "unknown",
+        "plan_node_id": "R4:4.2",
+        "ref": {
+          "root": "R4",
+          "node": "4.2"
+        }
+      }
+    ]
+  },
+  "next": [
+    {
+      "action": "Satisfy unverified acceptance conditions",
+      "plan_node_id": "R4:4.1",
+      "responsible": {
+        "kind": "crew_seat",
+        "actor_ref": null,
+        "seat_ref": "coordinator",
+        "provider": null
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "created_at": "2026-10-26T22:00:00.000000Z",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 2
+      },
+      "label": "4",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "round",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": null,
+      "plan_node_id": "R4",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "Fixture plan",
+      "usual_s": null,
+      "version": 1,
+      "work_id": null
+    },
+    {
+      "acceptance_status": [
+        {
+          "atom": "external_verified",
+          "binding": "signoff-0",
+          "evidence": null,
+          "freshness": "Unknown",
+          "id": "landing-p0",
+          "last_known_value": "",
+          "last_success": "",
+          "reason": "",
+          "source_id": "",
+          "source_value": "unknown",
+          "source_version": 0,
+          "value": "unknown"
+        }
+      ],
+      "created_at": "2026-10-26T22:00:00.000000Z",
+      "created_by_actor_id": "controller",
+      "current_validity": "unknown",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.1",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.1",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "交房：运行时自己合入 main 并交付 STG",
+      "usual_s": null,
+      "version": 1,
+      "view": {
+        "plan_node_id": "4.1",
+        "parent": "R4",
+        "ordinal": 1,
+        "title": "交房：运行时自己合入 main 并交付 STG",
+        "work_id": "W-31",
+        "lane_kind": "mainline",
+        "mainline_order": 1,
+        "anchor_node_id": null,
+        "milestones": [
+          "s0"
+        ],
+        "depends_on": [],
+        "next_responsible": {
+          "kind": "crew_seat",
+          "actor_ref": null,
+          "seat_ref": "coordinator",
+          "provider": null
+        },
+        "acceptance": [
+          {
+            "id": "landing-p0",
+            "milestone": "s0",
+            "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+            "rule_ref": "landing:S0",
+            "evidence_required": [
+              "P0 逐行五项权限结果",
+              "CI vet 种错失败 run",
+              "PipelineRun 的 platform/ui/infra commit",
+              "Gitea 实际推送者实证"
+            ],
+            "target_environment": "stg+prod",
+            "sources": [
+              "landing"
+            ]
+          }
+        ],
+        "estimate": {
+          "work_days": null,
+          "review_rounds": 1,
+          "source": "work",
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知"
+        },
+        "bindings": [
+          {
+            "v": 1,
+            "kind": "agentrt.plan_binding/v1",
+            "id": "signoff-0",
+            "version": 1,
+            "tenant": "dev",
+            "root": "R4",
+            "node": "4.1",
+            "step": "R4:4.1-1",
+            "acceptance": "landing-p0",
+            "acceptance_sha256": "6ddeedf2a2dd94b41e3049c56f8336f89c6ee06072b5eba66f9bed756786dfe6",
+            "atom": "external_verified",
+            "source": "owner_signoff"
+          }
+        ],
+        "evidence": [
+          {
+            "source": "work",
+            "milestone": "s0",
+            "classification": "repository_evidence",
+            "assessment": "Fixture input only",
+            "observed_at": "2026-10-26",
+            "live_verified": false
+          }
+        ]
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T22:00:00.000000Z",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {
+        "external_verified": {
+          "binding": "signoff-0",
+          "version": 1
+        }
+      },
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.1-1",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "step",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": "R4:4.1",
+      "plan_node_id": "R4:4.1-1",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "Review submitted evidence",
+      "usual_s": null,
+      "version": 1,
+      "work_id": null
+    },
+    {
+      "acceptance_status": [
+        {
+          "atom": "external_verified",
+          "binding": "signoff-1",
+          "evidence": null,
+          "freshness": "Unknown",
+          "id": "landing-p0",
+          "last_known_value": "",
+          "last_success": "",
+          "reason": "",
+          "source_id": "",
+          "source_value": "unknown",
+          "source_version": 0,
+          "value": "unknown"
+        }
+      ],
+      "created_at": "2026-10-26T22:00:00.000000Z",
+      "created_by_actor_id": "controller",
+      "current_validity": "unknown",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.2",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 1,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.2",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "Blocked acceptance",
+      "usual_s": null,
+      "version": 1,
+      "view": {
+        "plan_node_id": "4.2",
+        "parent": "R4",
+        "ordinal": 1,
+        "title": "Blocked acceptance",
+        "work_id": "W-31",
+        "lane_kind": "mainline",
+        "mainline_order": 2,
+        "anchor_node_id": null,
+        "milestones": [
+          "s0"
+        ],
+        "depends_on": [
+          {
+            "root": "R4",
+            "node": "4.1",
+            "milestone": "s0",
+            "required_for": "s0",
+            "relation": "blocks",
+            "reason": "First acceptance must be verified",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "next_responsible": {
+          "kind": "crew_seat",
+          "actor_ref": null,
+          "seat_ref": "coordinator",
+          "provider": null
+        },
+        "acceptance": [
+          {
+            "id": "landing-p0",
+            "milestone": "s0",
+            "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+            "rule_ref": "landing:S0",
+            "evidence_required": [
+              "P0 逐行五项权限结果",
+              "CI vet 种错失败 run",
+              "PipelineRun 的 platform/ui/infra commit",
+              "Gitea 实际推送者实证"
+            ],
+            "target_environment": "stg+prod",
+            "sources": [
+              "landing"
+            ]
+          }
+        ],
+        "estimate": {
+          "work_days": null,
+          "review_rounds": 1,
+          "source": "work",
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知"
+        },
+        "bindings": [
+          {
+            "v": 1,
+            "kind": "agentrt.plan_binding/v1",
+            "id": "signoff-1",
+            "version": 1,
+            "tenant": "dev",
+            "root": "R4",
+            "node": "4.2",
+            "step": "R4:4.2-1",
+            "acceptance": "landing-p0",
+            "acceptance_sha256": "6ddeedf2a2dd94b41e3049c56f8336f89c6ee06072b5eba66f9bed756786dfe6",
+            "atom": "external_verified",
+            "source": "owner_signoff"
+          }
+        ],
+        "evidence": [
+          {
+            "source": "work",
+            "milestone": "s0",
+            "classification": "repository_evidence",
+            "assessment": "Fixture input only",
+            "observed_at": "2026-10-26",
+            "live_verified": false
+          }
+        ]
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T22:00:00.000000Z",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {
+        "external_verified": {
+          "binding": "signoff-1",
+          "version": 1
+        }
+      },
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.2-1",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "step",
+      "ordinal": 0,
+      "owner_step": false,
+      "parent_plan_node_id": "R4:4.2",
+      "plan_node_id": "R4:4.2-1",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "Review submitted evidence",
+      "usual_s": null,
+      "version": 1,
+      "work_id": null
+    }
+  ],
+  "owner_later": [
+    {
+      "acceptance": "landing-p0",
+      "candidate_evidence": [
+        {
+          "artifact_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "label": "Submitted report · work-633",
+          "source": "external_work.report:ew_fixture"
+        },
+        {
+          "artifact_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "label": "Work registration · work-633",
+          "source": "external_work.registration:ew_fixture"
+        },
+        {
+          "artifact_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "label": "deterministic · pass · task-fixture",
+          "source": "verification:v_fixture"
+        }
+      ],
+      "evidence": [],
+      "plan_node_id": "R4:4.2-1",
+      "plan_version": 1,
+      "readiness": "Blocked",
+      "reason": "Owner acceptance signoff",
+      "ref": "plan-acceptance:8d35e4a21041c51873becde3aaeea1dc014e8d0893ae45878beabd3b75be782a",
+      "source": "adopted plan binding"
+    }
+  ],
+  "owner_waiting": [
+    {
+      "acceptance": "landing-p0",
+      "candidate_evidence": [
+        {
+          "artifact_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "label": "Submitted report · work-633",
+          "source": "external_work.report:ew_fixture"
+        },
+        {
+          "artifact_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "label": "Work registration · work-633",
+          "source": "external_work.registration:ew_fixture"
+        },
+        {
+          "artifact_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "label": "deterministic · pass · task-fixture",
+          "source": "verification:v_fixture"
+        }
+      ],
+      "evidence": [],
+      "plan_node_id": "R4:4.1-1",
+      "plan_version": 1,
+      "readiness": "Ready",
+      "reason": "Owner acceptance signoff",
+      "ref": "plan-acceptance:ca1d30df7f6df9c57794dc6304f9711e3f7d1ec4e676562bff1f2e8b36a052f6",
+      "source": "adopted plan binding"
+    }
+  ],
+  "plan_version": 1,
+  "recent_as_of": "2026-10-26T22:00:00.000000Z",
+  "recent_changes": [],
+  "recent_next": "",
+  "root": "R4",
+  "schema": "agentrt.plan_view_response/v1",
+  "source_watermarks": {},
+  "tasks": [],
+  "waiting_on": [
+    {
+      "edge": {
+        "from": {
+          "root": "R4",
+          "node": "4.2"
+        },
+        "to": {
+          "root": "R4",
+          "node": "4.1"
+        },
+        "milestone": "s0",
+        "required_for": "s0",
+        "relation": "blocks",
+        "reason": "First acceptance must be verified",
+        "sources": [
+          "work"
+        ]
+      },
+      "reason": "Required milestone is not currently verified",
+      "responsible": {
+        "kind": "crew_seat",
+        "actor_ref": null,
+        "seat_ref": "coordinator",
+        "provider": null
+      },
+      "status": "Unknown"
+    }
+  ],
+  "warnings": [],
+  "working": []
+}

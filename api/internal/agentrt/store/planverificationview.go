@@ -29,7 +29,7 @@ func (s *planFactsSnapshot) itemValue(root, node string) plan.Tri {
 	return plan.Unknown
 }
 
-func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption) (map[string]any, []any, []map[string]any, []any, []any, string) {
+func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence) (map[string]any, []any, []map[string]any, []any, []any, string) {
 	mainline, next, later := viewExecutionSummary(nodes, graph, adoption)
 	waiting := []map[string]any{}
 	ready := []any{}
@@ -87,7 +87,7 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 					}
 				}
 			}
-			entry := map[string]any{"plan_node_id": b.Step, "ref": b.SignoffRef(), "acceptance": b.Acceptance, "plan_version": b.Version, "evidence": b.Evidence, "reason": "Owner acceptance signoff", "source": "adopted plan binding"}
+			entry := map[string]any{"plan_node_id": b.Step, "ref": b.SignoffRef(), "acceptance": b.Acceptance, "plan_version": b.Version, "evidence": nonNil(o.Evidence), "candidate_evidence": candidates[b.Step], "reason": "Owner acceptance signoff", "source": "adopted plan binding"}
 			if canSign {
 				entry["readiness"] = "Ready"
 				ready = append(ready, entry)

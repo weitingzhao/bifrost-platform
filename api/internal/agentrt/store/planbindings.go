@@ -49,9 +49,6 @@ func validatePlanBinding(ctx context.Context, tx pgx.Tx, b planview.Binding, map
 			return invalid("external submission identity mismatch")
 		}
 	}
-	if len(b.Evidence) > 0 {
-		return haveArtifacts(ctx, tx, b.Evidence)
-	}
 	return nil
 }
 func bindingExternal(ctx context.Context, tx pgx.Tx, id string) (externalNote, error) {
