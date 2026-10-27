@@ -2,14 +2,31 @@ package store
 
 import (
 	"context"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 )
 
-// LandingCandidates orders by acceptance, never task creation or map order.
-func LandingCandidates(ctx context.Context, db DB) ([]string, error) {
+// LandingCandidates lists the accepted bifrost-platform implement tasks the
+// STG drill may still claim, oldest acceptance first. It leaves out, from the
+// database alone, what EligibleToClaim would refuse before any Git read:
+// a task accepted, or of a mission created, before enabledAt (before_enable),
+// and a task whose mission is not active or carries no_merge (stale). Each
+// candidate costs the drill a fresh fetch inside a held transaction, and the
+// STG runtime pool has two connections, so listing tasks that can only be
+// refused starved every other loop (2026-10-27: twelve pre-enable tasks).
+func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time) ([]string, error) {
 	var tasks []string
+	if enabledAt.IsZero() {
+		return nil, nil
+	}
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.event e ON e.task_id=t.task_id WHERE t.repo='bifrost-platform' AND t.role='implement' AND t.state='accepted' AND e.event_type='task_state_changed' AND e.body_json->>'to'='accepted' GROUP BY t.task_id ORDER BY max(e.at),t.task_id`)
+		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id=t.mission_id
+  JOIN agentrt.event e ON e.task_id=t.task_id
+  WHERE t.repo='bifrost-platform' AND t.role='implement' AND t.state='accepted'
+    AND m.state='active' AND COALESCE(m.scope_json->>'no_merge','')='' AND m.created_at >= $1
+    AND e.event_type='task_state_changed' AND e.body_json->>'to'='accepted'
+  GROUP BY t.task_id HAVING max(e.at) >= $1 ORDER BY max(e.at),t.task_id`, enabledAt)
 		if err != nil {
 			return err
 		}

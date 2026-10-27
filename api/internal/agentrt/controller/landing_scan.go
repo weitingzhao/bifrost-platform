@@ -78,6 +78,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	}
 	// No current rule means no new claims, but recovery and bounds above run.
 	enabled := false
+	var enabledAt time.Time
 	err = store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		rule, e := store.CurrentRule(ctx, tx, "landing:dev", now)
 		if e != nil {
@@ -90,7 +91,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 			return nil
 		}
 		enabled = true
-		_, e = store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", now)
+		enabledAt, e = store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", now)
 		return e
 	})
 	if err != nil {
@@ -99,7 +100,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	if !enabled {
 		return errors.Join(errs...)
 	}
-	tasks, err := store.LandingCandidates(ctx, c.DB)
+	tasks, err := store.LandingCandidates(ctx, c.DB, enabledAt)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}

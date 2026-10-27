@@ -266,7 +266,7 @@ func TestDrillBranchCollisionAutomaticallyReclaims(t *testing.T) {
 // check would make this record a rehearsal after the Owner tightened the rule.
 func TestDrillFinalGateReadsTightenedRule(t *testing.T) {
 	w, _, src := acceptedDrill(t)
-	tasks, e := store.LandingCandidates(ctx, w.rt)
+	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
 	ok(t, e)
 	if len(tasks) != 1 {
 		t.Fatal(tasks)
