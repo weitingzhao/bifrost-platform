@@ -32,7 +32,7 @@ function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnapshot; st
   </li>
 }
 export function ExternalRecord({ work }: { work: ExternalWork }) {
-  return <li className="[overflow-wrap:anywhere]">{work.description.task} · {work.description.executor} · {work.status}{work.backfilled && ' · Backfilled'}
+  return <li className="[overflow-wrap:anywhere]">{work.description.task} · {work.description.executor} · {work.status}{work.backfilled && ' · Backfilled'}{work.verification && ` · ${work.verification}`}
     {work.report_digest && <span className="block">Report · {work.report_digest}</span>}
     {work.commit_shas?.map(sha => <span className="block" key={sha}>Commit · {sha}</span>)}
   </li>
