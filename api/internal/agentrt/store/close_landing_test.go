@@ -87,12 +87,15 @@ func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The other order: the close decided first, so the
-// claim reads the mission done and refuses, never an operation under a closed
-// mission.
+// Serial: FreezeEventClock. The other order: the close decided first (the
+// first-claim grace has passed), so the claim reads the mission done and
+// refuses, never an operation under a closed mission.
 func TestLandingClaimAfterCloseIsRefused(t *testing.T) {
 	w, task, src := goalDrill(t, "M-4")
+	// Past the first-claim grace: a loop that missed it misses the drill.
+	restore := store.FreezeEventClock(time.Now().Add(3 * time.Minute))
 	closed, err := store.CloseMissions(ctx, w.rt)
+	restore()
 	if err != nil || len(closed) != 1 {
 		t.Fatalf("fixture: %v %v", closed, err)
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // Closing a goal's mission (W-31 2.2b, iteration 1: a goal that was done
@@ -66,6 +68,7 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 		return nil, err
 	}
 	var closed []string
+	var holdErrs []error
 	for _, id := range ids {
 		did := false
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -81,7 +84,18 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if held, err := landingInFlight(ctx, tx, id); err != nil || held {
+			// A savepoint: an unreadable landing stream holds this mission
+			// only, and the pass goes on with the others.
+			sp, err := tx.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			held, err := landingHolds(ctx, sp, id, eventClock())
+			if err != nil {
+				holdErrs = append(holdErrs, fmt.Errorf("mission %s: landing: %w", id, err))
+				return sp.Rollback(ctx)
+			}
+			if err = sp.Commit(ctx); err != nil || held {
 				return err
 			}
 			did = true
@@ -101,48 +115,88 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			closed = append(closed, id)
 		}
 	}
-	return closed, nil
+	return closed, errors.Join(holdErrs...)
 }
 
-// landingInFlight: an implementation the landing loop is carrying to main
-// keeps its mission active (CUT-landing §2.7, brought forward for the S2
-// drill). Every landing gate reads the mission as active, so closing it under
-// a running operation would end that operation stale before its CI finished.
-// A root holds while its latest operation has not ended, or ended discarded
-// (the next replay is due; the bound turns it into failed{bound} within six
-// hours). A task the loop never claimed holds nothing, and neither does a
-// finished one. The caller holds the mission's lock; ClaimLandingDrill takes
-// it FOR SHARE before the repository stream, so a claim and a close are
-// ordered: the close sees the claim, or the claim sees the mission done.
-func landingInFlight(ctx context.Context, tx pgx.Tx, mission string) (bool, error) {
-	rows, err := tx.Query(ctx, `SELECT task_id, repo FROM agentrt.task WHERE mission_id = $1 AND role = 'implement' AND repo <> '' ORDER BY repo, task_id`, mission)
+// landingHolds: an implementation the landing loop is carrying to main keeps
+// its mission active (CUT-landing §2.7's hold, brought forward for the S2
+// drill). Every landing gate reads the mission as active, so closing it would
+// end that operation stale before its CI finished. It holds while
+//   - the root's latest operation has not ended, or ended discarded (the
+//     replay k+1 is due), and at most landingHoldLimit after the root's first
+//     claim (or retry) — the six-hour bound plus a margin, so a mission is
+//     released even when no loop runs to record failed{bound};
+//   - or the root was never claimed, landing is enabled for its repo (a
+//     current landing rule, an observed enable time no later than the
+//     mission's creation and the task's acceptance), and it was accepted less
+//     than landingClaimGrace ago: the loop (every 15 s) gets its first claim
+//     before the close. A loop that misses the grace misses the drill; the
+//     mission closes as before, nothing is held for good.
+//
+// Without a landing rule (PROD today) nothing holds. The caller holds the
+// mission's lock; ClaimLandingDrill locks the task, then its mission, before
+// the repository stream, so a claim and a close are ordered.
+const (
+	landingClaimGrace = 2 * time.Minute
+	landingHoldLimit  = 6*time.Hour + 15*time.Minute
+)
+
+func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time) (bool, error) {
+	type root struct {
+		task     string
+		accepted *time.Time
+	}
+	rows, err := tx.Query(ctx, `SELECT t.task_id, t.repo, (SELECT max(e.at) FROM agentrt.event e WHERE e.task_id = t.task_id
+	    AND e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'accepted')
+	  FROM agentrt.task t WHERE t.mission_id = $1 AND t.role = 'implement' AND t.repo <> '' ORDER BY t.repo, t.task_id`, mission)
 	if err != nil {
 		return false, err
 	}
-	tasks, repos := map[string][]string{}, []string{}
+	roots, repos := map[string][]root{}, []string{}
 	for rows.Next() {
-		var task, repo string
-		if err = rows.Scan(&task, &repo); err != nil {
+		var r root
+		var repo string
+		if err = rows.Scan(&r.task, &repo, &r.accepted); err != nil {
 			rows.Close()
 			return false, err
 		}
-		if len(tasks[repo]) == 0 {
+		if len(roots[repo]) == 0 {
 			repos = append(repos, repo)
 		}
-		tasks[repo] = append(tasks[repo], task)
+		roots[repo] = append(roots[repo], r)
 	}
 	rows.Close()
-	if err = rows.Err(); err != nil {
+	if err = rows.Err(); err != nil || len(repos) == 0 {
+		return false, err
+	}
+	var tenant string
+	var created time.Time
+	if err = tx.QueryRow(ctx, `SELECT tenant, created_at FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&tenant, &created); err != nil {
+		return false, err
+	}
+	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, now)
+	if err != nil {
 		return false, err
 	}
 	for _, repo := range repos {
 		state, err := LandingState(ctx, tx, "landing:"+repo)
 		if err != nil {
-			return false, fmt.Errorf("landing state of %s: %w", repo, err)
+			return false, err
 		}
-		for _, task := range tasks[repo] {
-			latest, ok := state.Operations[state.LatestOperation(task)]
-			if ok && (!latest.Terminal() || latest.Phase == "discarded") {
+		enabled := false
+		if rule != nil {
+			_, enabled = rule.Landing.Repo(repo)
+		}
+		enabled = enabled && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
+		for _, r := range roots[repo] {
+			if latest, ok := state.Operations[state.LatestOperation(r.task)]; ok {
+				first, _ := landing.RootBudget(state, r.task)
+				if (!latest.Terminal() || latest.Phase == "discarded") && now.Before(first.Add(landingHoldLimit)) {
+					return true, nil
+				}
+				continue
+			}
+			if enabled && r.accepted != nil && !r.accepted.Before(state.EnabledAt) && now.Before(r.accepted.Add(landingClaimGrace)) {
 				return true, nil
 			}
 		}

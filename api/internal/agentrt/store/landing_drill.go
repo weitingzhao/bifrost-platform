@@ -14,10 +14,16 @@ import (
 // The caller orders tasks by their acceptance event time (CUT §2.5.1).
 func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task string, now time.Time) (op string, decision landing.Decision, err error) {
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		// The mission before the stream (the kernel's lock order): a close
-		// holding it decides first and the facts below then read it done, or
-		// this claim commits first and CloseMissions sees it (landingInFlight).
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission m JOIN agentrt.task t USING (mission_id) WHERE t.task_id = $1 FOR SHARE OF m`, task); err != nil {
+		// The task, then its mission, before the stream (the kernel's lock
+		// order). The task lock keeps it in this mission (a step rebind
+		// waits); the mission lock orders this claim against a close: the
+		// close decides first and the facts below read the mission done, or
+		// this claim commits first and CloseMissions sees it (landingHolds).
+		var mission string
+		if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&mission); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission); err != nil {
 			return err
 		}
 		if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
