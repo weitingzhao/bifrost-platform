@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"time"
 
@@ -104,6 +105,17 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
+	// The stream as it is after the recovery above: an operation it ended
+	// (a discard) opens its k+1 in this same pass.
+	var settled landing.State
+	if err = store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
+		var e error
+		settled, e = store.LandingState(ctx, tx, "landing:bifrost-platform")
+		return e
+	}); err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	tasks = unsettled(tasks, settled.Operations)
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
 		op, _, e := store.ClaimLandingDrill(one, c.DB, c.Drill.Facts, task, now)
@@ -160,4 +172,22 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 	default:
 		return c.LandingDrillBranch(ctx, c.DrillGit, id, now)
 	}
+}
+
+// unsettled leaves out the tasks ClaimLandingDrill would refuse from the
+// landing stream alone, before reading Git for them: one already rehearsed
+// (rehearsed), with an operation still in progress (in_progress), or whose
+// operation blocks a claim (terminal: ever landed, or failed and not
+// retried). Each of those is refused only after its Result and History reads
+// inside the claim's locked transaction (review 641 §3). ops is the stream as
+// read after the pass's recovery, so a discard it recorded opens the k+1 now.
+func unsettled(tasks []string, ops map[string]landing.Operation) []string {
+	return slices.DeleteFunc(tasks, func(task string) bool {
+		for _, o := range ops {
+			if o.Task == task && (o.Phase == "rehearsed" || !o.Terminal() || o.BlocksClaim()) {
+				return true
+			}
+		}
+		return false
+	})
 }
