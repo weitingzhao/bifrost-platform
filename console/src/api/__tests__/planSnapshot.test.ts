@@ -2,11 +2,34 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import fixture from '../__fixtures__/plan-view-handler.json'
 import legacy from '../__fixtures__/plan-view-handler-legacy.json'
 import page2 from '../__fixtures__/plan-view-handler-page2.json'
+import signoff from '../__fixtures__/plan-view-signoff.generated.json'
 import { fetchPlanSnapshot, parsePlanSnapshot } from '../planSnapshot'
 
 vi.mock('../client', () => ({ authedFetch: vi.fn() }))
 const { authedFetch } = await import('../client')
 afterEach(() => vi.clearAllMocks())
+describe('generated sign-off readiness contract', () => {
+  it('accepts Not started only in owner_later, with an empty candidate list', () => {
+    const view = parsePlanSnapshot(signoff, 'R4')
+    expect(view.owner_waiting).toHaveLength(1)
+    expect(view.owner_waiting[0]).toMatchObject({ readiness: 'Ready' })
+    expect(view.owner_later).toHaveLength(2)
+    expect(view.owner_later.find(row => row.readiness === 'Not started')).toMatchObject({
+      plan_node_id: 'R4:4.3-1', candidate_evidence: [],
+      reason: 'Work for this step has not started; no candidate evidence yet',
+    })
+  })
+  it.each(['Not started', 'Blocked', 'Unknown'])('rejects %s in owner_waiting', readiness => {
+    const value = structuredClone(signoff)
+    value.owner_waiting[0].readiness = readiness
+    expect(() => parsePlanSnapshot(value, 'R4')).toThrow(/readiness/)
+  })
+  it.each(['Ready', 'Unknown', 'Not Started'])('rejects %s in a later sign-off', readiness => {
+    const value = structuredClone(signoff)
+    value.owner_later[0].readiness = readiness
+    expect(() => parsePlanSnapshot(value, 'R4')).toThrow(/readiness/)
+  })
+})
 describe('PV1 snapshot contract captured from the HTTP handler', () => {
   it('reads the adopted plan, external work and stable history boundary', () => {
     const view = parsePlanSnapshot(fixture, 'R4')

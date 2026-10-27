@@ -21,10 +21,12 @@ import (
 type signoffViewDB struct {
 	DB
 	pgx.Tx
-	doc      *planview.Document
-	adoption viewAdoption
-	now      time.Time
-	nodes    []map[string]any
+	doc        *planview.Document
+	adoption   viewAdoption
+	now        time.Time
+	nodes      []map[string]any
+	attempted  map[string]bool
+	candidates map[string][]candidateEvidence
 }
 type signoffViewRows struct {
 	pgx.Rows
@@ -75,15 +77,15 @@ func (d *signoffViewDB) Query(_ context.Context, q string, _ ...any) (pgx.Rows, 
 	case strings.Contains(q, "SELECT to_jsonb(n)"):
 		for _, n := range d.nodes {
 			raw, _ := json.Marshal(n)
-			r.data = append(r.data, []any{raw})
+			r.data = append(r.data, []any{raw, d.attempted[n["plan_node_id"].(string)]})
 		}
 	case strings.Contains(q, "SELECT DISTINCT ON (event_stream_id) body_json->'plan_view'"):
 		raw, _ := json.Marshal(d.adoption)
 		r.data = [][]any{{raw}}
 	case strings.Contains(q, "SELECT c.step,c.id,c.label,c.source"):
-		for _, step := range []string{"R4:4.1-1", "R4:4.2-1"} {
-			for i, source := range []string{"external_work.report:ew_fixture", "external_work.registration:ew_fixture", "verification:v_fixture"} {
-				r.data = append(r.data, []any{step, "sha256:" + strings.Repeat(fmt.Sprint(i+1), 64), []string{"Submitted report · work-633", "Work registration · work-633", "deterministic · pass · task-fixture"}[i], source})
+		for _, step := range []string{"R4:4.1-1", "R4:4.2-1", "R4:4.3-1"} {
+			for _, c := range d.candidates[step] {
+				r.data = append(r.data, []any{step, c.Artifact, c.Label, c.Source})
 			}
 		}
 	case strings.HasPrefix(q, "SELECT body,at FROM"), strings.HasPrefix(q, "SELECT a.attempt_id"), strings.HasPrefix(q, "SELECT event_stream_id"), strings.HasPrefix(q, "SELECT to_jsonb(e)"):
@@ -92,8 +94,8 @@ func (d *signoffViewDB) Query(_ context.Context, q string, _ ...any) (pgx.Rows, 
 	}
 	return r, nil
 }
-func TestPlanSignoffResponseFixture(t *testing.T) {
-	t.Parallel()
+func newSignoffViewFixture(t *testing.T) *signoffViewDB {
+	t.Helper()
 	db, _ := collectorTestFixture(t)
 	d := db.doc
 	first := d.Items[0]
@@ -104,7 +106,20 @@ func TestPlanSignoffResponseFixture(t *testing.T) {
 	d.Items[1].Order = &order
 	d.Items[1].Title = "Blocked acceptance"
 	d.Items[1].Dependencies = []planview.Edge{{Root: d.Root, Node: first.Node, Milestone: first.Acceptance[0].Milestone, RequiredFor: first.Acceptance[0].Milestone, Relation: "blocks", Reason: "First acceptance must be verified", Sources: []string{"work"}}}
+	d.Items = append(d.Items, first)
+	d.Items[2].Node = "4.3"
+	d.Items[2].Ordinal = 2
+	thirdOrder := 3
+	d.Items[2].Order = &thirdOrder
+	d.Items[2].Title = "Future acceptance"
 	f := &signoffViewDB{doc: d, now: time.Date(2026, 10, 26, 22, 0, 0, 0, time.UTC), adoption: viewAdoption{V: 1, Kind: "agentrt.plan_view/v1", Root: d.Root, Tenant: "dev", Version: d.Version, Artifact: "sha256:" + strings.Repeat("a", 64), Nodes: map[string]string{}}}
+	f.attempted = map[string]bool{}
+	f.candidates = map[string][]candidateEvidence{}
+	for _, step := range []string{"R4:4.1-1", "R4:4.2-1"} {
+		for i, source := range []string{"external_work.report:ew_fixture", "external_work.registration:ew_fixture", "verification:v_fixture"} {
+			f.candidates[step] = append(f.candidates[step], candidateEvidence{Artifact: "sha256:" + strings.Repeat(fmt.Sprint(i+1), 64), Label: []string{"Submitted report · work-633", "Work registration · work-633", "deterministic · pass · task-fixture"}[i], Source: source})
+		}
+	}
 	addNode := func(id string, parent any, kind, label, title string, ordinal int, rule any) {
 		f.nodes = append(f.nodes, map[string]any{"plan_node_id": id, "parent_plan_node_id": parent, "node_kind": kind, "ordinal": ordinal, "label": label, "title": title, "work_id": nil, "mission_id": nil, "step_kind": nil, "owner_step": false, "effect_step": false, "done_rule_json": rule, "state": "planned", "state_event_id": nil, "usual_s": nil, "created_by_actor_id": "controller", "created_at": timeText(f.now), "version": 1})
 	}
@@ -124,12 +139,18 @@ func TestPlanSignoffResponseFixture(t *testing.T) {
 	if err := d.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	out, err := PlanView(context.Background(), f, d.Root)
+	return f
+}
+
+func TestPlanSignoffResponseFixture(t *testing.T) {
+	t.Parallel()
+	f := newSignoffViewFixture(t)
+	out, err := PlanView(context.Background(), f, f.doc.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out["owner_waiting"].([]any)) != 1 || len(out["owner_later"].([]any)) != 1 {
-		t.Fatalf("missing ready/blocked acceptances: %v", out)
+	if len(out["owner_waiting"].([]any)) != 1 || len(out["owner_later"].([]any)) != 2 {
+		t.Fatalf("missing ready/blocked/not-started acceptances: %v", out)
 	}
 	raw, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

@@ -17,7 +17,7 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
   const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
   const current = view.nodes.find(n => n.plan_node_id === view.mainline.current?.plan_node_id)
   const waits = view.owner_waiting.flatMap(w => 'task_id' in w ? [w] : [])
-  const signoffs = view.owner_waiting.flatMap(w => 'ref' in w ? [w] : [])
+  const signoffs = view.owner_waiting.flatMap(w => 'ref' in w && w.readiness === 'Ready' ? [w] : [])
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
   useEffect(() => {
     if (targetId) return scrollAfterShell(() => document.getElementById(planNodeDOMId(targetId)))

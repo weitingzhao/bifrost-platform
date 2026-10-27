@@ -26,16 +26,24 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err = tx.QueryRow(ctx, `SELECT transaction_timestamp()`).Scan(&now); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, viewTree+`SELECT to_jsonb(n) FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.ordinal,n.plan_node_id LIMIT 501`, root)
+	rows, err := tx.Query(ctx, viewTree+`SELECT to_jsonb(n), EXISTS (
+ SELECT 1 FROM agentrt.task t JOIN agentrt.attempt a USING(task_id)
+ WHERE t.plan_node_id=n.plan_node_id
+) FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.ordinal,n.plan_node_id LIMIT 501`, root)
 	if err != nil {
 		return nil, err
 	}
+	attemptedSteps := map[string]bool{}
 	nodes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (map[string]any, error) {
 		var b []byte
 		var n map[string]any
-		err := r.Scan(&b)
+		var attempted bool
+		err := r.Scan(&b, &attempted)
 		if err == nil {
 			err = json.Unmarshal(b, &n)
+		}
+		if err == nil && attempted {
+			attemptedSteps[n["plan_node_id"].(string)] = true
 		}
 		return n, err
 	})
@@ -91,7 +99,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption, candidates)
+	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption, candidates, attemptedSteps)
 	ext, err := snapshotExternal(ctx, tx, root, now)
 	if err != nil {
 		return nil, err

@@ -29,7 +29,7 @@ func (s *planFactsSnapshot) itemValue(root, node string) plan.Tri {
 	return plan.Unknown
 }
 
-func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence) (map[string]any, []any, []map[string]any, []any, []any, string) {
+func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence, attemptedSteps map[string]bool) (map[string]any, []any, []map[string]any, []any, []any, string) {
 	mainline, next, later := viewExecutionSummary(nodes, graph, adoption)
 	waiting := []map[string]any{}
 	ready := []any{}
@@ -88,11 +88,20 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 				}
 			}
 			entry := map[string]any{"plan_node_id": b.Step, "ref": b.SignoffRef(), "acceptance": b.Acceptance, "plan_version": b.Version, "evidence": nonNil(o.Evidence), "candidate_evidence": candidates[b.Step], "reason": "Owner acceptance signoff", "source": "adopted plan binding"}
-			if canSign {
+			// Use the same step state as viewExecutionSummary, plus any task
+			// attempt (including ended attempts). Unknown is not proof of work.
+			state, _ := byID[b.Step]["state"].(string)
+			started := state == "active" || state == "running" || state == "done" || attemptedSteps[b.Step]
+			if !canSign {
+				entry["readiness"] = "Blocked"
+				entry["reason"] = "Required acceptance conditions or dependencies are not currently verified"
+				later = append(later, entry)
+			} else if started || len(candidates[b.Step]) > 0 {
 				entry["readiness"] = "Ready"
 				ready = append(ready, entry)
 			} else {
-				entry["readiness"] = "Blocked"
+				entry["readiness"] = "Not started"
+				entry["reason"] = "Work for this step has not started; no candidate evidence yet"
 				later = append(later, entry)
 			}
 		}

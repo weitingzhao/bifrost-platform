@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '@/api/__fixtures__/plan-view-signoff.generated.json'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
@@ -41,7 +41,7 @@ describe('Work plan view reads PV2 responses', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getAllByText(/Acceptance Unknown/).length).toBeGreaterThan(0)
   })
-  it('renders the generated Go response with ready and blocked candidate evidence', async () => {
+  it('renders Not started plainly in Later and counts only Ready sign-offs', async () => {
     reply = fixture
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.as_of))
     show()
@@ -49,8 +49,24 @@ describe('Work plan view reads PV2 responses', () => {
     expect(needs).toHaveTextContent('Needs you · 1 sign-off ready')
     expect(needs).toHaveTextContent(`acceptance ${fixture.owner_waiting[0].acceptance} · plan v1`)
     expect(needs).toHaveTextContent('Blocked')
+    expect(needs).toHaveTextContent('Later · 2')
+    const later = needs.querySelector('details')!
+    expect(later).toHaveTextContent('Not started')
+    expect(later).toHaveTextContent('Work for this step has not started; no candidate evidence yet')
+    expect(within(later).queryByRole('button', { name: 'Sign off' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(needs).toHaveTextContent('Submitted report · work-633')
     expect(needs).toHaveTextContent('verification:v_fixture')
     expect(screen.getAllByRole('checkbox').every(box => !(box as HTMLInputElement).checked)).toBe(true)
+  })
+  it('does not count later sign-offs when none are Ready', async () => {
+    reply = { ...fixture, owner_waiting: [] }
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.as_of))
+    show()
+    const needs = await screen.findByRole('region', { name: 'Needs you' })
+    expect(needs).toHaveTextContent('Needs you · Unknown')
+    expect(needs).toHaveTextContent('Later · 2')
+    expect(needs).not.toHaveTextContent(/\d+ sign-offs? ready/)
+    expect(within(needs).queryByRole('button', { name: 'Sign off' })).toBeNull()
   })
 })

@@ -37,7 +37,7 @@ function show(element: React.ReactNode, auth = admin, environment = 'prod') {
 it('parses Go-generated candidates and rejects response drift in the closed contract', () => {
   const view = parsePlanSnapshot(fixture, 'R4')
   expect(view.owner_waiting).toHaveLength(1)
-  expect(view.owner_later).toHaveLength(1)
+  expect(view.owner_later.map(row => row.readiness)).toEqual(['Blocked', 'Not started'])
   expect(entry.candidate_evidence.map(c => c.source)).toEqual(['external_work.report:ew_fixture', 'external_work.registration:ew_fixture', 'verification:v_fixture'])
   for (const mutate of [(x: Record<string, unknown>) => { delete x.candidate_evidence }, (x: Record<string, unknown>) => { x.candidate_evidence = null }, (x: Record<string, unknown>) => { x.candidate_evidence = [{ artifact_id: 'x', label: 'x', source: 'x', extra: true }] }]) {
     const changed = structuredClone(fixture); mutate(changed.owner_waiting[0])
@@ -56,6 +56,17 @@ it.each(['Needs you', 'Plan sign-offs'])('%s requires explicit selection and sen
   fireEvent.click(screen.getByRole('button', { name: 'Confirm sign-off' }))
   await waitFor(() => expect(posts).toEqual([{ ref: entry.ref, evidence: [entry.candidate_evidence[0].artifact_id, entry.candidate_evidence[2].artifact_id] }]))
   expect(await screen.findByText(/Signed off.*by the Owner/)).toBeInTheDocument()
+})
+
+it('keeps Not started distinct from Blocked in the Plan sign-offs queue', async () => {
+  show(<AcceptanceSignoffQueue root="R4" />)
+  const pending = await screen.findByText(/^Not started · acceptance /)
+  expect(pending.tagName).toBe('SUMMARY')
+  expect(screen.getByText(/^Blocked · acceptance /)).toBeInTheDocument()
+  const details = pending.closest('details')!
+  expect(details).toHaveTextContent('Work for this step has not started; no candidate evidence yet')
+  expect(within(details).queryByRole('button')).toBeNull()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
 
 it('the existing generic Plan sign-off control loads candidates for an acceptance ref', async () => {

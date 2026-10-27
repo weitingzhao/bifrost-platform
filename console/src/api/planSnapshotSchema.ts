@@ -81,7 +81,7 @@ const snapshot = object({
     ? object({ task_id: str, plan_node_id: str, reason: str, source: str })(v, p)
     : object({ ...signoff, readiness: one('Ready') })(v, p)),
   owner_later: array((v: unknown, p: string) => 'ref' in dict(v, p)
-    ? object({ ...signoff, readiness: one('Blocked') })(v, p)
+    ? object({ ...signoff, readiness: one('Not started', 'Blocked') })(v, p)
     : object({ plan_node_id: str, title: str, readiness: one('Unknown'), reason: str })(v, p)),
   working: array(working), finished_today: array(finished), day_timezone: str, tasks: array(task), external_work: array(external),
   coverage: object({ unregistered_work: nonnegative, label: str, scope: str, reconciled: bool }),

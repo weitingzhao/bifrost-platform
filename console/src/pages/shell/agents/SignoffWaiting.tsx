@@ -92,5 +92,5 @@ export function AcceptanceSignoffQueue({ root }: { root: string }) {
     const node = view.nodes.find(n => n.plan_node_id === s.plan_node_id)
     return [<div key={s.ref}><p>{node?.label ?? s.plan_node_id} · {node?.title} · acceptance {s.acceptance} · plan v{s.plan_version}</p>
       <SignOffButton node={s.plan_node_id} label={node?.label ?? s.plan_node_id} signoffRef={s.ref} named={false} candidates={s.candidate_evidence} reviewContext={JSON.stringify([s, node?.state, node?.title])} unavailable={stale ? 'Refresh the plan before signing.' : node && ['done', 'stopped', 'dropped'].includes(node.state ?? '') ? 'This step is closed.' : undefined} /></div>]
-  })}{view.owner_later.flatMap(s => 'candidate_evidence' in s ? [<details key={s.ref}><summary>Blocked · acceptance {s.acceptance}</summary><p>{s.reason}</p><ul>{s.candidate_evidence.map(c => <li key={c.artifact_id}>{c.label} · {c.source}<br />{c.artifact_id}</li>)}</ul></details>] : [])}</div>
+  })}{view.owner_later.flatMap(s => 'candidate_evidence' in s ? [<details key={s.ref}><summary>{s.readiness} · acceptance {s.acceptance}</summary><p>{s.reason}</p><ul>{s.candidate_evidence.map(c => <li key={c.artifact_id}>{c.label} · {c.source}<br />{c.artifact_id}</li>)}</ul></details>] : [])}</div>
 }
