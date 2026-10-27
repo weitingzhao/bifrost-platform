@@ -65,9 +65,16 @@ func TestAcceptanceSignoffEvidenceHTTP(t *testing.T) {
 	if code, out := call(t, s, "viewer", "GET", "plan-view?root=R2", nil); code != 200 {
 		t.Fatalf("view %d %v", code, out)
 	} else {
-		entries := out["owner_waiting"].([]any)
-		if len(entries) != 1 || entries[0].(map[string]any)["candidate_evidence"] == nil {
-			t.Fatalf("missing candidates: %v", entries)
+		// No work has started on R2:1-1, so the sign-off waits in owner_later as
+		// Not started (Work 635); it still carries its candidates.
+		var found map[string]any
+		for _, e := range append(out["owner_waiting"].([]any), out["owner_later"].([]any)...) {
+			if m := e.(map[string]any); m["ref"] == b.SignoffRef() {
+				found = m
+			}
+		}
+		if found == nil || found["candidate_evidence"] == nil || found["readiness"] != "Not started" {
+			t.Fatalf("missing candidates: %v", found)
 		}
 	}
 }
