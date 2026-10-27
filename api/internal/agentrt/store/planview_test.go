@@ -242,15 +242,14 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	who := wr("thread:pages")
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "pages", Artifact: externalSpec(t, w)})
-	ok(t, err)
-	id := out["external_work_id"].(string)
-	for seq := int64(1); seq <= 25; seq++ {
-		typ := "heartbeat"
-		if seq == 1 {
-			typ = "started"
-		}
-		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: fmt.Sprint(seq), Seq: seq, Type: typ})
+	spec := externalSpec(t, w)
+	// Twelve runs, each registered and started: 24 listed events, more than a page.
+	var id string
+	for i := range 12 {
+		out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: fmt.Sprint("run-", i), Root: root, Node: s1, RunKey: fmt.Sprint("pages-", i), Artifact: spec})
+		ok(t, err)
+		id = out["external_work_id"].(string)
+		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 		ok(t, err)
 	}
 	first, err := store.PlanView(ctx, w.rt, root)
@@ -259,7 +258,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	if cursor == "" {
 		t.Fatal("missing recent continuation")
 	}
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "26", Seq: 26, Type: "heartbeat"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "end", Seq: 2, Type: "submitted"})
 	ok(t, err)
 	page, err := store.PlanViewPage(ctx, w.rt, root, cursor)
 	ok(t, err)
@@ -280,6 +279,41 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	}
 	_, err = store.PlanViewPage(ctx, w.rt, root, "invalid")
 	is(t, err, store.ErrInvalid)
+}
+
+// A dispatch run's heartbeat every 30 seconds says only that it is alive; Recent
+// changes lists its start and its end, not each heartbeat (2026-10-26: forty
+// heartbeats of one run filled the list on ops.bifrost.lan).
+func TestPlanViewRecentSkipsHeartbeats(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	who := wr("thread:beats")
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "beats", Artifact: externalSpec(t, w)})
+	ok(t, err)
+	id := out["external_work_id"].(string)
+	types := []string{"started"}
+	for range 30 {
+		types = append(types, "heartbeat")
+	}
+	types = append(types, "submitted")
+	for i, typ := range types {
+		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: fmt.Sprint(i + 1), Seq: int64(i + 1), Type: typ})
+		ok(t, err)
+	}
+	view, err := store.PlanView(ctx, w.rt, root)
+	ok(t, err)
+	var got []map[string]any
+	ok(t, json.Unmarshal(view["recent_changes"].(json.RawMessage), &got))
+	var listed []string
+	for _, e := range got {
+		body := e["body_json"].(map[string]any)
+		if x, ok := body["external_work"].(map[string]any); ok && x["external_work_id"] == id {
+			listed = append(listed, x["type"].(string))
+		}
+	}
+	if want := []string{"submitted", "started", "registered"}; !slices.Equal(listed, want) {
+		t.Fatalf("listed %v; want %v", listed, want)
+	}
 }
 
 func TestPlanViewLargeSnapshot(t *testing.T) {

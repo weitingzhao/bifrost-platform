@@ -4,59 +4,223 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 )
 
-// PlanHistory pins the head before pagination and refuses truncated history.
-// It preserves reverted results, unlike the cleanup-only MainResults index.
-func PlanHistory(ctx context.Context, acc Access, client *http.Client, repo, task, result, snapshot string, maxPages int) (landing.MainHistory, error) {
+// PlanHistoryReader answers, for the plan completion atoms, whether a task's
+// accepted result is effective on main (or on a pinned snapshot of it). It
+// keeps each repo's main commits between passes and reads only what is new:
+// a pass over 50 bindings is a head read per repo, not 50 full histories
+// (PV2 review 2026-10-26: about 30 requests per binding every 15 seconds).
+//
+// A result is read from the organization agent branches are pushed to
+// (Access.AgentOrg) first: a replayed result never exists in the delivery
+// organization, which mirrors GitHub and takes no push; then from the
+// delivery organization, where a result pushed straight to main lives.
+type PlanHistoryReader struct {
+	Access   AccessFunc
+	Client   *http.Client
+	MaxPages int
+	// HeadTTL is how long a read of main's head serves later bindings of the
+	// same pass (default 30s).
+	HeadTTL time.Duration
+	Now     func() time.Time
+
+	mu      sync.Mutex
+	repos   map[string]*repoMain
+	results map[string]string // repo@sha → message; a commit's message never changes
+}
+
+type repoMain struct {
+	head    string
+	headAt  time.Time
+	commits map[string]giteaCommit
+}
+
+// History implements store.PlanSources.History.
+func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
 	unknown := landing.MainHistory{State: landing.Unknown}
-	if maxPages < 1 {
+	if r.MaxPages < 1 {
 		return unknown, errors.New("history page budget missing")
 	}
-	g := &gitea{acc: acc, client: client}
-	target, err := g.commits(ctx, repo, result, time.Time{}, 1, nil)
+	acc, err := r.Access(ctx)
 	if err != nil {
 		return unknown, err
 	}
-	if len(target) == 0 || target[0].SHA != result {
-		return unknown, errors.New("result unavailable")
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.repos == nil {
+		r.repos, r.results = map[string]*repoMain{}, map[string]string{}
+	}
+	g := &gitea{acc: acc, client: r.Client}
+	m := r.repos[repo]
+	if m == nil {
+		m = &repoMain{commits: map[string]giteaCommit{}}
+		r.repos[repo] = m
 	}
 	if snapshot == "" {
-		var head struct {
-			Commit struct {
-				ID string `json:"id"`
-			} `json:"commit"`
-		}
-		if err = g.get(ctx, g.repoPath(repo)+"/branches/main", nil, &head); err != nil {
+		if snapshot, err = r.head(ctx, g, repo, m); err != nil {
 			return unknown, err
 		}
-		snapshot = head.Commit.ID
-		if snapshot == "" {
-			return unknown, errors.New("main unavailable")
+	}
+	history, complete := ancestry(m.commits, snapshot)
+	if !complete {
+		// New commits only: stop at the first one already held. A merged
+		// branch's older commits can follow a held one in the listing, so an
+		// ancestry still incomplete after that is read again in full.
+		known := func(sha string) bool { _, ok := m.commits[sha]; return ok }
+		if err = r.fetch(ctx, g, repo, snapshot, m, known); err != nil {
+			return unknown, err
+		}
+		if history, complete = ancestry(m.commits, snapshot); !complete {
+			if err = r.fetch(ctx, g, repo, snapshot, m, nil); err != nil {
+				return unknown, err
+			}
+			history, complete = ancestry(m.commits, snapshot)
 		}
 	}
-	commits, err := g.commits(ctx, repo, snapshot, time.Time{}, maxPages, nil)
+	if len(history) == 0 || history[0].SHA != snapshot {
+		return unknown, errors.New("snapshot unavailable")
+	}
+	msg, err := r.result(ctx, acc, repo, result)
 	if err != nil {
-		return unknown, err
-	}
-	if len(commits) == 0 || commits[0].SHA != snapshot {
-		return unknown, errors.New("snapshot mismatch")
-	}
-	seen := map[string]bool{}
-	history := make([]landinggit.HistoryCommit, 0, len(commits))
-	for _, c := range commits {
-		seen[c.SHA] = true
-		history = append(history, landinggit.HistoryCommit{SHA: c.SHA, Message: c.Msg})
-	}
-	complete := len(commits) < maxPages*pageLimit
-	for _, c := range commits {
-		for _, p := range c.Parents {
-			complete = complete && seen[p]
+		// An attempt branch is deleted once landed (TD-383) and its commit is
+		// collected later; the result's identity then comes from the commit on
+		// main that names it as the commit it cherry-picks (PV2 re-review S1).
+		var ok bool
+		if msg, ok = pickedResult(history, result); !ok {
+			return unknown, err
 		}
 	}
-	return landinggit.EvaluateHistory(task, result, target[0].Msg, history, complete)
+	h, err := landinggit.EvaluateHistory(task, result, msg, history, complete)
+	h.Snapshot = snapshot
+	return h, err
+}
+
+func (r *PlanHistoryReader) now() time.Time {
+	if r.Now != nil {
+		return r.Now()
+	}
+	return time.Now()
+}
+
+func (r *PlanHistoryReader) head(ctx context.Context, g *gitea, repo string, m *repoMain) (string, error) {
+	ttl := r.HeadTTL
+	if ttl <= 0 {
+		ttl = 30 * time.Second
+	}
+	if m.head != "" && r.now().Sub(m.headAt) < ttl {
+		return m.head, nil
+	}
+	var head struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	if err := g.get(ctx, g.repoPath(repo)+"/branches/main", nil, &head); err != nil {
+		return "", err
+	}
+	if head.Commit.ID == "" {
+		return "", errors.New("main unavailable")
+	}
+	m.head, m.headAt = head.Commit.ID, r.now()
+	return m.head, nil
+}
+
+// fetch lists commits reachable from ref into m; a partial read keeps what it
+// got (ancestry decides whether it is enough).
+func (r *PlanHistoryReader) fetch(ctx context.Context, g *gitea, repo, ref string, m *repoMain, stop func(string) bool) error {
+	commits, err := g.commits(ctx, repo, ref, time.Time{}, r.MaxPages, stop)
+	for _, c := range commits {
+		m.commits[c.SHA] = c
+	}
+	return err
+}
+
+// result is the accepted result's message, from the agent organization first.
+func (r *PlanHistoryReader) result(ctx context.Context, acc Access, repo, sha string) (string, error) {
+	key := repo + "@" + sha
+	if msg, ok := r.results[key]; ok {
+		return msg, nil
+	}
+	orgs := []string{}
+	if acc.AgentOrg != "" {
+		orgs = append(orgs, acc.AgentOrg)
+	}
+	if acc.Org != acc.AgentOrg {
+		orgs = append(orgs, acc.Org)
+	}
+	g := &gitea{acc: acc, client: r.Client}
+	for _, org := range orgs {
+		var c struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				Message string `json:"message"`
+			} `json:"commit"`
+		}
+		err := g.get(ctx, "/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/git/commits/"+url.PathEscape(sha), nil, &c)
+		if err == nil && c.SHA == sha {
+			r.results[key] = c.Commit.Message
+			return c.Commit.Message, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+	}
+	return "", errors.New("result unavailable")
+}
+
+// pickedResult is the message of the one commit in history that cherry-picks
+// result; two that do and disagree are not an identity.
+func pickedResult(history []landinggit.HistoryCommit, result string) (string, bool) {
+	line := "(cherry picked from commit " + result + ")"
+	msg, found := "", false
+	for _, c := range history {
+		if !strings.Contains(c.Message, line) {
+			continue
+		}
+		if found && c.Message != msg {
+			return "", false
+		}
+		msg, found = c.Message, true
+	}
+	return msg, found
+}
+
+// ancestry is the commits reachable from tip, tip first, and whether every
+// parent on the way is held and the history has exactly one root (a reader
+// that dropped parents would otherwise look complete).
+func ancestry(commits map[string]giteaCommit, tip string) ([]landinggit.HistoryCommit, bool) {
+	if _, ok := commits[tip]; !ok {
+		return nil, false
+	}
+	out := []landinggit.HistoryCommit{}
+	seen := map[string]bool{tip: true}
+	queue := []string{tip}
+	roots := 0
+	for len(queue) > 0 {
+		sha := queue[0]
+		queue = queue[1:]
+		c, ok := commits[sha]
+		if !ok {
+			return out, false
+		}
+		out = append(out, landinggit.HistoryCommit{SHA: c.SHA, Message: c.Msg, Parents: c.Parents})
+		if len(c.Parents) == 0 {
+			roots++
+		}
+		for _, p := range c.Parents {
+			if !seen[p] {
+				seen[p] = true
+				queue = append(queue, p)
+			}
+		}
+	}
+	return out, roots == 1
 }

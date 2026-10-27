@@ -108,6 +108,42 @@ type Controller struct {
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
 }
 
+// PlanObserveEvery is how often the plan completion atoms' sources are read
+// (store.CollectPlanObservations), in a loop of its own so a slow Gitea never
+// holds up facts and rules; PlanReadTimeout bounds each remote read, longer
+// than ReadTimeout because the first read of a repo's history is a full one
+// (PV2 review 2026-10-26).
+const (
+	PlanObserveEvery = time.Minute
+	PlanReadTimeout  = 2 * time.Minute
+)
+
+// PlanObservations is one pass of the plan completion atoms' sources.
+func (c *Controller) PlanObservations(ctx context.Context) (int, error) {
+	src := c.Sources.Plan
+	if src.History != nil {
+		original := src.History
+		src.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
+			rctx, cancel := context.WithTimeout(ctx, PlanReadTimeout)
+			defer cancel()
+			return original(rctx, repo, task, result, snapshot)
+		}
+	}
+	if src.Deployed != nil {
+		original := src.Deployed
+		src.Deployed = func(ctx context.Context, app, env string) (string, map[string]any, bool) {
+			type answer struct {
+				sha string
+				ref map[string]any
+				ok  bool
+			}
+			r := bounded(c, ctx, func(ctx context.Context) answer { sha, ref, ok := original(ctx, app, env); return answer{sha, ref, ok} })
+			return r.sha, r.ref, r.ok
+		}
+	}
+	return store.CollectPlanObservations(ctx, c.DB, src)
+}
+
 // boundedDeployed reads a deployment with the per-read timeout, for the done
 // rules, which read it while they hold the step (review 153 B1).
 func (c *Controller) boundedDeployed(ctx context.Context, env string) (string, map[string]any, bool) {
@@ -172,36 +208,6 @@ func (c *Controller) Facts(ctx context.Context) (int, error) {
 			recorded++
 		}
 	}
-	planSources := c.Sources.Plan
-	if planSources.History != nil {
-		original := planSources.History
-		planSources.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
-			type answer struct {
-				h landing.MainHistory
-				e error
-			}
-			r := bounded(c, ctx, func(ctx context.Context) answer {
-				h, e := original(ctx, repo, task, result, snapshot)
-				return answer{h, e}
-			})
-			return r.h, r.e
-		}
-	}
-	if planSources.Deployed != nil {
-		original := planSources.Deployed
-		planSources.Deployed = func(ctx context.Context, app, env string) (string, map[string]any, bool) {
-			type answer struct {
-				sha string
-				ref map[string]any
-				ok  bool
-			}
-			r := bounded(c, ctx, func(ctx context.Context) answer { sha, ref, ok := original(ctx, app, env); return answer{sha, ref, ok} })
-			return r.sha, r.ref, r.ok
-		}
-	}
-	n, e := store.CollectPlanObservations(ctx, c.DB, planSources)
-	recorded += n
-	errs = append(errs, e)
 	return recorded, errors.Join(errs...)
 }
 
@@ -633,6 +639,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		})
 	}
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
+	if c.Sources.Plan.History != nil || c.Sources.Plan.Deployed != nil {
+		c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
+			_, err := c.PlanObservations(ctx)
+			return err
+		})
+	}
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		_, ferr := c.Facts(ctx)
 		_, gerr := c.Gates(ctx)

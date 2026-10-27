@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
@@ -95,8 +96,8 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 		return landing.MainHistory{State: history, Commit: commitB}, nil
 	}}
 	ctl := controller.Controller{DB: w.rt, Sources: controller.Sources{Plan: src}}
-	if count, err := ctl.Facts(ctx); err != nil || count < 1 {
-		t.Fatalf("controller facts: %d %v", count, err)
+	if count, err := ctl.PlanObservations(ctx); err != nil || count < 1 {
+		t.Fatalf("controller plan observations: %d %v", count, err)
 	}
 	pvEvaluate(t, w, s1, "planned") // accepted is not landed
 	history = landing.Effective
@@ -110,8 +111,8 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	pvPoll(t, w, src)
 	var secondSeq int64
 	ok(t, w.rt.QueryRow(ctx, `SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id=$1`, "plan-observation:"+root).Scan(&secondSeq))
-	if secondSeq <= firstSeq {
-		t.Fatal("unchanged success did not refresh")
+	if secondSeq != firstSeq {
+		t.Fatal("an unchanged answer was written again (PV2 review: one event per binding per pass)")
 	}
 	history = landing.Reverted
 	pvPoll(t, w, src)
@@ -123,14 +124,25 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	history = landing.Effective
 	pvPoll(t, w, src)
 	pvEvaluate(t, w, s1, "done")
-	pvPoll(t, w, store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	// A failed read writes no answer and does not withdraw done: the last
+	// answer stands until it is Stale (PV2 review S4); the pass records that
+	// this binding was not read.
+	if _, err := store.CollectPlanObservations(ctx, w.rt, store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{}, errors.New("offline")
-	}})
-	pvEvaluate(t, w, s1, "active")
+	}}); err == nil || !strings.Contains(err.Error(), "offline") {
+		t.Fatalf("a failed read was not reported: %v", err)
+	}
+	pvEvaluate(t, w, s1, "done")
 	var body map[string]any
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'plan_observation' FROM agentrt.event WHERE event_stream_id=$1 ORDER BY seq DESC LIMIT 1`, "plan-observation:"+root).Scan(&body))
-	if body["value"] != "unknown" || body["last_success"] == nil || len(body["evidence"].([]any)) == 0 {
-		t.Fatalf("failure discarded last success: %v", body)
+	if body["value"] != "true" {
+		t.Fatalf("a failed read replaced the answer: %v", body)
+	}
+	var pass map[string]any
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'plan_observation_pass' FROM agentrt.event WHERE event_stream_id=$1 ORDER BY seq DESC LIMIT 1`, "plan-observation-pass:"+root).Scan(&pass))
+	// The failed read changed nothing the pass records: no new pass either.
+	if fresh, _ := pass["fresh"].(map[string]any); len(fresh) != 1 {
+		t.Fatalf("the pass lost the binding's last success: %v", pass)
 	}
 	history = landing.Effective
 	pvPoll(t, w, src)
@@ -382,5 +394,35 @@ func TestPV2LandingNoteAdapter(t *testing.T) {
 	}
 	if w.stepState(t, s1) == "done" {
 		t.Fatal("landing lifecycle was treated as completion proof")
+	}
+}
+
+// PV2 review 2026-10-26 S2: a card-auto-answer rule that answers plan changes
+// does not adopt a view binding completion atoms; the same view without
+// bindings it does (the control).
+func TestPV2RuleDoesNotAdoptBindings(t *testing.T) {
+	t.Parallel()
+	for _, binds := range []bool{true, false} {
+		w := newKernelWorld(t)
+		d := pvDocument(t, 1)
+		var artifact string
+		if binds {
+			b := pvBinding(d, s1, "external_verified", "owner_signoff")
+			b.Evidence = []string{w.artifact(t, "report", "drill evidence")}
+			artifact = pvArtifact(t, w, d, b)
+		} else {
+			artifact = pvArtifact(t, w, d)
+		}
+		signCardAuto(t, w, "30", "[plan_change]")
+		var s cardStore
+		zero := 0
+		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "adopt", root, "adopt the view", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, s.ask)
+		ok(t, err)
+		s.aged(s.order[0], time.Hour)
+		n, err := store.AnswerByRule(ctx, w.rt, s.rule())
+		ok(t, err)
+		if want := map[bool]int{true: 0, false: 1}[binds]; n != want {
+			t.Fatalf("binds %v: the rule answered %d cards; want %d", binds, n, want)
+		}
 	}
 }

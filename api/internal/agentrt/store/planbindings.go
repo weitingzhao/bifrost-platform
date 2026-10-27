@@ -3,9 +3,11 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
@@ -67,6 +69,10 @@ func externalMatches(n externalNote, b planview.Binding) bool {
 
 // Adoption is the existing plan decision, not a new completion write. It
 // installs conditions only; the next controller pass decides their truth.
+// A step's other conditions stay: the atoms an earlier version bound are
+// replaced by this version's, under one "all" with the rest of the rule; a
+// step this version binds nothing on loses its old atoms (PV2 review
+// 2026-10-26: adoption replaced a step's Owner signoff and gates).
 func installPlanBindings(ctx context.Context, tx pgx.Tx, d *planview.Document, mapping map[string]string, actor string, decision int64) error {
 	bindings, err := d.Bindings()
 	if err != nil {
@@ -79,29 +85,169 @@ func installPlanBindings(ctx context.Context, tx pgx.Tx, d *planview.Document, m
 		}
 		byStep[b.Step] = append(byStep[b.Step], map[string]any{b.Atom: map[string]any{"binding": b.ID, "version": b.Version}})
 	}
-	if len(byStep) > 0 {
-		records := []any{}
-		for _, b := range bindings {
-			record, e := jsonObject(b)
-			if e != nil {
-				return e
-			}
-			records = append(records, record)
-		}
-		if _, err = Append(ctx, tx, Event{Stream: PlanStream(d.Root), Type: "plan_changed", Actor: actor, Cause: decision, Body: map[string]any{"change": "adopt_plan_bindings", "decided_event_id": decision, "bindings": records}}); err != nil {
+	rows, err := tx.Query(ctx, `SELECT s.plan_node_id,s.done_rule_json FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id=s.parent_plan_node_id WHERE s.node_kind='step' AND i.parent_plan_node_id=$1 ORDER BY s.plan_node_id FOR UPDATE OF s`, d.Root)
+	if err != nil {
+		return err
+	}
+	current := map[string][]byte{}
+	var order []string
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err = rows.Scan(&id, &raw); err != nil {
+			rows.Close()
 			return err
+		}
+		current[id] = raw
+		order = append(order, id)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rules := map[string][]byte{}
+	for _, step := range order {
+		next, e := composeBoundRule(current[step], byStep[step])
+		if e != nil {
+			return invalid("step %s: %v", step, e)
+		}
+		was, e := canonRule(current[step])
+		if e != nil {
+			return e
+		}
+		if string(next) != string(was) {
+			rules[step] = next
 		}
 	}
-	for step, atoms := range byStep {
-		raw, err := json.Marshal(map[string]any{"all": atoms})
-		if err != nil {
-			return err
+	for step := range byStep {
+		if _, ok := current[step]; !ok {
+			return invalid("binding step %s is not a step of %s", step, d.Root)
+		}
+	}
+	if len(rules) == 0 && len(byStep) == 0 {
+		return nil
+	}
+	records := []any{}
+	for _, b := range bindings {
+		record, e := jsonObject(b)
+		if e != nil {
+			return e
+		}
+		records = append(records, record)
+	}
+	if _, err = Append(ctx, tx, Event{Stream: PlanStream(d.Root), Type: "plan_changed", Actor: actor, Cause: decision, Body: map[string]any{"change": "adopt_plan_bindings", "decided_event_id": decision, "bindings": records}}); err != nil {
+		return err
+	}
+	for _, step := range order {
+		raw, ok := rules[step]
+		if !ok {
+			continue
 		}
 		if _, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json=$2::jsonb,version=version+1 WHERE plan_node_id=$1`, step, raw); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// adoptsBindings says whether changes adopt a view that binds completion atoms.
+func adoptsBindings(ctx context.Context, tx pgx.Tx, changes []PlanChange) (bool, error) {
+	for _, c := range changes {
+		if c.Op != "adopt_plan_view" {
+			continue
+		}
+		doc, err := viewArtifact(ctx, tx, c.Artifact)
+		if err != nil {
+			return false, err
+		}
+		bs, err := doc.Bindings()
+		if err != nil || len(bs) > 0 {
+			return true, err
+		}
+	}
+	return false, nil
+}
+
+var boundAtoms = []string{plan.AtomMain, plan.AtomDeployment, plan.AtomReview, plan.AtomExternal}
+
+// composeBoundRule is old with its bound atoms removed, and atoms added under
+// one "all". A bound atom under "any" is refused: removing it would change
+// what the rest of that "any" means.
+func composeBoundRule(old []byte, atoms []any) ([]byte, error) {
+	v, err := canon.Parse(old)
+	if err != nil {
+		return nil, err
+	}
+	obj, _ := v.(map[string]any)
+	var base map[string]any
+	if len(obj) > 0 {
+		kept, keep, e := stripBound(obj, false)
+		if e != nil {
+			return nil, e
+		}
+		if keep {
+			base = kept
+		}
+	}
+	var out map[string]any
+	switch {
+	case len(atoms) == 0 && base == nil:
+		out = map[string]any{}
+	case len(atoms) == 0:
+		out = base
+	case base == nil:
+		out = map[string]any{"all": atoms}
+	default:
+		children := []any{base}
+		if all, ok := base["all"].([]any); ok && len(base) == 1 {
+			children = all
+		}
+		out = map[string]any{"all": append(append([]any{}, children...), atoms...)}
+	}
+	raw, err := canon.Encode(out)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = plan.Parse(raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+func stripBound(n map[string]any, underAny bool) (map[string]any, bool, error) {
+	if len(n) == 1 {
+		for k, v := range n {
+			if slices.Contains(boundAtoms, k) {
+				if underAny {
+					return nil, false, errors.New("a bound atom under any cannot be replaced; change the rule by a plan change first")
+				}
+				return nil, false, nil
+			}
+			if k == "all" || k == "any" {
+				list, _ := v.([]any)
+				kept := []any{}
+				for _, c := range list {
+					co, ok := c.(map[string]any)
+					if !ok {
+						kept = append(kept, c)
+						continue
+					}
+					x, keep, e := stripBound(co, underAny || k == "any")
+					if e != nil {
+						return nil, false, e
+					}
+					if keep {
+						kept = append(kept, x)
+					}
+				}
+				if len(kept) == 0 {
+					return nil, false, nil
+				}
+				return map[string]any{k: kept}, true, nil
+			}
+		}
+	}
+	return n, true, nil
 }
 
 // Other rule writers may only reference a binding actually adopted for this

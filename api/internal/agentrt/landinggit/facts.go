@@ -149,7 +149,8 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 	return true, changes, nil
 }
 
-var revertLine = regexp.MustCompile(`(?m)^This reverts commit ([0-9a-f]{40})\.\s*$`)
+// revertLine is git's revert line, of a commit ("X.") or of a merge ("X, reversing").
+var revertLine = regexp.MustCompile(`(?m)^This reverts commit ([0-9a-f]{40})(?:\.\s*$|,\s)`)
 
 // History scans complete local history, preserving both ever-present and
 // currently-effective evidence. It never calls the effective-only MainResults.
@@ -173,14 +174,14 @@ func (w *Workspace) History(ctx context.Context, task, a, snapshot string) (land
 	if e != nil {
 		return unknown, e
 	}
-	log, e := w.local(ctx, "log", "--topo-order", "--format=%H%x00%B%x00", tip, "--")
+	log, e := w.local(ctx, "log", "--topo-order", "--format=%H%x00%P%x00%B%x00", tip, "--")
 	if e != nil {
 		return unknown, e
 	}
 	parts := strings.Split(log, "\x00")
 	commits := []HistoryCommit{}
-	for i := 0; i+1 < len(parts); i += 2 {
-		commits = append(commits, HistoryCommit{strings.TrimSpace(parts[i]), parts[i+1]})
+	for i := 0; i+2 < len(parts); i += 3 {
+		commits = append(commits, HistoryCommit{SHA: strings.TrimSpace(parts[i]), Parents: strings.Fields(parts[i+1]), Message: parts[i+2]})
 	}
 	return EvaluateHistory(task, a, msg, commits, true)
 }

@@ -160,6 +160,16 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if card.ByRule, err = ruleAnswers(ctx, tx, CardPlanChange, ""); err != nil {
 			return nil, err
 		}
+		// What finishes a plan step is the Owner's to adopt: a view that binds
+		// completion atoms is never answered by a rule (PV2 review 2026-10-26;
+		// cardFor refuses it too).
+		if card.ByRule {
+			binds, e := adoptsBindings(ctx, tx, changes)
+			if e != nil {
+				return nil, e
+			}
+			card.ByRule = !binds
+		}
 		if card.Recommended, card.RecommendedWhy, err = gatesRecommend(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}

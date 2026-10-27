@@ -131,10 +131,26 @@ func cardFor(ctx context.Context, tx pgx.Tx, card RuntimeCard) (cardOn, bool, er
 	switch on.kind {
 	case CardPlanChange, CardPlanImport, CardRecorderImport:
 		var decided bool
+		var changes []byte
 		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event p JOIN agentrt.event d ON d.event_stream_id = p.event_stream_id
 		    AND d.event_type = 'plan_change_decided' AND (d.body_json->>'proposal_event_id')::bigint = p.event_id
-		  WHERE p.event_type = 'plan_change_proposed' AND p.body_json->>'question_id' = $1)`, card.ID).Scan(&decided)
-		return on, err == nil && !decided, err
+		  WHERE p.event_type = 'plan_change_proposed' AND p.body_json->>'question_id' = $1),
+		  COALESCE((SELECT p.body_json->'changes' FROM agentrt.event p WHERE p.event_type = 'plan_change_proposed' AND p.body_json->>'question_id' = $1
+		    ORDER BY p.event_id DESC LIMIT 1), '[]'::jsonb)`, card.ID).Scan(&decided, &changes)
+		if err != nil || decided {
+			return on, false, err
+		}
+		if on.kind == CardPlanChange {
+			// What finishes a plan step is the Owner's to adopt (PV2 review
+			// 2026-10-26): a rule never answers a view that binds atoms.
+			var cs []PlanChange
+			if err = json.Unmarshal(changes, &cs); err != nil {
+				return on, false, err
+			}
+			binds, err := adoptsBindings(ctx, tx, cs)
+			return on, err == nil && !binds, err
+		}
+		return on, true, nil
 	case CardMission:
 		var state, needsOwner, asked string
 		err = tx.QueryRow(ctx, `SELECT m.state, COALESCE(m.scope_json->>'needs_owner', ''),

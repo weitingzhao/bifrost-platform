@@ -9,6 +9,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// recentScope picks the events Recent changes lists for root $2 (plan stream $1):
+// the plan's own events, its external work except heartbeats (a dispatch run
+// sends one every 30 seconds; they only say it is alive, which the run's own
+// row already shows), landings of its tasks, and plan observations that
+// changed a value.
+const recentScope = `event_stream_id=$1 OR (body_json->'external_work'->>'root'=$2 AND body_json->'external_work'->>'type'<>'heartbeat') OR (event_stream_id LIKE 'landing:%' AND body_json->'landing'->>'op' IN (SELECT e.body_json->'landing'->>'op' FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.body_json->'landing'->>'task' JOIN agentrt.plan_node step ON step.plan_node_id=t.plan_node_id JOIN agentrt.plan_node item ON item.plan_node_id=step.parent_plan_node_id WHERE e.event_stream_id LIKE 'landing:%' AND item.parent_plan_node_id=$2)) OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true')`
+
 type viewRecentCursor struct {
 	Root    string           `json:"root"`
 	AsOf    string           `json:"as_of"`
@@ -38,7 +45,7 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 			return nil, "", "", invalid("invalid cursor time")
 		}
 	} else {
-		rows, err := tx.Query(ctx, `SELECT event_stream_id,max(seq) FROM agentrt.event WHERE event_stream_id=$1 OR body_json->'external_work'->>'root'=$2 OR (event_stream_id LIKE 'landing:%' AND body_json->'landing'->>'op' IN (SELECT e.body_json->'landing'->>'op' FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.body_json->'landing'->>'task' JOIN agentrt.plan_node step ON step.plan_node_id=t.plan_node_id JOIN agentrt.plan_node item ON item.plan_node_id=step.parent_plan_node_id WHERE e.event_stream_id LIKE 'landing:%' AND item.parent_plan_node_id=$2)) OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true') GROUP BY event_stream_id`, PlanStream(root), root)
+		rows, err := tx.Query(ctx, `SELECT event_stream_id,max(seq) FROM agentrt.event WHERE `+recentScope+` GROUP BY event_stream_id`, PlanStream(root), root)
 		if err != nil {
 			return nil, "", "", err
 		}
@@ -61,7 +68,7 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 	if err != nil {
 		return nil, "", "", err
 	}
-	rows, err := tx.Query(ctx, `SELECT to_jsonb(e),e.event_id FROM (SELECT event_id,event_stream_id,seq,event_type,actor_id,at,body_json FROM agentrt.event WHERE (event_stream_id=$1 OR body_json->'external_work'->>'root'=$2 OR (event_stream_id LIKE 'landing:%' AND body_json->'landing'->>'op' IN (SELECT e.body_json->'landing'->>'op' FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.body_json->'landing'->>'task' JOIN agentrt.plan_node step ON step.plan_node_id=t.plan_node_id JOIN agentrt.plan_node item ON item.plan_node_id=step.parent_plan_node_id WHERE e.event_stream_id LIKE 'landing:%' AND item.parent_plan_node_id=$2)) OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true')) AND seq<=COALESCE(($3::jsonb->>event_stream_id)::bigint,0) AND ($4::bigint=0 OR event_id<$4) ORDER BY event_id DESC LIMIT 21) e`, PlanStream(root), root, bounds, c.Before)
+	rows, err := tx.Query(ctx, `SELECT to_jsonb(e),e.event_id FROM (SELECT event_id,event_stream_id,seq,event_type,actor_id,at,body_json FROM agentrt.event WHERE (`+recentScope+`) AND seq<=COALESCE(($3::jsonb->>event_stream_id)::bigint,0) AND ($4::bigint=0 OR event_id<$4) ORDER BY event_id DESC LIMIT 21) e`, PlanStream(root), root, bounds, c.Before)
 	if err != nil {
 		return nil, "", "", err
 	}

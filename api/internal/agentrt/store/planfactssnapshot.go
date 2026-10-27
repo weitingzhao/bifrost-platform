@@ -20,6 +20,13 @@ type planFactsSnapshot struct {
 	Observations map[string]planObservation
 	Current      map[string]bool
 	External     map[string]externalNote
+	Passes       map[string]planPassSeen
+}
+
+// planPassSeen is a root's latest collector pass.
+type planPassSeen struct {
+	Fresh map[string]time.Time
+	At    time.Time
 }
 
 // One SQL statement gives a committed snapshot even inside the runtime's
@@ -36,6 +43,8 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
  ), observations AS (
  SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_observation' AND actor_id='controller'
  ORDER BY body_json->'plan_observation'->>'binding_sha256',(body_json->'plan_observation'->>'source_version')::bigint DESC
+ ), passes AS (
+ SELECT p.* FROM views v CROSS JOIN LATERAL (SELECT body_json->'plan_observation_pass' pass FROM agentrt.event WHERE event_stream_id='plan-observation-pass:'||(v.a->>'root') AND actor_id='controller' AND body_json ? 'plan_observation_pass' ORDER BY seq DESC LIMIT 1) p
  ), external AS (
  SELECT DISTINCT ON(event_stream_id) body_json->'external_work' e FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC
  ) SELECT jsonb_build_object('now',statement_timestamp(),
@@ -43,6 +52,7 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
  'docs',COALESCE((SELECT jsonb_agg(d) FROM docs),'[]'),
  'observations',COALESCE((SELECT jsonb_agg(o) FROM observations),'[]'),
  'external',COALESCE((SELECT jsonb_agg(e) FROM external),'[]'),
+ 'passes',COALESCE((SELECT jsonb_agg(pass) FROM passes),'[]'),
  'landings',COALESCE((SELECT jsonb_agg(jsonb_build_object('stream',event_stream_id,'at',at,'record',body_json->'landing') ORDER BY event_stream_id,seq) FROM agentrt.event WHERE event_type='note' AND actor_id='controller' AND event_stream_id LIKE 'landing:%' AND body_json ? 'landing'),'[]'),
  'current',COALESCE((SELECT jsonb_object_agg(b->>'attempt',EXISTS(
  SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) JOIN agentrt.attempt a USING(task_id)
@@ -64,11 +74,12 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 		Observations []planObservation
 		Current      map[string]bool
 		External     []externalNote
+		Passes       []planObservationPass
 	}
 	if err = json.Unmarshal(raw, &rows); err != nil {
 		return nil, err
 	}
-	s := &planFactsSnapshot{Landings: map[string]*landing.State{}, Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Observations: map[string]planObservation{}, Current: rows.Current, External: map[string]externalNote{}}
+	s := &planFactsSnapshot{Landings: map[string]*landing.State{}, Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Observations: map[string]planObservation{}, Current: rows.Current, External: map[string]externalNote{}, Passes: map[string]planPassSeen{}}
 	for _, v := range rows.Views {
 		s.Views[v.Root] = v
 	}
@@ -81,6 +92,21 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 	}
 	for _, o := range rows.Observations {
 		s.Observations[o.Digest] = o
+	}
+	// A pass that read a binding again with the same answer is its latest
+	// success: the answer was not rewritten (CollectPlanObservations).
+	for _, p := range rows.Passes {
+		seen := planPassSeen{Fresh: map[string]time.Time{}}
+		var e error
+		if seen.At, e = time.Parse(time.RFC3339Nano, p.At); e != nil {
+			return nil, e
+		}
+		for d, at := range p.Fresh {
+			if seen.Fresh[d], e = time.Parse(time.RFC3339Nano, at); e != nil {
+				return nil, e
+			}
+		}
+		s.applyPass(p.Root, seen)
 	}
 	for _, e := range rows.External {
 		s.External[e.ID] = e
@@ -105,6 +131,23 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 	}
 	return s, nil
 }
+
+// applyPass records a root's latest pass and moves each binding's last
+// success to the time the pass recorded for it, when later.
+func (s *planFactsSnapshot) applyPass(root string, p planPassSeen) {
+	s.Passes[root] = p
+	for d, seen := range p.Fresh {
+		o, ok := s.Observations[d]
+		if !ok || o.Status != "Fresh" || o.Root != root {
+			continue
+		}
+		if at, e := time.Parse(time.RFC3339Nano, o.LastSuccess); e == nil && seen.After(at) {
+			o.LastSuccess = timeText(seen)
+			s.Observations[d] = o
+		}
+	}
+}
+
 func (s *planFactsSnapshot) find(step, atom, id string, version int) (planview.Binding, bool) {
 	for _, d := range s.Docs {
 		bs, _ := d.Bindings()

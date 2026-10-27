@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,7 +13,16 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
-const planObservationTTL = 60 * time.Second
+// A binding's last successful read ages to Stale after planObservationTTL;
+// only then does a source that keeps failing withdraw a done that rests on it
+// (a Gitea blip does not flip a step and its dependents). A pass records which
+// bindings it read, at most every planPassRefresh while nothing changes, so
+// the freshness of an unchanged answer costs one event per root, not one per
+// binding per pass (PV2 review 2026-10-26, coordinator recommendation).
+const (
+	planObservationTTL = 25 * time.Minute
+	planPassRefresh    = 10 * time.Minute
+)
 
 // PlanSources are controller-owned adapters, never request payloads. History
 // must read complete Git history, including reverts. Deployed must check actual
@@ -60,83 +70,188 @@ func (n planObservation) validate() error {
 }
 func observationStream(root string) string     { return "plan-observation:" + root }
 func observationKey(b planview.Binding) string { return b.Root + ":" + b.Digest() }
+func passStream(root string) string            { return "plan-observation-pass:" + root }
 
-// collect is serial per binding: the source is read after taking the lock.
-// A poll is a new source version even when its business value is unchanged.
-// Replaying a version is idempotent, and a late older version cannot win.
+// planObservationPass is one collector pass over a root: for each binding
+// still adopted, the database time of its last successful read. A binding
+// this pass could not read keeps the time of its last success, so one failed
+// read does not make an unchanged answer Stale (PV2 re-review 2026-10-26).
+// Times are the database's: an event's own time is the writer's clock, which
+// a pod or a test may skew.
+type planObservationPass struct {
+	V     int               `json:"v"`
+	Kind  string            `json:"kind"`
+	Root  string            `json:"root"`
+	At    string            `json:"at"`
+	Fresh map[string]string `json:"fresh"`
+}
+
+func (p planObservationPass) validate() error {
+	if p.V != 1 || p.Kind != "agentrt.plan_observation_pass/v1" || p.Root == "" || p.Fresh == nil {
+		return invalid("invalid plan observation pass")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, p.At); err != nil {
+		return invalid("invalid plan observation pass time")
+	}
+	for d, at := range p.Fresh {
+		if len(d) != 64 || !shaPattern.MatchString(d) {
+			return invalid("invalid plan observation pass")
+		}
+		if _, err := time.Parse(time.RFC3339Nano, at); err != nil {
+			return invalid("invalid plan observation pass time")
+		}
+	}
+	return nil
+}
+
+// remoteRead is a binding's Git or deployment answer, read before the
+// collector's transaction so a slow source holds no lock.
+type remoteRead struct {
+	history   landing.MainHistory
+	err       error
+	snapshot  string
+	deployRef map[string]any
+}
+
+func readRemote(ctx context.Context, src PlanSources, b planview.Binding) remoteRead {
+	var r remoteRead
+	if b.Source != "git" && b.Source != "deployment" {
+		return r
+	}
+	if src.History == nil {
+		r.err = errors.New("history unavailable")
+		return r
+	}
+	if b.Source == "deployment" {
+		if src.Deployed == nil {
+			r.err = errors.New("deployment unavailable")
+			return r
+		}
+		var ok bool
+		r.snapshot, r.deployRef, ok = src.Deployed(ctx, b.Application, b.Environment)
+		if !ok || len(r.snapshot) != 40 || len(r.deployRef) == 0 {
+			r.err = errors.New("deployment unavailable")
+			return r
+		}
+	}
+	r.history, r.err = src.History(ctx, b.Repo, b.Task, b.Result, r.snapshot)
+	return r
+}
+
+// CollectPlanObservations is one pass. Per root: remote sources are read
+// first, outside any transaction; then, under the root's lock, each binding
+// still adopted gets its answer, written only when it differs from the last
+// one, and the pass records when each binding last answered. A failed read writes
+// nothing: the last answer stands until it is Stale. No step lock is taken:
+// an observation is keyed by the binding's digest, so one written for a
+// binding a concurrent adoption just replaced is never read for its successor.
 func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, error) {
-	var bindings []planview.Binding
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		s, e := readPlanFacts(ctx, tx)
-		if e != nil {
-			return e
-		}
-		for _, d := range s.Docs {
-			bs, e := d.Bindings()
-			if e != nil {
-				return e
-			}
-			bindings = append(bindings, bs...)
-		}
-		return nil
-	})
-	if err != nil {
+	var first *planFactsSnapshot
+	if err := InTx(ctx, db, func(tx pgx.Tx) error { var e error; first, e = readPlanFacts(ctx, tx); return e }); err != nil {
 		return 0, err
 	}
+	roots := make([]string, 0, len(first.Docs))
+	for r := range first.Docs {
+		roots = append(roots, r)
+	}
+	slices.Sort(roots)
 	count := 0
 	var errs []error
-	for _, b := range bindings {
+	for _, root := range roots {
+		bindings, err := first.Docs[root].Bindings()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if len(bindings) == 0 {
+			continue
+		}
+		remote := make([]remoteRead, len(bindings))
+		for i, b := range bindings {
+			remote[i] = readRemote(ctx, src, b)
+		}
+		var written int
+		var failed []error
 		err = InTx(ctx, db, func(tx pgx.Tx) error {
-			// Step first, matching adoption/signoff; poll cannot publish for a
-			// binding concurrently replaced by a new plan decision.
-			if _, e := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id=$1 FOR SHARE`, b.Step); e != nil {
-				return e
-			}
-			if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742120,hashtext($1))`, observationKey(b)); e != nil {
+			written, failed = 0, nil
+			if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742120,hashtext($1))`, passStream(root)); e != nil {
 				return e
 			}
 			s, e := readPlanFacts(ctx, tx)
 			if e != nil {
 				return e
 			}
-			current, ok := s.find(b.Step, b.Atom, b.ID, b.Version)
-			if !ok || current.Digest() != b.Digest() {
-				return nil
-			}
-			old := s.Observations[b.Digest()]
-			n := planObservation{V: 1, Kind: "agentrt.plan_observation/v1", Root: b.Root, Step: b.Step, Binding: b.ID, Version: b.Version, Digest: b.Digest(), Source: observationKey(b), SourceVersion: old.SourceVersion + 1, Status: "Fresh", Value: "unknown", Evidence: []string{}, Reason: "No trusted verification yet"}
-			if e = readPlanSource(ctx, tx, src, b, &n); e != nil {
-				n.Status = "Unknown"
-				n.Value = "unknown"
-				n.Reason = "Trusted source unavailable"
-			}
 			var now time.Time
 			if e = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); e != nil {
 				return e
 			}
-			if n.Status == "Fresh" {
+			last, had := s.Passes[root]
+			fresh := map[string]string{}
+			for i, b := range bindings {
+				current, ok := s.find(b.Step, b.Atom, b.ID, b.Version)
+				if !ok || current.Digest() != b.Digest() {
+					continue
+				}
+				old := s.Observations[b.Digest()]
+				n := planObservation{V: 1, Kind: "agentrt.plan_observation/v1", Root: b.Root, Step: b.Step, Binding: b.ID, Version: b.Version, Digest: b.Digest(), Source: observationKey(b), SourceVersion: old.SourceVersion + 1, Status: "Fresh", Value: "unknown", Evidence: []string{}, Reason: "No trusted verification yet"}
+				if e = readPlanSource(ctx, tx, remote[i], b, &n); e != nil {
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					failed = append(failed, fmt.Errorf("plan observation %s/%s: %w", b.Root, b.ID, e))
+					if at, ok := last.Fresh[b.Digest()]; ok {
+						fresh[b.Digest()] = timeText(at)
+					}
+					continue
+				}
+				fresh[b.Digest()] = timeText(now)
 				n.LastValue = n.Value
 				n.LastSuccess = timeText(now)
-			} else {
-				n.LastValue = old.LastValue
-				n.LastSuccess = old.LastSuccess
-				n.Evidence = old.Evidence
-				if n.Evidence == nil {
-					n.Evidence = []string{}
+				n.Changed = true
+				if old.Digest != "" && n.Status == old.Status && n.Value == old.Value && n.Reason == old.Reason && fmt.Sprint(n.Evidence) == fmt.Sprint(old.Evidence) {
+					continue // the same answer: the pass below keeps it fresh
+				}
+				did, e := recordPlanObservation(ctx, tx, n)
+				if e != nil {
+					return e
+				}
+				if did {
+					written++
 				}
 			}
-			n.Changed = n.Status != old.Status || n.Value != old.Value || n.Reason != old.Reason || fmt.Sprint(n.Evidence) != fmt.Sprint(old.Evidence)
-			did, e := recordPlanObservation(ctx, tx, n)
-			if did {
-				count++
+			// Written when the set of bindings changes, or to refresh: an
+			// unchanged answer read again costs one event per root per
+			// planPassRefresh, a failure nothing.
+			if had && sameKeys(last.Fresh, fresh) && now.Sub(last.At) < planPassRefresh {
+				return nil
 			}
+			body, e := jsonObject(planObservationPass{V: 1, Kind: "agentrt.plan_observation_pass/v1", Root: root, At: timeText(now), Fresh: fresh})
+			if e != nil {
+				return e
+			}
+			_, e = Append(ctx, tx, Event{Stream: passStream(root), Type: "note", Actor: "controller", Body: map[string]any{"text": "Plan verification pass", "plan_observation_pass": body}})
 			return e
 		})
 		if err != nil {
 			errs = append(errs, err)
+			continue
 		}
+		count += written
+		errs = append(errs, failed...)
 	}
 	return count, errors.Join(errs...)
+}
+
+func sameKeys[A, B any](a map[string]A, b map[string]B) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func recordPlanObservation(ctx context.Context, tx pgx.Tx, n planObservation) (bool, error) {
@@ -171,7 +286,7 @@ func recordPlanObservation(ctx context.Context, tx pgx.Tx, n planObservation) (b
 	return err == nil, err
 }
 
-func readPlanSource(ctx context.Context, tx pgx.Tx, src PlanSources, b planview.Binding, n *planObservation) error {
+func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planview.Binding, n *planObservation) error {
 	if b.ExternalWork != "" {
 		x, e := bindingExternal(ctx, tx, b.ExternalWork)
 		if e != nil {
@@ -236,25 +351,10 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, src PlanSources, b planview.
 			n.Value = "false"
 		}
 	case "git", "deployment":
-		if src.History == nil {
-			return fmt.Errorf("history unavailable")
+		if remote.err != nil {
+			return remote.err
 		}
-		snapshot := ""
-		var deployRef map[string]any
-		if b.Source == "deployment" {
-			if src.Deployed == nil {
-				return fmt.Errorf("deployment unavailable")
-			}
-			var ok bool
-			snapshot, deployRef, ok = src.Deployed(ctx, b.Application, b.Environment)
-			if !ok || len(snapshot) != 40 || len(deployRef) == 0 {
-				return fmt.Errorf("deployment unavailable")
-			}
-		}
-		h, e := src.History(ctx, b.Repo, b.Task, b.Result, snapshot)
-		if e != nil {
-			return e
-		}
+		h, snapshot, deployRef := remote.history, remote.snapshot, remote.deployRef
 		switch h.State {
 		case landing.Unknown:
 			return fmt.Errorf("incomplete history")

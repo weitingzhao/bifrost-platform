@@ -222,7 +222,9 @@ func TestTrustedDiffAndFullHistory(t *testing.T) {
 	w.Close()
 	// Land into the local fixture, then revert. Both operations are fixture
 	// setup, never an external repository or a deployed controller.
-	gitTest(t, src, "cherry-pick", in.A)
+	// -x: a landing names the result it replays, as the runtime's replay does;
+	// without it a commit sharing the Change-Id is Unknown (PV2 review).
+	gitTest(t, src, "cherry-pick", "-x", in.A)
 	landed := gitTest(t, src, "rev-parse", "HEAD")
 	repo := filepath.Join(filepath.Dir(src), "remote.git")
 	gitTest(t, src, "push", repo, "main")

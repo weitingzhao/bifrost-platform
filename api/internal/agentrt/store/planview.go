@@ -242,6 +242,13 @@ func jsonObject(v any) (map[string]any, error) {
 
 // Subprotocols are closed even when an internal caller uses Append directly.
 func checkViewNote(body map[string]any) error {
+	if raw, ok := body["plan_observation_pass"]; ok {
+		var p planObservationPass
+		if err := strictViewValue(raw, &p); err != nil {
+			return err
+		}
+		return p.validate()
+	}
 	if raw, ok := body["plan_observation"]; ok {
 		var n planObservation
 		if err := strictViewValue(raw, &n); err != nil {

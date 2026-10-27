@@ -94,6 +94,18 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 			return Appended{}, invalid("plan observations are controller-owned")
 		}
 	}
+	if raw, ok := ev.Body["plan_observation_pass"]; ok {
+		var p planObservationPass
+		if err := strictViewValue(raw, &p); err != nil {
+			return Appended{}, err
+		}
+		if err := p.validate(); err != nil {
+			return Appended{}, err
+		}
+		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != passStream(p.Root) || ev.PlanNode != "" {
+			return Appended{}, invalid("plan observation passes are controller-owned")
+		}
+	}
 
 	if ev.Stream == "" || ev.Type == "" || ev.Actor == "" {
 		return Appended{}, errors.New("store: an event needs a stream, a type and an actor")

@@ -21,6 +21,9 @@ const (
 type MainHistory struct {
 	State  History
 	Commit string
+	// Snapshot is the main commit the answer was read at, when the reader
+	// pinned one (plan observations keep it as evidence).
+	Snapshot string
 }
 
 // Facts is a fresh snapshot, shared by all gates. Unknown is deliberately not

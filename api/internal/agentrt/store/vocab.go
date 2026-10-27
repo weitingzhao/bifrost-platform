@@ -158,7 +158,7 @@ var bodies = map[string][]field{
 	// refs resolved; unavailable, why there is none. On the exams stream,
 	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
 	// that voided the paper, which no run was handed in for.
-	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
+	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"plan_observation_pass", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
 		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
