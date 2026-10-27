@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -91,10 +90,10 @@ func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, sna
 	msg, err := r.result(ctx, acc, repo, result)
 	if err != nil {
 		// An attempt branch is deleted once landed (TD-383) and its commit is
-		// collected later; the result's identity then comes from the commit on
-		// main that names it as the commit it cherry-picks (PV2 re-review S1).
+		// collected later. Recovery requires provenance and the independently
+		// bound task; a candidate's own Change-Id cannot prove its identity.
 		var ok bool
-		if msg, ok = pickedResult(history, result); !ok {
+		if msg, ok = pickedResult(history, task, result); !ok {
 			return unknown, err
 		}
 	}
@@ -176,21 +175,26 @@ func (r *PlanHistoryReader) result(ctx context.Context, acc Access, repo, sha st
 	return "", errors.New("result unavailable")
 }
 
-// pickedResult is the message of the one commit in history that cherry-picks
-// result; two that do and disagree are not an identity.
-func pickedResult(history []landinggit.HistoryCommit, result string) (string, bool) {
-	line := "(cherry picked from commit " + result + ")"
+// pickedResult recovers only the independently bound task. Never borrow a
+// candidate's Change-Id and then match that candidate against itself.
+func pickedResult(history []landinggit.HistoryCommit, task, result string) (string, bool) {
+	if task == "" {
+		return "", false
+	}
 	msg, found := "", false
 	for _, c := range history {
-		if !strings.Contains(c.Message, line) {
+		if landinggit.CherryPickSource(c.Message) != result {
 			continue
+		}
+		if !landinggit.HasTaskTrailer(c.Message, task) {
+			return "", false
 		}
 		if found && c.Message != msg {
 			return "", false
 		}
 		msg, found = c.Message, true
 	}
-	return msg, found
+	return "Recovered result\n\nAgentrt-Task: " + task, found
 }
 
 // ancestry is the commits reachable from tip, tip first, and whether every

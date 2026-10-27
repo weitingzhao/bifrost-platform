@@ -73,6 +73,9 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 		}
 		kept := map[string]string{}
 		for _, m := range mergeRevert.FindAllStringSubmatch(c.Message, -1) {
+			if previous, ok := kept[m[1]]; ok && previous != m[2] {
+				return unknown, errors.New("a merge revert names conflicting kept parents")
+			}
 			kept[m[1]] = m[2]
 		}
 		for _, r := range rs {
@@ -84,14 +87,9 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 			}
 			// A merge reverted: what it brought in is what is reachable from
 			// it but not from the parent the revert kept.
-			mainline := ps[0]
-			if k, ok := kept[undone]; ok {
-				// The parent a revert says it kept must be one of the merge's:
-				// any other would mark the whole history before it reverted.
-				if !slices.Contains(ps, k) {
-					return unknown, errors.New("a merge revert names a parent the merge does not have")
-				}
-				mainline = k
+			mainline, ok := kept[undone]
+			if !ok || !slices.Contains(ps, mainline) {
+				return unknown, errors.New("a merge revert needs an explicit parent of the merge")
 			}
 			base := reachable(mainline)
 			for x := range reachable(undone) {
@@ -127,7 +125,7 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 		}
 		ci := changeTrailer.FindAllStringSubmatch(historyTrailers(c.Message), -1)
 		ct := taskTrailer.FindAllStringSubmatch(historyTrailers(c.Message), -1)
-		provenance := c.SHA == result || strings.Contains(c.Message, "(cherry picked from commit "+result+")")
+		provenance := c.SHA == result || CherryPickSource(c.Message) == result
 		idMatch := len(ids) == 1 && len(ci) == 1 && ci[0][1] == ids[0][1]
 		if len(ci) > 1 || len(ct) > 1 {
 			if provenance || idMatch {
@@ -155,35 +153,4 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 		return unknown, errors.New("a commit shares the result's Change-Id without its provenance")
 	}
 	return found, nil
-}
-
-// Only the terminal trailer block supplies identity; quoted trailer examples
-// in a commit body do not bind a result to a task or Change-Id.
-func historyTrailers(message string) string {
-	message = strings.TrimSpace(strings.ReplaceAll(message, "\r\n", "\n"))
-	lines := []string{}
-	for _, line := range strings.Split(message, "\n") {
-		if strings.HasPrefix(line, "(cherry picked from commit ") && strings.HasSuffix(line, ")") {
-			continue
-		}
-		lines = append(lines, line)
-	}
-	message = strings.TrimSpace(strings.Join(lines, "\n"))
-	_, block, ok := strings.Cut(message, "\n\n")
-	if !ok {
-		return ""
-	}
-	if i := strings.LastIndex(block, "\n\n"); i >= 0 {
-		block = block[i+2:]
-	}
-	for i, line := range strings.Split(block, "\n") {
-		if i > 0 && (strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")) {
-			continue // a folded continuation of the trailer above
-		}
-		key, value, ok := strings.Cut(line, ":")
-		if !ok || strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" || strings.ContainsAny(key, " \t") {
-			return ""
-		}
-	}
-	return block
 }

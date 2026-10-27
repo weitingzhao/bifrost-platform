@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -13,15 +14,17 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
-// A binding's last successful read ages to Stale after planObservationTTL;
+// A binding's last persisted successful read ages to Stale after planObservationTTL;
 // only then does a source that keeps failing withdraw a done that rests on it
-// (a Gitea blip does not flip a step and its dependents). A pass records which
-// bindings it read, at most every planPassRefresh while nothing changes, so
-// the freshness of an unchanged answer costs one event per root, not one per
-// binding per pass (PV2 review 2026-10-26, coordinator recommendation).
+// (a Gitea blip does not flip a step and its dependents). A pass refreshes
+// successful bindings when any persisted success is planPassRefresh old, so
+// unchanged answers cost one event per root refresh, not one per binding
+// per round. A persisted success may lag the real last success by
+// up to planPassRefresh (Work 632, coordinator recommendation).
 const (
 	planObservationTTL = 25 * time.Minute
 	planPassRefresh    = 10 * time.Minute
+	planRoundTimeout   = 5 * time.Minute
 )
 
 // PlanSources are controller-owned adapters, never request payloads. History
@@ -107,10 +110,59 @@ func (p planObservationPass) validate() error {
 // remoteRead is a binding's Git or deployment answer, read before the
 // collector's transaction so a slow source holds no lock.
 type remoteRead struct {
+	read      bool
+	at        time.Time
 	history   landing.MainHistory
 	err       error
 	snapshot  string
 	deployRef map[string]any
+}
+
+type planObservationPosition struct{ pass, observation int64 }
+
+// Both positions come from one committed statement snapshot. Missing streams
+// are position zero; a first collector creating either stream fences this read.
+func readPlanObservationPosition(ctx context.Context, tx pgx.Tx, root string) (p planObservationPosition, err error) {
+	err = tx.QueryRow(ctx, `SELECT
+ COALESCE((SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id=$1),0),
+ COALESCE((SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id=$2),0)`, passStream(root), observationStream(root)).Scan(&p.pass, &p.observation)
+	return
+}
+
+// Each short clock transaction finishes before any remote call. The deadline
+// bounds the root, including an in-flight read; unread bindings have read=false.
+func readPlanRemotes(ctx context.Context, db DB, src PlanSources, bindings []planview.Binding) ([]remoteRead, error) {
+	rctx, cancel := context.WithTimeout(ctx, planRoundTimeout)
+	defer cancel()
+	remote := make([]remoteRead, len(bindings))
+	var start time.Time
+	for i, b := range bindings {
+		if rctx.Err() != nil {
+			break
+		}
+		if b.Source != "git" && b.Source != "deployment" {
+			remote[i].read = true
+			continue
+		}
+		var at time.Time
+		if err := InTx(rctx, db, func(tx pgx.Tx) error {
+			return tx.QueryRow(rctx, `SELECT clock_timestamp()`).Scan(&at)
+		}); err != nil {
+			if ctx.Err() == nil && rctx.Err() != nil {
+				break
+			}
+			return nil, err
+		}
+		if start.IsZero() {
+			start = at
+		}
+		if at.Sub(start) >= planRoundTimeout || rctx.Err() != nil {
+			break
+		}
+		remote[i] = readRemote(rctx, src, b)
+		remote[i].read, remote[i].at = true, at
+	}
+	return remote, ctx.Err()
 }
 
 func readRemote(ctx context.Context, src PlanSources, b planview.Binding) remoteRead {
@@ -166,16 +218,35 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 		if len(bindings) == 0 {
 			continue
 		}
-		remote := make([]remoteRead, len(bindings))
-		for i, b := range bindings {
-			remote[i] = readRemote(ctx, src, b)
+		var position planObservationPosition
+		if err = InTx(ctx, db, func(tx pgx.Tx) error {
+			var e error
+			position, e = readPlanObservationPosition(ctx, tx, root)
+			return e
+		}); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		remote, err := readPlanRemotes(ctx, db, src, bindings)
+		if err != nil {
+			errs = append(errs, err)
+			continue
 		}
 		var written int
 		var failed []error
+		var skipped bool
 		err = InTx(ctx, db, func(tx pgx.Tx) error {
-			written, failed = 0, nil
+			written, failed, skipped = 0, nil, false
 			if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742120,hashtext($1))`, passStream(root)); e != nil {
 				return e
+			}
+			currentPosition, e := readPlanObservationPosition(ctx, tx, root)
+			if e != nil {
+				return e
+			}
+			if currentPosition != position {
+				skipped = true
+				return nil
 			}
 			s, e := readPlanFacts(ctx, tx)
 			if e != nil {
@@ -187,7 +258,24 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 			}
 			last, had := s.Passes[root]
 			fresh := map[string]string{}
+			// Carry persisted successes for every still-adopted binding,
+			// including those this round did not reach before its deadline.
+			if doc := s.Docs[root]; doc != nil {
+				currentBindings, e := doc.Bindings()
+				if e != nil {
+					return e
+				}
+				for _, b := range currentBindings {
+					if at := s.Observations[b.Digest()].LastSuccess; at != "" {
+						fresh[b.Digest()] = at
+					}
+				}
+			}
+			succeeded, refresh := false, false
 			for i, b := range bindings {
+				if !remote[i].read {
+					continue
+				}
 				current, ok := s.find(b.Step, b.Atom, b.ID, b.Version)
 				if !ok || current.Digest() != b.Digest() {
 					continue
@@ -199,14 +287,20 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 						return ctx.Err()
 					}
 					failed = append(failed, fmt.Errorf("plan observation %s/%s: %w", b.Root, b.ID, e))
-					if at, ok := last.Fresh[b.Digest()]; ok {
-						fresh[b.Digest()] = timeText(at)
-					}
 					continue
 				}
-				fresh[b.Digest()] = timeText(now)
+				at := remote[i].at
+				if at.IsZero() { // database-only binding, read in this transaction
+					at = now
+				}
+				succeeded = true
+				persisted, parseErr := time.Parse(time.RFC3339Nano, old.LastSuccess)
+				if parseErr != nil || at.Sub(persisted) >= planPassRefresh {
+					refresh = true
+				}
+				fresh[b.Digest()] = timeText(at)
 				n.LastValue = n.Value
-				n.LastSuccess = timeText(now)
+				n.LastSuccess = timeText(at)
 				n.Changed = true
 				if old.Digest != "" && n.Status == old.Status && n.Value == old.Value && n.Reason == old.Reason && fmt.Sprint(n.Evidence) == fmt.Sprint(old.Evidence) {
 					continue // the same answer: the pass below keeps it fresh
@@ -219,10 +313,10 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 					written++
 				}
 			}
-			// Written when the set of bindings changes, or to refresh: an
-			// unchanged answer read again costs one event per root per
-			// planPassRefresh, a failure nothing.
-			if had && sameKeys(last.Fresh, fresh) && now.Sub(last.At) < planPassRefresh {
+			// A failure never writes a pass. Refresh against each binding's
+			// persisted success, not the last pass's time: another binding's
+			// recovery must not postpone this one's refresh.
+			if !succeeded || had && sameKeys(last.Fresh, fresh) && !refresh {
 				return nil
 			}
 			body, e := jsonObject(planObservationPass{V: 1, Kind: "agentrt.plan_observation_pass/v1", Root: root, At: timeText(now), Fresh: fresh})
@@ -237,6 +331,9 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 			continue
 		}
 		count += written
+		if skipped {
+			slog.Info("Plan observation round skipped", "root", root, "reason", "collector stream advanced during remote reads")
+		}
 		errs = append(errs, failed...)
 	}
 	return count, errors.Join(errs...)
