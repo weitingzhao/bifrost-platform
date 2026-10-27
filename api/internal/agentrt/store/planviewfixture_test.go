@@ -59,7 +59,8 @@ func (d *signoffViewDB) QueryRow(_ context.Context, q string, _ ...any) pgx.Row 
 			raw, _ := json.Marshal(d.doc)
 			*dest[0].(*[]byte) = raw
 		case strings.HasPrefix(q, "WITH views AS"):
-			raw, _ := json.Marshal(map[string]any{"now": d.now, "views": []any{d.adoption}, "docs": []any{d.doc}})
+			body, _ := json.Marshal(d.doc)
+			raw, _ := json.Marshal(map[string]any{"now": d.now, "views": []any{d.adoption}, "docs": []any{map[string]any{"root": d.doc.Root, "body": body}}})
 			*dest[0].(*[]byte) = raw
 		case strings.Contains(q, "jsonb_agg"):
 			*dest[0].(*[]byte) = []byte(`[]`)

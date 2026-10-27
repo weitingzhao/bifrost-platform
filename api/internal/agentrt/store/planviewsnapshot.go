@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,27 +57,19 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if len(nodes) > 500 {
 		return nil, invalid("plan exceeds 500 nodes")
 	}
-	views, err := adoptedViews(ctx, tx)
+	snap, err := readPlanFacts(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	adoption := views[root]
+	adoption := snap.Views[root]
 	graph := planview.Graph{Mainline: []planview.NodeRef{}, Edges: []planview.Dependency{}}
-	docs := map[string]*planview.Document{}
 	items := []planview.Item{}
 	warnings := []string{}
-	if adoption.Artifact != "" {
-		for r, a := range views {
-			docs[r], err = viewArtifact(ctx, tx, a.Artifact)
-			if err != nil {
-				return nil, err
-			}
-		}
-		graph, err = planview.Resolve(root, docs)
-		if err != nil {
-			return nil, err
-		}
-		items = docs[root].Items
+	if warning := snap.Warnings[root]; warning != "" {
+		warnings = append(warnings, warning)
+	} else if doc := snap.Docs[root]; doc != nil {
+		graph = adoptedViewGraph(doc)
+		items = doc.Items
 	} else {
 		warnings = append(warnings, "Legacy evidence: plan has no adopted view; nodes are Unclassified")
 	}
@@ -90,10 +83,6 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 			n["lane_kind"] = item.Lane
 			n["view"] = item
 		}
-	}
-	snap, err := readPlanFacts(ctx, tx)
-	if err != nil {
-		return nil, err
 	}
 	candidates, err := planEvidenceCandidates(ctx, tx, snap, root)
 	if err != nil {
@@ -197,6 +186,27 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	}
 	return map[string]any{"schema": "agentrt.plan_view_response/v1", "root": root, "plan_version": adoption.Version, "artifact_id": adoption.Artifact, "as_of": timeText(now), "nodes": nodes, "items": items, "edges": graph.Edges, "mainline": mainline, "next": next, "waiting_on": waiting, "owner_waiting": ownerWaiting, "owner_later": ownerLater, "working": working, "finished_today": finished, "day_timezone": "UTC", "tasks": tasks, "external_work": ext, "coverage": map[string]any{"unregistered_work": unregistered, "label": "Unregistered work", "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable", "reconciled": false}, "source_watermarks": watermarks, "freshness": map[string]any{"database": map[string]any{"status": "Fresh", "observed_at": timeText(now)}, "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds", "verification": verificationFreshness, "owner_waiting": "Runtime task waits and versioned acceptance signoffs; legacy readiness remains Unknown"}, "eta": map[string]any{"status": "Unknown", "reason": "Capacity and duration observations are not available"}, "recent_changes": json.RawMessage(recent), "recent_next": nextRecent, "recent_as_of": recentAsOf, "warnings": warnings}, nil
 }
+
+// Adoption validates the complete graph with planview.Resolve. Reading keeps
+// this root's validated items and edges even if a dependency's document cannot
+// be read now; its milestone evaluates Unknown through the same facts snapshot.
+func adoptedViewGraph(d *planview.Document) planview.Graph {
+	g := planview.Graph{Mainline: []planview.NodeRef{}, Edges: []planview.Dependency{}}
+	order := map[string]int{}
+	for _, n := range d.Items {
+		from := planview.NodeRef{Root: d.Root, Node: n.Node}
+		if n.Lane == "mainline" {
+			g.Mainline = append(g.Mainline, from)
+			order[n.Node] = *n.Order
+		}
+		for _, e := range n.Dependencies {
+			g.Edges = append(g.Edges, planview.Dependency{From: from, To: planview.NodeRef{Root: e.Root, Node: e.Node}, Milestone: e.Milestone, RequiredFor: e.RequiredFor, Relation: e.Relation, Reason: e.Reason, Sources: e.Sources})
+		}
+	}
+	sort.Slice(g.Mainline, func(i, j int) bool { return order[g.Mainline[i].Node] < order[g.Mainline[j].Node] })
+	return g
+}
+
 func itemIndex(d *planview.Document, node string) int {
 	for i, n := range d.Items {
 		if n.Node == node {

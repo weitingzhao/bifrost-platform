@@ -124,7 +124,14 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 		if v == plan.Unknown {
 			status = "Unknown"
 		}
-		waiting = append(waiting, map[string]any{"edge": edge, "status": status, "reason": "Required milestone is not currently verified", "responsible": s.Docs[edge.To.Root].Items[itemIndex(s.Docs[edge.To.Root], edge.To.Node)].Responsible})
+		responsible := planview.Responsible{Kind: "owner"}
+		reason := "Required milestone is not currently verified"
+		if target := s.Docs[edge.To.Root]; target != nil {
+			responsible = target.Items[itemIndex(target, edge.To.Node)].Responsible
+		} else {
+			reason = "Required plan view is unavailable; Owner must restore it"
+		}
+		waiting = append(waiting, map[string]any{"edge": edge, "status": status, "reason": reason, "responsible": responsible})
 	}
 	if hasBindings {
 		path := []any{}

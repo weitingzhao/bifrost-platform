@@ -433,13 +433,18 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 		n.Evidence = append([]string{fmt.Sprintf("event:%d", id)}, signed.Evidence...)
 		n.Reason = "Owner signed this acceptance version and evidence"
 	case "verification":
-		var verdict, method, evidence string
+		// Keep the adopted ID as the method anchor, not as the verdict. This
+		// preserves existing binding digests while following re-verification of
+		// the exact same task/attempt/result (the round is checked above).
+		var id, verdict, method, evidence string
 		var independent bool
-		e := tx.QueryRow(ctx, `SELECT v.verdict,v.method,v.evidence_artifact_id,
+		e := tx.QueryRow(ctx, `SELECT v.verification_id,v.verdict,v.method,v.evidence_artifact_id,
     COALESCE(va.executor_actor_id<>a.executor_actor_id AND vt.subject_task_id=t.task_id AND vt.role='review' AND vt.mission_id=t.mission_id AND va.model_provider IS NOT NULL AND NOT EXISTS(SELECT 1 FROM agentrt.attempt sa WHERE sa.task_id=t.task_id AND (sa.executor_actor_id=va.executor_actor_id OR sa.model_provider IS NULL OR sa.model_provider=va.model_provider)) AND convert_from(vb.body,'UTF8')::jsonb @> jsonb_build_object('round',t.round_no,'attempt',a.attempt_id,'commit',a.pushed_commit,'subject_task',t.task_id),false)
-    FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id AND a.task_id=v.task_id JOIN agentrt.task t ON t.task_id=a.task_id
+    FROM agentrt.verification anchor JOIN agentrt.verification v ON v.task_id=anchor.task_id AND v.attempt_id=anchor.attempt_id AND v.method=anchor.method AND v.subject_commit=anchor.subject_commit
+    JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id AND a.task_id=v.task_id JOIN agentrt.task t ON t.task_id=a.task_id
     LEFT JOIN agentrt.attempt va ON va.attempt_id=v.verifier_attempt_id LEFT JOIN agentrt.task vt ON vt.task_id=va.task_id LEFT JOIN agentrt.artifact_blob vb ON vb.artifact_id=vt.spec_artifact_id
-    WHERE v.verification_id=$1 AND v.task_id=$2 AND v.attempt_id=$3 AND a.pushed_commit=$4 AND v.subject_commit=$4`, b.Verification, b.Task, b.Attempt, b.Result).Scan(&verdict, &method, &evidence, &independent)
+    WHERE anchor.verification_id=$1 AND v.task_id=$2 AND v.attempt_id=$3 AND a.pushed_commit=$4 AND v.subject_commit=$4
+    ORDER BY v.created_at DESC,v.verification_id DESC LIMIT 1`, b.Verification, b.Task, b.Attempt, b.Result).Scan(&id, &verdict, &method, &evidence, &independent)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return nil
 		}
@@ -454,8 +459,8 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 			n.Reason = "Not an allowed external verifier"
 			return nil
 		}
-		n.Evidence = []string{b.Verification, evidence}
-		n.Reason = "Exact task/attempt verification"
+		n.Evidence = []string{id, evidence}
+		n.Reason = "Latest same-method verification of exact task/attempt/result"
 		if verdict == "pass" {
 			n.Value = "true"
 		} else if verdict == "fail" {

@@ -85,7 +85,11 @@ func (t *collectorTestTx) QueryRow(_ context.Context, q string, a ...any) pgx.Ro
 			if d.pass != nil {
 				passes = append(passes, *d.pass)
 			}
-			raw, e := json.Marshal(map[string]any{"now": d.now, "views": []any{map[string]any{"root": d.doc.Root}}, "docs": []any{d.doc}, "observations": obs, "passes": passes, "current": map[string]bool{}})
+			body, e := json.Marshal(d.doc)
+			if e != nil {
+				return e
+			}
+			raw, e := json.Marshal(map[string]any{"now": d.now, "views": []any{map[string]any{"root": d.doc.Root, "tenant": d.doc.Tenant, "plan_version": d.doc.Version}}, "docs": []any{map[string]any{"root": d.doc.Root, "body": body}}, "observations": obs, "passes": passes, "current": map[string]any{}})
 			*x[0].(*[]byte) = raw
 			return e
 		case strings.Contains(q, "SELECT clock_timestamp()"):
