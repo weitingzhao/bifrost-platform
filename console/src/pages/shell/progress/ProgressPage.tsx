@@ -4,6 +4,8 @@ import { runtimeUnreadLine } from '../owner/ownerModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
+import { usePlanAddress, usePlanSnapshot } from '../agents/usePlanSnapshot'
+import { SignoffWaiting } from '../agents/SignoffWaiting'
 import { AgentsPlan } from '../agents/AgentsPlan'
 import { useRuntimeArch, useRuntimePlan } from '../agents/useRuntimePlan'
 import { ProgressOverview } from './ProgressOverview'
@@ -28,6 +30,7 @@ function goalInHash(): string {
  */
 function addressTarget(): (() => HTMLElement | null) | null {
   const goal = goalInHash()
+  if (new URLSearchParams(canonicalQuery(window.location.hash)).has('node') && !goal) return null
   if (goal) {
     const task = hashQueryParam(canonicalQuery(window.location.hash), 'task')
     return () => (task ? document.getElementById(goalTaskId(goal, task)) : null) ?? document.getElementById(`goal-${goal}`)
@@ -42,10 +45,12 @@ function addressTarget(): (() => HTMLElement | null) | null {
  * the Owner is For you's; new goals are given on Chief of staff. `#work?goal=M-n` puts that goal's
  * card first and brings it into view.
  */
-export function ProgressPage() {
+export function ProgressPage({ planView = false }: { planView?: boolean }) {
   const openedAt = useRef(Date.now())
   const needs = useNeedsYou()
-  const plan = useRuntimePlan()
+  const plan = useRuntimePlan(!planView)
+  const { root } = usePlanAddress()
+  const snapshot = usePlanSnapshot(root, planView)
   // One scroll per address, on arrival and on every hash change, to what the address points at:
   // returning to the same goal scrolls again, and goal and section together scroll once (review 425 B1).
   useEffect(() => {
@@ -87,7 +92,7 @@ export function ProgressPage() {
   const runtime = unreadable ? undefined : runtimeQ.data
   const ids = missionIds(runtimeQ.data, submitted?.id)
   useSettledSignoffTarget(ids.slice(0, WORK_GOAL_CARDS),
-    (!runtimeQ.isPending || runtimeQ.isPaused) && plan.from !== 'loading')
+    (!runtimeQ.isPending || runtimeQ.isPaused) && (planView ? !snapshot.isPending || snapshot.isPaused : plan.from !== 'loading'))
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
       {runtime && <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime.generated_at}><Tick text={now => relative(runtime.generated_at || '', now)} /></time></p>}
@@ -104,8 +109,8 @@ export function ProgressPage() {
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
-    <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={unreadable} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} openedAt={openedAt.current} /></section>
-    <section id="plan" aria-label="Plan" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>
+    {!planView && <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={unreadable} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} openedAt={openedAt.current} /></section>}
+    {planView ? <SignoffWaiting deferScroll /> : <section id="plan" aria-label="Plan" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>}
     <section id="activity" aria-label="Activity"><AgentThreadsInProgress /><a href="#infrastructure?section=hosts">Host health and capacity · System</a></section>
     <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
       <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>

@@ -1,0 +1,4459 @@
+{
+  "artifact_id": "sha256:50497187e08e05981312fd0bb9427f9f12c0b8d17124e57fb21a99b76c3727c9",
+  "as_of": "2026-10-26T21:45:08.996940Z",
+  "coverage": {
+    "label": "Unregistered work",
+    "reconciled": false,
+    "scope": "Threads with plan-node events in this root in the last 24 hours; unsupported processes are not observable",
+    "unregistered_work": 0
+  },
+  "day_timezone": "UTC",
+  "edges": [
+    {
+      "from": {
+        "node": "4.2",
+        "root": "R4"
+      },
+      "milestone": "prod",
+      "reason": "第二波实施在 4.1 上 PROD 后开始",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.2",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "资格是接入配套，不推定整项必须串行",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.8",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.2",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "并行发布能力关联；不阻塞仓库接入设计",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.3",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.3",
+        "root": "R4"
+      },
+      "milestone": "prod",
+      "reason": "第二波实施门槛，设计可先行",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.3",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "服务多应用并行交付",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.2",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.4",
+        "root": "R4"
+      },
+      "milestone": "prod",
+      "reason": "第二波实施门槛；不依赖 4.2 完成",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.4",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "后备能力关联，硬件窗口不是统筹迁移前置",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.9",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.5",
+        "root": "R4"
+      },
+      "milestone": "prod",
+      "reason": "只约束完整现场流，子项全计划视图不继承此门槛",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.5",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "视图覆盖计划，完整现场流仍需单独验收",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.5.pv",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.6",
+        "root": "R4"
+      },
+      "milestone": "s0",
+      "reason": "D-L5 处置与历史落地资格相关，独立审批，不把全部清理串到 S0",
+      "relation": "related",
+      "required_for": "cleanup",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.7",
+        "root": "R4"
+      },
+      "milestone": "second_repo",
+      "reason": "第三波在第二个仓库接入后开始",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.2",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.7",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "计划状态推导配套关系",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.5.pv",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.7",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "主机执行器配套关系",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.7.host-policy",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.8",
+        "root": "R4"
+      },
+      "milestone": "prod",
+      "reason": "第二波实施门槛",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.8",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "给常驻岗位提供资格能力，不以搬迁完成阻塞考试",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.4",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.9",
+        "root": "R4"
+      },
+      "milestone": "second_repo",
+      "reason": "第三波只约束其余后备；B4 ①先行",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.2",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.10",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "需要真实自主落地证据",
+      "relation": "blocks",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.10",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "需要双产品并行证据",
+      "relation": "blocks",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.2",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.10",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "需要合盖一夜证据",
+      "relation": "blocks",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.4",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.10",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "需要七天免清理证据",
+      "relation": "blocks",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.6",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.10",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "需要七天决定计数",
+      "relation": "blocks",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.7",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.5.pv",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "读取落地事实；不要求 4.1 新事件先上线，也不阻塞 4.1",
+      "relation": "related",
+      "required_for": "accepted",
+      "sources": [
+        "work"
+      ],
+      "to": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    {
+      "from": {
+        "node": "4.7.host-policy",
+        "root": "R4"
+      },
+      "milestone": "accepted",
+      "reason": "Owner 最新顺序：视图可用后实施",
+      "relation": "blocks",
+      "required_for": "implementation",
+      "sources": [
+        "decision"
+      ],
+      "to": {
+        "node": "4.5.pv",
+        "root": "R4"
+      }
+    }
+  ],
+  "eta": {
+    "reason": "PV1 has no verified milestone or capacity facts",
+    "status": "Unknown"
+  },
+  "external_work": [
+    {
+      "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+      "backfilled": false,
+      "description": {
+        "acceptance_refs": [
+          "PV4"
+        ],
+        "branch": "w31/pv4",
+        "estimate_minutes": [
+          10,
+          20
+        ],
+        "executor": "codex",
+        "kind": "agentrt.external_work/v1",
+        "provider": "openai",
+        "repo": "platform",
+        "task": "实现全计划与现场视图",
+        "v": 1
+      },
+      "elapsed_s": 0,
+      "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "heartbeat_age_s": 0,
+      "heartbeat_at": "2026-10-26T21:45:08.986249Z",
+      "kind": "agentrt.external_work/v1",
+      "plan_node_id": "R4:4.1-1",
+      "recorded_at": "2026-10-26T21:45:08.986328Z",
+      "registered_at": "2026-10-26T21:45:08.961083Z",
+      "registrant": "thread:pv4",
+      "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+      "request_digest": "sha256:b58494e23fd3896b27fb4e84b6a7623600853b70672afc31ff4811dad098ebb8",
+      "root": "R4",
+      "seq": 23,
+      "source_run_key": "work624",
+      "started_at": "2026-10-26T21:45:08.963091Z",
+      "state": "Running",
+      "status": "Running",
+      "type": "heartbeat",
+      "v": 1
+    },
+    {
+      "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+      "backfilled": false,
+      "description": {
+        "acceptance_refs": [
+          "PV4"
+        ],
+        "branch": "w31/pv4",
+        "estimate_minutes": [
+          10,
+          20
+        ],
+        "executor": "codex",
+        "kind": "agentrt.external_work/v1",
+        "provider": "openai",
+        "repo": "platform",
+        "task": "实现全计划与现场视图",
+        "v": 1
+      },
+      "elapsed_s": 0,
+      "ended_at": "2026-10-26T21:45:08.990379Z",
+      "external_work_id": "ew_8778cca2ea3686bb23aab94401e559c2a251da5462841321cb69cd1712469228",
+      "heartbeat_age_s": 0,
+      "heartbeat_at": "2026-10-26T21:45:08.989453Z",
+      "kind": "agentrt.external_work/v1",
+      "plan_node_id": "R4:4.1-2",
+      "recorded_at": "2026-10-26T21:45:08.990462Z",
+      "registered_at": "2026-10-26T21:45:08.988441Z",
+      "registrant": "thread:pv4",
+      "registration_digest": "sha256:cb9db3ce4deb6c9f6401e806ec89683c30c13a5f5e53ec6fac3ed3d3520fde14",
+      "request_digest": "sha256:f0bdca148f82b02627a02be1e5beb6e62985556d7c1a64a17abf0c92c975de5e",
+      "root": "R4",
+      "seq": 2,
+      "source_run_key": "finished-work",
+      "started_at": "2026-10-26T21:45:08.989453Z",
+      "state": "Submitted",
+      "status": "Submitted",
+      "type": "submitted",
+      "v": 1
+    }
+  ],
+  "finished_today": [
+    {
+      "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+      "backfilled": false,
+      "description": {
+        "acceptance_refs": [
+          "PV4"
+        ],
+        "branch": "w31/pv4",
+        "estimate_minutes": [
+          10,
+          20
+        ],
+        "executor": "codex",
+        "kind": "agentrt.external_work/v1",
+        "provider": "openai",
+        "repo": "platform",
+        "task": "实现全计划与现场视图",
+        "v": 1
+      },
+      "elapsed_s": 0,
+      "ended_at": "2026-10-26T21:45:08.990379Z",
+      "external_work_id": "ew_8778cca2ea3686bb23aab94401e559c2a251da5462841321cb69cd1712469228",
+      "heartbeat_age_s": 0,
+      "heartbeat_at": "2026-10-26T21:45:08.989453Z",
+      "kind": "agentrt.external_work/v1",
+      "plan_node_id": "R4:4.1-2",
+      "recorded_at": "2026-10-26T21:45:08.990462Z",
+      "registered_at": "2026-10-26T21:45:08.988441Z",
+      "registrant": "thread:pv4",
+      "registration_digest": "sha256:cb9db3ce4deb6c9f6401e806ec89683c30c13a5f5e53ec6fac3ed3d3520fde14",
+      "request_digest": "sha256:f0bdca148f82b02627a02be1e5beb6e62985556d7c1a64a17abf0c92c975de5e",
+      "root": "R4",
+      "seq": 2,
+      "source_run_key": "finished-work",
+      "started_at": "2026-10-26T21:45:08.989453Z",
+      "state": "Submitted",
+      "status": "Submitted",
+      "type": "submitted",
+      "v": 1
+    }
+  ],
+  "freshness": {
+    "database": {
+      "observed_at": "2026-10-26T21:45:08.996940Z",
+      "status": "Fresh"
+    },
+    "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
+    "owner_waiting": "Partial: runtime task waits only; approval/question/signoff readiness awaits PV2",
+    "verification": "Unknown"
+  },
+  "items": [
+    {
+      "acceptance": [
+        {
+          "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+          "evidence_required": [
+            "P0 逐行五项权限结果",
+            "CI vet 种错失败 run",
+            "PipelineRun 的 platform/ui/infra commit",
+            "Gitea 实际推送者实证"
+          ],
+          "id": "landing-p0",
+          "milestone": "s0",
+          "rule_ref": "landing:S0",
+          "sources": [
+            "landing"
+          ],
+          "target_environment": "stg+prod"
+        },
+        {
+          "criterion": "受签名规则约束的落地控制器已上 PROD",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "landing-prod",
+          "milestone": "prod",
+          "rule_ref": "deployment_verified",
+          "sources": [
+            "landing"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "一句 Console 小目标自行进入 main 并上 STG，统筹线程零写入",
+          "evidence_required": [
+            "mission 完整事件链",
+            "落地记录与真实 Gitea 推送者",
+            "CI 与 STG run、摘要和平台健康",
+            "统筹全部写动作计数为 0"
+          ],
+          "id": "landing-star",
+          "milestone": "accepted",
+          "rule_ref": "landing:star",
+          "sources": [
+            "landing"
+          ],
+          "target_environment": "stg"
+        }
+      ],
+      "anchor_node_id": null,
+      "bindings": [],
+      "depends_on": [],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "第 3 稿切法存在；不能据此判实现完成",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "landing"
+        },
+        {
+          "assessment": "13 点按推荐已定；正式规则签名与发布审批仍按切法执行",
+          "classification": "owner_statement",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "decision"
+        },
+        {
+          "assessment": "本片完成仓库准备；P0 线上权限和推送者实证未验证",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "s0",
+          "observed_at": "2026-10-24",
+          "source": "p0"
+        },
+        {
+          "assessment": "简报报告 S5–S7 与 TD-435 已应用，不能外推完整 P0 通过",
+          "classification": "owner_statement",
+          "live_verified": false,
+          "milestone": "s0",
+          "observed_at": "2026-10-24",
+          "source": "td432"
+        }
+      ],
+      "lane_kind": "mainline",
+      "mainline_order": 1,
+      "milestones": [
+        "design",
+        "s0",
+        "implementation",
+        "prod",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 1,
+      "parent": "R4",
+      "plan_node_id": "4.1",
+      "title": "交房：运行时自己合入 main 并交付 STG",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "Owner 签 Finance 接入范围与权限",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "finance",
+          "milestone": "finance_signed",
+          "rule_ref": "owner_signoff",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "第二个产品仓库进入运行时队列并完成接入核验",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "second",
+          "milestone": "second_repo",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "真实 Screening 问题经业务入口交付 STG，太太试用并记录反馈",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "screening",
+          "milestone": "screening",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "stg"
+        },
+        {
+          "criterion": "两个产品任务时间重叠，各自进 main，不互相等待",
+          "evidence_required": [
+            "两条任务与落地链",
+            "两条发布链",
+            "任务时间重叠证据"
+          ],
+          "id": "two-products",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": null,
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "prod",
+          "node": "4.1",
+          "reason": "第二波实施在 4.1 上 PROD 后开始",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.8",
+          "reason": "资格是接入配套，不推定整项必须串行",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.3",
+          "reason": "并行发布能力关联；不阻塞仓库接入设计",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "旧台账列出目标与待做项，未查询运行时",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        }
+      ],
+      "lane_kind": "mainline",
+      "mainline_order": 2,
+      "milestones": [
+        "design",
+        "implementation",
+        "finance_signed",
+        "second_repo",
+        "screening",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 2,
+      "parent": "R4",
+      "plan_node_id": "4.2",
+      "title": "接多个项目、同时推进",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "Owner 签各应用发版策略",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "release-policy",
+          "milestone": "policy_signed",
+          "rule_ref": "owner_signoff",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "两个应用同时发布不等待；一次小改按策略自己上 PROD 后通知",
+          "evidence_required": [
+            "并行 run 与持久操作/车道记录",
+            "PROD 策略签名",
+            "同摘要发布、健康及通知证据"
+          ],
+          "id": "release-star",
+          "milestone": "accepted",
+          "rule_ref": "deployment_verified",
+          "sources": [
+            "release"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.1",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "prod",
+          "node": "4.1",
+          "reason": "第二波实施门槛，设计可先行",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.2",
+          "reason": "服务多应用并行交付",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "第 2 稿设计存在，实施与签名状态未在线核验",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "release"
+        },
+        {
+          "assessment": "复核 535 结论为先改：代次隔离、镜像和 CI 豁免等问题未关闭；不是实施或发布通过",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "release-review"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "policy_signed",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 3,
+      "parent": "R4",
+      "plan_node_id": "4.3",
+      "title": "每个应用自己的发布节奏",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "MacBook 合盖一整夜，任务照常推进；手机问统筹能收到回答",
+          "evidence_required": [
+            "完整夜间时窗与任务/产物记录",
+            "手机往返记录",
+            "Owner 演练签收",
+            "各家 CLI 登录与长期记忆读取验证"
+          ],
+          "id": "overnight",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "placement"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": null,
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "prod",
+          "node": "4.1",
+          "reason": "第二波实施门槛；不依赖 4.2 完成",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.9",
+          "reason": "后备能力关联，硬件窗口不是统筹迁移前置",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "设计已在仓库，不能据此判常驻服务运行",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "placement"
+        },
+        {
+          "assessment": "复核 536 结论为先改：测试覆盖、持续值守和恢复窗口等尚不成立；夜间演练未验证",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "placement-review"
+        },
+        {
+          "assessment": "记忆导入在本项，架构已选；未认定导入完成",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "memory"
+        }
+      ],
+      "lane_kind": "mainline",
+      "mainline_order": 3,
+      "milestones": [
+        "design",
+        "implementation",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 4,
+      "parent": "R4",
+      "plan_node_id": "4.4",
+      "title": "统筹搬出电脑，Mac mini 重新分工",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "不问统筹，手机能说出几件活在跑、各在第几步、哪件卡住",
+          "evidence_required": [
+            "真实任务现场流与动作审计",
+            "手机试用记录",
+            "等待/失联/未知状态测试"
+          ],
+          "id": "field-visible",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.1",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "prod",
+          "node": "4.1",
+          "reason": "只约束完整现场流，子项全计划视图不继承此门槛",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.5.pv",
+          "reason": "视图覆盖计划，完整现场流仍需单独验收",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "完整现场流仍是第二波；旧勾选不是完成证明",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        },
+        {
+          "assessment": "全计划视图提前并行，不能代替完整现场流",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "cut"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 5,
+      "parent": "R4",
+      "plan_node_id": "4.5",
+      "title": "进展和现场在 Ops 上看得见",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "按归属与归档规则完成一次性清理",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "cleanup",
+          "milestone": "cleanup",
+          "rule_ref": "external_verified",
+          "sources": [
+            "lifecycle"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "连续七天不手工清理，磁盘余量和分支数不恶化",
+          "evidence_required": [
+            "连续七天趋势及来源水位",
+            "人工清理动作记录",
+            "低磁盘停派与告警实证"
+          ],
+          "id": "seven-days",
+          "milestone": "seven_days",
+          "rule_ref": "external_verified",
+          "sources": [
+            "lifecycle"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "清理、告警、停派和七天观察均通过",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "lifecycle-star",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "lifecycle"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.1",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "s0",
+          "node": "4.1",
+          "reason": "D-L5 处置与历史落地资格相关，独立审批，不把全部清理串到 S0",
+          "relation": "related",
+          "required_for": "cleanup",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "有切法；第一波并行，不因等待 4.1 而停盘点",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "lifecycle"
+        },
+        {
+          "assessment": "盘点已记录；D-L5 等待按 mission 归档与审批，不等于已清理",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "cleanup",
+          "observed_at": "2026-10-24",
+          "source": "inventory"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "cleanup",
+        "seven_days",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 6,
+      "parent": "R4",
+      "plan_node_id": "4.6",
+      "title": "分支、工作目录、磁盘的生命周期",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "按明确一周窗口，Owner 决定少于 40 次",
+          "evidence_required": [
+            "Owner 决定事件及去重口径",
+            "固定七天统计窗口",
+            "执行器审计与审批合单记录"
+          ],
+          "id": "decisions",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.10",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "second_repo",
+          "node": "4.2",
+          "reason": "第三波在第二个仓库接入后开始",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.5.pv",
+          "reason": "计划状态推导配套关系",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.7.host-policy",
+          "reason": "主机执行器配套关系",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "第三波；没有读取最新决定事件，未量出周次数",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "implementation",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        },
+        {
+          "assessment": "计划步骤事件推导由 PV 提供，不替代执行器或审批合单",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "cut"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 7,
+      "parent": "R4",
+      "plan_node_id": "4.7",
+      "title": "降低 Owner 负担",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "Owner 签一次题集",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "questions",
+          "milestone": "questions_signed",
+          "rule_ref": "owner_signoff",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "换模型自动重考、发卷判分，岗位表和记录可见；关键岗位至少两家有候选",
+          "evidence_required": [
+            "模型变更及重考事件",
+            "题集签名与考试记录",
+            "岗位候选覆盖",
+            "全流程无需 Owner 输口令实证"
+          ],
+          "id": "qualifications",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.2",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "prod",
+          "node": "4.1",
+          "reason": "第二波实施门槛",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.4",
+          "reason": "给常驻岗位提供资格能力，不以搬迁完成阻塞考试",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "原 3.3 并入；题集签名和考试上线状态未读",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "questions_signed",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 8,
+      "parent": "R4",
+      "plan_node_id": "4.8",
+      "title": "资格流水线薄版",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "06、NAS、两台 mini 报数、失联与磁盘告警验证",
+          "evidence_required": [
+            "四台主机抓取结果",
+            "失联与磁盘种错告警",
+            "手机收到通知"
+          ],
+          "id": "b4",
+          "milestone": "b4",
+          "rule_ref": "external_verified",
+          "sources": [
+            "hosts"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "Owner 提供硬件与休市窗口",
+          "evidence_required": [
+            "当前结果 SHA 的独立复核",
+            "实际部署与健康核验",
+            "按版本绑定的验收记录"
+          ],
+          "id": "hardware",
+          "milestone": "hardware_window",
+          "rule_ref": "owner_signoff",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "拔掉任何一台非交易机器，对应能力按约定时间接上，手机收到通知",
+          "evidence_required": [
+            "逐机故障演练记录",
+            "恢复时长与约定比较",
+            "手机通知",
+            "Owner 签收"
+          ],
+          "id": "failover",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "hosts"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.4",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "second_repo",
+          "node": "4.2",
+          "reason": "第三波只约束其余后备；B4 ①先行",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "B4 ①切法与报数脚本已有；未把完整后备判成完成",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "b4",
+          "observed_at": "2026-10-24",
+          "source": "hosts"
+        },
+        {
+          "assessment": "台账记录 07 Ready 和 SSD 已安装；来源为记录，未在线重验，也不是 B1–B3 完成",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "hardware_window",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        }
+      ],
+      "lane_kind": "branch",
+      "mainline_order": null,
+      "milestones": [
+        "b4",
+        "implementation",
+        "hardware_window",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 9,
+      "parent": "R4",
+      "plan_node_id": "4.9",
+      "title": "整机房后备与新硬件",
+      "work_id": "W-68"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "运行时完成并自己合入的 main 代码提交过半",
+          "evidence_required": [
+            "固定窗口的 main 代码提交分母",
+            "真实 Gitea 推送者和 landed 事件分子"
+          ],
+          "id": "self-merge",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "每周 Owner 决定少于 40 次",
+          "evidence_required": [
+            "七天决定事件",
+            "去重口径与窗口"
+          ],
+          "id": "owner-decisions",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "MacBook 合盖一夜活照常推进",
+          "evidence_required": [
+            "夜间任务与产物",
+            "Owner 演练签收"
+          ],
+          "id": "closed-laptop",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "两个产品同时推进、各自 main 与发布链齐全",
+          "evidence_required": [
+            "两产品任务时间重叠",
+            "两条有效落地与发布链"
+          ],
+          "id": "two-products",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        },
+        {
+          "criterion": "一周不手工清理且磁盘余量和分支数不恶化",
+          "evidence_required": [
+            "七天趋势",
+            "人工清理动作记录"
+          ],
+          "id": "no-cleanup",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "work"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": null,
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "accepted",
+          "node": "4.1",
+          "reason": "需要真实自主落地证据",
+          "relation": "blocks",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.2",
+          "reason": "需要双产品并行证据",
+          "relation": "blocks",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.4",
+          "reason": "需要合盖一夜证据",
+          "relation": "blocks",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.6",
+          "reason": "需要七天免清理证据",
+          "relation": "blocks",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        },
+        {
+          "milestone": "accepted",
+          "node": "4.7",
+          "reason": "需要七天决定计数",
+          "relation": "blocks",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "五项是目标；旧基线为 1966 个提交中 13 个由包工队写且全部人工合入，不能作为当前分子",
+          "classification": "legacy_evidence",
+          "live_verified": false,
+          "milestone": "accepted",
+          "observed_at": "2026-10-24",
+          "source": "work"
+        }
+      ],
+      "lane_kind": "mainline",
+      "mainline_order": 4,
+      "milestones": [
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 10,
+      "parent": "R4",
+      "plan_node_id": "4.10",
+      "title": "第 4 轮五项验收",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "4.1–4.10 分类、依赖、验收逐项有来源；拒绝环与悬空",
+          "evidence_required": [
+            "版本化 JSON 产物",
+            "校验器正反测试",
+            "Owner 采用图的记录"
+          ],
+          "id": "pv0",
+          "milestone": "pv0",
+          "rule_ref": "plan_view:v1",
+          "sources": [
+            "cut"
+          ],
+          "target_environment": "repository"
+        },
+        {
+          "criterion": "手机可定位主线、下一步责任和证据，存量对账及 STG 同版核验通过",
+          "evidence_required": [
+            "390×844 与 1440×900 实测",
+            "真实事件/外部工作绑定",
+            "Unknown/Stale 与回滚测试",
+            "STG 核验"
+          ],
+          "id": "plan-view",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "cut"
+          ],
+          "target_environment": "stg"
+        }
+      ],
+      "anchor_node_id": "4.1",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "accepted",
+          "node": "4.1",
+          "reason": "读取落地事实；不要求 4.1 新事件先上线，也不阻塞 4.1",
+          "relation": "related",
+          "required_for": "accepted",
+          "root": "R4",
+          "sources": [
+            "work"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "切法估算含复核；不等于完工日期，Owner 等待另计",
+        "review_rounds": 1,
+        "source": "cut",
+        "work_days": [
+          9,
+          11
+        ]
+      },
+      "evidence": [
+        {
+          "assessment": "D-PV1/2/3 A 已定；本产物为待采用图，不伪造 note.plan_view",
+          "classification": "owner_statement",
+          "live_verified": false,
+          "milestone": "pv0",
+          "observed_at": "2026-10-24",
+          "source": "decision"
+        },
+        {
+          "assessment": "PV0 本片准备；PV1–PV5 尚未在本任务实施",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "pv0",
+          "observed_at": "2026-10-24",
+          "source": "cut"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "pv0",
+        "implementation",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "vendor_executor",
+        "provider": null,
+        "seat_ref": "codex"
+      },
+      "ordinal": 11,
+      "parent": "4.5",
+      "plan_node_id": "4.5.pv",
+      "title": "全计划视图：4.5 提前片",
+      "work_id": "W-31"
+    },
+    {
+      "acceptance": [
+        {
+          "criterion": "按签名策略执行可撤回主机动作，审计、失败通知与一周观察齐全",
+          "evidence_required": [
+            "策略签名",
+            "具名动作执行及恢复证据",
+            "独立复核",
+            "七天观察"
+          ],
+          "id": "host-policy",
+          "milestone": "accepted",
+          "rule_ref": "external_verified",
+          "sources": [
+            "host-policy"
+          ],
+          "target_environment": "prod"
+        }
+      ],
+      "anchor_node_id": "4.10",
+      "bindings": [],
+      "depends_on": [
+        {
+          "milestone": "accepted",
+          "node": "4.5.pv",
+          "reason": "Owner 最新顺序：视图可用后实施",
+          "relation": "blocks",
+          "required_for": "implementation",
+          "root": "R4",
+          "sources": [
+            "decision"
+          ]
+        }
+      ],
+      "estimate": {
+        "confidence": "low",
+        "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+        "review_rounds": 1,
+        "source": "work",
+        "work_days": null
+      },
+      "evidence": [
+        {
+          "assessment": "九个架构点按推荐；仍不是凭证或 PROD 写动作批准",
+          "classification": "repository_evidence",
+          "live_verified": false,
+          "milestone": "design",
+          "observed_at": "2026-10-24",
+          "source": "host-policy"
+        },
+        {
+          "assessment": "晚间顺序更新：计划视图可用后实施；不沿用旧台账“第一件”",
+          "classification": "owner_statement",
+          "live_verified": false,
+          "milestone": "implementation",
+          "observed_at": "2026-10-24",
+          "source": "decision"
+        }
+      ],
+      "lane_kind": "support",
+      "mainline_order": null,
+      "milestones": [
+        "design",
+        "implementation",
+        "accepted"
+      ],
+      "next_responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "ordinal": 12,
+      "parent": "4.7",
+      "plan_node_id": "4.7.host-policy",
+      "title": "主机操作策略与带外执行器",
+      "work_id": "W-31"
+    }
+  ],
+  "mainline": {
+    "basis": "Existing controller step states",
+    "current": {
+      "execution_state": "planned",
+      "milestone_status": "Unknown",
+      "plan_node_id": "R4:4.1",
+      "ref": {
+        "node": "4.1",
+        "root": "R4"
+      }
+    },
+    "milestone_status": "Unknown",
+    "path": [
+      {
+        "execution_state": "planned",
+        "milestone_status": "Unknown",
+        "plan_node_id": "R4:4.1",
+        "ref": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      {
+        "execution_state": "planned",
+        "milestone_status": "Unknown",
+        "plan_node_id": "R4:4.2",
+        "ref": {
+          "node": "4.2",
+          "root": "R4"
+        }
+      },
+      {
+        "execution_state": "planned",
+        "milestone_status": "Unknown",
+        "plan_node_id": "R4:4.4",
+        "ref": {
+          "node": "4.4",
+          "root": "R4"
+        }
+      },
+      {
+        "execution_state": "planned",
+        "milestone_status": "Unknown",
+        "plan_node_id": "R4:4.10",
+        "ref": {
+          "node": "4.10",
+          "root": "R4"
+        }
+      }
+    ]
+  },
+  "next": [
+    {
+      "action": "Inspect remaining steps and waiting dependencies",
+      "plan_node_id": "R4:4.1",
+      "reason": "First mainline node with unfinished controller steps; milestone verification pending"
+    }
+  ],
+  "nodes": [
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 2
+      },
+      "label": "4.1",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 1,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.1",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "交房：运行时自己合入 main 并交付 STG",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "P0 全身份权限实证通过，CI 完整 vet 与实际克隆 SHA 可追溯",
+            "evidence_required": [
+              "P0 逐行五项权限结果",
+              "CI vet 种错失败 run",
+              "PipelineRun 的 platform/ui/infra commit",
+              "Gitea 实际推送者实证"
+            ],
+            "id": "landing-p0",
+            "milestone": "s0",
+            "rule_ref": "landing:S0",
+            "sources": [
+              "landing"
+            ],
+            "target_environment": "stg+prod"
+          },
+          {
+            "criterion": "受签名规则约束的落地控制器已上 PROD",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "landing-prod",
+            "milestone": "prod",
+            "rule_ref": "deployment_verified",
+            "sources": [
+              "landing"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "一句 Console 小目标自行进入 main 并上 STG，统筹线程零写入",
+            "evidence_required": [
+              "mission 完整事件链",
+              "落地记录与真实 Gitea 推送者",
+              "CI 与 STG run、摘要和平台健康",
+              "统筹全部写动作计数为 0"
+            ],
+            "id": "landing-star",
+            "milestone": "accepted",
+            "rule_ref": "landing:star",
+            "sources": [
+              "landing"
+            ],
+            "target_environment": "stg"
+          }
+        ],
+        "anchor_node_id": null,
+        "bindings": [],
+        "depends_on": [],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "第 3 稿切法存在；不能据此判实现完成",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "landing"
+          },
+          {
+            "assessment": "13 点按推荐已定；正式规则签名与发布审批仍按切法执行",
+            "classification": "owner_statement",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "decision"
+          },
+          {
+            "assessment": "本片完成仓库准备；P0 线上权限和推送者实证未验证",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "s0",
+            "observed_at": "2026-10-24",
+            "source": "p0"
+          },
+          {
+            "assessment": "简报报告 S5–S7 与 TD-435 已应用，不能外推完整 P0 通过",
+            "classification": "owner_statement",
+            "live_verified": false,
+            "milestone": "s0",
+            "observed_at": "2026-10-24",
+            "source": "td432"
+          }
+        ],
+        "lane_kind": "mainline",
+        "mainline_order": 1,
+        "milestones": [
+          "design",
+          "s0",
+          "implementation",
+          "prod",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 1,
+        "parent": "R4",
+        "plan_node_id": "4.1",
+        "title": "交房：运行时自己合入 main 并交付 STG",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.1-1",
+      "lane_kind": "Unclassified",
+      "mission_id": "M-1",
+      "node_kind": "step",
+      "ordinal": 1,
+      "owner_step": false,
+      "parent_plan_node_id": "R4:4.1",
+      "plan_node_id": "R4:4.1-1",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": "agent",
+      "title": "实现自动交房",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.1-2",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "step",
+      "ordinal": 2,
+      "owner_step": true,
+      "parent_plan_node_id": "R4:4.1",
+      "plan_node_id": "R4:4.1-2",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": "owner",
+      "title": "验收真实交付链路",
+      "usual_s": null,
+      "version": 1,
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.2",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 2,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.2",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "接多个项目、同时推进",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "Owner 签 Finance 接入范围与权限",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "finance",
+            "milestone": "finance_signed",
+            "rule_ref": "owner_signoff",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "第二个产品仓库进入运行时队列并完成接入核验",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "second",
+            "milestone": "second_repo",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "真实 Screening 问题经业务入口交付 STG，太太试用并记录反馈",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "screening",
+            "milestone": "screening",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "stg"
+          },
+          {
+            "criterion": "两个产品任务时间重叠，各自进 main，不互相等待",
+            "evidence_required": [
+              "两条任务与落地链",
+              "两条发布链",
+              "任务时间重叠证据"
+            ],
+            "id": "two-products",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": null,
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "prod",
+            "node": "4.1",
+            "reason": "第二波实施在 4.1 上 PROD 后开始",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.8",
+            "reason": "资格是接入配套，不推定整项必须串行",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.3",
+            "reason": "并行发布能力关联；不阻塞仓库接入设计",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "旧台账列出目标与待做项，未查询运行时",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          }
+        ],
+        "lane_kind": "mainline",
+        "mainline_order": 2,
+        "milestones": [
+          "design",
+          "implementation",
+          "finance_signed",
+          "second_repo",
+          "screening",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 2,
+        "parent": "R4",
+        "plan_node_id": "4.2",
+        "title": "接多个项目、同时推进",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.3",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 3,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.3",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "每个应用自己的发布节奏",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "Owner 签各应用发版策略",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "release-policy",
+            "milestone": "policy_signed",
+            "rule_ref": "owner_signoff",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "两个应用同时发布不等待；一次小改按策略自己上 PROD 后通知",
+            "evidence_required": [
+              "并行 run 与持久操作/车道记录",
+              "PROD 策略签名",
+              "同摘要发布、健康及通知证据"
+            ],
+            "id": "release-star",
+            "milestone": "accepted",
+            "rule_ref": "deployment_verified",
+            "sources": [
+              "release"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.1",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "prod",
+            "node": "4.1",
+            "reason": "第二波实施门槛，设计可先行",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.2",
+            "reason": "服务多应用并行交付",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "第 2 稿设计存在，实施与签名状态未在线核验",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "release"
+          },
+          {
+            "assessment": "复核 535 结论为先改：代次隔离、镜像和 CI 豁免等问题未关闭；不是实施或发布通过",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "release-review"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "policy_signed",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 3,
+        "parent": "R4",
+        "plan_node_id": "4.3",
+        "title": "每个应用自己的发布节奏",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 4
+      },
+      "label": "4",
+      "lane_kind": "Unclassified",
+      "mission_id": null,
+      "node_kind": "round",
+      "ordinal": 4,
+      "owner_step": false,
+      "parent_plan_node_id": null,
+      "plan_node_id": "R4",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "包工队自己接活、自己交房",
+      "usual_s": null,
+      "version": 0,
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.4",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 4,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.4",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "统筹搬出电脑，Mac mini 重新分工",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "MacBook 合盖一整夜，任务照常推进；手机问统筹能收到回答",
+            "evidence_required": [
+              "完整夜间时窗与任务/产物记录",
+              "手机往返记录",
+              "Owner 演练签收",
+              "各家 CLI 登录与长期记忆读取验证"
+            ],
+            "id": "overnight",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "placement"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": null,
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "prod",
+            "node": "4.1",
+            "reason": "第二波实施门槛；不依赖 4.2 完成",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.9",
+            "reason": "后备能力关联，硬件窗口不是统筹迁移前置",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "设计已在仓库，不能据此判常驻服务运行",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "placement"
+          },
+          {
+            "assessment": "复核 536 结论为先改：测试覆盖、持续值守和恢复窗口等尚不成立；夜间演练未验证",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "placement-review"
+          },
+          {
+            "assessment": "记忆导入在本项，架构已选；未认定导入完成",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "memory"
+          }
+        ],
+        "lane_kind": "mainline",
+        "mainline_order": 3,
+        "milestones": [
+          "design",
+          "implementation",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 4,
+        "parent": "R4",
+        "plan_node_id": "4.4",
+        "title": "统筹搬出电脑，Mac mini 重新分工",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.5",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 5,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.5",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "进展和现场在 Ops 上看得见",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "不问统筹，手机能说出几件活在跑、各在第几步、哪件卡住",
+            "evidence_required": [
+              "真实任务现场流与动作审计",
+              "手机试用记录",
+              "等待/失联/未知状态测试"
+            ],
+            "id": "field-visible",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.1",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "prod",
+            "node": "4.1",
+            "reason": "只约束完整现场流，子项全计划视图不继承此门槛",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.5.pv",
+            "reason": "视图覆盖计划，完整现场流仍需单独验收",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "完整现场流仍是第二波；旧勾选不是完成证明",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          },
+          {
+            "assessment": "全计划视图提前并行，不能代替完整现场流",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "cut"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 5,
+        "parent": "R4",
+        "plan_node_id": "4.5",
+        "title": "进展和现场在 Ops 上看得见",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.6",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 6,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.6",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "分支、工作目录、磁盘的生命周期",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "按归属与归档规则完成一次性清理",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "cleanup",
+            "milestone": "cleanup",
+            "rule_ref": "external_verified",
+            "sources": [
+              "lifecycle"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "连续七天不手工清理，磁盘余量和分支数不恶化",
+            "evidence_required": [
+              "连续七天趋势及来源水位",
+              "人工清理动作记录",
+              "低磁盘停派与告警实证"
+            ],
+            "id": "seven-days",
+            "milestone": "seven_days",
+            "rule_ref": "external_verified",
+            "sources": [
+              "lifecycle"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "清理、告警、停派和七天观察均通过",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "lifecycle-star",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "lifecycle"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.1",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "s0",
+            "node": "4.1",
+            "reason": "D-L5 处置与历史落地资格相关，独立审批，不把全部清理串到 S0",
+            "relation": "related",
+            "required_for": "cleanup",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "有切法；第一波并行，不因等待 4.1 而停盘点",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "lifecycle"
+          },
+          {
+            "assessment": "盘点已记录；D-L5 等待按 mission 归档与审批，不等于已清理",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "cleanup",
+            "observed_at": "2026-10-24",
+            "source": "inventory"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "cleanup",
+          "seven_days",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 6,
+        "parent": "R4",
+        "plan_node_id": "4.6",
+        "title": "分支、工作目录、磁盘的生命周期",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.7",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 7,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.7",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "降低 Owner 负担",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "按明确一周窗口，Owner 决定少于 40 次",
+            "evidence_required": [
+              "Owner 决定事件及去重口径",
+              "固定七天统计窗口",
+              "执行器审计与审批合单记录"
+            ],
+            "id": "decisions",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.10",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "second_repo",
+            "node": "4.2",
+            "reason": "第三波在第二个仓库接入后开始",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.5.pv",
+            "reason": "计划状态推导配套关系",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.7.host-policy",
+            "reason": "主机执行器配套关系",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "第三波；没有读取最新决定事件，未量出周次数",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "implementation",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          },
+          {
+            "assessment": "计划步骤事件推导由 PV 提供，不替代执行器或审批合单",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "cut"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 7,
+        "parent": "R4",
+        "plan_node_id": "4.7",
+        "title": "降低 Owner 负担",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.8",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 8,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.8",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "资格流水线薄版",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "Owner 签一次题集",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "questions",
+            "milestone": "questions_signed",
+            "rule_ref": "owner_signoff",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "换模型自动重考、发卷判分，岗位表和记录可见；关键岗位至少两家有候选",
+            "evidence_required": [
+              "模型变更及重考事件",
+              "题集签名与考试记录",
+              "岗位候选覆盖",
+              "全流程无需 Owner 输口令实证"
+            ],
+            "id": "qualifications",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.2",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "prod",
+            "node": "4.1",
+            "reason": "第二波实施门槛",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.4",
+            "reason": "给常驻岗位提供资格能力，不以搬迁完成阻塞考试",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "原 3.3 并入；题集签名和考试上线状态未读",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "questions_signed",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 8,
+        "parent": "R4",
+        "plan_node_id": "4.8",
+        "title": "资格流水线薄版",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.9",
+      "lane_kind": "branch",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 9,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.9",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "整机房后备与新硬件",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "06、NAS、两台 mini 报数、失联与磁盘告警验证",
+            "evidence_required": [
+              "四台主机抓取结果",
+              "失联与磁盘种错告警",
+              "手机收到通知"
+            ],
+            "id": "b4",
+            "milestone": "b4",
+            "rule_ref": "external_verified",
+            "sources": [
+              "hosts"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "Owner 提供硬件与休市窗口",
+            "evidence_required": [
+              "当前结果 SHA 的独立复核",
+              "实际部署与健康核验",
+              "按版本绑定的验收记录"
+            ],
+            "id": "hardware",
+            "milestone": "hardware_window",
+            "rule_ref": "owner_signoff",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "拔掉任何一台非交易机器，对应能力按约定时间接上，手机收到通知",
+            "evidence_required": [
+              "逐机故障演练记录",
+              "恢复时长与约定比较",
+              "手机通知",
+              "Owner 签收"
+            ],
+            "id": "failover",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "hosts"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.4",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "second_repo",
+            "node": "4.2",
+            "reason": "第三波只约束其余后备；B4 ①先行",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "B4 ①切法与报数脚本已有；未把完整后备判成完成",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "b4",
+            "observed_at": "2026-10-24",
+            "source": "hosts"
+          },
+          {
+            "assessment": "台账记录 07 Ready 和 SSD 已安装；来源为记录，未在线重验，也不是 B1–B3 完成",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "hardware_window",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          }
+        ],
+        "lane_kind": "branch",
+        "mainline_order": null,
+        "milestones": [
+          "b4",
+          "implementation",
+          "hardware_window",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 9,
+        "parent": "R4",
+        "plan_node_id": "4.9",
+        "title": "整机房后备与新硬件",
+        "work_id": "W-68"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 0
+      },
+      "label": "4.10",
+      "lane_kind": "mainline",
+      "mission_id": null,
+      "node_kind": "item",
+      "ordinal": 10,
+      "owner_step": false,
+      "parent_plan_node_id": "R4",
+      "plan_node_id": "R4:4.10",
+      "state": null,
+      "state_event_id": null,
+      "step_kind": null,
+      "title": "第 4 轮五项验收",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "运行时完成并自己合入的 main 代码提交过半",
+            "evidence_required": [
+              "固定窗口的 main 代码提交分母",
+              "真实 Gitea 推送者和 landed 事件分子"
+            ],
+            "id": "self-merge",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "每周 Owner 决定少于 40 次",
+            "evidence_required": [
+              "七天决定事件",
+              "去重口径与窗口"
+            ],
+            "id": "owner-decisions",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "MacBook 合盖一夜活照常推进",
+            "evidence_required": [
+              "夜间任务与产物",
+              "Owner 演练签收"
+            ],
+            "id": "closed-laptop",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "两个产品同时推进、各自 main 与发布链齐全",
+            "evidence_required": [
+              "两产品任务时间重叠",
+              "两条有效落地与发布链"
+            ],
+            "id": "two-products",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          },
+          {
+            "criterion": "一周不手工清理且磁盘余量和分支数不恶化",
+            "evidence_required": [
+              "七天趋势",
+              "人工清理动作记录"
+            ],
+            "id": "no-cleanup",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "work"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": null,
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "accepted",
+            "node": "4.1",
+            "reason": "需要真实自主落地证据",
+            "relation": "blocks",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.2",
+            "reason": "需要双产品并行证据",
+            "relation": "blocks",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.4",
+            "reason": "需要合盖一夜证据",
+            "relation": "blocks",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.6",
+            "reason": "需要七天免清理证据",
+            "relation": "blocks",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          },
+          {
+            "milestone": "accepted",
+            "node": "4.7",
+            "reason": "需要七天决定计数",
+            "relation": "blocks",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "五项是目标；旧基线为 1966 个提交中 13 个由包工队写且全部人工合入，不能作为当前分子",
+            "classification": "legacy_evidence",
+            "live_verified": false,
+            "milestone": "accepted",
+            "observed_at": "2026-10-24",
+            "source": "work"
+          }
+        ],
+        "lane_kind": "mainline",
+        "mainline_order": 4,
+        "milestones": [
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 10,
+        "parent": "R4",
+        "plan_node_id": "4.10",
+        "title": "第 4 轮五项验收",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.5.pv",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "step",
+      "ordinal": 11,
+      "owner_step": false,
+      "parent_plan_node_id": "R4:4.5",
+      "plan_node_id": "R4:4.5.pv",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": "agent",
+      "title": "全计划视图：4.5 提前片",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "4.1–4.10 分类、依赖、验收逐项有来源；拒绝环与悬空",
+            "evidence_required": [
+              "版本化 JSON 产物",
+              "校验器正反测试",
+              "Owner 采用图的记录"
+            ],
+            "id": "pv0",
+            "milestone": "pv0",
+            "rule_ref": "plan_view:v1",
+            "sources": [
+              "cut"
+            ],
+            "target_environment": "repository"
+          },
+          {
+            "criterion": "手机可定位主线、下一步责任和证据，存量对账及 STG 同版核验通过",
+            "evidence_required": [
+              "390×844 与 1440×900 实测",
+              "真实事件/外部工作绑定",
+              "Unknown/Stale 与回滚测试",
+              "STG 核验"
+            ],
+            "id": "plan-view",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "cut"
+            ],
+            "target_environment": "stg"
+          }
+        ],
+        "anchor_node_id": "4.1",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "accepted",
+            "node": "4.1",
+            "reason": "读取落地事实；不要求 4.1 新事件先上线，也不阻塞 4.1",
+            "relation": "related",
+            "required_for": "accepted",
+            "root": "R4",
+            "sources": [
+              "work"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "切法估算含复核；不等于完工日期，Owner 等待另计",
+          "review_rounds": 1,
+          "source": "cut",
+          "work_days": [
+            9,
+            11
+          ]
+        },
+        "evidence": [
+          {
+            "assessment": "D-PV1/2/3 A 已定；本产物为待采用图，不伪造 note.plan_view",
+            "classification": "owner_statement",
+            "live_verified": false,
+            "milestone": "pv0",
+            "observed_at": "2026-10-24",
+            "source": "decision"
+          },
+          {
+            "assessment": "PV0 本片准备；PV1–PV5 尚未在本任务实施",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "pv0",
+            "observed_at": "2026-10-24",
+            "source": "cut"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "pv0",
+          "implementation",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "vendor_executor",
+          "provider": null,
+          "seat_ref": "codex"
+        },
+        "ordinal": 11,
+        "parent": "4.5",
+        "plan_node_id": "4.5.pv",
+        "title": "全计划视图：4.5 提前片",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    },
+    {
+      "created_at": "2026-10-26T16:45:08.931674-05:00",
+      "created_by_actor_id": "controller",
+      "done_rule_json": {},
+      "effect_step": false,
+      "execution_progress": {
+        "basis": "Existing controller step states; not delivery verification",
+        "done": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 1
+      },
+      "label": "4.7.host-policy",
+      "lane_kind": "support",
+      "mission_id": null,
+      "node_kind": "step",
+      "ordinal": 12,
+      "owner_step": false,
+      "parent_plan_node_id": "R4:4.7",
+      "plan_node_id": "R4:4.7.host-policy",
+      "state": "planned",
+      "state_event_id": null,
+      "step_kind": "agent",
+      "title": "主机操作策略与带外执行器",
+      "usual_s": null,
+      "version": 0,
+      "view": {
+        "acceptance": [
+          {
+            "criterion": "按签名策略执行可撤回主机动作，审计、失败通知与一周观察齐全",
+            "evidence_required": [
+              "策略签名",
+              "具名动作执行及恢复证据",
+              "独立复核",
+              "七天观察"
+            ],
+            "id": "host-policy",
+            "milestone": "accepted",
+            "rule_ref": "external_verified",
+            "sources": [
+              "host-policy"
+            ],
+            "target_environment": "prod"
+          }
+        ],
+        "anchor_node_id": "4.10",
+        "bindings": [],
+        "depends_on": [
+          {
+            "milestone": "accepted",
+            "node": "4.5.pv",
+            "reason": "Owner 最新顺序：视图可用后实施",
+            "relation": "blocks",
+            "required_for": "implementation",
+            "root": "R4",
+            "sources": [
+              "decision"
+            ]
+          }
+        ],
+        "estimate": {
+          "confidence": "low",
+          "reason": "无逐项工期实测；包含一轮复核，Owner 等待与发布排队未知",
+          "review_rounds": 1,
+          "source": "work",
+          "work_days": null
+        },
+        "evidence": [
+          {
+            "assessment": "九个架构点按推荐；仍不是凭证或 PROD 写动作批准",
+            "classification": "repository_evidence",
+            "live_verified": false,
+            "milestone": "design",
+            "observed_at": "2026-10-24",
+            "source": "host-policy"
+          },
+          {
+            "assessment": "晚间顺序更新：计划视图可用后实施；不沿用旧台账“第一件”",
+            "classification": "owner_statement",
+            "live_verified": false,
+            "milestone": "implementation",
+            "observed_at": "2026-10-24",
+            "source": "decision"
+          }
+        ],
+        "lane_kind": "support",
+        "mainline_order": null,
+        "milestones": [
+          "design",
+          "implementation",
+          "accepted"
+        ],
+        "next_responsible": {
+          "actor_ref": null,
+          "kind": "crew_seat",
+          "provider": null,
+          "seat_ref": "coordinator"
+        },
+        "ordinal": 12,
+        "parent": "4.7",
+        "plan_node_id": "4.7.host-policy",
+        "title": "主机操作策略与带外执行器",
+        "work_id": "W-31"
+      },
+      "work_id": null
+    }
+  ],
+  "owner_later": [
+    {
+      "plan_node_id": "R4:4.1-2",
+      "readiness": "Unknown",
+      "reason": "Owner readiness verification requires PV2",
+      "title": "验收真实交付链路"
+    }
+  ],
+  "owner_waiting": [],
+  "plan_version": 1,
+  "recent_as_of": "2026-10-26T21:45:08.990765Z",
+  "recent_changes": [
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.969176-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.969095Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:50d291a98ace736d2af646f367105131eff33e5c0b40bbd9e89744c96898ac78",
+          "root": "R4",
+          "seq": 6,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "heartbeat",
+          "v": 1
+        },
+        "text": "External work heartbeat"
+      },
+      "event_id": 50,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 7
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.968228-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.968143Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:58b971ddf82d876238de50b9f741eb78e4e42f818a317665a644d8fa153def9e",
+          "root": "R4",
+          "seq": 5,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "heartbeat",
+          "v": 1
+        },
+        "text": "External work heartbeat"
+      },
+      "event_id": 49,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 6
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.967187-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.967095Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:047bb2bc6924c227e89c63f1e54ef641e564215dc29dc7da0188951e659fbc71",
+          "root": "R4",
+          "seq": 4,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "heartbeat",
+          "v": 1
+        },
+        "text": "External work heartbeat"
+      },
+      "event_id": 48,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 5
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.966081-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.965991Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:79a182c0ddbadad1350ca46f7b1f2317a9e57ba4edf732f5f5f36cba9767439a",
+          "root": "R4",
+          "seq": 3,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "heartbeat",
+          "v": 1
+        },
+        "text": "External work heartbeat"
+      },
+      "event_id": 47,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 4
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.964705-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.964582Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:1e6b06ee41c3b25e6079428aaaca3c504a1087fca671e78f0920ea77db26a33e",
+          "root": "R4",
+          "seq": 2,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "heartbeat",
+          "v": 1
+        },
+        "text": "External work heartbeat"
+      },
+      "event_id": 46,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 3
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.963187-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.963091Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:e004fd629f8135bd41fa6d0840fd59a91a5b635f2d899a76cfb7fb2b431ecbec",
+          "root": "R4",
+          "seq": 1,
+          "source_run_key": "work624",
+          "started_at": "2026-10-26T21:45:08.963091Z",
+          "state": "Running",
+          "type": "started",
+          "v": 1
+        },
+        "text": "External work started"
+      },
+      "event_id": 45,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 2
+    },
+    {
+      "actor_id": "thread:pv4",
+      "at": "2026-10-26T16:45:08.961498-05:00",
+      "body_json": {
+        "external_work": {
+          "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+          "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+          "heartbeat_at": "2026-10-26T21:45:08.961083Z",
+          "kind": "agentrt.external_work/v1",
+          "plan_node_id": "R4:4.1-1",
+          "registered_at": "2026-10-26T21:45:08.961083Z",
+          "registrant": "thread:pv4",
+          "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "request_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+          "root": "R4",
+          "seq": 0,
+          "source_run_key": "work624",
+          "state": "Registered",
+          "type": "registered",
+          "v": 1
+        },
+        "text": "External work registered"
+      },
+      "event_id": 44,
+      "event_stream_id": "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "event_type": "note",
+      "seq": 1
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.950128-05:00",
+      "body_json": {
+        "change": "set_marks",
+        "decided_event_id": 35
+      },
+      "event_id": 36,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_changed",
+      "seq": 21
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.949843-05:00",
+      "body_json": {
+        "by": "owner",
+        "decision": "applied",
+        "proposal_event_id": 34,
+        "question_id": "q_fixture2"
+      },
+      "event_id": 35,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_change_decided",
+      "seq": 20
+    },
+    {
+      "actor_id": "thread:capture",
+      "at": "2026-10-26T16:45:08.949138-05:00",
+      "body_json": {
+        "changes": [
+          {
+            "node": "R4:4.1-2",
+            "op": "set_marks",
+            "owner_step": true
+          }
+        ],
+        "question_id": "q_fixture2",
+        "reason": "fixture links",
+        "standing": false,
+        "token": "fixture"
+      },
+      "event_id": 34,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_change_proposed",
+      "seq": 19
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.947184-05:00",
+      "body_json": {
+        "plan_view": {
+          "artifact_id": "sha256:50497187e08e05981312fd0bb9427f9f12c0b8d17124e57fb21a99b76c3727c9",
+          "decided_event_id": 31,
+          "kind": "agentrt.plan_view/v1",
+          "nodes": {
+            "4.1": "R4:4.1",
+            "4.10": "R4:4.10",
+            "4.2": "R4:4.2",
+            "4.3": "R4:4.3",
+            "4.4": "R4:4.4",
+            "4.5": "R4:4.5",
+            "4.5.pv": "R4:4.5.pv",
+            "4.6": "R4:4.6",
+            "4.7": "R4:4.7",
+            "4.7.host-policy": "R4:4.7.host-policy",
+            "4.8": "R4:4.8",
+            "4.9": "R4:4.9"
+          },
+          "plan_version": 1,
+          "root": "R4",
+          "tenant": "dev",
+          "v": 1
+        },
+        "text": "Plan view adopted"
+      },
+      "event_id": 32,
+      "event_stream_id": "plan:R4",
+      "event_type": "note",
+      "seq": 18
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.945297-05:00",
+      "body_json": {
+        "by": "owner",
+        "decision": "applied",
+        "proposal_event_id": 30,
+        "question_id": "q_fixture"
+      },
+      "event_id": 31,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_change_decided",
+      "seq": 17
+    },
+    {
+      "actor_id": "thread:capture",
+      "at": "2026-10-26T16:45:08.944312-05:00",
+      "body_json": {
+        "changes": [
+          {
+            "artifact": "sha256:50497187e08e05981312fd0bb9427f9f12c0b8d17124e57fb21a99b76c3727c9",
+            "expected_version": 0,
+            "op": "adopt_plan_view"
+          }
+        ],
+        "question_id": "q_fixture",
+        "reason": "fixture",
+        "standing": false,
+        "token": "fixture"
+      },
+      "event_id": 30,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_change_proposed",
+      "seq": 16
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.936222-05:00",
+      "body_json": {
+        "label": "4.1-2",
+        "node_kind": "step",
+        "ordinal": 2,
+        "title": "验收真实交付链路"
+      },
+      "event_id": 26,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 15
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.935933-05:00",
+      "body_json": {
+        "label": "4.1-1",
+        "node_kind": "step",
+        "ordinal": 1,
+        "title": "实现自动交房"
+      },
+      "event_id": 25,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 14
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.935506-05:00",
+      "body_json": {
+        "label": "4.7.host-policy",
+        "node_kind": "step",
+        "ordinal": 12,
+        "title": "主机操作策略与带外执行器"
+      },
+      "event_id": 24,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 13
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.935064-05:00",
+      "body_json": {
+        "label": "4.5.pv",
+        "node_kind": "step",
+        "ordinal": 11,
+        "title": "全计划视图：4.5 提前片"
+      },
+      "event_id": 23,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 12
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.934809-05:00",
+      "body_json": {
+        "label": "4.10",
+        "node_kind": "item",
+        "ordinal": 10,
+        "title": "第 4 轮五项验收"
+      },
+      "event_id": 22,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 11
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.934558-05:00",
+      "body_json": {
+        "label": "4.9",
+        "node_kind": "item",
+        "ordinal": 9,
+        "title": "整机房后备与新硬件"
+      },
+      "event_id": 21,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 10
+    },
+    {
+      "actor_id": "controller",
+      "at": "2026-10-26T16:45:08.934291-05:00",
+      "body_json": {
+        "label": "4.8",
+        "node_kind": "item",
+        "ordinal": 8,
+        "title": "资格流水线薄版"
+      },
+      "event_id": 20,
+      "event_stream_id": "plan:R4",
+      "event_type": "plan_node_created",
+      "seq": 9
+    }
+  ],
+  "recent_next": "eyJyb290IjoiUjQiLCJhc19vZiI6IjIwMjYtMTAtMjZUMjE6NDU6MDguOTkwNzY1WiIsInN0cmVhbXMiOnsiZXh0ZXJuYWwtd29yazpld183OGFmNDJiNDkxZDM4Y2YzZTNjNTNjZjhlZWNiNWY5MWE0NThmMGIxNDc1MjhlNmNlNjVlMDgyMzBhNmNjNGZiIjoyNCwiZXh0ZXJuYWwtd29yazpld184Nzc4Y2NhMmVhMzY4NmJiMjNhYWI5NDQwMWU1NTljMmEyNTFkYTU0NjI4NDEzMjFjYjY5Y2QxNzEyNDY5MjI4IjozLCJwbGFuOlI0IjoyMX0sImJlZm9yZSI6MjB9",
+  "root": "R4",
+  "schema": "agentrt.plan_view_response/v1",
+  "source_watermarks": {
+    "artifacts": 1,
+    "external-work:ew_05b851328bd754a550b8602942047cd67d0e178ce4ac889349cf41a09bde0c92": 1,
+    "external-work:ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb": 24,
+    "external-work:ew_8778cca2ea3686bb23aab94401e559c2a251da5462841321cb69cd1712469228": 3,
+    "host:h1": 1,
+    "mission:M-1": 9,
+    "offers:host:h1": 1,
+    "plan:R2": 3,
+    "plan:R3": 1,
+    "plan:R4": 21,
+    "system": 4
+  },
+  "tasks": [],
+  "waiting_on": [
+    {
+      "edge": {
+        "from": {
+          "node": "4.2",
+          "root": "R4"
+        },
+        "milestone": "prod",
+        "reason": "第二波实施在 4.1 上 PROD 后开始",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.3",
+          "root": "R4"
+        },
+        "milestone": "prod",
+        "reason": "第二波实施门槛，设计可先行",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.4",
+          "root": "R4"
+        },
+        "milestone": "prod",
+        "reason": "第二波实施门槛；不依赖 4.2 完成",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.5",
+          "root": "R4"
+        },
+        "milestone": "prod",
+        "reason": "只约束完整现场流，子项全计划视图不继承此门槛",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.7",
+          "root": "R4"
+        },
+        "milestone": "second_repo",
+        "reason": "第三波在第二个仓库接入后开始",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.2",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.8",
+          "root": "R4"
+        },
+        "milestone": "prod",
+        "reason": "第二波实施门槛",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.9",
+          "root": "R4"
+        },
+        "milestone": "second_repo",
+        "reason": "第三波只约束其余后备；B4 ①先行",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.2",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.10",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "需要真实自主落地证据",
+        "relation": "blocks",
+        "required_for": "accepted",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.1",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.10",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "需要双产品并行证据",
+        "relation": "blocks",
+        "required_for": "accepted",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.2",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.10",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "需要合盖一夜证据",
+        "relation": "blocks",
+        "required_for": "accepted",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.4",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.10",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "需要七天免清理证据",
+        "relation": "blocks",
+        "required_for": "accepted",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.6",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.10",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "需要七天决定计数",
+        "relation": "blocks",
+        "required_for": "accepted",
+        "sources": [
+          "work"
+        ],
+        "to": {
+          "node": "4.7",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "crew_seat",
+        "provider": null,
+        "seat_ref": "coordinator"
+      },
+      "status": "Unknown"
+    },
+    {
+      "edge": {
+        "from": {
+          "node": "4.7.host-policy",
+          "root": "R4"
+        },
+        "milestone": "accepted",
+        "reason": "Owner 最新顺序：视图可用后实施",
+        "relation": "blocks",
+        "required_for": "implementation",
+        "sources": [
+          "decision"
+        ],
+        "to": {
+          "node": "4.5.pv",
+          "root": "R4"
+        }
+      },
+      "reason": "Milestone verification requires PV2",
+      "responsible": {
+        "actor_ref": null,
+        "kind": "vendor_executor",
+        "provider": null,
+        "seat_ref": "codex"
+      },
+      "status": "Unknown"
+    }
+  ],
+  "warnings": [
+    "PV1 visibility only: milestone, delivery and Owner readiness verification await PV2"
+  ],
+  "working": [
+    {
+      "artifact_id": "sha256:a4e533da44260a9973610a767b12851f51071232ffeb7b2f749a7dac3b0ceceb",
+      "backfilled": false,
+      "description": {
+        "acceptance_refs": [
+          "PV4"
+        ],
+        "branch": "w31/pv4",
+        "estimate_minutes": [
+          10,
+          20
+        ],
+        "executor": "codex",
+        "kind": "agentrt.external_work/v1",
+        "provider": "openai",
+        "repo": "platform",
+        "task": "实现全计划与现场视图",
+        "v": 1
+      },
+      "elapsed_s": 0,
+      "external_work_id": "ew_78af42b491d38cf3e3c53cf8eecb5f91a458f0b147528e6ce65e08230a6cc4fb",
+      "heartbeat_age_s": 0,
+      "heartbeat_at": "2026-10-26T21:45:08.986249Z",
+      "kind": "agentrt.external_work/v1",
+      "plan_node_id": "R4:4.1-1",
+      "recorded_at": "2026-10-26T21:45:08.986328Z",
+      "registered_at": "2026-10-26T21:45:08.961083Z",
+      "registrant": "thread:pv4",
+      "registration_digest": "sha256:40c89b810049e90397b724ae929765aaacb7de2bfd5c2e8d2cbdee8a382e80da",
+      "request_digest": "sha256:b58494e23fd3896b27fb4e84b6a7623600853b70672afc31ff4811dad098ebb8",
+      "root": "R4",
+      "seq": 23,
+      "source_run_key": "work624",
+      "started_at": "2026-10-26T21:45:08.963091Z",
+      "state": "Running",
+      "status": "Running",
+      "type": "heartbeat",
+      "v": 1
+    }
+  ]
+}

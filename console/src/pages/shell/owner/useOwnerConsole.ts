@@ -19,11 +19,10 @@ import {
   releaseWindowView,
   splitReleaseRuns,
 } from '@/pages/shell/releases/releaseView'
-import { useRuntimeArch, useRuntimePlan } from '../agents/useRuntimePlan'
+import { useRuntimeArch } from '../agents/useRuntimePlan'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile, type ProbeReach } from './dataTiles'
 import {
   ownerVerdict,
-  planRows,
   goalRefreshMs,
   lastResult,
   workNow,
@@ -63,9 +62,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   // A failed refresh voids the last answer: agents idle, nodes ready and so on are not shown from a cache (review 221 A7).
   const runtime = current(needsYou.runtimeQuery)
   const work = workNow(runtime)
-  // The plan and the architecture table from the runtime only: the board is retired (2.5 ⑤).
-  const planSource = useRuntimePlan(blocks.work)
-  const planRound = planSource.from === 'runtime' ? planSource.round : undefined
+  // Architecture keeps its existing read; WorkPlanView owns the aggregate plan snapshot.
   const arch = useRuntimeArch(blocks.work)
   const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
@@ -140,9 +137,6 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
       : coordinatorQ.isPaused ? { state: 'error' as const, error: 'offline' }
       : coordinatorQ.data === undefined ? { state: 'loading' as const }
       : { state: 'read' as const, note: coordinatorQ.data.note, full: coordinatorQ.data.full },
-    planSource,
-    planRound,
-    plan: planRows(planRound),
     arch,
     hosts: runtime?.hosts ?? [],
     missions: runtime?.work.missions ?? [],

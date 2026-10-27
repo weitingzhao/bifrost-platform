@@ -142,6 +142,7 @@ describe('Sign off on the plan page', () => {
   it('asks once, then sends the step and its ref with the admin sign-in and says what was recorded', async () => {
     const { client } = show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
     client.setQueryData(['agent-runtime-plan', PLAN_ROOT], { found: true, doc: plan })
+    client.setQueryData(['agent-runtime-plan-view', 'R4'], { marker: 'previous snapshot' })
     const press = await screen.findByRole('button', { name: 'Sign off' })
     await vi.waitFor(() => expect(press).toBeEnabled())
     expect(press).toHaveStyle({ minHeight: '44px' })
@@ -158,6 +159,7 @@ describe('Sign off on the plan page', () => {
     expect(sent).toEqual([{ url: '/api/v1/agentrt/plan/R2:2.3-2/signoff', method: 'POST', authorization: `Bearer ${TOKEN}`, body: { ref: 'race' } }])
     // The plan is read again, so the step shows the platform's own record.
     expect(client.getQueryState(['agent-runtime-plan', PLAN_ROOT])?.isInvalidated).toBe(true)
+    expect(client.getQueryState(['agent-runtime-plan-view', 'R4'])?.isInvalidated).toBe(true)
     expect(screen.queryByRole('button', { name: 'Sign off' })).toBeNull()
   })
 

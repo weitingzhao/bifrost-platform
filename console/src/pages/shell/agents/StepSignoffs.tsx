@@ -46,6 +46,7 @@ function SignOffButton({ node, label, signoffRef, named, reviewContext }: { node
       setPhase({ kind: 'signed', answer })
       // Every round's tree: a step of any round may be signed here, and the waits list reads them all.
       void qc.invalidateQueries({ queryKey: ['agent-runtime-plan'] })
+      void qc.invalidateQueries({ queryKey: ['agent-runtime-plan-view'] })
       void qc.invalidateQueries({ queryKey: ['agent-runtime-progress'] })
     } catch (e) {
       setPhase({ kind: 'failed', error: scrubSecret(e instanceof Error ? e.message : String(e), auth.token) })

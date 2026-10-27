@@ -4,13 +4,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
-import { planRows, splitAlerts, workNow } from '../ownerModel'
+import { splitAlerts, workNow } from '../ownerModel'
 import marksFixture from '@/api/__fixtures__/agentrt-progress-marks.testdb.json'
-import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead, planRead, type ArchRead, type PlanRead } from '../../agents/useRuntimePlan'
-import archFixture from '@/api/__fixtures__/agentrt-progress-arch.testdb.json'
-import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
-import rootOnlyFixture from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
-import { PLAN_ROOT, parsePlanRequest } from '@/api/agentRuntimePlan'
+import type { ArchRead } from '../../agents/useRuntimePlan'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
@@ -21,6 +17,8 @@ import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.jso
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
+
+vi.mock('../../agents/WorkPlanView', () => ({ WorkPlanView: () => <section data-testid="plan-view" /> }))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
@@ -34,7 +32,6 @@ const missionsValue = vi.hoisted(() => ({ value: [] as unknown[] }))
 // The runtime as last read, when a test sets it (TD-411: what stops the controller is said on Work and System).
 const runtimeValue = vi.hoisted(() => ({ value: undefined as unknown }))
 // Where the plan was read from, when a test sets it; absent otherwise, as while the runtime holds none (2.5 slice 2; the board is retired, ⑤).
-const planValue = vi.hoisted(() => ({ value: undefined as PlanRead | undefined }))
 // Running, stuck and open goals as the hook reads them from the runtime, when a test sets them (T24).
 const workValue = vi.hoisted(() => ({ value: undefined as unknown }))
 
@@ -59,9 +56,6 @@ function fake(): OwnerConsoleData {
     last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
     coordinator: coordinatorView.value ?? { state: 'read', full: false, note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
-    planSource: planValue.value ?? { from: 'absent' },
-    planRound: planValue.value?.from === 'runtime' ? planValue.value.round : undefined,
-    plan: planRows(planValue.value?.from === 'runtime' ? planValue.value.round : undefined),
     arch: archValue.value ?? { from: 'absent' },
     hosts: [],
     missions: missionsValue.value,
@@ -121,7 +115,7 @@ beforeEach(() => {
     getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
   } })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined; archValue.value = undefined; runtimeValue.value = undefined; workValue.value = undefined })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; archValue.value = undefined; runtimeValue.value = undefined; workValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
 /** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
@@ -209,7 +203,7 @@ describe('Owner Console entries', () => {
     show('#work')
     expect(headings()).toEqual(['Work'])
     const progress = screen.getByTestId('merged-progress')
-    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan', 'Activity', 'History', 'Commit lineage', 'Code health'])
+    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Waiting for your sign-off', 'Activity', 'History', 'Commit lineage', 'Code health'])
     expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
   })
@@ -289,19 +283,10 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
 
-  it('shows the plan from the runtime, counted as GET /progress counts it, with no hand mark and no board note (2.5 slice 2)', () => {
-    const read = (data: unknown) => ({ data, error: null, isError: false, isPaused: false })
-    planValue.value = planRead(read({ found: true, doc: planFixture.plan }), read(parsePlanRequest(planFixture.request, PLAN_ROOT)), read(parseRuntimeProgress(planFixture.progress)))
+  it('puts the aggregate plan view on Work above the existing work cards', () => {
     show('#work')
-    const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(within(plan).getByRole('heading')).toHaveTextContent('The plan · Round 2')
-    const rows = within(plan).getAllByRole('listitem').map(li => li.textContent)
-    // A step done by a manual record is counted as done and marked manual (v5 §5.1.2, T24); the fixture's imported ones are.
-    expect(rows).toEqual(planFixture.progress.plan[0].items.map(i => `${i.label}${i.title}${i.count.manual ? `${i.count.manual} manual` : ''}${i.count.done}/${i.count.total}`))
-    expect(rows.filter(r => / manual\d/.test(r ?? ''))).toHaveLength(planFixture.progress.plan[0].items.filter(i => i.count.manual > 0).length)
-    expect(rows.filter(r => / manual\d/.test(r ?? '')).length).toBeGreaterThan(0)
-    expect(plan).not.toHaveTextContent('✎ by hand')
-    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
+    const view = screen.getByTestId('plan-view')
+    expect(view.compareDocumentPosition(screen.getByRole('region', { name: 'Now' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('counts on Now only the attempts running, says which are not, and marks a goal with work off plan (T24)', () => {
@@ -315,49 +300,6 @@ describe('Owner Console entries', () => {
     expect(within(now).getByText('Not confirmed running: 1 host lost · 1 maybe stuck (Crew)')).toBeInTheDocument()
     const goals = screen.getByRole('region', { name: 'Open goals' })
     expect(within(goals).getByText('1 of 5 tasks off plan').parentElement).toHaveTextContent('T24 drill: an errand outside the plan')
-  })
-
-  it('shows a runtime round with no items as empty, not unavailable and not the board\'s', () => {
-    const read = (data: unknown) => ({ data, error: null, isError: false, isPaused: false })
-    planValue.value = planRead(read({ found: true, doc: rootOnlyFixture.plan }), read(null), read(parseRuntimeProgress(rootOnlyFixture.progress)))
-    show('#work')
-    const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(plan).toHaveTextContent("No items in the runtime's plan.")
-    expect(within(plan).queryByRole('alert')).not.toBeInTheDocument()
-    expect(within(plan).queryAllByRole('listitem')).toHaveLength(0)
-    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
-  })
-
-  it('says the plan is not in the runtime while it holds none, with nothing kept by hand (the board is retired, 2.5 ⑤)', () => {
-    show('#work')
-    const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(plan).toHaveTextContent(PLAN_NOT_IMPORTED)
-    expect(plan).not.toHaveTextContent('✎')
-    expect(within(plan).queryAllByRole('listitem')).toHaveLength(0)
-    expect(plan).toHaveTextContent(ARCH_NOT_IMPORTED)
-  })
-
-  it('counts the architecture rows by their ticks, from GET /progress (2.5 ⑤ G2)', () => {
-    archValue.value = archRead({ data: parseRuntimeProgress(archFixture), error: null, isError: false, isPaused: false })
-    show('#work')
-    const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(plan.querySelector('[data-arch-summary]')).toHaveTextContent('Architecture, 4 rows:1 passed1 not yet1 no gate yet1 unknown')
-    expect(plan).not.toHaveTextContent(ARCH_NOT_IMPORTED)
-    cleanup()
-    archValue.value = { from: 'error', error: 'Agent runtime: unavailable' }
-    show('#work')
-    expect(screen.getByRole('region', { name: 'The plan' })).toHaveTextContent('Architecture unavailable: Agent runtime: unavailable')
-    expect(screen.getByRole('region', { name: 'The plan' }).querySelector('[data-arch-summary]')).toBeNull()
-  })
-
-  it('shows a failed read of the runtime\'s plan as unavailable, never the board\'s rows', () => {
-    planValue.value = { from: 'error', error: 'Plan: unavailable' }
-    show('#work')
-    const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(within(plan).getByRole('alert')).toHaveTextContent('Plan unavailable: Plan: unavailable')
-    expect(plan).not.toHaveTextContent('2.2b')
-    expect(plan).not.toHaveTextContent('✎ by hand')
-    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
   })
 
   it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {
