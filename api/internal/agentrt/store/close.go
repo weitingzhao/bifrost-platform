@@ -81,6 +81,9 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			if err != nil {
 				return err
 			}
+			if held, err := landingInFlight(ctx, tx, id); err != nil || held {
+				return err
+			}
 			did = true
 			switch {
 			case drops == 0:
@@ -99,4 +102,50 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 		}
 	}
 	return closed, nil
+}
+
+// landingInFlight: an implementation the landing loop is carrying to main
+// keeps its mission active (CUT-landing §2.7, brought forward for the S2
+// drill). Every landing gate reads the mission as active, so closing it under
+// a running operation would end that operation stale before its CI finished.
+// A root holds while its latest operation has not ended, or ended discarded
+// (the next replay is due; the bound turns it into failed{bound} within six
+// hours). A task the loop never claimed holds nothing, and neither does a
+// finished one. The caller holds the mission's lock; ClaimLandingDrill takes
+// it FOR SHARE before the repository stream, so a claim and a close are
+// ordered: the close sees the claim, or the claim sees the mission done.
+func landingInFlight(ctx context.Context, tx pgx.Tx, mission string) (bool, error) {
+	rows, err := tx.Query(ctx, `SELECT task_id, repo FROM agentrt.task WHERE mission_id = $1 AND role = 'implement' AND repo <> '' ORDER BY repo, task_id`, mission)
+	if err != nil {
+		return false, err
+	}
+	tasks, repos := map[string][]string{}, []string{}
+	for rows.Next() {
+		var task, repo string
+		if err = rows.Scan(&task, &repo); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if len(tasks[repo]) == 0 {
+			repos = append(repos, repo)
+		}
+		tasks[repo] = append(tasks[repo], task)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return false, err
+	}
+	for _, repo := range repos {
+		state, err := LandingState(ctx, tx, "landing:"+repo)
+		if err != nil {
+			return false, fmt.Errorf("landing state of %s: %w", repo, err)
+		}
+		for _, task := range tasks[repo] {
+			latest, ok := state.Operations[state.LatestOperation(task)]
+			if ok && (!latest.Terminal() || latest.Phase == "discarded") {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

@@ -14,6 +14,12 @@ import (
 // The caller orders tasks by their acceptance event time (CUT §2.5.1).
 func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task string, now time.Time) (op string, decision landing.Decision, err error) {
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		// The mission before the stream (the kernel's lock order): a close
+		// holding it decides first and the facts below then read it done, or
+		// this claim commits first and CloseMissions sees it (landingInFlight).
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission m JOIN agentrt.task t USING (mission_id) WHERE t.task_id = $1 FOR SHARE OF m`, task); err != nil {
+			return err
+		}
 		if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 			return err
 		}
