@@ -145,7 +145,7 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
 		roots = append(roots, map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
-			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID})
+			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert})
 	}
 	body := map[string]any{"mission_id": id, "in_scope": st.InScope, "roots": roots, "rule": st.Rule}
 	if st.Round != nil {

@@ -274,3 +274,21 @@ func TestB4ReversalAfterTheCloseIsTold(t *testing.T) {
 		t.Fatal("the mission was reopened", st)
 	}
 }
+
+// Serial: FreezeEventClock. Review 670 R-07: a card that ended with its
+// answer unknown (lost) is shown on its root in the mission's status.
+func TestB4StatusShowsALostCard(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	liveRoot(t, w, "land:b4i:1", at, "branch_pushed", newLandingRecord("land:b4i:1", "failed", "why", "conflict"))
+	f := newFakeCards(func() time.Time { return at })
+	cardPass(t, w, f, at)
+	delete(f.byID, "q1")
+	cardPass(t, w, f, at.Add(time.Minute))
+	st, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if len(st.Roots) != 1 || !strings.HasSuffix(st.Roots[0].CardAlert, " lost") {
+		t.Fatalf("%+v", st.Roots)
+	}
+}

@@ -362,6 +362,10 @@ type MissionLandingStatus struct {
 type LandingRootStatus struct {
 	LandingRootClass
 	CardKind, QuestionID string
+	// CardAlert names a card of this root that ended without its answer
+	// being known (unconfirmed, lost): the Owner may have answered a card
+	// the runtime could not read back (review 670 R-07). "" for none.
+	CardAlert string
 }
 
 // ReadMissionLandingStatus reads a mission's landing status.
@@ -387,6 +391,9 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 			for _, c := range cards {
 				if c.Root == r.Root && c.Op == r.Op && !c.Ended() && c.N >= latest.N {
 					latest = c
+				}
+				if c.Root == r.Root && c.Op == r.Op && c.Closed && (c.ClosedWhy == "unconfirmed" || c.ClosedWhy == "lost") {
+					rs.CardAlert = c.Prep + " " + c.ClosedWhy
 				}
 			}
 			rs.CardKind, rs.QuestionID = latest.Kind, latest.QuestionID
