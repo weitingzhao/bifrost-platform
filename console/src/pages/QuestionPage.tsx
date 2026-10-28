@@ -4,6 +4,7 @@ import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
+import { fetchLandingCard } from '@/api/landingCards'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
 import { decisionBlockReason } from '@/pages/decisionSignIn'
@@ -12,7 +13,7 @@ import { AssessmentPanel } from '@/pages/question/AssessmentPanel'
 import { assessmentError, useAssessment } from '@/pages/question/useAssessment'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
-import { ClosedLine, FROM_AN_AGENT, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
+import { ClosedLine, FROM_AN_AGENT, LandingOutcomeRecord, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
 import { NowClock } from '@/pages/shell/progress/progressClock'
 
 function questionIdFromHash(hash: string): string | null {
@@ -90,6 +91,16 @@ function QuestionSession({ id }: { id: string }) {
   const runtimeCard = shown != null && shown.requester === RUNTIME_REQUESTER
   const assessQ = useAssessment('card', id, runtimeCard)
   const aiRecommended = assessQ.data?.state === 'ready' ? assessQ.data.recommended : null
+  const landingQ = useQuery({
+    queryKey: ['questions', 'landing', id],
+    queryFn: ({ signal }) => fetchLandingCard(id, signal),
+    enabled: shown != null,
+    retry: false,
+    refetchInterval: query => {
+      const card = query.state.data
+      return card === undefined || (card !== null && card.outcome === null && !card.closed) ? 15_000 : false
+    },
+  })
 
   let state: 'loading' | 'unreadable' | 'stale' | 'ready' = 'ready'
   if (itemQ.isLoading && loaded == null) state = 'loading'
@@ -118,6 +129,7 @@ function QuestionSession({ id }: { id: string }) {
           <div className="flex w-full min-w-0 flex-col gap-3">
             <QuestionBody question={shown} environment={environment} />
             {showStored && answer != null ? <StoredAnswer question={shown} answer={answer} /> : null}
+            {!landingQ.isError && landingQ.data != null ? <LandingOutcomeRecord card={landingQ.data} /> : null}
             {showClosed ? <ClosedLine question={shown} /> : null}
             {runtimeCard ? (
               <AssessmentPanel

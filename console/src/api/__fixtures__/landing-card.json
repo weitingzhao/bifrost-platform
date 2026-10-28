@@ -1,0 +1,27 @@
+{
+  "question_id": "q_0123456789abcdef",
+  "prep": "card:42:1:root_failed",
+  "kind": "root_failed",
+  "root": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "op": "land:42",
+  "trigger_seq": 42,
+  "stop_generation": 0,
+  "acked": true,
+  "closed": false,
+  "closed_why": "",
+  "options": { "a": "try_again", "b": "do_not_merge" },
+  "outcome": {
+    "question_id": "q_0123456789abcdef",
+    "root": "t_01M50M1CZSDN8PNHRH8C2241RS",
+    "op": "land:42",
+    "outcome": "applied",
+    "why": "retry",
+    "choice": "try_again",
+    "by": "owner",
+    "answered_at": "2026-10-11T08:00:00Z",
+    "channel": "console",
+    "answer_text": "",
+    "mission_state": "active"
+  },
+  "next_step": "Carried out (retry)."
+}

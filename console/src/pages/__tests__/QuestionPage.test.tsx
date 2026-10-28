@@ -12,6 +12,12 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { QuestionPage } from '@/pages/QuestionPage'
 
+// Landing reads have their own HTTP/rendering coverage in QuestionLandingOutcome.test.tsx.
+vi.mock('@/api/landingCards', async importOriginal => ({
+  ...await importOriginal<typeof import('@/api/landingCards')>(),
+  fetchLandingCard: vi.fn(async () => null),
+}))
+
 const ADMIN_CAPS: AuthCapabilities = {
   authenticated: true,
   role: 'admin',
