@@ -488,8 +488,12 @@ func TestReconcileRecordsReversals(t *testing.T) {
 		t.Fatal("an open mission's landing not read")
 	}
 	ok(t, store.InTx(ctx, w3.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "done", "test") }))
+	if !listed() {
+		t.Fatal("a landing not read in the day after its mission closed (CUT §11.8 v3 item 2)")
+	}
+	store.FreezeEventClock(intent3.Add(time.Minute + store.LateRevertWithin + time.Hour))
 	if listed() {
-		t.Fatal("a closed mission's landing read again")
+		t.Fatal("a closed mission's landing read again after a day")
 	}
 }
 

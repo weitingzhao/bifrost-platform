@@ -86,7 +86,7 @@ func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]an
 		CardOkMissing: "the reconciler keeps reading main", CardRepoStopped: "no new landing runs in this repository",
 		CardLateLanding: "nothing waits on your answer", CardCIStuck: "the landing waits for its CI",
 		CardParkedLong: "the landing stays parked until its bound", CardLandedUnverified: "the reconciler keeps reading main",
-		CardInMain: "the task's mission stays open",
+		CardInMain: "the task's mission stays open", CardLateRevert: "nothing waits on your answer",
 	}[tr.Kind]
 	req := map[string]any{"title": title, "body": body, "options": labels, "ttl_hours": CardTTLHours, "allow_text": true,
 		"urgency": "when you can: only this landing waits for you", "owner_duty": "goal", "meanwhile": meanwhile}
@@ -118,6 +118,8 @@ func landingCardBody(repo string, tr CardTrigger) string {
 		return fmt.Sprintf("Repository %s: %s has been parked since %s (%s). It ends by itself at its six-hour bound.", repo, tr.Op, at, tr.Why)
 	case CardLandedUnverified:
 		return fmt.Sprintf("Repository %s: %s landed, but since %s main has not shown it in effect (%s). Count it as not delivered, or decide later while main is read again.", repo, tr.Op, at, tr.Why)
+	case CardLateRevert:
+		return fmt.Sprintf("Repository %s: %s was reverted in main at %s, after its mission closed as delivered. The mission is not reopened; this is for you to know.", repo, tr.Op, at)
 	case CardInMain:
 		return fmt.Sprintf("Repository %s: this task's change was already in main when its landing was to start (%s, %s). Count it as delivered, or as not delivered.", repo, tr.Op, at)
 	}
@@ -135,7 +137,7 @@ func cardTitle(ctx context.Context, tx pgx.Tx, repo string, tr CardTrigger) (str
 	}
 	verb := map[string]string{CardRootFailed: "Landing failed", CardFloor: "Cannot land", CardOkMissing: "Push not in main",
 		CardLateLanding: "Landed late", CardCIStuck: "CI running long", CardParkedLong: "Landing parked",
-		CardLandedUnverified: "Landed, not verified", CardInMain: "Already in main"}[tr.Kind]
+		CardLandedUnverified: "Landed, not verified", CardInMain: "Already in main", CardLateRevert: "Reverted after close"}[tr.Kind]
 	return verb + ": " + firstLine(title), nil
 }
 
@@ -303,7 +305,7 @@ func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) 
 
 // cardRank orders decision kinds before notices.
 func cardRank(kind string) int {
-	if slices.Contains([]string{CardLateLanding, CardCIStuck, CardParkedLong}, kind) {
+	if slices.Contains([]string{CardLateLanding, CardLateRevert, CardCIStuck, CardParkedLong}, kind) {
 		return 1
 	}
 	return 0

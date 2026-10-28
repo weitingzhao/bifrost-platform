@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -126,6 +127,16 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			if ok && open {
 				out = append(out, CardTrigger{Kind: CardInMain, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: "in_main", Choices: []string{"count_as_delivered", "confirm_not_delivered"}})
 			}
+		case o.Phase == "reverted" && o.EverLanded:
+			// Reverted within a day after its mission closed done (CUT §11.8
+			// v3 item 4): the Owner is told; the mission is not reopened.
+			e, ok, err := lateRevert(ctx, tx, stream, o.Task, op)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, CardTrigger{Kind: CardLateRevert, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: "reverted", Choices: []string{"ack", "remind_later"}})
+			}
 		case o.Phase == "landed":
 			// Landed, and main has not shown it in effect for two hours
 			// since its first such read (CUT §11.8 v3 item 4).
@@ -182,6 +193,33 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 	}
 	slices.SortFunc(out, func(a, b CardTrigger) int { return int(a.Seq - b.Seq) })
 	return out, nil
+}
+
+// LateRevertWithin is how long after a mission closes done the reconciler
+// still reads its landings, and a reversal is told as late_revert.
+const LateRevertWithin = 24 * time.Hour
+
+// lateRevert is op's reversal record when it came after its root's mission
+// closed done, within LateRevertWithin of the close.
+func lateRevert(ctx context.Context, tx pgx.Tx, stream, root, op string) (unverifiedRead, bool, error) {
+	var closed *time.Time
+	if err := tx.QueryRow(ctx, `SELECT (SELECT max(e.at) FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done')
+	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id) WHERE t.task_id = $1 AND m.state = 'done'`, root).Scan(&closed); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return unverifiedRead{}, false, err
+	}
+	if closed == nil {
+		return unverifiedRead{}, false, nil
+	}
+	var r unverifiedRead
+	err := tx.QueryRow(ctx, `SELECT seq, at FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	  AND body_json->'landing'->>'kind' = 'reverted' AND body_json->'landing'->>'op' = $2 ORDER BY seq DESC LIMIT 1`, stream, op).Scan(&r.seq, &r.at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return unverifiedRead{}, false, nil
+	}
+	if err != nil {
+		return unverifiedRead{}, false, err
+	}
+	return r, r.at.After(*closed) && !r.at.After(closed.Add(LateRevertWithin)), nil
 }
 
 // LandedUnverifiedAfter is how long a landing's main evidence stays not

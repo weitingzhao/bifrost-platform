@@ -122,8 +122,9 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, A: o.A, IntentAt: intents[op]})
 			}
 		}
-		// Landed and not reverted, its mission still open: read again for a
-		// reversal (S3 B-02, ⑪), until the mission closes.
+		// Landed and not reverted, its mission still open, or closed less
+		// than a day ago (CUT §11.8 v3 item 2: a reversal right after the
+		// close is still seen): read again for a reversal (S3 B-02, ⑪).
 		for _, op := range latestOps(s) {
 			o := s.Operations[op]
 			if o.Phase != "landed" || o.Reverted {
@@ -131,7 +132,9 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 			}
 			var open bool
 			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
-			  WHERE t.task_id = $1 AND m.state IN ('active','paused','awaiting_owner','proposed'))`, o.Task).Scan(&open); err != nil {
+			  WHERE t.task_id = $1 AND (m.state IN ('active','paused','awaiting_owner','proposed')
+			    OR m.state = 'done' AND EXISTS (SELECT 1 FROM agentrt.event e WHERE e.mission_id = m.mission_id
+			      AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done' AND e.at > $2)))`, o.Task, DecisionAt().Add(-LateRevertWithin)).Scan(&open); err != nil {
 				return err
 			}
 			if open {

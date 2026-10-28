@@ -240,3 +240,32 @@ func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
 		t.Fatal("counted not delivered did not stop", st)
 	}
 }
+
+// Serial: FreezeEventClock. CUT §11.8 v3 items 2, 4: after its mission
+// closed done, a landing is still read for a day; a reversal then is told
+// on a late_revert card, and the mission stays done.
+func TestB4ReversalAfterTheCloseIsTold(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	liveRoot(t, w, "land:b4h:1", at, "main_intent", newLandingRecord("land:b4h:1", "main_result", "outcome", "ok"))
+	effectiveRead(t, w, at.Add(-10*time.Minute))
+	closePass(t, w, at)
+	effectiveRead(t, w, at.Add(time.Minute))
+	if st := closePass(t, w, at.Add(2*time.Minute)); st != "done" {
+		t.Fatal(st)
+	}
+	revert := strings.Repeat("f", 40)
+	store.FreezeEventClock(at.Add(3 * time.Hour))
+	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
+	ok(t, err)
+	if o := landingState(t, w, landingRepoStream).Operations["land:b4h:1"]; !o.Reverted {
+		t.Fatal("a reversal after the close was not seen")
+	}
+	if tr, ok := triggersAt(t, w, at.Add(3*time.Hour))["land:b4h:1"]; !ok || tr.Kind != store.CardLateRevert {
+		t.Fatalf("no late_revert: %+v", tr)
+	}
+	if st := w.state(t, "mission", "M-3"); st != "done" {
+		t.Fatal("the mission was reopened", st)
+	}
+}
