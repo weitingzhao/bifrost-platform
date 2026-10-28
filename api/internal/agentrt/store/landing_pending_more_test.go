@@ -12,7 +12,10 @@ import (
 
 // TD-447 1, 2, 6 boundaries the first three tests missed (review 645, Codex;
 // adopted by the coordinator).
-// Serial: all probes use FreezeEventClock. Requires the real PG/Redis harness.
+// Requires the real PG/Redis harness.
+
+// Serial: FreezeEventClock. The eighth operation ending non_ff within the
+// hour still gets its failed{bound} successor (the count, not the clock).
 func TestNonFFCountBoundSettlesWithinTheHour(t *testing.T) {
 	w, task, _ := goalDrill(t, "M-3")
 	at := time.Now().UTC().Truncate(time.Microsecond)
@@ -31,6 +34,8 @@ func TestNonFFCountBoundSettlesWithinTheHour(t *testing.T) {
 	closeEnds(t, w, "count-bound successor did not release mission")
 }
 
+// Serial: FreezeEventClock. main_result ok, denied and unknown hold their
+// mission past the hold limit until reconciled (review 645 m3).
 func TestMainResultHoldsUntilReconciled(t *testing.T) {
 	for _, outcome := range []string{"ok", "denied", "unknown"} {
 		t.Run(outcome, func(t *testing.T) {
