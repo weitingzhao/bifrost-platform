@@ -129,7 +129,7 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 		return b, err
 	}
-	now = DecisionAt(now)
+	now = DecisionAt()
 	b.at = now
 	state, err := LandingState(ctx, tx, "landing:bifrost-platform")
 	if err != nil {

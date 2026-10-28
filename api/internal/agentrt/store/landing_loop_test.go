@@ -285,3 +285,36 @@ func TestDrillFinalGateReadsTightenedRule(t *testing.T) {
 		t.Fatal("tightened rule admitted", e)
 	}
 }
+
+// Serial: FreezeEventClock via acceptedDrill. A tightened version installed
+// beforehand takes effect while the final gate reads CI under its locks: the
+// gate selects the rule again after its reads and refuses (review 656 B-B1).
+// Selecting it once, when the locks were taken, admits the rehearsal.
+func TestDrillFinalGateSelectsTheRuleAfterItsReads(t *testing.T) {
+	w, _, src := acceptedDrill(t)
+	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
+	ok(t, e)
+	if len(tasks) != 1 {
+		t.Fatal(tasks)
+	}
+	op, at := pushedDrill(t, w, tasks[0], src)
+	start := at.Add(time.Minute).UTC().Truncate(time.Second)
+	body := strings.Replace(landingRuleBody, "deny: []", "deny: [\"console/src/components/**\"]", 1)
+	effective := start.Add(time.Minute).Format(time.RFC3339)
+	_, e = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", effective, until, body)))
+	ok(t, e)
+	restore := store.FreezeEventClock(start)
+	defer restore()
+	observed := false
+	e = store.FinishLandingDrill(ctx, w.rt, src, op, start, func(context.Context, landing.Operation) (landing.DrillObservation, error) {
+		observed = true
+		store.FreezeEventClock(start.Add(2 * time.Minute)) // the read takes two minutes
+		return landing.DrillObservation{Main: commitA, Candidate: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: at.Add(time.Second)}}, nil
+	})
+	if !observed {
+		t.Fatal("fixture: the gate did not observe")
+	}
+	if e == nil || landingState(t, w, landingRepoStream).Operations[op].Phase != "branch_pushed" {
+		t.Fatal("a version that took effect during the gate's reads was not applied", e)
+	}
+}

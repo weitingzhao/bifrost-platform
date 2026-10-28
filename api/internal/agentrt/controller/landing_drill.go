@@ -22,7 +22,7 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 	}
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var err error
-		now := store.DecisionAt(now) // CUT §9: not the pass's start
+		now := store.DecisionAt() // CUT §9: not the pass's start
 		f, err = store.LandingFacts(ctx, tx, src, c.Env, mode, task, op, "", now)
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// Bounds are checked before any external read: an unavailable Gitea or
 	// window must not keep the active slot forever.
 	first, n := landing.RootBudget(s, o.Task)
-	if landing.Bound(first, n-1, now) {
+	if landing.Bound(first, n-1, store.DecisionAt()) {
 		return landing.DrillAction{Kind: "failed", Why: "bound"}, appendRecord("failed", map[string]any{"why": "bound"})
 	}
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
@@ -126,8 +126,12 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	}
 	blocked, windowErr := src.WindowBlocked(ctx)
 	blocked = blocked || windowErr != nil
-	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked}, now)
-	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(now) {
+	// Decided at the clock after the reads above, not the pass's start: the
+	// ten-minute rebuild and thirty-minute stuck checks and the CI's creation
+	// time are judged as of now (CUT §9, review 656 B-R1).
+	at := store.DecisionAt()
+	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked}, at)
+	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(at) {
 		if err = appendRecord("ci_seen", map[string]any{"run": ci.Run, "status": ci.Status, "R": o.R, "created_at": ci.CreatedAt.Format(time.RFC3339Nano)}); err != nil {
 			return a, err
 		}
@@ -143,7 +147,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		if o.Phase == "parked" {
 			return a, nil
 		}
-		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": now.Add(time.Minute).Format(time.RFC3339Nano)})
+		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
 	case "unparked":
 		return a, appendRecord("unparked", map[string]any{})
 	case "ci_kick", "ci_rerun":

@@ -71,7 +71,7 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 			  FROM agentrt.mission m WHERE m.mission_id = $1 FOR SHARE`, mission, r.task).Scan(&missionState, &created, &noMerge, &accepted); err != nil {
 				return err
 			}
-			now := DecisionAt(now) // CUT §9: the window as of these locks
+			now := DecisionAt() // CUT §9: the window as of these locks
 			why := ""
 			switch {
 			case noMerge || created.Before(state.EnabledAt) || accepted == nil || accepted.Before(state.EnabledAt):

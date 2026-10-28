@@ -151,6 +151,8 @@ func TestDrillWindowBoundFreesActiveSlotInDatabase(t *testing.T) {
 	put("parked", "why", "window", "retry_at", first.Add(time.Minute).Format(time.RFC3339Nano))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	// A fresh controller with no I/O sources still expires the operation.
+	// Time passes on the clock the gates decide at (CUT §9).
+	store.FreezeEventClock(first.Add(6 * time.Hour))
 	a, err := ctl.LandingDrillCI(ctx, controller.DrillSources{}, op, first.Add(6*time.Hour))
 	ok(t, err)
 	if a.Kind != "failed" || a.Why != "bound" {
@@ -162,6 +164,7 @@ func TestDrillWindowBoundFreesActiveSlotInDatabase(t *testing.T) {
 		t.Fatal(o)
 	}
 	again := controller.Controller{DB: w.rt, Env: "stg"}
+	store.FreezeEventClock(first.Add(7 * time.Hour))
 	a, err = again.LandingDrillCI(ctx, controller.DrillSources{}, op, first.Add(7*time.Hour))
 	ok(t, err)
 	if a.Kind != "cleanup" {

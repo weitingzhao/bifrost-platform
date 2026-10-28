@@ -86,8 +86,16 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 // ObserveLandingEnabled is called when the loop first observes a current
 // authorized rule. Append's timestamp, not effective_at, becomes the fence.
 // Later versions and repeated observations never move it.
+//
+// The rule is selected once the stream lock is held, at that clock (CUT §9,
+// review 656 B-R1): the fence is never written on a rule that ran out while
+// this waited. now is the pass's; it no longer decides.
 func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, now time.Time) (time.Time, error) {
-	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, now)
+	stream := "landing:" + repo
+	if err := lockStream(ctx, tx, stream); err != nil {
+		return time.Time{}, err
+	}
+	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -96,10 +104,6 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, 
 	}
 	if _, ok := rule.Landing.Repo(repo); !ok {
 		return time.Time{}, fmt.Errorf("repo not enabled")
-	}
-	stream := "landing:" + repo
-	if err := lockStream(ctx, tx, stream); err != nil {
-		return time.Time{}, err
 	}
 	s, err := LandingState(ctx, tx, stream)
 	if err != nil {

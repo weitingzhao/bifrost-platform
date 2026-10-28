@@ -46,7 +46,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if err = lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 			return err
 		}
-		at := DecisionAt(now) // CUT §9: the rule and the window as of these locks
+		at := DecisionAt() // CUT §9: the rule and the window as of these locks
 		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", o.Task, op, "", at)
 		if err != nil {
 			return err
@@ -66,9 +66,20 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if err != nil {
 			return err
 		}
-		obs.Facts = f
-		// The observation reads CI under these locks: judge it as of now.
-		if action := landing.NextDrill(state, op, obs, DecisionAt(at)); action.Kind != "ready" {
+		// The facts and the observation read Git and CI under these locks,
+		// for as long as they take: decide at the clock after them. The rule
+		// is selected again at that time (a version that took effect during
+		// the reads decides, review 656 B-B1) with the database half read
+		// again; the external evidence read above stands, its keys held by
+		// these locks.
+		final := DecisionAt()
+		g, _, err := landingFactsDB(ctx, tx, src, "stg", "dry_run", o.Task, op, final)
+		if err != nil {
+			return err
+		}
+		g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+		obs.Facts = g
+		if action := landing.NextDrill(state, op, obs, final); action.Kind != "ready" {
 			return fmt.Errorf("drill final gate: %s %s", action.Kind, action.Why)
 		}
 		for _, r := range []map[string]any{

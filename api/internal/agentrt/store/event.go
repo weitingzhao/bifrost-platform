@@ -73,17 +73,18 @@ func envelope(ev Event, seq int64, prev string, at time.Time) map[string]any {
 // one moment.
 var eventClock = time.Now
 
-// DecisionAt is the time a locked decision is taken at (CUT §9): the event
-// clock read once the gate holds its locks, never earlier than the pass's
-// own now. A gate decides with the clock its records are written with, not
-// with the time its pass began; the pass's now only schedules (which
-// candidates, whether a backoff or a retry_at is due). The max keeps a test
-// that freezes the clock and passes a later now meaning what it meant.
-func DecisionAt(now time.Time) time.Time {
-	if c := eventClock().UTC().Truncate(time.Microsecond); c.After(now) {
-		return c
-	}
-	return now
+// DecisionAt is the time a locked decision is taken at (CUT §9 v2): the
+// event clock, read once the gate holds its locks and again after any slow
+// read it makes under them. It is the clock the gate's records are written
+// with (Append), so what is decided and what is recorded agree; a test moves
+// time by freezing this clock, not by passing a later now. The pass's own now
+// only schedules: which candidates run, whether a retry_at is due.
+//
+// The wall clock is trusted to move forward: a step back (NTP) may let a
+// window that ended look open again for that pass. Not guarded; the ledger
+// records it (review 656 B-R2).
+func DecisionAt() time.Time {
+	return eventClock().UTC().Truncate(time.Microsecond)
 }
 
 func nullable(s string) any {

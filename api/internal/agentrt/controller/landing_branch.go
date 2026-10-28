@@ -87,7 +87,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return nil
 	}
 	first, n := landing.RootBudget(s, o.Task)
-	if landing.Bound(first, n-1, now) {
+	if landing.Bound(first, n-1, store.DecisionAt()) { // CUT §9
 		return put("failed", map[string]any{"why": "bound"})
 	}
 	// Reconcile a completed push even after a rule expires. If absent, all

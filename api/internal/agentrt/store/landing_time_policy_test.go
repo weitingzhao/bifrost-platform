@@ -81,17 +81,18 @@ func TestClaimWindowEndingDuringTheReadIsBound(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A decision is never taken earlier than the
-// pass's own now, and is the event clock when that is later.
-func TestDecisionAtIsTheLaterOfNowAndTheClock(t *testing.T) {
+// Serial: FreezeEventClock. A decision is taken at the event clock, the
+// clock its records are written with, whatever the pass's now says (CUT §9
+// v2, review 656 B-R2).
+func TestDecisionAtIsTheEventClock(t *testing.T) {
 	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	restore := store.FreezeEventClock(now.Add(-time.Minute))
-	if got := store.DecisionAt(now); !got.Equal(now) {
-		t.Fatal("earlier clock", got)
+	defer restore()
+	if got := store.DecisionAt(); !got.Equal(now.Add(-time.Minute)) {
+		t.Fatal("not the clock", got)
 	}
 	store.FreezeEventClock(now.Add(time.Minute))
-	if got := store.DecisionAt(now); !got.Equal(now.Add(time.Minute)) {
-		t.Fatal("later clock", got)
+	if got := store.DecisionAt(); !got.Equal(now.Add(time.Minute)) {
+		t.Fatal("not the clock", got)
 	}
-	restore()
 }

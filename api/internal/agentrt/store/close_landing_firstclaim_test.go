@@ -166,6 +166,8 @@ func TestSettleUnclaimed(t *testing.T) {
 	if !slices.Equal(got, []string{stopped}) {
 		t.Fatalf("now: recorded %v, want the stopped mission's root", got)
 	}
+	// A decision is taken at the clock (CUT §9): the time passes on it.
+	defer store.FreezeEventClock(now.Add(landing.ClaimWindow + time.Minute))()
 	got, err = store.SettleUnclaimed(ctx, w.rt, "bifrost-platform", now.Add(landing.ClaimWindow+time.Minute))
 	ok(t, err)
 	slices.Sort(got)
@@ -194,7 +196,9 @@ func TestClaimPastTheWindowRecordsBoundWithoutGit(t *testing.T) {
 		t.Fatal("Result read for a root past its window")
 		return false, nil, nil
 	}
-	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now().Add(landing.ClaimWindow+time.Minute))
+	later := time.Now().Add(landing.ClaimWindow + time.Minute)
+	defer store.FreezeEventClock(later)() // CUT §9: decided at the clock
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, later)
 	ok(t, err)
 	if op != "" || d.Reason != "bound" {
 		t.Fatalf("op=%q decision=%+v", op, d)
