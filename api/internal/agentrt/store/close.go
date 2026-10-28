@@ -69,6 +69,7 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 	}
 	var closed []string
 	var holdErrs []error
+	folds := landingFolds{}
 	for _, id := range ids {
 		did := false
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -90,7 +91,7 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			held, err := landingHolds(ctx, sp, id, eventClock())
+			held, err := landingHolds(ctx, sp, folds, id, eventClock())
 			if err != nil {
 				holdErrs = append(holdErrs, fmt.Errorf("mission %s: landing: %w", id, err))
 				if rerr := sp.Rollback(ctx); rerr != nil {
@@ -151,7 +152,7 @@ const (
 	landingHoldLimit  = 6*time.Hour + 15*time.Minute
 )
 
-func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time) (bool, error) {
+func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string, now time.Time) (bool, error) {
 	type root struct {
 		task     string
 		accepted *time.Time
@@ -190,7 +191,7 @@ func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time)
 		return false, err
 	}
 	for _, repo := range repos {
-		state, err := LandingState(ctx, tx, "landing:"+repo)
+		state, err := folds.state(ctx, tx, "landing:"+repo)
 		if err != nil {
 			return false, err
 		}
@@ -222,4 +223,34 @@ func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time)
 		}
 	}
 	return false, nil
+}
+
+// landingFolds keeps, for one CloseMissions pass, each landing stream's fold
+// with the stream's head seq it was folded at (TD-447 3: every closable
+// mission folded its repository's whole stream again under its lock). The
+// stream is append-only and appends to it take its lock in order, so an
+// unchanged head means unchanged contents: the fold is reused. A new head is
+// folded again. Callers only read the State.
+type landingFolds map[string]landingFold
+
+type landingFold struct {
+	head  int64
+	state landing.State
+}
+
+func (m landingFolds) state(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
+	var head int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(seq), 0) FROM agentrt.event WHERE event_stream_id = $1`, stream).Scan(&head); err != nil {
+		return landing.State{}, err
+	}
+	if f, ok := m[stream]; ok && f.head == head {
+		return f.state, nil
+	}
+	hook("landing_fold", stream)
+	s, err := LandingState(ctx, tx, stream)
+	if err != nil {
+		return landing.State{}, err
+	}
+	m[stream] = landingFold{head: head, state: s}
+	return s, nil
 }
