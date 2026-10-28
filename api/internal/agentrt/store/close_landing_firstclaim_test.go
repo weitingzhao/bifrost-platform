@@ -202,3 +202,42 @@ func TestClaimPastTheWindowRecordsBoundWithoutGit(t *testing.T) {
 		t.Fatalf("no bound record: %+v", o)
 	}
 }
+
+// Serial: FreezeEventClock. Only a root in the handoff is ever recorded
+// unclaimed (review 653 R653-1): a mission created, and its task accepted,
+// before landing was enabled is out of it, so a claim past six hours refuses
+// before_enable as before and writes nothing (bffe7c04 wrote failed{bound}).
+func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
+	w := newKernelWorld(t)
+	s := signer{t, rptest.NewKey(t)}
+	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
+	ok(t, err)
+	w.goalMission(t, "M-3")
+	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "an operator's drill", BaseCommit: commitB})
+	w.passRound(t, task, "h1", "h2", "h3")
+	enabled := time.Now().Add(10 * time.Minute)
+	restore := store.FreezeEventClock(enabled)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", enabled)
+		return e
+	}))
+	restore()
+	src := store.LandingSource{Result: func(context.Context, string, string, string, string, string) (bool, []rules.LandingChange, error) {
+		return true, nil, nil
+	}, History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+		return landing.MainHistory{State: landing.Never}, nil
+	}}
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now().Add(landing.ClaimWindow+time.Hour))
+	ok(t, err)
+	if op != "" || d.Allowed || d.Reason != "before_enable" {
+		t.Fatalf("op=%q decision=%+v", op, d)
+	}
+	if _, found := firstOp(t, w, task); found {
+		t.Fatal("a root outside the handoff was recorded")
+	}
+	got, err := store.SettleUnclaimed(ctx, w.rt, "bifrost-platform", time.Now().Add(landing.ClaimWindow+time.Hour))
+	ok(t, err)
+	if len(got) != 0 {
+		t.Fatalf("the database step recorded a root outside the handoff: %v", got)
+	}
+}

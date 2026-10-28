@@ -42,3 +42,33 @@ func TestDrillBackoff(t *testing.T) {
 		t.Fatal("a moved stream kept the waits", got)
 	}
 }
+
+// The generation sees what frees a slot or changes a retry with the same
+// number of operations and retries (review 653 R653-3), and only that.
+func TestDrillGeneration(t *testing.T) {
+	ops := func(phase, outcome string) map[string]landing.Operation {
+		return map[string]landing.Operation{"land:a:1": {Phase: phase, Outcome: outcome}, "land:b:1": {Phase: "claimed"}, "land:c:1": {Phase: "failed", Outcome: "bound"}}
+	}
+	retry := func(after, consumed string, at time.Time) map[string]landing.Retry {
+		return map[string]landing.Retry{"a": {AfterOp: after, ConsumedBy: consumed, At: at}}
+	}
+	at := time.Date(2026, 10, 28, 5, 0, 0, 0, time.UTC)
+	base := drillGeneration(landing.State{Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "", at)})
+	for name, s := range map[string]landing.State{
+		"parked":            {Operations: ops("parked", ""), Retries: retry("land:a:1", "", at)},
+		"failed":            {Operations: ops("failed", "ci_red"), Retries: retry("land:a:1", "", at)},
+		"rehearsed":         {Operations: ops("rehearsed", ""), Retries: retry("land:a:1", "", at)},
+		"retry consumed":    {Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "land:a:2", at)},
+		"retry after other": {Operations: ops("branch_pushed", ""), Retries: retry("land:a:2", "", at)},
+		"retry again":       {Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "", at.Add(time.Hour))},
+	} {
+		if drillGeneration(s) == base {
+			t.Errorf("%s: the generation did not move", name)
+		}
+	}
+	for range 20 {
+		if drillGeneration(landing.State{Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "", at)}) != base {
+			t.Fatal("the same stream gave another generation")
+		}
+	}
+}

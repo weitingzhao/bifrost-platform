@@ -155,7 +155,7 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 		}
 	}
 	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, "stg", "dry_run", task, "", now)
-	if err != nil || n > 0 || b.facts.AcceptedAt.IsZero() || now.Before(b.facts.AcceptedAt.Add(landing.ClaimWindow)) {
+	if err != nil || n > 0 || !inHandoff(b.facts) || now.Before(b.facts.AcceptedAt.Add(landing.ClaimWindow)) {
 		return b, err
 	}
 	// Never claimed and its window is over: the loop never got to it (a
@@ -168,16 +168,19 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 
 // unclaimedEnd: the record a refusal of a root never claimed leaves, when
 // no later pass can turn it around without the Owner (CUT §7.7): stale only
-// for what does not recover (a mission done, stopped or expired, no_merge, a
-// dropped step, a goal whose producing plan another plan replaced); result;
+// for what does not recover (a mission done, stopped or expired, a dropped
+// step, a goal whose producing plan another plan replaced); result;
 // in_main or reverted when A is already in main's history. A paused mission,
 // a stopped step, unknown history, dependencies, rule and limit can change by
 // themselves: no record, the next pass tries again, the window ends it.
 func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
+	if !inHandoff(f) {
+		return "", false
+	}
 	switch d.Reason {
 	case "stale":
 		switch {
-		case f.NoMerge, slices.Contains([]string{"done", "stopped", "expired"}, f.MissionState), f.StepState == "dropped",
+		case slices.Contains([]string{"done", "stopped", "expired"}, f.MissionState), f.StepState == "dropped",
 			f.GoalTask && f.ProducingPlan != "" && f.LatestUsedPlan != "" && f.ProducingPlan != f.LatestUsedPlan:
 			return "stale", true
 		}
@@ -192,6 +195,17 @@ func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// inHandoff is the first-claim handoff read from the claim's locked facts,
+// the durable facts Close (landingHolds) and SettleUnclaimed read: an
+// accepted task, landing enabled on its repository's stream, its mission
+// created and the task accepted no earlier, the mission not no_merge. Only a
+// root in it is ever recorded unclaimed (review 653 R653-1): one rebound to
+// an older mission, or never in it, is refused as before and left alone.
+func inHandoff(f landing.Facts) bool {
+	return f.TaskState == "accepted" && !f.EnabledAt.IsZero() && !f.AcceptedAt.IsZero() && !f.MissionCreated.IsZero() &&
+		!f.AcceptedAt.Before(f.EnabledAt) && !f.MissionCreated.Before(f.EnabledAt) && !f.NoMerge
 }
 
 // refusalEvidence is what the claim saw, kept in the record's text (the

@@ -55,7 +55,9 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 	}
 	var recorded []string
 	for _, r := range due {
+		appended := false
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			appended = false
 			var mission, missionState string
 			var accepted *time.Time
 			var created time.Time
@@ -84,13 +86,15 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 			if why == "bound" {
 				evidence = "its window ended unclaimed; mission " + missionState
 			}
-			ok, err := failUnclaimedLocked(ctx, tx, stream, mission, r.task, why, evidence)
-			if ok {
-				recorded = append(recorded, r.task)
-			}
+			var err error
+			appended, err = failUnclaimedLocked(ctx, tx, stream, mission, r.task, why, evidence)
 			return err
 		}); err != nil {
 			return recorded, err
+		}
+		// Reported only once committed (review 653 N653-1).
+		if appended {
+			recorded = append(recorded, r.task)
 		}
 	}
 	return recorded, nil

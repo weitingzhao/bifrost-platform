@@ -123,11 +123,14 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	}); err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	tasks = c.drillWaits.due(unsettled(tasks, settled.Operations), drillGeneration(settled), now)
+	// Waits run on the clock as it is when each is read or set, not the
+	// pass's start: a slow read must not use up the wait it earns (review
+	// 653 R653-2).
+	tasks = c.drillWaits.due(unsettled(tasks, settled.Operations), drillGeneration(settled), c.clock())
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
 		op, d, e := store.ClaimLandingDrill(one, c.DB, c.Drill.Facts, task, now)
-		c.drillWaits.record(task, e == nil && (op != "" || d.Reason == "changed"), now)
+		c.drillWaits.record(task, e == nil && (op != "" || d.Reason == "changed"), c.clock())
 		if e != nil {
 			errs = append(errs, e)
 			done()
@@ -274,4 +277,12 @@ func (b *drillBackoff) record(task string, clear bool, now time.Time) {
 	w.tries++
 	w.until = now.Add(min(time.Minute<<min(w.tries-1, 3), 5*time.Minute))
 	b.waits[task] = w
+}
+
+// clock is Now when set (tests), else the wall clock.
+func (c *Controller) clock() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+	return time.Now()
 }
