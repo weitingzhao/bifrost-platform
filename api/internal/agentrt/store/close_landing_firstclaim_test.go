@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -239,5 +240,35 @@ func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
 	ok(t, err)
 	if len(got) != 0 {
 		t.Fatalf("the database step recorded a root outside the handoff: %v", got)
+	}
+}
+
+// Serial: FreezeEventClock via acceptedDrill. Through the pass itself (review
+// 654 N654-1): a claim whose read takes two minutes and then fails waits a
+// minute from when it failed, not from when the pass began; the next pass a
+// second later reads nothing for it, one at the wait's end reads it again.
+func TestDrillPassWaitStartsWhenTheReadFails(t *testing.T) {
+	w, _, src := acceptedDrill(t)
+	start := time.Now()
+	clock := start
+	failing := src
+	failing.History = func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+		clock = clock.Add(2 * time.Minute) // the slow read
+		return landing.MainHistory{}, errors.New("history read failed")
+	}
+	counted, results, _ := countedFacts(failing)
+	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return clock }, DrillGit: &startupDrillGit{}, Drill: &controller.DrillSources{Facts: counted}}
+	if ctl.LandingDrillPass(ctx) == nil || results.Load() != 1 {
+		t.Fatalf("fixture: the first pass did not read and fail (reads=%d)", results.Load())
+	}
+	clock = start.Add(2*time.Minute + time.Second)
+	_ = ctl.LandingDrillPass(ctx)
+	if n := results.Load(); n != 1 {
+		t.Fatalf("read again %v after the pass began, a second after it failed: reads=%d", clock.Sub(start), n)
+	}
+	clock = start.Add(3 * time.Minute)
+	_ = ctl.LandingDrillPass(ctx)
+	if n := results.Load(); n != 2 {
+		t.Fatalf("not read again when the wait ended: reads=%d", n)
 	}
 }

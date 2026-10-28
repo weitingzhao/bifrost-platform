@@ -61,6 +61,7 @@ func TestDrillGeneration(t *testing.T) {
 		"retry consumed":    {Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "land:a:2", at)},
 		"retry after other": {Operations: ops("branch_pushed", ""), Retries: retry("land:a:2", "", at)},
 		"retry again":       {Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "", at.Add(time.Hour))},
+		"outcome only":      {Operations: ops("branch_pushed", "window"), Retries: retry("land:a:1", "", at)},
 	} {
 		if drillGeneration(s) == base {
 			t.Errorf("%s: the generation did not move", name)
@@ -70,5 +71,20 @@ func TestDrillGeneration(t *testing.T) {
 		if drillGeneration(landing.State{Operations: ops("branch_pushed", ""), Retries: retry("land:a:1", "", at)}) != base {
 			t.Fatal("the same stream gave another generation")
 		}
+	}
+	// Built in another order, with two retries: the same generation.
+	two := map[string]landing.Retry{"a": {AfterOp: "land:a:1", At: at}, "b": {AfterOp: "land:b:1", At: at}}
+	reversed := map[string]landing.Retry{}
+	reversed["b"], reversed["a"] = two["b"], two["a"]
+	if drillGeneration(landing.State{Retries: two}) != drillGeneration(landing.State{Retries: reversed}) {
+		t.Fatal("insertion order changed the generation")
+	}
+	// A wait set under one generation is due at once when only an outcome moved.
+	var b drillBackoff
+	b.due([]string{"t1"}, base, at)
+	b.record("t1", false, at)
+	moved := drillGeneration(landing.State{Operations: ops("branch_pushed", "window"), Retries: retry("land:a:1", "", at)})
+	if got := b.due([]string{"t1"}, moved, at); len(got) != 1 {
+		t.Fatal("an outcome change kept the wait", got)
 	}
 }
