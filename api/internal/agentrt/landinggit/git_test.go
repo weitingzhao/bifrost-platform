@@ -549,3 +549,24 @@ func TestReplayNamesTheLiveLandingAndTheLanderKeepsItsBranch(t *testing.T) {
 		t.Fatal("the lander pushed a drill branch")
 	}
 }
+
+// Review 662 R-03: A no longer fetchable (its branch pruned) leaves main's
+// evidence standing: R in main with validity unknown, or R absent; never an
+// error.
+func TestMainEvidenceWithoutA(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	repo := filepath.Join(filepath.Dir(src), "remote.git")
+	gitTest(t, src, "cherry-pick", "-x", in.A)
+	landed := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, "main")
+	gone := strings.Repeat("d", 40)
+	head, has, hist, err := g.MainEvidence(ctx, landed, testTask, gone)
+	if err != nil || !has || head != landed || hist.State != landing.Unknown {
+		t.Fatalf("R in main, A gone: has=%v head=%s %+v %v", has, head, hist, err)
+	}
+	head, has, _, err = g.MainEvidence(ctx, strings.Repeat("e", 40), testTask, gone)
+	if err != nil || has || head != landed {
+		t.Fatalf("R absent, A gone: has=%v head=%s %v", has, head, err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -456,15 +457,6 @@ func TestReconcileRecordsReversals(t *testing.T) {
 	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; done["land:rev:2"] != "reverted" || !o.Reverted {
 		t.Fatalf("reverted later: %v %+v", done, o)
 	}
-	// Once its mission is closed it is not read again.
-	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "done", "test") }))
-	cands, err := store.MainCandidates(ctx, w2.rt, "bifrost-platform")
-	ok(t, err)
-	for _, c := range cands {
-		if c.Op == "land:rev:2" {
-			t.Fatal("a closed mission's landing read again")
-		}
-	}
 
 	w3 := newKernelWorld(t)
 	_, intent3 := atMain(t, w3, "land:rev:3", "unknown", at)
@@ -478,5 +470,177 @@ func TestReconcileRecordsReversals(t *testing.T) {
 	ok(t, w3.rt.QueryRow(ctx, `SELECT body_json->'landing_main'->>'validity' FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? 'landing_main'`, landingRepoStream).Scan(&validity))
 	if validity != "unknown" {
 		t.Fatal(validity)
+	}
+	// Landed and not reversed, it is read while its mission is open, and
+	// not once it is closed (review 662: asserted before any reversal).
+	listed := func() bool {
+		cands, err := store.MainCandidates(ctx, w3.rt, "bifrost-platform")
+		ok(t, err)
+		for _, c := range cands {
+			if c.Op == "land:rev:3" {
+				return true
+			}
+		}
+		return false
+	}
+	if !listed() {
+		t.Fatal("an open mission's landing not read")
+	}
+	ok(t, store.InTx(ctx, w3.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "done", "test") }))
+	if listed() {
+		t.Fatal("a closed mission's landing read again")
+	}
+}
+
+// mainEvidenceRows are the operation's landing_main records, oldest first:
+// verdict/validity.
+func mainEvidenceRows(t *testing.T, w *world, op string) []string {
+	t.Helper()
+	rows, err := w.rt.Query(ctx, `SELECT body_json->'landing_main'->>'verdict' || '/' || (body_json->'landing_main'->>'validity')
+	  FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_main'->>'op' = $2 ORDER BY event_id`, landingRepoStream, op)
+	ok(t, err)
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	ok(t, err)
+	return out
+}
+
+// Serial: FreezeEventClock. Review 662 B-04: a landing's evidence is read
+// again and recorded when it says something new: unknown to effective,
+// unreadable, R gone from main; the same again, or an older read, writes
+// nothing.
+func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	_, intent := atMain(t, w, "land:ev:1", "ok", at)
+	pass := func(k int, ev store.MainEvidence, err error) map[string]string {
+		t.Helper()
+		store.FreezeEventClock(intent.Add(time.Duration(k) * time.Minute))
+		done, e := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) { return ev, err })
+		if err == nil {
+			ok(t, e)
+		}
+		return done
+	}
+	pass(1, store.MainEvidence{Head: commitB, HasR: true}, nil)
+	pass(2, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}, nil)
+	pass(3, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}, nil)
+	pass(4, store.MainEvidence{}, errors.New("fetch failed"))
+	pass(5, store.MainEvidence{}, errors.New("fetch failed"))
+	pass(6, store.MainEvidence{Head: strings.Repeat("e", 40)}, nil)
+	want := []string{"landed/unknown", "observed/effective", "observed/unreadable", "observed/absent"}
+	if got := mainEvidenceRows(t, w, "land:ev:1"); !slices.Equal(got, want) {
+		t.Fatalf("evidence %v, want %v", got, want)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations["land:ev:1"]; o.Phase != "landed" || o.Reverted {
+		t.Fatalf("an observation moved the operation: %+v", o)
+	}
+	// An older read committed late is not recorded over a newer one.
+	c := store.MainCandidate{Op: "land:ev:1", Root: landingState(t, w, landingRepoStream).Operations["land:ev:1"].Task, Phase: "landed", Outcome: "ok", R: commitB, M0: commitA}
+	did, err := store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", c, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: intent.Add(5 * time.Minute)})
+	ok(t, err)
+	if did != "" || len(mainEvidenceRows(t, w, "land:ev:1")) != 4 {
+		t.Fatal("a stale observation recorded", did)
+	}
+	// A failed read of an operation not yet landed writes nothing.
+	w2 := newKernelWorld(t)
+	_, intent2 := atMain(t, w2, "land:ev:2", "unknown", at)
+	store.FreezeEventClock(intent2.Add(store.MainFence + time.Minute))
+	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
+		return store.MainEvidence{}, errors.New("fetch failed")
+	})
+	if err == nil || len(mainEvidenceRows(t, w2, "land:ev:2")) != 0 {
+		t.Fatal("a failed read recorded for an unsettled push", err)
+	}
+}
+
+// Review 662 N-01: versioned evidence is checked field by field; a record
+// without a version is checked as before, its validity typed.
+func TestMainEvidenceRecordsAreChecked(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	root := w.ready(t, store.Task{OffPlanReason: "evidence records"})
+	base := func(kv ...any) map[string]any {
+		m := map[string]any{"v": store.MainEvidenceVersion, "op": "land:x:1", "root": root, "verdict": "observed", "R": commitB, "M0": commitA,
+			"head": commitB, "has_r": true, "validity": "effective", "reverted_by": "", "read_at": time.Now().UTC().Format(time.RFC3339Nano)}
+		for i := 0; i+1 < len(kv); i += 2 {
+			if kv[i+1] == nil {
+				delete(m, kv[i].(string))
+				continue
+			}
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	put := func(m map[string]any) error {
+		return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: root, Body: map[string]any{"text": "evidence", "landing_main": m}})
+			return err
+		})
+	}
+	revert := strings.Repeat("f", 40)
+	for name, c := range map[string]struct {
+		m  map[string]any
+		ok bool
+	}{
+		"effective":              {base(), true},
+		"reverted":               {base("validity", "reverted", "reverted_by", revert), true},
+		"absent":                 {base("validity", "absent", "has_r", false, "head", commitA), true},
+		"unreadable":             {base("validity", "unreadable", "has_r", false, "head", ""), true},
+		"validity a number":      {base("validity", 5), false},
+		"validity missing":       {base("validity", nil), false},
+		"reverted, no reversal":  {base("validity", "reverted"), false},
+		"reversal, not reverted": {base("reverted_by", revert), false},
+		"reversal not a commit":  {base("validity", "reverted", "reverted_by", "HEAD~1"), false},
+		"absent with R":          {base("validity", "absent"), false},
+		"effective without R":    {base("has_r", false), false},
+		"unreadable with head":   {base("validity", "unreadable", "has_r", false), false},
+		"reverted_by missing":    {base("reverted_by", nil), false},
+		"another version":        {base("v", "3"), false},
+		"legacy":                 {base("v", nil, "verdict", "landed", "validity", "unknown", "reverted_by", nil), true},
+		"legacy, number":         {base("v", nil, "verdict", "landed", "validity", 1), false},
+		"legacy, observed":       {base("v", nil), false},
+	} {
+		if err := put(c.m); (err == nil) != c.ok {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// Serial: FreezeEventClock. Review 662 R-04: a landing, from ok or from
+// unknown, is read again every thirty minutes, not every minute past the
+// fence.
+func TestReconcileLoopRereadsALandingHalfHourly(t *testing.T) {
+	for _, outcome := range []string{"ok", "unknown"} {
+		t.Run(outcome, func(t *testing.T) {
+			w := newKernelWorld(t)
+			at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
+			defer store.FreezeEventClock(at)()
+			r := strings.Repeat("d", 40)
+			intent := atMainR(t, w, "land:half:1", r, at)
+			if outcome == "ok" {
+				ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:half:1", "main_result", "outcome", "ok")))
+			}
+			now := intent.Add(store.MainFence + time.Minute)
+			store.FreezeEventClock(now)
+			reads := 0
+			ctl := controller.Controller{DB: w.rt, Env: "prod", Now: func() time.Time { return now }}
+			ctl.Reconcile = &controller.LandingReconcile{MainEvidence: func(context.Context, string, string, string, string) (store.MainEvidence, error) {
+				reads++
+				return store.MainEvidence{Head: r, HasR: true, Validity: "effective"}, nil
+			}}
+			ok(t, ctl.LandingReconcilePass(ctx))
+			if p, _ := phaseOf(t, w, "land:half:1"); p != "landed" || reads != 1 {
+				t.Fatal(p, reads)
+			}
+			for i, step := range []time.Duration{time.Minute, 28 * time.Minute, time.Minute} {
+				now = now.Add(step)
+				store.FreezeEventClock(now)
+				ok(t, ctl.LandingReconcilePass(ctx))
+				if want := []int{1, 1, 2}[i]; reads != want {
+					t.Fatalf("after step %d: %d reads, want %d", i, reads, want)
+				}
+			}
+		})
 	}
 }

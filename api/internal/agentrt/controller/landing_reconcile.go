@@ -124,6 +124,12 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 		did := ""
 		if err == nil {
 			did, err = store.ReconcileMainOne(ctx, c.DB, repo, cand, ev)
+		} else if cand.Phase == "landed" {
+			// A landing's earlier evidence no longer stands: record that the
+			// read failed (review 662 B-04); the error still backs it off.
+			if _, recErr := store.ReconcileMainOne(ctx, c.DB, repo, cand, store.MainEvidence{Unreadable: true, ReadAt: started}); recErr != nil {
+				err = errors.Join(err, recErr)
+			}
 		}
 		r.mu.Lock()
 		switch {
@@ -131,7 +137,21 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 			step := min(max(2*w.step, time.Minute), reconcileMaxWait)
 			r.waits[key] = reconcileWait{until: c.clock().Add(step), step: step}
 			errs = append(errs, fmt.Errorf("%s: %w", cand.Op, err))
-		case did == "" && !cand.Late && (cand.Phase == "main_intent" || cand.Outcome == "unknown"):
+		case did == "landed":
+			// Just landed: its next read, as a landing, is thirty minutes
+			// on (review 662 R-04), under the key it is listed with now.
+			next := cand
+			next.Phase = "landed"
+			if cand.Phase == "main_intent" {
+				next.Outcome = "unknown"
+			}
+			delete(r.waits, key)
+			r.waits[reconcileKey(next)] = reconcileWait{until: c.clock().Add(reconcileRecheck)}
+		case cand.Phase == "landed":
+			// Landed: read again for a reversal or a change of evidence every
+			// thirty minutes, whatever this read found (review 662 R-04).
+			r.waits[key] = reconcileWait{until: c.clock().Add(reconcileRecheck)}
+		case did == "" && !cand.Late && (cand.Phase == "main_intent" || cand.Phase == "main_result" && cand.Outcome == "unknown"):
 			// Inside the fence: read again once it has passed.
 			r.waits[key] = reconcileWait{until: later(cand.IntentAt.Add(store.MainFence), c.clock().Add(time.Minute))}
 		case did == "" || did == "ok_missing" || did == "late_landing":

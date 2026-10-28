@@ -23,7 +23,9 @@ import (
 // effect now (S3 B-02): the main history of A's result evaluated at the same
 // head, Effective or Reverted (with the reversal in effect) when that names
 // R, and Unknown otherwise or when it does not read. Unknown is never taken
-// as in effect.
+// as in effect. A is fetched apart from main and only when R is in it: A no
+// longer fetchable (its agent branch pruned) leaves head and hasR standing
+// with validity unknown, never an error (review 662 R-03).
 func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
 	hist = landing.MainHistory{State: landing.Unknown}
 	if !fullSHA.MatchString(r) || (a != "" && !fullSHA.MatchString(a)) {
@@ -40,11 +42,7 @@ func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string,
 	if _, err = g.run(ctx, dir, false, nil, nil, "remote", "add", "origin", g.remote); err != nil {
 		return "", false, hist, err
 	}
-	fetch := []string{"fetch", "--no-tags", "--no-recurse-submodules", "origin", "+refs/heads/main:refs/remotes/origin/main"}
-	if a != "" {
-		fetch = append(fetch, a) // A's message names its lineage (Change-Id, task)
-	}
-	if _, err = g.run(ctx, dir, true, nil, nil, fetch...); err != nil {
+	if _, err = g.run(ctx, dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
 		return "", false, hist, err
 	}
 	shallow, err := g.run(ctx, dir, false, nil, nil, "rev-parse", "--is-shallow-repository")
@@ -72,6 +70,11 @@ func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string,
 		}
 	}
 	if hasR && task != "" && a != "" {
+		// A's message names its lineage (Change-Id, task). Fetched by id,
+		// it moves no ref: the head read above stands.
+		if _, e := g.run(ctx, dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", a); e != nil {
+			return head, hasR, hist, nil
+		}
 		w := &Workspace{git: g, dir: dir}
 		if h, e := w.History(ctx, task, a, head); e == nil && h.Commit == r && (h.State == landing.Effective || h.State == landing.Reverted) {
 			hist = h

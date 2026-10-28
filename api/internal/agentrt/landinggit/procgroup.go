@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // reapDelay bounds how long a Git call waits for its pipes once its process
@@ -43,7 +45,7 @@ func runGroup(ctx context.Context, cmd *exec.Cmd) error {
 	groupStarts.Add(1)
 	pid := cmd.Process.Pid
 	exited := make(chan bool, 1)
-	go func() { exited <- waitExit(pid) }()
+	safego.Go("landinggit-wait-exit", func() { exited <- waitExit(pid) })
 	var known bool
 	select {
 	case known = <-exited:
@@ -60,13 +62,13 @@ func runGroup(ctx context.Context, cmd *exec.Cmd) error {
 		// macOS): fall back to killing the group when ctx ends.
 		stop := make(chan struct{})
 		defer close(stop)
-		go func() {
+		safego.Go("landinggit-kill-on-cancel", func() {
 			select {
 			case <-ctx.Done():
 				_ = syscall.Kill(-pid, syscall.SIGKILL)
 			case <-stop:
 			}
-		}()
+		})
 	}
 	err := cmd.Wait()
 	if ctx.Err() != nil {

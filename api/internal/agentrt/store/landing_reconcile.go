@@ -38,6 +38,10 @@ type MainEvidence struct {
 	// "reverted" (RevertedBy is the reversal in effect) or "unknown"; empty
 	// reads as unknown. Unknown is never taken as in effect.
 	Validity, RevertedBy string
+	// Unreadable: the read failed. Only a landed operation records it (its
+	// earlier evidence no longer stands, review 662 B-04); for any other it
+	// proves nothing and nothing is written.
+	Unreadable bool
 	// ReadAt is when the read began (ReconcileMain sets it, on the decision
 	// clock, before calling the reader). Absence counts only from a read
 	// that began past the fence: a read begun inside it and finished, or
@@ -202,22 +206,31 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 			}
 			// What the outcome rests on, in the same transaction: the head
 			// read, when the read began (review 658 R4).
-			_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root,
-				Body: map[string]any{"text": "Main reconciled: evidence", "landing_main": map[string]any{
-					"op": c.Op, "root": c.Root, "verdict": did, "R": c.R, "M0": c.M0, "head": ev.Head, "has_r": ev.HasR,
-					"validity": validityOf(ev), "reverted_by": ev.RevertedBy,
-					"read_at": ev.ReadAt.UTC().Format(time.RFC3339Nano)}}})
-			return err
+			return appendMainEvidence(ctx, tx, stream, c, ev, did)
 		}
 		unknown := map[string]any{"kind": "main_result", "op": c.Op, "outcome": "unknown"}
+		if ev.Unreadable && c.Phase != "landed" {
+			return nil // a failed read proves nothing about an unsettled push
+		}
 		switch {
 		case c.Phase == "landed":
 			// A reversal of a landing already recorded (S3 B-02).
-			if !ev.HasR || validityOf(ev) != "reverted" {
+			if !ev.Unreadable && ev.HasR && validityOf(ev) == "reverted" {
+				did = "reverted"
+				return write(map[string]any{"kind": "reverted", "op": c.Op, "R": c.R, "by": ev.RevertedBy})
+			}
+			// Otherwise what this read says, when it says something new
+			// and is newer than what was recorded (review 662 B-04): back
+			// to effective, unknown, R gone from main, or unreadable.
+			prev, found, err := latestMainEvidence(ctx, tx, stream, c.Op)
+			if err != nil {
+				return err
+			}
+			if found && (!ev.ReadAt.After(prev.readAt) || prev.validity == mainValidity(ev) && prev.revertedBy == revertedBy(ev)) {
 				return nil
 			}
-			did = "reverted"
-			return write(map[string]any{"kind": "reverted", "op": c.Op, "R": c.R, "by": ev.RevertedBy})
+			did = "observed"
+			return appendMainEvidence(ctx, tx, stream, c, ev, did)
 		case c.Late:
 			if !ev.HasR {
 				return nil
@@ -295,7 +308,11 @@ func ReconcileMain(ctx context.Context, db DB, repo string, read MainEvidenceFun
 		ev.ReadAt = started
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", c.Op, err))
-			continue
+			if c.Phase != "landed" {
+				continue
+			}
+			// A landing's earlier evidence no longer stands (review 662 B-04).
+			ev = MainEvidence{Unreadable: true, ReadAt: started}
 		}
 		did, err := ReconcileMainOne(ctx, db, repo, c, ev)
 		if err != nil {
@@ -430,22 +447,62 @@ func badLandingMain(v any) string {
 			return "landing_main needs " + k
 		}
 	}
-	for _, k := range []string{"R", "M0", "head"} {
+	if _, err := time.Parse(time.RFC3339Nano, m["read_at"].(string)); err != nil {
+		return "landing_main read_at is not a time"
+	}
+	hasR, ok := m["has_r"].(bool)
+	if !ok {
+		return "landing_main needs has_r"
+	}
+	version, versioned := m["v"]
+	if !versioned {
+		// Written before versions: as it was checked then, validity typed.
+		for _, k := range []string{"R", "M0", "head"} {
+			if v, _ := m[k].(string); !landingSHA.MatchString(v) {
+				return "landing_main " + k + " is not a commit"
+			}
+		}
+		if !slices.Contains([]string{"landed", "unsent", "non_ff", "reverted"}, m["verdict"].(string)) {
+			return "landing_main verdict is not landed, unsent, non_ff or reverted"
+		}
+		if v, ok := m["validity"]; ok {
+			if s, isString := v.(string); !isString || !slices.Contains([]string{"effective", "reverted", "unknown"}, s) {
+				return "landing_main validity is not effective, reverted or unknown"
+			}
+		}
+		return ""
+	}
+	if version != MainEvidenceVersion {
+		return "landing_main version is not 2"
+	}
+	if !slices.Contains([]string{"landed", "unsent", "non_ff", "reverted", "observed"}, m["verdict"].(string)) {
+		return "landing_main verdict is not landed, unsent, non_ff, reverted or observed"
+	}
+	for _, k := range []string{"R", "M0"} {
 		if v, _ := m[k].(string); !landingSHA.MatchString(v) {
 			return "landing_main " + k + " is not a commit"
 		}
 	}
-	if _, ok := m["has_r"].(bool); !ok {
-		return "landing_main needs has_r"
+	validity, _ := m["validity"].(string)
+	head, headOK := m["head"].(string)
+	by, byOK := m["reverted_by"].(string)
+	if !slices.Contains(mainValidities, validity) || !headOK || !byOK {
+		return "landing_main needs validity, head and reverted_by"
 	}
-	if !slices.Contains([]string{"landed", "unsent", "non_ff", "reverted"}, m["verdict"].(string)) {
-		return "landing_main verdict is not landed, unsent, non_ff or reverted"
+	if validity == "unreadable" {
+		if head != "" || hasR || by != "" {
+			return "landing_main unreadable has no head, R or reversal"
+		}
+		return ""
 	}
-	if v, ok := m["validity"].(string); ok && !slices.Contains([]string{"effective", "reverted", "unknown"}, v) {
-		return "landing_main validity is not effective, reverted or unknown"
+	if !landingSHA.MatchString(head) {
+		return "landing_main head is not a commit"
 	}
-	if _, err := time.Parse(time.RFC3339Nano, m["read_at"].(string)); err != nil {
-		return "landing_main read_at is not a time"
+	switch {
+	case (validity == "absent") == hasR:
+		return "landing_main absent is exactly has_r false"
+	case (validity == "reverted") != landingSHA.MatchString(by):
+		return "landing_main reverted names its reversal, and only then"
 	}
 	return ""
 }
@@ -465,6 +522,85 @@ func checkLandingMainAppend(ev Event) error {
 		return fmt.Errorf("landing_main is not a landing record")
 	}
 	return nil
+}
+
+// MainEvidenceVersion is the version of the landing_main records written
+// now (review 662 N-01): every field present and typed, validity one of
+// mainValidities, consistent with has_r and reverted_by. Records without a
+// version (written before) are read as they were.
+const MainEvidenceVersion = "2"
+
+var mainValidities = []string{"effective", "reverted", "unknown", "absent", "unreadable"}
+
+// mainValidity is what a read says about R at main's head: absent (a full
+// history without R), unreadable (the read failed), else validityOf.
+func mainValidity(ev MainEvidence) string {
+	switch {
+	case ev.Unreadable:
+		return "unreadable"
+	case !ev.HasR:
+		return "absent"
+	}
+	return validityOf(ev)
+}
+
+func revertedBy(ev MainEvidence) string {
+	if mainValidity(ev) == "reverted" {
+		return ev.RevertedBy
+	}
+	return ""
+}
+
+// appendMainEvidence records what an outcome or an observation rests on:
+// the head read, whether R is in it and in effect, when the read began.
+func appendMainEvidence(ctx context.Context, tx pgx.Tx, stream string, c MainCandidate, ev MainEvidence, verdict string) error {
+	head := ev.Head
+	if ev.Unreadable {
+		head = ""
+	}
+	_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root,
+		Body: map[string]any{"text": "Main reconciled: evidence (" + verdict + ")", "landing_main": map[string]any{
+			"v": MainEvidenceVersion, "op": c.Op, "root": c.Root, "verdict": verdict, "R": c.R, "M0": c.M0, "head": head,
+			"has_r": ev.HasR && !ev.Unreadable, "validity": mainValidity(ev), "reverted_by": revertedBy(ev),
+			"read_at": ev.ReadAt.UTC().Format(time.RFC3339Nano)}}})
+	return err
+}
+
+type mainObservation struct {
+	validity, revertedBy string
+	readAt               time.Time
+}
+
+// latestMainEvidence is the operation's last recorded evidence. A record
+// written before versions has no absent/unreadable: its has_r false reads
+// as absent.
+func latestMainEvidence(ctx context.Context, tx pgx.Tx, stream, op string) (mainObservation, bool, error) {
+	var validity, by, readAt string
+	var hasR bool
+	err := tx.QueryRow(ctx, `SELECT COALESCE(body_json->'landing_main'->>'validity',''), COALESCE(body_json->'landing_main'->>'reverted_by',''),
+	  body_json->'landing_main'->>'read_at', COALESCE((body_json->'landing_main'->>'has_r')::boolean, false)
+	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_main'->>'op' = $2
+	  ORDER BY event_id DESC LIMIT 1`, stream, op).Scan(&validity, &by, &readAt, &hasR)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return mainObservation{}, false, nil
+	}
+	if err != nil {
+		return mainObservation{}, false, err
+	}
+	at, err := time.Parse(time.RFC3339Nano, readAt)
+	if err != nil {
+		return mainObservation{}, false, err
+	}
+	switch {
+	case !hasR && validity != "unreadable":
+		validity = "absent"
+	case validity == "":
+		validity = "unknown"
+	}
+	if validity != "reverted" {
+		by = ""
+	}
+	return mainObservation{validity: validity, revertedBy: by, readAt: at}, true, nil
 }
 
 // validityOf is the evidence's validity, unknown unless it says otherwise
