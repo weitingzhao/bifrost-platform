@@ -247,7 +247,7 @@ func (s *State) Apply(e Entry) error {
 	if k == "retry" {
 		root, after := r.String("root"), r.String("after_op")
 		o, exists := s.Operations[after]
-		if !exists || op != after || o.Task != root || s.LatestOperation(root) != after || o.Phase != "failed" || o.Retried || !slices.Contains([]string{"bound", "stale", "ci_red"}, o.Outcome) {
+		if !exists || op != after || o.Task != root || s.LatestOperation(root) != after || o.Phase != "failed" || o.Retried || !slices.Contains(RetryableReasons, o.Outcome) {
 			return fmt.Errorf("retry requires latest retryable failure")
 		}
 		o.Retried = true
@@ -554,6 +554,10 @@ const ClaimWindow = 6 * time.Hour
 func Bound(first time.Time, attempts int, now time.Time) bool {
 	return !first.IsZero() && (!now.Before(first.Add(ClaimWindow)) || attempts >= 8)
 }
+
+// RetryableReasons are the failures the Owner's retry may answer (CUT §8):
+// the only ones a root_failed card offers try_again for.
+var RetryableReasons = []string{"bound", "stale", "ci_red"}
 
 // ClaimRefusals are the failed reasons only the first record of a root never
 // claimed may carry (TD-447 4, CUT §7.7): its result cannot be claimed
