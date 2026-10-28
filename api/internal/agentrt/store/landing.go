@@ -144,3 +144,15 @@ func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, erro
 	})
 	return at, err
 }
+
+// LandingLiveAt is when the live mode was recorded on repo's stream, zero
+// when it never was.
+func LandingLiveAt(ctx context.Context, db DB, repo string) (time.Time, error) {
+	var at time.Time
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		s, err := LandingState(ctx, tx, "landing:"+repo)
+		at = s.LiveAt
+		return err
+	})
+	return at, err
+}

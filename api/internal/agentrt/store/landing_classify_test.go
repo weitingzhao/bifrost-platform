@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -169,5 +170,22 @@ func TestB4LeavesMissionsOutsideTheScope(t *testing.T) {
 	}
 	if st := closePass(t, w, at); st != "done" {
 		t.Fatal("a mission outside the live scope did not close as before", st)
+	}
+}
+
+// Serial: FreezeEventClock. CUT §11.8 v3 item 6: with the live mode on the
+// stream, the reconciler's own loop ends a root at its six hours with the
+// live switch off and no Git: failed{bound}, which the cards then ask about.
+func TestB4BoundsSettleWithoutTheLiveLoop(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	liveRoot(t, w, "land:b4f:1", at, "branch_pushed")
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Now: func() time.Time { return at.Add(6 * time.Hour) }}
+	ctl.Reconcile = &controller.LandingReconcile{}
+	store.FreezeEventClock(at.Add(6 * time.Hour))
+	ok(t, ctl.LandingReconcilePass(ctx))
+	if p, o := phaseOf(t, w, "land:b4f:1"); p != "failed" || o != "bound" {
+		t.Fatalf("not ended at its bound: %s %s", p, o)
 	}
 }

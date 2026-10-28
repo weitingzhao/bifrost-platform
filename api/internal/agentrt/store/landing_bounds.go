@@ -12,7 +12,7 @@ import (
 
 func failLandingBound(ctx context.Context, tx pgx.Tx, op string) error {
 	_, err := Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{
-		"text": "STG landing drill: bound", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "bound"},
+		"text": "Landing: bound", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "bound"},
 	}})
 	return err
 }

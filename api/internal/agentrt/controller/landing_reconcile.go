@@ -67,6 +67,20 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 		if _, err := store.ReconcileDenied(ctx, c.DB, repo); err != nil {
 			errs = append(errs, err)
 		}
+		// On a stream with the live mode, the database-only endings run here,
+		// before any Git and whatever the live switch says (CUT §11.8 v3
+		// item 6): a root's six hours or eight operations, and a root in the
+		// live scope never claimed. Each in its own transactions.
+		if live, err := store.LandingLiveAt(ctx, c.DB, repo); err != nil {
+			errs = append(errs, err)
+		} else if !live.IsZero() {
+			if _, err := store.SettleLandingDrillBounds(ctx, c.DB, c.clock()); err != nil {
+				errs = append(errs, err)
+			}
+			if _, err := store.SettleUnclaimed(ctx, c.DB, repo, c.clock()); err != nil {
+				errs = append(errs, err)
+			}
+		}
 		if r.MainEvidence == nil {
 			continue
 		}
