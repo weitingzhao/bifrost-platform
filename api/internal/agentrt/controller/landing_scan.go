@@ -178,9 +178,10 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 // landing stream alone, before reading Git for them: one already rehearsed
 // (rehearsed), with an operation still in progress (in_progress), or whose
 // operation blocks a claim (terminal: ever landed, or failed and not
-// retried). Each of those is refused only after its Result and History reads
-// inside the claim's locked transaction (review 641 §3). ops is the stream as
-// read after the pass's recovery, so a discard it recorded opens the k+1 now.
+// retried). The claim refuses those too, but terminal only after its Result
+// and History reads (review 641 §3), now done with no lock held (TD-447 5).
+// ops is the stream as read after the pass's recovery, so a discard it
+// recorded opens the k+1 now.
 func unsettled(tasks []string, ops map[string]landing.Operation) []string {
 	return slices.DeleteFunc(tasks, func(task string) bool {
 		for _, o := range ops {

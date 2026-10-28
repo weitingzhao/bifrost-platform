@@ -55,79 +55,89 @@ func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Red if the mission SHARE is removed. Pin both backend PIDs
-// instead of searching the truncated tail of pg_stat_activity.query. Expire
-// the grace before the overlap so it cannot mask a missing lock.
-func TestWork640ConcurrentClaimHoldsClose(t *testing.T) {
-	w, task, src := goalDrill(t, "M-3")
-	restore := store.FreezeEventClock(time.Now().Add(3 * time.Minute))
-	defer restore()
-	pool := w.db.Pool(t, w.db.Runtime)
-	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	claimConn, err := pool.Acquire(bounded)
-	ok(t, err)
-	defer claimConn.Release()
-	closeConn, err := pool.Acquire(bounded)
-	ok(t, err)
-	defer closeConn.Release()
-	entered, release := make(chan struct{}), make(chan struct{})
-	result := src.Result
-	src.Result = func(c context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
-		close(entered)
-		select {
-		case <-release:
-		case <-c.Done():
-			return false, nil, c.Err()
-		}
-		return result(c, repo, id, attempt, base, commit)
+// Serial: FreezeEventClock. A close that runs while a claim reads Git
+// (TD-447 5: the claim holds no lock then). Within the first-claim grace the
+// close keeps the mission and the claim lands; past it the close may end the
+// mission, and then the claim's second, locked read sees it and claims
+// nothing: never an operation under a closed mission. (Review 640's version
+// asserted the close waited on the claim's lock, the very hold TD-447 5
+// removes; the durable first-claim handoff is TD-447 4.)
+func TestConcurrentCloseDuringClaimReads(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		after  time.Duration
+		closes bool
+	}{{"within the grace", 0, false}, {"past the grace", 3 * time.Minute, true}} {
+		t.Run(c.name, func(t *testing.T) {
+			w, task, src := goalDrill(t, "M-3")
+			restore := store.FreezeEventClock(time.Now().Add(c.after))
+			defer restore()
+			bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			pool := w.db.Pool(t, w.db.Runtime)
+			claimConn, err := pool.Acquire(bounded)
+			ok(t, err)
+			defer claimConn.Release()
+			closeConn, err := pool.Acquire(bounded)
+			ok(t, err)
+			defer closeConn.Release()
+			entered, release := make(chan struct{}), make(chan struct{})
+			result := src.Result
+			src.Result = func(cx context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+				close(entered)
+				select {
+				case <-release:
+				case <-cx.Done():
+					return false, nil, cx.Err()
+				}
+				return result(cx, repo, id, attempt, base, commit)
+			}
+			type claimResult struct {
+				op string
+				d  landingDecision
+				e  error
+			}
+			claimed := make(chan claimResult, 1)
+			go func() {
+				op, d, e := store.ClaimLandingDrill(bounded, claimConn.Conn(), src, task, time.Now())
+				claimed <- claimResult{op, landingDecision{d.Allowed, d.Reason}, e}
+			}()
+			select {
+			case <-entered:
+			case <-bounded.Done():
+				t.Fatal("claim never reached external source")
+			}
+			// The claim holds no transaction now: the close is not blocked
+			// (on the version that read Git under the mission lock it waits
+			// here until the bounded context ends).
+			ids, err := store.CloseMissions(bounded, closeConn.Conn())
+			ok(t, err)
+			if slices.Contains(ids, "M-3") != c.closes {
+				t.Fatalf("close during the reads: closed=%v, want closes=%v", ids, c.closes)
+			}
+			close(release)
+			r := <-claimed
+			ok(t, r.e)
+			ops := landingState(t, w, landingRepoStream).Operations
+			if c.closes {
+				if r.op != "" || r.d.allowed || r.d.reason != "changed" || len(ops) != 0 {
+					t.Fatalf("claimed under a closed mission: op=%q decision=%+v ops=%d", r.op, r.d, len(ops))
+				}
+				return
+			}
+			if r.op == "" || !r.d.allowed || len(ops) != 1 {
+				t.Fatalf("claim lost to a close within the grace: op=%q decision=%+v", r.op, r.d)
+			}
+			if w.state(t, "mission", "M-3") != "active" {
+				t.Fatal("closed under a committed claim")
+			}
+		})
 	}
-	claimed := make(chan error, 1)
-	go func() {
-		op, d, e := store.ClaimLandingDrill(bounded, claimConn.Conn(), src, task, time.Now())
-		if e == nil && (op == "" || !d.Allowed) {
-			e = fmt.Errorf("claim refused: %+v", d)
-		}
-		claimed <- e
-	}()
-	defer func() { cancel(); <-claimed }()
-	select {
-	case <-entered:
-	case <-bounded.Done():
-		t.Fatal("claim never reached external source")
-	}
-	closed := make(chan error, 1)
-	go func() {
-		ids, e := store.CloseMissions(bounded, closeConn.Conn())
-		if e == nil && len(ids) != 0 {
-			e = fmt.Errorf("closed during claim: %v", ids)
-		}
-		closed <- e
-	}()
-	defer func() { cancel(); <-closed }()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		var waiting bool
-		ok(t, w.rt.QueryRow(ctx, `SELECT $2::integer = ANY(pg_blocking_pids($1::integer))`, closeConn.Conn().PgConn().PID(), claimConn.Conn().PgConn().PID()).Scan(&waiting))
-		if waiting {
-			break
-		}
-		if !time.Now().Before(deadline) {
-			t.Fatal("close never waited on the claim backend")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	close(release)
-	// Keep results for the deferred joins after checking them.
-	e := <-claimed
-	claimed <- e
-	ok(t, e)
-	e = <-closed
-	closed <- e
-	ok(t, e)
-	if w.state(t, "mission", "M-3") != "active" {
-		t.Fatal("closed under a committed claim")
-	}
+}
+
+type landingDecision struct {
+	allowed bool
+	reason  string
 }
 
 var work640Fatal = errors.New("work640 later mission lock failed")
@@ -199,5 +209,37 @@ func TestWork640CloseErrorIsolationAndJoin(t *testing.T) {
 				t.Fatalf("later fatal error was lost: %v", err)
 			}
 		})
+	}
+}
+
+// Serial: FreezeEventClock via goalDrill. TD-447 5: while the claim reads Git
+// it holds no lock and no transaction. Another transaction takes the mission
+// row exclusively with NOWAIT, on another connection; on the version that read Git inside the
+// locked transaction the NOWAIT fails.
+func TestClaimReadsGitWithNoLockHeld(t *testing.T) {
+	w, task, src := goalDrill(t, "M-3")
+	pool := w.db.Pool(t, w.db.Runtime)
+	claimConn, err := pool.Acquire(ctx)
+	ok(t, err)
+	defer claimConn.Release()
+	otherConn, err := pool.Acquire(ctx)
+	ok(t, err)
+	defer otherConn.Release()
+	result := src.Result
+	var during error
+	src.Result = func(cx context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+		during = store.InTx(cx, otherConn.Conn(), func(tx pgx.Tx) error {
+			_, e := tx.Exec(cx, `SELECT 1 FROM agentrt.mission WHERE mission_id = 'M-3' FOR UPDATE NOWAIT`)
+			return e
+		})
+		return result(cx, repo, id, attempt, base, commit)
+	}
+	op, d, err := store.ClaimLandingDrill(ctx, claimConn.Conn(), src, task, time.Now())
+	ok(t, err)
+	if during != nil {
+		t.Fatalf("the claim held the mission while reading Git: %v", during)
+	}
+	if op == "" || !d.Allowed {
+		t.Fatal("claim refused", d)
 	}
 }
