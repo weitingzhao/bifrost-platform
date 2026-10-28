@@ -427,3 +427,31 @@ func TestPushMainGivesUpAtItsDeadline(t *testing.T) {
 		t.Fatalf("outcome %s after %s", got, elapsed)
 	}
 }
+
+// The push outcome is a verdict only when the answer is explicit (review
+// 661 R-04): denied stops the repository, so a ref lock or server error is
+// unknown, never denied.
+func TestClassifyPush(t *testing.T) {
+	r := "b7c3f7e2a4d1f0e9c8b7a6958473625140312a0b"
+	exit := &exec.ExitError{}
+	for name, c := range map[string]struct {
+		stdout, stderr string
+		err            error
+		want           PushOutcome
+	}{
+		"done":            {" \t" + r + ":refs/heads/main\tabc..def\nDone\n", "", nil, PushOK},
+		"up to date":      {"=\t" + r + ":refs/heads/main\t[up to date]\n", "", nil, PushOK},
+		"non-ff local":    {"!\t" + r + ":refs/heads/main\t[rejected] (non-fast-forward)\n", "", exit, PushNonFF},
+		"fetch first":     {"!\t" + r + ":refs/heads/main\t[rejected] (fetch first)\n", "", exit, PushNonFF},
+		"hook declined":   {"!\t" + r + ":refs/heads/main\t[remote rejected] (pre-receive hook declined)\n", "", exit, PushDenied},
+		"ref lock":        {"!\t" + r + ":refs/heads/main\t[remote rejected] (failed to update ref)\n", "", exit, PushUnknown},
+		"403":             {"", "fatal: unable to access 'http://x/': The requested URL returned error: 403\n", exit, PushDenied},
+		"500":             {"", "fatal: unable to access 'http://x/': The requested URL returned error: 500\n", exit, PushUnknown},
+		"word denied":     {"", "remote: something about access denied\n", exit, PushUnknown},
+		"connection lost": {"", "fatal: the remote end hung up unexpectedly\n", exit, PushUnknown},
+	} {
+		if got := classifyPush(c.stdout, c.stderr, c.err); got != c.want {
+			t.Errorf("%s: %s, want %s", name, got, c.want)
+		}
+	}
+}

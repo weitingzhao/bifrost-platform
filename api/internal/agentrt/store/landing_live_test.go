@@ -183,3 +183,27 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	}
 	_ = task
 }
+
+// Serial: SetHook, FreezeEventClock. Midnight between the reservation and
+// main_intent: the whole gate rolls back, no reservation on the old day and
+// no intent (review 661 R-03).
+func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
+	w, task, op, src, prepared := liveReady(t)
+	midnight := time.Date(prepared.Year(), prepared.Month(), prepared.Day()+1, 0, 0, 0, 0, time.UTC)
+	defer store.FreezeEventClock(midnight.Add(-time.Second))()
+	defer store.SetHook(func(point, _ string) {
+		if point == "landing gate: reserved" {
+			store.FreezeEventClock(midnight.Add(time.Second))
+		}
+	})()
+	_, _, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
+	if !errors.Is(err, store.ErrLandingDayChanged) {
+		t.Fatal("midnight between the gate's records", err)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
+		t.Fatal("an intent across midnight", o.Phase)
+	}
+	if q := landingState(t, w, "landing-quota:dev:"+midnight.Add(-time.Second).UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
+		t.Fatal("a reservation kept from a rolled-back gate", q.Reservations, task)
+	}
+}

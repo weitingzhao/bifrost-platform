@@ -143,12 +143,26 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if err != nil {
 			return err
 		}
+		// Each record the gate writes is dated on the quota day it locked:
+		// one that lands past midnight rolls the whole gate back (review 661
+		// R-03), never a partial write on the wrong day.
+		onDay := func(a Appended) error {
+			if a.At.UTC().Format("2006-01-02") != day {
+				return ErrLandingDayChanged
+			}
+			return nil
+		}
 		if _, reserved := q.Reservations[o.Task]; !reserved {
-			if _, err = Append(ctx, tx, Event{Stream: quota, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-				Body: map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": o.Task}}}); err != nil {
+			r, err := Append(ctx, tx, Event{Stream: quota, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
+				Body: map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": o.Task}}})
+			if err == nil {
+				err = onDay(r)
+			}
+			if err != nil {
 				return err
 			}
 		}
+		hook("landing gate: reserved", op)
 		// main_intent needs R's success on the stream (protocol): the CI the
 		// gate decided on, recorded unless it already is.
 		if o.CI.String("run") != obs.CI.Run || o.CI.String("status") != obs.CI.Status || !o.CI.Time("created_at").Equal(obs.CI.CreatedAt) {
@@ -161,6 +175,9 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
 			Body: map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
 				"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0}}})
+		if err == nil {
+			err = onDay(a)
+		}
 		if err != nil {
 			return err
 		}

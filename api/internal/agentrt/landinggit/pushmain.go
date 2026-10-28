@@ -40,9 +40,12 @@ func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Ti
 	if !w.git.lander || !fullSHA.MatchString(r) || !fullSHA.MatchString(m0) {
 		return PushDenied
 	}
-	// R must be the replay on M0 (its first parent), the candidate the gate
-	// authorized; anything else is refused before any network.
-	if parent, err := w.local(ctx, "rev-parse", r+"^1"); err != nil || strings.TrimSpace(parent) != m0 {
+	// R must be the replay on M0 with M0 its only parent (review 661 B-01):
+	// then a main that moved past M0 can never fast-forward to R. Anything
+	// else is refused before any network.
+	if line, err := w.local(ctx, "rev-list", "--parents", "-n", "1", r); err != nil {
+		return PushDenied
+	} else if f := strings.Fields(line); len(f) != 2 || f[0] != r || f[1] != m0 {
 		return PushDenied
 	}
 	if deadline.IsZero() || !time.Now().Before(deadline) {
@@ -75,8 +78,15 @@ func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Ti
 
 // classifyPush reads git push --porcelain: a line "<flag>\t<from>:<to>\t
 // <summary>" per ref. Flag " " or "+" is done; "=" is up to date (main is
-// already r: treated as ok, the reconciler confirms it); "!" is rejected,
-// with the reason in brackets.
+// already r: ok, the reconciler confirms it from main); "!" is rejected,
+// with the reason in brackets. Only an explicit answer is a verdict (review
+// 661 R-04), because denied stops the repository (B6):
+//   - non_ff: "non-fast-forward" or "fetch first", from the client before
+//     sending or from the remote; main moved, k+1 replays.
+//   - denied: the remote's hook declined the update (Gitea's protected
+//     branch answer), or HTTP 403 for this identity.
+//   - unknown: everything else, a remote rejection for another reason (a
+//     ref lock, a server error) included; the reconciler reads main.
 func classifyPush(stdout, stderr string, err error) PushOutcome {
 	for _, line := range strings.Split(stdout, "\n") {
 		parts := strings.SplitN(line, "\t", 3)
@@ -94,20 +104,17 @@ func classifyPush(stdout, stderr string, err error) PushOutcome {
 			}
 		case "!":
 			switch {
-			case strings.Contains(summary, "non-fast-forward"), strings.Contains(summary, "fetch first"):
+			case strings.Contains(summary, "(non-fast-forward)"), strings.Contains(summary, "(fetch first)"):
 				return PushNonFF
-			case strings.Contains(summary, "remote rejected"):
+			case strings.HasPrefix(summary, "[remote rejected]") && strings.Contains(summary, "hook declined"):
 				return PushDenied
 			}
 			return PushUnknown
 		}
 	}
 	var exit *exec.ExitError
-	if err != nil && errors.As(err, &exit) {
-		low := strings.ToLower(stderr)
-		if strings.Contains(low, "403") || strings.Contains(low, "permission") || strings.Contains(low, "not allowed") || strings.Contains(low, "denied") {
-			return PushDenied
-		}
+	if err != nil && errors.As(err, &exit) && strings.Contains(stderr, "The requested URL returned error: 403") {
+		return PushDenied
 	}
 	return PushUnknown
 }
