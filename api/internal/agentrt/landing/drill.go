@@ -13,6 +13,10 @@ import (
 type CIRun struct {
 	Run, R, Status string
 	CreatedAt      time.Time
+	// UID and the run's results (CUT §11.7 item 3): what a STG snapshot
+	// pins P and U from, read from the same run. Empty when the run has
+	// not written them (yet).
+	UID, PlatformCommit, UICommit string
 }
 
 func LatestCI(runs []CIRun, revision string, after time.Time) CIRun {

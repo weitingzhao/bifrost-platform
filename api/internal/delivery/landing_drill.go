@@ -65,7 +65,9 @@ func (s *Service) landingCI(ctx context.Context, revision string, after time.Tim
 					}
 				}
 			}
-			runs = append(runs, landing.CIRun{Run: item.GetName(), R: revision, Status: status, CreatedAt: item.GetCreationTimestamp().Time})
+			run := landing.CIRun{Run: item.GetName(), R: revision, Status: status, CreatedAt: item.GetCreationTimestamp().Time, UID: string(item.GetUID())}
+			run.PlatformCommit, run.UICommit = landingCIResults(item)
+			runs = append(runs, run)
 		}
 		continuation = list.GetContinue()
 		if continuation == "" {
@@ -74,6 +76,26 @@ func (s *Service) landingCI(ctx context.Context, revision string, after time.Tim
 	}
 	return landing.LatestCI(runs, revision, after), nil
 }
+// landingCIResults reads a CI run's platform-commit and ui-commit results
+// (pipeline-ci-platform.yaml): a value only when it is a full commit id.
+func landingCIResults(item unstructured.Unstructured) (platform, ui string) {
+	results, _, _ := unstructured.NestedSlice(item.Object, "status", "results")
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		v, _ := m["value"].(string)
+		if !isFullGitSHA(v) {
+			continue
+		}
+		switch m["name"] {
+		case "platform-commit":
+			platform = v
+		case "ui-commit":
+			ui = v
+		}
+	}
+	return platform, ui
+}
+
 func landingRevision(item unstructured.Unstructured) string {
 	params, _, _ := unstructured.NestedSlice(item.Object, "spec", "params")
 	for _, p := range params {

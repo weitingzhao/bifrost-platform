@@ -35,6 +35,35 @@ func drillCI(t *testing.T, name, status string, at time.Time) *unstructured.Unst
 	o.SetCreationTimestamp(metav1.NewTime(at))
 	return o
 }
+// CUT §11.7 item 3: the run's UID and its platform-commit / ui-commit
+// results come with it; a malformed result is no result.
+func TestLandingCIReadsTheRunsResults(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	ui := "c83f40b40e65e52f8592ec6b73c5f6987c116e93"
+	green := drillCI(t, "green", "True", now)
+	green.SetUID("uid-green")
+	if err := unstructured.SetNestedSlice(green.Object, []any{
+		map[string]any{"name": "platform-commit", "value": factSHA1},
+		map[string]any{"name": "ui-commit", "value": ui},
+		map[string]any{"name": "infra-commit", "value": "not-a-sha"},
+	}, "status", "results"); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := drillService(t, green)
+	ci, e := s.landingCI(context.Background(), factSHA1, now.Add(-time.Hour))
+	if e != nil || ci.UID != "uid-green" || ci.PlatformCommit != factSHA1 || ci.UICommit != ui {
+		t.Fatal(ci, e)
+	}
+	bad := drillCI(t, "bad", "True", now)
+	if err := unstructured.SetNestedSlice(bad.Object, []any{map[string]any{"name": "ui-commit", "value": "main"}}, "status", "results"); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = drillService(t, bad)
+	if ci, _ = s.landingCI(context.Background(), factSHA1, now.Add(-time.Hour)); ci.UICommit != "" || ci.PlatformCommit != "" {
+		t.Fatal("a malformed result read as a commit", ci)
+	}
+}
+
 func TestLandingDrillLatestRunAndReadFailures(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, status := range []string{"False", "Unknown", ""} {
