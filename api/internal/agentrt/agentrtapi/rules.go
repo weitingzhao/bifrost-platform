@@ -130,3 +130,26 @@ func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
 		"trigger_seq": v.TriggerSeq, "stop_generation": v.StopGeneration, "acked": v.Acked, "closed": v.Closed, "closed_why": v.ClosedWhy,
 		"options": v.Options, "outcome": v.Outcome, "next_step": v.NextStep})
 }
+
+// getMissionLanding is GET /agentrt/landing/missions/{id} (S3 B4, CUT §11.8
+// v3 item 9): each live-scope root's class, reason and card, the rule as
+// read now and the closing round. in_scope false: the mission closes by the
+// rules before S3.
+func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	st, err := store.ReadMissionLandingStatus(r.Context(), a.DB, id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	roots := make([]map[string]any, 0, len(st.Roots))
+	for _, x := range st.Roots {
+		roots = append(roots, map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
+			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID})
+	}
+	body := map[string]any{"mission_id": id, "in_scope": st.InScope, "roots": roots, "rule": st.Rule}
+	if st.Round != nil {
+		body["closing_round"] = map[string]any{"round": st.Round.Round, "at": st.Round.At, "until": st.Round.Until, "ops": st.Round.Ops}
+	}
+	writeJSON(w, http.StatusOK, body)
+}

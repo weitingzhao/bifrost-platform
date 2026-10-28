@@ -47,11 +47,13 @@ var intendedRouteAdditions = map[string][]string{
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).
 	"GET /api/v1/agentrt/landing/cards/{question_id}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	"GET /api/v1/agentrt/external-work/{id}":          {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	"POST /api/v1/agentrt/external-work":              {"reporter", "operator", "admin", "trade-satellite"},
-	"POST /api/v1/agentrt/external-work/{id}/events":  {"reporter", "operator", "admin", "trade-satellite"},
-	"GET /api/v1/network/clients/{mac}":               {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	"POST /api/v1/network/clients/fixed-ip":           {"operator", "admin", "trade-satellite"},
+	// S3 B4: a mission's landing status, for every reader (CUT §11.8 v3).
+	"GET /api/v1/agentrt/landing/missions/{id}":      {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"GET /api/v1/agentrt/external-work/{id}":         {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"POST /api/v1/agentrt/external-work":             {"reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/agentrt/external-work/{id}/events": {"reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/network/clients/{mac}":              {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/network/clients/fixed-ip":          {"operator", "admin", "trade-satellite"},
 }
 
 // Work 611 narrows plain reporters to external-work registration and their

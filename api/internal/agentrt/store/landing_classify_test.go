@@ -205,6 +205,11 @@ func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
 	if st := closePass(t, w, at); st != "active" {
 		t.Fatal("an in-main root closed the mission by itself", st)
 	}
+	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if !status.InScope || len(status.Roots) != 1 || status.Roots[0].Class != store.RootUnresolved || status.Roots[0].Reason != "in_main_unverified" || !strings.Contains(status.Rule, "stg_release none") {
+		t.Fatalf("status: %+v", status)
+	}
 	f := newFakeCards(func() time.Time { return at })
 	cardPass(t, w, f, at)
 	var c store.CardRecord
@@ -223,7 +228,7 @@ func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
 	w2 := liveWorld(t, "none", at)
 	liveRoot(t, w2, "land:b4g:1", at, "main_intent", newLandingRecord("land:b4g:1", "main_result", "outcome", "ok"))
 	store.FreezeEventClock(at.Add(-10 * time.Minute))
-	_, err := store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true})) // landed, validity unknown
+	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true})) // landed, validity unknown
 	ok(t, err)
 	f2 := newFakeCards(func() time.Time { return at })
 	cardPass(t, w2, f2, at.Add(time.Hour))

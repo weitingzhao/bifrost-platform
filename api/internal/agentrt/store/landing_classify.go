@@ -346,3 +346,53 @@ func OpenCloseRoundOps(ctx context.Context, db DB, now time.Time) (map[string]bo
 	})
 	return out, err
 }
+
+// MissionLandingStatus is a mission's landing status for the Console (CUT
+// §11.8 v3 item 9): each live-scope root's class and reason, the card that
+// stands for it (if any), the rule as read now and the current closing
+// round. A read: no lock, no write.
+type MissionLandingStatus struct {
+	InScope bool
+	Roots   []LandingRootStatus
+	Rule    string
+	Round   *closeRound
+}
+
+// LandingRootStatus is one root in MissionLandingStatus.
+type LandingRootStatus struct {
+	LandingRootClass
+	CardKind, QuestionID string
+}
+
+// ReadMissionLandingStatus reads a mission's landing status.
+func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (MissionLandingStatus, error) {
+	var st MissionLandingStatus
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		round, err := readCloseRound(ctx, tx, mission)
+		if err != nil {
+			return err
+		}
+		inScope, roots, rule, err := classifyLandingRoots(ctx, tx, landingFolds{}, mission, round, DecisionAt())
+		if err != nil || !inScope {
+			return err
+		}
+		cards, err := LandingCards(ctx, tx, CardsStream("bifrost-platform"))
+		if err != nil {
+			return err
+		}
+		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round}
+		for _, r := range roots {
+			rs := LandingRootStatus{LandingRootClass: r}
+			var latest CardRecord
+			for _, c := range cards {
+				if c.Root == r.Root && c.Op == r.Op && !c.Ended() && c.N >= latest.N {
+					latest = c
+				}
+			}
+			rs.CardKind, rs.QuestionID = latest.Kind, latest.QuestionID
+			st.Roots = append(st.Roots, rs)
+		}
+		return nil
+	})
+	return st, err
+}
