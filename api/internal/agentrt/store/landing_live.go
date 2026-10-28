@@ -51,8 +51,12 @@ var ErrLandingDayChanged = errors.New("landing gate: the UTC day changed during 
 // every check passes: the repository is not stopped (B6), the operation is a
 // live branch_pushed with R on M0, EligibleToPush, main is still M0, the
 // window is free, and R's latest CI, created after prepared, succeeded. Then
-// it reserves the day's quota for the root (once a day per root) and writes
-// main_intent, returning the Authorization. A refusal is a Decision and no
+// it writes, in this order and in this one transaction: reserved on the
+// day's quota stream (once a day per root), ci_seen for the CI it decided on
+// when the stream does not have it yet, and main_intent carrying
+// landing_gate (the rule version, the decision time, the quota day and that
+// CI: what the authorization rests on, review 662 N-02); and returns the
+// Authorization, whose deadline counts from the intent's own time. A refusal is a Decision and no
 // error; the caller parks or fails the operation on its next pass.
 func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error)) (Authorization, landing.Decision, error) {
 	const stream = "landing:bifrost-platform"
@@ -179,7 +183,10 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		}
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
 			Body: map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
-				"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0}}})
+				"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0},
+				"landing_gate": map[string]any{"v": LandingGateVersion, "op": op, "rule_version": g.Rule.Version,
+					"decided_at": final.UTC().Format(time.RFC3339Nano), "quota_day": day,
+					"ci_run": obs.CI.Run, "ci_created_at": obs.CI.CreatedAt.UTC().Format(time.RFC3339Nano)}}})
 		if err == nil {
 			err = onDay(a)
 		}
@@ -195,6 +202,63 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		return Authorization{}, landing.Decision{}, err
 	}
 	return auth, decision, nil
+}
+
+// LandingGateVersion is the version of the landing_gate record.
+const LandingGateVersion = "1"
+
+// badLandingGate is why a landing_gate body is refused, or "".
+func badLandingGate(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "landing_gate is not an object"
+	}
+	if m["v"] != LandingGateVersion {
+		return "landing_gate version is not 1"
+	}
+	for _, k := range []string{"op", "decided_at", "quota_day", "ci_run", "ci_created_at"} {
+		if s, _ := m[k].(string); s == "" {
+			return "landing_gate needs " + k
+		}
+	}
+	for _, k := range []string{"decided_at", "ci_created_at"} {
+		if _, err := time.Parse(time.RFC3339Nano, m[k].(string)); err != nil {
+			return "landing_gate " + k + " is not a time"
+		}
+	}
+	if _, err := time.Parse("2006-01-02", m["quota_day"].(string)); err != nil {
+		return "landing_gate quota_day is not a day"
+	}
+	var version float64
+	switch n := m["rule_version"].(type) {
+	case int:
+		version = float64(n)
+	case int64:
+		version = float64(n)
+	case float64:
+		version = n
+	default:
+		return "landing_gate needs rule_version"
+	}
+	if version < 1 || version != float64(int64(version)) {
+		return "landing_gate rule_version is not a version"
+	}
+	return ""
+}
+
+// checkLandingGateAppend: landing_gate rides only on the controller's
+// main_intent for the same operation, on the repository stream.
+func checkLandingGateAppend(ev Event) error {
+	v, exists := ev.Body["landing_gate"]
+	if !exists {
+		return nil
+	}
+	m, _ := v.(map[string]any)
+	r, _ := ev.Body["landing"].(map[string]any)
+	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || r == nil || r["kind"] != "main_intent" || r["op"] != m["op"] {
+		return fmt.Errorf("landing_gate rides on the controller's main_intent for its operation")
+	}
+	return nil
 }
 
 // ErrLandingBindingChanged: the task's step, mission or tenant changed

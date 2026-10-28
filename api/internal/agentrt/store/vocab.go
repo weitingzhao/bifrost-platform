@@ -168,6 +168,10 @@ var bodies = map[string][]field{
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
 		{"landing_answer", kAny, true},
+		// landing_gate: on a main_intent, what the live second gate decided
+		// on (landing_live.go, review 662 N-02): the rule version, the
+		// decision time, the quota day and the CI run.
+		{"landing_gate", kAny, true},
 		// landing_anomaly: what the main reconciler found that only the
 		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
 		// late_landing, once per operation.
@@ -547,6 +551,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_main" {
 		return badLandingMain(v)
+	}
+	if eventType == "note" && name == "landing_gate" {
+		return badLandingGate(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

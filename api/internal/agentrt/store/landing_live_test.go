@@ -59,6 +59,14 @@ func TestLiveGateAuthorizesOnce(t *testing.T) {
 	if q.Reservations[task] != op {
 		t.Fatal("no reservation", q.Reservations)
 	}
+	// What the authorization rests on is on the intent (review 662 N-02).
+	var version int
+	var decided, day, run, created string
+	ok(t, w.rt.QueryRow(ctx, `SELECT (g->>'rule_version')::int, g->>'decided_at', g->>'quota_day', g->>'ci_run', g->>'ci_created_at'
+	  FROM (SELECT body_json->'landing_gate' AS g FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'main_intent') x`, landingRepoStream).Scan(&version, &decided, &day, &run, &created))
+	if version != auth.RuleVersion || decided != at.UTC().Format(time.RFC3339Nano) || day != auth.QuotaDay || run != "green" || created != prepared.Add(time.Minute).UTC().Format(time.RFC3339Nano) {
+		t.Fatal("landing_gate", version, decided, day, run, created)
+	}
 	// A second gate on the same operation authorizes nothing more.
 	_, d, err = store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
@@ -277,5 +285,54 @@ func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 				t.Fatal("reserved past the window", q.Reservations, task)
 			}
 		})
+	}
+}
+
+// Review 662 N-02: landing_gate is checked, and rides only on the
+// controller's main_intent for its operation.
+func TestLandingGateRecordIsChecked(t *testing.T) {
+	t.Parallel()
+	gate := func(kv ...any) map[string]any {
+		m := map[string]any{"v": store.LandingGateVersion, "op": "land:g:1", "rule_version": 1, "decided_at": time.Now().UTC().Format(time.RFC3339Nano),
+			"quota_day": "2026-10-28", "ci_run": "ci-1", "ci_created_at": time.Now().UTC().Format(time.RFC3339Nano)}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	if why := store.BadLandingGate(gate()); why != "" {
+		t.Fatal("a good record refused:", why)
+	}
+	if why := store.BadLandingGate(gate("rule_version", float64(2))); why != "" {
+		t.Fatal("a decoded record refused:", why)
+	}
+	for name, g := range map[string]map[string]any{
+		"version":      gate("v", "2"),
+		"rule version": gate("rule_version", 0),
+		"fraction":     gate("rule_version", 1.5),
+		"no version":   gate("rule_version", "1"),
+		"decided_at":   gate("decided_at", "now"),
+		"quota day":    gate("quota_day", "today"),
+		"no ci":        gate("ci_run", ""),
+	} {
+		if store.BadLandingGate(g) == "" {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	ev := func(kind, op, actor string) store.Event {
+		return store.Event{Stream: landingRepoStream, Type: "note", Actor: actor,
+			Body: map[string]any{"landing_gate": gate(), "landing": map[string]any{"kind": kind, "op": op}}}
+	}
+	if err := store.CheckLandingGateAppend(ev("main_intent", "land:g:1", "controller")); err != nil {
+		t.Fatal("refused on its main_intent:", err)
+	}
+	for name, e := range map[string]store.Event{
+		"another record":     ev("ci_seen", "land:g:1", "controller"),
+		"another operation":  ev("main_intent", "land:g:2", "controller"),
+		"not the controller": ev("main_intent", "land:g:1", "owner"),
+	} {
+		if store.CheckLandingGateAppend(e) == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

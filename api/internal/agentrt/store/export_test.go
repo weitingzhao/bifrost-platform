@@ -282,3 +282,7 @@ var (
 func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
 	return progressAt(ctx, db, at, since)
 }
+
+// BadLandingGate and CheckLandingGateAppend check landing_gate records (tests).
+var BadLandingGate = badLandingGate
+var CheckLandingGateAppend = checkLandingGateAppend
