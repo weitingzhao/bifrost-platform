@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,13 @@ import (
 // same locks in the same order, reads the bindings again, claims only if the
 // evidence's keys did not move (else "changed": the next pass tries again),
 // and judges eligibility on this second read.
+//
+// A root never claimed ends on the stream when the claim refuses it for good
+// (TD-447 4): stale, result, or history with A already in main's history;
+// or, read from the database alone, when its claim window has passed since
+// its acceptance (bound). That record (land:<root>:1, born failed) is what
+// releases its mission (landingHolds); any other refusal leaves it queued for
+// the next pass.
 func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task string, now time.Time) (op string, decision landing.Decision, err error) {
 	var first drillBinding
 	if err = InTx(ctx, db, func(tx pgx.Tx) error {
@@ -32,7 +40,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		return "", first.decision, err
 	}
 	facts := first.facts
-	if err = landingFactsExternal(ctx, src, &facts, first.deps, ""); err != nil {
+	if err = landingClaimExternal(ctx, src, &facts, first.deps); err != nil {
 		return "", landing.Decision{}, err
 	}
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
@@ -57,6 +65,10 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		facts = current
 		decision = landing.EligibleToClaim(facts, now)
 		if !decision.Allowed {
+			if why, ends := unclaimedEnd(decision, facts); ends && again.claims == 0 {
+				_, e = failUnclaimedLocked(ctx, tx, "landing:bifrost-platform", facts.Mission, task, why, refusalEvidence(facts))
+				return e
+			}
 			return nil
 		}
 		op = fmt.Sprintf("land:%s:%d", task, again.claims+1)
@@ -143,5 +155,76 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 		}
 	}
 	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, "stg", "dry_run", task, "", now)
+	if err != nil || n > 0 || b.facts.AcceptedAt.IsZero() || now.Before(b.facts.AcceptedAt.Add(landing.ClaimWindow)) {
+		return b, err
+	}
+	// Never claimed and its window is over: the loop never got to it (a
+	// controller down, a repository busy for six hours). Recorded, not read
+	// from Git.
+	b.settled, b.decision = true, landing.Decision{Reason: "bound"}
+	_, err = failUnclaimedLocked(ctx, tx, "landing:bifrost-platform", b.facts.Mission, task, "bound", "its window ended unclaimed")
 	return b, err
+}
+
+// unclaimedEnd: the record a refusal of a root never claimed leaves, when
+// no later pass can turn it around without the Owner (CUT §7.7): stale only
+// for what does not recover (a mission done, stopped or expired, no_merge, a
+// dropped step, a goal whose producing plan another plan replaced); result;
+// in_main or reverted when A is already in main's history. A paused mission,
+// a stopped step, unknown history, dependencies, rule and limit can change by
+// themselves: no record, the next pass tries again, the window ends it.
+func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
+	switch d.Reason {
+	case "stale":
+		switch {
+		case f.NoMerge, slices.Contains([]string{"done", "stopped", "expired"}, f.MissionState), f.StepState == "dropped",
+			f.GoalTask && f.ProducingPlan != "" && f.LatestUsedPlan != "" && f.ProducingPlan != f.LatestUsedPlan:
+			return "stale", true
+		}
+	case "result":
+		return "result", true
+	case "history":
+		switch f.History.State {
+		case landing.Effective:
+			return "in_main", true
+		case landing.Reverted:
+			return "reverted", true
+		}
+	}
+	return "", false
+}
+
+// refusalEvidence is what the claim saw, kept in the record's text (the
+// failed record's fields are closed): the bindings, and for a history ending
+// the commit main holds for A and the main commit it was read at, which can
+// differ from A (a cherry-pick) and can change later (review 652 R652-3).
+func refusalEvidence(f landing.Facts) string {
+	e := fmt.Sprintf("attempt %s, A %s, base %s, mission %s", f.Attempt, f.A, f.Base, f.MissionState)
+	if f.History.State == landing.Effective || f.History.State == landing.Reverted {
+		e += fmt.Sprintf("; main history %s at commit %s, read at %s", f.History.State, f.History.Commit, f.History.Snapshot)
+	}
+	return e
+}
+
+// failUnclaimedLocked records that a root never claimed will not be: its
+// first operation, born failed. It takes the stream's lock, reads the stream
+// again and records nothing when the root has an operation by now (a claim,
+// or another pass's record): false. Every caller holds the task's mission
+// (Close, the claim) or nothing else, so the stream stays the last lock.
+func failUnclaimedLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, why, evidence string) (bool, error) {
+	if err := lockStream(ctx, tx, stream); err != nil {
+		return false, err
+	}
+	state, err := LandingState(ctx, tx, stream)
+	if err != nil {
+		return false, err
+	}
+	if state.LatestOperation(task) != "" {
+		return false, nil
+	}
+	op := fmt.Sprintf("land:%s:1", task)
+	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: task, Body: map[string]any{
+		"text": "the landing loop will not claim this task: " + why + " (" + evidence + ")", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": why},
+	}})
+	return err == nil, err
 }

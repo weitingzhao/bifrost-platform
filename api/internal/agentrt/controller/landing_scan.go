@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,6 +29,12 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		return err
 	}
 	var errs []error
+	// Roots in the first-claim handoff that will never be claimed are
+	// recorded from the database alone, before any external read and
+	// whatever the rule (TD-447 4): a slow recovery below cannot starve it.
+	if _, err = store.SettleUnclaimed(ctx, c.DB, "bifrost-platform", now); err != nil {
+		errs = append(errs, err)
+	}
 	ids := make([]string, 0, len(state.Operations))
 	for id := range state.Operations {
 		ids = append(ids, id)
@@ -115,10 +123,11 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	}); err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	tasks = unsettled(tasks, settled.Operations)
+	tasks = c.drillWaits.due(unsettled(tasks, settled.Operations), drillGeneration(settled), now)
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
-		op, _, e := store.ClaimLandingDrill(one, c.DB, c.Drill.Facts, task, now)
+		op, d, e := store.ClaimLandingDrill(one, c.DB, c.Drill.Facts, task, now)
+		c.drillWaits.record(task, e == nil && (op != "" || d.Reason == "changed"), now)
 		if e != nil {
 			errs = append(errs, e)
 			done()
@@ -191,4 +200,78 @@ func unsettled(tasks []string, ops map[string]landing.Operation) []string {
 		}
 		return false
 	})
+}
+
+// drillBackoff: a root never claimed stays a candidate until its claim or its
+// refusal is recorded, up to its window (TD-447 4), so a refusal that may
+// pass by itself (dependencies, rule, limit, unknown history, a read error)
+// is not retried every pass, each time reading Git again (review 641 §3): 1,
+// 2, 4, then 5 minutes. A claim, or "changed" (the bindings moved under the
+// reads: look again next pass), clears it; so does any change of the
+// repository stream's operations or retries (an operation ends or parks, so
+// a slot frees; a retry). Memory only: a restart tries once sooner. The cost,
+// stated (reviews 651 R651-5, 652 R652-4): a rule version that newly allows
+// it, or a daily quota that resets, is seen only when the wait ends (at most
+// five minutes); any root's new record clears every wait (coarse, not
+// wrong); a root whose eligibility comes and goes within a wait can miss a
+// claim it could have had and end bound. Recording ends (SettleUnclaimed, Close) never
+// pass through here.
+type drillBackoff struct {
+	mu         sync.Mutex
+	generation string
+	waits      map[string]drillWait
+}
+
+type drillWait struct {
+	until time.Time
+	tries int
+}
+
+// drillGeneration changes whenever an operation or a retry is added or moves.
+func drillGeneration(s landing.State) string {
+	keys := make([]string, 0, len(s.Operations)+len(s.Retries))
+	for id, o := range s.Operations {
+		keys = append(keys, id+"="+o.Phase+"/"+o.Outcome)
+	}
+	for root, r := range s.Retries {
+		keys = append(keys, root+"<"+r.AfterOp+">"+r.ConsumedBy+"@"+r.At.String())
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
+// due drops the tasks still waiting, forgets the ones no longer listed, and
+// forgets every wait when the stream moved.
+func (b *drillBackoff) due(tasks []string, generation string, now time.Time) []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if generation != b.generation {
+		b.generation, b.waits = generation, nil
+	}
+	listed := map[string]bool{}
+	for _, t := range tasks {
+		listed[t] = true
+	}
+	for t := range b.waits {
+		if !listed[t] {
+			delete(b.waits, t)
+		}
+	}
+	return slices.DeleteFunc(tasks, func(t string) bool { return now.Before(b.waits[t].until) })
+}
+
+func (b *drillBackoff) record(task string, clear bool, now time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if clear {
+		delete(b.waits, task)
+		return
+	}
+	if b.waits == nil {
+		b.waits = map[string]drillWait{}
+	}
+	w := b.waits[task]
+	w.tries++
+	w.until = now.Add(min(time.Minute<<min(w.tries-1, 3), 5*time.Minute))
+	b.waits[task] = w
 }

@@ -136,6 +136,11 @@ func Parse(v any) (Record, error) {
 			if r.String("kind") == "discarded" {
 				valid = slices.Contains([]string{"main_changed", "branch_collision"}, r.String(k))
 			}
+			// result and history end only a root the claim refused before
+			// it was ever claimed (Apply checks that; TD-447 4).
+			if r.String("kind") == "failed" && slices.Contains(ClaimRefusals, r.String(k)) {
+				valid = true
+			}
 		case "status":
 			valid = slices.Contains([]string{"Missing", "Unknown", "Running", "Succeeded", "Failed"}, r.String(k))
 		case "outcome":
@@ -379,10 +384,26 @@ func (s *State) Apply(e Entry) error {
 		return nil
 	case "failed":
 		if old.Phase == "" {
+			if r.String("v") != Version {
+				return bad()
+			}
+			// A root never claimed that the claim refused for good, or whose
+			// claim window ran out, ends in one event: land:<root>:1, born
+			// failed (TD-447 4). Close then releases its mission on the
+			// record instead of a timer.
+			if root, ok := neverClaimed(*s, op); ok {
+				if !slices.Contains(append([]string{"stale", "bound"}, ClaimRefusals...), r.String("why")) {
+					return bad()
+				}
+				n.Task, n.ClaimNumber, n.ClaimedAt = root, 1, e.At
+				n.Phase, n.Outcome = "failed", r.String("why")
+				s.Operations[op] = n
+				return nil
+			}
 			// A crash may leave discarded as the last record until the root
 			// budget expires. Its successor is born terminal in one event;
 			// the discarded operation itself remains immutable.
-			if r.String("v") != Version || r.String("why") != "bound" {
+			if r.String("why") != "bound" {
 				return bad()
 			}
 			for id, previous := range s.Operations {
@@ -406,6 +427,9 @@ func (s *State) Apply(e Entry) error {
 			n.Phase, n.Outcome = "failed", "bound"
 			s.Operations[op] = n
 			return nil
+		}
+		if slices.Contains(ClaimRefusals, r.String("why")) {
+			return bad()
 		}
 		allowed := old.EndsAtBound()
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
@@ -497,9 +521,40 @@ func (o Operation) AtMain() bool {
 
 func (o Operation) Active() bool { return o.Phase != "" && o.Phase != "parked" && !o.Terminal() }
 
+// ClaimWindow is a root's wall-clock budget: from its first claim (or the
+// Owner's retry), and for a root never claimed from its acceptance (TD-447 4).
+const ClaimWindow = 6 * time.Hour
+
 // Bound includes all elapsed time, including window and main-red waits.
 func Bound(first time.Time, attempts int, now time.Time) bool {
-	return !first.IsZero() && (!now.Before(first.Add(6*time.Hour)) || attempts >= 8)
+	return !first.IsZero() && (!now.Before(first.Add(ClaimWindow)) || attempts >= 8)
+}
+
+// ClaimRefusals are the failed reasons only the first record of a root never
+// claimed may carry (TD-447 4, CUT §7.7): its result cannot be claimed
+// (result), A is in main already (in_main: merged by hand, not "undelivered"),
+// or was and was reverted (reverted). stale and bound end such a root too.
+var ClaimRefusals = []string{"result", "in_main", "reverted"}
+
+// ValidSHA: a full lowercase commit id, as the protocol stores them.
+func ValidSHA(s string) bool { return sha.MatchString(s) }
+
+// neverClaimed: op is land:<root>:1 for a root with no operation yet.
+func neverClaimed(s State, op string) (string, bool) {
+	root, ok := strings.CutPrefix(op, "land:")
+	if !ok {
+		return "", false
+	}
+	root, ok = strings.CutSuffix(root, ":1")
+	if !ok || !task.MatchString(root) {
+		return "", false
+	}
+	for _, o := range s.Operations {
+		if o.Task == root {
+			return "", false
+		}
+	}
+	return root, true
 }
 
 // BlocksClaim is a root-task terminal result. A non-FF finishes only this

@@ -132,25 +132,26 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 //     six-hour bound plus a margin, so a mission is released even when no
 //     loop runs to record failed{bound}; an operation at main
 //     (landing.AtMain) holds without that limit until it is reconciled;
-//   - or the root was never claimed, landing is enabled for its repo (a
-//     current landing rule, an observed enable time no later than the
-//     mission's creation and the task's acceptance), and it was accepted less
-//     than landingClaimGrace ago: the loop (every 15 s) gets its first claim
-//     before the close. A loop that misses the grace misses the drill; the
-//     mission closes as before, nothing is held for good. A busy pass (an
-//     older operation's external reads, or max_in_flight_per_repo taken for
-//     longer than the grace) can miss it too: one drill task at a time
-//     (review 640; a durable first-claim handoff is TD-447).
+//   - or the root is in the first-claim handoff (TD-447 4, CUT §7.7) and has
+//     no operation yet. The handoff is decided by durable facts only: the
+//     repository's stream recorded landing enabled, and the mission was
+//     created and the task accepted no earlier than that, and the mission is
+//     not no_merge. The current rule plays no part: a rule withdrawn or
+//     expired pauses claims, it does not drop a root (§5 item 5). The root
+//     stays held until the stream has its first operation: a claim, or the
+//     claim's record that it never will be (failed{stale|result|in_main|
+//     reverted|bound}, born terminal as land:<root>:1). A claim whose Git
+//     reads outlast any timer no longer loses to a close.
 //
-// Without a landing rule (PROD today) no never-claimed root is held; a root
-// already claimed holds by its stream whatever the rule (an operation at main
-// until reconciled, even after the rule is withdrawn). The caller holds the
-// mission's lock; ClaimLandingDrill locks the task, then its mission, before
-// the repository stream, so a claim and a close are ordered.
-const (
-	landingClaimGrace = 2 * time.Minute
-	landingHoldLimit  = 6*time.Hour + 15*time.Minute
-)
+// A handoff root still without an operation landing.ClaimWindow after its
+// acceptance is ended here, in this transaction, with failed{bound} before
+// the mission is let go: a mission never closes over a root with no landing
+// record, whether the loop ran or not. Without a recorded enable (PROD today)
+// no never-claimed root is held. The caller holds the mission's lock;
+// ClaimLandingDrill and ApplyLandingAnswer lock the task, then its mission,
+// before the repository stream, and the stream is always the last lock, so a
+// claim and a close are ordered and the append here closes no cycle.
+const landingHoldLimit = landing.ClaimWindow + 15*time.Minute
 
 func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string, now time.Time) (bool, error) {
 	type root struct {
@@ -180,27 +181,20 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 	if err = rows.Err(); err != nil || len(repos) == 0 {
 		return false, err
 	}
-	var tenant string
 	var created time.Time
 	var noMerge bool
-	if err = tx.QueryRow(ctx, `SELECT tenant, created_at, COALESCE(scope_json->>'no_merge','') <> '' FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&tenant, &created, &noMerge); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT created_at, COALESCE(scope_json->>'no_merge','') <> '' FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&created, &noMerge); err != nil {
 		return false, err
 	}
-	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, now)
-	if err != nil {
-		return false, err
-	}
+	held := false
 	for _, repo := range repos {
-		state, err := folds.state(ctx, tx, "landing:"+repo)
+		stream := "landing:" + repo
+		state, err := folds.state(ctx, tx, stream)
 		if err != nil {
 			return false, err
 		}
-		enabled := false
-		if rule != nil {
-			_, enabled = rule.Landing.Repo(repo)
-		}
-		// A no_merge mission is never claimed (the gate reads it stale): no grace.
-		enabled = enabled && !noMerge && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
+		// A no_merge mission is never claimed (the gate reads it stale).
+		handoff := !noMerge && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
 		for _, r := range roots[repo] {
 			if latest, ok := state.Operations[state.LatestOperation(r.task)]; ok {
 				if !state.RootPending(r.task) {
@@ -217,12 +211,31 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 				}
 				continue
 			}
-			if enabled && r.accepted != nil && !r.accepted.Before(state.EnabledAt) && now.Before(r.accepted.Add(landingClaimGrace)) {
-				return true, nil
+			if !handoff || r.accepted == nil || r.accepted.Before(state.EnabledAt) {
+				continue
+			}
+			if now.Before(r.accepted.Add(landing.ClaimWindow)) {
+				held = true
+				continue
+			}
+			// Its window is over with no record: record it, then let go.
+			// The pass's fold cache never holds this write: state above was
+			// folded from committed rows before it, and the stream is dropped
+			// from the cache here, so whether this mission's transaction then
+			// commits or rolls back (the savepoint, MoveMission), the next
+			// mission folds the stream again from what is committed (review
+			// 652 R652-1).
+			recorded, err := failUnclaimedLocked(ctx, tx, stream, mission, r.task, "bound", "its window ended unclaimed; recorded by the close")
+			if err != nil {
+				delete(folds, stream)
+				return false, err
+			}
+			if recorded {
+				delete(folds, stream)
 			}
 		}
 	}
-	return false, nil
+	return held, nil
 }
 
 // landingFolds keeps, for one CloseMissions pass, each landing stream's fold

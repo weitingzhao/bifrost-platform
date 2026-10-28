@@ -51,7 +51,10 @@ func TestBornTerminalBoundRequiresDiscardedSuccessor(t *testing.T) {
 		{"not elapsed", "discarded", "bound", fmt.Sprintf("land:%s:2", task1), epoch.Add(time.Hour), Version, false},
 		{"wrong number", "discarded", "bound", fmt.Sprintf("land:%s:3", task1), epoch.Add(7 * time.Hour), Version, false},
 		{"wrong root", "discarded", "bound", "land:other:2", epoch.Add(7 * time.Hour), Version, false},
-		{"no predecessor", "empty", "bound", fmt.Sprintf("land:%s:1", task1), epoch.Add(7 * time.Hour), Version, false},
+		// land:<root>:1 for a root with no operation is the never-claimed
+		// ending (TD-447 4, TestNeverClaimedRootEndsInOneEvent); any other
+		// number still needs a discarded predecessor.
+		{"no predecessor", "empty", "bound", fmt.Sprintf("land:%s:2", task1), epoch.Add(7 * time.Hour), Version, false},
 		{"old version", "discarded", "bound", fmt.Sprintf("land:%s:2", task1), epoch.Add(7 * time.Hour), 1, false},
 		{"other reason", "discarded", "stale", fmt.Sprintf("land:%s:2", task1), epoch.Add(7 * time.Hour), Version, false},
 		{"active", "branch_pushed", "bound", fmt.Sprintf("land:%s:2", task1), epoch.Add(7 * time.Hour), Version, false},

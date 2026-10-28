@@ -29,8 +29,10 @@ func TestClosePassFoldsTheLandingStreamOnce(t *testing.T) {
 			folds.Add(1)
 		}
 	})()
-	// Past both first-claim graces: M-3 holds by its claimed operation, M-4
-	// (never claimed) closes; both read the same stream.
+	// M-3 holds by its claimed operation; M-4's root was never claimed and
+	// the claim recorded that it never will be (TD-447 4), so M-4 closes;
+	// both read the same stream.
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+other+":1", "failed", "why", "result")))
 	restore := store.FreezeEventClock(time.Now().Add(3 * time.Minute))
 	defer restore()
 	closed, err := store.CloseMissions(ctx, w.rt)
@@ -57,10 +59,12 @@ func TestClosePassFoldsTheLandingStreamOnce(t *testing.T) {
 // connection. The second read sees the head moved, folds again, and holds
 // the mission; reusing the kept fold (no head check) would close it.
 func TestClosePassFoldsAgainWhenTheStreamMovesMidPass(t *testing.T) {
-	w, _, src := goalDrill(t, "M-3")
+	w, first, src := goalDrill(t, "M-3")
 	w.goalMission(t, "M-4")
 	other := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a second drill", BaseCommit: commitB})
 	w.passRound(t, other, "h4", "h5", "h6")
+	// M-3's root was never claimed and never will be (TD-447 4): M-3 closes.
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+first+":1", "failed", "why", "result")))
 	at := time.Now().UTC().Truncate(time.Microsecond)
 	defer store.FreezeEventClock(at)()
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, other, at)

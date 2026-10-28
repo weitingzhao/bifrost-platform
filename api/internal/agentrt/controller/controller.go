@@ -102,6 +102,9 @@ type Controller struct {
 	PlatformUp    func(ctx context.Context) error
 	PlatformProbe string
 	platform      platformSeen
+	// drillWaits backs off drill claims refused for a reason that may pass
+	// (landing_scan.go, TD-447 4); memory only.
+	drillWaits drillBackoff
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.

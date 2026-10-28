@@ -12,9 +12,11 @@ import (
 // database alone, what EligibleToClaim would refuse before any Git read:
 // a task accepted, or of a mission created, before enabledAt (before_enable),
 // and a task whose mission is not active or carries no_merge (stale). Each
-// candidate costs the drill a fresh fetch inside a held transaction, and the
-// STG runtime pool has two connections, so listing tasks that can only be
-// refused starved every other loop (2026-10-27: twelve pre-enable tasks).
+// candidate costs the drill fresh fetches (read between two transactions
+// since TD-447 5; on 2026-10-27, when they were read inside one, twelve
+// pre-enable tasks starved every other loop of STG's two connections). Roots
+// of missions no longer active are not lost by being left out here: the
+// pass's database step records them (SettleUnclaimed, TD-447 4).
 func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time) ([]string, error) {
 	var tasks []string
 	if enabledAt.IsZero() {

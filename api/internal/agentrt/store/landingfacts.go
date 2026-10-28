@@ -140,15 +140,40 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 // landingFactsExternal is LandingFacts' external half: it reads the result,
 // main's history and each dependency's history through src, and needs no
 // transaction (a claim reads it with no lock held, TD-447 5).
+// landingClaimExternal is the claim's read (no snapshot): it stops at the
+// first answer that already refuses for good, so a read error after it
+// cannot hide it (CUT §7.7): a result that is not one commit reads no
+// history, and A already in main's history reads no dependency.
+// A result the database already shows unclaimable (no accepted attempt, A
+// or Base not a commit id) reads nothing: the adapter would fail on it with
+// an error that is not a refusal (review 652 R652-2). Today the task table's
+// base_commit check keeps Base a commit id; this guards the claim, not that.
+func landingClaimExternal(ctx context.Context, src LandingSource, f *landing.Facts, deps []landingDep) error {
+	if f.Attempt == "" || !landing.ValidSHA(f.A) || !landing.ValidSHA(f.Base) {
+		return nil
+	}
+	return landingFactsRead(ctx, src, f, deps, "", true)
+}
+
 func landingFactsExternal(ctx context.Context, src LandingSource, f *landing.Facts, deps []landingDep, snapshot string) error {
+	return landingFactsRead(ctx, src, f, deps, snapshot, false)
+}
+
+func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, deps []landingDep, snapshot string, claim bool) error {
 	var err error
 	f.SingleCommit, f.Changes, err = src.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A)
 	if err != nil {
 		return err
 	}
+	if claim && !f.SingleCommit {
+		return nil
+	}
 	f.History, err = src.History(ctx, f.Repo, f.Task, f.A, "")
 	if err != nil {
 		return err
+	}
+	if claim && (f.History.State == landing.Effective || f.History.State == landing.Reverted) {
+		return nil
 	}
 	f.DependenciesEffective = true
 	for _, d := range deps {

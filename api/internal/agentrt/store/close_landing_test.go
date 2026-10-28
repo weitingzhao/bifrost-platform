@@ -87,21 +87,29 @@ func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The other order: the close decided first (the
-// first-claim grace has passed), so the claim reads the mission done and
-// refuses, never an operation under a closed mission.
+// Serial: FreezeEventClock. The other order: the close decided first. A root
+// in the first-claim handoff past its window with no record (the loop never
+// reached it) is recorded by the close itself, failed{bound} as
+// land:<root>:1, in the transaction that closes the mission (TD-447 4); a
+// claim after that reads the mission done and claims nothing.
 func TestLandingClaimAfterCloseIsRefused(t *testing.T) {
 	w, task, src := goalDrill(t, "M-4")
-	// Past the first-claim grace: a loop that missed it misses the drill.
-	restore := store.FreezeEventClock(time.Now().Add(3 * time.Minute))
+	restore := store.FreezeEventClock(time.Now().Add(6*time.Hour + time.Minute))
 	closed, err := store.CloseMissions(ctx, w.rt)
 	restore()
 	if err != nil || len(closed) != 1 {
 		t.Fatalf("fixture: %v %v", closed, err)
 	}
+	o, found := landingState(t, w, landingRepoStream).Operations["land:"+task+":1"]
+	if !found || o.Phase != "failed" || o.Outcome != "bound" || o.Task != task || o.ClaimNumber != 1 {
+		t.Fatalf("closed with no record of the root: %+v", o)
+	}
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
 	ok(t, err)
 	if d.Allowed || op != "" || d.Reason != "stale" {
 		t.Fatal("claimed under a closed mission", op, d)
+	}
+	if n := len(landingState(t, w, landingRepoStream).Operations); n != 1 {
+		t.Fatalf("operations=%d after the refused claim, want the one record", n)
 	}
 }

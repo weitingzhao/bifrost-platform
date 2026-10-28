@@ -58,18 +58,21 @@ func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
 }
 
 // Serial: FreezeEventClock. A close that runs while a claim reads Git
-// (TD-447 5: the claim holds no lock then). Within the first-claim grace the
-// close keeps the mission and the claim lands; past it the close may end the
-// mission, and then the claim's second, locked read sees it and claims
-// nothing: never an operation under a closed mission. (Review 640's version
-// asserted the close waited on the claim's lock, the very hold TD-447 5
-// removes; the durable first-claim handoff is TD-447 4.)
+// (TD-447 5: the claim holds no lock then). A root never claimed is queued by
+// its facts until the stream records its claim or its refusal (TD-447 4), so
+// a close during the reads keeps the mission however long they take (the old
+// two-minute grace lost this claim past it, review 646 §5). Only past the
+// root's window (the loop never got to it) may the close end the mission,
+// and then it records the root failed{bound} first; the claim's second,
+// locked read sees the mission done and claims nothing: never an operation
+// under a closed mission, never a silent miss.
 func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		after  time.Duration
 		closes bool
-	}{{"within the grace", 0, false}, {"past the grace", 3 * time.Minute, true}} {
+	}{{"right after acceptance", 0, false}, {"past the old two-minute grace", 3 * time.Minute, false},
+		{"an hour into the reads", time.Hour, false}, {"past the window", 6*time.Hour + time.Minute, true}} {
 		t.Run(c.name, func(t *testing.T) {
 			w, task, src := goalDrill(t, "M-3")
 			restore := store.FreezeEventClock(time.Now().Add(c.after))
@@ -122,13 +125,14 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			ok(t, r.e)
 			ops := landingState(t, w, landingRepoStream).Operations
 			if c.closes {
-				if r.op != "" || r.d.allowed || r.d.reason != "stale" || len(ops) != 0 {
-					t.Fatalf("claimed under a closed mission: op=%q decision=%+v ops=%d", r.op, r.d, len(ops))
+				o := ops["land:"+task+":1"]
+				if r.op != "" || r.d.allowed || r.d.reason != "stale" || len(ops) != 1 || o.Phase != "failed" || o.Outcome != "bound" {
+					t.Fatalf("claimed under a closed mission, or left no record: op=%q decision=%+v ops=%+v", r.op, r.d, ops)
 				}
 				return
 			}
-			if r.op == "" || !r.d.allowed || len(ops) != 1 {
-				t.Fatalf("claim lost to a close within the grace: op=%q decision=%+v", r.op, r.d)
+			if r.op == "" || !r.d.allowed || len(ops) != 1 || ops[r.op].Phase != "claimed" {
+				t.Fatalf("claim lost to a close during its reads: op=%q decision=%+v", r.op, r.d)
 			}
 			if w.state(t, "mission", "M-3") != "active" {
 				t.Fatal("closed under a committed claim")
