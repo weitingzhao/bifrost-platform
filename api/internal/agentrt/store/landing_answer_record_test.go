@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
@@ -395,5 +397,112 @@ func TestLandingAnswerConcurrentPassesActOnce(t *testing.T) {
 	}
 	if records, retries := answerRecords(t, w, "q-race", root); records != 1 || retries != 1 {
 		t.Fatalf("records=%d retries=%d", records, retries)
+	}
+}
+
+// Serial: FreezeEventClock. A note longer than the protocol's reason is
+// still a retry: the retry keeps a bounded reason, the record the whole text
+// (review 656 A-R5). 1001 bytes, and multibyte text cut on a rune.
+func TestLandingAnswerLongTextStillRetries(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	for i, text := range []string{strings.Repeat("a", 1000), strings.Repeat("a", 1001), strings.Repeat("重试", 400)} {
+		op := fmt.Sprintf("long:%d", i)
+		store.FreezeEventClock(at)
+		root := failedRoot(t, w, op, "bound")
+		store.FreezeEventClock(at.Add(time.Minute))
+		q := answerCard(fmt.Sprintf("q-long-%d", i), "try_again", at.Add(time.Minute))
+		q.Text = text
+		res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, op, at.Add(time.Minute))
+		ok(t, err)
+		if res.Outcome != store.LandingAnswerApplied || res.Record["answer_text"] != text {
+			t.Fatalf("%d bytes: %+v", len(text), res.Outcome)
+		}
+		var reason string
+		ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'landing'->>'reason' FROM agentrt.event WHERE event_stream_id = $1
+		  AND body_json->'landing'->>'kind' = 'retry' AND body_json->'landing'->>'root' = $2`, landingRepoStream, root).Scan(&reason))
+		if len(reason) > 1000 || !utf8.ValidString(reason) || (len(text) <= 1000 && reason != text) {
+			t.Fatalf("%d bytes: reason of %d bytes", len(text), len(reason))
+		}
+	}
+}
+
+// Serial: FreezeEventClock. A lost commit reports no verdict (review 656
+// A-R2), and a stored record returns as committed, whatever the card says
+// now (A-R3).
+func TestLandingAnswerReportsOnlyWhatCommitted(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "commit:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-commit", "try_again", at.Add(time.Minute))
+	failed := false
+	res, err := store.HandleLandingAnswer(ctx, commitFailDB{DB: w.rt, failed: &failed}, q, root, "commit:1", at.Add(time.Minute))
+	if err == nil || res.Outcome != "" || res.Recorded || res.Record != nil {
+		t.Fatalf("a lost commit reported %+v (%v)", res, err)
+	}
+	first, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "commit:1", at.Add(time.Minute))
+	ok(t, err)
+	q.Text = "changed since"
+	again, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "commit:1", at.Add(time.Minute))
+	ok(t, err)
+	if !first.Recorded || again.Recorded || !reflect.DeepEqual(again.Record, first.Record) || again.Record["answer_text"] != "owner" {
+		t.Fatalf("the stored record did not come back as committed: %v / %v", first.Record, again.Record)
+	}
+}
+
+// Serial: FreezeEventClock. A stored record is a credential: one that is not
+// the controller's, or whose fields contradict each other, is an error and
+// is not acked (review 656 A-R1). The append guard keeps anyone else from
+// writing one.
+func TestLandingAnswerStoredRecordMustBeTrustworthy(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "trust:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-trust", "do_not_merge", at.Add(time.Minute))
+	_, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "trust:1", at.Add(time.Minute))
+	ok(t, err)
+	admin := w.db.Connect(t, w.db.Admin)
+	tamper := func(q string, args ...any) {
+		t.Helper()
+		tx, e := admin.Begin(ctx)
+		ok(t, e)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, e = tx.Exec(ctx, `SET LOCAL session_replication_role = replica`)
+		ok(t, e)
+		_, e = tx.Exec(ctx, q, args...)
+		ok(t, e)
+		ok(t, tx.Commit(ctx))
+	}
+	// applied / declined under a try_again: a contradiction.
+	tamper(`UPDATE agentrt.event SET body_json = jsonb_set(body_json, '{landing_answer,choice}', '"try_again"')
+	  WHERE event_stream_id = $1 AND body_json->'landing_answer'->>'question_id' = 'q-trust'`, landingRepoStream)
+	acked := 0
+	ctl := controller.Controller{DB: w.rt, Env: "stg"}
+	ctl.Sources.Ack = func(context.Context, string) error { acked++; return nil }
+	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
+	if _, err := ctl.LandingAnswer(ctx, root, "trust:1", read); err == nil || acked != 0 {
+		t.Fatalf("a contradictory record was trusted: err=%v acked=%d", err, acked)
+	}
+	tamper(`UPDATE agentrt.event SET body_json = jsonb_set(body_json, '{landing_answer,choice}', '"do_not_merge"'), actor_id = 'owner'
+	  WHERE event_stream_id = $1 AND body_json->'landing_answer'->>'question_id' = 'q-trust'`, landingRepoStream)
+	if _, err := ctl.LandingAnswer(ctx, root, "trust:1", read); err == nil || acked != 0 {
+		t.Fatalf("a record not written by the controller was trusted: err=%v acked=%d", err, acked)
+	}
+	// Only the controller, on the repository stream, under the root it names.
+	body := map[string]any{"question_id": "q-forged", "root": root, "op": "trust:1", "choice": "try_again", "outcome": "applied", "why": "retry",
+		"by": "owner", "answered_at": at.Format(time.RFC3339Nano), "channel": "console", "answer_text": "", "mission_state": "active"}
+	for name, ev := range map[string]store.Event{
+		"owner":   {Stream: landingRepoStream, Type: "note", Actor: "owner", TaskID: root, Body: map[string]any{"text": "x", "landing_answer": body}},
+		"no root": {Stream: landingRepoStream, Type: "note", Actor: "controller", Body: map[string]any{"text": "x", "landing_answer": body}},
+		"mission": {Stream: store.MissionStream("M-1"), Type: "note", Actor: "controller", MissionID: "M-1", TaskID: root, Body: map[string]any{"text": "x", "landing_answer": body}},
+	} {
+		if err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, e := store.Append(ctx, tx, ev); return e }); err == nil {
+			t.Fatal("a landing_answer record was taken from", name)
+		}
 	}
 }

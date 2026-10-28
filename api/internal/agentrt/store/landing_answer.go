@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
@@ -29,6 +30,11 @@ const (
 type LandingAnswerResult struct {
 	Outcome, Why    string
 	Recorded, Acked bool
+	// Record is the stored record as committed: the answer as given (who,
+	// when, its text), the binding and the mission's state then. S3 builds
+	// the Owner's notice from it, never from the card or mission as they are
+	// now (review 656 A-R3). Nil when nothing was handled.
+	Record map[string]any
 }
 
 // ErrLandingAnswerBinding: the card is not bound to an operation of this root
@@ -68,17 +74,20 @@ func HandleLandingAnswer(ctx context.Context, db DB, q Question, root, after str
 		// A separate statement after the stream lock, so a pass that waited
 		// for another's commit sees its record (Read Committed, review 655).
 		var stored map[string]any
-		err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer' FROM agentrt.event
+		var actor, storedTask string
+		err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer', actor_id, COALESCE(task_id, '') FROM agentrt.event
 		  WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_answer'->>'question_id' = $2 ORDER BY seq LIMIT 1`,
-			stream, q.ID).Scan(&stored)
+			stream, q.ID).Scan(&stored, &actor, &storedTask)
 		if err == nil {
-			if why := badLandingAnswer(stored); why != "" {
-				return fmt.Errorf("landing answer %s: stored record is not valid: %s", q.ID, why)
+			// A stored record is a credential the Ack rests on: it must be
+			// the controller's, whole and consistent (review 656 A-R1).
+			if why := badLandingAnswer(stored); why != "" || actor != "controller" || storedTask != stored["root"] {
+				return fmt.Errorf("landing answer %s: stored record is not valid: %s (actor %s, task %s)", q.ID, why, actor, storedTask)
 			}
 			if stored["root"] != root || stored["op"] != after {
 				return fmt.Errorf("%w: %s was recorded for %v %v", ErrLandingAnswerBinding, q.ID, stored["root"], stored["op"])
 			}
-			res = LandingAnswerResult{Outcome: stored["outcome"].(string), Why: stored["why"].(string)}
+			res = LandingAnswerResult{Outcome: stored["outcome"].(string), Why: stored["why"].(string), Record: stored}
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -110,10 +119,15 @@ func HandleLandingAnswer(ctx context.Context, db DB, q Question, root, after str
 			Body: map[string]any{"text": landingAnswerText(outcome, why, q.Option, missionState), "landing_answer": body}}); err != nil {
 			return err
 		}
-		res = LandingAnswerResult{Outcome: outcome, Why: why, Recorded: true}
+		res = LandingAnswerResult{Outcome: outcome, Why: why, Recorded: true, Record: body}
 		return nil
 	})
-	return res, err
+	if err != nil {
+		// Nothing is known to be committed: no verdict is reported (review
+		// 656 A-R2). A commit that did land is found by the next pass.
+		return LandingAnswerResult{}, err
+	}
+	return res, nil
 }
 
 // decideLandingAnswer is the answer's verdict on the folded stream, and the
@@ -148,7 +162,10 @@ func decideLandingAnswer(s landing.State, root, after string, q Question, answer
 		case missionState != "active":
 			return LandingAnswerRefused, "mission_not_active", nil, nil
 		}
-		reason := q.Text
+		// The protocol keeps a bounded reason; the whole text is in the
+		// record (answer_text). A long note is not a reason to refuse (review
+		// 656 A-R5).
+		reason := boundedReason(q.Text)
 		if reason == "" {
 			reason = "try_again"
 		}
@@ -160,10 +177,11 @@ func decideLandingAnswer(s landing.State, root, after string, q Question, answer
 		r["kind"], r["why"] = "failed", "declined"
 	}
 	rec, err := landing.Parse(r)
-	if err == nil {
-		err = s.Check(landing.Entry{At: at, Record: rec})
-	}
 	if err != nil {
+		// The record is built here: a parse failure is a bug, not a verdict.
+		return "", "", nil, fmt.Errorf("landing answer %s: %w", q.ID, err)
+	}
+	if err := s.Check(landing.Entry{At: at, Record: rec}); err != nil {
 		if q.Option == "try_again" {
 			return LandingAnswerRefused, "not_retryable", nil, nil
 		}
@@ -195,7 +213,17 @@ var landingAnswerWhys = map[string][]string{
 	LandingAnswerRefused: {"mission_not_active", "not_retryable", "not_declinable", "not_failed", "answered_before", "unknown_choice"},
 }
 
-// badLandingAnswer is why a record body is refused, or "".
+// landingAnswerChoice is the choice each why can follow ("" for any).
+var landingAnswerChoice = map[string]string{
+	"retry": "try_again", "already_retried": "try_again", "not_failed": "try_again", "not_retryable": "try_again", "mission_not_active": "try_again",
+	"declined": "do_not_merge", "already_declined": "do_not_merge", "not_declinable": "do_not_merge",
+	"superseded": "", "answered_before": "", "unknown_choice": "",
+}
+
+// badLandingAnswer is why a record body is refused, or "": every field there,
+// the outcome and why a pair of the vocabulary, the why one that can follow
+// the choice and the mission's state, from a console answer at a real time
+// (review 656 A-R1).
 func badLandingAnswer(v any) string {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -209,12 +237,58 @@ func badLandingAnswer(v any) string {
 	if _, ok := m["answer_text"].(string); !ok {
 		return "landing_answer needs answer_text (empty when the Owner wrote none)"
 	}
-	if _, err := time.Parse(time.RFC3339Nano, m["answered_at"].(string)); err != nil {
-		return "landing_answer answered_at is not a time"
+	at, err := time.Parse(time.RFC3339Nano, m["answered_at"].(string))
+	if err != nil || at.IsZero() || at.Year() < 2000 {
+		return "landing_answer answered_at is not a real time"
+	}
+	if m["channel"] != "console" {
+		return "landing_answer is only for a console answer"
+	}
+	state, choice, why := m["mission_state"].(string), m["choice"].(string), m["why"].(string)
+	if !slices.Contains([]string{"active", "paused", "done", "stopped", "expired"}, state) {
+		return "landing_answer mission_state is not a mission state"
 	}
 	whys, ok := landingAnswerWhys[m["outcome"].(string)]
-	if !ok || !slices.Contains(whys, m["why"].(string)) {
-		return fmt.Sprintf("landing_answer: %v / %v is not in the vocabulary", m["outcome"], m["why"])
+	if !ok || !slices.Contains(whys, why) {
+		return fmt.Sprintf("landing_answer: %v / %v is not in the vocabulary", m["outcome"], why)
+	}
+	known := choice == "try_again" || choice == "do_not_merge"
+	if want := landingAnswerChoice[why]; (want != "" && choice != want) || (why == "unknown_choice") == known {
+		return fmt.Sprintf("landing_answer: %s does not follow %s", why, choice)
+	}
+	if (why == "mission_not_active" && state == "active") || (why == "retry" && state != "active") {
+		return fmt.Sprintf("landing_answer: %s does not follow a mission %s", why, state)
 	}
 	return ""
+}
+
+// checkLandingAnswerAppend: only the controller writes an answer's record,
+// on the repository stream, under the root it names (review 656 A-R1).
+func checkLandingAnswerAppend(ev Event) error {
+	v, exists := ev.Body["landing_answer"]
+	if !exists {
+		return nil
+	}
+	m, _ := v.(map[string]any)
+	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
+		return fmt.Errorf("landing_answer is written by the controller on the repository stream under its root")
+	}
+	if _, exists := ev.Body["landing"]; exists {
+		return fmt.Errorf("landing_answer is not a landing record")
+	}
+	return nil
+}
+
+// boundedReason is text cut to the protocol's reason limit on a rune
+// boundary, with a marker when it was cut.
+func boundedReason(text string) string {
+	const limit, marker = 1000, " …"
+	if len(text) <= limit {
+		return text
+	}
+	cut := limit - len(marker)
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + marker
 }
