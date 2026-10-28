@@ -214,21 +214,25 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 		}
 		switch {
 		case c.Phase == "landed":
+			// Only a read begun after every read already recorded counts,
+			// a reversal included (review 663 B-01): an older read committed
+			// late moves nothing. Every newer read is recorded, so the last
+			// record is always the newest read (no deduplication: a newer
+			// read with the same answer must still raise the mark).
+			prev, found, err := latestMainEvidence(ctx, tx, stream, c.Op)
+			if err != nil {
+				return err
+			}
+			if found && !ev.ReadAt.After(prev.readAt) {
+				return nil
+			}
 			// A reversal of a landing already recorded (S3 B-02).
 			if !ev.Unreadable && ev.HasR && validityOf(ev) == "reverted" {
 				did = "reverted"
 				return write(map[string]any{"kind": "reverted", "op": c.Op, "R": c.R, "by": ev.RevertedBy})
 			}
-			// Otherwise what this read says, when it says something new
-			// and is newer than what was recorded (review 662 B-04): back
-			// to effective, unknown, R gone from main, or unreadable.
-			prev, found, err := latestMainEvidence(ctx, tx, stream, c.Op)
-			if err != nil {
-				return err
-			}
-			if found && (!ev.ReadAt.After(prev.readAt) || prev.validity == mainValidity(ev) && prev.revertedBy == revertedBy(ev)) {
-				return nil
-			}
+			// Otherwise what this read says (review 662 B-04): effective,
+			// unknown, R gone from main, or unreadable.
 			did = "observed"
 			return appendMainEvidence(ctx, tx, stream, c, ev, did)
 		case c.Late:
@@ -489,9 +493,10 @@ func badLandingMain(v any) string {
 	if !slices.Contains(mainValidities, validity) || !headOK || !byOK {
 		return "landing_main needs validity, head and reverted_by"
 	}
+	verdict := m["verdict"].(string)
 	if validity == "unreadable" {
-		if head != "" || hasR || by != "" {
-			return "landing_main unreadable has no head, R or reversal"
+		if head != "" || hasR || by != "" || verdict != "observed" {
+			return "landing_main unreadable is an observation with no head, R or reversal"
 		}
 		return ""
 	}
@@ -501,8 +506,12 @@ func badLandingMain(v any) string {
 	switch {
 	case (validity == "absent") == hasR:
 		return "landing_main absent is exactly has_r false"
-	case (validity == "reverted") != landingSHA.MatchString(by):
+	case validity == "reverted" && !landingSHA.MatchString(by), validity != "reverted" && by != "":
 		return "landing_main reverted names its reversal, and only then"
+	case (verdict == "unsent" || verdict == "non_ff") && validity != "absent":
+		return "landing_main unsent and non_ff rest on R absent"
+	case verdict == "landed" && !hasR, verdict == "reverted" && validity != "reverted":
+		return "landing_main landed rests on R in main, reverted on its reversal"
 	}
 	return ""
 }

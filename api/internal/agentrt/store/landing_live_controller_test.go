@@ -140,3 +140,54 @@ func TestLiveLandingOffOnProd(t *testing.T) {
 		t.Fatal("written without a workspace", o.Phase)
 	}
 }
+
+// Serial: SetHook, FreezeEventClock. The reconciler moves the operation on
+// between the gate's commit and the push: nothing is pushed or recorded
+// (review 663 R-01).
+func TestLiveLandingRereadsTheIntentBeforePushing(t *testing.T) {
+	w, _, op, src, prepared := liveReady(t)
+	at := prepared.Add(10 * time.Minute)
+	defer store.FreezeEventClock(at)()
+	defer store.SetHook(func(point, arg string) {
+		if point == "landing live: before push check" && arg == op {
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "main_result", "outcome", "unknown")))
+		}
+	})()
+	p := &livePusher{outcome: landinggit.PushOK}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{},
+		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) { return p, nil }}
+	_, err := ctl.LandingDrillCI(ctx, liveSources(src, prepared), op, at)
+	ok(t, err)
+	if len(p.pushes) != 0 {
+		t.Fatal("pushed an intent the reconciler had moved on", p.pushes)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_result" || o.Outcome != "unknown" {
+		t.Fatal(o.Phase, o.Outcome)
+	}
+}
+
+// Serial: FreezeEventClock. Past the intent's deadline at the re-read:
+// nothing is pushed.
+func TestLiveLandingPushesNothingPastTheDeadline(t *testing.T) {
+	w, task, op, src, prepared := liveReady(t)
+	at := prepared.Add(10 * time.Minute)
+	defer store.FreezeEventClock(at)()
+	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
+	ok(t, err)
+	if !d.Allowed {
+		t.Fatal(d)
+	}
+	if cur, err := store.AuthorizationCurrent(ctx, w.rt, auth); err != nil || !cur {
+		t.Fatal("a fresh authorization is not current", cur, err)
+	}
+	store.FreezeEventClock(auth.Deadline)
+	if cur, err := store.AuthorizationCurrent(ctx, w.rt, auth); err != nil || cur {
+		t.Fatal("current at its deadline", cur, err)
+	}
+	other := auth
+	other.IntentSeq++
+	store.FreezeEventClock(at)
+	if cur, err := store.AuthorizationCurrent(ctx, w.rt, other); err != nil || cur {
+		t.Fatal("another intent's licence", cur, err, task)
+	}
+}

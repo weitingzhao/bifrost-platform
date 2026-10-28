@@ -293,8 +293,8 @@ func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 func TestLandingGateRecordIsChecked(t *testing.T) {
 	t.Parallel()
 	gate := func(kv ...any) map[string]any {
-		m := map[string]any{"v": store.LandingGateVersion, "op": "land:g:1", "rule_version": 1, "decided_at": time.Now().UTC().Format(time.RFC3339Nano),
-			"quota_day": "2026-10-28", "ci_run": "ci-1", "ci_created_at": time.Now().UTC().Format(time.RFC3339Nano)}
+		m := map[string]any{"v": store.LandingGateVersion, "op": "land:g:1", "rule_version": 1, "decided_at": "2026-10-28T15:00:00Z",
+			"quota_day": "2026-10-28", "ci_run": "ci-1", "ci_created_at": "2026-10-28T14:59:00Z"}
 		for i := 0; i+1 < len(kv); i += 2 {
 			m[kv[i].(string)] = kv[i+1]
 		}
@@ -314,6 +314,8 @@ func TestLandingGateRecordIsChecked(t *testing.T) {
 		"decided_at":   gate("decided_at", "now"),
 		"quota day":    gate("quota_day", "today"),
 		"no ci":        gate("ci_run", ""),
+		"another day":  gate("decided_at", "2026-10-28T15:00:00Z", "quota_day", "2026-10-29", "ci_created_at", "2026-10-28T14:00:00Z"),
+		"ci after":     gate("decided_at", "2026-10-28T15:00:00Z", "ci_created_at", "2026-10-28T16:00:00Z"),
 	} {
 		if store.BadLandingGate(g) == "" {
 			t.Errorf("%s: accepted", name)

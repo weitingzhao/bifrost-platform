@@ -26,6 +26,13 @@ var groupStarts atomic.Int64
 // not be started).
 var errNotStarted = errors.New("git not started")
 
+// errExitUnobserved: git's exit could not be awaited without reaping it;
+// the call was aborted, its whole group killed (review 663 R-02).
+var errExitUnobserved = errors.New("git exit not observable: aborted")
+
+// waitExitFn is waitExit; tests replace it to make it fail.
+var waitExitFn = waitExit
+
 // runGroup runs cmd in a process group of its own and returns when it is
 // done with the whole group, not only git itself (review 662 B-03). Git's
 // exit is awaited without reaping it (waitExit), so its unreaped exit keeps
@@ -45,7 +52,7 @@ func runGroup(ctx context.Context, cmd *exec.Cmd) error {
 	groupStarts.Add(1)
 	pid := cmd.Process.Pid
 	exited := make(chan bool, 1)
-	safego.Go("landinggit-wait-exit", func() { exited <- waitExit(pid) })
+	safego.Go("landinggit-wait-exit", func() { exited <- waitExitFn(pid) })
 	var known bool
 	select {
 	case known = <-exited:
@@ -53,24 +60,15 @@ func runGroup(ctx context.Context, cmd *exec.Cmd) error {
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
 		known = <-exited
 	}
-	if known {
-		// Git is not reaped yet (only cmd.Wait reaps): its id still names
-		// this group, so the kill reaches its leftovers and nothing else.
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
-	} else {
-		// The exit could not be awaited (it never happens on Linux or
-		// macOS): fall back to killing the group when ctx ends.
-		stop := make(chan struct{})
-		defer close(stop)
-		safego.Go("landinggit-kill-on-cancel", func() {
-			select {
-			case <-ctx.Done():
-				_ = syscall.Kill(-pid, syscall.SIGKILL)
-			case <-stop:
-			}
-		})
-	}
+	// Git is not reaped yet (only cmd.Wait reaps): its id still names this
+	// group, so the kill reaches its leftovers and nothing else. When the
+	// exit could not be awaited the call is aborted the same way, the whole
+	// group killed while git is still unreaped (review 663 R-02).
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	err := cmd.Wait()
+	if !known {
+		return errExitUnobserved
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

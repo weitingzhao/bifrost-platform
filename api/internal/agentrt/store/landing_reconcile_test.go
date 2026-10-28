@@ -452,6 +452,7 @@ func TestReconcileRecordsReversals(t *testing.T) {
 	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; !o.EverLanded || o.Reverted {
 		t.Fatalf("landed: %+v", o)
 	}
+	store.FreezeEventClock(intent2.Add(2 * time.Minute)) // a later read
 	done, err := store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
 	ok(t, err)
 	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; done["land:rev:2"] != "reverted" || !o.Reverted {
@@ -528,7 +529,9 @@ func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
 	pass(4, store.MainEvidence{}, errors.New("fetch failed"))
 	pass(5, store.MainEvidence{}, errors.New("fetch failed"))
 	pass(6, store.MainEvidence{Head: strings.Repeat("e", 40)}, nil)
-	want := []string{"landed/unknown", "observed/effective", "observed/unreadable", "observed/absent"}
+	// Every newer read is recorded, the same answer again included: the
+	// last record is the newest read (review 663 B-01).
+	want := []string{"landed/unknown", "observed/effective", "observed/effective", "observed/unreadable", "observed/unreadable", "observed/absent"}
 	if got := mainEvidenceRows(t, w, "land:ev:1"); !slices.Equal(got, want) {
 		t.Fatalf("evidence %v, want %v", got, want)
 	}
@@ -539,8 +542,31 @@ func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
 	c := store.MainCandidate{Op: "land:ev:1", Root: landingState(t, w, landingRepoStream).Operations["land:ev:1"].Task, Phase: "landed", Outcome: "ok", R: commitB, M0: commitA}
 	did, err := store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", c, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: intent.Add(5 * time.Minute)})
 	ok(t, err)
-	if did != "" || len(mainEvidenceRows(t, w, "land:ev:1")) != 4 {
+	if did != "" || len(mainEvidenceRows(t, w, "land:ev:1")) != 6 {
 		t.Fatal("a stale observation recorded", did)
+	}
+	// An older read that saw a reversal, committed after a newer read, does
+	// not end the landing as reverted (review 663 B-01).
+	revert := strings.Repeat("f", 40)
+	did, err = store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", c, store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert, ReadAt: intent.Add(5*time.Minute + time.Second)})
+	ok(t, err)
+	if o := landingState(t, w, landingRepoStream).Operations["land:ev:1"]; did != "" || o.Reverted {
+		t.Fatal("an older reversal read recorded over a newer read", did)
+	}
+	// The same answer read later raises the mark: an older read with
+	// another answer, committed after it, is not recorded.
+	w3 := newKernelWorld(t)
+	_, intent3 := atMain(t, w3, "land:ev:3", "ok", at)
+	store.FreezeEventClock(intent3.Add(time.Minute))
+	_, err = store.ReconcileMain(ctx, w3.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
+	ok(t, err)
+	c3 := store.MainCandidate{Op: "land:ev:3", Root: landingState(t, w3, landingRepoStream).Operations["land:ev:3"].Task, Phase: "landed", Outcome: "ok", R: commitB, M0: commitA}
+	_, err = store.ReconcileMainOne(ctx, w3.rt, "bifrost-platform", c3, store.MainEvidence{Head: commitB, HasR: true, ReadAt: intent3.Add(3 * time.Minute)})
+	ok(t, err)
+	did, err = store.ReconcileMainOne(ctx, w3.rt, "bifrost-platform", c3, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: intent3.Add(2 * time.Minute)})
+	ok(t, err)
+	if got := mainEvidenceRows(t, w3, "land:ev:3"); did != "" || !slices.Equal(got, []string{"landed/unknown", "observed/unknown"}) {
+		t.Fatal("an older effective over a newer unknown", did, got)
 	}
 	// A failed read of an operation not yet landed writes nothing.
 	w2 := newKernelWorld(t)
@@ -583,23 +609,30 @@ func TestMainEvidenceRecordsAreChecked(t *testing.T) {
 		m  map[string]any
 		ok bool
 	}{
-		"effective":              {base(), true},
-		"reverted":               {base("validity", "reverted", "reverted_by", revert), true},
-		"absent":                 {base("validity", "absent", "has_r", false, "head", commitA), true},
-		"unreadable":             {base("validity", "unreadable", "has_r", false, "head", ""), true},
-		"validity a number":      {base("validity", 5), false},
-		"validity missing":       {base("validity", nil), false},
-		"reverted, no reversal":  {base("validity", "reverted"), false},
-		"reversal, not reverted": {base("reverted_by", revert), false},
-		"reversal not a commit":  {base("validity", "reverted", "reverted_by", "HEAD~1"), false},
-		"absent with R":          {base("validity", "absent"), false},
-		"effective without R":    {base("has_r", false), false},
-		"unreadable with head":   {base("validity", "unreadable", "has_r", false), false},
-		"reverted_by missing":    {base("reverted_by", nil), false},
-		"another version":        {base("v", "3"), false},
-		"legacy":                 {base("v", nil, "verdict", "landed", "validity", "unknown", "reverted_by", nil), true},
-		"legacy, number":         {base("v", nil, "verdict", "landed", "validity", 1), false},
-		"legacy, observed":       {base("v", nil), false},
+		"effective":                           {base(), true},
+		"reverted":                            {base("validity", "reverted", "reverted_by", revert), true},
+		"absent":                              {base("validity", "absent", "has_r", false, "head", commitA), true},
+		"unreadable":                          {base("validity", "unreadable", "has_r", false, "head", ""), true},
+		"validity a number":                   {base("validity", 5), false},
+		"validity missing":                    {base("validity", nil), false},
+		"reverted, no reversal":               {base("validity", "reverted"), false},
+		"reversal, not reverted":              {base("reverted_by", revert), false},
+		"reversal not a commit":               {base("validity", "reverted", "reverted_by", "HEAD~1"), false},
+		"absent with R":                       {base("validity", "absent"), false},
+		"effective without R":                 {base("has_r", false), false},
+		"unreadable with head":                {base("validity", "unreadable", "has_r", false), false},
+		"reverted_by missing":                 {base("reverted_by", nil), false},
+		"another version":                     {base("v", "3"), false},
+		"reversal not a commit, not reverted": {base("reverted_by", "not-a-sha"), false},
+		"verdict reverted, effective":         {base("verdict", "reverted"), false},
+		"unreadable as a verdict":             {base("verdict", "landed", "validity", "unreadable", "has_r", false, "head", ""), false},
+		"unsent with R":                       {base("verdict", "unsent"), false},
+		"landed without R":                    {base("verdict", "landed", "validity", "absent", "has_r", false, "head", commitA), false},
+		"unsent":                              {base("verdict", "unsent", "validity", "absent", "has_r", false, "head", commitA), true},
+		"landed reverted":                     {base("verdict", "landed", "validity", "reverted", "reverted_by", revert), true},
+		"legacy":                              {base("v", nil, "verdict", "landed", "validity", "unknown", "reverted_by", nil), true},
+		"legacy, number":                      {base("v", nil, "verdict", "landed", "validity", 1), false},
+		"legacy, observed":                    {base("v", nil), false},
 	} {
 		if err := put(c.m); (err == nil) != c.ok {
 			t.Errorf("%s: %v", name, err)

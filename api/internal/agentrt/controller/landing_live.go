@@ -72,6 +72,12 @@ func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r strin
 	if auth.R != r {
 		return fmt.Errorf("landing authorization for another commit")
 	}
+	// Just before the push, the intent must still be this one, open and in
+	// time (review 663 R-01): if the reconciler moved it, or it cannot be
+	// read, nothing is pushed or recorded.
+	if current, err := store.AuthorizationCurrent(ctx, c.DB, auth); err != nil || !current {
+		return err
+	}
 	// From the intent on the push is owed: neither the pass's budget nor a
 	// shutdown cuts it short; its deadline (intent + PushTimeout) bounds it.
 	out := w.PushMain(context.WithoutCancel(ctx), auth.R, auth.M0, auth.Deadline)

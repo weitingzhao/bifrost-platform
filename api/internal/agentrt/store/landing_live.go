@@ -229,6 +229,16 @@ func badLandingGate(v any) string {
 	if _, err := time.Parse("2006-01-02", m["quota_day"].(string)); err != nil {
 		return "landing_gate quota_day is not a day"
 	}
+	// The grounds agree (review 663 N-02): decided on its quota day, on a
+	// CI created no later than the decision.
+	decided, _ := time.Parse(time.RFC3339Nano, m["decided_at"].(string))
+	created, _ := time.Parse(time.RFC3339Nano, m["ci_created_at"].(string))
+	if decided.UTC().Format("2006-01-02") != m["quota_day"] {
+		return "landing_gate quota_day is not the decision's day"
+	}
+	if created.After(decided) {
+		return "landing_gate CI is later than the decision"
+	}
 	var version float64
 	switch n := m["rule_version"].(type) {
 	case int:
@@ -259,6 +269,45 @@ func checkLandingGateAppend(ev Event) error {
 		return fmt.Errorf("landing_gate rides on the controller's main_intent for its operation")
 	}
 	return nil
+}
+
+// AuthorizationCurrent reads, just before the push, whether auth is still
+// the operation's open intent (CUT §11.4 B1, review 663 R-01): the
+// operation is at main_intent, its intent is the event auth names (seq,
+// time, R, M0), and the deadline has not passed. Anything else (the
+// reconciler moved it on, a result is recorded, the read fails) and the
+// caller pushes nothing; the reconciler settles it. It re-checks the licence
+// already granted, not the rules: a rule that changed since does not revoke
+// it, and the deadline is the intent's, never a fresh one.
+func AuthorizationCurrent(ctx context.Context, db DB, auth Authorization) (bool, error) {
+	hook("landing live: before push check", auth.Op)
+	const stream = "landing:bifrost-platform"
+	current := false
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		s, err := LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		o, ok := s.Operations[auth.Op]
+		if !ok || o.Phase != "main_intent" || o.R != auth.R || o.M0 != auth.M0 || o.Task != auth.Root {
+			return nil
+		}
+		var at time.Time
+		err = tx.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE event_stream_id = $1 AND seq = $2 AND event_type = 'note'
+		  AND body_json->'landing'->>'kind' = 'main_intent' AND body_json->'landing'->>'op' = $3`, stream, auth.IntentSeq, auth.Op).Scan(&at)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		current = at.Equal(auth.IntentAt) && DecisionAt().Before(auth.Deadline)
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return current, nil
 }
 
 // ErrLandingBindingChanged: the task's step, mission or tenant changed

@@ -73,3 +73,29 @@ func TestLimitedBuffer(t *testing.T) {
 		t.Fatal(n, b.String())
 	}
 }
+
+// Review 663 R-02: git's exit cannot be awaited: the call is aborted at
+// once, the whole group killed, and it says so; nothing is left running.
+func TestRunGroupAbortsWhenTheExitCannotBeAwaited(t *testing.T) {
+	defer func(f func(int) bool) { waitExitFn = f }(waitExitFn)
+	// It fails after git has started its child, so the child's id is read.
+	waitExitFn = func(int) bool { time.Sleep(300 * time.Millisecond); return false }
+	cmd := exec.Command("/bin/sh", "-c", `sleep 30 & echo $!; sleep 30`)
+	out := &limitedBuffer{max: 1 << 10}
+	cmd.Stdout = out
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	start := time.Now()
+	err := runGroup(ctx, cmd)
+	if elapsed := time.Since(start); err == nil || elapsed > 2*time.Second {
+		t.Fatal("not aborted", err, elapsed)
+	}
+	pid, e := strconv.Atoi(strings.TrimSpace(out.String()))
+	if e != nil {
+		t.Fatal("no child pid", out.String())
+	}
+	if !gone(pid) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatal("a child outlived the aborted call", pid)
+	}
+}
