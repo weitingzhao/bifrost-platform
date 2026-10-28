@@ -27,7 +27,7 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 	enabled := time.Now().Add(-time.Hour)
 	restore := store.FreezeEventClock(enabled)
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", enabled)
+		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
 	})
 	restore()

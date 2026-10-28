@@ -127,7 +127,7 @@ func TestHandoffHoldsWithoutACurrentRule(t *testing.T) {
 	enabled := time.Now().Add(-time.Hour)
 	restore := store.FreezeEventClock(enabled)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", enabled)
+		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
 	}))
 	restore()
@@ -223,7 +223,7 @@ func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
 	enabled := time.Now().Add(10 * time.Minute)
 	restore := store.FreezeEventClock(enabled)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", enabled)
+		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
 	}))
 	restore()

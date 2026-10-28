@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -44,12 +43,16 @@ func ReadLandingCard(ctx context.Context, db DB, repo, questionID string) (Landi
 		if !found {
 			return nil
 		}
-		var stored map[string]any
-		err = tx.QueryRow(ctx, `SELECT COALESCE(body_json->'landing_answer', body_json->'landing_card_outcome') FROM agentrt.event
-		  WHERE event_stream_id = $1 AND event_type = 'note'
-		    AND COALESCE(body_json->'landing_answer'->>'question_id', body_json->'landing_card_outcome'->>'question_id') = $2
-		  ORDER BY seq LIMIT 1`, "landing:"+repo, questionID).Scan(&stored)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		// The record checked to be this card's, as the handler reads it
+		// (review 672 R-03).
+		var card CardRecord
+		for _, c := range cards {
+			if c.QuestionID == questionID {
+				card = c
+			}
+		}
+		_, stored, _, err := storedCardRecord(ctx, tx, card, questionID)
+		if err != nil {
 			return err
 		}
 		v.Outcome = stored

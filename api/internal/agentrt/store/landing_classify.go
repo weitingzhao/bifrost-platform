@@ -35,13 +35,42 @@ type LandingRootClass struct {
 	// NeedsEvidence: a delivery that lacks only main evidence read in the
 	// current closing round.
 	NeedsEvidence bool
+	// key is the root's identity in a closing round's snapshot: what it is
+	// before this round's evidence (review 672 B-01). read: a round reads
+	// its operation's main.
+	key  string
+	read bool
 }
 
-// closeRound is a mission's closing round (landing_close_round).
+// closeSnapshot is the mission's closing-round snapshot: every in-scope
+// root's identity, sorted; and the operations a round reads.
+func closeSnapshot(roots []LandingRootClass) (snapshot, ops []string) {
+	for _, r := range roots {
+		snapshot = append(snapshot, r.key)
+		if r.read {
+			ops = append(ops, r.Op)
+		}
+	}
+	sort.Strings(snapshot)
+	sort.Strings(ops)
+	return snapshot, ops
+}
+
+// closeRound is a mission's closing round (landing_close_round). A v2 round
+// fixes the snapshot of every in-scope root it was opened on: evidence for
+// some of its operations only narrows what is left to read; it is reopened
+// only when the snapshot changes or its time ends (review 672 B-01). A v1
+// round (no snapshot) never counts.
 type closeRound struct {
 	Round     int64
 	At, Until time.Time
 	Ops       []string
+	Snapshot  []string
+}
+
+// validFor: the round counts for a decision at at on this snapshot.
+func (r *closeRound) validFor(snapshot []string, at time.Time) bool {
+	return r != nil && len(r.Snapshot) > 0 && at.Before(r.Until) && slices.Equal(r.Snapshot, snapshot)
 }
 
 // readCloseRound is the mission's latest closing round, or nil.
@@ -64,14 +93,24 @@ func readCloseRound(ctx context.Context, tx pgx.Tx, mission string) (*closeRound
 			r.Ops = append(r.Ops, fmt.Sprint(o))
 		}
 	}
+	if m["v"] == "2" {
+		if snap, ok := m["snapshot"].([]any); ok {
+			for _, k := range snap {
+				r.Snapshot = append(r.Snapshot, fmt.Sprint(k))
+			}
+		}
+	}
 	return r, nil
 }
 
 // badCloseRound is why a landing_close_round body is refused, or "".
 func badCloseRound(v any) string {
 	m, ok := v.(map[string]any)
-	if !ok || m["v"] != "1" {
-		return "landing_close_round is not a v1 object"
+	if !ok || (m["v"] != "1" && m["v"] != "2") {
+		return "landing_close_round is not a v1 or v2 object"
+	}
+	if m["v"] == "2" && !nonEmptyStrings(m["snapshot"]) {
+		return "landing_close_round v2 needs snapshot"
 	}
 	if n, ok := cardNumber(m["round"]); !ok || n < 1 {
 		return "landing_close_round needs round"
@@ -96,13 +135,44 @@ func badCloseRound(v any) string {
 	return ""
 }
 
-// checkCloseRoundAppend: the controller writes it on a mission's stream.
-func checkCloseRoundAppend(ev Event) error {
-	if _, ok := ev.Body["landing_close_round"]; !ok {
-		return nil
+// nonEmptyStrings: a non-empty list of non-empty strings, decoded or not.
+func nonEmptyStrings(v any) bool {
+	var xs []string
+	switch t := v.(type) {
+	case []string:
+		xs = t
+	case []any:
+		for _, x := range t {
+			s, ok := x.(string)
+			if !ok {
+				return false
+			}
+			xs = append(xs, s)
+		}
+	default:
+		return false
 	}
-	if ev.Type != "note" || ev.Actor != "controller" || !strings.HasPrefix(ev.Stream, "mission:") {
-		return fmt.Errorf("landing_close_round is written by the controller on a mission's stream")
+	if len(xs) == 0 {
+		return false
+	}
+	for _, x := range xs {
+		if x == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// checkCloseRoundAppend: the controller writes landing_close_round and
+// landing_close on a mission's stream.
+func checkCloseRoundAppend(ev Event) error {
+	for _, k := range []string{"landing_close_round", "landing_close"} {
+		if _, ok := ev.Body[k]; !ok {
+			continue
+		}
+		if ev.Type != "note" || ev.Actor != "controller" || !strings.HasPrefix(ev.Stream, "mission:") {
+			return fmt.Errorf("%s is written by the controller on a mission's stream", k)
+		}
 	}
 	return nil
 }
@@ -171,6 +241,13 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 			ruleNote = fmt.Sprintf("%s v%d, stg_release none", rule.Rule.ID, rule.Rule.Version)
 		}
 	}
+	// Landed roots whose latest evidence is effective: delivered when it was
+	// read in a round valid for this snapshot.
+	type freshRead struct {
+		i      int
+		readAt time.Time
+	}
+	var fresh []freshRead
 	for _, r := range candidates {
 		live := false
 		for _, o := range state.Operations {
@@ -178,7 +255,7 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 				live = true
 			}
 		}
-		handoff := r.accepted != nil && !r.accepted.Before(fence) && !created.Before(fence) && !noMerge
+		handoff := !fence.IsZero() && r.accepted != nil && !r.accepted.Before(fence) && !created.Before(fence) && !noMerge
 		if !live && !handoff {
 			continue
 		}
@@ -186,6 +263,7 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		op := state.LatestOperation(r.task)
 		o, has := state.Operations[op]
 		c := LandingRootClass{Root: r.task, Op: op, Class: RootUnresolved}
+		landed := false
 		dispWhy, err := landingDisposed(ctx, tx, stream, r.task, op)
 		if err != nil {
 			return false, nil, "", err
@@ -200,22 +278,33 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		case o.AtMain():
 			c.Reason = "at_main"
 		case o.EverLanded && !o.Reverted:
+			// The priority table, each row whole (review 672 R-01): a
+			// delivery read in a valid round (decided below, once the
+			// snapshot is known) over the Owner's disposition over the
+			// rule over evidence still to read.
 			ev, found, err := latestMainEvidence(ctx, tx, stream, op)
 			if err != nil {
 				return false, nil, "", err
 			}
 			switch {
+			case disposed || r.dropped:
+				c.Class, c.Reason = RootDisposed, "owner"
+				if !disposed {
+					c.Reason = "dropped"
+				}
+				if none && found && ev.validity == "effective" {
+					c.read = true
+					fresh = append(fresh, freshRead{len(roots), ev.readAt})
+				}
 			case !none:
 				c.Reason = "rule"
-			case found && ev.validity == "effective" && round != nil && slices.Contains(round.Ops, op) && ev.readAt.After(round.At) && at.Before(round.Until):
-				c.Class, c.Reason = RootDelivered, "landed"
 			case !found || ev.validity == "effective":
-				c.Reason, c.NeedsEvidence = "evidence", true
-			default:
-				c.Reason = "landed_unverified"
-				if disposed {
-					c.Class, c.Reason = RootDisposed, "owner"
+				c.Reason, c.NeedsEvidence, c.read, landed = "evidence", true, true, true
+				if found {
+					fresh = append(fresh, freshRead{len(roots), ev.readAt})
 				}
+			default:
+				c.Reason, c.read, landed = "landed_unverified", true, true
 			}
 		case o.EverLanded && o.Reverted:
 			c.Class, c.Reason = RootDisposed, "reverted"
@@ -236,13 +325,30 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 			c.Reason = "in_main_unverified"
 		case o.Phase == "failed":
 			c.Reason = "failed:" + o.Outcome
+		case o.Phase == "parked":
+			c.Reason = "parked:" + o.Why // shown with its since (review 672 R-07)
 		default:
 			c.Reason = o.Phase
 			if o.Outcome != "" {
 				c.Reason += ":" + o.Outcome
 			}
 		}
+		c.key = c.Root + "|" + c.Op + "|" + c.Class + ":" + c.Reason
+		if landed {
+			c.key = c.Root + "|" + c.Op + "|landed"
+		}
 		roots = append(roots, c)
+	}
+	// A delivery: effective evidence read after the start of a round opened
+	// on this very snapshot, before its end.
+	snapshot, _ := closeSnapshot(roots)
+	if round.validFor(snapshot, at) {
+		for _, f := range fresh {
+			if f.readAt.After(round.At) {
+				r := &roots[f.i]
+				r.Class, r.Reason, r.NeedsEvidence = RootDelivered, "landed", false
+			}
+		}
 	}
 	return inScope, roots, ruleNote, nil
 }
@@ -268,6 +374,12 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	// (a close pass must not wait on it, nor make its writers wait). The
 	// mode is written once; one that appears after this read is seen by the
 	// next pass.
+	// A mission with no implementation root in the repository never reads
+	// its stream: an unreadable stream holds only the missions it carries.
+	var carries bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = $1 AND role = 'implement' AND repo = 'bifrost-platform')`, mission).Scan(&carries); err != nil || !carries {
+		return false, false, "", "", err
+	}
 	if s, err := folds.state(ctx, tx, "landing:bifrost-platform"); err != nil || s.LiveAt.IsZero() {
 		return false, false, "", "", err
 	}
@@ -283,12 +395,12 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	if err != nil || !inScope {
 		return false, false, "", "", err
 	}
-	var needs []string
+	var needs int
 	delivered, disposed := 0, 0
 	for _, r := range roots {
 		switch {
 		case r.NeedsEvidence:
-			needs = append(needs, r.Op)
+			needs++
 		case r.Class == RootUnresolved:
 			return true, true, "", "", nil
 		case r.Class == RootDelivered:
@@ -297,19 +409,22 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 			disposed++
 		}
 	}
-	if len(needs) > 0 {
-		sort.Strings(needs)
-		if round != nil && at.Before(round.Until) && slices.Equal(round.Ops, needs) {
-			return true, true, "", "", nil // the round is open: its reads come
+	snapshot, ops := closeSnapshot(roots)
+	if needs > 0 {
+		// A round open on this snapshot waits for its reads: evidence for
+		// some of its operations narrows what is left, it does not reopen
+		// the round (review 672 B-01).
+		if round.validFor(snapshot, at) {
+			return true, true, "", "", nil
 		}
 		next := int64(1)
 		if round != nil {
 			next = round.Round + 1
 		}
 		_, err := Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "note", Actor: "controller", MissionID: mission,
-			Body: map[string]any{"text": fmt.Sprintf("Closing round %d: main is read again for %d landed root(s)", next, len(needs)),
-				"landing_close_round": map[string]any{"v": "1", "round": next, "ops": needs, "at": at.UTC().Format(time.RFC3339Nano),
-					"until": at.Add(CloseRoundFor).UTC().Format(time.RFC3339Nano)}}})
+			Body: map[string]any{"text": fmt.Sprintf("Closing round %d: main is read again for %d landed root(s)", next, len(ops)),
+				"landing_close_round": map[string]any{"v": "2", "round": next, "ops": ops, "snapshot": snapshot,
+					"at": at.UTC().Format(time.RFC3339Nano), "until": at.Add(CloseRoundFor).UTC().Format(time.RFC3339Nano)}}})
 		return true, true, "", "", err
 	}
 	var briefs int
@@ -321,7 +436,112 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 		to = "done"
 	}
 	why = fmt.Sprintf("Closed from landing evidence at %s: %d root(s) delivered, %d disposed, 0 unresolved (%s)", at.UTC().Format(time.RFC3339), delivered, disposed, ruleNote)
+	if delivered == 0 && briefs > 0 {
+		why += fmt.Sprintf("; done for its %d accepted brief(s), no root delivered", briefs)
+	}
+	// What the close decided on, kept apart from what is read later (review
+	// 672 N-01): the policy, the round, each root's class and the counts.
+	var roundN int64
+	if round != nil && delivered > 0 {
+		roundN = round.Round
+	}
+	list := make([]any, 0, len(roots))
+	for _, r := range roots {
+		list = append(list, map[string]any{"root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason})
+	}
+	if _, err := Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "note", Actor: "controller", MissionID: mission,
+		Body: map[string]any{"text": why, "landing_close": map[string]any{"v": "1", "to": to, "at": at.UTC().Format(time.RFC3339Nano),
+			"policy": "landing_evidence", "rule": ruleNote, "round": roundN, "roots": list,
+			"delivered": delivered, "disposed": disposed, "briefs": briefs}}}); err != nil {
+		return false, false, "", "", err
+	}
 	return true, false, to, why, nil
+}
+
+// LandingClose is a mission's close from landing evidence as decided
+// (landing_close): Roots are as classified then.
+type LandingClose struct {
+	To, Rule, At                string
+	Round                       int64
+	Delivered, Disposed, Briefs int64
+	Roots                       []map[string]any
+}
+
+// readLandingClose is the mission's latest landing_close, or nil.
+func readLandingClose(ctx context.Context, tx pgx.Tx, mission string) (*LandingClose, error) {
+	var m map[string]any
+	err := tx.QueryRow(ctx, `SELECT body_json->'landing_close' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	  AND actor_id = 'controller' AND body_json ? 'landing_close' ORDER BY seq DESC LIMIT 1`, MissionStream(mission)).Scan(&m)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	c := &LandingClose{To: fmt.Sprint(m["to"]), Rule: fmt.Sprint(m["rule"]), At: fmt.Sprint(m["at"])}
+	c.Round, _ = cardNumber(m["round"])
+	c.Delivered, _ = cardNumber(m["delivered"])
+	c.Disposed, _ = cardNumber(m["disposed"])
+	c.Briefs, _ = cardNumber(m["briefs"])
+	if roots, ok := m["roots"].([]any); ok {
+		for _, r := range roots {
+			if x, ok := r.(map[string]any); ok {
+				c.Roots = append(c.Roots, x)
+			}
+		}
+	}
+	return c, nil
+}
+
+// badLandingClose is why a landing_close body is refused, or "".
+func badLandingClose(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok || m["v"] != "1" {
+		return "landing_close is not a v1 object"
+	}
+	if to := m["to"]; to != "done" && to != "stopped" {
+		return "landing_close needs to done or stopped"
+	}
+	if _, err := time.Parse(time.RFC3339Nano, fmt.Sprint(m["at"])); err != nil {
+		return "landing_close needs at"
+	}
+	if m["policy"] != "landing_evidence" {
+		return "landing_close needs policy"
+	}
+	for _, k := range []string{"round", "delivered", "disposed", "briefs"} {
+		if n, ok := cardNumber(m[k]); !ok || n < 0 {
+			return "landing_close needs " + k
+		}
+	}
+	var roots []any
+	switch t := m["roots"].(type) {
+	case []any:
+		roots = t
+	case []map[string]any:
+		for _, x := range t {
+			roots = append(roots, x)
+		}
+	default:
+		return "landing_close needs roots"
+	}
+	if len(roots) == 0 {
+		return "landing_close needs roots"
+	}
+	for _, r := range roots {
+		x, ok := r.(map[string]any)
+		if !ok {
+			return "landing_close root is not an object"
+		}
+		for _, k := range []string{"root", "class", "reason"} {
+			if s, _ := x[k].(string); s == "" {
+				return "landing_close root needs " + k
+			}
+		}
+		if c := x["class"]; c != RootDelivered && c != RootDisposed {
+			return "landing_close root is delivered or disposed"
+		}
+	}
+	return ""
 }
 
 // OpenCloseRoundOps are the operations whose main is to be read for an open
@@ -357,13 +577,16 @@ func OpenCloseRoundOps(ctx context.Context, db DB, now time.Time) (map[string]bo
 
 // MissionLandingStatus is a mission's landing status for the Console (CUT
 // §11.8 v3 item 9): each live-scope root's class and reason, the card that
-// stands for it (if any), the rule as read now and the current closing
-// round. A read: no lock, no write.
+// stands for it (if any), the rule as read now and the closing round still
+// open (nil once its time is over). A read: no lock, no write.
 type MissionLandingStatus struct {
 	InScope bool
 	Roots   []LandingRootStatus
 	Rule    string
 	Round   *closeRound
+	// Closed is the close as decided then (landing_close), apart from the
+	// roots as read now (review 672 N-01). nil while not closed so.
+	Closed *LandingClose
 }
 
 // LandingRootStatus is one root in MissionLandingStatus.
@@ -374,6 +597,11 @@ type LandingRootStatus struct {
 	// being known (unconfirmed, lost): the Owner may have answered a card
 	// the runtime could not read back (review 670 R-07). "" for none.
 	CardAlert string
+	// A parked root (review 672 R-07): since its park, its retry, the
+	// status-only trigger it shows (ci_stuck, parked_long) and when a park
+	// becomes parked_long. Zero / "" otherwise.
+	ParkedSince, RetryAt, RemindAt time.Time
+	Shown                          string
 }
 
 // ReadMissionLandingStatus reads a mission's landing status.
@@ -384,7 +612,13 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 		if err != nil {
 			return err
 		}
-		inScope, roots, rule, err := classifyLandingRoots(ctx, tx, landingFolds{}, mission, round, DecisionAt())
+		closed, err := readLandingClose(ctx, tx, mission)
+		if err != nil {
+			return err
+		}
+		st.Closed = closed
+		at := DecisionAt()
+		inScope, roots, rule, err := classifyLandingRoots(ctx, tx, landingFolds{}, mission, round, at)
 		if err != nil || !inScope {
 			return err
 		}
@@ -392,7 +626,16 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 		if err != nil {
 			return err
 		}
-		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round}
+		triggers, err := LandingCardTriggers(ctx, tx, "bifrost-platform", at)
+		if err != nil {
+			return err
+		}
+		// Only an open round is the current one (the 673 report): a past
+		// round is history, its time over.
+		if round != nil && !at.Before(round.Until) {
+			round = nil
+		}
+		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round, Closed: closed}
 		for _, r := range roots {
 			rs := LandingRootStatus{LandingRootClass: r}
 			var latest CardRecord
@@ -405,6 +648,25 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 				}
 			}
 			rs.CardKind, rs.QuestionID = latest.Kind, latest.QuestionID
+			if strings.HasPrefix(r.Reason, "parked:") {
+				var retry *string
+				err := tx.QueryRow(ctx, `SELECT at, body_json->'landing'->>'retry_at' FROM agentrt.event WHERE event_stream_id = 'landing:bifrost-platform'
+				  AND event_type = 'note' AND body_json->'landing'->>'kind' = 'parked' AND body_json->'landing'->>'op' = $1 ORDER BY seq DESC LIMIT 1`, r.Op).Scan(&rs.ParkedSince, &retry)
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				if retry != nil {
+					rs.RetryAt, _ = time.Parse(time.RFC3339Nano, *retry)
+				}
+				if why := strings.TrimPrefix(r.Reason, "parked:"); why != "ci_stuck" && why != "rule" && !rs.ParkedSince.IsZero() {
+					rs.RemindAt = rs.ParkedSince.Add(ParkedLongAfter)
+				}
+				for _, tr := range triggers {
+					if tr.Op == r.Op && slices.Contains(statusOnlyKinds, tr.Kind) {
+						rs.Shown = tr.Kind
+					}
+				}
+			}
 			st.Roots = append(st.Roots, rs)
 		}
 		return nil

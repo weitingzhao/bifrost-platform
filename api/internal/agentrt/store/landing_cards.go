@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // Landing cards (S3 B3, CUT §11.6 v2/v3): the Owner's cards about landings,
@@ -132,22 +133,48 @@ func badCardRecord(name string, v any) string {
 				return "landing_card_prepared " + k + " is not a digest"
 			}
 		}
-		if _, ok := m["request"].(map[string]any); !ok {
+		req, ok := m["request"].(map[string]any)
+		if !ok {
 			return "landing_card_prepared needs request"
+		}
+		// The fingerprint is the request's (review 672 R-03).
+		if fp, err := canon.Sum(req); err != nil || strings.TrimPrefix(fp, "sha256:") != m["request_fp"] {
+			return "landing_card_prepared request_fp is not its request's"
 		}
 		opts, ok := m["options"].(map[string]any)
 		if !ok {
 			return "landing_card_prepared needs options"
 		}
+		// Letters from a, with no gap, each its choice's label in the
+		// request.
 		var choices []string
 		for _, letter := range []string{"a", "b", "c", "d"} {
-			if c, present := opts[letter]; present {
-				s, _ := c.(string)
-				choices = append(choices, s)
+			c, present := opts[letter]
+			if !present {
+				break
 			}
+			s, _ := c.(string)
+			choices = append(choices, s)
 		}
 		if len(choices) != len(opts) || !slices.ContainsFunc(sets, func(set []string) bool { return slices.Equal(set, choices) }) {
 			return "landing_card_prepared options are not the kind's choices in order"
+		}
+		labels := make([]string, 0, len(choices))
+		for _, c := range choices {
+			labels = append(labels, cardChoiceLabels[c])
+		}
+		var shown []string
+		switch t := req["options"].(type) {
+		case []any:
+			for _, x := range t {
+				s, _ := x.(string)
+				shown = append(shown, s)
+			}
+		case []string:
+			shown = t
+		}
+		if !slices.Equal(labels, shown) {
+			return "landing_card_prepared request options are not its choices' labels"
 		}
 		gen, _ := cardNumber(m["stop_generation"])
 		root, _ := m["root"].(string)

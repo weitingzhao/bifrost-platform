@@ -37,7 +37,7 @@ func TestLandingEnableObservationSurvivesRuleVersion(t *testing.T) {
 		var enabled time.Time
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var e error
-			enabled, e = store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", now)
+			enabled, e = store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", now)
 			return e
 		}))
 		return enabled

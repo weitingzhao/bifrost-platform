@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -22,8 +23,24 @@ func putCard(w *world, actor, stream, name string, body map[string]any) error {
 
 func preparedCard(root, kind string, seq int64, n int, options map[string]any) map[string]any {
 	digest := strings.Repeat("a", 64)
+	// The request as the engine writes it, its fingerprint recomputed.
+	var choices []string
+	for _, l := range []string{"a", "b", "c", "d"} {
+		if c, ok := options[l].(string); ok {
+			choices = append(choices, c)
+		}
+	}
+	tr := store.CardTrigger{Kind: kind, Seq: seq, Choices: choices}
+	if kind != store.CardRepoStopped {
+		tr.Root, tr.Op = root, "land:"+root+":1"
+	}
+	req := store.LandingCardRequest("bifrost-platform", tr, "x")
+	fp, err := canon.Sum(req)
+	if err != nil {
+		panic(err)
+	}
 	b := map[string]any{"prep": store.CardPrepID(kind, seq, n), "repo": "bifrost-platform", "kind": kind, "trigger_seq": seq, "n": n,
-		"template_version": 1, "key": digest, "request_fp": digest, "request": map[string]any{"title": "x"}, "options": options}
+		"template_version": 1, "key": digest, "request_fp": strings.TrimPrefix(fp, "sha256:"), "request": req, "options": options}
 	if kind == store.CardRepoStopped {
 		b["stop_generation"] = 1
 	} else {
@@ -108,6 +125,23 @@ func TestLandingCardRecordShapes(t *testing.T) {
 		"not a digest": {"controller", cardStream, func() map[string]any {
 			b := preparedCard(root, store.CardFloor, 3, 1, good)
 			b["key"] = "landing/root/op"
+			return b
+		}()},
+		// Review 672 R-03: the fingerprint is recomputed; letters run from
+		// a with no gap; the request shows the choices' labels.
+		"fingerprint not the request's": {"controller", cardStream, func() map[string]any {
+			b := preparedCard(root, store.CardFloor, 3, 1, good)
+			b["request_fp"] = strings.Repeat("b", 64)
+			return b
+		}()},
+		"letters with a gap": {"controller", cardStream, func() map[string]any {
+			b := preparedCard(root, store.CardFloor, 3, 1, good)
+			b["options"] = map[string]any{"a": "do_not_merge", "c": "wait"}
+			return b
+		}()},
+		"request labels not its choices": {"controller", cardStream, func() map[string]any {
+			b := preparedCard(root, store.CardFloor, 3, 1, good)
+			b["options"] = map[string]any{"a": "wait", "b": "do_not_merge"}
 			return b
 		}()},
 	} {

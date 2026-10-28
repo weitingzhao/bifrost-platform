@@ -156,11 +156,10 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			}
 			// The reason changed (a limit park whose CI then ran long): a new
 			// park, so its start and reason are what the landing status and
-			// the cards read (review 670 R-06). A crash between the two
-			// leaves it unparked; the next pass parks it again.
-			if err := appendRecord("unparked", map[string]any{}); err != nil {
-				return a, err
-			}
+			// the cards read (review 670 R-06), ended and started in one
+			// transaction (review 672 R-05).
+			_, err := store.ReparkLanding(ctx, c.DB, "bifrost-platform", op, o.Why, a.Why, at.Add(time.Minute), landingText(c.Env))
+			return a, err
 		}
 		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
 	case "unparked":

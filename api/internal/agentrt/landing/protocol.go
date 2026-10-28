@@ -643,8 +643,15 @@ func (s State) LatestOperation(root string) string {
 
 // Fence is the landing fence of the stream (CUT §11.8 v3 item 1): the later
 // of enabled and the live mode, when there is a live mode; enabled alone on a
-// stream that never had one (the STG drill).
+// stream that never had one (the STG drill). Zero while enabled is not
+// recorded: a mode alone puts no root in scope (review 672 B-02). PROD
+// records enabled only after its mode (ObserveLandingEnabled), so enabled
+// alone is the STG drill's fence. A root with a live operation stays in
+// scope whatever the fence (its history, not the time, decides).
 func (s State) Fence() time.Time {
+	if s.EnabledAt.IsZero() {
+		return time.Time{}
+	}
 	if s.LiveAt.After(s.EnabledAt) {
 		return s.LiveAt
 	}

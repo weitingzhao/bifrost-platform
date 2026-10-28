@@ -54,24 +54,21 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 		}
 		cancel()
 	}
-	if q.AskRaw == nil || q.LookupKey == nil {
+	if q.LookupKey == nil {
 		return errors.Join(errs...)
 	}
-	// A full quota pauses new cards only; an existing card is still taken
-	// up by its key (review 670 R-03).
-	mayCreate := !now.Before(c.cardAsksPausedUntil())
-	quotaFull := false
+	// A full quota, or no way to ask, pauses new cards only; an existing
+	// card is still taken up by its key (review 670 R-03, 672 R-04).
+	mayCreate := q.AskRaw != nil && !now.Before(c.cardAsksPausedUntil())
 	askOne := func(prep string) {
-		if quotaFull {
-			return
-		}
 		one, cancel := context.WithTimeout(ctx, landingCardCall)
 		defer cancel()
 		if _, err := store.AskLandingCard(one, c.DB, q, landingCardsRepo, prep, now, mayCreate); err != nil {
 			if errors.Is(err, store.ErrCardQuota) {
 				// Shared with every card the runtime asks: pause, do not
-				// hammer it every pass. Memory only: a restart tries once.
-				quotaFull = true
+				// hammer it every pass; the rest of this pass still looks
+				// its cards up. Memory only: a restart tries once.
+				mayCreate = false
 				c.pauseCardAsks(now.Add(landingCardQuotaPause))
 			}
 			errs = append(errs, fmt.Errorf("card %s: %w", prep, err))

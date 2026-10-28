@@ -25,7 +25,7 @@ func liveWorld(t *testing.T, stgRelease string, at time.Time) *world {
 	ok(t, err)
 	store.FreezeEventClock(at.Add(-2 * time.Hour))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", at)
+		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", at)
 		return e
 	}))
 	store.FreezeEventClock(at.Add(-time.Hour))

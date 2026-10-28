@@ -27,7 +27,7 @@ func acceptedDrill(t *testing.T) (*world, string, store.LandingSource) {
 	enabled := time.Now().Add(-time.Hour)
 	restore := store.FreezeEventClock(enabled)
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", enabled)
+		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
 	})
 	restore()
@@ -185,11 +185,13 @@ func TestDrillStartScansImmediately(t *testing.T) {
 	if g.opens.Load() == 0 {
 		t.Fatal("no startup scan")
 	}
+	// Read after the loop stops: its other passes share the fixture's one
+	// connection (pgx: conn busy).
+	cancel()
+	wait()
 	if landingState(t, w, landingRepoStream).LatestOperation(task) == "" {
 		t.Fatal("no claim")
 	}
-	cancel()
-	wait()
 	g.opens.Store(0)
 	ctl.Drill = nil
 	runCtx, cancel = context.WithCancel(ctx)

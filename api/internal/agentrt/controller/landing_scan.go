@@ -101,8 +101,9 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		if _, ok := rule.Landing.Repo("bifrost-platform"); !ok {
 			return nil
 		}
-		enabled = true
-		enabledAt, e = store.ObserveLandingEnabled(ctx, tx, "dev", "bifrost-platform", now)
+		enabledAt, e = store.ObserveLandingEnabled(ctx, tx, c.Env, "dev", "bifrost-platform", now)
+		// No fence yet (PROD before its mode): no candidate is in scope.
+		enabled = e == nil && !enabledAt.IsZero()
 		return e
 	})
 	if err != nil {

@@ -484,7 +484,8 @@ func (rt *questionRuntime) landingCardQuestions() store.CardQuestions {
 			switch {
 			case res.Code == http.StatusBadRequest:
 				return "", time.Time{}, fmt.Errorf("%w: the question store refused the landing card: %v", store.ErrInvalid, res.Body)
-			case res.Code == http.StatusTooManyRequests:
+			case res.Code == http.StatusTooManyRequests || res.Code == http.StatusInsufficientStorage:
+				// Quota or capacity: both back the asks off (review 672 R-04).
 				return "", time.Time{}, fmt.Errorf("%w: %v", store.ErrCardQuota, res.Body)
 			case (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "":
 				return "", time.Time{}, fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)

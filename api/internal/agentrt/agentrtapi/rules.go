@@ -144,12 +144,27 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 	}
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
-		roots = append(roots, map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
-			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert})
+		root := map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
+			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
+		if !x.ParkedSince.IsZero() {
+			parked := map[string]any{"since": x.ParkedSince, "shown": x.Shown}
+			if !x.RetryAt.IsZero() {
+				parked["retry_at"] = x.RetryAt
+			}
+			if !x.RemindAt.IsZero() {
+				parked["remind_at"] = x.RemindAt
+			}
+			root["parked"] = parked
+		}
+		roots = append(roots, root)
 	}
 	body := map[string]any{"mission_id": id, "in_scope": st.InScope, "roots": roots, "rule": st.Rule}
 	if st.Round != nil {
 		body["closing_round"] = map[string]any{"round": st.Round.Round, "at": st.Round.At, "until": st.Round.Until, "ops": st.Round.Ops}
+	}
+	if c := st.Closed; c != nil {
+		body["closed"] = map[string]any{"to": c.To, "at": c.At, "rule": c.Rule, "round": c.Round,
+			"delivered": c.Delivered, "disposed": c.Disposed, "briefs": c.Briefs, "roots": c.Roots}
 	}
 	writeJSON(w, http.StatusOK, body)
 }

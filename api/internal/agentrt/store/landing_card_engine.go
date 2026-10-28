@@ -334,8 +334,8 @@ var ErrCardAskUnconfirmed = errors.New("landing card: ask unconfirmed past the r
 // the ask started less than seven days ago), and binds the question. It
 // returns the question bound, or "" with nothing bound.
 func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep string, now time.Time, mayCreate bool) (string, error) {
-	if q.AskRaw == nil || q.LookupKey == nil {
-		return "", fmt.Errorf("landing card: no question store to ask")
+	if q.LookupKey == nil {
+		return "", fmt.Errorf("landing card: no question store to look up")
 	}
 	// The ask's start is its own commit: a crash after the Ask leaves the
 	// mark, and the lookup below finds what the Ask made.
@@ -387,7 +387,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 			// Decided on the clock after the lookup (review 670 B-03): an
 			// answer may have been trimmed. Say so, never ask under it.
 			return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": prep, "why": "unconfirmed"})
-		case !mayCreate:
+		case !mayCreate || q.AskRaw == nil:
 			return nil // asking is paused: only an existing card is taken
 		default:
 			id, created, err = q.AskRaw(ctx, c.Key, c.Request)

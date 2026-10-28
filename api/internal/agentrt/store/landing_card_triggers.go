@@ -112,8 +112,10 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 		if err != nil {
 			return nil, err
 		}
-		if why != "" {
-			continue // the Owner counted it: nothing more to ask
+		// The Owner counted it: no decision card asks again. A notice is
+		// not a decision: a late reversal is still told (review 672 R-02).
+		if why != "" && !(o.Phase == "reverted" && o.EverLanded) {
+			continue
 		}
 		switch {
 		case o.Phase == "failed" && o.Outcome == "in_main":
@@ -203,15 +205,33 @@ const LateRevertWithin = 24 * time.Hour
 // closed done, within LateRevertWithin of the close.
 func lateRevert(ctx context.Context, tx pgx.Tx, stream, root, op string) (unverifiedRead, bool, error) {
 	var closed *time.Time
-	if err := tx.QueryRow(ctx, `SELECT (SELECT max(e.at) FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done')
-	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id) WHERE t.task_id = $1 AND m.state = 'done'`, root).Scan(&closed); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	var mission string
+	if err := tx.QueryRow(ctx, `SELECT m.mission_id, (SELECT max(e.at) FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done')
+	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id) WHERE t.task_id = $1 AND m.state = 'done'`, root).Scan(&mission, &closed); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return unverifiedRead{}, false, err
 	}
 	if closed == nil {
 		return unverifiedRead{}, false, nil
 	}
+	// Closed from landing evidence: told only for an operation the close
+	// counted delivered (review 672 R-02).
+	lc, err := readLandingClose(ctx, tx, mission)
+	if err != nil {
+		return unverifiedRead{}, false, err
+	}
+	if lc != nil {
+		counted := false
+		for _, x := range lc.Roots {
+			if x["root"] == root && x["op"] == op && x["class"] == RootDelivered {
+				counted = true
+			}
+		}
+		if !counted {
+			return unverifiedRead{}, false, nil
+		}
+	}
 	var r unverifiedRead
-	err := tx.QueryRow(ctx, `SELECT seq, at FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	err = tx.QueryRow(ctx, `SELECT seq, at FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
 	  AND body_json->'landing'->>'kind' = 'reverted' AND body_json->'landing'->>'op' = $2 ORDER BY seq DESC LIMIT 1`, stream, op).Scan(&r.seq, &r.at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return unverifiedRead{}, false, nil

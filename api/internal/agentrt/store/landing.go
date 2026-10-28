@@ -93,7 +93,11 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 // The rule is selected once the stream lock is held, at that clock (CUT §9,
 // review 656 B-R1): the fence is never written on a rule that ran out while
 // this waited. now is the pass's; it no longer decides.
-func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, now time.Time) (time.Time, error) {
+//
+// It returns the stream's fence (State.Fence), zero when there is none yet:
+// on PROD (env "prod") enabled is recorded only after the live mode, so the
+// two are complete together (review 672 B-02).
+func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, env, tenant, repo string, now time.Time) (time.Time, error) {
 	stream := "landing:" + repo
 	if err := lockStream(ctx, tx, stream); err != nil {
 		return time.Time{}, err
@@ -113,10 +117,17 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, 
 		return time.Time{}, err
 	}
 	if !s.EnabledAt.IsZero() {
-		return s.EnabledAt, nil
+		return s.Fence(), nil
+	}
+	if env == "prod" && s.LiveAt.IsZero() {
+		return time.Time{}, nil
 	}
 	a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing enabled", "landing": map[string]any{"v": landing.Version, "kind": "enabled", "op": "enabled:" + tenant, "repo": repo, "rule_version": rule.Version}}})
-	return a.At, err
+	if err != nil {
+		return time.Time{}, err
+	}
+	s.EnabledAt = a.At
+	return s.Fence(), nil
 }
 
 // EnsureLandingMode records, once, that the live landing is wired for repo
@@ -155,4 +166,37 @@ func LandingLiveAt(ctx context.Context, db DB, repo string) (time.Time, error) {
 		return err
 	})
 	return at, err
+}
+
+// ReparkLanding moves a parked operation to a new park for why, in one
+// transaction under the stream's lock (review 672 R-05): it re-reads the
+// operation and, if it is still the park observed (parked for was), ends it
+// and starts the new one together. Nothing is written otherwise; ok reports
+// whether it was.
+func ReparkLanding(ctx context.Context, db DB, repo, op, was, why string, retryAt time.Time, text string) (ok bool, err error) {
+	stream := "landing:" + repo
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		ok = false
+		if err := lockStream(ctx, tx, stream); err != nil {
+			return err
+		}
+		s, err := LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		if o, has := s.Operations[op]; !has || o.Phase != "parked" || o.Why != was || was == why {
+			return nil
+		}
+		for _, r := range []map[string]any{
+			{"v": landing.Version, "kind": "unparked", "op": op},
+			{"v": landing.Version, "kind": "parked", "op": op, "why": why, "retry_at": retryAt.Format(time.RFC3339Nano)},
+		} {
+			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": text + r["kind"].(string), "landing": r}}); err != nil {
+				return err
+			}
+		}
+		ok = true
+		return nil
+	})
+	return ok, err
 }

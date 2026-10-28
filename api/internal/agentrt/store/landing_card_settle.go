@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -77,12 +78,77 @@ func badCardOutcome(v any) string {
 			return "landing_card_outcome applies only a resume or an Owner's delivery decision; the §8 choices are landing_answer"
 		}
 	}
+	if seq, ok := cardNumber(m["trigger_seq"]); !ok || seq < 1 {
+		return "landing_card_outcome needs trigger_seq"
+	}
+	if op, _ := m["op"].(string); (root != "") != (op != "") {
+		return "landing_card_outcome of a root names its operation"
+	}
+	return badCardOutcomeChoice(m)
+}
+
+// badCardOutcomeChoice: the outcome follows the channel, the choice and
+// the kind (review 672 R-03).
+func badCardOutcomeChoice(m map[string]any) string {
+	kind, outcome, why := m["kind"].(string), m["outcome"].(string), m["why"].(string)
+	choice, _ := m["choice"].(string)
+	known := slices.ContainsFunc(cardChoices[kind], func(set []string) bool { return slices.Contains(set, choice) })
+	switch {
+	case m["channel"] != "console":
+		if outcome != "refused" || why != "channel" {
+			return "landing_card_outcome off the Console is refused for its channel"
+		}
+		return ""
+	case !known:
+		if outcome != "refused" || why != "unknown_choice" {
+			return "landing_card_outcome of a choice the card does not offer is refused"
+		}
+		return ""
+	case outcome == "refused":
+		return "landing_card_outcome refuses only an unknown choice or another channel"
+	case outcome == "moot":
+		if (why == "stop_superseded" || why == "already_resumed") != (choice == "repo_resume") {
+			return "landing_card_outcome moot reason does not follow its choice"
+		}
+	case slices.Contains(section8Choices, choice):
+		return "landing_card_outcome carries a §8 choice only as moot; §8 is landing_answer"
+	case outcome == "applied":
+		if map[string]string{"repo_resume": "repo_resumed", "confirm_not_delivered": "not_delivered", "count_as_delivered": "counted_delivered"}[choice] != why {
+			return "landing_card_outcome applied reason does not follow its choice"
+		}
+	case outcome == "acknowledged":
+		if choice != "ack" {
+			return "landing_card_outcome acknowledges only ack"
+		}
+	case outcome == "held":
+		if choice != why {
+			return "landing_card_outcome held reason is its choice"
+		}
+		at, _ := time.Parse(time.RFC3339Nano, m["answered_at"].(string))
+		remind, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(m["remind_at"]))
+		if !remind.Equal(at.Add(CardHoldFor)) {
+			return "landing_card_outcome held reminds a hold after its answer"
+		}
+	}
 	return ""
 }
 
 // checkCardOutcomeAppend: only the controller records it, on a repository
-// landing stream, under the root it names (none for a repository card).
-func checkCardOutcomeAppend(ev Event) error {
+// landing stream, under the root it names (none for a repository card), for
+// the card bound to its question (same kind, root, operation and trigger),
+// once per question across both handling records (review 672 R-03). A §8
+// landing_answer is refused for a question a card outcome already handled.
+func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
+	if a, ok := ev.Body["landing_answer"].(map[string]any); ok {
+		var other bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+		  AND body_json->'landing_card_outcome'->>'question_id' = $2)`, ev.Stream, fmt.Sprint(a["question_id"])).Scan(&other); err != nil {
+			return err
+		}
+		if other {
+			return fmt.Errorf("question %v was handled by its card outcome already", a["question_id"])
+		}
+	}
 	v, ok := ev.Body["landing_card_outcome"]
 	if !ok {
 		return nil
@@ -94,6 +160,26 @@ func checkCardOutcomeAppend(ev Event) error {
 	}
 	if _, exists := ev.Body["landing"]; exists {
 		return fmt.Errorf("landing_card_outcome is not a landing record")
+	}
+	qid := fmt.Sprint(m["question_id"])
+	var handled bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	  AND (body_json->'landing_card_outcome'->>'question_id' = $2 OR body_json->'landing_answer'->>'question_id' = $2))`, ev.Stream, qid).Scan(&handled); err != nil {
+		return err
+	}
+	if handled {
+		return fmt.Errorf("question %s is handled once", qid)
+	}
+	cards, err := LandingCards(ctx, tx, CardsStream(strings.TrimPrefix(ev.Stream, "landing:")))
+	if err != nil {
+		return err
+	}
+	c := cards[fmt.Sprint(m["prep"])]
+	seq, _ := cardNumber(m["trigger_seq"])
+	op, _ := m["op"].(string)
+	gen, _ := cardNumber(m["stop_generation"])
+	if !c.Bound || c.QuestionID != qid || c.Kind != m["kind"] || c.Root != root || c.Op != op || c.TriggerSeq != seq || c.StopGeneration != gen {
+		return fmt.Errorf("landing_card_outcome names its card's bound question, kind, root, operation and trigger")
 	}
 	return nil
 }
@@ -141,7 +227,8 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			outcome, why = res.Outcome, res.Why
 			return err
 		}
-		body := map[string]any{"v": "1", "question_id": q.ID, "prep": c.Prep, "kind": c.Kind, "letter": q.Option, "choice": choice,
+		dispose := false
+		body := map[string]any{"v": "1", "question_id": q.ID, "prep": c.Prep, "kind": c.Kind, "trigger_seq": c.TriggerSeq, "letter": q.Option, "choice": choice,
 			"by": q.AnsweredBy, "answered_at": answeredAt.UTC().Format(time.RFC3339Nano), "channel": q.Channel, "answer_text": q.Text}
 		if c.Root != "" {
 			body["root"], body["op"] = c.Root, c.Op
@@ -169,11 +256,8 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			if choice == "count_as_delivered" {
 				why = "counted_delivered"
 			}
-			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root, MissionID: mission,
-				Body: map[string]any{"text": "Landing counted by the Owner: " + why, "landing_disposed": map[string]any{"v": "1", "root": c.Root, "op": c.Op,
-					"trigger_seq": c.TriggerSeq, "question_id": q.ID, "why": map[string]string{"not_delivered": "owner", "counted_delivered": "owner_delivered"}[why]}}}); err != nil {
-				return err
-			}
+			// The disposition follows its answer's record, below.
+			dispose = true
 		case choice == "ack":
 			outcome, why = "acknowledged", "ack"
 		case slices.Contains([]string{"wait", "keep_stopped", "remind_later"}, choice):
@@ -187,7 +271,12 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 		if c.Root != "" {
 			ev.TaskID, ev.MissionID = c.Root, mission
 		}
-		_, err = Append(ctx, tx, ev)
+		if _, err = Append(ctx, tx, ev); err != nil || !dispose {
+			return err
+		}
+		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root, MissionID: mission,
+			Body: map[string]any{"text": "Landing counted by the Owner: " + why, "landing_disposed": map[string]any{"v": "1", "root": c.Root, "op": c.Op,
+				"trigger_seq": c.TriggerSeq, "question_id": q.ID, "why": map[string]string{"not_delivered": "owner", "counted_delivered": "owner_delivered"}[why]}}})
 		return err
 	})
 	return outcome, why, err
@@ -198,32 +287,61 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 // landing_answer for its root and operation, written by the controller; a
 // landing_card_outcome for its prep. Another card's record is an error.
 func storedCardOutcome(ctx context.Context, tx pgx.Tx, c CardRecord, questionID string) (cardOutcome, bool, error) {
-	var answer, other map[string]any
-	var actor string
-	err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer', body_json->'landing_card_outcome', actor_id FROM agentrt.event
+	o, _, found, err := storedCardRecord(ctx, tx, c, questionID)
+	return o, found, err
+}
+
+// storedCardRecord is storedCardOutcome with the record itself. Two records
+// for one question are an error (review 672 R-03).
+func storedCardRecord(ctx context.Context, tx pgx.Tx, c CardRecord, questionID string) (cardOutcome, map[string]any, bool, error) {
+	rows, err := tx.Query(ctx, `SELECT body_json->'landing_answer', body_json->'landing_card_outcome', actor_id, COALESCE(task_id, '') FROM agentrt.event
 	  WHERE event_stream_id = $1 AND event_type = 'note'
 	    AND (body_json->'landing_answer'->>'question_id' = $2 OR body_json->'landing_card_outcome'->>'question_id' = $2)
-	  ORDER BY seq LIMIT 1`, "landing:"+c.Repo, questionID).Scan(&answer, &other, &actor)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return cardOutcome{}, false, nil
-	}
+	  ORDER BY seq LIMIT 2`, "landing:"+c.Repo, questionID)
 	if err != nil {
-		return cardOutcome{}, false, err
+		return cardOutcome{}, nil, false, err
 	}
-	m := other
-	switch {
-	case actor != "controller":
-		return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s has a record not the controller's", c.Prep, questionID)
-	case answer != nil && other != nil:
-		return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s has two records in one", c.Prep, questionID)
-	case answer != nil:
-		if why := badLandingAnswer(answer); why != "" || answer["root"] != c.Root || answer["op"] != c.Op {
-			return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s was recorded for %v %v (%s)", c.Prep, questionID, answer["root"], answer["op"], why)
+	type rec struct {
+		answer, other map[string]any
+		actor, task   string
+	}
+	var recs []rec
+	for rows.Next() {
+		var r rec
+		if err := rows.Scan(&r.answer, &r.other, &r.actor, &r.task); err != nil {
+			rows.Close()
+			return cardOutcome{}, nil, false, err
 		}
-		m = answer
+		recs = append(recs, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return cardOutcome{}, nil, false, err
+	}
+	switch len(recs) {
+	case 0:
+		return cardOutcome{}, nil, false, nil
+	case 1:
 	default:
-		if why := badCardOutcome(other); why != "" || other["prep"] != c.Prep {
-			return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s was recorded for %v (%s)", c.Prep, questionID, other["prep"], why)
+		return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s has two handling records", c.Prep, questionID)
+	}
+	r := recs[0]
+	m := r.other
+	switch {
+	case r.actor != "controller":
+		return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s has a record not the controller's", c.Prep, questionID)
+	case r.answer != nil && r.other != nil:
+		return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s has two records in one", c.Prep, questionID)
+	case r.answer != nil:
+		if why := badLandingAnswer(r.answer); why != "" || r.answer["root"] != c.Root || r.answer["op"] != c.Op || r.task != c.Root {
+			return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s was recorded for %v %v (%s)", c.Prep, questionID, r.answer["root"], r.answer["op"], why)
+		}
+		m = r.answer
+	default:
+		root, _ := r.other["root"].(string)
+		op, _ := r.other["op"].(string)
+		if why := badCardOutcome(r.other); why != "" || r.other["prep"] != c.Prep || r.other["kind"] != c.Kind || root != c.Root || op != c.Op || r.task != c.Root {
+			return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s was recorded for %v (%s)", c.Prep, questionID, r.other["prep"], why)
 		}
 	}
 	o := cardOutcome{}
@@ -232,7 +350,7 @@ func storedCardOutcome(ctx context.Context, tx pgx.Tx, c CardRecord, questionID 
 	if s, _ := m["remind_at"].(string); s != "" {
 		o.remindAt, _ = time.Parse(time.RFC3339Nano, s)
 	}
-	return o, true, nil
+	return o, m, true, nil
 }
 
 // cardApplies says whether a card's trigger still applies, read under the
@@ -354,8 +472,10 @@ func badLandingDisposed(v any) string {
 }
 
 // checkLandingDisposedAppend: the controller records it on the repository
-// stream under its root, beside the Owner's answer.
-func checkLandingDisposedAppend(ev Event) error {
+// stream under its root, right after the applied card outcome it follows:
+// same question, root, operation and trigger, why as the Owner chose
+// (review 672 R-03). A disposition with no such answer is refused.
+func checkLandingDisposedAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	v, ok := ev.Body["landing_disposed"]
 	if !ok {
 		return nil
@@ -363,6 +483,22 @@ func checkLandingDisposedAppend(ev Event) error {
 	m, _ := v.(map[string]any)
 	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID != fmt.Sprint(m["root"]) {
 		return fmt.Errorf("landing_disposed is written by the controller on the repository stream under its root")
+	}
+	var o map[string]any
+	var actor string
+	err := tx.QueryRow(ctx, `SELECT body_json->'landing_card_outcome', actor_id FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	  AND body_json->'landing_card_outcome'->>'question_id' = $2 ORDER BY seq LIMIT 1`, ev.Stream, fmt.Sprint(m["question_id"])).Scan(&o, &actor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("landing_disposed follows the Owner's applied answer")
+	}
+	if err != nil {
+		return err
+	}
+	seq, _ := cardNumber(m["trigger_seq"])
+	oseq, _ := cardNumber(o["trigger_seq"])
+	want := map[string]string{"not_delivered": "owner", "counted_delivered": "owner_delivered"}[fmt.Sprint(o["why"])]
+	if actor != "controller" || o["outcome"] != "applied" || o["root"] != m["root"] || o["op"] != m["op"] || seq != oseq || want == "" || want != m["why"] {
+		return fmt.Errorf("landing_disposed follows the Owner's applied answer for its root and operation")
 	}
 	return nil
 }
