@@ -183,6 +183,10 @@ var bodies = map[string][]field{
 		// repository; the Owner's resume answers that stop's generation
 		// (landing_live.go, CUT §11.4 B6).
 		{"landing_stop", kAny, true}, {"landing_resume", kAny, true},
+		// landing cards: on landing-cards:<repo>, the Owner's cards about
+		// landings and where each stands (landing_cards.go, CUT §11.6 v3).
+		{"landing_card_prepared", kAny, true}, {"landing_card_ask_started", kAny, true}, {"landing_card", kAny, true},
+		{"landing_card_acked", kAny, true}, {"landing_card_closed", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -554,6 +558,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_gate" {
 		return badLandingGate(v)
+	}
+	if eventType == "note" && slices.Contains(cardRecordKeys, name) {
+		return badCardRecord(name, v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)
