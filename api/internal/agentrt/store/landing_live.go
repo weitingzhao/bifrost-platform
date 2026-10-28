@@ -72,6 +72,7 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if err = tx.QueryRow(ctx, `SELECT m.tenant, COALESCE(t.plan_node_id,''), m.mission_id FROM agentrt.task t JOIN agentrt.mission m USING (mission_id) WHERE t.task_id = $1`, o.Task).Scan(&tenant, &step, &mission); err != nil {
 			return err
 		}
+		hook("landing gate: binding read", op)
 		day := DecisionAt().UTC().Format("2006-01-02")
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 			return err
@@ -79,15 +80,7 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1, hashtext($2))`, ruleLock, "landing:"+tenant); err != nil {
 			return err
 		}
-		if step != "" {
-			if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, step); err != nil {
-				return err
-			}
-		}
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, o.Task); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission); err != nil {
+		if err = lockLandingBinding(ctx, tx, o.Task, tenant, step, mission); err != nil {
 			return err
 		}
 		quota := "landing-quota:" + tenant + ":" + day
@@ -125,6 +118,18 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return err
 		}
 		g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+		// The root's six hours (and eight operations) as of final, under the
+		// stream lock (review 662 B-02): once main_intent is written only the
+		// reconciler ends it, so a slow read must not carry it past its
+		// window. The CI step's own check ends it failed{bound} next pass.
+		budget, err := LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		if first, n := landing.RootBudget(budget, o.Task); landing.Bound(first, n-1, final) {
+			decision = landing.Decision{Reason: "bound"}
+			return nil
+		}
 		if decision = landing.EligibleToPush(g, final); !decision.Allowed {
 			return nil
 		}
@@ -190,6 +195,37 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		return Authorization{}, landing.Decision{}, err
 	}
 	return auth, decision, nil
+}
+
+// ErrLandingBindingChanged: the task's step, mission or tenant changed
+// between the gate's first read and its task lock (a plan change rebound
+// it). The gate rolls back whole; the next pass locks the new binding.
+var ErrLandingBindingChanged = errors.New("landing gate: the task's binding changed during the gate")
+
+// lockLandingBinding takes the plan step, task and mission locks of a
+// final gate in the global order, after its capability and rule locks, and
+// checks under the task lock that the binding they were chosen from (read
+// with no lock) is still the task's (review 662 B-01). A rebind changes the
+// task row, so once the task lock is held and the binding matches, the
+// locked step and mission are the ones the facts will read.
+func lockLandingBinding(ctx context.Context, tx pgx.Tx, task, tenant, step, mission string) error {
+	if step != "" {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, step); err != nil {
+			return err
+		}
+	}
+	var nowStep, nowMission string
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id,''), mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&nowStep, &nowMission); err != nil {
+		return err
+	}
+	var nowTenant string
+	if err := tx.QueryRow(ctx, `SELECT tenant FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&nowTenant); err != nil {
+		return err
+	}
+	if nowStep != step || nowMission != mission || nowTenant != tenant {
+		return ErrLandingBindingChanged
+	}
+	return nil
 }
 
 // RecordPushResult writes what the remote said about auth's push, under the

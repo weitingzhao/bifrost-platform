@@ -329,16 +329,32 @@ func TestLanderPushMain(t *testing.T) {
 	}
 	defer drill.Close()
 	deadline := func() time.Time { return time.Now().Add(PushTimeout) }
-	if got := drill.PushMain(ctx, r, in.M0, deadline()); got != PushDenied {
+	// Refused before any network: not_sent, never denied (review 662 R-02).
+	if got := drill.PushMain(ctx, r, in.M0, deadline()); got != PushNotSent {
 		t.Fatal("the drill pushed main", got)
 	}
-	// Past the intent's deadline nothing starts.
-	if got := w.PushMain(ctx, r, in.M0, time.Now().Add(-time.Second)); got != PushUnknown {
-		t.Fatal("a push past its deadline", got)
+	// Past the intent's deadline, or with less than the reaping margin left,
+	// nothing starts, not even a local read (review 662 R-01).
+	for _, d := range []time.Time{time.Now().Add(-time.Second), time.Now().Add(reapDelay - 10*time.Millisecond)} {
+		before := groupStarts.Load()
+		if got := w.PushMain(ctx, r, in.M0, d); got != PushNotSent || groupStarts.Load() != before {
+			t.Fatal("a push past its deadline", got, groupStarts.Load()-before)
+		}
 	}
 	// R must be the replay on M0.
-	if got := w.PushMain(ctx, r, in.Base, deadline()); got != PushDenied {
+	if got := w.PushMain(ctx, r, in.Base, deadline()); got != PushNotSent {
 		t.Fatal("R not on the M0 given", got)
+	}
+	// Unreadable credentials: nothing sent.
+	broken := &Workspace{git: &Git{remote: lander.remote, usernameFile: filepath.Join(t.TempDir(), "none"), passwordFile: lander.passwordFile, scope: liveRef, lander: true}, dir: w.dir}
+	if got := broken.PushMain(ctx, r, in.M0, deadline()); got != PushNotSent {
+		t.Fatal("unreadable credentials", got)
+	}
+	// A cancelled caller: nothing sent.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := w.PushMain(cancelled, r, in.M0, deadline()); got != PushNotSent {
+		t.Fatal("a cancelled push", got)
 	}
 	// A hook refuses: denied, main unchanged.
 	hook := filepath.Join(repo, "hooks", "pre-receive")
@@ -421,10 +437,13 @@ func TestPushMainGivesUpAtItsDeadline(t *testing.T) {
 	if _, err := w.local(ctx, "remote", "set-url", "origin", "http://"+ln.Addr().String()+"/remote.git"); err != nil {
 		t.Fatal(err)
 	}
+	// The whole call, reaping included, ends by the deadline (review 662
+	// R-01).
 	start := time.Now()
-	got := w.PushMain(ctx, r, in.M0, start.Add(2*time.Second))
-	if elapsed := time.Since(start); got != PushUnknown || elapsed > 2*time.Second+reapDelay+time.Second {
-		t.Fatalf("outcome %s after %s", got, elapsed)
+	deadline := start.Add(reapDelay + 2*time.Second)
+	got := w.PushMain(ctx, r, in.M0, deadline)
+	if end := time.Now(); got != PushUnknown || end.After(deadline) || end.Before(start.Add(2*time.Second)) {
+		t.Fatalf("outcome %s after %s", got, end.Sub(start))
 	}
 }
 
@@ -448,6 +467,9 @@ func TestClassifyPush(t *testing.T) {
 		"403":             {"", "fatal: unable to access 'http://x/': The requested URL returned error: 403\n", exit, PushDenied},
 		"500":             {"", "fatal: unable to access 'http://x/': The requested URL returned error: 500\n", exit, PushUnknown},
 		"word denied":     {"", "remote: something about access denied\n", exit, PushUnknown},
+		"remote 403 text": {"", "remote: diagnostic example: The requested URL returned error: 403\nfatal: the remote end hung up unexpectedly\n", exit, PushUnknown},
+		"403 mid-line":    {"", "remote: fatal: unable to access 'http://x/': The requested URL returned error: 403\n", exit, PushUnknown},
+		"403 no exit":     {"", "fatal: unable to access 'http://x/': The requested URL returned error: 403\n", nil, PushUnknown},
 		"connection lost": {"", "fatal: the remote end hung up unexpectedly\n", exit, PushUnknown},
 	} {
 		if got := classifyPush(c.stdout, c.stderr, c.err); got != c.want {

@@ -75,9 +75,15 @@ func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r strin
 	// From the intent on the push is owed: neither the pass's budget nor a
 	// shutdown cuts it short; its deadline (intent + PushTimeout) bounds it.
 	out := w.PushMain(context.WithoutCancel(ctx), auth.R, auth.M0, auth.Deadline)
+	outcome := string(out)
+	if out == landinggit.PushNotSent {
+		// Nothing reached the remote: not a verdict (never denied, which
+		// stops the repository); the reconciler reads main past the fence.
+		outcome = string(landinggit.PushUnknown)
+	}
 	rec, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
 	defer cancel()
-	wrote, err := store.RecordPushResult(rec, c.DB, auth, string(out))
+	wrote, err := store.RecordPushResult(rec, c.DB, auth, outcome)
 	c.logf("agentrt landing %s: push of main %s (recorded %v)", op, out, wrote)
 	return err
 }

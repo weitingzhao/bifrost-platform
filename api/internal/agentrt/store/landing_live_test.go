@@ -207,3 +207,75 @@ func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
 		t.Fatal("a reservation kept from a rolled-back gate", q.Reservations, task)
 	}
 }
+
+// tamperAdmin runs one statement as the database admin with triggers off.
+func tamperAdmin(t *testing.T, w *world, q string, args ...any) {
+	t.Helper()
+	admin := w.db.Connect(t, w.db.Admin)
+	tx, e := admin.Begin(ctx)
+	ok(t, e)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, e = tx.Exec(ctx, `SET LOCAL session_replication_role = replica`)
+	ok(t, e)
+	_, e = tx.Exec(ctx, q, args...)
+	ok(t, e)
+	ok(t, tx.Commit(ctx))
+}
+
+// Serial: SetHook, FreezeEventClock. A plan change that rebinds the task to
+// another mission after the gate's first read and before its task lock
+// rolls the gate back: no reservation, no intent (review 662 B-01).
+func TestLiveGateRefusesARebindDuringIt(t *testing.T) {
+	w, task, op, src, prepared := liveReady(t)
+	w.goalMission(t, "M-4")
+	at := prepared.Add(10 * time.Minute)
+	defer store.FreezeEventClock(at)()
+	defer store.SetHook(func(point, _ string) {
+		if point == "landing gate: binding read" {
+			tamperAdmin(t, w, `UPDATE agentrt.task SET mission_id = 'M-4' WHERE task_id = $1`, task)
+		}
+	})()
+	_, _, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
+	if !errors.Is(err, store.ErrLandingBindingChanged) {
+		t.Fatal("a rebind during the gate", err)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
+		t.Fatal("an intent after a rebind", o.Phase)
+	}
+	if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
+		t.Fatal("a reservation after a rebind", q.Reservations)
+	}
+}
+
+// Serial: FreezeEventClock. The root's six hours run out during the gate's
+// reads: refused as bound, nothing written; already out before them, the
+// same (review 662 B-02).
+func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
+	for _, during := range []bool{true, false} {
+		t.Run(map[bool]string{true: "during the reads", false: "before them"}[during], func(t *testing.T) {
+			w, task, op, src, prepared := liveReady(t)
+			// The root was claimed six hours less two minutes before prepared.
+			first := prepared.Add(-landing.ClaimWindow + 2*time.Minute)
+			tamperAdmin(t, w, `UPDATE agentrt.event SET at = $2 WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'claimed' AND body_json->'landing'->>'op' = $3`, landingRepoStream, first, op)
+			start := prepared.Add(time.Minute)
+			if !during {
+				start = prepared.Add(3 * time.Minute)
+			}
+			defer store.FreezeEventClock(start)()
+			_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
+				store.FreezeEventClock(prepared.Add(3 * time.Minute))
+				return store.LiveObservation{Main: commitA, CI: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute)}}, nil
+			})
+			ok(t, err)
+			if d.Allowed || d.Reason != "bound" {
+				t.Fatalf("%+v", d)
+			}
+			if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
+				t.Fatal("written past the window", o.Phase)
+			}
+			if q := landingState(t, w, "landing-quota:dev:"+prepared.Add(3*time.Minute).UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
+				t.Fatal("reserved past the window", q.Reservations, task)
+			}
+		})
+	}
+}

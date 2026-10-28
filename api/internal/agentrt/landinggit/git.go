@@ -107,8 +107,7 @@ func (g *Git) header() (string, error) {
 func (g *Git) run(ctx context.Context, dir string, network bool, input []byte, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, isolation...), args...)...)
-	killGroupOnCancel(cmd)
+	cmd := exec.Command("git", append(append([]string{}, isolation...), args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(isolatedEnv(), env...)
 	cmd.Stdin = bytes.NewReader(input)
@@ -119,12 +118,14 @@ func (g *Git) run(ctx context.Context, dir string, network bool, input []byte, e
 		}
 		cmd.Env = append(cmd.Env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0="+h)
 	}
-	out, e := cmd.Output()
-	// Never propagate stderr: servers and Git can echo credentials or source.
-	if e != nil {
+	// Output is bounded (64 MiB: a history walk, never a remote's say);
+	// stderr is never kept: servers and Git can echo credentials or source.
+	out := &limitedBuffer{max: 64 << 20}
+	cmd.Stdout = out
+	if e := runGroup(ctx, cmd); e != nil || len(out.b) == out.max {
 		return "", fmt.Errorf("landing git %s failed", args[0])
 	}
-	return string(out), nil
+	return out.String(), nil
 }
 
 type Workspace struct {

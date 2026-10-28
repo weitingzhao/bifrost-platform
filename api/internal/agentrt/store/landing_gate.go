@@ -32,15 +32,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1,hashtext($2))`, ruleLock, "landing:"+tenant); err != nil {
 			return err
 		}
-		if step != "" {
-			if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id=$1 FOR SHARE`, step); err != nil {
-				return err
-			}
-		}
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id=$1 FOR SHARE`, o.Task); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id=$1 FOR SHARE`, mission); err != nil {
+		if err = lockLandingBinding(ctx, tx, o.Task, tenant, step, mission); err != nil {
 			return err
 		}
 		if err = lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
