@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -104,10 +105,13 @@ type Server struct {
 	agentThreads    *agentthreads.Handler
 	agentProgress   *agentprogress.Handler
 	agentRuntime    *agentRuntime
-	authLoaded      bool
-	audit           *actuation.AuditLog
-	jobs            *actuation.JobStore
-	httpMetrics     *httpMetrics
+	// landingHealth is what the workers wired for landing (S3): each reach
+	// of the landing cards into the question store and why live is off.
+	landingHealth atomic.Value // map[string]any
+	authLoaded    bool
+	audit         *actuation.AuditLog
+	jobs          *actuation.JobStore
+	httpMetrics   *httpMetrics
 	// pluginProbes, when set, replaces the four plugin health calls on /metrics.
 	// Tests inject counters. Production leaves it nil.
 	pluginProbes []func(context.Context) probe.PluginHealth
@@ -627,6 +631,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	// Whether this process's runtime routes take agentd's calls: the
 	// workers' controller asks it through the Service (review 528 A1b).
 	body["agentrt_ready"] = s.agentRuntime != nil && s.agentRuntime.late != nil && s.agentRuntime.late.Ready()
+	if h, ok := s.landingHealth.Load().(map[string]any); ok {
+		body["landing"] = h
+	}
 	writeJSON(w, http.StatusOK, body)
 }
 

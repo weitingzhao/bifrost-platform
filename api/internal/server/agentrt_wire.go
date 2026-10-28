@@ -143,6 +143,15 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			c.LandingCards = s.questionRuntime.landingCardQuestions()
 		}
 		s.wireLandingDrill(c)
+		if env == "prod" {
+			q := c.LandingCards
+			h := map[string]any{"live": c.Live, "cards": map[string]bool{"ask": q.AskRaw != nil, "lookup_key": q.LookupKey != nil,
+				"lookup": q.Lookup != nil, "withdraw": q.Withdraw != nil, "ack": q.Ack != nil}}
+			if !c.Live {
+				h["live_off"] = s.landingLiveOff(c)
+			}
+			s.landingHealth.Store(h)
+		}
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})

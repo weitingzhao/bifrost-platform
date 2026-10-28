@@ -86,3 +86,17 @@ func mainEvidenceReader(g *landinggit.Git) store.MainEvidenceFunc {
 		return ev, err
 	}
 }
+
+// landingLiveOff says in a phrase why PROD's live landing is off: the switch,
+// the lander identity, delivery, or the landing cards' reach.
+func (s *Server) landingLiveOff(c *controller.Controller) string {
+	switch {
+	case os.Getenv("AGENTRT_LANDING_LIVE") != "on":
+		return "AGENTRT_LANDING_LIVE is not on"
+	case !controller.LandingCardsComplete(c.LandingCards):
+		return "the landing cards cannot reach the question store"
+	case s.delivery == nil:
+		return "delivery unavailable"
+	}
+	return "no lander identity"
+}

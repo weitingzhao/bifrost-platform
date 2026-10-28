@@ -109,3 +109,22 @@ func completeCardQuestions() store.CardQuestions {
 		Ack:      func(context.Context, string) (bool, error) { return false, nil },
 	}
 }
+
+// S3 (review 670 R-04): PROD's live landing says on /health why it is off,
+// and which reach of the landing cards it has.
+func TestLandingLiveOffSaysWhy(t *testing.T) {
+	s := &Server{}
+	c := &controller.Controller{Env: "prod"}
+	t.Setenv("AGENTRT_LANDING_LIVE", "")
+	if got := s.landingLiveOff(c); got != "AGENTRT_LANDING_LIVE is not on" {
+		t.Fatal(got)
+	}
+	t.Setenv("AGENTRT_LANDING_LIVE", "on")
+	if got := s.landingLiveOff(c); got != "the landing cards cannot reach the question store" {
+		t.Fatal(got)
+	}
+	c.LandingCards = completeCardQuestions()
+	if got := s.landingLiveOff(c); got != "delivery unavailable" {
+		t.Fatal(got)
+	}
+}
