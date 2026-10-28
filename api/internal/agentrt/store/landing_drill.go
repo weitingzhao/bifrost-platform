@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,8 +19,9 @@ import (
 // runtime on 2026-10-27): a short transaction reads the bindings and settles
 // what the database alone decides (bound, rehearsed, in progress); the
 // external evidence is read with no lock held; a second transaction takes the
-// same locks in the same order, reads the bindings again and claims only if
-// none changed, else it leaves the task to the next pass ("changed").
+// same locks in the same order, reads the bindings again, claims only if the
+// evidence's keys did not move (else "changed": the next pass tries again),
+// and judges eligibility on this second read.
 func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task string, now time.Time) (op string, decision landing.Decision, err error) {
 	var first drillBinding
 	if err = InTx(ctx, db, func(tx pgx.Tx) error {
@@ -42,10 +42,19 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		if e != nil || again.settled {
 			return e
 		}
-		if !reflect.DeepEqual(again.facts, first.facts) || !slices.Equal(again.deps, first.deps) {
+		// The evidence read in step 2 is bound to these keys; if any moved it
+		// is stale and nothing is claimed. Everything else eligibility reads
+		// (mission, plan, rule, in-flight and daily counts) is taken from
+		// this locked read, so a close, a no_merge or a tightened rule since
+		// step 1 refuses, and a slot freed meanwhile does not (review 646).
+		if !reflect.DeepEqual(evidenceOf(again), evidenceOf(first)) {
 			decision = landing.Decision{Reason: "changed"}
 			return nil
 		}
+		current := again.facts
+		current.SingleCommit, current.Changes, current.History, current.DependenciesEffective =
+			facts.SingleCommit, facts.Changes, facts.History, facts.DependenciesEffective
+		facts = current
 		decision = landing.EligibleToClaim(facts, now)
 		if !decision.Allowed {
 			return nil
@@ -63,6 +72,18 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		op = ""
 	}
 	return
+}
+
+// drillEvidence is what the external evidence of a claim is read for: the
+// result (repository, task, attempt, A, Base) and each dependency's history
+// (task, repository, commit, in task order).
+type drillEvidence struct {
+	repo, task, attempt, a, base string
+	deps                         []landingDep
+}
+
+func evidenceOf(b drillBinding) drillEvidence {
+	return drillEvidence{b.facts.Repo, b.facts.Task, b.facts.Attempt, b.facts.A, b.facts.Base, b.deps}
 }
 
 // drillBinding is what one locked read of a drill claim found: either it is

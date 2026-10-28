@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -120,7 +122,7 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			ok(t, r.e)
 			ops := landingState(t, w, landingRepoStream).Operations
 			if c.closes {
-				if r.op != "" || r.d.allowed || r.d.reason != "changed" || len(ops) != 0 {
+				if r.op != "" || r.d.allowed || r.d.reason != "stale" || len(ops) != 0 {
 					t.Fatalf("claimed under a closed mission: op=%q decision=%+v ops=%d", r.op, r.d, len(ops))
 				}
 				return
@@ -241,5 +243,127 @@ func TestClaimReadsGitWithNoLockHeld(t *testing.T) {
 	}
 	if op == "" || !d.Allowed {
 		t.Fatal("claim refused", d)
+	}
+}
+
+// openTxDB counts the transactions open on it, so a test can see whether a
+// claim's external reads run inside one (review 646 R646-2: an empty
+// transaction around them would still take a pool connection).
+type openTxDB struct {
+	store.DB
+	open *atomic.Int32
+}
+
+func (d openTxDB) BeginTx(c context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := d.DB.BeginTx(c, opts)
+	if err != nil {
+		return nil, err
+	}
+	d.open.Add(1)
+	return &openTx{Tx: tx, open: d.open}, nil
+}
+
+type openTx struct {
+	pgx.Tx
+	open *atomic.Int32
+	done bool
+}
+
+func (tx *openTx) end() {
+	if !tx.done {
+		tx.done = true
+		tx.open.Add(-1)
+	}
+}
+func (tx *openTx) Commit(c context.Context) error   { defer tx.end(); return tx.Tx.Commit(c) }
+func (tx *openTx) Rollback(c context.Context) error { defer tx.end(); return tx.Tx.Rollback(c) }
+
+// Serial: FreezeEventClock via goalDrill. TD-447 5, review 646: every
+// external read of a claim (the result, main's history, each dependency's
+// history) runs with no transaction of the claim open.
+func TestClaimEvidenceReadsOpenNoTransaction(t *testing.T) {
+	w, task, src := goalDrill(t, "M-3")
+	var open atomic.Int32
+	db := openTxDB{DB: w.rt, open: &open}
+	var seen []string
+	result, history := src.Result, src.History
+	src.Result = func(cx context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+		seen = append(seen, fmt.Sprintf("result open=%d", open.Load()))
+		return result(cx, repo, id, attempt, base, commit)
+	}
+	src.History = func(cx context.Context, repo, id, commit, snapshot string) (landing.MainHistory, error) {
+		seen = append(seen, fmt.Sprintf("history open=%d", open.Load()))
+		return history(cx, repo, id, commit, snapshot)
+	}
+	op, d, err := store.ClaimLandingDrill(ctx, db, src, task, time.Now())
+	ok(t, err)
+	if op == "" || !d.Allowed {
+		t.Fatal("claim refused", d)
+	}
+	if len(seen) < 2 {
+		t.Fatal("no external reads seen", seen)
+	}
+	for _, s := range seen {
+		if !strings.HasSuffix(s, "open=0") {
+			t.Fatalf("an external read ran inside a transaction: %v", seen)
+		}
+	}
+	if open.Load() != 0 {
+		t.Fatal("a transaction left open", open.Load())
+	}
+}
+
+// Serial: FreezeEventClock via goalDrill. The evidence's keys move while it
+// is read (here the task's base, as a rebase would): the claim refuses
+// "changed" and writes nothing. Review 646's mutants that compare less than
+// the keys claim on the stale evidence.
+func TestClaimRefusesEvidenceWhoseKeysMoved(t *testing.T) {
+	w, task, src := goalDrill(t, "M-3")
+	admin := w.db.Connect(t, w.db.Admin)
+	result := src.Result
+	src.Result = func(cx context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+		tx, e := admin.Begin(cx)
+		if e != nil {
+			return false, nil, e
+		}
+		defer func() { _ = tx.Rollback(cx) }()
+		if _, e = tx.Exec(cx, `SET LOCAL session_replication_role = replica`); e != nil {
+			return false, nil, e
+		}
+		if _, e = tx.Exec(cx, `UPDATE agentrt.task SET base_commit = $2 WHERE task_id = $1`, task, commitA); e != nil {
+			return false, nil, e
+		}
+		if e = tx.Commit(cx); e != nil {
+			return false, nil, e
+		}
+		return result(cx, repo, id, attempt, base, commit)
+	}
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
+	ok(t, err)
+	if op != "" || d.Allowed || d.Reason != "changed" || len(landingState(t, w, landingRepoStream).Operations) != 0 {
+		t.Fatalf("claimed on evidence for a moved base: op=%q decision=%+v", op, d)
+	}
+}
+
+// Serial: FreezeEventClock via goalDrill. Review 646 N646-1: another root's
+// operation holds the only in-flight slot when the claim starts and ends
+// while the claim reads Git; the claim judges the slot on its second read
+// and lands, instead of throwing its reads away as "changed".
+func TestClaimUsesASlotFreedDuringItsReads(t *testing.T) {
+	w, task, src := goalDrill(t, "M-3")
+	other := "t_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	otherOp := "land:" + other + ":1"
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(otherOp, "claimed", "task", other, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	result := src.Result
+	src.Result = func(cx context.Context, repo, id, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+		if e := appendLanding(w, landingRepoStream, newLandingRecord(otherOp, "failed", "why", "stale")); e != nil {
+			return false, nil, e
+		}
+		return result(cx, repo, id, attempt, base, commit)
+	}
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
+	ok(t, err)
+	if op == "" || !d.Allowed {
+		t.Fatalf("a slot freed during the reads was not used: %+v", d)
 	}
 }

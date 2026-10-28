@@ -122,7 +122,7 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 	}
 	rows, err := tx.Query(ctx, `SELECT t.task_id,COALESCE(t.repo,''),COALESCE(a.pushed_commit,'') FROM agentrt.task_dependency d JOIN agentrt.task t ON t.task_id=d.depends_on_task_id
   LEFT JOIN LATERAL (SELECT attempt_id FROM agentrt.verification WHERE task_id=t.task_id AND accepts_attempt ORDER BY created_at DESC,verification_id DESC LIMIT 1) v ON true
-  LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id WHERE d.task_id=$1`, taskID)
+  LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id WHERE d.task_id=$1 ORDER BY t.task_id`, taskID)
 	if err != nil {
 		return f, nil, err
 	}
