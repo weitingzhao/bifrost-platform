@@ -101,7 +101,7 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 func completeCardQuestions() store.CardQuestions {
 	return store.CardQuestions{
 		AskRaw: func(context.Context, string, map[string]any) (string, time.Time, error) { return "", time.Time{}, nil },
-		LookupKey: func(context.Context, string) (store.Question, time.Time, bool, error) {
+		LookupKey: func(context.Context, string, map[string]any) (store.Question, time.Time, bool, error) {
 			return store.Question{}, time.Time{}, false, nil
 		},
 		Lookup:   func(context.Context, string) (store.Question, bool, error) { return store.Question{}, false, nil },

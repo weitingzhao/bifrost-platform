@@ -61,7 +61,7 @@ func (f *fakeCards) source() store.CardQuestions {
 			}
 			return id, f.now(), nil
 		},
-		LookupKey: func(_ context.Context, key string) (store.Question, time.Time, bool, error) {
+		LookupKey: func(_ context.Context, key string, _ map[string]any) (store.Question, time.Time, bool, error) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if p := f.protected(key); p != nil {
@@ -129,7 +129,7 @@ func cardPass(t *testing.T, w *world, f *fakeCards, now time.Time) {
 		ask, _, err := store.LandingCardsToSettle(ctx, w.rt, "bifrost-platform")
 		ok(t, err)
 		for _, c := range ask {
-			_, _ = store.AskLandingCard(ctx, w.rt, src, "bifrost-platform", c.Prep, now)
+			_, _ = store.AskLandingCard(ctx, w.rt, src, "bifrost-platform", c.Prep, now, true)
 		}
 	}
 	settle()
@@ -350,5 +350,61 @@ func TestLandingCardLostAndAckRetried(t *testing.T) {
 	ok(t, w2.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? 'landing_answer'`, landingRepoStream).Scan(&answers))
 	if answers != 1 || !f2.byID["q1"].acked {
 		t.Fatal("handled", answers, "acked", f2.byID["q1"].acked)
+	}
+}
+
+// Serial: FreezeEventClock. Review 670 B-02: a card answered try again after
+// its mission became no_merge is moot under the same locks; nothing is
+// retried. Review 670 B-03: the seven days are decided on the clock after
+// the lookup: a lookup that crosses them closes the card unconfirmed.
+func TestLandingCardDecidesOnTheStateAtTheAnswer(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-10 * 24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	root := cardFailedRoot(t, w, "land:c8:1", "stale", at)
+	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
+	cardPass(t, w, f, at.Add(time.Hour))
+	var mission string
+	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, root).Scan(&mission))
+	tamperAdmin(t, w, `UPDATE agentrt.mission SET scope_json = jsonb_set(COALESCE(scope_json,'{}'), '{no_merge}', '"owner"') WHERE mission_id = $1`, mission)
+	f.answer("q1", "a", at.Add(90*time.Minute)) // try again
+	cardPass(t, w, f, at.Add(2*time.Hour))
+	if o := landingState(t, w, landingRepoStream).Operations["land:c8:1"]; o.Retried {
+		t.Fatal("retried after the mission became no_merge")
+	}
+	v, _, err := store.ReadLandingCard(ctx, w.rt, "bifrost-platform", "q1")
+	ok(t, err)
+	if v.Outcome["outcome"] != "moot" || v.Outcome["why"] != "trigger_gone" {
+		t.Fatalf("%+v", v.Outcome)
+	}
+
+	// The lookup crosses the window.
+	w2 := newKernelWorld(t)
+	cardFailedRoot(t, w2, "land:c9:1", "conflict", at)
+	f2 := newFakeCards(func() time.Time { return at.Add(time.Hour) })
+	f2.loseReply = true
+	cardPass(t, w2, f2, at.Add(time.Hour))
+	delete(f2.byID, "q1")
+	f2.loseReply = false
+	src := f2.source()
+	look := src.LookupKey
+	src.LookupKey = func(c context.Context, key string, req map[string]any) (store.Question, time.Time, bool, error) {
+		store.FreezeEventClock(at.Add(time.Hour + store.CardRecoverWindow + time.Second))
+		return look(c, key, req)
+	}
+	store.FreezeEventClock(at.Add(time.Hour + store.CardRecoverWindow - time.Second))
+	ask, _, err := store.LandingCardsToSettle(ctx, w2.rt, "bifrost-platform")
+	ok(t, err)
+	for _, c := range ask {
+		_, err := store.AskLandingCard(ctx, w2.rt, src, "bifrost-platform", c.Prep, at.Add(time.Hour+store.CardRecoverWindow-time.Second), true)
+		ok(t, err)
+	}
+	if f2.asks != 1 {
+		t.Fatal("asked again across the window", f2.asks)
+	}
+	for _, c := range cardsNow(t, w2) {
+		if !c.Closed || c.ClosedWhy != "unconfirmed" {
+			t.Fatalf("%+v", c)
+		}
 	}
 }

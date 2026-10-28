@@ -95,20 +95,17 @@ func checkCardOutcomeAppend(ev Event) error {
 	return nil
 }
 
-// HandleLandingCardAnswer handles one answered landing card exactly once.
-// The letter is turned into the card's choice by the prepared map; a §8
-// choice goes to HandleLandingAnswer; the others are decided here under the
-// locks the decision needs (task, mission, then the repository stream for a
-// root card; the repository stream for a repository card), with the stored
-// record returned when there is one.
+// HandleLandingCardAnswer handles one answered landing card exactly once,
+// in one transaction under the locks the decision needs (task, mission, then
+// the repository stream for a root card; the repository stream for a
+// repository card): a stored result for the question (either record) is
+// returned as it is; otherwise the card must still apply (review 670 B-02),
+// or the answer is moot and nothing else is written; then a §8 choice is
+// carried out by §8's own decision (handleLandingAnswerTx) and the others
+// are decided here. The letter is turned into the card's choice by the
+// prepared map.
 func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Question, answeredAt time.Time) (string, string, error) {
 	choice, known := c.Options[q.Option]
-	if known && slices.Contains(section8Choices, choice) && q.Channel == "console" {
-		qq := q
-		qq.Option = choice
-		res, err := HandleLandingAnswer(ctx, db, qq, c.Root, c.Op, answeredAt)
-		return res.Outcome, res.Why, err
-	}
 	stream := "landing:" + c.Repo
 	var outcome, why string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -125,21 +122,20 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
-		var stored map[string]any
-		err := tx.QueryRow(ctx, `SELECT body_json->'landing_card_outcome' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND body_json->'landing_card_outcome'->>'question_id' = $2 ORDER BY seq LIMIT 1`, stream, q.ID).Scan(&stored)
-		if err == nil {
-			if stored["prep"] != c.Prep {
-				return fmt.Errorf("landing card %s: question %s was recorded for %v", c.Prep, q.ID, stored["prep"])
-			}
-			outcome, why = stored["outcome"].(string), stored["why"].(string)
-			return nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
+		o, found, err := storedCardOutcome(ctx, tx, c, q.ID)
+		if err != nil || found {
+			outcome, why = o.outcome, o.why
 			return err
 		}
-		applies, err := cardApplies(ctx, tx, c, eventClock())
+		applies, err := cardApplies(ctx, tx, c, DecisionAt())
 		if err != nil {
+			return err
+		}
+		if known && applies && q.Channel == "console" && slices.Contains(section8Choices, choice) {
+			qq := q
+			qq.Option = choice
+			res, err := handleLandingAnswerTx(ctx, tx, qq, c.Root, c.Op, answeredAt)
+			outcome, why = res.Outcome, res.Why
 			return err
 		}
 		body := map[string]any{"v": "1", "question_id": q.ID, "prep": c.Prep, "kind": c.Kind, "letter": q.Option, "choice": choice,
@@ -184,6 +180,48 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 	return outcome, why, err
 }
 
+// storedCardOutcome is the handling record of a card's question, from
+// either record, checked to be this card's (review 670 R-01): a §8
+// landing_answer for its root and operation, written by the controller; a
+// landing_card_outcome for its prep. Another card's record is an error.
+func storedCardOutcome(ctx context.Context, tx pgx.Tx, c CardRecord, questionID string) (cardOutcome, bool, error) {
+	var answer, other map[string]any
+	var actor string
+	err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer', body_json->'landing_card_outcome', actor_id FROM agentrt.event
+	  WHERE event_stream_id = $1 AND event_type = 'note'
+	    AND (body_json->'landing_answer'->>'question_id' = $2 OR body_json->'landing_card_outcome'->>'question_id' = $2)
+	  ORDER BY seq LIMIT 1`, "landing:"+c.Repo, questionID).Scan(&answer, &other, &actor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return cardOutcome{}, false, nil
+	}
+	if err != nil {
+		return cardOutcome{}, false, err
+	}
+	m := other
+	switch {
+	case actor != "controller":
+		return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s has a record not the controller's", c.Prep, questionID)
+	case answer != nil && other != nil:
+		return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s has two records in one", c.Prep, questionID)
+	case answer != nil:
+		if why := badLandingAnswer(answer); why != "" || answer["root"] != c.Root || answer["op"] != c.Op {
+			return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s was recorded for %v %v (%s)", c.Prep, questionID, answer["root"], answer["op"], why)
+		}
+		m = answer
+	default:
+		if why := badCardOutcome(other); why != "" || other["prep"] != c.Prep {
+			return cardOutcome{}, false, fmt.Errorf("landing card %s: question %s was recorded for %v (%s)", c.Prep, questionID, other["prep"], why)
+		}
+	}
+	o := cardOutcome{}
+	o.outcome, _ = m["outcome"].(string)
+	o.why, _ = m["why"].(string)
+	if s, _ := m["remind_at"].(string); s != "" {
+		o.remindAt, _ = time.Parse(time.RFC3339Nano, s)
+	}
+	return o, true, nil
+}
+
 // cardApplies says whether a card's trigger still applies, read under the
 // caller's locks: the repository's newest stop is this generation and not
 // resumed, or the trigger is still listed with this kind.
@@ -205,18 +243,18 @@ func cardApplies(ctx context.Context, tx pgx.Tx, c CardRecord, now time.Time) (b
 // its trigger no longer applies → withdrawn; expired, withdrawn or gone →
 // closed. A read that fails writes nothing. It returns what it did.
 func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord, now time.Time) (string, error) {
-	if q.Lookup == nil || q.Ack == nil {
-		return "", fmt.Errorf("landing card: no question store to read")
-	}
 	var handled bool
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		outcomes, err := cardOutcomes(ctx, tx, c.Repo, []string{c.QuestionID})
-		_, handled = outcomes[c.QuestionID]
+		_, found, err := storedCardOutcome(ctx, tx, c, c.QuestionID)
+		handled = found
 		return err
 	}); err != nil {
 		return "", err
 	}
 	ack := func() (string, error) {
+		if q.Ack == nil {
+			return "", nil // handled; acknowledged once the store can be told
+		}
 		found, err := q.Ack(ctx, c.QuestionID)
 		if err != nil {
 			return "", err
@@ -228,6 +266,9 @@ func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord
 	}
 	if handled {
 		return ack()
+	}
+	if q.Lookup == nil {
+		return "", nil
 	}
 	qq, found, err := q.Lookup(ctx, c.QuestionID)
 	if err != nil {

@@ -27,8 +27,10 @@ type CardQuestions struct {
 	// the store created it.
 	AskRaw func(ctx context.Context, key string, request map[string]any) (id string, created time.Time, err error)
 	// LookupKey finds the protected question (open, or answered and unread)
-	// under key; found false only when the store holds none.
-	LookupKey func(ctx context.Context, key string) (q Question, created time.Time, found bool, err error)
+	// under key; found false only when the store holds none. A question
+	// under the key that does not ask exactly this request (requester, task,
+	// options, text, TTL) is ErrCardMismatch, never found (review 670 B-01).
+	LookupKey func(ctx context.Context, key string, request map[string]any) (q Question, created time.Time, found bool, err error)
 	// Lookup reads a question by id after the store's sweep (an expired
 	// open question reads expired); found false only when the store holds
 	// no such question.
@@ -96,7 +98,10 @@ func landingCardBody(repo string, tr CardTrigger) string {
 	at := tr.At.UTC().Format(time.RFC3339)
 	switch tr.Kind {
 	case CardRootFailed:
-		return fmt.Sprintf("Repository %s: the landing of this task (operation %s) failed at %s: %s. Try again replays it on today's main; do not merge ends it.", repo, tr.Op, at, tr.Why)
+		if slices.Contains(tr.Choices, "try_again") {
+			return fmt.Sprintf("Repository %s: the landing of this task (operation %s) failed at %s: %s. Try again replays it on today's main; do not merge ends it.", repo, tr.Op, at, tr.Why)
+		}
+		return fmt.Sprintf("Repository %s: the landing of this task (operation %s) failed at %s: %s. It cannot be tried again: do not merge ends it, or decide later.", repo, tr.Op, at, tr.Why)
 	case CardFloor:
 		return fmt.Sprintf("Repository %s: this task's change touches what no landing rule can allow (%s, %s). It can only be ended: do not merge, or decide later.", repo, tr.Op, at)
 	case CardOkMissing:
@@ -106,7 +111,7 @@ func landingCardBody(repo string, tr CardTrigger) string {
 	case CardRepoStopped:
 		return fmt.Sprintf("Repository %s: landings stopped at %s after a push to main was denied (stop %d). Resume only lets new landings run.", repo, at, tr.StopGeneration)
 	case CardCIStuck:
-		return fmt.Sprintf("Repository %s: the CI of %s has run for 30 minutes (since %s). The landing waits; this is for you to know.", repo, tr.Op, at)
+		return fmt.Sprintf("Repository %s: the CI of %s has run for more than 30 minutes (seen at %s). The landing waits; this is for you to know.", repo, tr.Op, at)
 	case CardParkedLong:
 		return fmt.Sprintf("Repository %s: %s has been parked since %s (%s). It ends by itself at its six-hour bound.", repo, tr.Op, at, tr.Why)
 	}
@@ -193,6 +198,10 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 		if err != nil {
 			return err
 		}
+		// Decisions before notices (CUT §11.6 v3 item 6).
+		slices.SortStableFunc(triggers, func(a, b CardTrigger) int {
+			return cardRank(a.Kind) - cardRank(b.Kind)
+		})
 		for _, tr := range triggers {
 			// ci_stuck and parked_long are shown in the landing status, not
 			// asked: the runtime has three open cards in all, and these end
@@ -241,20 +250,25 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 	return prepared, err
 }
 
-// cardDue says whether a trigger with these cards may have a new one now.
+// cardDue says whether a trigger with these cards may have a new one now
+// (review 670 R-02): no card still waiting for a decision (one handled and
+// waiting only for its Ack does not count); not acknowledged or applied;
+// the next ask is the latest of the last real creation + 6 hours and the
+// latest card's held reminder; at most four made in 24 hours.
 func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) bool {
 	made := 0
-	var last time.Time
+	var last, remind time.Time
+	var latest CardRecord
 	for _, c := range mine {
-		if !c.Ended() {
-			return false // one card to settle at a time
-		}
 		o, handled := outcomes[c.QuestionID]
-		switch {
-		case handled && (o.outcome == "acknowledged" || o.outcome == "applied"):
-			return false // known, or carried out: the trigger needs no more cards
-		case handled && o.outcome == "held" && now.Before(o.remindAt):
+		if !c.Ended() && !handled {
+			return false // one card waiting for a decision at a time
+		}
+		if handled && (o.outcome == "acknowledged" || o.outcome == "applied") {
 			return false
+		}
+		if c.N > latest.N {
+			latest = c
 		}
 		created := c.CreatedAt
 		if created.IsZero() {
@@ -270,24 +284,30 @@ func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) 
 			made++
 		}
 	}
-	if made >= CardDailyLimit {
-		return false
+	if o, ok := outcomes[latest.QuestionID]; ok && o.outcome == "held" {
+		remind = o.remindAt
 	}
-	// The cooldown follows a card that ended unanswered or refused; a held
-	// answer is asked again at its reminder.
-	if !last.IsZero() && now.Before(last.Add(CardCooldown)) {
-		for _, c := range mine {
-			if o, ok := outcomes[c.QuestionID]; ok && o.outcome == "held" && !now.Before(o.remindAt) {
-				return true
-			}
-		}
-		return false
+	next := remind
+	if !last.IsZero() && last.Add(CardCooldown).After(next) {
+		next = last.Add(CardCooldown)
 	}
-	return true
+	return made < CardDailyLimit && !now.Before(next)
+}
+
+// cardRank orders decision kinds before notices.
+func cardRank(kind string) int {
+	if slices.Contains([]string{CardLateLanding, CardCIStuck, CardParkedLong}, kind) {
+		return 1
+	}
+	return 0
 }
 
 // statusOnlyKinds are triggers shown, never asked (CUT §11.6 v3 addendum).
 var statusOnlyKinds = []string{CardCIStuck, CardParkedLong}
+
+// ErrCardMismatch: the question store holds another request under the
+// card's key; the card stays unbound and is shown, never handled.
+var ErrCardMismatch = errors.New("landing card: the question under its key asks something else")
 
 // ErrCardQuota: the question store took no new card now (its per-requester
 // quotas, shared with every card the runtime asks); the caller pauses asking
@@ -304,7 +324,7 @@ var ErrCardAskUnconfirmed = errors.New("landing card: ask unconfirmed past the r
 // side effects, asks when the store holds no protected card under it (and
 // the ask started less than seven days ago), and binds the question. It
 // returns the question bound, or "" with nothing bound.
-func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep string, now time.Time) (string, error) {
+func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep string, now time.Time, mayCreate bool) (string, error) {
 	if q.AskRaw == nil || q.LookupKey == nil {
 		return "", fmt.Errorf("landing card: no question store to ask")
 	}
@@ -346,7 +366,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		if c.Prep == "" || c.Bound || c.Ended() || !c.AskStarted {
 			return nil // another recoverer bound it, or it ended
 		}
-		found, created, ok, err := q.LookupKey(ctx, c.Key)
+		found, created, ok, err := q.LookupKey(ctx, c.Key, c.Request)
 		if err != nil {
 			return err
 		}
@@ -354,9 +374,12 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		switch {
 		case ok:
 			id = found.ID
-		case !now.Before(c.AskStartedAt.Add(CardRecoverWindow)):
-			// An answer may have been trimmed: say so, never ask again under it.
+		case !DecisionAt().Before(c.AskStartedAt.Add(CardRecoverWindow)):
+			// Decided on the clock after the lookup (review 670 B-03): an
+			// answer may have been trimmed. Say so, never ask under it.
 			return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": prep, "why": "unconfirmed"})
+		case !mayCreate:
+			return nil // asking is paused: only an existing card is taken
 		default:
 			id, created, err = q.AskRaw(ctx, c.Key, c.Request)
 			if err != nil {

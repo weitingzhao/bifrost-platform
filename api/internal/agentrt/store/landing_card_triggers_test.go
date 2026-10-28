@@ -1,10 +1,13 @@
 package store_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -124,5 +127,37 @@ func TestLandingCardTriggers(t *testing.T) {
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:missing:1", "landed", "R", commitB)))
 	if _, ok := triggersAt(t, w, at.Add(3*time.Hour))["land:missing:1"]; ok {
 		t.Error("ok_missing after it landed")
+	}
+}
+
+// Serial: FreezeEventClock. Review 670 R-06: a park whose reason changes (a
+// window park whose CI then runs long) becomes a new park with the new
+// reason, so its start and reason are what the triggers read.
+func TestAParkWhoseReasonChangesIsANewPark(t *testing.T) {
+	w, task, src := acceptedDrill(t)
+	op, at := pushedDrill(t, w, task, src)
+	store.FreezeEventClock(at.Add(time.Minute))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "window", "retry_at", at.Add(2*time.Minute).Format(time.RFC3339Nano))))
+	now := at.Add(40 * time.Minute)
+	store.FreezeEventClock(now)
+	ctl := controller.Controller{DB: w.rt, Env: "stg"}
+	drill := controller.DrillSources{Facts: src,
+		Main:          func(context.Context) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
+		CI: func(_ context.Context, r string, _ time.Time) (landing.CIRun, error) {
+			return landing.CIRun{Run: "ci-long", R: r, Status: "Running", CreatedAt: at.Add(time.Minute)}, nil
+		},
+	}
+	a, err := ctl.LandingDrillCI(ctx, drill, op, now)
+	ok(t, err)
+	if a.Kind != "parked" || a.Why != "ci_stuck" {
+		t.Fatalf("%+v", a)
+	}
+	o := landingState(t, w, landingRepoStream).Operations[op]
+	if o.Phase != "parked" || o.Why != "ci_stuck" {
+		t.Fatalf("not parked anew: %s %s", o.Phase, o.Why)
+	}
+	if tr, ok := triggersAt(t, w, now)[op]; !ok || tr.Kind != store.CardCIStuck || !tr.At.Equal(now) {
+		t.Fatalf("the trigger is not the new park: %+v", tr)
 	}
 }

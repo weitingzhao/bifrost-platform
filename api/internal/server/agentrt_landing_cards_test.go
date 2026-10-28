@@ -42,9 +42,14 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 		if err != nil || again != id {
 			t.Fatalf("%s: the same request asked again made %q (%v)", tr.Kind, again, err)
 		}
-		found, _, ok, err := q.LookupKey(ctx, key)
+		found, _, ok, err := q.LookupKey(ctx, key, req)
 		if err != nil || !ok || found.ID != id {
 			t.Fatalf("%s: lookup by key %+v %v %v", tr.Kind, found, ok, err)
+		}
+		// The same key holding another request is a mismatch (review 670 B-01).
+		other := store.LandingCardRequest("bifrost-platform", tr, "Landing: another title")
+		if _, _, ok, err := q.LookupKey(ctx, key, other); ok || !errors.Is(err, store.ErrCardMismatch) {
+			t.Fatalf("%s: another request under the key: %v %v", tr.Kind, ok, err)
 		}
 		read, ok, err := q.Lookup(ctx, id)
 		if err != nil || !ok || read.Status != "open" || read.Options != 2 || read.ExpiresAt.Sub(created) != 72*time.Hour {

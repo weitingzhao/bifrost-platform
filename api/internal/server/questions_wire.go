@@ -454,22 +454,27 @@ func (rt *questionRuntime) landingCardQuestions() store.CardQuestions {
 		}
 		return q, true, nil
 	}
+	// wire is the create body a frozen request makes: the same bytes on
+	// every ask, so the store's fingerprint of it is the card's.
+	wire := func(key string, request map[string]any) ([]byte, error) {
+		req := map[string]any{}
+		for k, v := range request {
+			req[k] = v
+		}
+		labels, _ := request["options"].([]any)
+		opts := make([]map[string]string, 0, len(labels))
+		for _, l := range labels {
+			opts = append(opts, map[string]string{"label": fmt.Sprint(l)})
+		}
+		req["options"], req["idempotency_key"] = opts, key
+		if t, ok := req["title"].(string); ok {
+			req["title"] = questions.ClipTitle(t)
+		}
+		return json.Marshal(req)
+	}
 	return store.CardQuestions{
 		AskRaw: func(ctx context.Context, key string, request map[string]any) (string, time.Time, error) {
-			req := map[string]any{}
-			for k, v := range request {
-				req[k] = v
-			}
-			labels, _ := request["options"].([]any)
-			opts := make([]map[string]string, 0, len(labels))
-			for _, l := range labels {
-				opts = append(opts, map[string]string{"label": fmt.Sprint(l)})
-			}
-			req["options"], req["idempotency_key"] = opts, key
-			if t, ok := req["title"].(string); ok {
-				req["title"] = questions.ClipTitle(t)
-			}
-			raw, err := json.Marshal(req)
+			raw, err := wire(key, request)
 			if err != nil {
 				return "", time.Time{}, err
 			}
@@ -490,10 +495,23 @@ func (rt *questionRuntime) landingCardQuestions() store.CardQuestions {
 			}
 			return id, q.CreatedAt, nil
 		},
-		LookupKey: func(_ context.Context, key string) (store.Question, time.Time, bool, error) {
+		LookupKey: func(_ context.Context, key string, request map[string]any) (store.Question, time.Time, bool, error) {
 			q, ok, err := rt.svc.LookupKey(agentRuntimeRequester, key)
 			if err != nil || !ok {
 				return store.Question{}, time.Time{}, false, err
+			}
+			// The question under the key must ask exactly this request
+			// (review 670 B-01): the store's own fingerprint of it.
+			raw, err := wire(key, request)
+			if err != nil {
+				return store.Question{}, time.Time{}, false, err
+			}
+			c, err := questions.CanonicalizeRequestJSON(raw)
+			if err != nil {
+				return store.Question{}, time.Time{}, false, err
+			}
+			if q.RequestFP != c.RequestFP || q.Requester != agentRuntimeRequester {
+				return store.Question{}, time.Time{}, false, fmt.Errorf("%w: %s", store.ErrCardMismatch, q.ID)
 			}
 			return toFact(q), q.CreatedAt, true, nil
 		},

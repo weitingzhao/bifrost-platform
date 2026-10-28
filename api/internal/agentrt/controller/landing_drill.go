@@ -151,7 +151,16 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return a, appendRecord("failed", map[string]any{"why": a.Why})
 	case "parked":
 		if o.Phase == "parked" {
-			return a, nil
+			if o.Why == a.Why {
+				return a, nil
+			}
+			// The reason changed (a limit park whose CI then ran long): a new
+			// park, so its start and reason are what the landing status and
+			// the cards read (review 670 R-06). A crash between the two
+			// leaves it unparked; the next pass parks it again.
+			if err := appendRecord("unparked", map[string]any{}); err != nil {
+				return a, err
+			}
 		}
 		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
 	case "unparked":

@@ -38,7 +38,7 @@ func LandingCardsComplete(q store.CardQuestions) bool {
 // and writes the database on its own; one card's failure leaves the others.
 func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	q := c.LandingCards
-	if c.Env != "prod" || q.Lookup == nil || q.Ack == nil {
+	if c.Env != "prod" || q.Lookup == nil && q.Ack == nil {
 		return nil
 	}
 	now := c.clock()
@@ -54,9 +54,12 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 		}
 		cancel()
 	}
-	if q.AskRaw == nil || q.LookupKey == nil || now.Before(c.cardAsksPausedUntil()) {
+	if q.AskRaw == nil || q.LookupKey == nil {
 		return errors.Join(errs...)
 	}
+	// A full quota pauses new cards only; an existing card is still taken
+	// up by its key (review 670 R-03).
+	mayCreate := !now.Before(c.cardAsksPausedUntil())
 	quotaFull := false
 	askOne := func(prep string) {
 		if quotaFull {
@@ -64,7 +67,7 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 		}
 		one, cancel := context.WithTimeout(ctx, landingCardCall)
 		defer cancel()
-		if _, err := store.AskLandingCard(one, c.DB, q, landingCardsRepo, prep, now); err != nil {
+		if _, err := store.AskLandingCard(one, c.DB, q, landingCardsRepo, prep, now, mayCreate); err != nil {
 			if errors.Is(err, store.ErrCardQuota) {
 				// Shared with every card the runtime asks: pause, do not
 				// hammer it every pass. Memory only: a restart tries once.
@@ -76,6 +79,9 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	}
 	for _, card := range ask {
 		askOne(card.Prep)
+	}
+	if !mayCreate {
+		return errors.Join(errs...)
 	}
 	prepared, err := store.PrepareLandingCards(ctx, c.DB, landingCardsRepo, now)
 	if err != nil {

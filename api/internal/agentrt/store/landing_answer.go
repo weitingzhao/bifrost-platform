@@ -60,67 +60,9 @@ func HandleLandingAnswer(ctx context.Context, db DB, q Question, root, after str
 	const stream = "landing:bifrost-platform"
 	var res LandingAnswerResult
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		res = LandingAnswerResult{}
-		var mission, missionState string
-		if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
-			return err
-		}
-		if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
-			return err
-		}
-		if err := lockStream(ctx, tx, stream); err != nil {
-			return err
-		}
-		// A separate statement after the stream lock, so a pass that waited
-		// for another's commit sees its record (Read Committed, review 655).
-		var stored map[string]any
-		var actor, storedTask string
-		err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer', actor_id, COALESCE(task_id, '') FROM agentrt.event
-		  WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_answer'->>'question_id' = $2 ORDER BY seq LIMIT 1`,
-			stream, q.ID).Scan(&stored, &actor, &storedTask)
-		if err == nil {
-			// A stored record is a credential the Ack rests on: it must be
-			// the controller's, whole and consistent (review 656 A-R1).
-			if why := badLandingAnswer(stored); why != "" || actor != "controller" || storedTask != stored["root"] {
-				return fmt.Errorf("landing answer %s: stored record is not valid: %s (actor %s, task %s)", q.ID, why, actor, storedTask)
-			}
-			if stored["root"] != root || stored["op"] != after {
-				return fmt.Errorf("%w: %s was recorded for %v %v", ErrLandingAnswerBinding, q.ID, stored["root"], stored["op"])
-			}
-			res = LandingAnswerResult{Outcome: stored["outcome"].(string), Why: stored["why"].(string), Record: stored}
-			return nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		s, err := LandingState(ctx, tx, stream)
-		if err != nil {
-			return err
-		}
-		at := eventClock().UTC().Truncate(time.Microsecond)
-		outcome, why, record, err := decideLandingAnswer(s, root, after, q, answeredAt, missionState, at)
-		if err != nil {
-			return err
-		}
-		hook("landing answer: decided", q.ID)
-		if record != nil {
-			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
-				Body: map[string]any{"text": "Landing question: " + q.Option, "landing": record}}); err != nil {
-				return err
-			}
-			hook("landing answer: business appended", q.ID)
-		}
-		// The answer as given is kept here: the question store trims and an
-		// Ack is no archive (review 655 R2).
-		body := map[string]any{"question_id": q.ID, "root": root, "op": after, "choice": q.Option, "outcome": outcome, "why": why,
-			"by": q.AnsweredBy, "answered_at": answeredAt.UTC().Format(time.RFC3339Nano), "channel": q.Channel,
-			"answer_text": q.Text, "mission_state": missionState}
-		if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: root,
-			Body: map[string]any{"text": landingAnswerText(outcome, why, q.Option, missionState), "landing_answer": body}}); err != nil {
-			return err
-		}
-		res = LandingAnswerResult{Outcome: outcome, Why: why, Recorded: true, Record: body}
-		return nil
+		var err error
+		res, err = handleLandingAnswerTx(ctx, tx, q, root, after, answeredAt)
+		return err
 	})
 	if err != nil {
 		// Nothing is known to be committed: no verdict is reported (review
@@ -342,4 +284,73 @@ func boundedReason(text string) string {
 		cut--
 	}
 	return text[:cut] + marker
+}
+
+// handleLandingAnswerTx is HandleLandingAnswer inside the caller's
+// transaction: the landing card handler checks its card still applies under
+// the same locks first (review 670 B-02).
+func handleLandingAnswerTx(ctx context.Context, tx pgx.Tx, q Question, root, after string, answeredAt time.Time) (LandingAnswerResult, error) {
+	const stream = "landing:bifrost-platform"
+	var res LandingAnswerResult
+	var mission, missionState string
+	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
+		return res, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
+		return res, err
+	}
+	if err := lockStream(ctx, tx, stream); err != nil {
+		return res, err
+	}
+	// A separate statement after the stream lock, so a pass that waited
+	// for another's commit sees its record (Read Committed, review 655).
+	var stored map[string]any
+	var actor, storedTask string
+	err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer', actor_id, COALESCE(task_id, '') FROM agentrt.event
+	  WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_answer'->>'question_id' = $2 ORDER BY seq LIMIT 1`,
+		stream, q.ID).Scan(&stored, &actor, &storedTask)
+	if err == nil {
+		// A stored record is a credential the Ack rests on: it must be
+		// the controller's, whole and consistent (review 656 A-R1).
+		if why := badLandingAnswer(stored); why != "" || actor != "controller" || storedTask != stored["root"] {
+			return res, fmt.Errorf("landing answer %s: stored record is not valid: %s (actor %s, task %s)", q.ID, why, actor, storedTask)
+		}
+		if stored["root"] != root || stored["op"] != after {
+			return res, fmt.Errorf("%w: %s was recorded for %v %v", ErrLandingAnswerBinding, q.ID, stored["root"], stored["op"])
+		}
+		res = LandingAnswerResult{Outcome: stored["outcome"].(string), Why: stored["why"].(string), Record: stored}
+		return res, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return res, err
+	}
+	s, err := LandingState(ctx, tx, stream)
+	if err != nil {
+		return res, err
+	}
+	at := eventClock().UTC().Truncate(time.Microsecond)
+	outcome, why, record, err := decideLandingAnswer(s, root, after, q, answeredAt, missionState, at)
+	if err != nil {
+		return res, err
+	}
+	hook("landing answer: decided", q.ID)
+	if record != nil {
+		if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
+			Body: map[string]any{"text": "Landing question: " + q.Option, "landing": record}}); err != nil {
+			return res, err
+		}
+		hook("landing answer: business appended", q.ID)
+	}
+	// The answer as given is kept here: the question store trims and an
+	// Ack is no archive (review 655 R2).
+	body := map[string]any{"question_id": q.ID, "root": root, "op": after, "choice": q.Option, "outcome": outcome, "why": why,
+		"by": q.AnsweredBy, "answered_at": answeredAt.UTC().Format(time.RFC3339Nano), "channel": q.Channel,
+		"answer_text": q.Text, "mission_state": missionState}
+	if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: root,
+		Body: map[string]any{"text": landingAnswerText(outcome, why, q.Option, missionState), "landing_answer": body}}); err != nil {
+		return res, err
+	}
+	res = LandingAnswerResult{Outcome: outcome, Why: why, Recorded: true, Record: body}
+	return res, nil
+
 }
