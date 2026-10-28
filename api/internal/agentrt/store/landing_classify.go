@@ -263,6 +263,14 @@ func landingDisposed(ctx context.Context, tx pgx.Tx, stream, root, op string) (s
 // a closing round is opened (or kept) and the mission held; when every root
 // is delivered or disposed, the state to move to and why.
 func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string) (applies, held bool, to, why string, err error) {
+	// Only a stream with the live mode is locked here: every other mission
+	// closes by the rules before S3, with no new lock on the landing stream
+	// (a close pass must not wait on it, nor make its writers wait). The
+	// mode is written once; one that appears after this read is seen by the
+	// next pass.
+	if s, err := folds.state(ctx, tx, "landing:bifrost-platform"); err != nil || s.LiveAt.IsZero() {
+		return false, false, "", "", err
+	}
 	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 		return false, false, "", "", err
 	}
