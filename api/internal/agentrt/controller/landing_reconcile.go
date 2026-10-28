@@ -104,6 +104,12 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 	}
 	r.mu.Unlock()
 
+	// Operations an open closing round waits on are read now, whatever
+	// their wait (CUT §11.8 v3 item 2).
+	urgent, err := store.OpenCloseRoundOps(ctx, c.DB, c.clock())
+	if err != nil {
+		return err
+	}
 	budget, cancel := context.WithTimeout(ctx, reconcileMainBudget)
 	defer cancel()
 	var errs []error
@@ -113,7 +119,7 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 		r.mu.Lock()
 		w := r.waits[key]
 		r.mu.Unlock()
-		if c.clock().Before(w.until) {
+		if c.clock().Before(w.until) && !urgent[cand.Op] {
 			continue
 		}
 		started := store.DecisionAt()

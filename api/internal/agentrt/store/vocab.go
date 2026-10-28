@@ -190,6 +190,9 @@ var bodies = map[string][]field{
 		// landing_card_outcome: on the repository stream, how a card's
 		// answer outside §8 was handled (a resume, held, acknowledged).
 		{"landing_card_outcome", kAny, true},
+		// landing_close_round: on a mission's stream, the operations whose
+		// main is read again before the mission closes (CUT §11.8 v3 item 2).
+		{"landing_close_round", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -567,6 +570,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_card_outcome" {
 		return badCardOutcome(v)
+	}
+	if eventType == "note" && name == "landing_close_round" {
+		return badCloseRound(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

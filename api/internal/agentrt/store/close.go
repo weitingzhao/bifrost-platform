@@ -91,7 +91,13 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			held, err := landingHolds(ctx, sp, folds, id, eventClock())
+			// A mission with a root in the live landing scope closes from
+			// landing evidence (B4, CUT §11.8 v3); any other by the hold
+			// below, as before.
+			b4, held, to, why, err := landingCloseB4(ctx, sp, folds, id)
+			if err == nil && !b4 {
+				held, err = landingHolds(ctx, sp, folds, id, eventClock())
+			}
 			if err != nil {
 				holdErrs = append(holdErrs, fmt.Errorf("mission %s: landing: %w", id, err))
 				if rerr := sp.Rollback(ctx); rerr != nil {
@@ -103,6 +109,9 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 				return err
 			}
 			did = true
+			if b4 {
+				return MoveMission(ctx, tx, "controller", id, to, why)
+			}
 			switch {
 			case drops == 0:
 				return MoveMission(ctx, tx, "controller", id, "done", fmt.Sprintf("every task is accepted (%d)", accepted))
