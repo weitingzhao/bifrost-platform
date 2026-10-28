@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"net"
 	"net/http/cgi"
 	"net/http/httptest"
 	"os"
@@ -327,33 +328,102 @@ func TestLanderPushMain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer drill.Close()
-	if got := drill.PushMain(ctx, r, in.M0); got != PushDenied {
+	deadline := func() time.Time { return time.Now().Add(PushTimeout) }
+	if got := drill.PushMain(ctx, r, in.M0, deadline()); got != PushDenied {
 		t.Fatal("the drill pushed main", got)
+	}
+	// Past the intent's deadline nothing starts.
+	if got := w.PushMain(ctx, r, in.M0, time.Now().Add(-time.Second)); got != PushUnknown {
+		t.Fatal("a push past its deadline", got)
+	}
+	// R must be the replay on M0.
+	if got := w.PushMain(ctx, r, in.Base, deadline()); got != PushDenied {
+		t.Fatal("R not on the M0 given", got)
 	}
 	// A hook refuses: denied, main unchanged.
 	hook := filepath.Join(repo, "hooks", "pre-receive")
 	if e := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0700); e != nil {
 		t.Fatal(e)
 	}
-	if got := w.PushMain(ctx, r, in.M0); got != PushDenied {
+	if got := w.PushMain(ctx, r, in.M0, deadline()); got != PushDenied {
 		t.Fatal("a refused push", got)
 	}
 	if e := os.Remove(hook); e != nil {
 		t.Fatal(e)
 	}
-	// Not M0 any more: non_ff.
-	if got := w.PushMain(ctx, r, in.Base); got != PushNonFF {
-		t.Fatal("a stale M0", got)
+	if head, _ := lander.Ref(ctx, "refs/heads/main"); head != in.M0 {
+		t.Fatal("a refused push moved main", head)
 	}
-	if got := w.PushMain(ctx, r, in.M0); got != PushOK {
+	// A second candidate on the same M0, ready before the first lands.
+	gitTest(t, src, "checkout", "-q", "-b", "candidate2", in.M0)
+	if e := os.WriteFile(filepath.Join(src, "other.txt"), []byte("other\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	gitTest(t, src, "add", "other.txt")
+	gitTest(t, src, "commit", "-m", "other")
+	r2 := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, r2+":refs/heads/land/prod/"+testTask+"/2")
+	w2, err := lander.Open(ctx, r2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w2.Close()
+	if got := w.PushMain(ctx, r, in.M0, deadline()); got != PushOK {
 		t.Fatal("a fast-forward", got)
 	}
 	if head, err := lander.Ref(ctx, "refs/heads/main"); err != nil || head != r {
 		t.Fatalf("main is %s (%v), want %s", head, err, r)
 	}
-	// main moved past R's base meanwhile: the next push of another commit
-	// on the old M0 is non_ff.
-	if got := w.PushMain(ctx, in.A, in.M0); got != PushNonFF {
+	// main moved past M0: the second candidate is not a fast-forward and
+	// is refused by the remote, never laid over R.
+	if got := w2.PushMain(ctx, r2, in.M0, deadline()); got != PushNonFF {
 		t.Fatal("main moved", got)
+	}
+	if head, _ := lander.Ref(ctx, "refs/heads/main"); head != r {
+		t.Fatal("a non-fast-forward moved main", head)
+	}
+}
+
+// A remote that accepts and never answers: the push gives up at its
+// absolute deadline, its whole process group killed, within reapDelay
+// (CUT §11.4 B1, review 660 B-01), and the outcome is unknown.
+func TestPushMainGivesUpAtItsDeadline(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	lander := &Git{remote: g.remote, usernameFile: g.usernameFile, passwordFile: g.passwordFile, scope: liveRef, lander: true}
+	gitTest(t, src, "checkout", "-q", "-b", "hang", in.M0)
+	if e := os.WriteFile(filepath.Join(src, "hang.txt"), []byte("hang\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	gitTest(t, src, "add", "hang.txt")
+	gitTest(t, src, "commit", "-m", "hang")
+	r := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", filepath.Join(filepath.Dir(src), "remote.git"), r+":refs/heads/land/prod/"+testTask+"/9")
+	w, err := lander.Open(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close() // hold it open, never answer
+		}
+	}()
+	if _, err := w.local(ctx, "remote", "set-url", "origin", "http://"+ln.Addr().String()+"/remote.git"); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	got := w.PushMain(ctx, r, in.M0, start.Add(2*time.Second))
+	if elapsed := time.Since(start); got != PushUnknown || elapsed > 2*time.Second+reapDelay+time.Second {
+		t.Fatalf("outcome %s after %s", got, elapsed)
 	}
 }

@@ -108,6 +108,7 @@ func (g *Git) run(ctx context.Context, dir string, network bool, input []byte, e
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, isolation...), args...)...)
+	killGroupOnCancel(cmd)
 	cmd.Dir = dir
 	cmd.Env = append(isolatedEnv(), env...)
 	cmd.Stdin = bytes.NewReader(input)

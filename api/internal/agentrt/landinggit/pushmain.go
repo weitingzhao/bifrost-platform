@@ -32,21 +32,36 @@ const PushTimeout = 2 * time.Minute
 // unknown (no answer within PushTimeout, a broken connection, anything
 // else). The remote's text never leaves this function: Git and servers can
 // echo credentials.
-func (w *Workspace) PushMain(ctx context.Context, r, m0 string) PushOutcome {
+//
+// deadline is absolute: the main_intent's time plus PushTimeout (CUT §11.4
+// B1). A call at or past it starts nothing and returns unknown; the push is
+// never given a fresh two minutes.
+func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Time) PushOutcome {
 	if !w.git.lander || !fullSHA.MatchString(r) || !fullSHA.MatchString(m0) {
 		return PushDenied
 	}
-	ctx, cancel := context.WithTimeout(ctx, PushTimeout)
+	// R must be the replay on M0 (its first parent), the candidate the gate
+	// authorized; anything else is refused before any network.
+	if parent, err := w.local(ctx, "rev-parse", r+"^1"); err != nil || strings.TrimSpace(parent) != m0 {
+		return PushDenied
+	}
+	if deadline.IsZero() || !time.Now().Before(deadline) {
+		return PushUnknown // past the intent's deadline: never start (review 660 B-01)
+	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	h, err := w.git.header()
 	if err != nil {
 		return PushDenied
 	}
-	// --force-with-lease pins main to m0: the push lands only if main is
-	// still m0, and a plain fast-forward refusal otherwise. No --force.
-	args := append(append([]string{}, isolation...), "push", "--porcelain", "--no-verify",
-		"--force-with-lease=refs/heads/main:"+m0, "origin", r+":refs/heads/main")
+	// One explicit refspec, no "+", no force of any kind, no tags (review 660
+	// R-04): the remote takes it only as a fast-forward. R's parent is M0
+	// (the gate checked main = M0 just before), so if main moved meanwhile
+	// the push is refused, never laid over someone else's commit.
+	args := append(append([]string{}, isolation...), "-c", "push.followTags=false",
+		"push", "--porcelain", "--no-verify", "origin", r+":refs/heads/main")
 	cmd := exec.CommandContext(ctx, "git", args...)
+	killGroupOnCancel(cmd)
 	cmd.Dir = w.dir
 	cmd.Env = append(isolatedEnv(), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0="+h)
 	var out, stderr bytes.Buffer
@@ -79,8 +94,7 @@ func classifyPush(stdout, stderr string, err error) PushOutcome {
 			}
 		case "!":
 			switch {
-			case strings.Contains(summary, "non-fast-forward"), strings.Contains(summary, "fetch first"),
-				strings.Contains(summary, "stale info"):
+			case strings.Contains(summary, "non-fast-forward"), strings.Contains(summary, "fetch first"):
 				return PushNonFF
 			case strings.Contains(summary, "remote rejected"):
 				return PushDenied
