@@ -36,7 +36,8 @@ function mockFetch() {
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     let data: unknown = {}
-    if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
+    if (url.includes('/agentrt/landing/missions/')) data = { mission_id: url.split('/').at(-1), in_scope: false, rule: '', roots: [] }
+    else if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
     else if (url.includes('/agentrt/tasks?')) data = tasks
     else if (url.includes('/agentrt/events?stream=')) data = events
     else if (url.includes('/agentrt/events?')) data = { events: [], next: '0.0' }
@@ -223,9 +224,9 @@ describe('goal cards and source links', () => {
     const { rerender } = wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />, client)
     rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={2} questions={[]} /></QueryClientProvider>)
     await screen.findByText('Done', { selector: 'strong.text-lg' })
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(4)
     rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={3} questions={[]} /></QueryClientProvider>)
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(4)
   })
   it('does not give the Owner the move for silent threads alone', () => {
     expect(whoseMove({ state: 'known', count: 4 }, parseRuntimeProgress({ live: [{ task_id: 't' }] }), false, 4)).toBe("Agents' move")

@@ -1,11 +1,12 @@
-import { NEEDS_YOU_HREF, hashQueryParam } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF, goalHref, hashQueryParam } from '@/lib/shell/consoleRoutes'
 import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { StatusLamp } from '@bifrost/ui'
+import { DenseTag, StatusLamp } from '@bifrost/ui'
 import { record, text, type RuntimeProgress } from '@/api/agentRuntime'
 import { fetchRuntimeGoal, type GoalData } from '@/api/agentRuntimeGoals'
+import { fetchMissionLanding, type MissionLanding } from '@/api/missionLanding'
 import type { Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
@@ -15,7 +16,7 @@ import { stalledWords } from '../owner/attemptActivity'
 import { OffPlanMark } from '../owner/OwnerParts'
 import { LastRead } from '../owner/LastRead'
 import { answeredAt } from '../owner/ownerModel'
-import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, latestLease, relative, stageMarks, stalledStage, taskTiming, taskWho, terminalMission } from './goalCardModel'
+import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, landingReason, latestLease, relative, stageMarks, stalledStage, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
 const budgetLabels: Record<string, string> = { owner_granted_attempts: 'attempts granted on its cards', owner_granted_wall_hours: 'hours granted on its cards' }
@@ -42,6 +43,23 @@ function GoalResult({ data }: { data: GoalData }) {
     <p>Review verdict: {reviewed.join(', ') || 'Not recorded'}</p>
     <div className="flex flex-wrap gap-3">{reports.map((r, i) => <button key={`${r.id}-${i}`} className="underline" onClick={() => setArtifact(r.id)}>{r.label}</button>)}</div>
     {artifact && <ArtifactPanel id={artifact} label="Report" close={() => setArtifact(null)} />}
+  </section>
+}
+function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalData }) {
+  if (!landing.in_scope || !landing.roots.length) return null
+  const count = (value: string) => landing.roots.filter(root => root.class === value).length
+  return <section aria-label="Landing" className="rounded border border-[var(--card-border)] p-3 text-sm">
+    <h4 className="font-semibold">Landing</h4>
+    <p>{count('delivered')} delivered, {count('disposed')} disposed, {count('unresolved')} unresolved{landing.closing_round && <> · main is being read again until <time dateTime={landing.closing_round.until}>{landing.closing_round.until}</time></>}</p>
+    {landing.closed && <p>Closed {landing.closed.to} at <time dateTime={landing.closed.at}>{landing.closed.at}</time>: {landing.closed.delivered} delivered, {landing.closed.disposed} disposed when it closed ({landing.closed.rule})</p>}
+    <ul className="mt-2 space-y-2">{landing.roots.map(root => <li key={root.root} className="flex flex-wrap items-center gap-2 break-words">
+      <a className="underline [overflow-wrap:anywhere]" href={goalHref(landing.mission_id, root.root)}>{data.tasks.find(task => task.task_id === root.root)?.title || root.root}</a>
+      <DenseTag size="pill" variant={root.class === 'delivered' ? 'success' : root.class === 'unresolved' ? 'warning' : 'neutral'}>{root.class}</DenseTag>
+      <span>{landingReason(root.reason)}</span>
+      {root.parked && <span>since <time dateTime={root.parked.since}>{root.parked.since}</time>{root.parked.remind_at && <>, told at <time dateTime={root.parked.remind_at}>{root.parked.remind_at}</time></>}</span>}
+      {root.card_alert && <DenseTag size="pill" variant="warning">Answer not confirmed: {root.card_alert}</DenseTag>}
+      {root.question_id && <a className="underline" href={questionHref(root.question_id)}>Open question</a>}
+    </li>)}</ul>
   </section>
 }
 function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Question[]; done: boolean }) {
@@ -76,15 +94,21 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const openedAt = useRef(Date.now())
   const query = useQuery({ queryKey: ['agent-runtime-goal', id], queryFn: ({ signal }) => fetchRuntimeGoal(id, signal), retry: false,
     staleTime: Infinity, refetchOnWindowFocus: false })
+  const landingQuery = useQuery({ queryKey: ['mission-landing', id], queryFn: ({ signal }) => fetchMissionLanding(id, signal), retry: false,
+    staleTime: Infinity, refetchOnWindowFocus: false })
+  const landing = landingQuery.isPaused || landingQuery.isError ? null : landingQuery.data
   const previousPoll = useRef(updatedAt)
   const data = query.data
-  const finished = data && (goalDone(data) || terminalMission(text(data.mission.state)))
+  // Keep reading S3 (or unreadable-scope) missions until the controller closes them.
+  const finished = data && (terminalMission(text(data.mission.state))
+    || (landing != null && (!landing.in_scope || !landing.roots.length) && goalDone(data)))
   const refetch = query.refetch
+  const refetchLanding = landingQuery.refetch
   useEffect(() => {
     if (previousPoll.current === updatedAt) return
     previousPoll.current = updatedAt
-    if (!finished) void refetch()
-  }, [updatedAt, finished, refetch])
+    if (!finished) { void refetch(); void refetchLanding() }
+  }, [updatedAt, finished, refetch, refetchLanding])
   const now = useNow() || Date.now()
   // The task the address points at: its details open and come into view once the card has its tasks.
   const [target, setTarget] = useState(() => taskInHash(id))
@@ -101,14 +125,14 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'
   const links = data ? goalWaitingLinks(id, data, questions, runtime) : []
   if (data?.mission.state === 'awaiting_owner' && !links.length) links.push({ title: 'Review the mission request', href: NEEDS_YOU_HREF })
-  const stages = data ? goalStages(data) : []
+  const stages = data ? goalStages(data, landing) : []
   // A stage none of whose work the runtime can tell is moving says the runtime's words, not running (T24, review 471 B2).
   const live = runtime?.live ?? []
   const activeStalled = stalledStage(stages.find(s => s.state === 'running') ?? stages[0] ?? { label: '', state: 'future', tasks: [], completed: 0, dropped: 0 }, live)
   // The lamp reads the status alone; the stalled words only follow it in the head (review 472 B2-R1).
-  const status = data ? goalStatus(data, links.length > 0) : 'Planning'
+  const status = data ? goalStatus(data, links.length > 0, landing) : 'Planning'
   const head = status + (activeStalled ? ` · ${activeStalled}` : '')
-  const done = data ? goalDone(data) : false
+  const done = data ? goalDone(data, landing) : false
   const start = text(data?.mission.created_at)
   const accepted = data?.events.filter(e => e.event_type === 'task_state_changed' && e.body_json.to === 'accepted').at(-1)?.at
   const end = done ? accepted : finished ? data?.events.at(-1)?.at : undefined
@@ -145,6 +169,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
             {unpersisted && <p className="font-semibold text-[var(--color-warning)]">{lost ? `Attempt ${lost.attempt_no ?? '?'} lost on ${lost.host_id || 'no host'}, not done. ` : ''}{unpersisted}</p>}<p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
         })}
       </li> })}</ol>
+      {landing && <GoalLanding landing={landing} data={data} />}
       {done && <GoalResult data={data} />}
       <ChiefOfStaff data={data} questions={questions} done={done} />
       <details open={targeted || undefined}><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="cursor-pointer break-all text-xs pointer-coarse:min-h-11 pointer-coarse:py-3">{t.role} · {t.task_id} · {t.state}{t.off_plan === true ? ' · off plan' : ''}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>

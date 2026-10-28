@@ -94,7 +94,10 @@ function QuestionSession({ id }: { id: string }) {
   const landingQ = useQuery({
     queryKey: ['questions', 'landing', id],
     queryFn: ({ signal }) => fetchLandingCard(id, signal),
-    enabled: shown != null,
+    // After the question's own read: once shown, or once it fails, so a
+    // trimmed question still shows the runtime's lasting record (review 672
+    // R-06).
+    enabled: shown != null || unreadable,
     retry: false,
     refetchInterval: query => {
       const card = query.state.data
@@ -123,6 +126,12 @@ function QuestionSession({ id }: { id: string }) {
       ) : null}
       {unreadable || stale ? (
         <button type="button" disabled={itemQ.isFetching} onClick={() => { void itemQ.refetch() }}>Retry</button>
+      ) : null}
+      {shown == null && unreadable && !landingQ.isError && landingQ.data != null ? (
+        <NowClock>
+          <p className="m-0 text-sm">The question itself is no longer kept. The runtime&apos;s record of it:</p>
+          <LandingOutcomeRecord card={landingQ.data} />
+        </NowClock>
       ) : null}
       {shown != null ? (
         <NowClock>

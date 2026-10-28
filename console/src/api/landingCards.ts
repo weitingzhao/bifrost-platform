@@ -11,6 +11,8 @@ export const LANDING_KIND_LABELS = {
   ci_stuck: 'CI running long',
   parked_long: 'Landing parked',
   landed_unverified: 'Landing not verified',
+  in_main: 'Change already in main',
+  late_revert: 'Landing reverted after close',
 } as const
 
 const OUTCOMES = ['applied', 'moot', 'refused', 'held', 'acknowledged'] as const

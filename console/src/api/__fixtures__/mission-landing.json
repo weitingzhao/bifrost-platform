@@ -1,0 +1,40 @@
+{
+  "mission_id": "M-2",
+  "in_scope": true,
+  "rule": "landing:prod v3, stg_release none",
+  "roots": [
+    {
+      "root": "t_01M51EHZ92V5F2PRB7JCZVHTQ3",
+      "op": "land:42",
+      "class": "unresolved",
+      "reason": "evidence",
+      "needs_evidence": true,
+      "card_kind": "landed_unverified",
+      "question_id": "q_0123456789abcdef"
+    },
+    {
+      "root": "t_delivered",
+      "op": "land:43",
+      "class": "delivered",
+      "reason": "landed",
+      "needs_evidence": false,
+      "card_kind": "",
+      "question_id": ""
+    },
+    {
+      "root": "t_disposed",
+      "op": "land:44",
+      "class": "disposed",
+      "reason": "reverted",
+      "needs_evidence": false,
+      "card_kind": "",
+      "question_id": ""
+    }
+  ],
+  "closing_round": {
+    "round": 2,
+    "at": "2026-10-28T10:00:00Z",
+    "until": "2026-10-28T10:30:00Z",
+    "ops": ["land:42"]
+  }
+}

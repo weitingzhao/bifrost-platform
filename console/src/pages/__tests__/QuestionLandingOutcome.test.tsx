@@ -157,6 +157,36 @@ describe('QuestionPage landing outcome', () => {
     expect(screen.queryByText('Waiting for the runtime.')).toBeNull()
   })
 
+  it.each([['in_main', 'Change already in main'], ['late_revert', 'Landing reverted after close']])('shows a %s card', async (kind, label) => {
+    replies(() => json({ ...landing, kind, outcome: { ...landing.outcome, outcome: kind === 'in_main' ? 'applied' : 'acknowledged', why: kind === 'in_main' ? 'counted_delivered' : 'ack' } }))
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText(label)).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Landing outcome' })).toBeTruthy()
+  })
+
+  it('shows the lasting record when the question itself is gone (404), apart from a missing landing record', async () => {
+    replies(() => json(landing))
+    const routed = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/landing/cards/') || url.includes('/agentrt/tasks/')) return routed!(input, init)
+      return json({ error: 'not_found' }, 404)
+    })
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText(/The question itself is no longer kept/)).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Landing outcome' })).toBeTruthy()
+    expect(screen.getByText('Carried out')).toBeTruthy()
+  })
+
+  it('shows neither when both the question and its landing record are gone', async () => {
+    replies(() => json({ error: 'not_found' }, 404))
+    vi.mocked(fetch).mockImplementation(async () => json({ error: 'not_found' }, 404))
+    render(wrapper(<QuestionPage />))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/landing/cards/'))).toBe(true))
+    expect(screen.queryByText(/The question itself is no longer kept/)).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Landing outcome' })).toBeNull()
+  })
+
   it('does not request a task or show a task link for repository cards', async () => {
     replies(() => json({ ...landing, kind: 'repo_stopped', root: '', op: '' }))
     render(wrapper(<QuestionPage />))

@@ -1,6 +1,7 @@
 import { record, text, type RuntimeAttempt, type RuntimeEvent, type RuntimeProgress } from '@/api/agentRuntime'
 import { activityCounts, attemptActivity } from '../owner/attemptActivity'
 import type { GoalData, GoalTask } from '@/api/agentRuntimeGoals'
+import type { MissionLanding } from '@/api/missionLanding'
 import type { Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
@@ -89,8 +90,10 @@ function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageSt
   if (impls.length && passed === impls.length) return { state: 'done', completed: passed }
   return { state: running ? 'running' : 'future', completed: passed }
 }
-export function goalDone(data: GoalData): boolean {
+export function goalDone(data: GoalData, landing?: MissionLanding | null): boolean {
   if (['stopped', 'failed', 'cancelled'].includes(text(data.mission.state))) return false
+  // S3 roots must be settled before the controller closes the mission; accepted tasks alone do not close it.
+  if (landing?.in_scope && landing.roots.length) return ['done', 'accepted'].includes(text(data.mission.state))
   // A failed check of a task the Owner dropped says nothing of the goal.
   const dropped = droppedTasks(data)
   if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail' && !dropped.has(e.task_id)))) return false
@@ -100,8 +103,8 @@ export function goalDone(data: GoalData): boolean {
   return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.some(t => ['implement', 'brief'].includes(t.role) && t.state === 'accepted')
     && data.tasks.every(t => t.state === 'accepted' || dropped.has(t.task_id)))
 }
-export function goalStages(data: GoalData): GoalStage[] {
-  const done = goalDone(data)
+export function goalStages(data: GoalData, landing?: MissionLanding | null): GoalStage[] {
+  const done = goalDone(data, landing)
   const dropped = droppedTasks(data)
   const byRule = droppedByRule(data)
   const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1, dropped: 0 }]
@@ -149,12 +152,12 @@ export function stalledStage(stage: GoalStage, live: readonly RuntimeAttempt[]):
   }
   return activityCounts(stalled)
 }
-export function goalStatus(data: GoalData, waiting: boolean): string {
+export function goalStatus(data: GoalData, waiting: boolean, landing?: MissionLanding | null): string {
   if (['stopped', 'cancelled'].includes(text(data.mission.state))) return 'Stopped'
   if (waiting || data.mission.state === 'awaiting_owner') return 'Waiting for you'
-  const stages = goalStages(data)
+  const stages = goalStages(data, landing)
   if (stages.some(s => s.state === 'failed') || data.mission.state === 'failed') return 'Blocked'
-  if (goalDone(data)) return 'Done'
+  if (goalDone(data, landing)) return 'Done'
   if (data.mission.state === 'paused' || stages.some(s => s.state === 'waiting')) return 'Blocked'
   const active = stages.find(s => s.state === 'running')?.label || stages.find(s => s.state === 'future')?.label
   return ({ Plan: 'Planning', Implement: 'Implementing', Verify: 'Checking', Review: 'Reviewing', Done: 'Checking' })[active || 'Plan'] || 'Planning'
@@ -197,3 +200,26 @@ export function missionIds(runtime?: RuntimeProgress, submitted = ''): string[] 
 
 /** A task's details on its goal card: the element `#work?goal=M-n&task=t_…` brings into view (T36). */
 export const goalTaskId = (goal: string, task: string) => `goal-${goal}-task-${task}`
+
+const landingReasons: Record<string, string> = {
+  at_main: 'Waiting for the main update to be confirmed',
+  evidence: 'Waiting for fresh evidence from main',
+  landed_unverified: 'Landed, but main evidence is not verified',
+  rule: 'The current landing rule does not allow closing',
+  in_main_unverified: 'Already in main, awaiting delivery confirmation',
+  'failed:stale': 'Landing failed: the task or evidence is no longer current',
+  'failed:floor': 'Landing failed: the change is outside permitted landing boundaries',
+  unclaimed: 'Waiting for landing to be claimed',
+  reverted: 'The change was reverted',
+  declined: 'Landing was declined',
+  owner: 'Disposed by you',
+  dropped: 'The task was dropped',
+  landed: 'Landed and verified in main',
+  in_main: 'Already in main, confirmed delivered by you',
+  main_lost: 'The change is no longer in main',
+}
+export const landingReason = (reason: string): string => {
+  if (Object.hasOwn(landingReasons, reason)) return landingReasons[reason]!
+  if (reason.startsWith('parked:')) return reason === 'parked:ci_stuck' ? 'Parked: CI running long' : `Parked: ${reason.slice('parked:'.length) || 'no reason given'}`
+  return reason
+}

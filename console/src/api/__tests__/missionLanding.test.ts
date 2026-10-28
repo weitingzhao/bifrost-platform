@@ -1,0 +1,85 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import fixture from '../__fixtures__/mission-landing.json'
+import { fetchMissionLanding, parseMissionLanding } from '../missionLanding'
+
+beforeEach(() => {
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null } })
+})
+afterEach(() => vi.unstubAllGlobals())
+
+describe('mission landing contract', () => {
+  it('reads every class, the closing round, and additional fields', () => {
+    expect(parseMissionLanding(fixture)).toEqual(fixture)
+    expect(parseMissionLanding({ ...fixture, future: true })).not.toBeNull()
+  })
+  it('reads a park, a card alert and the close; rejects them mistyped (review 672 R-07, N-01)', () => {
+    const parked = { ...fixture.roots[0], card_alert: 'card:7:1:root_failed lost', parked: { since: '2026-10-28T08:00:00Z', shown: 'ci_stuck', retry_at: '2026-10-28T08:01:00Z' } }
+    const closed = { to: 'stopped', at: '2026-10-28T11:00:00Z', rule: 'no landing rule in force', round: 0, delivered: 0, disposed: 1, briefs: 0 }
+    expect(parseMissionLanding({ ...fixture, roots: [parked], closed })).not.toBeNull()
+    expect(parseMissionLanding({ ...fixture, roots: [{ ...parked, parked: { since: 'soon', shown: '' } }] })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, roots: [{ ...parked, card_alert: 1 }] })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, closed: { ...closed, to: 'expired' } })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, closed: { ...closed, delivered: -1 } })).toBeNull()
+  })
+  it('accepts an out-of-scope mission and an empty root list without a closing round', () => {
+    const body = { mission_id: 'M-2', in_scope: false, rule: '', roots: [] }
+    expect(parseMissionLanding(body)).toEqual(body)
+    expect(parseMissionLanding({ ...body, in_scope: true })).not.toBeNull()
+  })
+  it('preserves unknown reason/card words and permits an unclaimed root with no operation', () => {
+    const root = { ...fixture.roots[0], op: '', reason: 'future_reason', card_kind: 'future_card' }
+    expect(parseMissionLanding({ ...fixture, roots: [root] })?.roots).toEqual([root])
+  })
+  it.each(['mission_id', 'in_scope', 'rule', 'roots'])('rejects missing or mistyped %s', key => {
+    const body: Record<string, unknown> = { ...fixture }
+    delete body[key]
+    expect(parseMissionLanding(body)).toBeNull()
+    expect(parseMissionLanding({ ...fixture, [key]: 1 })).toBeNull()
+  })
+  it.each(Object.keys(fixture.roots[0]!))('rejects the whole read for missing or mistyped root.%s', key => {
+    const root: Record<string, unknown> = { ...fixture.roots[0] }
+    delete root[key]
+    expect(parseMissionLanding({ ...fixture, roots: [fixture.roots[1], root] })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, roots: [{ ...fixture.roots[0], [key]: [] }] })).toBeNull()
+  })
+  it.each(Object.keys(fixture.closing_round))('rejects missing or mistyped closing_round.%s', key => {
+    const round: Record<string, unknown> = { ...fixture.closing_round }
+    delete round[key]
+    expect(parseMissionLanding({ ...fixture, closing_round: round })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, closing_round: { ...fixture.closing_round, [key]: null } })).toBeNull()
+  })
+  it.each([null, [], {}, false, 'landing',
+    { ...fixture, mission_id: '' }, { ...fixture, roots: [null] },
+    { ...fixture, roots: [{ ...fixture.roots[0], root: '' }] },
+    { ...fixture, roots: [{ ...fixture.roots[0], class: 'unknown' }] },
+    { ...fixture, closing_round: null }, { ...fixture, closing_round: [] },
+    ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map(round => ({ ...fixture, closing_round: { ...fixture.closing_round, round } })),
+    { ...fixture, closing_round: { ...fixture.closing_round, at: 'yesterday' } },
+    { ...fixture, closing_round: { ...fixture.closing_round, until: 'tomorrow' } },
+    { ...fixture, closing_round: { ...fixture.closing_round, until: fixture.closing_round.at } },
+    { ...fixture, closing_round: { ...fixture.closing_round, ops: [42] } },
+  ])('rejects malformed shapes %# without throwing', body => {
+    expect(parseMissionLanding(body)).toBeNull()
+  })
+  it('reads 200 and forwards the abort signal and authentication headers', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(fixture)))
+    vi.stubGlobal('fetch', fetcher)
+    const controller = new AbortController()
+    expect(await fetchMissionLanding('M-2', controller.signal)).toEqual(fixture)
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/agentrt/landing/missions/M-2', expect.objectContaining({ signal: controller.signal, headers: expect.any(Headers) }))
+  })
+  it.each([201, 204, 301, 401, 403, 404, 500, 503])('treats HTTP %s as unreadable', async status => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(status === 204 ? null : JSON.stringify(fixture), { status })))
+    expect(await fetchMissionLanding('M-2')).toBeNull()
+  })
+  it.each(['{', '{}', JSON.stringify({ ...fixture, mission_id: 'M-3' })])('hides malformed or mismatched 200 responses: %s', async body => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    expect(await fetchMissionLanding('M-2')).toBeNull()
+  })
+  it('treats network failure and cancellation as unreadable', async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockRejectedValueOnce(new DOMException('Aborted', 'AbortError'))
+    vi.stubGlobal('fetch', fetcher)
+    expect(await fetchMissionLanding('M-2')).toBeNull()
+    expect(await fetchMissionLanding('M-2')).toBeNull()
+  })
+})
