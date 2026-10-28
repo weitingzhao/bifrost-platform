@@ -23,9 +23,21 @@ const PasswordFileEnv = "AGENTRT_LANDING_PASSWORD_FILE"
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var drillRef = regexp.MustCompile(`^refs/heads/land/stg/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`)
 
+// liveRef is the production landing branch (S3, CUT §2.5 step 4): only the
+// lander identity pushes it.
+var liveRef = regexp.MustCompile(`^refs/heads/land/prod/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`)
+
 // Git has no configurable production remote and no general-purpose push API.
 // The credentials are file paths, never token values in the parent's env.
-type Git struct{ remote, usernameFile, passwordFile string }
+type Git struct {
+	remote, usernameFile, passwordFile string
+	// scope is the only branch shape this identity reads, pushes and
+	// deletes: land/stg for the drill, land/prod for the lander.
+	scope *regexp.Regexp
+	// lander: the production identity, the only one that may push main
+	// (PushMain). The drill's Git never can.
+	lander bool
+}
 
 func FromEnv(environment string) (*Git, error) {
 	if environment != "stg" {
@@ -35,7 +47,32 @@ func FromEnv(environment string) (*Git, error) {
 	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
 		return nil, errors.New("landing credential paths must be absolute")
 	}
-	return &Git{remote: remoteURL, usernameFile: u, passwordFile: p}, nil
+	return &Git{remote: remoteURL, usernameFile: u, passwordFile: p, scope: drillRef}, nil
+}
+
+// Lander credentials: the agentrt-lander identity's basic-auth files (S3).
+const LanderUsernameFileEnv = "AGENTRT_LANDER_USERNAME_FILE"
+const LanderPasswordFileEnv = "AGENTRT_LANDER_PASSWORD_FILE"
+
+// LanderFromEnv is the production landing identity: land/prod branches and
+// a fast-forward push of platform main, nothing else (CUT §2.5, §3 S3 ⑫).
+func LanderFromEnv(environment string) (*Git, error) {
+	if environment != "prod" {
+		return nil, errors.New("the lander runs on prod")
+	}
+	u, p := os.Getenv(LanderUsernameFileEnv), os.Getenv(LanderPasswordFileEnv)
+	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
+		return nil, errors.New("lander credential paths must be absolute")
+	}
+	return &Git{remote: remoteURL, usernameFile: u, passwordFile: p, scope: liveRef, lander: true}, nil
+}
+
+func (g *Git) inScope(ref string) bool {
+	scope := g.scope
+	if scope == nil {
+		scope = drillRef
+	}
+	return scope.MatchString(ref)
 }
 
 // A strict allowlist prevents inherited Git config, tracing, helpers, proxies,
@@ -130,8 +167,8 @@ func (w *Workspace) Main(ctx context.Context) (string, error) {
 	return strings.TrimSpace(s), e
 }
 func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
-	if ref != "refs/heads/main" && !drillRef.MatchString(ref) {
-		return "", errors.New("ref outside drill scope")
+	if ref != "refs/heads/main" && !g.inScope(ref) {
+		return "", errors.New("ref outside landing scope")
 	}
 	s, e := g.run(ctx, "", true, nil, nil, "ls-remote", "--refs", g.remote, ref)
 	if e != nil {
@@ -147,15 +184,15 @@ func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
 	return f[0], nil
 }
 func (w *Workspace) Push(ctx context.Context, ref, sha string) error {
-	if !drillRef.MatchString(ref) || !fullSHA.MatchString(sha) {
-		return errors.New("push outside land/stg scope")
+	if !w.git.inScope(ref) || !fullSHA.MatchString(sha) {
+		return errors.New("push outside landing scope")
 	}
 	_, e := w.git.run(ctx, w.dir, true, nil, nil, "push", "--porcelain", "origin", sha+":"+ref)
 	return e
 }
 func (g *Git) Delete(ctx context.Context, ref, sha string) error {
-	if !drillRef.MatchString(ref) || !fullSHA.MatchString(sha) {
-		return errors.New("delete outside land/stg scope")
+	if !g.inScope(ref) || !fullSHA.MatchString(sha) {
+		return errors.New("delete outside landing scope")
 	}
 	// A crash after deletion is already complete. A race after this read is
 	// still protected by the atomic lease below.

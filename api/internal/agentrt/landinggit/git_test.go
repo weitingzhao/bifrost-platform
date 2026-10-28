@@ -293,3 +293,67 @@ func TestMainEvidence(t *testing.T) {
 		t.Fatalf("an unreachable main read as evidence: has=%v err=%v", has, err)
 	}
 }
+
+// PushMain (S3, CUT §2.5 step 7): the lander pushes R onto main only as a
+// fast-forward of M0; main moved is non_ff; a hook's refusal is denied; the
+// drill's identity can never push main; a land/prod branch is the lander's
+// scope and not the drill's.
+func TestLanderPushMain(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	repo := filepath.Join(filepath.Dir(src), "remote.git")
+	lander := &Git{remote: g.remote, usernameFile: g.usernameFile, passwordFile: g.passwordFile, scope: liveRef, lander: true}
+	ref := "refs/heads/land/prod/" + testTask + "/1"
+	if _, err := g.Ref(ctx, ref); err == nil {
+		t.Fatal("the drill read a land/prod branch")
+	}
+	// R: one commit on main (M0), published on a landing branch so a
+	// workspace can fetch it.
+	gitTest(t, src, "checkout", "-q", "-b", "candidate", in.M0)
+	if e := os.WriteFile(filepath.Join(src, "landed.txt"), []byte("landed\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	gitTest(t, src, "add", "landed.txt")
+	gitTest(t, src, "commit", "-m", "landed")
+	r := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, r+":"+ref)
+	w, err := lander.Open(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	drill, err := g.Open(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drill.Close()
+	if got := drill.PushMain(ctx, r, in.M0); got != PushDenied {
+		t.Fatal("the drill pushed main", got)
+	}
+	// A hook refuses: denied, main unchanged.
+	hook := filepath.Join(repo, "hooks", "pre-receive")
+	if e := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0700); e != nil {
+		t.Fatal(e)
+	}
+	if got := w.PushMain(ctx, r, in.M0); got != PushDenied {
+		t.Fatal("a refused push", got)
+	}
+	if e := os.Remove(hook); e != nil {
+		t.Fatal(e)
+	}
+	// Not M0 any more: non_ff.
+	if got := w.PushMain(ctx, r, in.Base); got != PushNonFF {
+		t.Fatal("a stale M0", got)
+	}
+	if got := w.PushMain(ctx, r, in.M0); got != PushOK {
+		t.Fatal("a fast-forward", got)
+	}
+	if head, err := lander.Ref(ctx, "refs/heads/main"); err != nil || head != r {
+		t.Fatalf("main is %s (%v), want %s", head, err, r)
+	}
+	// main moved past R's base meanwhile: the next push of another commit
+	// on the old M0 is non_ff.
+	if got := w.PushMain(ctx, in.A, in.M0); got != PushNonFF {
+		t.Fatal("main moved", got)
+	}
+}
