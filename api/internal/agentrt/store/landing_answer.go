@@ -2,15 +2,33 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"time"
 )
 
+// ErrLandingMissionClosed: a retry answered after its mission closed. The
+// mission closed first (Close holds its row while it decides), so the retry
+// could never be claimed; it is refused rather than recorded as if it could
+// (review 645 R1). Whether such a mission reopens is S3's policy.
+var ErrLandingMissionClosed = errors.New("the root's mission is no longer active: the retry cannot be claimed")
+
 // ApplyLandingAnswer is called only after the controller reads the bound
-// question. The repository stream serializes it against claims and failures.
+// question. It takes the claim's locks in the claim's order (task, then its
+// mission, then the repository stream), so it is ordered against a close as a
+// claim is: the close decides first and a retry is refused
+// (ErrLandingMissionClosed), or the retry commits first and the close reads it
+// (landingHolds). The stream serializes it against claims and failures.
 func ApplyLandingAnswer(ctx context.Context, tx pgx.Tx, root, after, choice, reason, by string, answeredAt time.Time) error {
+	var mission, missionState string
+	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
+		return err
+	}
 	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 		return err
 	}
@@ -33,6 +51,9 @@ func ApplyLandingAnswer(ctx context.Context, tx pgx.Tx, root, after, choice, rea
 		}
 		if o.Retried {
 			return nil
+		}
+		if missionState != "active" {
+			return ErrLandingMissionClosed
 		}
 		if reason == "" {
 			reason = "try_again"

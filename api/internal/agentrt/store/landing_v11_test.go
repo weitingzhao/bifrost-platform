@@ -114,7 +114,9 @@ func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
 
 // Serial: FreezeEventClock.
 func TestLandingV11RetryAnswersDatabase(t *testing.T) {
-	w := newWorld(t)
+	// Answers lock the root's task and mission (review 645 R1): the roots
+	// are real tasks of an active mission.
+	w := newKernelWorld(t)
 	at := time.Now().Add(-7 * time.Hour)
 	t.Cleanup(store.FreezeEventClock(at))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
@@ -122,7 +124,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 	for i, why := range reasons {
 		store.FreezeEventClock(at)
 		op := fmt.Sprintf("retry:%d", i)
-		root := fmt.Sprintf("t_%026d", i+100)
+		root := w.ready(t, store.Task{OffPlanReason: fmt.Sprintf("answer %d", i)})
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", why)))
 		q := store.Question{ID: "q_retry", Status: store.QuestionAnswered, Channel: "console", Option: "try_again", Text: "owner retry", AnsweredBy: "owner", AnsweredAt: at.Add(7 * time.Hour).Format(time.RFC3339Nano)}
@@ -159,7 +161,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 	store.FreezeEventClock(at)
 	// No answer, rule answer or an unrelated answer must not write retry.
 	op := "answer:decline"
-	root := landingTask
+	root := w.ready(t, store.Task{OffPlanReason: "answer decline"})
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "bound")))
 	q := store.Question{ID: "q_decline", Status: store.QuestionAnswered, Channel: "rule", Option: "try_again", AnsweredBy: "owner", AnsweredAt: time.Now().Format(time.RFC3339Nano)}
@@ -236,12 +238,13 @@ func TestLandingV11RefusesBadEvidenceDatabase(t *testing.T) {
 
 // Serial: FreezeEventClock.
 func TestLandingV11LiveCannotRehearseDatabase(t *testing.T) {
-	w := newWorld(t)
+	w := newKernelWorld(t)
+	root := w.ready(t, store.Task{OffPlanReason: "live"}) // answers lock the root's task (review 645 R1)
 	at := time.Now().Add(-time.Hour)
 	t.Cleanup(store.FreezeEventClock(at))
 	op := "live:1"
-	ref := "refs/heads/land/prod/" + landingTask + "/1"
-	for _, r := range []map[string]any{newLandingRecord(op, "claimed", "task", landingTask, "attempt", landingAttempt, "A", commitA, "rule_version", 1), newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
+	ref := "refs/heads/land/prod/" + root + "/1"
+	for _, r := range []map[string]any{newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1), newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
 	store.FreezeEventClock(at.Add(time.Minute))
@@ -251,7 +254,7 @@ func TestLandingV11LiveCannotRehearseDatabase(t *testing.T) {
 	}
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "window", "retry_at", at.Add(2*time.Minute).Format(time.RFC3339Nano))))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
-	ok(t, ctl.LandingAnswer(ctx, landingTask, op, func(context.Context, string, string) (store.Question, bool) {
+	ok(t, ctl.LandingAnswer(ctx, root, op, func(context.Context, string, string) (store.Question, bool) {
 		return store.Question{ID: "q_no", Status: store.QuestionAnswered, Channel: "console", Option: "do_not_merge", AnsweredBy: "owner", AnsweredAt: at.Add(3 * time.Minute).Format(time.RFC3339Nano)}, true
 	}))
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "failed" || o.Outcome != "declined" {
