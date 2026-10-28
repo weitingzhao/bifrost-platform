@@ -175,9 +175,7 @@ func TestDrillRecoveryDiscardRestartPastBudget(t *testing.T) {
 	if len(landingState(t, w, landingRepoStream).Operations) != 2 {
 		t.Fatal("restart duplicated bound failure")
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.ApplyLandingAnswer(ctx, tx, task, latestID, "try_again", "retry after recovery", "owner", later)
-	}))
+	ok(t, applyRetry(w.rt, task, latestID, "retry after recovery", later))
 	next, decision, err := store.ClaimLandingDrill(ctx, w.rt, src, task, later)
 	ok(t, err)
 	if next == "" || !decision.Allowed {

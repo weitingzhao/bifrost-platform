@@ -127,7 +127,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 		root := w.ready(t, store.Task{OffPlanReason: fmt.Sprintf("answer %d", i)})
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", why)))
-		q := store.Question{ID: "q_retry", Status: store.QuestionAnswered, Channel: "console", Option: "try_again", Text: "owner retry", AnsweredBy: "owner", AnsweredAt: at.Add(7 * time.Hour).Format(time.RFC3339Nano)}
+		q := store.Question{ID: fmt.Sprintf("q_retry_%d", i), Status: store.QuestionAnswered, Channel: "console", Option: "try_again", Text: "owner retry", AnsweredBy: "owner", AnsweredAt: at.Add(7 * time.Hour).Format(time.RFC3339Nano)}
 		read := func(_ context.Context, r, a string) (store.Question, bool) {
 			if r != root || a != op {
 				t.Fatal("wrong binding")
@@ -135,13 +135,20 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 			return q, true
 		}
 		restore := store.FreezeEventClock(at.Add(7 * time.Hour))
-		err := ctl.LandingAnswer(ctx, root, op, read)
+		res, err := ctl.LandingAnswer(ctx, root, op, read)
+		ok(t, err)
 		retryable := slices.Contains([]string{"bound", "stale", "ci_red"}, why)
-		if (err == nil) != retryable {
-			t.Fatal(why, err)
+		// A failure the protocol does not retry is a recorded refusal, not an
+		// error (CUT §8).
+		if (res.Outcome == store.LandingAnswerApplied) != retryable || (!retryable && res.Why != "not_retryable") {
+			t.Fatal(why, res)
 		}
 		if retryable {
-			ok(t, ctl.LandingAnswer(ctx, root, op, read)) // same answer is idempotent
+			again, err := ctl.LandingAnswer(ctx, root, op, read) // same answer is idempotent
+			ok(t, err)
+			if again.Recorded {
+				t.Fatal("the same card was handled twice", again)
+			}
 			state := landingState(t, w, landingRepoStream)
 			first, n := landing.RootBudget(state, root)
 			if !first.Equal(at.Add(7*time.Hour).Truncate(time.Microsecond)) || n != 1 || state.Operations[op].BlocksClaim() {
@@ -149,8 +156,9 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 			}
 			next := op + ":2"
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(next, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
-			if ctl.LandingAnswer(ctx, root, op, read) == nil {
-				t.Fatal("old question applied to new operation")
+			q.ID += "_late" // a new card still bound to the old operation
+			if late, err := ctl.LandingAnswer(ctx, root, op, read); err != nil || late.Outcome != store.LandingAnswerMoot || late.Why != "superseded" {
+				t.Fatal("old question applied to new operation", late, err)
 			}
 			if landingState(t, w, landingRepoStream).Retries[root].ConsumedBy != next {
 				t.Fatal("not consumed")
@@ -166,16 +174,20 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "bound")))
 	q := store.Question{ID: "q_decline", Status: store.QuestionAnswered, Channel: "rule", Option: "try_again", AnsweredBy: "owner", AnsweredAt: time.Now().Format(time.RFC3339Nano)}
 	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
-	ok(t, ctl.LandingAnswer(ctx, root, op, read))
+	if res, err := ctl.LandingAnswer(ctx, root, op, read); err != nil || res.Outcome != "" {
+		t.Fatal("rule answer handled", res, err)
+	}
 	if !landingState(t, w, landingRepoStream).Operations[op].BlocksClaim() {
 		t.Fatal("rule retry")
 	}
 	q.Channel = "console"
 	q.Option = "do_not_merge"
-	ok(t, ctl.LandingAnswer(ctx, root, op, read))
-	q.Option = "try_again"
-	if ctl.LandingAnswer(ctx, root, op, read) == nil {
-		t.Fatal("declined retry")
+	if res, err := ctl.LandingAnswer(ctx, root, op, read); err != nil || res.Outcome != store.LandingAnswerApplied {
+		t.Fatal("decline", res, err)
+	}
+	q.ID, q.Option = "q_decline_retry", "try_again"
+	if res, err := ctl.LandingAnswer(ctx, root, op, read); err != nil || res.Outcome != store.LandingAnswerRefused || res.Why != "not_retryable" {
+		t.Fatal("declined retry", res, err)
 	}
 	// Non-controller append is rejected even with valid fields and transition.
 	op = "actor:1"
@@ -254,9 +266,10 @@ func TestLandingV11LiveCannotRehearseDatabase(t *testing.T) {
 	}
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "window", "retry_at", at.Add(2*time.Minute).Format(time.RFC3339Nano))))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
-	ok(t, ctl.LandingAnswer(ctx, root, op, func(context.Context, string, string) (store.Question, bool) {
+	_, err := ctl.LandingAnswer(ctx, root, op, func(context.Context, string, string) (store.Question, bool) {
 		return store.Question{ID: "q_no", Status: store.QuestionAnswered, Channel: "console", Option: "do_not_merge", AnsweredBy: "owner", AnsweredAt: at.Add(3 * time.Minute).Format(time.RFC3339Nano)}, true
-	}))
+	})
+	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "failed" || o.Outcome != "declined" {
 		t.Fatal("parked not declined", o)
 	}

@@ -164,6 +164,10 @@ var bodies = map[string][]field{
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
 		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
+		// landing_answer: on the repository's landing stream, how one
+		// answered landing card was handled (landing_answer.go, CUT §8): the
+		// question, root and operation, applied / moot / refused and why.
+		{"landing_answer", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -523,6 +527,9 @@ func badValue(eventType, name string, v any) string {
 			return err.Error()
 		}
 		return ""
+	}
+	if eventType == "note" && name == "landing_answer" {
+		return badLandingAnswer(v)
 	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {

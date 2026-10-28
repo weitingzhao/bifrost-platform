@@ -3,7 +3,6 @@ package store_test
 import (
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -99,9 +98,7 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "failed" || o.Outcome != "bound" {
 		t.Fatal("fixture: claimed operation not failed{bound}", o.Phase, o.Outcome)
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.ApplyLandingAnswer(ctx, tx, task, op, "try_again", "retry", "owner", bound)
-	}))
+	ok(t, applyRetry(w.rt, task, op, "retry", bound))
 	closeKeeps(t, w, "closed between the retry and its claim")
 
 	later := bound.Add(6*time.Hour + time.Minute)

@@ -5,6 +5,7 @@ package landing
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -206,6 +207,20 @@ func Fold(entries []Entry) (State, error) {
 	}
 	return s, nil
 }
+
+// Check reports whether e would apply to s, without changing s: an answer
+// decides before it appends whether the protocol takes its record, so a
+// refusal is recorded instead of rolling the answer back (CUT §8).
+func (s State) Check(e Entry) error {
+	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion,
+		Retries: maps.Clone(s.Retries), Reservations: maps.Clone(s.Reservations), Operations: make(map[string]Operation, len(s.Operations))}
+	for k, o := range s.Operations {
+		o.Digests = maps.Clone(o.Digests)
+		c.Operations[k] = o
+	}
+	return c.Apply(e)
+}
+
 func (s *State) Apply(e Entry) error {
 	r, err := Parse(e.Record)
 	if err != nil {

@@ -1,0 +1,399 @@
+package store_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"reflect"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+)
+
+// CUT §8 (review 647): an answered landing card is handled once, recorded on
+// the repository stream in the transaction that applies it, and acknowledged
+// only after that commits. A refusal is a record, not an error.
+
+// applyRetry answers try_again on a fresh card and fails unless it applied.
+func applyRetry(db store.DB, root, op, text string, at time.Time) error {
+	q := store.Question{ID: fmt.Sprintf("q-retry-%s-%s-%d", root, op, at.UnixNano()), Status: store.QuestionAnswered, Channel: "console",
+		Option: "try_again", Text: text, AnsweredBy: "owner", AnsweredAt: at.Format(time.RFC3339Nano)}
+	res, err := store.HandleLandingAnswer(ctx, db, q, root, op, at)
+	if err != nil {
+		return err
+	}
+	if res.Outcome != store.LandingAnswerApplied {
+		return fmt.Errorf("retry %s: %s (%s)", op, res.Outcome, res.Why)
+	}
+	return nil
+}
+
+// failedRoot is a real task of the active mission M-1 whose operation op
+// failed with why, written at at.
+func failedRoot(t *testing.T, w *world, op, why string) string {
+	t.Helper()
+	root := w.ready(t, store.Task{OffPlanReason: "answer " + op})
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", why)))
+	return root
+}
+
+func answerCard(id, option string, at time.Time) store.Question {
+	return store.Question{ID: id, Status: store.QuestionAnswered, Channel: "console", Option: option, Text: "owner",
+		AnsweredBy: "owner", AnsweredAt: at.Format(time.RFC3339Nano)}
+}
+
+// answerRecords counts the record notes of a question and the retries of a
+// root on the repository stream.
+func answerRecords(t *testing.T, w *world, question, root string) (records, retries int) {
+	t.Helper()
+	ok(t, w.rt.QueryRow(ctx, `SELECT
+	    count(*) FILTER (WHERE body_json->'landing_answer'->>'question_id' = $2),
+	    count(*) FILTER (WHERE body_json->'landing'->>'kind' = 'retry' AND body_json->'landing'->>'root' = $3)
+	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'`, landingRepoStream, question, root).Scan(&records, &retries))
+	return records, retries
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerRefusedAfterCloseIsRecorded(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "refused:1", "bound")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "stopped", "test") }))
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-refused", "try_again", at.Add(time.Minute))
+
+	res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "refused:1", at.Add(time.Minute))
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerRefused || res.Why != "mission_not_active" || !res.Recorded {
+		t.Fatalf("a retry under a stopped mission: %+v", res)
+	}
+	again, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "refused:1", at.Add(time.Minute))
+	ok(t, err)
+	if again.Outcome != res.Outcome || again.Why != res.Why || again.Recorded {
+		t.Fatalf("second pass: %+v", again)
+	}
+	if records, retries := answerRecords(t, w, "q-refused", root); records != 1 || retries != 0 {
+		t.Fatalf("records=%d retries=%d", records, retries)
+	}
+	if landingState(t, w, landingRepoStream).Operations["refused:1"].Retried {
+		t.Fatal("retry folded under a stopped mission")
+	}
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerAckAfterCommitAndOnlyOnce(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "ack:1", "stale")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-ack", "try_again", at.Add(time.Minute))
+	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
+
+	var acks []string
+	fail := true
+	ctl := controller.Controller{DB: w.rt, Env: "stg"}
+	other, err := w.db.Pool(t, w.db.Runtime).Acquire(ctx)
+	ok(t, err)
+	defer other.Release()
+	ctl.Sources.Ack = func(_ context.Context, id string) error {
+		// The record and the retry are committed before the card is acked:
+		// another connection sees them.
+		var records, retries int
+		ok(t, other.Conn().QueryRow(ctx, `SELECT
+		    count(*) FILTER (WHERE body_json->'landing_answer'->>'question_id' = $2),
+		    count(*) FILTER (WHERE body_json->'landing'->>'kind' = 'retry' AND body_json->'landing'->>'root' = $3)
+		  FROM agentrt.event WHERE event_stream_id = $1`, landingRepoStream, id, root).Scan(&records, &retries))
+		if records != 1 || retries != 1 {
+			t.Errorf("ack before commit: records=%d retries=%d", records, retries)
+		}
+		acks = append(acks, id)
+		if fail {
+			fail = false
+			return errors.New("question store down")
+		}
+		return nil
+	}
+	if _, err := ctl.LandingAnswer(ctx, root, "ack:1", read); err == nil {
+		t.Fatal("a failed ack was not reported")
+	}
+	// The next pass, or a restarted controller, finds the record and only acks.
+	ctl2 := controller.Controller{DB: w.rt, Env: "stg", Sources: ctl.Sources}
+	// A later operation by now does not change the stored verdict.
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("ack:2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	res, err := ctl2.LandingAnswer(ctx, root, "ack:1", read)
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerApplied || res.Recorded || !res.Acked {
+		t.Fatalf("second pass: %+v", res)
+	}
+	if records, retries := answerRecords(t, w, "q-ack", root); records != 1 || retries != 1 || len(acks) != 2 {
+		t.Fatalf("records=%d retries=%d acks=%v", records, retries, acks)
+	}
+}
+
+// commitFailDB fails the first commit: the transaction rolls back as a
+// database failure would.
+type commitFailDB struct {
+	store.DB
+	failed *bool
+}
+type commitFailTx struct {
+	pgx.Tx
+	failed *bool
+}
+
+func (d commitFailDB) BeginTx(c context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := d.DB.BeginTx(c, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &commitFailTx{Tx: tx, failed: d.failed}, nil
+}
+func (tx *commitFailTx) Commit(c context.Context) error {
+	if !*tx.failed {
+		*tx.failed = true
+		_ = tx.Tx.Rollback(c)
+		return errors.New("commit lost")
+	}
+	return tx.Tx.Commit(c)
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerDatabaseFailureLeavesNothing(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "transient:1", "ci_red")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-transient", "try_again", at.Add(time.Minute))
+	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
+	acked := 0
+	failed := false
+	ctl := controller.Controller{DB: commitFailDB{DB: w.rt, failed: &failed}, Env: "stg"}
+	ctl.Sources.Ack = func(context.Context, string) error { acked++; return nil }
+	if _, err := ctl.LandingAnswer(ctx, root, "transient:1", read); err == nil {
+		t.Fatal("a lost commit was not reported")
+	}
+	if records, retries := answerRecords(t, w, "q-transient", root); records != 0 || retries != 0 || acked != 0 {
+		t.Fatalf("after a lost commit: records=%d retries=%d acked=%d", records, retries, acked)
+	}
+	res, err := ctl.LandingAnswer(ctx, root, "transient:1", read)
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerApplied || !res.Recorded || acked != 1 {
+		t.Fatalf("next pass: %+v acked=%d", res, acked)
+	}
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerVerdicts(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	type c struct {
+		name, outcome, why, option string
+		fail                       string // the operation's failure; "" leaves it claimed
+		setup                      func(root, op string)
+		answered                   time.Time
+	}
+	later := at.Add(time.Hour)
+	cases := []c{
+		// Moot: nothing at all is needed.
+		{"retried", store.LandingAnswerMoot, "already_retried", "try_again", "bound", func(root, op string) { ok(t, applyRetry(w.rt, root, op, "first", later)) }, later},
+		{"declined", store.LandingAnswerMoot, "already_declined", "do_not_merge", "bound", func(root, op string) {
+			_, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-first-"+op, "do_not_merge", later), root, op, later)
+			ok(t, err)
+		}, later},
+		{"superseded", store.LandingAnswerMoot, "superseded", "try_again", "bound", func(root, op string) {
+			ok(t, applyRetry(w.rt, root, op, "first", later))
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op+":2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+		}, later},
+		// Refused: not carried out; the Owner answers a new card (review 655 R1).
+		{"unknown", store.LandingAnswerRefused, "unknown_choice", "maybe", "bound", nil, later},
+		{"early", store.LandingAnswerRefused, "answered_before", "try_again", "bound", nil, at.Add(-time.Hour)},
+		{"running", store.LandingAnswerRefused, "not_failed", "try_again", "", nil, later},
+		{"conflict", store.LandingAnswerRefused, "not_retryable", "try_again", "conflict", nil, later},
+		{"floor", store.LandingAnswerRefused, "not_retryable", "try_again", "floor", nil, later},
+		// Applied.
+		{"decline", store.LandingAnswerApplied, "declined", "do_not_merge", "", nil, later},
+	}
+	for i, k := range cases {
+		op := fmt.Sprintf("verdict:%d", i)
+		store.FreezeEventClock(at)
+		root := w.ready(t, store.Task{OffPlanReason: "verdict " + k.name})
+		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+		if k.fail != "" {
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", k.fail)))
+		}
+		store.FreezeEventClock(later)
+		if k.setup != nil {
+			k.setup(root, op)
+		}
+		before := landingState(t, w, landingRepoStream)
+		id := "q-verdict-" + k.name
+		res, err := store.HandleLandingAnswer(ctx, w.rt, answerCard(id, k.option, k.answered), root, op, k.answered)
+		ok(t, err)
+		if res.Outcome != k.outcome || res.Why != k.why || !res.Recorded {
+			t.Fatalf("%s: %+v", k.name, res)
+		}
+		if records, _ := answerRecords(t, w, id, root); records != 1 {
+			t.Fatalf("%s: records=%d", k.name, records)
+		}
+		// A record note is not a landing record: only an applied answer
+		// changes the fold.
+		if after := landingState(t, w, landingRepoStream); (k.outcome == store.LandingAnswerApplied) == reflect.DeepEqual(after, before) {
+			t.Fatalf("%s: the fold changed=%v", k.name, !reflect.DeepEqual(after, before))
+		}
+	}
+}
+
+// Serial: FreezeEventClock. A stored verdict is returned before anything is
+// judged again: a later operation, or a mission that came back, does not
+// change what the card already did (review 655 R3).
+func TestLandingAnswerStoredVerdictComesFirst(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "stored:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	applied := answerCard("q-stored-applied", "try_again", at.Add(time.Minute))
+	res, err := store.HandleLandingAnswer(ctx, w.rt, applied, root, "stored:1", at.Add(time.Minute))
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerApplied {
+		t.Fatal(res)
+	}
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("stored:2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	again, err := store.HandleLandingAnswer(ctx, w.rt, applied, root, "stored:1", at.Add(time.Minute))
+	ok(t, err)
+	if again.Outcome != store.LandingAnswerApplied || again.Why != "retry" || again.Recorded {
+		t.Fatalf("after a successor: %+v", again)
+	}
+
+	other := failedRoot(t, w, "stored:3", "stale")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "paused", "test") }))
+	paused := answerCard("q-stored-paused", "try_again", at.Add(time.Minute))
+	res, err = store.HandleLandingAnswer(ctx, w.rt, paused, other, "stored:3", at.Add(time.Minute))
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerRefused || res.Why != "mission_not_active" {
+		t.Fatal(res)
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	again, err = store.HandleLandingAnswer(ctx, w.rt, paused, other, "stored:3", at.Add(time.Minute))
+	ok(t, err)
+	if again.Outcome != store.LandingAnswerRefused || again.Recorded {
+		t.Fatalf("a refusal turned into a retry when the mission came back: %+v", again)
+	}
+	if _, retries := answerRecords(t, w, "q-stored-paused", other); retries != 0 {
+		t.Fatal("retry written for a refused card")
+	}
+	// The answer as given is kept with the record (review 655 R2).
+	var text, channel string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'landing_answer'->>'answer_text', body_json->'landing_answer'->>'channel' FROM agentrt.event
+	  WHERE event_stream_id = $1 AND body_json->'landing_answer'->>'question_id' = 'q-stored-paused'`, landingRepoStream).Scan(&text, &channel))
+	if text != "owner" || channel != "console" {
+		t.Fatal(text, channel)
+	}
+}
+
+// Serial: SetHook, FreezeEventClock. A failure between the business record
+// and the verdict leaves neither (review 655 R3).
+func TestLandingAnswerFailureBetweenAppendsLeavesNothing(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "between:1", "ci_red")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-between", "try_again", at.Add(time.Minute))
+	cut, cancel := context.WithCancel(ctx)
+	defer store.SetHook(func(point, _ string) {
+		if point == "landing answer: business appended" {
+			cancel()
+		}
+	})()
+	if _, err := store.HandleLandingAnswer(cut, w.rt, q, root, "between:1", at.Add(time.Minute)); err == nil {
+		t.Fatal("a failure after the retry was not reported")
+	}
+	if records, retries := answerRecords(t, w, "q-between", root); records != 0 || retries != 0 {
+		t.Fatalf("records=%d retries=%d", records, retries)
+	}
+}
+
+// Serial: FreezeEventClock. A card bound to no operation of its root, or
+// recorded for another root, is S3's binding error: nothing is recorded.
+func TestLandingAnswerBindingMismatch(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	a := failedRoot(t, w, "bind:a", "bound")
+	b := failedRoot(t, w, "bind:b", "bound")
+	q := answerCard("q-bind", "try_again", at)
+	if _, err := store.HandleLandingAnswer(ctx, w.rt, q, b, "bind:a", at); !errors.Is(err, store.ErrLandingAnswerBinding) {
+		t.Fatal("an operation of another root", err)
+	}
+	ok(t, applyRetry(w.rt, a, "bind:a", "", at))
+	recorded := answerCard("q-bind-recorded", "do_not_merge", at)
+	_, err := store.HandleLandingAnswer(ctx, w.rt, recorded, a, "bind:a", at)
+	ok(t, err)
+	if _, err := store.HandleLandingAnswer(ctx, w.rt, recorded, b, "bind:b", at); !errors.Is(err, store.ErrLandingAnswerBinding) {
+		t.Fatal("a recorded card under another root", err)
+	}
+	if records, _ := answerRecords(t, w, "q-bind", b); records != 0 {
+		t.Fatal("a binding error was recorded")
+	}
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerNotRetryableIsRefused(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "conflict:1", "conflict")
+	store.FreezeEventClock(at.Add(time.Minute))
+	res, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-conflict", "try_again", at.Add(time.Minute)), root, "conflict:1", at.Add(time.Minute))
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerRefused || res.Why != "not_retryable" || !res.Recorded {
+		t.Fatalf("retry after conflict: %+v", res)
+	}
+	if _, retries := answerRecords(t, w, "q-conflict", root); retries != 0 {
+		t.Fatal("retry written after conflict")
+	}
+}
+
+// Serial: FreezeEventClock.
+func TestLandingAnswerConcurrentPassesActOnce(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "race:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-race", "try_again", at.Add(time.Minute))
+	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	pool := w.db.Pool(t, w.db.Runtime)
+	var wg sync.WaitGroup
+	results := make([]store.LandingAnswerResult, 2)
+	errs := make([]error, 2)
+	for i := range 2 {
+		conn, err := pool.Acquire(bounded)
+		ok(t, err)
+		defer conn.Release()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i], errs[i] = store.HandleLandingAnswer(bounded, conn.Conn(), q, root, "race:1", at.Add(time.Minute))
+		}()
+	}
+	wg.Wait()
+	ok(t, errors.Join(errs...))
+	if results[0].Recorded == results[1].Recorded || results[0].Outcome != store.LandingAnswerApplied || results[1].Outcome != store.LandingAnswerApplied {
+		t.Fatalf("two passes: %+v", results)
+	}
+	if records, retries := answerRecords(t, w, "q-race", root); records != 1 || retries != 1 {
+		t.Fatalf("records=%d retries=%d", records, retries)
+	}
+}

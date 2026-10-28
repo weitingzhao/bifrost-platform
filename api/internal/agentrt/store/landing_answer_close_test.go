@@ -15,7 +15,7 @@ import (
 // 7fe6b34a a retry committed in between (the answer locked only the stream)
 // and the mission closed under a pending root. Now the answer takes the
 // task, then the mission: it waits for the close, then finds the mission done
-// and is refused. The interception (review 645's) starts the answer on its
+// and is refused, and the refusal is recorded (CUT §8). The interception (review 645's) starts the answer on its
 // own connection right after Close's hold savepoint and checks it is blocked
 // on the close's backend before letting the close go on.
 
@@ -77,6 +77,7 @@ func TestRetryAnsweredDuringCloseIsRefused(t *testing.T) {
 	ok(t, err)
 	defer answerConn.Release()
 	answered := make(chan error, 1)
+	var res store.LandingAnswerResult
 	started := false
 	db := answerAfterHoldDB{DB: closeConn.Conn(), after: func() error {
 		if started {
@@ -84,9 +85,9 @@ func TestRetryAnsweredDuringCloseIsRefused(t *testing.T) {
 		}
 		started = true
 		go func() {
-			answered <- store.InTx(bounded, answerConn.Conn(), func(tx pgx.Tx) error {
-				return store.ApplyLandingAnswer(bounded, tx, task, op, "try_again", "explicit", "owner", at.Add(2*time.Minute))
-			})
+			var err error
+			res, err = store.HandleLandingAnswer(bounded, answerConn.Conn(), answerCard("q-during-close", "try_again", at.Add(2*time.Minute)), task, op, at.Add(2*time.Minute))
+			answered <- err
 		}()
 		deadline := time.Now().Add(5 * time.Second)
 		for {
@@ -119,8 +120,9 @@ func TestRetryAnsweredDuringCloseIsRefused(t *testing.T) {
 	if len(closed) != 1 || w.state(t, "mission", "M-3") != "done" {
 		t.Fatalf("fixture: the close should decide first: closed=%v answer=%v", closed, e)
 	}
-	if !errors.Is(e, store.ErrLandingMissionClosed) {
-		t.Fatalf("a retry under a closed mission was not refused: %v", e)
+	ok(t, e)
+	if res.Outcome != store.LandingAnswerRefused || res.Why != "mission_not_active" || !res.Recorded {
+		t.Fatalf("a retry under a closed mission was not refused: %+v", res)
 	}
 	if s := landingState(t, w, landingRepoStream); s.Operations[op].Retried || s.RootPending(task) {
 		t.Fatalf("retry recorded under a closed mission: %+v", s.Retries[task])

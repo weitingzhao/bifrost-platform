@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -13,19 +12,40 @@ import (
 // S3 supplies the question binding; a generic task question is not sufficient.
 // The callback returns semantic choices, "try_again" or "do_not_merge". No
 // answer (including rule answers) authorizes a release or changes eligibility.
-func (c *Controller) LandingAnswer(ctx context.Context, root, after string, read func(context.Context, string, string) (store.Question, bool)) error {
+//
+// The answer is handled once and recorded (store.HandleLandingAnswer); the
+// card is acknowledged only after that commits (CUT §8, review 647). An Ack
+// that fails is retried on the next pass, which finds the record and does not
+// act again. A refused answer comes back as a result, not an error. S3 builds
+// the Owner's notice from the stored record (by question id), not from this
+// return, so a crash after the Ack loses nothing (review 655 R4). Without a
+// card answered on the console, with who and when, nothing happens and the
+// result is empty.
+func (c *Controller) LandingAnswer(ctx context.Context, root, after string, read func(context.Context, string, string) (store.Question, bool)) (store.LandingAnswerResult, error) {
 	if read == nil {
-		return nil
+		return store.LandingAnswerResult{}, nil
 	}
 	q, ok := read(ctx, root, after)
 	if !ok || q.Status != store.QuestionAnswered || q.Channel != "console" || q.ID == "" || q.AnsweredBy == "" {
-		return nil
+		return store.LandingAnswerResult{}, nil
 	}
 	at, err := time.Parse(time.RFC3339Nano, q.AnsweredAt)
 	if err != nil {
-		return fmt.Errorf("landing answer needs timestamp")
+		return store.LandingAnswerResult{}, fmt.Errorf("landing answer needs timestamp")
 	}
-	return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-		return store.ApplyLandingAnswer(ctx, tx, root, after, q.Option, q.Text, q.AnsweredBy, at)
-	})
+	res, err := store.HandleLandingAnswer(ctx, c.DB, q, root, after, at)
+	if err != nil {
+		return res, err
+	}
+	// Without an Ack source the card stays unacknowledged (Acked false) and
+	// the next pass returns the stored result again; S3 wires the source.
+	ack := c.ack()
+	if ack == nil {
+		return res, nil
+	}
+	if err := ack(ctx, q.ID); err != nil {
+		return res, fmt.Errorf("landing answer %s recorded (%s), ack failed: %w", q.ID, res.Outcome, err)
+	}
+	res.Acked = true
+	return res, nil
 }

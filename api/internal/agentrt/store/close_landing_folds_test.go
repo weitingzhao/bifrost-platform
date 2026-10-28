@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -95,9 +94,7 @@ func TestClosePassFoldsAgainWhenTheStreamMovesMidPass(t *testing.T) {
 				return
 			}
 			done = true
-			injected = store.InTx(ctx, answerConn.Conn(), func(tx pgx.Tx) error {
-				return store.ApplyLandingAnswer(ctx, tx, other, op, "try_again", "mid-pass", "owner", later)
-			})
+			injected = applyRetry(answerConn.Conn(), other, op, "mid-pass", later)
 		}
 	})()
 	closed, err := store.CloseMissions(ctx, w.rt)

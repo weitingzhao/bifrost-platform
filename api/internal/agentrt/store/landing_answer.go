@@ -4,69 +4,217 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"time"
 )
 
-// ErrLandingMissionClosed: a retry answered after its mission closed. The
-// mission closed first (Close holds its row while it decides), so the retry
-// could never be claimed; it is refused rather than recorded as if it could
-// (review 645 R1). Whether such a mission reopens is S3's policy.
-var ErrLandingMissionClosed = errors.New("the root's mission is no longer active: the retry cannot be claimed")
+// What became of one answered landing card (CUT §8, review 647). Applied
+// wrote a retry or failed{declined}; moot needed nothing; refused is what the
+// Owner has to know: the answer was not carried out (a retry under a mission
+// that is no longer active, or one the protocol does not take).
+const (
+	LandingAnswerApplied = "applied"
+	LandingAnswerMoot    = "moot"
+	LandingAnswerRefused = "refused"
+)
 
-// ApplyLandingAnswer is called only after the controller reads the bound
-// question. It takes the claim's locks in the claim's order (task, then its
-// mission, then the repository stream), so it is ordered against a close as a
-// claim is: the close decides first and a retry is refused
-// (ErrLandingMissionClosed), or the retry commits first and the close reads it
-// (landingHolds). The stream serializes it against claims and failures.
-func ApplyLandingAnswer(ctx context.Context, tx pgx.Tx, root, after, choice, reason, by string, answeredAt time.Time) error {
-	var mission, missionState string
-	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
-		return err
-	}
-	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
-		return err
-	}
-	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
-		return err
-	}
-	s, err := LandingState(ctx, tx, "landing:bifrost-platform")
-	if err != nil {
-		return err
-	}
-	o, exists := s.Operations[after]
-	if !exists || o.Task != root || s.LatestOperation(root) != after {
-		return fmt.Errorf("answer does not name latest operation")
-	}
-	if answeredAt.Before(o.ClaimedAt) {
-		return fmt.Errorf("answer predates operation")
-	}
-	r := map[string]any{"v": landing.Version, "op": after}
-	switch choice {
-	case "try_again":
-		if o.Phase != "failed" || answeredAt.Before(o.LastAt) {
-			return fmt.Errorf("retry answer requires the failure it follows")
+// LandingAnswerResult is how an answer was handled. Recorded is false when an
+// earlier pass had already recorded it (the stored verdict is returned, not a
+// new one). Acked says the controller acknowledged the card after the record
+// committed; a result that is not acked is still handled, and the next pass
+// returns it again and acks.
+type LandingAnswerResult struct {
+	Outcome, Why    string
+	Recorded, Acked bool
+}
+
+// ErrLandingAnswerBinding: the card is not bound to an operation of this root
+// on the stream, or its stored record names another root or operation. It is
+// S3's binding at fault, not the Owner's answer, so nothing is recorded.
+var ErrLandingAnswerBinding = errors.New("landing answer: the card's binding does not match the stream")
+
+// HandleLandingAnswer handles one answered landing card exactly once (CUT §8).
+// Under the claim's locks (task, then its mission, then the repository stream)
+// it looks for a record of this question on the stream; if there is one it
+// returns it and writes nothing. Otherwise it decides, appends the retry or
+// failed{declined} when the answer applies, and appends the record in the same
+// transaction. A refusal is a record, not an error, so it is not rolled back;
+// only a database failure returns an error and leaves nothing, and the next
+// pass tries again. The caller acknowledges the card only after this commits.
+//
+// The lock order is the claim's, so it is ordered against a close as a claim
+// is: the close decides first and a retry is refused (mission_not_active), or
+// the retry commits first and the close reads it (landingHolds, review 645
+// R1). The record is a note on the repository stream with no "landing" key,
+// so LandingState does not fold it.
+func HandleLandingAnswer(ctx context.Context, db DB, q Question, root, after string, answeredAt time.Time) (LandingAnswerResult, error) {
+	const stream = "landing:bifrost-platform"
+	var res LandingAnswerResult
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		res = LandingAnswerResult{}
+		var mission, missionState string
+		if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
+			return err
 		}
-		if o.Retried {
+		if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
+			return err
+		}
+		if err := lockStream(ctx, tx, stream); err != nil {
+			return err
+		}
+		// A separate statement after the stream lock, so a pass that waited
+		// for another's commit sees its record (Read Committed, review 655).
+		var stored map[string]any
+		err := tx.QueryRow(ctx, `SELECT body_json->'landing_answer' FROM agentrt.event
+		  WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_answer'->>'question_id' = $2 ORDER BY seq LIMIT 1`,
+			stream, q.ID).Scan(&stored)
+		if err == nil {
+			if why := badLandingAnswer(stored); why != "" {
+				return fmt.Errorf("landing answer %s: stored record is not valid: %s", q.ID, why)
+			}
+			if stored["root"] != root || stored["op"] != after {
+				return fmt.Errorf("%w: %s was recorded for %v %v", ErrLandingAnswerBinding, q.ID, stored["root"], stored["op"])
+			}
+			res = LandingAnswerResult{Outcome: stored["outcome"].(string), Why: stored["why"].(string)}
 			return nil
 		}
-		if missionState != "active" {
-			return ErrLandingMissionClosed
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
 		}
+		s, err := LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		at := eventClock().UTC().Truncate(time.Microsecond)
+		outcome, why, record, err := decideLandingAnswer(s, root, after, q, answeredAt, missionState, at)
+		if err != nil {
+			return err
+		}
+		hook("landing answer: decided", q.ID)
+		if record != nil {
+			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
+				Body: map[string]any{"text": "Landing question: " + q.Option, "landing": record}}); err != nil {
+				return err
+			}
+			hook("landing answer: business appended", q.ID)
+		}
+		// The answer as given is kept here: the question store trims and an
+		// Ack is no archive (review 655 R2).
+		body := map[string]any{"question_id": q.ID, "root": root, "op": after, "choice": q.Option, "outcome": outcome, "why": why,
+			"by": q.AnsweredBy, "answered_at": answeredAt.UTC().Format(time.RFC3339Nano), "channel": q.Channel,
+			"answer_text": q.Text, "mission_state": missionState}
+		if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: root,
+			Body: map[string]any{"text": landingAnswerText(outcome, why, q.Option, missionState), "landing_answer": body}}); err != nil {
+			return err
+		}
+		res = LandingAnswerResult{Outcome: outcome, Why: why, Recorded: true}
+		return nil
+	})
+	return res, err
+}
+
+// decideLandingAnswer is the answer's verdict on the folded stream, and the
+// landing record to append when it applies. It checks the record against the
+// protocol before saying applied, so an answer the protocol would refuse is
+// recorded as refused rather than failing the transaction (review 655 B1).
+// Moot is only for what needs nothing at all (already done, or a later
+// operation took over); an answer that was not carried out for any other
+// reason is refused, so the Owner sees it and answers a new card (review 655
+// R1). A card bound to no operation of this root is S3's error.
+func decideLandingAnswer(s landing.State, root, after string, q Question, answeredAt time.Time, missionState string, at time.Time) (string, string, map[string]any, error) {
+	o, exists := s.Operations[after]
+	switch {
+	case !exists || o.Task != root:
+		return "", "", nil, fmt.Errorf("%w: %s names %s of %s", ErrLandingAnswerBinding, q.ID, after, root)
+	case s.LatestOperation(root) != after:
+		return LandingAnswerMoot, "superseded", nil, nil
+	case q.Option != "try_again" && q.Option != "do_not_merge":
+		return LandingAnswerRefused, "unknown_choice", nil, nil
+	case answeredAt.Before(o.ClaimedAt):
+		return LandingAnswerRefused, "answered_before", nil, nil
+	}
+	r := map[string]any{"v": landing.Version, "op": after}
+	if q.Option == "try_again" {
+		switch {
+		case o.Retried:
+			return LandingAnswerMoot, "already_retried", nil, nil
+		case o.Phase != "failed":
+			return LandingAnswerRefused, "not_failed", nil, nil
+		case answeredAt.Before(o.LastAt):
+			return LandingAnswerRefused, "answered_before", nil, nil
+		case missionState != "active":
+			return LandingAnswerRefused, "mission_not_active", nil, nil
+		}
+		reason := q.Text
 		if reason == "" {
 			reason = "try_again"
 		}
-		r["kind"], r["root"], r["after_op"], r["reason"], r["by"] = "retry", root, after, reason, by
-	case "do_not_merge":
+		r["kind"], r["root"], r["after_op"], r["reason"], r["by"] = "retry", root, after, reason, q.AnsweredBy
+	} else {
 		if o.Outcome == "declined" {
-			return nil
+			return LandingAnswerMoot, "already_declined", nil, nil
 		}
 		r["kind"], r["why"] = "failed", "declined"
-	default:
-		return nil
 	}
-	_, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing question: " + choice, "landing": r}})
-	return err
+	rec, err := landing.Parse(r)
+	if err == nil {
+		err = s.Check(landing.Entry{At: at, Record: rec})
+	}
+	if err != nil {
+		if q.Option == "try_again" {
+			return LandingAnswerRefused, "not_retryable", nil, nil
+		}
+		return LandingAnswerRefused, "not_declinable", nil, nil
+	}
+	if q.Option == "try_again" {
+		return LandingAnswerApplied, "retry", r, nil
+	}
+	return LandingAnswerApplied, "declined", r, nil
+}
+
+func landingAnswerText(outcome, why, choice, missionState string) string {
+	switch outcome {
+	case LandingAnswerApplied:
+		return "Landing answer applied: " + choice
+	case LandingAnswerRefused:
+		if why == "mission_not_active" {
+			return fmt.Sprintf("Landing answer refused: %s was not carried out, the mission is %s", choice, missionState)
+		}
+		return fmt.Sprintf("Landing answer refused: %s was not carried out (%s)", choice, why)
+	}
+	return fmt.Sprintf("Landing answer needed nothing: %s (%s)", choice, why)
+}
+
+// landingAnswerWhys is the closed vocabulary of a record's why, by outcome.
+var landingAnswerWhys = map[string][]string{
+	LandingAnswerApplied: {"retry", "declined"},
+	LandingAnswerMoot:    {"superseded", "already_retried", "already_declined"},
+	LandingAnswerRefused: {"mission_not_active", "not_retryable", "not_declinable", "not_failed", "answered_before", "unknown_choice"},
+}
+
+// badLandingAnswer is why a record body is refused, or "".
+func badLandingAnswer(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "landing_answer is not an object"
+	}
+	for _, k := range []string{"question_id", "root", "op", "choice", "outcome", "why", "by", "answered_at", "channel", "mission_state"} {
+		if s, _ := m[k].(string); s == "" {
+			return "landing_answer needs " + k
+		}
+	}
+	if _, ok := m["answer_text"].(string); !ok {
+		return "landing_answer needs answer_text (empty when the Owner wrote none)"
+	}
+	if _, err := time.Parse(time.RFC3339Nano, m["answered_at"].(string)); err != nil {
+		return "landing_answer answered_at is not a time"
+	}
+	whys, ok := landingAnswerWhys[m["outcome"].(string)]
+	if !ok || !slices.Contains(whys, m["why"].(string)) {
+		return fmt.Sprintf("landing_answer: %v / %v is not in the vocabulary", m["outcome"], m["why"])
+	}
+	return ""
 }
