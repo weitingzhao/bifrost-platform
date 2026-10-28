@@ -66,7 +66,7 @@ var pipelineMirrorRepos = map[string][]string{
 
 // pipelineRepoRefParams selects effective clone refs for platform delivery only.
 var pipelineRepoRefParams = map[string]map[string]string{
-	"bifrost-deliver-platform":      {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
+	"bifrost-deliver-platform":      {"bifrost-platform": "revision", "bifrost-ui": "uiRevision", "bifrost-trade-infra": "infraRevision"},
 	"bifrost-deliver-platform-prod": {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
 }
 

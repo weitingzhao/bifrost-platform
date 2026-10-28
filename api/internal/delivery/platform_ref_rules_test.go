@@ -220,7 +220,7 @@ func TestPlatformCloneRefParamsFollowInfra(t *testing.T) {
 
 // The repositories each platform delivery clones.
 var platformDeliveryClones = map[string]map[string]bool{
-	"bifrost-deliver-platform":      {"bifrost-platform": true, "bifrost-ui": true},
+	"bifrost-deliver-platform":      {"bifrost-platform": true, "bifrost-ui": true, "bifrost-trade-infra": true},
 	"bifrost-deliver-platform-prod": {"bifrost-platform": true},
 }
 
