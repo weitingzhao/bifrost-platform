@@ -108,7 +108,10 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			continue
 		}
 		switch {
-		case o.Phase == "failed" && !o.Retried && o.Outcome != "declined" && o.Outcome != "main_lost":
+		// in_main and reverted were found before a claim: the change is (or
+		// was) in main already. B4 follows them by their main evidence; a
+		// card to try again or not merge would ask the wrong question.
+		case o.Phase == "failed" && !o.Retried && !slices.Contains([]string{"declined", "main_lost", "in_main", "reverted"}, o.Outcome):
 			e, ok := lastFailed[op]
 			if !ok {
 				continue

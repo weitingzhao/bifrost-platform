@@ -111,3 +111,22 @@ func (a *API) getRule(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rule_id": id, "in_force": rule.Doc(), "signed_by": rule.SignedBy})
 }
+
+// getLandingCard is GET /agentrt/landing/cards/{question_id} (S3 B3, CUT
+// §11.6 v3 item 8): what a landing card asked and what became of its answer,
+// readable after the question store trimmed the question.
+func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "question_id")
+	v, found, err := store.ReadLandingCard(r.Context(), a.DB, "bifrost-platform", id)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "not_found", "no landing card was asked with this question")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"question_id": v.QuestionID, "prep": v.Prep, "kind": v.Kind, "root": v.Root, "op": v.Op,
+		"trigger_seq": v.TriggerSeq, "stop_generation": v.StopGeneration, "acked": v.Acked, "closed": v.Closed, "closed_why": v.ClosedWhy,
+		"options": v.Options, "outcome": v.Outcome, "next_step": v.NextStep})
+}

@@ -250,6 +250,9 @@ func TestLandingCardHeldThenResolved(t *testing.T) {
 	if f.asks != 1 {
 		t.Fatal("asked again while held", f.asks)
 	}
+	if v, _, err := store.ReadLandingCard(ctx, w.rt, "bifrost-platform", "q1"); err != nil || v.Outcome["outcome"] != "held" || v.Outcome["remind_at"] == nil {
+		t.Fatalf("held view: %+v %v", v, err)
+	}
 	cardPass(t, w, f, at.Add(27*time.Hour))
 	if f.asks != 2 {
 		t.Fatal("not asked again after the hold", f.asks)
@@ -289,6 +292,14 @@ func TestLandingCardRepoResume(t *testing.T) {
 	cardPass(t, w, f, at.Add(2*time.Hour))
 	if resumes() != 1 {
 		t.Fatal("resume not written once", resumes())
+	}
+	v, found, err := store.ReadLandingCard(ctx, w.rt, "bifrost-platform", "q1")
+	ok(t, err)
+	if !found || v.Kind != store.CardRepoStopped || v.Outcome["outcome"] != "applied" || v.Outcome["why"] != "repo_resumed" || !v.Acked || v.NextStep == "" {
+		t.Fatalf("the card's view: %+v", v)
+	}
+	if _, found, err := store.ReadLandingCard(ctx, w.rt, "bifrost-platform", "q-none"); found || err != nil {
+		t.Fatal("a question no card was bound to", found, err)
 	}
 	cardPass(t, w, f, at.Add(3*time.Hour))
 	if resumes() != 1 || f.asks != 1 {

@@ -179,6 +179,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
 		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
 		r.With(read, cfg).Get("/rules/{rule_id}", a.getRule)
+		r.With(read, cfg).Get("/landing/cards/{question_id}", a.getLandingCard)
 		r.With(read, cfg).Post("/rules/{rule_id}/check", a.checkRule)
 		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", a.proposeRule)
 		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)

@@ -64,6 +64,8 @@ func TestLandingCardTriggers(t *testing.T) {
 	ended("land:window:1", "parked", "why", "window", "retry_at", retryAt)
 	ended("land:rule:1", "parked", "why", "rule", "retry_at", retryAt)
 	closedRoot := ended("land:closed:1", "failed", "why", "stale")
+	inMain := w.ready(t, store.Task{OffPlanReason: "trigger in main"})
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+inMain+":1", "failed", "why", "in_main")))
 	missing := w.ready(t, store.Task{OffPlanReason: "trigger ok missing"})
 	prodChain(t, w, missing, "land:missing:1", at, "main_intent")
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:missing:1", "main_result", "outcome", "ok")))
@@ -89,7 +91,7 @@ func TestLandingCardTriggers(t *testing.T) {
 			t.Errorf("%s: %+v, want %v", key, tr, k)
 		}
 	}
-	for _, none := range []string{"land:declined:1", "land:window:1", "land:rule:1"} {
+	for _, none := range []string{"land:declined:1", "land:window:1", "land:rule:1", "land:" + inMain + ":1"} {
 		if tr, ok := got[none]; ok {
 			t.Errorf("%s: an unwanted card %+v", none, tr)
 		}
