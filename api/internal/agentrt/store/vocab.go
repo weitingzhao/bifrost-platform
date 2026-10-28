@@ -172,6 +172,9 @@ var bodies = map[string][]field{
 		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
 		// late_landing, once per operation.
 		{"landing_anomaly", kAny, true},
+		// landing_main: what a main reconciliation rested on (the head
+		// read, when the read began), beside its records (CUT §10.6).
+		{"landing_main", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -537,6 +540,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_anomaly" {
 		return badLandingAnomaly(v)
+	}
+	if eventType == "note" && name == "landing_main" {
+		return badLandingMain(v)
 	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {

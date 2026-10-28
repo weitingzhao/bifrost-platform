@@ -76,6 +76,9 @@ func TestUnknownPushFoldsToNonFF(t *testing.T) {
 // protocol gap is decided (Work 570 report B3).
 func TestFailedOperationCannotBeResumed(t *testing.T) {
 	for _, why := range reasons {
+		if why == "main_lost" {
+			continue // ends main_result{ok} alone (TestMainLostOnlyFromOk)
+		}
 		rs := []Record{records()[0], record("failed", "why", why)}
 		for _, candidate := range append(records(), record("unparked"), record("failed", "why", "declined")) {
 			s := mustFold(t, rs)

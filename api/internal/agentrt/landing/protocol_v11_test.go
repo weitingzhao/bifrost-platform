@@ -118,6 +118,9 @@ func TestV11ClosedFieldsAndRehearsalFences(t *testing.T) {
 }
 func TestV11RetryBudgetAndDecline(t *testing.T) {
 	for _, why := range reasons {
+		if why == "main_lost" {
+			continue // ends main_result{ok} alone (TestMainLostOnlyFromOk)
+		}
 		rs := phaseRecords("failed", true)
 		rs[len(rs)-1]["why"] = why
 		s := mustFold(t, rs)

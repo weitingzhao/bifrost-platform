@@ -80,6 +80,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if k == "failed" && s.Operations[r.String("op")].Phase == "" && ev.Actor != "controller" {
 		return fmt.Errorf("born-terminal landing failure requires controller")
 	}
+	if k == "failed" && r.String("why") == "main_lost" && ev.Actor != "controller" {
+		return fmt.Errorf("failed{main_lost} requires controller (an Owner answer)")
+	}
 	return s.Apply(landing.Entry{At: at, Record: r})
 }
 

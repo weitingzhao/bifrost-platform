@@ -84,6 +84,12 @@ func TestReconcileMainBranches(t *testing.T) {
 				if p, o := phaseOf(t, w, op); p != c.phase || o != c.result {
 					t.Fatalf("pass %d: %s{%s}, want %s{%s}", pass, p, o, c.phase, c.result)
 				}
+				// One evidence record per terminal verdict (review 658 R4).
+				var evidence int
+				ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_main'->>'op' = $2`, landingRepoStream, op).Scan(&evidence))
+				if want := map[bool]int{true: 1, false: 0}[c.did == "landed" || c.did == "unsent" || c.did == "non_ff"]; evidence != want {
+					t.Fatalf("pass %d: %d evidence records, want %d", pass, evidence, want)
+				}
 			}
 		})
 	}
@@ -173,7 +179,7 @@ func TestReconcileStaleEvidenceWritesNothing(t *testing.T) {
 	}
 	// The pusher records its result meanwhile.
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:moved:1", "main_result", "outcome", "ok")))
-	did, err := store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", cands[0], store.MainEvidence{Head: commitA})
+	did, err := store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", cands[0], store.MainEvidence{Head: commitA, ReadAt: intent.Add(store.MainFence + time.Minute)})
 	ok(t, err)
 	if p, o := phaseOf(t, w, "land:moved:1"); did != "" || p != "main_result" || o != "ok" {
 		t.Fatalf("stale evidence written: %q %s{%s}", did, p, o)
@@ -236,6 +242,103 @@ func TestReconcileLateLandingIsRecordedOnce(t *testing.T) {
 	}
 	if p, o := phaseOf(t, w, "land:late:1"); p != "failed" || o != "bound" {
 		t.Fatalf("a late landing changed the protocol state: %s{%s}", p, o)
+	}
+}
+
+// Serial: FreezeEventClock. Absence read by a pass that began inside the
+// fence proves nothing, however late it is written (review 658 B2); a read
+// begun past the fence does.
+func TestReconcileAbsenceReadInsideTheFenceProvesNothing(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	_, intent := atMain(t, w, "land:fence:1", "unknown", at)
+	fence := intent.Add(store.MainFence)
+	store.FreezeEventClock(fence.Add(-time.Second))
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+		store.FreezeEventClock(fence.Add(time.Second)) // the read ends past the fence
+		return store.MainEvidence{Head: commitA}, nil
+	})
+	ok(t, err)
+	if p, o := phaseOf(t, w, "land:fence:1"); len(done) != 0 || p != "main_result" || o != "unknown" {
+		t.Fatalf("absence read inside the fence was used: %v %s{%s}", done, p, o)
+	}
+	done, err = store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
+	ok(t, err)
+	if p, o := phaseOf(t, w, "land:fence:1"); done["land:fence:1"] != "unsent" || p != "failed" || o != "bound" {
+		t.Fatalf("a read past the fence: %v %s{%s}", done, p, o)
+	}
+}
+
+// Serial: FreezeEventClock. Two passes holding the same late candidate
+// record it once (review 658 R1); a late landing is still watched after the
+// Owner declined the unsent operation (R2).
+func TestReconcileLateLandingOnceAndAfterDecline(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	root, intent := atMain(t, w, "land:late:2", "", at)
+	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
+	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
+	ok(t, err)
+	later := intent.Add(time.Hour)
+	store.FreezeEventClock(later)
+	res, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-late-decline", "do_not_merge", later), root, "land:late:2", later)
+	ok(t, err)
+	if p, o := phaseOf(t, w, "land:late:2"); res.Outcome != store.LandingAnswerApplied || p != "failed" || o != "declined" {
+		t.Fatalf("fixture: %+v %s{%s}", res, p, o)
+	}
+	cands, err := store.MainCandidates(ctx, w.rt, "bifrost-platform")
+	ok(t, err)
+	if len(cands) != 1 || !cands[0].Late {
+		t.Fatalf("a declined unsent operation is not watched: %+v", cands)
+	}
+	found := store.MainEvidence{Head: commitB, HasR: true, ReadAt: later}
+	for range 2 {
+		_, err := store.ReconcileMainOne(ctx, w.rt, "bifrost-platform", cands[0], found)
+		ok(t, err)
+	}
+	var n int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_anomaly'->>'op' = 'land:late:2'`, landingRepoStream).Scan(&n))
+	if n != 1 {
+		t.Fatalf("%d late-landing records", n)
+	}
+}
+
+// Serial: FreezeEventClock. ok with R missing, recorded; R shows later: it
+// lands.
+func TestReconcileOkMissingThenFoundLands(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	_, intent := atMain(t, w, "land:found:1", "ok", at)
+	store.FreezeEventClock(intent.Add(time.Hour))
+	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
+	ok(t, err)
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
+	ok(t, err)
+	if p, _ := phaseOf(t, w, "land:found:1"); done["land:found:1"] != "landed" || p != "landed" {
+		t.Fatalf("%v %s", done, p)
+	}
+}
+
+// Serial: FreezeEventClock. An S2 drill never has a main_intent: it is no
+// candidate and main is never read for it (review 658).
+func TestReconcileIgnoresDrills(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	root := w.ready(t, store.Task{OffPlanReason: "drill"})
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true)))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "failed", "why", "bound")))
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+		t.Fatal("main read for a drill")
+		return store.MainEvidence{}, nil
+	})
+	ok(t, err)
+	if len(done) != 0 {
+		t.Fatal(done)
 	}
 	_ = landing.Version
 }

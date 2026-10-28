@@ -142,6 +142,11 @@ func Parse(v any) (Record, error) {
 			if r.String("kind") == "failed" && slices.Contains(ClaimRefusals, r.String(k)) {
 				valid = true
 			}
+			// main_lost ends only a failed, v1.1 record (CUT §10.6 1A,
+			// review 658 B3); Apply limits where it comes from.
+			if r.String(k) == "main_lost" && (r.String("kind") != "failed" || r.String("v") != Version) {
+				valid = false
+			}
 		case "status":
 			valid = slices.Contains([]string{"Missing", "Unknown", "Running", "Succeeded", "Failed"}, r.String(k))
 		case "outcome":
@@ -446,7 +451,9 @@ func (s *State) Apply(e Entry) error {
 		if slices.Contains(ClaimRefusals, r.String("why")) {
 			return bad()
 		}
-		allowed := old.EndsAtBound()
+		// main_lost comes from main_result{ok} alone, never from an
+		// operation that a general failure may end (review 658 B3).
+		allowed := old.EndsAtBound() && r.String("why") != "main_lost"
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))
 		allowed = allowed || r.String("v") == Version && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op

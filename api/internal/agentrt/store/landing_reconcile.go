@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
 	"time"
 
@@ -32,6 +34,11 @@ const (
 type MainEvidence struct {
 	Head string
 	HasR bool
+	// ReadAt is when the read began (ReconcileMain sets it, on the decision
+	// clock, before calling the reader). Absence counts only from a read
+	// that began past the fence: a read begun inside it and finished, or
+	// written, after it proves nothing (review 658 B2). Zero: never past.
+	ReadAt time.Time
 }
 
 // MainEvidenceFunc reads main for R. A failure is an error, never HasR false.
@@ -102,8 +109,11 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 			}
 		}
 		for op, at := range intents {
+			// Ended as never sent (failed{bound}), or then declined by the
+			// Owner: a decision about it, not proof main cannot get R
+			// (review 658 R2).
 			o, ok := s.Operations[op]
-			if !ok || o.Phase != "failed" || o.Outcome != "bound" {
+			if !ok || o.Phase != "failed" || (o.Outcome != "bound" && o.Outcome != "declined") {
 				continue
 			}
 			seen, err := hasAnomaly(ctx, tx, stream, op, "late_landing")
@@ -154,21 +164,35 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 			(!c.Late && s.LatestOperation(c.Root) != c.Op) {
 			return nil // moved since it was listed: the evidence is stale
 		}
-		now := DecisionAt()
-		fenced := !c.IntentAt.IsZero() && !now.Before(c.IntentAt.Add(MainFence))
+		// Absence counts only from a read begun past the fence (2A, review
+		// 658 B2); the decision clock is past it too, read under the lock.
+		fence := c.IntentAt.Add(MainFence)
+		fenced := !c.IntentAt.IsZero() && !ev.ReadAt.IsZero() && !ev.ReadAt.Before(fence) && !DecisionAt().Before(fence)
 		write := func(records ...map[string]any) error {
 			for _, r := range records {
 				if err := appendMainRecord(ctx, tx, stream, c.Root, r); err != nil {
 					return err
 				}
 			}
-			return nil
+			// What the outcome rests on, in the same transaction: the head
+			// read, when the read began (review 658 R4).
+			_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root,
+				Body: map[string]any{"text": "Main reconciled: evidence", "landing_main": map[string]any{
+					"op": c.Op, "root": c.Root, "verdict": did, "R": c.R, "M0": c.M0, "head": ev.Head, "has_r": ev.HasR,
+					"read_at": ev.ReadAt.UTC().Format(time.RFC3339Nano)}}})
+			return err
 		}
 		unknown := map[string]any{"kind": "main_result", "op": c.Op, "outcome": "unknown"}
 		switch {
 		case c.Late:
 			if !ev.HasR {
 				return nil
+			}
+			// Under the stream lock: two passes with the same candidate
+			// record it once (review 658 R1).
+			seen, err := hasAnomaly(ctx, tx, stream, c.Op, "late_landing")
+			if err != nil || seen {
+				return err
 			}
 			did = "late_landing"
 			return anomaly(ctx, tx, stream, c, ev, "late_landing")
@@ -232,7 +256,9 @@ func ReconcileMain(ctx context.Context, db DB, repo string, read MainEvidenceFun
 	}
 	var errs []error
 	for _, c := range cands {
+		started := DecisionAt()
 		ev, err := read(ctx, repo, c.R)
+		ev.ReadAt = started
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", c.Op, err))
 			continue
@@ -325,10 +351,13 @@ func badLandingAnomaly(v any) string {
 			return "landing_anomaly needs " + k
 		}
 	}
-	for _, k := range []string{"M0", "head"} {
-		if _, ok := m[k].(string); !ok {
-			return "landing_anomaly needs " + k
+	for _, k := range []string{"R", "M0", "head"} {
+		if v, _ := m[k].(string); !landingSHA.MatchString(v) {
+			return "landing_anomaly " + k + " is not a commit"
 		}
+	}
+	if !landingRoot.MatchString(m["root"].(string)) {
+		return "landing_anomaly root is not a task"
 	}
 	if m["kind"] != "ok_missing" && m["kind"] != "late_landing" {
 		return "landing_anomaly kind is not ok_missing or late_landing"
@@ -349,6 +378,54 @@ func checkLandingAnomalyAppend(ev Event) error {
 	}
 	if _, exists := ev.Body["landing"]; exists {
 		return fmt.Errorf("landing_anomaly is not a landing record")
+	}
+	return nil
+}
+
+var landingSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var landingRoot = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
+
+// badLandingMain is why an evidence body is refused, or "".
+func badLandingMain(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "landing_main is not an object"
+	}
+	for _, k := range []string{"op", "root", "verdict", "read_at"} {
+		if s, _ := m[k].(string); s == "" {
+			return "landing_main needs " + k
+		}
+	}
+	for _, k := range []string{"R", "M0", "head"} {
+		if v, _ := m[k].(string); !landingSHA.MatchString(v) {
+			return "landing_main " + k + " is not a commit"
+		}
+	}
+	if _, ok := m["has_r"].(bool); !ok {
+		return "landing_main needs has_r"
+	}
+	if !slices.Contains([]string{"landed", "unsent", "non_ff"}, m["verdict"].(string)) {
+		return "landing_main verdict is not landed, unsent or non_ff"
+	}
+	if _, err := time.Parse(time.RFC3339Nano, m["read_at"].(string)); err != nil {
+		return "landing_main read_at is not a time"
+	}
+	return ""
+}
+
+// checkLandingMainAppend: only the controller records evidence, on the
+// repository stream, under the root it names, never as a landing record.
+func checkLandingMainAppend(ev Event) error {
+	v, exists := ev.Body["landing_main"]
+	if !exists {
+		return nil
+	}
+	m, _ := v.(map[string]any)
+	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
+		return fmt.Errorf("landing_main is written by the controller on the repository stream under its root")
+	}
+	if _, exists := ev.Body["landing"]; exists {
+		return fmt.Errorf("landing_main is not a landing record")
 	}
 	return nil
 }
