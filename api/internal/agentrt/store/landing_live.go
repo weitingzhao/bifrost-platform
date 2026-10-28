@@ -310,6 +310,45 @@ func AuthorizationCurrent(ctx context.Context, db DB, auth Authorization) (bool,
 	return current, nil
 }
 
+// checkLandingGateGrounds checks landing_gate against the record it rides
+// on and the operation (review 664 N-01): the decision is on the intent's
+// own UTC day and no later than it, and the CI it names is the success the
+// operation has on record (the stream as it is before this intent, under
+// the append's stream lock).
+func checkLandingGateGrounds(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) error {
+	v, exists := ev.Body["landing_gate"]
+	if !exists {
+		return nil
+	}
+	m, _ := v.(map[string]any)
+	r, _ := ev.Body["landing"].(map[string]any)
+	if m == nil || r == nil {
+		return fmt.Errorf("landing_gate rides on its main_intent")
+	}
+	decided, err := time.Parse(time.RFC3339Nano, fmt.Sprint(m["decided_at"]))
+	if err != nil {
+		return fmt.Errorf("landing_gate decided_at is not a time")
+	}
+	if m["quota_day"] != at.UTC().Format("2006-01-02") {
+		// The day turned between the gate's decision and its intent: the
+		// gate rolls back as ErrLandingDayChanged (review 661 R-03).
+		return fmt.Errorf("landing_gate is not on its intent's day: %w", ErrLandingDayChanged)
+	}
+	if decided.After(at) {
+		return fmt.Errorf("landing_gate decided after its intent")
+	}
+	s, err := LandingState(ctx, tx, ev.Stream)
+	if err != nil {
+		return err
+	}
+	o := s.Operations[fmt.Sprint(r["op"])]
+	created, err := time.Parse(time.RFC3339Nano, fmt.Sprint(m["ci_created_at"]))
+	if err != nil || o.CI.String("status") != "Succeeded" || o.CI.String("run") != m["ci_run"] || !o.CI.Time("created_at").Equal(created) {
+		return fmt.Errorf("landing_gate names a CI the operation has not succeeded on")
+	}
+	return nil
+}
+
 // ErrLandingBindingChanged: the task's step, mission or tenant changed
 // between the gate's first read and its task lock (a plan change rebound
 // it). The gate rolls back whole; the next pass locks the new binding.

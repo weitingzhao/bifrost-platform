@@ -2,6 +2,7 @@ package landinggit
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -106,5 +107,15 @@ func TestRunGroupAbortsWhenTheExitCannotBeAwaited(t *testing.T) {
 	if !gone(pid) {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		t.Fatal("a child outlived the aborted call", pid)
+	}
+}
+
+// Review 664: the exit unobservable after git already exited 0 still
+// returns errExitUnobserved, never git's own success.
+func TestRunGroupSaysTheExitWasUnobserved(t *testing.T) {
+	defer func(f func(int) bool) { waitExitFn = f }(waitExitFn)
+	waitExitFn = func(int) bool { time.Sleep(200 * time.Millisecond); return false }
+	if err := runGroup(context.Background(), exec.Command("/bin/sh", "-c", "exit 0")); !errors.Is(err, errExitUnobserved) {
+		t.Fatal(err)
 	}
 }

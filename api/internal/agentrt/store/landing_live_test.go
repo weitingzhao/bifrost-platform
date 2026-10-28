@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -336,5 +337,49 @@ func TestLandingGateRecordIsChecked(t *testing.T) {
 		if store.CheckLandingGateAppend(e) == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// Serial: FreezeEventClock. Review 664 N-01: landing_gate must agree with
+// its intent's day and the operation's recorded CI success, not only with
+// itself.
+func TestLandingGateAgreesWithItsIntent(t *testing.T) {
+	w, task, op, _, prepared := liveReady(t)
+	at := prepared.Add(10 * time.Minute)
+	defer store.FreezeEventClock(at)()
+	created := prepared.Add(time.Minute).UTC().Format(time.RFC3339Nano)
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "run", "ci-real", "status", "Succeeded", "R", commitB, "created_at", created)))
+	ok(t, appendLanding(w, "landing-quota:dev:"+at.UTC().Format("2006-01-02"), newLandingRecord(op, "reserved", "root", task)))
+	day := at.UTC().Format("2006-01-02")
+	gate := func(kv ...any) map[string]any {
+		m := map[string]any{"v": store.LandingGateVersion, "op": op, "rule_version": 1, "decided_at": at.UTC().Format(time.RFC3339Nano),
+			"quota_day": day, "ci_run": "ci-real", "ci_created_at": created}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	}
+	intent := func(g map[string]any) error {
+		return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: task,
+				Body: map[string]any{"text": "intent", "landing": newLandingRecord(op, "main_intent", "R", commitB, "M0", commitA), "landing_gate": g}})
+			return err
+		})
+	}
+	prev := at.Add(-24 * time.Hour).UTC()
+	for name, g := range map[string]map[string]any{
+		"another day":      gate("decided_at", prev.Format(time.RFC3339Nano), "quota_day", prev.Format("2006-01-02"), "ci_created_at", prepared.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano)),
+		"after the intent": gate("decided_at", at.Add(time.Second).UTC().Format(time.RFC3339Nano)),
+		"another run":      gate("ci_run", "ci-not-the-success"),
+		"another time":     gate("ci_created_at", prepared.Add(2*time.Minute).UTC().Format(time.RFC3339Nano)),
+	} {
+		err := intent(g)
+		if err == nil || !strings.Contains(err.Error(), "landing_gate") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	ok(t, intent(gate()))
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_intent" {
+		t.Fatal(o.Phase)
 	}
 }
