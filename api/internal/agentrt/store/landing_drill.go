@@ -131,6 +131,12 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 	}
 	now = DecisionAt()
 	b.at = now
+	// A repository stopped by a denied push takes no claim until the Owner
+	// resumes it (B6); nothing is recorded.
+	if stopped, err := repoStopped(ctx, tx, "landing:bifrost-platform"); err != nil || stopped {
+		b.settled, b.decision = true, landing.Decision{Reason: "stopped"}
+		return b, err
+	}
 	state, err := LandingState(ctx, tx, "landing:bifrost-platform")
 	if err != nil {
 		return b, err

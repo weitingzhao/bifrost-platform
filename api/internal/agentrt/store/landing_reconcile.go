@@ -76,6 +76,11 @@ func ReconcileDenied(ctx context.Context, db DB, repo string) ([]string, error) 
 			if err := appendMainRecord(ctx, tx, stream, o.Task, map[string]any{"kind": "failed", "op": op, "why": "denied"}); err != nil {
 				return err
 			}
+			// The repository stops in the same transaction (B6): every path
+			// that ends a push denied passes here.
+			if err := stopRepo(ctx, tx, stream, repo, op, o.Task); err != nil {
+				return err
+			}
 			ended = append(ended, op)
 		}
 		return nil

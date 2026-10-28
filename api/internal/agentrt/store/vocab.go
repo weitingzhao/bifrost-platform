@@ -175,6 +175,10 @@ var bodies = map[string][]field{
 		// landing_main: what a main reconciliation rested on (the head
 		// read, when the read began), beside its records (CUT §10.6).
 		{"landing_main", kAny, true},
+		// landing_stop / landing_resume: a denied push stopped the
+		// repository; the Owner's resume answers that stop's generation
+		// (landing_live.go, CUT §11.4 B6).
+		{"landing_stop", kAny, true}, {"landing_resume", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -543,6 +547,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_main" {
 		return badLandingMain(v)
+	}
+	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
+		return badLandingStop(name, v)
 	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {
