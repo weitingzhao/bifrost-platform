@@ -264,3 +264,32 @@ func TestTrustedDiffAndFullHistory(t *testing.T) {
 		t.Fatal("unknown history became never")
 	}
 }
+
+// MainEvidence (CUT §10.6 C-R1): main's head after a complete fetch, R in its
+// history (the head itself, an ancestor, a commit landed later) or not (a
+// commit main never had, an unknown SHA). An unreachable main is an error,
+// never "absent".
+func TestMainEvidence(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	for name, c := range map[string]struct {
+		r    string
+		want bool
+	}{"head": {in.M0, true}, "ancestor": {in.Base, true}, "never in main": {in.A, false}, "unknown": {strings.Repeat("e", 40), false}} {
+		head, has, err := g.MainEvidence(ctx, c.r)
+		if err != nil || head != in.M0 || has != c.want {
+			t.Fatalf("%s: head=%s has=%v err=%v", name, head, has, err)
+		}
+	}
+	gitTest(t, src, "cherry-pick", "-x", in.A)
+	landed := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", filepath.Join(filepath.Dir(src), "remote.git"), "main")
+	head, has, err := g.MainEvidence(ctx, landed)
+	if err != nil || head != landed || !has {
+		t.Fatalf("landed later: head=%s has=%v err=%v", head, has, err)
+	}
+	broken := &Git{remote: "http://127.0.0.1:1/remote.git", usernameFile: g.usernameFile, passwordFile: g.passwordFile}
+	if _, has, err := broken.MainEvidence(ctx, in.M0); err == nil || has {
+		t.Fatalf("an unreachable main read as evidence: has=%v err=%v", has, err)
+	}
+}

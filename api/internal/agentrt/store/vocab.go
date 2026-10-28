@@ -168,6 +168,10 @@ var bodies = map[string][]field{
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
 		{"landing_answer", kAny, true},
+		// landing_anomaly: what the main reconciler found that only the
+		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
+		// late_landing, once per operation.
+		{"landing_anomaly", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -530,6 +534,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_answer" {
 		return badLandingAnswer(v)
+	}
+	if eventType == "note" && name == "landing_anomaly" {
+		return badLandingAnomaly(v)
 	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {

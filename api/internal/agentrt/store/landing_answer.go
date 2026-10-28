@@ -145,13 +145,23 @@ func decideLandingAnswer(s landing.State, root, after string, q Question, answer
 		return "", "", nil, fmt.Errorf("%w: %s names %s of %s", ErrLandingAnswerBinding, q.ID, after, root)
 	case s.LatestOperation(root) != after:
 		return LandingAnswerMoot, "superseded", nil, nil
-	case q.Option != "try_again" && q.Option != "do_not_merge":
+	case !slices.Contains(landingAnswerChoices, q.Option):
 		return LandingAnswerRefused, "unknown_choice", nil, nil
 	case answeredAt.Before(o.ClaimedAt):
 		return LandingAnswerRefused, "answered_before", nil, nil
 	}
 	r := map[string]any{"v": landing.Version, "op": after}
-	if q.Option == "try_again" {
+	if q.Option == "confirm_main_lost" {
+		// CUT §10.6 (1A): only on a push reported ok whose R main no longer
+		// shows, and only by the Owner's answer.
+		switch {
+		case o.Phase == "failed" && o.Outcome == "main_lost":
+			return LandingAnswerMoot, "already_lost", nil, nil
+		case o.Phase != "main_result" || o.Outcome != "ok":
+			return LandingAnswerRefused, "not_main_lost", nil, nil
+		}
+		r["kind"], r["why"] = "failed", "main_lost"
+	} else if q.Option == "try_again" {
 		switch {
 		case o.Retried:
 			return LandingAnswerMoot, "already_retried", nil, nil
@@ -182,13 +192,19 @@ func decideLandingAnswer(s landing.State, root, after string, q Question, answer
 		return "", "", nil, fmt.Errorf("landing answer %s: %w", q.ID, err)
 	}
 	if err := s.Check(landing.Entry{At: at, Record: rec}); err != nil {
-		if q.Option == "try_again" {
+		switch q.Option {
+		case "try_again":
 			return LandingAnswerRefused, "not_retryable", nil, nil
+		case "confirm_main_lost":
+			return LandingAnswerRefused, "not_main_lost", nil, nil
 		}
 		return LandingAnswerRefused, "not_declinable", nil, nil
 	}
-	if q.Option == "try_again" {
+	switch q.Option {
+	case "try_again":
 		return LandingAnswerApplied, "retry", r, nil
+	case "confirm_main_lost":
+		return LandingAnswerApplied, "main_lost", r, nil
 	}
 	return LandingAnswerApplied, "declined", r, nil
 }
@@ -208,15 +224,21 @@ func landingAnswerText(outcome, why, choice, missionState string) string {
 
 // landingAnswerWhys is the closed vocabulary of a record's why, by outcome.
 var landingAnswerWhys = map[string][]string{
-	LandingAnswerApplied: {"retry", "declined"},
-	LandingAnswerMoot:    {"superseded", "already_retried", "already_declined"},
-	LandingAnswerRefused: {"mission_not_active", "not_retryable", "not_declinable", "not_failed", "answered_before", "unknown_choice"},
+	LandingAnswerApplied: {"retry", "declined", "main_lost"},
+	LandingAnswerMoot:    {"superseded", "already_retried", "already_declined", "already_lost"},
+	LandingAnswerRefused: {"mission_not_active", "not_retryable", "not_declinable", "not_failed", "answered_before", "unknown_choice", "not_main_lost"},
 }
+
+// landingAnswerChoices are the semantic choices a landing card offers:
+// retry a failure, do not merge, and confirm that a push reported ok is lost
+// (CUT §10.6).
+var landingAnswerChoices = []string{"try_again", "do_not_merge", "confirm_main_lost"}
 
 // landingAnswerChoice is the choice each why can follow ("" for any).
 var landingAnswerChoice = map[string]string{
 	"retry": "try_again", "already_retried": "try_again", "not_failed": "try_again", "not_retryable": "try_again", "mission_not_active": "try_again",
 	"declined": "do_not_merge", "already_declined": "do_not_merge", "not_declinable": "do_not_merge",
+	"main_lost": "confirm_main_lost", "already_lost": "confirm_main_lost", "not_main_lost": "confirm_main_lost",
 	"superseded": "", "answered_before": "", "unknown_choice": "",
 }
 
@@ -252,7 +274,7 @@ func badLandingAnswer(v any) string {
 	if !ok || !slices.Contains(whys, why) {
 		return fmt.Sprintf("landing_answer: %v / %v is not in the vocabulary", m["outcome"], why)
 	}
-	known := choice == "try_again" || choice == "do_not_merge"
+	known := slices.Contains(landingAnswerChoices, choice)
 	if want := landingAnswerChoice[why]; (want != "" && choice != want) || (why == "unknown_choice") == known {
 		return fmt.Sprintf("landing_answer: %s does not follow %s", why, choice)
 	}

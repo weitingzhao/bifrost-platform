@@ -33,7 +33,7 @@ var ident = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_:./-]{0,199}$`)
 var task = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
 var attempt = regexp.MustCompile(`^a_[0-9A-HJKMNP-TV-Z]{26}$`)
 var digest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_failed", "ci_red", "floor", "limit", "denied", "bound", "declined", "rule", "main_red", "ci_stuck", "window"}
+var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_failed", "ci_red", "floor", "limit", "denied", "bound", "declined", "rule", "main_red", "ci_stuck", "window", "main_lost"}
 
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
@@ -450,6 +450,9 @@ func (s *State) Apply(e Entry) error {
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))
 		allowed = allowed || r.String("v") == Version && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op
+		// CUT §10.6 (1A): a push reported ok whose R main no longer shows
+		// ends only when the Owner confirms it is lost.
+		allowed = allowed || r.String("v") == Version && old.Phase == "main_result" && old.Outcome == "ok" && r.String("why") == "main_lost" && s.LatestOperation(old.Task) == op
 		if !allowed {
 			return bad()
 		}

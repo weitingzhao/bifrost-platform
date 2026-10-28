@@ -35,6 +35,13 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	if _, err = store.SettleUnclaimed(ctx, c.DB, "bifrost-platform", now); err != nil {
 		errs = append(errs, err)
 	}
+	// The main reconciler (S3 must 3, CUT §10.6): after the database
+	// settlements and before the drill's own reads, whatever the rule.
+	// denied needs no Git; each main read has its own time, and one that
+	// fails skips that operation only.
+	if _, err = store.ReconcileMain(ctx, c.DB, "bifrost-platform", c.boundedMainEvidence()); err != nil {
+		errs = append(errs, err)
+	}
 	ids := make([]string, 0, len(state.Operations))
 	for id := range state.Operations {
 		ids = append(ids, id)
@@ -285,4 +292,18 @@ func (c *Controller) clock() time.Time {
 		return c.Now()
 	}
 	return time.Now()
+}
+
+// boundedMainEvidence is the drill's main reader with a per-read timeout, so
+// one slow fetch cannot take the pass (review 656 C-R2); nil without one.
+func (c *Controller) boundedMainEvidence() store.MainEvidenceFunc {
+	if c.Drill == nil || c.Drill.MainEvidence == nil {
+		return nil
+	}
+	read := c.Drill.MainEvidence
+	return func(ctx context.Context, repo, r string) (store.MainEvidence, error) {
+		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		return read(ctx, repo, r)
+	}
 }

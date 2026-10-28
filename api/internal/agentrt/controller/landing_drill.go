@@ -49,6 +49,9 @@ type DrillSources struct {
 	WindowBlocked func(context.Context) (bool, error)
 	EnsureCI      func(context.Context, string, string) error
 	Delete        func(context.Context, string, string) error
+	// MainEvidence reads main for the main reconciler (S3 must 3): main's
+	// head and whether R is in its history. Nil: only denied is reconciled.
+	MainEvidence store.MainEvidenceFunc
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
