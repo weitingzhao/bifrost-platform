@@ -118,3 +118,29 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string, 
 	a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing enabled", "landing": map[string]any{"v": landing.Version, "kind": "enabled", "op": "enabled:" + tenant, "repo": repo, "rule_version": rule.Version}}})
 	return a.At, err
 }
+
+// EnsureLandingMode records, once, that the live landing is wired for repo
+// (CUT §11.8 v3 item 1): PROD workers write it before their first claim.
+// It returns when it was recorded.
+func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, error) {
+	stream := "landing:" + repo
+	var at time.Time
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		if err := lockStream(ctx, tx, stream); err != nil {
+			return err
+		}
+		s, err := LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		if !s.LiveAt.IsZero() {
+			at = s.LiveAt
+			return nil
+		}
+		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing live mode",
+			"landing": map[string]any{"v": landing.Version, "kind": "mode", "op": "mode:live", "repo": repo}}})
+		at = a.At
+		return err
+	})
+	return at, err
+}

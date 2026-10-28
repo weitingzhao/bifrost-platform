@@ -38,7 +38,7 @@ var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_fail
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
 var fields = map[string]string{
-	"enabled": "repo rule_version", "claimed": "task attempt A rule_version",
+	"enabled": "repo rule_version", "mode": "repo", "claimed": "task attempt A rule_version",
 	"prepared": "R M0 committer_date dry_run", "branch_intent": "ref R", "branch_pushed": "ref R",
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
 	"main_intent": "R M0", "main_result": "outcome", "landed": "R", "reverted": "R by",
@@ -175,6 +175,8 @@ type Entry struct {
 	Record Record
 }
 type Operation struct {
+	// Live: born after the repository's live mode (State.LiveAt).
+	Live                                                 bool
 	Phase, Resume, Outcome, Task, Attempt, A, R, M0, Ref string
 	RuleVersion                                          int
 	CommitterDate, RetryAt, LastAt                       time.Time
@@ -200,7 +202,11 @@ type State struct {
 	Operations     map[string]Operation
 	EnabledAt      time.Time
 	EnabledVersion int
-	Reservations   map[string]string // root -> first operation; quota stream is one UTC day
+	// LiveAt is when the live landing was first wired for this repository
+	// (CUT §11.8 v3 item 1): only a PROD stream has it. Every operation
+	// born after it is live.
+	LiveAt       time.Time
+	Reservations map[string]string // root -> first operation; quota stream is one UTC day
 }
 
 func Fold(entries []Entry) (State, error) {
@@ -255,6 +261,13 @@ func (s *State) Apply(e Entry) error {
 		s.Retries[root] = Retry{At: e.At, AfterOp: after}
 		return nil
 	}
+	if k == "mode" {
+		if r.String("v") != Version || !s.LiveAt.IsZero() {
+			return fmt.Errorf("landing mode recorded once, at v%s", Version)
+		}
+		s.LiveAt = e.At
+		return nil
+	}
 	if k == "enabled" {
 		if !s.EnabledAt.IsZero() {
 			return fmt.Errorf("landing already enabled")
@@ -273,6 +286,9 @@ func (s *State) Apply(e Entry) error {
 	old := s.Operations[op]
 	n := old
 	n.LastAt = e.At
+	if old.Phase == "" {
+		n.Live = !s.LiveAt.IsZero() // born after the live mode: a live operation
+	}
 	bad := func() error { return fmt.Errorf("landing %s: %s -> %s is illegal", op, old.Phase, k) }
 	switch k {
 	case "claimed":
@@ -623,4 +639,14 @@ func (s State) LatestOperation(root string) string {
 		}
 	}
 	return latest
+}
+
+// Fence is the landing fence of the stream (CUT §11.8 v3 item 1): the later
+// of enabled and the live mode, when there is a live mode; enabled alone on a
+// stream that never had one (the STG drill).
+func (s State) Fence() time.Time {
+	if s.LiveAt.After(s.EnabledAt) {
+		return s.LiveAt
+	}
+	return s.EnabledAt
 }

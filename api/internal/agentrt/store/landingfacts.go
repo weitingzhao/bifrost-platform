@@ -99,7 +99,7 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 	if err != nil {
 		return f, nil, err
 	}
-	f.EnabledAt = state.EnabledAt
+	f.EnabledAt = state.Fence() // the live fence on PROD (CUT §11.8 v3 item 1)
 	f.Operation = state.Operations[op]
 	for id, o := range state.Operations {
 		if id != op && o.Task != "" && o.Active() {

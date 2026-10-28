@@ -35,7 +35,7 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
   WHERE t.repo = $1 AND t.role = 'implement' AND t.state = 'accepted'
     AND m.created_at >= $2 AND COALESCE(m.scope_json->>'no_merge','') = ''
   GROUP BY t.task_id, m.state HAVING max(e.at) >= $2 AND (m.state IN ('done','stopped','expired') OR max(e.at) <= $3)
-  ORDER BY max(e.at), t.task_id`, repo, state.EnabledAt, now.Add(-landing.ClaimWindow))
+  ORDER BY max(e.at), t.task_id`, repo, state.Fence(), now.Add(-landing.ClaimWindow))
 		if err != nil {
 			return err
 		}
@@ -74,7 +74,7 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 			now := DecisionAt() // CUT §9: the window as of these locks
 			why := ""
 			switch {
-			case noMerge || created.Before(state.EnabledAt) || accepted == nil || accepted.Before(state.EnabledAt):
+			case noMerge || created.Before(state.Fence()) || accepted == nil || accepted.Before(state.Fence()):
 				return nil // rebound out of the handoff since the list (CUT §7.7 item 5)
 			case missionState == "done" || missionState == "stopped" || missionState == "expired":
 				why = "stale"

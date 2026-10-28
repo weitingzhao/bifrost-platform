@@ -194,7 +194,7 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 			return false, err
 		}
 		// A no_merge mission is never claimed (the gate reads it stale).
-		handoff := !noMerge && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
+		handoff := !noMerge && !state.Fence().IsZero() && !state.EnabledAt.IsZero() && !created.Before(state.Fence())
 		for _, r := range roots[repo] {
 			if latest, ok := state.Operations[state.LatestOperation(r.task)]; ok {
 				if !state.RootPending(r.task) {
@@ -211,7 +211,7 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 				}
 				continue
 			}
-			if !handoff || r.accepted == nil || r.accepted.Before(state.EnabledAt) {
+			if !handoff || r.accepted == nil || r.accepted.Before(state.Fence()) {
 				continue
 			}
 			if now.Before(r.accepted.Add(landing.ClaimWindow)) {

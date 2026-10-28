@@ -147,6 +147,12 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 	if err != nil {
 		return b, err
 	}
+	// PROD claims only after its live mode is recorded, under this lock
+	// (CUT §11.8 v3 item 1): the fence and the claim agree.
+	if env == "prod" && state.LiveAt.IsZero() {
+		b.settled, b.decision = true, landing.Decision{Reason: "mode"}
+		return b, nil
+	}
 	first, n := landing.RootBudget(state, task)
 	b.claims = n
 	if landing.Bound(first, n, now) {

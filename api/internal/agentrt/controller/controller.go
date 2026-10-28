@@ -639,6 +639,14 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		}
 	}
 	var wg sync.WaitGroup
+	// PROD records its live mode before its first claim (CUT §11.8 v3 item
+	// 1); without it the live loop does not start.
+	if c.Env == "prod" && c.landingRuns() {
+		if _, err := store.EnsureLandingMode(ctx, c.DB, landingCardsRepo); err != nil {
+			c.logf("agentrt landing live not started: recording the live mode: %v", err)
+			c.Live = false
+		}
+	}
 	if c.landingRuns() {
 		wg.Add(1)
 		safego.Go("agentrt-landing-drill", func() {
