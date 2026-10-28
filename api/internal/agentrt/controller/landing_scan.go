@@ -17,7 +17,7 @@ import (
 // LandingDrillPass resumes durable operations before scanning accepted work.
 // Each pass reconstructs state; errors on one operation do not starve others.
 func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
-	if c.Env != "stg" || c.Drill == nil || c.DrillGit == nil {
+	if !c.landingRuns() {
 		return nil
 	}
 	now := time.Now()
@@ -67,7 +67,9 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		for _, id := range ids {
 			o := state.Operations[id]
 			// A collided branch belongs to someone else; never delete it.
-			if o.Terminal() && o.Outcome != "branch_collision" && o.Ref != "" {
+			// PROD keeps its land/prod branches (B-05): the record of what
+			// was pushed to main.
+			if o.Terminal() && o.Outcome != "branch_collision" && o.Ref != "" && c.Env != "prod" {
 				cleanups = append(cleanups, o)
 			}
 		}
@@ -129,7 +131,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	tasks = c.drillWaits.due(unsettled(tasks, settled.Operations), drillGeneration(settled), c.clock())
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
-		op, d, e := store.ClaimLandingDrill(one, c.DB, c.Drill.Facts, task, now)
+		op, d, e := store.ClaimLanding(one, c.DB, c.Drill.Facts, c.Env, task, now)
 		c.drillWaits.record(task, e == nil && (op != "" || d.Reason == "changed"), c.clock())
 		if e != nil {
 			errs = append(errs, e)

@@ -60,8 +60,15 @@ type Sources struct {
 // Controller holds what the loops need. Zero intervals take the design's
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
-	Drill    *DrillSources // nil by default; workers opt in on STG only
+	Drill    *DrillSources // nil by default; workers opt in on STG (drill) or PROD (live)
 	DrillGit DrillGit
+	// Live runs the landing loop on PROD (S3, CUT §11.5): set only by the
+	// wiring, with AGENTRT_LANDING_LIVE=on and the lander identity as
+	// DrillGit. Without it PROD claims nothing and pushes nothing.
+	Live bool
+	// OpenLive opens the workspace the live landing pushes main from; nil
+	// uses DrillGit.Open (tests replace it: a real push needs the lander).
+	OpenLive func(ctx context.Context, r string) (LiveWorkspace, error)
 	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
 	// runs none. Apart from the drill: any environment, any rule.
 	Reconcile   *LandingReconcile
@@ -627,7 +634,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		}
 	}
 	var wg sync.WaitGroup
-	if c.Env == "stg" && c.Drill != nil && c.DrillGit != nil {
+	if c.landingRuns() {
 		wg.Add(1)
 		safego.Go("agentrt-landing-drill", func() {
 			defer wg.Done()

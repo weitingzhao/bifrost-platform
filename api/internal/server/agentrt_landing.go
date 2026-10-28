@@ -12,29 +12,42 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Only the workers path calls this, and only an explicit STG opt-in enables
-// the loop. Constructing adapters does not read credentials or contact services.
+// Only the workers path calls this, and only an explicit opt-in enables a
+// landing loop: AGENTRT_LANDING_DRILL=on on STG (the drill), or
+// AGENTRT_LANDING_LIVE=on on PROD with the lander identity (S3). Constructing
+// adapters does not read credentials or contact services.
 func (s *Server) wireLandingDrill(c *controller.Controller) {
 	// The main reconciler runs in every environment, before and apart from
 	// the drill (S3 must 3 wiring): denied settles from the database; main
 	// is read where Git is wired below. PROD reads main once the lander
 	// identity is (S3).
 	c.Reconcile = &controller.LandingReconcile{Repos: []string{"bifrost-platform"}}
-	if c.Env != "stg" || os.Getenv("AGENTRT_LANDING_DRILL") != "on" {
+	var g *landinggit.Git
+	var err error
+	switch {
+	case c.Env == "stg" && os.Getenv("AGENTRT_LANDING_DRILL") == "on":
+		g, err = landinggit.FromEnv(c.Env)
+	case c.Env == "prod" && os.Getenv("AGENTRT_LANDING_LIVE") == "on":
+		g, err = landinggit.LanderFromEnv(c.Env)
+	default:
 		return
 	}
-	g, err := landinggit.FromEnv(c.Env)
 	if err != nil {
-		slog.Error("agentrt landing drill disabled", "error", err)
+		slog.Error("agentrt landing disabled", "env", c.Env, "error", err)
 		return
 	}
 	if s.delivery == nil {
-		slog.Error("agentrt landing drill disabled: delivery unavailable")
+		slog.Error("agentrt landing disabled: delivery unavailable", "env", c.Env)
 		return
 	}
 	c.DrillGit = g
-	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: s.delivery.LandingCI, EnsureCI: s.delivery.EnsureLandingCI, WindowBlocked: s.delivery.LandingWindowBlocked, Delete: g.Delete}
-	// The drill's Git reads main for the reconciler too (STG).
+	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: s.delivery.LandingCI, EnsureCI: s.delivery.EnsureLandingCI, WindowBlocked: s.delivery.LandingWindowBlocked}
+	if c.Env == "prod" {
+		c.Live = true // land/prod branches are kept (B-05): no Delete
+	} else {
+		c.Drill.Delete = g.Delete
+	}
+	// The landing's Git reads main for the reconciler too.
 	c.Reconcile.MainEvidence = func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
 		if repo != "bifrost-platform" {
 			return store.MainEvidence{}, errors.New("unsupported landing repo")

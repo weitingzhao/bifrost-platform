@@ -19,8 +19,12 @@ var changeTrailer = regexp.MustCompile(`(?im)^Change-Id:\s*(I[0-9a-f]{40})\s*$`)
 // operation. On recovery it must be identical, including CommitterDate.
 type ReplayInput struct {
 	A, Base, M0, Task, Attempt, Mission, Reviewers, Operation string
-	RuleVersion                                               int
-	AcceptedAt, CommitterDate                                 time.Time
+	// Env is where the landing runs: "prod" for the live landing (S3),
+	// "stg" or empty for the drill. It names the run in the message and
+	// the Landed-By trailer (CUT §2.5 step 3).
+	Env                       string
+	RuleVersion               int
+	AcceptedAt, CommitterDate time.Time
 }
 
 func (w *Workspace) Replay(ctx context.Context, in ReplayInput) (string, error) {
@@ -102,8 +106,12 @@ func (w *Workspace) Replay(ctx context.Context, in ReplayInput) (string, error) 
 	if split < 0 {
 		return "", errors.New("missing trailer block")
 	}
-	provenance := fmt.Sprintf("Landed by the agent runtime (STG rehearsal) under landing:dev v%d: mission %s, task %s, attempt %s, reviewed by %s, accepted %s, replayed onto %s as %s.\n\n(cherry picked from commit %s)", in.RuleVersion, in.Mission, in.Task, in.Attempt, in.Reviewers, in.AcceptedAt.UTC().Format(time.RFC3339Nano), in.M0, in.Operation, in.A)
-	msg = msg[:split] + "\n\n" + provenance + msg[split:] + "\nLanded-By: agentrt-stg/" + in.Operation + "\n"
+	run, by := "STG rehearsal", "agentrt-stg/"
+	if in.Env == "prod" {
+		run, by = "PROD landing", "agentrt-prod/"
+	}
+	provenance := fmt.Sprintf("Landed by the agent runtime (%s) under landing:dev v%d: mission %s, task %s, attempt %s, reviewed by %s, accepted %s, replayed onto %s as %s.\n\n(cherry picked from commit %s)", run, in.RuleVersion, in.Mission, in.Task, in.Attempt, in.Reviewers, in.AcceptedAt.UTC().Format(time.RFC3339Nano), in.M0, in.Operation, in.A)
+	msg = msg[:split] + "\n\n" + provenance + msg[split:] + "\nLanded-By: " + by + in.Operation + "\n"
 	env := []string{"GIT_AUTHOR_NAME=" + parts[0], "GIT_AUTHOR_EMAIL=" + parts[1], "GIT_AUTHOR_DATE=" + parts[2], "GIT_COMMITTER_NAME=Agent Runtime", "GIT_COMMITTER_EMAIL=agentrt@bifrost.local", "GIT_COMMITTER_DATE=" + in.CommitterDate.UTC().Format(time.RFC3339)}
 	if _, e = w.git.run(ctx, w.dir, false, []byte(msg), env, "commit", "--no-verify", "--cleanup=verbatim", "-F", "-"); e != nil {
 		return "", e

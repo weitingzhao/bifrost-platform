@@ -192,7 +192,9 @@ func (w *Workspace) Push(ctx context.Context, ref, sha string) error {
 	return e
 }
 func (g *Git) Delete(ctx context.Context, ref, sha string) error {
-	if !g.inScope(ref) || !fullSHA.MatchString(sha) {
+	// The lander never deletes: a land/prod branch is the record of what
+	// was pushed to main (B-05).
+	if g.lander || !g.inScope(ref) || !fullSHA.MatchString(sha) {
 		return errors.New("delete outside landing scope")
 	}
 	// A crash after deletion is already complete. A race after this read is

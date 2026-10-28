@@ -55,8 +55,8 @@ func DrillGitFacts(g DrillGit) store.LandingSource {
 // push followed by a crash is resolved by ls-remote, never a new SHA or branch.
 // It has no production path and cannot record main_intent/landed.
 func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op string, now time.Time) error {
-	if c.Env != "stg" || g == nil {
-		return fmt.Errorf("drill requires stg git")
+	if !c.landingEnv() || g == nil {
+		return fmt.Errorf("landing requires its git (stg drill, or prod live)")
 	}
 	var s landing.State
 	if err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
@@ -73,12 +73,12 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	put := func(kind string, fields map[string]any) error {
 		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "STG landing drill: " + kind, "landing": fields}})
+			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
 			return e
 		})
 	}
 	if o.Terminal() {
-		if o.Ref != "" {
+		if o.Ref != "" && c.Env != "prod" { // B-05: land/prod is kept
 			return g.Delete(ctx, o.Ref, o.R)
 		}
 		return nil
@@ -160,7 +160,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		}
 		date = now.UTC().Truncate(time.Second)
 	}
-	r, e := w.Replay(ctx, landinggit.ReplayInput{A: o.A, Base: f.Base, M0: m0, Task: o.Task, Attempt: o.Attempt, Mission: f.Mission, Reviewers: f.Reviewers, Operation: op, RuleVersion: o.RuleVersion, AcceptedAt: f.AcceptedAt, CommitterDate: date})
+	r, e := w.Replay(ctx, landinggit.ReplayInput{A: o.A, Base: f.Base, M0: m0, Task: o.Task, Attempt: o.Attempt, Mission: f.Mission, Reviewers: f.Reviewers, Operation: op, RuleVersion: o.RuleVersion, AcceptedAt: f.AcceptedAt, CommitterDate: date, Env: c.Env})
 	if e != nil {
 		why := ""
 		switch {
@@ -180,7 +180,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return e
 	}
 	if o.Phase == "claimed" {
-		if e = put("prepared", map[string]any{"R": r, "M0": m0, "committer_date": date.Format(time.RFC3339Nano), "dry_run": true}); e != nil {
+		if e = put("prepared", map[string]any{"R": r, "M0": m0, "committer_date": date.Format(time.RFC3339Nano), "dry_run": c.Env != "prod"}); e != nil {
 			return e
 		}
 	} else if r != o.R {
@@ -191,7 +191,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if e != nil || k < 1 {
 		return fmt.Errorf("invalid operation number")
 	}
-	ref := "refs/heads/land/stg/" + o.Task + "/" + strconv.Itoa(k)
+	ref := "refs/heads/land/" + c.Env + "/" + o.Task + "/" + strconv.Itoa(k)
 	if o.Phase != "branch_intent" {
 		if e = put("branch_intent", map[string]any{"ref": ref, "R": r}); e != nil {
 			return e

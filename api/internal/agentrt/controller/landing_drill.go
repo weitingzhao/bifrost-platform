@@ -52,8 +52,8 @@ type DrillSources struct {
 // note state. No in-memory checkpoint is authoritative; P0 remains a separate
 // prerequisite to enabling the workers loop.
 func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op string, now time.Time) (landing.DrillAction, error) {
-	if c.Env != "stg" {
-		return landing.DrillAction{}, fmt.Errorf("drill requires stg")
+	if !c.landingEnv() {
+		return landing.DrillAction{}, fmt.Errorf("landing requires stg (drill) or prod with live on")
 	}
 	var s landing.State
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
@@ -71,12 +71,12 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	appendRecord := func(kind string, fields map[string]any) error {
 		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "STG landing drill: " + kind, "landing": fields}})
+			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
 			return e
 		})
 	}
 	if o.Terminal() {
-		if o.Ref != "" && src.Delete != nil {
+		if o.Ref != "" && src.Delete != nil && c.Env != "prod" { // B-05
 			return landing.DrillAction{Kind: "cleanup"}, src.Delete(ctx, o.Ref, o.R)
 		}
 		return landing.DrillAction{Kind: "cleanup"}, nil
@@ -141,6 +141,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	}
 	switch a.Kind {
 	case "ready":
+		if c.Env == "prod" {
+			return a, c.landLive(ctx, src, op, o.R)
+		}
 		return a, c.finishLandingDrill(ctx, src, op, now)
 	case "replay":
 		return a, appendRecord("discarded", map[string]any{"why": "main_changed"})
@@ -197,6 +200,25 @@ func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, o
 		}
 		return landing.DrillObservation{Main: main, Candidate: ci, WindowBlocked: blocked}, nil
 	})
+}
+
+// landingEnv says whether this controller's environment lands: the STG
+// drill, or PROD with Live set by the wiring.
+func (c *Controller) landingEnv() bool {
+	return c.Env == "stg" || c.Env == "prod" && c.Live
+}
+
+// landingRuns is landingEnv with the loop's sources and Git wired.
+func (c *Controller) landingRuns() bool {
+	return c.landingEnv() && c.Drill != nil && c.DrillGit != nil
+}
+
+// landingText starts a landing note's text.
+func landingText(env string) string {
+	if env == "prod" {
+		return "PROD landing: "
+	}
+	return "STG landing drill: "
 }
 
 // mode is the landing mode an environment runs: live on PROD, dry_run else.

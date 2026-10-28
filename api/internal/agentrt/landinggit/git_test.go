@@ -477,3 +477,53 @@ func TestMainEvidenceValidity(t *testing.T) {
 		t.Fatalf("reverted: has=%v %+v %v", has, hist, err)
 	}
 }
+
+// S3 (CUT §2.5 step 3, §11.5): a PROD replay names the live landing in its
+// message and Landed-By trailer, its provenance still reads back as the
+// result's; the lander pushes its land/prod branch and never deletes it
+// (B-05).
+func TestReplayNamesTheLiveLandingAndTheLanderKeepsItsBranch(t *testing.T) {
+	g, in, _ := fixture(t)
+	ctx := context.Background()
+	lander := &Git{remote: g.remote, usernameFile: g.usernameFile, passwordFile: g.passwordFile, scope: liveRef, lander: true}
+	w, e := lander.Open(ctx, in.A)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer w.Close()
+	stg, e := w.Replay(ctx, in)
+	if e != nil {
+		t.Fatal(e)
+	}
+	in.Env = "prod"
+	r, e := w.Replay(ctx, in)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if r == stg {
+		t.Fatal("the PROD replay is the STG one")
+	}
+	msg, e := w.local(ctx, "log", "-1", "--format=%B", r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(msg, "(PROD landing)") || !strings.Contains(msg, "\nLanded-By: agentrt-prod/"+in.Operation+"\n") || strings.Contains(msg, "agentrt-stg") {
+		t.Fatal(msg)
+	}
+	if CherryPickSource(msg) != in.A || !HasTaskTrailer(msg, in.Task) {
+		t.Fatal("provenance lost", msg)
+	}
+	ref := "refs/heads/land/prod/" + testTask + "/1"
+	if e = w.Push(ctx, ref, r); e != nil {
+		t.Fatal(e)
+	}
+	if e = lander.Delete(ctx, ref, r); e == nil {
+		t.Fatal("the lander deleted a land/prod branch")
+	}
+	if tip, e := lander.Ref(ctx, ref); e != nil || tip != r {
+		t.Fatal("land/prod branch gone", tip, e)
+	}
+	if e = w.Push(ctx, "refs/heads/land/stg/"+testTask+"/1", r); e == nil {
+		t.Fatal("the lander pushed a drill branch")
+	}
+}

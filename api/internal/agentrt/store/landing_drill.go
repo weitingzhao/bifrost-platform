@@ -31,10 +31,16 @@ import (
 // releases its mission (landingHolds); any other refusal leaves it queued for
 // the next pass.
 func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task string, now time.Time) (op string, decision landing.Decision, err error) {
+	return ClaimLanding(ctx, db, src, "stg", task, now)
+}
+
+// ClaimLanding is ClaimLandingDrill for an environment: "stg" claims for the
+// drill (dry_run), "prod" for the live landing (S3); the same three steps.
+func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task string, now time.Time) (op string, decision landing.Decision, err error) {
 	var first drillBinding
 	if err = InTx(ctx, db, func(tx pgx.Tx) error {
 		var e error
-		first, e = bindDrillClaim(ctx, tx, src, task, now)
+		first, e = bindDrillClaim(ctx, tx, src, env, task, now)
 		return e
 	}); err != nil || first.settled {
 		return "", first.decision, err
@@ -45,7 +51,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 	}
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		op = ""
-		again, e := bindDrillClaim(ctx, tx, src, task, now)
+		again, e := bindDrillClaim(ctx, tx, src, env, task, now)
 		decision = again.decision
 		if e != nil || again.settled {
 			return e
@@ -73,7 +79,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		}
 		op = fmt.Sprintf("land:%s:%d", task, again.claims+1)
 		_, e = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{
-			"text": "STG landing drill claimed", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": facts.Attempt, "A": facts.A, "rule_version": facts.Rule.Version},
+			"text": "Landing claimed (" + env + ")", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": facts.Attempt, "A": facts.A, "rule_version": facts.Rule.Version},
 		}})
 		if e != nil {
 			op = ""
@@ -117,7 +123,7 @@ type drillBinding struct {
 // orders this claim against a close: the close decides first and the facts
 // read the mission done, or this claim commits first and CloseMissions sees
 // it (landingHolds).
-func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task string, now time.Time) (drillBinding, error) {
+func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task string, now time.Time) (drillBinding, error) {
 	var b drillBinding
 	var mission string
 	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&mission); err != nil {
@@ -163,7 +169,11 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 			return b, nil
 		}
 	}
-	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, "stg", "dry_run", task, "", now)
+	mode := "dry_run"
+	if env == "prod" {
+		mode = "live"
+	}
+	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, env, mode, task, "", now)
 	if err != nil || n > 0 || !inHandoff(b.facts) || now.Before(b.facts.AcceptedAt.Add(landing.ClaimWindow)) {
 		return b, err
 	}
