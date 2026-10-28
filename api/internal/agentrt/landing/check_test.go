@@ -51,53 +51,84 @@ func TestCheckLeavesTheStateAlone(t *testing.T) {
 	}
 }
 
-// main_lost (CUT §10.6 1A, review 658 B3): a failed v1.1 record from
-// main_result{ok} only; refused from every phase a general failure may end,
-// as another kind, and as v1.
+// main_lost (CUT §10.6 1A, review 658 B3, 659 R659-3): a failed v1.1 record
+// from main_result{ok} only. Checked against the state after every record of
+// two chains (to main, and to parked), and after unknown and denied: refused
+// everywhere but ok; refused as another kind and as v1.
 func TestMainLostOnlyFromOk(t *testing.T) {
 	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	const task, attempt, a, b = "t_01ARZ3NDEKTSV4RRFFQ69G5FAV", "a_01ARZ3NDEKTSV4RRFFQ69G5FAV", "2333e00753f91c74c8b2f4d693a803f8e89e7892", "b7c3f7e2a4d1f0e9c8b7a6958473625140312a0b"
-	chain := []map[string]any{
+	ref := "refs/heads/land/prod/" + task + "/1"
+	head := []map[string]any{
 		{"kind": "claimed", "op": "m:1", "task": task, "attempt": attempt, "A": a, "rule_version": 1},
 		{"kind": "prepared", "op": "m:1", "R": b, "M0": a, "committer_date": at.Format(time.RFC3339Nano), "dry_run": false},
-		{"kind": "branch_intent", "op": "m:1", "ref": "refs/heads/land/prod/" + task + "/1", "R": b},
-		{"kind": "branch_pushed", "op": "m:1", "ref": "refs/heads/land/prod/" + task + "/1", "R": b},
-		{"kind": "ci_seen", "op": "m:1", "run": "green", "status": "Succeeded", "R": b, "created_at": at.Add(5 * time.Second).Format(time.RFC3339Nano)},
-		{"kind": "main_intent", "op": "m:1", "R": b, "M0": a},
-		{"kind": "main_result", "op": "m:1", "outcome": "ok"},
+		{"kind": "branch_intent", "op": "m:1", "ref": ref, "R": b},
+		{"kind": "branch_pushed", "op": "m:1", "ref": ref, "R": b},
 	}
-	lost := func(v any) map[string]any { return map[string]any{"v": v, "kind": "failed", "op": "m:1", "why": "main_lost"} }
-	var s State
-	for i, m := range chain {
+	toMain := append(append([]map[string]any{}, head...),
+		map[string]any{"kind": "ci_seen", "op": "m:1", "run": "green", "status": "Succeeded", "R": b, "created_at": at.Add(5 * time.Second).Format(time.RFC3339Nano)},
+		map[string]any{"kind": "main_intent", "op": "m:1", "R": b, "M0": a})
+	parse := func(m map[string]any) Record {
+		t.Helper()
 		m["v"] = Version
 		r, err := Parse(m)
 		if err != nil {
 			t.Fatal(m["kind"], err)
 		}
-		if m["kind"] != "ci_seen" && m["kind"] != "main_intent" {
-			// A general failure may end these; main_lost may not.
-			if r, err := Parse(lost(Version)); err == nil && m["kind"] != "main_result" {
-				if err := s.Check(Entry{At: at.Add(time.Duration(i) * time.Second), Record: r}); err == nil && i > 0 {
-					t.Fatalf("main_lost accepted after %s", chain[i-1]["kind"])
+		return r
+	}
+	lost := parse(map[string]any{"kind": "failed", "op": "m:1", "why": "main_lost"})
+	// fold returns the state after each record of a chain.
+	fold := func(chain []map[string]any) []State {
+		t.Helper()
+		var out []State
+		for i, m := range chain {
+			s, err := Fold(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for j, n := range chain[:i+1] {
+				if err := s.Apply(Entry{At: at.Add(time.Duration(j+2) * time.Second), Record: parse(n)}); err != nil {
+					t.Fatal(n["kind"], err)
 				}
 			}
+			_ = m
+			out = append(out, s)
 		}
-		if err := s.Apply(Entry{At: at.Add(time.Duration(i+2) * time.Second), Record: r}); err != nil {
-			t.Fatal(m["kind"], err)
+		return out
+	}
+	check := func(name string, s State, want bool) {
+		t.Helper()
+		if err := s.Check(Entry{At: at.Add(time.Minute), Record: lost}); (err == nil) != want {
+			t.Fatalf("main_lost after %s: accepted=%v", name, err == nil)
 		}
 	}
-	if _, err := Parse(lost(1)); err == nil {
+	for i, s := range fold(toMain) {
+		check(toMain[i]["kind"].(string), s, false)
+	}
+	parked := fold(append(append([]map[string]any{}, head...), map[string]any{"kind": "parked", "op": "m:1", "why": "window", "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)}))
+	check("parked", parked[len(parked)-1], false)
+	for _, outcome := range []string{"unknown", "denied", "ok"} {
+		chain := append(append([]map[string]any{}, toMain...), map[string]any{"kind": "main_result", "op": "m:1", "outcome": outcome})
+		states := fold(chain)
+		check("main_result{"+outcome+"}", states[len(states)-1], outcome == "ok")
+	}
+	if _, err := Parse(map[string]any{"v": 1, "kind": "failed", "op": "m:1", "why": "main_lost"}); err == nil {
 		t.Fatal("main_lost parsed as v1")
 	}
-	if _, err := Parse(map[string]any{"v": Version, "kind": "parked", "op": "m:1", "why": "main_lost", "retry_at": at.Format(time.RFC3339Nano)}); err == nil {
-		t.Fatal("parked{main_lost} parsed")
+	for _, kind := range []string{"parked", "stg_failed"} {
+		m := map[string]any{"v": Version, "kind": kind, "op": "m:1", "why": "main_lost"}
+		if kind == "parked" {
+			m["retry_at"] = at.Format(time.RFC3339Nano)
+		}
+		if _, err := Parse(m); err == nil {
+			t.Fatalf("%s{main_lost} parsed", kind)
+		}
 	}
-	r, err := Parse(lost(Version))
-	if err != nil {
+	ok := fold(append(append([]map[string]any{}, toMain...), map[string]any{"kind": "main_result", "op": "m:1", "outcome": "ok"}))
+	s := ok[len(ok)-1]
+	if err := s.Apply(Entry{At: at.Add(time.Minute), Record: lost}); err != nil {
 		t.Fatal(err)
-	}
-	if err := s.Apply(Entry{At: at.Add(time.Minute), Record: r}); err != nil {
-		t.Fatal("main_lost refused from main_result{ok}", err)
 	}
 	if o := s.Operations["m:1"]; o.Phase != "failed" || o.Outcome != "main_lost" || s.RootPending(task) || !o.BlocksClaim() {
 		t.Fatalf("%+v", o)

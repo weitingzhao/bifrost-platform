@@ -10,7 +10,9 @@ import (
 
 // LandingAnswer reads the landing question bound to this root and operation.
 // S3 supplies the question binding; a generic task question is not sufficient.
-// The callback returns semantic choices, "try_again" or "do_not_merge". No
+// The callback returns semantic choices: "try_again", "do_not_merge", or
+// "confirm_main_lost" (a push reported ok whose R main does not show, CUT
+// §10.6). No
 // answer (including rule answers) authorizes a release or changes eligibility.
 //
 // The answer is handled once and recorded (store.HandleLandingAnswer); the
