@@ -75,7 +75,11 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 		{"an hour into the reads", time.Hour, false}, {"past the window", 6*time.Hour + time.Minute, true}} {
 		t.Run(c.name, func(t *testing.T) {
 			w, task, src := goalDrill(t, "M-3")
-			restore := store.FreezeEventClock(time.Now().Add(c.after))
+			// The claim starts now; the time passes during its reads, and
+			// the close runs at the later time (CUT §9: each locked read
+			// decides at its own clock).
+			start := time.Now()
+			restore := store.FreezeEventClock(start)
 			defer restore()
 			bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
@@ -104,7 +108,7 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			}
 			claimed := make(chan claimResult, 1)
 			go func() {
-				op, d, e := store.ClaimLandingDrill(bounded, claimConn.Conn(), src, task, time.Now())
+				op, d, e := store.ClaimLandingDrill(bounded, claimConn.Conn(), src, task, start)
 				claimed <- claimResult{op, landingDecision{d.Allowed, d.Reason}, e}
 			}()
 			select {
@@ -112,6 +116,7 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			case <-bounded.Done():
 				t.Fatal("claim never reached external source")
 			}
+			store.FreezeEventClock(start.Add(c.after))
 			// The claim holds no transaction now: the close is not blocked
 			// (on the version that read Git under the mission lock it waits
 			// here until the bounded context ends).
@@ -126,6 +131,8 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			ops := landingState(t, w, landingRepoStream).Operations
 			if c.closes {
 				o := ops["land:"+task+":1"]
+				// The second read finds the close's record and the mission
+				// done: nothing is claimed.
 				if r.op != "" || r.d.allowed || r.d.reason != "stale" || len(ops) != 1 || o.Phase != "failed" || o.Outcome != "bound" {
 					t.Fatalf("claimed under a closed mission, or left no record: op=%q decision=%+v ops=%+v", r.op, r.d, ops)
 				}

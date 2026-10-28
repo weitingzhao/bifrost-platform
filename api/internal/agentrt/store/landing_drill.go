@@ -63,7 +63,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		current.SingleCommit, current.Changes, current.History, current.DependenciesEffective =
 			facts.SingleCommit, facts.Changes, facts.History, facts.DependenciesEffective
 		facts = current
-		decision = landing.EligibleToClaim(facts, now)
+		decision = landing.EligibleToClaim(facts, again.at)
 		if !decision.Allowed {
 			if why, ends := unclaimedEnd(decision, facts); ends && again.claims == 0 {
 				_, e = failUnclaimedLocked(ctx, tx, "landing:bifrost-platform", facts.Mission, task, why, refusalEvidence(facts))
@@ -108,6 +108,7 @@ type drillBinding struct {
 	facts    landing.Facts
 	deps     []landingDep
 	claims   int
+	at       time.Time // the decision time, read once the locks are held (CUT §9)
 }
 
 // bindDrillClaim takes the claim's locks and reads its bindings. The task,
@@ -128,6 +129,8 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, task stri
 	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 		return b, err
 	}
+	now = DecisionAt(now)
+	b.at = now
 	state, err := LandingState(ctx, tx, "landing:bifrost-platform")
 	if err != nil {
 		return b, err

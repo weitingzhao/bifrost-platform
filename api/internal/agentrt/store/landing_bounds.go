@@ -36,6 +36,7 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time) (state 
 		if e := lockStream(ctx, tx, "landing:bifrost-platform"); e != nil {
 			return e
 		}
+		now := DecisionAt(now) // CUT §9: later only settles sooner, never early
 		var e error
 		state, e = LandingState(ctx, tx, "landing:bifrost-platform")
 		if e != nil {

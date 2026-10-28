@@ -13,7 +13,6 @@ import (
 // final fresh external observation and the rehearsal record. It reserves no
 // production quota and has no deployment or main-push callback.
 func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string, now time.Time, observe func(context.Context, landing.Operation) (landing.DrillObservation, error)) error {
-	started := time.Now()
 	return InTx(ctx, db, func(tx pgx.Tx) error {
 		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
 		if err != nil {
@@ -47,7 +46,8 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if err = lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 			return err
 		}
-		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", o.Task, op, "", now)
+		at := DecisionAt(now) // CUT §9: the rule and the window as of these locks
+		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", o.Task, op, "", at)
 		if err != nil {
 			return err
 		}
@@ -67,7 +67,8 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			return err
 		}
 		obs.Facts = f
-		if action := landing.NextDrill(state, op, obs, now.Add(time.Since(started))); action.Kind != "ready" {
+		// The observation reads CI under these locks: judge it as of now.
+		if action := landing.NextDrill(state, op, obs, DecisionAt(at)); action.Kind != "ready" {
 			return fmt.Errorf("drill final gate: %s %s", action.Kind, action.Why)
 		}
 		for _, r := range []map[string]any{

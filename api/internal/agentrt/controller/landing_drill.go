@@ -22,6 +22,7 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 	}
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var err error
+		now := store.DecisionAt(now) // CUT §9: not the pass's start
 		f, err = store.LandingFacts(ctx, tx, src, c.Env, mode, task, op, "", now)
 		if err != nil {
 			return err
