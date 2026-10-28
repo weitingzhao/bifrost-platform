@@ -387,11 +387,16 @@ func (s *State) Apply(e Entry) error {
 			}
 			for id, previous := range s.Operations {
 				first, count := RootBudget(*s, previous.Task)
-				if previous.Phase == "discarded" && s.LatestOperation(previous.Task) == id &&
+				if s.LatestOperation(previous.Task) == id && s.AwaitsNext(previous.Task) &&
 					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && Bound(first, count, e.At) {
 					n.Task, n.Attempt, n.A = previous.Task, previous.Attempt, previous.A
 					n.RuleVersion, n.DryRun = previous.RuleVersion, previous.DryRun
 					n.ClaimNumber, n.ClaimedAt = count+1, e.At
+					// A retry this ends is used up, as a claim would use it.
+					if retry, ok := s.Retries[n.Task]; ok && retry.ConsumedBy == "" {
+						retry.ConsumedBy = op
+						s.Retries[n.Task] = retry
+					}
 					break
 				}
 			}
@@ -402,7 +407,7 @@ func (s *State) Apply(e Entry) error {
 			s.Operations[op] = n
 			return nil
 		}
-		allowed := slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, old.Phase)
+		allowed := old.EndsAtBound()
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))
 		allowed = allowed || r.String("v") == Version && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op
@@ -473,6 +478,21 @@ func stgBackoff(previousTry int) time.Duration {
 func (o Operation) Terminal() bool {
 	return slices.Contains([]string{"landed", "reverted", "failed", "discarded", "rehearsed", "stg_verified", "stg_failed"}, o.Phase) || o.Phase == "main_result" && o.Outcome == "non_ff"
 }
+
+// EndsAtBound: a live operation that has not reached main may end
+// failed{bound} from the stream alone (§5 item 6). From main_intent on, the
+// end depends on what main holds, which only a Git read can tell (§2.4).
+func (o Operation) EndsAtBound() bool {
+	return slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, o.Phase)
+}
+
+// AtMain: the operation asked main to move and its outcome is not settled
+// (main_intent, or a main_result other than non_ff). Neither a time limit nor
+// failed{bound} ends it; reconciling with main does (TD-447 2).
+func (o Operation) AtMain() bool {
+	return o.Phase == "main_intent" || o.Phase == "main_result" && o.Outcome != "non_ff"
+}
+
 func (o Operation) Active() bool { return o.Phase != "" && o.Phase != "parked" && !o.Terminal() }
 
 // Bound includes all elapsed time, including window and main-red waits.
@@ -488,6 +508,23 @@ func (o Operation) BlocksClaim() bool { return o.EverLanded || o.Phase == "faile
 // tenant/day stream. A rehearsal never consumes the production quota.
 func (o Operation) Reservable(root string) bool {
 	return o.Task == root && !o.DryRun && o.Phase == "branch_pushed"
+}
+
+// AwaitsNext: the root's latest operation ended without ending the root, so
+// its next operation k+1 is due: a replay after discarded, a push main did
+// not fast-forward (main_result{non_ff}), or a failure the Owner retried and
+// no claim has used yet. Close, the drill scan and the bound settlement read
+// it alike (TD-447 1, 6).
+func (s State) AwaitsNext(root string) bool {
+	o, ok := s.Operations[s.LatestOperation(root)]
+	return ok && o.Terminal() && !o.BlocksClaim() && o.Phase != "rehearsed"
+}
+
+// RootPending: the root still has a step to take: its latest operation is
+// live, or AwaitsNext. False for a root never claimed.
+func (s State) RootPending(root string) bool {
+	o, ok := s.Operations[s.LatestOperation(root)]
+	return ok && (!o.Terminal() || s.AwaitsNext(root))
 }
 
 // LatestOperation uses stream claim order, including equal event timestamps.

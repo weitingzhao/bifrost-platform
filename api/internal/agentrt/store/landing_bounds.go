@@ -17,11 +17,12 @@ func failLandingBound(ctx context.Context, tx pgx.Tx, op string) error {
 	return err
 }
 
-// The repository stream must be locked. Only the latest discarded operation
-// can acquire a born-terminal successor; repeated recovery is a no-op.
-func failDiscardedBound(ctx context.Context, tx pgx.Tx, state landing.State, task string, now time.Time) error {
+// The repository stream must be locked. Only a root whose latest operation
+// awaits its successor (discarded, non_ff, retried; landing.AwaitsNext) can
+// acquire a born-terminal successor; repeated recovery is a no-op.
+func failAwaitingBound(ctx context.Context, tx pgx.Tx, state landing.State, task string, now time.Time) error {
 	first, n := landing.RootBudget(state, task)
-	if state.Operations[state.LatestOperation(task)].Phase != "discarded" || !landing.Bound(first, n, now) {
+	if !state.AwaitsNext(task) || !landing.Bound(first, n, now) {
 		return nil
 	}
 	return failLandingBound(ctx, tx, fmt.Sprintf("land:%s:%d", task, n+1))
@@ -51,9 +52,13 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time) (state 
 				continue
 			}
 			first, n := landing.RootBudget(state, o.Task)
-			if o.Phase == "discarded" && state.LatestOperation(o.Task) == id {
-				e = failDiscardedBound(ctx, tx, state, o.Task, now)
-			} else if !o.Terminal() && landing.Bound(first, n-1, now) {
+			// An operation at main (main_intent, main_result other than
+			// non_ff) is left for reconciliation with main: failed{bound}
+			// would be refused by the protocol and roll back every other
+			// root's settlement here (TD-447 2).
+			if state.LatestOperation(o.Task) == id && state.AwaitsNext(o.Task) {
+				e = failAwaitingBound(ctx, tx, state, o.Task, now)
+			} else if o.EndsAtBound() && landing.Bound(first, n-1, now) {
 				e = failLandingBound(ctx, tx, id)
 			}
 			if e != nil {

@@ -36,7 +36,7 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 		first, n := landing.RootBudget(state, task)
 		if landing.Bound(first, n, now) {
 			decision = landing.Decision{Reason: "bound"}
-			return failDiscardedBound(ctx, tx, state, task, now)
+			return failAwaitingBound(ctx, tx, state, task, now)
 		}
 		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", task, "", "", now)
 		if err != nil {

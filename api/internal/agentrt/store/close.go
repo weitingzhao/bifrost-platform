@@ -125,10 +125,12 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 // its mission active (CUT-landing §2.7's hold, brought forward for the S2
 // drill). Every landing gate reads the mission as active, so closing it would
 // end that operation stale before its CI finished. It holds while
-//   - the root's latest operation has not ended, or ended discarded (the
-//     replay k+1 is due), and at most landingHoldLimit after the root's first
-//     claim (or retry) — the six-hour bound plus a margin, so a mission is
-//     released even when no loop runs to record failed{bound};
+//   - the root is pending (landing.RootPending: its latest operation has not
+//     ended, or ended discarded, non_ff or retried, so k+1 is due), and at
+//     most landingHoldLimit after the root's first claim (or retry) — the
+//     six-hour bound plus a margin, so a mission is released even when no
+//     loop runs to record failed{bound}; an operation at main
+//     (landing.AtMain) holds without that limit until it is reconciled;
 //   - or the root was never claimed, landing is enabled for its repo (a
 //     current landing rule, an observed enable time no later than the
 //     mission's creation and the task's acceptance), and it was accepted less
@@ -198,8 +200,16 @@ func landingHolds(ctx context.Context, tx pgx.Tx, mission string, now time.Time)
 		enabled = enabled && !noMerge && !state.EnabledAt.IsZero() && !created.Before(state.EnabledAt)
 		for _, r := range roots[repo] {
 			if latest, ok := state.Operations[state.LatestOperation(r.task)]; ok {
+				if !state.RootPending(r.task) {
+					continue
+				}
+				// At main the outcome is unknown until reconciled with main:
+				// no time limit releases the mission (TD-447 2).
+				if latest.AtMain() {
+					return true, nil
+				}
 				first, _ := landing.RootBudget(state, r.task)
-				if (!latest.Terminal() || latest.Phase == "discarded") && now.Before(first.Add(landingHoldLimit)) {
+				if now.Before(first.Add(landingHoldLimit)) {
 					return true, nil
 				}
 				continue
