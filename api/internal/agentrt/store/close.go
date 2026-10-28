@@ -252,5 +252,6 @@ func (m landingFolds) state(ctx context.Context, tx pgx.Tx, stream string) (land
 		return landing.State{}, err
 	}
 	m[stream] = landingFold{head: head, state: s}
+	hook("landing_folded", stream)
 	return s, nil
 }
