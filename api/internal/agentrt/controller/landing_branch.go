@@ -132,6 +132,21 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if f.A != o.A || f.Attempt != o.Attempt {
 		return put("failed", map[string]any{"why": "stale"})
 	}
+	// Before each new intent and the push, after the Git reads before it:
+	// the window and the authorization as of now (review 659 R659-1). Out of
+	// either, nothing new is written this pass; the next pass parks or
+	// fails it on its own reads.
+	recheck := func() (bool, error) {
+		at := store.DecisionAt()
+		if landing.Bound(first, n-1, at) {
+			return true, put("failed", map[string]any{"why": "bound"})
+		}
+		now, err := store.RefreshLandingFacts(ctx, c.DB, DrillGitFacts(g), c.Env, mode(c.Env), o.Task, op, f, at)
+		if err != nil {
+			return true, err
+		}
+		return !landing.EligibleToClaim(now, at).Allowed, nil
+	}
 	w, e := g.Open(ctx, o.A)
 	if e != nil {
 		return e
@@ -159,6 +174,9 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		if why != "" {
 			return put("failed", map[string]any{"why": why})
 		}
+		return e
+	}
+	if stop, e := recheck(); stop || e != nil {
 		return e
 	}
 	if o.Phase == "claimed" {
@@ -190,6 +208,9 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return put("discarded", map[string]any{"why": "branch_collision"})
 	}
 	if tip == "" {
+		if stop, e := recheck(); stop || e != nil {
+			return e
+		}
 		if e = w.Push(ctx, ref, r); e != nil {
 			return e
 		}

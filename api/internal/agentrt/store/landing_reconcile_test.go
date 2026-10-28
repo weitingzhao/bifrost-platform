@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -341,4 +343,83 @@ func TestReconcileIgnoresDrills(t *testing.T) {
 		t.Fatal(done)
 	}
 	_ = landing.Version
+}
+
+// Serial: FreezeEventClock. The reconciler's own loop runs without the drill
+// (any environment): with no main reader it still settles denied (PROD
+// today).
+func TestReconcileLoopSettlesDeniedWithoutTheDrill(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	atMain(t, w, "land:loop:denied", "denied", at)
+	store.FreezeEventClock(at.Add(time.Hour))
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Reconcile: &controller.LandingReconcile{}}
+	ok(t, ctl.LandingReconcilePass(ctx))
+	if p, o := phaseOf(t, w, "land:loop:denied"); p != "failed" || o != "denied" {
+		t.Fatalf("%s{%s}", p, o)
+	}
+}
+
+// atMainR is atMain with a given R, so a reader can tell operations apart.
+func atMainR(t *testing.T, w *world, op, r string, at time.Time) time.Time {
+	t.Helper()
+	root := w.ready(t, store.Task{OffPlanReason: "main " + op})
+	ref := "refs/heads/land/prod/" + root + "/1"
+	for i, rec := range []map[string]any{
+		newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1),
+		newLandingRecord(op, "prepared", "R", r, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false),
+		newLandingRecord(op, "branch_intent", "ref", ref, "R", r),
+		newLandingRecord(op, "branch_pushed", "ref", ref, "R", r),
+		newLandingRecord(op, "ci_seen", "run", "ci-"+op, "status", "Succeeded", "R", r, "created_at", at.Add(3*time.Minute).Format(time.RFC3339Nano)),
+		newLandingRecord(op, "main_intent", "R", r, "M0", commitA),
+	} {
+		store.FreezeEventClock(at.Add(time.Duration(i) * time.Minute))
+		ok(t, appendLanding(w, landingRepoStream, rec))
+	}
+	return at.Add(5 * time.Minute)
+}
+
+// Serial: FreezeEventClock. A read that fails holds back that operation only
+// (review 658 R3, 659 R659-4): the other is settled in the same pass; the
+// failed one is not read again until its wait is over, then is.
+func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	badR, goodR := strings.Repeat("c", 40), strings.Repeat("d", 40)
+	intent := atMainR(t, w, "land:loop:bad", badR, at)
+	atMainR(t, w, "land:loop:good", goodR, at)
+	now := intent.Add(store.MainFence + time.Minute)
+	store.FreezeEventClock(now)
+	reads := map[string]int{}
+	failing := true
+	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return now }}
+	ctl.Reconcile = &controller.LandingReconcile{MainEvidence: func(_ context.Context, _ string, r string) (store.MainEvidence, error) {
+		reads[r]++
+		if r == badR && failing {
+			return store.MainEvidence{}, errors.New("fetch failed")
+		}
+		return store.MainEvidence{Head: commitA}, nil
+	}}
+	if err := ctl.LandingReconcilePass(ctx); err == nil {
+		t.Fatal("a failed read was not reported")
+	}
+	if p, _ := phaseOf(t, w, "land:loop:good"); p != "failed" {
+		t.Fatalf("the healthy operation was not settled: %s", p)
+	}
+	if p, _ := phaseOf(t, w, "land:loop:bad"); p != "main_intent" {
+		t.Fatalf("a failed read wrote %s", p)
+	}
+	ok(t, ctl.LandingReconcilePass(ctx))
+	if reads[badR] != 1 {
+		t.Fatalf("read again before its wait was over: %d reads", reads[badR])
+	}
+	failing = false
+	now = now.Add(2 * time.Minute)
+	store.FreezeEventClock(now)
+	ok(t, ctl.LandingReconcilePass(ctx))
+	if p, _ := phaseOf(t, w, "land:loop:bad"); reads[badR] != 2 || p != "failed" {
+		t.Fatalf("after its wait: %d reads, %s", reads[badR], p)
+	}
 }

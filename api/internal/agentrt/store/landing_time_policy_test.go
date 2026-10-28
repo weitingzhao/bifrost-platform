@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -94,5 +96,54 @@ func TestDecisionAtIsTheEventClock(t *testing.T) {
 	store.FreezeEventClock(now.Add(time.Minute))
 	if got := store.DecisionAt(); !got.Equal(now.Add(time.Minute)) {
 		t.Fatal("not the clock", got)
+	}
+}
+
+// Serial: FreezeEventClock. A tightened version that takes effect while the
+// CI step reads CI: no CI is kicked under the rule of before the read
+// (review 659 R659-1). Before the refresh, the step judged the new time
+// against the old rule's facts and called EnsureCI.
+func TestDrillCIStepKicksNothingUnderARuleThatEndedDuringItsReads(t *testing.T) {
+	w, task, src := goalDrill(t, "M-3")
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
+	ok(t, err)
+	if op == "" || !d.Allowed {
+		t.Fatal("fixture claim", d)
+	}
+	clock := time.Now().Add(time.Minute).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(clock)()
+	ref := "refs/heads/land/stg/" + task + "/1"
+	ok(t, appendLanding(w, landingRepoStream, landingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", clock.Format(time.RFC3339Nano), "dry_run", true)))
+	ok(t, appendLanding(w, landingRepoStream, landingRecord(op, "branch_intent", "ref", ref, "R", commitB)))
+	ok(t, appendLanding(w, landingRepoStream, landingRecord(op, "branch_pushed", "ref", ref, "R", commitB)))
+	// Past the ten minutes after prepared: a missing CI is kicked.
+	start := clock.Add(11 * time.Minute)
+	store.FreezeEventClock(start)
+	tightened, ensured := false, 0
+	drill := controller.DrillSources{Facts: src,
+		Main:          func(context.Context) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
+		CI: func(_ context.Context, revision string, _ time.Time) (landing.CIRun, error) {
+			if !tightened {
+				tightened = true
+				body := strings.Replace(landingRuleBody, "deny: []", "deny: [\"console/src/components/**\"]", 1)
+				_, e := store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", start.Add(time.Minute).Format(time.RFC3339), until, body)))
+				ok(t, e)
+				store.FreezeEventClock(start.Add(2 * time.Minute))
+			}
+			return landing.CIRun{Status: "Missing"}, nil
+		},
+		EnsureCI: func(context.Context, string, string) error { ensured++; return nil },
+	}
+	ctl := controller.Controller{DB: w.rt, Env: "stg"}
+	a, err := ctl.LandingDrillCI(ctx, drill, op, start)
+	if !tightened {
+		t.Fatal("fixture: CI was not read")
+	}
+	if a.Kind == "ci_kick" || a.Kind == "ci_rerun" || ensured != 0 {
+		t.Fatalf("CI kicked under the rule of before the read: %+v err=%v ensured=%d", a, err, ensured)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Kicked {
+		t.Fatal("ci_kick recorded", o)
 	}
 }

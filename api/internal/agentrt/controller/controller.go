@@ -60,8 +60,11 @@ type Sources struct {
 // Controller holds what the loops need. Zero intervals take the design's
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
-	Drill       *DrillSources // nil by default; workers opt in on STG only
-	DrillGit    DrillGit
+	Drill    *DrillSources // nil by default; workers opt in on STG only
+	DrillGit DrillGit
+	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
+	// runs none. Apart from the drill: any environment, any rule.
+	Reconcile   *LandingReconcile
 	DB          store.DB
 	Sources     Sources
 	Logf        func(format string, args ...any)
@@ -639,6 +642,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			var loops sync.WaitGroup
 			c.every(ctx, &loops, "agentrt-landing-drill", facts, run)
 			loops.Wait()
+		})
+	}
+	if c.Reconcile != nil {
+		c.every(ctx, &wg, "agentrt-landing-reconcile", facts, func() error {
+			passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+			return c.LandingReconcilePass(passCtx)
 		})
 	}
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })

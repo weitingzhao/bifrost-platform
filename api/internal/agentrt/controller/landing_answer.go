@@ -27,7 +27,14 @@ func (c *Controller) LandingAnswer(ctx context.Context, root, after string, read
 	if read == nil {
 		return store.LandingAnswerResult{}, nil
 	}
-	q, ok := read(ctx, root, after)
+	// The card is read with the per-read timeout (review 657 N657-3): a
+	// slow question store skips this card, nothing is recorded or acked.
+	type card struct {
+		q  store.Question
+		ok bool
+	}
+	got := bounded(c, ctx, func(ctx context.Context) card { q, ok := read(ctx, root, after); return card{q, ok} })
+	q, ok := got.q, got.ok
 	if !ok || q.Status != store.QuestionAnswered || q.Channel != "console" || q.ID == "" || q.AnsweredBy == "" {
 		return store.LandingAnswerResult{}, nil
 	}

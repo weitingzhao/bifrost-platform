@@ -204,3 +204,23 @@ func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, 
 	}
 	return nil
 }
+
+// RefreshLandingFacts reads the database half of f again at the time at, in
+// a short transaction of its own, and keeps the external evidence f carries
+// (its keys are compared by the gates that bind it). A step that read Git or
+// CI for a while decides on the rule, the day's counts and the operation as
+// they are at, not as they were before its reads (CUT §9, review 657
+// R657-2, 659 R659-1).
+func RefreshLandingFacts(ctx context.Context, db DB, src LandingSource, environment, mode, task, op string, f landing.Facts, at time.Time) (landing.Facts, error) {
+	var g landing.Facts
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var err error
+		g, _, err = landingFactsDB(ctx, tx, src, environment, mode, task, op, at)
+		return err
+	})
+	if err != nil {
+		return landing.Facts{}, err
+	}
+	g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+	return g, nil
+}

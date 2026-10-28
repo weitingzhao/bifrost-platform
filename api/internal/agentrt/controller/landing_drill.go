@@ -16,10 +16,7 @@ import (
 func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSource, task, op, stage string, now time.Time) (landing.Facts, landing.Decision, error) {
 	var f landing.Facts
 	d := landing.Decision{Reason: "facts_unreadable"}
-	mode := "dry_run"
-	if c.Env == "prod" {
-		mode = "live"
-	}
+	mode := mode(c.Env)
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var err error
 		now := store.DecisionAt() // CUT §9: not the pass's start
@@ -49,9 +46,6 @@ type DrillSources struct {
 	WindowBlocked func(context.Context) (bool, error)
 	EnsureCI      func(context.Context, string, string) error
 	Delete        func(context.Context, string, string) error
-	// MainEvidence reads main for the main reconciler (S3 must 3): main's
-	// head and whether R is in its history. Nil: only denied is reconciled.
-	MainEvidence store.MainEvidenceFunc
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
@@ -133,6 +127,12 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// ten-minute rebuild and thirty-minute stuck checks and the CI's creation
 	// time are judged as of now (CUT §9, review 656 B-R1).
 	at := store.DecisionAt()
+	// The rule, the day's counts and the operation as of at, not as of the
+	// decision before the reads (review 659 R659-1): a version that took
+	// effect meanwhile decides whether CI is kicked.
+	if f, err = store.RefreshLandingFacts(ctx, c.DB, src.Facts, c.Env, mode(c.Env), o.Task, op, f, at); err != nil {
+		return landing.DrillAction{Kind: "wait"}, err
+	}
 	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked}, at)
 	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(at) {
 		if err = appendRecord("ci_seen", map[string]any{"run": ci.Run, "status": ci.Status, "R": o.R, "created_at": ci.CreatedAt.Format(time.RFC3339Nano)}); err != nil {
@@ -197,4 +197,12 @@ func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, o
 		}
 		return landing.DrillObservation{Main: main, Candidate: ci, WindowBlocked: blocked}, nil
 	})
+}
+
+// mode is the landing mode an environment runs: live on PROD, dry_run else.
+func mode(env string) string {
+	if env == "prod" {
+		return "live"
+	}
+	return "dry_run"
 }
