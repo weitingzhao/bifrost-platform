@@ -2,6 +2,7 @@ package landinggit
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -10,10 +11,18 @@ import (
 	"time"
 )
 
-// gone waits for pid to be gone (a killed orphan is reaped by init).
+// gone waits for pid to be dead: gone, or a zombie (killed, not reaped:
+// in a container whose init does not reap orphans, a killed orphan stays a
+// zombie, and a zombie still answers signal 0). On Linux the state is read
+// from /proc; elsewhere signal 0.
 func gone(pid int) bool {
 	for i := 0; i < 200; i++ {
-		if syscall.Kill(pid, 0) != nil {
+		if stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); err == nil {
+			// "pid (comm) S ...": the state follows the last ')'.
+			if f := strings.Fields(string(stat[strings.LastIndexByte(string(stat), ')')+1:])); len(f) > 0 && (f[0] == "Z" || f[0] == "X") {
+				return true
+			}
+		} else if syscall.Kill(pid, 0) != nil {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
