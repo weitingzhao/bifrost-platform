@@ -20,9 +20,10 @@ import (
 // (executorEnds), so it withdraws no executor (PROD M-22: codex, cursor and
 // claude were each withdrawn three times for a setup that never let one of
 // them start). Three in a row, of the attempts leased since the task last
-// went back to ready from a block, block it in BlockWithdrawn's pass, with
-// prepareBlockMark; its card says so and quotes the last one's report
-// (lastPrepare), and one more round tries it three times more.
+// went back to ready from a block, block it at the next claim or in
+// BlockWithdrawn's pass, with prepareBlockMark; its card says so and quotes
+// the last one's report (lastPrepare), and one more round tries it three
+// times more.
 
 // prepareFailed is the end of an attempt that failed before its executor
 // started.
