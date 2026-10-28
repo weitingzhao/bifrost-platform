@@ -80,7 +80,8 @@ const candidatePage = 100
 // from the author; a tool whose account has a pool cooling down is not
 // offered (2.4 slice ①); scores and pace are 2.4 slice ②. Candidates are
 // read in pages until one is taken or none is left, so tasks no tool here may
-// take never hide the ones it may (review 148 B2).
+// take never hide the ones it may (review 148 B2). A task whose preparation
+// failed in a row is blocked instead, ending this poll without a lease.
 func ClaimNext(ctx context.Context, db DB, r ClaimRequest) (*Claim, error) {
 	return claimNext(ctx, db, r, claimOpts{ttl: LeaseTTL, effects: dispatched})
 }
@@ -157,7 +158,8 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 						continue
 					}
 				}
-				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st); err != nil || claim != nil {
+				var blocked bool
+				if claim, blocked, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st); err != nil || claim != nil || blocked {
 					return err
 				}
 			}
@@ -253,29 +255,31 @@ func candidateOf(ctx context.Context, tx pgx.Tx, taskID string) (candidate, erro
 // tryCandidate leases c to the first tool that may take it, or returns nil.
 // What it locks for a candidate it does not take is released at once by
 // rolling back to a savepoint, so a skipped candidate holds nothing until the
-// claim commits (review 148 B1).
-func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, error) {
+// claim commits (review 148 B1). A blocked candidate commits its savepoint
+// and ends this poll: scanning on would hold one mission and its event stream
+// while taking another mission, unlike a claim that leases just one task.
+func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, bool, error) {
 	hook("candidate", c.id)
 	_, _, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
-		return nil, err
+		return nil, false, err
 	}
 	hook("picked", c.id)
 	sp, err := tx.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	cl, err := take(ctx, sp, r, cp, c, ttl, rc, st)
-	if err != nil || cl == nil {
+	cl, blocked, err := take(ctx, sp, r, cp, c, ttl, rc, st)
+	if err != nil || (cl == nil && !blocked) {
 		if rerr := sp.Rollback(ctx); err == nil {
 			err = rerr
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if err := sp.Commit(ctx); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return cl, nil
+	return cl, blocked, nil
 }
 
 // take locks the candidate if no one holds it and it is still ready and
@@ -293,16 +297,17 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 // row by a control on the task, so these checks are exact: a pause or stop
 // either commits before the claim or is seen by it (review 148 A2). A plan
 // task takes the mission row exclusively, so two plan tasks of one mission
-// never lease together (task_one_live_plan).
-func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, error) {
+// never lease together (task_one_live_plan). The bool reports a task blocked
+// instead of leased; callers must commit it and finish this poll.
+func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, bool, error) {
 	var mission string
 	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR NO KEY UPDATE SKIP LOCKED`,
 		c.id).Scan(&mission)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, false, nil
 	}
 	if err != nil || mission != c.mission {
-		return nil, err
+		return nil, false, err
 	}
 	if c.subject != "" {
 		// Skipped, not waited for, when someone holds the subject (an author
@@ -312,18 +317,18 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		var held string
 		err = tx.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE task_id = $1 FOR SHARE SKIP LOCKED`, c.subject).Scan(&held)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, false, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	if c, err = candidateOf(ctx, tx, c.id); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	tl, why, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
-		return nil, err
+		return nil, false, err
 	}
 	// Held exclusively, so the claims of one mission count its attempts one
 	// at a time and the last one its budget allows goes to one host (review
@@ -331,14 +336,14 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	var m missionBudget
 	if err = tx.QueryRow(ctx, `SELECT state, tenant, budget_json, created_at, COALESCE(envelope_rule_id, '') FROM agentrt.mission
 	  WHERE mission_id = $1 FOR NO KEY UPDATE`, c.mission).Scan(&m.state, &m.tenant, &m.budget, &m.created, &m.envelope); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if m.state != "active" {
-		return nil, nil
+		return nil, false, nil
 	}
 	limit, fits, err := m.allows(ctx, tx, rc, c)
 	if err != nil || !fits {
-		return nil, err
+		return nil, false, err
 	}
 	c.limitS = limit
 	scopes := []scope{{"mission", c.mission}, {"task", c.id}}
@@ -348,17 +353,38 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	}
 	stop, err := held(ctx, tx, scopes, "stop", "pause")
 	if err != nil || stop {
-		return nil, err
+		return nil, false, err
 	}
 	if c.role == "plan" {
 		var busy bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = $1 AND role = 'plan' AND state IN ('leased','running'))`,
 			c.mission).Scan(&busy); err != nil || busy {
-			return nil, err
+			return nil, false, err
+		}
+	}
+	// TD-449: a host can reclaim ready work before BlockWithdrawn sees it.
+	// Check under the task and mission locks, before opening another attempt.
+	if reason, err := preparesFailed(ctx, tx, c.id); err != nil {
+		return nil, false, err
+	} else if reason != "" && c.role != "brief" {
+		// Keep blockNoneLeft's scope: briefs and gate tasks have their own
+		// completion paths and get no blocked card here.
+		member, err := isGateMember(ctx, tx, c.id)
+		if err != nil {
+			return nil, false, err
+		}
+		if !member {
+			t, err := readTask(ctx, tx, c.id, true)
+			if err != nil {
+				return nil, false, err
+			}
+			err = moveTask(ctx, tx, "controller", t, "blocked", reason)
+			return nil, err == nil, err
 		}
 	}
 	hook("taken", c.id)
-	return lease(ctx, tx, r.HostID, tl, c, ttl, why)
+	cl, err := lease(ctx, tx, r.HostID, tl, c, ttl, why)
+	return cl, false, err
 }
 
 // pickTool returns the host tool the claim uses and why (pick.go): of the
