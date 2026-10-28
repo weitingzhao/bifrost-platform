@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -34,11 +35,18 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	c.DrillGit = g
 	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: s.delivery.LandingCI, EnsureCI: s.delivery.EnsureLandingCI, WindowBlocked: s.delivery.LandingWindowBlocked, Delete: g.Delete}
 	// The drill's Git reads main for the reconciler too (STG).
-	c.Reconcile.MainEvidence = func(ctx context.Context, repo, r string) (store.MainEvidence, error) {
+	c.Reconcile.MainEvidence = func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
 		if repo != "bifrost-platform" {
 			return store.MainEvidence{}, errors.New("unsupported landing repo")
 		}
-		head, has, err := g.MainEvidence(ctx, r)
-		return store.MainEvidence{Head: head, HasR: has}, err
+		head, has, hist, err := g.MainEvidence(ctx, r, root, a)
+		ev := store.MainEvidence{Head: head, HasR: has, Validity: "unknown"}
+		switch hist.State {
+		case landing.Effective:
+			ev.Validity = "effective"
+		case landing.Reverted:
+			ev.Validity, ev.RevertedBy = "reverted", hist.RevertedBy
+		}
+		return ev, err
 	}
 }

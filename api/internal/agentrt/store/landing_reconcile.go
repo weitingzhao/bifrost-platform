@@ -34,6 +34,10 @@ const (
 type MainEvidence struct {
 	Head string
 	HasR bool
+	// Validity is whether R is in effect at Head (S3 B-02): "effective",
+	// "reverted" (RevertedBy is the reversal in effect) or "unknown"; empty
+	// reads as unknown. Unknown is never taken as in effect.
+	Validity, RevertedBy string
 	// ReadAt is when the read began (ReconcileMain sets it, on the decision
 	// clock, before calling the reader). Absence counts only from a read
 	// that began past the fence: a read begun inside it and finished, or
@@ -41,14 +45,15 @@ type MainEvidence struct {
 	ReadAt time.Time
 }
 
-// MainEvidenceFunc reads main for R. A failure is an error, never HasR false.
-type MainEvidenceFunc func(ctx context.Context, repo, r string) (MainEvidence, error)
+// MainEvidenceFunc reads main for R, and R's validity from the root's task
+// and accepted commit A. A failure is an error, never HasR false.
+type MainEvidenceFunc func(ctx context.Context, repo, root, a, r string) (MainEvidence, error)
 
 // MainCandidate is an operation the reconciler reads main for, with the
 // state it was listed in: the locked write is refused if it moved since.
 type MainCandidate struct {
-	Op, Root, Phase, Outcome, R, M0 string
-	IntentAt                        time.Time
+	Op, Root, Phase, Outcome, R, M0, A string
+	IntentAt                           time.Time
 	// Late: it once had a main_intent and ended failed{bound} as never sent;
 	// main is read for a late landing (§10.6 2A).
 	Late bool
@@ -110,7 +115,23 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 		for _, op := range latestOps(s) {
 			o := s.Operations[op]
 			if o.AtMain() && !(o.Phase == "main_result" && o.Outcome == "denied") {
-				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, IntentAt: intents[op]})
+				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, A: o.A, IntentAt: intents[op]})
+			}
+		}
+		// Landed and not reverted, its mission still open: read again for a
+		// reversal (S3 B-02, ⑪), until the mission closes.
+		for _, op := range latestOps(s) {
+			o := s.Operations[op]
+			if o.Phase != "landed" || o.Reverted {
+				continue
+			}
+			var open bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
+			  WHERE t.task_id = $1 AND m.state IN ('active','paused','awaiting_owner','proposed'))`, o.Task).Scan(&open); err != nil {
+				return err
+			}
+			if open {
+				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, A: o.A, IntentAt: intents[op]})
 			}
 		}
 		for op, at := range intents {
@@ -126,7 +147,7 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 				return err
 			}
 			if !seen {
-				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, IntentAt: at, Late: true})
+				out = append(out, MainCandidate{Op: op, Root: o.Task, Phase: o.Phase, Outcome: o.Outcome, R: o.R, M0: o.M0, A: o.A, IntentAt: at, Late: true})
 			}
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Op < out[j].Op })
@@ -184,11 +205,19 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 			_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root,
 				Body: map[string]any{"text": "Main reconciled: evidence", "landing_main": map[string]any{
 					"op": c.Op, "root": c.Root, "verdict": did, "R": c.R, "M0": c.M0, "head": ev.Head, "has_r": ev.HasR,
+					"validity": validityOf(ev), "reverted_by": ev.RevertedBy,
 					"read_at": ev.ReadAt.UTC().Format(time.RFC3339Nano)}}})
 			return err
 		}
 		unknown := map[string]any{"kind": "main_result", "op": c.Op, "outcome": "unknown"}
 		switch {
+		case c.Phase == "landed":
+			// A reversal of a landing already recorded (S3 B-02).
+			if !ev.HasR || validityOf(ev) != "reverted" {
+				return nil
+			}
+			did = "reverted"
+			return write(map[string]any{"kind": "reverted", "op": c.Op, "R": c.R, "by": ev.RevertedBy})
 		case c.Late:
 			if !ev.HasR {
 				return nil
@@ -204,7 +233,7 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 		case c.Phase == "main_result" && c.Outcome == "ok":
 			if ev.HasR {
 				did = "landed"
-				return write(map[string]any{"kind": "landed", "op": c.Op, "R": c.R})
+				return write(landedRecords(c, ev)...)
 			}
 			seen, err := hasAnomaly(ctx, tx, stream, c.Op, "ok_missing")
 			if err != nil || seen {
@@ -220,7 +249,7 @@ func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, 
 			switch {
 			case ev.HasR:
 				did = "landed"
-				return write(append(first, map[string]any{"kind": "landed", "op": c.Op, "R": c.R})...)
+				return write(append(first, landedRecords(c, ev)...)...)
 			case !fenced:
 				return nil
 			case ev.Head == c.M0:
@@ -262,7 +291,7 @@ func ReconcileMain(ctx context.Context, db DB, repo string, read MainEvidenceFun
 	var errs []error
 	for _, c := range cands {
 		started := DecisionAt()
-		ev, err := read(ctx, repo, c.R)
+		ev, err := read(ctx, repo, c.Root, c.A, c.R)
 		ev.ReadAt = started
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", c.Op, err))
@@ -409,8 +438,11 @@ func badLandingMain(v any) string {
 	if _, ok := m["has_r"].(bool); !ok {
 		return "landing_main needs has_r"
 	}
-	if !slices.Contains([]string{"landed", "unsent", "non_ff"}, m["verdict"].(string)) {
-		return "landing_main verdict is not landed, unsent or non_ff"
+	if !slices.Contains([]string{"landed", "unsent", "non_ff", "reverted"}, m["verdict"].(string)) {
+		return "landing_main verdict is not landed, unsent, non_ff or reverted"
+	}
+	if v, ok := m["validity"].(string); ok && !slices.Contains([]string{"effective", "reverted", "unknown"}, v) {
+		return "landing_main validity is not effective, reverted or unknown"
 	}
 	if _, err := time.Parse(time.RFC3339Nano, m["read_at"].(string)); err != nil {
 		return "landing_main read_at is not a time"
@@ -433,4 +465,28 @@ func checkLandingMainAppend(ev Event) error {
 		return fmt.Errorf("landing_main is not a landing record")
 	}
 	return nil
+}
+
+// validityOf is the evidence's validity, unknown unless it says otherwise
+// with what it rests on.
+func validityOf(ev MainEvidence) string {
+	switch {
+	case ev.Validity == "effective":
+		return "effective"
+	case ev.Validity == "reverted" && landingSHA.MatchString(ev.RevertedBy):
+		return "reverted"
+	}
+	return "unknown"
+}
+
+// landedRecords are what a landing whose R main has writes: landed, and
+// reverted after it when the reversal is in effect already (S3 B-02, ⑪:
+// both facts, in this order, in one transaction). Unknown validity records
+// landed only; it is not delivery (B4, B5 read validity when they decide).
+func landedRecords(c MainCandidate, ev MainEvidence) []map[string]any {
+	out := []map[string]any{{"kind": "landed", "op": c.Op, "R": c.R}}
+	if validityOf(ev) == "reverted" {
+		out = append(out, map[string]any{"kind": "reverted", "op": c.Op, "R": c.R, "by": ev.RevertedBy})
+	}
+	return out
 }

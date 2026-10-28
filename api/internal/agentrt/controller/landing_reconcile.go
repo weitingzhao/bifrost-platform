@@ -118,7 +118,7 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 		}
 		started := store.DecisionAt()
 		readCtx, cancelRead := context.WithTimeout(budget, reconcileReadLimit)
-		ev, err := r.MainEvidence(readCtx, repo, cand.R)
+		ev, err := r.MainEvidence(readCtx, repo, cand.Root, cand.A, cand.R)
 		cancelRead()
 		ev.ReadAt = started
 		did := ""

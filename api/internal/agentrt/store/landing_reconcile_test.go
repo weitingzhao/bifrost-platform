@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -33,7 +34,7 @@ func atMain(t *testing.T, w *world, op, outcome string, at time.Time) (string, t
 }
 
 func evidence(ev store.MainEvidence) store.MainEvidenceFunc {
-	return func(context.Context, string, string) (store.MainEvidence, error) { return ev, nil }
+	return func(context.Context, string, string, string, string) (store.MainEvidence, error) { return ev, nil }
 }
 
 func phaseOf(t *testing.T, w *world, op string) (string, string) {
@@ -108,7 +109,7 @@ func TestReconcileDeniedNeedsNoGit(t *testing.T) {
 	if s := landingState(t, w, landingRepoStream); !s.RootPending(root) {
 		t.Fatal("fixture: denied should hold the root")
 	}
-	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		t.Fatal("main read for a denied push")
 		return store.MainEvidence{}, nil
 	})
@@ -198,7 +199,7 @@ func TestReconcileReadFailureSkipsOnlyThatOperation(t *testing.T) {
 	atMain(t, w, "land:fail:2", "", at)
 	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
 	calls := 0
-	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		calls++
 		if calls == 1 {
 			return store.MainEvidence{}, errors.New("fetch failed")
@@ -257,7 +258,7 @@ func TestReconcileAbsenceReadInsideTheFenceProvesNothing(t *testing.T) {
 	_, intent := atMain(t, w, "land:fence:1", "unknown", at)
 	fence := intent.Add(store.MainFence)
 	store.FreezeEventClock(fence.Add(-time.Second))
-	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		store.FreezeEventClock(fence.Add(time.Second)) // the read ends past the fence
 		return store.MainEvidence{Head: commitA}, nil
 	})
@@ -334,7 +335,7 @@ func TestReconcileIgnoresDrills(t *testing.T) {
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "failed", "why", "bound")))
-	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string) (store.MainEvidence, error) {
+	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		t.Fatal("main read for a drill")
 		return store.MainEvidence{}, nil
 	})
@@ -395,7 +396,7 @@ func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
 	reads := map[string]int{}
 	failing := true
 	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return now }}
-	ctl.Reconcile = &controller.LandingReconcile{MainEvidence: func(_ context.Context, _ string, r string) (store.MainEvidence, error) {
+	ctl.Reconcile = &controller.LandingReconcile{MainEvidence: func(_ context.Context, _, _, _ string, r string) (store.MainEvidence, error) {
 		reads[r]++
 		if r == badR && failing {
 			return store.MainEvidence{}, errors.New("fetch failed")
@@ -421,5 +422,61 @@ func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if p, _ := phaseOf(t, w, "land:loop:bad"); reads[badR] != 2 || p != "failed" {
 		t.Fatalf("after its wait: %d reads, %s", reads[badR], p)
+	}
+}
+
+// Serial: FreezeEventClock. ⑪ (S3 B-02): pushed, then reverted before the
+// landing was recorded: landed and reverted, both, in that order, in one
+// pass. Reverted after it was recorded: the landed operation, read again
+// while its mission is open, gets reverted. Unknown validity records landed
+// only.
+func TestReconcileRecordsReversals(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	revert := strings.Repeat("f", 40)
+	_, intent := atMain(t, w, "land:rev:1", "unknown", at)
+	store.FreezeEventClock(intent.Add(time.Minute))
+	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
+	ok(t, err)
+	if o := landingState(t, w, landingRepoStream).Operations["land:rev:1"]; !o.EverLanded || !o.Reverted {
+		t.Fatalf("reverted before it was recorded: %+v", o)
+	}
+
+	w2 := newKernelWorld(t)
+	_, intent2 := atMain(t, w2, "land:rev:2", "ok", at)
+	store.FreezeEventClock(intent2.Add(time.Minute))
+	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}))
+	ok(t, err)
+	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; !o.EverLanded || o.Reverted {
+		t.Fatalf("landed: %+v", o)
+	}
+	done, err := store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
+	ok(t, err)
+	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; done["land:rev:2"] != "reverted" || !o.Reverted {
+		t.Fatalf("reverted later: %v %+v", done, o)
+	}
+	// Once its mission is closed it is not read again.
+	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "done", "test") }))
+	cands, err := store.MainCandidates(ctx, w2.rt, "bifrost-platform")
+	ok(t, err)
+	for _, c := range cands {
+		if c.Op == "land:rev:2" {
+			t.Fatal("a closed mission's landing read again")
+		}
+	}
+
+	w3 := newKernelWorld(t)
+	_, intent3 := atMain(t, w3, "land:rev:3", "unknown", at)
+	store.FreezeEventClock(intent3.Add(time.Minute))
+	_, err = store.ReconcileMain(ctx, w3.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
+	ok(t, err)
+	if o := landingState(t, w3, landingRepoStream).Operations["land:rev:3"]; !o.EverLanded || o.Reverted {
+		t.Fatalf("unknown validity: %+v", o)
+	}
+	var validity string
+	ok(t, w3.rt.QueryRow(ctx, `SELECT body_json->'landing_main'->>'validity' FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? 'landing_main'`, landingRepoStream).Scan(&validity))
+	if validity != "unknown" {
+		t.Fatal(validity)
 	}
 }

@@ -99,23 +99,25 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 			}
 		}
 	}
-	var undone func(string, map[string]bool) (bool, error)
-	undone = func(sha string, path map[string]bool) (bool, error) {
+	// undone: sha is undone by a reversal of it that is itself in effect;
+	// by names that reversal.
+	var undone func(string, map[string]bool) (bool, string, error)
+	undone = func(sha string, path map[string]bool) (bool, string, error) {
 		if path[sha] || len(path) > 1000 {
-			return false, errors.New("cyclic revert history")
+			return false, "", errors.New("cyclic revert history")
 		}
 		path[sha] = true
 		defer delete(path, sha)
 		for _, r := range reversals[sha] {
-			u, e := undone(r, path)
+			u, _, e := undone(r, path)
 			if e != nil {
-				return false, e
+				return false, "", e
 			}
 			if !u {
-				return true, nil
+				return true, r, nil
 			}
 		}
-		return false, nil
+		return false, "", nil
 	}
 	found := landing.MainHistory{State: landing.Never}
 	unproven := false
@@ -140,14 +142,14 @@ func EvaluateHistory(task, result, message string, commits []HistoryCommit, comp
 			}
 			continue
 		}
-		u, e := undone(c.SHA, map[string]bool{})
+		u, by, e := undone(c.SHA, map[string]bool{})
 		if e != nil {
 			return unknown, e
 		}
 		if !u {
 			return landing.MainHistory{State: landing.Effective, Commit: c.SHA}, nil
 		}
-		found = landing.MainHistory{State: landing.Reverted, Commit: c.SHA}
+		found = landing.MainHistory{State: landing.Reverted, Commit: c.SHA, RevertedBy: by}
 	}
 	if unproven {
 		return unknown, errors.New("a commit shares the result's Change-Id without its provenance")

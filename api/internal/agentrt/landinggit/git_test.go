@@ -277,7 +277,7 @@ func TestMainEvidence(t *testing.T) {
 		r    string
 		want bool
 	}{"head": {in.M0, true}, "ancestor": {in.Base, true}, "never in main": {in.A, false}, "unknown": {strings.Repeat("e", 40), false}} {
-		head, has, err := g.MainEvidence(ctx, c.r)
+		head, has, _, err := g.MainEvidence(ctx, c.r, "", "")
 		if err != nil || head != in.M0 || has != c.want {
 			t.Fatalf("%s: head=%s has=%v err=%v", name, head, has, err)
 		}
@@ -285,12 +285,12 @@ func TestMainEvidence(t *testing.T) {
 	gitTest(t, src, "cherry-pick", "-x", in.A)
 	landed := gitTest(t, src, "rev-parse", "HEAD")
 	gitTest(t, src, "push", filepath.Join(filepath.Dir(src), "remote.git"), "main")
-	head, has, err := g.MainEvidence(ctx, landed)
+	head, has, _, err := g.MainEvidence(ctx, landed, "", "")
 	if err != nil || head != landed || !has {
 		t.Fatalf("landed later: head=%s has=%v err=%v", head, has, err)
 	}
 	broken := &Git{remote: "http://127.0.0.1:1/remote.git", usernameFile: g.usernameFile, passwordFile: g.passwordFile}
-	if _, has, err := broken.MainEvidence(ctx, in.M0); err == nil || has {
+	if _, has, _, err := broken.MainEvidence(ctx, in.M0, "", ""); err == nil || has {
 		t.Fatalf("an unreachable main read as evidence: has=%v err=%v", has, err)
 	}
 }
@@ -453,5 +453,27 @@ func TestClassifyPush(t *testing.T) {
 		if got := classifyPush(c.stdout, c.stderr, c.err); got != c.want {
 			t.Errorf("%s: %s, want %s", name, got, c.want)
 		}
+	}
+}
+
+// MainEvidence's validity (S3 B-02): a landing of A is effective; after its
+// revert it is reverted, naming the revert in effect.
+func TestMainEvidenceValidity(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	repo := filepath.Join(filepath.Dir(src), "remote.git")
+	gitTest(t, src, "cherry-pick", "-x", in.A)
+	landed := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, "main")
+	head, has, hist, err := g.MainEvidence(ctx, landed, testTask, in.A)
+	if err != nil || !has || head != landed || hist.State != landing.Effective || hist.Commit != landed {
+		t.Fatalf("landed: has=%v %+v %v", has, hist, err)
+	}
+	gitTest(t, src, "revert", "--no-edit", landed)
+	revert := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, "main")
+	_, has, hist, err = g.MainEvidence(ctx, landed, testTask, in.A)
+	if err != nil || !has || hist.State != landing.Reverted || hist.Commit != landed || hist.RevertedBy != revert {
+		t.Fatalf("reverted: has=%v %+v %v", has, hist, err)
 	}
 }
