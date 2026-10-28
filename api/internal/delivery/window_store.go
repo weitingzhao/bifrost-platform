@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -195,23 +196,15 @@ func getReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns string, n
 	if err != nil {
 		return windowRecord{}, false, err
 	}
+	// A read never deletes (CUT §2.6, S3): an expired record reads as free
+	// and stays, so a reader can never delete a window another caller has
+	// just taken. One that does not parse is not known to be free: it is an
+	// error, and callers that gate on the window treat an error as held.
 	rec, ok := parseWindowCM(cm)
-	if !ok || !rec.live(now) {
-		err = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, windowDeleteOptions(cm))
-		if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
-			// Read once more without deleting: another caller may now hold the window.
-			cm, err = cs.CoreV1().ConfigMaps(ns).Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return windowRecord{}, false, nil
-			}
-			if err != nil {
-				return windowRecord{}, false, err
-			}
-			rec, ok = parseWindowCM(cm)
-			if ok && rec.live(now) {
-				return rec, true, nil
-			}
-		}
+	if !ok {
+		return windowRecord{}, false, errWindowUnreadable
+	}
+	if !rec.live(now) {
 		return windowRecord{}, false, nil
 	}
 	return rec, true, nil
@@ -229,7 +222,22 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	if ok && rec.live(now) && !force && rec.Who != strings.TrimSpace(who) {
 		return &WindowNotHolder{Who: rec.Who}
 	}
-	err = cs.CoreV1().ConfigMaps(ns).Delete(ctx, releaseWindowConfigMap, windowDeleteOptions(cm))
+	// Released by ending it now, on the version read (CUT §2.6, S3): an
+	// Update carrying cm's resourceVersion, so a window taken meanwhile is
+	// never ended by a stale release. No delete.
+	if !ok {
+		rec = windowRecord{Who: strings.TrimSpace(who), Reason: "cleared"}
+	}
+	rec.ExpiresAt = now.UTC().Format(time.RFC3339)
+	body, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+	cm.Data[releaseWindowDataKey] = string(body)
+	_, err = cs.CoreV1().ConfigMaps(ns).Update(ctx, cm, metav1.UpdateOptions{})
 	if apierrors.IsConflict(err) {
 		return &WindowChanged{}
 	}
@@ -239,13 +247,9 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	return err
 }
 
-func windowDeleteOptions(cm *corev1.ConfigMap) metav1.DeleteOptions {
-	preconditions := &metav1.Preconditions{ResourceVersion: &cm.ResourceVersion}
-	if cm.UID != "" {
-		preconditions.UID = &cm.UID
-	}
-	return metav1.DeleteOptions{Preconditions: preconditions}
-}
+// errWindowUnreadable: the window ConfigMap holds a record that does not
+// parse; it is not known to be free.
+var errWindowUnreadable = errors.New("release window record is unreadable")
 
 func parseWindowCM(cm *corev1.ConfigMap) (windowRecord, bool) {
 	if cm == nil || cm.Data == nil {

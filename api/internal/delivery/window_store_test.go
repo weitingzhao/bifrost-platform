@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clienttesting "k8s.io/client-go/testing"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,18 +118,20 @@ func TestExpiredWindowIsEmptyAndReplaceable(t *testing.T) {
 	}
 }
 
-// replaceWindowBeforeDelete simulates an update between the read and delete.
-// The fake tracker needs explicit enforcement of delete preconditions.
-func replaceWindowBeforeDelete(t *testing.T, cs *fake.Clientset, replacement windowRecord) {
+// replaceWindowBeforeUpdate simulates another caller taking the window
+// between a release's read and its update. The fake tracker does not check
+// resourceVersion on Update by itself.
+func replaceWindowBeforeUpdate(t *testing.T, cs *fake.Clientset, replacement windowRecord) {
 	t.Helper()
 	first := true
 	resource := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
-	cs.PrependReactor("delete", "configmaps", func(action clienttesting.Action) (bool, runtime.Object, error) {
-		deletion := action.(clienttesting.DeleteAction)
-		if deletion.GetName() != releaseWindowConfigMap {
+	cs.PrependReactor("update", "configmaps", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		update := action.(clienttesting.UpdateAction)
+		sent := update.GetObject().(*corev1.ConfigMap)
+		if sent.Name != releaseWindowConfigMap {
 			return false, nil, nil
 		}
-		obj, err := cs.Tracker().Get(resource, action.GetNamespace(), deletion.GetName())
+		obj, err := cs.Tracker().Get(resource, action.GetNamespace(), sent.Name)
 		if err != nil {
 			return true, nil, err
 		}
@@ -147,76 +148,78 @@ func replaceWindowBeforeDelete(t *testing.T, cs *fake.Clientset, replacement win
 				t.Fatal(err)
 			}
 		}
-		pre := deletion.GetDeleteOptions().Preconditions
-		if pre != nil && ((pre.ResourceVersion != nil && *pre.ResourceVersion != cm.ResourceVersion) || (pre.UID != nil && *pre.UID != cm.UID)) {
+		if sent.ResourceVersion != cm.ResourceVersion {
 			return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "configmaps"}, cm.Name, nil)
 		}
 		return false, nil, nil
 	})
 }
 
-func TestReleaseWindowConditionalDelete(t *testing.T) {
+// CUT §2.6 (S3): a read never deletes or writes; an expired window reads as
+// free and stays. A release ends the window now with an Update on the
+// version it read, never a delete: a window taken meanwhile is left alone
+// (WindowChanged). A record that does not parse is not free.
+func TestReleaseWindowReadsAndReleasesWithoutDeleting(t *testing.T) {
 	now := time.Date(2026, 10, 9, 15, 0, 0, 0, time.UTC)
-	for _, operation := range []string{"read", "release"} {
-		for _, race := range []bool{false, true} {
-			name := operation + "/no-race"
-			if race {
-				name = operation + "/race"
-			}
-			t.Run(name, func(t *testing.T) {
-				ctx := context.Background()
-				original := windowRecord{Who: "a@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
-				if operation == "read" {
-					original.ExpiresAt = now.Add(-time.Minute).Format(time.RFC3339)
-				}
-				body, err := json.Marshal(original)
-				if err != nil {
-					t.Fatal(err)
-				}
-				cs := fake.NewSimpleClientset(&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd", ResourceVersion: "1", UID: "window-uid"},
-					Data:       map[string]string{releaseWindowDataKey: string(body)},
-				})
-				replacement := windowRecord{Who: "b@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
-				if operation == "read" {
-					replacement.Who = "other@host"
-				}
-				if race {
-					replaceWindowBeforeDelete(t, cs, replacement)
-				}
-				if operation == "read" {
-					rec, live, err := getReleaseWindow(ctx, cs, "cicd", now)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if live != race || (race && rec.Who != replacement.Who) {
-						t.Fatalf("read: live=%v who=%s", live, rec.Who)
-					}
-				} else {
-					err := deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now)
-					if race {
-						if _, ok := err.(*WindowChanged); !ok || !strings.Contains(err.Error(), "changed") {
-							t.Fatalf("expected window changed error, got %v", err)
-						}
-					} else if err != nil {
-						t.Fatal(err)
-					}
-				}
-				cm, err := cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
-				if !race {
-					if !apierrors.IsNotFound(err) {
-						t.Fatalf("expected removed ConfigMap, got %v", err)
-					}
-					return
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				rec, ok := parseWindowCM(cm)
-				if !ok || !rec.live(now) || rec.Who != replacement.Who || cm.ResourceVersion != "2" {
-					t.Fatalf("replacement was lost: %+v", cm)
-				}
-			})
+	ctx := context.Background()
+	seed := func(rec windowRecord) *fake.Clientset {
+		body, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatal(err)
 		}
+		return fake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd", ResourceVersion: "1", UID: "window-uid"},
+			Data:       map[string]string{releaseWindowDataKey: string(body)},
+		})
+	}
+	expired := windowRecord{Who: "a@host", What: "repo", ExpiresAt: now.Add(-time.Minute).Format(time.RFC3339)}
+	cs := seed(expired)
+	_, live, err := getReleaseWindow(ctx, cs, "cicd", now)
+	if err != nil || live {
+		t.Fatalf("expired read: live=%v err=%v", live, err)
+	}
+	for _, a := range cs.Actions() {
+		if a.GetVerb() != "get" {
+			t.Fatalf("a read wrote: %s", a.GetVerb())
+		}
+	}
+	if _, err := cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{}); err != nil {
+		t.Fatal("the expired window was removed", err)
+	}
+
+	held := windowRecord{Who: "a@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
+	cs = seed(held)
+	if err := deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal("a release deleted the window", err)
+	}
+	if rec, ok := parseWindowCM(cm); !ok || rec.live(now) || rec.Who != "a@host" {
+		t.Fatalf("released window: %+v", rec)
+	}
+
+	cs = seed(held)
+	taken := windowRecord{Who: "b@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
+	replaceWindowBeforeUpdate(t, cs, taken)
+	err = deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now)
+	if _, ok := err.(*WindowChanged); !ok {
+		t.Fatalf("expected window changed, got %v", err)
+	}
+	cm, err = cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec, ok := parseWindowCM(cm); !ok || rec.Who != "b@host" || !rec.live(now) {
+		t.Fatalf("the window taken meanwhile was ended: %+v", rec)
+	}
+
+	cs = fake.NewSimpleClientset(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd", ResourceVersion: "1"},
+		Data:       map[string]string{releaseWindowDataKey: "{not json"},
+	})
+	if _, _, err := getReleaseWindow(ctx, cs, "cicd", now); err == nil {
+		t.Fatal("an unreadable window read as free")
 	}
 }
