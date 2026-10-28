@@ -234,30 +234,57 @@ var landingAnswerWhys = map[string][]string{
 // (CUT §10.6).
 var landingAnswerChoices = []string{"try_again", "do_not_merge", "confirm_main_lost"}
 
-// landingAnswerChoice is the choice each why can follow ("" for any).
-var landingAnswerChoice = map[string]string{
-	"retry": "try_again", "already_retried": "try_again", "not_failed": "try_again", "not_retryable": "try_again", "mission_not_active": "try_again",
-	"declined": "do_not_merge", "already_declined": "do_not_merge", "not_declinable": "do_not_merge",
-	"main_lost": "confirm_main_lost", "already_lost": "confirm_main_lost", "not_main_lost": "confirm_main_lost",
-	"superseded": "", "answered_before": "", "unknown_choice": "",
+// landingAnswerRule is what each why can follow, as decideLandingAnswer
+// reaches it (review 657 B657-1): the choices ("any" for every choice; nil
+// for a choice that is none of the known ones) and whether the mission must
+// have been active, not active, or either ("").
+type landingAnswerRule struct {
+	choices []string
+	mission string // "active", "not_active" or ""
 }
 
+var landingAnswerRules = map[string]landingAnswerRule{
+	"superseded":         {[]string{"any"}, ""},
+	"unknown_choice":     {nil, ""},
+	"answered_before":    {landingAnswerChoices, ""},
+	"retry":              {[]string{"try_again"}, "active"},
+	"not_retryable":      {[]string{"try_again"}, "active"},
+	"mission_not_active": {[]string{"try_again"}, "not_active"},
+	"already_retried":    {[]string{"try_again"}, ""},
+	"not_failed":         {[]string{"try_again"}, ""},
+	"declined":           {[]string{"do_not_merge"}, ""},
+	"already_declined":   {[]string{"do_not_merge"}, ""},
+	"not_declinable":     {[]string{"do_not_merge"}, ""},
+	"main_lost":          {[]string{"confirm_main_lost"}, ""},
+	"already_lost":       {[]string{"confirm_main_lost"}, ""},
+	"not_main_lost":      {[]string{"confirm_main_lost"}, ""},
+}
+
+// missionStates is every state a mission row can hold (migrations 0001): a
+// record keeps the state its mission was in then, a rebound root's mission
+// included.
+var missionStates = []string{"proposed", "awaiting_owner", "active", "paused", "done", "stopped", "expired"}
+
 // badLandingAnswer is why a record body is refused, or "": every field there,
-// the outcome and why a pair of the vocabulary, the why one that can follow
-// the choice and the mission's state, from a console answer at a real time
-// (review 656 A-R1).
+// the outcome and why a pair of the vocabulary, and the why one that can
+// follow the choice and the mission's state as decideLandingAnswer decides
+// (review 656 A-R1, 657 B657-1 and R657-4), from a console answer at a real
+// time. The choice may be empty: a card answered with text only is an
+// unknown choice, recorded as such.
 func badLandingAnswer(v any) string {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return "landing_answer is not an object"
 	}
-	for _, k := range []string{"question_id", "root", "op", "choice", "outcome", "why", "by", "answered_at", "channel", "mission_state"} {
+	for _, k := range []string{"question_id", "root", "op", "outcome", "why", "by", "answered_at", "channel", "mission_state"} {
 		if s, _ := m[k].(string); s == "" {
 			return "landing_answer needs " + k
 		}
 	}
-	if _, ok := m["answer_text"].(string); !ok {
-		return "landing_answer needs answer_text (empty when the Owner wrote none)"
+	for _, k := range []string{"choice", "answer_text"} {
+		if _, ok := m[k].(string); !ok {
+			return "landing_answer needs " + k + " (empty when the Owner gave none)"
+		}
 	}
 	at, err := time.Parse(time.RFC3339Nano, m["answered_at"].(string))
 	if err != nil || at.IsZero() || at.Year() < 2000 {
@@ -267,18 +294,20 @@ func badLandingAnswer(v any) string {
 		return "landing_answer is only for a console answer"
 	}
 	state, choice, why := m["mission_state"].(string), m["choice"].(string), m["why"].(string)
-	if !slices.Contains([]string{"active", "paused", "done", "stopped", "expired"}, state) {
+	if !slices.Contains(missionStates, state) {
 		return "landing_answer mission_state is not a mission state"
 	}
 	whys, ok := landingAnswerWhys[m["outcome"].(string)]
 	if !ok || !slices.Contains(whys, why) {
 		return fmt.Sprintf("landing_answer: %v / %v is not in the vocabulary", m["outcome"], why)
 	}
+	rule := landingAnswerRules[why]
 	known := slices.Contains(landingAnswerChoices, choice)
-	if want := landingAnswerChoice[why]; (want != "" && choice != want) || (why == "unknown_choice") == known {
-		return fmt.Sprintf("landing_answer: %s does not follow %s", why, choice)
-	}
-	if (why == "mission_not_active" && state == "active") || (why == "retry" && state != "active") {
+	switch {
+	case rule.choices == nil && known,
+		rule.choices != nil && !slices.Contains(rule.choices, "any") && !slices.Contains(rule.choices, choice):
+		return fmt.Sprintf("landing_answer: %s does not follow the choice %q", why, choice)
+	case rule.mission == "active" && state != "active", rule.mission == "not_active" && state == "active":
 		return fmt.Sprintf("landing_answer: %s does not follow a mission %s", why, state)
 	}
 	return ""

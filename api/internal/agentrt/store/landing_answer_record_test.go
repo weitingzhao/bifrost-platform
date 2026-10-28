@@ -506,3 +506,221 @@ func TestLandingAnswerStoredRecordMustBeTrustworthy(t *testing.T) {
 		}
 	}
 }
+
+// Serial: FreezeEventClock. Every record the decision writes reads back
+// (review 657 B657-1): a superseded card with an unknown or empty choice,
+// and a refusal under a mission in any real state (a root rebound to a
+// mission awaiting the Owner).
+func TestLandingAnswerEveryDecidedRecordReadsBack(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "back:1", "bound")
+	later := at.Add(time.Hour)
+	store.FreezeEventClock(later)
+	ok(t, applyRetry(w.rt, root, "back:1", "first", later))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("back:2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
+	for _, choice := range []string{"none", ""} {
+		q := answerCard("q-back-"+choice, choice, later)
+		for pass := 0; pass < 2; pass++ {
+			res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "back:1", later)
+			ok(t, err)
+			if res.Outcome != store.LandingAnswerMoot || res.Why != "superseded" || res.Recorded == (pass == 1) {
+				t.Fatalf("%q pass %d: %+v", choice, pass, res)
+			}
+		}
+	}
+	other := failedRoot(t, w, "back:3", "bound")
+	admin := w.db.Connect(t, w.db.Admin)
+	tx, err := admin.Begin(ctx)
+	ok(t, err)
+	_, err = tx.Exec(ctx, `SET LOCAL session_replication_role = replica`)
+	ok(t, err)
+	_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'awaiting_owner' WHERE mission_id = 'M-1'`)
+	ok(t, err)
+	ok(t, tx.Commit(ctx))
+	q := answerCard("q-back-awaiting", "try_again", later)
+	for pass := 0; pass < 2; pass++ {
+		res, err := store.HandleLandingAnswer(ctx, w.rt, q, other, "back:3", later)
+		ok(t, err)
+		if res.Outcome != store.LandingAnswerRefused || res.Why != "mission_not_active" || res.Record["mission_state"] != "awaiting_owner" {
+			t.Fatalf("pass %d: %+v", pass, res)
+		}
+	}
+}
+
+// committedThenLostDB commits for real, then tells the caller the commit
+// failed: the outcome a lost reply leaves (review 657 R657-3).
+type committedThenLostDB struct{ store.DB }
+type committedThenLostTx struct{ pgx.Tx }
+
+func (d committedThenLostDB) BeginTx(c context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := d.DB.BeginTx(c, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &committedThenLostTx{tx}, nil
+}
+func (tx *committedThenLostTx) Commit(c context.Context) error {
+	if err := tx.Tx.Commit(c); err != nil {
+		return err
+	}
+	return errors.New("reply lost")
+}
+
+// Serial: FreezeEventClock. A commit that landed but whose reply was lost:
+// nothing is reported or acked; another connection sees the record; the next
+// pass finds it, does not act again and acks.
+func TestLandingAnswerCommitLandedReplyLost(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "lost:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-lost-reply", "try_again", at.Add(time.Minute))
+	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
+	acked := 0
+	ack := func(context.Context, string) error { acked++; return nil }
+	ctl := controller.Controller{DB: committedThenLostDB{w.rt}, Env: "stg"}
+	ctl.Sources.Ack = ack
+	res, err := ctl.LandingAnswer(ctx, root, "lost:1", read)
+	if err == nil || res.Outcome != "" || res.Recorded || acked != 0 {
+		t.Fatalf("a lost reply reported %+v err=%v acked=%d", res, err, acked)
+	}
+	other, err := w.db.Pool(t, w.db.Runtime).Acquire(ctx)
+	ok(t, err)
+	defer other.Release()
+	var records int
+	ok(t, other.Conn().QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_answer'->>'question_id' = 'q-lost-reply'`, landingRepoStream).Scan(&records))
+	if records != 1 {
+		t.Fatal("the commit did not land", records)
+	}
+	next := controller.Controller{DB: w.rt, Env: "stg"}
+	next.Sources.Ack = ack
+	res, err = next.LandingAnswer(ctx, root, "lost:1", read)
+	ok(t, err)
+	if res.Outcome != store.LandingAnswerApplied || res.Recorded || !res.Acked || acked != 1 {
+		t.Fatalf("next pass: %+v acked=%d", res, acked)
+	}
+	if _, retries := answerRecords(t, w, "q-lost-reply", root); retries != 1 {
+		t.Fatal("acted again", retries)
+	}
+}
+
+// Serial: SetHook, FreezeEventClock. Two passes on one card: the second
+// really waits on the first's stream lock (pg_blocking_pids), then reads its
+// record: one record, one retry, the same snapshot, recorded once (review
+// 657 R657-3).
+func TestLandingAnswerSecondPassWaitsAndReads(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	root := failedRoot(t, w, "wait:1", "bound")
+	store.FreezeEventClock(at.Add(time.Minute))
+	q := answerCard("q-wait", "try_again", at.Add(time.Minute))
+	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	pool := w.db.Pool(t, w.db.Runtime)
+	connA, err := pool.Acquire(bounded)
+	ok(t, err)
+	defer connA.Release()
+	connB, err := pool.Acquire(bounded)
+	ok(t, err)
+	defer connB.Release()
+	holding, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	defer store.SetHook(func(point, _ string) {
+		if point == "landing answer: decided" {
+			once.Do(func() { close(holding); <-release })
+		}
+	})()
+	type out struct {
+		res store.LandingAnswerResult
+		err error
+	}
+	a, b := make(chan out, 1), make(chan out, 1)
+	go func() {
+		r, e := store.HandleLandingAnswer(bounded, connA.Conn(), q, root, "wait:1", at.Add(time.Minute))
+		a <- out{r, e}
+	}()
+	select {
+	case <-holding:
+	case <-bounded.Done():
+		t.Fatal("the first pass never decided")
+	}
+	go func() {
+		r, e := store.HandleLandingAnswer(bounded, connB.Conn(), q, root, "wait:1", at.Add(time.Minute))
+		b <- out{r, e}
+	}()
+	for waiting := false; !waiting; {
+		ok(t, w.rt.QueryRow(ctx, `SELECT $2::integer = ANY(pg_blocking_pids($1::integer))`, connB.Conn().PgConn().PID(), connA.Conn().PgConn().PID()).Scan(&waiting))
+		if bounded.Err() != nil {
+			t.Fatal("the second pass never waited on the first")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	close(release)
+	ra, rb := <-a, <-b
+	ok(t, errors.Join(ra.err, rb.err))
+	if !ra.res.Recorded || rb.res.Recorded || !reflect.DeepEqual(ra.res.Record, rb.res.Record) {
+		t.Fatalf("first %+v second %+v", ra.res, rb.res)
+	}
+	if records, retries := answerRecords(t, w, "q-wait", root); records != 1 || retries != 1 {
+		t.Fatalf("records=%d retries=%d", records, retries)
+	}
+}
+
+// Serial: FreezeEventClock. do_not_merge from every phase an S2 drill reaches
+// (review 657 R657-3): it applies (failed{declined}) wherever the protocol
+// takes it and is refused (not_declinable) on a rehearsal; one record each,
+// none twice.
+func TestLandingAnswerDeclineSources(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	defer store.FreezeEventClock(at)()
+	for i, phase := range []string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked", "failed", "rehearsed"} {
+		op := fmt.Sprintf("decline:%d", i)
+		store.FreezeEventClock(at)
+		root := w.ready(t, store.Task{OffPlanReason: "decline " + phase})
+		ref := "refs/heads/land/stg/" + root + "/1"
+		chain := [][]any{
+			{"claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1},
+			{"prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true},
+			{"branch_intent", "ref", ref, "R", commitB},
+			{"branch_pushed", "ref", ref, "R", commitB},
+		}
+		for _, r := range chain {
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, r[0].(string), r[1:]...)))
+			if r[0] == phase {
+				break
+			}
+		}
+		switch phase {
+		case "parked":
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "window", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))))
+		case "failed":
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "bound")))
+		case "rehearsed":
+			store.FreezeEventClock(at.Add(2 * time.Second))
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "R", commitB, "run", "green", "status", "Succeeded", "created_at", at.Add(time.Second).Format(time.RFC3339Nano))))
+			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "rehearsed", "R", commitB)))
+		}
+		later := at.Add(time.Minute)
+		store.FreezeEventClock(later)
+		q := answerCard("q-decline-"+phase, "do_not_merge", later)
+		want, why := store.LandingAnswerApplied, "declined"
+		if phase == "rehearsed" {
+			want, why = store.LandingAnswerRefused, "not_declinable"
+		}
+		for pass := 0; pass < 2; pass++ {
+			res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, op, later)
+			ok(t, err)
+			if res.Outcome != want || res.Why != why || res.Recorded == (pass == 1) {
+				t.Fatalf("%s pass %d: %+v", phase, pass, res)
+			}
+		}
+		if o := landingState(t, w, landingRepoStream).Operations[op]; (want == store.LandingAnswerApplied) != (o.Phase == "failed" && o.Outcome == "declined") {
+			t.Fatalf("%s: %+v", phase, o)
+		}
+	}
+}

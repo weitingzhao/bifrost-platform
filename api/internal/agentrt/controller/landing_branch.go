@@ -112,6 +112,12 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if e != nil {
 		return e
 	}
+	// The decision read Git: the window is checked again as of now, before a
+	// new branch intent (review 657 R657-2).
+	at := store.DecisionAt()
+	if landing.Bound(first, n-1, at) {
+		return put("failed", map[string]any{"why": "bound"})
+	}
 	if !d.Allowed {
 		if d.Reason == "rule" || d.Reason == "limit" {
 			// v1 does not permit branch_intent -> parked. Preserve intent and wait;
@@ -119,7 +125,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			if o.Phase == "branch_intent" {
 				return nil
 			}
-			return put("parked", map[string]any{"why": d.Reason, "retry_at": now.Add(time.Minute).Format(time.RFC3339Nano)})
+			return put("parked", map[string]any{"why": d.Reason, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
 		}
 		return put("failed", map[string]any{"why": "stale"})
 	}

@@ -86,7 +86,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			{"v": landing.Version, "kind": "ci_seen", "op": op, "run": obs.Candidate.Run, "status": obs.Candidate.Status, "R": o.R, "created_at": obs.Candidate.CreatedAt.Format(time.RFC3339Nano)},
 			{"v": landing.Version, "kind": "rehearsed", "op": op, "R": o.R},
 		} {
-			if _, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: map[string]any{"text": fmt.Sprintf("STG drill %s; second gate rule version %d", r["kind"], f.Rule.Version), "landing": r}}); err != nil {
+			if _, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: map[string]any{"text": fmt.Sprintf("STG drill %s; second gate rule version %d", r["kind"], g.Rule.Version), "landing": r}}); err != nil {
 				return err
 			}
 		}

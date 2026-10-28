@@ -318,3 +318,33 @@ func TestDrillFinalGateSelectsTheRuleAfterItsReads(t *testing.T) {
 		t.Fatal("a version that took effect during the gate's reads was not applied", e)
 	}
 }
+
+// Serial: FreezeEventClock via acceptedDrill. A version that takes effect
+// during the gate's reads and still allows the change: the rehearsal is
+// recorded, under that version (review 657 R657-1: the record named the
+// version selected before the reads).
+func TestDrillFinalGateRecordsTheVersionItDecidedOn(t *testing.T) {
+	w, _, src := acceptedDrill(t)
+	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
+	ok(t, e)
+	op, at := pushedDrill(t, w, tasks[0], src)
+	start := at.Add(time.Minute).UTC().Truncate(time.Second)
+	body := strings.Replace(landingRuleBody, "max_files: 10", "max_files: 9", 1)
+	_, e = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", start.Add(time.Minute).Format(time.RFC3339), until, body)))
+	ok(t, e)
+	restore := store.FreezeEventClock(start)
+	defer restore()
+	e = store.FinishLandingDrill(ctx, w.rt, src, op, start, func(context.Context, landing.Operation) (landing.DrillObservation, error) {
+		store.FreezeEventClock(start.Add(2 * time.Minute))
+		return landing.DrillObservation{Main: commitA, Candidate: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: at.Add(time.Second)}}, nil
+	})
+	ok(t, e)
+	if landingState(t, w, landingRepoStream).Operations[op].Phase != "rehearsed" {
+		t.Fatal("a version that still allows the change refused it")
+	}
+	var text string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'text' FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'rehearsed'`, landingRepoStream).Scan(&text))
+	if !strings.Contains(text, "version 2") {
+		t.Fatal(text)
+	}
+}
