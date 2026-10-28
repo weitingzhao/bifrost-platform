@@ -69,6 +69,11 @@ type Controller struct {
 	// OpenLive opens the workspace the live landing pushes main from; nil
 	// uses DrillGit.Open (tests replace it: a real push needs the lander).
 	OpenLive func(ctx context.Context, r string) (LiveWorkspace, error)
+	// LandingCards is the landing cards' reach into the question store
+	// (landing_cards.go); zero carries no landing cards.
+	LandingCards store.CardQuestions
+	cardMu       sync.Mutex
+	cardPause    time.Time // asking landing cards pauses until then (quota)
 	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
 	// runs none. Apart from the drill: any environment, any rule.
 	Reconcile   *LandingReconcile
@@ -649,6 +654,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			var loops sync.WaitGroup
 			c.every(ctx, &loops, "agentrt-landing-drill", facts, run)
 			loops.Wait()
+		})
+	}
+	if c.Env == "prod" && c.LandingCards.Lookup != nil {
+		c.every(ctx, &wg, "agentrt-landing-cards", LandingCardsEvery, func() error {
+			passCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			return c.LandingCardsPass(passCtx)
 		})
 	}
 	if c.Reconcile != nil {

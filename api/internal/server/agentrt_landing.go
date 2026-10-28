@@ -55,6 +55,13 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	c.DrillGit = g
 	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: s.delivery.LandingCI, EnsureCI: s.delivery.EnsureLandingCI, WindowBlocked: s.delivery.LandingWindowBlocked}
 	if c.Env == "prod" {
+		// A new live landing needs every reach the landing cards need (CUT
+		// §11.6 v3 item 9): without them the Owner could not be asked.
+		if !controller.LandingCardsComplete(c.LandingCards) {
+			slog.Error("agentrt landing live disabled: the landing cards cannot reach the question store")
+			c.Drill, c.DrillGit = nil, nil
+			return
+		}
 		c.Live = true // land/prod branches are kept (B-05): no Delete
 	} else {
 		c.Drill.Delete = g.Delete

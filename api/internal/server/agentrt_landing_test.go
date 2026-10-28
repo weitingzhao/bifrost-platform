@@ -1,8 +1,11 @@
 package server
 
 import (
+	"time"
+
 	"context"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"strings"
@@ -37,16 +40,20 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 		env, drill, live string
 		creds, delivery  bool
 		reads, writes    bool
+		noCards          bool
 	}{
-		{"prod", "", "", true, true, true, false},
-		{"prod", "", "off", true, true, true, false},
-		{"prod", "", "on", true, false, true, false},
-		{"prod", "", "on", true, true, true, true},
-		{"prod", "", "on", false, true, false, false},
-		{"stg", "", "", true, true, true, false},
-		{"stg", "on", "", true, true, true, true},
-		{"stg", "on", "", false, true, false, false},
-		{"dev", "on", "on", true, true, false, false},
+		{"prod", "", "", true, true, true, false, false},
+		{"prod", "", "off", true, true, true, false, false},
+		{"prod", "", "on", true, false, true, false, false},
+		{"prod", "", "on", true, true, true, true, false},
+		// Without the landing cards' reach into the question store, PROD
+		// starts no live landing (CUT §11.6 v3 item 9).
+		{"prod", "", "on", true, true, true, false, true},
+		{"prod", "", "on", false, true, false, false, false},
+		{"stg", "", "", true, true, true, false, false},
+		{"stg", "on", "", true, true, true, true, false},
+		{"stg", "on", "", false, true, false, false, false},
+		{"dev", "on", "on", true, true, false, false, false},
 	} {
 		t.Run(tc.env+"/"+tc.drill+tc.live, func(t *testing.T) {
 			t.Setenv("AGENTRT_LANDING_DRILL", tc.drill)
@@ -66,6 +73,9 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 				s.delivery = delivery.NewHandlerForTest(delivery.NewService(&config.ClusterEntry{ID: "test"}), nil)
 			}
 			c := &controller.Controller{Env: tc.env}
+			if !tc.noCards {
+				c.LandingCards = completeCardQuestions()
+			}
 			s.wireLandingDrill(c)
 			if c.Reconcile == nil || (c.Reconcile.MainEvidence != nil) != (tc.env != "dev") {
 				t.Fatal("main reader wiring", tc)
@@ -83,5 +93,19 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 				t.Fatal("PROD wired a branch delete")
 			}
 		})
+	}
+}
+
+// completeCardQuestions is a card source with every reach present (never
+// called by the wiring).
+func completeCardQuestions() store.CardQuestions {
+	return store.CardQuestions{
+		AskRaw: func(context.Context, string, map[string]any) (string, time.Time, error) { return "", time.Time{}, nil },
+		LookupKey: func(context.Context, string) (store.Question, time.Time, bool, error) {
+			return store.Question{}, time.Time{}, false, nil
+		},
+		Lookup:   func(context.Context, string) (store.Question, bool, error) { return store.Question{}, false, nil },
+		Withdraw: func(context.Context, string, string) (string, error) { return "", nil },
+		Ack:      func(context.Context, string) (bool, error) { return false, nil },
 	}
 }

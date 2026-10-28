@@ -70,16 +70,22 @@ var cardChoiceLabels = map[string]string{
 	"confirm_not_delivered": "Count it as not delivered",
 }
 
-// cardRequest is the frozen request a trigger's card asks: title, body,
+// LandingCardRequest is the frozen request a trigger's card asks: title, body,
 // options in order, its task, 72 hours, free text allowed.
-func cardRequest(repo string, tr CardTrigger, title string) map[string]any {
+func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]any {
 	labels := make([]any, 0, len(tr.Choices))
 	for _, c := range tr.Choices {
 		labels = append(labels, cardChoiceLabels[c])
 	}
 	body := landingCardBody(repo, tr)
+	meanwhile := map[string]string{
+		CardRootFailed: "the task stays unlanded; nothing is merged", CardFloor: "the task stays unlanded; nothing is merged",
+		CardOkMissing: "the reconciler keeps reading main", CardRepoStopped: "no new landing runs in this repository",
+		CardLateLanding: "nothing waits on your answer", CardCIStuck: "the landing waits for its CI",
+		CardParkedLong: "the landing stays parked until its bound", CardLandedUnverified: "the reconciler keeps reading main",
+	}[tr.Kind]
 	req := map[string]any{"title": title, "body": body, "options": labels, "ttl_hours": CardTTLHours, "allow_text": true,
-		"urgency": "when you can: only this landing waits for you", "owner_duty": "goal"}
+		"urgency": "when you can: only this landing waits for you", "owner_duty": "goal", "meanwhile": meanwhile}
 	if tr.Root != "" {
 		req["task_id"] = tr.Root
 	}
@@ -188,6 +194,12 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 			return err
 		}
 		for _, tr := range triggers {
+			// ci_stuck and parked_long are shown in the landing status, not
+			// asked: the runtime has three open cards in all, and these end
+			// on their own (a park reaches its bound and fails, which asks).
+			if slices.Contains(statusOnlyKinds, tr.Kind) {
+				continue
+			}
 			var mine []CardRecord
 			for _, c := range cards {
 				if c.TriggerSeq == tr.Seq && c.Kind == tr.Kind {
@@ -206,7 +218,7 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 				return err
 			}
 			n := len(mine) + 1
-			req := cardRequest(repo, tr, title)
+			req := LandingCardRequest(repo, tr, title)
 			fp, err := canon.Sum(req)
 			if err != nil {
 				return err
@@ -273,6 +285,14 @@ func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) 
 	}
 	return true
 }
+
+// statusOnlyKinds are triggers shown, never asked (CUT §11.6 v3 addendum).
+var statusOnlyKinds = []string{CardCIStuck, CardParkedLong}
+
+// ErrCardQuota: the question store took no new card now (its per-requester
+// quotas, shared with every card the runtime asks); the caller pauses asking
+// (CUT §11.6 v3 item 6).
+var ErrCardQuota = errors.New("landing card: the question store's quota is full")
 
 // ErrCardAskUnconfirmed: an ask started too long ago to know whether the
 // Owner answered a card the store has since trimmed.

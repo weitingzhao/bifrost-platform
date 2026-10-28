@@ -139,6 +139,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
+		if env == "prod" {
+			c.LandingCards = s.questionRuntime.landingCardQuestions()
+		}
 		s.wireLandingDrill(c)
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
