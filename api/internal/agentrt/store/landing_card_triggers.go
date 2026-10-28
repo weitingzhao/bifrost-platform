@@ -107,7 +107,42 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 		if o.Task == "" || s.LatestOperation(o.Task) != op {
 			continue
 		}
+		why, err := landingDisposed(ctx, tx, stream, o.Task, op)
+		if err != nil {
+			return nil, err
+		}
+		if why != "" {
+			continue // the Owner counted it: nothing more to ask
+		}
 		switch {
+		case o.Phase == "failed" && o.Outcome == "in_main":
+			// Already in main before a claim (CUT §11.8 v3 item 4): the Owner
+			// counts it delivered or not; nothing else ends it.
+			e, ok := lastFailed[op]
+			open, err := rootMissionOpen(ctx, tx, o.Task)
+			if err != nil {
+				return nil, err
+			}
+			if ok && open {
+				out = append(out, CardTrigger{Kind: CardInMain, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: "in_main", Choices: []string{"count_as_delivered", "confirm_not_delivered"}})
+			}
+		case o.Phase == "landed":
+			// Landed, and main has not shown it in effect for two hours
+			// since its first such read (CUT §11.8 v3 item 4).
+			open, err := rootMissionOpen(ctx, tx, o.Task)
+			if err != nil {
+				return nil, err
+			}
+			if !open {
+				continue
+			}
+			start, ok, err := unverifiedSince(ctx, tx, stream, op)
+			if err != nil {
+				return nil, err
+			}
+			if ok && !now.Before(start.at.Add(LandedUnverifiedAfter)) {
+				out = append(out, CardTrigger{Kind: CardLandedUnverified, Seq: start.seq, At: start.at, Root: o.Task, Op: op, Why: start.validity, Choices: []string{"confirm_not_delivered", "wait"}})
+			}
 		// in_main and reverted were found before a claim: the change is (or
 		// was) in main already. B4 follows them by their main evidence; a
 		// card to try again or not merge would ask the wrong question.
@@ -147,6 +182,51 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 	}
 	slices.SortFunc(out, func(a, b CardTrigger) int { return int(a.Seq - b.Seq) })
 	return out, nil
+}
+
+// LandedUnverifiedAfter is how long a landing's main evidence stays not
+// effective before its card.
+const LandedUnverifiedAfter = 2 * time.Hour
+
+type unverifiedRead struct {
+	seq      int64
+	at       time.Time
+	validity string
+}
+
+// unverifiedSince is the first main evidence of op that is not effective
+// after its last effective one (the start of the current run of
+// not-effective reads), with that read's event seq; ok false when the
+// latest read is effective or there is none.
+func unverifiedSince(ctx context.Context, tx pgx.Tx, stream, op string) (unverifiedRead, bool, error) {
+	rows, err := tx.Query(ctx, `SELECT seq, at, COALESCE(body_json->'landing_main'->>'validity', ''), COALESCE((body_json->'landing_main'->>'has_r')::boolean, false)
+	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_main'->>'op' = $2 ORDER BY seq`, stream, op)
+	if err != nil {
+		return unverifiedRead{}, false, err
+	}
+	defer rows.Close()
+	var start unverifiedRead
+	open := false
+	for rows.Next() {
+		var r unverifiedRead
+		var hasR bool
+		if err := rows.Scan(&r.seq, &r.at, &r.validity, &hasR); err != nil {
+			return unverifiedRead{}, false, err
+		}
+		if r.validity == "" {
+			r.validity = "unknown"
+			if !hasR {
+				r.validity = "absent"
+			}
+		}
+		switch {
+		case r.validity == "effective":
+			open = false
+		case !open:
+			start, open = r, true
+		}
+	}
+	return start, open, rows.Err()
 }
 
 // rootMissionOpen: the root's mission is active and not no_merge, so a

@@ -193,6 +193,9 @@ var bodies = map[string][]field{
 		// landing_close_round: on a mission's stream, the operations whose
 		// main is read again before the mission closes (CUT §11.8 v3 item 2).
 		{"landing_close_round", kAny, true},
+		// landing_disposed: the Owner counted a landed or in-main root as
+		// delivered or not, on its card (CUT §11.8 v3 item 4).
+		{"landing_disposed", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -573,6 +576,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_close_round" {
 		return badCloseRound(v)
+	}
+	if eventType == "note" && name == "landing_disposed" {
+		return badLandingDisposed(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

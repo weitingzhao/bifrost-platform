@@ -94,7 +94,10 @@ func TestLandingCardTriggers(t *testing.T) {
 			t.Errorf("%s: %+v, want %v", key, tr, k)
 		}
 	}
-	for _, none := range []string{"land:declined:1", "land:window:1", "land:rule:1", "land:" + inMain + ":1"} {
+	if tr := got["land:"+inMain+":1"]; tr.Kind != store.CardInMain {
+		t.Errorf("a root already in main asks to be counted, not to try again: %+v", tr)
+	}
+	for _, none := range []string{"land:declined:1", "land:window:1", "land:rule:1"} {
 		if tr, ok := got[none]; ok {
 			t.Errorf("%s: an unwanted card %+v", none, tr)
 		}

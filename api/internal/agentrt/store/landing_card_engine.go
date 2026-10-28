@@ -70,6 +70,7 @@ var cardChoiceLabels = map[string]string{
 	"repo_resume":           "Resume landings (does not retry the failed push or release anything)",
 	"keep_stopped":          "Keep stopped (ask again in 24 hours)",
 	"confirm_not_delivered": "Count it as not delivered",
+	"count_as_delivered":    "Count it as delivered (its change is in main)",
 }
 
 // LandingCardRequest is the frozen request a trigger's card asks: title, body,
@@ -85,6 +86,7 @@ func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]an
 		CardOkMissing: "the reconciler keeps reading main", CardRepoStopped: "no new landing runs in this repository",
 		CardLateLanding: "nothing waits on your answer", CardCIStuck: "the landing waits for its CI",
 		CardParkedLong: "the landing stays parked until its bound", CardLandedUnverified: "the reconciler keeps reading main",
+		CardInMain: "the task's mission stays open",
 	}[tr.Kind]
 	req := map[string]any{"title": title, "body": body, "options": labels, "ttl_hours": CardTTLHours, "allow_text": true,
 		"urgency": "when you can: only this landing waits for you", "owner_duty": "goal", "meanwhile": meanwhile}
@@ -114,6 +116,10 @@ func landingCardBody(repo string, tr CardTrigger) string {
 		return fmt.Sprintf("Repository %s: the CI of %s has run for more than 30 minutes (seen at %s). The landing waits; this is for you to know.", repo, tr.Op, at)
 	case CardParkedLong:
 		return fmt.Sprintf("Repository %s: %s has been parked since %s (%s). It ends by itself at its six-hour bound.", repo, tr.Op, at, tr.Why)
+	case CardLandedUnverified:
+		return fmt.Sprintf("Repository %s: %s landed, but since %s main has not shown it in effect (%s). Count it as not delivered, or decide later while main is read again.", repo, tr.Op, at, tr.Why)
+	case CardInMain:
+		return fmt.Sprintf("Repository %s: this task's change was already in main when its landing was to start (%s, %s). Count it as delivered, or as not delivered.", repo, tr.Op, at)
 	}
 	return fmt.Sprintf("Repository %s: %s (%s).", repo, tr.Kind, at)
 }
@@ -128,7 +134,8 @@ func cardTitle(ctx context.Context, tx pgx.Tx, repo string, tr CardTrigger) (str
 		return "", err
 	}
 	verb := map[string]string{CardRootFailed: "Landing failed", CardFloor: "Cannot land", CardOkMissing: "Push not in main",
-		CardLateLanding: "Landed late", CardCIStuck: "CI running long", CardParkedLong: "Landing parked"}[tr.Kind]
+		CardLateLanding: "Landed late", CardCIStuck: "CI running long", CardParkedLong: "Landing parked",
+		CardLandedUnverified: "Landed, not verified", CardInMain: "Already in main"}[tr.Kind]
 	return verb + ": " + firstLine(title), nil
 }
 

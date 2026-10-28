@@ -186,10 +186,11 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		op := state.LatestOperation(r.task)
 		o, has := state.Operations[op]
 		c := LandingRootClass{Root: r.task, Op: op, Class: RootUnresolved}
-		disposed, err := landingDisposed(ctx, tx, stream, r.task, op)
+		dispWhy, err := landingDisposed(ctx, tx, stream, r.task, op)
 		if err != nil {
 			return false, nil, "", err
 		}
+		disposed := dispWhy == "owner"
 		switch {
 		case !has:
 			c.Reason = "unclaimed"
@@ -224,6 +225,13 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 			c.Class, c.Reason = RootDisposed, "owner"
 		case r.dropped:
 			c.Class, c.Reason = RootDisposed, "dropped"
+		case o.Phase == "failed" && o.Outcome == "in_main" && dispWhy == "owner_delivered":
+			// The Owner counted the change already in main as delivered.
+			if none {
+				c.Class, c.Reason = RootDelivered, "in_main"
+			} else {
+				c.Reason = "rule"
+			}
 		case o.Phase == "failed" && o.Outcome == "in_main":
 			c.Reason = "in_main_unverified"
 		case o.Phase == "failed":
@@ -239,13 +247,14 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 	return inScope, roots, ruleNote, nil
 }
 
-// landingDisposed: the Owner counted this root's operation as not delivered
-// (landing_disposed, B4 v3 item 4).
-func landingDisposed(ctx context.Context, tx pgx.Tx, stream, root, op string) (bool, error) {
-	var n int
-	err := tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-	  AND body_json->'landing_disposed'->>'root' = $2 AND body_json->'landing_disposed'->>'op' = $3`, stream, root, op).Scan(&n)
-	return n > 0, err
+// landingDisposed is how the Owner counted this root's operation on its card
+// (landing_disposed, B4 v3 item 4): "owner" (not delivered),
+// "owner_delivered", or "" for no decision. The latest counts.
+func landingDisposed(ctx context.Context, tx pgx.Tx, stream, root, op string) (string, error) {
+	var why string
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body_json->'landing_disposed'->>'why' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+	  AND body_json->'landing_disposed'->>'root' = $2 AND body_json->'landing_disposed'->>'op' = $3 ORDER BY seq DESC LIMIT 1), '')`, stream, root, op).Scan(&why)
+	return why, err
 }
 
 // landingCloseB4 decides a mission in the live landing scope (CUT §11.8

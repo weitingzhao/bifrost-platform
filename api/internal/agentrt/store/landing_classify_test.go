@@ -189,3 +189,54 @@ func TestB4BoundsSettleWithoutTheLiveLoop(t *testing.T) {
 		t.Fatalf("not ended at its bound: %s %s", p, o)
 	}
 }
+
+// Serial: FreezeEventClock. CUT §11.8 v3 item 4: every unresolved root has
+// an Owner's exit. A root already in main asks to be counted; counted
+// delivered, its mission closes done. A landing main has not shown in
+// effect for two hours asks too; counted not delivered, the mission stops.
+func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "in main", BaseCommit: commitB})
+	w.passRound(t, root, "h1", "h2", "h3")
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+root+":1", "failed", "why", "in_main")))
+	if st := closePass(t, w, at); st != "active" {
+		t.Fatal("an in-main root closed the mission by itself", st)
+	}
+	f := newFakeCards(func() time.Time { return at })
+	cardPass(t, w, f, at)
+	var c store.CardRecord
+	for _, x := range cardsNow(t, w) {
+		c = x
+	}
+	if c.Kind != store.CardInMain || c.QuestionID != "q1" || c.Options["a"] != "count_as_delivered" {
+		t.Fatalf("%+v", c)
+	}
+	f.answer("q1", "a", at.Add(time.Minute))
+	cardPass(t, w, f, at.Add(2*time.Minute))
+	if st := closePass(t, w, at.Add(3*time.Minute)); st != "done" {
+		t.Fatal("counted delivered did not close done", st)
+	}
+
+	w2 := liveWorld(t, "none", at)
+	liveRoot(t, w2, "land:b4g:1", at, "main_intent", newLandingRecord("land:b4g:1", "main_result", "outcome", "ok"))
+	store.FreezeEventClock(at.Add(-10 * time.Minute))
+	_, err := store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true})) // landed, validity unknown
+	ok(t, err)
+	f2 := newFakeCards(func() time.Time { return at })
+	cardPass(t, w2, f2, at.Add(time.Hour))
+	if f2.asks != 0 {
+		t.Fatal("asked before two hours", f2.asks)
+	}
+	cardPass(t, w2, f2, at.Add(2*time.Hour))
+	if f2.asks != 1 {
+		t.Fatal("not asked after two hours", f2.asks)
+	}
+	f2.answer("q1", "a", at.Add(2*time.Hour+time.Minute)) // count it as not delivered
+	cardPass(t, w2, f2, at.Add(2*time.Hour+2*time.Minute))
+	if st := closePass(t, w2, at.Add(2*time.Hour+3*time.Minute)); st != "stopped" {
+		t.Fatal("counted not delivered did not stop", st)
+	}
+}

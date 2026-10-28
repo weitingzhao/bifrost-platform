@@ -22,7 +22,7 @@ var section8Choices = []string{"try_again", "do_not_merge", "confirm_main_lost"}
 // cardOutcomeWhys are the outcome / why pairs a landing_card_outcome may
 // record (CUT §11.6 v3 item 5).
 var cardOutcomeWhys = map[string][]string{
-	"applied":      {"repo_resumed"},
+	"applied":      {"repo_resumed", "not_delivered", "counted_delivered"},
 	"moot":         {"stop_superseded", "already_resumed", "trigger_gone"},
 	"refused":      {"unknown_choice", "channel"},
 	"held":         {"wait", "keep_stopped", "remind_later"},
@@ -71,8 +71,11 @@ func badCardOutcome(v any) string {
 	} else if gen != 0 || !landingRoot.MatchString(root) {
 		return "landing_card_outcome of a root names the root"
 	}
-	if m["outcome"] == "applied" && m["kind"] != CardRepoStopped {
-		return "landing_card_outcome applies only a resume; the §8 choices are landing_answer"
+	if m["outcome"] == "applied" {
+		ok := map[string][]string{CardRepoStopped: {"repo_resumed"}, CardLandedUnverified: {"not_delivered"}, CardInMain: {"not_delivered", "counted_delivered"}}[m["kind"].(string)]
+		if !slices.Contains(ok, m["why"].(string)) {
+			return "landing_card_outcome applies only a resume or an Owner's delivery decision; the §8 choices are landing_answer"
+		}
 	}
 	return ""
 }
@@ -159,6 +162,16 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			outcome, why = "applied", "repo_resumed"
 			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
 				Body: map[string]any{"text": "Landing resumed for the repository by the Owner", "landing_resume": map[string]any{"repo": c.Repo, "generation": c.StopGeneration}}}); err != nil {
+				return err
+			}
+		case choice == "confirm_not_delivered" || choice == "count_as_delivered":
+			outcome, why = "applied", "not_delivered"
+			if choice == "count_as_delivered" {
+				why = "counted_delivered"
+			}
+			if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root, MissionID: mission,
+				Body: map[string]any{"text": "Landing counted by the Owner: " + why, "landing_disposed": map[string]any{"v": "1", "root": c.Root, "op": c.Op,
+					"trigger_seq": c.TriggerSeq, "question_id": q.ID, "why": map[string]string{"not_delivered": "owner", "counted_delivered": "owner_delivered"}[why]}}}); err != nil {
 				return err
 			}
 		case choice == "ack":
@@ -315,4 +328,41 @@ func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord
 		return "", nil // answered meanwhile: the next pass handles it
 	}
 	return "", nil
+}
+
+// badLandingDisposed is why a landing_disposed body is refused, or "".
+func badLandingDisposed(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok || m["v"] != "1" {
+		return "landing_disposed is not a v1 object"
+	}
+	if !landingRoot.MatchString(fmt.Sprint(m["root"])) {
+		return "landing_disposed root is not a task"
+	}
+	for _, k := range []string{"op", "question_id"} {
+		if s, _ := m[k].(string); s == "" {
+			return "landing_disposed needs " + k
+		}
+	}
+	if n, ok := cardNumber(m["trigger_seq"]); !ok || n < 1 {
+		return "landing_disposed needs trigger_seq"
+	}
+	if w := fmt.Sprint(m["why"]); w != "owner" && w != "owner_delivered" {
+		return "landing_disposed why is owner or owner_delivered"
+	}
+	return ""
+}
+
+// checkLandingDisposedAppend: the controller records it on the repository
+// stream under its root, beside the Owner's answer.
+func checkLandingDisposedAppend(ev Event) error {
+	v, ok := ev.Body["landing_disposed"]
+	if !ok {
+		return nil
+	}
+	m, _ := v.(map[string]any)
+	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID != fmt.Sprint(m["root"]) {
+		return fmt.Errorf("landing_disposed is written by the controller on the repository stream under its root")
+	}
+	return nil
 }

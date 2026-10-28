@@ -43,6 +43,7 @@ const (
 	CardCIStuck          = "ci_stuck"
 	CardParkedLong       = "parked_long"
 	CardLandedUnverified = "landed_unverified"
+	CardInMain           = "in_main"
 )
 
 // cardChoices are the semantic choices each kind may offer, in order.
@@ -55,6 +56,7 @@ var cardChoices = map[string][][]string{
 	CardCIStuck:          {{"ack", "remind_later"}},
 	CardParkedLong:       {{"ack", "remind_later"}},
 	CardLandedUnverified: {{"confirm_not_delivered", "wait"}},
+	CardInMain:           {{"count_as_delivered", "confirm_not_delivered"}},
 }
 
 // repoCards are the kinds about the repository, not a root.

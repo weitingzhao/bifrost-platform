@@ -27,6 +27,8 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 		{Kind: store.CardRepoStopped, Seq: 6, At: at, StopGeneration: 1, Choices: []string{"repo_resume", "keep_stopped"}},
 		{Kind: store.CardCIStuck, Seq: 7, At: at, Root: root, Op: "land:x:1", Why: "ci_stuck", Choices: []string{"ack", "remind_later"}},
 		{Kind: store.CardParkedLong, Seq: 8, At: at, Root: root, Op: "land:x:1", Why: "window", Choices: []string{"ack", "remind_later"}},
+		{Kind: store.CardLandedUnverified, Seq: 9, At: at, Root: root, Op: "land:x:1", Why: "unknown", Choices: []string{"confirm_not_delivered", "wait"}},
+		{Kind: store.CardInMain, Seq: 10, At: at, Root: root, Op: "land:x:1", Why: "in_main", Choices: []string{"count_as_delivered", "confirm_not_delivered"}},
 	}
 	for i, tr := range cases {
 		// A store of its own per card: the runtime may ask six an hour.
