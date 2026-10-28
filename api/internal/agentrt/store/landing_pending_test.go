@@ -119,8 +119,8 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 	closeEnds(t, w, "not closed after the retry expired")
 }
 
-// Serial: FreezeEventClock. An operation at main cannot take failed{bound}
-// (only reconciling with main ends it). The settlement leaves it alone and
+// Serial: FreezeEventClock. An operation at main_intent cannot take
+// failed{bound} (only reconciling with main ends it). The settlement leaves it alone and
 // still ends the other roots' expired operations, instead of rolling all of
 // them back; Close keeps its mission past the hold limit.
 func TestSettleSkipsOperationAtMain(t *testing.T) {

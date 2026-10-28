@@ -141,7 +141,9 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 //     longer than the grace) can miss it too: one drill task at a time
 //     (review 640; a durable first-claim handoff is TD-447).
 //
-// Without a landing rule (PROD today) nothing holds. The caller holds the
+// Without a landing rule (PROD today) no never-claimed root is held; a root
+// already claimed holds by its stream whatever the rule (an operation at main
+// until reconciled, even after the rule is withdrawn). The caller holds the
 // mission's lock; ClaimLandingDrill locks the task, then its mission, before
 // the repository stream, so a claim and a close are ordered.
 const (

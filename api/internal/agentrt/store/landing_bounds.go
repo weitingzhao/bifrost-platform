@@ -53,9 +53,11 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time) (state 
 			}
 			first, n := landing.RootBudget(state, o.Task)
 			// An operation at main (main_intent, main_result other than
-			// non_ff) is left for reconciliation with main: failed{bound}
-			// would be refused by the protocol and roll back every other
-			// root's settlement here (TD-447 2).
+			// non_ff) is left for reconciliation: main_intent and
+			// main_result{ok} refuse failed{bound} (one such append would
+			// roll back every other root's settlement here), unknown may
+			// take it only after a main read shows R absent, and denied ends
+			// failed{denied} (TD-447 2, review 645 N1).
 			if state.LatestOperation(o.Task) == id && state.AwaitsNext(o.Task) {
 				e = failAwaitingBound(ctx, tx, state, o.Task, now)
 			} else if o.EndsAtBound() && landing.Bound(first, n-1, now) {

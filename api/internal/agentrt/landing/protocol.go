@@ -481,14 +481,16 @@ func (o Operation) Terminal() bool {
 
 // EndsAtBound: a live operation that has not reached main may end
 // failed{bound} from the stream alone (§5 item 6). From main_intent on, the
-// end depends on what main holds, which only a Git read can tell (§2.4).
+// end depends on what main holds (§2.4): main_result{unknown} may take
+// failed{bound} only after a main read, denied ends failed{denied}.
 func (o Operation) EndsAtBound() bool {
 	return slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, o.Phase)
 }
 
 // AtMain: the operation asked main to move and its outcome is not settled
-// (main_intent, or a main_result other than non_ff). Neither a time limit nor
-// failed{bound} ends it; reconciling with main does (TD-447 2).
+// (main_intent, or a main_result other than non_ff). No time limit ends it:
+// reconciling with main does, or failed{denied} after a recorded denial
+// (TD-447 2). A recoverer must exist before S3 writes these phases.
 func (o Operation) AtMain() bool {
 	return o.Phase == "main_intent" || o.Phase == "main_result" && o.Outcome != "non_ff"
 }
