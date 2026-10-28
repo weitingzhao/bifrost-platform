@@ -205,6 +205,8 @@ func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
 		}
 	case "result":
 		return "result", true
+	case "floor":
+		return "floor", true
 	case "history":
 		switch f.History.State {
 		case landing.Effective:

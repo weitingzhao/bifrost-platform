@@ -127,6 +127,9 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			}
 			return put("parked", map[string]any{"why": d.Reason, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
 		}
+		if d.Reason == "floor" {
+			return put("failed", map[string]any{"why": "floor"})
+		}
 		return put("failed", map[string]any{"why": "stale"})
 	}
 	if f.A != o.A || f.Attempt != o.Attempt {

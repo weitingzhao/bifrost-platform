@@ -229,6 +229,33 @@ func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
 	return true
 }
 
+// FloorViolation reports a change no landing rule can ever allow (CUT §11.6
+// v2 item 1): a path under the immutable floor, a non-regular file, a binary
+// or otherwise unsupported diff, a change with no path. It needs no rule:
+// the answer does not change with a new version, so a root it refuses is
+// ended (failed{floor}), never parked waiting for a rule.
+func FloorViolation(repo string, changes []LandingChange) (string, bool) {
+	for _, c := range changes {
+		if c.OldPath == "" && c.NewPath == "" {
+			return "empty diff path", true
+		}
+		for _, p := range []string{c.OldPath, c.NewPath} {
+			if p != "" && LandingFloor(repo, p) {
+				return "floor: " + p, true
+			}
+		}
+		for _, side := range [][2]string{{c.OldPath, c.OldMode}, {c.NewPath, c.NewMode}} {
+			if side[0] == "" && side[1] != "" || side[0] != "" && side[1] != "100644" && side[1] != "100755" {
+				return "non-regular file", true
+			}
+		}
+		if c.Binary || c.Added < 0 || c.Deleted < 0 || (c.OldPath != "" && c.NewPath != "" && c.OldMode != c.NewMode && c.Added+c.Deleted == 0) {
+			return "unsupported diff", true
+		}
+	}
+	return "", false
+}
+
 func (l *Landing) CheckChanges(repo string, changes []LandingChange) error {
 	r, ok := l.Repo(repo)
 	if !ok {

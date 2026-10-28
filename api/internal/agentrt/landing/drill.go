@@ -81,8 +81,11 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 	}
 	d := EligibleToPush(obs.Facts, now)
 	if !d.Allowed {
-		if d.Reason == "rule" || d.Reason == "limit" {
+		switch d.Reason {
+		case "rule", "limit":
 			return DrillAction{Kind: "parked", Why: d.Reason}
+		case "floor":
+			return DrillAction{Kind: "failed", Why: "floor"}
 		}
 		return DrillAction{Kind: "failed", Why: "stale"}
 	}

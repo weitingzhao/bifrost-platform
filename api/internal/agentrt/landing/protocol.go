@@ -412,7 +412,7 @@ func (s *State) Apply(e Entry) error {
 			// failed (TD-447 4). Close then releases its mission on the
 			// record instead of a timer.
 			if root, ok := neverClaimed(*s, op); ok {
-				if !slices.Contains(append([]string{"stale", "bound"}, ClaimRefusals...), r.String("why")) {
+				if !slices.Contains(append([]string{"stale", "bound", "floor"}, ClaimRefusals...), r.String("why")) {
 					return bad()
 				}
 				n.Task, n.ClaimNumber, n.ClaimedAt = root, 1, e.At

@@ -176,6 +176,9 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 		if d.Allowed {
 			return c.appendDrill(ctx, id, "unparked", map[string]any{})
 		}
+		if d.Reason == "floor" {
+			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "floor"})
+		}
 		if d.Reason != "rule" && d.Reason != "limit" {
 			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "stale"})
 		}

@@ -22,6 +22,7 @@ func TestNeverClaimedRootEndsInOneEvent(t *testing.T) {
 		{"in_main", "empty", "in_main", first, Version, true},
 		{"reverted", "empty", "reverted", first, Version, true},
 		{"bound", "empty", "bound", first, Version, true},
+		{"floor", "empty", "floor", first, Version, true},
 		{"old version", "empty", "stale", first, 1, false},
 		{"other reason", "empty", "ci_red", first, Version, false},
 		{"declined", "empty", "declined", first, Version, false},

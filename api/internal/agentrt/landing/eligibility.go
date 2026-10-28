@@ -98,6 +98,11 @@ func EligibleToClaim(f Facts, now time.Time) Decision {
 	if f.Terminal {
 		return refuse("terminal")
 	}
+	// A change no rule can ever allow ends the root (CUT §11.6 v2): checked
+	// before any rule, which only pauses.
+	if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
+		return refuse("floor")
+	}
 	if !f.DependenciesEffective {
 		return refuse("dependencies")
 	}
