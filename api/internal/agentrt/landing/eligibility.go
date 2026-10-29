@@ -61,23 +61,46 @@ func planOK(f Facts) bool {
 	}
 	return !f.GoalTask || f.ProducingPlan != "" && f.ProducingPlan == f.LatestUsedPlan
 }
-func ruleOK(f Facts, now time.Time, deploy bool) bool {
+
+// ruleValid deliberately does not check paths, presentation or size. Missing
+// or expired rules can never be rescued by a grant or an older signed version.
+func ruleValid(f Facts, now time.Time) bool {
 	r := f.Rule
 	if r == nil || r.Kind != rules.KindLanding || r.Landing == nil || r.Landing.Tenant != f.Tenant || now.Before(r.Effective) || !now.Before(r.Expires) {
 		return false
 	}
-	repo, ok := r.Landing.Repo(f.Repo)
-	if !ok {
-		return false
+	_, ok := r.Landing.Repo(f.Repo)
+	return ok
+}
+
+// PolicyChecks exposes the layers to the grant protocol without changing the
+// v1 claim/push policy. Callers must still check global/live and runtime limits.
+func PolicyChecks(f Facts, now time.Time) (reason string, refusals []rules.LandingRefusal) {
+	if _, bad := rules.StructuralViolation(f.Changes); bad {
+		return "floor", nil
 	}
-	changes := f.Changes
+	if _, bad := rules.LandingAbsoluteViolation(f.Repo, f.Changes); bad {
+		return "floor", nil
+	}
+	if !ruleValid(f, now) {
+		return "rule", nil
+	}
+	return "", rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
+}
+
+func ruleOK(f Facts, now time.Time, deploy bool) bool {
 	if deploy {
+		if !ruleValid(f, now) {
+			return false
+		}
+		repo, _ := f.Rule.Landing.Repo(f.Repo)
 		if repo.STGRelease == "none" {
 			return false
 		}
-		changes = f.DeployChanges
+		f.Changes = f.DeployChanges
 	}
-	return r.Landing.CheckChanges(f.Repo, changes) == nil
+	reason, refusals := PolicyChecks(f, now)
+	return reason == "" && len(refusals) == 0
 }
 func EligibleToClaim(f Facts, now time.Time) Decision {
 	if !modeOK(f) {

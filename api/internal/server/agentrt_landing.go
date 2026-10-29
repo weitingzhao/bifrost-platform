@@ -9,8 +9,12 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 )
 
 // Only the workers path calls this. The main reconciler's reader is wired
@@ -48,12 +52,13 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	if !write {
 		return
 	}
-	if s.delivery == nil {
-		slog.Error("agentrt landing disabled: delivery unavailable", "env", c.Env)
+	if s.cluster == nil {
+		slog.Error("agentrt landing disabled: cluster unavailable", "env", c.Env)
 		return
 	}
+	ci := s.landingCIClient()
 	c.DrillGit = g
-	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: s.delivery.LandingCI, EnsureCI: s.delivery.EnsureLandingCI, WindowBlocked: s.delivery.LandingWindowBlocked}
+	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: ci.LandingCI, EnsureCI: ci.EnsureLandingCI, WindowBlocked: ci.LandingWindowBlocked}
 	if c.Env == "prod" {
 		// A new live landing needs every reach the landing cards need (CUT
 		// §11.6 v3 item 9): without them the Owner could not be asked.
@@ -95,8 +100,37 @@ func (s *Server) landingLiveOff(c *controller.Controller) string {
 		return "AGENTRT_LANDING_LIVE is not on"
 	case !controller.LandingCardsComplete(c.LandingCards):
 		return "the landing cards cannot reach the question store"
-	case s.delivery == nil:
-		return "delivery unavailable"
+	case s.cluster == nil:
+		return "cluster unavailable"
 	}
 	return "no lander identity"
+}
+
+// Landing transports are wired here, not through delivery. Evidence and
+// creation policy live entirely within the protected landingci package.
+func (s *Server) landingCIClient() *landingci.Client {
+	namespace := "cicd"
+	if entry := s.cfg.DefaultCluster(); entry != nil && entry.ResolvedStackNamespace() != "" {
+		namespace = entry.ResolvedStackNamespace()
+	}
+	return &landingci.Client{Namespace: namespace, Dynamic: func() (dynamic.Interface, error) {
+		cfg, _, err := s.cluster.Service().RestConfig()
+		if err != nil {
+			return nil, err
+		}
+		return dynamic.NewForConfig(cfg)
+	}, ConfigMap: func(ctx context.Context, name string) (map[string]string, bool, error) {
+		client, _, err := s.cluster.Service().KubernetesClient()
+		if err != nil {
+			return nil, false, err
+		}
+		cm, err := client.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		return cm.Data, true, nil
+	}}
 }
