@@ -19,7 +19,7 @@ func TestSTGExecutionIdentityAtEveryAdoption(t *testing.T) {
 	for _, entry := range []string{"existing", "read", "created", "lost", "409"} {
 		t.Run(entry, func(t *testing.T) {
 			t.Parallel()
-			for _, mode := range []string{"control", "task sa", "missing task", "extra task", "duplicate task", "template sa", "node selector", "workspace", "extra workspace", "timeout", "extra spec"} {
+			for _, mode := range []string{"control", "task sa", "missing task", "extra task", "duplicate task", "template sa", "node selector", "workspace", "extra workspace", "task timeout", "invalid timeout", "negative timeout", "unknown timeout", "extra spec", "unknown spec", "unknown template"} {
 				t.Run(mode, func(t *testing.T) {
 					t.Parallel()
 					obj := namedObject(t)
@@ -50,10 +50,20 @@ func TestSTGExecutionIdentityAtEveryAdoption(t *testing.T) {
 						spec["workspaces"] = []any{map[string]any{"name": "build-context", "persistentVolumeClaim": map[string]any{"claimName": "other-build"}}}
 					case "extra workspace":
 						spec["workspaces"] = append(spec["workspaces"].([]any), map[string]any{"name": "other", "emptyDir": map[string]any{}})
-					case "timeout":
-						spec["timeouts"] = map[string]any{"pipeline": "1h"}
+					case "task timeout":
+						spec["timeouts"] = map[string]any{"pipeline": "1h", "tasks": "30m"}
+					case "invalid timeout":
+						spec["timeouts"] = map[string]any{"pipeline": "invalid"}
+					case "negative timeout":
+						spec["timeouts"] = map[string]any{"pipeline": "-1h"}
+					case "unknown timeout":
+						spec["timeouts"] = map[string]any{"pipeline": "1h", "unknown": "1h"}
 					case "extra spec":
 						spec["taskRunTemplate"].(map[string]any)["podTemplate"].(map[string]any)["hostNetwork"] = true
+					case "unknown spec":
+						spec["unknownExecution"] = true
+					case "unknown template":
+						spec["taskRunTemplate"].(map[string]any)["unknownExecution"] = true
 					}
 					id, err := stgInput().Identity()
 					if err != nil {
@@ -149,7 +159,7 @@ func TestSTGExecutionContractRejectsChangedConstructor(t *testing.T) {
 			}
 			count := trackSTGCreates(t, dyn, "")
 			_, _, err := a.CreateNamedDeliverRun(context.Background(), stgInput())
-			if mode == "control" {
+			if mode == "control" || mode == "arch annotation" {
 				if err != nil || *count != 1 {
 					t.Fatal("control", err, *count)
 				}

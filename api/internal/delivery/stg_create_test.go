@@ -124,6 +124,11 @@ func TestSTGIdentityAndPrepareContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Named B5 runs pin the otherwise implicit default SA before admission.
+	if sa, _, _ := unstructured.NestedString(o.Object, "spec", "taskRunTemplate", "serviceAccountName"); sa != "default" {
+		t.Fatal("named run did not pin its default SA", sa)
+	}
+	stgSet(t, ref, "default", "spec", "taskRunTemplate", "serviceAccountName")
 	if !reflect.DeepEqual(o.Object["spec"], ref.Object["spec"]) {
 		t.Fatal("named spec diverged from StartPipelineRun")
 	}
