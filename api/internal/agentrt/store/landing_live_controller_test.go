@@ -35,12 +35,12 @@ func (p *livePusher) Close() error { p.closed++; return nil }
 // liveSources: main at M0 (commitA), CI on R green after prepared, no window.
 func liveSources(src store.LandingSource, prepared time.Time) controller.DrillSources {
 	return controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, r string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, r string, _ time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Run: "ci-land", R: r, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute)}, nil
 		},
-		EnsureCI: func(context.Context, string, string) error { return nil },
+		EnsureCI: func(context.Context, string, string, string) error { return nil },
 	}
 }
 
@@ -57,8 +57,8 @@ func TestLiveLandingPushesMainOnce(t *testing.T) {
 			at := prepared.Add(10 * time.Minute)
 			defer store.FreezeEventClock(at)()
 			p := &livePusher{outcome: c.outcome}
-			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{},
-				OpenLive: func(_ context.Context, r string) (controller.LiveWorkspace, error) {
+			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
+				OpenLive: func(_ context.Context, _ string, r string) (controller.LiveWorkspace, error) {
 					if r != commitB {
 						t.Fatal("workspace for", r)
 					}
@@ -92,15 +92,15 @@ func TestLiveLandingGateRefusalPushesNothing(t *testing.T) {
 	p := &livePusher{outcome: landinggit.PushOK}
 	reads := 0
 	s := liveSources(src, prepared)
-	s.Main = func(context.Context) (string, error) {
+	s.Main = func(context.Context, string) (string, error) {
 		reads++
 		if reads > 1 { // the gate's own read: main moved after "ready"
 			return strings.Repeat("e", 40), nil
 		}
 		return commitA, nil
 	}
-	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{},
-		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) { return p, nil }}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
+		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }}
 	_, err := ctl.LandingDrillCI(ctx, s, op, at)
 	ok(t, err)
 	if len(p.pushes) != 0 || p.closed != 1 {
@@ -119,12 +119,12 @@ func TestLiveLandingOffOnProd(t *testing.T) {
 	at := prepared.Add(10 * time.Minute)
 	defer store.FreezeEventClock(at)()
 	opened := 0
-	open := func(context.Context, string) (controller.LiveWorkspace, error) {
+	open := func(context.Context, string, string) (controller.LiveWorkspace, error) {
 		opened++
 		return nil, errors.New("offline")
 	}
 	s := liveSources(src, prepared)
-	off := controller.Controller{DB: w.rt, Env: "prod", DrillGit: &branchObserved{}, Drill: &s, OpenLive: open}
+	off := controller.Controller{DB: w.rt, Env: "prod", DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &s, OpenLive: open}
 	ok(t, off.LandingDrillPass(ctx))
 	if _, err := off.LandingDrillCI(ctx, s, op, at); err == nil {
 		t.Fatal("PROD without live ran the CI step")
@@ -132,7 +132,7 @@ func TestLiveLandingOffOnProd(t *testing.T) {
 	if err := off.LandingDrillBranch(ctx, &branchObserved{}, op, at); err == nil {
 		t.Fatal("PROD without live ran the branch step")
 	}
-	on := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, OpenLive: open}
+	on := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, OpenLive: open}
 	if _, err := on.LandingDrillCI(ctx, s, op, at); err == nil || opened != 1 {
 		t.Fatal("an unopened workspace", err, opened)
 	}
@@ -154,8 +154,8 @@ func TestLiveLandingRereadsTheIntentBeforePushing(t *testing.T) {
 		}
 	})()
 	p := &livePusher{outcome: landinggit.PushOK}
-	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{},
-		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) { return p, nil }}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
+		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }}
 	_, err := ctl.LandingDrillCI(ctx, liveSources(src, prepared), op, at)
 	ok(t, err)
 	if len(p.pushes) != 0 {

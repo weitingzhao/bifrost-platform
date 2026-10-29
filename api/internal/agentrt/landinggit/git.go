@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +31,7 @@ var liveRef = regexp.MustCompile(`^refs/heads/land/prod/t_[0-9A-HJKMNP-TV-Z]{26}
 // Git has no configurable production remote and no general-purpose push API.
 // The credentials are file paths, never token values in the parent's env.
 type Git struct {
-	remote, usernameFile, passwordFile string
+	repo, remote, usernameFile, passwordFile string
 	// scope is the only branch shape this identity reads, pushes and
 	// deletes: land/stg for the drill, land/prod for the lander.
 	scope *regexp.Regexp
@@ -39,7 +40,7 @@ type Git struct {
 	lander bool
 }
 
-func FromEnv(environment string) (*Git, error) {
+func FromEnv(environment string, repos ...string) (*Git, error) {
 	if environment != "stg" {
 		return nil, errors.New("landing drill requires stg")
 	}
@@ -47,7 +48,11 @@ func FromEnv(environment string) (*Git, error) {
 	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
 		return nil, errors.New("landing credential paths must be absolute")
 	}
-	return &Git{remote: remoteURL, usernameFile: u, passwordFile: p, scope: drillRef}, nil
+	repo, err := selectedRepo(repos)
+	if err != nil {
+		return nil, err
+	}
+	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: u, passwordFile: p, scope: drillRef}, nil
 }
 
 // Lander credentials: the agentrt-lander identity's basic-auth files (S3).
@@ -56,7 +61,7 @@ const LanderPasswordFileEnv = "AGENTRT_LANDER_PASSWORD_FILE"
 
 // LanderFromEnv is the production landing identity: land/prod branches and
 // a fast-forward push of platform main, nothing else (CUT §2.5, §3 S3 ⑫).
-func LanderFromEnv(environment string) (*Git, error) {
+func LanderFromEnv(environment string, repos ...string) (*Git, error) {
 	if environment != "prod" {
 		return nil, errors.New("the lander runs on prod")
 	}
@@ -64,7 +69,11 @@ func LanderFromEnv(environment string) (*Git, error) {
 	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
 		return nil, errors.New("lander credential paths must be absolute")
 	}
-	return &Git{remote: remoteURL, usernameFile: u, passwordFile: p, scope: liveRef, lander: true}, nil
+	repo, err := selectedRepo(repos)
+	if err != nil {
+		return nil, err
+	}
+	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: u, passwordFile: p, scope: liveRef, lander: true}, nil
 }
 
 func (g *Git) inScope(ref string) bool {
@@ -221,4 +230,23 @@ func (g *Git) Delete(ctx context.Context, ref, sha string) error {
 	}
 	_, e = g.run(ctx, dir, true, nil, nil, "push", "--porcelain", "--force-with-lease="+ref+":"+sha, g.remote, ":"+ref)
 	return e
+}
+
+// Repository is bound at construction, never supplied by a task or URL.
+func (g *Git) Repository() string {
+	if g.repo == "" {
+		return "bifrost-platform"
+	}
+	return g.repo
+}
+func selectedRepo(repos []string) (landing.LandingRepo, error) {
+	name := "bifrost-platform"
+	if len(repos) == 1 {
+		name = repos[0]
+	}
+	r, ok := landing.LandingRepos[name]
+	if !ok || len(repos) > 1 {
+		return r, errors.New("unsupported landing repo")
+	}
+	return r, nil
 }

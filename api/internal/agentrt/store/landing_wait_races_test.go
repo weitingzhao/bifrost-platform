@@ -72,9 +72,9 @@ func TestC4Review690CITimerInterleaving(t *testing.T) {
 			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true}
 			a, err := ctl.LandingDrillCI(ctx, controller.DrillSources{
 				Facts:         src,
-				Main:          func(context.Context) (string, error) { return commitA, nil },
-				WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-				CI: func(context.Context, string, time.Time) (landing.CIRun, error) {
+				Main:          func(context.Context, string) (string, error) { return commitA, nil },
+				WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+				CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {
 					if wait {
 						_, d, err := store.AuthorizeLandingPush(ctx, other, src, op, observed(at.Add(-29*time.Minute)))
 						ok(t, err)

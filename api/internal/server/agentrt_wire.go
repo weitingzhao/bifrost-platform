@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -153,7 +154,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		s.wireLandingDrill(c)
 		if env == "prod" {
 			q := c.LandingCards
-			h := map[string]any{"live": c.Live, "cards": map[string]bool{"ask": q.AskRaw != nil, "lookup_key": q.LookupKey != nil,
+			repos := map[string]bool{}
+			for _, repo := range landing.LandingRepoNames() {
+				repos[repo] = c.Live && c.DrillGit[repo] != nil
+			}
+			h := map[string]any{"repos": repos, "live": c.Live, "cards": map[string]bool{"ask": q.AskRaw != nil, "lookup_key": q.LookupKey != nil,
 				"lookup": q.Lookup != nil, "withdraw": q.Withdraw != nil, "ack": q.Ack != nil}}
 			if !c.Live {
 				h["live_off"] = s.landingLiveOff(c)

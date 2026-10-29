@@ -17,15 +17,45 @@ import (
 
 // LandingDrillPass resumes durable operations before scanning accepted work.
 // Each pass reconstructs state; errors on one operation do not starve others.
-func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
+func (c *Controller) LandingDrillPass(ctx context.Context) error {
+	var errs []error
+	repos := c.landingRepoNames()
+	if len(repos) == 1 {
+		return c.landingDrillRepoPass(ctx, repos[0])
+	}
+	for i, repo := range repos {
+		one, done := drillRepoShare(ctx, len(repos)-i)
+		errs = append(errs, c.landingDrillRepoPass(one, repo))
+		done()
+	}
+	return errors.Join(errs...)
+}
+func drillRepoShare(ctx context.Context, count int) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return drillWorkShare(ctx, count)
+	}
+	return context.WithTimeout(ctx, 5*time.Minute)
+}
+func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (result error) {
 	if !c.landingRuns() {
 		return nil
+	}
+	if repo != "bifrost-platform" {
+		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
+		if err != nil || !ready {
+			return err
+		}
+		if c.Env == "prod" {
+			if _, err := store.EnsureLandingMode(ctx, c.DB, repo); err != nil {
+				return err
+			}
+		}
 	}
 	now := time.Now()
 	if c.Now != nil {
 		now = c.Now()
 	}
-	state, err := store.SettleLandingDrillBounds(ctx, c.DB, now)
+	state, err := store.SettleLandingDrillBounds(ctx, c.DB, now, repo)
 	if err != nil {
 		return err
 	}
@@ -33,7 +63,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	// Roots in the first-claim handoff that will never be claimed are
 	// recorded from the database alone, before any external read and
 	// whatever the rule (TD-447 4): a slow recovery below cannot starve it.
-	if _, err = store.SettleUnclaimed(ctx, c.DB, "bifrost-platform", now); err != nil {
+	if _, err = store.SettleUnclaimed(ctx, c.DB, repo, now); err != nil {
 		errs = append(errs, err)
 	}
 	ids := make([]string, 0, len(state.Operations))
@@ -77,7 +107,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		cleanupErrors := []error{result}
 		for i, o := range cleanups {
 			one, done := drillWorkShare(cleanupCtx, len(cleanups)-i)
-			cleanupErrors = append(cleanupErrors, c.DrillGit.Delete(one, o.Ref, o.R))
+			cleanupErrors = append(cleanupErrors, c.DrillGit[repo].Delete(one, o.Ref, o.R))
 			done()
 		}
 		result = errors.Join(cleanupErrors...)
@@ -85,7 +115,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	for i, id := range pending {
 		o := state.Operations[id]
 		one, done := drillWorkShare(ctx, len(pending)-i)
-		errs = append(errs, c.resumeLandingDrill(one, id, o, now))
+		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo))
 		done()
 	}
 	// No current rule means no new claims, but recovery and bounds above run.
@@ -99,10 +129,10 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		if rule == nil || rule.Landing == nil {
 			return nil
 		}
-		if _, ok := rule.Landing.Repo("bifrost-platform"); !ok {
+		if _, ok := rule.Landing.Repo(repo); !ok {
 			return nil
 		}
-		enabledAt, e = store.ObserveLandingEnabled(ctx, tx, c.Env, "dev", "bifrost-platform", now)
+		enabledAt, e = store.ObserveLandingEnabled(ctx, tx, c.Env, "dev", repo, now)
 		// No fence yet (PROD before its mode): no candidate is in scope.
 		enabled = e == nil && !enabledAt.IsZero()
 		return e
@@ -113,7 +143,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	if !enabled {
 		return errors.Join(errs...)
 	}
-	tasks, err := store.LandingCandidates(ctx, c.DB, enabledAt)
+	tasks, err := store.LandingCandidates(ctx, c.DB, enabledAt, repo)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
@@ -122,7 +152,7 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	var settled landing.State
 	if err = store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var e error
-		settled, e = store.LandingState(ctx, tx, "landing:bifrost-platform")
+		settled, e = store.LandingState(ctx, tx, "landing:"+repo)
 		return e
 	}); err != nil {
 		return errors.Join(append(errs, err)...)
@@ -130,11 +160,11 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	// Waits run on the clock as it is when each is read or set, not the
 	// pass's start: a slow read must not use up the wait it earns (review
 	// 653 R653-2).
-	tasks = c.drillWaits.due(unsettled(tasks, settled.Operations), drillGeneration(settled), c.clock())
+	tasks = c.repoWaits(repo).due(unsettled(tasks, settled.Operations), drillGeneration(settled), c.clock())
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
 		op, d, e := store.ClaimLanding(one, c.DB, c.Drill.Facts, c.Env, task, now)
-		c.drillWaits.record(task, e == nil && (op != "" || d.Reason == "changed"), c.clock())
+		c.repoWaits(repo).record(task, e == nil && (op != "" || d.Reason == "changed"), c.clock())
 		if e != nil {
 			errs = append(errs, e)
 			done()
@@ -142,12 +172,12 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 		}
 		if op == "" && d.Reason != "" {
 			// Shown on the mission's landing status (CUT §11.13).
-			if _, err := store.RecordClaimRefusal(one, c.DB, "bifrost-platform", task, d.Reason); err != nil {
+			if _, err := store.RecordClaimRefusal(one, c.DB, repo, task, d.Reason, d.Detail); err != nil {
 				errs = append(errs, err)
 			}
 		}
 		if op != "" {
-			errs = append(errs, c.LandingDrillBranch(one, c.DrillGit, op, now))
+			errs = append(errs, c.LandingDrillBranch(one, c.DrillGit[repo], op, now, repo))
 			done()
 			break
 		}
@@ -156,10 +186,10 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 	return errors.Join(errs...)
 }
 
-func (c *Controller) appendDrill(ctx context.Context, op, kind string, fields map[string]any) error {
+func (c *Controller) appendDrill(ctx context.Context, op, kind string, fields map[string]any, repo string) error {
 	fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 	return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-		_, err := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "STG drill: " + kind, "landing": fields}})
+		_, err := store.Append(ctx, tx, store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": "STG drill: " + kind, "landing": fields}})
 		return err
 	})
 }
@@ -171,7 +201,7 @@ func drillWorkShare(ctx context.Context, remaining int) (context.Context, contex
 	return context.WithTimeout(ctx, max(time.Duration(0), time.Until(deadline))/time.Duration(remaining))
 }
 
-func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time) error {
+func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time, repo string) error {
 	switch {
 	case o.Phase == "awaiting_grant":
 		// C-5: only a grant the stream shows usable takes the operation to
@@ -188,7 +218,7 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			if !c.grantTries.due(id+"/"+grant, c.clock()) {
 				return nil
 			}
-			return c.landLiveWith(ctx, *c.Drill, id, o.R, false, nil)
+			return c.landLiveWith(ctx, *c.Drill, id, o.R, false, nil, repo)
 		}
 		// No grant: the gate checks whether the rule now in force fails
 		// nothing of it (§5.1 step 4, review 694 R-06). Only its stable
@@ -202,7 +232,7 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			return err
 		}
 		var d landing.Decision
-		err = c.landLiveWith(ctx, *c.Drill, id, o.R, true, &d)
+		err = c.landLiveWith(ctx, *c.Drill, id, o.R, true, &d, repo)
 		if err == nil && d.Reason == "awaiting_grant" {
 			c.grantTries.settle(key)
 		}
@@ -216,20 +246,20 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			return err
 		}
 		if d.Allowed {
-			return c.appendDrill(ctx, id, "unparked", map[string]any{})
+			return c.appendDrill(ctx, id, "unparked", map[string]any{}, repo)
 		}
 		if d.Reason == "floor" {
-			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "floor"})
+			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "floor"}, repo)
 		}
 		if d.Reason != "rule" && d.Reason != "limit" {
-			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "stale"})
+			return c.appendDrill(ctx, id, "failed", map[string]any{"why": "stale"}, repo)
 		}
 		return nil
 	case o.Phase == "branch_pushed" || o.Phase == "parked":
-		_, err := c.LandingDrillCI(ctx, *c.Drill, id, now)
+		_, err := c.LandingDrillCI(ctx, *c.Drill, id, now, repo)
 		return err
 	default:
-		return c.LandingDrillBranch(ctx, c.DrillGit, id, now)
+		return c.LandingDrillBranch(ctx, c.DrillGit[repo], id, now, repo)
 	}
 }
 
@@ -374,4 +404,18 @@ func (g *grantTries) settled(key string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.done[key]
+}
+
+func (c *Controller) repoWaits(repo string) *drillBackoff {
+	if repo == "bifrost-platform" {
+		return &c.drillWaits
+	}
+	// The drill pass is serial; each repository keeps an independent generation.
+	if c.otherDrillWaits == nil {
+		c.otherDrillWaits = map[string]*drillBackoff{}
+	}
+	if c.otherDrillWaits[repo] == nil {
+		c.otherDrillWaits[repo] = &drillBackoff{}
+	}
+	return c.otherDrillWaits[repo]
 }

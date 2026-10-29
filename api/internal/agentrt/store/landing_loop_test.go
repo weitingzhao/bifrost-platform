@@ -64,11 +64,11 @@ func TestDrillScanMainMovementOpensNextOperation(t *testing.T) {
 	op, at := pushedDrill(t, w, task, src)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "main_red", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))))
 	remote := &branchObserved{}
-	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return at.Add(time.Minute) }, DrillGit: remote}
-	ctl.Drill = &controller.DrillSources{Facts: src, Main: func(context.Context) (string, error) { return strings.Repeat("c", 40), nil }, CI: func(context.Context, string, time.Time) (landing.CIRun, error) {
+	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return at.Add(time.Minute) }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": remote}}
+	ctl.Drill = &controller.DrillSources{Facts: src, Main: func(context.Context, string) (string, error) { return strings.Repeat("c", 40), nil }, CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {
 		t.Fatal("polled old red main before discarding")
 		return landing.CIRun{}, nil
-	}, WindowBlocked: func(context.Context) (bool, error) { return false, nil }}
+	}, WindowBlocked: func(context.Context, string) (bool, error) { return false, nil }}
 	// The fake Git stops at the new replay's Open; the durable claim must
 	// already exist. Real Git replay/overlap tests live in landinggit.
 	if e := ctl.LandingDrillPass(ctx); e == nil {
@@ -96,20 +96,23 @@ func TestDrillFinalGateAndRehearsalDatabase(t *testing.T) {
 			restore := store.FreezeEventClock(now)
 			defer restore()
 			mainReads, ciReads, windowReads := 0, 0, 0
-			drill := controller.DrillSources{Facts: src, Main: func(context.Context) (string, error) {
+			drill := controller.DrillSources{Facts: src, Main: func(context.Context, string) (string, error) {
 				mainReads++
 				if change == "main" && mainReads > 1 {
 					return strings.Repeat("c", 40), nil
 				}
 				return commitA, nil
-			}, CI: func(_ context.Context, sha string, _ time.Time) (landing.CIRun, error) {
+			}, CI: func(_ context.Context, _ string, sha string, _ time.Time) (landing.CIRun, error) {
 				ciReads++
 				status := "Succeeded"
 				if change == "latest_ci" && ciReads > 1 {
 					status = "Failed"
 				}
 				return landing.CIRun{R: sha, Run: "latest", Status: status, CreatedAt: at.Add(time.Minute)}, nil
-			}, WindowBlocked: func(context.Context) (bool, error) { windowReads++; return change == "window" && windowReads > 1, nil }}
+			}, WindowBlocked: func(context.Context, string) (bool, error) {
+				windowReads++
+				return change == "window" && windowReads > 1, nil
+			}}
 			ctl := controller.Controller{DB: w.rt, Env: "stg"}
 			a, e := ctl.LandingDrillCI(ctx, drill, op, now)
 			if a.Kind != "ready" {
@@ -144,7 +147,7 @@ func TestDrillFinalGateAndRehearsalDatabase(t *testing.T) {
 				t.Fatal("drill repeated", next, d)
 			}
 			deleted := false
-			drill.Delete = func(_ context.Context, ref, sha string) error {
+			drill.Delete = func(_ context.Context, _ string, ref, sha string) error {
 				if ref != o.Ref || sha != o.R {
 					t.Fatal("unsafe deletion")
 				}
@@ -174,7 +177,7 @@ func (g *startupDrillGit) Delete(context.Context, string, string) error { return
 func TestDrillStartScansImmediately(t *testing.T) {
 	w, task, src := acceptedDrill(t)
 	g := &startupDrillGit{}
-	ctl := controller.Controller{DB: w.rt, Env: "stg", LeaseEvery: time.Hour, FactsEvery: time.Hour, DrillGit: g, Drill: &controller.DrillSources{Facts: src}}
+	ctl := controller.Controller{DB: w.rt, Env: "stg", LeaseEvery: time.Hour, FactsEvery: time.Hour, DrillGit: map[string]controller.DrillGit{"bifrost-platform": g}, Drill: &controller.DrillSources{Facts: src}}
 	runCtx, cancel := context.WithCancel(ctx)
 	wait := ctl.Start(runCtx)
 	defer func() { cancel(); wait() }()
@@ -254,7 +257,7 @@ func TestDrillBranchCollisionAutomaticallyReclaims(t *testing.T) {
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB)))
 	remote := &branchObserved{tip: strings.Repeat("c", 40)}
-	ctl := controller.Controller{DB: w.rt, Env: "stg", DrillGit: remote, Drill: &controller.DrillSources{Facts: src}}
+	ctl := controller.Controller{DB: w.rt, Env: "stg", DrillGit: map[string]controller.DrillGit{"bifrost-platform": remote}, Drill: &controller.DrillSources{Facts: src}}
 	if ctl.LandingDrillPass(ctx) == nil {
 		t.Fatal("expected new replay Open refusal")
 	}

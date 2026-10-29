@@ -142,6 +142,10 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 // LandingStateCIKeys is LandingState with the operations' pinned CI keys,
 // from the same single read (the controller's CI step).
 func LandingStateCIKeys(ctx context.Context, tx pgx.Tx, stream string) (landing.State, map[string]GrantCIKey, error) {
+	if stream == "landing:bifrost-trade-infra" {
+		st, err := infraLandingState(ctx, tx, stream)
+		return st, nil, err
+	}
 	r, err := scanLandingStream(ctx, tx, stream)
 	if err != nil {
 		return landing.State{}, nil, err

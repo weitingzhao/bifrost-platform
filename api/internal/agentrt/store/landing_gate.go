@@ -12,9 +12,14 @@ import (
 // FinishLandingDrill holds the second gate's rule and row locks through the
 // final fresh external observation and the rehearsal record. It reserves no
 // production quota and has no deployment or main-push callback.
-func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string, now time.Time, observe func(context.Context, landing.Operation) (landing.DrillObservation, error)) error {
+func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string, now time.Time, observe func(context.Context, landing.Operation) (landing.DrillObservation, error), repos ...string) error {
+	repo := landing.Repository(repos...)
+	if repo == "" {
+		return fmt.Errorf("unsupported landing repo")
+	}
+	stream := "landing:" + repo
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		state, err := LandingState(ctx, tx, stream)
 		if err != nil {
 			return err
 		}
@@ -35,7 +40,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if err = lockLandingBinding(ctx, tx, o.Task, tenant, step, mission); err != nil {
 			return err
 		}
-		if err = lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
+		if err = lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
 		at := DecisionAt() // CUT §9: the rule and the window as of these locks
@@ -50,7 +55,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if o.Phase != "branch_pushed" || !o.DryRun {
 			return fmt.Errorf("not a pushed drill")
 		}
-		state, err = LandingState(ctx, tx, "landing:bifrost-platform")
+		state, err = LandingState(ctx, tx, stream)
 		if err != nil {
 			return err
 		}
@@ -78,7 +83,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			{"v": landing.Version, "kind": "ci_seen", "op": op, "run": obs.Candidate.Run, "status": obs.Candidate.Status, "R": o.R, "created_at": obs.Candidate.CreatedAt.Format(time.RFC3339Nano)},
 			{"v": landing.Version, "kind": "rehearsed", "op": op, "R": o.R},
 		} {
-			if _, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: map[string]any{"text": fmt.Sprintf("STG drill %s; second gate rule version %d", r["kind"], g.Rule.Version), "landing": r}}); err != nil {
+			if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: map[string]any{"text": fmt.Sprintf("STG drill %s; second gate rule version %d", r["kind"], g.Rule.Version), "landing": r}}); err != nil {
 				return err
 			}
 		}

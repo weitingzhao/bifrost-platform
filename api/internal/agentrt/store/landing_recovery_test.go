@@ -28,9 +28,9 @@ func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
 	var actualCreation, observedCreation time.Time
 	drill := controller.DrillSources{
 		Facts:         src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, revision string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, revision string, _ time.Time) (landing.CIRun, error) {
 			status, name, at := "Failed", "old-failed", prepared.Add(time.Second)
 			if revision == commitA {
 				status = "Succeeded"
@@ -40,7 +40,7 @@ func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
 			}
 			return landing.CIRun{Run: name, R: revision, Status: status, CreatedAt: at}, nil
 		},
-		EnsureCI: func(_ context.Context, name, revision string) error {
+		EnsureCI: func(_ context.Context, _ string, name, revision string) error {
 			if !created {
 				if name != landing.CIName(op, 2) || revision != commitB {
 					t.Fatal("wrong create identity")
@@ -121,7 +121,7 @@ func TestDrillRecoveryCleanupCannotStarveExpiredOperation(t *testing.T) {
 	}
 	store.FreezeEventClock(now)
 	remote := &recoveryUnavailableGit{}
-	c := controller.Controller{DB: w.db.Pool(t, w.db.Runtime), Env: "stg", Now: func() time.Time { return now }, DrillGit: remote, Drill: &controller.DrillSources{}}
+	c := controller.Controller{DB: w.db.Pool(t, w.db.Runtime), Env: "stg", Now: func() time.Time { return now }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": remote}, Drill: &controller.DrillSources{}}
 	passCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	err := c.LandingDrillPass(passCtx)
@@ -152,7 +152,7 @@ func TestDrillRecoveryDiscardRestartPastBudget(t *testing.T) {
 	}); err == nil {
 		t.Fatal("non-controller created a born-terminal failure")
 	}
-	c := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return later }, DrillGit: &branchObserved{}, Drill: &controller.DrillSources{Facts: src}}
+	c := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return later }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &controller.DrillSources{Facts: src}}
 	// New controller after the crash: recover through the actual scan entry.
 	_ = c.LandingDrillPass(ctx)
 	state := landingState(t, w, landingRepoStream)
@@ -170,7 +170,7 @@ func TestDrillRecoveryDiscardRestartPastBudget(t *testing.T) {
 	if records != 1 || kind != "failed" {
 		t.Fatal("successor was not born terminal in one event", records, kind)
 	}
-	c = controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return later }, DrillGit: &branchObserved{}, Drill: &controller.DrillSources{Facts: src}}
+	c = controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return later }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &controller.DrillSources{Facts: src}}
 	_ = c.LandingDrillPass(ctx)
 	if len(landingState(t, w, landingRepoStream).Operations) != 2 {
 		t.Fatal("restart duplicated bound failure")

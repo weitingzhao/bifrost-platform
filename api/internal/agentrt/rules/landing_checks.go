@@ -80,12 +80,17 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		return []LandingRefusal{LandingRulePaths}
 	}
 	failed := map[LandingRefusal]bool{}
-	if len(changes) == 0 || len(changes) > l.Limits.MaxFiles {
+	limits := l.EffectiveLimits(repo)
+	if repo == "bifrost-trade-infra" {
+		limits.MaxFiles = min(limits.MaxFiles, 5)
+		limits.MaxChangedLines = min(limits.MaxChangedLines, 1500)
+	}
+	if len(changes) == 0 || len(changes) > limits.MaxFiles {
 		failed[LandingSize] = true
 	}
 	// Subtract instead of adding untrusted int counts: no overflow can make
 	// an oversized change pass, even when two counts each fit into an int.
-	remaining := l.Limits.MaxChangedLines
+	remaining := limits.MaxChangedLines
 	for _, c := range changes {
 		for _, p := range c.Paths() {
 			if LandingHardCore(repo, p) {
@@ -93,7 +98,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 			} else if LandingFloor(repo, p) && !LandingHard(repo, p) {
 				failed[LandingFloorSoft] = true
 			}
-			if !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) {
+			if !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) || repo == "bifrost-trade-infra" && !landingMatches(InfraLandingAllow, p) {
 				failed[LandingRulePaths] = true
 			}
 		}
@@ -103,7 +108,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		for _, p := range c.Paths() {
 			allowed = allowed && landingMatches(r.Allow, p)
 		}
-		if allowed && !LandingPresentationOnly(r.Allow, []LandingChange{c}) {
+		if repo != "bifrost-trade-infra" && allowed && !LandingPresentationOnly(r.Allow, []LandingChange{c}) {
 			failed[LandingPresentation] = true
 		}
 		for _, n := range []int{c.Added, c.Deleted} {
@@ -119,6 +124,9 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		if failed[category] {
 			out = append(out, category)
 		}
+	}
+	if repo == "bifrost-trade-infra" && slices.Contains(out, LandingRulePaths) {
+		return []LandingRefusal{LandingRulePaths}
 	}
 	return out
 }
@@ -144,7 +152,7 @@ func LandingWaivesCover(now, waives []LandingRefusal) bool {
 
 // GrantSupported is intentionally independent of path hard checks. S6 owns
 // infra's automatic lane; it does not gain grant support by adding that lane.
-func GrantSupported(repo string) bool { return repo == "bifrost-platform" }
+func GrantSupported(repo string) bool { return LandingRepositories[repo].GrantSupported }
 
 // legacyCheckChanges preserves the pre-grant gate's closed behavior. Grant
 // callers use the layers directly; no signed rule alone authorizes a waiver.

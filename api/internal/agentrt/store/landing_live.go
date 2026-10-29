@@ -30,12 +30,12 @@ type LiveObservation struct {
 // by the caller that wrote it. Deadline is the intent's time plus
 // PushTimeout; the push never starts at or past it.
 type Authorization struct {
-	Op, Root, R, M0 string
-	IntentSeq       int64
-	IntentAt        time.Time
-	Deadline        time.Time
-	RuleVersion     int
-	QuotaDay        string
+	Repo, Op, Root, R, M0 string
+	IntentSeq             int64
+	IntentAt              time.Time
+	Deadline              time.Time
+	RuleVersion           int
+	QuotaDay              string
 }
 
 // ErrLandingDayChanged: the UTC day turned between the gate's locks and its
@@ -59,8 +59,8 @@ var ErrLandingDayChanged = errors.New("landing gate: the UTC day changed during 
 // CI: what the authorization rests on, review 662 N-02); and returns the
 // Authorization, whose deadline counts from the intent's own time. A refusal is a Decision and no
 // error; the caller parks or fails the operation on its next pass.
-func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error)) (Authorization, landing.Decision, error) {
-	return authorizeLandingPush(ctx, db, src, op, observe, false)
+func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), repos ...string) (Authorization, landing.Decision, error) {
+	return authorizeLandingPush(ctx, db, src, op, observe, false, landing.Repository(repos...))
 }
 
 // RecheckWaitingLanding runs the same gate for a waiting operation that has
@@ -69,12 +69,15 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 // (landing_rule_clear), after every unwaivable check; otherwise it writes
 // nothing and the operation keeps waiting. The controller calls it once per
 // rule version per operation.
-func RecheckWaitingLanding(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error)) (Authorization, landing.Decision, error) {
-	return authorizeLandingPush(ctx, db, src, op, observe, true)
+func RecheckWaitingLanding(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), repos ...string) (Authorization, landing.Decision, error) {
+	return authorizeLandingPush(ctx, db, src, op, observe, true, landing.Repository(repos...))
 }
 
-func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool) (Authorization, landing.Decision, error) {
-	const stream = "landing:bifrost-platform"
+func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool, repo string) (Authorization, landing.Decision, error) {
+	stream := "landing:" + repo
+	if !landing.RepoSupported(repo) {
+		return Authorization{}, landing.Decision{Reason: "repo"}, nil
+	}
 	var auth Authorization
 	var decision landing.Decision
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -118,6 +121,10 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return err
 		}
 		o = state.Operations[op]
+		if !rules.GrantSupported(repo) && o.Phase == "awaiting_grant" {
+			decision = landing.Decision{Reason: "floor"}
+			return nil
+		}
 		// C-5: a waiting operation goes on only with a grant the stream
 		// shows usable (same candidate, unrevoked, unconsumed, unexpired);
 		// without one the gate reads nothing outside the database.
@@ -143,6 +150,9 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		f, err := LandingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt())
 		if err != nil {
 			return err
+		}
+		if f.Repo != repo {
+			return fmt.Errorf("landing operation repository mismatch")
 		}
 		o = f.Operation
 		if waiting && o.Phase != "awaiting_grant" || !waiting && o.Phase != "branch_pushed" || o.DryRun || o.R == "" || o.M0 == "" {
@@ -321,7 +331,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		}
 		if _, reserved := q.Reservations[o.Task]; !reserved {
 			r, err := Append(ctx, tx, Event{Stream: quota, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-				Body: map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": o.Task}}})
+				Body: landingReservationBody(repo, op, o.Task)})
 			if err == nil {
 				err = onDay(r)
 			}
@@ -352,7 +362,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if err != nil {
 			return err
 		}
-		auth = Authorization{Op: op, Root: o.Task, R: o.R, M0: o.M0, IntentSeq: a.Seq, IntentAt: a.At,
+		auth = Authorization{Repo: repo, Op: op, Root: o.Task, R: o.R, M0: o.M0, IntentSeq: a.Seq, IntentAt: a.At,
 			Deadline: a.At.Add(PushTimeout), RuleVersion: g.Rule.Version, QuotaDay: day}
 		decision = landing.Decision{Allowed: true}
 		return nil
@@ -424,7 +434,7 @@ func checkLandingGateAppend(ev Event) error {
 	}
 	m, _ := v.(map[string]any)
 	r, _ := ev.Body["landing"].(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || r == nil || r["kind"] != "main_intent" || r["op"] != m["op"] {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || r == nil || r["kind"] != "main_intent" || r["op"] != m["op"] {
 		return fmt.Errorf("landing_gate rides on the controller's main_intent for its operation")
 	}
 	return nil
@@ -440,7 +450,7 @@ func checkLandingGateAppend(ev Event) error {
 // it, and the deadline is the intent's, never a fresh one.
 func AuthorizationCurrent(ctx context.Context, db DB, auth Authorization) (bool, error) {
 	hook("landing live: before push check", auth.Op)
-	const stream = "landing:bifrost-platform"
+	stream := "landing:" + landing.Repository(authRepo(auth)...)
 	current := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		s, err := LandingState(ctx, tx, stream)
@@ -547,7 +557,7 @@ func lockLandingBinding(ctx context.Context, tx pgx.Tx, task, tenant, step, miss
 // main_result{denied}, which ReconcileDenied ends failed{denied} with the
 // repository stopped (B6); non_ff and unknown are recorded as they are.
 func RecordPushResult(ctx context.Context, db DB, auth Authorization, outcome string) (bool, error) {
-	const stream = "landing:bifrost-platform"
+	stream := "landing:" + landing.Repository(authRepo(auth)...)
 	wrote := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		wrote = false
@@ -637,11 +647,26 @@ func checkLandingStopAppend(ev Event) error {
 	if !stop && !resume {
 		return nil
 	}
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) {
 		return fmt.Errorf("a landing stop or resume is written by the controller on the repository stream")
 	}
 	if _, exists := ev.Body["landing"]; exists {
 		return fmt.Errorf("a landing stop or resume is not a landing record")
 	}
 	return nil
+}
+
+func authRepo(auth Authorization) []string {
+	if auth.Repo == "" {
+		return nil
+	}
+	return []string{auth.Repo}
+}
+
+func landingReservationBody(repo, op, root string) map[string]any {
+	b := map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": root}}
+	if repo != "bifrost-platform" {
+		b["landing_repo"] = repo
+	}
+	return b
 }

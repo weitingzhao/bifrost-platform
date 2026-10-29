@@ -19,6 +19,7 @@ var landingHardGo = [...]string{
 	"api/internal/agentrt/landing/",
 	"api/internal/agentrt/landinggit/",
 	"api/internal/agentrt/landingci/",
+	"api/internal/agentrt/infracheck/",
 	"api/internal/agentrt/rules/",
 	"api/internal/agentrt/controller/",
 	"api/internal/agentrt/agentrtapi/",
@@ -167,6 +168,7 @@ var landingHardBasenames = [...]string{
 
 // Entries planned by the design, allowed to be absent until their blocks land.
 var landingHardFuture = [...]string{
+	"api/internal/agentrt/infracheck/",
 	".github/",
 	"console/src/api/landingGrant.ts",
 	"console/src/pages/landing-grant/",
@@ -184,6 +186,9 @@ func inLandingEntries(p string, entries []string) bool {
 // LandingHard is the union of core and absolute. Unknown repositories remain
 // absolute until S6 supplies their explicit policy; they cannot receive grants.
 func LandingHard(repo, p string) bool {
+	if repo == "bifrost-trade-infra" {
+		return !landingPath(p) || infraHard(p)
+	}
 	if LandingHardAbsolute(repo, p) {
 		return true
 	}
@@ -193,6 +198,9 @@ func LandingHard(repo, p string) bool {
 }
 
 func LandingHardAbsolute(repo, p string) bool {
+	if repo == "bifrost-trade-infra" {
+		return !landingPath(p) || infraHard(p)
+	}
 	return repo != "bifrost-platform" || !landingPath(p) || strings.HasPrefix(path.Base(p), ".env") ||
 		path.Base(p) == ".gitmodules" || strings.HasPrefix(p, ".github/")
 }

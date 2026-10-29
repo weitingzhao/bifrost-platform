@@ -78,16 +78,16 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 	names := []string{}
 	created := map[string]bool{}
 	drill := controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, revision string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, revision string, _ time.Time) (landing.CIRun, error) {
 			status := "Failed"
 			if revision == commitA {
 				status = "Succeeded"
 			}
 			return landing.CIRun{R: revision, Run: "ci-old", Status: status, CreatedAt: clock.Add(time.Second)}, nil
 		},
-		EnsureCI: func(_ context.Context, name, revision string) error {
+		EnsureCI: func(_ context.Context, _ string, name, revision string) error {
 			names = append(names, name)
 			if created[name] {
 				return nil

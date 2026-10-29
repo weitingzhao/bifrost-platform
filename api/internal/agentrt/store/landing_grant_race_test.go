@@ -561,7 +561,7 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
 	p := &livePusher{outcome: landinggit.PushOK}
 	opened := 0
-	open := func(_ context.Context, r string) (controller.LiveWorkspace, error) {
+	open := func(_ context.Context, _ string, r string) (controller.LiveWorkspace, error) {
 		opened++
 		if r != commitB {
 			t.Fatal("workspace for", r)
@@ -570,15 +570,15 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 	}
 	patches := 0
 	src := controller.DrillSources{Facts: c.src,
-		Main:          func(context.Context) (string, error) { return c.main, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI:            func(context.Context, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string) error { return nil }}
+		Main:          func(context.Context, string) (string, error) { return c.main, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
+		EnsureCI:      func(context.Context, string, string, string) error { return nil }}
 	src.Facts.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) {
 		patches++
 		return c.patch, nil
 	}
-	on := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &src, OpenLive: open}
+	on := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &src, OpenLive: open}
 	// No grant: the gate rechecks the rule once for this rule version
 	// (R-06): core still fails, nothing is pushed, nor read a second time.
 	ok(t, on.LandingDrillPass(ctx))
@@ -588,14 +588,14 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 	}
 	opened = 0
 	c.grant(t, store.ActionCoreLanding)
-	off := controller.Controller{DB: c.w.rt, Env: "prod", DrillGit: &branchObserved{}, Drill: &src, OpenLive: open}
+	off := controller.Controller{DB: c.w.rt, Env: "prod", DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &src, OpenLive: open}
 	ok(t, off.LandingDrillPass(ctx))
 	if opened != 0 || len(p.pushes) != 0 || c.phase(t) != "awaiting_grant" {
 		t.Fatal("live off pushed", opened, p.pushes)
 	}
 	noPatch := src
 	noPatch.Facts.GrantPatch = nil
-	blind := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &noPatch, OpenLive: open}
+	blind := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &noPatch, OpenLive: open}
 	ok(t, blind.LandingDrillPass(ctx))
 	if len(p.pushes) != 0 || c.phase(t) != "awaiting_grant" || opened != 1 {
 		t.Fatal("pushed without the patch evidence", p.pushes, opened)

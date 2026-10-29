@@ -370,16 +370,19 @@ func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
 	// The controller's pass on PROD, live on, the v1 rule: no CI, no Git.
 	kicks, opens := 0, 0
 	sources := controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(context.Context, string, time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Status: "Missing"}, nil
 		},
-		EnsureCI:       func(context.Context, string, string) error { kicks++; return nil },
+		EnsureCI:       func(context.Context, string, string, string) error { kicks++; return nil },
 		EnsurePinnedCI: func(context.Context, string, store.GrantCIKey) error { kicks++; return nil },
 	}
-	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &sources,
-		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) { opens++; return &livePusher{}, nil }}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &sources,
+		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) {
+			opens++
+			return &livePusher{}, nil
+		}}
 	ok(t, ctl.LandingDrillPass(ctx))
 	if kicks != 0 || opens != 0 {
 		t.Fatal("the pass kicked CI or opened a workspace", kicks, opens)

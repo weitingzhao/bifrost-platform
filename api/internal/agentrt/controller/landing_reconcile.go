@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,7 +38,9 @@ type LandingReconcile struct {
 	// MainEvidence reads main; nil settles denied only.
 	MainEvidence store.MainEvidenceFunc
 	// Repos are the repositories reconciled (bifrost-platform today).
-	Repos    []string
+	Repos []string
+	// Discover retries a failed startup discovery; cleared after success.
+	Discover func(context.Context) ([]string, error)
 	Requests func(context.Context) ([]store.LandingGrantRequest, error)
 
 	mu    sync.Mutex
@@ -59,11 +63,24 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
+	var errs []error
+	if r.Discover != nil {
+		if found, err := r.Discover(ctx); err != nil {
+			errs = append(errs, err)
+		} else {
+			for _, repo := range found {
+				if !slices.Contains(r.Repos, repo) {
+					r.Repos = append(r.Repos, repo)
+				}
+			}
+			slices.Sort(r.Repos)
+			r.Discover = nil
+		}
+	}
 	repos := r.Repos
 	if len(repos) == 0 {
 		repos = []string{"bifrost-platform"}
 	}
-	var errs []error
 	for _, repo := range repos {
 		if _, err := store.ReconcileDenied(ctx, c.DB, repo); err != nil {
 			errs = append(errs, err)
@@ -75,10 +92,12 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 		if live, err := store.LandingLiveAt(ctx, c.DB, repo); err != nil {
 			errs = append(errs, err)
 		} else if !live.IsZero() {
-			if _, err := store.SettleWaitingLandingStale(ctx, c.DB); err != nil {
-				errs = append(errs, err)
+			if repo == "bifrost-platform" {
+				if _, err := store.SettleWaitingLandingStale(ctx, c.DB); err != nil {
+					errs = append(errs, err)
+				}
 			}
-			if _, err := store.SettleLandingDrillBounds(ctx, c.DB, c.clock()); err != nil {
+			if _, err := store.SettleLandingDrillBounds(ctx, c.DB, c.clock(), repo); err != nil {
 				errs = append(errs, err)
 			}
 			if _, err := store.SettleUnclaimed(ctx, c.DB, repo, c.clock()); err != nil {
@@ -107,10 +126,10 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 	}
 	live := map[string]bool{}
 	for _, cand := range cands {
-		live[reconcileKey(cand)] = true
+		live[repo+"|"+reconcileKey(cand)] = true
 	}
 	for k := range r.waits {
-		if !live[k] {
+		if strings.HasPrefix(k, repo+"|") && !live[k] {
 			delete(r.waits, k) // its operation moved on: the wait no longer applies
 		}
 	}
@@ -133,7 +152,7 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 	var errs []error
 	for i := 0; i < n && budget.Err() == nil; i++ {
 		cand := cands[(first+i)%n]
-		key := reconcileKey(cand)
+		key := repo + "|" + reconcileKey(cand)
 		r.mu.Lock()
 		w := r.waits[key]
 		r.mu.Unlock()
@@ -170,7 +189,7 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 				next.Outcome = "unknown"
 			}
 			delete(r.waits, key)
-			r.waits[reconcileKey(next)] = reconcileWait{until: c.clock().Add(reconcileRecheck)}
+			r.waits[repo+"|"+reconcileKey(next)] = reconcileWait{until: c.clock().Add(reconcileRecheck)}
 		case cand.Phase == "landed":
 			// Landed: read again for a reversal or a change of evidence every
 			// thirty minutes, whatever this read found (review 662 R-04).

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,7 +23,20 @@ type LandingRepo struct {
 	Repo        string
 	Allow, Deny []string
 	STGRelease  string
+	Limits      *LandingRepoLimits
 }
+type LandingRepoLimits struct{ MaxFiles, MaxChangedLines, MaxInFlight int }
+
+func (l *Landing) EffectiveLimits(repo string) LandingLimits {
+	v := l.Limits
+	if r, ok := l.Repo(repo); ok && r.Limits != nil {
+		v.MaxFiles = r.Limits.MaxFiles
+		v.MaxChangedLines = r.Limits.MaxChangedLines
+		v.MaxInFlightPerRepo = r.Limits.MaxInFlight
+	}
+	return v
+}
+
 type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo int }
 
 func (r *Rule) landing(o *object, arg string) error {
@@ -41,8 +55,7 @@ func (r *Rule) landing(o *object, arg string) error {
 		if repo.Repo, err = p.str("repo", false); err != nil {
 			return err
 		}
-		// The first slice only authorizes platform. Infra needs S6's CI and floor.
-		if repo.Repo != "bifrost-platform" || seen[repo.Repo] {
+		if !LandingRepoSupported(repo.Repo) || seen[repo.Repo] {
 			return fmt.Errorf("landing repo is unsupported or repeated: %s", repo.Repo)
 		}
 		seen[repo.Repo] = true
@@ -64,6 +77,33 @@ func (r *Rule) landing(o *object, arg string) error {
 		}
 		if repo.STGRelease != "none" && repo.STGRelease != "bifrost-deliver-platform" {
 			return fmt.Errorf("unsupported stg_release")
+		}
+
+		if repo.Repo == "bifrost-trade-infra" && repo.STGRelease != "none" {
+			return fmt.Errorf("infra stg_release must be none")
+		}
+		node, err := p.node("limits", true)
+		if err != nil {
+			return err
+		}
+		if node != nil {
+			lim, err := mapping(node, "repo limits")
+			if err != nil {
+				return err
+			}
+			repo.Limits = &LandingRepoLimits{}
+			for key, dst := range map[string]*int{"max_files": &repo.Limits.MaxFiles, "max_changed_lines": &repo.Limits.MaxChangedLines, "max_in_flight": &repo.Limits.MaxInFlight} {
+				upper := 1 << 30
+				if key == "max_in_flight" {
+					upper = 1
+				}
+				if *dst, err = lim.integer(key, 0, upper); err != nil {
+					return err
+				}
+			}
+			if err := lim.done(); err != nil {
+				return err
+			}
 		}
 		slices.Sort(repo.Allow)
 		slices.Sort(repo.Deny)
@@ -95,7 +135,11 @@ func (r *Rule) landing(o *object, arg string) error {
 func (l *Landing) doc() map[string]any {
 	repos := []any{}
 	for _, r := range l.Repos {
-		repos = append(repos, map[string]any{"repo": r.Repo, "allow": anyList(r.Allow), "deny": anyList(r.Deny), "stg_release": r.STGRelease})
+		row := map[string]any{"repo": r.Repo, "allow": anyList(r.Allow), "deny": anyList(r.Deny), "stg_release": r.STGRelease}
+		if r.Limits != nil {
+			row["limits"] = map[string]any{"max_files": r.Limits.MaxFiles, "max_changed_lines": r.Limits.MaxChangedLines, "max_in_flight": r.Limits.MaxInFlight}
+		}
+		repos = append(repos, row)
 	}
 	return map[string]any{"tenant": l.Tenant, "repos": repos, "limits": map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_landings_per_day": l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}}
 }
@@ -118,6 +162,10 @@ func landingTightens(p, n *Landing) error {
 		if !ok {
 			return fmt.Errorf("landing gains repo")
 		}
+		a, b := p.EffectiveLimits(r.Repo), n.EffectiveLimits(r.Repo)
+		if b.MaxFiles > a.MaxFiles || b.MaxChangedLines > a.MaxChangedLines || b.MaxInFlightPerRepo > a.MaxInFlightPerRepo {
+			return fmt.Errorf("landing repo limit goes up")
+		}
 		if err := subset(r.Allow, old.Allow, "allow"); err != nil {
 			return err
 		}
@@ -129,7 +177,7 @@ func landingTightens(p, n *Landing) error {
 		}
 	}
 	a, b := p.Limits, n.Limits
-	if b.MaxFiles > a.MaxFiles || b.MaxChangedLines > a.MaxChangedLines || b.MaxLandingsPerDay > a.MaxLandingsPerDay || b.MaxInFlightPerRepo > a.MaxInFlightPerRepo {
+	if b.MaxLandingsPerDay > a.MaxLandingsPerDay {
 		return fmt.Errorf("landing limit goes up")
 	}
 	return nil
@@ -171,7 +219,7 @@ func landingGlob(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile(out.String())
 }
 func landingPath(p string) bool {
-	return strings.IndexFunc(p, unicode.IsControl) < 0 && p != "" && p != "." && !strings.HasPrefix(p, "/") && path.Clean(p) == p && !strings.ContainsAny(p, "\\\x00\r\n") && !slices.Contains(strings.Split(p, "/"), "..")
+	return utf8.ValidString(p) && strings.IndexFunc(p, unicode.IsControl) < 0 && p != "" && p != "." && !strings.HasPrefix(p, "/") && path.Clean(p) == p && !strings.ContainsAny(p, "\\\x00\r\n") && !slices.Contains(strings.Split(p, "/"), "..")
 }
 func landingMatches(patterns []string, p string) bool {
 	for _, pattern := range patterns {
@@ -185,6 +233,9 @@ func landingMatches(patterns []string, p string) bool {
 
 // LandingFloor is immutable policy, independent of the signed allow list.
 func LandingFloor(repo, p string) bool {
+	if repo == "bifrost-trade-infra" {
+		return !landingPath(p) || infraHard(p)
+	}
 	if repo != "bifrost-platform" || !landingPath(p) {
 		return true
 	}
@@ -198,6 +249,7 @@ func LandingFloor(repo, p string) bool {
 // Change comes from a trusted diff reader, not an executor's report. Modes
 // are git's six-digit modes; an absent side is empty (add/delete).
 type LandingChange struct {
+	Kind                               string
 	OldPath, NewPath, OldMode, NewMode string
 	Added, Deleted                     int
 	AddedText                          string
@@ -234,11 +286,14 @@ func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
 // StructuralViolation and LandingAbsoluteViolation first, then the refusal
 // set. Keeping the old floor here prevents unwired v1 callers granting access.
 func FloorViolation(repo string, changes []LandingChange) (string, bool) {
-	if why, bad := StructuralViolation(changes); bad {
+	if why, bad := LandingStructuralViolation(repo, changes); bad {
 		return why, true
 	}
 	if why, bad := LandingAbsoluteViolation(repo, changes); bad {
 		return "floor: " + why, true
+	}
+	if why, bad := LandingChangeKindViolation(repo, changes); bad {
+		return "change_kind: " + why, true
 	}
 	for _, c := range changes {
 		for _, p := range c.Paths() {

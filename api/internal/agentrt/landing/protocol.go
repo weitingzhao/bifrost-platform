@@ -171,7 +171,7 @@ func Parse(v any) (Record, error) {
 		case "ref":
 			valid = regexp.MustCompile(`^refs/heads/land/(prod|stg)/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`).MatchString(r.String(k))
 		case "repo":
-			valid = r.String(k) == "bifrost-platform"
+			valid = RepoSupported(r.String(k))
 		default:
 			s, ok := v.(string)
 			valid = ok && ident.MatchString(s)

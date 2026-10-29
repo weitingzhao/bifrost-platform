@@ -65,7 +65,7 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 			t.Fatal("overbroad hard match", p)
 		}
 	}
-	if !LandingHardAbsolute("unknown", "README.md") || !LandingHardAbsolute("bifrost-trade-infra", "REPORT.md") {
+	if !LandingHardAbsolute("unknown", "README.md") {
 		t.Fatal("unknown repository opened")
 	}
 }

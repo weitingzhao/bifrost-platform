@@ -61,14 +61,17 @@ type Sources struct {
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
 	Drill    *DrillSources // nil by default; workers opt in on STG (drill) or PROD (live)
-	DrillGit DrillGit
+	DrillGit map[string]DrillGit
+	// LiveRepos is the configured allowlist; nil preserves the legacy platform-only test/caller contract.
+	LiveRepos       []string
+	otherDrillWaits map[string]*drillBackoff
 	// Live runs the landing loop on PROD (S3, CUT §11.5): set only by the
 	// wiring, with AGENTRT_LANDING_LIVE=on and the lander identity as
 	// DrillGit. Without it PROD claims nothing and pushes nothing.
 	Live bool
 	// OpenLive opens the workspace the live landing pushes main from; nil
 	// uses DrillGit.Open (tests replace it: a real push needs the lander).
-	OpenLive func(ctx context.Context, r string) (LiveWorkspace, error)
+	OpenLive func(ctx context.Context, repo, r string) (LiveWorkspace, error)
 	// LandingCards is the landing cards' reach into the question store
 	// (landing_cards.go); zero carries no landing cards.
 	LandingCards store.CardQuestions
@@ -647,8 +650,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	// PROD records its live mode before its first claim (CUT §11.8 v3 item
 	// 1); without it the live loop does not start.
 	if c.Env == "prod" && c.landingRuns() {
-		if _, err := store.EnsureLandingMode(ctx, c.DB, landingCardsRepo); err != nil {
-			c.logf("agentrt landing live not started: recording the live mode: %v", err)
+		for _, repo := range c.landingRepoNames() {
+			if _, err := store.EnsureLandingMode(ctx, c.DB, repo); err != nil {
+				c.logf("agentrt landing live not started: recording the live mode: %v", err)
+				delete(c.DrillGit, repo)
+			}
+		}
+		if len(c.landingRepoNames()) == 0 {
 			c.Live = false
 		}
 	}

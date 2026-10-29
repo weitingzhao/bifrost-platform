@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,7 +19,11 @@ import (
 // pre-enable tasks starved every other loop of STG's two connections). Roots
 // of missions no longer active are not lost by being left out here: the
 // pass's database step records them (SettleUnclaimed, TD-447 4).
-func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time) ([]string, error) {
+func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time, repos ...string) ([]string, error) {
+	repo := landing.Repository(repos...)
+	if repo == "" {
+		return nil, fmt.Errorf("unsupported landing repo")
+	}
 	var tasks []string
 	if enabledAt.IsZero() {
 		return nil, nil
@@ -25,10 +31,10 @@ func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time) ([]strin
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id=t.mission_id
   JOIN agentrt.event e ON e.task_id=t.task_id
-  WHERE t.repo='bifrost-platform' AND t.role='implement' AND t.state='accepted'
+  WHERE t.repo=$2 AND t.role='implement' AND t.state='accepted'
     AND m.state='active' AND COALESCE(m.scope_json->>'no_merge','')='' AND m.created_at >= $1
     AND e.event_type='task_state_changed' AND e.body_json->>'to'='accepted'
-  GROUP BY t.task_id HAVING max(e.at) >= $1 ORDER BY max(e.at),t.task_id`, enabledAt)
+  GROUP BY t.task_id HAVING max(e.at) >= $1 ORDER BY max(e.at),t.task_id`, enabledAt, repo)
 		if err != nil {
 			return err
 		}

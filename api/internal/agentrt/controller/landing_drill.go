@@ -41,11 +41,11 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 // EnsureCI must use name as its idempotency key, looking it up before create.
 type DrillSources struct {
 	Facts         store.LandingSource
-	Main          func(context.Context) (string, error)
-	CI            func(context.Context, string, time.Time) (landing.CIRun, error)
-	WindowBlocked func(context.Context) (bool, error)
-	EnsureCI      func(context.Context, string, string) error
-	Delete        func(context.Context, string, string) error
+	Main          func(context.Context, string) (string, error)
+	CI            func(context.Context, string, string, time.Time) (landing.CIRun, error)
+	WindowBlocked func(context.Context, string) (bool, error)
+	EnsureCI      func(context.Context, string, string, string) error
+	Delete        func(context.Context, string, string, string) error
 	// EnsurePinnedCI creates CI pinned to a key's sibling commits, and
 	// SiblingHeads reads the siblings' main heads to pin (C-5): only an
 	// operation that needs a grant uses them. Nil: no operation can be
@@ -57,15 +57,16 @@ type DrillSources struct {
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
 // note state. No in-memory checkpoint is authoritative; P0 remains a separate
 // prerequisite to enabling the workers loop.
-func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op string, now time.Time) (landing.DrillAction, error) {
-	if !c.landingEnv() {
+func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op string, now time.Time, repos ...string) (landing.DrillAction, error) {
+	repo := landing.Repository(repos...)
+	if !c.landingRepoEnabled(repo) {
 		return landing.DrillAction{}, fmt.Errorf("landing requires stg (drill) or prod with live on")
 	}
 	var s landing.State
 	var keys map[string]store.GrantCIKey
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var e error
-		s, keys, e = store.LandingStateCIKeys(ctx, tx, "landing:bifrost-platform")
+		s, keys, e = store.LandingStateCIKeys(ctx, tx, "landing:"+repo)
 		return e
 	})
 	if err != nil {
@@ -79,12 +80,12 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	appendRecord := func(kind string, fields map[string]any) error {
 		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
+			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
 			return e
 		})
 	}
 	settleBound := func() (landing.DrillAction, error) {
-		why, err := store.SettleLandingOperationBound(ctx, c.DB, op, o)
+		why, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 		if why == "" {
 			return landing.DrillAction{Kind: "wait"}, err
 		}
@@ -92,7 +93,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	}
 	if o.Terminal() {
 		if o.Ref != "" && src.Delete != nil && c.Env != "prod" { // B-05
-			return landing.DrillAction{Kind: "cleanup"}, src.Delete(ctx, o.Ref, o.R)
+			return landing.DrillAction{Kind: "cleanup"}, src.Delete(ctx, repo, o.Ref, o.R)
 		}
 		return landing.DrillAction{Kind: "cleanup"}, nil
 	}
@@ -108,7 +109,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
 		return landing.DrillAction{}, fmt.Errorf("drill sources unavailable")
 	}
-	main, err := src.Main(ctx)
+	main, err := src.Main(ctx, repo)
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
@@ -125,18 +126,18 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
-	ci, err := src.CI(ctx, o.R, o.PreparedAt)
+	ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
 	mainCI := landing.CIRun{Status: "Unknown"}
 	if ci.Status == "Failed" {
-		mainCI, err = src.CI(ctx, o.M0, time.Time{})
+		mainCI, err = src.CI(ctx, repo, o.M0, time.Time{})
 		if err != nil {
 			mainCI.Status = "Unknown"
 		}
 	}
-	blocked, windowErr := src.WindowBlocked(ctx)
+	blocked, windowErr := src.WindowBlocked(ctx, repo)
 	blocked = blocked || windowErr != nil
 	// Decided at the clock after the reads above, not the pass's start: the
 	// ten-minute rebuild and thirty-minute stuck checks and the CI's creation
@@ -177,9 +178,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	switch a.Kind {
 	case "ready":
 		if c.Env == "prod" {
-			return a, c.landLive(ctx, src, op, o.R)
+			return a, c.landLive(ctx, src, op, o.R, repo)
 		}
-		return a, c.finishLandingDrill(ctx, src, op, now)
+		return a, c.finishLandingDrill(ctx, src, op, now, repo)
 	case "replay":
 		return a, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	case "failed":
@@ -193,7 +194,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			// park, so its start and reason are what the landing status and
 			// the cards read (review 670 R-06), ended and started in one
 			// transaction (review 672 R-05).
-			_, err := store.ReparkLanding(ctx, c.DB, "bifrost-platform", op, o.Why, o.LastAt, a.Why, at.Add(time.Minute), landingText(c.Env))
+			_, err := store.ReparkLanding(ctx, c.DB, repo, op, o.Why, o.LastAt, a.Why, at.Add(time.Minute), landingText(c.Env))
 			return a, err
 		}
 		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})
@@ -225,7 +226,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			if err = appendRecord(a.Kind, map[string]any{"try": n}); err != nil {
 				return a, err
 			}
-			return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
+			return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R)
 		}
 		if err = store.AppendCIKick(ctx, c.DB, op, a.Kind, n, key, landingText(c.Env)+a.Kind+" (pinned for a grant)"); err != nil {
 			return a, err
@@ -245,7 +246,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			}
 			return a, nil // made sure of above, before readiness
 		}
-		return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
+		return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R)
 	}
 	return a, nil
 }
@@ -261,22 +262,22 @@ func (c *Controller) pinnable(src DrillSources, f landing.Facts, o landing.Opera
 	return reason == "" && len(soft) > 0 && landing.MayAwaitGrant(f, soft)
 }
 
-func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, op string, now time.Time) error {
+func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, op string, now time.Time, repo string) error {
 	return store.FinishLandingDrill(ctx, c.DB, src.Facts, op, now, func(ctx context.Context, o landing.Operation) (landing.DrillObservation, error) {
-		main, err := src.Main(ctx)
+		main, err := src.Main(ctx, repo)
 		if err != nil {
 			return landing.DrillObservation{}, err
 		}
-		ci, err := src.CI(ctx, o.R, o.PreparedAt)
+		ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
 		if err != nil {
 			return landing.DrillObservation{}, err
 		}
-		blocked, err := src.WindowBlocked(ctx)
+		blocked, err := src.WindowBlocked(ctx, repo)
 		if err != nil {
 			return landing.DrillObservation{}, err
 		}
 		return landing.DrillObservation{Main: main, Candidate: ci, WindowBlocked: blocked}, nil
-	})
+	}, repo)
 }
 
 // landingEnv says whether this controller's environment lands: the STG
@@ -287,7 +288,7 @@ func (c *Controller) landingEnv() bool {
 
 // landingRuns is landingEnv with the loop's sources and Git wired.
 func (c *Controller) landingRuns() bool {
-	return c.landingEnv() && c.Drill != nil && c.DrillGit != nil
+	return c.landingEnv() && c.Drill != nil && len(c.landingRepoNames()) > 0
 }
 
 // landingText starts a landing note's text.
@@ -304,4 +305,31 @@ func mode(env string) string {
 		return "live"
 	}
 	return "dry_run"
+}
+
+func (c *Controller) landingRepoEnabled(repo string) bool {
+	if !landing.RepoSupported(repo) || !c.landingEnv() {
+		return false
+	}
+	if c.Env != "prod" {
+		return true
+	}
+	if c.LiveRepos == nil {
+		return repo == "bifrost-platform"
+	}
+	for _, r := range c.LiveRepos {
+		if r == repo {
+			return true
+		}
+	}
+	return false
+}
+func (c *Controller) landingRepoNames() []string {
+	var repos []string
+	for _, repo := range landing.LandingRepoNames() {
+		if c.DrillGit[repo] != nil && c.landingRepoEnabled(repo) {
+			repos = append(repos, repo)
+		}
+	}
+	return repos
 }

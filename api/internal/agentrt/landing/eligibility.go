@@ -55,6 +55,7 @@ type Facts struct {
 type Decision struct {
 	Allowed, Reconcile bool
 	Reason             string
+	Detail             map[string]any
 }
 
 func refuse(s string) Decision { return Decision{Reason: s} }
@@ -82,7 +83,10 @@ func ruleValid(f Facts, now time.Time) bool {
 // PolicyChecks is shared by preparation and the final gate. Callers must
 // still check global/live and runtime limits; soft failures authorize no push.
 func PolicyChecks(f Facts, now time.Time) (reason string, refusals []rules.LandingRefusal) {
-	if _, bad := rules.StructuralViolation(f.Changes); bad {
+	if f.Repo == "bifrost-trade-infra" && !ruleValid(f, now) {
+		return "rule", nil
+	}
+	if _, bad := rules.LandingStructuralViolation(f.Repo, f.Changes); bad {
 		return "floor", nil
 	}
 	if _, bad := rules.LandingAbsoluteViolation(f.Repo, f.Changes); bad {
@@ -90,6 +94,9 @@ func PolicyChecks(f Facts, now time.Time) (reason string, refusals []rules.Landi
 	}
 	if !ruleValid(f, now) {
 		return "rule", nil
+	}
+	if _, bad := rules.LandingChangeKindViolation(f.Repo, f.Changes); bad {
+		return "floor", nil
 	}
 	return "", rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
 }
@@ -109,6 +116,9 @@ func ruleOK(f Facts, now time.Time, deploy bool) bool {
 	return reason == "" && len(refusals) == 0
 }
 func EligibleToClaim(f Facts, now time.Time) Decision {
+	if !RepoSupported(f.Repo) {
+		return refuse("repo")
+	}
 	if !modeOK(f) {
 		return refuse("mode")
 	}
@@ -132,18 +142,24 @@ func EligibleToClaim(f Facts, now time.Time) Decision {
 	// ordinary runtime roots under §12.3; soft-only roots require a pin).
 	reason, soft := PolicyChecks(f, now)
 	if reason != "" {
+		if reason == "floor" {
+			return Decision{Reason: reason, Detail: floorDetail(f)}
+		}
 		return refuse(reason)
 	}
 	if !f.DependenciesEffective {
 		return refuse("dependencies")
 	}
 	if len(soft) > 0 && !MayAwaitGrant(f, soft) {
+		if f.Repo == "bifrost-trade-infra" {
+			return Decision{Reason: "floor", Detail: floorDetail(f)}
+		}
 		if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
 			return refuse("floor")
 		}
 		return refuse("rule")
 	}
-	if f.ReservedToday >= f.Rule.Landing.Limits.MaxLandingsPerDay || f.OtherInFlight >= f.Rule.Landing.Limits.MaxInFlightPerRepo {
+	if f.ReservedToday >= f.Rule.Landing.Limits.MaxLandingsPerDay || f.OtherInFlight >= f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo {
 		return refuse("limit")
 	}
 	return Decision{Allowed: true}
@@ -211,4 +227,15 @@ func Evaluate(ctx context.Context, read FactsReader, task, stage string, now tim
 		return EligibleToDeploy(f, now), nil
 	}
 	return refuse("stage"), fmt.Errorf("unknown landing stage %q", stage)
+}
+
+func floorDetail(f Facts) map[string]any {
+	if f.Repo != "bifrost-trade-infra" {
+		return nil // Preserve platform's existing event body and grant evidence.
+	}
+	var l *rules.Landing
+	if f.Rule != nil {
+		l = f.Rule.Landing
+	}
+	return rules.PolicyFloorDetail(l, f.Repo, f.Changes)
 }

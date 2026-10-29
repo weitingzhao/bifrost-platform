@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
@@ -25,63 +27,144 @@ import (
 // on PROD with the lander identity (S3), and the delivery adapters.
 // Constructing adapters does not read credentials or contact services.
 func (s *Server) wireLandingDrill(c *controller.Controller) {
-	// denied settles from the database in every environment (S3 must 3).
 	c.Reconcile = &controller.LandingReconcile{Repos: []string{"bifrost-platform"}}
 	s.wireLandingRequests(c)
-	var g *landinggit.Git
-	var err error
-	switch c.Env {
-	case "stg":
-		g, err = landinggit.FromEnv(c.Env)
-	case "prod":
-		g, err = landinggit.LanderFromEnv(c.Env)
-	default:
+	if c.Env != "stg" && c.Env != "prod" {
 		return
 	}
-	if err != nil {
-		// No Git identity: every read of main fails visibly (a landing's
-		// evidence records unreadable), never a silent nil reader.
-		unavailable := fmt.Errorf("main reader unavailable: %w", err)
-		c.Reconcile.MainEvidence = func(context.Context, string, string, string, string) (store.MainEvidence, error) {
-			return store.MainEvidence{}, unavailable
+	requested := []string{}
+	if c.Env == "prod" {
+		requested = landing.LiveRepos(os.LookupEnv)
+	} else if os.Getenv("AGENTRT_LANDING_DRILL") == "on" {
+		requested = []string{"bifrost-platform"}
+		if _, set := os.LookupEnv("AGENTRT_LANDING_LIVE_REPOS"); set {
+			requested = landing.LiveRepos(os.LookupEnv)
 		}
-		slog.Error("agentrt landing: no Git identity; main reads fail and no landing runs", "env", c.Env, "error", err)
+	}
+	c.LiveRepos = append([]string{}, requested...)
+	// Discover previously started repositories once at startup, not on every
+	// platform pass. Closing the live switch cannot orphan main_intent.
+	if c.DB != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		repos, err := store.ExistingLandingRepos(ctx, c.DB)
+		cancel()
+		if err != nil {
+			slog.Error("agentrt landing repository recovery unavailable", "error", err)
+			c.Reconcile.Discover = func(ctx context.Context) ([]string, error) { return store.ExistingLandingRepos(ctx, c.DB) }
+		} else {
+			c.Reconcile.Repos = repos
+		}
+	}
+	for _, repo := range landing.LandingRepoNames() {
+		if slices.Contains(requested, repo) && !slices.Contains(c.Reconcile.Repos, repo) {
+			c.Reconcile.Repos = append(c.Reconcile.Repos, repo)
+		}
+	}
+	slices.Sort(c.Reconcile.Repos)
+	readers := map[string]*landinggit.Git{}
+	unavailable := map[string]error{}
+	for _, repo := range landing.LandingRepoNames() {
+		if !slices.Contains(c.Reconcile.Repos, repo) && !slices.Contains(requested, repo) {
+			continue
+		}
+		var g *landinggit.Git
+		var err error
+		if c.Env == "prod" {
+			g, err = landinggit.LanderFromEnv(c.Env, repo)
+		} else {
+			g, err = landinggit.FromEnv(c.Env, repo)
+		}
+		if err != nil {
+			unavailable[repo] = fmt.Errorf("main reader unavailable: %w", err)
+			continue
+		}
+		readers[repo] = g
+	}
+	c.Reconcile.MainEvidence = func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
+		if err := unavailable[repo]; err != nil {
+			return store.MainEvidence{}, err
+		}
+		if g := readers[repo]; g != nil {
+			return mainEvidenceReader(g)(ctx, repo, root, a, r)
+		}
+		// A repository found by a retried startup discovery gets a reader
+		// only when its durable operation actually needs main evidence.
+		if landing.RepoSupported(repo) && slices.Contains(c.Reconcile.Repos, repo) {
+			var g *landinggit.Git
+			var err error
+			if c.Env == "prod" {
+				g, err = landinggit.LanderFromEnv(c.Env, repo)
+			} else {
+				g, err = landinggit.FromEnv(c.Env, repo)
+			}
+			if err != nil {
+				return store.MainEvidence{}, err
+			}
+			return mainEvidenceReader(g)(ctx, repo, root, a, r)
+		}
+		return store.MainEvidence{}, errors.New("unsupported or unconfigured landing repo")
+	}
+	if len(requested) == 0 || s.cluster == nil {
 		return
 	}
-	c.Reconcile.MainEvidence = mainEvidenceReader(g)
-	write := c.Env == "stg" && os.Getenv("AGENTRT_LANDING_DRILL") == "on" || c.Env == "prod" && os.Getenv("AGENTRT_LANDING_LIVE") == "on"
-	if !write {
-		return
-	}
-	if s.cluster == nil {
-		slog.Error("agentrt landing disabled: cluster unavailable", "env", c.Env)
+	if c.Env == "prod" && !controller.LandingCardsComplete(c.LandingCards) {
 		return
 	}
 	ci := s.landingCIClient()
-	c.DrillGit = g
-	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: ci.LandingCI, EnsureCI: ci.EnsureLandingCI, WindowBlocked: ci.LandingWindowBlocked}
-	if c.Env == "prod" {
-		// C-5 (review 694 B-01): an operation that needs a grant runs CI
-		// pinned to the siblings' main heads read at its kick, and its
-		// grant's evidence is the strict read of that run.
-		c.Drill.Facts.GrantPatch = landingGrantPatch(g)
-		c.Drill.Facts.GrantCI = ci.GrantCI
-		c.Drill.EnsurePinnedCI = ci.EnsureGrantCI
-		if heads := s.agentRuntimeMains(); heads != nil {
-			c.Drill.SiblingHeads = siblingHeads(heads)
+	c.DrillGit = map[string]controller.DrillGit{}
+	for _, repo := range requested {
+		if g := readers[repo]; g != nil {
+			c.DrillGit[repo] = g
 		}
 	}
+	if len(c.DrillGit) == 0 {
+		c.DrillGit = nil
+		return
+	}
+	facts := controller.MultiRepoGitFacts(c.DrillGit)
+	c.Drill = &controller.DrillSources{Facts: facts,
+		Main: func(ctx context.Context, repo string) (string, error) {
+			if g := readers[repo]; g != nil {
+				return g.Ref(ctx, "refs/heads/main")
+			}
+			return "", errors.New("landing repo unavailable")
+		},
+		CI: func(ctx context.Context, repo, r string, after time.Time) (landing.CIRun, error) {
+			if repo != "bifrost-platform" {
+				return landing.CIRun{R: r, Status: "Missing"}, nil
+			}
+			return ci.LandingCI(ctx, r, after)
+		},
+		EnsureCI: func(ctx context.Context, repo, name, r string) error {
+			if repo != "bifrost-platform" {
+				return errors.New("infra landing CI adapter requires S6-5")
+			}
+			return ci.EnsureLandingCI(ctx, name, r)
+		},
+		WindowBlocked: func(ctx context.Context, repo string) (bool, error) {
+			if !landing.RepoSupported(repo) {
+				return true, errors.New("unsupported landing repo")
+			}
+			return ci.LandingWindowBlocked(ctx)
+		},
+	}
 	if c.Env == "prod" {
-		// A new live landing needs every reach the landing cards need (CUT
-		// §11.6 v3 item 9): without them the Owner could not be asked.
-		if !controller.LandingCardsComplete(c.LandingCards) {
-			slog.Error("agentrt landing live disabled: the landing cards cannot reach the question store")
-			c.Drill, c.DrillGit = nil, nil
-			return
+		if g := readers["bifrost-platform"]; g != nil {
+			c.Drill.Facts.GrantPatch = landingGrantPatch(g)
+			c.Drill.Facts.GrantCI = ci.GrantCI
+			c.Drill.EnsurePinnedCI = ci.EnsureGrantCI
+			if heads := s.agentRuntimeMains(); heads != nil {
+				c.Drill.SiblingHeads = siblingHeads(heads)
+			}
 		}
-		c.Live = true // land/prod branches are kept (B-05): no Delete
+		c.Live = true
 	} else {
-		c.Drill.Delete = g.Delete
+		c.Drill.Delete = func(ctx context.Context, repo, ref, r string) error {
+			if g := readers[repo]; g != nil {
+				return g.Delete(ctx, ref, r)
+			}
+			return errors.New("landing repo unavailable")
+		}
 	}
 }
 
@@ -89,7 +172,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 // Git identity.
 func mainEvidenceReader(g *landinggit.Git) store.MainEvidenceFunc {
 	return func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
-		if repo != "bifrost-platform" {
+		if repo != g.Repository() {
 			return store.MainEvidence{}, errors.New("unsupported landing repo")
 		}
 		head, has, hist, err := g.MainEvidence(ctx, r, root, a)
@@ -108,7 +191,10 @@ func mainEvidenceReader(g *landinggit.Git) store.MainEvidenceFunc {
 // the lander identity, delivery, or the landing cards' reach.
 func (s *Server) landingLiveOff(c *controller.Controller) string {
 	switch {
-	case os.Getenv("AGENTRT_LANDING_LIVE") != "on":
+	case len(landing.LiveRepos(os.LookupEnv)) == 0:
+		if _, set := os.LookupEnv("AGENTRT_LANDING_LIVE_REPOS"); set {
+			return "AGENTRT_LANDING_LIVE_REPOS has no enabled repositories"
+		}
 		return "AGENTRT_LANDING_LIVE is not on"
 	case !controller.LandingCardsComplete(c.LandingCards):
 		return "the landing cards cannot reach the question store"

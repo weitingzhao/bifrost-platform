@@ -47,7 +47,7 @@ func TestDrillPassSkipsStreamRefusalsBeforeFacts(t *testing.T) {
 		t.Helper()
 		counted, results, histories := countedFacts(src)
 		g := &startupDrillGit{}
-		ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return now }, DrillGit: g, Drill: &controller.DrillSources{Facts: counted}}
+		ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return now }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": g}, Drill: &controller.DrillSources{Facts: counted}}
 		e := ctl.LandingDrillPass(ctx)
 		return e, results.Load(), histories.Load(), g.opens.Load()
 	}

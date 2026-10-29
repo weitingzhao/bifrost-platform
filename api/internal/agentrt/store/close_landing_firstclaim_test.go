@@ -261,7 +261,7 @@ func TestDrillPassWaitStartsWhenTheReadFails(t *testing.T) {
 		return landing.MainHistory{}, errors.New("history read failed")
 	}
 	counted, results, _ := countedFacts(failing)
-	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return clock }, DrillGit: &startupDrillGit{}, Drill: &controller.DrillSources{Facts: counted}}
+	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return clock }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &startupDrillGit{}}, Drill: &controller.DrillSources{Facts: counted}}
 	if ctl.LandingDrillPass(ctx) == nil || results.Load() != 1 {
 		t.Fatalf("fixture: the first pass did not read and fail (reads=%d)", results.Load())
 	}

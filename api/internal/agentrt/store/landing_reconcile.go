@@ -431,7 +431,7 @@ func checkLandingAnomalyAppend(ev Event) error {
 		return nil
 	}
 	m, _ := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
 		return fmt.Errorf("landing_anomaly is written by the controller on the repository stream under its root")
 	}
 	if _, exists := ev.Body["landing"]; exists {
@@ -527,7 +527,7 @@ func checkLandingMainAppend(ev Event) error {
 		return nil
 	}
 	m, _ := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
 		return fmt.Errorf("landing_main is written by the controller on the repository stream under its root")
 	}
 	if _, exists := ev.Body["landing"]; exists {

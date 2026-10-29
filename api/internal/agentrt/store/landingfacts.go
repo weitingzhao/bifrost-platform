@@ -174,6 +174,14 @@ func landingFactsExternal(ctx context.Context, src LandingSource, f *landing.Fac
 }
 
 func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, deps []landingDep, snapshot string, claim bool) error {
+	if f.Repo == "bifrost-trade-infra" {
+		if f.Rule == nil || f.Rule.Landing == nil {
+			return nil
+		}
+		if _, ok := f.Rule.Landing.Repo(f.Repo); !ok {
+			return nil
+		}
+	}
 	var err error
 	f.SingleCommit, f.Changes, err = src.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A)
 	if err != nil {

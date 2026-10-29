@@ -44,15 +44,18 @@ type ciCalls struct{ legacy, pinned []string }
 
 func pinSources(src store.LandingSource, calls *ciCalls, ci *landing.CIRun, mainCI string) controller.DrillSources {
 	return controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, r string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, r string, _ time.Time) (landing.CIRun, error) {
 			if r == commitA {
 				return landing.CIRun{Run: "main", R: commitA, Status: mainCI, CreatedAt: time.Now()}, nil
 			}
 			return *ci, nil
 		},
-		EnsureCI: func(_ context.Context, name, _ string) error { calls.legacy = append(calls.legacy, name); return nil },
+		EnsureCI: func(_ context.Context, _, name, _ string) error {
+			calls.legacy = append(calls.legacy, name)
+			return nil
+		},
 		EnsurePinnedCI: func(_ context.Context, name string, _ store.GrantCIKey) error {
 			calls.pinned = append(calls.pinned, name)
 			return nil
@@ -63,7 +66,7 @@ func pinSources(src store.LandingSource, calls *ciCalls, ci *landing.CIRun, main
 }
 
 func liveController(w *world) controller.Controller {
-	return controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) {
+	return controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) {
 		return &livePusher{outcome: landinggit.PushOK}, nil
 	}}
 }
@@ -134,12 +137,12 @@ func TestC5R01RecheckRetriesUntilItsStableAnswer(t *testing.T) {
 	opens, fail := 0, true
 	clock := c.at
 	src := controller.DrillSources{Facts: c.src,
-		Main:          func(context.Context) (string, error) { return c.main, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI:            func(context.Context, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string) error { return nil }}
-	ctl := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &src, Now: func() time.Time { return clock },
-		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) {
+		Main:          func(context.Context, string) (string, error) { return c.main, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
+		EnsureCI:      func(context.Context, string, string, string) error { return nil }}
+	ctl := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &src, Now: func() time.Time { return clock },
+		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) {
 			opens++
 			if fail {
 				fail = false

@@ -33,7 +33,20 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 	if len(tasks) != 1 || tasks[0][1] != task || len(ids) != 1 {
 		return false, nil, errors.New("invalid result lineage")
 	}
-	raw, e := w.local(ctx, "diff", "--raw", "-z", "--no-abbrev", "--find-renames", base, a, "--")
+	renameFlag := "--find-renames"
+	var endpoints []rules.LandingChange
+	if w.git.Repository() == "bifrost-trade-infra" {
+		renameFlag = "--no-renames"
+		names, err := w.local(ctx, "diff", "--no-renames", "-z", "--name-status", base, a, "--")
+		if err != nil {
+			return false, nil, err
+		}
+		endpoints, err = infraNameStatus(names)
+		if err != nil {
+			return false, nil, err
+		}
+	}
+	raw, e := w.local(ctx, "diff", "--raw", "-z", "--no-abbrev", renameFlag, base, a, "--")
 	if e != nil {
 		return false, nil, e
 	}
@@ -47,7 +60,7 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 		}
 		path := fields[i]
 		i++
-		c := rules.LandingChange{OldPath: path, NewPath: path, OldMode: strings.TrimPrefix(meta[0], ":"), NewMode: meta[1]}
+		c := rules.LandingChange{Kind: string(meta[4][0]), OldPath: path, NewPath: path, OldMode: strings.TrimPrefix(meta[0], ":"), NewMode: meta[1]}
 		switch meta[4][0] {
 		case 'A':
 			c.OldPath, c.OldMode = "", ""
@@ -62,6 +75,12 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 		case 'M', 'T':
 		default:
 			return false, nil, errors.New("unsupported diff status")
+		}
+		if w.git.Repository() == "bifrost-trade-infra" {
+			n := len(changes)
+			if n >= len(endpoints) || endpoints[n].Kind != c.Kind || endpoints[n].OldPath != c.OldPath || endpoints[n].NewPath != c.NewPath {
+				return false, nil, errors.New("infra diff endpoints disagree")
+			}
 		}
 		paths := []string{}
 		if c.OldPath != "" {
@@ -124,7 +143,7 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 				}
 			}
 		}
-		diff, e := w.local(ctx, append([]string{"diff", "--no-ext-diff", "--no-textconv", "--find-renames", "--unified=0", base, a, "--"}, paths...)...)
+		diff, e := w.local(ctx, append([]string{"diff", "--no-ext-diff", "--no-textconv", renameFlag, "--unified=0", base, a, "--"}, paths...)...)
 		if e != nil {
 			return false, nil, e
 		}
@@ -146,7 +165,43 @@ func (w *Workspace) Result(ctx context.Context, task, base, a string) (bool, []r
 		c.AddedText = added.String()
 		changes = append(changes, c)
 	}
+	if w.git.Repository() == "bifrost-trade-infra" && len(changes) != len(endpoints) {
+		return false, nil, errors.New("infra diff endpoints incomplete")
+	}
 	return true, changes, nil
+}
+
+// infraNameStatus accepts only single-endpoint, NUL-delimited records.
+// Raw diff supplies modes separately; numstat supplies binary and line counts.
+func infraNameStatus(raw string) ([]rules.LandingChange, error) {
+	var out []rules.LandingChange
+	if raw == "" {
+		return out, nil
+	}
+	if !strings.HasSuffix(raw, "\x00") {
+		return nil, errors.New("unterminated infra diff")
+	}
+	fields := strings.Split(strings.TrimSuffix(raw, "\x00"), "\x00")
+	if len(fields)%2 != 0 {
+		return nil, errors.New("malformed infra diff")
+	}
+	for i := 0; i < len(fields); i += 2 {
+		c := rules.LandingChange{Kind: fields[i], OldPath: fields[i+1], NewPath: fields[i+1]}
+		if c.OldPath == "" {
+			return nil, errors.New("path_invalid")
+		}
+		switch c.Kind {
+		case "A":
+			c.OldPath = ""
+		case "D":
+			c.NewPath = ""
+		case "M", "T":
+		default:
+			return nil, errors.New("unsupported infra diff status")
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // revertLine is git's revert line, of a commit ("X.") or of a merge ("X, reversing").

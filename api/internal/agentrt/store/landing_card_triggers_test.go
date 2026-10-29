@@ -145,9 +145,9 @@ func TestAParkWhoseReasonChangesIsANewPark(t *testing.T) {
 	store.FreezeEventClock(now)
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	drill := controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, r string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, r string, _ time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Run: "ci-long", R: r, Status: "Running", CreatedAt: at.Add(time.Minute)}, nil
 		},
 	}

@@ -57,7 +57,6 @@ var ErrLandingAnswerBinding = errors.New("landing answer: the card's binding doe
 // R1). The record is a note on the repository stream with no "landing" key,
 // so LandingState does not fold it.
 func HandleLandingAnswer(ctx context.Context, db DB, q Question, root, after string, answeredAt time.Time) (LandingAnswerResult, error) {
-	const stream = "landing:bifrost-platform"
 	var res LandingAnswerResult
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
@@ -263,7 +262,7 @@ func checkLandingAnswerAppend(ev Event) error {
 		return nil
 	}
 	m, _ := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID == "" || ev.TaskID != m["root"] {
 		return fmt.Errorf("landing_answer is written by the controller on the repository stream under its root")
 	}
 	if _, exists := ev.Body["landing"]; exists {
@@ -290,12 +289,16 @@ func boundedReason(text string) string {
 // transaction: the landing card handler checks its card still applies under
 // the same locks first (review 670 B-02).
 func handleLandingAnswerTx(ctx context.Context, tx pgx.Tx, q Question, root, after string, answeredAt time.Time) (LandingAnswerResult, error) {
-	const stream = "landing:bifrost-platform"
+	var repo string
 	var res LandingAnswerResult
 	var mission, missionState string
-	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT mission_id, repo FROM agentrt.task WHERE task_id = $1 FOR SHARE`, root).Scan(&mission, &repo); err != nil {
 		return res, err
 	}
+	if !landing.RepoSupported(repo) {
+		return res, ErrLandingAnswerBinding
+	}
+	stream := "landing:" + repo
 	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission).Scan(&missionState); err != nil {
 		return res, err
 	}

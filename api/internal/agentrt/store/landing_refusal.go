@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,12 +19,12 @@ import (
 // landing status and the goal page can say why a root waits.
 
 // claimRefusalReasons are the reasons a refused claim records.
-var claimRefusalReasons = []string{"mode", "before_enable", "stale", "result", "history", "terminal", "floor",
+var claimRefusalReasons = []string{"repo", "live", "mode", "before_enable", "stale", "result", "history", "terminal", "floor",
 	"dependencies", "rule", "limit", "stage", "facts_unreadable", "stopped", "bound", "in_progress"}
 
 // RecordClaimRefusal records why the claim of task was refused, unless the
 // task's latest refusal already says the same. It reports whether it wrote.
-func RecordClaimRefusal(ctx context.Context, db DB, repo, task, reason string) (bool, error) {
+func RecordClaimRefusal(ctx context.Context, db DB, repo, task, reason string, detail ...map[string]any) (bool, error) {
 	if !slices.Contains(claimRefusalReasons, reason) {
 		return false, nil // not a refusal this record speaks for (changed, rehearsed)
 	}
@@ -36,8 +36,12 @@ func RecordClaimRefusal(ctx context.Context, db DB, repo, task, reason string) (
 		if err != nil || last == reason {
 			return err
 		}
+		refusal := map[string]any{"v": "1", "task": task, "reason": reason}
+		if len(detail) > 0 && detail[0] != nil {
+			refusal["detail"] = detail[0]
+		}
 		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: task,
-			Body: map[string]any{"text": "Landing claim refused: " + reason, "landing_refusal": map[string]any{"v": "1", "task": task, "reason": reason}}})
+			Body: map[string]any{"text": "Landing claim refused: " + reason, "landing_refusal": refusal}})
 		wrote = err == nil
 		return err
 	})
@@ -68,7 +72,41 @@ func badLandingRefusal(v any) string {
 	if r, _ := m["reason"].(string); !slices.Contains(claimRefusalReasons, r) {
 		return "landing_refusal reason is not a claim refusal"
 	}
+	if detail, ok := m["detail"]; ok && (m["reason"] != "floor" || !validLandingFloor(detail)) {
+		return "landing_refusal detail is not a floor refusal"
+	}
 	return ""
+}
+
+func validLandingFloor(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"structural", "hard", "change_kind"} {
+		if s, ok := m[key].(string); ok && s != "" {
+			return len(m) == 1
+		}
+	}
+	if len(m) != 2 || m["grant_supported"] != false {
+		return false
+	}
+	var items []string
+	switch soft := m["soft"].(type) {
+	case []string:
+		items = soft
+	case []any:
+		for _, item := range soft {
+			s, ok := item.(string)
+			if !ok {
+				return false
+			}
+			items = append(items, s)
+		}
+	default:
+		return false
+	}
+	return len(items) == 1 && (items[0] == "rule_paths" || items[0] == "size")
 }
 
 // checkLandingRefusalAppend: the controller writes it on a repository
@@ -79,7 +117,7 @@ func checkLandingRefusalAppend(ev Event) error {
 		return nil
 	}
 	m, _ := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || !strings.HasPrefix(ev.Stream, "landing:") || m == nil || ev.TaskID != fmt.Sprint(m["task"]) {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID != fmt.Sprint(m["task"]) {
 		return fmt.Errorf("landing_refusal is written by the controller on a repository landing stream under its task")
 	}
 	if _, exists := ev.Body["landing"]; exists {

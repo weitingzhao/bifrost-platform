@@ -121,9 +121,9 @@ func TestDrillCIStepKicksNothingUnderARuleThatEndedDuringItsReads(t *testing.T) 
 	store.FreezeEventClock(start)
 	tightened, ensured := false, 0
 	drill := controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI: func(_ context.Context, revision string, _ time.Time) (landing.CIRun, error) {
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI: func(_ context.Context, _ string, revision string, _ time.Time) (landing.CIRun, error) {
 			if !tightened {
 				tightened = true
 				body := strings.Replace(landingRuleBody, "deny: []", "deny: [\"console/src/components/**\"]", 1)
@@ -133,7 +133,7 @@ func TestDrillCIStepKicksNothingUnderARuleThatEndedDuringItsReads(t *testing.T) 
 			}
 			return landing.CIRun{Status: "Missing"}, nil
 		},
-		EnsureCI: func(context.Context, string, string) error { ensured++; return nil },
+		EnsureCI: func(context.Context, string, string, string) error { ensured++; return nil },
 	}
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	a, err := ctl.LandingDrillCI(ctx, drill, op, start)

@@ -24,10 +24,14 @@ type DrillGit interface {
 
 // DrillGitFacts supplies fresh complete Git evidence to the shared store
 // reader. Every temporary clone is removed, including on an error.
-func DrillGitFacts(g DrillGit) store.LandingSource {
+func DrillGitFacts(g DrillGit, repos ...string) store.LandingSource {
+	bound := landing.Repository(repos...)
+	if named, ok := g.(interface{ Repository() string }); ok && named.Repository() != bound {
+		return store.LandingSource{}
+	}
 	return store.LandingSource{
 		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
-			if repo != "bifrost-platform" {
+			if repo != bound {
 				return false, nil, fmt.Errorf("unsupported drill repo")
 			}
 			w, e := g.Open(ctx, a)
@@ -38,7 +42,7 @@ func DrillGitFacts(g DrillGit) store.LandingSource {
 			return w.Result(ctx, task, base, a)
 		},
 		History: func(ctx context.Context, repo, task, a, snapshot string) (landing.MainHistory, error) {
-			if repo != "bifrost-platform" {
+			if repo != bound {
 				return landing.MainHistory{}, fmt.Errorf("unsupported drill repo")
 			}
 			w, e := g.Open(ctx, a)
@@ -54,14 +58,24 @@ func DrillGitFacts(g DrillGit) store.LandingSource {
 // LandingDrillBranch prepares or reconciles a claimed operation. A successful
 // push followed by a crash is resolved by ls-remote, never a new SHA or branch.
 // It has no production path and cannot record main_intent/landed.
-func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op string, now time.Time) error {
-	if !c.landingEnv() || g == nil {
+func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op string, now time.Time, repos ...string) error {
+	repo := landing.Repository(repos...)
+	if !c.landingRepoEnabled(repo) || g == nil {
 		return fmt.Errorf("landing requires its git (stg drill, or prod live)")
+	}
+	if repo != "bifrost-platform" {
+		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return fmt.Errorf("landing repo has no current rule")
+		}
 	}
 	var s landing.State
 	if err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var e error
-		s, e = store.LandingState(ctx, tx, "landing:bifrost-platform")
+		s, e = store.LandingState(ctx, tx, "landing:"+repo)
 		return e
 	}); err != nil {
 		return err
@@ -73,7 +87,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	put := func(kind string, fields map[string]any) error {
 		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
-			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
+			_, e := store.Append(ctx, tx, store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": landingText(c.Env) + kind, "landing": fields}})
 			return e
 		})
 	}
@@ -88,7 +102,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	}
 	_, n := landing.RootBudget(s, o.Task)
 	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
-		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o)
+		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 		return err
 	}
 	// Reconcile a completed push even after a rule expires. If absent, all
@@ -109,7 +123,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			return put("discarded", map[string]any{"why": "branch_collision"})
 		}
 	}
-	f, d, e := c.LandingDecision(ctx, DrillGitFacts(g), o.Task, op, "claim", now)
+	f, d, e := c.LandingDecision(ctx, DrillGitFacts(g, repo), o.Task, op, "claim", now)
 	if e != nil {
 		return e
 	}
@@ -117,7 +131,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	// new branch intent (review 657 R657-2).
 	at := store.DecisionAt()
 	if why := landing.RootBound(s, o.Task, at, false); why != "" {
-		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o)
+		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 		return err
 	}
 	if !d.Allowed {
@@ -144,10 +158,10 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	recheck := func() (bool, error) {
 		at := store.DecisionAt()
 		if why := landing.RootBound(s, o.Task, at, false); why != "" {
-			_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o)
+			_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 			return true, err
 		}
-		now, err := store.RefreshLandingFacts(ctx, c.DB, DrillGitFacts(g), c.Env, mode(c.Env), o.Task, op, f, at)
+		now, err := store.RefreshLandingFacts(ctx, c.DB, DrillGitFacts(g, repo), c.Env, mode(c.Env), o.Task, op, f, at)
 		if err != nil {
 			return true, err
 		}
@@ -222,4 +236,33 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		}
 	}
 	return put("branch_pushed", map[string]any{"ref": ref, "R": r})
+}
+
+// MultiRepoGitFacts dispatches by repository, including dependencies, before
+// opening a workspace. A SHA in another repository never selects its adapter.
+func MultiRepoGitFacts(gits map[string]DrillGit) store.LandingSource {
+	return store.LandingSource{
+		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
+			g := gits[repo]
+			if g == nil || !landing.RepoSupported(repo) {
+				return false, nil, fmt.Errorf("unsupported or disabled landing repo")
+			}
+			source := DrillGitFacts(g, repo)
+			if source.Result == nil {
+				return false, nil, fmt.Errorf("landing transport repo mismatch")
+			}
+			return source.Result(ctx, repo, task, attempt, base, a)
+		},
+		History: func(ctx context.Context, repo, task, a, snapshot string) (landing.MainHistory, error) {
+			g := gits[repo]
+			if g == nil || !landing.RepoSupported(repo) {
+				return landing.MainHistory{}, fmt.Errorf("unsupported or disabled landing repo")
+			}
+			source := DrillGitFacts(g, repo)
+			if source.History == nil {
+				return landing.MainHistory{}, fmt.Errorf("landing transport repo mismatch")
+			}
+			return source.History(ctx, repo, task, a, snapshot)
+		},
+	}
 }

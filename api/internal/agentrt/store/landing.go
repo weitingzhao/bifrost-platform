@@ -13,6 +13,9 @@ import (
 // LandingState folds only the authoritative stream, never mission mirrors.
 // Writers call it after Append has locked the stream, in the same transaction.
 func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
+	if stream == "landing:bifrost-trade-infra" {
+		return infraLandingState(ctx, tx, stream)
+	}
 	// The protocol records and the grant projection (C-5, §5.3: a valid
 	// grant pauses W) come from one ordered read of the stream.
 	r, err := scanLandingStream(ctx, tx, stream)
@@ -24,6 +27,12 @@ func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State,
 func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) error {
 	value, exists := ev.Body["landing"]
 	if !exists {
+		if _, ok := ev.Body["landing_floor"]; ok {
+			return fmt.Errorf("floor detail requires landing failure")
+		}
+		if _, ok := ev.Body["landing_repo"]; ok {
+			return fmt.Errorf("landing_repo requires reservation")
+		}
 		return nil
 	}
 	if ev.Type != "note" {
@@ -33,7 +42,26 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if err != nil {
 		return err
 	}
+
 	k := r.String("kind")
+	if named, ok := ev.Body["landing_repo"]; ok && (k != "reserved" || named != "bifrost-trade-infra") {
+		return fmt.Errorf("landing_repo is only used by infra reservations")
+	}
+	if ev.Stream == "landing:bifrost-trade-infra" && k == "claimed" {
+		var repo string
+		if err := tx.QueryRow(ctx, `SELECT repo FROM agentrt.task WHERE task_id=$1`, r.String("task")).Scan(&repo); err != nil {
+			return err
+		}
+		if repo != "bifrost-trade-infra" {
+			return fmt.Errorf("landing task differs from repository stream")
+		}
+	}
+	if v, ok := ev.Body["landing_floor"]; ok {
+		if ev.Actor != "controller" || k != "failed" || r.String("why") != "floor" || ev.Stream != "landing:bifrost-trade-infra" || !validLandingFloor(v) {
+			return fmt.Errorf("floor detail requires controller floor failure")
+		}
+	}
+
 	switch k {
 	case "stg_pending", "stg_snapshot", "stg_started", "stg_result", "stg_verified", "stg_failed":
 		return stgError("legacy", k, "legacy STG kinds are read-only; write note.stg_release v1")
@@ -46,7 +74,23 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		if len(parts) != 3 || parts[0] != "landing-quota" || (parts[1] != "dev" && parts[1] != "business") || parts[2] != at.UTC().Format("2006-01-02") {
 			return fmt.Errorf("reservation requires today's tenant quota stream")
 		}
-		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		repo := "bifrost-platform"
+		if named, ok := ev.Body["landing_repo"].(string); ok {
+			repo = named
+		}
+		if !landing.RepoSupported(repo) {
+			return fmt.Errorf("unsupported reservation repo")
+		}
+		if repo != "bifrost-platform" {
+			var taskRepo string
+			if err := tx.QueryRow(ctx, `SELECT repo FROM agentrt.task WHERE task_id=$1`, r.String("root")).Scan(&taskRepo); err != nil {
+				return err
+			}
+			if taskRepo != repo {
+				return fmt.Errorf("reservation repo mismatch")
+			}
+		}
+		state, err := LandingState(ctx, tx, "landing:"+repo)
 		if err != nil {
 			return err
 		}
@@ -54,8 +98,16 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		if !ok || !op.Reservable(r.String("root")) {
 			return fmt.Errorf("reservation requires a live prepared operation")
 		}
-	} else if ev.Stream != "landing:bifrost-platform" {
+	} else if !landing.RepoStream(ev.Stream) {
 		return fmt.Errorf("landing record requires repository stream; mission mirrors are text only")
+	}
+	if k == "mode" || k == "enabled" {
+		if ev.Stream != "landing:"+r.String("repo") {
+			return fmt.Errorf("landing repo differs from stream")
+		}
+	}
+	if k == "awaiting_grant" && ev.Stream != "landing:bifrost-platform" {
+		return fmt.Errorf("grant_unsupported")
 	}
 	s, err := LandingState(ctx, tx, ev.Stream)
 	if err != nil {
@@ -141,6 +193,9 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, env, tenant, repo str
 // (CUT §11.8 v3 item 1): PROD workers write it before their first claim.
 // It returns when it was recorded.
 func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, error) {
+	if !landing.RepoSupported(repo) {
+		return time.Time{}, fmt.Errorf("unsupported landing repo")
+	}
 	stream := "landing:" + repo
 	var at time.Time
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -154,6 +209,18 @@ func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, erro
 		if !s.LiveAt.IsZero() {
 			at = s.LiveAt
 			return nil
+		}
+		if repo != "bifrost-platform" {
+			r, err := CurrentRule(ctx, tx, "landing:dev", DecisionAt())
+			if err != nil {
+				return err
+			}
+			if r == nil || r.Landing == nil {
+				return nil
+			}
+			if _, ok := r.Landing.Repo(repo); !ok {
+				return nil
+			}
 		}
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing live mode",
 			"landing": map[string]any{"v": landing.Version, "kind": "mode", "op": "mode:live", "repo": repo}}})

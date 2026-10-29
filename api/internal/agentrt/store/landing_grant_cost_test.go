@@ -71,12 +71,12 @@ func TestC5R05OrdinaryCIStepCostsWhatItDid(t *testing.T) {
 	running := landing.CIRun{Run: landing.CIName(op, 1), R: commitB, Status: "Running", CreatedAt: at.Add(-25 * time.Minute)}
 	ensured := 0
 	srcs := controller.DrillSources{Facts: src,
-		Main:          func(context.Context) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
-		CI:            func(context.Context, string, time.Time) (landing.CIRun, error) { return running, nil },
-		EnsureCI:      func(context.Context, string, string) error { ensured++; return nil }}
+		Main:          func(context.Context, string) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
+		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return running, nil },
+		EnsureCI:      func(context.Context, string, string, string) error { ensured++; return nil }}
 	db := &stmtDB{DB: w.rt}
-	ctl := controller.Controller{DB: db, Env: "prod", Live: true, DrillGit: &branchObserved{}}
+	ctl := controller.Controller{DB: db, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}}
 	_, err = ctl.LandingDrillCI(ctx, srcs, op, at.Add(-20*time.Minute))
 	ok(t, err)
 	if ensured != 1 {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"slices"
 	"strings"
 	"time"
@@ -161,7 +162,7 @@ func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	}
 	m, _ := v.(map[string]any)
 	root, _ := m["root"].(string)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID != root {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID != root {
 		return fmt.Errorf("landing_card_outcome is written by the controller on the repository stream under its root")
 	}
 	if _, exists := ev.Body["landing"]; exists {
@@ -501,7 +502,7 @@ func checkLandingDisposedAppend(ctx context.Context, tx pgx.Tx, ev Event) error 
 		return nil
 	}
 	m, _ := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" || m == nil || ev.TaskID != fmt.Sprint(m["root"]) {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID != fmt.Sprint(m["root"]) {
 		return fmt.Errorf("landing_disposed is written by the controller on the repository stream under its root")
 	}
 	var o map[string]any

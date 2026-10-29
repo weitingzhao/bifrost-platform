@@ -211,6 +211,8 @@ var bodies = map[string][]field{
 		// landing_refusal: why the landing loop refused a task's claim, on
 		// the repository stream, once per change of reason (CUT §11.13).
 		{"landing_refusal", kAny, true},
+		{"landing_floor", kAny, true},
+		{"landing_repo", kStr, true},
 		// landing_disposed: the Owner counted a landed or in-main root as
 		// delivered or not, on its card (CUT §11.8 v3 item 4).
 		{"landing_disposed", kAny, true},

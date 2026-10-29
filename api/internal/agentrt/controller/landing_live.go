@@ -30,27 +30,37 @@ const recordTimeout = 30 * time.Second
 // records what the remote answered. Nothing here retries a push: a crash
 // or an unrecorded answer after the intent is the reconciler's, which reads
 // main (R there, or R absent past the fence).
-func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r string) error {
-	return c.landLiveWith(ctx, src, op, r, false, nil)
+func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r, repo string) error {
+	return c.landLiveWith(ctx, src, op, r, false, nil, repo)
 }
 
 // landLiveWith is landLive; recheck takes a waiting operation with no
 // grant through the gate's rule recheck (store.RecheckWaitingLanding).
 // decided, when given, receives the gate's decision (zero when the gate did
 // not decide: an error before or in it).
-func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r string, recheck bool, decided *landing.Decision) error {
-	if c.Env != "prod" || !c.Live || c.DrillGit == nil && c.OpenLive == nil {
+func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r string, recheck bool, decided *landing.Decision, repos ...string) error {
+	repo := landing.Repository(repos...)
+	if c.Env != "prod" || !c.landingRepoEnabled(repo) || c.DrillGit[repo] == nil && c.OpenLive == nil {
 		return fmt.Errorf("live landing requires prod with live on")
 	}
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
 		return fmt.Errorf("landing sources unavailable")
 	}
+	if repo != "bifrost-platform" {
+		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return fmt.Errorf("landing repo has no current rule")
+		}
+	}
 	var w LiveWorkspace
 	var err error
 	if c.OpenLive != nil {
-		w, err = c.OpenLive(ctx, r)
+		w, err = c.OpenLive(ctx, repo, r)
 	} else {
-		w, err = c.DrillGit.Open(ctx, r)
+		w, err = c.DrillGit[repo].Open(ctx, r)
 	}
 	if err != nil {
 		return err
@@ -61,20 +71,20 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 		gate = store.RecheckWaitingLanding
 	}
 	auth, d, err := gate(ctx, c.DB, src.Facts, op, func(ctx context.Context, o landing.Operation) (store.LiveObservation, error) {
-		main, err := src.Main(ctx)
+		main, err := src.Main(ctx, repo)
 		if err != nil {
 			return store.LiveObservation{}, err
 		}
-		ci, err := src.CI(ctx, o.R, o.PreparedAt)
+		ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
 		if err != nil {
 			return store.LiveObservation{}, err
 		}
-		blocked, err := src.WindowBlocked(ctx)
+		blocked, err := src.WindowBlocked(ctx, repo)
 		if err != nil {
 			return store.LiveObservation{}, err
 		}
 		return store.LiveObservation{Main: main, CI: ci, WindowBlocked: blocked}, nil
-	})
+	}, repo)
 	if decided != nil && err == nil {
 		*decided = d
 	}

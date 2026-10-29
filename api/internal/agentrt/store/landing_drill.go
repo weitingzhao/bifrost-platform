@@ -72,13 +72,13 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 		decision = landing.EligibleToClaim(facts, again.at)
 		if !decision.Allowed {
 			if why, ends := unclaimedEnd(decision, facts); ends && again.claims == 0 {
-				_, e = failUnclaimedLocked(ctx, tx, "landing:bifrost-platform", facts.Mission, task, why, refusalEvidence(facts))
+				_, e = failUnclaimedLocked(ctx, tx, "landing:"+facts.Repo, facts.Mission, task, why, refusalEvidence(facts), decision.Detail)
 				return e
 			}
 			return nil
 		}
 		op = fmt.Sprintf("land:%s:%d", task, again.claims+1)
-		_, e = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{
+		_, e = Append(ctx, tx, Event{Stream: "landing:" + facts.Repo, Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{
 			"text": "Landing claimed (" + env + ")", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": facts.Attempt, "A": facts.A, "rule_version": facts.Rule.Version},
 		}})
 		if e != nil {
@@ -125,25 +125,30 @@ type drillBinding struct {
 // it (landingHolds).
 func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task string, now time.Time) (drillBinding, error) {
 	var b drillBinding
-	var mission string
-	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&mission); err != nil {
+	var mission, repo string
+	if err := tx.QueryRow(ctx, `SELECT mission_id, COALESCE(repo,'') FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&mission, &repo); err != nil {
 		return b, err
 	}
+	if !landing.RepoSupported(repo) {
+		b.settled, b.decision = true, landing.Decision{Reason: "repo"}
+		return b, nil
+	}
+	stream := "landing:" + repo
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission); err != nil {
 		return b, err
 	}
-	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
+	if err := lockStream(ctx, tx, stream); err != nil {
 		return b, err
 	}
 	now = DecisionAt()
 	b.at = now
 	// A repository stopped by a denied push takes no claim until the Owner
 	// resumes it (B6); nothing is recorded.
-	if stopped, err := repoStopped(ctx, tx, "landing:bifrost-platform"); err != nil || stopped {
+	if stopped, err := repoStopped(ctx, tx, stream); err != nil || stopped {
 		b.settled, b.decision = true, landing.Decision{Reason: "stopped"}
 		return b, err
 	}
-	state, err := LandingState(ctx, tx, "landing:bifrost-platform")
+	state, err := LandingState(ctx, tx, stream)
 	if err != nil {
 		return b, err
 	}
@@ -157,7 +162,7 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 	b.claims = n
 	if why := landing.RootBound(state, task, now, true); why != "" {
 		b.settled, b.decision = true, landing.Decision{Reason: why}
-		return b, failAwaitingBound(ctx, tx, state, task, now)
+		return b, failAwaitingBound(ctx, tx, state, task, now, repo)
 	}
 	// Completed rehearsals are not repeated by the STG scanner. They
 	// remain non-blocking to production's common eligibility reader.
@@ -180,6 +185,16 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 		mode = "live"
 	}
 	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, env, mode, task, "", now)
+	if err == nil && repo == "bifrost-trade-infra" {
+		if b.facts.Rule == nil || b.facts.Rule.Landing == nil {
+			b.settled, b.decision = true, landing.Decision{Reason: "rule"}
+			return b, nil
+		}
+		if _, ok := b.facts.Rule.Landing.Repo(repo); !ok {
+			b.settled, b.decision = true, landing.Decision{Reason: "rule"}
+			return b, nil
+		}
+	}
 	if err != nil || n > 0 || !inHandoff(b.facts) || now.Before(b.facts.AcceptedAt.Add(landing.ClaimWindow)) {
 		return b, err
 	}
@@ -187,7 +202,7 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 	// controller down, a repository busy for six hours). Recorded, not read
 	// from Git.
 	b.settled, b.decision = true, landing.Decision{Reason: "bound"}
-	_, err = failUnclaimedLocked(ctx, tx, "landing:bifrost-platform", b.facts.Mission, task, "bound", "its window ended unclaimed")
+	_, err = failUnclaimedLocked(ctx, tx, stream, b.facts.Mission, task, "bound", "its window ended unclaimed")
 	return b, err
 }
 
@@ -252,7 +267,7 @@ func refusalEvidence(f landing.Facts) string {
 // again and records nothing when the root has an operation by now (a claim,
 // or another pass's record): false. Every caller holds the task's mission
 // (Close, the claim) or nothing else, so the stream stays the last lock.
-func failUnclaimedLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, why, evidence string) (bool, error) {
+func failUnclaimedLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, why, evidence string, detail ...map[string]any) (bool, error) {
 	if err := lockStream(ctx, tx, stream); err != nil {
 		return false, err
 	}
@@ -264,8 +279,10 @@ func failUnclaimedLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, 
 		return false, nil
 	}
 	op := fmt.Sprintf("land:%s:1", task)
-	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: task, Body: map[string]any{
-		"text": "the landing loop will not claim this task: " + why + " (" + evidence + ")", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": why},
-	}})
+	body := map[string]any{"text": "the landing loop will not claim this task: " + why + " (" + evidence + ")", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": why}}
+	if len(detail) > 0 && detail[0] != nil {
+		body["landing_floor"] = detail[0]
+	}
+	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: task, Body: body})
 	return err == nil, err
 }
