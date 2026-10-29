@@ -75,7 +75,7 @@ func pinWorld(t *testing.T) *world {
 // pin says otherwise.
 func (w *world) pinnedTask(ref, pin string) store.PinnedTask {
 	return store.PinnedTask{TaskProposal: store.TaskProposal{Ref: ref, PlanNode: s1, Role: "implement", Class: "go", Title: ref,
-		SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, ExecutorPin: pin}
+		SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, ExecutorPin: pin, Providers: []string{"anthropic"}}
 }
 
 // proposePinned proposes one pinned task, returning its id.
@@ -385,7 +385,13 @@ func TestExternalHostIsNotReportedOffline(t *testing.T) {
 	w := presenceWorld(t, "h1")
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", externalHost, store.HostExternal))
 	w.poll(t, "h1", codex)
-	last := w.poll(t, externalHost, claude)
+	// The external host's agentd claims only by id: what it offers and its
+	// contact, recorded as its exact claims record them.
+	_, err := store.RecordHostOffered(ctx, w.rt, externalHost, []store.Tool{claude}, false)
+	ok(t, err)
+	ok(t, store.TouchHost(ctx, w.rt, externalHost))
+	var last time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT last_poll_at FROM agentrt.host WHERE host_id = $1`, externalHost).Scan(&last))
 	doc, _ := w.presence(t)
 	for _, e := range doc.Executors {
 		if slices.Contains(e.Hosts, externalHost) {
@@ -393,9 +399,9 @@ func TestExternalHostIsNotReportedOffline(t *testing.T) {
 		}
 	}
 	presenceAt(t, w, last.Add(10*time.Minute))
-	rows, err := w.rt.Query(ctx, `SELECT event_stream_id FROM agentrt.event WHERE event_type = 'policy_alert' AND body_json->>'rule' = 'host_offline'`)
+	alerts, err := w.rt.Query(ctx, `SELECT event_stream_id FROM agentrt.event WHERE event_type = 'policy_alert' AND body_json->>'rule' = 'host_offline'`)
 	ok(t, err)
-	offline, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	offline, err := pgx.CollectRows(alerts, pgx.RowTo[string])
 	ok(t, err)
 	if !slices.Equal(offline, []string{store.HostPresenceStream("h1")}) {
 		t.Fatalf("hosts reported offline: %v; want only h1", offline)

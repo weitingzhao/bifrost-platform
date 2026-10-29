@@ -66,6 +66,7 @@ type candidate struct {
 	tenant                                               string // its mission's: whose routing rule applies
 	class                                                string // its task class: which scores bear on it
 	pin                                                  string // its executor pin, "" for none (pin.go)
+	subjectPin                                           string // the pin of the task it checks, "" for none (route.go)
 	core                                                 bool
 	needs, route                                         []string
 	limitS                                               int
@@ -95,80 +96,11 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 	}
 	var claim *Claim
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		var state string
-		var slots int
-		// A host that states no slots has the most a rule may give (2.4 slice
-		// ③): the signed per_host decides how many run.
-		err := tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = $1
-		  RETURNING state, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.MaxPerHost).Scan(&state, &slots)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
-		}
-		if err != nil || state != "active" || r.FreeSlots <= 0 || len(r.Tools) == 0 || (r.Disk != nil && r.Disk.Below(r.DiskFloor)) {
-			return err
-		}
-		// A global control takes this lock exclusively (SetControl), and a
-		// write of candidates or capability facts the other (LockCapabilities).
-		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(742105), pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
-			return err
-		}
-		// The concurrency rule caps the host's slots; without one nothing is
-		// dispatched (proposal §2).
-		if slots, err = perHost(ctx, tx, slots); err != nil || slots == 0 {
-			return err
-		}
-		var live int
-		if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.attempt WHERE host_id = $1 AND state IN ('leased','running','stale')`,
-			r.HostID).Scan(&live); err != nil || live >= slots {
-			return err
-		}
-		stop, err := held(ctx, tx, []scope{{"global", ""}, {"host", r.HostID}}, "stop", "pause", "drain")
-		if err != nil || stop {
-			return err
-		}
-		// A tool whose vendor account (the Owner's) has a pool cooling down takes nothing
-		// until it is over (2.4 slice ①).
-		if r.Tools, err = notCooling(ctx, tx, r.Tools); err != nil || len(r.Tools) == 0 {
-			return err
-		}
-		// Held shared from here to the commit, the capability lock fixes the
-		// candidates and restrictions this claim reads now.
-		cp, err := readCapabilities(ctx, tx)
-		if err != nil {
-			return err
-		}
-		var after *candidate
-		rc := ruleCache{}
-		st := &pickState{}
-		for {
-			cands, err := candidates(ctx, tx, o.effects, after)
-			if err != nil {
-				return err
-			}
-			for i := range cands {
-				// A mission that started inside a standing envelope is worked
-				// only on its hosts, by its executors, while it is in force.
-				req := r
-				if cands[i].envelope != "" {
-					env, eerr := rc.get(ctx, tx, cands[i].envelope)
-					if eerr != nil {
-						return eerr
-					}
-					var fits bool
-					if req, fits = envelopeTools(env, r); !fits {
-						continue
-					}
-				}
-				var blocked bool
-				if claim, blocked, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st); err != nil || claim != nil || blocked {
-					return err
-				}
-			}
-			if len(cands) < candidatePage {
-				return nil
-			}
-			after = &cands[len(cands)-1]
-		}
+		var err error
+		claim, _, err = claimIn(ctx, tx, r, func(ctx context.Context, tx pgx.Tx, after *candidate) ([]candidate, error) {
+			return candidates(ctx, tx, o.effects, after)
+		}, o, false)
+		return err
 	})
 	if err != nil && claim != nil {
 		// Its commit failed: cut while it commits, pgx gives up on a commit
@@ -211,6 +143,118 @@ func confirmClaim(ctx context.Context, db DB, claim *Claim, cerr error) (*Claim,
 	return claim, nil
 }
 
+// candidateSource reads the candidates of a claim a page at a time, after
+// the cursor (nil: from the start); a page shorter than candidatePage is the
+// last.
+type candidateSource func(ctx context.Context, tx pgx.Tx, after *candidate) ([]candidate, error)
+
+// claimIn is a claim's transaction body, whatever the candidates come from
+// (DESIGN-coordinator-landing-v3 §2.4): the host's state, the controls, its
+// slots and disk, the concurrency rule, its live attempts, the vendor pools
+// cooling down, the capabilities, the standing envelope of each candidate's
+// mission, and each candidate's mission, tenant, budget, route, core work
+// and independence (tryCandidate, take, pickTool), then the lease. ClaimNext
+// reads the ready tasks a page at a time; ClaimPinned reads the one task it
+// names (pinclaim.go). pinned says which: an ordinary claim refuses the
+// external host, a pinned one any other. It returns the lease, or nil and
+// why there is none.
+func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource, o claimOpts, pinned bool) (*Claim, string, error) {
+	var state, kind string
+	var slots int
+	// A host that states no slots has the most a rule may give (2.4 slice
+	// ③): the signed per_host decides how many run.
+	err := tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = $1
+	  RETURNING state, host_kind, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.MaxPerHost).Scan(&state, &kind, &slots)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
+	}
+	switch {
+	case err != nil:
+		return nil, "", err
+	case !pinned && kind == HostExternal:
+		return nil, "", fmt.Errorf("%w: host %s is the external host; it claims only its pinned tasks, by id", ErrExternalHost, r.HostID)
+	case pinned && kind != HostExternal:
+		return nil, "", fmt.Errorf("%w: host %s is a %s host", ErrNotExternal, r.HostID, kind)
+	case state != "active":
+		return nil, "host " + r.HostID + " is " + state, nil
+	case r.FreeSlots <= 0:
+		return nil, "the host has no free slot", nil
+	case len(r.Tools) == 0:
+		return nil, "the host offers no tool", nil
+	case r.Disk != nil && r.Disk.Below(r.DiskFloor):
+		return nil, "the host's free disk is below the floor", nil
+	}
+	// A global control takes this lock exclusively (SetControl), and a
+	// write of candidates or capability facts the other (LockCapabilities).
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(742105), pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
+		return nil, "", err
+	}
+	// The concurrency rule caps the host's slots; without one nothing is
+	// dispatched (proposal §2).
+	if slots, err = perHost(ctx, tx, slots); err != nil || slots == 0 {
+		return nil, "no concurrency rule in force gives the host a slot", err
+	}
+	var live int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.attempt WHERE host_id = $1 AND state IN ('leased','running','stale')`,
+		r.HostID).Scan(&live); err != nil || live >= slots {
+		return nil, fmt.Sprintf("the host runs %d attempts, all its %d slots", live, slots), err
+	}
+	stop, err := held(ctx, tx, []scope{{"global", ""}, {"host", r.HostID}}, "stop", "pause", "drain")
+	if err != nil || stop {
+		return nil, "a stop, pause or drain holds the host or every host", err
+	}
+	// A tool whose vendor account (the Owner's) has a pool cooling down takes nothing
+	// until it is over (2.4 slice ①).
+	if r.Tools, err = notCooling(ctx, tx, r.Tools); err != nil || len(r.Tools) == 0 {
+		return nil, "the pools of the host's tools cool down", err
+	}
+	// Held shared from here to the commit, the capability lock fixes the
+	// candidates and restrictions this claim reads now.
+	cp, err := readCapabilities(ctx, tx)
+	if err != nil {
+		return nil, "", err
+	}
+	var after *candidate
+	rc := ruleCache{}
+	st := &pickState{}
+	for {
+		cands, err := src(ctx, tx, after)
+		if err != nil {
+			return nil, "", err
+		}
+		for i := range cands {
+			// A mission that started inside a standing envelope is worked
+			// only on its hosts, by its executors, while it is in force.
+			req := r
+			if cands[i].envelope != "" {
+				env, eerr := rc.get(ctx, tx, cands[i].envelope)
+				if eerr != nil {
+					return nil, "", eerr
+				}
+				var fits bool
+				if req, fits = envelopeTools(env, r); !fits {
+					st.skip = "the standing envelope its mission started under is not in force, or names neither this host nor its executor"
+					continue
+				}
+			}
+			claim, blocked, err := tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st)
+			if err != nil || claim != nil {
+				return claim, "", err
+			}
+			if blocked {
+				return nil, "the task's preparation failed in a row: it is blocked", nil
+			}
+		}
+		if len(cands) < candidatePage {
+			if st.skip == "" {
+				st.skip = "no task this host may take"
+			}
+			return nil, st.skip, nil
+		}
+		after = &cands[len(cands)-1]
+	}
+}
+
 // candidates reads one page of ready tasks of active missions, oldest first,
 // after the cursor. A review or verification of core work is core work
 // (review 148 B4). A task pinned to the external host is none of them: only
@@ -237,14 +281,14 @@ const candidateColumns = `SELECT t.task_id, t.mission_id, t.role, t.spec_artifac
 	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
 	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)),
 	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, ''), m.tenant, t.task_class,
-	  COALESCE(t.executor_pin, '')
+	  COALESCE(t.executor_pin, ''), COALESCE(s.executor_pin, '')
 	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id`
 
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
 	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.route,
-		&c.limitS, &c.created, &c.envelope, &c.tenant, &c.class, &c.pin)
+		&c.limitS, &c.created, &c.envelope, &c.tenant, &c.class, &c.pin, &c.subjectPin)
 	return c, err
 }
 
@@ -267,6 +311,7 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 	hook("candidate", c.id)
 	_, _, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
+		st.skip = "no tool of the host is on the task's route now"
 		return nil, false, err
 	}
 	hook("picked", c.id)
@@ -309,9 +354,11 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR NO KEY UPDATE SKIP LOCKED`,
 		c.id).Scan(&mission)
 	if errors.Is(err, pgx.ErrNoRows) {
+		st.skip = "the task is not ready, or another claim holds it"
 		return nil, false, nil
 	}
 	if err != nil || mission != c.mission {
+		st.skip = "the task moved to another mission"
 		return nil, false, err
 	}
 	if c.subject != "" {
@@ -322,6 +369,7 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		var held string
 		err = tx.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE task_id = $1 FOR SHARE SKIP LOCKED`, c.subject).Scan(&held)
 		if errors.Is(err, pgx.ErrNoRows) {
+			st.skip = "another write holds the task it checks"
 			return nil, false, nil
 		}
 		if err != nil {
@@ -333,6 +381,7 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	}
 	tl, why, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
+		st.skip = "no tool of the host is on the task's route now"
 		return nil, false, err
 	}
 	// Held exclusively, so the claims of one mission count its attempts one
@@ -344,10 +393,12 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		return nil, false, err
 	}
 	if m.state != "active" {
+		st.skip = "its mission is " + m.state
 		return nil, false, nil
 	}
 	limit, fits, err := m.allows(ctx, tx, rc, c)
 	if err != nil || !fits {
+		st.skip = "its mission's budget, or the standing envelope it started under, allows no more"
 		return nil, false, err
 	}
 	c.limitS = limit
@@ -358,6 +409,7 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	}
 	stop, err := held(ctx, tx, scopes, "stop", "pause")
 	if err != nil || stop {
+		st.skip = "a stop or pause holds its mission or the task"
 		return nil, false, err
 	}
 	if c.role == "plan" {

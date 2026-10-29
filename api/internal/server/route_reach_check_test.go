@@ -47,7 +47,10 @@ var intendedRouteAdditions = map[string][]string{
 	// W-31 core C-4: an operation's wait status (read like the other agentrt reads) and agentd's refresh.
 	"GET /api/v1/agentrt/landing/operations/{op}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/agentrt/landing/refresh":        {"agentd:h1"},
-	"GET /api/v1/agentrt/plan-view":               {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// C-2: the external host's exact claim, an agentd route; the store
+	// refuses every host but the one the envelope names (claimpinned.go).
+	"POST /api/v1/agentrt/claim/pinned": {"agentd:h1"},
+	"GET /api/v1/agentrt/plan-view":     {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).
 	"GET /api/v1/agentrt/landing/cards/{question_id}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},

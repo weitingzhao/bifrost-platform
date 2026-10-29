@@ -132,6 +132,9 @@ func lastLeases(ctx context.Context, tx pgx.Tx) (map[string]int64, error) {
 // last lease and each tenant's quota stop; a claim walks many candidates and
 // picks again for the one it takes, and none of these change under it.
 type pickState struct {
+	// skip is why the last candidate passed over was not leased, for a
+	// claim that leases nothing (claimIn).
+	skip   string
 	loaded bool
 	quota  map[string]toolQuota
 	leases map[string]int64

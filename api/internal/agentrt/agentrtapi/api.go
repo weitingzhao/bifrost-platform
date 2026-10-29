@@ -36,6 +36,9 @@ import (
 type API struct {
 	DB   store.DB
 	Head store.BranchHead
+	// Commits reads a pushed commit, for a pinned task's result
+	// (store.CommitFacts); without it such a result answers 503.
+	Commits store.CommitReader
 	// ClaimWait is how long a claim waits for work (long poll; v5: at most
 	// 25 seconds, as the approvals executor); ClaimPoll how often it looks.
 	ClaimWait, ClaimPoll time.Duration
@@ -143,6 +146,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(agentd, cfg).Post("/claim", a.claim)
+		r.With(agentd, cfg).Post("/claim/pinned", a.claimPinned)
 		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
 		r.With(agentd, cfg).Post("/benchmark", a.recordBenchmark)
 		r.With(agentd, cfg).Get("/prunes", a.prunes)
@@ -274,6 +278,18 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
+	case errors.Is(err, store.ErrExternalHost):
+		writeError(w, http.StatusForbidden, "external_host", err.Error())
+	case errors.Is(err, store.ErrNotExternal):
+		writeError(w, http.StatusForbidden, "forbidden", err.Error())
+	case errors.Is(err, store.ErrNotPinned):
+		writeError(w, http.StatusForbidden, "not_pinned", err.Error())
+	case errors.Is(err, store.ErrNoLease):
+		writeError(w, http.StatusConflict, "no_lease", err.Error())
+	case errors.Is(err, store.ErrCoreMismatch):
+		writeError(w, http.StatusUnprocessableEntity, "core_mismatch", err.Error())
+	case errors.Is(err, store.ErrMixedSource):
+		writeError(w, http.StatusUnprocessableEntity, "mixed_source_not_supported", err.Error())
 	case errors.Is(err, store.ErrPinNotPermitted):
 		writeError(w, http.StatusUnprocessableEntity, "pin_not_permitted", err.Error())
 	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
@@ -390,6 +406,12 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	// it, so the answer comes within the wait and one poll (TD-399).
 	ctx, cancel := context.WithDeadline(r.Context(), entered.Add(wait))
 	defer cancel()
+	// The external host claims only by id (claimpinned.go): refused before
+	// anything is written for it.
+	if err := store.RefuseExternalHost(ctx, a.DB, req.HostID); err != nil {
+		a.fail(w, err)
+		return
+	}
 	// The first valid claim of a token registers the host it is bound to.
 	if err := store.RegisterAgentdHost(ctx, a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
 		a.fail(w, err)
@@ -574,11 +596,11 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 			out["usage_refused"] = refused
 		}
 	case "persist":
-		out, err = store.Persist(ctx, a.DB, f, res, a.Head)
+		out, err = store.PersistChecked(ctx, a.DB, f, res, a.Head, a.Commits)
 	case "submit":
 		out, err = store.Submit(ctx, a.DB, f)
 	case "salvage":
-		out, err = store.Salvage(ctx, a.DB, id, b.HostID, res, a.Head)
+		out, err = store.SalvageChecked(ctx, a.DB, id, b.HostID, res, a.Head, a.Commits)
 	case "ended":
 		out, err = store.Ended(ctx, a.DB, id, b.HostID, b.EndHow, b.GroupCleared)
 	default:

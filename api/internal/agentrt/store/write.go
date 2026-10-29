@@ -290,6 +290,7 @@ type Task struct {
 	// pinned proposal, set only by proposeBatchTx after checkPin (pin.go);
 	// nothing outside this package, and nothing else in it, sets them.
 	pin, viaSession string
+	providers       []string
 }
 
 // ProposeTask writes task_proposed and the task. A task outside the plan
@@ -318,7 +319,7 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 		body["token"] = t.Token
 	}
 	if t.pin != "" {
-		body["executor_pin"], body["via_session"] = t.pin, t.viaSession
+		body["executor_pin"], body["via_session"], body["providers"] = t.pin, t.viaSession, t.providers
 	}
 	needs, err := canon.Encode(nonNil(t.Needs))
 	if err != nil {

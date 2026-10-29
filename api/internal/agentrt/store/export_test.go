@@ -286,3 +286,23 @@ func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[str
 // BadLandingGate and CheckLandingGateAppend check landing_gate records (tests).
 var BadLandingGate = badLandingGate
 var CheckLandingGateAppend = checkLandingGateAppend
+
+// ClaimPinnedFor is ClaimPinned with a lease of the test's choosing (a lease
+// already past its grace, for salvage).
+func ClaimPinnedFor(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Duration) (map[string]any, error) {
+	return claimPinned(ctx, db, r, ttl)
+}
+
+// ReadBackClaimPinned is the read-back an exact claim whose commit failed
+// makes: the answer its key stored, if any.
+func ReadBackClaimPinned(ctx context.Context, db DB, host, key, task string) (map[string]any, bool) {
+	return readBackKey(ctx, db, hostActor(host), "claim_pinned", key, map[string]any{"task_id": task})
+}
+
+// PinnedReviewForTest fits a review's spec of subject's attempt as the
+// controller does when it proposes it: the time limit and the text.
+func PinnedReviewForTest(ctx context.Context, tx pgx.Tx, subject, attempt string) (time.Duration, string, error) {
+	spec := checkSpec{check: "review", subject: subject, attempt: attempt}
+	limit, err := pinnedReview(ctx, tx, subject, &spec)
+	return limit, spec.text, err
+}

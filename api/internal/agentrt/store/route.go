@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -234,6 +235,7 @@ func priorAttempts(ctx context.Context, tx pgx.Tx, tasks []string) (map[string][
 type routeInput struct {
 	job, core, subject string
 	pin                string // the task's executor pin, "" for none (pin.go)
+	subjectPin         string // the pin of the task it checks: a review of a pinned task goes to PinnedReviewer alone
 	needs              []string
 	candidates         []jobCandidate
 	facts              []restriction // on the task's needs and its core label
@@ -253,6 +255,16 @@ func (cp capabilities) input(c candidate, attempts []priorAttempt) routeInput {
 		}
 	}
 	in.candidates = cp.candidates[in.job]
+	if c.role == "review" && c.subjectPin != "" {
+		// A pinned task's review goes to the fixed reviewer of another
+		// provider than the coordinator's (§2.8: Codex, openai, in the
+		// first version), whatever else the job lists; independence from
+		// the subject's attempts is checked as for any review.
+		in.subjectPin = c.subjectPin
+		in.candidates = slices.DeleteFunc(slices.Clone(in.candidates), func(jc jobCandidate) bool {
+			return jc.executor != PinnedReviewer.Executor || jc.provider != PinnedReviewer.Provider
+		})
+	}
 	in.competence = cp.competenceOf(c, in.job, in.candidates)
 	subjects := map[string]bool{in.core: in.core != ""}
 	for _, n := range c.needs {
@@ -398,6 +410,9 @@ func (in routeInput) record() map[string]any {
 		// fingerprint, are what they were before pins (0010).
 		rec["executor_pin"] = in.pin
 	}
+	if in.subjectPin != "" {
+		rec["subject_pin"] = in.subjectPin // only a pinned task's review, as executor_pin
+	}
 	return rec
 }
 
@@ -462,7 +477,8 @@ func replayInput(rec map[string]any) (routeInput, error) {
 		}
 		return ref
 	}
-	in := routeInput{job: str(rec, "job"), core: str(rec, "core"), subject: str(rec, "subject"), pin: str(rec, "executor_pin")}
+	in := routeInput{job: str(rec, "job"), core: str(rec, "core"), subject: str(rec, "subject"), pin: str(rec, "executor_pin"),
+		subjectPin: str(rec, "subject_pin")}
 	if l, ok := rec["needs"].([]any); ok {
 		for _, n := range l {
 			if s, ok := n.(string); ok {

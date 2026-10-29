@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -253,6 +254,23 @@ func seatsUnique(tokens []TokenConfig) error {
 		seen[name] = true
 	}
 	return nil
+}
+
+// Seats are the seat principals whose tokens loaded (a value configured),
+// sorted: the platform registers the ones it may at its start
+// (store.EnsureSeats).
+func (a *AuthService) Seats() []string {
+	if a == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range a.principals {
+		if strings.HasPrefix(p.Name, SeatPrefix) {
+			out = append(out, p.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // IssueReader says whether a principal reads business issues (§5.3): an

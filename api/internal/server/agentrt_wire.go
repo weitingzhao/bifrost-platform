@@ -80,7 +80,7 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), Commits: s.agentRuntimeCommits(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
 		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
@@ -127,6 +127,13 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// they did already recorded: the API's readers count a host's silence
 		// from no earlier (review 528 A1b).
 		late.open(pool, time.Now())
+		// The seats the token table names that the platform registers
+		// itself (store.EnsureSeats): the coordinator's proposer seat.
+		if seats, err := store.EnsureSeats(ctx, pool, s.auth.Seats()); err != nil {
+			slog.Error("agentrt: a configured seat could not be registered", "err", err)
+		} else if len(seats) > 0 {
+			slog.Info("agentrt: seats registered", "seats", seats)
+		}
 		// Both processes say whether the database has this binary's
 		// migrations (TD-411), in their health and their log.
 		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })

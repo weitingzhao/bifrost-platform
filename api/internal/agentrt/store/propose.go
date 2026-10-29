@@ -636,7 +636,7 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 	if p != nil {
 		for _, t := range tasks {
 			if pin := p.pins[t.Ref]; pin != "" {
-				if err := checkPin(ctx, tx, w, missionID, t, pin); err != nil {
+				if err := checkPin(ctx, tx, w, missionID, t, pin, p.providers[t.Ref]); err != nil {
 					return nil, err
 				}
 			}
@@ -648,30 +648,24 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 		if effectRank[t.Effect] > effectRank[ceiling] {
 			return nil, invalid("task %s: effect_class %s is above the mission's max_action %s", t.Ref, t.Effect, ceiling)
 		}
-		var kind string
-		var spec []byte
-		if err := tx.QueryRow(ctx, `SELECT a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
-		  WHERE a.artifact_id = $1`, t.SpecArtifact).Scan(&kind, &spec); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, invalid("task %s: spec %s is not stored (upload it first)", t.Ref, t.SpecArtifact)
+		pinned := p != nil && p.pins[t.Ref] != ""
+		specID := t.SpecArtifact
+		if pinned {
+			// The platform's spec, never the proposer's (§2.8).
+			var err error
+			if specID, err = pinnedSpec(ctx, tx, t); err != nil {
+				return nil, err
 			}
+		} else if err := checkSpecArtifact(ctx, tx, t); err != nil {
 			return nil, err
-		}
-		if kind != "task_spec" {
-			return nil, invalid("task %s: spec %s is a %s, not a task_spec", t.Ref, t.SpecArtifact, kind)
-		}
-		// A spec stored some other way than an upload is held to the
-		// upload's rule too (T11).
-		if ref, found := WorkspaceRef(kind, spec); found {
-			return nil, invalid("task %s: spec %s refers to a task's workspace: %s", t.Ref, t.SpecArtifact, ref)
 		}
 		id := NewTaskID()
 		task := Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
 			OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
-			SpecArtifact: t.SpecArtifact, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
+			SpecArtifact: specID, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
 			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}
-		if p != nil && p.pins[t.Ref] != "" {
-			task.pin, task.viaSession = p.pins[t.Ref], p.viaSession
+		if pinned {
+			task.pin, task.viaSession, task.providers = p.pins[t.Ref], p.viaSession, p.providers[t.Ref]
 		}
 		if _, err := ProposeTask(ctx, tx, w.Actor, task); err != nil {
 			return nil, err
@@ -702,6 +696,29 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 		}
 	}
 	return map[string]any{"mission_id": missionID, "tasks": out}, nil
+}
+
+// checkSpecArtifact checks the spec a proposed task names: stored, a
+// task_spec, and referring to no task's workspace.
+func checkSpecArtifact(ctx context.Context, tx pgx.Tx, t TaskProposal) error {
+	var kind string
+	var spec []byte
+	if err := tx.QueryRow(ctx, `SELECT a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+	  WHERE a.artifact_id = $1`, t.SpecArtifact).Scan(&kind, &spec); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return invalid("task %s: spec %s is not stored (upload it first)", t.Ref, t.SpecArtifact)
+		}
+		return err
+	}
+	if kind != "task_spec" {
+		return invalid("task %s: spec %s is a %s, not a task_spec", t.Ref, t.SpecArtifact, kind)
+	}
+	// A spec stored some other way than an upload is held to the
+	// upload's rule too (T11).
+	if ref, found := WorkspaceRef(kind, spec); found {
+		return invalid("task %s: spec %s refers to a task's workspace: %s", t.Ref, t.SpecArtifact, ref)
+	}
+	return nil
 }
 
 // dispatchPage is how many proposed tasks Dispatch reads at a time.

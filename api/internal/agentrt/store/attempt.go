@@ -447,10 +447,18 @@ func (r Result) body() map[string]any {
 // the report and artifacts are stored here, and the branch, if any, points at
 // the commit reported. Only a persisted attempt can be accepted.
 func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (map[string]any, error) {
+	return PersistChecked(ctx, db, f, r, head, nil)
+}
+
+// PersistChecked is Persist with the forge's reader of commits, which a
+// pinned task's result needs (pinresult.go); without it such a result waits
+// (ErrNoHead).
+func PersistChecked(ctx context.Context, db DB, f Fence, r Result, head BranchHead, commits CommitReader) (map[string]any, error) {
 	if r.Report == "" {
 		return nil, fmt.Errorf("%w: a result has a report", ErrState)
 	}
-	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(db, f.AttemptID, head),
+	var pr pinnedRead
+	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.pinnedCheck(db, f.AttemptID, head, commits, &pr),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockLive(ctx, tx, f, false)
 			if err != nil {
@@ -462,7 +470,11 @@ func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (ma
 			if err = r.fits(ctx, tx, a); err != nil {
 				return nil, err
 			}
-			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_persisted", r.body()); err != nil {
+			pinned, err := checkPinnedResult(ctx, tx, a, r, pr)
+			if err != nil {
+				return nil, err
+			}
+			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_persisted", withPinned(r.body(), pinned)); err != nil {
 				return nil, err
 			}
 			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
@@ -509,7 +521,14 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 // persisted, the attempt gets persisted_at, so a new verification task may
 // accept it. Neither the attempt's state nor the task's changes.
 func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, head BranchHead) (map[string]any, error) {
-	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(db, attemptID, head),
+	return SalvageChecked(ctx, db, attemptID, hostID, r, head, nil)
+}
+
+// SalvageChecked is Salvage with the forge's reader of commits: a pinned
+// task's salvaged result is checked as its persisted one is (pinresult.go).
+func SalvageChecked(ctx context.Context, db DB, attemptID, hostID string, r Result, head BranchHead, commits CommitReader) (map[string]any, error) {
+	var pr pinnedRead
+	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.pinnedCheck(db, attemptID, head, commits, &pr),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockAttempt(ctx, tx, attemptID, false)
 			if err != nil {
@@ -527,7 +546,11 @@ func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, hea
 			if err = r.fits(ctx, tx, a); err != nil {
 				return nil, err
 			}
-			if err = attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_salvaged", r.body()); err != nil {
+			pinned, err := checkPinnedResult(ctx, tx, a, r, pr)
+			if err != nil {
+				return nil, err
+			}
+			if err = attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_salvaged", withPinned(r.body(), pinned)); err != nil {
 				return nil, err
 			}
 			persisted := a.persisted

@@ -116,6 +116,9 @@ type taskBody struct {
 	// ExecutorPin pins the task to the external host (store/pin.go): only
 	// the proposer seat a signed standing envelope names may set it.
 	ExecutorPin string `json:"executor_pin"`
+	// Providers declares whose work a pinned task's commit holds (§2.8):
+	// only the entry's provider, alone, is taken.
+	Providers []string `json:"providers"`
 }
 
 type tasksBody struct {
@@ -150,7 +153,7 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = append(tasks, store.PinnedTask{TaskProposal: store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
-			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin})
+			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers})
 		pinned = pinned || t.ExecutorPin != ""
 	}
 	var out map[string]any

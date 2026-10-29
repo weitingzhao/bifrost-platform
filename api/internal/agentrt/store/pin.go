@@ -43,12 +43,27 @@ func pinRefused(format string, args ...any) error {
 type PinnedTask struct {
 	TaskProposal
 	ExecutorPin string
+	// Providers are the model providers whose work the commit holds, as
+	// the proposer declares them (§2.8, F4 A): a pinned task takes only the
+	// provider its entry names, alone. Its spec is the platform's
+	// (ImplementSpec), whatever SpecArtifact says.
+	Providers []string
 }
+
+// ErrMixedSource: a pinned task declares no provider, or one besides its
+// entry's (§2.8, F4 A: the first version takes only the coordinator's own
+// work); nothing of the batch was written. It is an ErrInvalid.
+var ErrMixedSource = fmt.Errorf("%w: mixed_source_not_supported", ErrInvalid)
+
+// generatedSpec stands in, until the write, for the spec of a pinned task
+// that names none: the platform writes it (pinnedSpec).
+const generatedSpec = "generated"
 
 // pinning is what a pinned batch adds to its tasks: each one's pin, by ref,
 // and the session header it came with.
 type pinning struct {
 	pins       map[string]string
+	providers  map[string][]string
 	viaSession string
 }
 
@@ -60,12 +75,15 @@ type pinning struct {
 // only to the writer who may pin (§2.6).
 func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, viaSession string, tasks []PinnedTask) (map[string]any, error) {
 	props := make([]TaskProposal, 0, len(tasks))
-	pins := map[string]string{}
+	pins, providers := map[string]string{}, map[string][]string{}
 	for _, t := range tasks {
-		props = append(props, t.TaskProposal)
 		if t.ExecutorPin != "" {
-			pins[t.Ref] = t.ExecutorPin
+			pins[t.Ref], providers[t.Ref] = t.ExecutorPin, slices.Clone(t.Providers)
+			if t.SpecArtifact == "" {
+				t.SpecArtifact = generatedSpec
+			}
 		}
+		props = append(props, t.TaskProposal)
 	}
 	if len(pins) == 0 {
 		return ProposeTasks(ctx, db, w, key, missionID, props)
@@ -88,10 +106,11 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 	for i, t := range tasks {
 		if t.ExecutorPin != "" {
 			req["tasks"].([]any)[i].(map[string]any)["executor_pin"] = t.ExecutorPin
+			req["tasks"].([]any)[i].(map[string]any)["providers"] = nonNil(t.Providers)
 		}
 	}
 	req["via_session"] = viaSession
-	p := &pinning{pins: pins, viaSession: viaSession}
+	p := &pinning{pins: pins, providers: providers, viaSession: viaSession}
 	for try := 1; ; try++ {
 		out, err := idempotentHeld(ctx, db, w, "missions/"+missionID+"/tasks", key, req,
 			func(pgx.Tx) error { return pinWriter(w) },
@@ -131,7 +150,7 @@ func pinWriter(w Writer) error {
 // the writer already ensured: the writer may pin, and the envelope in force
 // for the mission's tenant, signed, has the pin's entry, whose proposer is
 // the writer and which lists the task's repository and role.
-func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t TaskProposal, pin string) error {
+func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t TaskProposal, pin string, providers []string) error {
 	if err := pinWriter(w); err != nil {
 		return err
 	}
@@ -164,8 +183,30 @@ func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t Task
 		return pinRefused("task %s: %s v%d lets pin %s have roles %v, not %s", t.Ref, env.ID, env.Version, pin, h.Roles, t.Role)
 	case !slices.Contains(h.Repos, t.Repo):
 		return pinRefused("task %s: %s v%d lets pin %s have repositories %v, not %q", t.Ref, env.ID, env.Version, pin, h.Repos, t.Repo)
+	case len(Repos[t.Repo].Verify) == 0:
+		return pinRefused("task %s: repository %q has no checks the platform knows, so no spec of its own", t.Ref, t.Repo)
+	case len(providers) == 0:
+		return fmt.Errorf("%w: task %s declares no providers; a pinned task declares [%s]", ErrMixedSource, t.Ref, h.Provider)
+	}
+	for _, pv := range providers {
+		if pv != h.Provider {
+			return fmt.Errorf("%w: task %s declares provider %q; a pinned task holds %s's work alone, or goes by hand", ErrMixedSource, t.Ref, pv, h.Provider)
+		}
 	}
 	return nil
+}
+
+// pinnedSpec is the spec of a pinned task (§2.8): the platform's, made by
+// ImplementSpec with the repository's own checks, never one the proposer
+// uploaded.
+func pinnedSpec(ctx context.Context, tx pgx.Tx, t TaskProposal) (string, error) {
+	repo := Repos[t.Repo]
+	spec, err := ImplementSpec(t.Title, "Handed in by the coordinator: one commit on the task's base, made before it was handed in. "+
+		"The checks below run on that commit.", repo, slices.Clone(repo.Verify))
+	if err != nil {
+		return "", err
+	}
+	return PutArtifact(ctx, tx, "controller", "task_spec", "application/json", spec)
 }
 
 // badViaSession says why a via_session is refused, "" when it is a

@@ -91,12 +91,16 @@ type checkSpec struct {
 	round                                           int64
 	verification, verifyReport                      string // a review's deterministic pass
 	salvage                                         bool   // the attempt is a lost one whose result was salvaged (adopt.go)
+	text                                            string // what the checker is told before the subject (pinreview.go)
 }
 
 func (c checkSpec) put(ctx context.Context, tx pgx.Tx) (string, error) {
 	doc := map[string]any{"check": c.check, "subject_task": c.subject, "attempt": c.attempt, "round": c.round, "task_spec": c.taskSpec}
 	if c.salvage {
 		doc["salvage"] = true
+	}
+	if c.text != "" {
+		doc["text"] = c.text
 	}
 	for k, v := range map[string]string{"commit": c.commit, "repo": c.repo, "verification": c.verification, "verify_report": c.verifyReport} {
 		if v != "" {
@@ -144,6 +148,10 @@ func readCheckSpec(ctx context.Context, tx pgx.Tx, artifactID string) (checkSpec
 // subject's step, starting from its repository at the attempt's commit, and
 // makes it ready to claim.
 func proposeChecker(ctx context.Context, tx pgx.Tx, subject taskRow, d taskDetail, spec checkSpec) (string, error) {
+	limit, err := pinnedReview(ctx, tx, subject.id, &spec)
+	if err != nil {
+		return "", err
+	}
 	specID, err := spec.put(ctx, tx)
 	if err != nil {
 		return "", err
@@ -155,7 +163,7 @@ func proposeChecker(ctx context.Context, tx pgx.Tx, subject taskRow, d taskDetai
 	id := NewTaskID()
 	if _, err := ProposeTask(ctx, tx, "controller", Task{ID: id, MissionID: subject.mission, PlanNode: subject.step,
 		OffPlanReason: d.offPlanReason, Subject: subject.id, Role: spec.check, Class: subject.class, Title: spec.check + " " + subject.id,
-		SpecArtifact: specID, Effect: "none", Core: d.core, Repo: d.repo, BaseCommit: base}); err != nil {
+		SpecArtifact: specID, Effect: "none", Core: d.core, Repo: d.repo, BaseCommit: base, HardLimit: limit}); err != nil {
 		return "", err
 	}
 	return id, MarkReady(ctx, tx, "controller", id)
