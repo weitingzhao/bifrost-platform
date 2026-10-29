@@ -303,6 +303,11 @@ func ReadBackClaimPinned(ctx context.Context, db DB, host, key, task string) (ma
 // controller does when it proposes it: the time limit and the text.
 func PinnedReviewForTest(ctx context.Context, tx pgx.Tx, subject, attempt string) (time.Duration, string, error) {
 	spec := checkSpec{check: "review", subject: subject, attempt: attempt}
+	// The review is of the attempt's pushed commit (review 691: the facts are
+	// read for that commit only).
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&spec.commit); err != nil {
+		return 0, "", err
+	}
 	limit, err := pinnedReview(ctx, tx, subject, &spec)
 	return limit, spec.text, err
 }

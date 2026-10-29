@@ -152,8 +152,10 @@ func Test691PersistThenSalvageImmutable(t *testing.T) {
 	head, read := forge(a.Commit, facts)
 	_, err := store.PersistChecked(ctx, w.rt, r.fence, a, head, read)
 	ok(t, err)
-	_, err = w.rt.Exec(ctx, `UPDATE agentrt.attempt SET lease_expires_at=clock_timestamp()-interval '1 hour' WHERE attempt_id=$1`, r.attempt)
-	ok(t, err)
+	// A lease moves back only with another column and the import event
+	// (liveness columns alone move forward only): as progresspersist_test.go.
+	w.legacy(t, `UPDATE agentrt.attempt SET lease_expires_at=clock_timestamp()-interval '1 hour',
+	  started_at = started_at - interval '1 second' WHERE attempt_id='`+r.attempt+`'`)
 	_, _, err = store.SweepLeases(ctx, w.rt)
 	ok(t, err)
 	before := w.count(t, `SELECT count(*) FROM agentrt.event`)
