@@ -13,6 +13,7 @@ import (
 // handlers, including omitempty/omitzero and the material handler's envelope.
 // Regenerate explicitly: C6_UPDATE_FIXTURES=1 go test ./internal/agentrt/store -run TestC6ConsoleFixture
 func TestC6ConsoleFixture(t *testing.T) {
+	t.Parallel()
 	at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	a, r, m0 := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40)
 	op := "land:t_00000000000000000000000001:1"
