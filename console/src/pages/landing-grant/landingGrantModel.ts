@@ -1,9 +1,12 @@
 import type { LandingGrant, LandingWait } from '@/api/landingGrant'
 
-export function grantState(g: LandingGrant, now = Date.now()): string {
+/** opPhase is the operation's phase in the same read: a grant of an operation no longer waiting is never "waiting for push". */
+export function grantState(g: LandingGrant, now = Date.now(), opPhase = 'awaiting_grant'): string {
   if (g.handed_to_push) return 'Handed to push'
   if (g.revoked) return 'Revoked'
   if (g.refused) return `Refused at the final gate${g.refused_reason ? `: ${g.refused_reason}` : ''}; a new tier D approval is needed`
+  const ended = g.ended ?? (opPhase !== 'awaiting_grant' ? `operation_${opPhase}` : '')
+  if (ended) return `Not usable: ${ended.replaceAll('_', ' ')}; a new request is needed for the operation that replaces it`
   if (Date.parse(g.expires_at) <= now) return 'Expired'
   return g.valid ? 'Authorized, waiting for push' : 'Not currently usable'
 }
@@ -11,7 +14,7 @@ export function landingWaitWords(w: LandingWait): string {
   const kind = w.soft_at_request.some(s => s === 'core' || s.startsWith('core:')) ? 'trust-core' : 'soft guardrail'
   const request = w.approval_number ? `#${w.approval_number}` : 'request'
   switch (w.shown) {
-    case 'authorized': return w.grants.some(g => grantState(g) === 'Authorized, waiting for push')
+    case 'authorized': return w.grants.some(g => grantState(g, Date.now(), w.phase) === 'Authorized, waiting for push')
       ? 'Authorized, waiting for push' : 'No usable grant in this read; refresh the landing stream'
     case 'handed_to_push': return 'Handed to push'
     case 'grant_refused': return `The final gate refused the grant${w.grant_refused ? ` (${w.grant_refused})` : ''}; a new tier D approval is needed`

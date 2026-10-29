@@ -5,6 +5,7 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import { GrantStatus, WaitStatus } from './GrantStatus'
 import { MaterialEvidence } from './MaterialEvidence'
+import { useConfirmedReads } from './useConfirmedRead'
 
 function readLocation() {
   const q = new URLSearchParams(window.location.hash.split('?')[1])
@@ -29,6 +30,7 @@ export function LandingGrantContent({ op, stg = true }: { op: string; stg?: bool
   const [notice, setNotice] = useState('')
   const material = useQuery({ queryKey: ['landing-material', op, stg], queryFn: ({ signal }) => fetchLandingMaterial(op, stg, signal), enabled: op !== '', retry: false, refetchInterval: 15_000 })
   const status = useQuery({ queryKey: ['landing-wait', op], queryFn: ({ signal }) => fetchLandingWait(op, signal), enabled: op !== '', retry: false, refetchInterval: 15_000 })
+  const [statusNow, materialNow] = useConfirmedReads([status, material])
   const refresh = () => { void material.refetch(); void status.refetch() }
   async function revoke(id: string) {
     if (lock.current || decisionBlockReason(authRef.current) !== null) return
@@ -50,23 +52,24 @@ export function LandingGrantContent({ op, stg = true }: { op: string; stg?: bool
     }
   }
   if (!op) return <p>No landing operation named in the link.</p>
-  // On a failed refresh, old grants cannot support another mutation or a current authorization claim.
-  const grants = status.isSuccess && !status.isPaused ? status.data.grants : []
+  // On a failed refresh, or offline (review 698 R-04), old grants cannot
+  // support another mutation or a current authorization claim.
+  const grants = statusNow && status.data ? status.data.grants : []
   return <div className="flex min-w-0 max-w-5xl flex-col gap-4">
     <div className="flex flex-wrap gap-3 text-sm"><span className="break-all">Operation {op}</span><button type="button" className="underline" disabled={busy} onClick={refresh}>Refresh material and status</button></div>
     {material.isPending && <p>Reading landing material…</p>}
     {material.isError && <p role="alert">{material.error.message}</p>}
-    {material.isPaused && <p role="alert">Landing material unavailable — offline.</p>}
-    {material.isSuccess && !material.isPaused && <MaterialEvidence data={material.data} />}
+    {material.isSuccess && !materialNow && <p role="alert">Landing material unconfirmed — offline or not read since reconnecting.</p>}
+    {materialNow && material.data && <MaterialEvidence data={material.data} />}
     <section aria-label="Authorization status" className="space-y-3">
       <h3 className="font-semibold">Authorization status</h3>
       <p className="text-sm">Only grants recorded in the landing stream authorize a push. Failed or unknown approval results do not prove a grant is absent or revoked.</p>
       {status.isPending && <p>Reading the landing stream…</p>}
-      {(status.isError || status.isPaused) && <p role="alert">Landing status unavailable. Refresh to read the landing stream.</p>}
-      {status.isSuccess && !status.isPaused && <><WaitStatus wait={status.data} />{grants.length === 0 && <p>No grant recorded in this read.</p>}</>}
+      {(status.isError || status.isSuccess && !statusNow) && <p role="alert">Landing status unavailable. Refresh to read the landing stream.</p>}
+      {statusNow && status.data && <><WaitStatus wait={status.data} />{grants.length === 0 && <p>No grant recorded in this read.</p>}</>}
       {blocked && <p className="text-sm">{blocked}</p>}
       {notice && <p role="status" className="text-sm">{notice}</p>}
-      {grants.map(grant => <GrantStatus key={grant.grant_id} grant={grant} revoke={id => void revoke(id)} disabled={busy || blocked !== null || status.isFetching} />)}
+      {grants.map(grant => <GrantStatus key={grant.grant_id} grant={grant} opPhase={status.data?.phase ?? ''} revoke={id => void revoke(id)} disabled={busy || blocked !== null || status.isFetching || !statusNow} />)}
     </section>
   </div>
 }

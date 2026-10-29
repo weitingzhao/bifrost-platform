@@ -722,12 +722,33 @@ type LandingGrantStatus struct {
 	RefusedReason  string    `json:"refused_reason,omitempty"`
 	RefusedAt      time.Time `json:"refused_at,omitzero"`
 	IntentSeq      int64     `json:"main_intent_seq,omitempty"`
-	Valid          bool      `json:"valid"`
-	CandidateHash  string    `json:"candidate_digest"`
-	MaterialHash   string    `json:"material_digest"`
+	// Valid: the grant can be consumed now — usable on the stream, and its
+	// operation still the root's latest, waiting on the same candidate.
+	// Ended says why an unspent grant cannot be (review 698 R-03):
+	// operation_discarded, operation_failed, operation_superseded, ...
+	Valid         bool   `json:"valid"`
+	Ended         string `json:"ended,omitempty"`
+	CandidateHash string `json:"candidate_digest"`
+	MaterialHash  string `json:"material_digest"`
 }
 
-func (g *grantView) status(now time.Time) LandingGrantStatus {
+// status is the grant as shown, beside its operation as the stream has it.
+func (g *grantView) status(now time.Time, o landing.Operation, latest bool) LandingGrantStatus {
+	st := g.statusOnly(now)
+	if st.Valid {
+		switch {
+		case o.Phase != "awaiting_grant" && !o.AtMain():
+			st.Valid, st.Ended = false, "operation_"+o.Phase
+		case !latest:
+			st.Valid, st.Ended = false, "operation_superseded"
+		case o.R != g.R || o.M0 != g.M0 || o.A != g.A:
+			st.Valid, st.Ended = false, "operation_changed"
+		}
+	}
+	return st
+}
+
+func (g *grantView) statusOnly(now time.Time) LandingGrantStatus {
 	return LandingGrantStatus{GrantID: g.GrantID, ApprovalID: g.ApprovalID, ApprovalNumber: g.ApprovalNumber, Action: g.Action, Op: g.Op,
 		Waives: slices.Clone(g.Waives), STGRelease: g.STGRelease, ApprovedAt: g.approved, GrantedAt: g.granted, ExpiresAt: g.exp,
 		Revoked: !g.RevokedAt.IsZero(), RevokedAt: g.RevokedAt, Consumed: g.ConsumedSeq != 0, IntentSeq: g.ConsumedSeq,

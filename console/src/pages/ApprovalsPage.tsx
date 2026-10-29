@@ -65,6 +65,7 @@ import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import { approvalOptionLabel } from '@/api/assessment'
 import { fetchLandingMaterial, isLandingAction } from '@/api/landingGrant'
 import { LandingApprovalEvidence } from '@/pages/landing-grant/LandingApprovalEvidence'
+import { useConfirmedRead } from '@/pages/landing-grant/useConfirmedRead'
 import { AssessmentSection } from '@/pages/question/AssessmentPanel'
 
 function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
@@ -292,7 +293,7 @@ function ApprovalCard({
   const op = typeof item.params?.op === 'string' ? item.params.op : ''
   const stg = item.params?.stg_release !== false
   const landingQ = useQuery({ queryKey: ['landing-material', op, stg], queryFn: ({ signal }) => fetchLandingMaterial(op, stg, signal), enabled: landing && op !== '', retry: false, refetchInterval: landing ? 15_000 : false })
-  const evidence = landingQ.isSuccess && !landingQ.isPaused ? landingQ.data : undefined
+  const evidence = useConfirmedRead(landingQ) ? landingQ.data : undefined
   const matches = typeof item.params?.stg_release === 'boolean' && item.params.env === 'prod'
     && evidence?.material.material_digest === item.params?.material_digest && evidence?.material.candidate.R === item.params?.R
     && evidence?.material.action === item.action && evidence?.material.candidate.task === item.params?.task && evidence?.material.candidate.repo === item.params?.repo

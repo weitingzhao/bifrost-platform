@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
@@ -369,8 +370,27 @@ func trustAnswerValid(answer string) bool {
 			return false
 		}
 	}
-	return true
+	// Review 698 N-02: obvious placeholders are not answers — a bracketed
+	// or angled blank, an ellipsis, TBD/TODO-like fillers, the prompt's own
+	// example, an explanation of fewer than three distinct words.
+	if strings.ContainsAny(why, "[]<>…") || strings.Contains(why, "...") || strings.Contains(why, trustExample) {
+		return false
+	}
+	words := map[string]bool{}
+	for _, w := range strings.FieldsFunc(why, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if slices.Contains(trustFillers, w) {
+			return false
+		}
+		words[w] = true
+	}
+	return len(words) >= 3
 }
+
+// trustExample is the example answer TrustReviewText gives, which is no
+// answer; trustFillers are words that only stand in for one.
+const trustExample = "the token is still read from"
+
+var trustFillers = []string{"tbd", "todo", "tba", "fixme", "xxx", "placeholder", "lorem", "ipsum"}
 
 // grantExt is the external half: the result's diff, R's patch and R's CI.
 type grantExt struct {
@@ -520,7 +540,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	}
 	for _, g := range d.grants {
 		if g.Op == d.opID {
-			m.Grants = append(m.Grants, g.status(now))
+			m.Grants = append(m.Grants, g.status(now, d.op, d.latest))
 		}
 	}
 	return m, nil

@@ -82,7 +82,7 @@ func parseLandingCIKey(v any) (landingCIKeyRecord, error) {
 
 // checkLandingCIKeyAppend: the key rides only on the controller's ci_kick
 // or ci_rerun of its operation, on the repository stream, with that
-// operation's R and M0; a rerun keeps the key of the kick.
+// operation's R and M0; once recorded it never changes.
 func checkLandingCIKeyAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	v, has := ev.Body["landing_ci_key"]
 	if !has {
@@ -112,8 +112,10 @@ func checkLandingCIKeyAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	if prior != nil && !prior.equal(k.GrantCIKey) {
 		return invalid("landing_ci_key of %s is fixed at its first kick", k.Op)
 	}
-	if prior == nil && r["kind"] != "ci_kick" {
-		return invalid("landing_ci_key is fixed at the first kick")
+	// The first key may ride on a rerun: the first run was the webhook's or
+	// v1's, not pinned (review 698 B-01); from then on it never changes.
+	if prior == nil && r["kind"] == "ci_rerun" && o.Rerun {
+		return invalid("landing_ci_key is fixed at the operation's first pinned run")
 	}
 	return nil
 }
@@ -237,7 +239,22 @@ func checkLandingRuleClearAppend(ctx context.Context, tx pgx.Tx, ev Event, at ti
 	if s.Operations[c.Op].Phase != "awaiting_grant" {
 		return invalid("landing_rule_clear ends a waiting operation only")
 	}
-	return nil
+	// Review 698 N-03: the certificate is the final gate's own, on the rule
+	// that exists: its landing_gate in the same event names the same rule
+	// version and decision, the checks are this binary's, and the rule's
+	// text is the one its sha256 says.
+	gate, _ := ev.Body["landing_gate"].(map[string]any)
+	if gate == nil || gate["decided_at"] != c.DecidedAt || fmt.Sprint(gate["rule_version"]) != fmt.Sprint(c.Rule.Version) ||
+		c.ChecksVersion != rules.LandingChecksVersion {
+		return invalid("landing_rule_clear rides with its final gate's landing_gate, on the same rule and decision")
+	}
+	var sum string
+	err = tx.QueryRow(ctx, `SELECT encode(sha256(convert_to(body_text,'UTF8')),'hex') FROM agentrt.rule WHERE rule_id=$1 AND rule_version=$2`,
+		c.Rule.ID, c.Rule.Version).Scan(&sum)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && sum != c.Rule.SHA256 {
+		return invalid("landing_rule_clear names a rule that does not exist")
+	}
+	return err
 }
 
 // refuseGrant records the final gate's refusal of a grant for good, in the

@@ -66,15 +66,28 @@ func pinnedReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpe
 	if spec.check != "review" {
 		return 0, nil
 	}
-	var pin string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(executor_pin, '') FROM agentrt.task WHERE task_id = $1`, subject).Scan(&pin); err != nil {
+	// One read (review 698 R-05): the pin, and for an unpinned task whether
+	// its review asks the trust chain — no second round trip for any review.
+	var pin, repo, role, tenant string
+	var core bool
+	var env grantEnvelopeRow
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(executor_pin, ''), t.core, COALESCE(t.repo, ''), t.role, m.tenant,
+	    e.rule_version, e.direction, e.effective_at, e.expires_at, e.body_text, e.body_json, e.signed_by
+	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
+	  LEFT JOIN LATERAL (SELECT r.rule_version, r.direction, r.effective_at, r.expires_at, r.body_text, r.body_json, r.signed_by FROM agentrt.rule r
+	    WHERE r.rule_id = 'standing-envelope:' || m.tenant AND r.effective_at <= clock_timestamp() ORDER BY r.rule_version DESC LIMIT 1) e ON true
+	  WHERE t.task_id = $1`, subject).Scan(&pin, &core, &repo, &role, &tenant,
+		&env.version, &env.direction, &env.effective, &env.expires, &env.text, &env.body, &env.signedBy); err != nil {
 		return 0, err
 	}
 	if pin == "" {
 		// An ordinary core task's commit may be granted too (§12.3 last
 		// item): once grants are enabled its review answers the trust chain
 		// (review 694 B-02), the default limit kept. Before, as it was.
-		return 0, coreTrustReview(ctx, tx, subject, spec)
+		if core && role == "implement" && rules.GrantSupported(repo) && env.enables(tenant, repo, time.Now()) {
+			spec.text = TrustReviewText
+		}
+		return 0, nil
 	}
 	var lines int
 	var hard bool
@@ -92,26 +105,4 @@ func pinnedReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpe
 		spec.text = TrustReviewText
 	}
 	return PinnedReviewLimit(lines), nil
-}
-
-// coreTrustReview gives the trust chain's questions to the review of an
-// unpinned core implementation in a repository that takes grants, once the
-// envelope in force enables them.
-func coreTrustReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpec) error {
-	var core bool
-	var repo, role, tenant string
-	var env grantEnvelopeRow
-	if err := tx.QueryRow(ctx, `SELECT t.core, COALESCE(t.repo, ''), t.role, m.tenant,
-	    e.rule_version, e.direction, e.effective_at, e.expires_at, e.body_text, e.body_json, e.signed_by
-	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
-	  LEFT JOIN LATERAL (SELECT r.rule_version, r.direction, r.effective_at, r.expires_at, r.body_text, r.body_json, r.signed_by FROM agentrt.rule r
-	    WHERE r.rule_id = 'standing-envelope:' || m.tenant AND r.effective_at <= clock_timestamp() ORDER BY r.rule_version DESC LIMIT 1) e ON true
-	  WHERE t.task_id = $1`, subject).Scan(&core, &repo, &role, &tenant,
-		&env.version, &env.direction, &env.effective, &env.expires, &env.text, &env.body, &env.signedBy); err != nil {
-		return err
-	}
-	if core && role == "implement" && rules.GrantSupported(repo) && env.enables(tenant, repo, time.Now()) {
-		spec.text = TrustReviewText
-	}
-	return nil
 }

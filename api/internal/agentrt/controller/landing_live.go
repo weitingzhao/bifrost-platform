@@ -31,12 +31,14 @@ const recordTimeout = 30 * time.Second
 // or an unrecorded answer after the intent is the reconciler's, which reads
 // main (R there, or R absent past the fence).
 func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r string) error {
-	return c.landLiveWith(ctx, src, op, r, false)
+	return c.landLiveWith(ctx, src, op, r, false, nil)
 }
 
 // landLiveWith is landLive; recheck takes a waiting operation with no
 // grant through the gate's rule recheck (store.RecheckWaitingLanding).
-func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r string, recheck bool) error {
+// decided, when given, receives the gate's decision (zero when the gate did
+// not decide: an error before or in it).
+func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r string, recheck bool, decided *landing.Decision) error {
 	if c.Env != "prod" || !c.Live || c.DrillGit == nil && c.OpenLive == nil {
 		return fmt.Errorf("live landing requires prod with live on")
 	}
@@ -73,6 +75,9 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 		}
 		return store.LiveObservation{Main: main, CI: ci, WindowBlocked: blocked}, nil
 	})
+	if decided != nil && err == nil {
+		*decided = d
+	}
 	if err != nil || !d.Allowed {
 		return err
 	}

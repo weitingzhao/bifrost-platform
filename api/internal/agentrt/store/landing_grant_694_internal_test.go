@@ -92,7 +92,7 @@ func (r *grantRows) Scan(dest ...any) error {
 	body := r.bodies[r.i-1]
 	*dest[0].(*int64) = int64(r.i)
 	*dest[1].(*time.Time) = r.at
-	for i, key := range []string{"landing", "landing_grant", "landing_grant_revoked", "landing_grant_use", "landing_grant_refused"} {
+	for i, key := range []string{"landing", "landing_grant", "landing_grant_revoked", "landing_grant_use", "landing_grant_refused", "landing_ci_key"} {
 		*dest[2+i].(*[]byte) = nil
 		if v, ok := body[key]; ok {
 			b, err := json.Marshal(v)

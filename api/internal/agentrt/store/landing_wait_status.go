@@ -120,7 +120,7 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 	w.Grants = []LandingGrantStatus{}
 	for _, g := range grants {
 		if g.Op == op {
-			st := g.status(at)
+			st := g.status(at, o, state.LatestOperation(o.Task) == op)
 			w.Grants = append(w.Grants, st)
 			authorized = authorized || st.Valid
 			if st.Refused {

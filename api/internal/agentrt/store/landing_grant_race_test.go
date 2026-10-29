@@ -354,7 +354,9 @@ func TestC5T48LockOrder(t *testing.T) {
 		_, err := store.WriteLandingGrant(ctx, c.w.db.Connect(t, c.w.db.Runtime), c.gsrc, c.approval(store.ActionCoreLanding, time.Minute), p)
 		wrote <- err
 	}()
-	time.Sleep(300 * time.Millisecond) // the executor waits on the mission
+	// The executor is waiting on the mission lock Close holds, proven by
+	// PostgreSQL's own wait state (review 698 N-01), not a guessed sleep.
+	c.w.waitFor(t, "FROM agentrt.mission WHERE mission_id = $1 FOR SHARE", time.Now().Add(30*time.Second))
 	revokeDone := make(chan error, 1)
 	go func() {
 		r, err := store.RevokeLandingGrant(ctx, c.w.db.Connect(t, c.w.db.Runtime), first.GrantID)

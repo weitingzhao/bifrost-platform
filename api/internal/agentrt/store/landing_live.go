@@ -185,6 +185,28 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			decision = landing.Decision{Reason: "grant_not_enabled"}
 			return nil
 		}
+		// A grant's CI identity is judged before the ordinary CI check
+		// (review 698 R-02): a newer run of R than the one approved, whether
+		// running, red or green, ends the grant on the record (W runs again,
+		// the status says so); evidence not readable yet decides nothing.
+		var grantKey *GrantCIKey
+		var grantRun GrantCIEvidence
+		if grant != nil {
+			if grantKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
+				return err
+			}
+			if grantKey == nil || src.GrantPatch == nil || src.GrantCI == nil {
+				decision = landing.Decision{Reason: "grant_evidence"}
+				return nil
+			}
+			if grantRun, err = src.GrantCI(ctx, *grantKey, o.PreparedAt); err != nil {
+				return err
+			}
+			if grantRun.Run != "" && grantRun.Run != grant.CI.Run {
+				decision = landing.Decision{Reason: "grant_stale"}
+				return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
+			}
+		}
 		switch {
 		case obs.Main != o.M0 && waiting:
 			// §5.4: a waiting operation for a main that moved is spent, and
@@ -244,19 +266,8 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			// when it waives every soft failure under the rule in force now.
 			// Otherwise nothing is reserved or pushed; a grant refused for
 			// good is recorded spent (review 694 R-05) and a new one needed.
-			key, err := landingCIKeyOf(ctx, tx, op)
-			if err != nil {
-				return err
-			}
-			if key == nil || src.GrantPatch == nil || src.GrantCI == nil {
-				decision = landing.Decision{Reason: "grant_evidence"}
-				return nil
-			}
-			ci, err := src.GrantCI(ctx, *key, o.PreparedAt)
-			if err != nil {
-				return err
-			}
-			if ci.Run == "" || ci.Run == grant.CI.Run && grantCIProblem(o, key, ci, final) {
+			key, ci := grantKey, grantRun
+			if ci.Run == "" || grantCIProblem(o, key, ci, final) {
 				decision = landing.Decision{Reason: "grant_evidence"} // nothing newer yet: no verdict on the grant
 				return nil
 			}

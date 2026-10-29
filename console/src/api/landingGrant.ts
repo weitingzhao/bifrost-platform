@@ -14,6 +14,8 @@ export type LandingGrant = {
   waives: string[]; stg_release: boolean; approved_at: string; granted_at: string; expires_at: string
   revoked: boolean; revoked_at?: string; handed_to_push: boolean; main_intent_seq?: number; valid: boolean
   refused: boolean; refused_reason?: string; refused_at?: string
+  /** Why an unspent grant cannot be consumed: its operation ended or was superseded (review 698 R-03). */
+  ended?: string
   candidate_digest: string; material_digest: string
 }
 export type LandingWait = {
@@ -58,7 +60,7 @@ function grant(v: unknown): boolean {
   return object(v) && fields(v, 'grant_id approval_id op candidate_digest material_digest', string)
     && count(v.approval_number) && v.approval_number > 0 && isLandingAction(v.action) && strings(v.waives)
     && fields(v, 'stg_release revoked handed_to_push valid refused', bool) && fields(v, 'approved_at granted_at expires_at', time)
-    && optional(v, 'revoked_at refused_at', time) && optional(v, 'main_intent_seq', count) && optional(v, 'refused_reason', string)
+    && optional(v, 'revoked_at refused_at', time) && optional(v, 'main_intent_seq', count) && optional(v, 'refused_reason ended', string)
 }
 function candidate(v: unknown): boolean {
   if (!object(v) || !fields(v, 'env tenant repo mission plan_step task attempt op A base R M0 committer_date patch_sha256', string)

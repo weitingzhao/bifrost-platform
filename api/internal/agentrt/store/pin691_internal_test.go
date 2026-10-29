@@ -109,6 +109,8 @@ func Test691SalvageCannotReplaceReviewFacts(t *testing.T) {
 		switch {
 		case strings.Contains(sql, "FROM agentrt.idempotency_key"):
 			return reviewRow{err: pgx.ErrNoRows}
+		case strings.Contains(sql, "SELECT COALESCE(executor_pin, '')"):
+			return pinnedTaskRow()
 		case strings.Contains(sql, "SELECT COALESCE(t.repo, '') FROM agentrt.attempt"):
 			return reviewValues("bifrost-platform")
 		case strings.Contains(sql, "SELECT COALESCE(t.executor_pin, '')") && strings.Contains(sql, "FROM agentrt.attempt"):
@@ -140,8 +142,6 @@ func Test691SalvageCannotReplaceReviewFacts(t *testing.T) {
 				t.Fatal(err)
 			}
 			return reviewValues(int64(2))
-		case strings.Contains(sql, "SELECT COALESCE(executor_pin, '')"):
-			return reviewValues(rules.PinCoordinator)
 		case strings.Contains(sql, "body_json->>'changed_lines'"):
 			facts := latest
 			if len(args) == 2 && args[1] == oldResult {
@@ -297,7 +297,7 @@ func Test691ReviewFactsMatchCommit(t *testing.T) {
 	t.Parallel()
 	q := &reviewTx{query: func(sql string, args []any) pgx.Row {
 		if strings.Contains(sql, "SELECT COALESCE(executor_pin") {
-			return reviewValues(rules.PinCoordinator)
+			return pinnedTaskRow()
 		}
 		if strings.Contains(sql, "changed_lines") {
 			if len(args) == 2 && args[1] == "A" {
@@ -318,4 +318,11 @@ func Test691ReviewFactsMatchCommit(t *testing.T) {
 	if err != nil || limit != 90*time.Minute || spec.text != "" {
 		t.Fatalf("review B control: %v %v %q", limit, err, spec.text)
 	}
+}
+
+// pinnedTaskRow is pinnedReview's one read of a pinned task (review 698
+// R-05): the pin, core, repository, role, tenant and no envelope.
+func pinnedTaskRow() pgx.Row {
+	return reviewValues(rules.PinCoordinator, false, "bifrost-platform", "implement", "dev",
+		(*int)(nil), (*string)(nil), (*time.Time)(nil), (*time.Time)(nil), (*string)(nil), []byte(nil), (*string)(nil))
 }

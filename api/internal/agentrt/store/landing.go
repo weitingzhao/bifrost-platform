@@ -15,11 +15,11 @@ import (
 func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
 	// The protocol records and the grant projection (C-5, §5.3: a valid
 	// grant pauses W) come from one ordered read of the stream.
-	entries, _, grants, err := scanLandingStream(ctx, tx, stream)
+	r, err := scanLandingStream(ctx, tx, stream)
 	if err != nil {
 		return landing.State{}, err
 	}
-	return landing.FoldWithGrants(entries, grantPeriods(grants))
+	return landing.FoldWithGrants(r.entries, grantPeriods(r.order))
 }
 func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) error {
 	value, exists := ev.Body["landing"]

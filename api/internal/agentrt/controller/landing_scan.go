@@ -188,15 +188,25 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			if !c.grantTries.due(id+"/"+grant, c.clock()) {
 				return nil
 			}
-			return c.landLiveWith(ctx, *c.Drill, id, o.R, false)
+			return c.landLiveWith(ctx, *c.Drill, id, o.R, false, nil)
 		}
-		// No grant: once per rule version (review 694 R-06), the gate checks
-		// whether the rule now in force fails nothing of it (§5.1 step 4).
+		// No grant: the gate checks whether the rule now in force fails
+		// nothing of it (§5.1 step 4, review 694 R-06). Only its stable
+		// answer for a rule version — soft failures remain, wait on — ends
+		// the checks for that version; an unreadable Git or CI, a window, a
+		// quota or CI not done yet is tried again after a while (review 698
+		// R-01).
 		version, err := store.LandingRuleVersion(ctx, c.DB, "landing:dev", now)
-		if err != nil || version == 0 || !c.grantTries.once(id+"/rule:"+strconv.Itoa(version)) {
+		key := id + "/rule:" + strconv.Itoa(version)
+		if err != nil || version == 0 || c.grantTries.settled(key) || !c.grantTries.due(key, c.clock()) {
 			return err
 		}
-		return c.landLiveWith(ctx, *c.Drill, id, o.R, true)
+		var d landing.Decision
+		err = c.landLiveWith(ctx, *c.Drill, id, o.R, true, &d)
+		if err == nil && d.Reason == "awaiting_grant" {
+			c.grantTries.settle(key)
+		}
+		return err
 	case o.Phase == "parked" && o.Resume != "branch_pushed":
 		if now.Before(o.RetryAt) {
 			return nil
@@ -331,6 +341,7 @@ const grantTryEvery = 10 * time.Minute
 type grantTries struct {
 	mu   sync.Mutex
 	last map[string]time.Time
+	done map[string]bool
 }
 
 // due says whether key (operation/grant) may be tried at now, and if so
@@ -348,16 +359,19 @@ func (g *grantTries) due(key string, now time.Time) bool {
 	return true
 }
 
-// once says whether key was never tried in this process, and records it.
-func (g *grantTries) once(key string) bool {
+// settle records that key has its stable answer (no more tries); settled
+// reads it. Memory only: a restart checks each once more.
+func (g *grantTries) settle(key string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.last == nil {
-		g.last = map[string]time.Time{}
+	if g.done == nil {
+		g.done = map[string]bool{}
 	}
-	if _, ok := g.last[key]; ok {
-		return false
-	}
-	g.last[key] = time.Time{}
-	return true
+	g.done[key] = true
+}
+
+func (g *grantTries) settled(key string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.done[key]
 }
