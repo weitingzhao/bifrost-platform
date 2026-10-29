@@ -60,6 +60,8 @@ func checkStgReleaseAppend(ctx context.Context, tx pgx.Tx, ev *Event, seq int64,
 	if idempotent > 0 {
 		var old Appended
 		err := tx.QueryRow(ctx, `SELECT event_id,seq,sha256,at FROM agentrt.event WHERE event_stream_id=$1 AND seq=$2`, StgReleaseStream, idempotent).Scan(&old.EventID, &old.Seq, &old.SHA256, &old.At)
+		// Same shape as a fresh Append: the recorder's time is always UTC.
+		old.At = old.At.UTC()
 		return &old, err
 	}
 	ev.Body = maps.Clone(ev.Body)
