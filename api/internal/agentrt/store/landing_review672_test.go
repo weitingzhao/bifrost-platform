@@ -251,11 +251,12 @@ func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 	if r.Reason != "parked:window" || r.ParkedSince.IsZero() || !r.RemindAt.Equal(r.ParkedSince.Add(store.ParkedLongAfter)) || r.Shown != "" {
 		t.Fatalf("park status: %+v", r)
 	}
+	seen := landingState(t, w, landingRepoStream).Operations["land:r672h:1"].LastAt
 	store.FreezeEventClock(at.Add(time.Minute))
-	if done, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r672h:1", "rule", "ci_stuck", at.Add(2*time.Minute), "test "); err != nil || done {
+	if done, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r672h:1", "rule", seen, "ci_stuck", at.Add(2*time.Minute), "test "); err != nil || done {
 		t.Fatal("re-parked from a park not observed", done, err)
 	}
-	done, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r672h:1", "window", "ci_stuck", at.Add(2*time.Minute), "test ")
+	done, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r672h:1", "window", seen, "ci_stuck", at.Add(2*time.Minute), "test ")
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations["land:r672h:1"]; !done || o.Phase != "parked" || o.Why != "ci_stuck" {
 		t.Fatalf("not re-parked: %v %+v", done, o)
@@ -349,5 +350,33 @@ func TestB4CardRecordsBindTheirAnswer(t *testing.T) {
 	ok(t, err)
 	if !found || v.Outcome == nil {
 		t.Fatalf("view: %+v", v)
+	}
+}
+
+// Serial: FreezeEventClock. Review 675 R-05: a park observed, then changed
+// to ci_stuck and back to window by another caller, is not the park the old
+// observation saw: the old caller writes nothing.
+func TestB4ReparkRefusesABA(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	liveRoot(t, w, "land:r675a:1", at, "branch_pushed",
+		newLandingRecord("land:r675a:1", "parked", "why", "window", "retry_at", at.Add(time.Hour).Format(time.RFC3339Nano)))
+	old := landingState(t, w, landingRepoStream).Operations["land:r675a:1"].LastAt
+	store.FreezeEventClock(at.Add(time.Minute))
+	ok1, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "window", old, "ci_stuck", at.Add(2*time.Minute), "test ")
+	ok(t, err)
+	mid := landingState(t, w, landingRepoStream).Operations["land:r675a:1"].LastAt
+	store.FreezeEventClock(at.Add(2 * time.Minute))
+	ok2, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "ci_stuck", mid, "window", at.Add(3*time.Minute), "test ")
+	ok(t, err)
+	if !ok1 || !ok2 {
+		t.Fatal("the two re-parks of the other caller", ok1, ok2)
+	}
+	store.FreezeEventClock(at.Add(3 * time.Minute))
+	stale, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "window", old, "ci_stuck", at.Add(4*time.Minute), "test ")
+	ok(t, err)
+	if o := landingState(t, w, landingRepoStream).Operations["land:r675a:1"]; stale || o.Why != "window" {
+		t.Fatalf("an old observation moved a later park: %v %+v", stale, o)
 	}
 }

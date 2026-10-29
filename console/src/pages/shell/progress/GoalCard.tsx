@@ -88,6 +88,8 @@ function taskInHash(goal: string): string {
   const q = canonicalQuery(window.location.hash), task = hashQueryParam(q, 'task')
   return hashQueryParam(q, 'goal') === goal && task && /^t_[0-9A-Za-z]+$/.test(task) ? task : ''
 }
+/** How long after a close from landing evidence a reversal is still told (store.LateRevertWithin). */
+const LANDING_OBSERVED_MS = 24 * 60 * 60 * 1000
 export function GoalCard({ id, runtime, updatedAt, questions, highlighted = false, submittedGoal = '' }: {
   id: string; runtime?: RuntimeProgress; updatedAt: number; questions: Question[]; highlighted?: boolean; submittedGoal?: string
 }) {
@@ -96,19 +98,26 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     staleTime: Infinity, refetchOnWindowFocus: false })
   const landingQuery = useQuery({ queryKey: ['mission-landing', id], queryFn: ({ signal }) => fetchMissionLanding(id, signal), retry: false,
     staleTime: Infinity, refetchOnWindowFocus: false })
-  const landing = landingQuery.isPaused || landingQuery.isError ? null : landingQuery.data
+  // null: the scope is unknown (failed, paused or not back yet), never "not in scope" (review 675 R-08)
+  const landing = landingQuery.isPaused || landingQuery.isError ? null : (landingQuery.data ?? null)
   const previousPoll = useRef(updatedAt)
   const data = query.data
   // Keep reading S3 (or unreadable-scope) missions until the controller closes them.
   const finished = data && (terminalMission(text(data.mission.state))
     || (landing != null && (!landing.in_scope || !landing.roots.length) && goalDone(data)))
+  // The Landing block is read on after the goal finished, until its scope is settled: out of scope,
+  // or closed from landing evidence more than a day ago, when a late reversal is no longer told
+  // (review 675 R-09). A closed mission still shows its close and any reversal that follows.
+  const landingSettled = landing != null && (!landing.in_scope || !landing.roots.length
+    || (landing.closed != null && Date.now() - Date.parse(landing.closed.at) > LANDING_OBSERVED_MS))
   const refetch = query.refetch
   const refetchLanding = landingQuery.refetch
   useEffect(() => {
     if (previousPoll.current === updatedAt) return
     previousPoll.current = updatedAt
-    if (!finished) { void refetch(); void refetchLanding() }
-  }, [updatedAt, finished, refetch, refetchLanding])
+    if (!finished) void refetch()
+    if (!finished || !landingSettled) void refetchLanding()
+  }, [updatedAt, finished, landingSettled, refetch, refetchLanding])
   const now = useNow() || Date.now()
   // The task the address points at: its details open and come into view once the card has its tasks.
   const [target, setTarget] = useState(() => taskInHash(id))

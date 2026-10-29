@@ -170,10 +170,12 @@ func LandingLiveAt(ctx context.Context, db DB, repo string) (time.Time, error) {
 
 // ReparkLanding moves a parked operation to a new park for why, in one
 // transaction under the stream's lock (review 672 R-05): it re-reads the
-// operation and, if it is still the park observed (parked for was), ends it
-// and starts the new one together. Nothing is written otherwise; ok reports
-// whether it was.
-func ReparkLanding(ctx context.Context, db DB, repo, op, was, why string, retryAt time.Time, text string) (ok bool, err error) {
+// operation and, if it is still the park observed (parked for was, its last
+// record at seen), ends it and starts the new one together. The time of the
+// last record tells the park observed from a later one with the same reason
+// (review 675 R-05: window, ci_stuck, window again). Nothing is written
+// otherwise; ok reports whether it was.
+func ReparkLanding(ctx context.Context, db DB, repo, op, was string, seen time.Time, why string, retryAt time.Time, text string) (ok bool, err error) {
 	stream := "landing:" + repo
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		ok = false
@@ -184,7 +186,7 @@ func ReparkLanding(ctx context.Context, db DB, repo, op, was, why string, retryA
 		if err != nil {
 			return err
 		}
-		if o, has := s.Operations[op]; !has || o.Phase != "parked" || o.Why != was || was == why {
+		if o, has := s.Operations[op]; !has || o.Phase != "parked" || o.Why != was || !o.LastAt.Equal(seen) || was == why {
 			return nil
 		}
 		for _, r := range []map[string]any{

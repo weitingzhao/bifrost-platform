@@ -66,6 +66,13 @@ describe('Landing on the goal detail', () => {
     expect(screen.queryByRole('region', { name: 'Landing' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+  it('does not call an active mission Done when its landing cannot be read from the start (review 675 R-08)', async () => {
+    landingStatus = 503
+    const { client } = mount()
+    await waitFor(() => expect(client.getQueryState(['mission-landing', 'M-2'])?.status).toBe('success'))
+    expect(await screen.findByRole('listitem', { name: 'Done: future' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
+  })
   it('keeps the goal usable when landing is unavailable', async () => {
     landingStatus = 503
     const { client } = mount()
@@ -101,6 +108,9 @@ describe('Landing on the goal detail', () => {
     landingStatus = 500
     rerender(ui(2))
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Landing' })).not.toBeInTheDocument())
+    // A failed read leaves the scope unknown: an active mission is not Done (review 675 R-08).
+    expect(screen.getByRole('listitem', { name: 'Done: future' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
     landingStatus = 200
     landingBody = { ...fixture, roots: fixture.roots.filter(root => root.class !== 'unresolved') }
     rerender(ui(3))
@@ -110,6 +120,16 @@ describe('Landing on the goal detail', () => {
     rerender(ui(4))
     await screen.findByRole('listitem', { name: 'Done: done' })
     expect(screen.getByRole('region', { name: 'Result' })).toBeInTheDocument()
+  })
+  it('reads Landing on after the mission closed, so its close and a later reversal show (review 675 R-09)', async () => {
+    missionState = 'done'
+    landingBody = { ...fixture, closing_round: undefined, roots: fixture.roots.filter(root => root.class === 'delivered') }
+    const { rerender, ui } = mount()
+    await screen.findByRole('region', { name: 'Landing' })
+    expect(screen.queryByText(/^Closed /)).not.toBeInTheDocument()
+    landingBody = { ...landingBody as object, closed: { to: 'done', at: new Date().toISOString(), rule: 'landing:dev v1, stg_release none', round: 1, delivered: 1, disposed: 0, briefs: 0 } }
+    rerender(ui(2))
+    expect(await screen.findByText((_, el) => el?.tagName === 'P' && (el.textContent ?? '').startsWith('Closed '))).toBeVisible()
   })
   it.each(['at_main', 'evidence', 'landed_unverified', 'rule', 'in_main_unverified', 'failed:stale', 'failed:floor', 'unclaimed', 'reverted', 'declined', 'owner', 'dropped', 'landed', 'in_main'])('explains %s in English', reason => {
     expect(landingReason(reason)).not.toBe(reason)

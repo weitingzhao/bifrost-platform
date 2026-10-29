@@ -664,7 +664,8 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			loops.Wait()
 		})
 	}
-	if c.Env == "prod" && (c.LandingCards.Lookup != nil || c.LandingCards.Ack != nil) {
+	// Any reach runs the pass; each step checks only what it needs (review 675 R-04).
+	if c.Env == "prod" && (c.LandingCards.Lookup != nil || c.LandingCards.Ack != nil || c.LandingCards.LookupKey != nil) {
 		c.every(ctx, &wg, "agentrt-landing-cards", LandingCardsEvery, func() error {
 			passCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()

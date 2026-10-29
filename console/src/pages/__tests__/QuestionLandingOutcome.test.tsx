@@ -178,6 +178,20 @@ describe('QuestionPage landing outcome', () => {
     expect(screen.getByText('Carried out')).toBeTruthy()
   })
 
+  it('does not call a question trimmed when it only cannot be read now (503; review 675 N-02)', async () => {
+    replies(() => json(landing))
+    const routed = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/landing/cards/') || url.includes('/agentrt/tasks/')) return routed!(input, init)
+      return json({ error: 'unavailable' }, 503)
+    })
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText(/The question cannot be read right now/)).toBeTruthy()
+    expect(screen.queryByText(/The question itself is no longer kept/)).toBeNull()
+    expect(screen.getByRole('region', { name: 'Landing outcome' })).toBeTruthy()
+  })
+
   it('shows neither when both the question and its landing record are gone', async () => {
     replies(() => json({ error: 'not_found' }, 404))
     vi.mocked(fetch).mockImplementation(async () => json({ error: 'not_found' }, 404))

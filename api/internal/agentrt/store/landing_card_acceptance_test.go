@@ -552,3 +552,31 @@ func TestS3CardPassWithoutLookupKey(t *testing.T) {
 		t.Fatal("not handled", o.Outcome)
 	}
 }
+
+// Serial: FreezeEventClock. Review 675 R-04: with LookupKey alone (no Ask,
+// Lookup or Ack, as on a restart that wired only it), the pass takes up a card
+// the question store already has by its key, and asks nothing new.
+func TestS3CardPassLookupKeyAlone(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := newKernelWorld(t)
+	cardFailedRoot(t, w, "land:acc9a:1", "stale", at)
+	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
+	store.FreezeEventClock(at.Add(time.Hour))
+	prepared, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at.Add(time.Hour))
+	ok(t, err)
+	if len(prepared) != 1 {
+		t.Fatal(prepared)
+	}
+	// The ask reaches the store, its reply is lost: nothing bound.
+	f.loseReply = true
+	if _, err := store.AskLandingCard(ctx, w.rt, f.source(), "bifrost-platform", prepared[0], at.Add(time.Hour), true); err == nil {
+		t.Fatal("a lost reply bound")
+	}
+	src := f.source()
+	only := store.CardQuestions{LookupKey: src.LookupKey}
+	ok(t, newCardCtl(w, only).cardsPassAt(at.Add(time.Hour+time.Minute)))
+	if c := cardsByN(t, w)[1]; !c.Bound || c.QuestionID != "q1" || f.asks != 1 {
+		t.Fatalf("not taken up by its key alone: %+v, %d asks", c, f.asks)
+	}
+}

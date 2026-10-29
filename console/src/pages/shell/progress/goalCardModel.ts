@@ -90,8 +90,15 @@ function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageSt
   if (impls.length && passed === impls.length) return { state: 'done', completed: passed }
   return { state: running ? 'running' : 'future', completed: passed }
 }
+/**
+ * landing: undefined when the caller has no landing reading (the old policy);
+ * null when the landing scope is unknown (the read failed or has not come
+ * back): then only the mission's own state says done, never accepted tasks
+ * alone (review 675 R-08); a reading says in or out of scope.
+ */
 export function goalDone(data: GoalData, landing?: MissionLanding | null): boolean {
   if (['stopped', 'failed', 'cancelled'].includes(text(data.mission.state))) return false
+  if (landing === null) return ['done', 'accepted'].includes(text(data.mission.state))
   // S3 roots must be settled before the controller closes the mission; accepted tasks alone do not close it.
   if (landing?.in_scope && landing.roots.length) return ['done', 'accepted'].includes(text(data.mission.state))
   // A failed check of a task the Owner dropped says nothing of the goal.

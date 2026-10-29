@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
-import { RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
+import { QuestionHttpError, RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
 import { fetchLandingCard } from '@/api/landingCards'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
@@ -129,7 +129,10 @@ function QuestionSession({ id }: { id: string }) {
       ) : null}
       {shown == null && unreadable && !landingQ.isError && landingQ.data != null ? (
         <NowClock>
-          <p className="m-0 text-sm">The question itself is no longer kept. The runtime&apos;s record of it:</p>
+          {/* Trimmed only on a 404; any other failure is a read that may come back (review 675 N-02). */}
+          {itemQ.error instanceof QuestionHttpError && itemQ.error.status === 404
+            ? <p className="m-0 text-sm">The question itself is no longer kept. The runtime&apos;s record of it:</p>
+            : <p className="m-0 text-sm">The question cannot be read right now. The runtime&apos;s record of it:</p>}
           <LandingOutcomeRecord card={landingQ.data} />
         </NowClock>
       ) : null}

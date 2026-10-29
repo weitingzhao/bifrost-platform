@@ -158,7 +158,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			// park, so its start and reason are what the landing status and
 			// the cards read (review 670 R-06), ended and started in one
 			// transaction (review 672 R-05).
-			_, err := store.ReparkLanding(ctx, c.DB, "bifrost-platform", op, o.Why, a.Why, at.Add(time.Minute), landingText(c.Env))
+			_, err := store.ReparkLanding(ctx, c.DB, "bifrost-platform", op, o.Why, o.LastAt, a.Why, at.Add(time.Minute), landingText(c.Env))
 			return a, err
 		}
 		return a, appendRecord("parked", map[string]any{"why": a.Why, "retry_at": at.Add(time.Minute).Format(time.RFC3339Nano)})

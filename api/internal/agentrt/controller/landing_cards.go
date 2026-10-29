@@ -38,7 +38,10 @@ func LandingCardsComplete(q store.CardQuestions) bool {
 // and writes the database on its own; one card's failure leaves the others.
 func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	q := c.LandingCards
-	if c.Env != "prod" || q.Lookup == nil && q.Ack == nil {
+	// Each step needs its own reach (review 675 R-04): settling bound cards
+	// reads (Lookup) or acknowledges (Ack); taking an existing card up by its
+	// key needs LookupKey alone.
+	if c.Env != "prod" || q.Lookup == nil && q.Ack == nil && q.LookupKey == nil {
 		return nil
 	}
 	now := c.clock()
@@ -47,12 +50,14 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, card := range bound {
-		one, cancel := context.WithTimeout(ctx, landingCardCall)
-		if _, err := store.SettleLandingCard(one, c.DB, q, card, now); err != nil {
-			errs = append(errs, fmt.Errorf("card %s: %w", card.Prep, err))
+	if q.Lookup != nil || q.Ack != nil {
+		for _, card := range bound {
+			one, cancel := context.WithTimeout(ctx, landingCardCall)
+			if _, err := store.SettleLandingCard(one, c.DB, q, card, now); err != nil {
+				errs = append(errs, fmt.Errorf("card %s: %w", card.Prep, err))
+			}
+			cancel()
 		}
-		cancel()
 	}
 	if q.LookupKey == nil {
 		return errors.Join(errs...)
