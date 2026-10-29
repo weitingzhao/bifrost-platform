@@ -2,6 +2,7 @@ package agentrtapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -292,4 +294,74 @@ func TestExactClaimOverHTTP(t *testing.T) {
 	if code, out := act("submit", fence(nil)); code != http.StatusOK {
 		t.Fatalf("submit: %d %v", code, out)
 	}
+}
+
+// landingWait makes attempt, the external host's lease of pinned task task,
+// the accepted one and runs a prod landing operation of the task to
+// awaiting_grant, its M0 not main (the fixture's main reader answers mainAt):
+// what POST landing/refresh refreshes. It returns the operation.
+func landingWait(t *testing.T, pool *pgxpool.Pool, task string, claim map[string]any) string {
+	t.Helper()
+	op := "land:" + task + ":1"
+	attempt := claim["attempt_id"].(string)
+	var epoch int64
+	switch n := claim["lease_epoch"].(type) {
+	case float64:
+		epoch = int64(n)
+	case json.Number:
+		epoch, _ = n.Int64()
+	}
+	// The attempt hands in its one commit on the base, as handin.sh does.
+	f := store.Fence{AttemptID: attempt, HostID: "coordinator-mbp", Epoch: epoch}
+	must(t, store.Start(ctx, pool, f, "", "anthropic"))
+	zero := 0
+	_, err := store.Computed(ctx, pool, f, &zero, "exit", "done")
+	must(t, err)
+	var report string
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+		report, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("handed in "+task+"\n"))
+		return err
+	}))
+	_, err = store.PersistChecked(ctx, pool, f, store.Result{Report: report, Ref: store.AttemptRef(task, 1), Commit: pushedAt},
+		func(context.Context, string, string) (string, error) { return pushedAt, nil },
+		func(context.Context, string, string) (store.CommitFacts, error) {
+			return store.CommitFacts{Parents: []string{commitA}, Message: "x\n\nAgentrt-Task: " + task + "\nChange-Id: I" + strings.Repeat("ef", 20) + "\n",
+				Paths: []string{"api/internal/research/x.go"}, Lines: 2}, nil
+		})
+	must(t, err)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		evidence, err := store.PutArtifact(ctx, tx, "controller", "report", "text/plain", []byte("pass "+task+"\n"))
+		if err != nil {
+			return err
+		}
+		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: an accepted pinned attempt"}}); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
+		    evidence_artifact_id, accepts_attempt) VALUES ($1, $2, $3, 'review', 'pass', $4, true)`, store.NewVerificationID(), task, attempt, evidence)
+		return err
+	}))
+	ref := "refs/heads/land/prod/" + task + "/1"
+	put := func(kind string, kv ...any) {
+		t.Helper()
+		r := map[string]any{"v": landing.Version, "kind": kind, "op": op}
+		for i := 0; i < len(kv); i += 2 {
+			r[kv[i].(string)] = kv[i+1]
+		}
+		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+			_, err := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller",
+				Body: map[string]any{"text": "Landing protocol test", "landing": r}})
+			return err
+		}))
+	}
+	put("claimed", "task", task, "attempt", attempt, "A", pushedAt, "rule_version", 1)
+	put("prepared", "R", pushedAt, "M0", pushedAt, "committer_date", time.Now().UTC().Format(time.RFC3339Nano), "dry_run", false)
+	put("branch_intent", "ref", ref, "R", pushedAt)
+	put("branch_pushed", "ref", ref, "R", pushedAt)
+	time.Sleep(10 * time.Millisecond)
+	put("ci_seen", "run", "ci-platform-1", "status", "Succeeded", "R", pushedAt, "created_at", time.Now().UTC().Format(time.RFC3339Nano))
+	put("awaiting_grant", "soft", []any{"floor_soft"}, "files", 1, "lines", 2, "material", "sha256:"+strings.Repeat("ab", 32))
+	return op
 }

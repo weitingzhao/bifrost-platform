@@ -39,7 +39,7 @@ const (
 // valid request does. Reads that write are listed too (an exam paper is
 // recorded when it is handed out).
 var routeExpect = map[string]string{
-	"POST claim": expectWrites, "POST claim/pinned": expectWrites, "PUT artifacts/{id}": expectWrites,
+	"POST claim": expectWrites, "POST claim/pinned": expectWrites, "POST landing/refresh": expectWrites, "PUT artifacts/{id}": expectWrites,
 	"POST attempts/{id}/start": expectWrites, "POST attempts/{id}/heartbeat": expectAnswers,
 	"POST attempts/{id}/checkpoint": expectWrites, "POST attempts/{id}/computed": expectWrites,
 	"POST attempts/{id}/persist": expectWrites, "POST attempts/{id}/submit": expectWrites,
@@ -254,8 +254,12 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	// The coordinator's exact claim of its pinned task (pin_test.go's
 	// world, on the business tenant so the dev envelope stays as it is).
 	pinned := pinnedFixture(t, f.pool)
-	ok("POST claim/pinned", "agentd:coordinator-mbp", "POST", "claim/pinned", map[string]any{"host_id": "coordinator-mbp",
+	exact := ok("POST claim/pinned", "agentd:coordinator-mbp", "POST", "claim/pinned", map[string]any{"host_id": "coordinator-mbp",
 		"task_id": pinned, "idempotency_key": pinned + ":1", "free_slots": 1})
+	// Its landing waiting for a grant, main moved on: the executor
+	// refreshes it (C-4, landing_wait.go).
+	op := landingWait(t, f.pool, pinned, exact)
+	ok("POST landing/refresh", "agentd:coordinator-mbp", "POST", "landing/refresh", map[string]any{"task": pinned, "op": op})
 	ok("POST hosts/{id}/drain", "operator", "POST", "hosts/h2/drain", map[string]any{"idempotency_key": "v5", "reason": "maintenance"})
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "add_node", "parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}})
