@@ -12,7 +12,8 @@ import {
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 
 /**
- * Subcontractors → Market Data — Plugin management page (P6).
+ * Data → Market data (Massive) — Plugin management page (P6), embedded in
+ * pages/shell/data/DataPage.tsx.
  * Tabs: Overview | Coverage | Ingest.
  * Deep link: ?tab=coverage&panel=readiness|financials|quality|db-summary|capability
  * Legacy ?tab=analytics lands on Overview (demand dashboard).
