@@ -136,8 +136,11 @@ func TestLiveGateDecidesAfterItsReads(t *testing.T) {
 	}
 
 	w2, _, op2, src2, prepared2 := liveReady(t)
-	midnight := time.Date(prepared2.Year(), prepared2.Month(), prepared2.Day()+1, 0, 0, 0, 0, time.UTC)
-	store.FreezeEventClock(midnight.Add(-time.Second))
+	// From ten minutes after the branch was prepared, whatever the wall
+	// clock; the reads end just after the next UTC midnight.
+	start2 := prepared2.Add(10 * time.Minute)
+	midnight := start2.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
+	store.FreezeEventClock(start2)
 	_, _, err = store.AuthorizeLandingPush(ctx, w2.rt, src2, op2, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
 		store.FreezeEventClock(midnight.Add(time.Second))
 		return store.LiveObservation{Main: commitA, CI: landing.CIRun{R: commitB, Status: "Succeeded", CreatedAt: prepared2.Add(time.Minute)}}, nil
@@ -198,11 +201,16 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 // no intent (review 661 R-03).
 func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
 	w, task, op, src, prepared := liveReady(t)
-	midnight := time.Date(prepared.Year(), prepared.Month(), prepared.Day()+1, 0, 0, 0, 0, time.UTC)
-	defer store.FreezeEventClock(midnight.Add(-time.Second))()
+	// The gate starts ten minutes after the branch was prepared, whatever the
+	// wall clock (it used to start one second before the next UTC midnight,
+	// past the root's six hours unless the run began after 18:00 UTC); the
+	// day turns between the reservation and main_intent.
+	start := prepared.Add(10 * time.Minute)
+	next := start.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
+	defer store.FreezeEventClock(start)()
 	defer store.SetHook(func(point, _ string) {
 		if point == "landing gate: reserved" {
-			store.FreezeEventClock(midnight.Add(time.Second))
+			store.FreezeEventClock(next.Add(time.Second))
 		}
 	})()
 	_, _, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
@@ -212,7 +220,7 @@ func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
 		t.Fatal("an intent across midnight", o.Phase)
 	}
-	if q := landingState(t, w, "landing-quota:dev:"+midnight.Add(-time.Second).UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
+	if q := landingState(t, w, "landing-quota:dev:"+start.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
 		t.Fatal("a reservation kept from a rolled-back gate", q.Reservations, task)
 	}
 }
