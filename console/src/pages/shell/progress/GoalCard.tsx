@@ -51,7 +51,7 @@ function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalDat
   return <section aria-label="Landing" className="rounded border border-[var(--card-border)] p-3 text-sm">
     <h4 className="font-semibold">Landing</h4>
     <p>{count('delivered')} delivered, {count('disposed')} disposed, {count('unresolved')} unresolved{landing.closing_round && <> · main is being read again until <time dateTime={landing.closing_round.until}>{landing.closing_round.until}</time></>}</p>
-    {landing.closed && <p>Closed {landing.closed.to} at <time dateTime={landing.closed.at}>{landing.closed.at}</time>: {landing.closed.delivered} delivered, {landing.closed.disposed} disposed when it closed ({landing.closed.rule})</p>}
+    {landing.closed && <p>Closed as {landing.closed.to} at <time dateTime={landing.closed.at}>{landing.closed.at}</time>: {landing.closed.delivered} delivered, {landing.closed.disposed} disposed ({landing.closed.rule})</p>}
     <ul className="mt-2 space-y-2">{landing.roots.map(root => <li key={root.root} className="flex flex-wrap items-center gap-2 break-words">
       <a className="underline [overflow-wrap:anywhere]" href={goalHref(landing.mission_id, root.root)}>{data.tasks.find(task => task.task_id === root.root)?.title || root.root}</a>
       <DenseTag size="pill" variant={root.class === 'delivered' ? 'success' : root.class === 'unresolved' ? 'warning' : 'neutral'}>{root.class}</DenseTag>

@@ -93,7 +93,7 @@ describe('Landing on the goal detail', () => {
     expect(block.getByText('Parked: window')).toBeVisible()
     expect(block.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'since 2026-10-28T08:00:00Z, told at 2026-10-28T10:00:00Z')).toBeVisible()
     expect(block.getByText('Answer not confirmed: card:7:1:root_failed lost')).toBeVisible()
-    expect(block.getByText((_, el) => el?.tagName === 'P' && (el.textContent ?? '').startsWith('Closed done at 2026-10-28T11:00:00Z: 1 delivered, 0 disposed when it closed'))).toBeVisible()
+    expect(block.getByText((_, el) => el?.tagName === 'P' && (el.textContent ?? '').startsWith('Closed as done at 2026-10-28T11:00:00Z: 1 delivered, 0 disposed'))).toBeVisible()
   })
   it('keeps reading accepted tasks until the mission closes, and removes stale landing on failure', async () => {
     const { rerender, ui } = mount()
