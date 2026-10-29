@@ -52,31 +52,6 @@ func TestReaderPushesNothing(t *testing.T) {
 	if out := w.PushMain(ctx, sha, strings.Repeat("b", 40), time.Now().Add(time.Hour)); out != PushNotSent {
 		t.Fatalf("reader main push %v", out)
 	}
-	// An empty ref is refused before any network by every entry (review 713 N-01).
-	if err := w.Push(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-		t.Fatalf("reader push to an empty ref: %v", err)
-	}
-	if err := g.Delete(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-		t.Fatalf("reader delete of an empty ref: %v", err)
-	}
-	if _, err := g.Ref(ctx, ""); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-		t.Fatalf("reader read of an empty ref: %v", err)
-	}
-	// The reader's files are read as the platform's Gitea reader reads them:
-	// a trailing newline is not part of the value (review 713 R-01).
-	h, err := g.header()
-	if err != nil || h != "Authorization: Basic eDp4" { // base64("x:x")
-		t.Fatalf("reader header with trailing newlines: %q %v", h, err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "password"), []byte("x\ny\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.header(); err == nil {
-		t.Fatal("reader accepted a two-line password")
-	}
-	if err := os.WriteFile(filepath.Join(dir, "password"), []byte("x\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	// Control: the lander is the writer for land/prod and main.
 	t.Setenv(LanderUsernameFileEnv, filepath.Join(dir, "username"))
 	t.Setenv(LanderPasswordFileEnv, filepath.Join(dir, "password"))
@@ -133,5 +108,32 @@ func TestReaderCredentialContract(t *testing.T) {
 	lander := &Git{lander: true, usernameFile: user, passwordFile: user}
 	if _, err := lander.header(); err == nil {
 		t.Fatal("lander accepted a trailing newline")
+	}
+}
+
+// Every identity refuses an empty ref before any network (review 713 N-01).
+// Its own test, so a failure here cannot hide the credential contract
+// (review 717 B-2). The lander is the control: it still writes its scope.
+func TestEmptyRefIsOutsideEveryScope(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	sha := strings.Repeat("a", 40)
+	reader := &Git{reader: true, scope: noRef}
+	lander := &Git{lander: true, scope: liveRef}
+	for name, g := range map[string]*Git{"reader": reader, "lander": lander} {
+		w := &Workspace{git: g, dir: t.TempDir()}
+		if err := w.Push(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
+			t.Fatalf("%s push to an empty ref: %v", name, err)
+		}
+		if err := g.Delete(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
+			t.Fatalf("%s delete of an empty ref: %v", name, err)
+		}
+		if _, err := g.Ref(ctx, ""); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
+			t.Fatalf("%s read of an empty ref: %v", name, err)
+		}
+	}
+	if !lander.inScope("refs/heads/land/prod/t_00000000000000000000000001/1") {
+		t.Fatal("lander control lost its land/prod scope")
 	}
 }
