@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,6 +96,27 @@ func (a *STGReleaseAdapter) ProbeFinalizerAdmission(ctx context.Context, newInpu
 	if err != nil || patch == nil {
 		return ErrSTGUnknown
 	}
-	_, err = res.Patch(ctx, id.Name, types.JSONPatchType, patch, metav1.PatchOptions{DryRun: []string{metav1.DryRunAll}})
-	return err
+	patched, err := res.Patch(ctx, id.Name, types.JSONPatchType, patch, metav1.PatchOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		return err
+	}
+	// A successful HTTP response does not prove admission allowed removal:
+	// a mutating webhook can put the hold back. Inspect the dry-run result;
+	// a GET would only return the deliberately unchanged persisted sample.
+	if err = MatchNamedDeliverRun(patched, sample, false); err != nil {
+		return err
+	}
+	if patched.GetUID() != sampleUID {
+		return ErrSTGCollision
+	}
+	remaining := patched.GetFinalizers()
+	if slices.Contains(remaining, STGReleaseFinalizer) {
+		return fmt.Errorf("%w: admission retained STG release hold", ErrSTGUnknown)
+	}
+	for _, finalizer := range existing.GetFinalizers() {
+		if finalizer != STGReleaseFinalizer && !slices.Contains(remaining, finalizer) {
+			return fmt.Errorf("%w: admission removed another finalizer", ErrSTGUnknown)
+		}
+	}
+	return nil
 }

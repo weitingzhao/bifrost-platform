@@ -40,6 +40,12 @@ func PrepareNamedDeliverRun(in NamedDeliverInput, pipe *unstructured.Unstructure
 	if err = validateRunRequirements(pipe, obj); err != nil {
 		return nil, err
 	}
+	// The shared constructor can follow mutable Pipeline declarations. B5 v1
+	// only creates its frozen execution contract, so recovery never has to
+	// reconstruct historical expectations from today's Pipeline.
+	if !matchesSTGExecutionV1(obj) {
+		return nil, fmt.Errorf("STG release execution differs from the frozen v1 contract")
+	}
 	params, err := namedStrings(obj, "spec", "params")
 	if err != nil {
 		return nil, err

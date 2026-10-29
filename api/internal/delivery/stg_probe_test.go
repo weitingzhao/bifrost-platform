@@ -48,10 +48,11 @@ func TestSTGAccessProbeChecksEveryPermission(t *testing.T) {
 }
 func TestSTGAdmissionProbeUsesServerDryRunOnly(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"control", "create denied", "patch denied", "finalizer stripped", "missing sample"} {
+	for _, mode := range []string{"control", "create denied", "patch denied", "finalizer stripped", "missing sample", "hold retained", "wrong uid", "wrong identity", "other finalizer lost", "execution changed"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			sample := namedObject(t)
+			sample.SetFinalizers([]string{"other.example/first", STGReleaseFinalizer, "other.example/last"})
 			before := sample.DeepCopy()
 			created, patched := 0, 0
 			// The stock dynamic fake discards CreateOptions/PatchOptions (client-go
@@ -102,10 +103,28 @@ func TestSTGAdmissionProbeUsesServerDryRunOnly(t *testing.T) {
 					if err := json.NewDecoder(r.Body).Decode(&ops); err != nil {
 						t.Fatal(err)
 					}
-					if len(ops) != 4 || ops[0]["value"] != string(sample.GetUID()) || ops[1]["value"] != sample.GetResourceVersion() {
+					if len(ops) != 4 || ops[0]["value"] != string(sample.GetUID()) || ops[1]["value"] != sample.GetResourceVersion() ||
+						ops[2]["op"] != "test" || ops[2]["path"] != "/metadata/finalizers/1" || ops[2]["value"] != STGReleaseFinalizer ||
+						ops[3]["op"] != "remove" || ops[3]["path"] != "/metadata/finalizers/1" {
 						t.Fatal("unguarded patch", ops)
 					}
-					result = sample.Object
+					// Apply the guarded removal to a copy, as a server dry-run
+					// would; the persisted sample must remain unchanged.
+					obj := sample.DeepCopy()
+					obj.SetFinalizers([]string{"other.example/first", "other.example/last"})
+					switch mode {
+					case "hold retained":
+						obj.SetFinalizers(sample.GetFinalizers())
+					case "wrong uid":
+						obj.SetUID("another-uid")
+					case "wrong identity":
+						obj.SetLabels(nil)
+					case "other finalizer lost":
+						obj.SetFinalizers([]string{"other.example/first"})
+					case "execution changed":
+						stgSet(t, obj, []any{}, "spec", "taskRunSpecs")
+					}
+					result = obj.Object
 					if mode == "patch denied" {
 						code = 403
 					}

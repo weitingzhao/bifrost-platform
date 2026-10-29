@@ -82,6 +82,7 @@ func namedStrings(obj *unstructured.Unstructured, fields ...string) (map[string]
 
 // MatchNamedDeliverRun tolerates controller-owned metadata, but hashes only
 // the exact managed keys. Every actual param participates in the fingerprint.
+// Execution settings must also match the immutable B5 v1 contract.
 func MatchNamedDeliverRun(obj *unstructured.Unstructured, in NamedDeliverInput, requireHold bool) error {
 	id, err := in.Identity()
 	if err != nil {
@@ -93,6 +94,9 @@ func MatchNamedDeliverRun(obj *unstructured.Unstructured, in NamedDeliverInput, 
 	ref, _, _ := unstructured.NestedMap(obj.Object, "spec", "pipelineRef")
 	_, inline, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineSpec")
 	if inline || !reflect.DeepEqual(ref, map[string]any{"name": STGReleasePipeline}) {
+		return ErrSTGCollision
+	}
+	if !matchesSTGExecutionV1(obj) {
 		return ErrSTGCollision
 	}
 	params, err := namedStrings(obj, "spec", "params")

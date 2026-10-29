@@ -15,16 +15,11 @@ import (
 var stgApplicationGVR = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
 var stgDeployments = []string{"platform-api", "platform-workers", "platform-console"}
 
-type STGWorkload struct {
-	UID        string `json:"uid"`
-	Generation int64  `json:"generation"`
-	Digest     string `json:"digest"`
-}
-
 // ReadWorkloads preserves every PodDigests condition and adds the template
 // digest plus a bracket around all three reads. No bool collapses read errors
-// or unsettled deployments into a trusted baseline.
-func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consoleDigest string) (map[string]STGWorkload, error) {
+// or unsettled deployments into a trusted baseline. The returned JSON objects
+// can enter B5-a's canonical encoder directly, without a caller conversion.
+func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consoleDigest string) (map[string]any, error) {
 	if !stgDigest.MatchString(apiDigest) || !stgDigest.MatchString(consoleDigest) {
 		return nil, ErrSTGEvidence
 	}
@@ -46,7 +41,7 @@ func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consol
 		}
 		before[name] = dep
 	}
-	out := map[string]STGWorkload{}
+	out := map[string]any{}
 	for _, name := range stgDeployments {
 		expected := apiDigest
 		container := "platform-api"
@@ -71,7 +66,7 @@ func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consol
 				return nil, fmt.Errorf("%w: %s pod digest", ErrSTGEvidence, name)
 			}
 		}
-		out[name] = STGWorkload{string(dep.UID), dep.Generation, expected}
+		out[name] = map[string]any{"uid": string(dep.UID), "generation": dep.Generation, "digest": expected}
 	}
 	for _, name := range stgDeployments {
 		dep, e := deps.Get(ctx, name, metav1.GetOptions{})
