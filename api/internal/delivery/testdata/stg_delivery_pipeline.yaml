@@ -1,0 +1,213 @@
+# Ops Platform deliver — Gitea clone → Kaniko (api + console) → agentrt-migrate → promote → pin the
+# application to the built digests and sync → rollout check (TD-411, TD-335, TD-419).
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: bifrost-deliver-platform
+  namespace: cicd
+  labels:
+    bifrost.io/purpose: platform-deliver
+spec:
+  description: >-
+    Mirror-sync bifrost-platform → build platform-api + platform-console images →
+    run STG's agentrt migrations with the api image built → pin
+    bifrost-platform-stg to the built digests and sync → verify the rollout.
+  params:
+    - name: revision
+      type: string
+      default: main
+    # bifrost-ui is its own repo, so it gets its own ref: a pinned run names the ui
+    # commit here (TD-234). Callers pass the same ref as revision unless they pin.
+    - name: uiRevision
+      type: string
+      default: main
+    # The infra checkout the Dockerfiles come from (TD-448). Default main; a
+    # pinned run names the infra commit, so every clone has its own ref param
+    # (platform delivery ratchet TestPlatformCloneRefParamsFollowInfra).
+    - name: infraRevision
+      type: string
+      default: main
+    - name: giteaBase
+      type: string
+      default: http://gitea.cicd.svc.cluster.local:3000/bifrost
+    - name: platformApiImage
+      type: string
+      default: registry.cicd.svc.cluster.local:5000/bifrost-platform-api:stg
+    - name: platformConsoleImage
+      type: string
+      default: registry.cicd.svc.cluster.local:5000/bifrost-platform-console:stg
+  workspaces:
+    - name: build-context
+  tasks:
+    - name: freeze-check
+      taskRef:
+        name: bifrost-release-freeze-check
+    - name: mirror-sync
+      runAfter: [freeze-check]
+      taskRef:
+        name: bifrost-gitea-mirror-sync
+      params:
+        - name: giteaBase
+          value: $(params.giteaBase)
+        - name: mirrorRepos
+          value: bifrost-platform bifrost-ui bifrost-trade-infra
+    # revision belongs to platform; Dockerfiles come from infra's own main.
+    # Clone once so both builds use the same infra commit (recorded by the task).
+    - name: clone-infra
+      runAfter: [mirror-sync]
+      taskRef:
+        name: bifrost-git-clone-gitea
+      params:
+        - name: url
+          value: $(params.giteaBase)/bifrost-trade-infra.git
+        - name: revision
+          value: $(params.infraRevision)
+        - name: subdir
+          value: bifrost-trade-infra
+      workspaces:
+        - name: output
+          workspace: build-context
+    - name: clone-platform
+      runAfter: [mirror-sync]
+      taskRef:
+        name: bifrost-git-clone-gitea
+      params:
+        - name: url
+          value: $(params.giteaBase)/bifrost-platform.git
+        - name: revision
+          value: $(params.revision)
+        - name: subdir
+          value: bifrost-platform
+      workspaces:
+        - name: output
+          workspace: build-context
+    - name: clone-ui
+      runAfter: [mirror-sync]
+      taskRef:
+        name: bifrost-git-clone-gitea
+      params:
+        - name: url
+          value: $(params.giteaBase)/bifrost-ui.git
+        - name: revision
+          value: $(params.uiRevision)
+        - name: subdir
+          value: bifrost-ui
+      workspaces:
+        - name: output
+          workspace: build-context
+    - name: stage-api-dockerfile
+      runAfter: [clone-platform, clone-infra]
+      workspaces:
+        - name: source
+          workspace: build-context
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: copy
+            image: alpine:3.20
+            script: |
+              #!/usr/bin/env sh
+              set -eu
+              cp "$(workspaces.source.path)/bifrost-trade-infra/k8s/cicd/docker/Dockerfile.platform-api-stg" "$(workspaces.source.path)/Dockerfile.platform-api-stg"
+              echo "=== Dockerfile.platform-api-stg from this run's infra clone ==="
+              cat "$(workspaces.source.path)/Dockerfile.platform-api-stg"
+    - name: stage-console-dockerfile
+      runAfter: [clone-platform, clone-ui, clone-infra]
+      workspaces:
+        - name: source
+          workspace: build-context
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: copy
+            image: alpine:3.20
+            script: |
+              #!/usr/bin/env sh
+              set -eu
+              cp "$(workspaces.source.path)/bifrost-trade-infra/k8s/cicd/docker/Dockerfile.platform-console-stg" "$(workspaces.source.path)/Dockerfile.platform-console-stg"
+              echo "=== Dockerfile.platform-console-stg from this run's infra clone ==="
+              cat "$(workspaces.source.path)/Dockerfile.platform-console-stg"
+    # TD-411: built to the candidate tag; :stg moves only in promote-images.
+    - name: build-platform-api
+      runAfter: [stage-api-dockerfile]
+      taskRef:
+        name: bifrost-kaniko-platform-api-stg
+      params:
+        - name: image
+          value: registry.cicd.svc.cluster.local:5000/bifrost-platform-api:stg-candidate
+      workspaces:
+        - name: source
+          workspace: build-context
+    - name: build-platform-console
+      runAfter: [stage-console-dockerfile]
+      taskRef:
+        name: bifrost-kaniko-platform-console-stg
+      params:
+        - name: image
+          value: registry.cicd.svc.cluster.local:5000/bifrost-platform-console:stg-candidate
+      workspaces:
+        - name: source
+          workspace: build-context
+    # TD-411: the agentrt migrations of the api image just built (by digest) run on
+    # STG's database before anything else moves; a Job that fails stops the run here.
+    - name: agentrt-migrate
+      runAfter: [build-platform-api]
+      # a backstop: the step bounds itself to AGENTRT_MIGRATE_WAIT_S (960 s) (review 503)
+      timeout: 20m
+      taskRef:
+        name: bifrost-agentrt-migrate-stg
+      params:
+        - name: apiDigest
+          value: $(tasks.build-platform-api.results.digest)
+        - name: deliverRun
+          value: $(context.pipelineRun.name)
+    # Only now does :stg point at what this run built (review 498 A1).
+    - name: promote-images
+      runAfter: [agentrt-migrate, build-platform-console]
+      taskRef:
+        name: bifrost-promote-platform-images
+      params:
+        - name: apiImage
+          value: $(params.platformApiImage)
+        - name: apiDigest
+          value: $(tasks.build-platform-api.results.digest)
+        - name: consoleImage
+          value: $(params.platformConsoleImage)
+        - name: consoleDigest
+          value: $(tasks.build-platform-console.results.digest)
+    # Sync ConfigMap (clusters.yaml grafana_url, etc.) before rollout so platform-api
+    # reads updated config on pod start — not stale in-memory config from prior mount.
+    # TD-335, TD-419: STG deploys this run's digests, not :stg. The application's image
+    # override is pinned to them in the same patch as the sync request, and the sync is
+    # waited for; a run that overlaps another fails its own check instead of claiming
+    # the other's build.
+    - name: gitops-sync
+      runAfter: [promote-images]
+      taskRef:
+        name: bifrost-argocd-pin-sync-platform
+      params:
+        - name: application
+          value: bifrost-platform-stg
+        - name: apiDigest
+          value: $(tasks.build-platform-api.results.digest)
+        - name: consoleDigest
+          value: $(tasks.build-platform-console.results.digest)
+        - name: deliverRun
+          value: $(context.pipelineRun.name)
+    - name: rollout
+      runAfter: [gitops-sync]
+      taskRef:
+        name: bifrost-rollout-verify-platform
+      params:
+        - name: namespace
+          value: bifrost-platform-stg
+        - name: apiDigest
+          value: $(tasks.build-platform-api.results.digest)
+        - name: consoleDigest
+          value: $(tasks.build-platform-console.results.digest)
+        - name: requireSpecDigest
+          value: "true"
+        - name: recordApplication
+          value: none

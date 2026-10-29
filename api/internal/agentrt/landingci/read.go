@@ -191,47 +191,61 @@ func strictCandidate(item unstructured.Unstructured, repo, revision string) bool
 }
 
 func (c *Client) latest(ctx context.Context, pipeline, revision string, after time.Time, candidate func(unstructured.Unstructured) (include, trusted bool)) (landing.CIRun, unstructured.Unstructured, error) {
-	res, err := c.resource()
+	all, err := c.pipelineRuns(ctx, pipeline)
 	if err != nil {
 		return landing.CIRun{}, unstructured.Unstructured{}, err
 	}
 	var runs []landing.CIRun
 	items := map[string]unstructured.Unstructured{}
+	for _, item := range all {
+		include, trusted := candidate(item)
+		if !include {
+			continue
+		}
+		run := landing.CIRun{Run: item.GetName(), UID: string(item.GetUID()), R: revision, Status: runStatus(item), CreatedAt: item.GetCreationTimestamp().Time}
+		if !trusted || landingCIName.MatchString(run.Run) && item.GetLabels()["bifrost.io/trigger"] != "agentrt-landing-drill" {
+			run.Status = "Unknown"
+		}
+		run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
+		runs = append(runs, run)
+		items[run.Run] = item
+	}
+	latest := landing.LatestCI(runs, revision, after)
+	return latest, items[latest.Run], nil
+}
+
+// pipelineRuns is shared by pinned landing reads, legacy reads and release
+// selection. Never truncate the list: a newer red run may be on the last page.
+func (c *Client) pipelineRuns(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+	res, err := c.resource()
+	if err != nil {
+		return nil, err
+	}
+	var items []unstructured.Unstructured
 	seenPages := map[string]bool{}
 	continuation := ""
 	for {
 		list, err := res.List(ctx, metav1.ListOptions{Limit: 500, Continue: continuation})
 		if err != nil {
-			return landing.CIRun{}, unstructured.Unstructured{}, err
+			return nil, err
 		}
 		for _, item := range list.Items {
 			name, _, _ := unstructured.NestedString(item.Object, "spec", "pipelineRef", "name")
 			if name != pipeline {
 				continue
 			}
-			include, trusted := candidate(item)
-			if !include {
-				continue
-			}
-			run := landing.CIRun{Run: item.GetName(), UID: string(item.GetUID()), R: revision, Status: runStatus(item), CreatedAt: item.GetCreationTimestamp().Time}
-			if !trusted || landingCIName.MatchString(run.Run) && item.GetLabels()["bifrost.io/trigger"] != "agentrt-landing-drill" {
-				run.Status = "Unknown"
-			}
-			run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
-			runs = append(runs, run)
-			items[run.Run] = item
+			items = append(items, item)
 		}
 		continuation = list.GetContinue()
 		if continuation == "" {
 			break
 		}
 		if seenPages[continuation] {
-			return landing.CIRun{}, unstructured.Unstructured{}, fmt.Errorf("landing CI pagination repeated")
+			return nil, fmt.Errorf("landing CI pagination repeated")
 		}
 		seenPages[continuation] = true
 	}
-	latest := landing.LatestCI(runs, revision, after)
-	return latest, items[latest.Run], nil
+	return items, nil
 }
 func runStatus(item unstructured.Unstructured) string {
 	conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")

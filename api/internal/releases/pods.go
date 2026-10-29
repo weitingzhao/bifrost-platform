@@ -35,6 +35,15 @@ func (s *Service) PodDigests(ctx context.Context, namespace, deployment, contain
 	if err != nil {
 		return nil, err
 	}
+	return ReadPodDigests(ctx, core, namespace, deployment, container)
+}
+
+// ReadPodDigests exposes the same strict workload read to evidence adapters
+// with an injected Kubernetes client, without constructing a recorder.
+func ReadPodDigests(ctx context.Context, core kubernetes.Interface, namespace, deployment, container string) ([]string, error) {
+	if core == nil {
+		return nil, errors.New("releases: no cluster client")
+	}
 	dep, err := core.AppsV1().Deployments(namespace).Get(ctx, deployment, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
