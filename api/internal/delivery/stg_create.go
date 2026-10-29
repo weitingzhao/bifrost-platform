@@ -96,6 +96,20 @@ func (a *STGReleaseAdapter) ReadNamedDeliverRun(ctx context.Context, in NamedDel
 // same actuation audit envelope as StartPipelineRun; B5-c persists its intent
 // before calling and records the result. Authorization/permit belongs to B5-c.
 func (a *STGReleaseAdapter) CreateNamedDeliverRun(ctx context.Context, in NamedDeliverInput) (resp cluster.ActuationResponse, obj *unstructured.Unstructured, err error) {
+	return a.createNamedDeliverRun(ctx, in, nil)
+}
+
+// CreatePermittedNamedDeliverRun checks a committed B5-c licence at the last
+// boundary, after Pipeline/window reads and immediately before the POST. A
+// caller paused during those reads cannot send on an expired generation.
+func (a *STGReleaseAdapter) CreatePermittedNamedDeliverRun(ctx context.Context, in NamedDeliverInput, permit func(context.Context) error) (cluster.ActuationResponse, *unstructured.Unstructured, error) {
+	if permit == nil {
+		return cluster.ActuationResponse{}, nil, fmt.Errorf("STG send permit required")
+	}
+	return a.createNamedDeliverRun(ctx, in, permit)
+}
+
+func (a *STGReleaseAdapter) createNamedDeliverRun(ctx context.Context, in NamedDeliverInput, permit func(context.Context) error) (resp cluster.ActuationResponse, obj *unstructured.Unstructured, err error) {
 	resp = cluster.ActuationResponse{Action: "delivery.pipeline.run", GeneratedAt: a.now()}
 	defer func() {
 		if err != nil {
@@ -135,6 +149,11 @@ func (a *STGReleaseAdapter) CreateNamedDeliverRun(ctx context.Context, in NamedD
 	// not require a window, so it cannot provide B5's stronger contract.
 	if err = a.namedWindow(ctx, id.Who); err != nil {
 		return resp, nil, err
+	}
+	if permit != nil {
+		if err = permit(ctx); err != nil {
+			return resp, nil, err
+		}
 	}
 	created, createErr := runs.Create(ctx, desired, metav1.CreateOptions{})
 	if createErr != nil {
