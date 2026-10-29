@@ -27,15 +27,17 @@ import (
 var writeLandingGrant = store.WriteLandingGrant
 
 // landingGrantSources are the Git and CI reads of a grant's material in this
-// process: the lander identity and the CI client. Incomplete (every grant
-// read refuses) where the process has no lander identity or no cluster.
+// process: the platform's read-only Gitea reader and the CI client. The
+// lander, the one identity that can push platform main, stays in the workers
+// (Owner 2026-10-29). Incomplete (every grant read refuses) where the process
+// has no reader or no cluster.
 func (s *Server) landingGrantSources() store.GrantSources {
 	var src store.GrantSources
 	rt := s.agentRuntime
 	if rt == nil || rt.env != "prod" || s.cluster == nil {
 		return src
 	}
-	g, err := landinggit.LanderFromEnv("prod")
+	g, err := landinggit.ReaderFromEnv()
 	if err != nil {
 		return src
 	}

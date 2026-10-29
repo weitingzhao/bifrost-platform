@@ -76,6 +76,32 @@ func LanderFromEnv(environment string, repos ...string) (*Git, error) {
 	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: u, passwordFile: p, scope: liveRef, lander: true}, nil
 }
 
+// ReaderDirEnv names the platform's Gitea reader mount (TD-432): a
+// kubernetes.io/basic-auth Secret (files username and password) of an
+// identity that reads the organization's repositories and writes nothing.
+const ReaderDirEnv = "GITEA_READER_DIR"
+
+// noRef matches no ref at all: a reader pushes, deletes and reads no
+// land/** branch; it reads main and fetches commits by SHA.
+var noRef = regexp.MustCompile(`$^`)
+
+// ReaderFromEnv is a read-only Git for the landing grant's material, its
+// create check and its executor, which run in platform-api (Owner 2026-10-29
+// chose this over mounting the lander, the one identity that can push
+// platform main, in the process that serves HTTP). It reads main and fetches
+// the A, M0 and R commits; every push, main push and delete refuses.
+func ReaderFromEnv(repos ...string) (*Git, error) {
+	dir := strings.TrimSpace(os.Getenv(ReaderDirEnv))
+	if !filepath.IsAbs(dir) {
+		return nil, errors.New("the Gitea reader directory must be an absolute path")
+	}
+	repo, err := selectedRepo(repos)
+	if err != nil {
+		return nil, err
+	}
+	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: filepath.Join(dir, "username"), passwordFile: filepath.Join(dir, "password"), scope: noRef}, nil
+}
+
 func (g *Git) inScope(ref string) bool {
 	scope := g.scope
 	if scope == nil {
