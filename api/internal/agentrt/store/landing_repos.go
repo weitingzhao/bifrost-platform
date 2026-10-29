@@ -36,10 +36,21 @@ func ExistingLandingRepos(ctx context.Context, db DB) ([]string, error) {
 	return repos, err
 }
 
+// landingEvidenceTxKey scopes a transaction to LandingFacts' synchronous
+// evidence reads only. Claims read evidence outside their transaction and
+// keep the independent, bounded rule read below. No transaction is cached
+// in the shared source or controller.
+type landingEvidenceTxKey struct{}
+
 func LandingRuleIncludes(ctx context.Context, db DB, tenant, repo string) (bool, error) {
 	if !landing.RepoSupported(repo) {
 		return false, nil
 	}
+	if tx, ok := ctx.Value(landingEvidenceTxKey{}).(pgx.Tx); ok {
+		return landingRuleIncludes(ctx, tx, tenant, repo)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	var includes bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error

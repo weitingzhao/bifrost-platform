@@ -35,7 +35,10 @@ func LandingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment
 	if err != nil {
 		return f, err
 	}
-	err = landingFactsExternal(ctx, src, &f, deps, snapshot)
+	// Evidence callbacks run synchronously within this transaction. Their
+	// fresh rule checks must use its connection too: borrowing from the pool
+	// while holding the stream lock can wait on a reconciler waiting on us.
+	err = landingFactsExternal(context.WithValue(ctx, landingEvidenceTxKey{}, tx), src, &f, deps, snapshot)
 	return f, err
 }
 
