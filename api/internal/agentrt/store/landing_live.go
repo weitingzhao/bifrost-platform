@@ -209,7 +209,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 				decision = landing.Decision{Reason: "grant_evidence"}
 				return nil
 			}
-			if grantRun, err = src.GrantCI(ctx, *grantKey, o.PreparedAt); err != nil {
+			if grantRun, err = readGrantCI(ctx, src, *grantKey, o.PreparedAt); err != nil {
 				return err
 			}
 			// A PipelineRun name can be reused after deletion. Require a

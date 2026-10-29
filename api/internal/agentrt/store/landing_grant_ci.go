@@ -183,7 +183,21 @@ func grantCIRead(ctx context.Context, src LandingSource, key *GrantCIKey, o land
 	if src.GrantCI == nil {
 		return GrantCIEvidence{}, errors.New("landing grant CI reader unavailable in this process")
 	}
-	return src.GrantCI(ctx, *key, o.PreparedAt)
+	return readGrantCI(ctx, src, *key, o.PreparedAt)
+}
+
+// readGrantCI reads CI evidence at the precision the landing stream keeps
+// times (microseconds). A grant records its run's creation time that way, so
+// a live read compared with it must not carry finer digits: on Linux the clock
+// has nanoseconds, and the same instant would read as a newer run (seen in CI
+// bifrost-ci-platform-1793293053, TestC5A01CIObjectIdentity "equal creation
+// time"). Kubernetes reports whole seconds; this only aligns the comparison.
+func readGrantCI(ctx context.Context, src LandingSource, key GrantCIKey, after time.Time) (GrantCIEvidence, error) {
+	ci, err := src.GrantCI(ctx, key, after)
+	if err == nil && !ci.CreatedAt.IsZero() {
+		ci.CreatedAt = ci.CreatedAt.Truncate(time.Microsecond)
+	}
+	return ci, err
 }
 
 // LandingRuleClear rides on the main_intent of a waiting operation that the

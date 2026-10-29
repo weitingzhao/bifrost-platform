@@ -201,7 +201,9 @@ func TestC5A01CIObjectIdentity(t *testing.T) {
 			{"read failed", "new-ci", "new-uid", time.Minute, false, true},
 		} {
 			t.Run(status+"/"+identity.name, func(t *testing.T) {
-				at := time.Now().UTC()
+				// Nanoseconds as a Linux clock gives them, so the precision
+				// of the stored grant time is exercised on every platform.
+				at := time.Now().UTC().Truncate(time.Microsecond).Add(123 * time.Nanosecond)
 				defer FreezeEventClock(at)()
 				db := grantIdentityGateFixture(t)
 				created := at.Add(-identity.age)
