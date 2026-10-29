@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -258,7 +257,8 @@ func TestExactClaimKey(t *testing.T) {
 	if pinNum(t, next["attempt_no"]) != 2 || next["pushed_ref"] != store.AttemptRef(task, 2) {
 		t.Fatalf("a new key: %v", next)
 	}
-	// T13 (inner): a claim whose commit failed is read back by its key.
+	// Direct key lookup coverage; T13's COMMIT fault is exercised through
+	// ClaimPinned by Test695ClaimPinnedCommitOutcome.
 	back, found := store.ReadBackClaimPinned(ctx, w.rt, externalHost, "k2", task)
 	if !found || back["attempt_id"] != next["attempt_id"] {
 		t.Fatalf("read back: %v %v", back, found)
@@ -574,11 +574,10 @@ func TestPinnedSpecAndProviders(t *testing.T) {
 	if spec == thin {
 		t.Fatal("the uploaded spec was taken")
 	}
-	v, err := canon.Parse(body)
-	ok(t, err)
-	verify := v.(map[string]any)["verify"].([]any)
-	if want := len(store.Repos["bifrost-platform"].Verify); len(verify) != want || want == 0 {
-		t.Fatalf("the spec runs %d checks; the repository has %d", len(verify), want)
+	var specDoc struct{ Verify [][]string }
+	ok(t, json.Unmarshal(body, &specDoc))
+	if want := store.Repos["bifrost-platform"].Verify; len(want) == 0 || !slices.EqualFunc(specDoc.Verify, want, slices.Equal) {
+		t.Fatalf("the spec runs %q; the repository requires %q", specDoc.Verify, want)
 	}
 	var providers []string
 	ok(t, w.rt.QueryRow(ctx, `SELECT ARRAY(SELECT jsonb_array_elements_text(body_json->'providers')) FROM agentrt.event
