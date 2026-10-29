@@ -61,7 +61,18 @@ func (c *Controller) landLive(ctx context.Context, src DrillSources, op, r strin
 		if err != nil {
 			return store.LiveObservation{}, err
 		}
-		return store.LiveObservation{Main: main, CI: ci, WindowBlocked: blocked}, nil
+		obs := store.LiveObservation{Main: main, CI: ci, WindowBlocked: blocked}
+		// A waiting operation reaches here only with a usable grant: its
+		// candidate digest needs R's patch (C-5). No reader, no patch: the
+		// gate refuses and the operation keeps waiting.
+		if o.Phase == "awaiting_grant" && src.GrantPatch != nil && main == o.M0 {
+			p, err := src.GrantPatch(ctx, o.A, o.M0, o.R)
+			if err != nil {
+				return store.LiveObservation{}, err
+			}
+			obs.Patch = &p
+		}
+		return obs, nil
 	})
 	if err != nil || !d.Allowed {
 		return err

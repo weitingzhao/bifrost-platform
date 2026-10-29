@@ -53,9 +53,13 @@ type Approval struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 	DecidedAt    time.Time `json:"decided_at,omitempty"`
 	Channel      string    `json:"channel,omitempty"`
-	RejectReason string    `json:"reject_reason,omitempty"`
-	Result       any       `json:"result,omitempty"`
-	Error        string    `json:"error,omitempty"`
+	// ConfirmedNumber is the number the approver repeated (confirm_number),
+	// stored when it matched: what an executor reads back to know the
+	// number was checked (landing grants, coordinator v3 §5.6 item 4).
+	ConfirmedNumber int    `json:"confirmed_number,omitempty"`
+	RejectReason    string `json:"reject_reason,omitempty"`
+	Result          any    `json:"result,omitempty"`
+	Error           string `json:"error,omitempty"`
 	// Resolution is how the Owner closed an unknown result. Nil until then.
 	Resolution *Resolution `json:"resolution,omitempty"`
 

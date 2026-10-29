@@ -58,6 +58,9 @@ type API struct {
 	// MainHead reads a repository's main where agentd clones it, the base of
 	// a goal's task; nil answers POST /goals 503.
 	MainHead MainHead
+	// Grants are the Git and CI reads of a landing grant's material (C-5);
+	// nil, or incomplete sources, answer the material route 503.
+	Grants func() store.GrantSources
 	// Actions keeps attempts' actions in redis-agents (W-31 2.3); nil keeps
 	// none: a heartbeat's actions are refused in its answer, the read 503.
 	Actions *actions.Store
@@ -185,6 +188,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/rules/{rule_id}", a.getRule)
 		r.With(agentd, cfg).Post("/landing/refresh", a.refreshLanding)
 		r.With(read, cfg).Get("/landing/operations/{op}", a.getLandingWait)
+		r.With(read, cfg).Get("/landing/{op}/material", a.getLandingMaterial)
+		r.With(gate("lift"), cfg).Post("/landing/grants/{grant_id}/revoke", a.revokeLandingGrant)
 		r.With(read, cfg).Get("/landing/cards/{question_id}", a.getLandingCard)
 		r.With(read, cfg).Get("/landing/missions/{id}", a.getMissionLanding)
 		r.With(read, cfg).Post("/rules/{rule_id}/check", a.checkRule)

@@ -32,13 +32,16 @@ type LandingWaitStatus struct {
 	MainKnown        bool      `json:"main_known"`
 	MainChanged      bool      `json:"main_changed"`
 	OwnerTodo        bool      `json:"owner_todo"`
+	// Grants are the operation's grants as the stream has them (C-5);
+	// Shown is "authorized" while one is valid.
+	Grants []LandingGrantStatus `json:"grants"`
 }
 
 func (s *LandingWaitStatus) ObserveMain(head string) {
 	s.MainKnown = landing.ValidSHA(head)
 	s.MainChanged = s.MainKnown && head != s.M0
-	s.OwnerTodo = s.Phase == "awaiting_grant" && s.ApprovalStatus == "pending" && s.MainKnown && !s.MainChanged
-	if s.Phase != "awaiting_grant" || s.ApprovalStatus != "pending" {
+	s.OwnerTodo = s.Phase == "awaiting_grant" && s.ApprovalStatus == "pending" && s.MainKnown && !s.MainChanged && s.Shown != "authorized"
+	if s.Phase != "awaiting_grant" || s.ApprovalStatus != "pending" || s.Shown == "authorized" {
 		return
 	}
 	s.Shown = "request_main_unknown"
@@ -86,6 +89,7 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 	var picked map[string]any
 	for _, id := range ids {
 		m := current[id]
@@ -103,9 +107,24 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 		w.ApprovalNumber, _ = cardNumber(picked["approval_number"])
 		w.ApprovalURL = "/api/v1/approvals/" + w.ApprovalID
 	}
+	_, grants, err := readLandingGrants(ctx, tx, landingRepoStream)
+	if err != nil {
+		return nil, err
+	}
+	authorized := false
+	w.Grants = []LandingGrantStatus{}
+	for _, g := range grants {
+		if g.Op == op {
+			st := g.status(at)
+			w.Grants = append(w.Grants, st)
+			authorized = authorized || st.Valid
+		}
+	}
 	switch {
 	case o.AtMain():
 		w.Shown = "handed_to_push"
+	case o.Phase == "awaiting_grant" && authorized:
+		w.Shown = "authorized"
 	case o.Phase == "awaiting_grant":
 		w.Shown = "awaiting_request"
 		if slices.Contains([]string{"approved", "running"}, w.ApprovalStatus) {

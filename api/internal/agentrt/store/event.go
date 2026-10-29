@@ -170,6 +170,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if err := checkLandingRequestAppend(ctx, tx, ev, at); err != nil {
 		return Appended{}, err
 	}
+	if err := checkLandingGrantAppend(ctx, tx, ev, at); err != nil {
+		return Appended{}, err
+	}
 	if err := checkLandingAppend(ctx, tx, ev, at); err != nil {
 		return Appended{}, err
 	}

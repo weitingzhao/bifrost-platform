@@ -173,9 +173,17 @@ func drillWorkShare(ctx context.Context, remaining int) (context.Context, contex
 func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time) error {
 	switch {
 	case o.Phase == "awaiting_grant":
-		// C-5 will resume with a verified grant. No Git/CI polling, branch
-		// rewrite, repeated event or card while authorization is absent.
-		return nil
+		// C-5: only a grant the stream shows usable takes the operation to
+		// the final gate, which verifies and consumes it. Without one: no
+		// Git/CI polling, branch rewrite, repeated event or card.
+		if c.Env != "prod" || !c.Live {
+			return nil
+		}
+		grant, err := store.UsableLandingGrant(ctx, c.DB, id)
+		if err != nil || grant == "" || !c.grantTries.due(id+"/"+grant, c.clock()) {
+			return err
+		}
+		return c.landLive(ctx, *c.Drill, id, o.R)
 	case o.Phase == "parked" && o.Resume != "branch_pushed":
 		if now.Before(o.RetryAt) {
 			return nil
@@ -301,4 +309,28 @@ func (c *Controller) clock() time.Time {
 		return c.Now()
 	}
 	return time.Now()
+}
+
+// grantTryEvery is how often the gate tries one grant that it refused.
+const grantTryEvery = 10 * time.Minute
+
+// grantTries is memory only: a restart tries each grant once sooner.
+type grantTries struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+// due says whether key (operation/grant) may be tried at now, and if so
+// records the try. The first try of a grant is always due.
+func (g *grantTries) due(key string, now time.Time) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.last == nil {
+		g.last = map[string]time.Time{}
+	}
+	if at, ok := g.last[key]; ok && now.Before(at.Add(grantTryEvery)) {
+		return false
+	}
+	g.last[key] = now
+	return true
 }

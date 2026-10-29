@@ -120,6 +120,11 @@ type Controller struct {
 	// drillWaits backs off drill claims refused for a reason that may pass
 	// (landing_scan.go, TD-447 4); memory only.
 	drillWaits drillBackoff
+	// grantTries spaces the final gate's tries of one waiting operation's
+	// grant (C-5): each try opens a workspace and reads main, CI and R's
+	// patch, and a grant the gate refuses (stale, insufficient) stays
+	// usable-looking on the stream until it expires.
+	grantTries grantTries
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.

@@ -65,7 +65,7 @@ func RootTiming(s State, root string, now time.Time) Timing {
 	if first.IsZero() || now.Before(first) {
 		return b
 	}
-	for _, o := range s.Operations {
+	for id, o := range s.Operations {
 		if o.Task != root || o.AwaitingAt.IsZero() {
 			continue
 		}
@@ -79,7 +79,7 @@ func RootTiming(s State, root string, now time.Time) Timing {
 		if !start.Before(end) {
 			continue
 		}
-		b.Waiting += end.Sub(start) - availableFor(o.GrantPeriods, start, end)
+		b.Waiting += end.Sub(start) - availableFor(append(slices.Clone(o.GrantPeriods), s.Grants[id]...), start, end)
 	}
 	b.Execution = max(time.Duration(0), now.Sub(first)-b.Waiting)
 	return b

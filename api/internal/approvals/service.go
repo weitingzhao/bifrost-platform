@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -449,6 +450,10 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 		found.DecidedAt = now
 		found.Channel = channel
 		found.ApprovedLine = line
+		found.ConfirmedNumber = 0
+		if in.Confirm != nil && *in.Confirm == found.Number && found.Number != 0 {
+			found.ConfirmedNumber = found.Number
+		}
 		found.Status = StatusApproved
 		found.Result = nil
 		found.Error = ""
@@ -540,7 +545,10 @@ func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *deci
 		return nil
 	}
 	if confirm == nil {
-		if s.requireConfirm {
+		// A landing grant is written only for an approval whose number was
+		// confirmed (coordinator v3 §5.6 item 4): refuse here, before the
+		// Owner's click turns into a failed execution.
+		if s.requireConfirm || slices.Contains(confirmRequired, rec.Action) {
 			return &decided{Status: 400, Body: map[string]any{"error": "confirm_number required", "number": rec.Number}}
 		}
 		return nil
@@ -550,6 +558,9 @@ func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *deci
 	}
 	return nil
 }
+
+// confirmRequired are actions whose approval always repeats its number.
+var confirmRequired = []string{"approve_guardrail_landing", "approve_core_landing"}
 
 func decisionCode(rec Approval) int {
 	if rec.Status == StatusApproved || rec.Status == StatusRunning {

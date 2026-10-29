@@ -3,6 +3,9 @@ package server
 import (
 	"context"
 	"errors"
+	"slices"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 )
@@ -17,6 +20,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	if action == "mark_missions_no_merge" {
 		_, err := s.noMergeRequest(params)
 		return err
+	}
+	if slices.Contains(store.GrantActions, action) {
+		return s.landingGrantCreateCheck(ctx, action, params)
 	}
 	if action != "start_pipeline_run" || s.delivery == nil {
 		return nil

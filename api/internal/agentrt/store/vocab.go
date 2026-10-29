@@ -174,6 +174,11 @@ var bodies = map[string][]field{
 		// decision time, the quota day and the CI run.
 		{"landing_gate", kAny, true},
 		{"landing_grant_request", kAny, true},
+		// landing_grant / landing_grant_revoked / landing_grant_use: a D-tier
+		// approval's grant on the repository stream, its revocation by the
+		// Owner, and its consumption on the main_intent that uses it
+		// (landing_grant.go, coordinator v3 §5.5).
+		{"landing_grant", kAny, true}, {"landing_grant_revoked", kAny, true}, {"landing_grant_use", kAny, true},
 		// landing_anomaly: what the main reconciler found that only the
 		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
 		// late_landing, once per operation.
@@ -578,6 +583,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_grant_request" {
 		return badLandingGrantRequest(v)
+	}
+	if eventType == "note" && (name == "landing_grant" || name == "landing_grant_revoked" || name == "landing_grant_use") {
+		return badGrantRecord(name, v)
 	}
 	if eventType == "note" && name == "landing_gate" {
 		return badLandingGate(v)

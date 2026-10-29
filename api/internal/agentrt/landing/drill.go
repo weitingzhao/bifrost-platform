@@ -17,6 +17,9 @@ type CIRun struct {
 	// pins P and U from, read from the same run. Empty when the run has
 	// not written them (yet).
 	UID, PlatformCommit, UICommit string
+	// InfraCommit is the run's infra-commit result: a landing grant's
+	// material names every sibling checkout the run built with (C-5).
+	InfraCommit string
 }
 
 func LatestCI(runs []CIRun, revision string, after time.Time) CIRun {

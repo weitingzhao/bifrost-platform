@@ -39,7 +39,13 @@ func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State,
 	if err := rows.Err(); err != nil {
 		return landing.State{}, err
 	}
-	return landing.Fold(entries)
+	// The grant projection (C-5, §5.3): a valid grant pauses W, from the
+	// stream's grant records, the same on every read and after a restart.
+	_, grants, err := readLandingGrants(ctx, tx, stream)
+	if err != nil {
+		return landing.State{}, err
+	}
+	return landing.FoldWithGrants(entries, grantPeriods(grants))
 }
 func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) error {
 	value, exists := ev.Body["landing"]
@@ -96,7 +102,11 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		return fmt.Errorf("waiting operation has not reached its current budget")
 	}
 	if k == "main_intent" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
-		return fmt.Errorf("waiting operation requires grant consumption; not installed in C-4")
+		// C-5: a waiting operation reaches main only by consuming a grant in
+		// the same event (checkLandingGrantAppend checks the grant itself).
+		if _, ok := ev.Body["landing_grant_use"]; !ok {
+			return fmt.Errorf("a waiting operation's main_intent must consume its grant (landing_grant_use)")
+		}
 	}
 	if k == "failed" && r.String("why") == "declined" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
 		request, ok := ev.Body["landing_grant_request"].(map[string]any)

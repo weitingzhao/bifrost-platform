@@ -61,6 +61,9 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	c.DrillGit = g
 	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: ci.LandingCI, EnsureCI: ci.EnsureLandingCI, WindowBlocked: ci.LandingWindowBlocked}
 	if c.Env == "prod" {
+		c.Drill.GrantPatch = landingGrantPatch(g) // C-5: a waiting operation's grant needs R's patch
+	}
+	if c.Env == "prod" {
 		// A new live landing needs every reach the landing cards need (CUT
 		// §11.6 v3 item 9): without them the Owner could not be asked.
 		if !controller.LandingCardsComplete(c.LandingCards) {

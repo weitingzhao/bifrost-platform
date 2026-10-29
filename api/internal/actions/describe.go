@@ -67,6 +67,8 @@ var notifySafeKeys = map[string][]string{
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 	"void_exam_paper":            {"environment", "run_id"},
 	"mark_missions_no_merge":     {"env", "archive_manifest_sha256"},
+	"approve_guardrail_landing":  {"env", "repo", "op", "R", "stg_release"},
+	"approve_core_landing":       {"env", "repo", "op", "R", "stg_release"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -119,6 +121,10 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		}
 	case "mark_missions_no_merge":
 		d.Env, d.Summary = p("env"), "Mark done missions no_merge (disposed, not delivered)"
+	case "approve_guardrail_landing":
+		d.Env, d.Summary = p("env"), "Land "+shortRef(p("R"))+" ("+p("op")+") past its soft guardrails"
+	case "approve_core_landing":
+		d.Env, d.Summary = p("env"), "Trusted core change: land "+shortRef(p("R"))+" ("+p("op")+")"
 	case "void_exam_paper":
 		run := p("run_id")
 		if len(run) > 12 {

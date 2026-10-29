@@ -217,7 +217,7 @@ func (c *Client) latest(ctx context.Context, pipeline, revision string, after ti
 			if !trusted || landingCIName.MatchString(run.Run) && item.GetLabels()["bifrost.io/trigger"] != "agentrt-landing-drill" {
 				run.Status = "Unknown"
 			}
-			run.PlatformCommit, run.UICommit = landingCIResults(item)
+			run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
 			runs = append(runs, run)
 			items[run.Run] = item
 		}
@@ -272,8 +272,11 @@ func namedValues(item unstructured.Unstructured, fields ...string) (map[string]s
 	}
 	return values, counts
 }
-func landingCIResults(item unstructured.Unstructured) (platform, ui string) {
+func landingCIResults(item unstructured.Unstructured) (platform, ui, infra string) {
 	values, counts := namedValues(item, "status", "results")
+	if counts["infra-commit"] == 1 && fullSHA.MatchString(values["infra-commit"]) {
+		infra = values["infra-commit"]
+	}
 	if counts["platform-commit"] == 1 && fullSHA.MatchString(values["platform-commit"]) {
 		platform = values["platform-commit"]
 	}

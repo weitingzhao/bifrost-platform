@@ -92,6 +92,9 @@ func init() {
 		"POST /api/v1/agentrt/rules/{rule_id}/sign",
 		"POST /api/v1/agentrt/rules/{rule_id}/tighten",
 	)
+	exempt("agent runtime landing grant revocation (W-31 core C-5, coordinator v3 §5.7, F2 A): only the Owner (admin) revokes a landing grant an approval wrote; revoking only tightens (the grant can no longer be consumed by the final gate) and needs no approval of its own; the store writes landing_grant_revoked under the repository stream lock in one transaction, and a grant already handed to the push is not revoked; no route writes a grant itself (an approve_*_landing approval's executor does); not a cluster write",
+		"POST /api/v1/agentrt/landing/grants/{grant_id}/revoke",
+	)
 	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
 	)

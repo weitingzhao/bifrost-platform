@@ -46,6 +46,10 @@ type DrillSources struct {
 	WindowBlocked func(context.Context) (bool, error)
 	EnsureCI      func(context.Context, string, string) error
 	Delete        func(context.Context, string, string) error
+	// GrantPatch reads R's patch evidence for a waiting operation's grant
+	// (C-5): the final gate recomputes the grant's candidate digest from it.
+	// Nil leaves every waiting operation waiting.
+	GrantPatch func(ctx context.Context, a, m0, r string) (store.GrantPatch, error)
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its

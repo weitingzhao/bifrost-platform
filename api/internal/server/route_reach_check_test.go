@@ -51,7 +51,11 @@ var intendedRouteAdditions = map[string][]string{
 	// refresh of it, an agentd route the store holds to the pin's host.
 	"GET /api/v1/agentrt/landing/operations/{op}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/agentrt/landing/refresh":        {"agentd:h1"},
-	"GET /api/v1/agentrt/plan-view":               {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// C-5: a landing grant's material, for every reader; its revocation,
+	// the Owner's alone (no route writes a grant).
+	"GET /api/v1/agentrt/landing/{op}/material":             {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"POST /api/v1/agentrt/landing/grants/{grant_id}/revoke": {"admin"},
+	"GET /api/v1/agentrt/plan-view":                         {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).
 	"GET /api/v1/agentrt/landing/cards/{question_id}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},

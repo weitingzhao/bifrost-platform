@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The live landing's second gate and its result (S3 B1, CUT §2.5 steps 6–7,
@@ -23,6 +24,10 @@ type LiveObservation struct {
 	Main          string
 	CI            landing.CIRun
 	WindowBlocked bool
+	// Patch is R's patch evidence (C-5), read only for a waiting operation
+	// whose grant the gate may consume: its candidate digest needs it. Nil
+	// otherwise; nil for a waiting operation refuses the consumption.
+	Patch *GrantPatch
 }
 
 // Authorization is a committed main_intent: the only licence to push, held
@@ -103,20 +108,34 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return err
 		}
 		o = state.Operations[op]
-		if o.Phase == "awaiting_grant" {
+		// C-5: a waiting operation goes on only with a grant the stream
+		// shows usable (same candidate, unrevoked, unconsumed, unexpired);
+		// without one the gate reads nothing outside the database.
+		waiting := o.Phase == "awaiting_grant"
+		var grant *grantView
+		if waiting {
 			why := landing.RootBound(state, o.Task, DecisionAt(), false)
-			if why == "" {
-				why = "awaiting_grant"
+			if why == "" && state.LatestOperation(o.Task) == op {
+				_, order, err := readLandingGrants(ctx, tx, stream)
+				if err != nil {
+					return err
+				}
+				grant = candidateGrant(order, op, o, DecisionAt())
 			}
-			decision = landing.Decision{Reason: why}
-			return nil // only C-5's verified grant consumption may resume this phase
+			if grant == nil {
+				if why == "" {
+					why = "awaiting_grant"
+				}
+				decision = landing.Decision{Reason: why}
+				return nil
+			}
 		}
 		f, err := LandingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt())
 		if err != nil {
 			return err
 		}
 		o = f.Operation
-		if o.Phase != "branch_pushed" || o.DryRun || o.R == "" || o.M0 == "" {
+		if waiting && o.Phase != "awaiting_grant" || !waiting && o.Phase != "branch_pushed" || o.DryRun || o.R == "" || o.M0 == "" {
 			decision = landing.Decision{Reason: "not_ready"}
 			return nil
 		}
@@ -150,7 +169,30 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if decision = landing.EligibleToClaim(g, final); !decision.Allowed {
 			return nil
 		}
+		if waiting {
+			// The Owner's signed external host entry is still in force: its
+			// removal (a tightening) stops grants at once (§2.1).
+			enabled, err := grantEnabled(ctx, tx, g.Tenant, g.Repo)
+			if err != nil {
+				return err
+			}
+			if !enabled {
+				decision = landing.Decision{Reason: "grant_not_enabled"}
+				return nil
+			}
+		}
 		switch {
+		case obs.Main != o.M0 && waiting:
+			// §5.4: a grant for a main that moved is spent with its operation.
+			if !landing.ValidSHA(obs.Main) {
+				decision = landing.Decision{Reason: "main_changed"}
+				return nil
+			}
+			decision = landing.Decision{Reason: "main_changed"}
+			_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
+				Body: map[string]any{"text": "Landing granted operation discarded: main advanced to " + obs.Main,
+					"landing": map[string]any{"v": landing.Version, "kind": "discarded", "op": op, "why": "main_changed"}}})
+			return err
 		case obs.Main != o.M0:
 			decision = landing.Decision{Reason: "main_changed"}
 			return nil
@@ -171,7 +213,50 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			}
 		}
 		_, soft := landing.PolicyChecks(g, final)
-		if len(soft) > 0 {
+		var use map[string]any
+		if waiting {
+			// §3.3 / §5.5: the grant is usable only for this very candidate
+			// (its digest recomputed now), before its expiry at the decision,
+			// and only when it waives every soft failure under the rule in
+			// force now. Otherwise nothing is reserved or written: the
+			// operation stays waiting (a tightened rule needs a new grant).
+			if obs.Patch == nil {
+				decision = landing.Decision{Reason: "grant_evidence"}
+				return nil
+			}
+			acc, rev, body, err := readGrantChecks(ctx, tx, o.Task, o.Attempt)
+			if err != nil {
+				return err
+			}
+			var stepID string
+			if err = tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id,'') FROM agentrt.task WHERE task_id=$1`, o.Task).Scan(&stepID); err != nil {
+				return err
+			}
+			trust := grant.Action == ActionCoreLanding && trustAnswered(body)
+			cand, err := buildCandidate(g, stepID, op, o, acc, rev, trust, *obs.Patch, obs.CI, grant.STGRelease).Digest()
+			if err != nil {
+				return err
+			}
+			softNow := refusalSet(soft)
+			rule := GrantRule{ID: g.Rule.ID, Version: int64(g.Rule.Version)}
+			if err = tx.QueryRow(ctx, `SELECT encode(sha256(convert_to(body_text,'UTF8')),'hex') FROM agentrt.rule WHERE rule_id=$1 AND rule_version=$2`,
+				g.Rule.ID, g.Rule.Version).Scan(&rule.SHA256); err != nil {
+				return err
+			}
+			switch {
+			case !final.Before(grant.exp):
+				decision = landing.Decision{Reason: "grant_expired"}
+				return nil
+			case cand != grant.CandidateDigest:
+				decision = landing.Decision{Reason: "grant_stale"}
+				return nil
+			case !rules.LandingWaivesCover(soft, refusalsOf(grant.Waives)):
+				decision = landing.Decision{Reason: "grant_insufficient"}
+				return nil
+			}
+			use = toBody(LandingGrantUse{V: LandingGrantVersion, GrantID: grant.GrantID, CandidateDigest: cand, SoftNow: softNow,
+				Rule: rule, ChecksVersion: rules.LandingChecksVersion, DecidedAt: final.UTC().Format(time.RFC3339Nano)})
+		} else if len(soft) > 0 {
 			decision = landing.Decision{Reason: "awaiting_grant"}
 			return appendAwaitingGrant(ctx, tx, g, op, obs.CI, soft)
 		}
@@ -199,12 +284,18 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			}
 		}
 		hook("landing gate: reserved", op)
-		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-			Body: map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
-				"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0},
-				"landing_gate": map[string]any{"v": LandingGateVersion, "op": op, "rule_version": g.Rule.Version,
-					"decided_at": final.UTC().Format(time.RFC3339Nano), "quota_day": day,
-					"ci_run": obs.CI.Run, "ci_created_at": obs.CI.CreatedAt.UTC().Format(time.RFC3339Nano)}}})
+		body := map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
+			"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0},
+			"landing_gate": map[string]any{"v": LandingGateVersion, "op": op, "rule_version": g.Rule.Version,
+				"decided_at": final.UTC().Format(time.RFC3339Nano), "quota_day": day,
+				"ci_run": obs.CI.Run, "ci_created_at": obs.CI.CreatedAt.UTC().Format(time.RFC3339Nano)}}
+		if use != nil {
+			// Consumption is this event: no separate consumed record (§5.5).
+			body["landing_grant_use"] = use
+			body["text"] = fmt.Sprintf("Landing main_intent on grant %s; second gate rule version %d", grant.GrantID, g.Rule.Version)
+		}
+		hook("landing gate: before main_intent", op)
+		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: body})
 		if err == nil {
 			err = onDay(a)
 		}

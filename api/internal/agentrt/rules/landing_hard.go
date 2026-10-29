@@ -194,3 +194,35 @@ func LandingHardAbsolute(repo, p string) bool {
 func LandingHardCore(repo, p string) bool {
 	return !LandingHardAbsolute(repo, p) && LandingHard(repo, p)
 }
+
+// LandingHardCoreEntry is the §4.2 entry a hard_core path matches, for the
+// core-level approval's material (§12.2 item 2); "" when p is not hard_core.
+// Basename and Dockerfile entries name the basename rule they match.
+func LandingHardCoreEntry(repo, p string) string {
+	if !LandingHardCore(repo, p) {
+		return ""
+	}
+	for _, list := range [][]string{landingHardGo[:], landingHardConsole[:], landingHardOtherDirs[:], landingHardFiles[:]} {
+		for _, entry := range list {
+			if p == entry || strings.HasSuffix(entry, "/") && strings.HasPrefix(p, entry) {
+				return entry
+			}
+		}
+	}
+	base := path.Base(p)
+	if strings.HasPrefix(base, "Dockerfile") {
+		return "**/Dockerfile*"
+	}
+	return "**/" + base
+}
+
+// LandingDecisionChain: p is on the Owner's decision chain (§12.2 item 2):
+// the process-external approval source (§4.2 B), the Console decision UI and
+// its credentials (§4.2 C), or the approvals and actuation packages.
+func LandingDecisionChain(repo, p string) bool {
+	if !LandingHardCore(repo, p) {
+		return false
+	}
+	return inLandingEntries(p, landingHardConsole[:]) || strings.HasPrefix(p, "mcp/platform/") ||
+		strings.HasPrefix(p, "api/internal/approval") || strings.HasPrefix(p, "api/internal/actuation")
+}

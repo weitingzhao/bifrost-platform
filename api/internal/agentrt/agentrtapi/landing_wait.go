@@ -1,6 +1,7 @@
 package agentrtapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -49,4 +50,47 @@ func (a *API) getLandingWait(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+// getLandingMaterial is a landing grant's material (C-5, §5.6 item 3): what
+// the Owner is shown and the digests a request must carry, recomputed now.
+// stg_release is the request's parameter (true unless "false", O-1 A).
+func (a *API) getLandingMaterial(w http.ResponseWriter, r *http.Request) {
+	if a.Grants == nil {
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "landing grant evidence is not read in this process")
+		return
+	}
+	stg := r.URL.Query().Get("stg_release") != "false"
+	m, err := store.ReadLandingGrantMaterial(r.Context(), a.DB, a.Grants(), chi.URLParam(r, "op"), stg)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalid) {
+			a.fail(w, err)
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "unavailable", err.Error())
+		return
+	}
+	if a.MainHead != nil {
+		head, err := a.MainHead(r.Context(), m.Candidate.Repo)
+		writeJSON(w, http.StatusOK, map[string]any{"material": m, "main": head, "main_known": err == nil && head != "",
+			"main_is_M0": err == nil && head == m.Candidate.M0})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"material": m, "main": "", "main_known": false, "main_is_M0": false})
+}
+
+// revokeLandingGrant is the Owner's revocation (F2 A, §5.7): a tightening,
+// no approval. A grant already consumed is not revoked; the answer says it
+// was handed to the push. An unknown outcome answers 503: the stream decides.
+func (a *API) revokeLandingGrant(w http.ResponseWriter, r *http.Request) {
+	out, err := store.RevokeLandingGrant(r.Context(), a.DB, chi.URLParam(r, "grant_id"))
+	if errors.Is(err, store.ErrGrantUncertain) {
+		writeError(w, http.StatusServiceUnavailable, "unknown", "the result is unknown; refresh the material page, which reads the stream: "+err.Error())
+		return
+	}
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

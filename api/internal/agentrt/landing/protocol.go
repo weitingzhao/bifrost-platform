@@ -227,10 +227,18 @@ type State struct {
 	// born after it is live.
 	LiveAt       time.Time
 	Reservations map[string]string // root -> first operation; quota stream is one UTC day
+	// Grants is the grant projection (C-5): per operation, the intervals a
+	// valid grant was available, from the stream's grant records. It is set
+	// before the fold, so every record is checked against the same W that
+	// was in force when it was appended (intervals are clipped to time).
+	Grants map[string][]Interval
 }
 
-func Fold(entries []Entry) (State, error) {
-	s := State{Operations: map[string]Operation{}, Reservations: map[string]string{}}
+func Fold(entries []Entry) (State, error) { return FoldWithGrants(entries, nil) }
+
+// FoldWithGrants folds entries with the grant projection in place (C-5).
+func FoldWithGrants(entries []Entry, grants map[string][]Interval) (State, error) {
+	s := State{Operations: map[string]Operation{}, Reservations: map[string]string{}, Grants: grants}
 	for _, e := range entries {
 		if err := s.Apply(e); err != nil {
 			return State{}, err
@@ -243,7 +251,7 @@ func Fold(entries []Entry) (State, error) {
 // decides before it appends whether the protocol takes its record, so a
 // refusal is recorded instead of rolling the answer back (CUT §8).
 func (s State) Check(e Entry) error {
-	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, LiveAt: s.LiveAt,
+	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, LiveAt: s.LiveAt, Grants: s.Grants,
 		Retries: maps.Clone(s.Retries), Reservations: maps.Clone(s.Reservations), Operations: make(map[string]Operation, len(s.Operations))}
 	for k, o := range s.Operations {
 		o.Digests = maps.Clone(o.Digests)
