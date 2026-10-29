@@ -32,9 +32,14 @@ type MainHistory struct {
 // Facts is a fresh snapshot, shared by all gates. Unknown is deliberately not
 // Never. Versions let the caller bind its audit record to the rows it locked.
 type Facts struct {
-	Mission, Reviewers                                               string
-	Environment, Mode, Tenant, Repo, Task, Attempt, A, Base          string
-	ExecutorPin                                                      string
+	Mission, Reviewers                                      string
+	Environment, Mode, Tenant, Repo, Task, Attempt, A, Base string
+	ExecutorPin                                             string
+	// GrantEnabled: the Owner's signed standing envelope in force names the
+	// coordinator's external host for Repo (§2.1). Until it does, nothing
+	// waits for a grant: core and soft failures are refused as before
+	// (review 694 R-03).
+	GrantEnabled                                                     bool
 	MissionState, StepState, ProducingPlan, LatestUsedPlan           string
 	ReservedToday, OtherInFlight                                     int
 	MissionVersion, StepVersion                                      int
@@ -162,7 +167,7 @@ func EligibleToPush(f Facts, now time.Time) Decision {
 // MayAwaitGrant is eligibility to prepare, never permission to push. The
 // grant executor separately enforces the action, identity and waiver checks.
 func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
-	return f.Environment == "prod" && f.Mode == "live" && rules.GrantSupported(f.Repo) &&
+	return f.Environment == "prod" && f.Mode == "live" && f.GrantEnabled && rules.GrantSupported(f.Repo) &&
 		(f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore))
 }
 func EligibleToDeploy(f Facts, now time.Time) Decision {

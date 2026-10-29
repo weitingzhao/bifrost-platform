@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -261,5 +262,30 @@ func TestCheckGrantRecord(t *testing.T) {
 	}
 	if checkGrantRecord(good(), store.ActionCoreLanding, hash, "", true) == nil || checkGrantRecord(good(), store.ActionCoreLanding, hash, hash, false) == nil {
 		t.Error("no execution hash, or not PROD, accepted")
+	}
+}
+
+// Review 694 R-02 through the server's wiring: two requests for one
+// operation whose create checks both pass before either is stored leave
+// one open request; the other is 409 open_request.
+func TestC5R02ServerKeepsOneOpenRequestPerOperation(t *testing.T) {
+	srv, do, _, _ := grantServer(t)
+	var both sync.WaitGroup
+	both.Add(2)
+	srv.approvals.SetCreateCheck(func(context.Context, string, map[string]any) error {
+		both.Done()
+		both.Wait()
+		return nil
+	})
+	codes := make(chan int, 2)
+	for _, action := range []string{store.ActionCoreLanding, store.ActionGuardrailLanding} {
+		go func() {
+			rec := do(http.MethodPost, "/api/v1/approvals", map[string]any{"action": action, "params": grantParams(), "reason": "land", "rollback": "revert"}, "operator")
+			codes <- rec.Code
+		}()
+	}
+	a, b := <-codes, <-codes
+	if a+b != http.StatusCreated+http.StatusConflict {
+		t.Fatalf("statuses %d, %d", a, b)
 	}
 }

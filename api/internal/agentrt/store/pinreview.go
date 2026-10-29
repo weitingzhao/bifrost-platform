@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The review of a pinned task (W-31 round 4, core block C-2;
@@ -15,17 +16,29 @@ import (
 // rules.LandingHard) the reviewer is given the trust chain's fixed questions
 // and answers each in its report, which the core-level approval reads.
 
-// TrustReviewText is what the review of a pinned commit that touches the
-// trusted core asks, before anything else (§12.2 item 3).
+// TrustReviewText is what the review of a commit that touches the trusted
+// core asks, before anything else (§12.2 item 3). Its answers have a fixed
+// shape the core-level approval checks (trustAnswered, review 694 B-02): a
+// section headed "## Trust chain answers", one line per question ID. The
+// text itself holds no such section and no answer line.
 const TrustReviewText = "# Trust chain review\n\n" +
 	"This commit changes the platform's trusted core: approvals, identity, the landing gate, or what they depend on. " +
-	"Besides whether it is correct and complete, answer each question below in your report, under its number, " +
-	"with what in the diff shows it:\n\n" +
-	"1. Does it change who can approve, or what an approval needs?\n" +
-	"2. Does it change how the thing approved is shown to the Owner (its material, its digests, its page)?\n" +
-	"3. Does it change how a token or a credential is obtained, kept or checked?\n" +
-	"4. Does it change how the landing gate decides, or open a way around it?\n\n" +
-	"A question not answered counts as a failing review.\n"
+	"Besides whether it is correct and complete, answer the four questions below. End your report with a section whose heading line is " +
+	"exactly `## Trust chain answers`, holding one line per question: its ID and a colon, then Yes or No, then what in the diff shows it " +
+	"(for instance a line reading `T3: No, the token is still read from ...`).\n\n" +
+	"- (T1) Does it change who can approve, or what an approval needs?\n" +
+	"- (T2) Does it change how the thing approved is shown to the Owner (its material, its digests, its page)?\n" +
+	"- (T3) Does it change how a token or a credential is obtained, kept or checked?\n" +
+	"- (T4) Does it change how the landing gate decides, or open a way around it?\n\n" +
+	"A question missing, answered without Yes or No, or without what in the diff shows it counts as a failing review.\n"
+
+// trustQuestions are the four questions' texts, which no answer may copy.
+var trustQuestions = []string{
+	"does it change who can approve",
+	"does it change how the thing approved is shown",
+	"does it change how a token or a credential is obtained",
+	"does it change how the landing gate decides",
+}
 
 // Bounds of a pinned review's time (§2.8): an hour, and half an hour more
 // for every 300 lines the commit adds or deletes, at most three hours.
@@ -54,8 +67,14 @@ func pinnedReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpe
 		return 0, nil
 	}
 	var pin string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(executor_pin, '') FROM agentrt.task WHERE task_id = $1`, subject).Scan(&pin); err != nil || pin == "" {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(executor_pin, '') FROM agentrt.task WHERE task_id = $1`, subject).Scan(&pin); err != nil {
 		return 0, err
+	}
+	if pin == "" {
+		// An ordinary core task's commit may be granted too (§12.3 last
+		// item): once grants are enabled its review answers the trust chain
+		// (review 694 B-02), the default limit kept. Before, as it was.
+		return 0, coreTrustReview(ctx, tx, subject, spec)
 	}
 	var lines int
 	var hard bool
@@ -73,4 +92,26 @@ func pinnedReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpe
 		spec.text = TrustReviewText
 	}
 	return PinnedReviewLimit(lines), nil
+}
+
+// coreTrustReview gives the trust chain's questions to the review of an
+// unpinned core implementation in a repository that takes grants, once the
+// envelope in force enables them.
+func coreTrustReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpec) error {
+	var core bool
+	var repo, role, tenant string
+	var env grantEnvelopeRow
+	if err := tx.QueryRow(ctx, `SELECT t.core, COALESCE(t.repo, ''), t.role, m.tenant,
+	    e.rule_version, e.direction, e.effective_at, e.expires_at, e.body_text, e.body_json, e.signed_by
+	  FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
+	  LEFT JOIN LATERAL (SELECT r.rule_version, r.direction, r.effective_at, r.expires_at, r.body_text, r.body_json, r.signed_by FROM agentrt.rule r
+	    WHERE r.rule_id = 'standing-envelope:' || m.tenant AND r.effective_at <= clock_timestamp() ORDER BY r.rule_version DESC LIMIT 1) e ON true
+	  WHERE t.task_id = $1`, subject).Scan(&core, &repo, &role, &tenant,
+		&env.version, &env.direction, &env.effective, &env.expires, &env.text, &env.body, &env.signedBy); err != nil {
+		return err
+	}
+	if core && role == "implement" && rules.GrantSupported(repo) && env.enables(tenant, repo, time.Now()) {
+		spec.text = TrustReviewText
+	}
+	return nil
 }

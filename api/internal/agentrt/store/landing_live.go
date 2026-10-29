@@ -24,10 +24,6 @@ type LiveObservation struct {
 	Main          string
 	CI            landing.CIRun
 	WindowBlocked bool
-	// Patch is R's patch evidence (C-5), read only for a waiting operation
-	// whose grant the gate may consume: its candidate digest needs it. Nil
-	// otherwise; nil for a waiting operation refuses the consumption.
-	Patch *GrantPatch
 }
 
 // Authorization is a committed main_intent: the only licence to push, held
@@ -64,6 +60,20 @@ var ErrLandingDayChanged = errors.New("landing gate: the UTC day changed during 
 // Authorization, whose deadline counts from the intent's own time. A refusal is a Decision and no
 // error; the caller parks or fails the operation on its next pass.
 func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error)) (Authorization, landing.Decision, error) {
+	return authorizeLandingPush(ctx, db, src, op, observe, false)
+}
+
+// RecheckWaitingLanding runs the same gate for a waiting operation that has
+// no usable grant (review 694 R-06, §5.1 step 4): when the rule now in force
+// fails nothing, it writes main_intent on the rule's authority
+// (landing_rule_clear), after every unwaivable check; otherwise it writes
+// nothing and the operation keeps waiting. The controller calls it once per
+// rule version per operation.
+func RecheckWaitingLanding(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error)) (Authorization, landing.Decision, error) {
+	return authorizeLandingPush(ctx, db, src, op, observe, true)
+}
+
+func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool) (Authorization, landing.Decision, error) {
 	const stream = "landing:bifrost-platform"
 	var auth Authorization
 	var decision landing.Decision
@@ -122,7 +132,7 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 				}
 				grant = candidateGrant(order, op, o, DecisionAt())
 			}
-			if grant == nil {
+			if why != "" || grant == nil && (!recheck || state.LatestOperation(o.Task) != op) {
 				if why == "" {
 					why = "awaiting_grant"
 				}
@@ -169,21 +179,16 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if decision = landing.EligibleToClaim(g, final); !decision.Allowed {
 			return nil
 		}
-		if waiting {
+		if grant != nil && !g.GrantEnabled {
 			// The Owner's signed external host entry is still in force: its
 			// removal (a tightening) stops grants at once (§2.1).
-			enabled, err := grantEnabled(ctx, tx, g.Tenant, g.Repo)
-			if err != nil {
-				return err
-			}
-			if !enabled {
-				decision = landing.Decision{Reason: "grant_not_enabled"}
-				return nil
-			}
+			decision = landing.Decision{Reason: "grant_not_enabled"}
+			return nil
 		}
 		switch {
 		case obs.Main != o.M0 && waiting:
-			// §5.4: a grant for a main that moved is spent with its operation.
+			// §5.4: a waiting operation for a main that moved is spent, and
+			// its grant with it; the next claim prepares k+1.
 			if !landing.ValidSHA(obs.Main) {
 				decision = landing.Decision{Reason: "main_changed"}
 				return nil
@@ -214,15 +219,50 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		}
 		_, soft := landing.PolicyChecks(g, final)
 		var use map[string]any
+		rule := GrantRule{ID: g.Rule.ID, Version: int64(g.Rule.Version)}
 		if waiting {
+			if err = tx.QueryRow(ctx, `SELECT encode(sha256(convert_to(body_text,'UTF8')),'hex') FROM agentrt.rule WHERE rule_id=$1 AND rule_version=$2`,
+				g.Rule.ID, g.Rule.Version).Scan(&rule.SHA256); err != nil {
+				return err
+			}
+		}
+		var clear map[string]any
+		if waiting && grant == nil {
+			// §5.1 step 4 (review 694 R-06): the rule in force fails nothing
+			// now: main_intent on the rule's authority; otherwise wait on.
+			if len(soft) > 0 {
+				decision = landing.Decision{Reason: "awaiting_grant"}
+				return nil
+			}
+			clear = toBody(LandingRuleClear{V: LandingGrantVersion, Op: op, Rule: rule, ChecksVersion: rules.LandingChecksVersion,
+				DecidedAt: final.UTC().Format(time.RFC3339Nano)})
+		}
+		if grant != nil {
 			// §3.3 / §5.5: the grant is usable only for this very candidate
-			// (its digest recomputed now), before its expiry at the decision,
-			// and only when it waives every soft failure under the rule in
-			// force now. Otherwise nothing is reserved or written: the
-			// operation stays waiting (a tightened rule needs a new grant).
-			if obs.Patch == nil {
+			// (its digest recomputed now, on the strict read of its pinned
+			// CI and R's patch), before its expiry at the decision, and only
+			// when it waives every soft failure under the rule in force now.
+			// Otherwise nothing is reserved or pushed; a grant refused for
+			// good is recorded spent (review 694 R-05) and a new one needed.
+			key, err := landingCIKeyOf(ctx, tx, op)
+			if err != nil {
+				return err
+			}
+			if key == nil || src.GrantPatch == nil || src.GrantCI == nil {
 				decision = landing.Decision{Reason: "grant_evidence"}
 				return nil
+			}
+			ci, err := src.GrantCI(ctx, *key, o.PreparedAt)
+			if err != nil {
+				return err
+			}
+			if ci.Run == "" || ci.Run == grant.CI.Run && grantCIProblem(o, key, ci, final) {
+				decision = landing.Decision{Reason: "grant_evidence"} // nothing newer yet: no verdict on the grant
+				return nil
+			}
+			patch, err := src.GrantPatch(ctx, o.A, o.M0, o.R)
+			if err != nil {
+				return err
 			}
 			acc, rev, body, err := readGrantChecks(ctx, tx, o.Task, o.Attempt)
 			if err != nil {
@@ -233,26 +273,21 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 				return err
 			}
 			trust := grant.Action == ActionCoreLanding && trustAnswered(body)
-			cand, err := buildCandidate(g, stepID, op, o, acc, rev, trust, *obs.Patch, obs.CI, grant.STGRelease).Digest()
+			cand, err := buildCandidate(g, stepID, op, o, acc, rev, trust, patch, ci, key, grant.STGRelease).Digest()
 			if err != nil {
 				return err
 			}
 			softNow := refusalSet(soft)
-			rule := GrantRule{ID: g.Rule.ID, Version: int64(g.Rule.Version)}
-			if err = tx.QueryRow(ctx, `SELECT encode(sha256(convert_to(body_text,'UTF8')),'hex') FROM agentrt.rule WHERE rule_id=$1 AND rule_version=$2`,
-				g.Rule.ID, g.Rule.Version).Scan(&rule.SHA256); err != nil {
-				return err
-			}
 			switch {
 			case !final.Before(grant.exp):
 				decision = landing.Decision{Reason: "grant_expired"}
 				return nil
-			case cand != grant.CandidateDigest:
+			case grantCIProblem(o, key, ci, final) || cand != grant.CandidateDigest:
 				decision = landing.Decision{Reason: "grant_stale"}
-				return nil
+				return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
 			case !rules.LandingWaivesCover(soft, refusalsOf(grant.Waives)):
 				decision = landing.Decision{Reason: "grant_insufficient"}
-				return nil
+				return refuseGrant(ctx, tx, grant, "grant_insufficient", final, mission)
 			}
 			use = toBody(LandingGrantUse{V: LandingGrantVersion, GrantID: grant.GrantID, CandidateDigest: cand, SoftNow: softNow,
 				Rule: rule, ChecksVersion: rules.LandingChecksVersion, DecidedAt: final.UTC().Format(time.RFC3339Nano)})
@@ -293,6 +328,10 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			// Consumption is this event: no separate consumed record (§5.5).
 			body["landing_grant_use"] = use
 			body["text"] = fmt.Sprintf("Landing main_intent on grant %s; second gate rule version %d", grant.GrantID, g.Rule.Version)
+		}
+		if clear != nil {
+			body["landing_rule_clear"] = clear
+			body["text"] = fmt.Sprintf("Landing main_intent: rule version %d now fails nothing of the waiting operation", g.Rule.Version)
 		}
 		hook("landing gate: before main_intent", op)
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: body})

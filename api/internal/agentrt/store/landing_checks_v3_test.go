@@ -103,10 +103,10 @@ func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
 						t.Fatal("control", d, phase, quota)
 					}
 				} else {
+					// Grants are not enabled in this world: a core change is
+					// floor at the final gate too (review 694 R-03); with
+					// them it waits (TestC4*, TestC5*).
 					wantReason, wantPhase := "floor", "branch_pushed"
-					if tc.name == "core" || tc.name == "old hard endpoint" {
-						wantReason, wantPhase = "awaiting_grant", "awaiting_grant"
-					}
 					if d.Allowed || d.Reason != wantReason || phase != wantPhase || len(quota.Reservations) != 0 {
 						t.Fatal(d, phase, quota)
 					}

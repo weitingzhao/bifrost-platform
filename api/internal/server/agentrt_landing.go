@@ -61,7 +61,15 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	c.DrillGit = g
 	c.Drill = &controller.DrillSources{Facts: controller.DrillGitFacts(g), Main: func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }, CI: ci.LandingCI, EnsureCI: ci.EnsureLandingCI, WindowBlocked: ci.LandingWindowBlocked}
 	if c.Env == "prod" {
-		c.Drill.GrantPatch = landingGrantPatch(g) // C-5: a waiting operation's grant needs R's patch
+		// C-5 (review 694 B-01): an operation that needs a grant runs CI
+		// pinned to the siblings' main heads read at its kick, and its
+		// grant's evidence is the strict read of that run.
+		c.Drill.Facts.GrantPatch = landingGrantPatch(g)
+		c.Drill.Facts.GrantCI = ci.GrantCI
+		c.Drill.EnsurePinnedCI = ci.EnsureGrantCI
+		if heads := s.agentRuntimeMains(); heads != nil {
+			c.Drill.SiblingHeads = siblingHeads(heads)
+		}
 	}
 	if c.Env == "prod" {
 		// A new live landing needs every reach the landing cards need (CUT
@@ -140,4 +148,23 @@ func (s *Server) landingCIClient() *landingci.Client {
 		}
 		return cm.Data, true, nil
 	}}
+}
+
+// siblingHeads reads the platform CI's sibling repositories' main heads
+// (bifrost-ui, bifrost-trade-infra) for a pinned grant CI key.
+func siblingHeads(main func(context.Context, string) (string, error)) func(context.Context) (map[string]string, error) {
+	return func(ctx context.Context) (map[string]string, error) {
+		out := map[string]string{}
+		for _, repo := range []string{"bifrost-trade-infra", "bifrost-ui"} {
+			head, err := main(ctx, repo)
+			if err != nil {
+				return nil, err
+			}
+			if !landing.ValidSHA(head) {
+				return nil, fmt.Errorf("%s main head unreadable", repo)
+			}
+			out[repo] = head
+		}
+		return out, nil
+	}
 }

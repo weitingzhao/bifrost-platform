@@ -239,7 +239,7 @@ func TestC4PreparationEligibilityAndFinalPolicy(t *testing.T) {
 	for _, pin := range []bool{false, true} {
 		for _, path := range []string{"api/internal/research/x.go", "api/internal/agentrt/store/x.go", ".env.local"} {
 			f := eligibleFacts()
-			f.Environment, f.Mode = "prod", "live"
+			f.Environment, f.Mode, f.GrantEnabled = "prod", "live", true
 			if pin {
 				f.ExecutorPin = "external:coordinator"
 			}

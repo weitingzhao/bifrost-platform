@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 func c4Source(path string) store.LandingSource {
@@ -36,6 +37,8 @@ func c4Ready(t *testing.T, path string) (*world, string, string, store.LandingSo
 	store.FreezeEventClock(at.Add(-40 * time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C4", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
+	// Nothing waits for a grant until grants are enabled (review 694 R-03).
+	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
 	src := c4Source(path)
 	store.FreezeEventClock(at.Add(-30 * time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)

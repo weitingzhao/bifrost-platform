@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -180,10 +181,22 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			return nil
 		}
 		grant, err := store.UsableLandingGrant(ctx, c.DB, id)
-		if err != nil || grant == "" || !c.grantTries.due(id+"/"+grant, c.clock()) {
+		if err != nil {
 			return err
 		}
-		return c.landLive(ctx, *c.Drill, id, o.R)
+		if grant != "" {
+			if !c.grantTries.due(id+"/"+grant, c.clock()) {
+				return nil
+			}
+			return c.landLiveWith(ctx, *c.Drill, id, o.R, false)
+		}
+		// No grant: once per rule version (review 694 R-06), the gate checks
+		// whether the rule now in force fails nothing of it (§5.1 step 4).
+		version, err := store.LandingRuleVersion(ctx, c.DB, "landing:dev", now)
+		if err != nil || version == 0 || !c.grantTries.once(id+"/rule:"+strconv.Itoa(version)) {
+			return err
+		}
+		return c.landLiveWith(ctx, *c.Drill, id, o.R, true)
 	case o.Phase == "parked" && o.Resume != "branch_pushed":
 		if now.Before(o.RetryAt) {
 			return nil
@@ -332,5 +345,19 @@ func (g *grantTries) due(key string, now time.Time) bool {
 		return false
 	}
 	g.last[key] = now
+	return true
+}
+
+// once says whether key was never tried in this process, and records it.
+func (g *grantTries) once(key string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.last == nil {
+		g.last = map[string]time.Time{}
+	}
+	if _, ok := g.last[key]; ok {
+		return false
+	}
+	g.last[key] = time.Time{}
 	return true
 }

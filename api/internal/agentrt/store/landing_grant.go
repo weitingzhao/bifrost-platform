@@ -117,6 +117,22 @@ type LandingGrantUse struct {
 	DecidedAt       string    `json:"decided_at"`
 }
 
+// LandingGrantRefused is the final gate's record that it refused a grant
+// for good (review 694 R-05): the rule now in force fails more than it
+// waives (grant_insufficient), or the candidate is no longer the one
+// approved (grant_stale). The grant is spent: it pauses W no more, the
+// status says a new request is needed, and a new approval may be granted.
+type LandingGrantRefused struct {
+	V         string `json:"v"`
+	GrantID   string `json:"grant_id"`
+	Reason    string `json:"reason"`
+	DecidedAt string `json:"decided_at"`
+}
+
+// GrantRefusals are the gate's refusals that spend a grant. Transient ones
+// (window, CI running, main unreadable) leave it usable.
+var GrantRefusals = []string{"grant_insufficient", "grant_stale"}
+
 var (
 	grantDigest  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	grantHex64   = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -308,7 +324,18 @@ func parseLandingGrantUse(v any) (LandingGrantUse, error) {
 	return u, nil
 }
 
-// badGrantRecord is checkBody's closed-schema check of the three keys.
+func parseLandingGrantRefused(v any) (LandingGrantRefused, error) {
+	var r LandingGrantRefused
+	if err := closedDecode(v, &r, "v", "grant_id", "reason", "decided_at"); err != nil {
+		return r, fmt.Errorf("landing_grant_refused: %w", err)
+	}
+	if _, ok := grantTime(r.DecidedAt); !ok || r.V != LandingGrantVersion || !landingRequestID.MatchString(r.GrantID) || !slices.Contains(GrantRefusals, r.Reason) {
+		return r, fmt.Errorf("landing_grant_refused: invalid")
+	}
+	return r, nil
+}
+
+// badGrantRecord is checkBody's closed-schema check of the grant keys.
 func badGrantRecord(name string, v any) string {
 	var err error
 	switch name {
@@ -318,6 +345,12 @@ func badGrantRecord(name string, v any) string {
 		_, err = parseLandingGrantRevoked(v)
 	case "landing_grant_use":
 		_, err = parseLandingGrantUse(v)
+	case "landing_grant_refused":
+		_, err = parseLandingGrantRefused(v)
+	case "landing_ci_key":
+		_, err = parseLandingCIKey(v)
+	case "landing_rule_clear":
+		_, err = parseLandingRuleClear(v)
 	}
 	if err != nil {
 		return err.Error()
@@ -335,87 +368,27 @@ type grantView struct {
 	ConsumedSeq            int64
 	ConsumedAt             time.Time
 	ConsumedOp             string
+	RefusedAt              time.Time
+	RefusedWhy             string
 	approved, granted, exp time.Time
 }
 
 // usableAt: not revoked, not consumed, before expiry (§5.5 可用 grant,
 // the stream half; the gate adds the operation and digest checks).
 func (g *grantView) usableAt(t time.Time) bool {
-	return g.RevokedAt.IsZero() && g.ConsumedSeq == 0 && t.Before(g.exp)
+	return g.RevokedAt.IsZero() && g.ConsumedSeq == 0 && g.RefusedAt.IsZero() && t.Before(g.exp)
 }
 
 // period is when the grant was available: from its writing to the first of
 // expiry, revocation and consumption (§5.3: a valid grant ends the wait).
 func (g *grantView) period() landing.Interval {
 	end := g.exp
-	for _, t := range []time.Time{g.RevokedAt, g.ConsumedAt} {
+	for _, t := range []time.Time{g.RevokedAt, g.ConsumedAt, g.RefusedAt} {
 		if !t.IsZero() && t.Before(end) {
 			end = t
 		}
 	}
 	return landing.Interval{Start: g.granted, End: end}
-}
-
-// readLandingGrants folds the stream's grant records, in stream order.
-func readLandingGrants(ctx context.Context, tx pgx.Tx, stream string) (map[string]*grantView, []*grantView, error) {
-	byID := map[string]*grantView{}
-	var order []*grantView
-	if stream != landingRepoStream {
-		return byID, order, nil
-	}
-	rows, err := tx.Query(ctx, `SELECT seq, at, body_json FROM agentrt.event WHERE event_stream_id=$1 AND event_type='note'
-	  AND (body_json ? 'landing_grant' OR body_json ? 'landing_grant_revoked' OR body_json ? 'landing_grant_use') ORDER BY seq`, stream)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var seq int64
-		var at time.Time
-		var raw []byte
-		if err := rows.Scan(&seq, &at, &raw); err != nil {
-			return nil, nil, err
-		}
-		v, err := canon.Parse(raw)
-		if err != nil {
-			return nil, nil, err
-		}
-		body, _ := v.(map[string]any)
-		if x, ok := body["landing_grant"]; ok {
-			g, err := parseLandingGrant(x)
-			if err != nil {
-				return nil, nil, err
-			}
-			view := &grantView{LandingGrant: g, Seq: seq, At: at}
-			view.approved, _ = grantTime(g.ApprovedAt)
-			view.granted, _ = grantTime(g.GrantedAt)
-			view.exp, _ = grantTime(g.ExpiresAt)
-			byID[g.GrantID] = view
-			order = append(order, view)
-		}
-		if x, ok := body["landing_grant_revoked"]; ok {
-			r, err := parseLandingGrantRevoked(x)
-			if err != nil {
-				return nil, nil, err
-			}
-			if g := byID[r.GrantID]; g != nil && g.RevokedAt.IsZero() {
-				g.RevokedAt, _ = grantTime(r.At)
-				g.RevokedBy = r.By
-			}
-		}
-		if x, ok := body["landing_grant_use"]; ok {
-			u, err := parseLandingGrantUse(x)
-			if err != nil {
-				return nil, nil, err
-			}
-			r, _ := body["landing"].(map[string]any)
-			if g := byID[u.GrantID]; g != nil && g.ConsumedSeq == 0 {
-				g.ConsumedSeq, g.ConsumedAt = seq, at
-				g.ConsumedOp, _ = r["op"].(string)
-			}
-		}
-	}
-	return byID, order, rows.Err()
 }
 
 // grantPeriods is the projection RootTiming reads (§5.3): per operation, the
@@ -449,7 +422,8 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 	_, hasGrant := ev.Body["landing_grant"]
 	_, hasRevoked := ev.Body["landing_grant_revoked"]
 	useRaw, hasUse := ev.Body["landing_grant_use"]
-	if !hasGrant && !hasRevoked && !hasUse {
+	_, hasRefused := ev.Body["landing_grant_refused"]
+	if !hasGrant && !hasRevoked && !hasUse && !hasRefused {
 		return nil
 	}
 	if ev.Type != "note" || ev.Stream != landingRepoStream {
@@ -457,7 +431,7 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 	}
 	_, hasLanding := ev.Body["landing"]
 	n := 0
-	for _, b := range []bool{hasGrant, hasRevoked, hasUse} {
+	for _, b := range []bool{hasGrant, hasRevoked, hasUse, hasRefused} {
 		if b {
 			n++
 		}
@@ -514,6 +488,16 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 		if t, _ := grantTime(r.At); t.After(at) {
 			return invalid("revocation dated in the future")
 		}
+	case hasRefused:
+		r, err := parseLandingGrantRefused(ev.Body["landing_grant_refused"])
+		if err != nil {
+			return invalid("%v", err)
+		}
+		g := grants[r.GrantID]
+		decided, _ := grantTime(r.DecidedAt)
+		if ev.Actor != "controller" || hasLanding || g == nil || ev.TaskID != g.Task || decided.After(at) || !g.usableAt(decided) {
+			return invalid("only the final gate refuses a grant still usable, alone, for its task")
+		}
 	case hasUse:
 		u, err := parseLandingGrantUse(useRaw)
 		if err != nil {
@@ -529,8 +513,8 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 		switch {
 		case o.Phase != "awaiting_grant" || o.R != g.R || o.M0 != g.M0 || o.A != g.A || o.Attempt != g.Attempt:
 			return invalid("the grant's operation is not waiting on the same candidate")
-		case !g.RevokedAt.IsZero() || g.ConsumedSeq != 0:
-			return invalid("grant %s is revoked or already used", g.GrantID)
+		case !g.RevokedAt.IsZero() || g.ConsumedSeq != 0 || !g.RefusedAt.IsZero():
+			return invalid("grant %s is revoked, refused or already used", g.GrantID)
 		case decided.After(at) || !decided.Before(g.exp):
 			return invalid("grant %s expired before its use", g.GrantID)
 		case u.CandidateDigest != g.CandidateDigest:
@@ -599,7 +583,9 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	if !landingRequestID.MatchString(grantID) {
 		return out, invalid("not a grant id")
 	}
-	read := func(tx pgx.Tx) (*grantView, error) {
+	// read takes its own context: the read back runs on a fresh one, never
+	// the request's (review 694 R-01).
+	read := func(ctx context.Context, tx pgx.Tx) (*grantView, error) {
 		if err := lockStream(ctx, tx, landingRepoStream); err != nil {
 			return nil, err
 		}
@@ -630,7 +616,7 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 		return out, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	g, err := read(tx)
+	g, err := read(ctx, tx)
 	if err != nil {
 		return out, err
 	}
@@ -654,7 +640,7 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	var back *grantView
 	rerr := InTx(rctx, db, func(tx pgx.Tx) error {
 		var e error
-		back, e = read(tx)
+		back, e = read(rctx, tx)
 		return e
 	})
 	if rerr != nil {
@@ -732,6 +718,9 @@ type LandingGrantStatus struct {
 	Revoked        bool      `json:"revoked"`
 	RevokedAt      time.Time `json:"revoked_at,omitzero"`
 	Consumed       bool      `json:"handed_to_push"`
+	Refused        bool      `json:"refused"`
+	RefusedReason  string    `json:"refused_reason,omitempty"`
+	RefusedAt      time.Time `json:"refused_at,omitzero"`
 	IntentSeq      int64     `json:"main_intent_seq,omitempty"`
 	Valid          bool      `json:"valid"`
 	CandidateHash  string    `json:"candidate_digest"`
@@ -742,6 +731,7 @@ func (g *grantView) status(now time.Time) LandingGrantStatus {
 	return LandingGrantStatus{GrantID: g.GrantID, ApprovalID: g.ApprovalID, ApprovalNumber: g.ApprovalNumber, Action: g.Action, Op: g.Op,
 		Waives: slices.Clone(g.Waives), STGRelease: g.STGRelease, ApprovedAt: g.approved, GrantedAt: g.granted, ExpiresAt: g.exp,
 		Revoked: !g.RevokedAt.IsZero(), RevokedAt: g.RevokedAt, Consumed: g.ConsumedSeq != 0, IntentSeq: g.ConsumedSeq,
+		Refused: !g.RefusedAt.IsZero(), RefusedReason: g.RefusedWhy, RefusedAt: g.RefusedAt,
 		Valid: g.usableAt(now), CandidateHash: g.CandidateDigest, MaterialHash: g.MaterialDigest}
 }
 

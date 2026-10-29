@@ -46,10 +46,12 @@ type DrillSources struct {
 	WindowBlocked func(context.Context) (bool, error)
 	EnsureCI      func(context.Context, string, string) error
 	Delete        func(context.Context, string, string) error
-	// GrantPatch reads R's patch evidence for a waiting operation's grant
-	// (C-5): the final gate recomputes the grant's candidate digest from it.
-	// Nil leaves every waiting operation waiting.
-	GrantPatch func(ctx context.Context, a, m0, r string) (store.GrantPatch, error)
+	// EnsurePinnedCI creates CI pinned to a key's sibling commits, and
+	// SiblingHeads reads the siblings' main heads to pin (C-5): only an
+	// operation that needs a grant uses them. Nil: no operation can be
+	// granted (its CI is not pinned).
+	EnsurePinnedCI func(ctx context.Context, name string, key store.GrantCIKey) error
+	SiblingHeads   func(ctx context.Context) (map[string]string, error)
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
@@ -189,10 +191,24 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		if a.Kind == "ci_rerun" {
 			n = 2
 		}
-		if err = appendRecord(a.Kind, map[string]any{"try": n}); err != nil {
+		// An operation that can only reach main through a grant runs CI
+		// pinned to sibling commits fixed now and recorded with the kick:
+		// the grant's evidence is that run, read strictly (C-5, review 694
+		// B-01). Every other operation keeps the v1 CI (uiRevision=main).
+		key, err := c.grantCIKey(ctx, src, f, op, o, at)
+		if err != nil {
 			return a, err
 		}
-		return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
+		if key == nil {
+			if err = appendRecord(a.Kind, map[string]any{"try": n}); err != nil {
+				return a, err
+			}
+			return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
+		}
+		if err = store.AppendCIKick(ctx, c.DB, op, a.Kind, n, *key, landingText(c.Env)+a.Kind+" (pinned for a grant)"); err != nil {
+			return a, err
+		}
+		return a, src.EnsurePinnedCI(ctx, landing.CIName(op, n), *key)
 	}
 	// Resume creation after a crash between intent and external result. The
 	// same name is used on every pass; intentional rerun alone gets try 2.
@@ -201,9 +217,41 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		if o.Rerun {
 			n = 2
 		}
+		key, err := store.LandingCIKey(ctx, c.DB, op)
+		if err != nil {
+			return a, err
+		}
+		if key != nil {
+			if src.EnsurePinnedCI == nil {
+				return a, fmt.Errorf("pinned CI creator unavailable")
+			}
+			return a, src.EnsurePinnedCI(ctx, landing.CIName(op, n), *key)
+		}
 		return a, src.EnsureCI(ctx, landing.CIName(op, n), o.R)
 	}
 	return a, nil
+}
+
+// grantCIKey is the pinned CI key of an operation that needs a grant to
+// reach main (its soft failures and grants enabled, as the final gate will
+// judge them): the key recorded at its first kick, or a new one with the
+// siblings' main heads read now. Nil for every other operation, and where
+// this process cannot pin (it then cannot be granted: ci_not_pinned).
+func (c *Controller) grantCIKey(ctx context.Context, src DrillSources, f landing.Facts, op string, o landing.Operation, at time.Time) (*store.GrantCIKey, error) {
+	if c.Env != "prod" || o.DryRun || src.EnsurePinnedCI == nil || src.SiblingHeads == nil {
+		return nil, nil
+	}
+	if reason, soft := landing.PolicyChecks(f, at); reason != "" || len(soft) == 0 || !landing.MayAwaitGrant(f, soft) {
+		return nil, nil
+	}
+	if key, err := store.LandingCIKey(ctx, c.DB, op); err != nil || key != nil {
+		return key, err
+	}
+	siblings, err := src.SiblingHeads(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &store.GrantCIKey{Repo: f.Repo, Revision: o.R, Base: o.M0, Siblings: siblings}, nil
 }
 
 func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, op string, now time.Time) error {

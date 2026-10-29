@@ -401,6 +401,7 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	if s, err := folds.state(ctx, tx, "landing:bifrost-platform"); err != nil || s.LiveAt.IsZero() {
 		return false, false, "", "", err
 	}
+	hook("close: mission locked", mission) // lock-order tests (C-5 T48)
 	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
 		return false, false, "", "", err
 	}

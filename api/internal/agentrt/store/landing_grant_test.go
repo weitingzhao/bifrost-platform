@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -28,6 +29,8 @@ type c5 struct {
 	gsrc     store.GrantSources
 	at       time.Time
 	ci       landing.CIRun
+	ciReason string
+	key      store.GrantCIKey
 	patch    store.GrantPatch
 	main     string
 	signer   signer
@@ -56,7 +59,20 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 	if pinned {
 		c5Pin(t, c.w, c.root)
 	}
+	// Grants are enabled before the claim: before, nothing waits (R-03).
+	if enabled {
+		c.enable(t, 1)
+	}
 	c.src = c4Source(path)
+	c.src.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) { return c.patch, nil }
+	c.src.GrantCI = func(context.Context, store.GrantCIKey, time.Time) (store.GrantCIEvidence, error) {
+		ev := store.GrantCIEvidence{Run: c.ci.Run, UID: c.ci.UID, CreatedAt: c.ci.CreatedAt, Status: c.ci.Status, Reason: c.ciReason,
+			Candidate: c.ci.PlatformCommit, Siblings: map[string]string{"bifrost-ui": c.ci.UICommit, "bifrost-trade-infra": c.ci.InfraCommit}}
+		if ev.Status == "Succeeded" && ev.Reason == "" {
+			ev.Pipeline = "bifrost-ci-platform"
+		}
+		return ev, nil
+	}
 	store.FreezeEventClock(at.Add(-30 * time.Minute))
 	op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", c.root, at)
 	ok(t, err)
@@ -66,6 +82,10 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 	c.op = op
 	prepared := at.Add(-29 * time.Minute)
 	c4Prepare(t, c.w, c.root, op, prepared, true)
+	// The kick that pins its CI, as the controller makes it (B-01).
+	c.key = store.GrantCIKey{Repo: "bifrost-platform", Revision: commitB, Base: commitA,
+		Siblings: map[string]string{"bifrost-ui": commitC, "bifrost-trade-infra": commitA}}
+	ok(t, store.AppendCIKick(ctx, c.w.rt, op, "ci_kick", 1, c.key, "test: pinned kick"))
 	c.ci = landing.CIRun{Run: "green", UID: "uid-green", R: commitB, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute),
 		PlatformCommit: commitB, UICommit: commitC, InfraCommit: commitA}
 	c.patch = store.GrantPatch{SHA256: strings.Repeat("7", 64), Shown: "diff --git a/x b/x\n", Size: 19, Match: true}
@@ -76,13 +96,7 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 		t.Fatal("not waiting", d)
 	}
 	c5Trust(t, c.w, c.root)
-	if enabled {
-		c.enable(t, 1)
-	}
-	c.gsrc = store.GrantSources{Facts: c.src,
-		Patch: func(context.Context, string, string, string) (store.GrantPatch, error) { return c.patch, nil },
-		CI:    func(context.Context, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		Main:  func(context.Context) (string, error) { return c.main, nil }}
+	c.gsrc = store.GrantSources{Facts: c.src, Main: func(context.Context) (string, error) { return c.main, nil }}
 	store.FreezeEventClock(at)
 	return c
 }
@@ -90,19 +104,29 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 // enable signs the dev envelope with the coordinator's external host.
 func (c *c5) enable(t *testing.T, version int) {
 	t.Helper()
+	enableGrants(t, c.w, c.signer, version, true)
+}
+
+// enableGrants signs version of the dev envelope, naming the coordinator's
+// external host (grants enabled) or not (a tightening that stops them).
+func enableGrants(t *testing.T, w *world, s signer, version int, hosts bool) {
+	t.Helper()
 	if version == 1 {
-		registerSeat(t, c.w)
-		ok(t, store.RegisterHost(ctx, c.w.rt, "owner", externalHost, store.HostExternal))
+		registerSeat(t, w)
+		ok(t, store.RegisterHost(ctx, w.rt, "owner", externalHost, store.HostExternal))
 	}
-	body := strings.Replace(pinEnvelope(version, map[bool]string{true: rules.Initial, false: "loosen"}[version == 1], true),
+	direction := map[bool]string{true: "loosen", false: "tighten"}[hosts]
+	if version == 1 {
+		direction = rules.Initial
+	}
+	body := strings.Replace(pinEnvelope(version, direction, hosts),
 		"hosts: [h1, coordinator-mbp]", "hosts: [h1, h2, h3, h4, h5, h6, h7, h8, coordinator-mbp]", 1)
-	ok(t, firstErr(c.signer.sign(c.w, body)))
+	ok(t, firstErr(s.sign(w, body)))
 }
 
 func (c *c5) observe() func(context.Context, landing.Operation) (store.LiveObservation, error) {
 	return func(context.Context, landing.Operation) (store.LiveObservation, error) {
-		p := c.patch
-		return store.LiveObservation{Main: c.main, CI: c.ci, Patch: &p}, nil
+		return store.LiveObservation{Main: c.main, CI: c.ci}, nil
 	}
 }
 
@@ -129,7 +153,7 @@ func c5Trust(t *testing.T, w *world, task string) {
 		  ORDER BY created_at DESC LIMIT 1`, task).Scan(&attempt, &reviewer); err != nil {
 			return err
 		}
-		body := "Correct.\n\n# Trust chain review\n1. No: approvers unchanged.\n2. No: material unchanged.\n3. No: tokens unchanged.\n4. No: gate unchanged.\n"
+		body := c5TrustAnswers
 		evidence, err := store.PutArtifact(ctx, tx, "controller", "review", "text/markdown", []byte(body+task))
 		if err != nil {
 			return err
@@ -143,6 +167,14 @@ func c5Trust(t *testing.T, w *world, task string) {
 		return err
 	}))
 }
+
+// c5TrustAnswers is a review report that answers the trust chain in the
+// shape store.TrustReviewText asks for.
+const c5TrustAnswers = "Correct and complete.\n\n## Trust chain answers\n" +
+	"- T1: No, the approval roles and tiers are untouched by this diff.\n" +
+	"- T2: No, the material and its digests are computed as before.\n" +
+	"- T3: No, no token or credential is read or kept differently.\n" +
+	"- T4: No, the landing gate's checks and their order are unchanged.\n"
 
 var c5Approvals = 0
 
@@ -281,7 +313,7 @@ func TestC5ExecutorRefusals(t *testing.T) {
 	c.ci = ci
 	// No Git reader in this process.
 	saved := c.gsrc
-	c.gsrc.Patch = nil
+	c.gsrc.Facts.GrantPatch = nil
 	_, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(store.ActionCoreLanding, time.Minute), good)
 	if err == nil || grants() != 0 {
 		t.Fatal("wrote without its evidence")
@@ -320,50 +352,85 @@ func TestC5ExecutorMainAdvanced(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Before the Owner signs the external host entry,
-// C-5 changes nothing: the material says why, the executor writes nothing,
-// and a grant appended anyway (a forged fixture) is never consumed. The
-// entry signed, the same request succeeds.
+// Serial: FreezeEventClock. Review 694 R-03: before the Owner signs the
+// external host entry nothing waits for a grant. A core root is refused at
+// the claim as floor, as before C-4/C-5: no operation, no preparation, no CI
+// kick, no wait. The control signs the entry and the next root of the same
+// change is claimed. (A grant's consumption once the entry is removed:
+// TestC5GrantStopsWhenTheEntryGoes.)
 func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
-	c := c5Wait(t, c5Core, false, false)
-	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
-	ok(t, err)
-	if !slices.Contains(m.Problems, "grant_not_enabled") || m.GrantEnabled {
-		t.Fatalf("material: %v", m.Problems)
+	at := time.Now().UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 R-03", BaseCommit: commitB})
+	w.passRound(t, root, "h1", "h2", "h3")
+	src := c4Source(c5Core)
+	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	// The controller's pass on PROD, live on, the v1 rule: no CI, no Git.
+	kicks, opens := 0, 0
+	sources := controller.DrillSources{Facts: src,
+		Main:          func(context.Context) (string, error) { return commitA, nil },
+		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
+		CI: func(context.Context, string, time.Time) (landing.CIRun, error) {
+			return landing.CIRun{Status: "Missing"}, nil
+		},
+		EnsureCI:       func(context.Context, string, string) error { kicks++; return nil },
+		EnsurePinnedCI: func(context.Context, string, store.GrantCIKey) error { kicks++; return nil },
 	}
-	p := store.GrantParams{Env: "prod", Repo: "bifrost-platform", Task: c.root, Op: c.op, R: commitB, MaterialDigest: m.MaterialDigest, STGRelease: true}
-	_, err = store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(store.ActionCoreLanding, time.Minute), p)
-	refusedWith(t, err, "grant_not_enabled")
-	_, err = store.CheckLandingGrantRequest(ctx, c.w.rt, c.gsrc, store.ActionCoreLanding, p)
-	refusedWith(t, err, "grant_not_enabled")
-	// A grant on the stream all the same: the gate does not consume it.
-	forged := store.LandingGrant{V: "1", GrantID: "lg_forged", ApprovalID: "forged", ApprovalNumber: 1, Action: store.ActionCoreLanding,
-		ParamsHash: strings.Repeat("ab", 32), Home: "prod", Env: "prod", Tenant: "dev", Repo: "bifrost-platform", Task: c.root, Attempt: m.Candidate.Attempt,
-		Op: c.op, A: m.Candidate.A, Base: m.Candidate.Base, R: commitB, M0: commitA, CommitterDate: m.Candidate.CommitterDate,
-		CandidateDigest: m.CandidateDigest, MaterialDigest: m.MaterialDigest, Waives: m.SoftAtRequest, SoftAtRequest: m.SoftAtRequest,
-		Files: 1, Lines: 2, Rule: m.Rule, ChecksVersion: m.ChecksVersion,
-		CI:      store.GrantCI{Pipeline: "bifrost-ci-platform", Run: "green", UID: "uid-green", CreatedAt: m.Candidate.CI.CreatedAt, Status: "Succeeded", SHA: commitB},
-		Purpose: "landing_main", STGRelease: true, ApprovedAt: c.at.Add(-time.Minute).Format(time.RFC3339Nano), GrantedAt: c.at.Format(time.RFC3339Nano),
-		ExpiresAt: c.at.Add(-time.Minute + store.LandingGrantTTL).Format(time.RFC3339Nano)}
-	ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
-		_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: c.root,
-			Body: map[string]any{"text": "forged", "landing_grant": forged.Body()}})
-		return err
-	}))
-	if _, d := c.gate(t); d.Allowed || d.Reason != "grant_not_enabled" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &sources,
+		OpenLive: func(context.Context, string) (controller.LiveWorkspace, error) { opens++; return &livePusher{}, nil }}
+	ok(t, ctl.LandingDrillPass(ctx))
+	if kicks != 0 || opens != 0 {
+		t.Fatal("the pass kicked CI or opened a workspace", kicks, opens)
+	}
+	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
+	ok(t, err)
+	if op != "" || d.Reason != "floor" && d.Reason != "terminal" {
+		t.Fatalf("a core root before the entry: %q %+v", op, d)
+	}
+	records := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind' IN ('claimed','prepared','ci_kick','awaiting_grant')`, landingRepoStream)
+	if records != 0 {
+		t.Fatal("prepared before the entry", records)
+	}
+	store.FreezeEventClock(at.Add(-25 * time.Minute))
+	control := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 R-03 control", BaseCommit: commitB})
+	w.passRound(t, control, "h4", "h5", "h6")
+	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
+	op, d, err = store.ClaimLanding(ctx, w.rt, src, "prod", control, at)
+	ok(t, err)
+	if op == "" || !d.Allowed {
+		t.Fatalf("the control after the entry: %+v", d)
+	}
+}
+
+// Serial: FreezeEventClock. The entry removed (a tightening, no signature
+// needed by design) stops a grant already written: the gate refuses it,
+// nothing is reserved or pushed, the controller no longer sees it usable.
+// Signed again, the same grant is consumed.
+func TestC5GrantStopsWhenTheEntryGoes(t *testing.T) {
+	c := c5Wait(t, c5Core, false, true)
+	c.grant(t, store.ActionCoreLanding)
+	enableGrants(t, c.w, c.signer, 2, false)
+	// Without the entry the change is floor again (R-03), grant or not.
+	if _, d := c.gate(t); d.Allowed || d.Reason != "floor" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
 		t.Fatalf("consumed without the entry: %+v", d)
 	}
-	// Signed, the same grant is consumed.
-	c.enable(t, 1)
+	if g, err := store.UsableLandingGrant(ctx, c.w.rt, c.op); err != nil || g != "" {
+		t.Fatal("usable without the entry", g, err)
+	}
+	enableGrants(t, c.w, c.signer, 3, true)
 	if _, d := c.gate(t); !d.Allowed {
 		t.Fatalf("with the entry: %+v", d)
 	}
 }
 
-// Serial: FreezeEventClock. T23: a rule signed after the grant makes size
-// fail anew: grant_insufficient, the operation stays waiting, nothing is
-// reserved or pushed. Control: the same grant under the old rule pushes
-// (TestC5GrantWrittenAndConsumed).
+// Serial: FreezeEventClock. T23 and review 694 R-05: a rule signed after the
+// grant makes size fail anew: grant_insufficient, nothing reserved or
+// pushed, the operation waiting. The grant is spent on the record
+// (landing_grant_refused): the status shows grant_refused with the reason,
+// not "authorized", and W runs again from the refusal. A new request under
+// the new rule is granted and pushes.
 func TestC5T23TighterRuleNeedsANewGrant(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
@@ -373,10 +440,25 @@ func TestC5T23TighterRuleNeedsANewGrant(t *testing.T) {
 	if d.Allowed || d.Reason != "grant_insufficient" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
 		t.Fatalf("%+v %s %d", d, c.phase(t), c.reservations(t))
 	}
-	usable, err := store.HasUsableLandingGrant(ctx, c.w.rt, c.op)
+	st, err := store.ReadLandingWait(ctx, c.w.rt, c.op)
 	ok(t, err)
-	if !usable {
-		t.Fatal("a refused consumption used the grant")
+	if st.Shown != "grant_refused" || st.GrantRefused != "grant_insufficient" || len(st.Grants) != 1 || st.Grants[0].Valid || !st.Grants[0].Refused {
+		t.Fatalf("status after the refusal: %+v", st)
+	}
+	before := st.WaitingSeconds
+	store.FreezeEventClock(c.at.Add(time.Hour))
+	if st, _ = store.ReadLandingWait(ctx, c.w.rt, c.op); st.WaitingSeconds != before+3600 {
+		t.Fatal("W did not run after the refusal", before, st.WaitingSeconds)
+	}
+	if g, err := store.UsableLandingGrant(ctx, c.w.rt, c.op); err != nil || g != "" {
+		t.Fatal("a refused grant is still usable", g, err)
+	}
+	g := c.grant(t, store.ActionCoreLanding)
+	if !slices.Contains(g.Waives, "size") {
+		t.Fatal("the new grant does not waive size", g.Waives)
+	}
+	if _, d = c.gate(t); !d.Allowed {
+		t.Fatalf("the new grant: %+v", d)
 	}
 }
 
@@ -446,11 +528,15 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 		},
 		"quota": func(t *testing.T, c *c5) {
 			fuller := strings.Replace(c5RuleBody, "max_landings_per_day: 5", "max_landings_per_day: 0", 1)
-			_, err := c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, fuller))
-			if err != nil {
-				// A zero limit may not parse: fill the quota instead.
-				t.Skip("zero quota limit not expressible:", err)
-			}
+			ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, fuller))))
+		},
+		"repo out of the rule": func(t *testing.T, c *c5) {
+			none := "tenant: dev\nrepos: []\nlimits: {max_files: 10, max_changed_lines: 300, max_landings_per_day: 5, max_in_flight_per_repo: 1}\n"
+			ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, none))))
+		},
+		"rule missing": func(t *testing.T, c *c5) {
+			// Before the rule took effect: no rule in force at the decision.
+			store.FreezeEventClock(time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
 		},
 		"mission": func(t *testing.T, c *c5) {
 			ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-3", "stopped", "test") }))
@@ -461,7 +547,7 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 			store.FreezeEventClock(c.at.Add(2 * time.Minute))
 		},
 	}
-	want := map[string]string{"stopped": "stopped", "quota": "limit", "mission": "stale", "rule expired": "rule"}
+	want := map[string]string{"stopped": "stopped", "quota": "limit", "mission": "stale", "rule expired": "rule", "repo out of the rule": "rule", "rule missing": "rule"}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)

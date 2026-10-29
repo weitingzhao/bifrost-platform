@@ -19,6 +19,11 @@ type LandingSource struct {
 	Result         func(ctx context.Context, repo, task, attempt, base, commit string) (singleCommit bool, changes []rules.LandingChange, err error)
 	History        func(ctx context.Context, repo, task, commit, snapshot string) (landing.MainHistory, error)
 	DeploymentDiff func(ctx context.Context, repo, snapshot string) ([]rules.LandingChange, error)
+	// GrantPatch and GrantCI are a landing grant's evidence (C-5): R's
+	// patch, and the strict read of the operation's pinned CI. Only grant
+	// reads use them; nil refuses every grant.
+	GrantPatch func(ctx context.Context, a, m0, r string) (GrantPatch, error)
+	GrantCI    func(ctx context.Context, key GrantCIKey, after time.Time) (GrantCIEvidence, error)
 }
 
 // LandingFacts is the common reader for all three gates. The caller supplies
@@ -45,14 +50,23 @@ type landingDep struct{ task, repo, commit string }
 func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op string, now time.Time) (landing.Facts, []landingDep, error) {
 	f := landing.Facts{Environment: environment, Mode: mode, Task: taskID}
 	var mission, step, offPlan, role, class string
+	// The standing envelope in force rides on this one read (review 694
+	// R-03/R-04): whether grants are enabled costs no extra round trip, and
+	// an envelope that does not mention external_hosts is not parsed.
+	var env grantEnvelopeRow
 	err := tx.QueryRow(ctx, `SELECT t.mission_id, COALESCE(t.plan_node_id,''), COALESCE(t.off_plan_reason,''), t.role,t.task_class,
   COALESCE(t.repo,''),COALESCE(t.base_commit,''),t.state,m.tenant,m.state,m.version,m.created_at,
-  COALESCE(m.scope_json->>'no_merge','') <> '',COALESCE(p.state,''),COALESCE(p.version,0),COALESCE(to_jsonb(t)->>'executor_pin','')
+  COALESCE(m.scope_json->>'no_merge','') <> '',COALESCE(p.state,''),COALESCE(p.version,0),COALESCE(to_jsonb(t)->>'executor_pin',''),
+  e.rule_version, e.direction, e.effective_at, e.expires_at, e.body_text, e.body_json, e.signed_by
   FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) LEFT JOIN agentrt.plan_node p ON p.plan_node_id=t.plan_node_id
-  WHERE t.task_id=$1`, taskID).Scan(&mission, &step, &offPlan, &role, &class, &f.Repo, &f.Base, &f.TaskState, &f.Tenant, &f.MissionState, &f.MissionVersion, &f.MissionCreated, &f.NoMerge, &f.StepState, &f.StepVersion, &f.ExecutorPin)
+  LEFT JOIN LATERAL (SELECT r.rule_version, r.direction, r.effective_at, r.expires_at, r.body_text, r.body_json, r.signed_by FROM agentrt.rule r
+    WHERE r.rule_id='standing-envelope:'||m.tenant AND r.effective_at <= $2 ORDER BY r.rule_version DESC LIMIT 1) e ON true
+  WHERE t.task_id=$1`, taskID, now).Scan(&mission, &step, &offPlan, &role, &class, &f.Repo, &f.Base, &f.TaskState, &f.Tenant, &f.MissionState, &f.MissionVersion, &f.MissionCreated, &f.NoMerge, &f.StepState, &f.StepVersion, &f.ExecutorPin,
+		&env.version, &env.direction, &env.effective, &env.expires, &env.text, &env.body, &env.signedBy)
 	if err != nil {
 		return f, nil, err
 	}
+	f.GrantEnabled = env.enables(f.Tenant, f.Repo, now)
 	f.Mission = mission
 	if role != "implement" {
 		return f, nil, fmt.Errorf("landing only implements")

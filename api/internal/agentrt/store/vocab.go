@@ -179,6 +179,11 @@ var bodies = map[string][]field{
 		// Owner, and its consumption on the main_intent that uses it
 		// (landing_grant.go, coordinator v3 §5.5).
 		{"landing_grant", kAny, true}, {"landing_grant_revoked", kAny, true}, {"landing_grant_use", kAny, true},
+		{"landing_grant_refused", kAny, true},
+		// landing_ci_key: on a ci_kick, the pinned CI key of an operation
+		// that needs a grant; landing_rule_clear: on a waiting operation's
+		// main_intent, the rule that no longer fails it (landing_grant_ci.go).
+		{"landing_ci_key", kAny, true}, {"landing_rule_clear", kAny, true},
 		// landing_anomaly: what the main reconciler found that only the
 		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
 		// late_landing, once per operation.
@@ -584,7 +589,7 @@ func badValue(eventType, name string, v any) string {
 	if eventType == "note" && name == "landing_grant_request" {
 		return badLandingGrantRequest(v)
 	}
-	if eventType == "note" && (name == "landing_grant" || name == "landing_grant_revoked" || name == "landing_grant_use") {
+	if eventType == "note" && (name == "landing_grant" || name == "landing_grant_revoked" || name == "landing_grant_use" || name == "landing_grant_refused" || name == "landing_ci_key" || name == "landing_rule_clear") {
 		return badGrantRecord(name, v)
 	}
 	if eventType == "note" && name == "landing_gate" {

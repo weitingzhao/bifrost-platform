@@ -35,6 +35,10 @@ type LandingWaitStatus struct {
 	// Grants are the operation's grants as the stream has them (C-5);
 	// Shown is "authorized" while one is valid.
 	Grants []LandingGrantStatus `json:"grants"`
+	// GrantRefused is why the final gate spent the latest grant
+	// (grant_insufficient: the rule changed, needs a new approval;
+	// grant_stale: the candidate's evidence changed).
+	GrantRefused string `json:"grant_refused,omitempty"`
 }
 
 func (s *LandingWaitStatus) ObserveMain(head string) {
@@ -112,12 +116,16 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 		return nil, err
 	}
 	authorized := false
+	var refused *LandingGrantStatus
 	w.Grants = []LandingGrantStatus{}
 	for _, g := range grants {
 		if g.Op == op {
 			st := g.status(at)
 			w.Grants = append(w.Grants, st)
 			authorized = authorized || st.Valid
+			if st.Refused {
+				refused = &w.Grants[len(w.Grants)-1]
+			}
 		}
 	}
 	switch {
@@ -125,6 +133,10 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 		w.Shown = "handed_to_push"
 	case o.Phase == "awaiting_grant" && authorized:
 		w.Shown = "authorized"
+	case o.Phase == "awaiting_grant" && refused != nil && w.ApprovalStatus != "pending":
+		// review 694 R-05: the gate refused the grant for good (the rule
+		// now fails more, or the candidate changed): a new request is due.
+		w.Shown, w.GrantRefused = "grant_refused", refused.RefusedReason
 	case o.Phase == "awaiting_grant":
 		w.Shown = "awaiting_request"
 		if slices.Contains([]string{"approved", "running"}, w.ApprovalStatus) {

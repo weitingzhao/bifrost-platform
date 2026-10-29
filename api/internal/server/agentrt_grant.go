@@ -41,9 +41,9 @@ func (s *Server) landingGrantSources() store.GrantSources {
 	}
 	ci := s.landingCIClient()
 	src.Facts = controller.DrillGitFacts(g)
-	src.CI = ci.LandingCI
+	src.Facts.GrantPatch = landingGrantPatch(g)
+	src.Facts.GrantCI = ci.GrantCI // the strict read of the pinned key (review 694 B-01)
 	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
-	src.Patch = landingGrantPatch(g)
 	return src
 }
 
@@ -79,27 +79,12 @@ func (s *Server) landingGrantRequest(action string, params map[string]any) (stor
 
 // landingGrantCreateCheck refuses, before the approval row exists, a request
 // the executor would refuse (§5.6 item 2): the store half recomputes the
-// material, and here at most one open request per operation.
+// material. At most one open request per operation is the approval
+// service's own atomic rule (landingGrantOpenKey).
 func (s *Server) landingGrantCreateCheck(ctx context.Context, action string, params map[string]any) error {
 	p, err := s.landingGrantRequest(action, params)
 	if err != nil {
 		return err
-	}
-	if s.approvals == nil {
-		return errors.New("no approval service")
-	}
-	list, err := s.approvals.Observations()
-	if err != nil {
-		return err
-	}
-	for _, a := range list {
-		if !slices.Contains(store.GrantActions, a.Action) || a.Params["op"] != p.Op {
-			continue
-		}
-		switch a.Status {
-		case approvals.StatusPending, approvals.StatusApproved, approvals.StatusRunning, approvals.StatusUnknown:
-			return fmt.Errorf("open_request: operation %s already has open request #%d (%s)", p.Op, a.Number, a.Status)
-		}
 	}
 	_, err = store.CheckLandingGrantRequest(ctx, s.agentRuntime.api.DB, s.landingGrantSources(), action, p)
 	return err
@@ -184,4 +169,18 @@ func (s *Server) landingGrantExecutor(action string) actions.Executor {
 		}
 		return map[string]any{"grant_id": g.GrantID, "op": g.Op, "R": g.R, "waives": g.Waives, "expires_at": g.ExpiresAt, "stg_release": g.STGRelease}, nil
 	}
+}
+
+// landingGrantOpenKey: a landing grant request is for its operation, and an
+// operation has at most one open request at a time (§5.4, review 694 R-02),
+// whichever of the two actions it is.
+func landingGrantOpenKey(action string, params map[string]any) string {
+	if !slices.Contains(store.GrantActions, action) {
+		return ""
+	}
+	op, _ := params["op"].(string)
+	if op == "" {
+		return ""
+	}
+	return "landing-grant:" + op
 }

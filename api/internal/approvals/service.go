@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,6 +30,10 @@ type Service struct {
 	now   func() time.Time
 	auto  AutoApprover
 	check CreateCheck
+	// openKey names what at most one open request may be for (landing
+	// grants: one operation); "" for no such limit. Checked in the store's
+	// own update, so two concurrent requests cannot both be open.
+	openKey OpenKey
 	// runnerID names this platform-api process as the executor of platform runs.
 	runnerID string
 	// requireConfirm makes confirm_number mandatory for tier D approvals from
@@ -54,6 +59,20 @@ type AutoApprover func(ctx context.Context, action string, tier actions.Tier, pa
 // reason, when what it signs cannot run (TD-420: a pipeline run's mistyped
 // commit). nil lets it be made.
 type CreateCheck func(ctx context.Context, action string, params map[string]any) error
+
+// OpenKey names the subject of which at most one request may be open
+// (pending, approved, running or unknown) at a time; "" for none.
+type OpenKey func(action string, params map[string]any) string
+
+// SetOpenKey installs the one-open-request rule (review 694 R-02).
+func (s *Service) SetOpenKey(fn OpenKey) {
+	s.mu.Lock()
+	s.openKey = fn
+	s.mu.Unlock()
+}
+
+// errOpenRequest: another request for the same subject is open.
+var errOpenRequest = errors.New("open request")
 
 // SetCreateCheck installs the check every request goes through before its
 // approval row is written.
@@ -241,11 +260,29 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		WorkID:          work,
 		Drill:           in.Drill,
 	}
+	s.mu.Lock()
+	openKey := s.openKey
+	s.mu.Unlock()
+	var open Approval
 	err = s.store.update(func(doc *file) error {
+		if openKey != nil && !in.Drill {
+			if key := openKey(act.ID, norm); key != "" {
+				for _, a := range doc.Approvals {
+					if a.open() && !a.Drill && openKey(a.Action, a.Params) == key {
+						open = a
+						return errOpenRequest
+					}
+				}
+			}
+		}
 		rec.Number = doc.nextNumber()
 		doc.put(rec)
 		return nil
 	})
+	if errors.Is(err, errOpenRequest) {
+		return failFields(409, map[string]any{"error": "open_request: another request for the same subject is open", "action": act.ID,
+			"open_id": open.ID, "open_number": open.Number, "open_status": open.Status})
+	}
 	if err != nil {
 		return fail(500, "store approvals: "+err.Error())
 	}

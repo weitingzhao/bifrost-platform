@@ -63,12 +63,7 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 	if err != nil {
 		return out, err
 	}
-	sum := sha256.Sum256([]byte(patch))
-	out.SHA256, out.Size = hex.EncodeToString(sum[:]), len(patch)
-	out.Shown, out.Truncated = patch, len(patch) > ShownLimit
-	if out.Truncated {
-		out.Shown = ""
-	}
+	out = patchEvidence(patch)
 	x, err := g.run(ctx, dir, false, []byte(original), nil, "patch-id", "--stable")
 	if err != nil {
 		return out, err
@@ -79,4 +74,16 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 	}
 	out.Match = len(strings.Fields(x)) > 0 && len(strings.Fields(y)) > 0 && strings.Fields(x)[0] == strings.Fields(y)[0]
 	return out, nil
+}
+
+// patchEvidence is the digest of the whole patch and what of it is shown:
+// all of it up to ShownLimit bytes, none past it (the digest still covers
+// every byte; the Owner then reads the file table and Gitea's compare).
+func patchEvidence(patch string) CandidatePatch {
+	sum := sha256.Sum256([]byte(patch))
+	out := CandidatePatch{SHA256: hex.EncodeToString(sum[:]), Size: len(patch), Shown: patch, Truncated: len(patch) > ShownLimit}
+	if out.Truncated {
+		out.Shown = ""
+	}
+	return out
 }

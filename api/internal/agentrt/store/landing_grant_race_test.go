@@ -3,8 +3,10 @@ package store_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -316,54 +318,86 @@ func TestC5GrantPausesTheWait(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and a test hook. T48: the executor holds its
-// locks up to the binding (rule shared, step, task, mission FOR SHARE)
-// while the Owner revokes another grant, the gate runs and B4 closes: all
-// finish, none deadlocks, and the result is the serial one.
+// Serial: FreezeEventClock and test hooks. T48 (review 694 R-07): B4's
+// Close takes the mission (FOR NO KEY UPDATE) and stops before the
+// repository stream; the executor then starts and must wait on the mission
+// holding nothing Close needs, while the Owner revokes the first grant
+// (the stream alone). Released, Close finishes, then the executor, whose
+// grant follows the revocation: the serial result. An executor that took the
+// stream before the mission would deadlock here (PostgreSQL ends one side:
+// an error, red); the mutant was run by hand (C-5 fix report).
 func TestC5T48LockOrder(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
+	first := c.grant(t, store.ActionCoreLanding)
 	p := c.params(t)
-	held, release := make(chan struct{}), make(chan struct{})
+	closeHeld, closeRelease := make(chan struct{}), make(chan struct{})
+	var once sync.Once
 	defer store.SetHook(func(point, arg string) {
-		if point == "landing grant: binding locked" {
-			close(held)
-			<-release
+		if point == "close: mission locked" && arg == "M-3" {
+			once.Do(func() {
+				close(closeHeld)
+				<-closeRelease
+			})
 		}
 	})()
+	closed := make(chan error, 1)
+	go func() { _, err := store.CloseMissions(ctx, c.w.db.Connect(t, c.w.db.Runtime)); closed <- err }()
+	select {
+	case <-closeHeld:
+	case err := <-closed:
+		t.Fatal("Close did not reach the mission lock", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("Close did not reach the mission lock")
+	}
 	wrote := make(chan error, 1)
 	go func() {
-		_, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(store.ActionCoreLanding, time.Minute), p)
+		_, err := store.WriteLandingGrant(ctx, c.w.db.Connect(t, c.w.db.Runtime), c.gsrc, c.approval(store.ActionCoreLanding, time.Minute), p)
 		wrote <- err
 	}()
-	<-held
-	others := make(chan error, 3)
+	time.Sleep(300 * time.Millisecond) // the executor waits on the mission
+	revokeDone := make(chan error, 1)
 	go func() {
-		_, _, err := store.AuthorizeLandingPush(ctx, c.w.db.Connect(t, c.w.db.Runtime), c.src, c.op, c.observe())
-		others <- err
-	}()
-	go func() { _, err := store.CloseMissions(ctx, c.w.db.Connect(t, c.w.db.Runtime)); others <- err }()
-	go func() {
-		_, err := store.RevokeLandingGrant(ctx, c.w.db.Connect(t, c.w.db.Runtime), "lg_none")
-		if errors.Is(err, store.ErrInvalid) {
-			err = nil
+		r, err := store.RevokeLandingGrant(ctx, c.w.db.Connect(t, c.w.db.Runtime), first.GrantID)
+		if err == nil && !r.Revoked {
+			err = fmt.Errorf("not revoked: %+v", r)
 		}
-		others <- err
+		revokeDone <- err
 	}()
-	time.Sleep(300 * time.Millisecond)
-	close(release)
+	// The revocation needs the stream alone: it must not wait behind an
+	// executor that waits on the mission.
+	var errs []error
+	pending := 2
+	select {
+	case err := <-revokeDone:
+		errs = append(errs, err)
+	case <-time.After(5 * time.Second):
+		errs = append(errs, errors.New("the revocation waits behind the executor: the executor holds the stream while waiting on the mission"))
+		pending++
+	}
+	close(closeRelease)
 	deadline := time.After(30 * time.Second)
-	for i := 0; i < 4; i++ {
+	for ; pending > 0; pending-- {
 		select {
 		case err := <-wrote:
-			ok(t, err)
-		case err := <-others:
-			ok(t, err)
+			errs = append(errs, err)
+		case err := <-closed:
+			errs = append(errs, err)
+		case err := <-revokeDone:
+			errs = append(errs, err)
 		case <-deadline:
-			t.Fatal("deadlock")
+			t.Fatal("deadlock", errs)
 		}
 	}
-	if n := c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE body_json ? 'landing_grant'`); n != 1 {
-		t.Fatal(n)
+	for _, err := range errs {
+		ok(t, err)
+	}
+	var revoked, granted int
+	ok(t, c.w.rt.QueryRow(ctx, `SELECT count(*) FILTER (WHERE body_json ? 'landing_grant_revoked'), count(*) FILTER (WHERE body_json ? 'landing_grant')
+	  FROM agentrt.event WHERE event_stream_id=$1`, landingRepoStream).Scan(&revoked, &granted))
+	g, err := store.UsableLandingGrant(ctx, c.w.rt, c.op)
+	ok(t, err)
+	if revoked != 1 || granted != 2 || g == "" || g == first.GrantID {
+		t.Fatal("not the serial result", revoked, granted, g)
 	}
 }
 
@@ -489,28 +523,31 @@ func c5WaitNoTrust(t *testing.T) *c5 {
 
 // Serial: FreezeEventClock. §5.5: the grant is usable only for the candidate
 // the Owner saw. R's latest CI replaced by another run (green too), or R's
-// patch read differently, makes it stale: nothing reserved or pushed, the
-// grant still unused. Back to the same evidence, it pushes (the control).
+// patch read differently, makes it stale: nothing reserved or pushed, and
+// the grant is spent (review 694 R-05). A new request on the evidence as
+// it is now is granted and pushes (the control).
 func TestC5GrantStaleOnOtherEvidence(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
-	ci, patch := c.ci, c.patch
+	ci := c.ci
 	c.ci.Run, c.ci.UID, c.ci.CreatedAt = "green-again", "uid-again", ci.CreatedAt.Add(time.Minute)
 	if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" || c.reservations(t) != 0 || c.phase(t) != "awaiting_grant" {
 		t.Fatalf("another CI run: %+v", d)
 	}
-	// A fresh world for the patch: the rerun above is on this stream now.
+	if st, _ := store.ReadLandingWait(ctx, c.w.rt, c.op); st.Shown != "grant_refused" || st.GrantRefused != "grant_stale" {
+		t.Fatalf("status: %+v", st)
+	}
+	c.grant(t, store.ActionCoreLanding)
+	if _, d := c.gate(t); !d.Allowed {
+		t.Fatalf("a new grant on the new run: %+v", d)
+	}
+	// Another patch, on a fresh world.
 	d := c5Wait(t, c5Core, false, true)
 	d.grant(t, store.ActionCoreLanding)
 	d.patch.SHA256 = strings.Repeat("8", 64)
 	if _, dec := d.gate(t); dec.Allowed || dec.Reason != "grant_stale" || d.reservations(t) != 0 {
 		t.Fatalf("another patch: %+v", dec)
 	}
-	d.patch = patch
-	if _, dec := d.gate(t); !dec.Allowed {
-		t.Fatalf("the same evidence: %+v", dec)
-	}
-	_ = ci
 }
 
 // Serial: FreezeEventClock. The controller's resume of a waiting operation
@@ -534,16 +571,20 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 		Main:          func(context.Context) (string, error) { return c.main, nil },
 		WindowBlocked: func(context.Context) (bool, error) { return false, nil },
 		CI:            func(context.Context, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string) error { return nil },
-		GrantPatch: func(context.Context, string, string, string) (store.GrantPatch, error) {
-			patches++
-			return c.patch, nil
-		}}
+		EnsureCI:      func(context.Context, string, string) error { return nil }}
+	src.Facts.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) {
+		patches++
+		return c.patch, nil
+	}
 	on := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &src, OpenLive: open}
+	// No grant: the gate rechecks the rule once for this rule version
+	// (R-06): core still fails, nothing is pushed, nor read a second time.
 	ok(t, on.LandingDrillPass(ctx))
-	if opened != 0 || patches != 0 || len(p.pushes) != 0 {
+	ok(t, on.LandingDrillPass(ctx))
+	if opened != 1 || patches != 0 || len(p.pushes) != 0 || c.phase(t) != "awaiting_grant" {
 		t.Fatal("polled without a grant", opened, patches, p.pushes)
 	}
+	opened = 0
 	c.grant(t, store.ActionCoreLanding)
 	off := controller.Controller{DB: c.w.rt, Env: "prod", DrillGit: &branchObserved{}, Drill: &src, OpenLive: open}
 	ok(t, off.LandingDrillPass(ctx))
@@ -551,16 +592,16 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 		t.Fatal("live off pushed", opened, p.pushes)
 	}
 	noPatch := src
-	noPatch.GrantPatch = nil
+	noPatch.Facts.GrantPatch = nil
 	blind := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: &branchObserved{}, Drill: &noPatch, OpenLive: open}
 	ok(t, blind.LandingDrillPass(ctx))
 	if len(p.pushes) != 0 || c.phase(t) != "awaiting_grant" || opened != 1 {
 		t.Fatal("pushed without the patch evidence", p.pushes, opened)
 	}
-	// A refused grant is tried again only after a while: no workspace now.
+	// A grant the gate could not judge is tried again only after a while.
 	ok(t, blind.LandingDrillPass(ctx))
 	if opened != 1 {
-		t.Fatal("tried the refused grant again at once", opened)
+		t.Fatal("tried the grant again at once", opened)
 	}
 	ok(t, on.LandingDrillPass(ctx))
 	if len(p.pushes) != 1 || p.pushes[0] != commitB+"<-"+commitA || patches != 1 {

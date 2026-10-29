@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -37,15 +39,15 @@ type GrantPatch struct {
 // GrantSources are the external reads of a grant's material, made outside
 // every transaction except the final gate's (which reads Git under its
 // locks today, §5.9).
+// Facts carries the Git and CI evidence readers (LandingSource.GrantPatch,
+// GrantCI): the final gate reads the same ones.
 type GrantSources struct {
 	Facts LandingSource
-	Patch func(ctx context.Context, a, m0, r string) (GrantPatch, error)
-	CI    func(ctx context.Context, r string, after time.Time) (landing.CIRun, error)
 	Main  func(ctx context.Context) (string, error)
 }
 
 func (s GrantSources) complete() bool {
-	return s.Facts.Result != nil && s.Facts.History != nil && s.Patch != nil && s.CI != nil && s.Main != nil
+	return s.Facts.Result != nil && s.Facts.History != nil && s.Facts.GrantPatch != nil && s.Facts.GrantCI != nil && s.Main != nil
 }
 
 // GrantParams are the approval's parameters, closed (§5.6 item 1).
@@ -113,7 +115,9 @@ type GrantHardPath struct {
 	Entry string `json:"entry"`
 }
 
-type GrantCIEvidence struct {
+// GrantCandidateCI is the strict CI evidence in candidate_digest: the
+// verified pipeline, the run, and the key's siblings.
+type GrantCandidateCI struct {
 	Pipeline  string            `json:"pipeline"`
 	Run       string            `json:"run"`
 	UID       string            `json:"uid"`
@@ -147,7 +151,7 @@ type GrantCandidate struct {
 	Acceptance       []GrantAcceptance `json:"acceptance"`
 	Review           GrantReview       `json:"review"`
 	ReviewPatchMatch bool              `json:"review_patch_match"`
-	CI               GrantCIEvidence   `json:"ci"`
+	CI               GrantCandidateCI  `json:"ci"`
 	STGRelease       bool              `json:"stg_release"`
 	HardCorePaths    []GrantHardPath   `json:"hard_core_paths"`
 	DecisionChain    bool              `json:"decision_chain"`
@@ -219,6 +223,7 @@ type grantDB struct {
 	rule       GrantRule
 	enabled    bool
 	grants     []*grantView
+	ciKey      *GrantCIKey
 }
 
 // readGrantDB reads every database input of an operation's material. It
@@ -251,7 +256,8 @@ func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, n
 			return d, err
 		}
 	}
-	if d.enabled, err = grantEnabled(ctx, tx, d.facts.Tenant, d.facts.Repo); err != nil {
+	d.enabled = d.facts.GrantEnabled
+	if d.ciKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 		return d, err
 	}
 	_, d.grants, err = readLandingGrants(ctx, tx, landingRepoStream)
@@ -305,23 +311,61 @@ func readGrantChecks(ctx context.Context, tx pgx.Tx, task, attempt string) ([]Gr
 	return acc, rev, body, err
 }
 
-var trustAnswers = func() []*regexp.Regexp {
-	var out []*regexp.Regexp
-	for n := 1; n <= 4; n++ {
-		out = append(out, regexp.MustCompile(fmt.Sprintf(`(?m)^[\s#>*_-]*%d[.)][*_]*\s+\S`, n)))
-	}
-	return out
-}()
+var (
+	trustHeading = regexp.MustCompile(`(?i)^#{2,3}\s*trust chain answers\s*$`)
+	trustLine    = regexp.MustCompile(`^(?:[-*]\s+)?\**T([1-4])\**\s*:\s*(.*)$`)
+	trustAnswer  = regexp.MustCompile(`(?i)^\**(yes|no)\b\**[\s,.;:\x{2014}\x{2013}-]+(\S.{11,})$`)
+)
 
-// trustAnswered: the review's evidence answers each of the trust chain's
-// four questions under its number (§12.2 item 3, store.TrustReviewText).
-// This is mechanical: it proves an answer is there, not that it is right.
+// trustAnswered: the review's evidence ends in the trust chain's answer
+// section (store.TrustReviewText): under the heading "## Trust chain
+// answers", exactly one line for each of T1-T4, each Yes or No followed by
+// at least a dozen characters of explanation that is not a question and
+// does not copy a question (§12.2 item 3, review 694 B-02). It rejects the
+// question text alone, an unrelated numbered list, a missing or empty
+// answer. Its boundary, stated: it proves four structured answers exist,
+// not that they are true, nor that the reviewer read the diff; that rests
+// on the reviewer being another vendor and on the Owner's own check.
 func trustAnswered(body []byte) bool {
-	if len(body) == 0 {
+	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
+	start := -1
+	for i, l := range lines {
+		if trustHeading.MatchString(strings.TrimSpace(l)) {
+			start = i + 1
+		}
+	}
+	if start < 0 {
 		return false
 	}
-	for _, re := range trustAnswers {
-		if !re.Match(body) {
+	seen := map[string]bool{}
+	for _, l := range lines[start:] {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "#") {
+			break
+		}
+		m := trustLine.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		if seen[m[1]] || !trustAnswerValid(m[2]) {
+			return false
+		}
+		seen[m[1]] = true
+	}
+	return len(seen) == 4
+}
+
+func trustAnswerValid(answer string) bool {
+	m := trustAnswer.FindStringSubmatch(strings.TrimSpace(answer))
+	if m == nil {
+		return false
+	}
+	why := strings.ToLower(strings.TrimSpace(m[2]))
+	if strings.HasSuffix(why, "?") || strings.HasPrefix(why, "<") || strings.HasPrefix(why, "...") {
+		return false
+	}
+	for _, q := range trustQuestions {
+		if strings.Contains(why, q) {
 			return false
 		}
 	}
@@ -333,7 +377,7 @@ type grantExt struct {
 	single  bool
 	changes []rules.LandingChange
 	patch   GrantPatch
-	ci      landing.CIRun
+	ci      GrantCIEvidence
 }
 
 func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
@@ -349,22 +393,26 @@ func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 	if x.single, x.changes, err = src.Facts.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A); err != nil {
 		return x, err
 	}
-	if x.patch, err = src.Patch(ctx, o.A, o.M0, o.R); err != nil {
+	if x.patch, err = src.Facts.GrantPatch(ctx, o.A, o.M0, o.R); err != nil {
 		return x, err
 	}
-	x.ci, err = src.CI(ctx, o.R, o.PreparedAt)
+	x.ci, err = grantCIRead(ctx, src.Facts, d.ciKey, o)
 	return x, err
 }
 
 // buildCandidate composes candidate_digest's inputs.
 func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc []GrantAcceptance, rev GrantReview, trust bool,
-	patch GrantPatch, ci landing.CIRun, stg bool) GrantCandidate {
+	patch GrantPatch, ci GrantCIEvidence, key *GrantCIKey, stg bool) GrantCandidate {
+	siblings := map[string]string{}
+	if key != nil {
+		siblings = maps.Clone(key.Siblings)
+	}
 	c := GrantCandidate{Env: "prod", Tenant: f.Tenant, Repo: f.Repo, Mission: f.Mission, PlanStep: step, Task: f.Task, Attempt: o.Attempt,
 		Op: op, A: o.A, Base: f.Base, R: o.R, M0: o.M0, CommitterDate: o.CommitterDate.UTC().Format(time.RFC3339Nano),
 		Changes: []GrantChange{}, PatchSHA256: patch.SHA256, Files: len(f.Changes), Acceptance: acc, Review: rev,
 		ReviewPatchMatch: patch.Match, STGRelease: stg, HardCorePaths: []GrantHardPath{}, TrustReview: trust,
-		CI: GrantCIEvidence{Pipeline: "bifrost-ci-platform", Run: ci.Run, UID: ci.UID, CreatedAt: ci.CreatedAt.UTC().Format(time.RFC3339Nano),
-			Status: ci.Status, SHA: ci.PlatformCommit, Siblings: map[string]string{"bifrost-ui": ci.UICommit, "bifrost-trade-infra": ci.InfraCommit}}}
+		CI: GrantCandidateCI{Pipeline: ci.Pipeline, Run: ci.Run, UID: ci.UID, CreatedAt: ci.CreatedAt.UTC().Format(time.RFC3339Nano),
+			Status: ci.Status, SHA: ci.Candidate, Siblings: siblings}}
 	if c.Acceptance == nil {
 		c.Acceptance = []GrantAcceptance{}
 	}
@@ -392,13 +440,6 @@ func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc [
 	return c
 }
 
-// ciProblem: R's latest CI is the success the grant must rest on (§3.2
-// 始终生效层; §3.5 4): status, R, after preparation, its own SHA result.
-func ciProblem(o landing.Operation, ci landing.CIRun, now time.Time) bool {
-	return ci.Status != "Succeeded" || ci.R != o.R || ci.PlatformCommit != o.R || ci.Run == "" || ci.UID == "" ||
-		!ci.CreatedAt.After(o.PreparedAt) || ci.CreatedAt.After(now)
-}
-
 // composeMaterial joins the two halves at now, for stg as requested.
 func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGrantMaterial, error) {
 	f := d.facts
@@ -424,7 +465,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	}
 	m.Action = GrantActionFor(m.SoftAtRequest)
 	trust := m.Action == ActionCoreLanding && trustAnswered(d.reviewBody)
-	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, trust, x.patch, x.ci, stg)
+	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, trust, x.patch, x.ci, d.ciKey, stg)
 	var err error
 	if m.CandidateDigest, err = m.Candidate.Digest(); err != nil {
 		return nil, err
@@ -456,7 +497,10 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	if !x.patch.Match {
 		problem("patch_changed")
 	}
-	if ciProblem(d.op, x.ci, now) {
+	switch {
+	case d.ciKey == nil:
+		problem("ci_not_pinned") // its CI was not pinned to sibling commits: no grant rests on it
+	case grantCIProblem(d.op, d.ciKey, x.ci, now):
 		problem("ci_not_green")
 	}
 	if f.Rule != nil && f.Rule.Landing != nil {

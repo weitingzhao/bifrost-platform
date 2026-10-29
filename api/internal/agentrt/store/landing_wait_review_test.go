@@ -23,7 +23,11 @@ type waitReviewTx struct {
 }
 
 func (tx waitReviewTx) Query(_ context.Context, q string, _ ...any) (pgx.Rows, error) {
-	// C-5's grant projection: these fixtures carry no grant records.
+	// C-5's one ordered read of the stream (review 694 R-04): the landing
+	// records in its wide row shape; these fixtures carry no grant records.
+	if strings.Contains(q, "body_json->'landing_grant_refused'") {
+		return &waitReviewRows{entries: tx.entries, wide: true}, nil
+	}
 	if strings.Contains(q, "landing_grant_use") {
 		return &waitReviewRows{}, nil
 	}
@@ -50,6 +54,7 @@ type waitReviewRows struct {
 	pgx.Rows
 	requests []map[string]any
 	entries  []landing.Entry
+	wide     bool
 	i        int
 }
 
@@ -62,8 +67,17 @@ func (r *waitReviewRows) Scan(dest ...any) error {
 		return nil
 	}
 	e := r.entries[r.i-1]
-	*dest[0].(*time.Time) = e.At
 	b, err := json.Marshal(e.Record)
+	if r.wide {
+		*dest[0].(*int64) = int64(r.i)
+		*dest[1].(*time.Time) = e.At
+		*dest[2].(*[]byte) = b
+		for _, d := range dest[3:] {
+			*d.(*[]byte) = nil
+		}
+		return err
+	}
+	*dest[0].(*time.Time) = e.At
 	*dest[1].(*[]byte) = b
 	return err
 }

@@ -7,41 +7,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // LandingState folds only the authoritative stream, never mission mirrors.
 // Writers call it after Append has locked the stream, in the same transaction.
 func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
-	rows, err := tx.Query(ctx, `SELECT at, body_json->'landing' FROM agentrt.event WHERE event_stream_id=$1 AND event_type='note' AND body_json ? 'landing' ORDER BY seq`, stream)
-	if err != nil {
-		return landing.State{}, err
-	}
-	defer rows.Close()
-	entries := []landing.Entry{}
-	for rows.Next() {
-		var at time.Time
-		var raw []byte
-		if err := rows.Scan(&at, &raw); err != nil {
-			return landing.State{}, err
-		}
-		v, err := canon.Parse(raw)
-		if err != nil {
-			return landing.State{}, err
-		}
-		r, err := landing.Parse(v)
-		if err != nil {
-			return landing.State{}, err
-		}
-		entries = append(entries, landing.Entry{At: at, Record: r})
-	}
-	if err := rows.Err(); err != nil {
-		return landing.State{}, err
-	}
-	// The grant projection (C-5, §5.3): a valid grant pauses W, from the
-	// stream's grant records, the same on every read and after a restart.
-	_, grants, err := readLandingGrants(ctx, tx, stream)
+	// The protocol records and the grant projection (C-5, §5.3: a valid
+	// grant pauses W) come from one ordered read of the stream.
+	entries, _, grants, err := scanLandingStream(ctx, tx, stream)
 	if err != nil {
 		return landing.State{}, err
 	}
@@ -104,8 +78,10 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if k == "main_intent" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
 		// C-5: a waiting operation reaches main only by consuming a grant in
 		// the same event (checkLandingGrantAppend checks the grant itself).
-		if _, ok := ev.Body["landing_grant_use"]; !ok {
-			return fmt.Errorf("a waiting operation's main_intent must consume its grant (landing_grant_use)")
+		_, use := ev.Body["landing_grant_use"]
+		_, clear := ev.Body["landing_rule_clear"]
+		if !use && !clear {
+			return fmt.Errorf("a waiting operation's main_intent must consume its grant (landing_grant_use) or rest on a rule that clears it (landing_rule_clear)")
 		}
 	}
 	if k == "failed" && r.String("why") == "declined" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
