@@ -164,6 +164,7 @@ var bodies = map[string][]field{
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
 		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
+		{"stg_release", kAny, true},
 		// landing_answer: on the repository's landing stream, how one
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
@@ -557,6 +558,9 @@ var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "
 // badValue is why v, of its field's kind already, is refused, or "". A list
 // is checked element by element.
 func badValue(eventType, name string, v any) string {
+	if eventType == "note" && name == "stg_release" {
+		return badStgRelease(v)
+	}
 	if eventType == "note" && name == "landing" {
 		if _, err := landing.Parse(v); err != nil {
 			return err.Error()

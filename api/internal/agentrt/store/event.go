@@ -127,7 +127,18 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if ev.Body == nil {
 		ev.Body = map[string]any{}
 	}
+	if raw, ok := ev.Body["stg_release"]; ok {
+		if err := stgEnvelope(ev); err != nil {
+			return Appended{}, err
+		}
+		if _, err := ParseStgRelease(raw); err != nil {
+			return Appended{}, err
+		}
+	}
 	if err := checkBody(ev.Type, ev.Body); err != nil {
+		if _, ok := ev.Body["stg_release"]; ok {
+			return Appended{}, stgError("invalid", "", err.Error())
+		}
 		return Appended{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`,
@@ -181,6 +192,11 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		return Appended{}, err
 	}
 	seq := lastSeq + 1
+	if old, err := checkStgReleaseAppend(ctx, tx, &ev, seq, at); err != nil {
+		return Appended{}, err
+	} else if old != nil {
+		return *old, nil
+	}
 	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
 	if err != nil {
 		return Appended{}, fmt.Errorf("store: %s body: %w", ev.Type, err)

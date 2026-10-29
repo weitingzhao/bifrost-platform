@@ -1,8 +1,6 @@
 package store_test
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -79,29 +77,13 @@ func TestLandingAllKindsMigratedDatabase(t *testing.T) {
 	put(landingRepoStream, landingRecord("land:1", "reverted", "R", commitB, "by", commitA))
 	put(landingRepoStream, landingRecord("land:2", "claimed", "task", landingTask, "attempt", landingAttempt, "A", commitA, "rule_version", 1))
 	put(landingRepoStream, landingRecord("land:2", "failed", "why", "declined"))
-	for i, outcome := range []string{"ok", "failed"} {
-		op := fmt.Sprintf("stg:%d", i)
-		if i == 0 {
-			put(landingRepoStream, landingRecord(op, "stg_pending", "R", []string{commitB}))
-		}
-		put(landingRepoStream, landingRecord(op, "stg_snapshot", "P", commitB, "U", commitA, "try", 1, "not_before", clock.Format(time.RFC3339)))
-		put(landingRepoStream, landingRecord(op, "stg_started", "run", op, "try", 1))
-		put(landingRepoStream, landingRecord(op, "stg_result", "run", op, "outcome", outcome))
-		if outcome == "ok" {
-			dig := map[string]any{}
-			for _, k := range []string{"platform-api", "platform-workers", "platform-console"} {
-				dig[k] = "sha256:" + strings.Repeat("a", 64)
-			}
-			put(landingRepoStream, landingRecord(op, "stg_verified", "P", commitB, "U", commitA, "digests", dig))
-		} else {
-			put(landingRepoStream, landingRecord(op, "stg_failed", "why", "ci_failed"))
-		}
-	}
-	if len(seen) != 22 {
-		t.Fatalf("covered %d kinds, want 22: %v", len(seen), seen)
+	// The six historical STG kinds are now read-only. Their exact replay
+	// is covered by TestStgMixedLegacyReplay; new writes are rejected.
+	if len(seen) != 16 {
+		t.Fatalf("covered %d kinds, want 16: %v", len(seen), seen)
 	}
 	s := landingState(t, w, landingRepoStream)
-	if !s.Operations["land:1"].EverLanded || !s.Operations["land:1"].Reverted || s.Operations["stg:0"].Phase != "stg_verified" {
+	if !s.Operations["land:1"].EverLanded || !s.Operations["land:1"].Reverted {
 		t.Fatal("fold lost state", s)
 	}
 	if !s.EnabledAt.Equal(at.Add(time.Minute)) {

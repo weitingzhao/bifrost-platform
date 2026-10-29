@@ -54,6 +54,10 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		return err
 	}
 	k := r.String("kind")
+	switch k {
+	case "stg_pending", "stg_snapshot", "stg_started", "stg_result", "stg_verified", "stg_failed":
+		return stgError("legacy", k, "legacy STG kinds are read-only; write note.stg_release v1")
+	}
 	if (k == "retry" || k == "rehearsed" || k == "discarded" || k == "awaiting_grant") && ev.Actor != "controller" {
 		return fmt.Errorf("landing transition requires controller")
 	}
