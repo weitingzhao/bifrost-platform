@@ -32,9 +32,9 @@ type StgSendPermit struct {
 	Inputs, Started                       StgRecord
 }
 
-// StgNotFoundProof comes only from a successful named GET returning 404. A
-// retained-object capability is mandatory; ordinary errors are not absence.
-// The exact permit read before GET is bound to the proof to reject stale reads.
+// StgNotFoundProof is a named GET's absence observation, retained for caller
+// compatibility. It does NOT prove a previously dispatched Create cannot
+// still succeed, even with FinalizerGuaranteed. It can only drive isolation.
 type StgNotFoundProof struct {
 	IntentSeq, PermitSeq int64
 	ReadAt               time.Time
@@ -47,13 +47,16 @@ func ReadStgRelease(ctx context.Context, db DB) (StgState, error) {
 	return s, err
 }
 
-// AuthorizeStgRelease is the B5-c final gate. nil proof means first send;
-// recovery requires the unbound, expired permit's retained-object 404 proof.
-// A refusal persists its blocking interval (where applicable), and recovery
-// records unsent in the same transaction. No network write occurs here.
+// AuthorizeStgRelease is the B5-c final gate. nil proof means first send.
+// An absence observation uses the same recovery path as Sender.Recover;
+// it never grants resend or writes unsent. No network write occurs here.
 func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, src StgGateSource, proof *StgNotFoundProof) (StgSendPermit, StgGateDecision, error) {
 	var permit StgSendPermit
 	var decision StgGateDecision
+	if proof != nil {
+		action, err := RecordStgRecovery(ctx, db, batch, try, StgRunObservation{IntentSeq: proof.IntentSeq, PermitSeq: proof.PermitSeq, Kind: "not_found", ReadAt: proof.ReadAt, FinalizerGuaranteed: proof.FinalizerGuaranteed})
+		return permit, StgGateDecision{Why: action}, err
+	}
 	if src.Observe == nil || src.Live == nil || src.Generation == nil {
 		return permit, decision, errors.New("STG gate source unavailable")
 	}
@@ -104,24 +107,16 @@ func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, sr
 			decision.Why = "not_ready"
 			return nil
 		}
-		t := b.Tries[try]
 		at := DecisionAt()
-		if proof != nil && !stgValidNotFound(t, *proof, at) {
-			decision.Why = "not_ready"
-			return nil
-		}
 		facts, err := stgReadGateFacts(ctx, tx, s, again, at)
 		if err != nil {
 			return err
 		}
 		facts.Live, facts.Environment, facts.Generation = src.Live(), src.Environment, src.Generation()
-		decision = stgEvaluateGate(s, batch, obs, facts, at, proof != nil)
+		decision = stgEvaluateGate(s, batch, obs, facts, at, false)
 		if !decision.Allowed {
 			if err = stgRecordRefusal(ctx, tx, s, batch, obs, facts, at, &decision); err != nil {
 				return err
-			}
-			if proof != nil {
-				_, err = appendStg(ctx, tx, stgBatchRecord("unsent", batch, try, "proof", "gate_failed_before_send"))
 			}
 			return err
 		}
@@ -130,23 +125,18 @@ func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, sr
 			deadline = obs.Lease.Expires
 		}
 		lease := map[string]any{"who": obs.Lease.Who, "gen": obs.Lease.Generation}
-		var r StgRecord
-		if proof != nil {
-			r = stgBatchRecord("resend", batch, try, "intent_seq", t.Started.Seq, "lease", lease, "deadline", deadline.Format(time.RFC3339Nano), "why", "not_found_unbound")
-		} else {
-			// Same-U CI succession is recorded without changing frozen inputs.
-			if _, exists := b.CI[obs.CI.UID]; !exists {
-				ci, _ := obs.CI.Record()
-				_, err = appendStg(ctx, tx, StgRecord{"v": "1", "scope": "batch", "kind": "ci_accepted", "batch": batch, "P": obs.Main, "ci": ci})
-				if err != nil {
-					return err
-				}
+		// Same-U CI succession is recorded without changing frozen inputs.
+		if _, exists := b.CI[obs.CI.UID]; !exists {
+			ci, _ := obs.CI.Record()
+			_, err = appendStg(ctx, tx, StgRecord{"v": "1", "scope": "batch", "kind": "ci_accepted", "batch": batch, "P": obs.Main, "ci": ci})
+			if err != nil {
+				return err
 			}
-			n := stgBatchNumber(batch)
-			labels := map[string]any{"bifrost.io/stg-release": "true", "bifrost.io/stg-release-n": strconv.FormatInt(n, 10), "bifrost.io/stg-release-try": strconv.FormatInt(try, 10)}
-			annotations := map[string]any{"bifrost.io/stg-release-batch": batch, "bifrost.io/stg-release-intent": "0"}
-			r = stgBatchRecord("started", batch, try, "intent_seq", int64(0), "run", fmt.Sprintf("stgrel-%d-%d-%s", n, try, obs.Main[:8]), "labels", labels, "annotations", annotations, "fingerprint", stgFingerprint(snapshot.Record.object("inputs"), labels, annotations), "spend", []any{}, "lease", lease, "deadline", deadline.Format(time.RFC3339Nano))
 		}
+		n := stgBatchNumber(batch)
+		labels := map[string]any{"bifrost.io/stg-release": "true", "bifrost.io/stg-release-n": strconv.FormatInt(n, 10), "bifrost.io/stg-release-try": strconv.FormatInt(try, 10)}
+		annotations := map[string]any{"bifrost.io/stg-release-batch": batch, "bifrost.io/stg-release-intent": "0"}
+		r := stgBatchRecord("started", batch, try, "intent_seq", int64(0), "run", fmt.Sprintf("stgrel-%d-%d-%s", n, try, obs.Main[:8]), "labels", labels, "annotations", annotations, "fingerprint", stgFingerprint(snapshot.Record.object("inputs"), labels, annotations), "spend", []any{}, "lease", lease, "deadline", deadline.Format(time.RFC3339Nano))
 		hook("stg gate: before permit", batch)
 		a, err := appendStg(ctx, tx, r)
 		if err != nil {
@@ -156,7 +146,7 @@ func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, sr
 		if err != nil {
 			return err
 		}
-		t = s.Batches[batch].Tries[try]
+		t := s.Batches[batch].Tries[try]
 		permit = StgSendPermit{Batch: batch, Try: try, IntentSeq: t.Started.Seq, PermitSeq: a.Seq, Generation: obs.Lease.Generation, Deadline: deadline, Inputs: t.Snapshot.Record.object("inputs"), Started: t.Started.Record}
 		return nil
 	})

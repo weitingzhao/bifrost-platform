@@ -16,10 +16,6 @@ type StgRunObservation struct {
 	FinalizerGuaranteed            bool
 }
 
-func stgValidNotFound(t *StgTry, p StgNotFoundProof, at time.Time) bool {
-	return t != nil && t.Occupied() && !t.IsQuarantined() && t.Bound.Seq == 0 && p.FinalizerGuaranteed && p.IntentSeq == t.Started.Seq && p.PermitSeq == t.Permit.Seq && !p.ReadAt.IsZero() && !p.ReadAt.Before(t.Permit.Record.Time("deadline")) && !p.ReadAt.After(at) && at.Sub(p.ReadAt) <= 2*time.Minute
-}
-
 // StgRecoveryDecision is pure, and does not consult live, rules or lease.
 // Existing execution is always observable, including under stg_release:none.
 func StgRecoveryDecision(t *StgTry, obs StgRunObservation, at time.Time) string {
@@ -55,18 +51,20 @@ func StgRecoveryDecision(t *StgTry, obs StgRunObservation, at time.Time) string 
 	if obs.PermitSeq != t.Permit.Seq || obs.ReadAt.Before(t.Permit.Record.Time("deadline")) || at.Before(t.Permit.Record.Time("deadline")) {
 		return "wait"
 	}
-	if !obs.FinalizerGuaranteed {
-		return "unknown_execution"
-	}
 	if at.Sub(obs.ReadAt) > 2*time.Minute {
 		return "wait"
 	}
-	return "resend"
+	// A permit deadline fences dispatch, not a POST already accepted by the
+	// API server. Even with retention, this GET may precede that POST's
+	// persistence. Without a server-side fence proving it cannot complete,
+	// neither resend nor unsent is justified. Keep the slot until readback
+	// supplies terminal evidence (or the Owner explicitly closes isolation).
+	return "unknown_execution"
 }
 
 // RecordStgRecovery serializes a readback with other observers and senders.
-// It returns resend only as a request to run the entire final gate again;
-// this result itself is never a sending licence and never debits a budget.
+// Absence cannot grant another send or end execution occupancy. A matching
+// late UID remains bindable even while quarantined and with live/none off.
 func RecordStgRecovery(ctx context.Context, db DB, batch string, try int64, obs StgRunObservation) (string, error) {
 	out := "wait"
 	err := InTx(ctx, db, func(tx pgx.Tx) error {

@@ -68,8 +68,8 @@ func PrepareNamedDeliverRun(in NamedDeliverInput, pipe *unstructured.Unstructure
 }
 
 // ReadNamedDeliverRun is the recovery read. It preserves Kubernetes NotFound
-// versus Forbidden/timeout; B5-c decides whether a 404 proves unsent using its
-// binding, deadline and finalizer-probe facts. This method never creates.
+// versus Forbidden/timeout. A 404 does not rule out an in-flight POST, even
+// after the permit deadline with retention. This method never creates.
 func (a *STGReleaseAdapter) ReadNamedDeliverRun(ctx context.Context, in NamedDeliverInput) (*unstructured.Unstructured, error) {
 	id, err := in.Identity()
 	if err != nil {
@@ -102,6 +102,8 @@ func (a *STGReleaseAdapter) CreateNamedDeliverRun(ctx context.Context, in NamedD
 // CreatePermittedNamedDeliverRun checks a committed B5-c licence at the last
 // boundary, after Pipeline/window reads and immediately before the POST. A
 // caller paused during those reads cannot send on an expired generation.
+// Once POST begins, expiry/timeout cannot prove server-side cancellation;
+// recovery must retain occupancy until the outcome can be reconciled.
 func (a *STGReleaseAdapter) CreatePermittedNamedDeliverRun(ctx context.Context, in NamedDeliverInput, permit func(context.Context) error) (cluster.ActuationResponse, *unstructured.Unstructured, error) {
 	if permit == nil {
 		return cluster.ActuationResponse{}, nil, fmt.Errorf("STG send permit required")

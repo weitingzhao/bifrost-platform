@@ -208,7 +208,7 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 		if obs.CI.Status == "Failed" {
 			return refuse("ci_red")
 		}
-		if obs.CI.Status == "Running" || obs.CI.Status == "Missing" {
+		if obs.CI.Reason == "" && (obs.CI.Status == "Running" || obs.CI.Status == "Missing" || obs.CI.Status == "Unknown") {
 			return refuse("ci_waiting")
 		}
 		return refuse("ci_results")
@@ -221,7 +221,11 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 	if obs.CI.ReadAt.After(at) {
 		return refuse("observation_expired")
 	}
-	for _, c := range obs.Commits {
+	// Authorize the entire range before deriving its debit set. A disposed
+	// original still needs authorization, as does its recorded reversal.
+	authorized := map[string]int{}
+	members := make([]StgMemberKey, 0, len(obs.Commits))
+	for i, c := range obs.Commits {
 		op := landinggit.LandedOperation(c.Message)
 		o, ok := s.Legacy.Operations[op]
 		if op == "" || !ok || !o.EverLanded || o.R != c.SHA || o.DryRun || !landinggit.HasTaskTrailer(c.Message, o.Task) {
@@ -254,7 +258,21 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 		} else if a.RuleVersion < 1 || facts.Rules[binding.Tenant].Landing.CheckChanges("bifrost-platform", c.Changes) != nil {
 			return refuse("rule")
 		}
-		if old := s.Members[m]; old.To != "delivered" && old.To != "covered" && !s.covered(m) {
+		authorized[c.SHA] = i
+		members = append(members, m)
+	}
+	for i, m := range members {
+		old := s.Members[m]
+		if old.To == "disposed" {
+			ref, _ := cardNumber(old.Ref)
+			proof := s.Records[ref].Record
+			reversal, inRange := authorized[proof.String("by")]
+			if proof.String("kind") != "reverted" || proof.String("op") != m.Op || proof.String("R") != m.R || !inRange || reversal <= i {
+				return refuse("diff_unlanded")
+			}
+			continue
+		}
+		if old.To != "delivered" && old.To != "covered" && !s.covered(m) {
 			d.Set = append(d.Set, m)
 		}
 	}

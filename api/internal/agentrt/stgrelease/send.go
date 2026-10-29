@@ -117,8 +117,9 @@ func (s Sender) observe(ctx context.Context, intent, permit, bound int64, in del
 	return obs, nil // transport failure remains an unknown observation
 }
 
-// Recover observes first even with live off/none. Only a proven unbound 404
-// after the latest deadline can enter AuthorizeStgRelease again.
+// Recover observes even with live off/none. An expired, unbound 404 isolates
+// execution: a previously dispatched POST may still complete. Recovery never
+// sends again; matching late objects remain observable while quarantined.
 func (s Sender) Recover(ctx context.Context, batch string, try int64) (string, error) {
 	state, err := store.ReadStgRelease(ctx, s.DB)
 	if err != nil {
@@ -134,20 +135,5 @@ func (s Sender) Recover(ctx context.Context, batch string, try int64) (string, e
 	if err != nil {
 		return "", err
 	}
-	action, err := store.RecordStgRecovery(ctx, s.DB, batch, try, obs)
-	if err != nil || action != "resend" {
-		return action, err
-	}
-	proof := &store.StgNotFoundProof{IntentSeq: obs.IntentSeq, PermitSeq: obs.PermitSeq, ReadAt: obs.ReadAt, FinalizerGuaranteed: obs.FinalizerGuaranteed}
-	p, d, err := store.AuthorizeStgRelease(ctx, s.DB, batch, try, s.Gate, proof)
-	if err != nil {
-		return "wait", err
-	}
-	if !d.Allowed {
-		if d.Why == "not_ready" {
-			return "wait", nil
-		}
-		return "unsent", nil
-	}
-	return "resend", s.send(ctx, p)
+	return store.RecordStgRecovery(ctx, s.DB, batch, try, obs)
 }

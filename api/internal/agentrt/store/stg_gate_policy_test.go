@@ -308,7 +308,7 @@ func TestStgRecoveryTable(t *testing.T) {
 		delta            time.Duration
 		uid, want        string
 	}{
-		{"not_found", false, true, -time.Second, "", "wait"}, {"not_found", false, true, 0, "", "resend"}, {"not_found", false, false, 0, "", "unknown_execution"},
+		{"not_found", false, true, -time.Second, "", "wait"}, {"not_found", false, true, 0, "", "unknown_execution"}, {"not_found", false, false, 0, "", "unknown_execution"},
 		{"not_found", true, true, 0, "", "object_lost"}, {"unknown", false, true, 0, "", "wait"}, {"unknown", true, true, 0, "", "wait"},
 		{"found", false, true, -time.Second, "uid", "bound"}, {"found", true, true, 0, "uid", "bound"}, {"found", true, true, 0, "other", "object_lost"},
 		{"collision", false, true, 0, "", "collision"}, {"collision", true, true, 0, "", "object_lost"},
@@ -342,7 +342,7 @@ func TestStgRecoveryStaleAbsenceCannotQuarantineNewBinding(t *testing.T) {
 	tr := h.state().Batches[stgTestBatch].Tries[1]
 	at := tr.Permit.Record.Time("deadline")
 	obs := StgRunObservation{IntentSeq: tr.Started.Seq, PermitSeq: tr.Permit.Seq, Kind: "not_found", ReadAt: at, FinalizerGuaranteed: true}
-	if got := StgRecoveryDecision(tr, obs, at); got != "resend" {
+	if got := StgRecoveryDecision(tr, obs, at); got != "unknown_execution" {
 		t.Fatal("unbound control", got)
 	}
 	tr.Bound = StgEvent{Seq: 99, At: at, Record: StgRecord{"uid": "new-uid"}}

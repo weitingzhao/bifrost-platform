@@ -160,7 +160,7 @@ func TestStgGatePGFirstPermitAndDuplicate(t *testing.T) {
 
 // Serial: FreezeEventClock. none disables sends but keeps facts recordable.
 func TestStgGatePGNoneRecoveryAndBudget(t *testing.T) {
-	for _, mode := range []string{"resend", "unsent", "observe under none", "none first"} {
+	for _, mode := range []string{"enabled absence", "none absence", "observe under none", "none first"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
 			if mode == "none first" {
@@ -181,7 +181,7 @@ func TestStgGatePGNoneRecoveryAndBudget(t *testing.T) {
 			p := x.permit(t)
 			at := p.Deadline.Add(time.Second)
 			x.advance(at)
-			if mode != "resend" {
+			if mode != "enabled absence" {
 				x.none(t)
 			}
 			if mode == "observe under none" {
@@ -206,12 +206,8 @@ func TestStgGatePGNoneRecoveryAndBudget(t *testing.T) {
 			if s.Budget[store.StgBudgetKey{R: commitB, Gen: 1}] != 1 {
 				t.Fatal("resend debited or unsent refunded")
 			}
-			if mode == "resend" {
-				if !d.Allowed || q.IntentSeq != p.IntentSeq || q.PermitSeq == p.PermitSeq || tr.Permit.Record.String("kind") != "resend" {
-					t.Fatal(q, d)
-				}
-			} else if d.Allowed || d.Why != "rule" || tr.Unsent.Seq == 0 || tr.Occupied() {
-				t.Fatal("none did not end proven unsent", d, tr)
+			if d.Allowed || d.Why != "unknown_execution" || q.IntentSeq != 0 || tr.Permit.Seq != p.PermitSeq || tr.Unsent.Seq != 0 || !tr.Occupied() || !tr.IsQuarantined() {
+				t.Fatal("absence must retain occupancy without a new permit", q, d, tr)
 			}
 		})
 	}

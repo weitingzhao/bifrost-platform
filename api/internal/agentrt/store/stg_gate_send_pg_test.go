@@ -19,11 +19,12 @@ import (
 // b5Runs uses the real frozen-object constructor and identity matcher. It
 // models a lost response after creation, without running a control loop.
 type b5Runs struct {
-	pipe, obj *unstructured.Unstructured
-	creates   int
-	lost      bool
-	before    func()
-	readErr   error
+	pipe, obj  *unstructured.Unstructured
+	creates    int
+	lost       bool
+	before     func()
+	afterCheck func()
+	readErr    error
 }
 
 func b5RunAdapter(t *testing.T) *b5Runs {
@@ -49,6 +50,9 @@ func (r *b5Runs) CreatePermittedNamedDeliverRun(ctx context.Context, in delivery
 	}
 	if err := permit(ctx); err != nil {
 		return cluster.ActuationResponse{}, nil, err
+	}
+	if r.afterCheck != nil {
+		r.afterCheck()
 	}
 	obj, err := delivery.PrepareNamedDeliverRun(in, r.pipe)
 	if err != nil {
@@ -114,16 +118,16 @@ func TestStgGatePGSenderNoneAndLostResponse(t *testing.T) {
 }
 
 // Serial: FreezeEventClock. Unknown GETs keep the slot; a retained-object
-// 404 under withdrawn authorization ends unsent without refund or Create.
-func TestStgGatePGSenderUnsentAndQuarantine(t *testing.T) {
-	for _, mode := range []string{"unsent", "no retention", "bound lost", "unknown"} {
+// 404 under withdrawn authorization isolates without refund or Create.
+func TestStgGatePGSenderAbsenceAndQuarantine(t *testing.T) {
+	for _, mode := range []string{"none absence", "no retention", "bound lost", "unknown"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
 			p := x.permit(t)
 			x.advance(p.Deadline.Add(time.Second))
 			runs := b5RunAdapter(t)
 			sender := stgrelease.Sender{DB: x.w.rt, Runs: runs, Gate: x.src, FinalizerGuaranteed: mode != "no retention"}
-			if mode == "unsent" {
+			if mode == "none absence" {
 				x.none(t)
 			}
 			if mode == "bound lost" {
@@ -141,8 +145,8 @@ func TestStgGatePGSenderUnsentAndQuarantine(t *testing.T) {
 				t.Fatal("recovery created", mode, runs.creates)
 			}
 			switch mode {
-			case "unsent":
-				if action != "unsent" || tr.Unsent.Seq == 0 || tr.Occupied() {
+			case "none absence":
+				if action != "unknown_execution" || tr.Unsent.Seq != 0 || !tr.Occupied() || !tr.IsQuarantined() {
 					t.Fatal(action, tr)
 				}
 			case "unknown":
