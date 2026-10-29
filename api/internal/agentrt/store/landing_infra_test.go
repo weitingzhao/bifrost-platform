@@ -226,7 +226,9 @@ func TestS6SignedRuleRequiredBeforeInfraModePG(t *testing.T) {
 	w.passRound(t, task, "h1", "h2", "h3")
 	op, d, err := store.ClaimLanding(ctx, w.rt, store.LandingSource{}, "prod", task, time.Now())
 	ok(t, err)
-	if op != "" || d.Reason != "rule" || w.lastSeq(t, infraStream) != 0 {
+	// Eligibility judges mode before rule: v1 never recorded infra's live
+	// mode, so the claim stops there, before any evidence is read.
+	if op != "" || d.Reason != "mode" || w.lastSeq(t, infraStream) != 0 {
 		t.Fatal("v1 claimed or read external evidence", op, d)
 	}
 	_, err = s.sign(w, ruleText("landing:dev", 2, "loosen", since, until, infraRuleBody))
@@ -394,7 +396,10 @@ func TestS6UnknownRepoRefusedBeforeEvidencePG(t *testing.T) {
 	if op != "" || d.Reason != "repo" {
 		t.Fatal(op, d)
 	}
-	if w.lastSeq(t, "landing:bifrost-research") != 0 {
+	// An unknown repository has no landing stream at all: none is created.
+	var streams int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event_stream WHERE event_stream_id = 'landing:bifrost-research'`).Scan(&streams))
+	if streams != 0 {
 		t.Fatal("unknown stream written")
 	}
 }
