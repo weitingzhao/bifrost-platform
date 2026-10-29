@@ -68,6 +68,12 @@ func TestB4PartialEvidenceKeepsTheRound(t *testing.T) {
 	if lc["to"] != "done" || lc["round"] != float64(1) || lc["delivered"] != float64(2) || len(roots) != 2 {
 		t.Fatalf("close record: %v", lc)
 	}
+	// Review 675 N-01: each delivery keeps when its evidence was read.
+	for _, r := range roots {
+		if m, _ := r.(map[string]any); m["evidence_read_at"] == nil {
+			t.Fatalf("a delivered root without its evidence time: %v", r)
+		}
+	}
 	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
 	ok(t, err)
 	if status.Closed == nil || status.Closed.To != "done" || status.Closed.Delivered != 2 || len(status.Closed.Roots) != 2 {
@@ -341,10 +347,29 @@ func TestB4CardRecordsBindTheirAnswer(t *testing.T) {
 	if err := put("landing_card_outcome", outcome(c.Kind, "do_not_merge", "acknowledged", "ack")); err == nil {
 		t.Error("an outcome not following its choice was accepted")
 	}
+	// Review 675 R-03: the choice must be what this card offered under its
+	// letter (b is do_not_merge here), and one note carries one record.
+	if err := put("landing_card_outcome", outcome(c.Kind, "try_again", "moot", "trigger_gone")); err == nil {
+		t.Error("a choice the card did not offer under its letter was accepted")
+	}
+	if err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: root,
+			Body: map[string]any{"text": "two", "landing_card_outcome": outcome(c.Kind, "do_not_merge", "moot", "trigger_gone"),
+				"landing_answer": map[string]any{"question_id": "q1"}}})
+		return err
+	}); err == nil {
+		t.Error("a note with two handling records was accepted")
+	}
 	f.answer("q1", "b", answered) // do_not_merge: §8's landing_answer
 	cardPass(t, w, f, at.Add(2*time.Minute))
 	if err := put("landing_card_outcome", outcome(c.Kind, "do_not_merge", "moot", "trigger_gone")); err == nil {
 		t.Error("a second record for a handled question was accepted")
+	}
+	// Replaying the §8 record itself is refused too.
+	var stored map[string]any
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'landing_answer' FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_answer'->>'question_id' = 'q1'`, landingRepoStream).Scan(&stored))
+	if err := put("landing_answer", stored); err == nil {
+		t.Error("a second landing_answer for a handled question was accepted")
 	}
 	v, found, err := store.ReadLandingCard(ctx, w.rt, "bifrost-platform", "q1")
 	ok(t, err)

@@ -139,14 +139,20 @@ func badCardOutcomeChoice(m map[string]any) string {
 // once per question across both handling records (review 672 R-03). A §8
 // landing_answer is refused for a question a card outcome already handled.
 func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
+	_, answer := ev.Body["landing_answer"]
+	_, outcome := ev.Body["landing_card_outcome"]
+	if answer && outcome {
+		return fmt.Errorf("one handling record per note: landing_answer or landing_card_outcome") // review 675 R-03
+	}
 	if a, ok := ev.Body["landing_answer"].(map[string]any); ok {
+		// One handling record per question, of either kind (review 675 R-03).
 		var other bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND body_json->'landing_card_outcome'->>'question_id' = $2)`, ev.Stream, fmt.Sprint(a["question_id"])).Scan(&other); err != nil {
+		  AND (body_json->'landing_card_outcome'->>'question_id' = $2 OR body_json->'landing_answer'->>'question_id' = $2))`, ev.Stream, fmt.Sprint(a["question_id"])).Scan(&other); err != nil {
 			return err
 		}
 		if other {
-			return fmt.Errorf("question %v was handled by its card outcome already", a["question_id"])
+			return fmt.Errorf("question %v is handled once", a["question_id"])
 		}
 	}
 	v, ok := ev.Body["landing_card_outcome"]
@@ -180,6 +186,17 @@ func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	gen, _ := cardNumber(m["stop_generation"])
 	if !c.Bound || c.QuestionID != qid || c.Kind != m["kind"] || c.Root != root || c.Op != op || c.TriggerSeq != seq || c.StopGeneration != gen {
 		return fmt.Errorf("landing_card_outcome names its card's bound question, kind, root, operation and trigger")
+	}
+	// The choice is the one this card offered under its letter, not just a
+	// choice of its kind (review 675 R-03); an unknown letter has no choice.
+	letter, _ := m["letter"].(string)
+	choice, _ := m["choice"].(string)
+	if offered, ok := c.Options[letter]; ok {
+		if choice != offered {
+			return fmt.Errorf("landing_card_outcome choice %q is not what the card offered as %q", choice, letter)
+		}
+	} else if choice != "" {
+		return fmt.Errorf("landing_card_outcome letter %q is not one the card offered", letter)
 	}
 	return nil
 }
@@ -340,7 +357,10 @@ func storedCardRecord(ctx context.Context, tx pgx.Tx, c CardRecord, questionID s
 	default:
 		root, _ := r.other["root"].(string)
 		op, _ := r.other["op"].(string)
-		if why := badCardOutcome(r.other); why != "" || r.other["prep"] != c.Prep || r.other["kind"] != c.Kind || root != c.Root || op != c.Op || r.task != c.Root {
+		seq, _ := cardNumber(r.other["trigger_seq"])
+		gen, _ := cardNumber(r.other["stop_generation"])
+		if why := badCardOutcome(r.other); why != "" || r.other["prep"] != c.Prep || r.other["kind"] != c.Kind || root != c.Root || op != c.Op || r.task != c.Root ||
+			seq != c.TriggerSeq || gen != c.StopGeneration {
 			return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s was recorded for %v (%s)", c.Prep, questionID, r.other["prep"], why)
 		}
 	}

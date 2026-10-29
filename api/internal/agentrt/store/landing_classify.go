@@ -40,6 +40,9 @@ type LandingRootClass struct {
 	// its operation's main.
 	key  string
 	read bool
+	// evidenceAt: when the main evidence a delivery rests on was read (a
+	// delivery in the closing round); zero otherwise (review 675 N-01).
+	evidenceAt time.Time
 }
 
 // closeSnapshot is the mission's closing-round snapshot: every in-scope
@@ -352,7 +355,7 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		for _, f := range fresh {
 			if f.readAt.After(round.At) {
 				r := &roots[f.i]
-				r.Class, r.Reason, r.NeedsEvidence = RootDelivered, "landed", false
+				r.Class, r.Reason, r.NeedsEvidence, r.evidenceAt = RootDelivered, "landed", false, f.readAt
 			}
 		}
 	}
@@ -447,13 +450,19 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	}
 	// What the close decided on, kept apart from what is read later (review
 	// 672 N-01): the policy, the round, each root's class and the counts.
+	// The round is named only when a delivery rests on its evidence; each
+	// root keeps when that evidence was read (review 675 N-01).
 	var roundN int64
-	if round != nil && delivered > 0 {
-		roundN = round.Round
-	}
 	list := make([]any, 0, len(roots))
 	for _, r := range roots {
-		list = append(list, map[string]any{"root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason})
+		item := map[string]any{"root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason}
+		if !r.evidenceAt.IsZero() {
+			item["evidence_read_at"] = r.evidenceAt.UTC().Format(time.RFC3339Nano)
+			if round != nil {
+				roundN = round.Round
+			}
+		}
+		list = append(list, item)
 	}
 	if _, err := Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "note", Actor: "controller", MissionID: mission,
 		Body: map[string]any{"text": why, "landing_close": map[string]any{"v": "1", "to": to, "at": at.UTC().Format(time.RFC3339Nano),
@@ -545,6 +554,11 @@ func badLandingClose(v any) string {
 		}
 		if c := x["class"]; c != RootDelivered && c != RootDisposed {
 			return "landing_close root is delivered or disposed"
+		}
+		if e, has := x["evidence_read_at"]; has {
+			if _, err := time.Parse(time.RFC3339Nano, fmt.Sprint(e)); err != nil {
+				return "landing_close root evidence_read_at is not a time"
+			}
 		}
 	}
 	return ""
