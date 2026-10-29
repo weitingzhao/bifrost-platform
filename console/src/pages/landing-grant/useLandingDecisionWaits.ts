@@ -1,13 +1,13 @@
 import { useQueries } from '@tanstack/react-query'
 import type { ApprovalItem } from '@/api/approvals'
 import { fetchLandingWait, isLandingAction } from '@/api/landingGrant'
-import { useConfirmedReads } from './useConfirmedRead'
+import { confirmedReadOptions, useConfirmedReads } from './useConfirmedRead'
 
 /** §5.8: a stale request or an already-authorized operation is not an Owner decision. */
 export function useLandingDecisionWaits(items: readonly ApprovalItem[]) {
   const landing = items.filter(item => item.status === 'pending' && isLandingAction(item.action) && !item.drill)
   const ops = [...new Set(landing.map(item => typeof item.params?.op === 'string' ? item.params.op : ''))]
-  const reads = useQueries({ queries: ops.map(op => ({ queryKey: ['landing-wait', op], queryFn: ({ signal }: { signal: AbortSignal }) => fetchLandingWait(op, signal), enabled: op !== '', retry: false, refetchInterval: 15_000 })) })
+  const reads = useQueries({ queries: ops.map(op => ({ queryKey: ['landing-wait', op], ...confirmedReadOptions(({ signal }) => fetchLandingWait(op, signal)), enabled: op !== '', retry: false, refetchInterval: 15_000 })) })
   const confirmed = useConfirmedReads(reads)
   const eligible = new Set<string>()
   let unreadable = false, loading = false

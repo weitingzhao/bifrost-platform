@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { onlineManager } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import wire from '@/api/__fixtures__/landing-grant.go.json'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
@@ -14,7 +15,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-29T13:00:00Z'))
   window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'fixture-only')
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); onlineManager.setOnline(true) })
 
 function setup(kind: 'core' | 'guardrail' | 'other' = 'core', mutate?: (m: LandingMaterialResponse) => void, status = 200) {
   const data = parseLandingMaterial(structuredClone(kind === 'guardrail' ? wire.guardrail : wire.core))!
@@ -41,6 +42,28 @@ function setup(kind: 'core' | 'guardrail' | 'other' = 'core', mutate?: (m: Landi
   return { item, posts, fetch }
 }
 describe('C-6 approval branches', () => {
+  it('A-02: remount after an unobserved reconnect keeps approval disabled until fresh material arrives', async () => {
+    const { fetch } = setup('guardrail')
+    const baseFetch = fetch.getMockImplementation()!
+    let hold = false
+    let release: (() => void) | undefined
+    fetch.mockImplementation(async (input, init) => {
+      if (hold && String(input).includes('/material?')) await new Promise<void>(resolve => { release = resolve })
+      return baseFetch(input, init)
+    })
+    const view = wrapper(<ApprovalsPage />)
+    const first = render(view)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve approve_guardrail_landing' }).hasAttribute('disabled')).toBe(false))
+    first.unmount()
+    await act(async () => { onlineManager.setOnline(false) })
+    await act(async () => { onlineManager.setOnline(true) })
+    hold = true
+    render(view)
+    await waitFor(() => expect(release).toBeDefined())
+    expect(screen.getByRole('button', { name: 'Approve approve_guardrail_landing' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => { release?.() })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve approve_guardrail_landing' }).hasAttribute('disabled')).toBe(false))
+  })
   it('requires the Gitea checkbox for a decision-chain core change and sends confirm_number', async () => {
     const { posts } = setup()
     render(wrapper(<ApprovalsPage />))

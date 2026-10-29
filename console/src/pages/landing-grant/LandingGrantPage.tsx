@@ -5,7 +5,7 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import { GrantStatus, WaitStatus } from './GrantStatus'
 import { MaterialEvidence } from './MaterialEvidence'
-import { useConfirmedReads } from './useConfirmedRead'
+import { confirmedReadOptions, useConfirmedReads } from './useConfirmedRead'
 
 function readLocation() {
   const q = new URLSearchParams(window.location.hash.split('?')[1])
@@ -28,8 +28,8 @@ export function LandingGrantContent({ op, stg = true }: { op: string; stg?: bool
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const [notice, setNotice] = useState('')
-  const material = useQuery({ queryKey: ['landing-material', op, stg], queryFn: ({ signal }) => fetchLandingMaterial(op, stg, signal), enabled: op !== '', retry: false, refetchInterval: 15_000 })
-  const status = useQuery({ queryKey: ['landing-wait', op], queryFn: ({ signal }) => fetchLandingWait(op, signal), enabled: op !== '', retry: false, refetchInterval: 15_000 })
+  const material = useQuery({ queryKey: ['landing-material', op, stg], ...confirmedReadOptions(({ signal }) => fetchLandingMaterial(op, stg, signal)), enabled: op !== '', retry: false, refetchInterval: 15_000 })
+  const status = useQuery({ queryKey: ['landing-wait', op], ...confirmedReadOptions(({ signal }) => fetchLandingWait(op, signal)), enabled: op !== '', retry: false, refetchInterval: 15_000 })
   const [statusNow, materialNow] = useConfirmedReads([status, material])
   const refresh = () => { void material.refetch(); void status.refetch() }
   async function revoke(id: string) {

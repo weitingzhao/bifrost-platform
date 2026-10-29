@@ -212,7 +212,14 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			if grantRun, err = src.GrantCI(ctx, *grantKey, o.PreparedAt); err != nil {
 				return err
 			}
-			if grantRun.Run != "" && grantRun.Run != grant.CI.Run {
+			// A PipelineRun name can be reused after deletion. Require a
+			// complete object identity and a newer creation time;
+			// missing, older or future-dated evidence cannot retire a grant.
+			approvedCreatedAt, parseErr := time.Parse(time.RFC3339Nano, grant.CI.CreatedAt)
+			if parseErr == nil && grant.CI.Run != "" && grant.CI.UID != "" &&
+				grantRun.Run != "" && grantRun.UID != "" &&
+				(grantRun.Run != grant.CI.Run || grantRun.UID != grant.CI.UID) &&
+				grantRun.CreatedAt.After(approvedCreatedAt) && !grantRun.CreatedAt.After(final) {
 				decision = landing.Decision{Reason: "grant_stale"}
 				return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
 			}
