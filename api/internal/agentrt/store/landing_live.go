@@ -415,18 +415,13 @@ func badLandingGate(v any) string {
 	if created.After(decided) {
 		return "landing_gate CI is later than the decision"
 	}
-	var version float64
-	switch n := m["rule_version"].(type) {
-	case int:
-		version = float64(n)
-	case int64:
-		version = float64(n)
-	case float64:
-		version = n
-	default:
+	// Appends carry Go integers; canonical reads of stored JSONB carry
+	// json.Number. Validate both without rounding a stored rule version.
+	version, ok := cardNumber(m["rule_version"])
+	if !ok {
 		return "landing_gate needs rule_version"
 	}
-	if version < 1 || version != float64(int64(version)) {
+	if version < 1 {
 		return "landing_gate rule_version is not a version"
 	}
 	return ""

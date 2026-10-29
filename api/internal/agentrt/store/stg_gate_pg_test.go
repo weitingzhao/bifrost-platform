@@ -48,6 +48,7 @@ func b5Ready(t *testing.T) *b5Fixture {
 	w, root, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
 	t.Cleanup(store.FreezeEventClock(at))
+	b5AssertRule(t, w, at, 1, "bifrost-deliver-platform")
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
 	if !d.Allowed {
@@ -57,6 +58,19 @@ func b5Ready(t *testing.T) *b5Fixture {
 	ok(t, err)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "landed", "R", commitB)))
 	return b5Snapshot(t, w, root, op, at)
+}
+
+func b5AssertRule(t *testing.T, w *world, at time.Time, version int, release string) {
+	t.Helper()
+	r := inForce(t, w, "landing:dev", at)
+	if r == nil || r.Landing == nil {
+		t.Fatalf("B5 fixture: no landing rule at %s: %+v", at.Format(time.RFC3339Nano), r)
+	}
+	repo, found := r.Landing.Repo("bifrost-platform")
+	t.Logf("B5 fixture: rule=%s version=%d signed=%t stg_release=%q", r.ID, r.Version, r.SignedBy != "", repo.STGRelease)
+	if !found || r.Version != version || repo.STGRelease != release || release != "none" && r.SignedBy == "" {
+		t.Fatalf("B5 fixture: want rule version=%d stg_release=%q (signature required when enabled)", version, release)
+	}
 }
 
 func b5Snapshot(t *testing.T, w *world, root, op string, at time.Time) *b5Fixture {
@@ -111,6 +125,7 @@ func (x *b5Fixture) none(t *testing.T) {
 	body := strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: none", 1)
 	_, err := store.TightenRule(ctx, x.w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", since, until, body)))
 	ok(t, err)
+	b5AssertRule(t, x.w, store.DecisionAt(), 2, "none")
 }
 
 // Serial: FreezeEventClock and real PostgreSQL transactions.
@@ -260,6 +275,8 @@ func TestStgGatePGTwoConnectionsOnePermit(t *testing.T) {
 	}()
 	select {
 	case <-held:
+	case got := <-one:
+		t.Fatalf("first gate returned before permit: permit=%+v decision=%+v err=%v", got.p, got.d, got.err)
 	case <-c.Done():
 		t.Fatal("first gate did not reach permit")
 	}
@@ -307,6 +324,7 @@ func TestStgGatePGConsumedCoreGrant(t *testing.T) {
 	ok(t, err)
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(c.op, "landed", "R", commitB)))
 	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, landingRuleBody))))
+	b5AssertRule(t, c.w, store.DecisionAt(), 2, "bifrost-deliver-platform")
 	x := b5Snapshot(t, c.w, c.root, c.op, store.DecisionAt())
 	x.obs.Commits[0].Changes[0].OldPath = c5Core
 	x.obs.Commits[0].Changes[0].NewPath = c5Core
