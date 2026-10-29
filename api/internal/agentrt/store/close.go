@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -163,6 +164,10 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 const landingHoldLimit = landing.ClaimWindow + 15*time.Minute
 
 func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string, now time.Time) (bool, error) {
+	return landingHoldsExcept(ctx, tx, folds, mission, now, nil)
+}
+
+func landingHoldsExcept(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string, now time.Time, except map[string]bool) (bool, error) {
 	type root struct {
 		task     string
 		accepted *time.Time
@@ -181,6 +186,9 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 			rows.Close()
 			return false, err
 		}
+		if except[repo] {
+			continue
+		}
 		if len(roots[repo]) == 0 {
 			repos = append(repos, repo)
 		}
@@ -195,6 +203,7 @@ func landingHolds(ctx context.Context, tx pgx.Tx, folds landingFolds, mission st
 	if err = tx.QueryRow(ctx, `SELECT created_at, COALESCE(scope_json->>'no_merge','') <> '' FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&created, &noMerge); err != nil {
 		return false, err
 	}
+	slices.Sort(repos) // byte order, independent of database collation
 	held := false
 	for _, repo := range repos {
 		stream := "landing:" + repo

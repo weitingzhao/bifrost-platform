@@ -39,6 +39,26 @@ afterEach(() => {
 })
 
 describe('Landing on the goal detail', () => {
+  it('groups roots by repository and gives infra a split/manual path without an approval entry', async () => {
+    landingBody = { ...fixture, roots: [
+      { ...fixture.roots[0], root: 'infra-root', repo: 'bifrost-trade-infra', reason: 'failed:floor', grant_supported: false, floor: { soft: ['size'], grant_supported: false } },
+      { ...fixture.roots[1], repo: 'bifrost-platform' },
+    ] }
+    mount()
+    const block = within(await screen.findByRole('region', { name: 'Landing' }))
+    const repos = block.getAllByRole('heading', { level: 5 })
+    expect(repos.map(h => h.textContent)).toEqual(['bifrost-platform', 'bifrost-trade-infra'])
+    const infra = within(block.getByRole('region', { name: 'bifrost-trade-infra' }))
+    expect(infra.getByText('Outside the infra landing scope. Split the change or have the Owner push it manually.')).toBeVisible()
+    expect(infra.queryByText(/Request.*approval/i)).not.toBeInTheDocument()
+    expect(within(block.getByRole('region', { name: 'bifrost-platform' })).queryByText('infra-root')).not.toBeInTheDocument()
+  })
+  it('never renders a grant entry for infra, even if a future response includes a wait reason', async () => {
+    landingBody = { ...fixture, roots: [{ ...fixture.roots[0], repo: 'bifrost-trade-infra', reason: 'awaiting_grant' }] }
+    mount()
+    await screen.findByRole('region', { name: 'bifrost-trade-infra' })
+    expect(screen.queryByRole('link', { name: 'Landing authorization material' })).not.toBeInTheDocument()
+  })
   it('shows counts, classes, reasons, closing time and existing task/question links', async () => {
     mount()
     const block = within(await screen.findByRole('region', { name: 'Landing' }))

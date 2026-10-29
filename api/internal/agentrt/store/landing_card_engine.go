@@ -105,6 +105,9 @@ func landingCardBody(repo string, tr CardTrigger) string {
 		}
 		return fmt.Sprintf("Repository %s: the landing of this task (operation %s) failed at %s: %s. It cannot be tried again: do not merge ends it, or decide later.", repo, tr.Op, at, tr.Why)
 	case CardFloor:
+		if repo == "bifrost-trade-infra" && tr.Floor["soft"] != nil {
+			return fmt.Sprintf("Repository %s: this change exceeds the infra landing scope (%s, %s). Split the change or have the Owner push it manually. Infra does not support landing approvals.", repo, tr.Op, at)
+		}
 		return fmt.Sprintf("Repository %s: this task's change touches what no landing rule can allow (%s, %s). It can only be ended: do not merge, or decide later.", repo, tr.Op, at)
 	case CardOkMissing:
 		return fmt.Sprintf("Repository %s: the push of %s was reported accepted at %s, but main does not show it. Confirm it is lost to end it, or decide later.", repo, tr.Op, at)

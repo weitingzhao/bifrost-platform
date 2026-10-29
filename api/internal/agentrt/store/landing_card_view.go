@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // LandingCardView is what a landing card asked and what became of its
@@ -12,10 +14,10 @@ import (
 // landing_card_outcome), whatever the question store still holds. Found
 // false when no card was bound to the question.
 type LandingCardView struct {
-	QuestionID, Prep, Kind, Root, Op, ClosedWhy string
-	TriggerSeq, StopGeneration                  int64
-	Acked, Closed                               bool
-	Options                                     map[string]string
+	Repo, QuestionID, Prep, Kind, Root, Op, ClosedWhy string
+	TriggerSeq, StopGeneration                        int64
+	Acked, Closed                                     bool
+	Options                                           map[string]string
 	// Outcome is the handling record as stored; nil before the answer is
 	// handled.
 	Outcome map[string]any
@@ -37,7 +39,7 @@ func ReadLandingCard(ctx context.Context, db DB, repo, questionID string) (Landi
 				continue
 			}
 			found = true
-			v = LandingCardView{QuestionID: questionID, Prep: c.Prep, Kind: c.Kind, Root: c.Root, Op: c.Op, ClosedWhy: c.ClosedWhy,
+			v = LandingCardView{Repo: repo, QuestionID: questionID, Prep: c.Prep, Kind: c.Kind, Root: c.Root, Op: c.Op, ClosedWhy: c.ClosedWhy,
 				TriggerSeq: c.TriggerSeq, StopGeneration: c.StopGeneration, Acked: c.Acked, Closed: c.Closed, Options: c.Options}
 		}
 		if !found {
@@ -91,4 +93,24 @@ func landingCardNextStep(v LandingCardView) string {
 func valueString(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+// FindLandingCard resolves a globally unique question across the closed
+// repository registry. A duplicate binding is unreadable, never guessed.
+func FindLandingCard(ctx context.Context, db DB, questionID string) (LandingCardView, bool, error) {
+	var found bool
+	var result LandingCardView
+	for _, repo := range landing.LandingRepoNames() {
+		v, ok, err := ReadLandingCard(ctx, db, repo, questionID)
+		if err != nil {
+			return LandingCardView{}, false, err
+		}
+		if ok {
+			if found {
+				return LandingCardView{}, false, fmt.Errorf("landing question bound to multiple repositories")
+			}
+			result, found = v, true
+		}
+	}
+	return result, found, nil
 }

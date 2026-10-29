@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -117,7 +118,7 @@ func (a *API) getRule(w http.ResponseWriter, r *http.Request) {
 // readable after the question store trimmed the question.
 func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "question_id")
-	v, found, err := store.ReadLandingCard(r.Context(), a.DB, "bifrost-platform", id)
+	v, found, err := store.FindLandingCard(r.Context(), a.DB, id)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -126,7 +127,7 @@ func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no landing card was asked with this question")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"question_id": v.QuestionID, "prep": v.Prep, "kind": v.Kind, "root": v.Root, "op": v.Op,
+	writeJSON(w, http.StatusOK, map[string]any{"repo": v.Repo, "question_id": v.QuestionID, "prep": v.Prep, "kind": v.Kind, "root": v.Root, "op": v.Op,
 		"trigger_seq": v.TriggerSeq, "stop_generation": v.StopGeneration, "acked": v.Acked, "closed": v.Closed, "closed_why": v.ClosedWhy,
 		"options": v.Options, "outcome": v.Outcome, "next_step": v.NextStep})
 }
@@ -153,8 +154,11 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 	}
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
-		root := map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
+		root := map[string]any{"repo": x.Repo, "grant_supported": landing.LandingRepos[x.Repo].GrantSupported, "root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
 			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
+		if x.Floor != nil {
+			root["floor"] = x.Floor
+		}
 		if x.ApprovalID != "" {
 			root["approval_id"] = x.ApprovalID
 		}

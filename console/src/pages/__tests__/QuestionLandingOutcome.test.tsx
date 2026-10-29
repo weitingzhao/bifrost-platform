@@ -124,6 +124,13 @@ describe('QuestionPage landing outcome', () => {
     window.location.hash = `#questions?id=${ID}`
   }
 
+  it('shows the infra repository on its landing receipt', async () => {
+    replies(() => json({ ...landing, repo: 'bifrost-trade-infra' }))
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText('bifrost-trade-infra')).toBeTruthy()
+    expect(posts()).toBe(0)
+  })
+
   it.each([
     ['applied', 'Carried out'], ['moot', 'Not carried out (moot)'],
     ['refused', 'Not carried out (refused)'], ['acknowledged', 'Noted'],

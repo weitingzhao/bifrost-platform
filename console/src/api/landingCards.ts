@@ -21,6 +21,8 @@ export type LandingOutcome = {
   outcome: Outcome; why: string; choice: string; by: string; answered_at: string; remind_at?: string
 }
 export type LandingCard = {
+  repo?: 'bifrost-platform' | 'bifrost-trade-infra'
+
   question_id: string; prep: string; kind: keyof typeof LANDING_KIND_LABELS; root: string; op: string
   trigger_seq: number; stop_generation: number; acked: boolean; closed: boolean; closed_why: string
   options: Record<string, string>; outcome: LandingOutcome | null; next_step: string
@@ -39,6 +41,7 @@ function isOutcome(v: unknown): v is LandingOutcome {
 /** Missing or mistyped fields are unreadable; new, unrelated fields are allowed. */
 export function parseLandingCard(v: unknown): LandingCard | null {
   if (!object(v) || typeof v.question_id !== 'string' || !isQuestionId(v.question_id)
+    || ('repo' in v && v.repo !== 'bifrost-platform' && v.repo !== 'bifrost-trade-infra')
     || !['prep', 'root', 'op', 'closed_why', 'next_step'].every(key => typeof v[key] === 'string')
     || typeof v.kind !== 'string' || !Object.hasOwn(LANDING_KIND_LABELS, v.kind)
     || !count(v.trigger_seq) || !count(v.stop_generation)

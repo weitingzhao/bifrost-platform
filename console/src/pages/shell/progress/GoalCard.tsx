@@ -49,21 +49,26 @@ function GoalResult({ data }: { data: GoalData }) {
 function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalData }) {
   if (!landing.in_scope || !landing.roots.length) return null
   const count = (value: string) => landing.roots.filter(root => root.class === value).length
+  const repos = [...new Set(landing.roots.map(root => root.repo ?? 'bifrost-platform'))].sort()
   return <section aria-label="Landing" className="rounded border border-[var(--card-border)] p-3 text-sm">
     <h4 className="font-semibold">Landing</h4>
     <p>{count('delivered')} delivered, {count('disposed')} disposed, {count('unresolved')} unresolved{landing.closing_round && <> · main is being read again until <time dateTime={landing.closing_round.until}>{landing.closing_round.until}</time></>}</p>
     {landing.closed && <p>Closed as {landing.closed.to} at <time dateTime={landing.closed.at}>{landing.closed.at}</time>: {landing.closed.delivered} delivered, {landing.closed.disposed} disposed ({landing.closed.rule})</p>}
-    <ul className="mt-2 space-y-2">{landing.roots.map(root => <li key={root.root} className="flex flex-wrap items-center gap-2 break-words">
-      <a className="underline [overflow-wrap:anywhere]" href={goalHref(landing.mission_id, root.root)}>{data.tasks.find(task => task.task_id === root.root)?.title || root.root}</a>
-      <DenseTag size="pill" variant={root.class === 'delivered' ? 'success' : root.class === 'unresolved' ? 'warning' : 'neutral'}>{root.class}</DenseTag>
-      <span>{landingReason(root.reason)}</span>
-      {root.op && (root.authorization_wait || root.reason === 'awaiting_grant') && <LandingAuthorization op={root.op} />}
-      {root.parked && <span>since <time dateTime={root.parked.since}>{root.parked.since}</time>{root.parked.remind_at && <>, told at <time dateTime={root.parked.remind_at}>{root.parked.remind_at}</time></>}</span>}
-      {root.card_alert && <DenseTag size="pill" variant="warning">Answer not confirmed: {root.card_alert}</DenseTag>}
-      {root.held && <span>Held on your answer until <time dateTime={root.held.until}>{root.held.until}</time>{root.held.question_id && <> (<a className="underline" href={questionHref(root.held.question_id)}>your answer</a>)</>}</span>}
-      {root.card_pending && <span>A card is waiting to be asked</span>}
-      {root.question_id && <a className="underline" href={questionHref(root.question_id)}>Open question</a>}
-    </li>)}</ul>
+    {repos.map(repo => <section key={repo} aria-label={repo} className="mt-2">
+      <h5 className="font-medium">{repo}</h5>
+      <ul className="mt-2 space-y-2">{landing.roots.filter(root => (root.repo ?? 'bifrost-platform') === repo).map(root => <li key={root.root} className="flex flex-wrap items-center gap-2 break-words">
+        <a className="underline [overflow-wrap:anywhere]" href={goalHref(landing.mission_id, root.root)}>{data.tasks.find(task => task.task_id === root.root)?.title || root.root}</a>
+        <DenseTag size="pill" variant={root.class === 'delivered' ? 'success' : root.class === 'unresolved' ? 'warning' : 'neutral'}>{root.class}</DenseTag>
+        <span>{repo === 'bifrost-trade-infra' && root.reason === 'failed:floor' && (root.floor?.soft?.length ?? 0) > 0
+          ? 'Outside the infra landing scope. Split the change or have the Owner push it manually.' : landingReason(root.reason)}</span>
+        {repo === 'bifrost-platform' && root.grant_supported !== false && root.op && (root.authorization_wait || root.reason === 'awaiting_grant') && <LandingAuthorization op={root.op} />}
+        {root.parked && <span>since <time dateTime={root.parked.since}>{root.parked.since}</time>{root.parked.remind_at && <>, told at <time dateTime={root.parked.remind_at}>{root.parked.remind_at}</time></>}</span>}
+        {root.card_alert && <DenseTag size="pill" variant="warning">Answer not confirmed: {root.card_alert}</DenseTag>}
+        {root.held && <span>Held on your answer until <time dateTime={root.held.until}>{root.held.until}</time>{root.held.question_id && <> (<a className="underline" href={questionHref(root.held.question_id)}>your answer</a>)</>}</span>}
+        {root.card_pending && <span>A card is waiting to be asked</span>}
+        {root.question_id && <a className="underline" href={questionHref(root.question_id)}>Open question</a>}
+      </li>)}</ul>
+    </section>)}
   </section>
 }
 function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Question[]; done: boolean }) {

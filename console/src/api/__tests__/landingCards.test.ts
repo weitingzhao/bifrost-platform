@@ -9,6 +9,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('landing card contract', () => {
+  it('keeps a card repository and accepts old responses without one', () => {
+    for (const repo of ['bifrost-platform', 'bifrost-trade-infra']) {
+      expect(parseLandingCard({ ...fixture, repo })?.repo).toBe(repo)
+    }
+    expect(parseLandingCard(fixture)).toEqual(fixture)
+    for (const repo of ['', 'bifrost-research', null, 7]) expect(parseLandingCard({ ...fixture, repo })).toBeNull()
+  })
   it.each(['applied', 'moot', 'refused', 'held', 'acknowledged'])('reads a 200 %s outcome', async outcome => {
     const body = { ...fixture, outcome: { ...fixture.outcome, outcome, ...(outcome === 'held' ? { remind_at: '2026-10-12T08:00:00Z' } : {}) } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body))))

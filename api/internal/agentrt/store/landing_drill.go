@@ -118,16 +118,27 @@ type drillBinding struct {
 	at       time.Time // the decision time, read once the locks are held (CUT §9)
 }
 
-// bindDrillClaim takes the claim's locks and reads its bindings. The task,
-// then its mission, before the stream (the kernel's lock order). The task
+// bindDrillClaim takes capability and rule shared locks, then the plan
+// step, task, mission and repository stream, matching the final gate's
+// order without its quota reservation lock. The task
 // lock keeps it in this mission (a step rebind waits); the mission lock
 // orders this claim against a close: the close decides first and the facts
 // read the mission done, or this claim commits first and CloseMissions sees
 // it (landingHolds).
 func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task string, now time.Time) (drillBinding, error) {
 	var b drillBinding
-	var mission, repo string
-	if err := tx.QueryRow(ctx, `SELECT mission_id, COALESCE(repo,'') FROM agentrt.task WHERE task_id = $1 FOR SHARE`, task).Scan(&mission, &repo); err != nil {
+	var mission, repo, tenant, step string
+	if err := tx.QueryRow(ctx, `SELECT t.mission_id, COALESCE(t.repo,''), m.tenant, COALESCE(t.plan_node_id,'')
+      FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) WHERE t.task_id=$1`, task).Scan(&mission, &repo, &tenant, &step); err != nil {
+		return b, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
+		return b, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1,hashtext($2))`, ruleLock, "landing:"+tenant); err != nil {
+		return b, err
+	}
+	if err := lockLandingBinding(ctx, tx, task, tenant, step, mission); err != nil {
 		return b, err
 	}
 	if !landing.RepoSupported(repo) {
@@ -135,16 +146,13 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 		return b, nil
 	}
 	if repo != "bifrost-platform" {
-		ready, err := landingRuleIncludes(ctx, tx, "dev", repo)
+		ready, err := landingRuleIncludes(ctx, tx, tenant, repo)
 		if err != nil || !ready {
 			b.settled, b.decision = true, landing.Decision{Reason: "rule"}
 			return b, err
 		}
 	}
 	stream := "landing:" + repo
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission); err != nil {
-		return b, err
-	}
 	if err := lockStream(ctx, tx, stream); err != nil {
 		return b, err
 	}

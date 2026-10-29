@@ -131,6 +131,7 @@ export function LandingOutcomeRecord({ card }: { card: LandingCard }) {
   return (
     <section aria-label="Landing outcome" className="ops-decision-receipt flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium">Landing outcome</h3>
+      <Field label="Repository" value={card.repo ?? 'bifrost-platform'} />
       <Field label="Kind" value={LANDING_KIND_LABELS[card.kind]} />
       {card.outcome !== null ? <>
         <Field label="Status" value={landingStatus(card.outcome)} />

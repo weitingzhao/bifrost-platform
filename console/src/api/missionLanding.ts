@@ -3,6 +3,11 @@ import { serverFetch } from '@/api/serverContact'
 import { parseLandingWait, type LandingWait } from '@/api/landingGrant'
 
 export type MissionLandingRoot = {
+  /** Absent only on responses from the previous platform-only server. */
+  repo?: 'bifrost-platform' | 'bifrost-trade-infra'
+  grant_supported?: boolean
+  floor?: { soft?: unknown[]; grant_supported?: boolean; [key: string]: unknown }
+
   root: string; op: string; class: 'delivered' | 'disposed' | 'unresolved'; reason: string
   needs_evidence: boolean; card_kind: string; question_id: string
   /** A card of this root ended with its answer unknown (review 670 R-07). */
@@ -28,6 +33,10 @@ const time = (v: unknown): v is string => typeof v === 'string' && Number.isFini
 
 function isRoot(v: unknown): v is MissionLandingRoot {
   return object(v) && typeof v.root === 'string' && v.root.trim() !== ''
+    && (!('repo' in v) || v.repo === 'bifrost-platform' || v.repo === 'bifrost-trade-infra')
+    && (!('grant_supported' in v) || typeof v.grant_supported === 'boolean')
+    && (!('floor' in v) || (object(v.floor) && (!('soft' in v.floor) || Array.isArray(v.floor.soft))
+      && (!('grant_supported' in v.floor) || typeof v.floor.grant_supported === 'boolean')))
     && ['op', 'reason', 'card_kind', 'question_id'].every(key => typeof v[key] === 'string')
     && ['delivered', 'disposed', 'unresolved'].some(value => value === v.class)
     && typeof v.needs_evidence === 'boolean'

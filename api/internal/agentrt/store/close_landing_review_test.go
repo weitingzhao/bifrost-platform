@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Serial: FreezeEventClock (through goalDrill). The normal controller can run
@@ -86,14 +86,28 @@ type work638AfterMissionTx struct {
 	after func() error
 }
 
-func (tx *work638AfterMissionTx) Exec(c context.Context, q string, args ...any) (pgconn.CommandTag, error) {
-	tag, err := tx.Tx.Exec(c, q, args...)
-	if err == nil && tx.after != nil && strings.Contains(q, "FROM agentrt.mission WHERE mission_id = $1 FOR SHARE") {
-		f := tx.after
+func (tx *work638AfterMissionTx) QueryRow(c context.Context, q string, args ...any) pgx.Row {
+	row := tx.Tx.QueryRow(c, q, args...)
+	if tx.after != nil && strings.Contains(q, "FROM agentrt.mission WHERE mission_id = $1 FOR SHARE") {
+		after := tx.after
 		tx.after = nil
-		err = f()
+		return work638AfterMissionRow{Row: row, after: after}
 	}
-	return tag, err
+	return row
+}
+
+type work638AfterMissionRow struct {
+	pgx.Row
+	after func() error
+}
+
+func (r work638AfterMissionRow) Scan(dest ...any) error {
+	// QueryRow is lazy: the mission lock is known to be held only after
+	// Scan succeeds. S6-6 uses this shared binding reader, no longer Exec.
+	if err := r.Row.Scan(dest...); err != nil {
+		return err
+	}
+	return r.after()
 }
 
 // Serial: FreezeEventClock (acceptedDrill). A legal step rebind that tries to
@@ -107,24 +121,67 @@ func TestWork638ClaimLocksTheMissionUsedByFacts(t *testing.T) {
 	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "work638-rebind", root, "move accepted work", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-3"}}, a.ask)
 	ok(t, err)
 	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	tried := false
-	db := work638AfterMissionDB{DB: w.db.Pool(t, w.db.Runtime), after: func() error {
-		tried = true
-		short, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	var originalMission string
+	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1`, task).Scan(&originalMission))
+	claim := w.db.Connect(t, w.db.Runtime)
+	tried := 0
+	db := work638AfterMissionDB{DB: claim, after: func() error {
+		tried++
+		rebind := w.db.Connect(t, w.db.Runtime)
+		short, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		if n, e := store.DecidePlanChanges(short, w.rt, a.question, nil); e == nil && n == 1 {
-			return fmt.Errorf("the rebind moved the task while the claim held it")
+		done := make(chan struct{})
+		var n int
+		var rebindErr error
+		safego.Go("work638.rebind", func() {
+			defer close(done)
+			n, rebindErr = store.DecidePlanChanges(short, rebind, a.question, nil)
+		})
+		defer func() { cancel(); <-done }()
+		tick := time.NewTicker(5 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			var blocked bool
+			if err := w.rt.QueryRow(short, `SELECT $1::int = ANY(pg_blocking_pids($2::int))`,
+				claim.PgConn().PID(), rebind.PgConn().PID()).Scan(&blocked); err != nil {
+				return err
+			}
+			if blocked {
+				cancel()
+				<-done
+				if n != 0 || rebindErr == nil {
+					return fmt.Errorf("blocked rebind applied: n=%d err=%v", n, rebindErr)
+				}
+				return nil
+			}
+			select {
+			case <-done:
+				return fmt.Errorf("rebind did not wait for claim: n=%d err=%v", n, rebindErr)
+			case <-short.Done():
+				return fmt.Errorf("rebind lock wait not observed: %w", short.Err())
+			case <-tick.C:
+			}
 		}
-		return nil
 	}}
 	op, d, err := store.ClaimLandingDrill(ctx, db, src, task, time.Now())
 	ok(t, err)
-	if !tried || op == "" || !d.Allowed {
-		t.Fatalf("fixture: tried=%v op=%s decision=%+v", tried, op, d)
+	if tried != 2 || op == "" || !d.Allowed {
+		t.Fatalf("fixture: tried=%d op=%s decision=%+v", tried, op, d)
+	}
+	var taskMission, recordedMission string
+	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1`, task).Scan(&taskMission))
+	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.event WHERE event_stream_id=$1
+      AND body_json->'landing'->>'kind'='claimed' AND body_json->'landing'->>'op'=$2`, landingRepoStream, op).Scan(&recordedMission))
+	if taskMission != originalMission || recordedMission != originalMission {
+		t.Fatalf("claim changed mission: task=%s record=%s original=%s", taskMission, recordedMission, originalMission)
 	}
 	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 	if n != 1 {
 		t.Fatalf("rebind did not apply after the claim: %d", n)
+	}
+	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1`, task).Scan(&taskMission))
+	if taskMission != "M-3" {
+		t.Fatalf("successful rebind left task in %s", taskMission)
 	}
 }

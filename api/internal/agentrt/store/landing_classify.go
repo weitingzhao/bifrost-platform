@@ -31,8 +31,8 @@ const CloseRoundFor = 30 * time.Minute
 
 // LandingRootClass is one root's class and why.
 type LandingRootClass struct {
-	Root, Op, Class, Reason string
-	ApprovalID              string
+	Repo, Root, Op, Class, Reason string
+	ApprovalID                    string
 	// NeedsEvidence: a delivery that lacks only main evidence read in the
 	// current closing round.
 	NeedsEvidence bool
@@ -181,12 +181,11 @@ func checkCloseRoundAppend(ev Event) error {
 	return nil
 }
 
-// classifyLandingRoots classifies the live-scope roots of a mission at the
+// classifyLandingRepo classifies the live-scope roots of a mission at the
 // decision time at, under the caller's locks (the mission's, then the
 // repository stream's). inScope false: no root of the mission is in the live
 // landing scope, and the current rules close it.
-func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string, round *closeRound, at time.Time) (inScope bool, roots []LandingRootClass, ruleNote string, err error) {
-	const repo = "bifrost-platform"
+func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mission, repo string, at time.Time) (inScope bool, roots []LandingRootClass, ruleNote string, err error) {
 	stream := "landing:" + repo
 	state, err := folds.state(ctx, tx, stream)
 	if err != nil || state.LiveAt.IsZero() {
@@ -266,7 +265,7 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		inScope = true
 		op := state.LatestOperation(r.task)
 		o, has := state.Operations[op]
-		c := LandingRootClass{Root: r.task, Op: op, Class: RootUnresolved}
+		c := LandingRootClass{Repo: repo, Root: r.task, Op: op, Class: RootUnresolved}
 		landed := false
 		dispWhy, err := landingDisposed(ctx, tx, stream, r.task, op)
 		if err != nil {
@@ -357,16 +356,10 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		}
 		roots = append(roots, c)
 	}
-	// A delivery: effective evidence read after the start of a round opened
-	// on this very snapshot, before its end.
-	snapshot, _ := closeSnapshot(roots)
-	if round.validFor(snapshot, at) {
-		for _, f := range fresh {
-			if f.readAt.After(round.At) {
-				r := &roots[f.i]
-				r.Class, r.Reason, r.NeedsEvidence, r.evidenceAt = RootDelivered, "landed", false, f.readAt
-			}
-		}
+	// Retain candidate evidence; the combined mission snapshot decides
+	// freshness only after every repository has been classified.
+	for _, f := range fresh {
+		roots[f.i].evidenceAt = f.readAt
 	}
 	return inScope, roots, ruleNote, nil
 }
@@ -387,32 +380,31 @@ func landingDisposed(ctx context.Context, tx pgx.Tx, stream, root, op string) (s
 // a closing round is opened (or kept) and the mission held; when every root
 // is delivered or disposed, the state to move to and why.
 func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission string) (applies, held bool, to, why string, err error) {
-	// Only a stream with the live mode is locked here: every other mission
-	// closes by the rules before S3, with no new lock on the landing stream
-	// (a close pass must not wait on it, nor make its writers wait). The
-	// mode is written once; one that appears after this read is seen by the
-	// next pass.
-	// A mission with no implementation root in the repository never reads
-	// its stream: an unreadable stream holds only the missions it carries.
-	var carries bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = $1 AND role = 'implement' AND repo = 'bifrost-platform')`, mission).Scan(&carries); err != nil || !carries {
+	repos, err := missionLandingRepos(ctx, tx, mission)
+	if err != nil {
 		return false, false, "", "", err
 	}
-	if s, err := folds.state(ctx, tx, "landing:bifrost-platform"); err != nil || s.LiveAt.IsZero() {
+	// Lock all participating streams before either B4 or the legacy hold can
+	// append. The latter may settle an unclaimed non-live root. Empty streams
+	// stay untouched, including infra before its first signed rule.
+	liveRepos, err := lockMissionLandingStreams(ctx, tx, folds, mission, repos)
+	if err != nil || len(liveRepos) == 0 {
 		return false, false, "", "", err
 	}
-	hook("close: mission locked", mission) // lock-order tests (C-5 T48)
-	if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
-		return false, false, "", "", err
-	}
+	// A mode first recorded after the lock-set read belongs to the next
+	// pass. Never classify a newly live stream that this pass did not lock.
 	at := DecisionAt()
 	round, err := readCloseRound(ctx, tx, mission)
 	if err != nil {
 		return false, false, "", "", err
 	}
-	inScope, roots, ruleNote, err := classifyLandingRoots(ctx, tx, folds, mission, round, at)
+	inScope, roots, ruleNote, err := classifyMissionLandingRepos(ctx, tx, folds, mission, round, at, liveRepos)
 	if err != nil || !inScope {
 		return false, false, "", "", err
+	}
+	legacyHeld, err := landingHoldsExcept(ctx, tx, folds, mission, at, liveRootRepos(roots))
+	if err != nil || legacyHeld {
+		return true, legacyHeld, "", "", err
 	}
 	var needs int
 	delivered, disposed := 0, 0
@@ -465,7 +457,7 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	var roundN int64
 	list := make([]any, 0, len(roots))
 	for _, r := range roots {
-		item := map[string]any{"root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason}
+		item := map[string]any{"repo": r.Repo, "root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason}
 		if r.ApprovalID != "" {
 			item["approval_id"] = r.ApprovalID
 		}
@@ -606,134 +598,4 @@ func OpenCloseRoundOps(ctx context.Context, db DB, now time.Time) (map[string]bo
 		return rows.Err()
 	})
 	return out, err
-}
-
-// MissionLandingStatus is a mission's landing status for the Console (CUT
-// §11.8 v3 item 9): each live-scope root's class and reason, the card that
-// stands for it (if any), the rule as read now and the closing round still
-// open (nil once its time is over). A read: no lock, no write.
-type MissionLandingStatus struct {
-	InScope bool
-	Roots   []LandingRootStatus
-	Rule    string
-	Round   *closeRound
-	// Closed is the close as decided then (landing_close), apart from the
-	// roots as read now (review 672 N-01). nil while not closed so.
-	Closed *LandingClose
-}
-
-// LandingRootStatus is one root in MissionLandingStatus.
-type LandingRootStatus struct {
-	LandingRootClass
-	CardKind, QuestionID string
-	// CardAlert names a card of this root that ended without its answer
-	// being known (unconfirmed, lost): the Owner may have answered a card
-	// the runtime could not read back (review 670 R-07). "" for none.
-	CardAlert string
-	// A parked root (review 672 R-07): since its park, its retry, the
-	// status-only trigger it shows (ci_stuck, parked_long) and when a park
-	// becomes parked_long. Zero / "" otherwise.
-	ParkedSince, RetryAt, RemindAt time.Time
-	Shown                          string
-	// The Owner's answer holds the root (review 675 R-07): wait or remind
-	// later on its latest answered card, until HeldUntil, on HeldQuestion.
-	HeldUntil    time.Time
-	HeldQuestion string
-	// CardPending: a card for the root is prepared and not yet asked (the
-	// card budget or quota holds it).
-	CardPending bool
-	Waiting     *LandingWaitStatus
-}
-
-// ReadMissionLandingStatus reads a mission's landing status.
-func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (MissionLandingStatus, error) {
-	var st MissionLandingStatus
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		round, err := readCloseRound(ctx, tx, mission)
-		if err != nil {
-			return err
-		}
-		closed, err := readLandingClose(ctx, tx, mission)
-		if err != nil {
-			return err
-		}
-		st.Closed = closed
-		at := DecisionAt()
-		inScope, roots, rule, err := classifyLandingRoots(ctx, tx, landingFolds{}, mission, round, at)
-		if err != nil || !inScope {
-			return err
-		}
-		cards, err := LandingCards(ctx, tx, CardsStream("bifrost-platform"))
-		if err != nil {
-			return err
-		}
-		triggers, err := LandingCardTriggers(ctx, tx, "bifrost-platform", at)
-		if err != nil {
-			return err
-		}
-		// Only an open round is the current one (the 673 report): a past
-		// round is history, its time over.
-		if round != nil && !at.Before(round.Until) {
-			round = nil
-		}
-		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
-		if err != nil {
-			return err
-		}
-		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round, Closed: closed}
-		for _, r := range roots {
-			rs := LandingRootStatus{LandingRootClass: r}
-			rs.Waiting, err = readLandingWaitStatus(ctx, tx, state, r.Op, at)
-			if err != nil {
-				return err
-			}
-			var latest, answered CardRecord
-			for _, c := range cards {
-				if c.Root == r.Root && c.Op == r.Op && !c.Ended() && c.N >= latest.N {
-					latest = c
-				}
-				if c.Root == r.Root && c.Op == r.Op && c.QuestionID != "" && c.N >= answered.N {
-					answered = c
-				}
-				if c.Root == r.Root && c.Op == r.Op && !c.Bound && !c.Ended() {
-					rs.CardPending = true
-				}
-				if c.Root == r.Root && c.Op == r.Op && c.Closed && (c.ClosedWhy == "unconfirmed" || c.ClosedWhy == "lost") {
-					rs.CardAlert = c.Prep + " " + c.ClosedWhy
-				}
-			}
-			rs.CardKind, rs.QuestionID = latest.Kind, latest.QuestionID
-			if answered.QuestionID != "" {
-				o, _, found, err := storedCardRecord(ctx, tx, answered, answered.QuestionID)
-				if err != nil {
-					return err
-				}
-				if found && o.outcome == "held" && at.Before(o.remindAt) {
-					rs.HeldUntil, rs.HeldQuestion = o.remindAt, answered.QuestionID
-				}
-			}
-			if strings.HasPrefix(r.Reason, "parked:") {
-				var retry *string
-				err := tx.QueryRow(ctx, `SELECT at, body_json->'landing'->>'retry_at' FROM agentrt.event WHERE event_stream_id = 'landing:bifrost-platform'
-				  AND event_type = 'note' AND body_json->'landing'->>'kind' = 'parked' AND body_json->'landing'->>'op' = $1 ORDER BY seq DESC LIMIT 1`, r.Op).Scan(&rs.ParkedSince, &retry)
-				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-					return err
-				}
-				if retry != nil {
-					rs.RetryAt, _ = time.Parse(time.RFC3339Nano, *retry)
-				}
-				if why := strings.TrimPrefix(r.Reason, "parked:"); why != "ci_stuck" && why != "rule" && !rs.ParkedSince.IsZero() {
-					rs.RemindAt = rs.ParkedSince.Add(ParkedLongAfter)
-				}
-				for _, tr := range triggers {
-					if tr.Op == r.Op && slices.Contains(statusOnlyKinds, tr.Kind) {
-						rs.Shown = tr.Kind
-					}
-				}
-			}
-			st.Roots = append(st.Roots, rs)
-		}
-		return nil
-	})
-	return st, err
 }

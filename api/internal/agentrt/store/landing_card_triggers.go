@@ -22,6 +22,7 @@ type CardTrigger struct {
 	Root, Op, Why  string
 	StopGeneration int64
 	Choices        []string
+	Floor          map[string]any
 }
 
 // ParkedLongAfter is how long a park (other than ci_stuck and rule) lasts
@@ -175,6 +176,7 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			switch {
 			case o.Outcome == "floor":
 				t.Kind = CardFloor
+				t.Floor, _ = e.body["landing_floor"].(map[string]any)
 			case slices.Contains(landing.RetryableReasons, o.Outcome):
 				t.Choices = []string{"try_again", "do_not_merge"}
 			}
