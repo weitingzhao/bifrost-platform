@@ -43,6 +43,18 @@ var landingHardGo = [...]string{
 	"api/internal/questions/",
 	"api/internal/releasepolicy/",
 	"api/internal/maintainer/",
+	// Runtime transports/configuration and injected evidence/policy providers
+	// are trusted dependencies, even when server supplies them via callbacks.
+	"api/internal/cluster/",
+	"api/internal/config/",
+	"api/internal/opscontext/",
+	"api/internal/placement/",
+	"api/internal/probe/",
+	"api/internal/delivery/",
+	"api/internal/lineage/",
+	"api/internal/releases/",
+	"api/internal/agentrt/exam/",
+	"api/internal/workactions/",
 	"api/cmd/",
 }
 

@@ -54,20 +54,46 @@ func listDependencies(t *testing.T, dir string, args ...string) []listedPackage 
 	return out
 }
 
-// §4.2 explicitly excludes server's mounted business dependencies. These are
-// exact assembly edges, frozen at the implementation baseline, not a blanket
-// exemption for server/cmd transitive dependencies. A new edge is reviewed;
-// the same dependency imported by store/approvals/etc still fails the closure.
-var assemblyEdges = map[string][]string{
+// §4.2 excludes mounted business features, not injected trust providers.
+// Each retained edge was checked at its call sites (686 B-02). Reasons name
+// the consumer so this list cannot silently stand for every server import.
+// These exclusions do not prove isolation from arbitrary same-process code.
+var assemblyEdges = map[string]map[string]string{
 	"internal/server": {
-		"agentgovernance", "agentprogress", "agentrt/exam", "agentthreads", "checklist", "cluster", "codehealth", "config", "datahusbandry", "delivery", "devsession", "flexquery", "gitops", "ibgateway", "lineage", "marketdata", "mcp", "network", "operatorplane", "opsagent", "opsfacts", "patrol", "probe", "promote", "releases", "research", "satellite", "selfhealth", "telemetry", "threadtitles", "topology", "tradeagent", "workactions",
+		"agentgovernance": "server.go: trust matrix/override display and skill-run recording; not AuthService or action tier input",
+		"agentprogress":   "agent_progress_wire.go: progress recorder and reporting routes",
+		"agentthreads":    "agent_threads_wire.go: thread liveness, metrics and operator notices",
+		"checklist":       "server.go: checklist signals and background prober; no landing/approval predicate",
+		"codehealth":      "server.go: code-health reporting/rescan routes; not the landing CI reader",
+		"datahusbandry":   "server.go: data status projection and checklist source",
+		"devsession":      "server.go: local dev-session list/log/control routes",
+		"flexquery":       "server.go, metrics.go: plugin proxy and health metric",
+		"gitops":          "actions_wire.go: guarded Argo action handler; not an approval or landing evidence provider",
+		"ibgateway":       "actions_wire.go, metrics.go: guarded plugin handlers and health metric",
+		"marketdata":      "actions_wire.go, metrics.go: plugin proxy/action handlers and health metric",
+		"mcp":             "server.go: tool catalog/status routes; not the credential-bearing mcp/platform bridge",
+		"network":         "actions_wire.go: guarded network action handlers and read routes",
+		"operatorplane":   "server.go: mount/proxy L-1 business routes using the supplied AuthService",
+		"opsagent":        "server.go: Alertmanager intake route",
+		"opsfacts":        "ops_facts.go: read-only System projection, not an authorization input",
+		"patrol":          "server.go: patrol business routes/background loop; not the agentrt controller",
+		"promote":         "server.go: context display overlay; not release-policy or landing input",
+		"research":        "server.go, metrics.go: research proxy/status and health metric",
+		"satellite":       "server.go: satellite bus/matrix read routes",
+		"selfhealth":      "server.go: platform self-health read route",
+		"telemetry":       "server.go, ops_facts.go: metrics/alerts projection and attention-mute route",
+		"threadtitles":    "server.go, agent_threads_wire.go: display titles and transcript sync",
+		"topology":        "server.go: topology read projection",
+		"tradeagent":      "server.go: Trade domain/catalog read routes",
 	},
-	"cmd/operator-plane": {"alertrelay", "config", "operatorplane"},
-	"cmd/platform-api":   {"config"},
+	"cmd/operator-plane": {
+		"alertrelay":    "main.go: out-of-band alert delivery and heartbeat service",
+		"operatorplane": "main.go: L-1 business route assembly using protected config/actuation",
+	},
 }
 
 func assemblyEdge(from, to string) bool {
-	return slices.Contains(assemblyEdges[strings.TrimPrefix(from, modulePath)], strings.TrimPrefix(to, modulePath+"internal/"))
+	return assemblyEdges[strings.TrimPrefix(from, modulePath)][strings.TrimPrefix(to, modulePath+"internal/")] != ""
 }
 func uncoveredDependencies(pkgs []listedPackage, prefix string, protected func(string) bool, exempt func(string, string) bool) []string {
 	graph := map[string]listedPackage{}
@@ -114,6 +140,19 @@ func TestLandingHardDependencyClosure(t *testing.T) {
 		args = append(args, "./"+strings.TrimPrefix(dir, "api/")+"...")
 	}
 	pkgs := listDependencies(t, filepath.Join(root, "api"), args...)
+	for from, deps := range assemblyEdges {
+		for dep, reason := range deps {
+			found := false
+			for _, p := range pkgs {
+				if p.ImportPath == modulePath+from && slices.Contains(p.Imports, modulePath+"internal/"+dep) {
+					found = true
+				}
+			}
+			if !found || strings.TrimSpace(reason) == "" || inLandingEntries("api/internal/"+dep+"/", landingHardGo[:]) {
+				t.Errorf("stale, unexplained or protected assembly exemption: %s -> %s", from, dep)
+			}
+		}
+	}
 	missing := uncoveredDependencies(pkgs, modulePath, func(pkg string) bool {
 		return inLandingEntries("api/"+strings.TrimPrefix(pkg, modulePath)+"/", landingHardGo[:])
 	}, assemblyEdge)

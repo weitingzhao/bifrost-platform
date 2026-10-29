@@ -100,7 +100,10 @@ func (c *Client) Read(ctx context.Context, key Key, after time.Time) (Evidence, 
 	if err != nil {
 		return Evidence{}, err
 	}
-	latest, item, err := c.latest(ctx, key.Repo, repo.Pipeline, key.Revision, after)
+	latest, item, err := c.latest(ctx, repo.Pipeline, key.Revision, after, func(item unstructured.Unstructured) (bool, bool) {
+		trusted := strictCandidate(item, key.Repo, key.Revision)
+		return trusted, trusted
+	})
 	out := Evidence{CIRun: latest}
 	if err != nil {
 		return out, err
@@ -153,16 +156,41 @@ func checkedResults(item unstructured.Unstructured, repo Repository, key Key) (m
 
 // LandingCI is the existing v1 adapter. It preserves platform's prior status
 // and optional result behavior until the prepared-key consumers are wired.
+// Unlike Read, its candidate set must include every legacy pipeline/revision
+// match. Conflicting identity stays in the ordering as Unknown, never deleted
+// in a way that could revive an older success.
 // New grant/STG evidence consumers must use Read, never this adapter.
 func (c *Client) LandingCI(ctx context.Context, revision string, after time.Time) (landing.CIRun, error) {
 	if !fullSHA.MatchString(revision) {
 		return landing.CIRun{}, fmt.Errorf("invalid landing revision")
 	}
-	run, _, err := c.latest(ctx, "bifrost-platform", "bifrost-ci-platform", revision, after)
+	run, _, err := c.latest(ctx, "bifrost-ci-platform", revision, after, func(item unstructured.Unstructured) (bool, bool) {
+		params, _, _ := unstructured.NestedSlice(item.Object, "spec", "params")
+		for _, entry := range params {
+			p, _ := entry.(map[string]any)
+			if p["name"] == "revision" {
+				// The baseline uses the first revision parameter. Preserve
+				// that candidate even if a later duplicate contradicts it.
+				return p["value"] == revision, strictCandidate(item, "bifrost-platform", revision)
+			}
+		}
+		return false, false
+	})
 	return run, err
 }
 
-func (c *Client) latest(ctx context.Context, repo, pipeline, revision string, after time.Time) (landing.CIRun, unstructured.Unstructured, error) {
+// strictCandidate is the repository-aware Read filter, not the legacy
+// candidate predicate. Legacy only uses it to downgrade conflicting evidence.
+func strictCandidate(item unstructured.Unstructured, repo, revision string) bool {
+	if _, inline, _ := unstructured.NestedFieldNoCopy(item.Object, "spec", "pipelineSpec"); inline {
+		return false
+	}
+	params, counts := namedValues(item, "spec", "params")
+	label := item.GetLabels()["bifrost.io/repo"]
+	return counts["revision"] == 1 && params["revision"] == revision && (label == "" || label == repo)
+}
+
+func (c *Client) latest(ctx context.Context, pipeline, revision string, after time.Time, candidate func(unstructured.Unstructured) (include, trusted bool)) (landing.CIRun, unstructured.Unstructured, error) {
 	res, err := c.resource()
 	if err != nil {
 		return landing.CIRun{}, unstructured.Unstructured{}, err
@@ -181,19 +209,12 @@ func (c *Client) latest(ctx context.Context, repo, pipeline, revision string, af
 			if name != pipeline {
 				continue
 			}
-			if _, inline, _ := unstructured.NestedFieldNoCopy(item.Object, "spec", "pipelineSpec"); inline {
-				continue
-			}
-			params, counts := namedValues(item, "spec", "params")
-			if counts["revision"] != 1 || params["revision"] != revision {
-				continue
-			}
-			labels := item.GetLabels()
-			if labels["bifrost.io/repo"] != "" && labels["bifrost.io/repo"] != repo {
+			include, trusted := candidate(item)
+			if !include {
 				continue
 			}
 			run := landing.CIRun{Run: item.GetName(), UID: string(item.GetUID()), R: revision, Status: runStatus(item), CreatedAt: item.GetCreationTimestamp().Time}
-			if landingCIName.MatchString(run.Run) && labels["bifrost.io/trigger"] != "agentrt-landing-drill" {
+			if !trusted || landingCIName.MatchString(run.Run) && item.GetLabels()["bifrost.io/trigger"] != "agentrt-landing-drill" {
 				run.Status = "Unknown"
 			}
 			run.PlatformCommit, run.UICommit = landingCIResults(item)

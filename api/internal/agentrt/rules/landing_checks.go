@@ -7,7 +7,7 @@ import (
 
 // LandingChecksVersion identifies the coordinator v3 checks, including §12.
 // It is audit evidence, not a substitute for recomputing the refusal set.
-const LandingChecksVersion = 1
+const LandingChecksVersion = 2
 
 type LandingRefusal string
 

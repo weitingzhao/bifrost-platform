@@ -10,7 +10,10 @@ import (
 )
 
 var decisionCall = regexp.MustCompile(`\b(postApprovalDecision|postApprovalResolve|createApprovalRequest|operatorToken|APPROVAL_TOKEN_STORAGE_KEY)\b|navigator\s*\.\s*serviceWorker`)
-var authorizationHeader = regexp.MustCompile(`(?i)(\.\s*(set|append)\s*\(\s*["']Authorization["']|(?:^|[{,])\s*["']?Authorization["']?\s*:|\[\s*["']Authorization["']\s*\]\s*=)`)
+
+// Direct syntax ratchet, not a complete data-flow proof. Aliases, computed
+// property names and indirect wrappers still require semantic review.
+var authorizationHeader = regexp.MustCompile(`(?i)((?:\.\s*(?:set|append)|\[\s*["'](?:set|append)["']\s*\])\s*\(\s*["']Authorization["']|(?:^|[{,])\s*["']?Authorization["']?\s*:|\[\s*["']Authorization["']\s*\]\s*=|\.\s*Authorization\s*=|\[\s*["']Authorization["']\s*,)`)
 
 func consoleSensitive(source []byte) bool {
 	return decisionCall.Match(source) || authorizationHeader.Match(source)
@@ -31,7 +34,7 @@ func scanConsole(root string, covered func(string) bool) ([]string, error) {
 			return nil
 		}
 		switch filepath.Ext(p) {
-		case ".ts", ".tsx", ".js", ".jsx":
+		case ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs":
 		default:
 			return nil
 		}
