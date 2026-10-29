@@ -8,6 +8,7 @@ import (
 )
 
 func TestStripProxyPrefix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		want string
