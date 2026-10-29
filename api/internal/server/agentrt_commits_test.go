@@ -20,7 +20,7 @@ func TestDiffFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"api/x.go", "new.txt", "gone.txt", "api/internal/agentrt/old.go", "docs/new.go", "bin.png"}
-	if !slices.Equal(paths, want) || lines != 4 {
+	if !slices.Equal(paths, want) || lines != 1<<30 {
 		t.Fatalf("paths %v lines %d", paths, lines)
 	}
 	for name, d := range map[string]string{

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -106,6 +107,32 @@ func checkPinnedResult(ctx context.Context, tx pgx.Tx, a attemptRow, r Result, r
 	}
 	if !read.pinned {
 		return nil, ErrNoHead // read before the pin was seen: never, as pins do not change; refused all the same
+	}
+	if a.persisted {
+		// A persisted result is immutable, including report and the ordered
+		// attachment list. Salvage may recover it, never substitute another.
+		var ref, commit, report string
+		var artifactsJSON []byte
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(pushed_ref, ''), COALESCE(pushed_commit, ''),
+		  COALESCE(report_artifact_id, '') FROM agentrt.attempt WHERE attempt_id = $1`, a.id).
+			Scan(&ref, &commit, &report); err != nil {
+			return nil, err
+		}
+		if ref != r.Ref || commit != r.Commit || report != r.Report {
+			return nil, fmt.Errorf("%w: persisted result is immutable", ErrState)
+		}
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(body_json->'artifacts', '[]'::jsonb) FROM agentrt.event
+		  WHERE attempt_id = $1 AND event_type IN ('attempt_persisted','attempt_salvaged')
+		  AND body_json->>'pushed_commit' = $2 ORDER BY event_id LIMIT 1`, a.id, commit).Scan(&artifactsJSON); err != nil {
+			return nil, err
+		}
+		var artifacts []string
+		if err := json.Unmarshal(artifactsJSON, &artifacts); err != nil {
+			return nil, err
+		}
+		if !slices.Equal(artifacts, r.all()) {
+			return nil, fmt.Errorf("%w: persisted attachments are immutable", ErrState)
+		}
 	}
 	f := read.facts
 	switch {

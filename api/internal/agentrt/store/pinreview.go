@@ -61,7 +61,8 @@ func pinnedReview(ctx context.Context, tx pgx.Tx, subject string, spec *checkSpe
 	var hard bool
 	err := tx.QueryRow(ctx, `SELECT (body_json->>'changed_lines')::int, (body_json->>'hard')::boolean FROM agentrt.event
 	  WHERE attempt_id = $1 AND event_type IN ('attempt_persisted','attempt_salvaged') AND body_json ? 'changed_lines'
-	  ORDER BY event_id DESC LIMIT 1`, spec.attempt).Scan(&lines, &hard)
+	  AND body_json->>'pushed_commit' = $2
+	  ORDER BY event_id DESC LIMIT 1`, spec.attempt, spec.commit).Scan(&lines, &hard)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		lines, hard = 1<<30, true

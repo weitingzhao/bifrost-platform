@@ -71,44 +71,25 @@ func claimPinned(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Dura
 		return nil, invalid("a host is required")
 	}
 	req := map[string]any{"task_id": r.TaskID}
-	var entry rules.ExternalHost
-	// Outside the claim's transaction, and only when the key is new: the
-	// pin's entry, and the host's first registration as the external host.
 	pre := func(ctx context.Context) error {
-		h, err := pinnedHost(ctx, db, r.HostID, r.TaskID)
-		if err != nil {
-			return err
-		}
-		if err = registerHost(ctx, db, "controller", r.HostID, HostExternal, r.Token, false); err != nil {
-			if errors.Is(err, ErrState) {
-				return fmt.Errorf("%w: %v", ErrNotExternal, err)
-			}
-			return err
-		}
-		entry = h
-		return nil
+		return registerPinnedHost(ctx, db, r)
 	}
 	op := func(tx pgx.Tx) (map[string]any, error) {
-		// Again under the claim's transaction: the envelope may have
-		// changed since.
-		var pin, tenant, state string
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(t.executor_pin, ''), m.tenant, t.state FROM agentrt.task t
-		  JOIN agentrt.mission m ON m.mission_id = t.mission_id WHERE t.task_id = $1`, r.TaskID).Scan(&pin, &tenant, &state); err != nil {
-			return nil, err
+		var pin string
+		authorize := func(ctx context.Context, tx pgx.Tx, cr ClaimRequest) (ClaimRequest, error) {
+			h, p, err := pinnedEntry(ctx, tx, r.HostID, r.TaskID)
+			if err != nil {
+				return cr, err
+			}
+			pin = p
+			cr.Tools = []Tool{{Executor: h.Executor, Provider: h.Provider}}
+			return cr, nil
 		}
-		h, err := entryOf(ctx, tx, tenant, pin, r.HostID)
-		if err != nil {
-			return nil, err
+		cr := ClaimRequest{HostID: r.HostID, FreeSlots: r.FreeSlots, Disk: r.Disk, DiskFloor: r.DiskFloor}
+		src := func(ctx context.Context, tx pgx.Tx, after *candidate) ([]candidate, error) {
+			return pinnedSource(r.TaskID, pin)(ctx, tx, after)
 		}
-		if h.Executor != entry.Executor || h.Provider != entry.Provider {
-			return nil, fmt.Errorf("%w: the envelope's entry for %s changed while it was read", ErrNotExternal, pin)
-		}
-		if state != "ready" {
-			return nil, fmt.Errorf("%w: task %s is %s, not ready", ErrState, r.TaskID, state)
-		}
-		cr := ClaimRequest{HostID: r.HostID, FreeSlots: r.FreeSlots, Disk: r.Disk, DiskFloor: r.DiskFloor,
-			Tools: []Tool{{Executor: h.Executor, Provider: h.Provider}}}
-		cl, why, err := claimIn(ctx, tx, cr, pinnedSource(r.TaskID, pin), claimOpts{ttl: ttl, effects: dispatched}, true)
+		cl, why, err := claimIn(ctx, tx, cr, src, claimOpts{ttl: ttl, effects: dispatched, authorize: authorize}, true)
 		if err != nil {
 			return nil, err
 		}
@@ -168,30 +149,55 @@ func readBackKey(ctx context.Context, db DB, actor, route, key string, request a
 	return out, found
 }
 
-// pinnedHost is the entry of the task's pin in the signed standing envelope
-// in force for its mission's tenant, when it names host: refused with
-// ErrNotPinned when the task has no pin, ErrNotExternal when no such entry
-// names the host, or when the host is registered as another kind.
-func pinnedHost(ctx context.Context, db DB, host, taskID string) (rules.ExternalHost, error) {
-	var h rules.ExternalHost
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+// registerPinnedHost serializes a first registration with envelope writers.
+// Existing hosts are reauthorized only after claimIn takes host -> capability,
+// so this preflight cannot hold capability while waiting for an existing host.
+func registerPinnedHost(ctx context.Context, db DB, r PinnedClaimRequest) error {
+	return InTx(ctx, db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742112, hashtext($1))`, r.HostID); err != nil {
+			return err
+		}
 		var kind string
-		err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, host).Scan(&kind)
-		switch {
-		case err == nil && kind != HostExternal:
-			return fmt.Errorf("%w: host %s is a %s host", ErrNotExternal, host, kind)
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, r.HostID).Scan(&kind)
+		if err == nil {
+			if kind != HostExternal {
+				return fmt.Errorf("%w: host %s is a %s host", ErrNotExternal, r.HostID, kind)
+			}
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		var pin, tenant string
-		if err = tx.QueryRow(ctx, `SELECT COALESCE(t.executor_pin, ''), m.tenant FROM agentrt.task t
-		  JOIN agentrt.mission m ON m.mission_id = t.mission_id WHERE t.task_id = $1`, taskID).Scan(&pin, &tenant); err != nil {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 			return err
 		}
-		h, err = entryOf(ctx, tx, tenant, pin, host)
-		return err
+		if _, _, err = pinnedEntry(ctx, tx, r.HostID, r.TaskID); err != nil {
+			return err
+		}
+		return registerHostIn(ctx, tx, "controller", r.HostID, HostExternal, r.Token, false)
 	})
-	return h, err
+}
+
+// pinnedEntry is read only while holding capabilityLock, up to commit.
+func pinnedEntry(ctx context.Context, tx pgx.Tx, host, task string) (rules.ExternalHost, string, error) {
+	var pin, tenant, repo, role, state string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(t.executor_pin, ''), m.tenant, COALESCE(t.repo, ''), t.role, t.state
+	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id WHERE t.task_id = $1`, task).
+		Scan(&pin, &tenant, &repo, &role, &state)
+	if err != nil {
+		return rules.ExternalHost{}, pin, err
+	}
+	h, err := entryOf(ctx, tx, tenant, pin, host)
+	if err != nil {
+		return h, pin, err
+	}
+	if !slices.Contains(h.Repos, repo) || !slices.Contains(h.Roles, role) {
+		return h, pin, fmt.Errorf("%w: the envelope's entry for %s no longer permits %s/%s", ErrNotExternal, pin, repo, role)
+	}
+	if state != "ready" {
+		return h, pin, fmt.Errorf("%w: task %s is %s, not ready", ErrState, task, state)
+	}
+	return h, pin, nil
 }
 
 // entryOf is the entry of pin in the signed standing envelope in force for

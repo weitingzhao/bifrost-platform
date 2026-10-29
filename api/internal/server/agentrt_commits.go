@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -103,6 +105,24 @@ func giteaCommits(access func(context.Context) (delivery.GiteaAccess, error), or
 		if facts.Paths, facts.Lines, err = diffFacts(diff); err != nil {
 			return store.CommitFacts{}, fmt.Errorf("gitea: %s/%s commit %s: %w", org, repo, sha, err)
 		}
+		if len(facts.Parents) != 1 || !commitID.MatchString(facts.Parents[0]) {
+			return store.CommitFacts{}, errors.New("gitea: a pinned result needs one parent")
+		}
+		trees := strings.TrimSuffix(base, "/commits/"+sha) + "/trees/"
+		before, err := commitTree(get, trees+facts.Parents[0])
+		if err != nil {
+			return store.CommitFacts{}, err
+		}
+		after, err := commitTree(get, trees+sha)
+		if err != nil {
+			return store.CommitFacts{}, err
+		}
+		if err := completeDiffPaths(before, after, facts.Paths); err != nil {
+			return store.CommitFacts{}, err
+		}
+		if err := completeDiffContent(get, strings.TrimSuffix(trees, "/trees/")+"/blobs/", before, after, diff); err != nil {
+			return store.CommitFacts{}, err
+		}
 		return facts, nil
 	}
 }
@@ -125,9 +145,14 @@ func diffFacts(diff []byte) ([]string, int, error) {
 	}
 	lines := 0
 	inHunk := false
+	oldLeft, newLeft := 0, 0
+	binary := false
 	var pending string // a header's path when both sides are the same name
 	var named bool     // the current file's paths were taken
 	flush := func() error {
+		if oldLeft != 0 || newLeft != 0 {
+			return errors.New("incomplete diff hunk")
+		}
 		if pending == "" && !named {
 			return nil
 		}
@@ -140,6 +165,27 @@ func diffFacts(diff []byte) ([]string, int, error) {
 	sc.Buffer(make([]byte, 1<<20), maxCommitDiff)
 	for sc.Scan() {
 		l := sc.Text()
+		if inHunk && (oldLeft > 0 || newLeft > 0) {
+			switch {
+			case strings.HasPrefix(l, " "):
+				oldLeft--
+				newLeft--
+			case strings.HasPrefix(l, "-"):
+				oldLeft--
+				lines++
+			case strings.HasPrefix(l, "+"):
+				newLeft--
+				lines++
+			case l == `\ No newline at end of file`:
+				continue
+			default:
+				return nil, 0, errors.New("incomplete diff hunk")
+			}
+			if oldLeft < 0 || newLeft < 0 {
+				return nil, 0, errors.New("diff hunk exceeds its counts")
+			}
+			continue
+		}
 		switch {
 		case strings.HasPrefix(l, "diff --git "):
 			if err := flush(); err != nil {
@@ -175,9 +221,26 @@ func diffFacts(diff []byte) ([]string, int, error) {
 			}
 			named = true
 		case strings.HasPrefix(l, "@@"):
+			m := diffHunk.FindStringSubmatch(l)
+			if pending == "" || m == nil {
+				return nil, 0, errors.New("invalid diff hunk header")
+			}
+			count := func(s string) int {
+				if s == "" {
+					return 1
+				}
+				n, _ := strconv.Atoi(s)
+				return n
+			}
+			oldLeft, newLeft = count(m[1]), count(m[2])
 			inHunk = true
-		case inHunk && (strings.HasPrefix(l, "+") || strings.HasPrefix(l, "-")):
-			lines++
+		case l == `\ No newline at end of file` && inHunk:
+		case !inHunk && pending != "" && strings.HasPrefix(l, "Binary files ") && strings.HasSuffix(l, " differ"):
+			binary = true
+		case !inHunk && pending != "" && diffExtendedHeader.MatchString(l):
+		default:
+			return nil, 0, fmt.Errorf("unknown diff line: %q", l)
+
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -186,5 +249,12 @@ func diffFacts(diff []byte) ([]string, int, error) {
 	if err := flush(); err != nil {
 		return nil, 0, err
 	}
+	if binary {
+		// Binary line counts are unknown: request the maximum review budget.
+		lines = 1 << 30
+	}
 	return paths, lines, nil
 }
+
+var diffHunk = regexp.MustCompile(`^@@ -[0-9]+(?:,([0-9]+))? \+[0-9]+(?:,([0-9]+))? @@(?: .*)?$`)
+var diffExtendedHeader = regexp.MustCompile(`^(index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?|(?:old|new|new file|deleted file) mode [0-7]{6}|(?:dis)?similarity index [0-9]+%|--- (?:a/.*|/dev/null)|\+\+\+ (?:b/.*|/dev/null))$`)

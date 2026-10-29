@@ -265,54 +265,59 @@ func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, an
 	if !slices.Contains(hostKinds, kind) {
 		return fmt.Errorf("%w: host kind %q is not one of %v", ErrState, kind, hostKinds)
 	}
-	actor := hostActor(hostID)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		// One registration of a host at a time: a second first claim waits,
-		// then finds it registered (review 190 B5).
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742112, hashtext($1))`, hostID); err != nil {
-			return err
-		}
-		var have string
-		err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, hostID).Scan(&have)
-		if err == nil {
-			if have == kind || anyKind {
-				return nil
-			}
-			return fmt.Errorf("%w: host %s is registered as %s", ErrState, hostID, have)
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		// A host a standing envelope names as the external host is
-		// registered only as that, by its first exact claim (pinclaim.go):
-		// an agentd call that would make it an ordinary host is refused
-		// (DESIGN-coordinator-landing-v3 §2.4; the coordinating thread,
-		// 2026-10-29, the strictest reading).
-		if kind != HostExternal {
-			named, err := externalNamed(ctx, tx, hostID)
-			if err != nil {
-				return err
-			}
-			if named {
-				return fmt.Errorf("%w: host %s is the external host a standing envelope names; only its exact claim registers it",
-					ErrExternalHost, hostID)
-			}
-		}
-		body := map[string]any{"host_id": hostID, "actor_id": actor, "host_kind": kind}
-		if token != "" {
-			body["token"] = token
-		}
-		if _, err = Append(ctx, tx, Event{Stream: "host:" + hostID, Type: "host_registered", Actor: by, Body: body}); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'host', $2)`,
-			actor, "Agent host "+hostID); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.host (host_id, actor_id, host_kind, state) VALUES ($1, $2, $3, 'active')`,
-			hostID, actor, kind)
-		return err
+		return registerHostIn(ctx, tx, by, hostID, kind, token, anyKind)
 	})
+}
+
+// registerHostIn keeps registration and its caller's authorization in one transaction.
+func registerHostIn(ctx context.Context, tx pgx.Tx, by, hostID, kind, token string, anyKind bool) error {
+	actor := hostActor(hostID)
+	// One registration of a host at a time: a second first claim waits,
+	// then finds it registered (review 190 B5).
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742112, hashtext($1))`, hostID); err != nil {
+		return err
+	}
+	var have string
+	err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, hostID).Scan(&have)
+	if err == nil {
+		if have == kind || anyKind {
+			return nil
+		}
+		return fmt.Errorf("%w: host %s is registered as %s", ErrState, hostID, have)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	// A host a standing envelope names as the external host is
+	// registered only as that, by its first exact claim (pinclaim.go):
+	// an agentd call that would make it an ordinary host is refused
+	// (DESIGN-coordinator-landing-v3 §2.4; the coordinating thread,
+	// 2026-10-29, the strictest reading).
+	if kind != HostExternal {
+		named, err := externalNamed(ctx, tx, hostID)
+		if err != nil {
+			return err
+		}
+		if named {
+			return fmt.Errorf("%w: host %s is the external host a standing envelope names; only its exact claim registers it",
+				ErrExternalHost, hostID)
+		}
+	}
+	body := map[string]any{"host_id": hostID, "actor_id": actor, "host_kind": kind}
+	if token != "" {
+		body["token"] = token
+	}
+	if _, err = Append(ctx, tx, Event{Stream: "host:" + hostID, Type: "host_registered", Actor: by, Body: body}); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'host', $2)`,
+		actor, "Agent host "+hostID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO agentrt.host (host_id, actor_id, host_kind, state) VALUES ($1, $2, $3, 'active')`,
+		hostID, actor, kind)
+	return err
 }
 
 func hostActor(hostID string) string { return "host:" + hostID }

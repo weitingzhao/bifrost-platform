@@ -58,6 +58,8 @@ var dispatched = []string{"none", "branch"}
 type claimOpts struct {
 	ttl     time.Duration
 	effects []string
+	// authorize runs after the host and capability locks, before routing.
+	authorize func(context.Context, pgx.Tx, ClaimRequest) (ClaimRequest, error)
 }
 
 type candidate struct {
@@ -179,8 +181,6 @@ func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource
 		return nil, "host " + r.HostID + " is " + state, nil
 	case r.FreeSlots <= 0:
 		return nil, "the host has no free slot", nil
-	case len(r.Tools) == 0:
-		return nil, "the host offers no tool", nil
 	case r.Disk != nil && r.Disk.Below(r.DiskFloor):
 		return nil, "the host's free disk is below the floor", nil
 	}
@@ -188,6 +188,14 @@ func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource
 	// write of candidates or capability facts the other (LockCapabilities).
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(742105), pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 		return nil, "", err
+	}
+	if o.authorize != nil {
+		if r, err = o.authorize(ctx, tx, r); err != nil {
+			return nil, "", err
+		}
+	}
+	if len(r.Tools) == 0 {
+		return nil, "the host offers no tool", nil
 	}
 	// The concurrency rule caps the host's slots; without one nothing is
 	// dispatched (proposal §2).

@@ -288,7 +288,14 @@ func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
 	var executors, hosts []string
 	switch r.Kind {
 	case rules.KindEnvelope:
-		executors, hosts = r.Envelope.Executors, r.Envelope.Hosts
+		executors = r.Envelope.Executors
+		// A signed external entry may name its host before the first claim
+		// registers it. All other hosts still have to be known.
+		for _, host := range r.Envelope.Hosts {
+			if !slices.ContainsFunc(r.Envelope.ExternalHosts, func(h rules.ExternalHost) bool { return h.Host == host }) {
+				hosts = append(hosts, host)
+			}
+		}
 	case rules.KindJob:
 		for _, c := range r.Job.Candidates {
 			executors = append(executors, c.Executor)
