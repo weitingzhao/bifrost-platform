@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"strconv"
 	"strings"
 	"sync"
@@ -130,8 +131,9 @@ func HoldWindow(ctx context.Context, cfg WindowConfig, state store.StgState, bat
 		cancel: stop, renewDone: make(chan struct{}), done: make(chan struct{}), losses: make(chan WindowLoss, 1)}
 	// Create the ticker before returning so no first tick can be missed.
 	ticker := cfg.Clock.NewTicker(time.Minute)
-	go h.renew(renewCtx, ticker)
-	go h.finish(context.WithoutCancel(ctx))
+	safego.Go("stg-release-window-renew", func() { h.renew(renewCtx, ticker) })
+	finishCtx := context.WithoutCancel(ctx)
+	safego.Go("stg-release-window-finish", func() { h.finish(finishCtx) })
 	if !cfg.Policy().enabled(cfg.Clock.Now()) || ctx.Err() != nil {
 		_ = h.Release()
 		return nil, ErrWindowDisabled
