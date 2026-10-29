@@ -32,6 +32,7 @@ const CloseRoundFor = 30 * time.Minute
 // LandingRootClass is one root's class and why.
 type LandingRootClass struct {
 	Root, Op, Class, Reason string
+	ApprovalID              string
 	// NeedsEvidence: a delivery that lacks only main evidence read in the
 	// current closing round.
 	NeedsEvidence bool
@@ -319,6 +320,14 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 			c.Class, c.Reason = RootDisposed, "reverted"
 		case o.Phase == "failed" && slices.Contains([]string{"declined", "main_lost", "reverted"}, o.Outcome):
 			c.Class, c.Reason = RootDisposed, o.Outcome
+			if o.Outcome == "declined" {
+				err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body_json->'landing_grant_request'->>'approval_id' FROM agentrt.event
+				  WHERE event_stream_id=$1 AND body_json->'landing'->>'op'=$2 AND body_json->'landing'->>'kind'='failed'
+				  AND body_json->'landing'->>'why'='declined' ORDER BY seq DESC LIMIT 1),'')`, stream, op).Scan(&c.ApprovalID)
+				if err != nil {
+					return false, nil, "", err
+				}
+			}
 		case disposed:
 			c.Class, c.Reason = RootDisposed, "owner"
 		case r.dropped:
@@ -456,6 +465,9 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	list := make([]any, 0, len(roots))
 	for _, r := range roots {
 		item := map[string]any{"root": r.Root, "op": r.Op, "class": r.Class, "reason": r.Reason}
+		if r.ApprovalID != "" {
+			item["approval_id"] = r.ApprovalID
+		}
 		if !r.evidenceAt.IsZero() {
 			item["evidence_read_at"] = r.evidenceAt.UTC().Format(time.RFC3339Nano)
 			if round != nil {
@@ -629,6 +641,7 @@ type LandingRootStatus struct {
 	// CardPending: a card for the root is prepared and not yet asked (the
 	// card budget or quota holds it).
 	CardPending bool
+	Waiting     *LandingWaitStatus
 }
 
 // ReadMissionLandingStatus reads a mission's landing status.
@@ -662,9 +675,17 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 		if round != nil && !at.Before(round.Until) {
 			round = nil
 		}
+		state, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		if err != nil {
+			return err
+		}
 		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round, Closed: closed}
 		for _, r := range roots {
 			rs := LandingRootStatus{LandingRootClass: r}
+			rs.Waiting, err = readLandingWaitStatus(ctx, tx, state, r.Op, at)
+			if err != nil {
+				return err
+			}
 			var latest, answered CardRecord
 			for _, c := range cards {
 				if c.Root == r.Root && c.Op == r.Op && !c.Ended() && c.N >= latest.N {

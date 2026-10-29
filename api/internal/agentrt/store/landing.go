@@ -54,8 +54,8 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		return err
 	}
 	k := r.String("kind")
-	if (k == "retry" || k == "rehearsed" || k == "discarded") && ev.Actor != "controller" {
-		return fmt.Errorf("landing v1.1 transition requires controller")
+	if (k == "retry" || k == "rehearsed" || k == "discarded" || k == "awaiting_grant") && ev.Actor != "controller" {
+		return fmt.Errorf("landing transition requires controller")
 	}
 	if k == "reserved" {
 		parts := strings.Split(ev.Stream, ":")
@@ -82,6 +82,15 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 	if k == "failed" && r.String("why") == "main_lost" && ev.Actor != "controller" {
 		return fmt.Errorf("failed{main_lost} requires controller (an Owner answer)")
+	}
+	if k == "main_intent" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
+		return fmt.Errorf("waiting operation requires grant consumption; not installed in C-4")
+	}
+	if k == "failed" && r.String("why") == "declined" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
+		request, ok := ev.Body["landing_grant_request"].(map[string]any)
+		if !ok || request["op"] != r.String("op") || request["status"] != "rejected" || request["approval_id"] == "" {
+			return fmt.Errorf("declining an authorization wait requires its rejected approval in the same event")
+		}
 	}
 	return s.Apply(landing.Entry{At: at, Record: r})
 }

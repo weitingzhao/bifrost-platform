@@ -86,9 +86,9 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if o.Phase != "claimed" && o.Phase != "prepared" && o.Phase != "branch_intent" {
 		return nil
 	}
-	first, n := landing.RootBudget(s, o.Task)
-	if landing.Bound(first, n-1, store.DecisionAt()) { // CUT §9
-		return put("failed", map[string]any{"why": "bound"})
+	_, n := landing.RootBudget(s, o.Task)
+	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
+		return put("failed", map[string]any{"why": why})
 	}
 	// Reconcile a completed push even after a rule expires. If absent, all
 	// eligibility conditions still apply before retrying the external action.
@@ -115,8 +115,8 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	// The decision read Git: the window is checked again as of now, before a
 	// new branch intent (review 657 R657-2).
 	at := store.DecisionAt()
-	if landing.Bound(first, n-1, at) {
-		return put("failed", map[string]any{"why": "bound"})
+	if why := landing.RootBound(s, o.Task, at, false); why != "" {
+		return put("failed", map[string]any{"why": why})
 	}
 	if !d.Allowed {
 		if d.Reason == "rule" || d.Reason == "limit" {
@@ -141,8 +141,8 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	// fails it on its own reads.
 	recheck := func() (bool, error) {
 		at := store.DecisionAt()
-		if landing.Bound(first, n-1, at) {
-			return true, put("failed", map[string]any{"why": "bound"})
+		if why := landing.RootBound(s, o.Task, at, false); why != "" {
+			return true, put("failed", map[string]any{"why": why})
 		}
 		now, err := store.RefreshLandingFacts(ctx, c.DB, DrillGitFacts(g), c.Env, mode(c.Env), o.Task, op, f, at)
 		if err != nil {

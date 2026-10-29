@@ -86,9 +86,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	}
 	// Bounds are checked before any external read: an unavailable Gitea or
 	// window must not keep the active slot forever.
-	first, n := landing.RootBudget(s, o.Task)
-	if landing.Bound(first, n-1, store.DecisionAt()) {
-		return landing.DrillAction{Kind: "failed", Why: "bound"}, appendRecord("failed", map[string]any{"why": "bound"})
+	_, n := landing.RootBudget(s, o.Task)
+	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
+		return landing.DrillAction{Kind: "failed", Why: why}, appendRecord("failed", map[string]any{"why": why})
 	}
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
 		return landing.DrillAction{}, fmt.Errorf("drill sources unavailable")

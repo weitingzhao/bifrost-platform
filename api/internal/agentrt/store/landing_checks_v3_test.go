@@ -64,6 +64,7 @@ func TestLandingV1StructuralAndFloorStoreRefusals(t *testing.T) {
 
 // Serial: liveReady/FreezeEventClock. Verify the existing final gate rejects
 // a changed trusted diff without writing main_intent or reserving quota.
+// C-4 now prepares core paths for a grant; absolute/structure still refuse.
 func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -101,8 +102,14 @@ func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
 					if !d.Allowed || phase != "main_intent" || len(quota.Reservations) != 1 {
 						t.Fatal("control", d, phase, quota)
 					}
-				} else if d.Allowed || d.Reason != "floor" || phase != "branch_pushed" || len(quota.Reservations) != 0 {
-					t.Fatal(d, phase, quota)
+				} else {
+					wantReason, wantPhase := "floor", "branch_pushed"
+					if tc.name == "core" || tc.name == "old hard endpoint" {
+						wantReason, wantPhase = "awaiting_grant", "awaiting_grant"
+					}
+					if d.Allowed || d.Reason != wantReason || phase != wantPhase || len(quota.Reservations) != 0 {
+						t.Fatal(d, phase, quota)
+					}
 				}
 			}
 		})

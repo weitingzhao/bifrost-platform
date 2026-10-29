@@ -34,6 +34,7 @@ type MainHistory struct {
 type Facts struct {
 	Mission, Reviewers                                               string
 	Environment, Mode, Tenant, Repo, Task, Attempt, A, Base          string
+	ExecutorPin                                                      string
 	MissionState, StepState, ProducingPlan, LatestUsedPlan           string
 	ReservedToday, OtherInFlight                                     int
 	MissionVersion, StepVersion                                      int
@@ -73,8 +74,8 @@ func ruleValid(f Facts, now time.Time) bool {
 	return ok
 }
 
-// PolicyChecks exposes the layers to the grant protocol without changing the
-// v1 claim/push policy. Callers must still check global/live and runtime limits.
+// PolicyChecks is shared by preparation and the final gate. Callers must
+// still check global/live and runtime limits; soft failures authorize no push.
 func PolicyChecks(f Facts, now time.Time) (reason string, refusals []rules.LandingRefusal) {
 	if _, bad := rules.StructuralViolation(f.Changes); bad {
 		return "floor", nil
@@ -121,15 +122,20 @@ func EligibleToClaim(f Facts, now time.Time) Decision {
 	if f.Terminal {
 		return refuse("terminal")
 	}
-	// A change no rule can ever allow ends the root (CUT §11.6 v2): checked
-	// before any rule, which only pauses.
-	if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
-		return refuse("floor")
+	// Absolute and structural failures remain unwaivable. Only supported live
+	// roots may defer policy failures until the final gate (core includes
+	// ordinary runtime roots under §12.3; soft-only roots require a pin).
+	reason, soft := PolicyChecks(f, now)
+	if reason != "" {
+		return refuse(reason)
 	}
 	if !f.DependenciesEffective {
 		return refuse("dependencies")
 	}
-	if !ruleOK(f, now, false) {
+	if len(soft) > 0 && !MayAwaitGrant(f, soft) {
+		if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
+			return refuse("floor")
+		}
 		return refuse("rule")
 	}
 	if f.ReservedToday >= f.Rule.Landing.Limits.MaxLandingsPerDay || f.OtherInFlight >= f.Rule.Landing.Limits.MaxInFlightPerRepo {
@@ -142,7 +148,22 @@ func EligibleToPush(f Facts, now time.Time) Decision {
 		// Already happened: the caller reconciles even after revocation.
 		return Decision{Reconcile: true, Reason: "already_on_main"}
 	}
-	return EligibleToClaim(f, now)
+	d := EligibleToClaim(f, now)
+	if !d.Allowed {
+		return d
+	}
+	_, soft := PolicyChecks(f, now)
+	if len(soft) > 0 {
+		return refuse("awaiting_grant")
+	}
+	return d
+}
+
+// MayAwaitGrant is eligibility to prepare, never permission to push. The
+// grant executor separately enforces the action, identity and waiver checks.
+func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
+	return f.Environment == "prod" && f.Mode == "live" && rules.GrantSupported(f.Repo) &&
+		(f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore))
 }
 func EligibleToDeploy(f Facts, now time.Time) Decision {
 	if !modeOK(f) || f.Mode != "live" || f.Operation.DryRun {

@@ -36,7 +36,8 @@ type LandingReconcile struct {
 	// MainEvidence reads main; nil settles denied only.
 	MainEvidence store.MainEvidenceFunc
 	// Repos are the repositories reconciled (bifrost-platform today).
-	Repos []string
+	Repos    []string
+	Requests func(context.Context) ([]store.LandingGrantRequest, error)
 
 	mu    sync.Mutex
 	waits map[string]reconcileWait
@@ -74,6 +75,9 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 		if live, err := store.LandingLiveAt(ctx, c.DB, repo); err != nil {
 			errs = append(errs, err)
 		} else if !live.IsZero() {
+			if _, err := store.SettleWaitingLandingStale(ctx, c.DB); err != nil {
+				errs = append(errs, err)
+			}
 			if _, err := store.SettleLandingDrillBounds(ctx, c.DB, c.clock()); err != nil {
 				errs = append(errs, err)
 			}

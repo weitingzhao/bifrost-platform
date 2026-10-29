@@ -47,13 +47,13 @@ var ErrLandingDayChanged = errors.New("landing gate: the UTC day changed during 
 // (shared), the plan step, the task, the mission (FOR SHARE), the day's
 // quota stream, the repository stream. Under them it reads the facts (Git
 // included) and observes main, CI and the window, then takes the decision
-// time (CUT §9.7) and selects the rule again at it. It writes nothing unless
+// time (CUT §9.7) and selects the rule again at it. It writes no intent unless
 // every check passes: the repository is not stopped (B6), the operation is a
 // live branch_pushed with R on M0, EligibleToPush, main is still M0, the
 // window is free, and R's latest CI, created after prepared, succeeded. Then
-// it writes, in this order and in this one transaction: reserved on the
-// day's quota stream (once a day per root), ci_seen for the CI it decided on
-// when the stream does not have it yet, and main_intent carrying
+// it records ci_seen when necessary. A core/pinned soft failure writes
+// awaiting_grant with no quota reservation. Otherwise it writes reserved on
+// the day's quota stream (once per root) and main_intent carrying
 // landing_gate (the rule version, the decision time, the quota day and that
 // CI: what the authorization rests on, review 662 N-02); and returns the
 // Authorization, whose deadline counts from the intent's own time. A refusal is a Decision and no
@@ -98,6 +98,19 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			decision = landing.Decision{Reason: "stopped"}
 			return err
 		}
+		state, err = LandingState(ctx, tx, stream)
+		if err != nil {
+			return err
+		}
+		o = state.Operations[op]
+		if o.Phase == "awaiting_grant" {
+			why := landing.RootBound(state, o.Task, DecisionAt(), false)
+			if why == "" {
+				why = "awaiting_grant"
+			}
+			decision = landing.Decision{Reason: why}
+			return nil // only C-5's verified grant consumption may resume this phase
+		}
 		f, err := LandingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt())
 		if err != nil {
 			return err
@@ -130,11 +143,11 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		if err != nil {
 			return err
 		}
-		if first, n := landing.RootBudget(budget, o.Task); landing.Bound(first, n-1, final) {
-			decision = landing.Decision{Reason: "bound"}
+		if why := landing.RootBound(budget, o.Task, final, false); why != "" {
+			decision = landing.Decision{Reason: why}
 			return nil
 		}
-		if decision = landing.EligibleToPush(g, final); !decision.Allowed {
+		if decision = landing.EligibleToClaim(g, final); !decision.Allowed {
 			return nil
 		}
 		switch {
@@ -147,6 +160,20 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		case obs.CI.R != o.R || obs.CI.Status != "Succeeded" || !obs.CI.CreatedAt.After(o.PreparedAt) || obs.CI.CreatedAt.After(final):
 			decision = landing.Decision{Reason: "ci"}
 			return nil
+		}
+		// main_intent needs R's success on the stream (protocol): the CI the
+		// gate decided on, recorded unless it already is.
+		if o.CI.String("run") != obs.CI.Run || o.CI.String("status") != obs.CI.Status || !o.CI.Time("created_at").Equal(obs.CI.CreatedAt) {
+			if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
+				Body: map[string]any{"text": "Landing ci_seen at the second gate", "landing": map[string]any{"v": landing.Version, "kind": "ci_seen", "op": op,
+					"run": obs.CI.Run, "status": obs.CI.Status, "R": o.R, "created_at": obs.CI.CreatedAt.Format(time.RFC3339Nano)}}}); err != nil {
+				return err
+			}
+		}
+		_, soft := landing.PolicyChecks(g, final)
+		if len(soft) > 0 {
+			decision = landing.Decision{Reason: "awaiting_grant"}
+			return appendAwaitingGrant(ctx, tx, g, op, obs.CI, soft)
 		}
 		q, err := LandingState(ctx, tx, quota)
 		if err != nil {
@@ -172,15 +199,6 @@ func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			}
 		}
 		hook("landing gate: reserved", op)
-		// main_intent needs R's success on the stream (protocol): the CI the
-		// gate decided on, recorded unless it already is.
-		if o.CI.String("run") != obs.CI.Run || o.CI.String("status") != obs.CI.Status || !o.CI.Time("created_at").Equal(obs.CI.CreatedAt) {
-			if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-				Body: map[string]any{"text": "Landing ci_seen at the second gate", "landing": map[string]any{"v": landing.Version, "kind": "ci_seen", "op": op,
-					"run": obs.CI.Run, "status": obs.CI.Status, "R": o.R, "created_at": obs.CI.CreatedAt.Format(time.RFC3339Nano)}}}); err != nil {
-				return err
-			}
-		}
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
 			Body: map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
 				"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0},

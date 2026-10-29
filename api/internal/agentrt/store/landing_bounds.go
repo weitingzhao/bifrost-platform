@@ -11,8 +11,12 @@ import (
 )
 
 func failLandingBound(ctx context.Context, tx pgx.Tx, op string) error {
+	return failLandingLimit(ctx, tx, op, "bound")
+}
+
+func failLandingLimit(ctx context.Context, tx pgx.Tx, op, why string) error {
 	_, err := Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{
-		"text": "Landing: bound", "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "bound"},
+		"text": "Landing: " + why, "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": why},
 	}})
 	return err
 }
@@ -21,11 +25,12 @@ func failLandingBound(ctx context.Context, tx pgx.Tx, op string) error {
 // awaits its successor (discarded, non_ff, retried; landing.AwaitsNext) can
 // acquire a born-terminal successor; repeated recovery is a no-op.
 func failAwaitingBound(ctx context.Context, tx pgx.Tx, state landing.State, task string, now time.Time) error {
-	first, n := landing.RootBudget(state, task)
-	if !state.AwaitsNext(task) || !landing.Bound(first, n, now) {
+	_, n := landing.RootBudget(state, task)
+	why := landing.RootBound(state, task, now, true)
+	if !state.AwaitsNext(task) || why == "" {
 		return nil
 	}
-	return failLandingBound(ctx, tx, fmt.Sprintf("land:%s:%d", task, n+1))
+	return failLandingLimit(ctx, tx, fmt.Sprintf("land:%s:%d", task, n+1), why)
 }
 
 // SettleLandingDrillBounds completes all database-only recovery before any
@@ -52,7 +57,6 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time) (state 
 			if o.Task == "" {
 				continue
 			}
-			first, n := landing.RootBudget(state, o.Task)
 			// An operation at main (main_intent, main_result other than
 			// non_ff) is left for reconciliation: main_intent and
 			// main_result{ok} refuse failed{bound} (one such append would
@@ -61,8 +65,8 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time) (state 
 			// failed{denied} (TD-447 2, review 645 N1).
 			if state.LatestOperation(o.Task) == id && state.AwaitsNext(o.Task) {
 				e = failAwaitingBound(ctx, tx, state, o.Task, now)
-			} else if o.EndsAtBound() && landing.Bound(first, n-1, now) {
-				e = failLandingBound(ctx, tx, id)
+			} else if why := landing.RootBound(state, o.Task, now, false); o.EndsAtBound() && why != "" {
+				e = failLandingLimit(ctx, tx, id, why)
 			}
 			if e != nil {
 				return e

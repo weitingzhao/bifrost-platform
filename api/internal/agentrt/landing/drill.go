@@ -66,9 +66,15 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 	if o.Terminal() {
 		return DrillAction{Kind: "cleanup"}
 	}
-	first, n := RootBudget(s, o.Task)
-	if Bound(first, n-1, now) {
-		return DrillAction{Kind: "failed", Why: "bound"}
+	if o.AtMain() {
+		return DrillAction{Kind: "wait"} // only the main reconciler may settle an intent
+	}
+	_, n := RootBudget(s, o.Task)
+	if why := RootBound(s, o.Task, now, false); why != "" {
+		return DrillAction{Kind: "failed", Why: why}
+	}
+	if o.Phase == "awaiting_grant" {
+		return DrillAction{Kind: "wait"}
 	}
 	if obs.Main == "" {
 		return DrillAction{Kind: "wait"}
@@ -79,7 +85,7 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		}
 		return DrillAction{Kind: "replay"}
 	}
-	d := EligibleToPush(obs.Facts, now)
+	d := EligibleToClaim(obs.Facts, now) // preparation may carry soft failures to the locked final gate
 	if !d.Allowed {
 		switch d.Reason {
 		case "rule", "limit":

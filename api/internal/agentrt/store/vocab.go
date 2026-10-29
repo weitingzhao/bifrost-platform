@@ -172,6 +172,7 @@ var bodies = map[string][]field{
 		// on (landing_live.go, review 662 N-02): the rule version, the
 		// decision time, the quota day and the CI run.
 		{"landing_gate", kAny, true},
+		{"landing_grant_request", kAny, true},
 		// landing_anomaly: what the main reconciler found that only the
 		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
 		// late_landing, once per operation.
@@ -570,6 +571,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_main" {
 		return badLandingMain(v)
+	}
+	if eventType == "note" && name == "landing_grant_request" {
+		return badLandingGrantRequest(v)
 	}
 	if eventType == "note" && name == "landing_gate" {
 		return badLandingGate(v)

@@ -172,6 +172,10 @@ func drillWorkShare(ctx context.Context, remaining int) (context.Context, contex
 
 func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time) error {
 	switch {
+	case o.Phase == "awaiting_grant":
+		// C-5 will resume with a verified grant. No Git/CI polling, branch
+		// rewrite, repeated event or card while authorization is absent.
+		return nil
 	case o.Phase == "parked" && o.Resume != "branch_pushed":
 		if now.Before(o.RetryAt) {
 			return nil

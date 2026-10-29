@@ -142,10 +142,26 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	main := ""
+	if a.MainHead != nil {
+		for _, x := range st.Roots {
+			if x.Waiting != nil && x.Waiting.Phase == "awaiting_grant" {
+				main, _ = a.MainHead(r.Context(), "bifrost-platform")
+				break
+			}
+		}
+	}
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
 		root := map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
 			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
+		if x.ApprovalID != "" {
+			root["approval_id"] = x.ApprovalID
+		}
+		if x.Waiting != nil {
+			x.Waiting.ObserveMain(main)
+			root["authorization_wait"] = x.Waiting
+		}
 		if !x.HeldUntil.IsZero() {
 			root["held"] = map[string]any{"until": x.HeldUntil, "question_id": x.HeldQuestion}
 		}

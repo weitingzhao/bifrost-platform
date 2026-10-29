@@ -153,10 +153,10 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 		b.settled, b.decision = true, landing.Decision{Reason: "mode"}
 		return b, nil
 	}
-	first, n := landing.RootBudget(state, task)
+	_, n := landing.RootBudget(state, task)
 	b.claims = n
-	if landing.Bound(first, n, now) {
-		b.settled, b.decision = true, landing.Decision{Reason: "bound"}
+	if why := landing.RootBound(state, task, now, true); why != "" {
+		b.settled, b.decision = true, landing.Decision{Reason: why}
 		return b, failAwaitingBound(ctx, tx, state, task, now)
 	}
 	// Completed rehearsals are not repeated by the STG scanner. They

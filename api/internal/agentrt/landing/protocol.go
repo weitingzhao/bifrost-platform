@@ -15,7 +15,7 @@ import (
 )
 
 // Version is a string because canonical event JSON forbids fractional numbers.
-const Version = "1.1"
+const Version = "1.2"
 
 type Record map[string]any
 
@@ -41,14 +41,15 @@ var fields = map[string]string{
 	"enabled": "repo rule_version", "mode": "repo", "claimed": "task attempt A rule_version",
 	"prepared": "R M0 committer_date dry_run", "branch_intent": "ref R", "branch_pushed": "ref R",
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
-	"main_intent": "R M0", "main_result": "outcome", "landed": "R", "reverted": "R by",
+	"awaiting_grant": "soft files lines material",
+	"main_intent":    "R M0", "main_result": "outcome", "landed": "R", "reverted": "R by",
 	"parked": "why retry_at", "unparked": "", "failed": "why", "reserved": "root",
 	"discarded": "why", "rehearsed": "R", "retry": "root after_op reason by",
 	"stg_pending": "R", "stg_snapshot": "P U try not_before", "stg_started": "run try",
 	"stg_result": "run outcome", "stg_verified": "P U digests", "stg_failed": "why",
 }
 
-// Parse accepts closed v1 and v1.1 objects, normalizing Go integers and JSON
+// Parse accepts closed v1, v1.1 and v1.2 objects, normalizing Go integers and JSON
 // numbers alike through the same canonical decoder used by event storage.
 func Parse(v any) (Record, error) {
 	if r, ok := v.(Record); ok {
@@ -71,8 +72,9 @@ func Parse(v any) (Record, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown landing kind")
 	}
-	if r.String("v") != Version && slices.Contains([]string{"discarded", "rehearsed", "retry"}, r.String("kind")) {
-		return nil, fmt.Errorf("landing kind requires v1.1")
+	version := recordVersion(r)
+	if version == 0 || version < minimumVersion[r.String("kind")] {
+		return nil, fmt.Errorf("unsupported landing version for %s", r.String("kind"))
 	}
 	allowed := strings.Fields("v kind op " + spec)
 	if len(m) != len(allowed) {
@@ -87,7 +89,7 @@ func Parse(v any) (Record, error) {
 		switch k {
 		case "v":
 			n, ok := v.(json.Number)
-			valid = (ok && n.String() == "1") || r.String("v") == Version
+			valid = (ok && n.String() == "1") || slices.Contains([]string{"1.1", "1.2"}, r.String("v"))
 		case "rule_version", "try":
 			n, ok := v.(json.Number)
 			i, e := n.Int64()
@@ -98,6 +100,14 @@ func Parse(v any) (Record, error) {
 			if k == "try" {
 				valid = valid && i <= 3
 			}
+		case "files", "lines":
+			n, ok := v.(json.Number)
+			i, e := n.Int64()
+			valid = ok && e == nil && i >= 0
+		case "soft":
+			valid = validSoft(v)
+		case "material":
+			valid = digest.MatchString(r.String(k))
 		case "dry_run":
 			_, valid = v.(bool)
 		case "committer_date", "created_at", "retry_at", "not_before":
@@ -133,7 +143,7 @@ func Parse(v any) (Record, error) {
 		case "reason":
 			valid = len(r.String(k)) > 0 && len(r.String(k)) <= 1000
 		case "why":
-			valid = slices.Contains(reasons, r.String(k))
+			valid = slices.Contains(reasons, r.String(k)) || (r.String(k) == "approval_expired" && version >= 3)
 			if r.String("kind") == "discarded" {
 				valid = slices.Contains([]string{"main_changed", "branch_collision"}, r.String(k))
 			}
@@ -144,7 +154,10 @@ func Parse(v any) (Record, error) {
 			}
 			// main_lost ends only a failed, v1.1 record (CUT §10.6 1A,
 			// review 658 B3); Apply limits where it comes from.
-			if r.String(k) == "main_lost" && (r.String("kind") != "failed" || r.String("v") != Version) {
+			if r.String(k) == "main_lost" && (r.String("kind") != "failed" || version < 2) {
+				valid = false
+			}
+			if r.String(k) == "approval_expired" && (r.String("kind") != "failed" || version < 3) {
 				valid = false
 			}
 		case "status":
@@ -192,6 +205,13 @@ type Operation struct {
 	Retried                                              bool
 	NotBefore                                            time.Time
 	Pending                                              []string
+	// Waiting is fixed by the stream. GrantPeriods is a projection of valid
+	// grants supplied by the grant reader (C-5), never an approval status.
+	AwaitingAt, WaitEndedAt time.Time
+	Soft                    []string
+	Files, Lines            int
+	Material                string
+	GrantPeriods            []Interval
 }
 type Retry struct {
 	At                  time.Time
@@ -223,7 +243,7 @@ func Fold(entries []Entry) (State, error) {
 // decides before it appends whether the protocol takes its record, so a
 // refusal is recorded instead of rolling the answer back (CUT §8).
 func (s State) Check(e Entry) error {
-	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion,
+	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, LiveAt: s.LiveAt,
 		Retries: maps.Clone(s.Retries), Reservations: maps.Clone(s.Reservations), Operations: make(map[string]Operation, len(s.Operations))}
 	for k, o := range s.Operations {
 		o.Digests = maps.Clone(o.Digests)
@@ -262,7 +282,7 @@ func (s *State) Apply(e Entry) error {
 		return nil
 	}
 	if k == "mode" {
-		if r.String("v") != Version || !s.LiveAt.IsZero() {
+		if recordVersion(r) < 2 || !s.LiveAt.IsZero() {
 			return fmt.Errorf("landing mode recorded once, at v%s", Version)
 		}
 		s.LiveAt = e.At
@@ -302,7 +322,7 @@ func (s *State) Apply(e Entry) error {
 			}
 		}
 		n.ClaimNumber++
-		if r.String("v") == Version {
+		if recordVersion(r) >= 2 {
 			for _, existing := range s.Operations {
 				if existing.Task == n.Task && (existing.BlocksClaim() || !existing.Terminal()) {
 					return bad()
@@ -343,7 +363,7 @@ func (s *State) Apply(e Entry) error {
 		}
 		n.Ref = r.String("ref")
 	case "ci_kick", "ci_rerun", "ci_seen":
-		if old.Phase != "branch_pushed" {
+		if old.Phase != "branch_pushed" && !(old.Phase == "awaiting_grant" && k == "ci_seen") {
 			return bad()
 		}
 		if k == "ci_kick" {
@@ -374,16 +394,29 @@ func (s *State) Apply(e Entry) error {
 		s.Operations[op] = n
 		return nil
 	case "discarded":
-		if !slices.Contains([]string{"branch_intent", "branch_pushed", "parked"}, old.Phase) {
+		if !slices.Contains([]string{"branch_intent", "branch_pushed", "parked", "awaiting_grant"}, old.Phase) {
+			return bad()
+		}
+		if old.Phase == "awaiting_grant" && r.String("why") != "main_changed" {
 			return bad()
 		}
 		n.Outcome = r.String("why")
+	case "awaiting_grant":
+		if old.Phase != "branch_pushed" || old.DryRun || old.R == "" || old.M0 == "" || old.CI.String("status") != "Succeeded" {
+			return bad()
+		}
+		n.AwaitingAt = e.At
+		n.Soft = nil
+		for _, x := range r["soft"].([]any) {
+			n.Soft = append(n.Soft, x.(string))
+		}
+		n.Files, n.Lines, n.Material = r.Int("files"), r.Int("lines"), r.String("material")
 	case "rehearsed":
 		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || !rerunObserved(op, old, old.CI.String("run"), old.CI.Time("created_at")) {
 			return bad()
 		}
 	case "main_intent":
-		if old.Phase != "branch_pushed" || old.DryRun || old.CI.String("status") != "Succeeded" || r.String("R") != old.R || r.String("M0") != old.M0 {
+		if (old.Phase != "branch_pushed" && old.Phase != "awaiting_grant") || old.DryRun || old.CI.String("status") != "Succeeded" || r.String("R") != old.R || r.String("M0") != old.M0 {
 			return bad()
 		}
 	case "main_result":
@@ -420,7 +453,7 @@ func (s *State) Apply(e Entry) error {
 		return nil
 	case "failed":
 		if old.Phase == "" {
-			if r.String("v") != Version {
+			if recordVersion(r) < 2 {
 				return bad()
 			}
 			// A root never claimed that the claim refused for good, or whose
@@ -439,13 +472,13 @@ func (s *State) Apply(e Entry) error {
 			// A crash may leave discarded as the last record until the root
 			// budget expires. Its successor is born terminal in one event;
 			// the discarded operation itself remains immutable.
-			if r.String("why") != "bound" {
+			if !slices.Contains([]string{"bound", "approval_expired"}, r.String("why")) {
 				return bad()
 			}
 			for id, previous := range s.Operations {
-				first, count := RootBudget(*s, previous.Task)
+				_, count := RootBudget(*s, previous.Task)
 				if s.LatestOperation(previous.Task) == id && s.AwaitsNext(previous.Task) &&
-					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && Bound(first, count, e.At) {
+					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && RootBound(*s, previous.Task, e.At, true) == r.String("why") {
 					n.Task, n.Attempt, n.A = previous.Task, previous.Attempt, previous.A
 					n.RuleVersion, n.DryRun = previous.RuleVersion, previous.DryRun
 					n.ClaimNumber, n.ClaimedAt = count+1, e.At
@@ -460,9 +493,15 @@ func (s *State) Apply(e Entry) error {
 			if n.Task == "" {
 				return bad()
 			}
-			n.Phase, n.Outcome = "failed", "bound"
+			n.Phase, n.Outcome = "failed", r.String("why")
 			s.Operations[op] = n
 			return nil
+		}
+		if old.Phase == "awaiting_grant" && !slices.Contains([]string{"declined", "approval_expired", "bound", "stale"}, r.String("why")) {
+			return bad()
+		}
+		if r.String("why") == "approval_expired" && RootTiming(*s, old.Task, e.At).Waiting < WaitWindow {
+			return bad()
 		}
 		if slices.Contains(ClaimRefusals, r.String("why")) {
 			return bad()
@@ -472,10 +511,10 @@ func (s *State) Apply(e Entry) error {
 		allowed := old.EndsAtBound() && r.String("why") != "main_lost"
 		// §2.4 recovery explicitly ends an unknown push not found on unchanged main.
 		allowed = allowed || old.Phase == "main_result" && ((old.Outcome == "denied" && r.String("why") == "denied") || (old.Outcome == "unknown" && r.String("why") == "bound"))
-		allowed = allowed || r.String("v") == Version && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op
+		allowed = allowed || recordVersion(r) >= 2 && old.Phase == "failed" && old.Outcome != "declined" && r.String("why") == "declined" && s.LatestOperation(old.Task) == op
 		// CUT §10.6 (1A): a push reported ok whose R main no longer shows
 		// ends only when the Owner confirms it is lost.
-		allowed = allowed || r.String("v") == Version && old.Phase == "main_result" && old.Outcome == "ok" && r.String("why") == "main_lost" && s.LatestOperation(old.Task) == op
+		allowed = allowed || recordVersion(r) >= 2 && old.Phase == "main_result" && old.Outcome == "ok" && r.String("why") == "main_lost" && s.LatestOperation(old.Task) == op
 		if !allowed {
 			return bad()
 		}
@@ -530,6 +569,9 @@ func (s *State) Apply(e Entry) error {
 	default:
 		return bad()
 	}
+	if old.Phase == "awaiting_grant" && k != "ci_seen" {
+		n.WaitEndedAt = e.At
+	}
 	n.Phase = k
 	s.Operations[op] = n
 	return nil
@@ -549,7 +591,7 @@ func (o Operation) Terminal() bool {
 // end depends on what main holds (§2.4): main_result{unknown} may take
 // failed{bound} only after a main read, denied ends failed{denied}.
 func (o Operation) EndsAtBound() bool {
-	return slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked"}, o.Phase)
+	return slices.Contains([]string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked", "awaiting_grant"}, o.Phase)
 }
 
 // AtMain: the operation asked main to move and its outcome is not settled
@@ -560,20 +602,27 @@ func (o Operation) AtMain() bool {
 	return o.Phase == "main_intent" || o.Phase == "main_result" && o.Outcome != "non_ff"
 }
 
-func (o Operation) Active() bool { return o.Phase != "" && o.Phase != "parked" && !o.Terminal() }
+func (o Operation) Active() bool {
+	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
+}
 
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the
 // Owner's retry), and for a root never claimed from its acceptance (TD-447 4).
 const ClaimWindow = 6 * time.Hour
 
-// Bound includes all elapsed time, including window and main-red waits.
-func Bound(first time.Time, attempts int, now time.Time) bool {
-	return !first.IsZero() && (!now.Before(first.Add(ClaimWindow)) || attempts >= 8)
+// Bound subtracts authorization waiting only. Window and main-red waits
+// remain execution time. Callers with a stream use RootBound.
+func Bound(first time.Time, attempts int, now time.Time, waiting ...time.Duration) bool {
+	var w time.Duration
+	for _, d := range waiting {
+		w += d
+	}
+	return !first.IsZero() && (now.Sub(first)-w >= ClaimWindow || attempts >= 8)
 }
 
 // RetryableReasons are the failures the Owner's retry may answer (CUT §8):
 // the only ones a root_failed card offers try_again for.
-var RetryableReasons = []string{"bound", "stale", "ci_red"}
+var RetryableReasons = []string{"bound", "stale", "ci_red", "approval_expired"}
 
 // ClaimRefusals are the failed reasons only the first record of a root never
 // claimed may carry (TD-447 4, CUT §7.7): its result cannot be claimed
@@ -609,7 +658,7 @@ func (o Operation) BlocksClaim() bool { return o.EverLanded || o.Phase == "faile
 // Reservable is checked against the repository state while reserving in the
 // tenant/day stream. A rehearsal never consumes the production quota.
 func (o Operation) Reservable(root string) bool {
-	return o.Task == root && !o.DryRun && o.Phase == "branch_pushed"
+	return o.Task == root && !o.DryRun && (o.Phase == "branch_pushed" || o.Phase == "awaiting_grant")
 }
 
 // AwaitsNext: the root's latest operation ended without ending the root, so

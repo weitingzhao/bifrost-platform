@@ -27,6 +27,7 @@ import (
 func (s *Server) wireLandingDrill(c *controller.Controller) {
 	// denied settles from the database in every environment (S3 must 3).
 	c.Reconcile = &controller.LandingReconcile{Repos: []string{"bifrost-platform"}}
+	s.wireLandingRequests(c)
 	var g *landinggit.Git
 	var err error
 	switch c.Env {

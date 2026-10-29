@@ -11,14 +11,15 @@ import (
 // before and whatever the rule; a path the rule merely does not allow only
 // pauses it (rule). An operation already claimed ends failed{floor}.
 func TestFloorEndsTheRootRulePausesIt(t *testing.T) {
+	t.Parallel()
 	now := epoch.Add(time.Hour)
 	f := eligibleFacts()
 	f.Changes = []rules.LandingChange{{OldPath: "api/main.go", NewPath: "api/main.go", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1}}
 	if d := EligibleToClaim(f, now); d.Allowed || d.Reason != "floor" {
 		t.Fatalf("floor: %+v", d)
 	}
-	f.Rule = nil // no rule at all: still the floor, not "rule"
-	if d := EligibleToClaim(f, now); d.Reason != "floor" {
+	f.Rule = nil // v1.2: rule validity precedes the soft support decision.
+	if d := EligibleToClaim(f, now); d.Reason != "rule" {
 		t.Fatalf("floor without a rule: %+v", d)
 	}
 	g := eligibleFacts()

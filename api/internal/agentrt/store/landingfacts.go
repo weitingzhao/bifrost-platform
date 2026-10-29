@@ -47,9 +47,9 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 	var mission, step, offPlan, role, class string
 	err := tx.QueryRow(ctx, `SELECT t.mission_id, COALESCE(t.plan_node_id,''), COALESCE(t.off_plan_reason,''), t.role,t.task_class,
   COALESCE(t.repo,''),COALESCE(t.base_commit,''),t.state,m.tenant,m.state,m.version,m.created_at,
-  COALESCE(m.scope_json->>'no_merge','') <> '',COALESCE(p.state,''),COALESCE(p.version,0)
+  COALESCE(m.scope_json->>'no_merge','') <> '',COALESCE(p.state,''),COALESCE(p.version,0),COALESCE(to_jsonb(t)->>'executor_pin','')
   FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) LEFT JOIN agentrt.plan_node p ON p.plan_node_id=t.plan_node_id
-  WHERE t.task_id=$1`, taskID).Scan(&mission, &step, &offPlan, &role, &class, &f.Repo, &f.Base, &f.TaskState, &f.Tenant, &f.MissionState, &f.MissionVersion, &f.MissionCreated, &f.NoMerge, &f.StepState, &f.StepVersion)
+  WHERE t.task_id=$1`, taskID).Scan(&mission, &step, &offPlan, &role, &class, &f.Repo, &f.Base, &f.TaskState, &f.Tenant, &f.MissionState, &f.MissionVersion, &f.MissionCreated, &f.NoMerge, &f.StepState, &f.StepVersion, &f.ExecutorPin)
 	if err != nil {
 		return f, nil, err
 	}

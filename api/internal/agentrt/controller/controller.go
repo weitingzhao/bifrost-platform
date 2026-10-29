@@ -672,6 +672,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return c.LandingCardsPass(passCtx)
 		})
 	}
+	if c.Reconcile != nil && c.Reconcile.Requests != nil && c.Env == "prod" {
+		c.every(ctx, &wg, "agentrt-landing-requests", 30*time.Second, func() error {
+			passCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			return c.LandingRequestsPass(passCtx)
+		})
+	}
 	if c.Reconcile != nil {
 		c.every(ctx, &wg, "agentrt-landing-reconcile", facts, func() error {
 			passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
