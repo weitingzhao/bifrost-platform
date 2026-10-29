@@ -145,7 +145,8 @@ func stgCIIdentityEqual(a, b StgRecord) bool {
 // Every permit checks open intervals. Closed intervals remain immutable audit
 // history. For a target P, input and baseline repairs are independent: only a
 // newer verified proof in the SAME dimension supersedes an older constraint.
-// Order by proof seq, not close seq (overlapping intervals may close backwards).
+// CI proofs follow seq; baseline proofs follow the verified deployed.at, since
+// an older observation may arrive late. Neither uses interval closing order.
 // Each effective proof still binds its full CI or baseline identity; an old
 // UID/base cannot satisfy it merely by appearing in the same batch or P.
 func (s StgState) checkReleaseBlocks(b *StgBatch, kind string) error {
@@ -157,7 +158,9 @@ func (s StgState) checkReleaseBlocks(b *StgBatch, kind string) error {
 	}
 	snap := b.Tries[b.Try].Snapshot.Record
 	inputs := snap.object("inputs")
-	effective := map[string]StgEvent{}
+	var inputProof StgEvent
+	var lastBaseProof StgEvent
+	var baselines []StgEvent
 	for _, block := range s.BlockHistory {
 		if block.Closed.Seq == 0 || inputs.String("revision") != block.Opened.Record.String("P") {
 			continue
@@ -173,24 +176,53 @@ func (s StgState) checkReleaseBlocks(b *StgBatch, kind string) error {
 		default:
 			continue // grant/withholding affects budget, never input identity
 		}
-		dimension := "base"
 		if stgCICause(block.Opened.Record.String("why")) {
-			dimension = "inputs"
+			if proof.Seq > inputProof.Seq {
+				inputProof = proof
+			}
+			continue
 		}
-		if proof.Seq > effective[dimension].Seq {
-			effective[dimension] = proof
+		if proof.Seq > lastBaseProof.Seq {
+			lastBaseProof = proof
+		}
+		if proof.Record.String("kind") != "evidence" {
+			continue
+		}
+		at := proof.Record.object("deployed").Time("at")
+		if len(baselines) == 0 || at.After(baselines[0].Record.object("deployed").Time("at")) {
+			baselines = []StgEvent{proof}
+		} else if at.Equal(baselines[0].Record.object("deployed").Time("at")) {
+			baselines = append(baselines, proof)
 		}
 	}
-	if p := effective["inputs"].Record; p != nil {
+	if p := inputProof.Record; p != nil {
 		ci := p.object("ci")
 		accepted := b.CI[ci.String("uid")].Record.object("ci")
 		if !stgCIProofKind(p.String("kind")) || !stgSameCI(accepted, ci) || inputs.String("uiRevision") != ci.String("ui_commit") || inputs.String("infraRevision") != ci.String("infra_commit") {
 			return fail("permit reused inputs from a resolved blocking interval")
 		}
 	}
-	if p := effective["base"].Record; p != nil {
+	// Preserve the existing refusal for a latest non-deployment repair (such
+	// as a different Git head). Its seq never chooses between baselines.
+	if p := lastBaseProof.Record; p != nil && p.String("kind") != "evidence" {
+		return fail("permit reused the baseline from a resolved blocking interval")
+	}
+	if len(baselines) > 0 {
 		base := snap.object("base")
-		if p.String("kind") != "evidence" || base.String("evidence") != p.String("evidence") || base.String("P") != p.String("P") || !stgSame(p["content"], map[string]any{"api_digest": base["api_digest"], "console_digest": base["console_digest"]}) {
+		latest := baselines[0].Record
+		matched := false
+		for _, proof := range baselines {
+			p := proof.Record
+			// Check all latest-time peers before accepting any identity. A
+			// strictly newer observation can supersede an older ambiguous set.
+			if p.String("P") != latest.String("P") || !stgSame(p["content"], latest["content"]) {
+				return fail("conflicting baseline observations at the same deployment time")
+			}
+			if base.String("evidence") == p.String("evidence") && base.String("P") == p.String("P") && stgSame(p["content"], map[string]any{"api_digest": base["api_digest"], "console_digest": base["console_digest"]}) {
+				matched = true
+			}
+		}
+		if !matched {
 			return fail("permit reused the baseline from a resolved blocking interval")
 		}
 	}
