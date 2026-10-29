@@ -20,9 +20,19 @@
 -- has this file. An older platform never sets a pin and never registers an
 -- external host; should it meet a pinned task as the oldest ready one, the
 -- attempt guard below refuses its lease and that claim fails, so it fails
--- closed. The ALTERs take strong locks on host and task while they check
--- the rows; both tables are small. The one DROP is host_host_kind_check,
--- made again at once with external added.
+-- closed.
+--
+-- Locks, in file order: ALTER TABLE takes ACCESS EXCLUSIVE on host, then
+-- task. Their ordinary CREATE INDEX takes SHARE and CREATE TRIGGER takes
+-- SHARE ROW EXCLUSIVE (already covered by those stronger ALTER locks).
+-- CREATE TRIGGER on attempt also takes SHARE ROW EXCLUSIVE, conflicting
+-- with attempt writers. All locks remain until this file's transaction
+-- ends. Small tables do not bound lock waits: migrate.apply sets LOCAL
+-- lock_timeout = 2s and statement_timeout = 30s before running the file.
+-- A timeout rolls back the whole file and its migration record; retry in
+-- a quieter window. Record actual wait/hold time in STG before PROD.
+-- The one DROP is host_host_kind_check, made again in this SAME transaction
+-- with external added; never run these statements separately in autocommit.
 
 -- Hosts: an external kind, at most one host of it, and a kind never changes.
 ALTER TABLE agentrt.host DROP CONSTRAINT host_host_kind_check;

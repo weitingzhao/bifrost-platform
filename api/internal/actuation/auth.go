@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -153,6 +154,9 @@ func LoadAuth(path string) (*AuthService, error) {
 	if err := yaml.Unmarshal(data, &file); err != nil {
 		return nil, fmt.Errorf("parse platform auth: %w", err)
 	}
+	if err := seatsUnique(file.Tokens); err != nil {
+		return nil, err
+	}
 	auth := &AuthService{principals: map[string]Principal{}, issueReaders: map[string]bool{}}
 	readers := DefaultIssueReaders
 	if file.IssueReaders != nil {
@@ -163,9 +167,6 @@ func LoadAuth(path string) (*AuthService, error) {
 			return nil, fmt.Errorf("platform auth: issue_readers names an empty token")
 		}
 		auth.issueReaders[name] = true
-	}
-	if err := seatsUnique(file.Tokens); err != nil {
-		return nil, err
 	}
 	for _, t := range file.Tokens {
 		token := strings.TrimSpace(t.Token)
@@ -231,6 +232,10 @@ func LoadAuth(path string) (*AuthService, error) {
 // (store/pin.go; DESIGN-coordinator-landing-v3 §2.1).
 const SeatPrefix = "seat:"
 
+// ErrDuplicateSeat is a startup configuration error: a seat must resolve to
+// one configured token, even if a token's value is currently absent.
+var ErrDuplicateSeat = errors.New("platform auth: duplicate seat token name")
+
 // seatsUnique refuses a configuration that names one seat twice under
 // tokens, whatever the values, configured or not: a seat is one principal,
 // so the writes recorded as it, and a pin, come from one token only (§2.1;
@@ -243,7 +248,7 @@ func seatsUnique(tokens []TokenConfig) error {
 			continue
 		}
 		if seen[name] {
-			return fmt.Errorf("platform auth: seat token %q is named twice; a seat is one token", name)
+			return fmt.Errorf("%w: seat token %q is named twice; a seat is one token", ErrDuplicateSeat, name)
 		}
 		seen[name] = true
 	}

@@ -166,6 +166,15 @@ func apply(ctx context.Context, conn *pgx.Conn, role string, f File) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	// Bound every file before it can acquire DDL locks. A blocked ALTER must
+	// not hold earlier locks for the CLI's ten-minute context. Two seconds
+	// lets short transactions finish; longer traffic requires a later retry.
+	// Thirty seconds bounds each statement (including CHECK/index scans).
+	// These transaction-local settings also cover the migration record and
+	// leave the caller's session settings intact after commit or rollback.
+	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '30s'`); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `SELECT set_config('agentrt.runtime_role', $1, true)`, role); err != nil {
 		return err
 	}

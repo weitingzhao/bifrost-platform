@@ -1,6 +1,7 @@
 package actuation
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -37,7 +38,7 @@ tokens:
 `,
 	} {
 		_, err := LoadAuth(writeAuthFile(t, body))
-		if err == nil || !strings.Contains(err.Error(), `seat token "seat:coordinator" is named twice`) {
+		if !errors.Is(err, ErrDuplicateSeat) || !strings.Contains(err.Error(), `seat token "seat:coordinator" is named twice`) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

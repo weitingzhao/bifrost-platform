@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -119,6 +120,9 @@ type Server struct {
 
 func New(cfg *config.Config) (*Server, error) {
 	auth, err := actuation.LoadAuth(cfg.PlatformAuthPath)
+	if errors.Is(err, actuation.ErrDuplicateSeat) {
+		return nil, fmt.Errorf("platform startup: %w", err)
+	}
 	authLoaded := err == nil
 	if err != nil {
 		// Fails closed (every gated route answers 401), which reads like a bad
