@@ -87,7 +87,11 @@ func TestStgGrantWithholdingAndBlockIntervals(t *testing.T) {
 	if len(h.state().BlockHistory) != 2 {
 		t.Fatal("lost previous blocking interval")
 	}
-	h.add(stgRecord("unblocked", "block", second.Record.String("block"), "why", "evidence_changed", "ref", "revision-2"))
+	h.reject(stgRecord("unblocked", "block", second.Record.String("block"), "why", "evidence_changed", "ref", "revision-2"), "transition")
+	// Opening another interval cannot reuse the first interval's grant.
+	h.reject(stgUnblock(second, "granted", "q1"), "transition")
+	// The new-generation positive control uses the legally resolved prefix.
+	h.entries = h.entries[:second.Seq-1]
 	open := h.opened(m)
 	open["batch"] = "stg:bifrost-platform:2"
 	open["first_pending_at"] = map[string]any{stgSHA("a"): state.Members[stgMember(m)].FirstPendingAt.Format(time.RFC3339Nano)}
@@ -265,6 +269,7 @@ func TestStgEveryEventKindHasSuccessAndDuplicateControl(t *testing.T) {
 	samples = append(samples, h.samples...)
 	h = stgReady(t, m)
 	h.add(stgTestEvidence(h.at, "cluster/cicd/external-1", "external", "manual"))
+	h.add(stgDeploymentCheck(h.at, "cluster/cicd/external-1"))
 	h.effective(m, stgSHA("b"), "effective")
 	c := stgRecord("covers")
 	for k, v := range m {

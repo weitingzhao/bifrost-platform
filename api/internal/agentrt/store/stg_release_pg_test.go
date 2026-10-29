@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -126,35 +125,96 @@ func TestStgStoreTwoConnectionsSpendLastCreditOnce(t *testing.T) {
 	h.add(h.snapshot(3, m))
 	stgPGReplay(t, one, h.entries)
 	defer FreezeEventClock(h.at)()
-	goNow := make(chan struct{})
-	results := make(chan error, 2)
-	var wg sync.WaitGroup
-	for _, conn := range []*pgx.Conn{one, two} {
-		wg.Add(1)
-		ev := stgNote(h.start(3))
-		go func() { defer wg.Done(); <-goNow; _, err := stgPGAppend(conn, ev); results <- err }()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tx, err := one.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		t.Fatal(err)
 	}
-	close(goNow)
-	wg.Wait()
-	close(results)
-	pass, refused := 0, 0
-	for err := range results {
-		if err == nil {
-			pass++
-		} else {
-			var se *StgReleaseError
-			if !errors.As(err, &se) || se.Code != "transition" {
-				t.Fatal(err)
-			}
-			refused++
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := Append(ctx, tx, stgNote(h.start(3))); err != nil {
+		t.Fatal(err)
+	}
+	// The first debit is still uncommitted and holds the stream lock. Do
+	// not release it until PostgreSQL confirms the second writer is waiting.
+	result := make(chan error, 1)
+	done := make(chan struct{})
+	second := stgNote(h.start(3))
+	go func() {
+		defer close(done)
+		result <- InTx(ctx, two, func(tx pgx.Tx) error { _, err := Append(ctx, tx, second); return err })
+	}()
+	defer func() { cancel(); <-done }()
+	observer := db.Connect(t, db.Runtime)
+	for {
+		var waiting bool
+		if err := observer.QueryRow(ctx, `SELECT $2::int = ANY(pg_blocking_pids($1::int))`, two.PgConn().PID(), one.PgConn().PID()).Scan(&waiting); err != nil {
+			t.Fatal("second writer never reached the stream lock", err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("second writer never waited on the first")
+		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	if pass != 1 || refused != 1 {
-		t.Fatalf("success=%d refusal=%d", pass, refused)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	err = <-result
+	var se *StgReleaseError
+	if !errors.As(err, &se) || se.Code != "transition" {
+		t.Fatal("waiting writer did not re-read the committed STARTED", err)
 	}
 	s := stgPGRead(t, one)
 	if s.Budget[StgBudgetKey{stgSHA("a"), 1}] != 3 || s.LastSeq != int64(len(h.entries)+1) {
 		t.Fatal("double debit or extra intent")
+	}
+}
+
+// Serial: FreezeEventClock; rollback must undo a debit and the stream hash head.
+func TestStgStoreStartedRollbackRestoresBudgetAndHead(t *testing.T) {
+	_, conn := stgPG(t)
+	h := stgReady(t, stgTestMember())
+	stgPGReplay(t, conn, h.entries)
+	defer FreezeEventClock(h.at)()
+	ctx := context.Background()
+	before := stgPGRead(t, conn)
+	var seq int64
+	var sha string
+	if err := conn.QueryRow(ctx, `SELECT last_seq,last_sha256 FROM agentrt.event_stream WHERE event_stream_id=$1`, StgReleaseStream).Scan(&seq, &sha); err != nil {
+		t.Fatal(err)
+	}
+	rollback := errors.New("rollback started fixture")
+	err := InTx(ctx, conn, func(tx pgx.Tx) error {
+		if _, err := Append(ctx, tx, stgNote(h.start(1))); err != nil {
+			return err
+		}
+		s, err := StgReleaseState(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if s.Budget[StgBudgetKey{stgSHA("a"), 1}] != 1 || s.LastSeq != seq+1 {
+			t.Error("transaction did not actually debit before rollback")
+		}
+		return rollback
+	})
+	if !errors.Is(err, rollback) || !reflect.DeepEqual(before, stgPGRead(t, conn)) {
+		t.Fatal("rollback retained STARTED or its budget", err)
+	}
+	var afterSeq int64
+	var afterSHA string
+	if err := conn.QueryRow(ctx, `SELECT last_seq,last_sha256 FROM agentrt.event_stream WHERE event_stream_id=$1`, StgReleaseStream).Scan(&afterSeq, &afterSHA); err != nil || seq != afterSeq || sha != afterSHA {
+		t.Fatal("rollback changed sequence or hash head", err)
+	}
+	a, err := stgPGAppend(conn, stgNote(h.start(1)))
+	if err != nil || a.Seq != seq+1 || stgPGRead(t, conn).Budget[StgBudgetKey{stgSHA("a"), 1}] != 1 {
+		t.Fatal("same entry could not spend the rolled-back credit", err)
+	}
+	if count, err := VerifyStream(ctx, conn, StgReleaseStream); err != nil || count != a.Seq {
+		t.Fatal("hash chain did not recover", count, err)
 	}
 }
 

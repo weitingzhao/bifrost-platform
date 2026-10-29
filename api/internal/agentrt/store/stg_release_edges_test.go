@@ -87,7 +87,9 @@ func TestStgBlockUnknownBaselineAndStableDiagnosticClock(t *testing.T) {
 		t.Fatal("scan reset interval clock")
 	}
 	h.reject(h.opened(stgTestMember()), "transition")
-	h.add(stgRecord("unblocked", "block", r["block"], "why", "evidence_changed", "ref", "observation-v2"))
+	h.reject(stgRecord("unblocked", "block", r["block"], "why", "evidence_changed", "ref", "observation-v2"), "transition")
+	h.add(stgTestEvidence(h.at, "cluster/cicd/new-baseline", "external", "manual"))
+	h.add(stgRecord("unblocked", "block", r["block"], "why", "evidence_changed", "ref", "cluster/cicd/new-baseline"))
 	h.add(h.opened(stgTestMember()))
 	d := stgRecord("diag", "try", 0, "what", "ci_waiting", "gen", 1)
 	h.add(d)

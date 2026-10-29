@@ -85,6 +85,7 @@ type StgState struct {
 	Blocks             map[string]StgBlock
 	BlockHistory       map[int64]StgBlock
 	Evidence           map[string]StgEvent
+	DeploymentChecks   map[string]StgEvent
 	Covers             map[StgCoverKey]StgEvent
 	Legacy             landing.State
 	Validity           map[StgValidityKey]StgEvent
@@ -96,7 +97,7 @@ type StgState struct {
 func newStgState() StgState {
 	return StgState{Batches: map[string]*StgBatch{}, Members: map[StgMemberKey]StgMemberState{}, Budget: map[StgBudgetKey]int64{},
 		Generations: map[string]int64{}, Debits: map[string]StgDebit{}, Grants: map[string]StgEvent{}, Withheld: map[StgMemberKey]StgEvent{},
-		Blocks: map[string]StgBlock{}, BlockHistory: map[int64]StgBlock{}, Evidence: map[string]StgEvent{}, Covers: map[StgCoverKey]StgEvent{},
+		Blocks: map[string]StgBlock{}, BlockHistory: map[int64]StgBlock{}, Evidence: map[string]StgEvent{}, DeploymentChecks: map[string]StgEvent{}, Covers: map[StgCoverKey]StgEvent{},
 		Validity: map[StgValidityKey]StgEvent{}, Records: map[int64]StgEvent{}, Answers: map[string]StgEvent{}}
 }
 
@@ -133,15 +134,20 @@ func StgFold(entries []StgEntry) (StgState, error) {
 			if why := badLandingMain(raw); why != "" {
 				return StgState{}, stgError("invalid", "landing_main", why)
 			}
-			m := raw.(map[string]any)
-			r := StgRecord(m)
-			s.Validity[StgValidityKey{stgMember(m), r.String("head")}] = StgEvent{e.Seq, e.At, r}
+			r, err := stgDetached(raw)
+			if err != nil {
+				return StgState{}, err
+			}
+			s.Validity[StgValidityKey{stgMember(r), r.String("head")}] = StgEvent{e.Seq, e.At, r}
 			s.Records[e.Seq] = StgEvent{e.Seq, e.At, r}
 		} else if raw, ok := e.Event.Body["landing_card_outcome"].(map[string]any); ok && raw["family"] == "stg" {
 			// B5-g owns the card protocol and its storage-side question binding.
 			// Until that protocol accepts STG outcomes, no Owner-only edge can
 			// pass Append. Replay retains the recorded outcome, never an RPC reply.
-			r := StgRecord(raw)
+			r, err := stgDetached(raw)
+			if err != nil {
+				return StgState{}, err
+			}
 			if e.Event.Actor != "controller" || e.Event.Type != "note" || r.String("question_id") == "" {
 				return StgState{}, stgError("permission", "answer", "invalid recorded card outcome")
 			}
@@ -153,6 +159,18 @@ func StgFold(entries []StgEntry) (StgState, error) {
 		s.LastSeq = e.Seq
 	}
 	return s, nil
+}
+
+func stgDetached(raw any) (StgRecord, error) {
+	b, err := canon.Encode(raw)
+	if err != nil {
+		return nil, err
+	}
+	v, err := canon.Parse(b)
+	if err != nil {
+		return nil, err
+	}
+	return StgRecord(v.(map[string]any)), nil
 }
 
 func stgEnvelope(ev Event) error {
@@ -363,6 +381,9 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 		if b.Phase != "SNAP" || t.Started.Seq > 0 || e.At.Before(t.Snapshot.Record.Time("not_before")) {
 			return fail("transition", "started requires a due, unspent snapshot")
 		}
+		if err := s.checkReleaseBlocks(b, k); err != nil {
+			return 0, err
+		}
 		if err := s.checkStart(b, e); err != nil {
 			return 0, err
 		}
@@ -380,6 +401,9 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 			return fail("transition", "requires unbound execution after its latest permit expires")
 		}
 		if k == "resend" {
+			if err := s.checkReleaseBlocks(b, k); err != nil {
+				return 0, err
+			}
 			if r.Int("intent_seq") != t.Started.Seq || r.object("lease").String("who") != t.Started.Record.object("lease").String("who") || r.object("lease").Int("gen") < t.Permit.Record.object("lease").Int("gen") || !stgDeadline(e) {
 				return fail("conflict", "resend requires the original intent, a nondecreasing lease generation and a new deadline")
 			}
@@ -392,6 +416,11 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 	case "bound":
 		if !t.Occupied() {
 			return fail("transition", "bound requires an outstanding execution")
+		}
+		for id := range s.Evidence {
+			if stgRunUID(id) == r.String("uid") {
+				return fail("conflict", "run UID already has evidence without this binding")
+			}
 		}
 		t.Bound = e
 	case "run_evidence":
@@ -567,8 +596,11 @@ func (s StgState) checkVerify(b *StgBatch, e StgEvent) error {
 	if outcome == "verified" && (ev.Record.String("source") != "automatic" || ev.Record.String("batch") != b.Opened.Record.String("batch") || ev.Record.String("run") != t.Started.Record.String("run") || ev.Record.String("P") != inputs.String("revision") || ev.Record.String("U") != inputs.String("uiRevision") || ev.Record.String("infra") != inputs.String("infraRevision")) {
 		return stgError("conflict", "verify", "verified evidence is not this execution")
 	}
-	if outcome == "superseded" && (ev.Record.String("run") == t.Started.Record.String("run") || ev.Record.object("deployed").Time("at").Before(t.Started.At)) {
-		return stgError("conflict", "verify", "superseding evidence must identify a different later deployment")
+	if outcome == "superseded" {
+		observed := s.deploymentObservation(r.String("evidence"))
+		if stgRunUID(r.String("evidence")) == t.Bound.Record.String("uid") || observed.Seq <= t.RunEvidence.Seq || observed.Record.object("deployed").Time("at").Before(t.RunEvidence.At) || observed.Record.object("deployed").Time("at").Before(t.RunEvidence.Record.Time("at")) {
+			return stgError("conflict", "verify", "superseding deployment must be rechecked after this run's terminal evidence")
+		}
 	}
 	return nil
 }

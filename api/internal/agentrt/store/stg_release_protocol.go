@@ -43,29 +43,30 @@ func (r StgRecord) object(k string) StgRecord {
 type stgSpec struct{ scope, fields string }
 
 var stgSpecs = map[string]stgSpec{
-	"opened":            {"batch", "members first_pending_at"},
-	"p_selected":        {"batch", "P at"},
-	"ci_accepted":       {"batch", "P ci"},
-	"snapshot":          {"batch", "try inputs base set not_before"},
-	"started":           {"batch", "try intent_seq run labels annotations fingerprint spend lease deadline"},
-	"resend":            {"batch", "try intent_seq lease deadline why"},
-	"unsent":            {"batch", "try proof"},
-	"bound":             {"batch", "try uid"},
-	"run_evidence":      {"batch", "try uid status raw at"},
-	"effect":            {"batch", "try class workloads at"},
-	"verify":            {"batch", "try outcome why evidence"},
-	"member":            {"batch", "root op R to ref"},
-	"retry":             {"batch", "try not_before"},
-	"quarantined":       {"batch", "try why at"},
-	"quarantine_closed": {"batch", "try question_id by"},
-	"settled":           {"batch", "members why"},
-	"evidence":          {"ext", "source run P U infra content deployed health"},
-	"covers":            {"ext", "root op R"},
-	"granted":           {"grant", "members gen trigger_seq question_id"},
-	"withheld":          {"grant", "members why trigger_seq"},
-	"blocked":           {"block", "why P base first_at evidence_version detail"},
-	"unblocked":         {"block", "why ref"},
-	"diag":              {"batch", "try what gen"},
+	"opened":             {"batch", "members first_pending_at"},
+	"p_selected":         {"batch", "P at"},
+	"ci_accepted":        {"batch", "P ci"},
+	"snapshot":           {"batch", "try inputs base set not_before"},
+	"started":            {"batch", "try intent_seq run labels annotations fingerprint spend lease deadline"},
+	"resend":             {"batch", "try intent_seq lease deadline why"},
+	"unsent":             {"batch", "try proof"},
+	"bound":              {"batch", "try uid"},
+	"run_evidence":       {"batch", "try uid status raw at"},
+	"effect":             {"batch", "try class workloads at"},
+	"verify":             {"batch", "try outcome why evidence"},
+	"member":             {"batch", "root op R to ref"},
+	"retry":              {"batch", "try not_before"},
+	"quarantined":        {"batch", "try why at"},
+	"quarantine_closed":  {"batch", "try question_id by"},
+	"settled":            {"batch", "members why"},
+	"evidence":           {"ext", "source run P U infra content deployed health"},
+	"deployment_checked": {"ext", "content deployed health"},
+	"covers":             {"ext", "root op R"},
+	"granted":            {"grant", "members gen trigger_seq question_id"},
+	"withheld":           {"grant", "members why trigger_seq"},
+	"blocked":            {"block", "why P base first_at evidence_version detail"},
+	"unblocked":          {"block", "why ref"},
+	"diag":               {"batch", "try what gen"},
 }
 
 var (
@@ -115,7 +116,7 @@ func ParseStgRelease(v any) (StgRecord, error) {
 	}
 	for key, val := range r {
 		valid := true
-		s, _ := val.(string)
+		s, isString := val.(string)
 		switch key {
 		case "v", "kind", "scope":
 		case "batch":
@@ -123,7 +124,7 @@ func ParseStgRelease(v any) (StgRecord, error) {
 		case "evidence":
 			// Failed verification has no trusted deployment evidence. The
 			// field stays present but empty; verified/superseded must name one.
-			valid = stgEvidenceID(s) || k == "verify" && r.String("outcome") == "failed" && s == ""
+			valid = isString && (stgEvidenceID(s) || k == "verify" && r.String("outcome") == "failed" && s == "")
 		case "block":
 			valid = stgHex16.MatchString(s)
 		case "P", "U", "R", "infra":

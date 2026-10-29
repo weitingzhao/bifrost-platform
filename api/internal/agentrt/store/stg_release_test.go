@@ -185,7 +185,11 @@ func (h *stgHarness) block(why string, ms ...map[string]any) StgEvent {
 	for _, m := range ms {
 		a = append(a, m)
 	}
-	return h.add(stgRecord("blocked", "block", StgBlockID(stgSHA("b"), stgSHA("e"), why, "v1"), "why", why, "P", stgSHA("b"), "base", stgTestBase(), "first_at", h.at.Format(time.RFC3339Nano), "evidence_version", "v1", "detail", map[string]any{"members": a}))
+	base := stgTestBase()
+	if why == "baseline_unknown" {
+		base = map[string]any{"P": ""}
+	}
+	return h.add(stgRecord("blocked", "block", StgBlockID(stgSHA("b"), base["P"].(string), why, "v1"), "why", why, "P", stgSHA("b"), "base", base, "first_at", h.at.Format(time.RFC3339Nano), "evidence_version", "v1", "detail", map[string]any{"members": a}))
 }
 func memberRecord(m map[string]any, to string, ref any) map[string]any {
 	r := stgRecord("member", "to", to, "ref", ref)
@@ -340,6 +344,8 @@ func TestStgQuarantineExternalCoverageDoesNotReleaseExecution(t *testing.T) {
 	h.reject(stgRecord("verify", "try", 1, "outcome", "superseded", "why", "manual", "evidence", "cluster/cicd/external-1"), "transition")
 	h.add(stgRecord("run_evidence", "try", 1, "uid", "run-uid-1", "status", "Succeeded", "raw", map[string]any{"results": []any{}, "child_refs": []any{}, "conditions": []any{}}, "at", h.at.Format(time.RFC3339Nano)))
 	h.add(memberRecord(m, "covered", "cluster/cicd/external-1"))
+	h.reject(stgRecord("verify", "try", 1, "outcome", "superseded", "why", "manual", "evidence", "cluster/cicd/external-1"), "conflict")
+	h.add(stgDeploymentCheck(h.at, "cluster/cicd/external-1"))
 	h.add(stgRecord("verify", "try", 1, "outcome", "superseded", "why", "manual", "evidence", "cluster/cicd/external-1"))
 	h.settle(m)
 	if start.Seq == 0 || h.state().Batches[stgTestBatch].Tries[1].IsQuarantined() {

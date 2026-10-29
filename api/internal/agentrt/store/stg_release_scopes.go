@@ -21,10 +21,15 @@ func (s *StgState) applyOther(e StgEvent) error {
 		// run cannot be relabelled external by the other observer.
 		var automatic *StgTry
 		var batchID string
-		uid := strings.Split(id, "/")[2]
+		uid := stgRunUID(id)
 		for bid, b := range s.Batches {
 			for _, t := range b.Tries {
-				if t.Started.Record.String("run") == r.String("run") {
+				// Cluster is not stored in bound v1. Conservatively reserve a
+				// known UID across clusters/namespaces until B5-b binds it.
+				if t.Bound.Record.String("uid") == uid {
+					if automatic != nil {
+						return fail("conflict", "run UID is bound to multiple intents")
+					}
 					automatic = t
 					batchID = bid
 				}
@@ -34,7 +39,7 @@ func (s *StgState) applyOther(e StgEvent) error {
 			return fail("conflict", "local automatic run is not external")
 		}
 		if r.String("source") == "automatic" {
-			if automatic == nil || r.String("batch") != batchID || automatic.Bound.Record.String("uid") != uid || automatic.RunEvidence.Record.String("status") != "Succeeded" {
+			if automatic == nil || r.String("batch") != batchID || automatic.Started.Record.String("run") != r.String("run") || automatic.RunEvidence.Record.String("status") != "Succeeded" {
 				return fail("transition", "automatic evidence needs its bound successful run")
 			}
 			inputs := automatic.Snapshot.Record.object("inputs")
@@ -46,6 +51,20 @@ func (s *StgState) applyOther(e StgEvent) error {
 			}
 		}
 		s.Evidence[id] = e
+	case "deployment_checked":
+		// Append a fresh observation of an immutable evidence identity. The
+		// adapter must recheck pin-sync, workloads and health against its
+		// content; an old observation cannot be refreshed by changing its ID.
+		id := r.String("evidence")
+		proof, ok := s.Evidence[id]
+		if !ok || !stgSame(r["content"], proof.Record["content"]) {
+			return fail("conflict", "deployment check must match existing evidence content")
+		}
+		at := r.object("deployed").Time("at")
+		if at.After(e.At) || !at.After(s.deploymentObservation(id).Record.object("deployed").Time("at")) {
+			return fail("invalid", "deployment check must be a newer, non-future observation")
+		}
+		s.DeploymentChecks[id] = e
 	case "covers":
 		id := r.String("evidence")
 		proof, ok := s.Evidence[id]
@@ -150,21 +169,8 @@ func (s *StgState) applyOther(e StgEvent) error {
 		if !b.IsOpen() {
 			return fail("transition", "blocking interval is not open")
 		}
-		// refs to local decisions must exist. External input/rule revisions
-		// remain strings; B5-c/e acquires those observations.
-		if seq, ok := cardNumber(r["ref"]); ok && s.Records[seq].Seq == 0 {
-			return fail("transition", "unblock decision reference does not exist")
-		}
-		if r.String("why") == "granted" {
-			g, ok := s.Grants[r.String("ref")]
-			if !ok || g.Record.Int("trigger_seq") != b.Opened.Seq {
-				return fail("transition", "unblock must name this interval's grant or withholding")
-			}
-		}
-		if r.String("why") == "external_release" {
-			if ev, ok := s.Evidence[r.String("ref")]; !ok || ev.Record.String("source") != "external" {
-				return fail("transition", "external release evidence is missing")
-			}
+		if err := s.checkUnblock(b, r); err != nil {
+			return err
 		}
 		b.Closed = e
 		s.Blocks[id] = b
