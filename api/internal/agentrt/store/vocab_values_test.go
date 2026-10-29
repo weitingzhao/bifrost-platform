@@ -22,6 +22,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"mission_state_changed", "from", "awaiting_owner", "waiting"},
 		{"mission_state_changed", "to", "expired", "closed"},
 		{"task_proposed", "role", "brief", "author"},
+		{"task_proposed", "executor_pin", "external:coordinator", "external:other"},
 		{"task_state_changed", "to", "blocked", "stuck"},
 		{"task_state_changed", "from", "verifying", "checking"},
 		{"task_dependency_added", "depends_on_task_id", "t_" + ulid, "t1"},
@@ -178,6 +179,13 @@ func TestEventFieldValues(t *testing.T) {
 			if !found {
 				t.Errorf("%s.%s is checked but not in the body", event, name)
 			}
+		}
+	}
+	// A pinned task's via_session is the header as given, "" for none, and
+	// nothing else (pin.go).
+	for v, want := range map[any]bool{"": true, "local_s1": true, "no session!": false, 7: false} {
+		if got := badValue("task_proposed", "via_session", v) == ""; got != want {
+			t.Errorf("task_proposed.via_session %#v taken %v", v, got)
 		}
 	}
 	// A list is checked element by element.

@@ -164,6 +164,9 @@ func LoadAuth(path string) (*AuthService, error) {
 		}
 		auth.issueReaders[name] = true
 	}
+	if err := seatsUnique(file.Tokens); err != nil {
+		return nil, err
+	}
 	for _, t := range file.Tokens {
 		token := strings.TrimSpace(t.Token)
 		if isPlaceholderToken(token) {
@@ -220,6 +223,31 @@ func LoadAuth(path string) (*AuthService, error) {
 		auth.principals[token] = Principal{Name: t.Name, Role: RoleIntake}
 	}
 	return auth, nil
+}
+
+// SeatPrefix starts the name of a seat's token: the runtime records a write
+// with it as the seat itself (agentrtapi.writer), and a seat may be the
+// proposer a standing envelope names, the one writer allowed to pin a task
+// (store/pin.go; DESIGN-coordinator-landing-v3 §2.1).
+const SeatPrefix = "seat:"
+
+// seatsUnique refuses a configuration that names one seat twice under
+// tokens, whatever the values, configured or not: a seat is one principal,
+// so the writes recorded as it, and a pin, come from one token only (§2.1;
+// tokens are otherwise held unique only by value).
+func seatsUnique(tokens []TokenConfig) error {
+	seen := map[string]bool{}
+	for _, t := range tokens {
+		name := strings.TrimSpace(t.Name)
+		if !strings.HasPrefix(name, SeatPrefix) {
+			continue
+		}
+		if seen[name] {
+			return fmt.Errorf("platform auth: seat token %q is named twice; a seat is one token", name)
+		}
+		seen[name] = true
+	}
+	return nil
 }
 
 // IssueReader says whether a principal reads business issues (§5.3): an

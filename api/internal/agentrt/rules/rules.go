@@ -109,6 +109,9 @@ type Envelope struct {
 	Budget    Budget
 	Executors []string
 	Hosts     []string
+	// ExternalHosts: the external hosts a pinned task may go to, sorted by
+	// host, nil for none (envelope_hosts.go).
+	ExternalHosts []ExternalHost
 }
 
 // BudgetRule is a tenant's default mission budget and an attempt's hard time
@@ -334,6 +337,9 @@ func (r *Rule) envelope(o *object, arg string) error {
 	}
 	slices.Sort(e.Executors)
 	slices.Sort(e.Hosts)
+	if err = e.externalHosts(o); err != nil {
+		return err
+	}
 	r.Envelope = e
 	return nil
 }
@@ -587,6 +593,9 @@ func (r Rule) Doc() map[string]any {
 		e := r.Envelope
 		doc["tenant"], doc["max_action"], doc["executors"], doc["hosts"] = e.Tenant, e.MaxAction, anyList(e.Executors), anyList(e.Hosts)
 		doc["budget"] = map[string]any{"max_attempts": e.Budget.MaxAttempts, "max_wall_hours": e.Budget.MaxWallHours}
+		if hosts := e.externalHostsDoc(); hosts != nil {
+			doc["external_hosts"] = hosts
+		}
 	case KindConcurrency:
 		doc["per_host"] = *r.PerHost
 	case KindBudget:

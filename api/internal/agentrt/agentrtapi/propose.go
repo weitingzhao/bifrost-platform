@@ -113,6 +113,9 @@ type taskBody struct {
 	Needs          []string `json:"needs"`
 	DependsOn      []string `json:"depends_on"`
 	HardLimitS     int      `json:"hard_limit_s"`
+	// ExecutorPin pins the task to the external host (store/pin.go): only
+	// the proposer seat a signed standing envelope names may set it.
+	ExecutorPin string `json:"executor_pin"`
 }
 
 type tasksBody struct {
@@ -121,7 +124,9 @@ type tasksBody struct {
 }
 
 // proposeTasks is POST /missions/{id}/tasks: a batch of task_proposed, all
-// or nothing; the controller readies them (store.Dispatch).
+// or nothing; the controller readies them (store.Dispatch). A batch that
+// pins a task is store.ProposePinnedTasks's, its X-Bifrost-Session header
+// recorded on each pinned task (via_session) and granting nothing.
 func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 	var b tasksBody
 	if !decode(w, r, &b) {
@@ -132,7 +137,8 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	tasks := make([]store.TaskProposal, 0, len(b.Tasks))
+	tasks := make([]store.PinnedTask, 0, len(b.Tasks))
+	pinned := false
 	for _, t := range b.Tasks {
 		// Bounded before it becomes a duration, which a large number would
 		// wrap (review 175 B5).
@@ -141,12 +147,22 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("task %s: hard_limit_s is from 0 to %d", t.Ref, int(store.MaxHardLimit/time.Second)))
 			return
 		}
-		tasks = append(tasks, store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
+		tasks = append(tasks, store.PinnedTask{TaskProposal: store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
-			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second})
+			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin})
+		pinned = pinned || t.ExecutorPin != ""
 	}
-	out, err := store.ProposeTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), tasks)
+	var out map[string]any
+	if pinned {
+		out, err = store.ProposePinnedTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), r.Header.Get(SessionHeader), tasks)
+	} else {
+		plain := make([]store.TaskProposal, 0, len(tasks))
+		for _, t := range tasks {
+			plain = append(plain, t.TaskProposal)
+		}
+		out, err = store.ProposeTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), plain)
+	}
 	if err != nil {
 		a.fail(w, err)
 		return

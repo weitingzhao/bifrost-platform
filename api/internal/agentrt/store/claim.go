@@ -65,6 +65,7 @@ type candidate struct {
 	envelope                                             string // the standing envelope its mission started under
 	tenant                                               string // its mission's: whose routing rule applies
 	class                                                string // its task class: which scores bear on it
+	pin                                                  string // its executor pin, "" for none (pin.go)
 	core                                                 bool
 	needs, route                                         []string
 	limitS                                               int
@@ -212,7 +213,10 @@ func confirmClaim(ctx context.Context, db DB, claim *Claim, cerr error) (*Claim,
 
 // candidates reads one page of ready tasks of active missions, oldest first,
 // after the cursor. A review or verification of core work is core work
-// (review 148 B4).
+// (review 148 B4). A task pinned to the external host is none of them: only
+// that host leases it, by its id (DESIGN-coordinator-landing-v3 §2.4; the
+// database refuses any other lease, 0010), so it neither goes to an
+// ordinary host nor keeps one from the tasks after it.
 func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candidate) ([]candidate, error) {
 	var at any
 	var id string
@@ -220,7 +224,7 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 		at, id = after.created, after.id
 	}
 	rows, err := tx.Query(ctx, candidateColumns+`
-	  WHERE t.state = 'ready' AND m.state = 'active' AND t.effect_class = ANY($1)
+	  WHERE t.state = 'ready' AND m.state = 'active' AND t.effect_class = ANY($1) AND t.executor_pin IS NULL
 	    AND ($2::timestamptz IS NULL OR (t.created_at, t.task_id) > ($2::timestamptz, $3::text))
 	  ORDER BY t.created_at, t.task_id LIMIT $4`, effects, at, id, candidatePage)
 	if err != nil {
@@ -232,14 +236,15 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 const candidateColumns = `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
 	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
 	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)),
-	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, ''), m.tenant, t.task_class
+	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, ''), m.tenant, t.task_class,
+	  COALESCE(t.executor_pin, '')
 	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id`
 
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
 	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.route,
-		&c.limitS, &c.created, &c.envelope, &c.tenant, &c.class)
+		&c.limitS, &c.created, &c.envelope, &c.tenant, &c.class, &c.pin)
 	return c, err
 }
 

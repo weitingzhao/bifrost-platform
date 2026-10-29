@@ -260,8 +260,8 @@ func RegisterAgentdHost(ctx context.Context, db DB, hostID, token string) error 
 }
 
 func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, anyKind bool) error {
-	if kind != "dev" && kind != "vm" {
-		return fmt.Errorf("%w: host kind %q is not dev or vm", ErrState, kind)
+	if !slices.Contains(hostKinds, kind) {
+		return fmt.Errorf("%w: host kind %q is not one of %v", ErrState, kind, hostKinds)
 	}
 	actor := hostActor(hostID)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
@@ -299,6 +299,15 @@ func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, an
 }
 
 func hostActor(hostID string) string { return "host:" + hostID }
+
+// hostKinds are the kinds of host (0010): an Agent host of the cluster's
+// (dev, vm), or the one external host, the coordinator's Mac, which leases
+// only the tasks pinned to it (DESIGN-coordinator-landing-v3 §2.4); the
+// database holds an external host to those and allows one.
+var hostKinds = []string{"dev", "vm", HostExternal}
+
+// HostExternal is the kind of the external host.
+const HostExternal = "external"
 
 // Controls.
 

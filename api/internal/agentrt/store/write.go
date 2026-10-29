@@ -286,6 +286,10 @@ type Task struct {
 	Needs                                                                                     []string
 	HardLimit                                                                                 time.Duration
 	Token                                                                                     string // the proposing token, when a route did
+	// pin and viaSession: the executor pin and the session header of a
+	// pinned proposal, set only by proposeBatchTx after checkPin (pin.go);
+	// nothing outside this package, and nothing else in it, sets them.
+	pin, viaSession string
 }
 
 // ProposeTask writes task_proposed and the task. A task outside the plan
@@ -312,6 +316,9 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	if t.Token != "" {
 		body["token"] = t.Token
+	}
+	if t.pin != "" {
+		body["executor_pin"], body["via_session"] = t.pin, t.viaSession
 	}
 	needs, err := canon.Encode(nonNil(t.Needs))
 	if err != nil {
@@ -350,11 +357,11 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, off_plan, off_plan_reason,
 	  subject_task_id, role, task_class, title, spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id,
-	  core, needs_json, repo, base_commit)
-	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'proposed',$12,$13,$14,$15::jsonb,$16,$17)`,
+	  core, needs_json, repo, base_commit, executor_pin)
+	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'proposed',$12,$13,$14,$15::jsonb,$16,$17,$18)`,
 		t.ID, t.MissionID, nullable(t.PlanNode), t.PlanNode == "", nullable(t.OffPlanReason), nullable(t.Subject),
 		t.Role, t.Class, t.Title, t.SpecArtifact, t.Effect, limit, actor,
-		t.Core, string(needs), nullable(t.Repo), nullable(t.BaseCommit))
+		t.Core, string(needs), nullable(t.Repo), nullable(t.BaseCommit), nullable(t.pin))
 	if err != nil {
 		return ev, err
 	}

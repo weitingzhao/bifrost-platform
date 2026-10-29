@@ -63,8 +63,9 @@ func headSQL(stream string) string {
 // (pruning), its last contact (contact_at), whether it takes work
 // (claiming: true, false, or null while
 // not known yet; review 527 A3), and whether the controller reports it
-// offline (reported_offline: lost, active, and no stop or drain on it or on
-// every host).
+// offline (reported_offline: lost, active, not the external host, and no
+// stop or drain on it or on every host). The external host (0010) polls
+// only when the coordinator hands work in, so its silence is no news.
 func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
@@ -75,7 +76,7 @@ func HostsSQL(now string) string {
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
 	    'pruning', ` + pruneOpenSQL(now) + `, 'contact_at', hc.at,
 	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
-	    'reported_offline', h.state = 'active' AND ` + hostSilentSQL(now) + `
+	    'reported_offline', h.state = 'active' AND h.host_kind <> 'external' AND ` + hostSilentSQL(now) + `
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
 	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))))
 	  ORDER BY h.host_id), '[]'::jsonb)
@@ -194,6 +195,7 @@ func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool, di
 // HostPresence is a host as the hosts document has it.
 type HostPresence struct {
 	HostID          string     `json:"host_id"`
+	HostKind        string     `json:"host_kind"`
 	State           string     `json:"state"`
 	LastPollAt      *time.Time `json:"last_poll_at"`
 	Online          bool       `json:"online"`
@@ -223,16 +225,22 @@ func (h HostPresence) held() string {
 
 // usable is a host that takes work now: its claim loop calls (alive alone
 // is not enough: review 527 A3), it is active, under no stop, pause or drain,
-// with room on disk.
+// with room on disk, and not the external host.
 func (h HostPresence) usable() bool {
-	return h.Claiming != nil && *h.Claiming && h.State == "active" && h.held() == "" && !h.DiskLow
+	return !h.external() && h.Claiming != nil && *h.Claiming && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
+// external is the external host (0010): it leases only the tasks pinned
+// to it, when the coordinator hands one in, so it is neither watched (its
+// silence is no news) nor a host that makes any job's executor available.
+func (h HostPresence) external() bool { return h.HostKind == HostExternal }
+
 // watched says whether the presence pass tells this host's turns: an active
-// host under no stop or drain (on it, or on every host). A host taken out of
-// work on purpose is not reported, either way (review 526 B1).
+// host under no stop or drain (on it, or on every host), not the external
+// host. A host taken out of work on purpose is not reported, either way
+// (review 526 B1).
 func (h HostPresence) watched() bool {
-	if h.State != "active" {
+	if h.State != "active" || h.external() {
 		return false
 	}
 	for _, c := range h.Controls {
@@ -247,7 +255,7 @@ func (h HostPresence) watched() bool {
 // yet: its silence is counted from the reader's start (review 526 A1b). What
 // it can take is not known.
 func (h HostPresence) waited() bool {
-	return h.Claiming == nil && h.State == "active" && h.held() == "" && !h.DiskLow
+	return !h.external() && h.Claiming == nil && h.State == "active" && h.held() == "" && !h.DiskLow
 }
 
 // ExecutorPresence is an executor some job's candidate names: whether it is

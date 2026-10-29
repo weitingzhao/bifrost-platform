@@ -74,7 +74,7 @@ var bodies = map[string][]field{
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"question_id", kID, true}, {"answer", kStr, true}},
 	"mission_amended":         {{"reason", kStr, false}, {"success", kAny, true}, {"out_of_scope", kAny, true}, {"max_attempts", kInt, true}, {"max_wall_hours", kInt, true}, {"no_merge", kStr, true}, {"approval_id", kStr, true}, {"archive_manifest_sha256", kStr, true}, {"env", kStr, true}, {"expected_version", kInt, true}, {"version", kInt, true}},
 	"decision_recorded":       {{"decision", kStr, false}, {"why", kStr, false}, {"dropped", kStr, true}, {"reverse", kStr, true}},
-	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}},
+	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"failed", kBool, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
 	"route_decided":           {{"job", kStr, false}, {"candidates", kAny, false}, {"excluded", kAny, false}, {"inputs", kAny, false}, {"fingerprint", kStr, false}},
@@ -466,7 +466,7 @@ var fieldValues = map[string]map[string]value{
 	"plan_node_state_changed": {"from": oneOf(statesOf(stepMoves)...), "to": oneOf(statesOf(stepMoves)...)},
 	"plan_change_decided":     {"decision": oneOf("applied", "refused", "failed", "withdrawn", "expired")},
 	"mission_state_changed":   {"from": oneOf(statesOf(missionMoves)...), "to": oneOf(statesOf(missionMoves)...)},
-	"task_proposed":           {"role": oneOf("plan", "implement", "verify", "review", "brief", "other")},
+	"task_proposed":           {"role": oneOf("plan", "implement", "verify", "review", "brief", "other"), "executor_pin": oneOf(ExecutorPins...)},
 	"task_state_changed":      {"from": oneOf(statesOf(taskMoves)...), "to": oneOf(statesOf(taskMoves)...)},
 	"task_dependency_added":   {"depends_on_task_id": taskID},
 	"attempt_leased":          {"executor": executorID},
@@ -478,7 +478,7 @@ var fieldValues = map[string]map[string]value{
 	"attempt_salvaged":        {"artifacts": artifactID},
 	"attempt_persisted":       {"artifacts": artifactID},
 	"attempt_cancelled":       {"accepted_attempt": attemptID},
-	"host_registered":         {"host_kind": oneOf("dev", "vm")},
+	"host_registered":         {"host_kind": oneOf(hostKinds...)},
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
 	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
@@ -594,6 +594,11 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)
+	}
+	if eventType == "task_proposed" && name == "via_session" {
+		// Only on a pinned task (pin.go): the header the proposal came
+		// with, "" for none; recorded, granting nothing.
+		return badViaSession(v)
 	}
 	check, ok := fieldValues[eventType][name]
 	if !ok {

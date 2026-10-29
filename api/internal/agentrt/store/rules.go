@@ -308,6 +308,9 @@ func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
 		slices.Sort(unknown)
 		return invalid("the rule names executors or hosts the runtime has not registered: %v", slices.Compact(unknown))
 	}
+	if r.Kind == rules.KindEnvelope {
+		return knownExternalHosts(ctx, tx, r.Envelope.ExternalHosts)
+	}
 	return nil
 }
 
@@ -411,4 +414,32 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		return map[string]any{"rule_id": id, "rule_version": r.Version, "text_artifact_id": art, "event_id": ev.EventID,
 			"needs_signature": why != nil}, nil
 	})
+}
+
+// knownExternalHosts refuses an envelope whose external host is registered
+// as a host of another kind, whose proposer is not a registered seat or
+// whose executor is not a registered executor (pin.go): an entry never
+// names an ordinary host, nor a seat or executor that is not there. A host
+// not registered yet may be named (the claim that first hears from it
+// registers it).
+func knownExternalHosts(ctx context.Context, tx pgx.Tx, hosts []rules.ExternalHost) error {
+	for _, h := range hosts {
+		var other, seat, executor bool
+		if err := tx.QueryRow(ctx, `SELECT
+		    EXISTS (SELECT 1 FROM agentrt.host WHERE host_id = $1 AND host_kind <> $4),
+		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $2 AND actor_kind = 'seat' AND retired_at IS NULL),
+		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $3 AND actor_kind = 'executor')`,
+			h.Host, h.Proposer, h.Executor, HostExternal).Scan(&other, &seat, &executor); err != nil {
+			return err
+		}
+		switch {
+		case other:
+			return invalid("external host %s is registered as a host of another kind", h.Host)
+		case !seat:
+			return invalid("external host %s: its proposer %s is not a registered seat", h.Host, h.Proposer)
+		case !executor:
+			return invalid("external host %s: its executor %s is not registered", h.Host, h.Executor)
+		}
+	}
+	return nil
 }

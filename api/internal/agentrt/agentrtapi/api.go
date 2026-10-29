@@ -272,6 +272,8 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
+	case errors.Is(err, store.ErrPinNotPermitted):
+		writeError(w, http.StatusUnprocessableEntity, "pin_not_permitted", err.Error())
 	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):

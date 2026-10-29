@@ -233,6 +233,7 @@ func priorAttempts(ctx context.Context, tx pgx.Tx, tasks []string) (map[string][
 // routeInput is everything a route of one task depends on.
 type routeInput struct {
 	job, core, subject string
+	pin                string // the task's executor pin, "" for none (pin.go)
 	needs              []string
 	candidates         []jobCandidate
 	facts              []restriction // on the task's needs and its core label
@@ -244,7 +245,7 @@ type routeInput struct {
 // task c. Core work needs author_core, or review_core for a review or a
 // verification.
 func (cp capabilities) input(c candidate, attempts []priorAttempt) routeInput {
-	in := routeInput{job: jobOfRole[c.role], subject: c.subject, needs: c.needs, attempts: attempts}
+	in := routeInput{job: jobOfRole[c.role], subject: c.subject, pin: c.pin, needs: c.needs, attempts: attempts}
 	if c.core {
 		in.core = "author_core"
 		if c.role == "review" || c.role == "verify" {
@@ -392,6 +393,11 @@ func (in routeInput) record() map[string]any {
 	if in.competence != nil {
 		rec["competence"] = in.competence.record(in.candidates)
 	}
+	if in.pin != "" {
+		// Only a pinned task's: every other route's record, and its
+		// fingerprint, are what they were before pins (0010).
+		rec["executor_pin"] = in.pin
+	}
 	return rec
 }
 
@@ -456,7 +462,7 @@ func replayInput(rec map[string]any) (routeInput, error) {
 		}
 		return ref
 	}
-	in := routeInput{job: str(rec, "job"), core: str(rec, "core"), subject: str(rec, "subject")}
+	in := routeInput{job: str(rec, "job"), core: str(rec, "core"), subject: str(rec, "subject"), pin: str(rec, "executor_pin")}
 	if l, ok := rec["needs"].([]any); ok {
 		for _, n := range l {
 			if s, ok := n.(string); ok {

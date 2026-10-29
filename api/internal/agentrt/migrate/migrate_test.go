@@ -214,8 +214,10 @@ func TestUpgradeTo0007ReplacesTheSubjectCheck(t *testing.T) {
 	if err = conn.QueryRow(ctx, checks).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	applied, err := migrate.RunFiles(ctx, conn, "dev", files)
-	if err != nil || len(applied) != len(files)-6 || applied[0] != 7 {
+	// Through 0007 only: a later file may add a CHECK of its own (0010
+	// adds task_executor_pin_check).
+	applied, err := migrate.RunFiles(ctx, conn, "dev", files[:7])
+	if err != nil || len(applied) != 1 || applied[0] != 7 {
 		t.Fatalf("applied %v %v", applied, err)
 	}
 	if err = conn.QueryRow(ctx, checks).Scan(&after); err != nil {
@@ -238,7 +240,7 @@ func TestUpgradeTo0007ReplacesTheSubjectCheck(t *testing.T) {
 	if same(before) != same(after) {
 		t.Fatalf("0007 changed another CHECK:\n%s\n---\n%s", same(before), same(after))
 	}
-	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files); rerr != nil || len(again) != 0 {
+	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files[:7]); rerr != nil || len(again) != 0 {
 		t.Fatalf("a second run applied %v %v", again, rerr)
 	}
 }

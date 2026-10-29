@@ -63,7 +63,7 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	srv.agentRuntime = &agentRuntime{schema: w}
 	behind := health()
 	missing, _ := behind["agentrt_schema_missing"].([]any)
-	if behind["status"] != "ok" || behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != 3 ||
+	if behind["status"] != "ok" || behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != len(files)-6 ||
 		missing[0] != "0007_gate_tasks" || missing[1] != "0008_attempt_prepare_failed" || missing[2] != "0009_issues" {
 		t.Fatalf("behind: %v", behind)
 	}

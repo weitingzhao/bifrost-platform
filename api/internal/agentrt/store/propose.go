@@ -603,8 +603,14 @@ func proposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, t
 
 // proposeTasksTx is ProposeTasks's write, in a transaction its caller holds
 // with the writer ensured (a goal's plan task, goal.go; a plan's tasks,
-// planresult.go). tasks have passed checkBatch.
+// planresult.go). tasks have passed checkBatch. It sets no pin.
 func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, tasks []TaskProposal) (map[string]any, error) {
+	return proposeBatchTx(ctx, tx, w, missionID, tasks, nil)
+}
+
+// proposeBatchTx is the write of a batch; p, when not nil, pins some of its
+// tasks (pin.go), each checked before any task is written.
+func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, tasks []TaskProposal, p *pinning) (map[string]any, error) {
 	if err := lockBatch(ctx, tx, tasks); err != nil {
 		return nil, err
 	}
@@ -626,6 +632,15 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 	ceiling := "branch"
 	if maxAction != nil {
 		ceiling = *maxAction
+	}
+	if p != nil {
+		for _, t := range tasks {
+			if pin := p.pins[t.Ref]; pin != "" {
+				if err := checkPin(ctx, tx, w, missionID, t, pin); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	ids := map[string]string{}
 	out := make([]any, 0, len(tasks))
@@ -651,10 +666,14 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 			return nil, invalid("task %s: spec %s refers to a task's workspace: %s", t.Ref, t.SpecArtifact, ref)
 		}
 		id := NewTaskID()
-		if _, err := ProposeTask(ctx, tx, w.Actor, Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
+		task := Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
 			OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
 			SpecArtifact: t.SpecArtifact, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
-			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}); err != nil {
+			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}
+		if p != nil && p.pins[t.Ref] != "" {
+			task.pin, task.viaSession = p.pins[t.Ref], p.viaSession
+		}
+		if _, err := ProposeTask(ctx, tx, w.Actor, task); err != nil {
 			return nil, err
 		}
 		hook("proposed", id)

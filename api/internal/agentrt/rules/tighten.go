@@ -105,7 +105,10 @@ func envelopeTightens(p, n *Envelope) error {
 	if err := subset(n.Executors, p.Executors, "executors"); err != nil {
 		return err
 	}
-	return subset(n.Hosts, p.Hosts, "hosts")
+	if err := subset(n.Hosts, p.Hosts, "hosts"); err != nil {
+		return err
+	}
+	return externalHostsTighten(p.ExternalHosts, n.ExternalHosts)
 }
 
 // jobTightens: the brief unchanged, no new candidate, none higher in status.
