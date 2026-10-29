@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"time"
 
 	"context"
@@ -22,7 +23,7 @@ func TestLandingDrillWorkerOptIn(t *testing.T) {
 			// Files need not exist: constructing adapters must perform no I/O.
 			t.Setenv("AGENTRT_LANDING_USERNAME_FILE", "/not-read/username")
 			t.Setenv("AGENTRT_LANDING_PASSWORD_FILE", "/not-read/password")
-			s := &Server{delivery: delivery.NewHandlerForTest(delivery.NewService(&config.ClusterEntry{ID: "test"}), nil)}
+			s := &Server{delivery: delivery.NewHandlerForTest(delivery.NewService(&config.ClusterEntry{ID: "test"}), nil), cluster: cluster.NewHandler(&config.Config{}, nil)}
 			c := &controller.Controller{Env: tc.env}
 			s.wireLandingDrill(c)
 			if (c.Drill != nil) != tc.enabled || (c.DrillGit != nil) != tc.enabled {
@@ -71,6 +72,7 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 			s := &Server{}
 			if tc.delivery {
 				s.delivery = delivery.NewHandlerForTest(delivery.NewService(&config.ClusterEntry{ID: "test"}), nil)
+				s.cluster = cluster.NewHandler(&config.Config{}, nil)
 			}
 			c := &controller.Controller{Env: tc.env}
 			if !tc.noCards {
@@ -124,7 +126,7 @@ func TestLandingLiveOffSaysWhy(t *testing.T) {
 		t.Fatal(got)
 	}
 	c.LandingCards = completeCardQuestions()
-	if got := s.landingLiveOff(c); got != "delivery unavailable" {
+	if got := s.landingLiveOff(c); got != "cluster unavailable" {
 		t.Fatal(got)
 	}
 }

@@ -110,8 +110,11 @@ func (s *Server) landingLiveOff(c *controller.Controller) string {
 // creation policy live entirely within the protected landingci package.
 func (s *Server) landingCIClient() *landingci.Client {
 	namespace := "cicd"
-	if entry := s.cfg.DefaultCluster(); entry != nil && entry.ResolvedStackNamespace() != "" {
-		namespace = entry.ResolvedStackNamespace()
+	// Tests build a bare Server; production always has a config.
+	if s.cfg != nil {
+		if entry := s.cfg.DefaultCluster(); entry != nil && entry.ResolvedStackNamespace() != "" {
+			namespace = entry.ResolvedStackNamespace()
+		}
 	}
 	return &landingci.Client{Namespace: namespace, Dynamic: func() (dynamic.Interface, error) {
 		cfg, _, err := s.cluster.Service().RestConfig()
