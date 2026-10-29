@@ -199,6 +199,14 @@ func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, erro
 	stream := "landing:" + repo
 	var at time.Time
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		// lockStream creates the stream. An unsigned repository must stop
+		// before that write, including when no mode event would be appended.
+		if repo != "bifrost-platform" {
+			ready, err := landingRuleIncludes(ctx, tx, "dev", repo)
+			if err != nil || !ready {
+				return err
+			}
+		}
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
@@ -209,18 +217,6 @@ func EnsureLandingMode(ctx context.Context, db DB, repo string) (time.Time, erro
 		if !s.LiveAt.IsZero() {
 			at = s.LiveAt
 			return nil
-		}
-		if repo != "bifrost-platform" {
-			r, err := CurrentRule(ctx, tx, "landing:dev", DecisionAt())
-			if err != nil {
-				return err
-			}
-			if r == nil || r.Landing == nil {
-				return nil
-			}
-			if _, ok := r.Landing.Repo(repo); !ok {
-				return nil
-			}
 		}
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing live mode",
 			"landing": map[string]any{"v": landing.Version, "kind": "mode", "op": "mode:live", "repo": repo}}})

@@ -68,6 +68,7 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 		current := again.facts
 		current.SingleCommit, current.Changes, current.History, current.DependenciesEffective =
 			facts.SingleCommit, facts.Changes, facts.History, facts.DependenciesEffective
+		current.DependenciesEffective = current.DependenciesEffective && landingDependenciesAllowed(current, again.deps)
 		facts = current
 		decision = landing.EligibleToClaim(facts, again.at)
 		if !decision.Allowed {
@@ -132,6 +133,13 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 	if !landing.RepoSupported(repo) {
 		b.settled, b.decision = true, landing.Decision{Reason: "repo"}
 		return b, nil
+	}
+	if repo != "bifrost-platform" {
+		ready, err := landingRuleIncludes(ctx, tx, "dev", repo)
+		if err != nil || !ready {
+			b.settled, b.decision = true, landing.Decision{Reason: "rule"}
+			return b, err
+		}
 	}
 	stream := "landing:" + repo
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, mission); err != nil {

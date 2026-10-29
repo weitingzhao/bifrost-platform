@@ -147,13 +147,15 @@ func EligibleToClaim(f Facts, now time.Time) Decision {
 		}
 		return refuse(reason)
 	}
+	// Infra's L4/L5 failures are final even while a dependency is pending.
+	// Platform retains its existing dependency/grant ordering.
+	if f.Repo == "bifrost-trade-infra" && len(soft) > 0 {
+		return Decision{Reason: "floor", Detail: floorDetail(f)}
+	}
 	if !f.DependenciesEffective {
 		return refuse("dependencies")
 	}
 	if len(soft) > 0 && !MayAwaitGrant(f, soft) {
-		if f.Repo == "bifrost-trade-infra" {
-			return Decision{Reason: "floor", Detail: floorDetail(f)}
-		}
 		if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
 			return refuse("floor")
 		}

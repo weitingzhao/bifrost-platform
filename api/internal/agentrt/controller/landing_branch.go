@@ -63,6 +63,9 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if !c.landingRepoEnabled(repo) || g == nil {
 		return fmt.Errorf("landing requires its git (stg drill, or prod live)")
 	}
+	if named, ok := g.(interface{ Repository() string }); ok && named.Repository() != repo {
+		return fmt.Errorf("landing transport repo mismatch")
+	}
 	if repo != "bifrost-platform" {
 		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
 		if err != nil {
@@ -123,7 +126,14 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			return put("discarded", map[string]any{"why": "branch_collision"})
 		}
 	}
-	f, d, e := c.LandingDecision(ctx, DrillGitFacts(g, repo), o.Task, op, "claim", now)
+	// Keep the same repository-scoped evidence source used by the claim:
+	// dependencies may belong to another enabled repository. Only replay and
+	// writes below use the candidate's Git adapter.
+	source := DrillGitFacts(g, repo)
+	if c.Drill != nil {
+		source = c.Drill.Facts
+	}
+	f, d, e := c.LandingDecision(ctx, source, o.Task, op, "claim", now)
 	if e != nil {
 		return e
 	}
@@ -161,7 +171,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 			return true, err
 		}
-		now, err := store.RefreshLandingFacts(ctx, c.DB, DrillGitFacts(g, repo), c.Env, mode(c.Env), o.Task, op, f, at)
+		now, err := store.RefreshLandingFacts(ctx, c.DB, source, c.Env, mode(c.Env), o.Task, op, f, at)
 		if err != nil {
 			return true, err
 		}

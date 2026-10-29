@@ -42,14 +42,20 @@ func LandingRuleIncludes(ctx context.Context, db DB, tenant, repo string) (bool,
 	}
 	var includes bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
-		if err != nil || r == nil || r.Landing == nil {
-			return err
-		}
-		_, includes = r.Landing.Repo(repo)
-		return nil
+		var err error
+		includes, err = landingRuleIncludes(ctx, tx, tenant, repo)
+		return err
 	})
 	return includes, err
+}
+
+func landingRuleIncludes(ctx context.Context, tx pgx.Tx, tenant, repo string) (bool, error) {
+	r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
+	if err != nil || r == nil || r.Landing == nil {
+		return false, err
+	}
+	_, includes := r.Landing.Repo(repo)
+	return includes, nil
 }
 
 // Infra never reads or folds grants, even if its stream contains a malformed

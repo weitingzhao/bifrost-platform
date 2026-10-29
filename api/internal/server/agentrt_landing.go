@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +42,6 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			requested = landing.LiveRepos(os.LookupEnv)
 		}
 	}
-	c.LiveRepos = append([]string{}, requested...)
 	// Discover previously started repositories once at startup, not on every
 	// platform pass. Closing the live switch cannot orphan main_intent.
 	if c.DB != nil {
@@ -55,6 +55,24 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			c.Reconcile.Repos = repos
 		}
 	}
+	// Configuration expresses intent; a current signed rule is required
+	// before infra joins any new-action or dependency-evidence source.
+	requested = slices.DeleteFunc(requested, func(repo string) bool {
+		if repo == "bifrost-platform" {
+			return false
+		}
+		if c.DB == nil {
+			return true
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
+		if err != nil {
+			slog.Error("agentrt landing repository rule unavailable", "repo", repo, "error", err)
+		}
+		return err != nil || !ready
+	})
+	c.LiveRepos = append([]string{}, requested...)
 	for _, repo := range landing.LandingRepoNames() {
 		if slices.Contains(requested, repo) && !slices.Contains(c.Reconcile.Repos, repo) {
 			c.Reconcile.Repos = append(c.Reconcile.Repos, repo)
@@ -121,7 +139,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 		c.DrillGit = nil
 		return
 	}
-	facts := controller.MultiRepoGitFacts(c.DrillGit)
+	facts := s.landingRepoFacts(c, controller.MultiRepoGitFacts(c.DrillGit))
 	c.Drill = &controller.DrillSources{Facts: facts,
 		Main: func(ctx context.Context, repo string) (string, error) {
 			if g := readers[repo]; g != nil {
@@ -165,6 +183,42 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			}
 			return errors.New("landing repo unavailable")
 		}
+	}
+}
+
+// Recheck infra before every new Git read, including reads for a platform
+// task's dependency after its rule has been removed. Platform-only reads
+// add no transaction; historical main recovery has its own source.
+func (s *Server) landingRepoFacts(c *controller.Controller, src store.LandingSource) store.LandingSource {
+	check := func(ctx context.Context, repo string) error {
+		if repo == "bifrost-platform" {
+			return nil
+		}
+		if c.DB == nil {
+			return errors.New("landing repo rule unavailable")
+		}
+		ready, err := store.LandingRuleIncludes(ctx, c.DB, "dev", repo)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return errors.New("landing repo has no current rule")
+		}
+		return nil
+	}
+	return store.LandingSource{
+		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
+			if err := check(ctx, repo); err != nil {
+				return false, nil, err
+			}
+			return src.Result(ctx, repo, task, attempt, base, a)
+		},
+		History: func(ctx context.Context, repo, task, a, snapshot string) (landing.MainHistory, error) {
+			if err := check(ctx, repo); err != nil {
+				return landing.MainHistory{}, err
+			}
+			return src.History(ctx, repo, task, a, snapshot)
+		},
 	}
 }
 

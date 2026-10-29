@@ -183,6 +183,9 @@ func TestS6InfraClosedRepositoryReconcilesPG(t *testing.T) {
 	if !d.Allowed || auth.Repo != infraRepo {
 		t.Fatal(auth, d)
 	}
+	// Revocation stops new work but cannot orphan a committed main intent.
+	_, err = store.TightenRule(ctx, w.rt, wr("thread:s1"), "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", since, until, strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: none", 1))))
+	ok(t, err)
 	repos, err := store.ExistingLandingRepos(ctx, w.rt)
 	ok(t, err)
 	reads := 0
@@ -212,13 +215,13 @@ func TestS6SignedRuleRequiredBeforeInfraModePG(t *testing.T) {
 	ok(t, err)
 	mode, err := store.EnsureLandingMode(ctx, w.rt, infraRepo)
 	ok(t, err)
-	if !mode.IsZero() || w.lastSeq(t, infraStream) != 0 {
+	if !mode.IsZero() || landingStreamRows704(t, w, infraStream) != 0 {
 		t.Fatal("v1 activated infra")
 	}
 	git := &startupDrillGit{}
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, LiveRepos: []string{infraRepo}, DrillGit: map[string]controller.DrillGit{infraRepo: git}, Drill: &controller.DrillSources{}}
 	ok(t, ctl.LandingDrillPass(ctx))
-	if git.opens.Load() != 0 || w.lastSeq(t, infraStream) != 0 {
+	if git.opens.Load() != 0 || landingStreamRows704(t, w, infraStream) != 0 {
 		t.Fatal("v1 started infra")
 	}
 	w.goalMission(t, "M-3")
@@ -226,16 +229,15 @@ func TestS6SignedRuleRequiredBeforeInfraModePG(t *testing.T) {
 	w.passRound(t, task, "h1", "h2", "h3")
 	op, d, err := store.ClaimLanding(ctx, w.rt, store.LandingSource{}, "prod", task, time.Now())
 	ok(t, err)
-	// Eligibility judges mode before rule: v1 never recorded infra's live
-	// mode, so the claim stops there, before any evidence is read.
-	if op != "" || d.Reason != "mode" || w.lastSeq(t, infraStream) != 0 {
+	// The rule is checked before a claim can create the infra stream.
+	if op != "" || d.Reason != "rule" || landingStreamRows704(t, w, infraStream) != 0 {
 		t.Fatal("v1 claimed or read external evidence", op, d)
 	}
 	_, err = s.sign(w, ruleText("landing:dev", 2, "loosen", since, until, infraRuleBody))
 	ok(t, err)
 	mode, err = store.EnsureLandingMode(ctx, w.rt, infraRepo)
 	ok(t, err)
-	if mode.IsZero() {
+	if mode.IsZero() || w.lastSeq(t, infraStream) == 0 {
 		t.Fatal("signed infra did not enable")
 	}
 	body := strings.Replace(infraRuleBody, "max_changed_lines: 1500", "max_changed_lines: 1000", 1)

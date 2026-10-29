@@ -70,6 +70,14 @@ func ReconcileDenied(ctx context.Context, db DB, repo string) ([]string, error) 
 	var ended []string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		ended = nil
+		if repo != "bifrost-platform" {
+			// Recovery may outlive its rule, but must never create an empty
+			// stream just because an unsigned repository was configured.
+			var exists bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id=$1)`, stream).Scan(&exists); err != nil || !exists {
+				return err
+			}
+		}
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}

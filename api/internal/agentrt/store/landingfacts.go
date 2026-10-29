@@ -174,13 +174,8 @@ func landingFactsExternal(ctx context.Context, src LandingSource, f *landing.Fac
 }
 
 func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, deps []landingDep, snapshot string, claim bool) error {
-	if f.Repo == "bifrost-trade-infra" {
-		if f.Rule == nil || f.Rule.Landing == nil {
-			return nil
-		}
-		if _, ok := f.Rule.Landing.Repo(f.Repo); !ok {
-			return nil
-		}
+	if !landingEvidenceAllowed(*f, f.Repo) {
+		return nil
 	}
 	var err error
 	f.SingleCommit, f.Changes, err = src.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A)
@@ -199,7 +194,7 @@ func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, 
 	}
 	f.DependenciesEffective = true
 	for _, d := range deps {
-		if d.repo == "" || d.commit == "" {
+		if d.repo == "" || d.commit == "" || !landingEvidenceAllowed(*f, d.repo) {
 			f.DependenciesEffective = false
 			continue
 		}
@@ -227,6 +222,32 @@ func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, 
 	return nil
 }
 
+// CurrentRule already selected the effective signed rule in the database
+// read. Its infra gate applies to dependencies as well as the candidate.
+// Recovery uses MainEvidence independently and does not pass this gate.
+func landingEvidenceAllowed(f landing.Facts, repo string) bool {
+	if !landing.RepoSupported(repo) {
+		return false
+	}
+	if repo == "bifrost-platform" {
+		return true
+	}
+	if f.Rule == nil || f.Rule.Landing == nil {
+		return false
+	}
+	_, ok := f.Rule.Landing.Repo(repo)
+	return ok
+}
+
+func landingDependenciesAllowed(f landing.Facts, deps []landingDep) bool {
+	for _, dep := range deps {
+		if !landingEvidenceAllowed(f, dep.repo) {
+			return false
+		}
+	}
+	return true
+}
+
 // RefreshLandingFacts reads the database half of f again at the time at, in
 // a short transaction of its own, and keeps the external evidence f carries
 // (its keys are compared by the gates that bind it). A step that read Git or
@@ -235,14 +256,16 @@ func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, 
 // R657-2, 659 R659-1).
 func RefreshLandingFacts(ctx context.Context, db DB, src LandingSource, environment, mode, task, op string, f landing.Facts, at time.Time) (landing.Facts, error) {
 	var g landing.Facts
+	var deps []landingDep
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
-		g, _, err = landingFactsDB(ctx, tx, src, environment, mode, task, op, at)
+		g, deps, err = landingFactsDB(ctx, tx, src, environment, mode, task, op, at)
 		return err
 	})
 	if err != nil {
 		return landing.Facts{}, err
 	}
 	g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+	g.DependenciesEffective = g.DependenciesEffective && landingDependenciesAllowed(g, deps)
 	return g, nil
 }

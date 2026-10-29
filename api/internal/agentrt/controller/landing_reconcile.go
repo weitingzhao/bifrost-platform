@@ -27,10 +27,11 @@ import (
 // The waits live in memory: a restart may read once early.
 
 const (
-	reconcileMainBudget = 3 * time.Minute
-	reconcileReadLimit  = 90 * time.Second
-	reconcileRecheck    = 30 * time.Minute
-	reconcileMaxWait    = 30 * time.Minute
+	reconcileMainBudget     = 3 * time.Minute
+	reconcileReadLimit      = 90 * time.Second
+	reconcileRecheck        = 30 * time.Minute
+	reconcileMaxWait        = 30 * time.Minute
+	reconcileDiscoveryLimit = 10 * time.Second
 )
 
 // LandingReconcile is the reconciler's per-controller state.
@@ -43,9 +44,10 @@ type LandingReconcile struct {
 	Discover func(context.Context) ([]string, error)
 	Requests func(context.Context) ([]store.LandingGrantRequest, error)
 
-	mu    sync.Mutex
-	waits map[string]reconcileWait
-	start int
+	mu            sync.Mutex
+	waits         map[string]reconcileWait
+	start         int
+	discoveryWait reconcileWait
 }
 
 type reconcileWait struct {
@@ -64,18 +66,8 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
-	if r.Discover != nil {
-		if found, err := r.Discover(ctx); err != nil {
-			errs = append(errs, err)
-		} else {
-			for _, repo := range found {
-				if !slices.Contains(r.Repos, repo) {
-					r.Repos = append(r.Repos, repo)
-				}
-			}
-			slices.Sort(r.Repos)
-			r.Discover = nil
-		}
+	if err := c.discoverLandingRepos(ctx); err != nil {
+		errs = append(errs, err)
 	}
 	repos := r.Repos
 	if len(repos) == 0 {
@@ -112,6 +104,33 @@ func (c *Controller) LandingReconcilePass(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// Startup discovery is the one compatibility cost even in a legacy
+// platform-only configuration. A failed discovery is retried within a
+// separate ten-second budget, with 1, 2, 4 ... 30 minute backoff. Success
+// clears it permanently; it never becomes a per-platform-pass query.
+func (c *Controller) discoverLandingRepos(ctx context.Context) error {
+	r := c.Reconcile
+	if r.Discover == nil || c.clock().Before(r.discoveryWait.until) {
+		return nil
+	}
+	readCtx, cancel := context.WithTimeout(ctx, reconcileDiscoveryLimit)
+	defer cancel()
+	found, err := r.Discover(readCtx)
+	if err != nil {
+		step := min(max(2*r.discoveryWait.step, time.Minute), reconcileMaxWait)
+		r.discoveryWait = reconcileWait{until: c.clock().Add(step), step: step}
+		return err
+	}
+	for _, repo := range found {
+		if !slices.Contains(r.Repos, repo) {
+			r.Repos = append(r.Repos, repo)
+		}
+	}
+	slices.Sort(r.Repos)
+	r.Discover = nil
+	return nil
 }
 
 func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error {

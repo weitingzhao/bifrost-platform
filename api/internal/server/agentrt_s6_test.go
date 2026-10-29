@@ -55,7 +55,7 @@ func TestS6LiveRepoWorkerWiring(t *testing.T) {
 		t.Run(tc.repos, func(t *testing.T) {
 			t.Setenv("AGENTRT_LANDING_LIVE_REPOS", tc.repos)
 			s := &Server{cluster: cluster.NewHandler(&config.Config{}, nil)}
-			c := &controller.Controller{Env: "prod", LandingCards: completeCardQuestions()}
+			c := &controller.Controller{Env: "prod", DB: &startup704DB{signed: true}, LandingCards: completeCardQuestions()}
 			s.wireLandingDrill(c)
 			if len(c.DrillGit) != tc.want || c.Live != (tc.want > 0) {
 				t.Fatal("wrong writers", c.DrillGit, c.Live)
