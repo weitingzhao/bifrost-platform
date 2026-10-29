@@ -174,6 +174,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if err := checkLandingDisposedAppend(ctx, tx, ev); err != nil {
 		return Appended{}, err
 	}
+	if err := checkLandingRefusalAppend(ev); err != nil {
+		return Appended{}, err
+	}
 	seq := lastSeq + 1
 	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
 	if err != nil {

@@ -272,6 +272,12 @@ func classifyLandingRoots(ctx context.Context, tx pgx.Tx, folds landingFolds, mi
 		switch {
 		case !has:
 			c.Reason = "unclaimed"
+			// Why it waits: the loop's latest refusal, when there is one.
+			if why, _, err := latestClaimRefusal(ctx, tx, stream, r.task); err != nil {
+				return false, nil, "", err
+			} else if why != "" {
+				c.Reason = "unclaimed:" + why
+			}
 			if r.dropped {
 				c.Class, c.Reason = RootDisposed, "dropped"
 			}

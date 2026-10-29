@@ -134,3 +134,52 @@ func appendNote(w *world, stream string, body map[string]any) error {
 		return err
 	})
 }
+
+// Serial: FreezeEventClock. CUT §11.13: a refused claim says why on the
+// mission's landing status; the same reason is recorded once, a new one again.
+func TestClaimRefusalShowsOnTheStatus(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "refused", BaseCommit: commitB})
+	w.passRound(t, root, "h1", "h2", "h3")
+	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if len(status.Roots) != 1 || status.Roots[0].Reason != "unclaimed" {
+		t.Fatalf("before any refusal: %+v", status.Roots)
+	}
+	store.FreezeEventClock(at)
+	for i, want := range []bool{true, false} {
+		wrote, err := store.RecordClaimRefusal(ctx, w.rt, "bifrost-platform", root, "stale")
+		ok(t, err)
+		if wrote != want {
+			t.Fatalf("stale #%d wrote %v", i+1, wrote)
+		}
+	}
+	status, err = store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if status.Roots[0].Reason != "unclaimed:stale" {
+		t.Fatalf("refusal not shown: %+v", status.Roots[0])
+	}
+	if wrote, err := store.RecordClaimRefusal(ctx, w.rt, "bifrost-platform", root, "rule"); err != nil || !wrote {
+		t.Fatal("a new reason not recorded", wrote, err)
+	}
+	if wrote, err := store.RecordClaimRefusal(ctx, w.rt, "bifrost-platform", root, "changed"); err != nil || wrote {
+		t.Fatal("a reason that is not a refusal recorded", wrote, err)
+	}
+	status, err = store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if status.Roots[0].Reason != "unclaimed:rule" {
+		t.Fatalf("latest refusal not shown: %+v", status.Roots[0])
+	}
+	var n int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? 'landing_refusal'`, landingRepoStream).Scan(&n))
+	if n != 2 {
+		t.Fatal("refusal notes", n)
+	}
+	// Only the controller writes it, under its task.
+	if err := appendNote(w, landingRepoStream, map[string]any{"text": "x", "landing_refusal": map[string]any{"v": "1", "task": root, "reason": "stale"}}); err == nil {
+		t.Fatal("a refusal without its task id was accepted")
+	}
+}

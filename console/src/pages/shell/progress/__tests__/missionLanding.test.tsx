@@ -134,6 +134,9 @@ describe('Landing on the goal detail', () => {
   it.each(['at_main', 'evidence', 'landed_unverified', 'rule', 'in_main_unverified', 'failed:stale', 'failed:floor', 'unclaimed', 'reverted', 'declined', 'owner', 'dropped', 'landed', 'in_main'])('explains %s in English', reason => {
     expect(landingReason(reason)).not.toBe(reason)
   })
+  it.each([['unclaimed:stale', 'Waiting to be claimed: not landable as set up'], ['unclaimed:rule', 'Waiting to be claimed: the change is outside'], ['unclaimed:future', 'Waiting to be claimed: future']])('explains a refused claim %s (CUT §11.13)', (reason, start) => {
+    expect(landingReason(reason).startsWith(start)).toBe(true)
+  })
   it.each(['future_reason', 'toString', '__proto__'])('preserves unknown reason %s', reason => {
     expect(landingReason(reason)).toBe(reason)
   })

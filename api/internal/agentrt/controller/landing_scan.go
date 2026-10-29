@@ -139,6 +139,12 @@ func (c *Controller) LandingDrillPass(ctx context.Context) (result error) {
 			done()
 			continue
 		}
+		if op == "" && d.Reason != "" {
+			// Shown on the mission's landing status (CUT §11.13).
+			if _, err := store.RecordClaimRefusal(one, c.DB, "bifrost-platform", task, d.Reason); err != nil {
+				errs = append(errs, err)
+			}
+		}
 		if op != "" {
 			errs = append(errs, c.LandingDrillBranch(one, c.DrillGit, op, now))
 			done()

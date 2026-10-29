@@ -225,8 +225,30 @@ const landingReasons: Record<string, string> = {
   in_main: 'Already in main, confirmed delivered by you',
   main_lost: 'The change is no longer in main',
 }
+/** Why the landing loop refused a root's claim (landing_refusal, CUT §11.13). */
+const claimRefusals: Record<string, string> = {
+  mode: 'the live landing is off',
+  before_enable: 'accepted before landing was enabled',
+  stale: 'not landable as set up (no producing plan, the mission not active, or marked no_merge)',
+  result: 'the accepted result is not one commit on its base',
+  history: 'the change is already in main or was reverted there',
+  terminal: 'its landing has already ended',
+  floor: 'the change touches what no landing rule can allow',
+  dependencies: 'a task it depends on has not landed',
+  rule: 'the change is outside what the landing rule allows',
+  limit: "the day's landing limit is used, or another landing is in flight",
+  stage: 'its plan step is not ready',
+  facts_unreadable: 'the facts it needs could not be read',
+  stopped: 'landings in this repository are stopped',
+  bound: 'its six hours to land are over',
+  in_progress: 'another landing of it is in progress',
+}
 export const landingReason = (reason: string): string => {
   if (Object.hasOwn(landingReasons, reason)) return landingReasons[reason]!
+  if (reason.startsWith('unclaimed:')) {
+    const why = reason.slice('unclaimed:'.length)
+    return `Waiting to be claimed: ${Object.hasOwn(claimRefusals, why) ? claimRefusals[why] : why}`
+  }
   if (reason.startsWith('parked:')) return reason === 'parked:ci_stuck' ? 'Parked: CI running long' : `Parked: ${reason.slice('parked:'.length) || 'no reason given'}`
   return reason
 }

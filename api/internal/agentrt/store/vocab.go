@@ -196,6 +196,9 @@ var bodies = map[string][]field{
 		// landing_close: on a mission's stream, what a close from landing
 		// evidence decided on (review 672 N-01).
 		{"landing_close", kAny, true},
+		// landing_refusal: why the landing loop refused a task's claim, on
+		// the repository stream, once per change of reason (CUT §11.13).
+		{"landing_refusal", kAny, true},
 		// landing_disposed: the Owner counted a landed or in-main root as
 		// delivered or not, on its card (CUT §11.8 v3 item 4).
 		{"landing_disposed", kAny, true},
@@ -582,6 +585,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_close" {
 		return badLandingClose(v)
+	}
+	if eventType == "note" && name == "landing_refusal" {
+		return badLandingRefusal(v)
 	}
 	if eventType == "note" && name == "landing_disposed" {
 		return badLandingDisposed(v)
