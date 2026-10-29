@@ -38,6 +38,9 @@ type Git struct {
 	// lander: the production identity, the only one that may push main
 	// (PushMain). The drill's Git never can.
 	lander bool
+	// reader parses its files as the platform's Gitea reader does
+	// (delivery/gitea_reader.go): one line, trimmed, bounded.
+	reader bool
 }
 
 func FromEnv(environment string, repos ...string) (*Git, error) {
@@ -99,10 +102,13 @@ func ReaderFromEnv(repos ...string) (*Git, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: filepath.Join(dir, "username"), passwordFile: filepath.Join(dir, "password"), scope: noRef}, nil
+	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: filepath.Join(dir, "username"), passwordFile: filepath.Join(dir, "password"), scope: noRef, reader: true}, nil
 }
 
 func (g *Git) inScope(ref string) bool {
+	if ref == "" {
+		return false // no identity reads, pushes or deletes an empty ref (review 713 N-01)
+	}
 	scope := g.scope
 	if scope == nil {
 		scope = drillRef
@@ -131,6 +137,15 @@ func (g *Git) header() (string, error) {
 	p, e := os.ReadFile(g.passwordFile)
 	if e != nil {
 		return "", errors.New("cannot read landing password file")
+	}
+	// The Gitea reader's files follow the reader's own contract: surrounding
+	// whitespace (a trailing newline) is not part of the value, a value is
+	// one line of at most 4096 bytes (review 713 R-01).
+	if g.reader {
+		if len(u) > 4096 || len(p) > 4096 {
+			return "", errors.New("invalid Gitea reader files")
+		}
+		u, p = bytes.TrimSpace(u), bytes.TrimSpace(p)
 	}
 	// Basic-auth Secret values are exact bytes; trailing newlines are not tokens.
 	if len(u) == 0 || len(p) == 0 || bytes.ContainsAny(u, ":\r\n") || bytes.ContainsAny(p, "\r\n") {
