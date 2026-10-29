@@ -234,7 +234,7 @@ export async function postApprovalDecision(
   id: string,
   token: string,
   path: 'approve' | 'reject',
-  body: { channel: 'console'; approval_line: string; params_hash: string } | { reason: string },
+  body: { channel: 'console'; approval_line: string; params_hash: string; confirm_number?: number } | { reason: string },
 ): Promise<ApprovalDecision> {
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')

@@ -1,3 +1,4 @@
+import { CORE_LANDING_TITLE } from '@/api/landingGrant'
 import {
   approvalEnv,
   formatParams,
@@ -13,7 +14,7 @@ function drillTitle(drill: boolean | undefined, title: string): string {
 
 /** `#n · summary`, or the action name when either piece is missing; a drill's starts with "Drill". */
 export function decisionTitle(item: Pick<ApprovalItem, 'number' | 'summary' | 'action'> & Partial<Pick<ApprovalItem, 'drill'>>): string {
-  const summary = item.summary?.trim() ?? ''
+  const summary = item.action === 'approve_core_landing' ? CORE_LANDING_TITLE : item.summary?.trim() ?? ''
   const number = item.number
   if (typeof number === 'number' && Number.isFinite(number) && number > 0 && summary !== '') {
     return drillTitle(item.drill, `#${number} · ${summary}`)
@@ -55,7 +56,7 @@ export function approvalRowTitle(
   const lead = splitReason(item.reason ?? '').lead.trim()
   const summary = item.summary?.trim() ?? ''
   const action = item.action?.trim() ?? ''
-  const body = lead !== '' ? lead : summary !== '' ? summary : action
+  const body = item.action === 'approve_core_landing' ? CORE_LANDING_TITLE : lead !== '' ? lead : summary !== '' ? summary : action
   const number = requestNumber(item.number)
   if (number == null) return drillTitle(item.drill, body)
   if (body === '') return drillTitle(item.drill, `#${number}`)

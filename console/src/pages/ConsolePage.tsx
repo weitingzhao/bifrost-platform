@@ -8,6 +8,7 @@ import { DomainNav } from '@/components/shell/DomainNav'
 import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { LandingGrantPage } from '@/pages/landing-grant/LandingGrantPage'
 import { QuestionPage } from '@/pages/QuestionPage'
 import { IssuePage } from '@/pages/IssuePage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
@@ -62,6 +63,7 @@ function readLocation(): ConsoleLocation {
 }
 
 function locationTitle(location: ConsoleLocation): { title: string; description: string } {
+  if (location.kind === 'landing-grant') return { title: 'Landing authorization', description: 'Review candidate evidence and revoke an unused grant.' }
   if (location.kind === 'dev-sessions') {
     return {
       title: 'Dev Sessions',
@@ -90,6 +92,7 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
  * its place).
  */
 function backFor(location: ConsoleLocation): HeaderBack | undefined {
+  if (location.kind === 'landing-grant') return { label: 'Command', href: NEEDS_YOU_HREF }
   if (location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue') {
     return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: NEEDS_YOU_HREF }
   }
@@ -162,7 +165,7 @@ function ConsolePageInner() {
   const activeTab =
     location.kind === 'dev-sessions'
       ? 'dev-sessions'
-      : location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue'
+      : location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue' || location.kind === 'landing-grant'
         ? NEEDS_YOU_ROUTE
         : locationId(location)
   const yoursBadge = yoursNavBadge(yours)
@@ -222,6 +225,7 @@ function ConsolePageInner() {
             {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
+            {location.kind === 'landing-grant' ? <LandingGrantPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
             {location.kind === 'issue' ? <IssuePage /> : null}
             {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}

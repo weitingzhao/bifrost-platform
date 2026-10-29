@@ -15,6 +15,8 @@ export type PlatformApprovalRecord = {
   /** The line stored when the request was approved. */
   approved_line?: string
   number?: number
+  /** The confirmation number recorded by the two landing approval actions (C-5). */
+  confirmed_number?: number
   env?: string
   summary?: string
   key_params?: Record<string, string>

@@ -1,0 +1,269 @@
+{
+  "core": {
+    "main": "cccccccccccccccccccccccccccccccccccccccc",
+    "main_is_M0": true,
+    "main_known": true,
+    "material": {
+      "candidate": {
+        "env": "prod",
+        "tenant": "dev",
+        "repo": "bifrost-platform",
+        "mission": "M-31",
+        "plan_step": "R4:4.1",
+        "task": "t_00000000000000000000000001",
+        "attempt": "a_console",
+        "op": "land:t_00000000000000000000000001:1",
+        "A": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "base": "cccccccccccccccccccccccccccccccccccccccc",
+        "R": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "M0": "cccccccccccccccccccccccccccccccccccccccc",
+        "committer_date": "2026-10-29T12:00:00Z",
+        "changes": [
+          {
+            "old": "console/src/api/approvals.ts",
+            "new": "console/src/api/approvals.ts",
+            "old_mode": "100644",
+            "new_mode": "100644",
+            "added": 2,
+            "deleted": 1
+          }
+        ],
+        "patch_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "files": 1,
+        "lines": 3,
+        "acceptance": [
+          {
+            "verification_id": "v_console",
+            "result": "pass"
+          }
+        ],
+        "review": {
+          "task": "t_review",
+          "attempt": "a_review",
+          "executor": "codex",
+          "provider": "openai",
+          "conclusion": "pass",
+          "artifact": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        "review_patch_match": true,
+        "ci": {
+          "pipeline": "bifrost-ci-platform",
+          "run": "ci-platform-console",
+          "uid": "ci-uid",
+          "created_at": "2026-10-29T12:00:00Z",
+          "status": "Succeeded",
+          "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "siblings": {
+            "bifrost-trade-infra": "cccccccccccccccccccccccccccccccccccccccc",
+            "bifrost-ui": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "stg_release": true,
+        "hard_core_paths": [
+          {
+            "path": "console/src/api/approvals.ts",
+            "entry": "console/src/api/approvals.ts"
+          }
+        ],
+        "decision_chain": true,
+        "trust_review": true
+      },
+      "candidate_digest": "sha256:e14430ecb68be4fcd0b4c5e660f9bf181d2f9c350783af08810ed95f7d098713",
+      "material_digest": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f",
+      "soft_at_request": [
+        "core",
+        "files"
+      ],
+      "waiting_soft": [
+        "core",
+        "files"
+      ],
+      "rule": {
+        "id": "landing:dev",
+        "version": 1,
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "checks_version": 1,
+      "action": "approve_core_landing",
+      "title": "Trusted core change",
+      "first_line": "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code.",
+      "phase": "awaiting_grant",
+      "latest": true,
+      "pinned": true,
+      "grant_enabled": true,
+      "patch": "diff --git a/x b/x\n-old\n+new\n+line\n",
+      "patch_truncated": false,
+      "patch_size": 35,
+      "compare_url": "http://192.168.10.73:30300/bifrost/bifrost-platform/compare/cccccccccccccccccccccccccccccccccccccccc...bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "gitea_notice": "Gitea's own page is not rendered by this platform's code",
+      "quota_reserved_today": 2,
+      "quota_max_per_day": 5,
+      "quota_note": "today's count as of this read; the push checks it again",
+      "stg_notice": "Approving also authorizes this commit to go to STG with the B5 batch.",
+      "grants": [],
+      "problems": [],
+      "computed_at": "2026-10-29T12:00:00Z"
+    }
+  },
+  "guardrail": {
+    "main": "cccccccccccccccccccccccccccccccccccccccc",
+    "main_is_M0": true,
+    "main_known": true,
+    "material": {
+      "candidate": {
+        "env": "prod",
+        "tenant": "dev",
+        "repo": "bifrost-platform",
+        "mission": "M-31",
+        "plan_step": "R4:4.1",
+        "task": "t_00000000000000000000000001",
+        "attempt": "a_console",
+        "op": "land:t_00000000000000000000000001:1",
+        "A": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "base": "cccccccccccccccccccccccccccccccccccccccc",
+        "R": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "M0": "cccccccccccccccccccccccccccccccccccccccc",
+        "committer_date": "2026-10-29T12:00:00Z",
+        "changes": [
+          {
+            "old": "console/src/example.ts",
+            "new": "console/src/example.ts",
+            "old_mode": "100644",
+            "new_mode": "100644",
+            "added": 2,
+            "deleted": 1
+          }
+        ],
+        "patch_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "files": 1,
+        "lines": 3,
+        "acceptance": [
+          {
+            "verification_id": "v_console",
+            "result": "pass"
+          }
+        ],
+        "review": {
+          "task": "t_review",
+          "attempt": "a_review",
+          "executor": "codex",
+          "provider": "openai",
+          "conclusion": "pass",
+          "artifact": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        "review_patch_match": true,
+        "ci": {
+          "pipeline": "bifrost-ci-platform",
+          "run": "ci-platform-console",
+          "uid": "ci-uid",
+          "created_at": "2026-10-29T12:00:00Z",
+          "status": "Succeeded",
+          "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "siblings": {
+            "bifrost-trade-infra": "cccccccccccccccccccccccccccccccccccccccc",
+            "bifrost-ui": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "stg_release": true,
+        "hard_core_paths": [],
+        "decision_chain": false,
+        "trust_review": false
+      },
+      "candidate_digest": "sha256:416f341d89cf3e05f7a3767ecb1a26211f5383f421e3f1d90758bb66fdb81b9e",
+      "material_digest": "sha256:34508a0e9d7eb056e49f0b60acb398434eb6e615d73fc98afcd743ce3794ec87",
+      "soft_at_request": [
+        "files"
+      ],
+      "waiting_soft": [
+        "files"
+      ],
+      "rule": {
+        "id": "landing:dev",
+        "version": 1,
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "checks_version": 1,
+      "action": "approve_guardrail_landing",
+      "title": "Soft guardrail change",
+      "phase": "awaiting_grant",
+      "latest": true,
+      "pinned": true,
+      "grant_enabled": true,
+      "patch": "diff --git a/x b/x\n-old\n+new\n+line\n",
+      "patch_truncated": false,
+      "patch_size": 35,
+      "compare_url": "http://192.168.10.73:30300/bifrost/bifrost-platform/compare/cccccccccccccccccccccccccccccccccccccccc...bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "gitea_notice": "Gitea's own page is not rendered by this platform's code",
+      "quota_reserved_today": 2,
+      "quota_max_per_day": 5,
+      "quota_note": "today's count as of this read; the push checks it again",
+      "stg_notice": "Approving also authorizes this commit to go to STG with the B5 batch.",
+      "grants": [],
+      "problems": [],
+      "computed_at": "2026-10-29T12:00:00Z"
+    }
+  },
+  "handed": {
+    "grant_id": "lg_approval_console",
+    "op": "land:t_00000000000000000000000001:1",
+    "revoked": false,
+    "already": false,
+    "handed_to_push": true,
+    "main_intent_seq": 42,
+    "message": "handed to the push"
+  },
+  "revoked": {
+    "grant_id": "lg_approval_console",
+    "op": "land:t_00000000000000000000000001:1",
+    "revoked": true,
+    "already": false,
+    "handed_to_push": false,
+    "message": "revoked"
+  },
+  "wait": {
+    "phase": "awaiting_grant",
+    "shown": "authorized",
+    "since": "2026-10-29T12:00:00Z",
+    "soft_at_request": [
+      "core",
+      "files"
+    ],
+    "files": 1,
+    "lines": 3,
+    "waiting_snapshot": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f",
+    "R": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "M0": "cccccccccccccccccccccccccccccccccccccccc",
+    "execution_seconds": 30,
+    "waiting_seconds": 60,
+    "operations": 1,
+    "approval_id": "approval_console",
+    "approval_number": 51,
+    "approval_status": "executed",
+    "approval_url": "/api/v1/approvals/approval_console",
+    "main_known": true,
+    "main_changed": false,
+    "owner_todo": false,
+    "grants": [
+      {
+        "grant_id": "lg_approval_console",
+        "approval_id": "approval_console",
+        "approval_number": 51,
+        "action": "approve_core_landing",
+        "op": "land:t_00000000000000000000000001:1",
+        "waives": [
+          "core",
+          "files"
+        ],
+        "stg_release": true,
+        "approved_at": "2026-10-29T12:00:00Z",
+        "granted_at": "2026-10-29T12:00:00Z",
+        "expires_at": "2026-10-30T12:00:00Z",
+        "revoked": false,
+        "handed_to_push": false,
+        "valid": true,
+        "candidate_digest": "sha256:e14430ecb68be4fcd0b4c5e660f9bf181d2f9c350783af08810ed95f7d098713",
+        "material_digest": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f"
+      }
+    ]
+  }
+}

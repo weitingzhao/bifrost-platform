@@ -66,6 +66,7 @@ export const MORE_ROUTE = 'more'
 
 /** The request page. Phone notifications link here (`#approvals?id=<id>`). */
 export const APPROVAL_ROUTE = 'approvals'
+export const LANDING_GRANT_ROUTE = 'landing-grant'
 
 /** The question page. Phone notifications link here (`#questions?id=q_…`). */
 export const QUESTION_ROUTE = 'questions'
@@ -135,6 +136,7 @@ export const FORMER_CONSOLE_TABS = [
 export type ConsoleLocation =
   | { kind: 'shell'; id: ShellRouteId }
   | { kind: 'approval' }
+  | { kind: 'landing-grant' }
   | { kind: 'question' }
   | { kind: 'issue' }
   | { kind: 'more' }
@@ -286,6 +288,7 @@ export function isEntryRoute(value: string): value is EntryRouteId {
  * question under Command, detail pages under their owning domain. More belongs to none.
  */
 export function entryOf(location: ConsoleLocation, query = ''): EntryRouteId | null {
+  if (location.kind === 'landing-grant') return 'command'
   if (location.kind === 'more') return null
   if (location.kind === 'dev-sessions') return 'system'
   if (location.kind === 'approval' || location.kind === 'question' || location.kind === 'issue') return 'command'
@@ -345,6 +348,7 @@ export function questionHref(id: string): string {
 }
 
 export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy: boolean } {
+  if (tab === LANDING_GRANT_ROUTE) return { location: { kind: 'landing-grant' }, legacy: false }
   if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
   if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
   if (tab === QUESTION_ROUTE) return { location: { kind: 'question' }, legacy: false }
@@ -419,6 +423,7 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
 }
 
 export function locationId(location: ConsoleLocation): string {
+  if (location.kind === 'landing-grant') return LANDING_GRANT_ROUTE
   if (location.kind === 'dev-sessions') return 'dev-sessions'
   if (location.kind === 'approval') return APPROVAL_ROUTE
   if (location.kind === 'question') return QUESTION_ROUTE

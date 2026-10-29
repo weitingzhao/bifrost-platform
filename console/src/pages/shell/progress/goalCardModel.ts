@@ -209,6 +209,9 @@ export function missionIds(runtime?: RuntimeProgress, submitted = ''): string[] 
 export const goalTaskId = (goal: string, task: string) => `goal-${goal}-task-${task}`
 
 const landingReasons: Record<string, string> = {
+  awaiting_grant: 'Unresolved: waiting for landing authorization',
+  'failed:approval_expired': 'Landing authorization wait expired; retry from the landing question',
+  'failed:declined': 'Landing was declined by you',
   at_main: 'Waiting for the main update to be confirmed',
   evidence: 'Waiting for fresh evidence from main',
   landed_unverified: 'Landed, but main evidence is not verified',

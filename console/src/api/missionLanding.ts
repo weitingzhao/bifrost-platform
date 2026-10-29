@@ -1,5 +1,6 @@
 import { authHeaders } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
+import { parseLandingWait, type LandingWait } from '@/api/landingGrant'
 
 export type MissionLandingRoot = {
   root: string; op: string; class: 'delivered' | 'disposed' | 'unresolved'; reason: string
@@ -12,6 +13,7 @@ export type MissionLandingRoot = {
   held?: { until: string; question_id: string }
   /** A card for the root is prepared and not yet asked. */
   card_pending?: boolean
+  authorization_wait?: LandingWait
 }
 export type MissionLanding = {
   mission_id: string; in_scope: boolean; rule: string; roots: MissionLandingRoot[]
@@ -34,6 +36,7 @@ function isRoot(v: unknown): v is MissionLandingRoot {
       && (!('retry_at' in v.parked) || time(v.parked.retry_at)) && (!('remind_at' in v.parked) || time(v.parked.remind_at))))
     && (!('held' in v) || (object(v.held) && time(v.held.until) && typeof v.held.question_id === 'string'))
     && (!('card_pending' in v) || typeof v.card_pending === 'boolean')
+    && (!('authorization_wait' in v) || parseLandingWait(v.authorization_wait) !== null)
 }
 
 /** Missing or mistyped fields are unreadable; unrelated additions remain compatible. */

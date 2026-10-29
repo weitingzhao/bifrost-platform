@@ -1,4 +1,6 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { isLandingAction } from '@/api/landingGrant'
+import { useLandingDecisionWaits } from '@/pages/landing-grant/useLandingDecisionWaits'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { mergedWaitingCount, offlineHostItem, offlineHosts, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
@@ -69,6 +71,8 @@ export function useNeedsYou() {
     retry: false,
   })
   const groups: NeedsYouGroups = groupOpenApprovals(openQ.data ?? [], now)
+  const landingWaits = useLandingDecisionWaits(openQ.data ?? [])
+  groups.decide = groups.decide.filter(item => !isLandingAction(item.action) || landingWaits.eligible.has(item.id))
   const questions: Question[] = useMemo(() => questionsQ.data ?? [], [questionsQ.data])
   // The same list while the questions are the same: the Answer group does not repaint for another read (CI 2026-10-21).
   const openQuestions = useMemo(() => questions.filter(question => question.status === 'open'), [questions])
@@ -88,9 +92,9 @@ export function useNeedsYou() {
   const silentSectionCount = silent.length + (capacityActive ? 1 : 0)
 
   const openCount = knownOrPending(
-    openQ.isError || openQ.isPaused,
-    openQ.isPaused ? new Error('Could not read approvals — offline.') : openQ.error,
-    openQ.data,
+    openQ.isError || openQ.isPaused || landingWaits.unreadable,
+    landingWaits.unreadable ? new Error('Could not verify landing approval readiness from the landing stream and main.') : openQ.isPaused ? new Error('Could not read approvals — offline.') : openQ.error,
+    landingWaits.loading ? undefined : openQ.data,
     'approvals request failed',
     waitingCount(groups, 0),
   )

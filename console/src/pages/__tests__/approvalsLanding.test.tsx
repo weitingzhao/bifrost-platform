@@ -1,0 +1,100 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import wire from '@/api/__fixtures__/landing-grant.go.json'
+import { buildPlatformApproval } from '@/api/approvalsApiFixture'
+import { parseLandingMaterial, type LandingMaterialResponse } from '@/api/landingGrant'
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+import { approvalsPageHooks, json, wrapper } from './approvalsPageTestKit'
+import { clickDecisionControl } from './clickDecisionControl'
+
+approvalsPageHooks()
+beforeEach(() => {
+  vi.setSystemTime(new Date('2026-10-29T13:00:00Z'))
+  window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'fixture-only')
+})
+afterEach(cleanup)
+
+function setup(kind: 'core' | 'guardrail' | 'other' = 'core', mutate?: (m: LandingMaterialResponse) => void, status = 200) {
+  const data = parseLandingMaterial(structuredClone(kind === 'guardrail' ? wire.guardrail : wire.core))!
+  const c = data.material.candidate
+  const item = buildPlatformApproval({ id: 'approval_console', number: 51, action: kind === 'other' ? 'gitops_sync_app' : data.material.action, tier: 'D',
+    params: { env: 'prod', repo: c.repo, task: c.task, op: c.op, R: c.R, material_digest: data.material.material_digest, stg_release: c.stg_release } })
+  mutate?.(data)
+  const posts: { url: string; body: Record<string, unknown> }[] = []
+  const fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+    const url = String(input)
+    if (url === '/index.html') return new Response('<script type="module" src="/same.js"></script>')
+    if (url.includes('/auth/capabilities')) return json({ authenticated: true, role: 'admin', can_admin: true, can_operate: true })
+    if (init?.method === 'POST') { posts.push({ url, body: JSON.parse(String(init.body)) }); return json({ status: url.endsWith('/reject') ? 'rejected' : 'executed' }) }
+    if (url.includes('/material?')) return json(data, status)
+    if (url.includes('?status=')) return json({ approvals: [] })
+    if (url.includes('/agentrt/events?')) return json([])
+    if (url.includes('/agentrt/progress')) return json({ plan: [] })
+    if (url.includes('/agentrt/plan?')) return json({ error: 'not_found' }, 404)
+    if (url.includes('/approvals/')) return json(item)
+    return json({ error: 'not_found' }, 404)
+  })
+  vi.stubGlobal('fetch', fetch)
+  window.location.hash = '#approvals?id=approval_console'
+  return { item, posts, fetch }
+}
+describe('C-6 approval branches', () => {
+  it('requires the Gitea checkbox for a decision-chain core change and sends confirm_number', async () => {
+    const { posts } = setup()
+    render(wrapper(<ApprovalsPage />))
+    const check = await screen.findByRole('checkbox', { name: 'I checked this in Gitea' })
+    const approve = screen.getByRole('button', { name: 'Approve approve_core_landing' })
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText(/UI constraint only/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '#51 · Trust-core change' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open landing authorization material' }).getAttribute('href')).toContain('stg_release=true')
+    fireEvent.click(check)
+    clickDecisionControl(approve)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toEqual({ channel: 'console', approval_line: expect.any(String), params_hash: 'fixture-params-hash', confirm_number: 51 })
+  })
+  it.each(['guardrail', 'core'] as const)('does not demand Gitea attestation for a %s change outside the decision chain', async kind => {
+    const { posts } = setup(kind, data => { data.material.candidate.decision_chain = false })
+    render(wrapper(<ApprovalsPage />))
+    const button = await screen.findByRole('button', { name: /Approve approve_/ })
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    clickDecisionControl(button)
+    await waitFor(() => expect(posts[0]?.body.confirm_number).toBe(51))
+  })
+  it.each(['unavailable', 'digest', 'main', 'unknown main'] as const)('keeps approval disabled with %s evidence, while rejection remains available', async reason => {
+    const { posts } = setup('core', data => {
+      if (reason === 'digest') data.material.material_digest = 'changed'
+      if (reason === 'main') data.main_is_M0 = false
+      if (reason === 'unknown main') data.main_known = false
+    }, reason === 'unavailable' ? 503 : 200)
+    render(wrapper(<ApprovalsPage />))
+    const approve = await screen.findByRole('button', { name: 'Approve approve_core_landing' })
+    await screen.findByRole('link', { name: 'Open landing authorization material' })
+    const checkbox = screen.queryByRole('checkbox')
+    if (checkbox) fireEvent.click(checkbox)
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'Please refresh' } })
+    fireEvent.click(screen.getByRole('button', { name: /Reject approve_core_landing/ }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toEqual({ reason: 'Please refresh' })
+  })
+  it('leaves every other action payload and review behavior unchanged without reading landing material', async () => {
+    const { posts, fetch } = setup('other')
+    render(wrapper(<ApprovalsPage />))
+    clickDecisionControl(await screen.findByRole('button', { name: 'Approve gitops_sync_app' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toEqual({ channel: 'console', approval_line: expect.any(String), params_hash: 'fixture-params-hash' })
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('/material?'))).toBe(false)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+  it('shows soft checks and STG authorization in the approval list', async () => {
+    const { item } = setup('guardrail')
+    render(wrapper(<ApprovalRow item={item} />))
+    expect(await screen.findByText('Soft checks: files')).toBeTruthy()
+    expect(screen.getAllByText(/B5 batch/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/run one command in a terminal/)).toBeNull()
+  })
+})

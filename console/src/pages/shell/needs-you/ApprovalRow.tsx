@@ -1,4 +1,6 @@
 import { DenseTag } from '@bifrost/ui'
+import { isLandingAction } from '@/api/landingGrant'
+import { LandingApprovalSummary } from '@/pages/landing-grant/LandingApprovalSummary'
 import {
   approvalEnv,
   formatDecidedAt,
@@ -36,7 +38,7 @@ export function ApprovalRow({
 }) {
   const env = approvalEnv(item)
   const pending = item.status === 'pending'
-  const words = tierWords(item.tier, item.drill === true)
+  const words = isLandingAction(item.action) && !item.drill ? 'approval authorizes this candidate; the landing gate checks again before push' : tierWords(item.tier, item.drill === true)
   const detail = lines != null && lines.length > 0 ? lines : null
   return (
     <li className="list-none min-w-0 max-w-full">
@@ -52,6 +54,7 @@ export function ApprovalRow({
         >
           {approvalRowTitle(item)}
         </span>
+        {isLandingAction(item.action) && <LandingApprovalSummary item={item} />}
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {item.drill === true ? <DenseTag variant="neutral">Drill</DenseTag> : null}
           <DenseTag variant={item.tier === 'D' ? 'danger' : 'warning'}>{item.tier || '—'}</DenseTag>

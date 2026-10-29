@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var decisionCall = regexp.MustCompile(`\b(postApprovalDecision|postApprovalResolve|createApprovalRequest|operatorToken|APPROVAL_TOKEN_STORAGE_KEY)\b|navigator\s*\.\s*serviceWorker`)
+var decisionCall = regexp.MustCompile(`\b(postApprovalDecision|postApprovalResolve|createApprovalRequest|revokeLandingGrant|operatorToken|APPROVAL_TOKEN_STORAGE_KEY)\b|navigator\s*\.\s*serviceWorker`)
 
 // Direct syntax ratchet, not a complete data-flow proof. Aliases, computed
 // property names and indirect wrappers still require semantic review.
@@ -63,7 +63,7 @@ func TestLandingHardConsoleCallSites(t *testing.T) {
 }
 func TestLandingHardConsoleDetectsNewCallSite(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{"postApprovalDecision(x)", "postApprovalResolve(x)", "createApprovalRequest(x)", "operatorToken()", "APPROVAL_TOKEN_STORAGE_KEY", "headers.set('Authorization', token)", "const h = { Authorization: token }", "h['Authorization'] = token", "navigator.serviceWorker.register('/sw.js')"} {
+	for _, source := range []string{"postApprovalDecision(x)", "postApprovalResolve(x)", "createApprovalRequest(x)", "revokeLandingGrant(x)", "operatorToken()", "APPROVAL_TOKEN_STORAGE_KEY", "headers.set('Authorization', token)", "const h = { Authorization: token }", "h['Authorization'] = token", "navigator.serviceWorker.register('/sw.js')"} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()

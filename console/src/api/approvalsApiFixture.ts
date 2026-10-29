@@ -17,6 +17,7 @@ export function buildPlatformApproval(
     approval_line: '#1 · tier C · gitops_sync_app · fixture-params',
     approved_line: '',
     number: 1,
+    confirmed_number: 0,
     env: 'prod',
     summary: 'Sync rocket',
     key_params: { name: 'rocket' },
