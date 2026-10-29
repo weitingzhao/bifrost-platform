@@ -23,6 +23,10 @@ type waitReviewTx struct {
 }
 
 func (tx waitReviewTx) Query(_ context.Context, q string, _ ...any) (pgx.Rows, error) {
+	// C-5's grant projection: these fixtures carry no grant records.
+	if strings.Contains(q, "landing_grant_use") {
+		return &waitReviewRows{}, nil
+	}
 	if strings.Contains(q, "landing_grant_request") {
 		requests := tx.requests
 		// The baseline query returned only the newest arrival per approval.
