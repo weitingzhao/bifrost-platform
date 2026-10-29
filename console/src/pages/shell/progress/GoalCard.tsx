@@ -58,6 +58,8 @@ function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalDat
       <span>{landingReason(root.reason)}</span>
       {root.parked && <span>since <time dateTime={root.parked.since}>{root.parked.since}</time>{root.parked.remind_at && <>, told at <time dateTime={root.parked.remind_at}>{root.parked.remind_at}</time></>}</span>}
       {root.card_alert && <DenseTag size="pill" variant="warning">Answer not confirmed: {root.card_alert}</DenseTag>}
+      {root.held && <span>Held on your answer until <time dateTime={root.held.until}>{root.held.until}</time>{root.held.question_id && <> (<a className="underline" href={questionHref(root.held.question_id)}>your answer</a>)</>}</span>}
+      {root.card_pending && <span>A card is waiting to be asked</span>}
       {root.question_id && <a className="underline" href={questionHref(root.question_id)}>Open question</a>}
     </li>)}</ul>
   </section>

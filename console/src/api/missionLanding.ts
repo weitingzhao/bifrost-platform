@@ -8,6 +8,10 @@ export type MissionLandingRoot = {
   card_alert?: string
   /** A parked root: since when, its retry, what it shows and when it is told (review 672 R-07). */
   parked?: { since: string; shown: string; retry_at?: string; remind_at?: string }
+  /** The Owner's answer holds the root until then, on that question (review 675 R-07). */
+  held?: { until: string; question_id: string }
+  /** A card for the root is prepared and not yet asked. */
+  card_pending?: boolean
 }
 export type MissionLanding = {
   mission_id: string; in_scope: boolean; rule: string; roots: MissionLandingRoot[]
@@ -28,6 +32,8 @@ function isRoot(v: unknown): v is MissionLandingRoot {
     && (!('card_alert' in v) || typeof v.card_alert === 'string')
     && (!('parked' in v) || (object(v.parked) && time(v.parked.since) && typeof v.parked.shown === 'string'
       && (!('retry_at' in v.parked) || time(v.parked.retry_at)) && (!('remind_at' in v.parked) || time(v.parked.remind_at))))
+    && (!('held' in v) || (object(v.held) && time(v.held.until) && typeof v.held.question_id === 'string'))
+    && (!('card_pending' in v) || typeof v.card_pending === 'boolean')
 }
 
 /** Missing or mistyped fields are unreadable; unrelated additions remain compatible. */

@@ -608,6 +608,13 @@ type LandingRootStatus struct {
 	// becomes parked_long. Zero / "" otherwise.
 	ParkedSince, RetryAt, RemindAt time.Time
 	Shown                          string
+	// The Owner's answer holds the root (review 675 R-07): wait or remind
+	// later on its latest answered card, until HeldUntil, on HeldQuestion.
+	HeldUntil    time.Time
+	HeldQuestion string
+	// CardPending: a card for the root is prepared and not yet asked (the
+	// card budget or quota holds it).
+	CardPending bool
 }
 
 // ReadMissionLandingStatus reads a mission's landing status.
@@ -644,16 +651,31 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 		st = MissionLandingStatus{InScope: true, Rule: rule, Round: round, Closed: closed}
 		for _, r := range roots {
 			rs := LandingRootStatus{LandingRootClass: r}
-			var latest CardRecord
+			var latest, answered CardRecord
 			for _, c := range cards {
 				if c.Root == r.Root && c.Op == r.Op && !c.Ended() && c.N >= latest.N {
 					latest = c
+				}
+				if c.Root == r.Root && c.Op == r.Op && c.QuestionID != "" && c.N >= answered.N {
+					answered = c
+				}
+				if c.Root == r.Root && c.Op == r.Op && !c.Bound && !c.Ended() {
+					rs.CardPending = true
 				}
 				if c.Root == r.Root && c.Op == r.Op && c.Closed && (c.ClosedWhy == "unconfirmed" || c.ClosedWhy == "lost") {
 					rs.CardAlert = c.Prep + " " + c.ClosedWhy
 				}
 			}
 			rs.CardKind, rs.QuestionID = latest.Kind, latest.QuestionID
+			if answered.QuestionID != "" {
+				o, _, found, err := storedCardRecord(ctx, tx, answered, answered.QuestionID)
+				if err != nil {
+					return err
+				}
+				if found && o.outcome == "held" && at.Before(o.remindAt) {
+					rs.HeldUntil, rs.HeldQuestion = o.remindAt, answered.QuestionID
+				}
+			}
 			if strings.HasPrefix(r.Reason, "parked:") {
 				var retry *string
 				err := tx.QueryRow(ctx, `SELECT at, body_json->'landing'->>'retry_at' FROM agentrt.event WHERE event_stream_id = 'landing:bifrost-platform'

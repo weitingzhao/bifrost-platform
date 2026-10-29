@@ -146,6 +146,12 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 	for _, x := range st.Roots {
 		root := map[string]any{"root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
 			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
+		if !x.HeldUntil.IsZero() {
+			root["held"] = map[string]any{"until": x.HeldUntil, "question_id": x.HeldQuestion}
+		}
+		if x.CardPending {
+			root["card_pending"] = true
+		}
 		if !x.ParkedSince.IsZero() {
 			parked := map[string]any{"since": x.ParkedSince, "shown": x.Shown}
 			if !x.RetryAt.IsZero() {

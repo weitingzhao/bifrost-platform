@@ -21,6 +21,12 @@ describe('mission landing contract', () => {
     expect(parseMissionLanding({ ...fixture, closed: { ...closed, to: 'expired' } })).toBeNull()
     expect(parseMissionLanding({ ...fixture, closed: { ...closed, delivered: -1 } })).toBeNull()
   })
+  it('reads a hold and a pending card; rejects them mistyped (review 675 R-07)', () => {
+    const held = { ...fixture.roots[0], held: { until: '2026-10-29T08:00:00Z', question_id: 'q_0123456789abcdef' }, card_pending: true }
+    expect(parseMissionLanding({ ...fixture, roots: [held] })).not.toBeNull()
+    expect(parseMissionLanding({ ...fixture, roots: [{ ...held, held: { until: 'later', question_id: 'q_1' } }] })).toBeNull()
+    expect(parseMissionLanding({ ...fixture, roots: [{ ...held, card_pending: 'yes' }] })).toBeNull()
+  })
   it('accepts an out-of-scope mission and an empty root list without a closing round', () => {
     const body = { mission_id: 'M-2', in_scope: false, rule: '', roots: [] }
     expect(parseMissionLanding(body)).toEqual(body)

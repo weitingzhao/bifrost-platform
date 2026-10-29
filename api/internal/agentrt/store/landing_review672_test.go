@@ -380,3 +380,34 @@ func TestB4ReparkRefusesABA(t *testing.T) {
 		t.Fatalf("an old observation moved a later park: %v %+v", stale, o)
 	}
 }
+
+// Serial: FreezeEventClock. Review 675 R-07: a card prepared and not asked
+// shows as pending; once the Owner answers wait, the root shows held until a
+// day after the answer, on that question.
+func TestB4StatusShowsHeldAndPendingCards(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	liveRoot(t, w, "land:r675h:1", at, "main_intent", newLandingRecord("land:r675h:1", "main_result", "outcome", "ok"))
+	readOne(t, w, "land:r675h:1", at.Add(-10*time.Minute), "unknown")
+	store.FreezeEventClock(at.Add(2 * time.Hour))
+	_, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at.Add(2*time.Hour))
+	ok(t, err)
+	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	if r := status.Roots[0]; !r.CardPending || !r.HeldUntil.IsZero() {
+		t.Fatalf("prepared card not pending: %+v", r)
+	}
+	f := newFakeCards(func() time.Time { return at.Add(2 * time.Hour) })
+	cardPass(t, w, f, at.Add(2*time.Hour))
+	answered := at.Add(2*time.Hour + time.Minute)
+	f.answer("q1", "b", answered) // wait
+	cardPass(t, w, f, at.Add(2*time.Hour+2*time.Minute))
+	store.FreezeEventClock(at.Add(3 * time.Hour))
+	status, err = store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
+	ok(t, err)
+	r := status.Roots[0]
+	if r.CardPending || r.HeldQuestion != "q1" || !r.HeldUntil.Equal(answered.Add(store.CardHoldFor)) {
+		t.Fatalf("held not shown: %+v", r)
+	}
+}

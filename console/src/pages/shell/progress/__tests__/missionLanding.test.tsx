@@ -121,6 +121,14 @@ describe('Landing on the goal detail', () => {
     await screen.findByRole('listitem', { name: 'Done: done' })
     expect(screen.getByRole('region', { name: 'Result' })).toBeInTheDocument()
   })
+  it('shows a root held on the Owner\'s answer and a card waiting to be asked (review 675 R-07)', async () => {
+    landingBody = { ...fixture, roots: [{ ...fixture.roots[0], held: { until: '2026-10-29T08:00:00Z', question_id: 'q_0123456789abcdef' }, card_pending: true }] }
+    mount()
+    const block = within(await screen.findByRole('region', { name: 'Landing' }))
+    expect(block.getByText((_, el) => el?.tagName === 'SPAN' && (el.textContent ?? '').startsWith('Held on your answer until 2026-10-29T08:00:00Z'))).toBeVisible()
+    expect(block.getByRole('link', { name: 'your answer' })).toHaveAttribute('href', '#questions?id=q_0123456789abcdef')
+    expect(block.getByText('A card is waiting to be asked')).toBeVisible()
+  })
   it('reads Landing on after the mission closed, so its close and a later reversal show (review 675 R-09)', async () => {
     missionState = 'done'
     landingBody = { ...fixture, closing_round: undefined, roots: fixture.roots.filter(root => root.class === 'delivered') }
