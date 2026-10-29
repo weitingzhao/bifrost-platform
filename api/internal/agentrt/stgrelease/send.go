@@ -1,5 +1,5 @@
-// Package stgrelease supplies B5-c's one-shot send/recovery operations. It
-// starts no controller, timer, lease renewal or automatic release loop.
+// Package stgrelease supplies B5's explicit send/recovery operations and
+// opt-in window holders. It starts no automatic release controller.
 package stgrelease
 
 import (
@@ -25,6 +25,9 @@ type Sender struct {
 	DB   store.DB
 	Runs Runs
 	Gate store.StgGateSource
+	// B5-d holder for the current try. B5-e supplies this together with its
+	// Generation/Observe callbacks; nil retains the one-shot B5-c API.
+	Window *WindowHolder
 	// True only after the admission/retention probes succeeded (§14).
 	FinalizerGuaranteed bool
 }
@@ -58,6 +61,18 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 		current, err := store.StgPermitCurrent(ctx, s.DB, p, s.Gate.Generation(), store.DecisionAt())
 		if err != nil {
 			return err
+		}
+		if s.Window != nil {
+			if s.Window.batch != p.Batch || s.Window.try != p.Try {
+				return errors.New("STG send window belongs to another try")
+			}
+			w, err := s.Window.Observe(ctx)
+			if err != nil {
+				return err
+			}
+			if w.Generation != p.Generation {
+				return errors.New("STG send window generation changed")
+			}
 		}
 		// The read itself can stall across the deadline or a lease takeover.
 		if !current || !store.DecisionAt().Before(p.Deadline) || s.Gate.Generation() != p.Generation {
