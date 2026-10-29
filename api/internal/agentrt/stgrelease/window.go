@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"k8s.io/utils/clock"
 )
 
@@ -225,8 +225,26 @@ func (h *WindowHolder) lose(err error) {
 	h.cancel()
 }
 
+// contained turns a panic in one transport call into an ordinary error, so
+// the holder's lock, notification and completion paths always run.
+func contained(name string, fn func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("STG window %s panicked: %v", name, r)
+		}
+	}()
+	return fn()
+}
+
 func (h *WindowHolder) renew(ctx context.Context, ticker clock.Ticker) {
 	defer close(h.renewDone)
+	// Runs before renewDone closes: a renewer that dies unexpectedly first
+	// invalidates the holder and sends its one loss notification.
+	defer func() {
+		if r := recover(); r != nil {
+			h.lose(fmt.Errorf("STG window renewer panicked: %v", r))
+		}
+	}()
 	defer ticker.Stop()
 	for {
 		select {
@@ -260,7 +278,11 @@ func (h *WindowHolder) renewOnce(ctx context.Context) bool {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	next, err := h.cfg.Windows.RenewSTGWindow(ctx, held)
+	var next delivery.STGWindow
+	err := contained("renewal", func() (e error) {
+		next, e = h.cfg.Windows.RenewSTGWindow(ctx, held)
+		return e
+	})
 	cancel()
 	if err != nil {
 		// Even cancellation may hide a successful update. Do not release the
@@ -278,22 +300,29 @@ func (h *WindowHolder) finish(ctx context.Context) {
 	<-h.renewDone // the renewer has exited before any release write
 	h.cancel()
 	h.io.Lock()
+	var err error
+	// Unlock, record and close on every exit, a panic included: Release and
+	// Done never wait on a finisher that is gone.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("STG window release panicked: %v", r)
+		}
+		h.mu.Lock()
+		h.releaseErr = err
+		h.mu.Unlock()
+		h.io.Unlock()
+		close(h.losses)
+		close(h.done)
+	}()
 	h.mu.Lock()
 	h.active = false
 	held, lost := h.held, h.lost
 	h.mu.Unlock()
-	var err error
 	if !lost {
 		releaseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err = h.cfg.Windows.EndSTGWindow(releaseCtx, held)
+		err = contained("release", func() error { return h.cfg.Windows.EndSTGWindow(releaseCtx, held) })
 		cancel()
 	}
-	h.mu.Lock()
-	h.releaseErr = err
-	h.mu.Unlock()
-	h.io.Unlock()
-	close(h.losses)
-	close(h.done)
 }
 
 // Release cancels and waits for the renewer, then waits for its one CAS expiry
