@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,23 +130,38 @@ var isolation = []string{"-c", "core.hooksPath=/dev/null", "-c", "core.attribute
 	"-c", "protocol.http.allow=always", "-c", "submodule.recurse=false", "-c", "commit.gpgSign=false",
 	"-c", "tag.gpgSign=false", "-c", "core.autocrlf=false"}
 
+// readCredential reads one credential file. The Gitea reader's files follow
+// the reader's own contract (delivery/gitea_reader.go): at most 4096 bytes are
+// read, surrounding whitespace (a trailing newline) is not part of the value,
+// and a NUL is refused (reviews 713 R-01, 717 B-1). Other identities keep
+// exact bytes.
+func (g *Git) readCredential(path string) ([]byte, error) {
+	if !g.reader {
+		return os.ReadFile(path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(f, 4097))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > 4096 || bytes.IndexByte(raw, 0) >= 0 {
+		return nil, errors.New("invalid Gitea reader file")
+	}
+	return bytes.TrimSpace(raw), nil
+}
+
 func (g *Git) header() (string, error) {
-	u, e := os.ReadFile(g.usernameFile)
+	u, e := g.readCredential(g.usernameFile)
 	if e != nil {
 		return "", errors.New("cannot read landing username file")
 	}
-	p, e := os.ReadFile(g.passwordFile)
+	p, e := g.readCredential(g.passwordFile)
 	if e != nil {
 		return "", errors.New("cannot read landing password file")
-	}
-	// The Gitea reader's files follow the reader's own contract: surrounding
-	// whitespace (a trailing newline) is not part of the value, a value is
-	// one line of at most 4096 bytes (review 713 R-01).
-	if g.reader {
-		if len(u) > 4096 || len(p) > 4096 {
-			return "", errors.New("invalid Gitea reader files")
-		}
-		u, p = bytes.TrimSpace(u), bytes.TrimSpace(p)
 	}
 	// Basic-auth Secret values are exact bytes; trailing newlines are not tokens.
 	if len(u) == 0 || len(p) == 0 || bytes.ContainsAny(u, ":\r\n") || bytes.ContainsAny(p, "\r\n") {
