@@ -13,11 +13,13 @@ export type LandingGrant = {
   grant_id: string; approval_id: string; approval_number: number; action: LandingAction; op: string
   waives: string[]; stg_release: boolean; approved_at: string; granted_at: string; expires_at: string
   revoked: boolean; revoked_at?: string; handed_to_push: boolean; main_intent_seq?: number; valid: boolean
+  refused: boolean; refused_reason?: string; refused_at?: string
   candidate_digest: string; material_digest: string
 }
 export type LandingWait = {
   phase: string; shown: string; since: string; soft_at_request: string[]; files: number; lines: number
   waiting_snapshot: string; R: string; M0: string; execution_seconds: number; waiting_seconds: number; operations: number
+  grant_refused?: string
   approval_id?: string; approval_number?: number; approval_status?: string; approval_url?: string
   main_known: boolean; main_changed: boolean; owner_todo: boolean; grants: LandingGrant[]
 }
@@ -55,8 +57,8 @@ const optional = (v: Record<string, unknown>, keys: string, check: (v: unknown) 
 function grant(v: unknown): boolean {
   return object(v) && fields(v, 'grant_id approval_id op candidate_digest material_digest', string)
     && count(v.approval_number) && v.approval_number > 0 && isLandingAction(v.action) && strings(v.waives)
-    && fields(v, 'stg_release revoked handed_to_push valid', bool) && fields(v, 'approved_at granted_at expires_at', time)
-    && optional(v, 'revoked_at', time) && optional(v, 'main_intent_seq', count)
+    && fields(v, 'stg_release revoked handed_to_push valid refused', bool) && fields(v, 'approved_at granted_at expires_at', time)
+    && optional(v, 'revoked_at refused_at', time) && optional(v, 'main_intent_seq', count) && optional(v, 'refused_reason', string)
 }
 function candidate(v: unknown): boolean {
   if (!object(v) || !fields(v, 'env tenant repo mission plan_step task attempt op A base R M0 committer_date patch_sha256', string)
@@ -86,7 +88,7 @@ export function parseLandingWait(v: unknown): LandingWait | null {
   if (!object(v) || !fields(v, 'phase shown waiting_snapshot R M0', string) || !time(v.since)
     || !strings(v.soft_at_request) || !fields(v, 'files lines execution_seconds waiting_seconds operations', count)
     || !fields(v, 'main_known main_changed owner_todo', bool) || !list(v.grants, grant)
-    || !optional(v, 'approval_id approval_status approval_url', string) || !optional(v, 'approval_number', count)) return null
+    || !optional(v, 'approval_id approval_status approval_url grant_refused', string) || !optional(v, 'approval_number', count)) return null
   return v as LandingWait
 }
 export function parseLandingRevoke(v: unknown): LandingRevoke | null {

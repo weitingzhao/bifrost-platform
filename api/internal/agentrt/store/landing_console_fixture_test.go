@@ -22,7 +22,7 @@ func TestC6ConsoleFixture(t *testing.T) {
 		Changes:     []GrantChange{{Old: "console/src/api/approvals.ts", New: "console/src/api/approvals.ts", OldMode: "100644", NewMode: "100644", Added: 2, Deleted: 1}},
 		PatchSHA256: strings.Repeat("7", 64), Acceptance: []GrantAcceptance{{VerificationID: "v_console", Result: "pass"}},
 		Review:           GrantReview{Task: "t_review", Attempt: "a_review", Executor: "codex", Provider: "openai", Conclusion: "pass", Artifact: "sha256:" + strings.Repeat("8", 64)},
-		ReviewPatchMatch: true, CI: GrantCIEvidence{Pipeline: "bifrost-ci-platform", Run: "ci-platform-console", UID: "ci-uid", CreatedAt: at.Format(time.RFC3339), Status: "Succeeded", SHA: r, Siblings: map[string]string{"bifrost-ui": a, "bifrost-trade-infra": m0}},
+		ReviewPatchMatch: true, CI: GrantCandidateCI{Pipeline: "bifrost-ci-platform", Run: "ci-platform-console", UID: "ci-uid", CreatedAt: at.Format(time.RFC3339), Status: "Succeeded", SHA: r, Siblings: map[string]string{"bifrost-ui": a, "bifrost-trade-infra": m0}},
 		STGRelease: true, HardCorePaths: []GrantHardPath{{Path: "console/src/api/approvals.ts", Entry: "console/src/api/approvals.ts"}}, DecisionChain: true, TrustReview: true}
 	m := LandingGrantMaterial{Candidate: c, SoftAtRequest: []string{"core", "files"}, WaitingSoft: []string{"core", "files"}, Rule: GrantRule{ID: "landing:dev", Version: 1, SHA256: strings.Repeat("9", 64)}, ChecksVersion: 1,
 		Action: ActionCoreLanding, Title: "Trusted core change", FirstLine: "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code.",

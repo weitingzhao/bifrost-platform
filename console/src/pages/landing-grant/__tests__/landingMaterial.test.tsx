@@ -48,6 +48,7 @@ describe('C-6 authorization material', () => {
     const w = parseLandingWait(wire.wait)!
     expect(landingWaitWords({ ...w, shown: 'awaiting_request', grants: [], approval_status: 'failed' })).toContain('coordinator')
     expect(landingWaitWords({ ...w, shown: 'request_stale' })).toContain('stale')
+    expect(landingWaitWords({ ...w, shown: 'grant_refused', grant_refused: 'grant_insufficient' })).toContain('refused the grant (grant_insufficient)')
     expect(landingWaitWords({ ...w, shown: 'awaiting_owner' })).toContain('tier D trust-core approval #51')
     expect(landingWaitWords({ ...w, shown: 'approval_observed', approval_status: 'running' })).toContain('waiting for a grant')
   })
@@ -57,6 +58,8 @@ describe('C-6 authorization material', () => {
     expect(grantState(g, Date.parse(g.expires_at))).toBe('Expired')
     expect(grantState({ ...g, revoked: true })).toBe('Revoked')
     expect(grantState({ ...g, handed_to_push: true })).toBe('Handed to push')
+    // review 694 R-05: a grant the final gate refused is spent; a new approval is needed.
+    expect(grantState({ ...g, refused: true, refused_reason: 'grant_stale' })).toContain('Refused at the final gate: grant_stale')
   })
 })
 function serve(materialStatus = 200, reply: unknown = wire.revoked, revokeStatus = 200) {

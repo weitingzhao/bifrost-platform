@@ -260,6 +260,7 @@
         "expires_at": "2026-10-30T12:00:00Z",
         "revoked": false,
         "handed_to_push": false,
+        "refused": false,
         "valid": true,
         "candidate_digest": "sha256:e14430ecb68be4fcd0b4c5e660f9bf181d2f9c350783af08810ed95f7d098713",
         "material_digest": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f"
