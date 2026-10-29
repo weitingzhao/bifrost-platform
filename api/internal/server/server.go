@@ -403,6 +403,7 @@ func (s *Server) Router() http.Handler {
 		s.mountQuestions(r)
 		s.mountAgentRuntime(r)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/ops/facts/system", s.handleOpsSystemFacts)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)

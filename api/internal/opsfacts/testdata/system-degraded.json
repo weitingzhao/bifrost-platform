@@ -1,0 +1,165 @@
+{
+  "as_of": "2026-10-28T04:30:00Z",
+  "timezone": "America/Chicago",
+  "health": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "platform",
+      "method": "GET",
+      "path": "/health"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "status": "ok",
+      "service": "platform-api",
+      "role": "api",
+      "auth_loaded": true,
+      "agentrt_schema": "current",
+      "agentrt_ready": true,
+      "contained_panics": 0
+    }
+  },
+  "alerts": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/alerts"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": null,
+      "paginated": null,
+      "truncated": null,
+      "limit": null
+    },
+    "state": "error",
+    "reason": "source returned an invalid or empty document",
+    "merged_sources": [],
+    "value": null
+  },
+  "service_inventory": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/targets?state=active"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": null,
+      "paginated": null,
+      "truncated": null,
+      "limit": null
+    },
+    "state": "forbidden",
+    "reason": "source access denied",
+    "merged_sources": [],
+    "value": null
+  },
+  "release_window": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "delivery",
+      "method": "GET",
+      "path": "/api/v1/delivery/release-window"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": null,
+      "paginated": null,
+      "truncated": null,
+      "limit": null
+    },
+    "state": "error",
+    "reason": "source returned an unsuccessful status",
+    "merged_sources": [],
+    "value": null
+  },
+  "release_policy": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "release-policy",
+      "method": "GET",
+      "path": "/api/v1/release-policy"
+    },
+    "watermark": "2026-10-28T04:30:00Z",
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "valid": false,
+      "expired": null,
+      "frozen": null,
+      "checked_at": "2026-10-28T04:30:00Z",
+      "signing_state": "unsigned"
+    }
+  },
+  "availability_7d": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/promql?q=avg_over_time%28up%5B7d%5D%29"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": {
+        "kind": "trailing_seven_days",
+        "timezone": "UTC",
+        "start": "2026-10-21T04:30:00Z",
+        "end": "2026-10-28T04:30:00Z"
+      },
+      "complete": null,
+      "paginated": null,
+      "truncated": null,
+      "limit": null,
+      "reason": "scrape cadence, expected target lifetime, and full-window sample coverage are not established; observed means are not seven-day SLOs"
+    },
+    "state": "unknown",
+    "reason": "no up series measured for this window",
+    "merged_sources": [],
+    "value": {
+      "series": [],
+      "sample_counts": {
+        "as_of": "2026-10-28T04:30:00Z",
+        "source": {
+          "name": "prometheus",
+          "method": "GET",
+          "path": "/api/v1/telemetry/promql?q=count_over_time%28up%5B7d%5D%29"
+        },
+        "watermark": null,
+        "coverage": {
+          "window": null,
+          "complete": null,
+          "paginated": null,
+          "truncated": null,
+          "limit": null
+        },
+        "state": "unknown",
+        "reason": "source not measured",
+        "merged_sources": [],
+        "value": null
+      },
+      "overall": null
+    }
+  }
+}

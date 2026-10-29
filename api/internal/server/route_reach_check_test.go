@@ -43,6 +43,7 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	"GET /api/v1/ops/facts/system":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/plan-view": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).

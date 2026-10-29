@@ -1,0 +1,275 @@
+{
+  "as_of": "2026-10-28T04:30:00Z",
+  "timezone": "America/Chicago",
+  "health": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "platform",
+      "method": "GET",
+      "path": "/health"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "status": "ok",
+      "service": "platform-api",
+      "role": "api",
+      "auth_loaded": true,
+      "agentrt_schema": "current",
+      "agentrt_ready": true,
+      "contained_panics": 0
+    }
+  },
+  "alerts": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/alerts"
+    },
+    "watermark": "2026-10-28T04:30:00Z",
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null,
+      "reason": "current alert instances; not incidents, noise classifications, or historical openings"
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "total": 2,
+      "raw_total": 2,
+      "firing": 1,
+      "pending": 1,
+      "by_severity": {
+        "critical": 1,
+        "warning": 1
+      },
+      "by_state_and_severity": {
+        "firing": {
+          "critical": 1
+        },
+        "pending": {
+          "warning": 1
+        }
+      },
+      "items": [
+        {
+          "id": "423ab383959a11e3a8ac154d792ed38c6f3bad645b15c85ea2ed1d5362d1b9aa",
+          "name": "APIUnavailable",
+          "state": "firing",
+          "severity": "critical",
+          "symptom": "API probe failed",
+          "active_at": "2026-10-28T04:29:00Z",
+          "active_seconds": 60,
+          "responsibility": {
+            "state": "ok",
+            "owner": "platform-team",
+            "service": "platform-api",
+            "reason": "exact namespace/service match in current scrape inventory",
+            "source": {
+              "name": "prometheus",
+              "method": "GET",
+              "path": "/api/v1/telemetry/targets?state=active"
+            }
+          },
+          "release_window": {
+            "state": "ok",
+            "held": true,
+            "holder": "release-session",
+            "relation": "unknown",
+            "reason": "window status alone does not establish causality or queued work"
+          },
+          "merged_sources": []
+        },
+        {
+          "id": "79f832e0ffd4ad8fe354d6ec1221511e99bdefd2cd0e57aeca0692a09a132209",
+          "name": "DiskQueue",
+          "state": "pending",
+          "severity": "warning",
+          "symptom": "DiskQueue",
+          "active_at": null,
+          "active_seconds": null,
+          "responsibility": {
+            "state": "unknown",
+            "owner": "unknown",
+            "service": "",
+            "reason": "no explicit responsibility label or unambiguous registered service owner",
+            "source": {
+              "name": "prometheus",
+              "method": "GET",
+              "path": "/api/v1/telemetry/targets?state=active"
+            }
+          },
+          "release_window": {
+            "state": "ok",
+            "held": true,
+            "holder": "release-session",
+            "relation": "unknown",
+            "reason": "window status alone does not establish causality or queued work"
+          },
+          "merged_sources": []
+        }
+      ]
+    }
+  },
+  "service_inventory": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/targets?state=active"
+    },
+    "watermark": "2026-10-28T04:30:00Z",
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null,
+      "reason": "active scrape targets only; not a complete organizational ownership registry"
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "services": [
+        {
+          "namespace": "ops",
+          "name": "platform-api",
+          "owner": "platform-team"
+        }
+      ]
+    }
+  },
+  "release_window": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "delivery",
+      "method": "GET",
+      "path": "/api/v1/delivery/release-window"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "open": true,
+      "window": {
+        "who": "release-session",
+        "what": "platform",
+        "env": "stg",
+        "started_at": "2026-10-28T04:29:00Z",
+        "expires_at": "2026-10-28T04:34:00Z"
+      }
+    }
+  },
+  "release_policy": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "release-policy",
+      "method": "GET",
+      "path": "/api/v1/release-policy"
+    },
+    "watermark": "2026-10-28T04:30:00Z",
+    "coverage": {
+      "window": null,
+      "complete": true,
+      "paginated": false,
+      "truncated": false,
+      "limit": null
+    },
+    "state": "ok",
+    "merged_sources": [],
+    "value": {
+      "valid": false,
+      "expired": null,
+      "frozen": null,
+      "checked_at": "2026-10-28T04:30:00Z",
+      "signing_state": "unsigned"
+    }
+  },
+  "availability_7d": {
+    "as_of": "2026-10-28T04:30:00Z",
+    "source": {
+      "name": "prometheus",
+      "method": "GET",
+      "path": "/api/v1/telemetry/promql?q=avg_over_time%28up%5B7d%5D%29"
+    },
+    "watermark": null,
+    "coverage": {
+      "window": {
+        "kind": "trailing_seven_days",
+        "timezone": "UTC",
+        "start": "2026-10-21T04:30:00Z",
+        "end": "2026-10-28T04:30:00Z"
+      },
+      "complete": null,
+      "paginated": null,
+      "truncated": null,
+      "limit": null,
+      "reason": "scrape cadence, expected target lifetime, and full-window sample coverage are not established; observed means are not seven-day SLOs"
+    },
+    "state": "unknown",
+    "reason": "sample means are available; complete seven-day availability is not measured",
+    "merged_sources": [],
+    "value": {
+      "series": [
+        {
+          "labels": {
+            "namespace": "ops",
+            "service": "platform-api"
+          },
+          "observed_ratio": 1,
+          "samples": 2,
+          "availability": null,
+          "state": "unknown",
+          "reason": "full-window sampling coverage is unknown"
+        }
+      ],
+      "sample_counts": {
+        "as_of": "2026-10-28T04:30:00Z",
+        "source": {
+          "name": "prometheus",
+          "method": "GET",
+          "path": "/api/v1/telemetry/promql?q=count_over_time%28up%5B7d%5D%29"
+        },
+        "watermark": null,
+        "coverage": {
+          "window": {
+            "kind": "trailing_seven_days",
+            "timezone": "UTC",
+            "start": "2026-10-21T04:30:00Z",
+            "end": "2026-10-28T04:30:00Z"
+          },
+          "complete": null,
+          "paginated": false,
+          "truncated": false,
+          "limit": null,
+          "reason": "returned sample counts; expected sampling coverage is not established"
+        },
+        "state": "ok",
+        "merged_sources": [],
+        "value": {
+          "{\"namespace\":\"ops\",\"service\":\"platform-api\"}": 2
+        }
+      },
+      "overall": null
+    }
+  }
+}
