@@ -118,6 +118,16 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 				if err := ensureWriter(ctx, tx, w, true); err != nil {
 					return nil, err
 				}
+				// The rules' lock, shared, before any step or task (review
+				// 686 R-01): every rule write takes it exclusively, after its
+				// writer, as here, so the envelope checkPin reads stays the one
+				// in force until this commits. A tightening that drops the
+				// entry, or a version naming another proposer, commits before
+				// this reads it or after this commits, never in between.
+				if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
+					return nil, err
+				}
+				hook("pin rules held", w.Actor)
 				return proposeBatchTx(ctx, tx, w, missionID, props, p)
 			})
 		if !lockNotAvailable(err) {

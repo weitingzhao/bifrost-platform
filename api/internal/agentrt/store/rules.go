@@ -249,6 +249,7 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 		if err := LockCapabilities(ctx, tx); err != nil {
 			return err
 		}
+		hook("rule locked", r.ID)
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, ruleLock, r.ID); err != nil {
 			return err
 		}
