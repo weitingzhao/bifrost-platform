@@ -84,6 +84,8 @@ type StgState struct {
 	Withheld           map[StgMemberKey]StgEvent
 	Blocks             map[string]StgBlock
 	BlockHistory       map[int64]StgBlock
+	CIObservations     map[int64]map[string]StgEvent // opening seq -> UID -> successful terminal read
+	BoundIntents       map[string]StgEvent           // UID -> first bound (batch/try never released)
 	Evidence           map[string]StgEvent
 	DeploymentChecks   map[string]StgEvent
 	Covers             map[StgCoverKey]StgEvent
@@ -98,6 +100,7 @@ func newStgState() StgState {
 	return StgState{Batches: map[string]*StgBatch{}, Members: map[StgMemberKey]StgMemberState{}, Budget: map[StgBudgetKey]int64{},
 		Generations: map[string]int64{}, Debits: map[string]StgDebit{}, Grants: map[string]StgEvent{}, Withheld: map[StgMemberKey]StgEvent{},
 		Blocks: map[string]StgBlock{}, BlockHistory: map[int64]StgBlock{}, Evidence: map[string]StgEvent{}, DeploymentChecks: map[string]StgEvent{}, Covers: map[StgCoverKey]StgEvent{},
+		CIObservations: map[int64]map[string]StgEvent{}, BoundIntents: map[string]StgEvent{},
 		Validity: map[StgValidityKey]StgEvent{}, Records: map[int64]StgEvent{}, Answers: map[string]StgEvent{}}
 }
 
@@ -417,12 +420,16 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 		if !t.Occupied() {
 			return fail("transition", "bound requires an outstanding execution")
 		}
+		if s.BoundIntents[r.String("uid")].Seq > 0 {
+			return fail("conflict", "run UID is already bound to another intent")
+		}
 		for id := range s.Evidence {
 			if stgRunUID(id) == r.String("uid") {
 				return fail("conflict", "run UID already has evidence without this binding")
 			}
 		}
 		t.Bound = e
+		s.BoundIntents[r.String("uid")] = e
 	case "run_evidence":
 		if t.Started.Seq == 0 || t.Bound.Seq == 0 || t.RunEvidence.Seq > 0 || t.Unsent.Seq > 0 || t.QuarantineClosed.Seq > 0 || r.String("uid") != t.Bound.Record.String("uid") || r.Time("at").Before(t.Started.At) {
 			return fail("transition", "terminal evidence requires the bound UID and no earlier terminal decision")

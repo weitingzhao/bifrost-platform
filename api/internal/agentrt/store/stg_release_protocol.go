@@ -65,6 +65,7 @@ var stgSpecs = map[string]stgSpec{
 	"granted":            {"grant", "members gen trigger_seq question_id"},
 	"withheld":           {"grant", "members why trigger_seq"},
 	"blocked":            {"block", "why P base first_at evidence_version detail"},
+	"ci_observed":        {"block", "interval_seq P ci status"},
 	"unblocked":          {"block", "why ref"},
 	"diag":               {"batch", "try what gen"},
 }
@@ -135,7 +136,7 @@ func ParseStgRelease(v any) (StgRecord, error) {
 			valid = stgTime(val)
 		case "try":
 			valid = stgInteger(val, 1) || k == "diag" && r.String("what") == "ci_waiting" && stgInteger(val, 0)
-		case "gen", "trigger_seq":
+		case "gen", "trigger_seq", "interval_seq":
 			valid = stgInteger(val, 1)
 		case "intent_seq":
 			valid = stgInteger(val, 1) || k == "started" && stgInteger(val, 0)
@@ -190,6 +191,9 @@ func ParseStgRelease(v any) (StgRecord, error) {
 			valid = slices.Contains([]string{"automatic", "external"}, s)
 		case "status":
 			valid = slices.Contains([]string{"Succeeded", "Failed"}, s)
+			if k == "ci_observed" {
+				valid = s == "Succeeded"
+			}
 		case "outcome":
 			valid = slices.Contains([]string{"verified", "failed", "superseded"}, s)
 		case "class":
@@ -237,6 +241,18 @@ func ParseStgRelease(v any) (StgRecord, error) {
 	}
 	if (k == "granted" || k == "withheld" && r.String("why") == "owner") && r.String("grant") != r.String("question_id") {
 		return fail("grant must equal question_id")
+	}
+	// A failed/unusable CI need not have a batch ci_accepted row. When the
+	// adapter has one, reserve detail.ci for the exact rejected observation.
+	// Older blocks without it still bind all CI identities in their prefix.
+	if k == "blocked" {
+		if v, exists := r.object("detail")["ci"]; exists {
+			ci, ok := v.(map[string]any)
+			c := StgRecord(ci)
+			if !ok || !stgKeys(ci, "uid created_at read_at") || !stgString(ci["uid"]) || !stgTime(ci["created_at"]) || !stgTime(ci["read_at"]) || c.Time("created_at").After(c.Time("read_at")) {
+				return fail("invalid blocked CI observation")
+			}
+		}
 	}
 	return r, nil
 }

@@ -149,6 +149,7 @@ func TestStgCIUnblockRequiresChangedUID(t *testing.T) {
 	h.reject(stgUnblock(block, "inputs_changed", old.Seq), "transition")
 	stale := stgForBatch(h.ci("stale-ci"), 2)
 	stale["ci"].(map[string]any)["created_at"] = block.At.Add(-time.Minute).Format(time.RFC3339Nano)
+	stale["ci"].(map[string]any)["read_at"] = block.At.Add(-time.Second).Format(time.RFC3339Nano)
 	old = h.add(stale)
 	h.reject(stgUnblock(block, "inputs_changed", old.Seq), "transition")
 	fresh := h.add(stgForBatch(h.ci("new-ci"), 2))

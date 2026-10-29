@@ -160,9 +160,30 @@ func (s *StgState) applyOther(e StgEvent) error {
 		if s.Blocks[id].IsOpen() {
 			return fail("duplicate", "blocking interval is already open")
 		}
+		if r.object("detail").object("ci").Time("read_at").After(e.At) {
+			return fail("invalid", "blocked CI observation is in the future")
+		}
 		b := StgBlock{Opened: e}
 		s.Blocks[id] = b
 		s.BlockHistory[e.Seq] = b
+	case "ci_observed":
+		// Independent evidence survives settlement; it never enters a batch's
+		// accepted CI set or changes its immutable snapshot.
+		b := s.Blocks[r.String("block")]
+		if !b.IsOpen() || b.Opened.Seq != r.Int("interval_seq") || !stgCICause(b.Opened.Record.String("why")) {
+			return fail("transition", "CI observation requires its open CI blocking interval")
+		}
+		uid := r.object("ci").String("uid")
+		if s.CIObservations[b.Opened.Seq][uid].Seq > 0 {
+			return fail("duplicate", "CI UID already observed for this interval")
+		}
+		if err := s.checkCIProof(b, e); err != nil {
+			return err
+		}
+		if s.CIObservations[b.Opened.Seq] == nil {
+			s.CIObservations[b.Opened.Seq] = map[string]StgEvent{}
+		}
+		s.CIObservations[b.Opened.Seq][uid] = e
 	case "unblocked":
 		id := r.String("block")
 		b := s.Blocks[id]
