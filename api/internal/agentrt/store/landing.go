@@ -87,6 +87,14 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if k == "failed" && r.String("why") == "main_lost" && ev.Actor != "controller" {
 		return fmt.Errorf("failed{main_lost} requires controller (an Owner answer)")
 	}
+	// A delayed preparer cannot charge authorization waiting to execution.
+	// Keep this at append time rather than changing historical Fold semantics;
+	// main_result{unknown}'s reconciler still has its separate bound meaning.
+	if o := s.Operations[r.String("op")]; k == "failed" && o.Phase == "awaiting_grant" &&
+		(r.String("why") == "bound" || r.String("why") == "approval_expired") &&
+		landing.RootBound(s, o.Task, at, false) != r.String("why") {
+		return fmt.Errorf("waiting operation has not reached its current budget")
+	}
 	if k == "main_intent" && s.Operations[r.String("op")].Phase == "awaiting_grant" {
 		return fmt.Errorf("waiting operation requires grant consumption; not installed in C-4")
 	}

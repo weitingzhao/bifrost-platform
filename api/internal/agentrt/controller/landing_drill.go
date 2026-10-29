@@ -75,6 +75,13 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			return e
 		})
 	}
+	settleBound := func() (landing.DrillAction, error) {
+		why, err := store.SettleLandingOperationBound(ctx, c.DB, op, o)
+		if why == "" {
+			return landing.DrillAction{Kind: "wait"}, err
+		}
+		return landing.DrillAction{Kind: "failed", Why: why}, err
+	}
 	if o.Terminal() {
 		if o.Ref != "" && src.Delete != nil && c.Env != "prod" { // B-05
 			return landing.DrillAction{Kind: "cleanup"}, src.Delete(ctx, o.Ref, o.R)
@@ -88,7 +95,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// window must not keep the active slot forever.
 	_, n := landing.RootBudget(s, o.Task)
 	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
-		return landing.DrillAction{Kind: "failed", Why: why}, appendRecord("failed", map[string]any{"why": why})
+		return settleBound()
 	}
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
 		return landing.DrillAction{}, fmt.Errorf("drill sources unavailable")
@@ -134,6 +141,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return landing.DrillAction{Kind: "wait"}, err
 	}
 	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked}, at)
+	if a.Kind == "failed" && (a.Why == "bound" || a.Why == "approval_expired") {
+		return settleBound()
+	}
 	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(at) {
 		if err = appendRecord("ci_seen", map[string]any{"run": ci.Run, "status": ci.Status, "R": o.R, "created_at": ci.CreatedAt.Format(time.RFC3339Nano)}); err != nil {
 			return a, err

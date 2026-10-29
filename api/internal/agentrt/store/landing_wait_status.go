@@ -58,31 +58,44 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 	clock := landing.RootTiming(state, o.Task, at)
 	w := &LandingWaitStatus{Phase: o.Phase, Since: o.AwaitingAt, Soft: slices.Clone(o.Soft), Files: o.Files, Lines: o.Lines,
 		Snapshot: o.Material, R: o.R, M0: o.M0, ExecutionSeconds: int64(clock.Execution / time.Second), WaitingSeconds: int64(clock.Waiting / time.Second), Operations: clock.Operations}
-	rows, err := tx.Query(ctx, `SELECT request FROM (SELECT DISTINCT ON (body_json->'landing_grant_request'->>'approval_id')
-	  body_json->'landing_grant_request' AS request, seq FROM agentrt.event
+	rows, err := tx.Query(ctx, `SELECT body_json->'landing_grant_request' FROM agentrt.event
 	  WHERE event_stream_id='landing:bifrost-platform' AND body_json->'landing_grant_request'->>'op'=$1
-	  ORDER BY body_json->'landing_grant_request'->>'approval_id', seq DESC) x ORDER BY seq DESC`, op)
+	  ORDER BY seq DESC`, op)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var picked map[string]any
+	// Keep every distinct observation in the audit stream, but project each
+	// approval's progress independently of arrival time (including seen_at,
+	// which is sampled after reading the approval snapshot).
+	var ids []string
+	current := map[string]map[string]any{}
 	for rows.Next() {
 		var m map[string]any
 		if err := rows.Scan(&m); err != nil {
 			return nil, err
 		}
-		if picked == nil {
-			picked = m
+		id, _ := m["approval_id"].(string)
+		if current[id] == nil {
+			ids = append(ids, id)
 		}
-		status, _ := m["status"].(string)
-		if slices.Contains([]string{"pending", "approved", "running"}, status) {
-			picked = m
-			break
+		if current[id] == nil || landingRequestProgress(m) > landingRequestProgress(current[id]) {
+			current[id] = m
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	var picked map[string]any
+	for _, id := range ids {
+		m := current[id]
+		if picked == nil {
+			picked = m
+		}
+		if status, _ := m["status"].(string); slices.Contains([]string{"pending", "approved", "running"}, status) {
+			picked = m
+			break
+		}
 	}
 	if picked != nil {
 		w.ApprovalID, _ = picked["approval_id"].(string)
@@ -103,6 +116,27 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 		w.Shown = o.Phase
 	}
 	return w, nil
+}
+
+// Observed progress, not an execution grant: pending -> approved -> running
+// -> unknown -> a definitive outcome. A not-started runner can requeue to
+// approved; retaining running in that case is deliberately conservative and
+// has the same open-request display. Unknown can only resolve to a late
+// executed/failed result; it must never resurrect a pending Owner task.
+func landingRequestProgress(m map[string]any) int {
+	switch m["status"] {
+	case "pending":
+		return 1
+	case "approved":
+		return 2
+	case "running":
+		return 3
+	case "unknown":
+		return 4
+	case "executed", "failed", "rejected", "expired":
+		return 5
+	}
+	return 0
 }
 
 // ReadLandingWait reads one operation with no external I/O or writes. Main

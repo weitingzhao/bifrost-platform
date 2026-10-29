@@ -1,10 +1,13 @@
 package store
 
 import (
+	"context"
 	"maps"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 func TestC4WaitingStatusDoesNotInventOwnerWorkOrGrant(t *testing.T) {
@@ -24,7 +27,17 @@ func TestC4WaitingStatusDoesNotInventOwnerWorkOrGrant(t *testing.T) {
 	} {
 		t.Run(tc.status+tc.main, func(t *testing.T) {
 			t.Parallel()
-			w := LandingWaitStatus{Phase: "awaiting_grant", M0: head, ApprovalStatus: tc.status, Shown: tc.shown}
+			at := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
+			state, err := landing.Fold(reviewWaitEntries(t, at.Add(-time.Hour), at))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := LandingGrantRequest{Op: "land:t_00000000000000000000000001:1", ApprovalID: "approval_1", ApprovalNumber: 1,
+				Status: tc.status, ParamsHash: strings.Repeat("a", 64), SeenAt: at}
+			w, err := readLandingWaitStatus(context.Background(), waitReviewTx{requests: []map[string]any{request.body()}}, state, request.Op, at)
+			if err != nil {
+				t.Fatal(err)
+			}
 			w.ObserveMain(tc.main)
 			if w.Shown != tc.shown || w.OwnerTodo != tc.todo {
 				t.Fatal(w)

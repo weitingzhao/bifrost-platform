@@ -21,6 +21,33 @@ func failLandingLimit(ctx context.Context, tx pgx.Tx, op, why string) error {
 	return err
 }
 
+// SettleLandingOperationBound rechecks a preparer's timer decision under the
+// repository stream lock. A phase, generation or record changed while it read
+// external evidence makes the old decision a no-op. No main I/O occurs here.
+func SettleLandingOperationBound(ctx context.Context, db DB, op string, observed landing.Operation) (why string, err error) {
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		why = ""
+		if err := lockStream(ctx, tx, "landing:bifrost-platform"); err != nil {
+			return err
+		}
+		s, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		if err != nil {
+			return err
+		}
+		o, ok := s.Operations[op]
+		if !ok || !o.EndsAtBound() || s.LatestOperation(o.Task) != op || o.Task != observed.Task ||
+			o.Phase != observed.Phase || !o.LastAt.Equal(observed.LastAt) {
+			return nil
+		}
+		why = landing.RootBound(s, o.Task, DecisionAt(), false)
+		if why == "" {
+			return nil
+		}
+		return failLandingLimit(ctx, tx, op, why)
+	})
+	return
+}
+
 // The repository stream must be locked. Only a root whose latest operation
 // awaits its successor (discarded, non_ff, retried; landing.AwaitsNext) can
 // acquire a born-terminal successor; repeated recovery is a no-op.
