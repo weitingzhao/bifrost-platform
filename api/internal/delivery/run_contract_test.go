@@ -23,6 +23,13 @@ func infraTektonDir(t *testing.T) string {
 		t.Fatal("runtime.Caller")
 	}
 	dir := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../bifrost-trade-infra/k8s/cicd/tekton"))
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		// Isolated implementation workspaces name the read-only sibling infra/.
+		alternate := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../infra/k8s/cicd/tekton"))
+		if _, err := os.Stat(alternate); err == nil {
+			dir = alternate
+		}
+	}
 	if _, err := os.Stat(dir); err != nil {
 		// clone-infra places the checkout beside platform in Tekton's source workspace.
 		// CI YAML does not set BIFROST_CI, so also recognize the workspace path.
@@ -102,6 +109,10 @@ func baselineRunSpecs(t *testing.T) map[string]any {
 	pipes := baselinePipelines(t)
 	names := map[string]bool{"unknown": true, "bifrost-smoke": true, "bifrost-clone-frontend-smoke": true, "bifrost-build-flex-query": true}
 	for name := range kanikoPipelineNames {
+		if isInfraPipeline(name) {
+			// Infra did not exist in this baseline; infra_run_test pins its runs.
+			continue
+		}
 		names[name] = true
 	}
 	out := map[string]any{}
@@ -154,7 +165,7 @@ func TestPipelineRunRequirementsRatchet(t *testing.T) {
 				extra["repo"] = pythonCIRepos[0]
 			}
 			tag := "1.2.3"
-			if isCIPipeline(name) {
+			if isCIPipeline(name) || isInfraPipeline(name) {
 				tag = ""
 			}
 			spec, _, err := buildPipelineRunSpec(name, factSHA1, tag, extra, pipe)
@@ -201,12 +212,18 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 			}
 		}
 		defaults["revision"] = factSHA1
+		if name == "bifrost-ci-infra" {
+			defaults["base"], defaults["purpose"] = factSHA2, "push"
+		}
 		repos := []string{"bifrost-platform"}
 		if name == "bifrost-ci-frontend" {
 			repos = []string{"bifrost-trade-frontend"}
 		}
 		if name == "bifrost-ci-python" {
 			repos = pythonCIRepos
+		}
+		if name == "bifrost-ci-infra" {
+			repos = []string{"bifrost-trade-infra"}
 		}
 		for _, repo := range repos {
 			t.Run(name+"/"+repo, func(t *testing.T) {
@@ -226,6 +243,9 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				extra := map[string]string{}
 				if name == "bifrost-ci-python" {
 					extra["repo"] = repo
+				}
+				if name == "bifrost-ci-infra" {
+					extra["base"], extra["purpose"] = defaults["base"], defaults["purpose"]
 				}
 				spec, _, err := buildPipelineRunSpec(name, factSHA1, "", extra, pipes[name])
 				if err != nil {
@@ -268,7 +288,7 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 			})
 		}
 	}
-	if count != 3 {
+	if count != 4 {
 		t.Fatalf("matched %d CI templates", count)
 	}
 }

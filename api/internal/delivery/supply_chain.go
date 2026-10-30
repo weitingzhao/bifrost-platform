@@ -42,6 +42,8 @@ var trackedGiteaRepos = []string{
 var pipelineMirrorRepos = map[string][]string{
 	"bifrost-ci-platform":           {"bifrost-platform"},
 	"bifrost-ci-frontend":           {"bifrost-trade-frontend"},
+	"bifrost-ci-infra":              {"bifrost-trade-infra"},
+	"bifrost-build-ci-infra-tools":  {"bifrost-trade-infra"},
 	"bifrost-deliver-platform":      {"bifrost-platform", "bifrost-ui"},
 	"bifrost-deliver-platform-prod": {"bifrost-platform", "bifrost-ui"},
 	"bifrost-deliver-stg": {

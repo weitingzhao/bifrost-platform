@@ -13,10 +13,20 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/infracheck"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 const infra = "bifrost-trade-infra"
+
+func TestInfraUsesSharedGenerator(t *testing.T) {
+	t.Parallel()
+	r := store.Repos[infra]
+	if !slices.Equal(r.Verify[0], []string{"sh", "-c", infracheck.Check()}) ||
+		!slices.EqualFunc(r.Setup, infracheck.Setup(""), slices.Equal) {
+		t.Fatal("agentd must use the same infra check and setup as CI")
+	}
+}
 
 // infraPlan is a planner's plan for an infra goal: one task, no checks of
 // its own.
@@ -44,15 +54,15 @@ func TestInfraImplementSpec(t *testing.T) {
 	// loads no plugin it finds (review 330 A1).
 	const refuse = `for f in __init__.py agent-config/__init__.py agent-config/scripts/__init__.py k8s/__init__.py k8s/data/__init__.py ` +
 		`scripts/__init__.py; do if [ -e "$f" ] || [ -L "$f" ]; then echo "$f: `
-	const find = `f=$(find -L k8s/data/role-matrix scripts/agentrt scripts/benchmark scripts/k3s -name __init__.py -print 2>/dev/null | head -n 1); `
+	const find = `f=$(find -L k8s/data/role-matrix scripts/agentrt scripts/benchmark scripts/k3s scripts/landing -name __init__.py -print 2>/dev/null | head -n 1); `
 	const script = `PATH="$PWD/.git/venv/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ` +
 		`exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider `
 	before, after, found := strings.Cut(check[2], script)
-	if len(check) != 3 || check[0] != "sh" || check[1] != "-c" || !found || !strings.HasPrefix(before, refuse) || !strings.Contains(before, find) {
+	if len(check) != 3 || check[0] != "sh" || check[1] != "-c" || !found || !strings.Contains(before, refuse) || !strings.Contains(before, find) {
 		t.Fatalf("check = %q", check)
 	}
 	tests := strings.Fields(after)
-	for _, want := range []string{"scripts/agentrt", "scripts/benchmark", "scripts/k3s", "k8s/data/role-matrix", "scripts/test_access_checks.py"} {
+	for _, want := range []string{"scripts/agentrt", "scripts/benchmark", "scripts/k3s", "scripts/landing", "k8s/data/role-matrix", "scripts/test_access_checks.py"} {
 		if !slices.Contains(tests, want) {
 			t.Errorf("the check does not run %s: %v", want, tests)
 		}

@@ -1,0 +1,159 @@
+# Declarations captured from the read-only infra checkout for W-31 S6.
+# W-31 S6 §5. IMAGE_DIGEST is UNBUILT until Owner builds and pins the tools image.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: bifrost-ci-infra
+  namespace: cicd
+  annotations:
+    bifrost.io/run-arch: amd64
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: base
+    type: string
+    default: ''
+  - name: platformRevision
+    type: string
+    default: ''
+  - name: generation
+    type: string
+    default: ''
+  - name: purpose
+    type: string
+    default: push
+  workspaces:
+  - name: source
+  results:
+  - name: infra-commit
+    value: $(tasks.clone.results.commit)
+  - name: base-commit
+    value: $(tasks.clone.results.base-commit)
+  - name: platform-commit
+    value: $(tasks.clone.results.platform-commit)
+  - name: tools-from
+    value: $(tasks.check.results.tools-from)
+  - name: doc-policy
+    value: $(tasks.check.results.doc-policy)
+  - name: purpose
+    value: $(tasks.check.results.purpose)
+  tasks:
+  - name: resolve
+    taskRef:
+      name: bifrost-ci-infra-resolve
+    params:
+    - name: platformRevision
+      value: $(params.platformRevision)
+    - name: purpose
+      value: $(params.purpose)
+  - name: clone
+    taskRef:
+      name: bifrost-ci-infra-clone
+    params:
+    - name: revision
+      value: $(params.revision)
+    - name: base
+      value: $(params.base)
+    - name: platformRevision
+      value: $(tasks.resolve.results.platform-commit)
+    - name: purpose
+      value: $(params.purpose)
+    runAfter:
+    - resolve
+    workspaces:
+    - name: source
+      workspace: source
+  - name: check
+    taskRef:
+      name: bifrost-ci-infra-check
+    params:
+    - name: revision
+      value: $(params.revision)
+    - name: base
+      value: $(tasks.clone.results.base-commit)
+    - name: platformRevision
+      value: $(tasks.clone.results.platform-commit)
+    - name: generation
+      value: $(params.generation)
+    - name: purpose
+      value: $(params.purpose)
+    runAfter:
+    - clone
+    workspaces:
+    - name: source
+      workspace: source
+
+---
+# W-31 S6 §5. IMAGE_DIGEST is UNBUILT until Owner builds and pins the tools image.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: bifrost-build-ci-infra-tools
+  namespace: cicd
+  annotations:
+    bifrost.io/run-arch: amd64
+spec:
+  params:
+  - name: revision
+    type: string
+  workspaces:
+  - name: source
+  results:
+  - name: image-digest
+    value: $(tasks.build.results.digest)
+  tasks:
+  - name: freeze-check
+    taskRef:
+      name: bifrost-release-freeze-check
+  - name: clone
+    runAfter:
+    - freeze-check
+    taskRef:
+      name: bifrost-git-clone-gitea
+    params:
+    - name: url
+      value: http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-trade-infra.git
+    - name: revision
+      value: $(params.revision)
+    - name: subdir
+      value: bifrost-trade-infra
+    workspaces:
+    - name: output
+      workspace: source
+  - name: build
+    runAfter:
+    - clone
+    params:
+    - name: revision
+      value: $(tasks.clone.results.commit)
+    workspaces:
+    - name: source
+      workspace: source
+    taskSpec:
+      params:
+      - name: revision
+        type: string
+      workspaces:
+      - name: source
+      results:
+      - name: digest
+      steps:
+      - name: build-and-push
+        image: gcr.io/kaniko-project/executor:v1.23.2
+        args:
+        - --dockerfile=docker/ci-infra/Dockerfile
+        - --context=$(workspaces.source.path)/bifrost-trade-infra
+        - --destination=registry.cicd.svc.cluster.local:5000/bifrost-ci-infra-tools:$(params.revision)
+        - --digest-file=$(results.digest.path)
+        - --custom-platform=linux/amd64
+        - --insecure
+        - --skip-tls-verify
+        - --insecure-registry=registry.cicd.svc.cluster.local:5000
+        computeResources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: '2'
+            memory: 2Gi

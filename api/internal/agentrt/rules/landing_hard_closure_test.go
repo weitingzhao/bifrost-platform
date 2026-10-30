@@ -180,6 +180,24 @@ func TestLandingHardCatalogEntriesExist(t *testing.T) {
 	}
 }
 
+func TestInfraCheckHardClosure(t *testing.T) {
+	t.Parallel()
+	for _, p := range []string{
+		"api/internal/agentrt/infracheck/check.go",
+		"api/internal/agentrt/infracheck/future/new_test.go",
+		"api/internal/agentrt/infracheck/testdata/check.golden",
+		"api/cmd/infracheck/main.go",
+	} {
+		if !LandingHardCore("bifrost-platform", p) {
+			t.Errorf("quick trust component is outside the hard closure: %s", p)
+		}
+	}
+	const dir = "api/internal/agentrt/infracheck/"
+	if !slices.Contains(landingHardRoots[:], dir) || slices.Contains(landingHardFuture[:], dir) {
+		t.Fatal("infracheck must be a checked closure root, not a future exemption")
+	}
+}
+
 // T19 uses a real temporary Go module. Adding a non-test dependency to the
 // protected root makes the same go-list closure checker reject it.
 func TestLandingHardClosureDetectsNewDependency(t *testing.T) {

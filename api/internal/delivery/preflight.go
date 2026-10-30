@@ -21,6 +21,7 @@ var kanikoPipelineNames = map[string]bool{
 	"bifrost-build-market-data":      true,
 	"bifrost-build-flex-query":       true,
 	"bifrost-build-ib-gateway":       true,
+	"bifrost-build-ci-infra-tools":   true,
 }
 
 func isKanikoPipeline(name string) bool {

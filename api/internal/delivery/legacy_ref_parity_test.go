@@ -35,7 +35,8 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 	}
 	for call := range names {
 		name, ciRepo, _ := strings.Cut(call, "/")
-		if isPlatformDelivery(name) {
+		if isPlatformDelivery(name) || isInfraPipeline(name) {
+			// Infra did not exist in this baseline; infra_run_test pins its refs.
 			continue
 		}
 		repos := []string{"bifrost-trade-core", "bifrost-trade-worker", "bifrost-trade-socket", "bifrost-trade-api", "bifrost-trade-frontend", "bifrost-trade-infra", "bifrost-ui", "bifrost-platform"}

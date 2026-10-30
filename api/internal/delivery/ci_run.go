@@ -10,7 +10,7 @@ var pythonCIRepos = []string{"bifrost-trade-core", "bifrost-trade-api", "bifrost
 
 func isCIPipeline(name string) bool {
 	switch name {
-	case "bifrost-ci-platform", "bifrost-ci-frontend", "bifrost-ci-python":
+	case "bifrost-ci-platform", "bifrost-ci-frontend", "bifrost-ci-python", "bifrost-ci-infra":
 		return true
 	}
 	return false
@@ -19,6 +19,10 @@ func isCIPipeline(name string) bool {
 // Resolve the effective commit before probing its repository. CI callers cannot
 // override the trigger's other refs or source settings.
 func ciRunInputs(name, revision string, extra map[string]string) (string, string, error) {
+	if name == "bifrost-ci-infra" {
+		params, err := infraPipelineInputs(name, revision, extra)
+		return params["revision"], "bifrost-trade-infra", err
+	}
 	keys := make([]string, 0, len(extra))
 	for key := range extra {
 		keys = append(keys, key)

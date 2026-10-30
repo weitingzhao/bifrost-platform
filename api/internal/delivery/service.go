@@ -217,6 +217,14 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	var empty PipelineRunView
 
+	if pipelineName == "bifrost-build-ci-infra-tools" {
+		params, err := infraPipelineInputs(pipelineName, revision, extra)
+		if err != nil {
+			resp.Message = err.Error()
+			return resp, empty, err
+		}
+		revision = params["revision"]
+	}
 	ciRepo := ""
 	if isCIPipeline(pipelineName) {
 		if tag != "" {
@@ -554,7 +562,7 @@ func pipelineTakesRevision(name string) bool {
 		"bifrost-deliver-platform", "bifrost-deliver-platform-prod",
 		"bifrost-deliver-research", "bifrost-build-research-dagster",
 		"bifrost-build-market-data", "bifrost-build-flex-query",
-		"bifrost-build-ib-gateway":
+		"bifrost-build-ib-gateway", "bifrost-ci-infra", "bifrost-build-ci-infra-tools":
 		return true
 	}
 	return false
@@ -627,7 +635,12 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 		}
 	case "bifrost-deliver-research", "bifrost-build-frontend-stg", "bifrost-build-market-data":
 		return []map[string]any{buildContextPVC}
-	case "bifrost-build-ib-gateway", "bifrost-build-flex-query":
+	case "bifrost-ci-infra":
+		return []map[string]any{{"name": "source", "volumeClaimTemplate": map[string]any{"spec": map[string]any{
+			"accessModes": []any{"ReadWriteOnce"}, "storageClassName": "local-path",
+			"resources": map[string]any{"requests": map[string]any{"storage": "2Gi"}},
+		}}}}
+	case "bifrost-build-ib-gateway", "bifrost-build-flex-query", "bifrost-build-ci-infra-tools":
 		// These pipelines name the workspace "source", matching flex-query's pipeline.
 		source := map[string]any{}
 		for k, v := range buildContextPVC {

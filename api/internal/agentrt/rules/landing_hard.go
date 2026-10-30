@@ -75,6 +75,7 @@ var landingHardRoots = [...]string{
 	"api/internal/agentrt/landinggit/",
 	"api/internal/agentrt/landingci/",
 	"api/internal/agentrt/stgrelease/",
+	"api/internal/agentrt/infracheck/",
 	"api/internal/agentrt/rules/",
 	"api/internal/agentrt/controller/",
 	"api/internal/agentrt/agentrtapi/",
@@ -173,7 +174,6 @@ var landingHardBasenames = [...]string{
 
 // Entries planned by the design, allowed to be absent until their blocks land.
 var landingHardFuture = [...]string{
-	"api/internal/agentrt/infracheck/",
 	".github/",
 	"console/src/api/landingGrant.ts",
 	"console/src/pages/landing-grant/",

@@ -61,15 +61,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 	const infra, platform = "bifrost-trade-infra", "bifrost-platform"
 	env := gitEnvT(t.TempDir())
 	platformBare, platformBase := bareRemote(t, env)
-	infraBare, _ := bareRemote(t, env)
-	// infra's main moves on, so the two mains are different commits.
-	seed := filepath.Join(t.TempDir(), "seed")
-	sh(t, t.TempDir(), env, "git", "clone", "--quiet", infraBare, seed)
-	must(t, os.WriteFile(filepath.Join(seed, "INFRA.md"), []byte("# infra\n"), 0o600))
-	sh(t, seed, env, "git", "add", "INFRA.md")
-	sh(t, seed, env, "git", "commit", "--quiet", "-m", "infra")
-	sh(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
-	infraBase := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	infraBare, infraBase := infraGoalRemote(t, env)
 	remotes := map[string]string{platform: platformBare, infra: infraBare}
 	lsRemote := func(repo, ref string) (string, error) {
 		out, err := exec.Command("git", "ls-remote", remotes[repo], ref).Output()

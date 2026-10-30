@@ -7,6 +7,9 @@ import (
 )
 
 func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string, pipe *unstructured.Unstructured) (map[string]any, string, error) {
+	if isInfraPipeline(pipelineName) {
+		return infraPipelineRunSpec(pipelineName, rev, tag, extra, pipe)
+	}
 	if isCIPipeline(pipelineName) {
 		if tag != "" {
 			return nil, rev, fmt.Errorf("tag %q cannot be set for CI: CI builds no image", tag)

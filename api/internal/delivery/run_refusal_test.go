@@ -31,7 +31,10 @@ func (f contractTransport) RoundTrip(r *http.Request) (*http.Response, error) { 
 func contractService(t *testing.T, pipe *unstructured.Unstructured, visibility string) (*Service, *dynfake.FakeDynamicClient, *[]string) {
 	t.Helper()
 	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetClientsetForTest(k8sfake.NewSimpleClientset())
+	// One Ready amd64 node: kaniko builds (bifrost-build-ci-infra-tools among
+	// them, review 788 C1) pass the build preflight here; the no-node refusal
+	// has its own test.
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(readyAmd64Node()))
 	dyn := dynfake.NewSimpleDynamicClient(runtime.NewScheme(), pipe)
 	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	paths := []string{}
