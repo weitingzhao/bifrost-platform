@@ -44,8 +44,9 @@ var agentrtDatabase = map[string]string{
 
 // agentRuntime is the agent runtime as this process runs it.
 type agentRuntime struct {
-	api  *agentrtapi.API
-	stop func()
+	api           *agentrtapi.API
+	stop          func()
+	materialCache store.GrantMaterialCache
 	// env is AGENTRT_ENV: whose runtime this platform runs (an approved
 	// void_exam_paper names it, agentrt_voidpaper.go).
 	env string

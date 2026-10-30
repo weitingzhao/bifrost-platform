@@ -43,6 +43,7 @@ export type LandingMaterial = {
   grants: LandingGrant[]; problems: string[]; computed_at: string
 }
 export type LandingMaterialResponse = { material: LandingMaterial; main: string; main_known: boolean; main_is_M0: boolean }
+export class LandingMaterialPending extends Error {}
 export type LandingRevoke = { grant_id: string; op: string; revoked: boolean; already: boolean; handed_to_push: boolean; main_intent_seq?: number; message: string }
 
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -108,6 +109,14 @@ export function giteaCompareHref(value: string): string | undefined {
 }
 export async function fetchLandingMaterial(op: string, stg = true, signal?: AbortSignal): Promise<LandingMaterialResponse> {
   const r = await authedFetch('Landing material', `/api/v1/agentrt/landing/${pathSegment(op)}/material?stg_release=${stg}`, { signal }, async (prefix, response, token) => {
+    if (response.status === 429) {
+      const body: unknown = await response.clone().json().catch(() => null)
+      if (object(body) && (body.error === 'material_pending' || body.error === 'material_busy')) {
+        return new LandingMaterialPending(body.error === 'material_pending'
+          ? 'Landing material is being prepared.'
+          : 'Landing material is waiting for capacity.')
+      }
+    }
     if (response.status === 503) return new Error('Landing material unavailable: Git or CI evidence cannot be read in this process (503).')
     return parseError(prefix, response, token)
   })

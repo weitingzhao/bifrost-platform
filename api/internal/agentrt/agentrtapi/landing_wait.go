@@ -63,6 +63,13 @@ func (a *API) getLandingMaterial(w http.ResponseWriter, r *http.Request) {
 	stg := r.URL.Query().Get("stg_release") != "false"
 	m, err := store.ReadLandingGrantMaterial(r.Context(), a.DB, a.Grants(), chi.URLParam(r, "op"), stg)
 	if err != nil {
+		if materialRetry(w, err) {
+			return
+		}
+		if errors.Is(err, store.ErrMaterialTooLarge) {
+			writeError(w, http.StatusUnprocessableEntity, "material_too_large", err.Error())
+			return
+		}
 		if errors.Is(err, store.ErrInvalid) {
 			a.fail(w, err)
 			return
@@ -70,6 +77,11 @@ func (a *API) getLandingMaterial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", err.Error())
 		return
 	}
+	a.writeLandingMaterial(w, r, m)
+}
+
+// Main is a live observation, never part of the reusable Git evidence.
+func (a *API) writeLandingMaterial(w http.ResponseWriter, r *http.Request, m *store.LandingGrantMaterial) {
 	if a.MainHead != nil {
 		head, err := a.MainHead(r.Context(), m.Candidate.Repo)
 		writeJSON(w, http.StatusOK, map[string]any{"material": m, "main": head, "main_known": err == nil && head != "",
@@ -77,6 +89,21 @@ func (a *API) getLandingMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"material": m, "main": "", "main_known": false, "main_is_M0": false})
+}
+
+func materialRetry(w http.ResponseWriter, err error) bool {
+	code := ""
+	switch {
+	case errors.Is(err, store.ErrMaterialPending):
+		code = "material_pending"
+	case errors.Is(err, store.ErrMaterialBusy):
+		code = "material_busy"
+	default:
+		return false
+	}
+	w.Header().Set("Retry-After", "2")
+	writeError(w, http.StatusTooManyRequests, code, err.Error())
+	return true
 }
 
 // revokeLandingGrant is the Owner's revocation (F2 A, §5.7): a tightening,

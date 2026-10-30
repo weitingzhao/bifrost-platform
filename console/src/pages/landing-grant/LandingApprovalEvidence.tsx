@@ -16,6 +16,8 @@ export function LandingApprovalEvidence({ item, data, error, checked, onCheck }:
       : !m ? <p>Reading landing approval material…</p> : <>
         <p>Soft checks: {m.soft_at_request.join(', ') || 'None'}</p>
         <p>Main still M0? {data?.main_known ? data.main_is_M0 ? 'Yes' : 'No — ask the coordinator to refresh' : 'Unknown — approval unavailable'}</p>
+        {!m.latest && <p role="alert">This operation is no longer the latest candidate. Open the replacement request before approving.</p>}
+        {m.phase !== 'awaiting_grant' && <p role="alert">Approval unavailable: operation is {m.phase}.</p>}
         {m.problems.length > 0 && <p role="alert">Approval unavailable: {m.problems.join(', ')}</p>}
         <p>Patch SHA-256: <code>{m.candidate.patch_sha256}</code></p>
         {compare && <a className="underline" href={compare} target="_blank" rel="noopener noreferrer">Compare M0...R in Gitea</a>}

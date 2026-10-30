@@ -45,6 +45,9 @@ type GrantPatch struct {
 type GrantSources struct {
 	Facts LandingSource
 	Main  func(ctx context.Context) (string, error)
+	// Cache belongs to this runtime/source. Only immutable Git evidence is
+	// shared; CI, database facts and authorization are always read again.
+	Cache *GrantMaterialCache
 }
 
 func (s GrantSources) complete() bool {
@@ -401,6 +404,14 @@ type grantExt struct {
 }
 
 func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
+	x, err := readGrantGit(ctx, src, d)
+	if err == nil {
+		x.ci, err = grantCIRead(ctx, src.Facts, d.ciKey, d.op)
+	}
+	return x, err
+}
+
+func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
 	var x grantExt
 	if !src.complete() {
 		return x, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
@@ -416,8 +427,7 @@ func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 	if x.patch, err = src.Facts.GrantPatch(ctx, o.A, o.M0, o.R); err != nil {
 		return x, err
 	}
-	x.ci, err = grantCIRead(ctx, src.Facts, d.ciKey, o)
-	return x, err
+	return x, nil
 }
 
 // buildCandidate composes candidate_digest's inputs.
@@ -546,22 +556,16 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	return m, nil
 }
 
-// ReadLandingGrantMaterial computes an operation's material afresh (the
-// material route, the create check). It writes nothing.
+// ReadLandingGrantMaterial refreshes all mutable evidence. The optional
+// runtime cache reuses only fixed-commit diffs, patch and patch digest.
 func ReadLandingGrantMaterial(ctx context.Context, db DB, src GrantSources, op string, stg bool) (*LandingGrantMaterial, error) {
-	var d grantDB
-	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		var e error
-		d, e = readGrantDB(ctx, tx, src.Facts, op, DecisionAt())
-		return e
-	}); err != nil {
-		return nil, err
-	}
-	x, err := readGrantExt(ctx, src, d)
-	if err != nil {
-		return nil, err
-	}
-	return composeMaterial(d, x, stg, DecisionAt())
+	return readGrantMaterial(ctx, src, stg, func() (d grantDB, err error) {
+		err = InTx(ctx, db, func(tx pgx.Tx) error {
+			d, err = readGrantDB(ctx, tx, src.Facts, op, DecisionAt())
+			return err
+		})
+		return
+	})
 }
 
 // CheckLandingGrantRequest is the create check's store half (§5.6 item 2):

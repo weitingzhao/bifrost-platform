@@ -28,7 +28,8 @@ function setup() {
     if (url.includes('/material?') || url.includes('/operations/')) {
       if (url.includes('/material?')) reads.material++; else reads.status++
       if (reads.hold) await new Promise<void>(resolve => { pending.push(resolve) })
-      return json(url.includes('/material?') ? wire.core : wire.wait)
+      // This suite exercises an active wait; terminal approvals stop polling.
+      return json(url.includes('/material?') ? wire.core : { ...wire.wait, approval_status: 'pending' })
     }
     return json({}, 404)
   }))

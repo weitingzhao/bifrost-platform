@@ -39,9 +39,61 @@ function setup(kind: 'core' | 'guardrail' | 'other' = 'core', mutate?: (m: Landi
   })
   vi.stubGlobal('fetch', fetch)
   window.location.hash = '#approvals?id=approval_console'
-  return { item, posts, fetch }
+  return { item, posts, fetch, data }
 }
 describe('C-6 approval branches', () => {
+  it.each(['digest', 'main', 'latest'] as const)('TD-459: keeps the button and material during a slow refresh, then disables with the %s reason', async change => {
+    const { fetch, data } = setup('guardrail')
+    const baseFetch = fetch.getMockImplementation()!
+    let hold = false
+    let release: (() => void) | undefined
+    let reads = 0
+    fetch.mockImplementation(async (input, init) => {
+      if (String(input).includes('/material?')) {
+        reads++
+        if (hold) await new Promise<void>(resolve => { release = resolve })
+      }
+      return baseFetch(input, init)
+    })
+    vi.useFakeTimers()
+    await act(async () => { render(wrapper(<ApprovalsPage />)) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    const approve = screen.getByRole('button', { name: 'Approve approve_guardrail_landing' })
+    expect(approve.hasAttribute('disabled')).toBe(false)
+    hold = true
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_100) })
+    expect(reads).toBe(2)
+    expect(approve.hasAttribute('disabled')).toBe(false)
+    expect(screen.getByText('Soft checks: files')).toBeTruthy()
+    expect(screen.queryByText('Reading landing approval material…')).toBeNull()
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000) })
+    expect(reads).toBe(2)
+    if (change === 'digest') data.material.material_digest = 'new-material'
+    if (change === 'main') data.main_is_M0 = false
+    if (change === 'latest') data.material.latest = false
+    hold = false
+    await act(async () => { release?.(); await vi.advanceTimersByTimeAsync(100) })
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    const reason = change === 'digest' ? /no longer matches this request/ : change === 'main' ? /No — ask the coordinator to refresh/ : /no longer the latest candidate/
+    expect(screen.getByText(reason)).toBeTruthy()
+    // The next timer starts at completion, even after a >15s read.
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_000) })
+    expect(reads).toBe(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_100) })
+    expect(reads).toBe(3)
+  })
+  it.each(['executed', 'rejected', 'expired', 'failed'] as const)('TD-459: stops material reads when the approval becomes %s', async status => {
+    const { fetch, item } = setup('guardrail')
+    vi.useFakeTimers()
+    await act(async () => { render(wrapper(<ApprovalsPage />)) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(screen.getByText('Soft checks: files')).toBeTruthy()
+    item.status = status
+    await act(async () => { await vi.advanceTimersByTimeAsync(31_000) })
+    const before = fetch.mock.calls.filter(([url]) => String(url).includes('/material?')).length
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes('/material?'))).toHaveLength(before)
+  })
   it('A-02: remount after an unobserved reconnect keeps approval disabled until fresh material arrives', async () => {
     const { fetch } = setup('guardrail')
     const baseFetch = fetch.getMockImplementation()!

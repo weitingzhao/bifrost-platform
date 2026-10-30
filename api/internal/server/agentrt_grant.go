@@ -46,6 +46,7 @@ func (s *Server) landingGrantSources() store.GrantSources {
 	src.Facts.GrantPatch = landingGrantPatch(g)
 	src.Facts.GrantCI = ci.GrantCI // the strict read of the pinned key (review 694 B-01)
 	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
+	src.Cache = &rt.materialCache
 	return src
 }
 

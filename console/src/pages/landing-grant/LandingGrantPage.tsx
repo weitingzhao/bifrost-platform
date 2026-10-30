@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLandingMaterial, fetchLandingWait, revokeLandingGrant } from '@/api/landingGrant'
+import { fetchLandingWait, revokeLandingGrant } from '@/api/landingGrant'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import { GrantStatus, WaitStatus } from './GrantStatus'
 import { MaterialEvidence } from './MaterialEvidence'
-import { confirmedReadOptions, useConfirmedReads } from './useConfirmedRead'
+import { confirmedReadOptions, useConfirmedRead } from './useConfirmedRead'
+import { terminalApproval, terminalLanding, useLandingMaterial } from './useLandingMaterial'
 
 function readLocation() {
   const q = new URLSearchParams(window.location.hash.split('?')[1])
@@ -28,9 +29,18 @@ export function LandingGrantContent({ op, stg = true }: { op: string; stg?: bool
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const [notice, setNotice] = useState('')
-  const material = useQuery({ queryKey: ['landing-material', op, stg], ...confirmedReadOptions(({ signal }) => fetchLandingMaterial(op, stg, signal)), enabled: op !== '', retry: false, refetchInterval: 15_000 })
-  const status = useQuery({ queryKey: ['landing-wait', op], ...confirmedReadOptions(({ signal }) => fetchLandingWait(op, signal)), enabled: op !== '', retry: false, refetchInterval: 15_000 })
-  const [statusNow, materialNow] = useConfirmedReads([status, material])
+  const status = useQuery({
+    queryKey: ['landing-wait', op], ...confirmedReadOptions(({ signal }) => fetchLandingWait(op, signal)),
+    enabled: op !== '', retry: false, refetchOnWindowFocus: false,
+    // Approval execution only writes the grant. Follow its later consumption,
+    // refusal or revocation until the landing operation itself has ended.
+    refetchOnReconnect: query => !terminalLanding(query.state.data?.phase),
+    refetchInterval: query => query.state.fetchStatus === 'fetching' || terminalLanding(query.state.data?.phase) ? false : 15_000,
+  })
+  const terminal = terminalLanding(status.data?.phase) || terminalApproval(status.data?.approval_status)
+  const material = useLandingMaterial(op, stg, terminal)
+  const statusNow = useConfirmedRead(status)
+  const materialNow = material.confirmed
   const refresh = () => { void material.refetch(); void status.refetch() }
   async function revoke(id: string) {
     if (lock.current || decisionBlockReason(authRef.current) !== null) return
@@ -58,9 +68,9 @@ export function LandingGrantContent({ op, stg = true }: { op: string; stg?: bool
   return <div className="flex min-w-0 max-w-5xl flex-col gap-4">
     <div className="flex flex-wrap gap-3 text-sm"><span className="break-all">Operation {op}</span><button type="button" className="underline" disabled={busy} onClick={refresh}>Refresh material and status</button></div>
     {material.isPending && <p>Reading landing material…</p>}
-    {material.isError && <p role="alert">{material.error.message}</p>}
+    {material.isError && <p role={material.waiting ? 'status' : 'alert'}>{material.waitingMessage ?? material.error.message}</p>}
     {material.isSuccess && !materialNow && <p role="alert">Landing material unconfirmed — offline or not read since reconnecting.</p>}
-    {materialNow && material.data && <MaterialEvidence data={material.data} />}
+    {material.displayData && <MaterialEvidence data={material.displayData} />}
     <section aria-label="Authorization status" className="space-y-3">
       <h3 className="font-semibold">Authorization status</h3>
       <p className="text-sm">Only grants recorded in the landing stream authorize a push. Failed or unknown approval results do not prove a grant is absent or revoked.</p>
