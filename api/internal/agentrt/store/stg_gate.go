@@ -180,6 +180,10 @@ func stgDiscoverBindings(ctx context.Context, tx pgx.Tx, s StgState, batch strin
 			roots[o.Task] = true
 		}
 	}
+	return stgBindingsForRoots(ctx, tx, roots)
+}
+
+func stgBindingsForRoots(ctx context.Context, tx pgx.Tx, roots map[string]bool) (map[string]stgBinding, error) {
 	out := map[string]stgBinding{}
 	for _, root := range sortedStgKeys(roots) {
 		b := stgBinding{Root: root}
@@ -368,35 +372,16 @@ func stgRecordRefusal(ctx context.Context, tx pgx.Tx, s StgState, batch string, 
 	if !slices.Contains([]string{"rule", "diff_unlanded", "non_linear", "no_merge_after_landing", "baseline_unknown", "baseline_moved", "budget_exhausted", "hard_floor", "wrong_input", "ci_red", "ci_results"}, d.Why) {
 		return nil
 	}
-	b := s.Batches[batch]
-	snap := b.Tries[b.Try].Snapshot.Record
-	base := snap.object("base")
-	versions := map[string]any{}
-	for tenant, r := range f.Rules {
-		if r != nil {
-			versions[tenant] = r.Version
-		} else {
-			versions[tenant] = 0
-		}
+	r, err := stgRefusalRecord(s, batch, obs, f, at, *d)
+	if err != nil {
+		return err
 	}
-	version, _ := canon.Sum(map[string]any{"rules": versions, "ci": obs.CI.UID, "baseline": d.Evidence})
-	id := StgBlockID(snap.object("inputs").String("revision"), base.String("P"), d.Why, version)
+	id := r.String("block")
 	d.Block = id
 	if s.Blocks[id].IsOpen() {
 		return nil
 	}
-	detail := map[string]any{"members": stgMemberValues(d.Set), "rules": versions}
-	if d.Why == "hard_floor" {
-		detail["members"] = stgMemberValues(d.HardFloor)
-	}
-	// CI blockers require the rejected selection's precise identity when it
-	// is available. Unknown observations still block without invented facts.
-	if ci, err := obs.CI.Record(); err == nil {
-		detail["ci"] = map[string]any{"uid": ci["uid"], "created_at": ci["created_at"], "read_at": ci["read_at"]}
-	} else if obs.CI.UID != "" && !obs.CI.CreatedAt.IsZero() && !obs.CI.CreatedAt.After(obs.CI.ReadAt) {
-		detail["ci"] = map[string]any{"uid": obs.CI.UID, "created_at": obs.CI.CreatedAt.Format(time.RFC3339Nano), "read_at": obs.CI.ReadAt.Format(time.RFC3339Nano)}
-	}
-	a, err := appendStg(ctx, tx, StgRecord{"v": "1", "kind": "blocked", "scope": "block", "block": id, "why": d.Why, "P": snap.object("inputs")["revision"], "base": map[string]any(base), "first_at": at.Format(time.RFC3339Nano), "evidence_version": version, "detail": detail})
+	a, err := appendStg(ctx, tx, r)
 	if err != nil {
 		return err
 	}
@@ -413,6 +398,33 @@ func stgRecordRefusal(ctx context.Context, tx pgx.Tx, s StgState, batch string, 
 		}
 	}
 	return err
+}
+
+func stgRefusalRecord(s StgState, batch string, obs StgGateObservation, f stgGateFacts, at time.Time, d StgGateDecision) (StgRecord, error) {
+	b := s.Batches[batch]
+	snap := b.Tries[b.Try].Snapshot.Record
+	base := snap.object("base")
+	versions := map[string]any{}
+	for tenant, r := range f.Rules {
+		if r != nil {
+			versions[tenant] = r.Version
+		} else {
+			versions[tenant] = 0
+		}
+	}
+	version, _ := canon.Sum(map[string]any{"rules": versions, "ci": obs.CI.UID, "baseline": d.Evidence})
+	detail := map[string]any{"members": stgMemberValues(d.Set), "rules": versions}
+	if d.Why == "hard_floor" {
+		detail["members"] = stgMemberValues(d.HardFloor)
+	}
+	// CI blockers require the rejected selection's precise identity when it
+	// is available. Unknown observations still block without invented facts.
+	if ci, err := obs.CI.Record(); err == nil {
+		detail["ci"] = map[string]any{"uid": ci["uid"], "created_at": ci["created_at"], "read_at": ci["read_at"]}
+	} else if obs.CI.UID != "" && !obs.CI.CreatedAt.IsZero() && !obs.CI.CreatedAt.After(obs.CI.ReadAt) {
+		detail["ci"] = map[string]any{"uid": obs.CI.UID, "created_at": obs.CI.CreatedAt.Format(time.RFC3339Nano), "read_at": obs.CI.ReadAt.Format(time.RFC3339Nano)}
+	}
+	return StgBlockedRecord(snap.object("inputs").String("revision"), d.Why, base, at, version, detail)
 }
 
 // StgPermitCurrent is read-only and deliberately independent of current

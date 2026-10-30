@@ -128,6 +128,7 @@ func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"repo": v.Repo, "question_id": v.QuestionID, "prep": v.Prep, "kind": v.Kind, "root": v.Root, "op": v.Op,
+		"family": v.Family, "block": v.Block, "batch": v.Batch,
 		"trigger_seq": v.TriggerSeq, "stop_generation": v.StopGeneration, "acked": v.Acked, "closed": v.Closed, "closed_why": v.ClosedWhy,
 		"options": v.Options, "outcome": v.Outcome, "next_step": v.NextStep})
 }
@@ -156,6 +157,9 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 	for _, x := range st.Roots {
 		root := map[string]any{"repo": x.Repo, "grant_supported": landing.LandingRepos[x.Repo].GrantSupported, "root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
 			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
+		if x.STG != nil {
+			root["stg"] = x.STG
+		}
 		if x.Floor != nil {
 			root["floor"] = x.Floor
 		}

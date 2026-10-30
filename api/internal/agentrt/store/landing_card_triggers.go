@@ -16,13 +16,16 @@ import (
 // from the stream as it is now; the card's handler decides again under the
 // business locks.
 type CardTrigger struct {
-	Kind           string
-	Seq            int64
-	At             time.Time
-	Root, Op, Why  string
-	StopGeneration int64
-	Choices        []string
-	Floor          map[string]any
+	Family, Block, Batch string
+	Members              []StgMemberKey
+	P, BaseP             string
+	Kind                 string
+	Seq                  int64
+	At                   time.Time
+	Root, Op, Why        string
+	StopGeneration       int64
+	Choices              []string
+	Floor                map[string]any
 }
 
 // ParkedLongAfter is how long a park (other than ci_stuck and rule) lasts
@@ -195,6 +198,11 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			}
 		}
 	}
+	stg, err := stgCardTriggers(ctx, tx, repo)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, stg...)
 	slices.SortFunc(out, func(a, b CardTrigger) int { return int(a.Seq - b.Seq) })
 	return out, nil
 }
@@ -260,7 +268,8 @@ type unverifiedRead struct {
 // latest read is effective or there is none.
 func unverifiedSince(ctx context.Context, tx pgx.Tx, stream, op string) (unverifiedRead, bool, error) {
 	rows, err := tx.Query(ctx, `SELECT seq, at, COALESCE(body_json->'landing_main'->>'validity', ''), COALESCE((body_json->'landing_main'->>'has_r')::boolean, false)
-	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_main'->>'op' = $2 ORDER BY seq`, stream, op)
+	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_main'->>'op' = $2
+	  AND NOT (body_json->'landing_main' ? 'stg_evidence') ORDER BY seq`, stream, op)
 	if err != nil {
 		return unverifiedRead{}, false, err
 	}

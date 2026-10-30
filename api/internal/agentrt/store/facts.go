@@ -107,6 +107,9 @@ type Question struct {
 	ID, Status, Option, Text, AnsweredBy, AnsweredAt string
 	Options                                          int    // how many options the card offers; 0 when the reader does not say
 	Channel                                          string // how it was answered: the console, or a rule (questions.RuleChannel)
+	// OwnerAnswer is set only by the trusted question-store adapter after
+	// the Console's admin authorization, never inferred from AnsweredBy.
+	OwnerAnswer bool
 	// ExpiresAt is when an open question expires; zero when the reader does
 	// not say. The store marks it expired only at its next sweep, so an open
 	// one past it can no longer be answered though it still reads open.

@@ -14,6 +14,7 @@ import (
 // landing_card_outcome), whatever the question store still holds. Found
 // false when no card was bound to the question.
 type LandingCardView struct {
+	Family, Block, Batch                              string
 	Repo, QuestionID, Prep, Kind, Root, Op, ClosedWhy string
 	TriggerSeq, StopGeneration                        int64
 	Acked, Closed                                     bool
@@ -40,6 +41,7 @@ func ReadLandingCard(ctx context.Context, db DB, repo, questionID string) (Landi
 			}
 			found = true
 			v = LandingCardView{Repo: repo, QuestionID: questionID, Prep: c.Prep, Kind: c.Kind, Root: c.Root, Op: c.Op, ClosedWhy: c.ClosedWhy,
+				Family: c.Family, Block: c.Block, Batch: c.Batch,
 				TriggerSeq: c.TriggerSeq, StopGeneration: c.StopGeneration, Acked: c.Acked, Closed: c.Closed, Options: c.Options}
 		}
 		if !found {
@@ -65,6 +67,9 @@ func ReadLandingCard(ctx context.Context, db DB, repo, questionID string) (Landi
 }
 
 func landingCardNextStep(v LandingCardView) string {
+	if v.Family == "stg" {
+		return stgCardNextStep(v)
+	}
 	if v.Outcome == nil {
 		switch {
 		case v.Closed:

@@ -13,6 +13,9 @@ export const LANDING_KIND_LABELS = {
   landed_unverified: 'Landing not verified',
   in_main: 'Change already in main',
   late_revert: 'Landing reverted after close',
+  stg_failed: 'STG release attempts exhausted',
+  stg_blocked: 'STG release blocked',
+  stg_ineligible: 'Automatic STG release ineligible',
 } as const
 
 const OUTCOMES = ['applied', 'moot', 'refused', 'held', 'acknowledged'] as const
@@ -22,6 +25,7 @@ export type LandingOutcome = {
 }
 export type LandingCard = {
   repo?: 'bifrost-platform' | 'bifrost-trade-infra'
+  family?: '' | 'stg'; block?: string; batch?: string
 
   question_id: string; prep: string; kind: keyof typeof LANDING_KIND_LABELS; root: string; op: string
   trigger_seq: number; stop_generation: number; acked: boolean; closed: boolean; closed_why: string
@@ -48,6 +52,17 @@ export function parseLandingCard(v: unknown): LandingCard | null {
     || typeof v.acked !== 'boolean' || typeof v.closed !== 'boolean'
     || !object(v.options) || !Object.values(v.options).every(option => typeof option === 'string')
     || (v.outcome !== null && !isOutcome(v.outcome))) return null
+  if (v.family !== undefined && v.family !== '' && v.family !== 'stg') return null
+  if (['block', 'batch'].some(key => key in v && typeof v[key] !== 'string')) return null
+  const stg = v.family === 'stg'
+  if (v.kind.startsWith('stg_') !== stg) return null
+  if (stg) {
+    const block = typeof v.block === 'string' && /^[0-9a-f]{16}$/.test(v.block)
+    const batch = typeof v.batch === 'string' && /^stg:bifrost-platform:[1-9][0-9]*$/.test(v.batch)
+    if (v.repo !== 'bifrost-platform' || v.root !== '' || v.op !== '' || v.stop_generation !== 0
+      || block === batch || (batch && v.kind !== 'stg_blocked')
+      || (!block && v.block !== undefined && v.block !== '') || (!batch && v.batch !== undefined && v.batch !== '')) return null
+  } else if (v.block || v.batch) return null
   return v as LandingCard
 }
 

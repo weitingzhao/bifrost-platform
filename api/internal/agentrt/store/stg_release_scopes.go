@@ -69,7 +69,7 @@ func (s *StgState) applyOther(e StgEvent) error {
 		id := r.String("evidence")
 		proof, ok := s.Evidence[id]
 		m := stgMember(r)
-		if !ok || !s.effective(m, proof.Record.String("P")) {
+		if !ok || !s.canCover(m, proof.Record.String("P")) {
 			return fail("transition", "coverage requires trusted evidence and effective R in its P")
 		}
 		key := StgCoverKey{id, m}
@@ -93,6 +93,10 @@ func (s *StgState) applyOther(e StgEvent) error {
 			return fail("transition", "trigger does not exist")
 		}
 		ms := r.members("members")
+		keys := make([]StgMemberKey, 0, len(ms))
+		for _, m := range ms {
+			keys = append(keys, m.StgMemberKey)
+		}
 		if k == "granted" || r.String("why") == "owner" {
 			choice := "do_not_release"
 			if k == "granted" {
@@ -121,7 +125,7 @@ func (s *StgState) applyOther(e StgEvent) error {
 				return fail("transition", "member still belongs to an open batch")
 			}
 			if k == "granted" {
-				if old.To != "exhausted" || r.Int("gen") != s.generation(m.R)+1 {
+				if old.To != "exhausted" || r.Int("gen") != stgNextGrantGeneration(*s, keys) {
 					return fail("budget", "grant requires exhausted members and their next generation")
 				}
 			} else if r.String("why") == "hard_floor" {
@@ -211,8 +215,8 @@ func (s *StgState) applyOther(e StgEvent) error {
 	return nil
 }
 
-// ownerAnswer fails closed until B5-g supplies a stored, applied STG card
-// outcome. question_id/by alone are never accepted as Owner authorization.
+// Owner-only ledger edges require the stored, applied STG card outcome.
+// question_id/by alone are never accepted as Owner authorization.
 func (s StgState) ownerAnswer(question string, trigger int64, choice string, members []StgMember) error {
 	a := s.Answers[question].Record
 	t := s.Records[trigger].Record
@@ -220,7 +224,7 @@ func (s StgState) ownerAnswer(question string, trigger int64, choice string, mem
 	if choice == "accept_unreconciled" {
 		wantKind = "stg_blocked"
 	}
-	if a.String("kind") != wantKind || a.Int("trigger_seq") != trigger || a.String("outcome") != "applied" || a.String("choice") != choice || a.String("channel") != "console" || a.String("by") != "owner" || a.String("block") != t.String("block") || a.String("batch") != t.String("batch") {
+	if a.String("kind") != wantKind || a.Int("trigger_seq") != trigger || a.String("outcome") != "applied" || a.String("choice") != choice || a.String("channel") != "console" || !stgOutcomeOwner(a) || a.String("block") != t.String("block") || a.String("batch") != t.String("batch") {
 		return stgError("permission", "owner_decision", "missing matching applied STG card answer")
 	}
 	// Budget answers bind the exact member set. Quarantine answers instead

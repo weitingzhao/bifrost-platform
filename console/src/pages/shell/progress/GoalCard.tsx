@@ -2,6 +2,7 @@ import { NEEDS_YOU_HREF, goalHref, hashQueryParam } from '@/lib/shell/consoleRou
 import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
 import { LandingAuthorization } from './LandingAuthorization'
+import { LandingSTG } from './LandingSTG'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
@@ -67,6 +68,7 @@ function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalDat
         {root.held && <span>Held on your answer until <time dateTime={root.held.until}>{root.held.until}</time>{root.held.question_id && <> (<a className="underline" href={questionHref(root.held.question_id)}>your answer</a>)</>}</span>}
         {root.card_pending && <span>A card is waiting to be asked</span>}
         {root.question_id && <a className="underline" href={questionHref(root.question_id)}>Open question</a>}
+        {root.stg && <LandingSTG stg={root.stg} />}
       </li>)}</ul>
     </section>)}
   </section>

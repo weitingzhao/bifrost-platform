@@ -8,9 +8,16 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 func (s *Service) Answer(ctx context.Context, session, principal, role, ref string, raw []byte) Result {
+	// The route requires the same role. Keep the in-process entry equally
+	// strict so a stored Console answer is evidence of Owner authorization.
+	if actuation.Role(role) != actuation.RoleAdmin {
+		return fail(http.StatusForbidden, "answer requires admin", nil)
+	}
 	if err := ValidSession(session); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}

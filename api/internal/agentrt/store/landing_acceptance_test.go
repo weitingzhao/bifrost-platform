@@ -90,7 +90,7 @@ func TestLiveTighteningAfterTheIntentStillLands(t *testing.T) {
 
 // Serial: FreezeEventClock. Case ⑤ with B4: one root delivered and one
 // failed unanswered keep the mission active; the rule changing to not none
-// just before the close holds the landed root on the rule.
+// just before the close holds the landed root pending STG coverage.
 func TestB4CloseCombinations(t *testing.T) {
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
 	defer store.FreezeEventClock(at)()
@@ -123,7 +123,7 @@ func TestB4CloseCombinations(t *testing.T) {
 	}
 	status, err := store.ReadMissionLandingStatus(ctx, w2.rt, "M-3")
 	ok(t, err)
-	if len(status.Roots) != 1 || status.Roots[0].Reason != "rule" || !strings.Contains(status.Rule, "stg_release bifrost-deliver-platform") {
+	if len(status.Roots) != 1 || status.Roots[0].Reason != "stg_pending" || !strings.Contains(status.Rule, "stg_release bifrost-deliver-platform") {
 		t.Fatalf("status: %+v", status)
 	}
 }

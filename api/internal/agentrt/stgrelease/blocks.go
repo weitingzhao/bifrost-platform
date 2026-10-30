@@ -118,14 +118,6 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 		}
 		return finish(s, id, b, ref, false)
 	}
-	// Reuse an interval already opened by the final gate, preserving its time
-	// and trigger even when a later scan has different diagnostic detail.
-	for _, block := range s.Blocks {
-		r := block.Opened.Record
-		if block.IsOpen() && r.String("P") == p && r.String("why") == why && object(r, "base").String("P") == base.String("P") {
-			return c.write(ctx, s, append(checks, settlement(block.Opened.Seq)...)...)
-		}
-	}
 	detail := map[string]any{"members": members(b)}
 	versions := map[string]any{}
 	if rule := c.Policy().Rule; rule != nil {
@@ -153,8 +145,18 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 		detail["ci"] = map[string]any{"uid": ci.UID, "created_at": ci.CreatedAt.Format(time.RFC3339Nano), "read_at": ci.ReadAt.Format(time.RFC3339Nano)}
 	}
 	version, _ := canon.Sum(identity)
-	block := store.StgBlockID(p, base.String("P"), why, version)
-	r := store.StgRecord{"v": "1", "scope": "block", "kind": "blocked", "block": block, "why": why, "P": p, "base": map[string]any(base), "first_at": c.now().Format(time.RFC3339Nano), "evidence_version": version, "detail": detail}
+	r, err := store.StgBlockedRecord(p, why, base, c.now(), version, detail)
+	if err != nil {
+		return err
+	}
+	// Match normalized protocol identities, preserving the original interval
+	// and trigger even when a later scan has different diagnostic detail.
+	for _, block := range s.Blocks {
+		prior := block.Opened.Record
+		if block.IsOpen() && prior.String("P") == p && prior.String("why") == r.String("why") && object(prior, "base").String("P") == object(r, "base").String("P") {
+			return c.write(ctx, s, append(checks, settlement(block.Opened.Seq)...)...)
+		}
+	}
 	rs := append(checks, r)
 	rs = append(rs, settlement(s.LastSeq+int64(len(rs)))...)
 	return c.write(ctx, s, rs...)

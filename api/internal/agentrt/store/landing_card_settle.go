@@ -24,9 +24,9 @@ var section8Choices = []string{"try_again", "do_not_merge", "confirm_main_lost"}
 // cardOutcomeWhys are the outcome / why pairs a landing_card_outcome may
 // record (CUT §11.6 v3 item 5).
 var cardOutcomeWhys = map[string][]string{
-	"applied":      {"repo_resumed", "not_delivered", "counted_delivered"},
+	"applied":      {"repo_resumed", "not_delivered", "counted_delivered", "release_granted", "release_withheld", "quarantine_closed"},
 	"moot":         {"stop_superseded", "already_resumed", "trigger_gone"},
-	"refused":      {"unknown_choice", "channel"},
+	"refused":      {"unknown_choice", "channel", "actor"},
 	"held":         {"wait", "keep_stopped", "remind_later"},
 	"acknowledged": {"ack"},
 }
@@ -64,6 +64,12 @@ func badCardOutcome(v any) string {
 			return "landing_card_outcome remind_at is not a time"
 		}
 	}
+	if why := badCardFamily(m); why != "" {
+		return why
+	}
+	if m["family"] == "stg" {
+		return badStgCardOutcome(m)
+	}
 	gen, _ := cardNumber(m["stop_generation"])
 	root, _ := m["root"].(string)
 	if slices.Contains(repoCards, m["kind"].(string)) {
@@ -100,6 +106,11 @@ func badCardOutcomeChoice(m map[string]any) string {
 			return "landing_card_outcome off the Console is refused for its channel"
 		}
 		return ""
+	case m["family"] == "stg" && !stgOutcomeOwner(m):
+		if outcome != "refused" || why != "actor" {
+			return "STG card refuses non-Owner answers"
+		}
+		return ""
 	case !known:
 		if outcome != "refused" || why != "unknown_choice" {
 			return "landing_card_outcome of a choice the card does not offer is refused"
@@ -114,7 +125,7 @@ func badCardOutcomeChoice(m map[string]any) string {
 	case slices.Contains(section8Choices, choice):
 		return "landing_card_outcome carries a §8 choice only as moot; §8 is landing_answer"
 	case outcome == "applied":
-		if map[string]string{"repo_resume": "repo_resumed", "confirm_not_delivered": "not_delivered", "count_as_delivered": "counted_delivered"}[choice] != why {
+		if map[string]string{"repo_resume": "repo_resumed", "confirm_not_delivered": "not_delivered", "count_as_delivered": "counted_delivered", "retry_release": "release_granted", "do_not_release": "release_withheld", "accept_unreconciled": "quarantine_closed"}[choice] != why {
 			return "landing_card_outcome applied reason does not follow its choice"
 		}
 	case outcome == "acknowledged":
@@ -185,7 +196,7 @@ func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	seq, _ := cardNumber(m["trigger_seq"])
 	op, _ := m["op"].(string)
 	gen, _ := cardNumber(m["stop_generation"])
-	if !c.Bound || c.QuestionID != qid || c.Kind != m["kind"] || c.Root != root || c.Op != op || c.TriggerSeq != seq || c.StopGeneration != gen {
+	if !c.Bound || c.QuestionID != qid || c.Kind != m["kind"] || c.Root != root || c.Op != op || c.TriggerSeq != seq || c.StopGeneration != gen || !sameCardFamily(c, m) {
 		return fmt.Errorf("landing_card_outcome names its card's bound question, kind, root, operation and trigger")
 	}
 	// The choice is the one this card offered under its letter, not just a
@@ -198,6 +209,9 @@ func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 		}
 	} else if choice != "" {
 		return fmt.Errorf("landing_card_outcome letter %q is not one the card offered", letter)
+	}
+	if c.Family == "stg" {
+		return checkStgCardOutcome(ctx, tx, c, m)
 	}
 	return nil
 }
@@ -212,6 +226,9 @@ func checkCardOutcomeAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 // are decided here. The letter is turned into the card's choice by the
 // prepared map.
 func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Question, answeredAt time.Time) (string, string, error) {
+	if c.Family == "stg" {
+		return handleStgCardAnswer(ctx, db, c, q, answeredAt)
+	}
 	choice, known := c.Options[q.Option]
 	stream := "landing:" + c.Repo
 	var outcome, why string
@@ -361,7 +378,7 @@ func storedCardRecord(ctx context.Context, tx pgx.Tx, c CardRecord, questionID s
 		seq, _ := cardNumber(r.other["trigger_seq"])
 		gen, _ := cardNumber(r.other["stop_generation"])
 		if why := badCardOutcome(r.other); why != "" || r.other["prep"] != c.Prep || r.other["kind"] != c.Kind || root != c.Root || op != c.Op || r.task != c.Root ||
-			seq != c.TriggerSeq || gen != c.StopGeneration {
+			seq != c.TriggerSeq || gen != c.StopGeneration || !sameCardFamily(c, r.other) {
 			return cardOutcome{}, nil, false, fmt.Errorf("landing card %s: question %s was recorded for %v (%s)", c.Prep, questionID, r.other["prep"], why)
 		}
 	}
@@ -383,7 +400,7 @@ func cardApplies(ctx context.Context, tx pgx.Tx, c CardRecord, now time.Time) (b
 		return false, err
 	}
 	for _, tr := range triggers {
-		if tr.Seq == c.TriggerSeq && tr.Kind == c.Kind && tr.StopGeneration == c.StopGeneration {
+		if tr.Seq == c.TriggerSeq && tr.Kind == c.Kind && tr.StopGeneration == c.StopGeneration && tr.Family == c.Family && tr.Block == c.Block && tr.Batch == c.Batch {
 			return true, nil
 		}
 	}
@@ -396,34 +413,41 @@ func cardApplies(ctx context.Context, tx pgx.Tx, c CardRecord, now time.Time) (b
 // closed. A read that fails writes nothing. It returns what it did.
 func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord, now time.Time) (string, error) {
 	var handled bool
+	enabled := true
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
+		if c.Family == "stg" {
+			var err error
+			enabled, err = stgCardPolicy(ctx, tx)
+			if err != nil || !enabled {
+				return err
+			}
+		}
 		_, found, err := storedCardOutcome(ctx, tx, c, c.QuestionID)
 		handled = found
 		return err
 	}); err != nil {
 		return "", err
 	}
-	ack := func() (string, error) {
-		if q.Ack == nil {
-			return "", nil // handled; acknowledged once the store can be told
-		}
-		found, err := q.Ack(ctx, c.QuestionID)
-		if err != nil {
-			return "", err
-		}
-		if !found {
-			return "gone_after_handled", closeCard(ctx, db, c.Repo, c, "gone_after_handled")
-		}
-		return "acked", ackedCard(ctx, db, c.Repo, c)
+	if !enabled {
+		return "", nil
 	}
+	ack := func() (string, error) { return settleCardAck(ctx, db, q, c) }
 	if handled {
 		return ack()
 	}
 	if q.Lookup == nil {
 		return "", nil
 	}
-	qq, found, err := q.Lookup(ctx, c.QuestionID)
-	if err != nil {
+	var qq Question
+	var found bool
+	// The real Lookup sweeps expired questions and can therefore write.
+	// Fence it too, then release before handling takes its business locks.
+	read, err := settleCardWrite(ctx, db, c, func(tx pgx.Tx) (string, error) {
+		var err error
+		qq, found, err = q.Lookup(ctx, c.QuestionID)
+		return "read", err
+	})
+	if err != nil || read == "" {
 		return "", err
 	}
 	if !found {
@@ -435,7 +459,7 @@ func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord
 		if err != nil || qq.AnsweredBy == "" {
 			return "", fmt.Errorf("landing card %s: an answer without who or when", c.Prep)
 		}
-		if _, _, err := HandleLandingCardAnswer(ctx, db, c, qq, at); err != nil {
+		if outcome, _, err := HandleLandingCardAnswer(ctx, db, c, qq, at); err != nil || outcome == "" {
 			return "", err
 		}
 		return ack()
@@ -444,27 +468,7 @@ func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord
 	case "withdrawn":
 		return "withdrawn", closeCard(ctx, db, c.Repo, c, "withdrawn")
 	case "open":
-		var applies bool
-		if err := InTx(ctx, db, func(tx pgx.Tx) error {
-			var err error
-			applies, err = cardApplies(ctx, tx, c, now)
-			return err
-		}); err != nil || applies || q.Withdraw == nil {
-			return "", err
-		}
-		status, err := q.Withdraw(ctx, c.QuestionID, "the landing it asks about has moved on")
-		if err != nil {
-			return "", err
-		}
-		switch status {
-		case "withdrawn":
-			return "resolved", closeCard(ctx, db, c.Repo, c, "resolved")
-		case "expired":
-			return "expired", closeCard(ctx, db, c.Repo, c, "expired")
-		case "gone":
-			return "lost", closeCard(ctx, db, c.Repo, c, "lost")
-		}
-		return "", nil // answered meanwhile: the next pass handles it
+		return settleCardWithdraw(ctx, db, q, c, now)
 	}
 	return "", nil
 }

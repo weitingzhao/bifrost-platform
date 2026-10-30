@@ -16,6 +16,7 @@ var landingHardGo = [...]string{
 	"api/internal/actuation/",
 	"api/internal/actuationpolicy/",
 	"api/internal/agentrt/store/",
+	"api/internal/agentrt/questioncards/",
 	"api/internal/agentrt/landing/",
 	"api/internal/agentrt/landinggit/",
 	"api/internal/agentrt/landingci/",

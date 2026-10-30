@@ -111,6 +111,7 @@ func (f *fakeCards) answer(id, letter string, at time.Time) {
 	defer f.mu.Unlock()
 	p := f.byID[id]
 	p.q.Status, p.q.Option, p.q.Channel, p.q.AnsweredBy, p.q.AnsweredAt = store.QuestionAnswered, letter, "console", "owner", at.UTC().Format(time.RFC3339Nano)
+	p.q.OwnerAnswer = true
 }
 
 // cardPass is one pass of the engine: settle, ask, prepare, then ask again.

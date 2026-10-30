@@ -60,10 +60,11 @@ type Execution interface {
 }
 
 type Sources struct {
-	Head         func(context.Context) (string, error)
-	CI           func(context.Context, string) (store.StgCIObservation, error)
-	Range        func(context.Context, string, string) ([]landing.ReleaseCommit, error)
-	MainEvidence store.MainEvidenceFunc
+	Head            func(context.Context) (string, error)
+	CI              func(context.Context, string) (store.StgCIObservation, error)
+	Range           func(context.Context, string, string) ([]landing.ReleaseCommit, error)
+	MainEvidence    store.MainEvidenceFunc
+	ReleaseEvidence func(context.Context, store.StgState, store.StgMemberKey, string) (store.MainEvidence, error)
 }
 
 // Controller is a single repository reconciler. Everything needed after a

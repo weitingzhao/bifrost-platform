@@ -8,6 +8,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('mission landing contract', () => {
+  it('accepts STG state and refuses malformed state without breaking old responses', () => {
+    const stg = { batch: 'stg:bifrost-platform:1', try: 2, phase: 'quarantined', budget_used: 2, budget_gen: 1, quarantined: true, blocked: { why: 'baseline_moved', since: '2026-10-29T12:00:00Z' } }
+    const read = (value: unknown) => parseMissionLanding({ ...fixture, roots: [{ ...fixture.roots[0], stg: value }] })
+    expect(read(stg)?.roots[0]?.stg).toEqual(stg)
+    expect(parseMissionLanding(fixture)).not.toBeNull()
+    for (const value of [null, [], { ...stg, try: -1 }, { ...stg, budget_used: 4 }, { ...stg, budget_gen: 0 }, { ...stg, quarantined: 'true' }, { ...stg, blocked: { why: 'rule', since: 'later' } }]) expect(read(value)).toBeNull()
+  })
   it('accepts repository and floor details, preserves old responses, and refuses mistyped additions', () => {
     const root = { ...fixture.roots[0], repo: 'bifrost-trade-infra', grant_supported: false, floor: { soft: ['size'], grant_supported: false } }
     expect(parseMissionLanding({ ...fixture, roots: [root] })?.roots[0]).toEqual(root)

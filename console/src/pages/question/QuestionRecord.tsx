@@ -119,6 +119,8 @@ function landingStatus(outcome: LandingOutcome): string {
 
 /** A root is a task id, not a Work number; resolve its actual mission for the existing detail route. */
 export function LandingOutcomeRecord({ card }: { card: LandingCard }) {
+  const stg = card.family === 'stg'
+  const heading = stg ? 'STG release outcome' : 'Landing outcome'
   const taskQ = useQuery({
     queryKey: ['agent-runtime-task', card.root],
     queryFn: ({ signal }) => fetchRuntimeTaskDetail(card.root, signal),
@@ -129,10 +131,15 @@ export function LandingOutcomeRecord({ card }: { card: LandingCard }) {
   const task = taskQ.data
   const href = card.root !== '' && !taskQ.isError && task?.task_id === card.root && task.mission_id !== '' ? goalHref(task.mission_id, card.root) : null
   return (
-    <section aria-label="Landing outcome" className="ops-decision-receipt flex w-full min-w-0 flex-col gap-2">
-      <h3 className="m-0 text-sm font-medium">Landing outcome</h3>
+    <section aria-label={heading} className="ops-decision-receipt flex w-full min-w-0 flex-col gap-2">
+      <h3 className="m-0 text-sm font-medium">{heading}</h3>
       <Field label="Repository" value={card.repo ?? 'bifrost-platform'} />
       <Field label="Kind" value={LANDING_KIND_LABELS[card.kind]} />
+      {stg ? <>
+        {card.block ? <Field label="Block" value={card.block} /> : null}
+        {card.batch ? <Field label="Batch" value={card.batch} /> : null}
+        <p className="m-0 text-sm">An answer is not an approval.</p>
+      </> : null}
       {card.outcome !== null ? <>
         <Field label="Status" value={landingStatus(card.outcome)} />
         <Field label="Why" value={card.outcome.why} />

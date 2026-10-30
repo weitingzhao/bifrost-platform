@@ -33,8 +33,8 @@ import (
 // CardsStream is the card stream of a repository.
 func CardsStream(repo string) string { return "landing-cards:" + repo }
 
-// Card kinds and the choices each offers (CUT §11.6 v2 item 1, v3 item 4):
-// every card has two options; the second of a one-decision card defers it.
+// Card kinds and their choices (CUT §11.6; B5 §12). A quarantine card has
+// a third option to accept unreconciled risk; notices otherwise offer defer.
 const (
 	CardRootFailed       = "root_failed"
 	CardFloor            = "floor"
@@ -46,6 +46,9 @@ const (
 	CardLandedUnverified = "landed_unverified"
 	CardInMain           = "in_main"
 	CardLateRevert       = "late_revert"
+	CardSTGFailed        = "stg_failed"
+	CardSTGBlocked       = "stg_blocked"
+	CardSTGIneligible    = "stg_ineligible"
 )
 
 // cardChoices are the semantic choices each kind may offer, in order.
@@ -60,6 +63,9 @@ var cardChoices = map[string][][]string{
 	CardLandedUnverified: {{"confirm_not_delivered", "wait"}},
 	CardInMain:           {{"count_as_delivered", "confirm_not_delivered"}},
 	CardLateRevert:       {{"ack", "remind_later"}},
+	CardSTGFailed:        {{"retry_release", "do_not_release"}},
+	CardSTGBlocked:       {{"ack", "remind_later"}, {"ack", "remind_later", "accept_unreconciled"}},
+	CardSTGIneligible:    {{"ack", "remind_later"}},
 }
 
 // repoCards are the kinds about the repository, not a root.
@@ -161,7 +167,7 @@ func badCardRecord(name string, v any) string {
 		}
 		labels := make([]string, 0, len(choices))
 		for _, c := range choices {
-			labels = append(labels, cardChoiceLabels[c])
+			labels = append(labels, cardChoiceLabel(kind, c))
 		}
 		var shown []string
 		switch t := req["options"].(type) {
@@ -179,7 +185,12 @@ func badCardRecord(name string, v any) string {
 		gen, _ := cardNumber(m["stop_generation"])
 		root, _ := m["root"].(string)
 		op, _ := m["op"].(string)
-		if slices.Contains(repoCards, kind) {
+		if why := badCardFamily(m); why != "" {
+			return why
+		}
+		if m["family"] == "stg" {
+			return badStgCardOptions(m, choices)
+		} else if slices.Contains(repoCards, kind) {
 			if gen < 1 || root != "" || op != "" {
 				return "landing_card_prepared of the repository names a stop generation and no root"
 			}
@@ -210,6 +221,7 @@ func badCardRecord(name string, v any) string {
 
 // CardRecord is one card as its records say.
 type CardRecord struct {
+	Family, Block, Batch                                              string
 	Prep, Repo, Kind, Root, Op, Key, RequestFP, QuestionID, ClosedWhy string
 	TriggerSeq, StopGeneration                                        int64
 	N, TemplateVersion                                                int
@@ -261,11 +273,23 @@ func checkCardAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 		if body["repo"] != strings.TrimPrefix(ev.Stream, "landing-cards:") {
 			return fmt.Errorf("card %s is prepared on another repository's stream", prep)
 		}
+		if body["family"] == "stg" {
+			return checkStgCardPrepared(ctx, tx, body)
+		}
 		return nil
 	case !exists:
 		return fmt.Errorf("card %s is not prepared", prep)
 	case c.Ended():
 		return fmt.Errorf("card %s has ended", prep)
+	}
+	if c.Family == "stg" {
+		enabled, err := stgCardPolicy(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if !enabled {
+			return fmt.Errorf("STG card lifecycle is disabled by the rule")
+		}
 	}
 	switch name {
 	case "landing_card_ask_started":
@@ -319,6 +343,9 @@ func LandingCards(ctx context.Context, tx pgx.Tx, stream string) (map[string]Car
 				c = CardRecord{Prep: prep, PreparedAt: at, Options: map[string]string{}}
 				c.Repo, _ = m["repo"].(string)
 				c.Kind, _ = m["kind"].(string)
+				c.Family, _ = m["family"].(string)
+				c.Block, _ = m["block"].(string)
+				c.Batch, _ = m["batch"].(string)
 				c.Root, _ = m["root"].(string)
 				c.Op, _ = m["op"].(string)
 				c.Key, _ = m["key"].(string)

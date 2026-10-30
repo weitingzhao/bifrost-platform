@@ -132,6 +132,37 @@ describe('QuestionPage landing outcome', () => {
   })
 
   it.each([
+    ['stg_failed', 'STG release attempts exhausted'],
+    ['stg_blocked', 'STG release blocked'],
+    ['stg_ineligible', 'Automatic STG release ineligible'],
+  ])('shows %s as an STG receipt without inventing a task', async (kind, label) => {
+    replies(() => json({ ...landing, repo: 'bifrost-platform', family: 'stg', kind, root: '', op: '',
+      block: '0123456789abcdef', batch: '', outcome: null, next_step: 'No deployment starts from this card.' }))
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText(label)).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'STG release outcome' })).toBeTruthy()
+    expect(screen.getByText('An answer is not an approval.')).toBeTruthy()
+    expect(screen.getByText('0123456789abcdef')).toBeTruthy()
+    expect(screen.getByText('No deployment starts from this card.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'View task' })).toBeNull()
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/agentrt/tasks/'))).toBe(false)
+    expect(posts()).toBe(0)
+  })
+
+  it('keeps quarantine identity and its stored risk receipt after the question is trimmed', async () => {
+    const step = 'Quarantine closed with unreconciled execution risk accepted. This is not delivery evidence and does not refund attempts.'
+    replies(() => json({ ...landing, repo: 'bifrost-platform', family: 'stg', kind: 'stg_blocked', root: '', op: '', block: '', batch: 'stg:bifrost-platform:3',
+      outcome: { ...landing.outcome, why: 'quarantine_closed', choice: 'accept_unreconciled' }, next_step: step }))
+    const routed = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation(async (input, init) => String(input).includes('/landing/cards/') ? routed!(input, init) : json({}, 404))
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText('stg:bifrost-platform:3')).toBeTruthy()
+    expect(screen.getByText(step)).toBeTruthy()
+    expect(screen.getByText(/The question itself is no longer kept/)).toBeTruthy()
+    expect(posts()).toBe(0)
+  })
+
+  it.each([
     ['applied', 'Carried out'], ['moot', 'Not carried out (moot)'],
     ['refused', 'Not carried out (refused)'], ['acknowledged', 'Noted'],
     ['held', `Held until ${new Date('2026-10-12T08:00:00Z').toLocaleString()}`],

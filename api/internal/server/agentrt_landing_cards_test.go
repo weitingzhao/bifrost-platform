@@ -15,6 +15,7 @@ import (
 // its key without side effects, read, withdrawn, and a second withdrawal
 // says what it became.
 func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := "t_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	at := time.Now().UTC()
@@ -29,6 +30,10 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 		{Kind: store.CardParkedLong, Seq: 8, At: at, Root: root, Op: "land:x:1", Why: "window", Choices: []string{"ack", "remind_later"}},
 		{Kind: store.CardLandedUnverified, Seq: 9, At: at, Root: root, Op: "land:x:1", Why: "unknown", Choices: []string{"confirm_not_delivered", "wait"}},
 		{Kind: store.CardInMain, Seq: 10, At: at, Root: root, Op: "land:x:1", Why: "in_main", Choices: []string{"count_as_delivered", "confirm_not_delivered"}},
+		{Family: "stg", Kind: store.CardSTGFailed, Seq: 11, At: at, Block: "0123456789abcdef", Choices: []string{"retry_release", "do_not_release"}},
+		{Family: "stg", Kind: store.CardSTGBlocked, Seq: 12, At: at, Block: "1123456789abcdef", Choices: []string{"ack", "remind_later"}},
+		{Family: "stg", Kind: store.CardSTGBlocked, Seq: 13, At: at, Batch: "stg:bifrost-platform:1", Choices: []string{"ack", "remind_later", "accept_unreconciled"}},
+		{Family: "stg", Kind: store.CardSTGIneligible, Seq: 14, At: at, Block: "2123456789abcdef", Choices: []string{"ack", "remind_later"}},
 	}
 	for i, tr := range cases {
 		// A store of its own per card: the runtime may ask six an hour.
@@ -54,7 +59,7 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 			t.Fatalf("%s: another request under the key: %v %v", tr.Kind, ok, err)
 		}
 		read, ok, err := q.Lookup(ctx, id)
-		if err != nil || !ok || read.Status != "open" || read.Options != 2 || read.ExpiresAt.Sub(created) != 72*time.Hour {
+		if err != nil || !ok || read.Status != "open" || read.Options != len(tr.Choices) || read.ExpiresAt.Sub(created) != 72*time.Hour {
 			t.Fatalf("%s: read %+v %v %v", tr.Kind, read, ok, err)
 		}
 		if st, err := q.Withdraw(ctx, id, "moved on"); err != nil || st != "withdrawn" {

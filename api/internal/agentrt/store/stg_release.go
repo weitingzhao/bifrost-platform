@@ -93,6 +93,8 @@ type StgState struct {
 	Validity           map[StgValidityKey]StgEvent
 	Records            map[int64]StgEvent
 	Answers            map[string]StgEvent
+	InMain             map[string]string   // op -> H from failed{in_main}'s recorded history
+	Disposals          map[string]StgEvent // op -> latest legacy Owner disposition
 	LastBatch, LastSeq int64
 }
 
@@ -101,7 +103,7 @@ func newStgState() StgState {
 		Generations: map[string]int64{}, Debits: map[string]StgDebit{}, Grants: map[string]StgEvent{}, Withheld: map[StgMemberKey]StgEvent{},
 		Blocks: map[string]StgBlock{}, BlockHistory: map[int64]StgBlock{}, Evidence: map[string]StgEvent{}, DeploymentChecks: map[string]StgEvent{}, Covers: map[StgCoverKey]StgEvent{},
 		CIObservations: map[int64]map[string]StgEvent{}, BoundIntents: map[string]StgEvent{},
-		Validity: map[StgValidityKey]StgEvent{}, Records: map[int64]StgEvent{}, Answers: map[string]StgEvent{}}
+		Validity: map[StgValidityKey]StgEvent{}, Records: map[int64]StgEvent{}, Answers: map[string]StgEvent{}, InMain: map[string]string{}, Disposals: map[string]StgEvent{}}
 }
 
 // StgFold is deterministic and does no I/O. Legacy records still use the
@@ -133,6 +135,16 @@ func StgFold(entries []StgEntry) (StgState, error) {
 				return StgState{}, err
 			}
 			s.Records[e.Seq] = StgEvent{e.Seq, e.At, StgRecord(r)}
+			if r.String("kind") == "failed" && r.String("why") == "in_main" {
+				text, _ := e.Event.Body["text"].(string)
+				s.InMain[r.String("op")] = stgInMainCommit(text)
+			}
+		} else if raw, ok := e.Event.Body["landing_disposed"]; ok {
+			r, err := stgDetached(raw)
+			if err != nil {
+				return StgState{}, err
+			}
+			s.Disposals[r.String("op")] = StgEvent{e.Seq, e.At, r}
 		} else if raw, ok := e.Event.Body["landing_main"]; ok {
 			if why := badLandingMain(raw); why != "" {
 				return StgState{}, stgError("invalid", "landing_main", why)
@@ -141,12 +153,16 @@ func StgFold(entries []StgEntry) (StgState, error) {
 			if err != nil {
 				return StgState{}, err
 			}
+			if r.String("stg_evidence") != "" {
+				if err := s.checkCoverageProof(r); err != nil {
+					return StgState{}, err
+				}
+			}
 			s.Validity[StgValidityKey{stgMember(r), r.String("head")}] = StgEvent{e.Seq, e.At, r}
 			s.Records[e.Seq] = StgEvent{e.Seq, e.At, r}
 		} else if raw, ok := e.Event.Body["landing_card_outcome"].(map[string]any); ok && raw["family"] == "stg" {
-			// B5-g owns the card protocol and its storage-side question binding.
-			// Until that protocol accepts STG outcomes, no Owner-only edge can
-			// pass Append. Replay retains the recorded outcome, never an RPC reply.
+			// The card protocol checks the storage-side question binding.
+			// Replay retains the recorded outcome, never an RPC reply.
 			r, err := stgDetached(raw)
 			if err != nil {
 				return StgState{}, err

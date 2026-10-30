@@ -27,6 +27,19 @@ import (
 // longer fetchable (its agent branch pruned) leaves head and hasR standing
 // with validity unknown, never an error (review 662 R-03).
 func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
+	return g.readEvidence(ctx, "", r, task, a)
+}
+
+// ReleaseEvidence reads the complete history at a release's immutable P.
+// It never substitutes today's main head for that historical snapshot.
+func (g *Git) ReleaseEvidence(ctx context.Context, p, r, task, a string) (string, bool, landing.MainHistory, error) {
+	if !fullSHA.MatchString(p) {
+		return "", false, landing.MainHistory{}, errors.New("invalid release P")
+	}
+	return g.readEvidence(ctx, p, r, task, a)
+}
+
+func (g *Git) readEvidence(ctx context.Context, snapshot, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
 	hist = landing.MainHistory{State: landing.Unknown}
 	if !fullSHA.MatchString(r) || (a != "" && !fullSHA.MatchString(a)) {
 		return "", false, hist, errors.New("invalid R or A")
@@ -53,6 +66,12 @@ func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string,
 	head = strings.TrimSpace(out)
 	if err != nil || !fullSHA.MatchString(head) {
 		return "", false, hist, errors.New("main's head is not readable")
+	}
+	if snapshot != "" {
+		if _, err := g.run(ctx, dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", snapshot); err != nil {
+			return "", false, hist, err
+		}
+		head = snapshot
 	}
 	// The whole walk or an error: rev-list fails on a missing or corrupt
 	// object in the history it walks, so a finished walk is all of it.

@@ -472,6 +472,11 @@ func badLandingMain(v any) string {
 	if !ok {
 		return "landing_main is not an object"
 	}
+	if id, exists := m["stg_evidence"]; exists {
+		if s, ok := id.(string); !ok || !stgEvidenceID(s) || m["v"] != MainEvidenceVersion || m["verdict"] != "observed" {
+			return "landing_main STG observation needs an evidence identity"
+		}
+	}
 	for _, k := range []string{"op", "root", "verdict", "read_at"} {
 		if s, _ := m[k].(string); s == "" {
 			return "landing_main needs " + k
@@ -615,7 +620,7 @@ func latestMainEvidence(ctx context.Context, tx pgx.Tx, stream, op string) (main
 	err := tx.QueryRow(ctx, `SELECT COALESCE(body_json->'landing_main'->>'validity',''), COALESCE(body_json->'landing_main'->>'reverted_by',''),
 	  body_json->'landing_main'->>'read_at', COALESCE((body_json->'landing_main'->>'has_r')::boolean, false)
 	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' AND body_json->'landing_main'->>'op' = $2
-	  ORDER BY event_id DESC LIMIT 1`, stream, op).Scan(&validity, &by, &readAt, &hasR)
+	  AND NOT (body_json->'landing_main' ? 'stg_evidence') ORDER BY event_id DESC LIMIT 1`, stream, op).Scan(&validity, &by, &readAt, &hasR)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return mainObservation{}, false, nil
 	}

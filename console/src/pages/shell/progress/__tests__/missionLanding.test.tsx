@@ -39,6 +39,18 @@ afterEach(() => {
 })
 
 describe('Landing on the goal detail', () => {
+  it('shows one STG line with batch, budget, blocking time and unreconciled execution', async () => {
+    landingBody = { ...fixture, roots: [{ ...fixture.roots[0], reason: 'stg_blocked', stg: {
+      batch: 'stg:bifrost-platform:7', try: 2, phase: 'quarantined', budget_used: 2, budget_gen: 3, quarantined: true,
+      blocked: { why: 'baseline_moved', since: '2026-10-29T12:00:00Z' },
+    } }] }
+    mount()
+    const line = await screen.findByLabelText('STG release')
+    expect(line).toHaveTextContent('STG: quarantined · stg:bifrost-platform:7 · try 2 · 2/3 attempts · generation 3')
+    expect(line).toHaveTextContent('baseline moved since 2026-10-29T12:00:00Z · execution unreconciled')
+    expect(screen.getAllByLabelText('STG release')).toHaveLength(1)
+    expect(screen.getByText('STG release is blocked')).toBeVisible()
+  })
   it('groups roots by repository and gives infra a split/manual path without an approval entry', async () => {
     landingBody = { ...fixture, roots: [
       { ...fixture.roots[0], root: 'infra-root', repo: 'bifrost-trade-infra', reason: 'failed:floor', grant_supported: false, floor: { soft: ['size'], grant_supported: false } },

@@ -45,6 +45,13 @@ func StgReleaseState(ctx context.Context, tx pgx.Tx) (StgState, error) {
 // replaces them, together with the intent annotation and its fingerprint.
 // A same-UID bound is the sole no-write idempotent edge.
 func checkStgReleaseAppend(ctx context.Context, tx pgx.Tx, ev *Event, seq int64, at time.Time) (*Appended, error) {
+	if raw, ok := ev.Body["landing_main"].(map[string]any); ok && raw["stg_evidence"] != nil {
+		s, err := StgReleaseState(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.checkCoverageProof(StgRecord(raw))
+	}
 	_, ok := ev.Body["stg_release"]
 	if !ok {
 		return nil, nil

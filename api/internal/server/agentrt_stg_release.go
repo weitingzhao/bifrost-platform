@@ -65,6 +65,9 @@ func (s *Server) startSTGRelease(ctx context.Context, c *controller.Controller) 
 			if release == nil {
 				release = s.newSTGRelease(ctx, c, func() stgrelease.WindowPolicy { return *policy.Load() })
 			}
+			if err := release.ExternalPass(ctx); err != nil && ctx.Err() == nil {
+				slog.Warn("STG external release pass", "error", err)
+			}
 			if err := release.Pass(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("STG release pass", "error", err)
 			}
@@ -109,6 +112,18 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 	// credential paths, and no candidate code or Git push enters this loop.
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
 	sources := stgrelease.Sources{
+		ReleaseEvidence: func(ctx context.Context, state store.StgState, m store.StgMemberKey, p string) (store.MainEvidence, error) {
+			g, err := git()
+			if err != nil {
+				return store.MainEvidence{}, err
+			}
+			root, a := m.Root, state.Legacy.Operations[m.Op].A
+			if state.InMain[m.Op] == m.R {
+				root, a = "", "" // O-3 asks whether the recorded H is contained in P
+			}
+			head, has, hist, err := g.ReleaseEvidence(ctx, p, m.R, root, a)
+			return store.MainEvidence{Head: head, HasR: has, Validity: string(hist.State), RevertedBy: hist.RevertedBy}, err
+		},
 		MainEvidence: func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
 			g, err := git()
 			if err != nil {

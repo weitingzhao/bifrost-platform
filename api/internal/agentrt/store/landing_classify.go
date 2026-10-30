@@ -16,8 +16,9 @@ import (
 // mission with a root in the live landing scope is closed only when every
 // such root is delivered or disposed, classified one class per root by a
 // priority table; a delivery needs main evidence read in the mission's
-// current closing round and the rule in force at the decision explicitly
-// stg_release none. No timer releases it.
+// current closing round. Enabled platform releases also need a delivered
+// member or coverage; none retains the original main-only policy. No timer
+// releases it.
 
 // Root classes.
 const (
@@ -36,6 +37,7 @@ type LandingRootClass struct {
 	// NeedsEvidence: a delivery that lacks only main evidence read in the
 	// current closing round.
 	NeedsEvidence bool
+	STG           *StgRootStatus
 	// key is the root's identity in a closing round's snapshot: what it is
 	// before this round's evidence (review 672 B-01). read: a round reads
 	// its operation's main.
@@ -224,7 +226,7 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 	}
 	fence := state.Fence()
 	// The rule as in force at the decision (CUT §11.8 v3 item 5).
-	none := false
+	none, ruleKnown := false, false
 	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, at)
 	if err != nil {
 		return false, nil, "", err
@@ -238,10 +240,19 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 		case !ok:
 			ruleNote = fmt.Sprintf("%s v%d has no %s", rule.Rule.ID, rule.Rule.Version, repo)
 		case r.STGRelease != "none":
+			ruleKnown = true
 			ruleNote = fmt.Sprintf("%s v%d, stg_release %s", rule.Rule.ID, rule.Rule.Version, r.STGRelease)
 		default:
+			ruleKnown = true
 			none = true
 			ruleNote = fmt.Sprintf("%s v%d, stg_release none", rule.Rule.ID, rule.Rule.Version)
+		}
+	}
+	var stg StgState
+	if !none && repo == "bifrost-platform" {
+		stg, err = StgReleaseState(ctx, tx)
+		if err != nil {
+			return false, nil, "", err
 		}
 	}
 	// Landed roots whose latest evidence is effective: delivered when it was
@@ -286,6 +297,12 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 			}
 		case o.AtMain():
 			c.Reason = "at_main"
+		case !none && repo == "bifrost-platform" && o.EverLanded:
+			ev, found, err := latestMainEvidence(ctx, tx, stream, op)
+			if err != nil {
+				return false, nil, "", err
+			}
+			c = classifyStgRoot(c, stg, StgMemberKey{r.task, op, o.R}, disposed, r.dropped, ruleKnown, ev, found)
 		case o.EverLanded && !o.Reverted:
 			// The priority table, each row whole (review 672 R-01): a
 			// delivery read in a valid round (decided below, once the
@@ -335,11 +352,16 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 			// The Owner counted the change already in main as delivered.
 			if none {
 				c.Class, c.Reason = RootDelivered, "in_main"
+			} else if repo == "bifrost-platform" {
+				c = classifyStgInMain(c, stg, true, ruleKnown)
 			} else {
 				c.Reason = "rule"
 			}
 		case o.Phase == "failed" && o.Outcome == "in_main":
 			c.Reason = "in_main_unverified"
+			if !none && repo == "bifrost-platform" {
+				c = classifyStgInMain(c, stg, false, ruleKnown)
+			}
 		case o.Phase == "failed":
 			c.Reason = "failed:" + o.Outcome
 		case o.Phase == "parked":
@@ -350,9 +372,18 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 				c.Reason += ":" + o.Outcome
 			}
 		}
-		c.key = c.Root + "|" + c.Op + "|" + c.Class + ":" + c.Reason
+		if c.key == "" {
+			c.key = c.Root + "|" + c.Op + "|" + c.Class + ":" + c.Reason
+		}
 		if landed {
 			c.key = c.Root + "|" + c.Op + "|landed"
+		}
+		if !none && repo == "bifrost-platform" && c.STG == nil && has {
+			r := o.R
+			if r == "" {
+				r = stg.InMain[op]
+			}
+			c.STG = stgRootStatus(stg, StgMemberKey{c.Root, op, r})
 		}
 		roots = append(roots, c)
 	}

@@ -78,7 +78,7 @@ var cardChoiceLabels = map[string]string{
 func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]any {
 	labels := make([]any, 0, len(tr.Choices))
 	for _, c := range tr.Choices {
-		labels = append(labels, cardChoiceLabels[c])
+		labels = append(labels, cardChoiceLabel(tr.Kind, c))
 	}
 	body := landingCardBody(repo, tr)
 	meanwhile := map[string]string{
@@ -88,8 +88,14 @@ func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]an
 		CardParkedLong: "the landing stays parked until its bound", CardLandedUnverified: "the reconciler keeps reading main",
 		CardInMain: "the task's mission stays open", CardLateRevert: "nothing waits on your answer",
 	}[tr.Kind]
+	if tr.Family == "stg" {
+		body, meanwhile = stgCardBody(repo, tr), "Automatic STG release stays subject to the signed rule and all release checks."
+	}
 	req := map[string]any{"title": title, "body": body, "options": labels, "ttl_hours": CardTTLHours, "allow_text": true,
 		"urgency": "when you can: only this landing waits for you", "owner_duty": "goal", "meanwhile": meanwhile}
+	if tr.Family == "stg" {
+		req["urgency"] = "when you can: this STG release needs your attention"
+	}
 	if tr.Root != "" {
 		req["task_id"] = tr.Root
 	}
@@ -131,6 +137,9 @@ func landingCardBody(repo string, tr CardTrigger) string {
 
 // cardTitle names a card.
 func cardTitle(ctx context.Context, tx pgx.Tx, repo string, tr CardTrigger) (string, error) {
+	if tr.Family == "stg" {
+		return stgCardTitle(tr.Kind) + ": " + repo, nil
+	}
 	if tr.Root == "" {
 		return "Landings stopped in " + repo, nil
 	}
@@ -189,6 +198,14 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 	var prepared []string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		prepared = nil
+		// Policy precedes either stream lock; none cannot prepare STG cards.
+		if _, err := lockStgCardPolicy(ctx, tx, repo); err != nil {
+			return err
+		}
+		initial, err := LandingCardTriggers(ctx, tx, repo, now)
+		if err != nil || len(initial) == 0 {
+			return err
+		}
 		if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
 			return err
 		}
@@ -247,7 +264,15 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 			prep := CardPrepID(tr.Kind, tr.Seq, n)
 			body := map[string]any{"prep": prep, "repo": repo, "kind": tr.Kind, "trigger_seq": tr.Seq, "n": n, "template_version": cardTemplate,
 				"key": cardKey(repo, tr.Kind, tr.Seq, n, cardTemplate), "request": req, "request_fp": strings.TrimPrefix(fp, "sha256:"), "options": opts}
-			if tr.Kind == CardRepoStopped {
+			if tr.Family == "stg" {
+				body["family"] = "stg"
+				if tr.Block != "" {
+					body["block"] = tr.Block
+				}
+				if tr.Batch != "" {
+					body["batch"] = tr.Batch
+				}
+			} else if tr.Kind == CardRepoStopped {
 				body["stop_generation"] = tr.StopGeneration
 			} else {
 				body["root"], body["op"] = tr.Root, tr.Op
@@ -308,7 +333,7 @@ func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) 
 
 // cardRank orders decision kinds before notices.
 func cardRank(kind string) int {
-	if slices.Contains([]string{CardLateLanding, CardLateRevert, CardCIStuck, CardParkedLong}, kind) {
+	if slices.Contains([]string{CardLateLanding, CardLateRevert, CardCIStuck, CardParkedLong, CardSTGBlocked, CardSTGIneligible}, kind) {
 		return 1
 	}
 	return 0
@@ -344,6 +369,10 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 	// mark, and the lookup below finds what the Ask made.
 	var c CardRecord
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		allowed, err := stgCardWriteAllowed(ctx, tx, repo, prep)
+		if err != nil || !allowed {
+			return err
+		}
 		if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
 			return err
 		}
@@ -352,6 +381,16 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 			return err
 		}
 		c = cards[prep]
+		if c.Family == "stg" && !c.AskStarted && !c.Bound && !c.Ended() {
+			applies, err := cardApplies(ctx, tx, c, DecisionAt())
+			if err != nil {
+				return err
+			}
+			if !applies {
+				c.Closed = true
+				return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": prep, "why": "resolved"})
+			}
+		}
 		if c.Prep == "" || c.Bound || c.Ended() || c.AskStarted {
 			return nil
 		}
@@ -367,6 +406,10 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 	bound := ""
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		bound = ""
+		allowed, err := stgCardWriteAllowed(ctx, tx, repo, prep)
+		if err != nil || !allowed {
+			return err
+		}
 		if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
 			return err
 		}
@@ -381,6 +424,18 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		found, created, ok, err := q.LookupKey(ctx, c.Key, c.Request)
 		if err != nil {
 			return err
+		}
+		// An earlier Ask may have succeeded with its reply lost. Bind that
+		// question first, even if its trigger moved on, so settlement can
+		// record a moot answer or withdraw it instead of leaving an orphan.
+		if c.Family == "stg" && !ok {
+			applies, err := cardApplies(ctx, tx, c, DecisionAt())
+			if err != nil {
+				return err
+			}
+			if !applies {
+				return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": prep, "why": "resolved"})
+			}
 		}
 		id := ""
 		switch {
@@ -439,36 +494,37 @@ func LandingCardsToSettle(ctx context.Context, db DB, repo string) (ask, bound [
 	return ask, bound, err
 }
 
-// closeCard ends a bound card for why, under the card stream's lock.
+// closeCard ends a bound card under its policy and card stream locks.
 func closeCard(ctx context.Context, db DB, repo string, c CardRecord, why string) error {
+	return finishLandingCard(ctx, db, repo, c, "landing_card_closed", why)
+}
+
+func finishLandingCard(ctx context.Context, db DB, repo string, c CardRecord, kind, why string) error {
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
+		allowed, err := stgCardWriteAllowed(ctx, tx, repo, c.Prep)
+		if err != nil || !allowed {
 			return err
 		}
-		cards, err := LandingCards(ctx, tx, CardsStream(repo))
-		if err != nil {
-			return err
-		}
-		if now := cards[c.Prep]; now.Ended() {
-			return nil
-		}
-		return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": c.Prep, "question_id": c.QuestionID, "why": why})
+		return finishLandingCardTx(ctx, tx, repo, c, kind, why)
 	})
 }
 
-// ackedCard records an acknowledgement, under the card stream's lock.
-func ackedCard(ctx context.Context, db DB, repo string, c CardRecord) error {
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
-			return err
-		}
-		cards, err := LandingCards(ctx, tx, CardsStream(repo))
-		if err != nil {
-			return err
-		}
-		if now := cards[c.Prep]; now.Ended() {
-			return nil
-		}
-		return appendCardRecord(ctx, tx, repo, "landing_card_acked", map[string]any{"prep": c.Prep, "question_id": c.QuestionID})
-	})
+// The caller holds the STG policy lock when applicable. Reuse this inside
+// settlement so an external write and its receipt share that same lock.
+func finishLandingCardTx(ctx context.Context, tx pgx.Tx, repo string, c CardRecord, kind, why string) error {
+	if err := lockStream(ctx, tx, CardsStream(repo)); err != nil {
+		return err
+	}
+	cards, err := LandingCards(ctx, tx, CardsStream(repo))
+	if err != nil {
+		return err
+	}
+	if cards[c.Prep].Ended() {
+		return nil
+	}
+	body := map[string]any{"prep": c.Prep, "question_id": c.QuestionID}
+	if why != "" {
+		body["why"] = why
+	}
+	return appendCardRecord(ctx, tx, repo, kind, body)
 }

@@ -22,8 +22,19 @@ describe('landing card contract', () => {
     expect(await fetchLandingCard(fixture.question_id)).toEqual(body)
   })
 
-  it.each(Object.keys(LANDING_KIND_LABELS))('reads kind %s and a pending outcome', kind => {
+  it.each(Object.keys(LANDING_KIND_LABELS).filter(kind => !kind.startsWith('stg_')))('reads kind %s and a pending outcome', kind => {
     expect(parseLandingCard({ ...fixture, kind, outcome: null })?.kind).toBe(kind)
+  })
+
+  it.each(['stg_failed', 'stg_blocked', 'stg_ineligible'])('reads the separate %s family with its interval', kind => {
+    const card = { ...fixture, repo: 'bifrost-platform', family: 'stg', kind, block: '0123456789abcdef', batch: '', root: '', op: '', outcome: null }
+    expect(parseLandingCard(card)).toEqual(card)
+    for (const change of [{ family: '' }, { family: 'root' }, { root: fixture.root }, { op: fixture.op }, { stop_generation: 1 },
+      { block: '' }, { block: 1 }, { block: 'bad' }, { batch: 'stg:bifrost-platform:1' }, { repo: 'bifrost-trade-infra' }]) {
+      expect(parseLandingCard({ ...card, ...change })).toBeNull()
+    }
+    const quarantine = { ...card, block: '', batch: 'stg:bifrost-platform:1' }
+    expect(parseLandingCard(quarantine) !== null).toBe(kind === 'stg_blocked')
   })
 
   it('accepts repository cards with no task and permits additional fields', () => {

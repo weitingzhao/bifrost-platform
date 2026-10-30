@@ -79,7 +79,7 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 		}
 		// landing_main v2 is an existing, validated Git observation. Require
 		// its actual head and read time, not an arbitrary SHA in ref.
-		if p.String("v") != "2" || p.String("head") == "" || p.String("head") == original.String("P") || p.Time("read_at").Before(b.Opened.At) {
+		if p.String("stg_evidence") != "" || p.String("v") != "2" || p.String("head") == "" || p.String("head") == original.String("P") || p.Time("read_at").Before(b.Opened.At) {
 			return fail("input unblock needs an observed different main head")
 		}
 		return nil

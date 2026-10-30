@@ -19,6 +19,21 @@ func (c *Controller) batch(ctx context.Context, s store.StgState, id string, b *
 	if err := c.releaseWhenIdle(b); err != nil {
 		return err
 	}
+	// Consume terminal facts before any settlement, including external
+	// coverage. Only an unstarted OPEN/SNAP may hand off without verification.
+	if t != nil && t.RunEvidence.Seq > 0 && t.Verify.Seq == 0 {
+		return c.verify(ctx, s, id, b, t)
+	}
+	if t != nil && t.Verify.Seq > 0 && t.Retry.Seq == 0 {
+		return c.conclude(ctx, s, id, b, t)
+	}
+	if t == nil || t.Started.Seq == 0 {
+		for m := range b.Members {
+			if cover(s, m) != "" {
+				return errors.Join(c.release(), c.write(ctx, s, finishMembers(s, id, b, b.Opened.Seq, false, true)...))
+			}
+		}
+	}
 	// A durable final-gate blocker may have committed immediately before a
 	// crash. End this batch against that original interval, never create another.
 	for _, block := range s.Blocks {
@@ -29,23 +44,14 @@ func (c *Controller) batch(ctx context.Context, s store.StgState, id string, b *
 	p := c.Policy()
 	p.Live = true
 	if (b.Phase == "OPEN" || b.Phase == "SNAP") && b.Selected.Seq > 0 && !p.enabled(c.now()) {
-		base, _ := store.StgTrustedBaseline(s)
-		if t != nil {
+		base, known := store.StgTrustedBaseline(s)
+		if known && t != nil {
 			base = object(t.Snapshot.Record, "base")
-		}
-		if base == nil {
-			base = store.StgRecord{"P": ""}
 		}
 		return errors.Join(c.release(), c.blockAndFinish(ctx, s, id, b, "rule", base, nil))
 	}
 	if b.Try == 0 {
 		return c.prepare(ctx, s, id, b)
-	}
-	if t.RunEvidence.Seq > 0 && t.Verify.Seq == 0 {
-		return c.verify(ctx, s, id, b, t)
-	}
-	if t.Verify.Seq > 0 && t.Retry.Seq == 0 {
-		return c.conclude(ctx, s, id, b, t)
 	}
 	if t.QuarantineClosed.Seq > 0 || t.Unsent.Seq > 0 {
 		return c.write(ctx, s, finish(s, id, b, max(t.QuarantineClosed.Seq, t.Unsent.Seq), false)...)
