@@ -428,6 +428,7 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 				return
 			}
 			s.retryDue(ctx)
+			s.RetryThreadInbox(ctx)
 			s.remindDue(ctx)
 		}
 	}

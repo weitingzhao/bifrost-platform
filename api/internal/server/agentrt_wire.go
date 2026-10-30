@@ -99,6 +99,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	// itself instead of leaving the runtime off until the next restart.
 	late := &lateDB{}
 	rt.api.DB, rt.api.Back, rt.late = late, late.Back, late
+	s.wireThreadInbox(late)
 	rdb, prefix, rerr := agentrtRedisFromEnv()
 	switch {
 	case rerr != nil:

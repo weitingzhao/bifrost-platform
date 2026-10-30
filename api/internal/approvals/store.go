@@ -4,9 +4,11 @@ package approvals
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"reflect"
 	"sort"
@@ -39,10 +41,14 @@ func newStore(path string) *store {
 }
 
 func (s *store) read() (file, error) {
+	return s.readContext(context.Background())
+}
+
+func (s *store) readContext(ctx context.Context) (file, error) {
 	if s.path == "" {
 		return file{}, nil
 	}
-	data, err := statefile.ReadFile(s.path)
+	data, err := statefile.ReadFileContext(ctx, s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err) {
 			return file{}, nil
@@ -82,7 +88,8 @@ func parse(data []byte) (file, error) {
 	}
 	extra := map[string]json.RawMessage{}
 	for k, v := range top {
-		if k == "last_number" || k == "approvals" {
+		// Retired TD-457 metadata is deliberately discarded, not preserved as an unknown business field.
+		if k == "last_number" || k == "approvals" || k == "thread_inbox" || k == "thread_inbox_source" {
 			continue
 		}
 		extra[k] = append(json.RawMessage(nil), v...)
@@ -204,6 +211,7 @@ func (s *store) update(mutate func(doc *file) error) error {
 		}
 		return err
 	}
+	pruned := 0
 	err := statefile.Update(s.path, func(old []byte) ([]byte, error) {
 		doc, err := parse(old)
 		if err != nil {
@@ -212,11 +220,17 @@ func (s *store) update(mutate func(doc *file) error) error {
 		if err := mutate(&doc); err != nil {
 			return nil, err
 		}
+		before := len(doc.Approvals)
 		doc.prune()
-		return doc.marshal()
+		raw, err := doc.marshal()
+		pruned = before - len(doc.Approvals)
+		return raw, err
 	})
 	if errors.Is(err, errNoChange) {
 		return nil
+	}
+	if err == nil && pruned > 0 {
+		slog.Info("approval business records pruned; conclusions follow retained records", "count", pruned)
 	}
 	return err
 }

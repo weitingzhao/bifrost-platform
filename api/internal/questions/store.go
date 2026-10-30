@@ -1,9 +1,11 @@
 package questions
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -56,6 +58,7 @@ var (
 // statefile write conflicts. A document over the byte budget drops ordinary
 // terminal records; if it is still over, the write is not stored.
 func (s *store) update(mutate func(*document) error) error {
+	pruned := 0
 	limit := s.limit()
 	keep := s.keepCount()
 	run := func(old []byte) ([]byte, error) {
@@ -66,6 +69,7 @@ func (s *store) update(mutate func(*document) error) error {
 		if err := mutate(doc); err != nil {
 			return nil, err
 		}
+		before := len(doc.Questions)
 		doc.prune(keep)
 		raw, err := doc.marshal()
 		if err != nil {
@@ -80,6 +84,7 @@ func (s *store) update(mutate func(*document) error) error {
 		if len(raw) > limit {
 			return nil, errTooBig
 		}
+		pruned = before - len(doc.Questions)
 		return raw, nil
 	}
 	if s.path == "" {
@@ -97,6 +102,9 @@ func (s *store) update(mutate func(*document) error) error {
 	err := statefile.Update(s.path, run)
 	if errors.Is(err, errNoChange) {
 		return nil
+	}
+	if err == nil && pruned > 0 {
+		slog.Info("question business records pruned; conclusions follow retained records", "count", pruned)
 	}
 	return err
 }
@@ -201,10 +209,14 @@ func (doc *document) nextNumber() int {
 }
 
 func (s *store) readBytes() ([]byte, error) {
+	return s.readBytesContext(context.Background())
+}
+
+func (s *store) readBytesContext(ctx context.Context) ([]byte, error) {
 	if s.path == "" {
 		return nil, nil
 	}
-	data, err := statefile.ReadFile(s.path)
+	data, err := statefile.ReadFileContext(ctx, s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err) {
 			return nil, nil

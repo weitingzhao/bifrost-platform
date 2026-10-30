@@ -12,6 +12,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
+	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 // Service is the question record: one document, one write path.
@@ -23,6 +24,8 @@ type Service struct {
 	post         func(context.Context, notice.Message) ([]notice.Delivery, error)
 	beforeNotify func() error
 	newID        func() (string, error)
+	threadInbox  threadinbox.Sender
+	inboxScan    threadinbox.Scan
 }
 
 // Result is an HTTP status and a JSON body.
@@ -90,6 +93,7 @@ func (s *Service) RunSweep(ctx context.Context, every time.Duration) {
 			return
 		case <-timer.C:
 			s.Sweep()
+			s.RetryThreadInbox(ctx)
 			timer.Reset(every)
 		}
 	}

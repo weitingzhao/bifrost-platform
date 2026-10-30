@@ -44,6 +44,7 @@ var landingHardGo = [...]string{
 	"api/internal/safego/",
 	"api/internal/localpath/",
 	"api/internal/questions/",
+	"api/internal/threadinbox/",
 	"api/internal/releasepolicy/",
 	"api/internal/maintainer/",
 	// Runtime transports/configuration and injected evidence/policy providers

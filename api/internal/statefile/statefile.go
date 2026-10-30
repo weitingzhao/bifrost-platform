@@ -78,11 +78,19 @@ func route(path string) (Backend, string) {
 // ReadFile reads path. A missing state is reported so that os.IsNotExist and
 // errors.Is(err, fs.ErrNotExist) both hold, as with os.ReadFile.
 func ReadFile(path string) ([]byte, error) {
+	return ReadFileContext(context.Background(), path)
+}
+
+// ReadFileContext shares the caller's work budget with the backend request.
+func ReadFileContext(parent context.Context, path string) ([]byte, error) {
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
 	b, key := route(path)
 	if b == nil {
 		return os.ReadFile(path)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	data, err := b.Read(ctx, key)
 	if err != nil {
@@ -121,14 +129,22 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 // The file backend holds an exclusive lock for the read-modify-write. A
 // backend retries mutate on the latest contents when the write conflicts.
 func Update(path string, mutate func(old []byte) ([]byte, error)) error {
+	return UpdateContext(context.Background(), path, mutate)
+}
+
+// UpdateContext bounds the entire read/mutate/CAS, including nested work.
+func UpdateContext(parent context.Context, path string, mutate func(old []byte) ([]byte, error)) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
 	b, key := route(path)
 	if b == nil {
-		if err := updateFile(path, mutate); err != nil {
+		if err := updateFile(parent, path, mutate); err != nil {
 			return &fs.PathError{Op: "update", Path: path, Err: err}
 		}
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	if err := b.Update(ctx, key, mutate); err != nil {
 		return &fs.PathError{Op: "update", Path: path, Err: err}
@@ -136,7 +152,7 @@ func Update(path string, mutate func(old []byte) ([]byte, error)) error {
 	return nil
 }
 
-func updateFile(path string, mutate func(old []byte) ([]byte, error)) error {
+func updateFile(ctx context.Context, path string, mutate func(old []byte) ([]byte, error)) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -145,8 +161,19 @@ func updateFile(path string, mutate func(old []byte) ([]byte, error)) error {
 		return err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
+	for {
+		err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Millisecond):
+		}
 	}
 	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 	old, err := os.ReadFile(path)
@@ -158,6 +185,9 @@ func updateFile(path string, mutate func(old []byte) ([]byte, error)) error {
 	}
 	next, err := mutate(old)
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"

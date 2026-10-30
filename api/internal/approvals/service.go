@@ -19,17 +19,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 // Service stores approvals, runs platform actions on approve, and hands the
 // rest to an executor that claims them.
 type Service struct {
-	mu    sync.Mutex
-	store *store
-	audit *actuation.AuditLog
-	now   func() time.Time
-	auto  AutoApprover
-	check CreateCheck
+	mu          sync.Mutex
+	store       *store
+	audit       *actuation.AuditLog
+	now         func() time.Time
+	threadInbox threadinbox.Sender
+	inboxScan   threadinbox.Scan
+	auto        AutoApprover
+	check       CreateCheck
 	// openKey names what at most one open request may be for (landing
 	// grants: one operation); "" for no such limit. Checked in the store's
 	// own update, so two concurrent requests cannot both be open.

@@ -20,6 +20,7 @@ func (s *Service) RunHeldFinishes(ctx context.Context, every time.Duration) {
 				return
 			}
 			s.flushHeld()
+			s.RetryThreadInbox(ctx)
 		}
 	}
 }
