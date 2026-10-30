@@ -21,6 +21,7 @@ var landingHardGo = [...]string{
 	"api/internal/agentrt/landinggit/",
 	"api/internal/agentrt/landingci/",
 	"api/internal/agentrt/stgrelease/",
+	"api/internal/agentrt/stgpreflight/",
 	"api/internal/agentrt/infracheck/",
 	"api/internal/agentrt/rules/",
 	"api/internal/agentrt/controller/",
