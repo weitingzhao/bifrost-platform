@@ -47,12 +47,14 @@ func (*reviewControlRuns) ReadHealth(context.Context) delivery.STGHealth {
 
 func reviewOpenPG(t *testing.T) (*b5Fixture, store.LandingSource) {
 	t.Helper()
-	w, root, op, src, prepared := liveReady(t)
+	w := newKernelWorld(t)
 	// PostgreSQL owns defaults on task/mission rows. Use its clock as the
-	// reference, not a frozen event clock presumed to affect SQL now().
+	// reference for claim/prepared as well as the gate. A fixed historical
+	// claim combined with database now() would exhaust the six-hour window.
 	var dbNow time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&dbNow))
-	at := dbNow.Add(10 * time.Minute).UTC().Truncate(time.Microsecond)
+	w, root, op, src, prepared := liveReadyInWorld(t, w, dbNow.UTC().Truncate(time.Microsecond))
+	at := prepared.Add(10 * time.Minute)
 	t.Cleanup(store.FreezeEventClock(at))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)

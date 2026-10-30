@@ -49,7 +49,9 @@ const c5Soft = "api/internal/research/c5.go"
 // be able to: the pin path itself is C-1/C-2's tests').
 func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 	t.Helper()
-	at := time.Now().UTC().Truncate(time.Second)
+	// Grant expiry during a read must not accidentally cross the quota day
+	// first (T35). All relative grant times derive from this injected clock.
+	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	t.Cleanup(store.FreezeEventClock(at))
 	c := &c5{at: at, main: commitA, signer: signer{t, rptest.NewKey(t)}}
 	c.w = liveWorld(t, "none", at)

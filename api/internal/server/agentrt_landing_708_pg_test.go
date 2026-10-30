@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const dep708 = "t_00000000000000000000000002"
@@ -107,6 +108,27 @@ func fixture708(t *testing.T, db *agentrttest.DB, repo, dep, env string, at time
 	}))
 	appendEvent(store.Event{Stream: "mission:M-3", Type: "task_state_changed", Actor: "controller", TaskID: task708, MissionID: "M-3",
 		Body: map[string]any{"from": "verifying", "to": "accepted", "reason": "review708 fixture"}})
+	// Diagnose the actual operands before the pool/locking regression runs.
+	// effective_at is not the eligibility fence. Do not rewrite imported
+	// created_at to hide a database/event-clock ordering failure (TD-456).
+	must708(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
+		state, err := store.LandingState(ctx, tx, "landing:"+repo)
+		if err != nil {
+			return err
+		}
+		var databaseNow, created, accepted time.Time
+		if err := tx.QueryRow(ctx, `SELECT now(), m.created_at,
+          (SELECT max(at) FROM agentrt.event WHERE task_id=$1 AND event_type='task_state_changed' AND body_json->>'to'='accepted')
+          FROM agentrt.mission m WHERE mission_id='M-3'`, task708).Scan(&databaseNow, &created, &accepted); err != nil {
+			return err
+		}
+		fence := state.Fence()
+		if fence.IsZero() || fence.After(databaseNow) || created.Before(fence) || accepted.Before(fence) {
+			return fmt.Errorf("Review 708 fixture clock order: enabled=%s live=%s fence=%s database_now=%s mission=%s accepted=%s event_now=%s rule_effective=%s",
+				state.EnabledAt, state.LiveAt, fence, databaseNow, created, accepted, store.DecisionAt(), at.Add(-2*time.Hour).Truncate(time.Second))
+		}
+		return nil
+	}))
 	ref := "refs/heads/land/" + env + "/" + task708 + "/1"
 	for _, rec := range []map[string]any{
 		{"v": landing.Version, "kind": "claimed", "op": op708, "task": task708, "attempt": attempt708, "A": strings.Repeat("a", 40), "rule_version": 1},
@@ -153,6 +175,7 @@ func waitBlocked708(ctx context.Context, observer *pgx.Conn, gate, reconcile uin
 	}
 }
 
+// Serial: keep the two-connection contention regression isolated from package load.
 func TestReview708FinalGatesTwoConnectionsPG(t *testing.T) {
 	for _, env := range []string{"stg", "prod"} {
 		for _, tc := range []struct{ name, repo, dep string }{
@@ -180,7 +203,11 @@ func TestReview708FinalGatesTwoConnectionsPG(t *testing.T) {
 				src := (&Server{}).landingRepoFacts(&controller.Controller{DB: pool}, store.LandingSource{
 					Result: func(ctx context.Context, _, _, _, _, _ string) (bool, []rules.LandingChange, error) {
 						started = true
-						go func() { _, err := store.ReconcileDenied(ctx, reconcile, tc.repo); done <- err }()
+						safego.Go("review708.reconcile", func() {
+							defer close(done)
+							_, reconcileErr := store.ReconcileDenied(ctx, reconcile, tc.repo)
+							done <- reconcileErr
+						})
 						var pid uint32
 						select {
 						case pid = <-reconcile.pid:
@@ -226,9 +253,9 @@ func TestReview708FinalGatesTwoConnectionsPG(t *testing.T) {
 				// must not be what breaks the wait on a passing test.
 				if started {
 					select {
-					case recErr := <-done:
-						if recErr != nil {
-							t.Errorf("reconciler: %v", recErr)
+					case recErr, completed := <-done:
+						if !completed || recErr != nil {
+							t.Errorf("reconciler: completed=%t err=%v", completed, recErr)
 						}
 					case <-ctx.Done():
 						cancel()
@@ -264,6 +291,7 @@ func TestReview708FinalGatesTwoConnectionsPG(t *testing.T) {
 }
 
 func TestReview708UnsignedAndRevokedEvidencePG(t *testing.T) {
+	t.Parallel()
 	db := agentrttest.Migrated(t)
 	ctx := context.Background()
 	_, err := store.Seed(ctx, db.Connect(t, db.Owner))

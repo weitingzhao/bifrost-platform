@@ -15,22 +15,45 @@ import (
 // goalDrill is the STG drill's real shape: a mission bound to no plan step
 // (an operator's ad-hoc mission), its implementation accepted after the
 // landing rule was first seen.
-func goalDrill(t *testing.T, mission string) (*world, string, store.LandingSource) {
+func goalDrill(t *testing.T, mission string, clock ...time.Time) (*world, string, store.LandingSource) {
 	t.Helper()
-	w := newKernelWorld(t)
+	return goalDrillInWorld(t, newKernelWorld(t), mission, clock...)
+}
+
+func goalDrillInWorld(t *testing.T, w *world, mission string, clock ...time.Time) (*world, string, store.LandingSource) {
+	t.Helper()
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
-	enabled := time.Now().Add(-time.Hour)
+	// Mission.created_at uses PostgreSQL now(), even when event time is
+	// injected. The enable fence must precede both clocks.
+	var databaseNow time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&databaseNow))
+	enabled := databaseNow.Add(-time.Hour)
+	if len(clock) > 0 && clock[0].Add(-time.Hour).Before(enabled) {
+		enabled = clock[0].Add(-time.Hour)
+	}
 	restore := store.FreezeEventClock(enabled)
+	t.Cleanup(restore)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
 	}))
 	restore()
+	if len(clock) > 0 {
+		store.FreezeEventClock(clock[0])
+	}
 	w.goalMission(t, mission)
 	task := w.ready(t, store.Task{MissionID: mission, OffPlanReason: "an operator's drill", BaseCommit: commitB})
 	w.passRound(t, task, "h1", "h2", "h3")
+	var created, accepted, checkedAt time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT m.created_at,
+      (SELECT max(at) FROM agentrt.event WHERE task_id=$2 AND event_type='task_state_changed' AND body_json->>'to'='accepted'), now()
+      FROM agentrt.mission m WHERE mission_id=$1`, mission, task).Scan(&created, &accepted, &checkedAt))
+	fence := landingState(t, w, landingRepoStream).Fence()
+	if fence.IsZero() || fence.After(checkedAt) || created.Before(fence) || accepted.Before(fence) {
+		t.Fatalf("landing fixture: fence=%s database_now=%s mission=%s accepted=%s", fence, checkedAt, created, accepted)
+	}
 	src := store.LandingSource{Result: func(context.Context, string, string, string, string, string) (bool, []rules.LandingChange, error) {
 		return true, []rules.LandingChange{{OldPath: "console/src/components/A.tsx", NewPath: "console/src/components/A.tsx", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "<p>Ready</p>"}}, nil
 	}, History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {

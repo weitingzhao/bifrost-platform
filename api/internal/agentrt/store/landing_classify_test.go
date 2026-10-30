@@ -23,16 +23,28 @@ func liveWorld(t *testing.T, stgRelease string, at time.Time) *world {
 	body := strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: "+stgRelease, 1)
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, body))
 	ok(t, err)
-	store.FreezeEventClock(at.Add(-2 * time.Hour))
+	var databaseNow time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&databaseNow))
+	liveAt := at.Add(-time.Hour)
+	if earlier := databaseNow.Add(-time.Hour); earlier.Before(liveAt) {
+		liveAt = earlier
+	}
+	store.FreezeEventClock(liveAt.Add(-time.Hour))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", at)
 		return e
 	}))
-	store.FreezeEventClock(at.Add(-time.Hour))
+	store.FreezeEventClock(liveAt)
 	_, err = store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	store.FreezeEventClock(at.Add(-50 * time.Minute))
 	w.goalMission(t, "M-3")
+	var created, checkedAt time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT created_at, now() FROM agentrt.mission WHERE mission_id='M-3'`).Scan(&created, &checkedAt))
+	fence := landingState(t, w, landingRepoStream).Fence()
+	if fence.IsZero() || fence.After(checkedAt) || created.Before(fence) {
+		t.Fatalf("landing fixture: fence=%s database_now=%s mission=%s", fence, checkedAt, created)
+	}
 	return w
 }
 

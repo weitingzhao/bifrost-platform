@@ -18,15 +18,25 @@ import (
 
 // liveReady is a live operation of goalDrill's root at branch_pushed, R on
 // M0, prepared at the returned time.
-func liveReady(t *testing.T) (*world, string, string, store.LandingSource, time.Time) {
+func liveReady(t *testing.T, clock ...time.Time) (*world, string, string, store.LandingSource, time.Time) {
 	t.Helper()
-	w, task, src := goalDrill(t, "M-3")
-	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
+	prepared := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	if len(clock) > 0 {
+		prepared = clock[0]
+	}
+	return liveReadyInWorld(t, newKernelWorld(t), prepared)
+}
+
+// liveReadyInWorld lets SQL-clock callers choose prepared from this world's
+// database before constructing the accepted task and claiming its root.
+func liveReadyInWorld(t *testing.T, w *world, prepared time.Time) (*world, string, string, store.LandingSource, time.Time) {
+	t.Helper()
+	w, task, src := goalDrillInWorld(t, w, "M-3", prepared.Add(-time.Minute))
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, store.DecisionAt())
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("fixture claim", d)
 	}
-	prepared := time.Now().UTC().Truncate(time.Second)
 	store.FreezeEventClock(prepared)
 	ref := "refs/heads/land/prod/" + task + "/1"
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", prepared.Format(time.RFC3339Nano), "dry_run", false)))
@@ -135,11 +145,11 @@ func TestLiveGateDecidesAfterItsReads(t *testing.T) {
 		t.Fatalf("a rule that took effect during the reads: %+v", d)
 	}
 
-	w2, _, op2, src2, prepared2 := liveReady(t)
-	// From ten minutes after the branch was prepared, whatever the wall
-	// clock; the reads end just after the next UTC midnight.
+	midnight := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
+	w2, _, op2, src2, prepared2 := liveReady(t, midnight.Add(-10*time.Minute-time.Second))
+	// Start at 23:59:59 UTC with a fresh root; only the day boundary,
+	// not the six-hour bound, changes during the read.
 	start2 := prepared2.Add(10 * time.Minute)
-	midnight := start2.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 	store.FreezeEventClock(start2)
 	_, _, err = store.AuthorizeLandingPush(ctx, w2.rt, src2, op2, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
 		store.FreezeEventClock(midnight.Add(time.Second))
@@ -188,7 +198,7 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	// Another root of the repository is not claimed while it is stopped.
 	other := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "another drill", BaseCommit: commitB})
 	w.passRound(t, other, "h1", "h2", "h3")
-	opOther, dOther, err := store.ClaimLandingDrill(ctx, w.rt, src, other, time.Now())
+	opOther, dOther, err := store.ClaimLandingDrill(ctx, w.rt, src, other, store.DecisionAt())
 	ok(t, err)
 	if opOther != "" || dOther.Reason != "stopped" {
 		t.Fatalf("claimed while stopped: %q %+v", opOther, dOther)
@@ -200,13 +210,11 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 // main_intent: the whole gate rolls back, no reservation on the old day and
 // no intent (review 661 R-03).
 func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
-	w, task, op, src, prepared := liveReady(t)
-	// The gate starts ten minutes after the branch was prepared, whatever the
-	// wall clock (it used to start one second before the next UTC midnight,
-	// past the root's six hours unless the run began after 18:00 UTC); the
-	// day turns between the reservation and main_intent.
+	next := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
+	w, task, op, src, prepared := liveReady(t, next.Add(-10*time.Minute-time.Second))
+	// The gate starts at 23:59:59 UTC, ten minutes after preparation.
+	// The day turns between the reservation and main_intent.
 	start := prepared.Add(10 * time.Minute)
-	next := start.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 	defer store.FreezeEventClock(start)()
 	defer store.SetHook(func(point, _ string) {
 		if point == "landing gate: reserved" {
@@ -270,7 +278,11 @@ func TestLiveGateRefusesARebindDuringIt(t *testing.T) {
 func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 	for _, during := range []bool{true, false} {
 		t.Run(map[bool]string{true: "during the reads", false: "before them"}[during], func(t *testing.T) {
-			w, task, op, src, prepared := liveReady(t)
+			// The read ends at 23:59:59 on the same UTC day. A wall-clock
+			// prepared time in [23:57, 23:59) used to cross midnight here,
+			// triggering ErrLandingDayChanged before the bound decision.
+			preparedAt := time.Date(2026, 10, 28, 23, 56, 59, 0, time.UTC)
+			w, task, op, src, prepared := liveReady(t, preparedAt)
 			// The root was claimed six hours less two minutes before prepared.
 			first := prepared.Add(-landing.ClaimWindow + 2*time.Minute)
 			tamperAdmin(t, w, `UPDATE agentrt.event SET at = $2 WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'claimed' AND body_json->'landing'->>'op' = $3`, landingRepoStream, first, op)
@@ -294,6 +306,34 @@ func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 				t.Fatal("reserved past the window", q.Reservations, task)
 			}
 		})
+	}
+}
+
+// Serial: FreezeEventClock. TD-456's old wall-clock case, reproduced without
+// waiting for midnight: a read crosses both the UTC day and the root bound.
+// The day-change error wins; the bound-only test above stays on one day.
+func TestLiveGateDayChangePrecedesRootWindow(t *testing.T) {
+	w, task, op, src, prepared := liveReady(t, time.Date(2026, 10, 28, 23, 58, 0, 0, time.UTC))
+	first := prepared.Add(-landing.ClaimWindow + 2*time.Minute)
+	tamperAdmin(t, w, `UPDATE agentrt.event SET at=$2 WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='claimed' AND body_json->'landing'->>'op'=$3`, landingRepoStream, first, op)
+	start, finish := prepared.Add(time.Minute), prepared.Add(3*time.Minute)
+	store.FreezeEventClock(start)
+	read := false
+	_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
+		read = true
+		store.FreezeEventClock(finish)
+		return observed(prepared)(c, o)
+	})
+	if !read || !errors.Is(err, store.ErrLandingDayChanged) || d.Allowed {
+		t.Fatalf("crossed both boundaries: read=%t decision=%+v err=%v", read, d, err)
+	}
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
+		t.Fatal("written across midnight", o.Phase)
+	}
+	for _, at := range []time.Time{start, finish} {
+		if q := landingState(t, w, "landing-quota:dev:"+at.Format("2006-01-02")); len(q.Reservations) != 0 {
+			t.Fatal("reserved across midnight", q.Reservations, task)
+		}
 	}
 }
 
