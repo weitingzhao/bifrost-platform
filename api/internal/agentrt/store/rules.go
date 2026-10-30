@@ -100,6 +100,15 @@ func latestRule(ctx context.Context, q pgx.Tx, id string) (*StoredRule, error) {
 func CurrentRule(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, id string, now time.Time) (*StoredRule, error) {
+	return effectiveRule(ctx, q, id, now, false)
+}
+
+// effectiveRule preserves the latest effective configuration even after
+// expiry, solely for controllers observing already-started work. It never
+// grants authorization; CurrentRule is still the authorization entry point.
+func effectiveRule(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, id string, now time.Time, includeExpired bool) (*StoredRule, error) {
 	var version int
 	var direction, text string
 	var body []byte
@@ -114,7 +123,7 @@ func CurrentRule(ctx context.Context, q interface {
 	if err != nil {
 		return nil, err
 	}
-	if !expires.After(now) {
+	if !includeExpired && !expires.After(now) {
 		return nil, nil
 	}
 	return readRule(id, version, direction, effective, expires, text, body, signedBy)

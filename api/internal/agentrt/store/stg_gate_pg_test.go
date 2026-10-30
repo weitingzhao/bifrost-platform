@@ -75,6 +75,11 @@ func b5AssertRule(t *testing.T, w *world, at time.Time, version int, release str
 
 func b5Snapshot(t *testing.T, w *world, root, op string, at time.Time) *b5Fixture {
 	t.Helper()
+	return b5StateFixture(t, w, root, op, at, true)
+}
+
+func b5StateFixture(t *testing.T, w *world, root, op string, at time.Time, snapshot bool) *b5Fixture {
+	t.Helper()
 	x := &b5Fixture{w: w, root: root, op: op, at: at}
 	api, console := "sha256:"+strings.Repeat("a", 64), "sha256:"+strings.Repeat("c", 64)
 	workloads := map[string]any{}
@@ -89,11 +94,17 @@ func b5Snapshot(t *testing.T, w *world, root, op string, at time.Time) *b5Fixtur
 	b5Append(t, w, b5Record("evidence", "ext", "evidence", "cluster/cicd/base", "source", "external", "run", "base-run", "P", commitA, "U", commitA, "infra", commitA, "content", map[string]any{"api_digest": api, "console_digest": console}, "deployed", map[string]any{"pin_sync_ok": true, "workloads": workloads, "at": at.Format(time.RFC3339Nano)}, "health", map[string]any{"status": "ok"}))
 	m := map[string]any{"root": root, "op": op, "R": commitB}
 	b5Append(t, w, b5Record("opened", "batch", "members", []any{map[string]any{"root": root, "op": op, "R": commitB, "gen": 1}}, "first_pending_at", map[string]any{commitB: at.Format(time.RFC3339Nano)}))
-	b5Append(t, w, b5Record("p_selected", "batch", "P", commitB, "at", at.Format(time.RFC3339Nano)))
+	if snapshot {
+		b5Append(t, w, b5Record("p_selected", "batch", "P", commitB, "at", at.Format(time.RFC3339Nano)))
+	}
 	ci := map[string]any{"name": "ci-release", "uid": "ci-release-uid", "created_at": at.Add(-time.Minute).Format(time.RFC3339Nano), "platform_commit": commitB, "ui_commit": commitA, "infra_commit": commitA, "pipeline_ref": "bifrost-ci-platform", "repo_url": landing.LandingRepos["bifrost-platform"].Remote, "read_at": at.Format(time.RFC3339Nano)}
-	b5Append(t, w, b5Record("ci_accepted", "batch", "P", commitB, "ci", ci))
+	if snapshot {
+		b5Append(t, w, b5Record("ci_accepted", "batch", "P", commitB, "ci", ci))
+	}
 	inputs := map[string]any{"namespace": "cicd", "pipeline": "bifrost-deliver-platform", "revision": commitB, "uiRevision": commitA, "infraRevision": commitA, "params_canonical": map[string]any{"revision": commitB, "uiRevision": commitA, "infraRevision": commitA}}
-	b5Append(t, w, b5Record("snapshot", "batch", "try", 1, "inputs", inputs, "base", base, "set", []any{m}, "not_before", at.Format(time.RFC3339Nano)))
+	if snapshot {
+		b5Append(t, w, b5Record("snapshot", "batch", "try", 1, "inputs", inputs, "base", base, "set", []any{m}, "not_before", at.Format(time.RFC3339Nano)))
+	}
 	x.obs = store.StgGateObservation{Main: commitB, BaseP: commitA, ReadAt: at, Workloads: workloads, CI: store.StgCIObservation{Status: "Succeeded", UID: "ci-release-uid", ReadAt: at, Accepted: ci}, Lease: store.StgLeaseObservation{Who: "stgrel-bifrost-platform-1-1", What: "bifrost-platform", Env: "stg", ResourceVersion: "10", Generation: 1, Expires: at.Add(5 * time.Minute)}, Commits: []landing.ReleaseCommit{{SHA: commitB, Parents: []string{commitA}, Message: "Result\n\nAgentrt-Task: " + root + "\nLanded-By: agentrt-prod/" + op + "\n", Changes: []rules.LandingChange{{OldPath: "console/src/components/A.tsx", NewPath: "console/src/components/A.tsx", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "<p>Ready</p>"}}}}}
 	x.src = store.StgGateSource{Environment: "prod", Live: func() bool { return true }, Generation: func() int64 { return 1 }, Observe: func(context.Context, store.StgRecord) (store.StgGateObservation, error) { return x.obs, nil }}
 	return x

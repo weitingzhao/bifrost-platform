@@ -281,6 +281,12 @@ func TestStgEveryEventKindHasSuccessAndDuplicateControl(t *testing.T) {
 	}
 	h.add(c)
 	samples = append(samples, h.samples...)
+	h = stgReady(t, m)
+	ruleBlock := stgRecord("blocked", "block", StgBlockID(stgSHA("b"), stgSHA("e"), "rule", "v1"), "why", "rule", "P", stgSHA("b"), "base", h.snapshot(1, m)["base"], "first_at", h.at.Format(time.RFC3339Nano), "evidence_version", "v1", "detail", map[string]any{"rules": map[string]any{"dev": 1}})
+	rb := h.add(ruleBlock)
+	rp := h.add(stgRecord("rule_observed", "block", rb.Record.String("block"), "interval_seq", rb.Seq, "rule_id", "landing:dev", "rule_version", 2, "read_at", h.at.Format(time.RFC3339Nano)))
+	h.add(stgUnblock(rb, "rule_changed", rp.Seq))
+	samples = append(samples, h.samples...)
 	seen := map[string]bool{}
 	for _, sample := range samples {
 		kind := sample.record["kind"].(string)

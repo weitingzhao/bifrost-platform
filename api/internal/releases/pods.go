@@ -50,7 +50,7 @@ func ReadPodDigests(ctx context.Context, core kubernetes.Interface, namespace, d
 	}
 	sel, replicas, err := settled(dep)
 	if err != nil {
-		return nil, fmt.Errorf("releases: %s/%s: %w", namespace, deployment, err)
+		return nil, fmt.Errorf("%w: %s/%s: %w", ErrUnsettled, namespace, deployment, err)
 	}
 	pods, err := core.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: sel})
 	if err != nil {
@@ -71,17 +71,17 @@ func ReadPodDigests(ctx context.Context, core kubernetes.Interface, namespace, d
 				return nil, err
 			}
 			if !current {
-				return nil, fmt.Errorf("releases: pod %s/%s is not of the current revision", namespace, p.Name)
+				return nil, fmt.Errorf("%w: pod %s/%s is not of the current revision", ErrUnsettled, namespace, p.Name)
 			}
 		}
 		d, err := runs(p, container)
 		if err != nil {
-			return nil, fmt.Errorf("releases: pod %s/%s: %w", namespace, p.Name, err)
+			return nil, fmt.Errorf("%w: pod %s/%s: %w", ErrUnsettled, namespace, p.Name, err)
 		}
 		out = append(out, d)
 	}
 	if active != replicas {
-		return nil, fmt.Errorf("releases: %s/%s has %d active pods, not %d", namespace, deployment, active, replicas)
+		return nil, fmt.Errorf("%w: %s/%s has %d active pods, not %d", ErrUnsettled, namespace, deployment, active, replicas)
 	}
 	return out, nil
 }

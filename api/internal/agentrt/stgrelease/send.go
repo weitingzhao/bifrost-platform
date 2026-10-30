@@ -1,5 +1,5 @@
-// Package stgrelease supplies B5's explicit send/recovery operations and
-// opt-in window holders. It starts no automatic release controller.
+// Package stgrelease supplies B5's opt-in STG release controller, durable
+// reconciliation, fenced send/recovery operations and window holders.
 package stgrelease
 
 import (
@@ -28,6 +28,8 @@ type Sender struct {
 	// B5-d holder for the current try. B5-e supplies this together with its
 	// Generation/Observe callbacks; nil retains the one-shot B5-c API.
 	Window *WindowHolder
+	// Set by B5-e to recheck none under the rule lock on recovery writes.
+	ControlTenant string
 	// True only after the admission/retention probes succeeded (§14).
 	FinalizerGuaranteed bool
 }
@@ -90,7 +92,7 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 		if readErr != nil {
 			return readErr
 		}
-		action, readErr := store.RecordStgRecovery(ctx, s.DB, p.Batch, p.Try, obs)
+		action, readErr := s.recordRecovery(ctx, p.Batch, p.Try, obs)
 		if readErr != nil {
 			return readErr
 		}
@@ -100,10 +102,10 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 		return err
 	}
 	if err = delivery.MatchNamedDeliverRun(obj, in, true); err != nil {
-		_, e := store.RecordStgRecovery(ctx, s.DB, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "collision", ReadAt: store.DecisionAt()})
+		_, e := s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "collision", ReadAt: store.DecisionAt()})
 		return e
 	}
-	_, err = store.RecordStgRecovery(ctx, s.DB, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: string(obj.GetUID()), ReadAt: store.DecisionAt()})
+	_, err = s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: string(obj.GetUID()), ReadAt: store.DecisionAt()})
 	return err
 }
 
@@ -149,6 +151,13 @@ func (s Sender) Recover(ctx context.Context, batch string, try int64) (string, e
 	obs, err := s.observe(ctx, t.Started.Seq, t.Permit.Seq, t.Bound.Seq, in)
 	if err != nil {
 		return "", err
+	}
+	return s.recordRecovery(ctx, batch, try, obs)
+}
+
+func (s Sender) recordRecovery(ctx context.Context, batch string, try int64, obs store.StgRunObservation) (string, error) {
+	if s.ControlTenant != "" {
+		return store.RecordStgControlRecovery(ctx, s.DB, s.ControlTenant, batch, try, obs)
 	}
 	return store.RecordStgRecovery(ctx, s.DB, batch, try, obs)
 }

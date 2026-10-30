@@ -57,6 +57,15 @@ func checkStgReleaseAppend(ctx context.Context, tx pgx.Tx, ev *Event, seq int64,
 	if err != nil {
 		return nil, err
 	}
+	if r.String("kind") == "rule_observed" {
+		rule, err := CurrentRule(ctx, tx, r.String("rule_id"), at)
+		if err != nil {
+			return nil, err
+		}
+		if rule == nil || int64(rule.Rule.Version) != r.Int("rule_version") || !stgRuleEnabled(&rule.Rule, at) {
+			return nil, stgError("permission", "rule_observed", "observation is not the current enabled rule")
+		}
+	}
 	if idempotent > 0 {
 		var old Appended
 		err := tx.QueryRow(ctx, `SELECT event_id,seq,sha256,at FROM agentrt.event WHERE event_stream_id=$1 AND seq=$2`, StgReleaseStream, idempotent).Scan(&old.EventID, &old.Seq, &old.SHA256, &old.At)

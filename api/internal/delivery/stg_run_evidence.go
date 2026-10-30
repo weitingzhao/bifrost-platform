@@ -85,7 +85,7 @@ func (a *STGReleaseAdapter) ObserveRun(ctx context.Context, id STGRunIdentity) (
 		copy["task_run"] = child.DeepCopy().Object
 		// Keep the executed Pipeline spec and run identity once. B5-a's raw
 		// object has exactly three array keys; enriching a child preserves
-		// that protocol. With no children only run_failed can be concluded.
+		// that protocol. With no children the actual inputs remain unknown.
 		if len(rawRefs) == 0 {
 			copy["pipeline_run"] = run.DeepCopy().Object
 		}
@@ -205,13 +205,25 @@ func (o STGRunObservation) Content(expected STGContent) (STGContent, error) {
 		if check.result != "" {
 			values[check.task] = results[check.result]
 		}
+		// Diagnose frozen input mismatch before checking builds or pin-sync.
+		// A bad input must never become a retryable rollout failure merely
+		// because a later task also failed to supply usable evidence.
+		if check.task == "clone-infra" {
+			p, u, infra := values["clone-platform"], values["clone-ui"], values["clone-infra"]
+			if !callerParamSHA.MatchString(p) || !callerParamSHA.MatchString(u) || !callerParamSHA.MatchString(infra) {
+				return out, ErrSTGEvidence
+			}
+			if p != expected.P || u != expected.U || infra != expected.Infra {
+				return out, ErrSTGWrongInput
+			}
+		}
 	}
 	out = STGContent{P: values["clone-platform"], U: values["clone-ui"], Infra: values["clone-infra"], APIDigest: values["build-platform-api"], ConsoleDigest: values["build-platform-console"]}
 	if !callerParamSHA.MatchString(out.P) || !callerParamSHA.MatchString(out.U) || !callerParamSHA.MatchString(out.Infra) || !stgDigest.MatchString(out.APIDigest) || !stgDigest.MatchString(out.ConsoleDigest) {
 		return STGContent{}, fmt.Errorf("%w: invalid clone/build results", ErrSTGEvidence)
 	}
 	if out.P != expected.P || out.U != expected.U || out.Infra != expected.Infra {
-		return STGContent{}, fmt.Errorf("%w: wrong_input", ErrSTGEvidence)
+		return STGContent{}, ErrSTGWrongInput
 	}
 	params, _ := namedStrings(o.Children["gitops-sync"], "spec", "params")
 	if params["application"] != stgNamespace || params["apiDigest"] != out.APIDigest || params["consoleDigest"] != out.ConsoleDigest || params["deliverRun"] != o.Identity.Name {

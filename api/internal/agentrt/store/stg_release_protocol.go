@@ -66,6 +66,7 @@ var stgSpecs = map[string]stgSpec{
 	"withheld":           {"grant", "members why trigger_seq"},
 	"blocked":            {"block", "why P base first_at evidence_version detail"},
 	"ci_observed":        {"block", "interval_seq P ci status"},
+	"rule_observed":      {"block", "interval_seq rule_id rule_version read_at"},
 	"unblocked":          {"block", "why ref"},
 	"diag":               {"batch", "try what gen"},
 }
@@ -132,11 +133,11 @@ func ParseStgRelease(v any) (StgRecord, error) {
 			valid = landingSHA.MatchString(s)
 		case "root":
 			valid = landingRoot.MatchString(s)
-		case "at", "first_at", "not_before", "deadline":
+		case "at", "first_at", "not_before", "deadline", "read_at":
 			valid = stgTime(val)
 		case "try":
-			valid = stgInteger(val, 1) || k == "diag" && r.String("what") == "ci_waiting" && stgInteger(val, 0)
-		case "gen", "trigger_seq", "interval_seq":
+			valid = stgInteger(val, 1) || k == "diag" && (r.String("what") == "ci_waiting" || r.String("what") == "lease_lost") && stgInteger(val, 0)
+		case "gen", "trigger_seq", "interval_seq", "rule_version":
 			valid = stgInteger(val, 1)
 		case "intent_seq":
 			valid = stgInteger(val, 1) || k == "started" && stgInteger(val, 0)
@@ -205,7 +206,7 @@ func ParseStgRelease(v any) (StgRecord, error) {
 		case "proof":
 			valid = slices.Contains([]string{"gate_failed_before_send", "deadline_passed_not_found"}, s)
 		case "what":
-			valid = slices.Contains([]string{"lease_lost", "running_long", "verify_unknown", "ci_waiting"}, s)
+			valid = slices.Contains([]string{"lease_lost", "running_long", "verify_unknown", "ci_waiting", "finalizer_stuck"}, s)
 		case "why":
 			valid = stgString(val)
 			switch k {

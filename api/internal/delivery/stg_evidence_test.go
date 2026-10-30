@@ -369,3 +369,39 @@ func TestSTGHealthClassifiesDefiniteAndUnknown(t *testing.T) {
 		})
 	}
 }
+
+// A failed release can leave API and workers on different, individually
+// settled revisions. Capture both facts; strict successful delivery still
+// requires the same API digest on both workloads.
+func TestSTGObservePartialRolloutPreservesEachDigest(t *testing.T) {
+	t.Parallel()
+	core := kfake.NewSimpleClientset(stgWorkloadWorld()...)
+	a := &STGReleaseAdapter{Core: func() (kubernetes.Interface, error) { return core, nil }}
+	ctx := context.Background()
+	dep, err := core.AppsV1().Deployments(stgNamespace).Get(ctx, "platform-workers", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod, err := core.CoreV1().Pods(stgNamespace).Get(ctx, "platform-workers-pod", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep.Spec.Template.Spec.Containers[0].Image = "registry/api@" + stgConsole
+	pod.Status.ContainerStatuses[0].ImageID = "docker-pullable://registry/api@" + stgConsole
+	if _, err = core.AppsV1().Deployments(stgNamespace).Update(ctx, dep, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = core.CoreV1().Pods(stgNamespace).Update(ctx, pod, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	observed, err := a.ObserveWorkloads(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["platform-api"].(map[string]any)["digest"] != stgAPI || observed["platform-workers"].(map[string]any)["digest"] != stgConsole {
+		t.Fatal("partial rollout was collapsed", observed)
+	}
+	if _, err = a.ReadWorkloads(ctx, stgAPI, stgConsole); err == nil {
+		t.Fatal("partial rollout passed successful-delivery predicate")
+	}
+}

@@ -66,8 +66,24 @@ func StgRecoveryDecision(t *StgTry, obs StgRunObservation, at time.Time) string 
 // Absence cannot grant another send or end execution occupancy. A matching
 // late UID remains bindable even while quarantined and with live/none off.
 func RecordStgRecovery(ctx context.Context, db DB, batch string, try int64, obs StgRunObservation) (string, error) {
+	return recordStgRecovery(ctx, db, "", batch, try, obs)
+}
+
+// RecordStgControlRecovery preserves B5-c recovery semantics while honoring
+// B5-e's stronger none contract, including a rule change during the GET.
+func RecordStgControlRecovery(ctx context.Context, db DB, tenant, batch string, try int64, obs StgRunObservation) (string, error) {
+	return recordStgRecovery(ctx, db, tenant, batch, try, obs)
+}
+func recordStgRecovery(ctx context.Context, db DB, tenant, batch string, try int64, obs StgRunObservation) (string, error) {
 	out := "wait"
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		out = "wait"
+		if tenant != "" {
+			enabled, err := stgControlEnabled(ctx, tx, tenant, func() bool { return true })
+			if err != nil || !enabled {
+				return err
+			}
+		}
 		if err := lockStream(ctx, tx, StgReleaseStream); err != nil {
 			return err
 		}

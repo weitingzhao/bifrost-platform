@@ -23,6 +23,26 @@ func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consol
 	if !stgDigest.MatchString(apiDigest) || !stgDigest.MatchString(consoleDigest) {
 		return nil, ErrSTGEvidence
 	}
+	out, err := a.ObserveWorkloads(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range stgDeployments {
+		expected := apiDigest
+		if name == "platform-console" {
+			expected = consoleDigest
+		}
+		if out[name].(map[string]any)["digest"] != expected {
+			return nil, fmt.Errorf("%w: %s digest", ErrSTGEvidence, name)
+		}
+	}
+	return out, nil
+}
+
+// ObserveWorkloads retains ReadWorkloads' complete readiness and identity
+// checks, but reports each workload's actual digest. A terminal failed try can
+// leave api and workers on different, individually settled versions.
+func (a *STGReleaseAdapter) ObserveWorkloads(ctx context.Context) (map[string]any, error) {
 	ctx, cancel := stgContext(ctx)
 	defer cancel()
 	core, err := a.core()
@@ -43,17 +63,16 @@ func (a *STGReleaseAdapter) ReadWorkloads(ctx context.Context, apiDigest, consol
 	}
 	out := map[string]any{}
 	for _, name := range stgDeployments {
-		expected := apiDigest
 		container := "platform-api"
 		if name == "platform-console" {
-			expected = consoleDigest
 			container = "platform-console"
 		}
 		dep := before[name]
 		containers := dep.Spec.Template.Spec.Containers
-		if len(containers) != 1 || containers[0].Name != container || imageDigest(containers[0].Image) != expected {
+		if len(containers) != 1 || containers[0].Name != container || imageDigest(containers[0].Image) == "" {
 			return nil, fmt.Errorf("%w: %s template digest", ErrSTGEvidence, name)
 		}
+		expected := imageDigest(containers[0].Image)
 		digests, e := releases.ReadPodDigests(ctx, core, stgNamespace, name, container)
 		if e != nil {
 			return nil, e

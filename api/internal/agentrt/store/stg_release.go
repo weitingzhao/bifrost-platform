@@ -310,7 +310,7 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 			return fail("conflict", "different run UID")
 		}
 	}
-	if b.Phase == "CLOSED" {
+	if b.Phase == "CLOSED" && !(k == "diag" && r.String("what") == "finalizer_stuck") {
 		return fail("transition", "batch is closed")
 	}
 	t := b.Tries[b.Try]
@@ -511,7 +511,12 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 		b.Settled = e
 		b.Phase = "CLOSED"
 	case "diag":
-		if r.Int("try") != b.Try {
+		if r.String("what") == "finalizer_stuck" {
+			tr := b.Tries[r.Int("try")]
+			if tr == nil || tr.RunEvidence.Seq == 0 || tr.Bound.Seq == 0 || e.At.Sub(tr.Bound.At) < 30*24*time.Hour {
+				return fail("transition", "finalizer diagnostic requires an archived try bound for 30 days")
+			}
+		} else if r.Int("try") != b.Try {
 			return fail("transition", "diagnostic must name the current try (zero before snapshot)")
 		}
 		key := fmt.Sprintf("%s/%d/%d", r.String("what"), r.Int("try"), r.Int("gen"))
@@ -589,8 +594,8 @@ func (s StgState) checkVerify(b *StgBatch, e StgEvent) error {
 	r := e.Record
 	t := b.Tries[b.Try]
 	outcome := r.String("outcome")
-	if t.RunEvidence.Record.String("status") == "Failed" && (outcome != "failed" || r.String("why") != "run_failed") {
-		return stgError("conflict", "verify", "a failed run verifies as run_failed")
+	if t.RunEvidence.Record.String("status") == "Failed" && (outcome != "failed" || !slices.Contains([]string{"run_failed", "wrong_input"}, r.String("why"))) {
+		return stgError("conflict", "verify", "a failed run verifies as run_failed or wrong_input")
 	}
 	if outcome == "failed" {
 		return nil

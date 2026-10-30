@@ -196,6 +196,15 @@ func (s *StgState) applyOther(e StgEvent) error {
 		b.Closed = e
 		s.Blocks[id] = b
 		s.BlockHistory[b.Opened.Seq] = b
+	case "rule_observed":
+		if !StgCanObserveRule(*s, r, e.At) {
+			return fail("transition", "rule observation does not change this interval's rule")
+		}
+		for _, old := range s.Records {
+			if old.Record.String("kind") == "rule_observed" && old.Record.Int("interval_seq") == r.Int("interval_seq") && old.Record.String("rule_id") == r.String("rule_id") && old.Record.Int("rule_version") == r.Int("rule_version") {
+				return fail("duplicate", "rule already observed for this interval")
+			}
+		}
 	default:
 		return fail("invalid", "unknown scope kind")
 	}

@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -19,9 +20,10 @@ const (
 )
 
 var (
-	ErrSTGEvidence  = errors.New("STG evidence does not match")
-	ErrSTGCollision = errors.New("STG release run identity collision")
-	ErrSTGUnknown   = errors.New("STG evidence is unknown")
+	ErrSTGEvidence   = errors.New("STG evidence does not match")
+	ErrSTGCollision  = errors.New("STG release run identity collision")
+	ErrSTGUnknown    = errors.New("STG evidence is unknown")
+	ErrSTGWrongInput = fmt.Errorf("%w: wrong_input", ErrSTGEvidence)
 )
 
 // STGReleaseAdapter supplies only external facts and named writes. It has no

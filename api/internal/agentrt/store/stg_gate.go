@@ -20,9 +20,12 @@ import (
 // and lease owner; they must not perform I/O or take database locks.
 type StgGateSource struct {
 	Environment string
-	Live        func() bool
-	Generation  func() int64
-	Observe     func(context.Context, StgRecord) (StgGateObservation, error)
+	// ControlTenant enables B5-e's none guard without altering standalone
+	// B5-c callers that still record policy refusals.
+	ControlTenant string
+	Live          func() bool
+	Generation    func() int64
+	Observe       func(context.Context, StgRecord) (StgGateObservation, error)
 }
 
 type StgSendPermit struct {
@@ -76,6 +79,15 @@ func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, sr
 		return permit, decision, err
 	} // unknown never becomes unsent
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		if src.ControlTenant != "" {
+			// Lock policy before bindings/stream, including when the diff has
+			// no member from this tenant. none produces no refusal record.
+			enabled, err := stgControlEnabled(ctx, tx, src.ControlTenant, src.Live)
+			if err != nil || !enabled {
+				decision.Why = "disabled"
+				return err
+			}
+		}
 		s, err := StgReleaseState(ctx, tx)
 		if err != nil {
 			return err
@@ -348,6 +360,11 @@ func stgMemberValues(ms []StgMemberKey) []any {
 }
 
 func stgRecordRefusal(ctx context.Context, tx pgx.Tx, s StgState, batch string, obs StgGateObservation, f stgGateFacts, at time.Time, d *StgGateDecision) error {
+	// A new CI changed frozen inputs before sending: hand off immediately.
+	// wrong_input blocks only an executed run whose actual inputs were wrong.
+	if d.Why == "wrong_input" && d.Handoff {
+		return nil
+	}
 	if !slices.Contains([]string{"rule", "diff_unlanded", "non_linear", "no_merge_after_landing", "baseline_unknown", "baseline_moved", "budget_exhausted", "hard_floor", "wrong_input", "ci_red", "ci_results"}, d.Why) {
 		return nil
 	}

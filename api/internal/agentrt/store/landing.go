@@ -101,10 +101,13 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	} else if !landing.RepoStream(ev.Stream) {
 		return fmt.Errorf("landing record requires repository stream; mission mirrors are text only")
 	}
-	if k == "mode" || k == "enabled" {
+	if k == "mode" || k == "enabled" || k == "stg_enabled" {
 		if ev.Stream != "landing:"+r.String("repo") {
 			return fmt.Errorf("landing repo differs from stream")
 		}
+	}
+	if k == "stg_enabled" && ev.Actor != "controller" {
+		return fmt.Errorf("STG enablement requires controller")
 	}
 	if k == "awaiting_grant" && ev.Stream != "landing:bifrost-platform" {
 		return fmt.Errorf("grant_unsupported")

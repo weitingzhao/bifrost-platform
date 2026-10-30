@@ -38,7 +38,7 @@ var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_fail
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
 var fields = map[string]string{
-	"enabled": "repo rule_version", "mode": "repo", "claimed": "task attempt A rule_version",
+	"enabled": "repo rule_version", "stg_enabled": "repo rule_version", "mode": "repo", "claimed": "task attempt A rule_version",
 	"prepared": "R M0 committer_date dry_run", "branch_intent": "ref R", "branch_pushed": "ref R",
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
 	"awaiting_grant": "soft files lines material",
@@ -222,6 +222,7 @@ type State struct {
 	Operations     map[string]Operation
 	EnabledAt      time.Time
 	EnabledVersion int
+	STGEnabledAt   time.Time
 	// LiveAt is when the live landing was first wired for this repository
 	// (CUT §11.8 v3 item 1): only a PROD stream has it. Every operation
 	// born after it is live.
@@ -251,7 +252,7 @@ func FoldWithGrants(entries []Entry, grants map[string][]Interval) (State, error
 // decides before it appends whether the protocol takes its record, so a
 // refusal is recorded instead of rolling the answer back (CUT §8).
 func (s State) Check(e Entry) error {
-	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, LiveAt: s.LiveAt, Grants: s.Grants,
+	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, STGEnabledAt: s.STGEnabledAt, LiveAt: s.LiveAt, Grants: s.Grants,
 		Retries: maps.Clone(s.Retries), Reservations: maps.Clone(s.Reservations), Operations: make(map[string]Operation, len(s.Operations))}
 	for k, o := range s.Operations {
 		o.Digests = maps.Clone(o.Digests)
@@ -302,6 +303,13 @@ func (s *State) Apply(e Entry) error {
 		}
 		s.EnabledAt = e.At
 		s.EnabledVersion = r.Int("rule_version")
+		return nil
+	}
+	if k == "stg_enabled" {
+		if !s.STGEnabledAt.IsZero() || r.String("repo") != "bifrost-platform" {
+			return fmt.Errorf("STG release already enabled or unsupported repository")
+		}
+		s.STGEnabledAt = e.At
 		return nil
 	}
 	if k == "reserved" {

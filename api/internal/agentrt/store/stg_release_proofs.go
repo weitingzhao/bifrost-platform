@@ -1,6 +1,29 @@
 package store
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
+
+// The controller probes proofs before a compare-and-append; Append repeats
+// these same checks under the stream lock.
+func StgCanUnblock(s StgState, r StgRecord) bool {
+	b := s.Blocks[r.String("block")]
+	return b.IsOpen() && s.checkUnblock(b, r) == nil
+}
+func StgCanObserveCI(s StgState, r StgRecord, at time.Time) bool {
+	b := s.Blocks[r.String("block")]
+	return b.IsOpen() && stgCICause(b.Opened.Record.String("why")) && s.checkCIProof(b, StgEvent{Seq: s.LastSeq + 1, At: at, Record: r}) == nil
+}
+func StgCanObserveRule(s StgState, r StgRecord, at time.Time) bool {
+	b := s.Blocks[r.String("block")]
+	tenant := strings.TrimPrefix(r.String("rule_id"), "landing:")
+	old := b.Opened.Record.object("detail").object("rules")
+	_, known := old[tenant]
+	return b.IsOpen() && b.Opened.Record.String("why") == "rule" && r.Int("interval_seq") == b.Opened.Seq &&
+		strings.HasPrefix(r.String("rule_id"), "landing:") && known && r.Int("rule_version") > old.Int(tenant) &&
+		r.Time("read_at").After(b.Opened.At) && !r.Time("read_at").After(at)
+}
 
 func stgRunUID(id string) string {
 	return strings.Split(id, "/")[2] // parsed evidence identity
@@ -37,6 +60,13 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 		return fail("unblock reason does not resolve the original cause")
 	}
 	switch why {
+	case "rule_changed":
+		seq, _ := cardNumber(r["ref"])
+		proof := s.Records[seq]
+		if proof.Seq <= b.Opened.Seq || proof.Record.String("kind") != "rule_observed" || proof.Record.String("block") != original.String("block") || proof.Record.Int("interval_seq") != b.Opened.Seq || !StgCanObserveRule(s, proof.Record, proof.At) {
+			return fail("rule change needs a current recorded rule for this interval")
+		}
+		return nil
 	case "inputs_changed":
 		seq, _ := cardNumber(r["ref"])
 		proof := s.Records[seq]

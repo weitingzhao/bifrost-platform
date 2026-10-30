@@ -189,10 +189,25 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 // Absence before the fence (MainFence after the main_intent) writes nothing:
 // a push may still be landing.
 func ReconcileMainOne(ctx context.Context, db DB, repo string, c MainCandidate, ev MainEvidence) (string, error) {
+	return reconcileMainOne(ctx, db, "", repo, c, ev)
+}
+
+// ReconcileStgMainOne captures B5-e's member proof under the same none guard
+// as its release records. Ordinary B4 reconciliation remains independent.
+func ReconcileStgMainOne(ctx context.Context, db DB, tenant, repo string, c MainCandidate, ev MainEvidence) (string, error) {
+	return reconcileMainOne(ctx, db, tenant, repo, c, ev)
+}
+func reconcileMainOne(ctx context.Context, db DB, tenant, repo string, c MainCandidate, ev MainEvidence) (string, error) {
 	stream := "landing:" + repo
 	did := ""
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = ""
+		if tenant != "" {
+			enabled, err := stgControlEnabled(ctx, tx, tenant, func() bool { return true })
+			if err != nil || !enabled {
+				return err
+			}
+		}
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
