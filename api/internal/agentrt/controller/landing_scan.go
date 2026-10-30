@@ -112,10 +112,11 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 		}
 		result = errors.Join(cleanupErrors...)
 	}()
+	var window grantWindowProbe // Shared only within this repository's pass.
 	for i, id := range pending {
 		o := state.Operations[id]
 		one, done := drillWorkShare(ctx, len(pending)-i)
-		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo))
+		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo, &window))
 		done()
 	}
 	// No current rule means no new claims, but recovery and bounds above run.
@@ -201,7 +202,7 @@ func drillWorkShare(ctx context.Context, remaining int) (context.Context, contex
 	return context.WithTimeout(ctx, max(time.Duration(0), time.Until(deadline))/time.Duration(remaining))
 }
 
-func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time, repo string) error {
+func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landing.Operation, now time.Time, repo string, window *grantWindowProbe) error {
 	switch {
 	case o.Phase == "awaiting_grant":
 		// C-5: only a grant the stream shows usable takes the operation to
@@ -215,10 +216,24 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 			return err
 		}
 		if grant != "" {
-			if !c.grantTries.due(id+"/"+grant, c.clock()) {
-				return nil
+			key := id + "/" + grant
+			ready, err := c.grantTries.ready(key, c.clock, func(reason string) (bool, error) {
+				if reason == "window" {
+					return window.ready(ctx, c.Drill.WindowBlocked, repo)
+				}
+				// Reuse the store's database-only counts and rule selection.
+				// No Git/CI read or final-gate lock is taken for this probe.
+				at := c.clock()
+				f, err := store.RefreshLandingFacts(ctx, c.DB, c.Drill.Facts, "prod", "live", o.Task, id, landing.Facts{}, at)
+				return grantCapacityAvailable(f, at), err
+			})
+			if err != nil || !ready {
+				return err
 			}
-			return c.landLiveWith(ctx, *c.Drill, id, o.R, false, nil, repo)
+			var d landing.Decision
+			err = c.landLiveWith(ctx, *c.Drill, id, o.R, false, &d, repo)
+			c.grantTries.record(key, d, err)
+			return err
 		}
 		// No grant: the gate checks whether the rule now in force fails
 		// nothing of it (§5.1 step 4, review 694 R-06). Only its stable
@@ -364,14 +379,15 @@ func (c *Controller) clock() time.Time {
 	return time.Now()
 }
 
-// grantTryEvery is how often the gate tries one grant that it refused.
+// grantTryEvery is the fallback interval without a window or slot wake-up.
 const grantTryEvery = 10 * time.Minute
 
 // grantTries is memory only: a restart tries each grant once sooner.
 type grantTries struct {
-	mu   sync.Mutex
-	last map[string]time.Time
-	done map[string]bool
+	mu      sync.Mutex
+	last    map[string]time.Time
+	done    map[string]bool
+	waiting map[string]string // operation/grant -> limit or window refusal
 }
 
 // due says whether key (operation/grant) may be tried at now, and if so

@@ -78,6 +78,19 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 			}
 			return nil
 		}
+		// Claim-only priority under the repository lock: awaiting_grant is
+		// not Active, and EligibleToClaim is also used by the final gate.
+		// Counting waiting grants there would block the very push we favor.
+		if env == "prod" {
+			waiting, err := grantedLandingWaiting(ctx, tx, facts.Repo)
+			if err != nil {
+				return err
+			}
+			if waiting {
+				decision = landing.Decision{Reason: "limit"}
+				return nil
+			}
+		}
 		op = fmt.Sprintf("land:%s:%d", task, again.claims+1)
 		_, e = Append(ctx, tx, Event{Stream: "landing:" + facts.Repo, Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{
 			"text": "Landing claimed (" + env + ")", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": facts.Attempt, "A": facts.A, "rule_version": facts.Rule.Version},
