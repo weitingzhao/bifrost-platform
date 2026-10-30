@@ -44,6 +44,7 @@ func TestS6T14InfraGrantRequestCreatesNoApproval(t *testing.T) {
 // Serial: process environment. T62 through worker wiring: explicit empty
 // wins over LIVE=on, platform-only constructs no infra reader/writer, and
 // the S6-5 boundary can never reuse platform CI evidence for infra.
+// Serial: process environment controls worker wiring.
 func TestS6LiveRepoWorkerWiring(t *testing.T) {
 	t.Setenv("AGENTRT_LANDING_LIVE", "on")
 	t.Setenv("AGENTRT_LANDER_USERNAME_FILE", "/not-read/username")
@@ -67,7 +68,7 @@ func TestS6LiveRepoWorkerWiring(t *testing.T) {
 				}
 			} else {
 				run, err := c.Drill.CI(context.Background(), "bifrost-trade-infra", strings.Repeat("a", 40), time.Time{})
-				if err != nil || run.Status != "Missing" {
+				if err == nil || run.Status == "Succeeded" {
 					t.Fatal("infra accepted foreign CI", run, err)
 				}
 				if err := c.Drill.EnsureCI(context.Background(), "bifrost-trade-infra", "same-name", strings.Repeat("a", 40)); err == nil {

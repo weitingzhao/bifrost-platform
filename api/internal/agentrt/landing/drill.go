@@ -20,6 +20,8 @@ type CIRun struct {
 	// InfraCommit is the run's infra-commit result: a landing grant's
 	// material names every sibling checkout the run built with (C-5).
 	InfraCommit string
+	// Results is present only on infra's repository-aware evidence.
+	Results map[string]string
 }
 
 func LatestCI(runs []CIRun, revision string, after time.Time) CIRun {
@@ -142,6 +144,11 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		}
 		return DrillAction{Kind: "ready"}
 	case "Failed":
+		// Infra has one CI identity per preparation and never consumes push
+		// CI as a main baseline. A failed landing run ends this operation.
+		if obs.Facts.Repo == "bifrost-trade-infra" {
+			return DrillAction{Kind: "failed", Why: "ci_red"}
+		}
 		switch obs.MainCI.Status {
 		case "Failed":
 			return DrillAction{Kind: "parked", Why: "main_red"}

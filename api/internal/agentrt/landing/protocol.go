@@ -77,6 +77,14 @@ func Parse(v any) (Record, error) {
 		return nil, fmt.Errorf("unsupported landing version for %s", r.String("kind"))
 	}
 	allowed := strings.Fields("v kind op " + spec)
+	// S6 extends only infra preparation/evidence. The old shapes remain
+	// byte-for-byte valid; repository ownership is enforced at append time.
+	if version >= 3 && r.String("kind") == "prepared" && m["platform_revision"] != nil {
+		allowed = append(allowed, "platform_revision", "generation")
+	}
+	if version >= 3 && r.String("kind") == "ci_seen" && m["results"] != nil {
+		allowed = append(allowed, "uid", "results")
+	}
 	if len(m) != len(allowed) {
 		return nil, fmt.Errorf("landing fields do not match %s", r.String("kind"))
 	}
@@ -90,7 +98,7 @@ func Parse(v any) (Record, error) {
 		case "v":
 			n, ok := v.(json.Number)
 			valid = (ok && n.String() == "1") || slices.Contains([]string{"1.1", "1.2"}, r.String("v"))
-		case "rule_version", "try":
+		case "rule_version", "try", "generation":
 			n, ok := v.(json.Number)
 			i, e := n.Int64()
 			valid = ok && e == nil && i > 0 && i <= 1<<30
@@ -131,8 +139,13 @@ func Parse(v any) (Record, error) {
 			} else {
 				valid = sha.MatchString(r.String(k))
 			}
-		case "A", "M0", "P", "U":
+		case "A", "M0", "P", "U", "platform_revision":
 			valid = sha.MatchString(r.String(k))
+		case "uid":
+			_, valid = v.(string)
+			valid = valid && len(r.String(k)) <= 200 && (r.String("status") != "Succeeded" || r.String(k) != "")
+		case "results":
+			valid = validCIResults(v)
 		case "digests":
 			a, ok := v.(map[string]any)
 			valid = ok && len(a) == 3
@@ -212,6 +225,9 @@ type Operation struct {
 	Files, Lines            int
 	Material                string
 	GrantPeriods            []Interval
+	// Infra's sibling revision and generation are fixed with prepared.
+	PlatformRevision string
+	Generation       int
 }
 type Retry struct {
 	At                  time.Time
@@ -362,6 +378,10 @@ func (s *State) Apply(e Entry) error {
 		n.PreparedAt = e.At
 		n.CommitterDate = r.Time("committer_date")
 		n.DryRun = r["dry_run"].(bool)
+		n.PlatformRevision, n.Generation = r.String("platform_revision"), r.Int("generation")
+		if n.Generation != 0 && n.Generation != n.ClaimNumber {
+			return bad()
+		}
 	case "branch_intent", "branch_pushed":
 		want := "prepared"
 		if k == "branch_pushed" {

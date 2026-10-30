@@ -75,7 +75,7 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 		if err != nil {
 			return store.LiveObservation{}, err
 		}
-		ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
+		ci, err := candidateCI(ctx, src, repo, o)
 		if err != nil {
 			return store.LiveObservation{}, err
 		}

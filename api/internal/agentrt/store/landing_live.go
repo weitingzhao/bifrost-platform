@@ -245,14 +245,19 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return nil
 		case obs.CI.R != o.R || obs.CI.Status != "Succeeded" || !obs.CI.CreatedAt.After(o.PreparedAt) || obs.CI.CreatedAt.After(final):
 			decision = landing.Decision{Reason: "ci"}
+			if repo == "bifrost-trade-infra" {
+				decision.Reason = "ci_unknown"
+				if obs.CI.Status == "Failed" {
+					decision.Reason = "ci_red"
+				}
+			}
 			return nil
 		}
 		// main_intent needs R's success on the stream (protocol): the CI the
 		// gate decided on, recorded unless it already is.
-		if o.CI.String("run") != obs.CI.Run || o.CI.String("status") != obs.CI.Status || !o.CI.Time("created_at").Equal(obs.CI.CreatedAt) {
+		if landing.CIChanged(o.CI, obs.CI) {
 			if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-				Body: map[string]any{"text": "Landing ci_seen at the second gate", "landing": map[string]any{"v": landing.Version, "kind": "ci_seen", "op": op,
-					"run": obs.CI.Run, "status": obs.CI.Status, "R": o.R, "created_at": obs.CI.CreatedAt.Format(time.RFC3339Nano)}}}); err != nil {
+				Body: map[string]any{"text": "Landing ci_seen at the second gate", "landing": landing.CIRecord(op, obs.CI)}}); err != nil {
 				return err
 			}
 		}

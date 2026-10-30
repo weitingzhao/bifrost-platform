@@ -177,6 +177,7 @@ func TestReview704CrossRepoClaimAndPreparePG(t *testing.T) {
 			}
 			before := f.run(f.remotes[depRepo], "show-ref")
 			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, LiveRepos: landing.LandingRepoNames(), DrillGit: gits, Drill: &controller.DrillSources{Facts: src}}
+			ctl.Drill.InfraPlatformHead = func(ctx context.Context) (string, error) { return gits[platformRepo].Ref(ctx, "refs/heads/main") }
 			seq := w.lastSeq(t, "landing:"+repo)
 			ctl.Drill.Facts = controller.MultiRepoGitFacts(map[string]controller.DrillGit{repo: gits[repo], depRepo: gits[repo]})
 			if err := ctl.LandingDrillBranch(ctx, gits[repo], op, time.Now(), repo); err == nil {

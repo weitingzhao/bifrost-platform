@@ -44,6 +44,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 
 	k := r.String("kind")
+	if (r["platform_revision"] != nil || r["results"] != nil) && (ev.Stream != "landing:bifrost-trade-infra" || ev.Actor != "controller") {
+		return fmt.Errorf("infra CI preparation and evidence require its controller stream")
+	}
 	if named, ok := ev.Body["landing_repo"]; ok && (k != "reserved" || named != "bifrost-trade-infra") {
 		return fmt.Errorf("landing_repo is only used by infra reservations")
 	}

@@ -80,7 +80,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			return fmt.Errorf("drill final gate: %s %s", action.Kind, action.Why)
 		}
 		for _, r := range []map[string]any{
-			{"v": landing.Version, "kind": "ci_seen", "op": op, "run": obs.Candidate.Run, "status": obs.Candidate.Status, "R": o.R, "created_at": obs.Candidate.CreatedAt.Format(time.RFC3339Nano)},
+			landing.CIRecord(op, obs.Candidate),
 			{"v": landing.Version, "kind": "rehearsed", "op": op, "R": o.R},
 		} {
 			if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: map[string]any{"text": fmt.Sprintf("STG drill %s; second gate rule version %d", r["kind"], g.Rule.Version), "landing": r}}); err != nil {

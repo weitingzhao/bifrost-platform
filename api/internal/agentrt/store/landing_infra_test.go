@@ -337,6 +337,12 @@ func TestS6SameSHAIsolatedCandidatesAndCIPG(t *testing.T) {
 			},
 			WindowBlocked: func(_ context.Context, got string) (bool, error) { check(got); return false, nil },
 			EnsureCI:      func(_ context.Context, got, name, r string) error { check(got); kicks++; return nil }}
+		sources.InfraCI = func(_ context.Context, o landing.Operation) (landing.CIRun, error) {
+			check(infraRepo)
+			ciReads++
+			return landing.CIRun{R: o.R, Status: "Missing"}, nil
+		}
+		sources.EnsureInfraCI = func(context.Context, landing.Operation) error { check(infraRepo); kicks++; return nil }
 		ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, LiveRepos: []string{repo}}
 		a, err := ctl.LandingDrillCI(ctx, sources, op, at, repo)
 		ok(t, err)

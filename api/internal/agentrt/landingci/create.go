@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -22,6 +23,12 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 	for sibling, param := range repo.SiblingParams {
 		params[param] = key.Siblings[sibling]
 	}
+	if key.Repo == "bifrost-trade-infra" {
+		if name != landing.InfraCIName(key.Revision, key.Base, key.Siblings["bifrost-platform"], key.Generation) {
+			return fmt.Errorf("invalid landing CI identity")
+		}
+		params = infraParams(key)
+	}
 	return c.ensure(ctx, name, key.Repo, repo.Pipeline, key.Revision, params)
 }
 
@@ -31,7 +38,8 @@ func (c *Client) EnsureLandingCI(ctx context.Context, name, revision string) err
 	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, map[string]string{"revision": revision, "uiRevision": "main"})
 }
 func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision string, params map[string]string) error {
-	if !landingCIName.MatchString(name) || !fullSHA.MatchString(revision) {
+	r, supported := landing.LandingRepos[repo]
+	if !supported || !r.CINamePattern.MatchString(name) || !fullSHA.MatchString(revision) {
 		return fmt.Errorf("invalid landing CI identity")
 	}
 	res, err := c.resource()
@@ -39,6 +47,9 @@ func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision stri
 		return err
 	}
 	labels := map[string]string{"tekton.dev/pipeline": pipeline, "bifrost.io/repo": repo, "bifrost.io/trigger": "agentrt-landing-drill", "bifrost.io/revision": revision}
+	if repo == "bifrost-trade-infra" {
+		labels["bifrost.io/base"], labels["bifrost.io/purpose"] = params["base"], "landing"
+	}
 	desired := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "PipelineRun", "spec": platformSpec(pipeline, params)}}
 	desired.SetName(name)
 	desired.SetNamespace(c.namespace())

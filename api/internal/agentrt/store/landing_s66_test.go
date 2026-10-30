@@ -273,6 +273,7 @@ func TestS66T50SharedQuotaDualRemotePG(t *testing.T) {
 				}
 				ops[repo] = op
 				ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, LiveRepos: repos, DrillGit: gits, Drill: &controller.DrillSources{Facts: src}}
+				ctl.Drill.InfraPlatformHead = func(ctx context.Context) (string, error) { return gits[platformRepo].Ref(ctx, "refs/heads/main") }
 				ok(t, ctl.LandingDrillBranch(ctx, gits[repo], op, at, repo))
 			}
 			store.FreezeEventClock(at.Add(2 * time.Minute))

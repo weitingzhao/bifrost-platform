@@ -210,7 +210,24 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return e
 	}
 	if o.Phase == "claimed" {
-		if e = put("prepared", map[string]any{"R": r, "M0": m0, "committer_date": date.Format(time.RFC3339Nano), "dry_run": c.Env != "prod"}); e != nil {
+		prepared := map[string]any{"R": r, "M0": m0, "committer_date": date.Format(time.RFC3339Nano), "dry_run": c.Env != "prod"}
+		if repo == "bifrost-trade-infra" {
+			if c.Drill == nil || c.Drill.InfraPlatformHead == nil {
+				return fmt.Errorf("infra preparation requires platform main reader")
+			}
+			platform, err := c.Drill.InfraPlatformHead(ctx)
+			if err != nil {
+				return err
+			}
+			if !landing.ValidSHA(platform) {
+				return fmt.Errorf("infra preparation requires fixed platform SHA")
+			}
+			prepared["platform_revision"], prepared["generation"] = platform, o.ClaimNumber
+			if stop, err := recheck(); stop || err != nil {
+				return err
+			}
+		}
+		if e = put("prepared", prepared); e != nil {
 			return e
 		}
 	} else if r != o.R {

@@ -149,13 +149,13 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 		},
 		CI: func(ctx context.Context, repo, r string, after time.Time) (landing.CIRun, error) {
 			if repo != "bifrost-platform" {
-				return landing.CIRun{R: r, Status: "Missing"}, nil
+				return landing.CIRun{}, errors.New("landing CI requires a prepared repository key")
 			}
 			return ci.LandingCI(ctx, r, after)
 		},
 		EnsureCI: func(ctx context.Context, repo, name, r string) error {
 			if repo != "bifrost-platform" {
-				return errors.New("infra landing CI adapter requires S6-5")
+				return errors.New("landing CI requires a prepared repository key")
 			}
 			return ci.EnsureLandingCI(ctx, name, r)
 		},
@@ -166,6 +166,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			return ci.LandingWindowBlocked(ctx)
 		},
 	}
+	s.wireInfraLandingCI(c, ci)
 	if c.Env == "prod" {
 		if g := readers["bifrost-platform"]; g != nil {
 			c.Drill.Facts.GrantPatch = landingGrantPatch(g)

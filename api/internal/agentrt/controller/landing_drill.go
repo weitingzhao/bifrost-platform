@@ -52,6 +52,10 @@ type DrillSources struct {
 	// granted (its CI is not pinned).
 	EnsurePinnedCI func(ctx context.Context, name string, key store.GrantCIKey) error
 	SiblingHeads   func(ctx context.Context) (map[string]string, error)
+	// Infra fixes its platform checkout at preparation, before branch push.
+	InfraPlatformHead func(context.Context) (string, error)
+	InfraCI           func(context.Context, landing.Operation) (landing.CIRun, error)
+	EnsureInfraCI     func(context.Context, landing.Operation) error
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
@@ -126,12 +130,20 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
-	ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
+	if repo == "bifrost-trade-infra" && o.Kicked && landing.EligibleToClaim(f, store.DecisionAt()).Allowed {
+		if src.EnsureInfraCI == nil {
+			return landing.DrillAction{Kind: "wait"}, fmt.Errorf("infra CI creator unavailable")
+		}
+		if err = src.EnsureInfraCI(ctx, o); err != nil {
+			return landing.DrillAction{Kind: "wait"}, err
+		}
+	}
+	ci, err := candidateCI(ctx, src, repo, o)
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
 	mainCI := landing.CIRun{Status: "Unknown"}
-	if ci.Status == "Failed" {
+	if ci.Status == "Failed" && repo == "bifrost-platform" {
 		mainCI, err = src.CI(ctx, repo, o.M0, time.Time{})
 		if err != nil {
 			mainCI.Status = "Unknown"
@@ -170,8 +182,8 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if a.Kind == "failed" && (a.Why == "bound" || a.Why == "approval_expired") {
 		return settleBound()
 	}
-	if o.Phase == "branch_pushed" && (o.CI.String("run") != ci.Run || o.CI.String("status") != ci.Status || !o.CI.Time("created_at").Equal(ci.CreatedAt)) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(at) {
-		if err = appendRecord("ci_seen", map[string]any{"run": ci.Run, "status": ci.Status, "R": o.R, "created_at": ci.CreatedAt.Format(time.RFC3339Nano)}); err != nil {
+	if o.Phase == "branch_pushed" && landing.CIChanged(o.CI, ci) && ci.Run != "" && ci.R == o.R && ci.CreatedAt.After(o.PreparedAt) && !ci.CreatedAt.After(at) {
+		if err = appendRecord("ci_seen", landing.CIRecord(op, ci)); err != nil {
 			return a, err
 		}
 	}
@@ -201,6 +213,18 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	case "unparked":
 		return a, appendRecord("unparked", map[string]any{})
 	case "ci_kick", "ci_rerun":
+		if repo == "bifrost-trade-infra" {
+			if src.EnsureInfraCI == nil || a.Kind != "ci_kick" {
+				return a, fmt.Errorf("infra CI creator unavailable or invalid retry")
+			}
+			if o.Phase == "parked" {
+				return landing.DrillAction{Kind: "unparked"}, appendRecord("unparked", map[string]any{})
+			}
+			if err = appendRecord(a.Kind, map[string]any{"try": 1}); err != nil {
+				return a, err
+			}
+			return a, src.EnsureInfraCI(ctx, o)
+		}
 		if src.EnsureCI == nil {
 			return a, fmt.Errorf("CI creator unavailable")
 		}
@@ -236,6 +260,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// Resume creation after a crash between intent and external result. The
 	// same name is used on every pass; intentional rerun alone gets try 2.
 	if src.EnsureCI != nil && (o.Kicked || o.Rerun) {
+		if repo == "bifrost-trade-infra" {
+			return a, nil // ensured above, before readiness
+		}
 		n := 1
 		if o.Rerun {
 			n = 2
@@ -268,7 +295,7 @@ func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, o
 		if err != nil {
 			return landing.DrillObservation{}, err
 		}
-		ci, err := src.CI(ctx, repo, o.R, o.PreparedAt)
+		ci, err := candidateCI(ctx, src, repo, o)
 		if err != nil {
 			return landing.DrillObservation{}, err
 		}
@@ -278,6 +305,16 @@ func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, o
 		}
 		return landing.DrillObservation{Main: main, Candidate: ci, WindowBlocked: blocked}, nil
 	}, repo)
+}
+
+func candidateCI(ctx context.Context, src DrillSources, repo string, o landing.Operation) (landing.CIRun, error) {
+	if repo == "bifrost-trade-infra" {
+		if src.InfraCI == nil {
+			return landing.CIRun{}, fmt.Errorf("infra CI reader unavailable")
+		}
+		return src.InfraCI(ctx, o)
+	}
+	return src.CI(ctx, repo, o.R, o.PreparedAt)
 }
 
 // landingEnv says whether this controller's environment lands: the STG
