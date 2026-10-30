@@ -81,14 +81,25 @@ export function parseMissionLanding(v: unknown): MissionLanding | null {
   return v as MissionLanding
 }
 
-/** An optional read: unavailable, malformed and non-200 responses never block the goal. */
-export async function fetchMissionLanding(id: string, signal?: AbortSignal): Promise<MissionLanding | null> {
+/** Keep read failures distinct from a confirmed scope so the goal can explain Unknown and retry. */
+export async function fetchMissionLanding(id: string, signal?: AbortSignal): Promise<MissionLanding> {
+  let response: Response
   try {
-    const r = await serverFetch(`/api/v1/agentrt/landing/missions/${encodeURIComponent(id)}`, { headers: authHeaders(), signal })
-    if (r.status !== 200) return null
-    const landing = parseMissionLanding(await r.json())
-    return landing?.mission_id === id ? landing : null
-  } catch {
-    return null
+    response = await serverFetch(`/api/v1/agentrt/landing/missions/${encodeURIComponent(id)}`, { headers: authHeaders(), signal })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new Error("Couldn't read landing status (network error)", { cause: error })
   }
+  if (response.status !== 200) throw new Error(`Couldn't read landing status (${response.status})`)
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new Error("Couldn't read landing status (invalid JSON response)", { cause: error })
+  }
+  const landing = parseMissionLanding(body)
+  if (!landing) throw new Error("Couldn't read landing status (invalid response data)")
+  if (landing.mission_id !== id) throw new Error("Couldn't read landing status (mission mismatch)")
+  return landing
 }

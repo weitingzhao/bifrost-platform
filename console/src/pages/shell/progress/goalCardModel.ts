@@ -5,9 +5,9 @@ import type { MissionLanding } from '@/api/missionLanding'
 import type { Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
-export type StageState = 'done' | 'running' | 'waiting' | 'failed' | 'future' | 'skipped'
+export type StageState = 'done' | 'running' | 'waiting' | 'failed' | 'future' | 'skipped' | 'unknown'
 export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number; dropped: number; droppedByRule?: number }
-export const stageMarks: Record<StageState, string> = { done: '✓', running: '●', waiting: '⏸', failed: '✗', future: '○', skipped: '—' }
+export const stageMarks: Record<StageState, string> = { done: '✓', running: '●', waiting: '⏸', failed: '✗', future: '○', skipped: '—', unknown: '?' }
 export const terminalMission = (state: string) => ['done', 'accepted', 'stopped', 'failed', 'cancelled'].includes(state)
 export const executorName = (id: string) => ({ 'exec:claude': 'Claude', 'exec:codex': 'Codex', 'exec:cursor': 'Cursor', 'exec:deterministic': 'Checks' })[id] || id || 'Unassigned'
 export function duration(seconds: number): string {
@@ -136,7 +136,9 @@ export function goalStages(data: GoalData, landing?: MissionLanding | null): Goa
     stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed, dropped: all.length - tasks.length,
       droppedByRule: all.filter(t => byRule.has(t.task_id)).length })
   }
-  stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
+  // Accepted work with no landing reading has an unknown completion, not another check in progress (724 N-01).
+  const unknown = landing === null && !terminalMission(text(data.mission.state)) && stages.every(s => s.state === 'done' || s.state === 'skipped')
+  stages.push({ label: 'Done', state: done ? 'done' : unknown ? 'unknown' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
   return stages
 }
 // Task states in which a stage moves without a live attempt of its own: waiting for the controller, a host or a check.
@@ -166,6 +168,7 @@ export function goalStatus(data: GoalData, waiting: boolean, landing?: MissionLa
   if (stages.some(s => s.state === 'failed') || data.mission.state === 'failed') return 'Blocked'
   if (goalDone(data, landing)) return 'Done'
   if (data.mission.state === 'paused' || stages.some(s => s.state === 'waiting')) return 'Blocked'
+  if (stages.some(s => s.state === 'unknown')) return 'Unknown'
   const active = stages.find(s => s.state === 'running')?.label || stages.find(s => s.state === 'future')?.label
   return ({ Plan: 'Planning', Implement: 'Implementing', Verify: 'Checking', Review: 'Reviewing', Done: 'Checking' })[active || 'Plan'] || 'Planning'
 }

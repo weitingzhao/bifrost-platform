@@ -67,6 +67,16 @@ describe('goal stages from the production stream', () => {
     expect(goalStages(full).map(s => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
     expect(goalStatus(full, false)).toBe('Done')
   })
+  it('uses Unknown for accepted work without a landing reading, preserving known progress and mission outcomes', () => {
+    expect(goalDone(full, null)).toBe(false)
+    expect(goalStages(full, null).at(-1)?.state).toBe('unknown')
+    expect(goalStatus(full, false, null)).toBe('Unknown')
+    expect(goalStatus(cut(46), false, null)).toBe('Reviewing')
+    expect(goalStatus(full, true, null)).toBe('Waiting for you')
+    for (const [state, status] of [['done', 'Done'], ['accepted', 'Done'], ['failed', 'Blocked'], ['paused', 'Blocked'], ['stopped', 'Stopped'], ['cancelled', 'Stopped']]) {
+      expect(goalStatus({ ...full, mission: { ...full.mission, state } }, false, null)).toBe(status)
+    }
+  })
   it('moves from the accepted plan to implementation, then from checks to review', () => {
     const planAccepted = events.find(e => e.event_type === 'task_state_changed' && e.task_id === tasks.tasks[0]!.task_id && 'to' in e.body_json && e.body_json.to === 'accepted')!
     expect(goalStatus(cut(planAccepted.seq), false)).toBe('Implementing')

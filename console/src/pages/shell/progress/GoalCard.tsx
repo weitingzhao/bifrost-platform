@@ -23,7 +23,7 @@ import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQu
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
 const budgetLabels: Record<string, string> = { owner_granted_attempts: 'attempts granted on its cards', owner_granted_wall_hours: 'hours granted on its cards' }
 
-const stageColor = { done: 'var(--color-success)', running: 'var(--color-info)', waiting: 'var(--color-warning)', failed: 'var(--color-danger)', future: 'var(--border)', skipped: 'var(--border)' }
+const stageColor = { done: 'var(--color-success)', running: 'var(--color-info)', waiting: 'var(--color-warning)', failed: 'var(--color-danger)', future: 'var(--border)', skipped: 'var(--border)', unknown: 'var(--muted-foreground)' }
 function Lines({ value }: { value: unknown }) {
   const lines = Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
   return lines.length ? <ul className="list-disc space-y-1 pl-5">{lines.map((line, i) => <li key={i}>{line}</li>)}</ul> : <p className="text-muted-foreground">Not recorded yet.</p>
@@ -111,6 +111,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     staleTime: Infinity, refetchOnWindowFocus: false })
   // null: the scope is unknown (failed, paused or not back yet), never "not in scope" (review 675 R-08)
   const landing = landingQuery.isPaused || landingQuery.isError ? null : (landingQuery.data ?? null)
+  const landingError = landingQuery.isPaused ? "Couldn't read landing status (offline)" : landingQuery.error?.message
   const previousPoll = useRef(updatedAt)
   const data = query.data
   // Keep reading S3 (or unreadable-scope) missions until the controller closes them.
@@ -158,7 +159,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const end = done ? accepted : finished ? data?.events.at(-1)?.at : undefined
   return <article id={`goal-${id}`} aria-label={`Goal ${id}`} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${highlighted ? 'border-[var(--color-info)] ring-2 ring-[var(--color-info)]' : 'border-[var(--card-border)]'}`}>
     <header className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : 'degraded'} /><strong className="text-lg">{head}</strong></div>
+      <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : status === 'Unknown' ? 'unknown' : 'degraded'} /><strong className="text-lg">{head}</strong></div>
       <h3 className="break-words text-base font-semibold">{goal.split('\n')[0]}</h3>
       <p className="text-xs text-muted-foreground">Given by {data?.mission.created_by_actor_id === 'owner' ? 'You' : text(data?.mission.created_by_actor_id) || 'Unknown'} · <time title={start}>started {relative(start, now)}</time>{start && <span title={[start, end].filter(Boolean).join(' → ')}> · {end ? 'took' : 'elapsed'} {duration(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000)}</span>}</p>
       <details><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Full goal</summary><p className="whitespace-pre-wrap break-words text-sm">{goal}</p></details>
@@ -173,6 +174,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
         <div className="flex items-center gap-2"><span aria-hidden="true" style={{ color: stageColor[shown] }}>{stageMarks[shown]}</span><strong>{stage.label}</strong>{stage.tasks.length > 1 && <span>{stage.completed}/{stage.tasks.length}</span>}</div>
         {stalled && <p className="text-xs font-semibold text-[var(--color-warning)] [overflow-wrap:anywhere]">{stalled}: not confirmed running</p>}
         {stage.state === 'skipped' && !stage.dropped && <p className="text-xs text-muted-foreground">Skipped</p>}
+        {stage.state === 'unknown' && <p className="text-xs text-muted-foreground">Unknown</p>}
         {stage.dropped - (stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.dropped - (stage.droppedByRule ?? 0)} dropped by you</p>}
         {(stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.droppedByRule} dropped by rule</p>}
         {stage.tasks.map(t => { const timing = taskTiming(data, t, now), lease = latestLease(data, t)
@@ -189,7 +191,11 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
             {unpersisted && <p className="font-semibold text-[var(--color-warning)]">{lost ? `Attempt ${lost.attempt_no ?? '?'} lost on ${lost.host_id || 'no host'}, not done. ` : ''}{unpersisted}</p>}<p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
         })}
       </li> })}</ol>
-      {landing && <GoalLanding landing={landing} data={data} />}
+      {landing ? <GoalLanding landing={landing} data={data} /> : <section aria-label="Landing" className="rounded border border-[var(--card-border)] p-3 text-sm">
+        <h4 className="font-semibold">Landing</h4>
+        <p role="status">{landingError ? 'Landing status unknown' : 'Reading landing status…'}</p>
+        {landingError && <><p>{landingError}</p><button onClick={() => void refetchLanding()} disabled={landingQuery.isFetching} className="min-h-11 underline">{landingQuery.isFetching ? 'Retrying…' : 'Retry'}</button></>}
+      </section>}
       {done && <GoalResult data={data} />}
       <ChiefOfStaff data={data} questions={questions} done={done} />
       <details open={targeted || undefined}><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="cursor-pointer break-all text-xs pointer-coarse:min-h-11 pointer-coarse:py-3">{t.role} · {t.task_id} · {t.state}{t.off_plan === true ? ' · off plan' : ''}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>

@@ -89,18 +89,25 @@ describe('mission landing contract', () => {
     expect(await fetchMissionLanding('M-2', controller.signal)).toEqual(fixture)
     expect(fetcher).toHaveBeenCalledWith('/api/v1/agentrt/landing/missions/M-2', expect.objectContaining({ signal: controller.signal, headers: expect.any(Headers) }))
   })
-  it.each([201, 204, 301, 401, 403, 404, 500, 503])('treats HTTP %s as unreadable', async status => {
+  it.each([201, 204, 301, 401, 403, 404, 429, 500, 502, 503])('preserves HTTP %s as the unreadable reason', async status => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(status === 204 ? null : JSON.stringify(fixture), { status })))
-    expect(await fetchMissionLanding('M-2')).toBeNull()
+    await expect(fetchMissionLanding('M-2')).rejects.toThrow(`Couldn't read landing status (${status})`)
   })
-  it.each(['{', '{}', JSON.stringify({ ...fixture, mission_id: 'M-3' })])('hides malformed or mismatched 200 responses: %s', async body => {
+  it.each([
+    ['{', 'invalid JSON response'], ['{}', 'invalid response data'],
+    [JSON.stringify({ ...fixture, roots: [{ ...fixture.roots[0], repo: 'unreadable' }] }), 'invalid response data'],
+    [JSON.stringify({ ...fixture, mission_id: 'M-3' }), 'mission mismatch'],
+  ])('explains malformed or mismatched 200 responses: %s', async (body, reason) => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
-    expect(await fetchMissionLanding('M-2')).toBeNull()
+    await expect(fetchMissionLanding('M-2')).rejects.toThrow(`Couldn't read landing status (${reason})`)
   })
-  it('treats network failure and cancellation as unreadable', async () => {
-    const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockRejectedValueOnce(new DOMException('Aborted', 'AbortError'))
+  it('explains network failure and preserves cancellation', async () => {
+    const aborted = new DOMException('Aborted', 'AbortError')
+    const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(aborted)
     vi.stubGlobal('fetch', fetcher)
-    expect(await fetchMissionLanding('M-2')).toBeNull()
-    expect(await fetchMissionLanding('M-2')).toBeNull()
+    await expect(fetchMissionLanding('M-2')).rejects.toThrow("Couldn't read landing status (network error)")
+    const controller = new AbortController()
+    controller.abort()
+    await expect(fetchMissionLanding('M-2', controller.signal)).rejects.toBe(aborted)
   })
 })
