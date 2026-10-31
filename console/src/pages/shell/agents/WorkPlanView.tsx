@@ -7,6 +7,7 @@ import { ActionLink, Card } from '../owner/OwnerParts'
 import { NowClock, useNow } from '../progress/progressClock'
 import { SIGNOFF_SECTION_HREF } from '../progress/progressPart'
 import { PlanLiveWork } from './PlanLiveWork'
+import { PlanModuleRows } from './PlanModuleRows'
 import { PlanTree } from './PlanTree'
 import { responsibility, validity } from './planSnapshotModel'
 import { PlanRecentChanges } from './PlanRecentChanges'
@@ -43,6 +44,7 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
       </Card>
     </div>
     {selected && !view.nodes.some(n => n.plan_node_id === selected || n.label === selected) && <p role="alert">Node not found in {view.root}: {selected}</p>}
+    <PlanModuleRows view={view} selected={selected} />
     <PlanLiveWork view={view} stale={stale} />
     <PlanTree view={view} selected={selected} />
     <Card label="Waiting on" title="Waiting on">

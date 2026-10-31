@@ -42,7 +42,7 @@ function NodeCard({ node, view, selected, children }: { node: PlanNode; view: Pl
       </> : <p>Unclassified · No adopted acceptance metadata.</p>}
       {ownTasks.length > 0 && <ul aria-label="Tasks on this node" className="space-y-1">{ownTasks.map(t => <li key={t.task_id}><a className="inline-flex min-h-11 items-center" href={goalHref(t.mission_id, t.task_id)}>{t.title} · {t.state}</a>{t.delivery && <span className="block text-xs">{t.delivery}</span>}</li>)}</ul>}
       <ul className="space-y-2">{steps.map(step => <li key={step.plan_node_id} id={planNodeDOMId(step.plan_node_id)} tabIndex={-1} className="scroll-mt-4">
-        <a className="inline-flex min-h-11 items-center" href={planNodeHref(view.root, step.plan_node_id)}>{step.label} {step.title}</a> · {step.state} {step.owner_step && '· Owner'} {step.effect_step && '· ★'}
+        <a className="inline-flex min-h-11 items-center" href={planNodeHref(view.root, step.plan_node_id)}>{step.label} {step.title}</a> · {step.state ?? 'Unknown'} {step.owner_step && '· Owner'} {step.effect_step && '· ★'}
         {view.tasks.filter(t => t.plan_node_id === step.plan_node_id).map(t => <div key={t.task_id}><a className="inline-flex min-h-11 items-center" href={goalHref(t.mission_id, t.task_id)}>{t.title} · {t.state}</a>{t.delivery && <span className="block text-xs">{t.delivery}</span>}</div>)}
         <ul>{view.external_work.filter(w => w.plan_node_id === step.plan_node_id).map(w => <ExternalRecord key={w.external_work_id} work={w} />)}</ul>
       </li>)}</ul>
