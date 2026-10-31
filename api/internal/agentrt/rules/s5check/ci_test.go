@@ -113,14 +113,27 @@ func TestCIMaterialsMatchCheckerGolden(t *testing.T) {
 	}
 }
 
+// The shipped pin is the bifrost-ui revision whose built declarations the
+// manifest's toolchain hashes were enrolled from (71 @bifrost/ui entries).
+// Changing either side without the other must be a deliberate core change.
+func TestShippedUIPinIsEnrolledRevision(t *testing.T) {
+	root, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := pinnedUI(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "c83f40b40e65e52f8592ec6b73c5f6987c116e93" {
+		t.Fatalf("shipped UI pin %s is not the enrolled bifrost-ui revision", got)
+	}
+}
+
 func TestCIMaterialsFailClosed(t *testing.T) {
 	cases := map[string]func(t *testing.T, policyRoot string, lock *[]byte){
-		"shipped zero UI pin": func(t *testing.T, policyRoot string, _ *[]byte) {
-			shipped, err := os.ReadFile(UIRevisionFile)
-			if err != nil {
-				t.Fatal(err)
-			}
-			writeFile(t, filepath.Join(policyRoot, UIRevisionFile), string(shipped))
+		"zero UI pin": func(t *testing.T, policyRoot string, _ *[]byte) {
+			writeFile(t, filepath.Join(policyRoot, UIRevisionFile), `{"uiSHA":"`+strings.Repeat("0", 40)+`"}`)
 		},
 		"missing UI pin": func(_ *testing.T, policyRoot string, _ *[]byte) {
 			os.Remove(filepath.Join(policyRoot, UIRevisionFile))
