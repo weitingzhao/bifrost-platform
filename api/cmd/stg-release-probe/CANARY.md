@@ -23,24 +23,38 @@
 
 ## 开门前只读探针
 
-在任务目录构建（不会启动 workers）：
+探针 `stg-release-probe` 随平台镜像构建：infra `k8s/cicd/docker/Dockerfile.platform-api-stg` 同时编译它并放在 `/usr/local/bin/stg-release-probe`，镜像入口仍是 `platform-api`。PROD 不构建镜像，跑的是 `bifrost-deliver-platform` 用这份 Dockerfile 构建、经 STG 核验的 digest，所以要等含探针的平台版本发到 PROD 之后才能跑；更早的镜像里没有这个文件，Job 会以 StartError 失败。
 
-```sh
-export GOCACHE="$PWD/.gocache"
-go -C platform/api build -o "$PWD/stg-release-probe" ./cmd/stg-release-probe
-```
+身份必须是部署中的实际 workers ServiceAccount，不能用管理员身份制造 PASS（`workers_identity` 不通过时探针不做后续检查）。合规跑法是在 `bifrost-platform-prod` 起一个一次性 Job：镜像与 workers 相同的完整 digest、ServiceAccount 与 workers 相同。Job 清单是本目录的附件 `probe-job.yaml`（`backoffLimit: 0`、`activeDeadlineSeconds: 300`、`restartPolicy: Never`、amd64、结束 24 小时后自动删除；不带 workers 的标签，不会被 workers 的 Service 或发布核对选中）。
 
-在具有 STG 集群内部服务网络的获准运行环境执行。身份必须是部署中的实际 workers ServiceAccount；默认核对 `bifrost-platform-prod/platform-workers` 的 `serviceAccountName`，不能用管理员身份制造 PASS。二进制放置或运行环境准备如涉及集群写入，另走平台动作与既有审批。
+1. 只读核对 workers 的 ServiceAccount 与镜像：
 
-```sh
-./stg-release-probe \
-  --revision "$B5_PROBE_P" \
-  --sample "$B5_HELD_RUN" \
-  --sample-uid "$B5_HELD_UID" \
-  --workers-namespace bifrost-platform-prod
-```
+   ```sh
+   kubectl -n bifrost-platform-prod get deploy platform-workers -o jsonpath='{.spec.template.spec.serviceAccountName}{"\n"}'
+   kubectl -n bifrost-platform-prod get pods -l app.kubernetes.io/name=platform-workers -o jsonpath='{range .items[*]}{.status.containerStatuses[0].imageID}{"\n"}{end}'
+   ```
 
-默认使用 in-cluster 身份；已有、经授权的 workers kubeconfig 可用 `--kubeconfig /path/to/workers-kubeconfig` 显式提供。不要输出其内容。该环境仍须能访问固定的 STG `/health` 内部地址。
+   第一条必须输出 `bifrost-platform`（附件里写的就是它；2026-10-31 只读核对如此）。不一致就停下，先查清再改附件。第二条每个 Pod 的 imageID 必须相同。
+2. 复制 `probe-job.yaml`，替换四个值，别的不改：
+
+   | 占位 | 取值 |
+   |---|---|
+   | `WORKERS_IMAGE_DIGEST` | 第 1 步的 imageID，形如 `192.168.10.73:30500/bifrost-platform-api@sha256:<64 位>`；不能用 tag |
+   | `B5_PROBE_P` | 进入条件第 4 条里已核验、有成功 CI 的完整 40 位提交 |
+   | `B5_HELD_RUN` | `stg_release_sample_create` 结果里的 `run` |
+   | `B5_HELD_UID` | 同一结果里的 `uid` |
+
+3. Owner 经 `owner_run_command`（管理员身份）执行 `kubectl apply -f probe-job.yaml`。平台不能自己建这个 Job：准入 `bifrost-platform-job-sa` 拒绝平台以 `bifrost-platform` 身份建 Job，也不要改走 `apply_manifest`。
+4. 等它结束并保存输出（失败的 Job 也要读日志，FAIL 行就是结论）：
+
+   ```sh
+   kubectl -n bifrost-platform-prod wait --for=condition=complete --timeout=330s job/b5-stg-release-probe
+   kubectl -n bifrost-platform-prod logs job/b5-stg-release-probe
+   ```
+
+5. 重跑前先经 `owner_run_command` 删除旧 Job（`kubectl -n bifrost-platform-prod delete job b5-stg-release-probe`），再 apply。
+
+只在开发时本机构建（`go -C platform/api build ./cmd/stg-release-probe`）；本机没有 workers 身份，`--kubeconfig` 只接受已有、经授权的 workers kubeconfig，不要输出其内容。Job 所在的 PROD 平台命名空间要能访问固定的 STG `/health` 内部地址（2026-10-31 该命名空间没有出站 NetworkPolicy）。
 
 `B5_HELD_RUN` 必须是一个已经存在、成功且证据完整的确定名 `stgrel-*` 样本，持有 B5 finalizer；`B5_HELD_UID` 从独立的既有创建响应/审计记录取值，不能只把本次 GET 的 UID 填回探针。探针不创建、归档或清理样本；样本由 `stg_release_sample_create` 建立、`stg_release_sample_finalize` 收尾，见下一节；不能将普通人工 run 改名、补标签/finalizer 或伪造 UID，也不能把 CREATE dry-run 通过替代真实对象上的 PATCH dry-run。
 

@@ -191,7 +191,7 @@ func TestReadPaginationAndInvalidKeys(t *testing.T) {
 }
 func TestEnsurePinnedChecksEveryParameterAndLabel(t *testing.T) {
 	t.Parallel()
-	for _, change := range []string{"revision", "uiRevision", "infraRevision", "extra", "duplicate", "pipeline", "inline", "label"} {
+	for _, change := range []string{"revision", "uiRevision", "infraRevision", "repo-url", "extra", "duplicate", "pipeline", "inline", "label"} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			c, d := drillService(t)

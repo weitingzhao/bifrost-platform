@@ -23,6 +23,9 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 	for sibling, param := range repo.SiblingParams {
 		params[param] = key.Siblings[sibling]
 	}
+	if key.Repo == "bifrost-platform" {
+		params["repo-url"] = PlatformRepoURL
+	}
 	if key.Repo == "bifrost-trade-infra" {
 		if name != landing.InfraCIName(key.Revision, key.Base, key.Siblings["bifrost-platform"], key.Generation) {
 			return fmt.Errorf("invalid landing CI identity")
@@ -34,8 +37,9 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 
 // EnsureLandingCI preserves v1's platform spec, including uiRevision=main.
 // It shares all collision and uncertain-create handling with the pinned API.
+// Like every platform CI it names repo-url, which B5's ReadRelease requires.
 func (c *Client) EnsureLandingCI(ctx context.Context, name, revision string) error {
-	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, map[string]string{"revision": revision, "uiRevision": "main"})
+	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, map[string]string{"revision": revision, "uiRevision": "main", "repo-url": PlatformRepoURL})
 }
 func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision string, params map[string]string) error {
 	r, supported := landing.LandingRepos[repo]
@@ -59,10 +63,11 @@ func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision stri
 		expectedRef, _, _ := unstructured.NestedMap(desired.Object, "spec", "pipelineRef")
 		_, inline, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineSpec")
 		values, counts := namedValues(*obj, "spec", "params")
-		if inline || !reflect.DeepEqual(actualRef, expectedRef) || !reflect.DeepEqual(values, params) {
+		want := withoutPreRepoURL(params, counts)
+		if inline || !reflect.DeepEqual(actualRef, expectedRef) || !reflect.DeepEqual(values, want) {
 			return fmt.Errorf("landing CI name collision")
 		}
-		for name := range params {
+		for name := range want {
 			if counts[name] != 1 {
 				return fmt.Errorf("landing CI name collision")
 			}
@@ -88,6 +93,22 @@ func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision stri
 		return matches(existing)
 	}
 	return err
+}
+
+// A run this operation created before platform CI carried repo-url is still
+// its run: it is accepted here (landing reads never needed repo-url) and stays
+// Unknown(ci_identity) to B5's ReadRelease. Any other difference collides.
+func withoutPreRepoURL(params map[string]string, counts map[string]int) map[string]string {
+	if _, ok := params["repo-url"]; !ok || counts["repo-url"] != 0 {
+		return params
+	}
+	out := make(map[string]string, len(params)-1)
+	for name, value := range params {
+		if name != "repo-url" {
+			out[name] = value
+		}
+	}
+	return out
 }
 
 // This is the existing platform CI spec, now owned by the hard landingci

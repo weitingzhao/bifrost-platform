@@ -57,12 +57,20 @@ func ciRunInputs(name, revision string, extra map[string]string) (string, string
 	return revision, repo, nil
 }
 
+// platformCIRepoURL is the repository bifrost-ci-platform clones P from. W-31
+// B5's release reader accepts a platform CI run only when its spec.params name
+// exactly this repo-url; it never infers it from the Pipeline default.
+const platformCIRepoURL = giteaInClusterBase + "/" + giteaOrg + "/bifrost-platform.git"
+
 func ciRunSpec(name, revision, repo string) map[string]any {
 	params := []map[string]any{{"name": "revision", "value": revision}}
 	if name == "bifrost-ci-python" {
 		params = append(params, map[string]any{"name": "repo", "value": repo})
 	} else {
 		params = append(params, map[string]any{"name": "uiRevision", "value": "main"})
+	}
+	if name == "bifrost-ci-platform" {
+		params = append(params, map[string]any{"name": "repo-url", "value": platformCIRepoURL})
 	}
 	size := "2Gi"
 	if name == "bifrost-ci-frontend" {

@@ -1,0 +1,56 @@
+# B5 pre-open read-only probe as a one-off Job (CANARY.md「开门前只读探针」).
+# Applied once by the Owner through owner_run_command (an administrator), never
+# by the platform: bifrost-platform-job-sa refuses the platform creating a Job
+# under its own ServiceAccount. Replace the four ALL-CAPS values first; CANARY.md
+# says where each comes from. The probe sends only GET, SelfSubjectReview /
+# SelfSubjectAccessReview and dryRun=All requests; the Job itself is the only
+# object this creates, and it removes itself 24 hours after it finishes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: b5-stg-release-probe
+  namespace: bifrost-platform-prod
+  labels:
+    app.kubernetes.io/name: stg-release-probe
+    app.kubernetes.io/part-of: bifrost-platform
+    bifrost.io/purpose: b5-preopen-probe
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stg-release-probe
+        app.kubernetes.io/part-of: bifrost-platform
+        bifrost.io/purpose: b5-preopen-probe
+    spec:
+      # The deployed workers' identity: the probe's workers_identity check
+      # compares SelfSubjectReview with platform-workers' serviceAccountName.
+      serviceAccountName: bifrost-platform
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: probe
+          # The full digest platform-workers runs, e.g.
+          # 192.168.10.73:30500/bifrost-platform-api@sha256:<64 hex>.
+          image: WORKERS_IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/stg-release-probe"]
+          args:
+            - --revision=B5_PROBE_P
+            - --sample=B5_HELD_RUN
+            - --sample-uid=B5_HELD_UID
+            - --workers-namespace=bifrost-platform-prod
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
