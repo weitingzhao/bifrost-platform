@@ -1,0 +1,547 @@
+{
+  "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "materials": {
+    "callersDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "profileDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "testsDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "toolchainDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "typesDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "uiSHA": "0000000000000000000000000000000000000000"
+  },
+  "pipeline": {
+    "params": [
+      {
+        "name": "base",
+        "type": "string"
+      },
+      {
+        "name": "revision",
+        "type": "string"
+      },
+      {
+        "name": "uiRevision",
+        "type": "string"
+      },
+      {
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "name": "keyDigest",
+        "type": "string"
+      },
+      {
+        "name": "generation",
+        "type": "string"
+      }
+    ],
+    "results": [
+      {
+        "name": "base-commit",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.base-commit)"
+      },
+      {
+        "name": "revision-commit",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.revision-commit)"
+      },
+      {
+        "name": "baseline-tree",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.baseline-tree)"
+      },
+      {
+        "name": "result-tree",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.result-tree)"
+      },
+      {
+        "name": "ui-commit",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.ui-commit)"
+      },
+      {
+        "name": "key-digest",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.key-digest)"
+      },
+      {
+        "name": "generation",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.generation)"
+      },
+      {
+        "name": "evidence",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.evidence)"
+      },
+      {
+        "name": "evidence-digest",
+        "type": "string",
+        "value": "$(tasks.s5-check.results.evidence-digest)"
+      }
+    ],
+    "tasks": [
+      {
+        "name": "freeze-check",
+        "taskRef": {
+          "name": "bifrost-release-freeze-check"
+        }
+      },
+      {
+        "name": "s5-fetch",
+        "params": [
+          {
+            "name": "base",
+            "value": "$(params.base)"
+          },
+          {
+            "name": "revision",
+            "value": "$(params.revision)"
+          },
+          {
+            "name": "uiRevision",
+            "value": "$(params.uiRevision)"
+          },
+          {
+            "name": "key",
+            "value": "$(params.key)"
+          },
+          {
+            "name": "keyDigest",
+            "value": "$(params.keyDigest)"
+          },
+          {
+            "name": "generation",
+            "value": "$(params.generation)"
+          },
+          {
+            "name": "ciUID",
+            "value": "$(context.pipelineRun.uid)"
+          }
+        ],
+        "runAfter": [
+          "freeze-check"
+        ],
+        "taskRef": {
+          "name": "bifrost-s5-fetch"
+        },
+        "timeout": "10m0s",
+        "workspaces": [
+          {
+            "name": "trees",
+            "workspace": "trees"
+          }
+        ]
+      },
+      {
+        "name": "s5-check",
+        "params": [
+          {
+            "name": "base",
+            "value": "$(params.base)"
+          },
+          {
+            "name": "revision",
+            "value": "$(params.revision)"
+          },
+          {
+            "name": "uiRevision",
+            "value": "$(params.uiRevision)"
+          },
+          {
+            "name": "key",
+            "value": "$(params.key)"
+          },
+          {
+            "name": "keyDigest",
+            "value": "$(params.keyDigest)"
+          },
+          {
+            "name": "generation",
+            "value": "$(params.generation)"
+          },
+          {
+            "name": "ciUID",
+            "value": "$(context.pipelineRun.uid)"
+          }
+        ],
+        "runAfter": [
+          "s5-fetch"
+        ],
+        "taskRef": {
+          "name": "bifrost-s5-check"
+        },
+        "timeout": "10m0s",
+        "workspaces": [
+          {
+            "name": "trees",
+            "workspace": "trees"
+          }
+        ]
+      }
+    ],
+    "workspaces": [
+      {
+        "name": "trees"
+      }
+    ]
+  },
+  "runTemplate": {
+    "pipelineRef": {
+      "name": "bifrost-ci-s5"
+    },
+    "taskRunSpecs": [
+      {
+        "pipelineTaskName": "freeze-check",
+        "podTemplate": {
+          "automountServiceAccountToken": true,
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          }
+        },
+        "serviceAccountName": "default"
+      }
+    ],
+    "taskRunTemplate": {
+      "podTemplate": {
+        "automountServiceAccountToken": false,
+        "enableServiceLinks": false,
+        "nodeSelector": {
+          "kubernetes.io/arch": "amd64"
+        },
+        "securityContext": {
+          "fsGroup": 1000
+        }
+      },
+      "serviceAccountName": "bifrost-s5"
+    },
+    "timeouts": {
+      "pipeline": "20m0s"
+    },
+    "workspaces": [
+      {
+        "name": "trees",
+        "volumeClaimTemplate": {
+          "spec": {
+            "accessModes": [
+              "ReadWriteOnce"
+            ],
+            "resources": {
+              "requests": {
+                "storage": "2Gi"
+              }
+            },
+            "storageClassName": "local-path"
+          }
+        }
+      }
+    ]
+  },
+  "schema": 1,
+  "tasks": {
+    "check": {
+      "params": [
+        {
+          "name": "base",
+          "type": "string"
+        },
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "keyDigest",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "string"
+        },
+        {
+          "name": "ciUID",
+          "type": "string"
+        }
+      ],
+      "results": [
+        {
+          "name": "base-commit",
+          "type": "string"
+        },
+        {
+          "name": "revision-commit",
+          "type": "string"
+        },
+        {
+          "name": "baseline-tree",
+          "type": "string"
+        },
+        {
+          "name": "result-tree",
+          "type": "string"
+        },
+        {
+          "name": "ui-commit",
+          "type": "string"
+        },
+        {
+          "name": "key-digest",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "string"
+        },
+        {
+          "name": "evidence",
+          "type": "string"
+        },
+        {
+          "name": "evidence-digest",
+          "type": "string"
+        }
+      ],
+      "steps": [
+        {
+          "args": [
+            "check"
+          ],
+          "command": [
+            "python3",
+            "-I",
+            "/opt/s5/runner.py"
+          ],
+          "computeResources": {
+            "limits": {
+              "cpu": "2",
+              "memory": "2Gi"
+            },
+            "requests": {
+              "cpu": "250m",
+              "memory": "512Mi"
+            }
+          },
+          "env": [
+            {
+              "name": "S5_BASE",
+              "value": "$(params.base)"
+            },
+            {
+              "name": "S5_REVISION",
+              "value": "$(params.revision)"
+            },
+            {
+              "name": "S5_UI",
+              "value": "$(params.uiRevision)"
+            },
+            {
+              "name": "S5_KEY",
+              "value": "$(params.key)"
+            },
+            {
+              "name": "S5_KEY_DIGEST",
+              "value": "$(params.keyDigest)"
+            },
+            {
+              "name": "S5_GENERATION",
+              "value": "$(params.generation)"
+            },
+            {
+              "name": "S5_CI_UID",
+              "value": "$(params.ciUID)"
+            }
+          ],
+          "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "name": "check",
+          "securityContext": {
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "add": [
+                "SETUID",
+                "SETGID"
+              ],
+              "drop": [
+                "ALL"
+              ]
+            },
+            "readOnlyRootFilesystem": true,
+            "runAsGroup": 0,
+            "runAsUser": 0,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/tmp",
+              "name": "scratch"
+            }
+          ]
+        }
+      ],
+      "volumes": [
+        {
+          "emptyDir": {
+            "sizeLimit": "128Mi"
+          },
+          "name": "scratch"
+        }
+      ],
+      "workspaces": [
+        {
+          "mountPath": "/workspace/trees",
+          "name": "trees",
+          "readOnly": true
+        }
+      ]
+    },
+    "fetch": {
+      "params": [
+        {
+          "name": "base",
+          "type": "string"
+        },
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "keyDigest",
+          "type": "string"
+        },
+        {
+          "name": "generation",
+          "type": "string"
+        },
+        {
+          "name": "ciUID",
+          "type": "string"
+        }
+      ],
+      "steps": [
+        {
+          "args": [
+            "fetch"
+          ],
+          "command": [
+            "python3",
+            "-I",
+            "/opt/s5/runner.py"
+          ],
+          "computeResources": {
+            "limits": {
+              "cpu": "2",
+              "memory": "2Gi"
+            },
+            "requests": {
+              "cpu": "250m",
+              "memory": "512Mi"
+            }
+          },
+          "env": [
+            {
+              "name": "GIT_USERNAME",
+              "valueFrom": {
+                "secretKeyRef": {
+                  "key": "username",
+                  "name": "gitea-ci-reader"
+                }
+              }
+            },
+            {
+              "name": "GIT_PASSWORD",
+              "valueFrom": {
+                "secretKeyRef": {
+                  "key": "password",
+                  "name": "gitea-ci-reader"
+                }
+              }
+            },
+            {
+              "name": "S5_BASE",
+              "value": "$(params.base)"
+            },
+            {
+              "name": "S5_REVISION",
+              "value": "$(params.revision)"
+            },
+            {
+              "name": "S5_UI",
+              "value": "$(params.uiRevision)"
+            },
+            {
+              "name": "S5_KEY",
+              "value": "$(params.key)"
+            },
+            {
+              "name": "S5_KEY_DIGEST",
+              "value": "$(params.keyDigest)"
+            },
+            {
+              "name": "S5_GENERATION",
+              "value": "$(params.generation)"
+            },
+            {
+              "name": "S5_CI_UID",
+              "value": "$(params.ciUID)"
+            }
+          ],
+          "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "name": "fetch",
+          "securityContext": {
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            },
+            "readOnlyRootFilesystem": true,
+            "runAsGroup": 1000,
+            "runAsUser": 1000,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/tmp",
+              "name": "scratch"
+            }
+          ]
+        }
+      ],
+      "volumes": [
+        {
+          "emptyDir": {
+            "sizeLimit": "128Mi"
+          },
+          "name": "scratch"
+        }
+      ],
+      "workspaces": [
+        {
+          "mountPath": "/workspace/trees",
+          "name": "trees",
+          "readOnly": false
+        }
+      ]
+    }
+  }
+}

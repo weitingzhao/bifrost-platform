@@ -10,6 +10,7 @@ import (
 var minimumVersion = map[string]int{
 	"discarded": 2, "rehearsed": 2, "retry": 2, "mode": 2,
 	"awaiting_grant": 3,
+	"s5_required":    4, "s5_key": 4, "s5_run": 4, "s5_failed": 4,
 }
 
 func recordVersion(r Record) int {
@@ -21,6 +22,8 @@ func recordVersion(r Record) int {
 		return 2
 	case "1.2":
 		return 3
+	case S5Version:
+		return 4
 	}
 	return 0
 }

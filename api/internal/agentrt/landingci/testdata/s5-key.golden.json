@@ -1,0 +1,32 @@
+{
+  "canonical": "{\"A\":\"2222222222222222222222222222222222222222\",\"M0\":\"3333333333333333333333333333333333333333\",\"R\":\"4444444444444444444444444444444444444444\",\"attempt\":\"attempt-1\",\"base\":\"1111111111111111111111111111111111111111\",\"baselineTree\":\"5555555555555555555555555555555555555555\",\"callersDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"checkerImageDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"env\":\"dev\",\"generation\":1,\"op\":\"op-1\",\"patchEvidenceDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"profileDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"repo\":\"bifrost-platform\",\"resultTree\":\"6666666666666666666666666666666666666666\",\"reviewBindingDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"ruleDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"ruleVersion\":3,\"schema\":2,\"task\":\"task-1\",\"tenant\":\"dev\",\"testsDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"toolchainDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"typesDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uiSHA\":\"7777777777777777777777777777777777777777\"}",
+  "digest": "a063d6646b03777223c75015de4a8ce14f2f0620d8f1c0e481fcc963be6259db",
+  "key": {
+    "A": "2222222222222222222222222222222222222222",
+    "M0": "3333333333333333333333333333333333333333",
+    "R": "4444444444444444444444444444444444444444",
+    "attempt": "attempt-1",
+    "base": "1111111111111111111111111111111111111111",
+    "baselineTree": "5555555555555555555555555555555555555555",
+    "callersDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "checkerImageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "env": "dev",
+    "generation": 1,
+    "op": "op-1",
+    "patchEvidenceDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "profileDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "repo": "bifrost-platform",
+    "resultTree": "6666666666666666666666666666666666666666",
+    "reviewBindingDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ruleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ruleVersion": 3,
+    "schema": 2,
+    "task": "task-1",
+    "tenant": "dev",
+    "testsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "toolchainDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "typesDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "uiSHA": "7777777777777777777777777777777777777777"
+  },
+  "name": "s5-a063d6646b03777223c75015de4a8ce14f2f0620-g1"
+}

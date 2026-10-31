@@ -1,0 +1,983 @@
+{
+ "_source": "Read-only kubectl get from namespace cicd (Tekton v1.6.0) on 2026-10-30: PipelineRun landing-ci-9d1ba242c76d103f8a48a18a-1 (pipeline bifrost-ci-platform), its clone and test-console TaskRuns, the clone Pod and the workspace PVC. Trimmed to the fields the S5 reader compares; pipelineYAML/taskYAML are the infra manifests the stored objects came from, trimmed to the same tasks.",
+ "pipelineRun": {
+  "apiVersion": "tekton.dev/v1",
+  "kind": "PipelineRun",
+  "metadata": {
+   "creationTimestamp": "2026-10-30T21:14:55Z",
+   "name": "landing-ci-9d1ba242c76d103f8a48a18a-1",
+   "namespace": "cicd",
+   "uid": "4ec33ba9-8f52-4096-9321-ffeaacbf6c00"
+  },
+  "spec": {
+   "params": [
+    {
+     "name": "infraRevision",
+     "value": "4a1d1ac364f17bc616c620be656200a24c2bb013"
+    },
+    {
+     "name": "revision",
+     "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+    },
+    {
+     "name": "uiRevision",
+     "value": "c83f40b40e65e52f8592ec6b73c5f6987c116e93"
+    }
+   ],
+   "pipelineRef": {
+    "name": "bifrost-ci-platform"
+   },
+   "taskRunTemplate": {
+    "podTemplate": {
+     "nodeSelector": {
+      "kubernetes.io/arch": "amd64"
+     },
+     "tolerations": [
+      {
+       "effect": "NoSchedule",
+       "key": "node-role.kubernetes.io/control-plane",
+       "operator": "Exists"
+      }
+     ]
+    },
+    "serviceAccountName": "default"
+   },
+   "timeouts": {
+    "pipeline": "1h0m0s"
+   },
+   "workspaces": [
+    {
+     "name": "source",
+     "volumeClaimTemplate": {
+      "metadata": {
+       "creationTimestamp": null
+      },
+      "spec": {
+       "accessModes": [
+        "ReadWriteOnce"
+       ],
+       "resources": {
+        "requests": {
+         "storage": "2Gi"
+        }
+       },
+       "storageClassName": "local-path"
+      },
+      "status": {}
+     }
+    }
+   ]
+  },
+  "status": {
+   "childReferences": [
+    {
+     "apiVersion": "tekton.dev/v1",
+     "kind": "TaskRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-clone",
+     "pipelineTaskName": "clone"
+    },
+    {
+     "apiVersion": "tekton.dev/v1",
+     "kind": "TaskRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-test-console",
+     "pipelineTaskName": "test-console"
+    }
+   ],
+   "completionTime": "2026-10-30T21:27:32Z",
+   "conditions": [
+    {
+     "lastTransitionTime": "2026-10-30T21:27:32Z",
+     "message": "Tasks Completed: 9 (Failed: 0, Cancelled 0), Skipped: 0",
+     "reason": "Succeeded",
+     "status": "True",
+     "type": "Succeeded"
+    }
+   ],
+   "pipelineSpec": {
+    "description": "CI gate for bifrost-platform \u2014 go vet + go test + console type-check, lint, test and build + check-spine + ops-context parity against the infra overlay copies. Triggered by Gitea push webhook or manual Console run. L1 control plane: conservative gate, must not break ops visibility.",
+    "params": [
+     {
+      "default": "main",
+      "description": "The bifrost-platform commit or branch under test \u2014 a push webhook sends a SHA.",
+      "name": "revision",
+      "type": "string"
+     },
+     {
+      "default": "main",
+      "name": "infraRevision",
+      "type": "string"
+     },
+     {
+      "default": "main",
+      "name": "uiRevision",
+      "type": "string"
+     },
+     {
+      "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+      "name": "giteaBase",
+      "type": "string"
+     }
+    ],
+    "results": [
+     {
+      "description": "",
+      "name": "platform-commit",
+      "value": "$(tasks.clone.results.commit)"
+     },
+     {
+      "description": "",
+      "name": "ui-commit",
+      "value": "$(tasks.clone-ui.results.commit)"
+     },
+     {
+      "description": "",
+      "name": "infra-commit",
+      "value": "$(tasks.clone-infra.results.commit)"
+     }
+    ],
+    "tasks": [
+     {
+      "name": "clone",
+      "params": [
+       {
+        "name": "url",
+        "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+       },
+       {
+        "name": "revision",
+        "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+       },
+       {
+        "name": "subdir",
+        "value": "bifrost-platform"
+       }
+      ],
+      "taskRef": {
+       "kind": "Task",
+       "name": "bifrost-git-clone-gitea"
+      },
+      "workspaces": [
+       {
+        "name": "output",
+        "workspace": "source"
+       }
+      ]
+     },
+     {
+      "name": "clone-ui",
+      "params": [
+       {
+        "name": "url",
+        "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-ui.git"
+       },
+       {
+        "name": "revision",
+        "value": "c83f40b40e65e52f8592ec6b73c5f6987c116e93"
+       },
+       {
+        "name": "subdir",
+        "value": "bifrost-ui"
+       }
+      ],
+      "taskRef": {
+       "kind": "Task",
+       "name": "bifrost-git-clone-gitea"
+      },
+      "workspaces": [
+       {
+        "name": "output",
+        "workspace": "source"
+       }
+      ]
+     },
+     {
+      "name": "clone-infra",
+      "params": [
+       {
+        "name": "url",
+        "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-trade-infra.git"
+       },
+       {
+        "name": "revision",
+        "value": "4a1d1ac364f17bc616c620be656200a24c2bb013"
+       },
+       {
+        "name": "subdir",
+        "value": "bifrost-trade-infra"
+       }
+      ],
+      "taskRef": {
+       "kind": "Task",
+       "name": "bifrost-git-clone-gitea"
+      },
+      "workspaces": [
+       {
+        "name": "output",
+        "workspace": "source"
+       }
+      ]
+     },
+     {
+      "name": "clone-legacy",
+      "params": [
+       {
+        "name": "url",
+        "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+       },
+       {
+        "name": "revision",
+        "value": "5a8edd550aaa49474a320eb15ed7c9c33f0e1bc5"
+       },
+       {
+        "name": "subdir",
+        "value": "legacy-5a8edd55"
+       }
+      ],
+      "taskRef": {
+       "kind": "Task",
+       "name": "bifrost-git-clone-gitea"
+      },
+      "workspaces": [
+       {
+        "name": "output",
+        "workspace": "source"
+       }
+      ]
+     },
+     {
+      "name": "test-console",
+      "runAfter": [
+       "clone",
+       "clone-ui"
+      ],
+      "timeout": "8m0s"
+     },
+     {
+      "name": "code-health",
+      "params": [
+       {
+        "name": "repo",
+        "value": "bifrost-platform"
+       }
+      ],
+      "runAfter": [
+       "clone",
+       "clone-infra"
+      ],
+      "taskRef": {
+       "kind": "Task",
+       "name": "bifrost-code-health"
+      },
+      "workspaces": [
+       {
+        "name": "source",
+        "workspace": "source"
+       }
+      ]
+     }
+    ],
+    "workspaces": [
+     {
+      "name": "source"
+     }
+    ]
+   },
+   "startTime": "2026-10-30T21:14:55Z"
+  }
+ },
+ "pipelineYAML": {
+  "description": "CI gate for bifrost-platform \u2014 go vet + go test + console type-check, lint, test and build + check-spine + ops-context parity against the infra overlay copies. Triggered by Gitea push webhook or manual Console run. L1 control plane: conservative gate, must not break ops visibility.",
+  "params": [
+   {
+    "default": "main",
+    "description": "The bifrost-platform commit or branch under test \u2014 a push webhook sends a SHA.",
+    "name": "revision",
+    "type": "string"
+   },
+   {
+    "default": "main",
+    "name": "infraRevision",
+    "type": "string"
+   },
+   {
+    "default": "main",
+    "name": "uiRevision",
+    "type": "string"
+   },
+   {
+    "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+    "name": "giteaBase",
+    "type": "string"
+   }
+  ],
+  "results": [
+   {
+    "name": "platform-commit",
+    "value": "$(tasks.clone.results.commit)"
+   },
+   {
+    "name": "ui-commit",
+    "value": "$(tasks.clone-ui.results.commit)"
+   },
+   {
+    "name": "infra-commit",
+    "value": "$(tasks.clone-infra.results.commit)"
+   }
+  ],
+  "tasks": [
+   {
+    "name": "clone",
+    "params": [
+     {
+      "name": "url",
+      "value": "$(params.giteaBase)/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "$(params.revision)"
+     },
+     {
+      "name": "subdir",
+      "value": "bifrost-platform"
+     }
+    ],
+    "taskRef": {
+     "name": "bifrost-git-clone-gitea"
+    },
+    "workspaces": [
+     {
+      "name": "output",
+      "workspace": "source"
+     }
+    ]
+   },
+   {
+    "name": "clone-ui",
+    "params": [
+     {
+      "name": "url",
+      "value": "$(params.giteaBase)/bifrost-ui.git"
+     },
+     {
+      "name": "revision",
+      "value": "$(params.uiRevision)"
+     },
+     {
+      "name": "subdir",
+      "value": "bifrost-ui"
+     }
+    ],
+    "taskRef": {
+     "name": "bifrost-git-clone-gitea"
+    },
+    "workspaces": [
+     {
+      "name": "output",
+      "workspace": "source"
+     }
+    ]
+   },
+   {
+    "name": "clone-infra",
+    "params": [
+     {
+      "name": "url",
+      "value": "$(params.giteaBase)/bifrost-trade-infra.git"
+     },
+     {
+      "name": "revision",
+      "value": "$(params.infraRevision)"
+     },
+     {
+      "name": "subdir",
+      "value": "bifrost-trade-infra"
+     }
+    ],
+    "taskRef": {
+     "name": "bifrost-git-clone-gitea"
+    },
+    "workspaces": [
+     {
+      "name": "output",
+      "workspace": "source"
+     }
+    ]
+   },
+   {
+    "name": "clone-legacy",
+    "params": [
+     {
+      "name": "url",
+      "value": "$(params.giteaBase)/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "5a8edd550aaa49474a320eb15ed7c9c33f0e1bc5"
+     },
+     {
+      "name": "subdir",
+      "value": "legacy-5a8edd55"
+     }
+    ],
+    "taskRef": {
+     "name": "bifrost-git-clone-gitea"
+    },
+    "workspaces": [
+     {
+      "name": "output",
+      "workspace": "source"
+     }
+    ]
+   },
+   {
+    "name": "test-console",
+    "runAfter": [
+     "clone",
+     "clone-ui"
+    ],
+    "timeout": "8m0s"
+   },
+   {
+    "name": "code-health",
+    "params": [
+     {
+      "name": "repo",
+      "value": "bifrost-platform"
+     }
+    ],
+    "runAfter": [
+     "clone",
+     "clone-infra"
+    ],
+    "taskRef": {
+     "name": "bifrost-code-health"
+    },
+    "workspaces": [
+     {
+      "name": "source",
+      "workspace": "source"
+     }
+    ]
+   }
+  ],
+  "workspaces": [
+   {
+    "name": "source"
+   }
+  ]
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "creationTimestamp": "2026-10-30T21:14:55Z",
+   "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-clone-pod",
+   "namespace": "cicd",
+   "ownerReferences": [
+    {
+     "apiVersion": "tekton.dev/v1",
+     "blockOwnerDeletion": true,
+     "controller": true,
+     "kind": "TaskRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-clone",
+     "uid": "d45716c6-5181-41cc-82da-eadf758ba181"
+    }
+   ],
+   "uid": "0c61a04b-8d50-4267-be0a-8ba3b8b78d5e"
+  },
+  "spec": {
+   "containers": [
+    {
+     "env": [
+      {
+       "name": "GIT_USERNAME",
+       "valueFrom": {
+        "secretKeyRef": {
+         "key": "username",
+         "name": "gitea-ci-reader"
+        }
+       }
+      },
+      {
+       "name": "GIT_PASSWORD",
+       "valueFrom": {
+        "secretKeyRef": {
+         "key": "password",
+         "name": "gitea-ci-reader"
+        }
+       }
+      },
+      {
+       "name": "CLONE_URL",
+       "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+      },
+      {
+       "name": "REVISION",
+       "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+      },
+      {
+       "name": "SUBDIR",
+       "value": "bifrost-platform"
+      }
+     ],
+     "image": "alpine/git:2.45.2",
+     "name": "step-clone",
+     "volumeMounts": [
+      {
+       "mountPath": "/workspace/output",
+       "name": "ws-79a94"
+      },
+      {
+       "mountPath": "/tekton/scripts",
+       "name": "tekton-internal-scripts",
+       "readOnly": true
+      },
+      {
+       "mountPath": "/tekton/downward",
+       "name": "tekton-internal-downward",
+       "readOnly": true
+      },
+      {
+       "mountPath": "/tekton/creds",
+       "name": "tekton-creds-init-home-0"
+      },
+      {
+       "mountPath": "/tekton/run/0",
+       "name": "tekton-internal-run-0"
+      },
+      {
+       "mountPath": "/tekton/bin",
+       "name": "tekton-internal-bin",
+       "readOnly": true
+      },
+      {
+       "mountPath": "/workspace",
+       "name": "tekton-internal-workspace"
+      },
+      {
+       "mountPath": "/tekton/home",
+       "name": "tekton-internal-home"
+      },
+      {
+       "mountPath": "/tekton/results",
+       "name": "tekton-internal-results"
+      },
+      {
+       "mountPath": "/tekton/steps",
+       "name": "tekton-internal-steps",
+       "readOnly": true
+      },
+      {
+       "mountPath": "/tekton/artifacts",
+       "name": "tekton-internal-artifacts"
+      },
+      {
+       "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+       "name": "kube-api-access-m5x9k",
+       "readOnly": true
+      }
+     ]
+    }
+   ],
+   "serviceAccountName": "default",
+   "volumes": [
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-workspace"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-home"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-results"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-steps"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-artifacts"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-scripts"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-bin"
+    },
+    {
+     "downwardAPI": {
+      "defaultMode": 420,
+      "items": [
+       {
+        "fieldRef": {
+         "apiVersion": "v1",
+         "fieldPath": "metadata.annotations['tekton.dev/ready']"
+        },
+        "path": "ready"
+       }
+      ]
+     },
+     "name": "tekton-internal-downward"
+    },
+    {
+     "emptyDir": {
+      "medium": "Memory"
+     },
+     "name": "tekton-creds-init-home-0"
+    },
+    {
+     "emptyDir": {},
+     "name": "tekton-internal-run-0"
+    },
+    {
+     "name": "ws-79a94",
+     "persistentVolumeClaim": {
+      "claimName": "pvc-2fb23d66b6"
+     }
+    },
+    {
+     "name": "kube-api-access-m5x9k",
+     "projected": {
+      "defaultMode": 420,
+      "sources": [
+       {
+        "serviceAccountToken": {
+         "expirationSeconds": 3607,
+         "path": "token"
+        }
+       },
+       {
+        "configMap": {
+         "items": [
+          {
+           "key": "ca.crt",
+           "path": "ca.crt"
+          }
+         ],
+         "name": "kube-root-ca.crt"
+        }
+       },
+       {
+        "downwardAPI": {
+         "items": [
+          {
+           "fieldRef": {
+            "apiVersion": "v1",
+            "fieldPath": "metadata.namespace"
+           },
+           "path": "namespace"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "pvc": {
+  "apiVersion": "v1",
+  "kind": "PersistentVolumeClaim",
+  "metadata": {
+   "creationTimestamp": "2026-10-30T21:14:55Z",
+   "name": "pvc-2fb23d66b6",
+   "namespace": "cicd",
+   "ownerReferences": [
+    {
+     "apiVersion": "tekton.dev/v1",
+     "blockOwnerDeletion": true,
+     "controller": true,
+     "kind": "PipelineRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1",
+     "uid": "4ec33ba9-8f52-4096-9321-ffeaacbf6c00"
+    }
+   ],
+   "uid": "cb6ac37b-0ce8-4a7b-8452-ba6dec6f2081"
+  }
+ },
+ "taskRun": {
+  "apiVersion": "tekton.dev/v1",
+  "kind": "TaskRun",
+  "metadata": {
+   "creationTimestamp": "2026-10-30T21:14:55Z",
+   "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-clone",
+   "namespace": "cicd",
+   "ownerReferences": [
+    {
+     "apiVersion": "tekton.dev/v1",
+     "blockOwnerDeletion": true,
+     "controller": true,
+     "kind": "PipelineRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1",
+     "uid": "4ec33ba9-8f52-4096-9321-ffeaacbf6c00"
+    }
+   ],
+   "uid": "d45716c6-5181-41cc-82da-eadf758ba181"
+  },
+  "spec": {
+   "params": [
+    {
+     "name": "url",
+     "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+    },
+    {
+     "name": "revision",
+     "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+    },
+    {
+     "name": "subdir",
+     "value": "bifrost-platform"
+    }
+   ],
+   "podTemplate": {
+    "nodeSelector": {
+     "kubernetes.io/arch": "amd64"
+    },
+    "tolerations": [
+     {
+      "effect": "NoSchedule",
+      "key": "node-role.kubernetes.io/control-plane",
+      "operator": "Exists"
+     }
+    ]
+   },
+   "serviceAccountName": "default",
+   "taskRef": {
+    "kind": "Task",
+    "name": "bifrost-git-clone-gitea"
+   },
+   "timeout": "1h0m0s",
+   "workspaces": [
+    {
+     "name": "output",
+     "persistentVolumeClaim": {
+      "claimName": "pvc-2fb23d66b6"
+     }
+    }
+   ]
+  },
+  "status": {
+   "completionTime": "2026-10-30T21:15:06Z",
+   "conditions": [
+    {
+     "lastTransitionTime": "2026-10-30T21:15:06Z",
+     "message": "All Steps have completed executing",
+     "reason": "Succeeded",
+     "status": "True",
+     "type": "Succeeded"
+    }
+   ],
+   "podName": "landing-ci-9d1ba242c76d103f8a48a18a-1-clone-pod",
+   "results": [
+    {
+     "name": "commit",
+     "type": "string",
+     "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+    }
+   ],
+   "startTime": "2026-10-30T21:14:55Z",
+   "steps": [
+    {
+     "container": "step-clone",
+     "imageID": "docker.io/alpine/git@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592",
+     "name": "clone",
+     "provenance": {},
+     "terminated": {
+      "exitCode": 0,
+      "finishedAt": "2026-10-30T21:15:05Z",
+      "reason": "Completed",
+      "startedAt": "2026-10-30T21:15:02Z"
+     },
+     "terminationReason": "Completed"
+    }
+   ],
+   "taskSpec": {
+    "description": "Shallow clone from Gitea HTTP with basic-auth secret gitea-ci-reader",
+    "params": [
+     {
+      "description": "Gitea clone URL (http://gitea.cicd.svc.cluster.local:3000/org/repo.git)",
+      "name": "url",
+      "type": "string"
+     },
+     {
+      "default": "main",
+      "name": "revision",
+      "type": "string"
+     },
+     {
+      "default": "",
+      "description": "Optional subdirectory under workspace (e.g. bifrost-trade-frontend)",
+      "name": "subdir",
+      "type": "string"
+     }
+    ],
+    "results": [
+     {
+      "description": "Full SHA of the commit checked out (git rev-parse HEAD). The deliver pipelines pass core's to the image builds as BIFROST_CORE_SHA (TD-37).",
+      "name": "commit",
+      "type": "string"
+     }
+    ],
+    "steps": [
+     {
+      "computeResources": {},
+      "env": [
+       {
+        "name": "GIT_USERNAME",
+        "valueFrom": {
+         "secretKeyRef": {
+          "key": "username",
+          "name": "gitea-ci-reader"
+         }
+        }
+       },
+       {
+        "name": "GIT_PASSWORD",
+        "valueFrom": {
+         "secretKeyRef": {
+          "key": "password",
+          "name": "gitea-ci-reader"
+         }
+        }
+       },
+       {
+        "name": "CLONE_URL",
+        "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+       },
+       {
+        "name": "REVISION",
+        "value": "eb4b5643cb06557af6df9dd3ee92a39ac62af9c1"
+       },
+       {
+        "name": "SUBDIR",
+        "value": "bifrost-platform"
+       }
+      ],
+      "image": "alpine/git:2.45.2",
+      "name": "clone",
+      "script": "#!/usr/bin/env sh\nset -eu\nuser=\"${GIT_USERNAME:?}\"\npassword=\"${GIT_PASSWORD:?}\"\nunset GIT_USERNAME GIT_PASSWORD\nauth=\"$(printf '%s:%s' \"$user\" \"$password\" | base64 | tr -d '\\n')\"\nunset user password\ngit_read() {\n  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \\\n  GIT_CONFIG_COUNT=3 \\\n  GIT_CONFIG_KEY_0=http.http://gitea.cicd.svc.cluster.local:3000/.extraHeader \\\n  GIT_CONFIG_VALUE_0=\"Authorization: Basic $auth\" \\\n  GIT_CONFIG_KEY_1=http.followRedirects GIT_CONFIG_VALUE_1=false \\\n  GIT_CONFIG_KEY_2=credential.helper GIT_CONFIG_VALUE_2= git \"$@\"\n}\nurl=\"${CLONE_URL}\"\ncase \"$url\" in *[!A-Za-z0-9._:/-]*) echo \"invalid Gitea URL\" >&2; exit 1 ;; esac\nrev=\"${REVISION}\"\nsubdir=\"${SUBDIR}\"\nprintf '%s' \"$url\" | grep -Eq '^http://gitea\\.cicd\\.svc\\.cluster\\.local:3000/[A-Za-z0-9_-]+/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.git$' || { echo \"invalid Gitea URL\" >&2; exit 1; }\ncase \"$subdir\" in\n  *[!A-Za-z0-9._-]*|.*|-*) echo \"invalid subdir\" >&2; exit 1 ;;\nesac\ncase \"$rev\" in\n  ''|*[!A-Za-z0-9._/-]*|[!A-Za-z0-9]*) echo \"invalid revision\" >&2; exit 1 ;;\nesac\nif printf '%s' \"$rev\" | grep -Eq '^[0-9a-f]+$'; then\n  [ \"${#rev}\" -eq 40 ] || { echo \"SHA must have 40 hex characters\" >&2; exit 1; }\nelse\n  git check-ref-format \"refs/heads/$rev\" >/dev/null || { echo \"invalid ref\" >&2; exit 1; }\nfi\nout=\"/workspace/output\"\ntarget=\"${out}${subdir:+/$subdir}\"\nmkdir -p \"$target\"\nrm -rf \"${target}\"/* \"${target}\"/.[!.]* \"${target}\"/..?*\necho \"Cloning ${url} @ ${rev} into ${target} ...\"\n# A push webhook hands us a commit SHA, and `git_read clone --branch` cannot\n# take one \u2014 it resolves branch and tag names only, so every\n# webhook-triggered run died here with \"Remote branch <sha> not found\".\n# Fetch the object instead; fall back to a full clone and checkout when\n# the server will not serve a bare SHA.\nif echo \"${rev}\" | grep -qE '^[0-9a-f]{40}$'; then\n  git init -q \"${target}\"\n  cd \"${target}\"\n  git remote add origin \"${url}\"\n  if git_read fetch -q --depth=1 origin \"${rev}\" 2>/dev/null; then\n    git checkout -q --detach FETCH_HEAD\n  else\n    echo \"server refused a bare-SHA fetch \u2014 cloning in full and checking out ${rev}\"\n    cd /\n    rm -rf \"${target}\"\n    git_read clone -q \"${url}\" \"${target}\"\n    cd \"${target}\"\n    git checkout -q --detach \"${rev}\"\n  fi\nelse\n  git_read clone --depth=1 --branch \"${rev}\" \"${url}\" \"${target}\"\n  cd \"${target}\"\nfi\nunset auth\nhead_sha=\"$(git rev-parse HEAD)\"\necho \"=== HEAD ${head_sha} ===\"\nprintf '%s' \"${head_sha}\" > \"/tekton/results/commit\"\ngit log -1 --oneline\nls -la\n"
+     }
+    ],
+    "workspaces": [
+     {
+      "name": "output"
+     }
+    ]
+   }
+  }
+ },
+ "taskYAML": {
+  "description": "Shallow clone from Gitea HTTP with basic-auth secret gitea-ci-reader",
+  "params": [
+   {
+    "description": "Gitea clone URL (http://gitea.cicd.svc.cluster.local:3000/org/repo.git)",
+    "name": "url",
+    "type": "string"
+   },
+   {
+    "default": "main",
+    "name": "revision",
+    "type": "string"
+   },
+   {
+    "default": "",
+    "description": "Optional subdirectory under workspace (e.g. bifrost-trade-frontend)",
+    "name": "subdir",
+    "type": "string"
+   }
+  ],
+  "results": [
+   {
+    "description": "Full SHA of the commit checked out (git rev-parse HEAD). The deliver pipelines pass core's to the image builds as BIFROST_CORE_SHA (TD-37).",
+    "name": "commit"
+   }
+  ],
+  "steps": [
+   {
+    "env": [
+     {
+      "name": "GIT_USERNAME",
+      "valueFrom": {
+       "secretKeyRef": {
+        "key": "username",
+        "name": "gitea-ci-reader"
+       }
+      }
+     },
+     {
+      "name": "GIT_PASSWORD",
+      "valueFrom": {
+       "secretKeyRef": {
+        "key": "password",
+        "name": "gitea-ci-reader"
+       }
+      }
+     },
+     {
+      "name": "CLONE_URL",
+      "value": "$(params.url)"
+     },
+     {
+      "name": "REVISION",
+      "value": "$(params.revision)"
+     },
+     {
+      "name": "SUBDIR",
+      "value": "$(params.subdir)"
+     }
+    ],
+    "image": "alpine/git:2.45.2",
+    "name": "clone",
+    "script": "#!/usr/bin/env sh\nset -eu\nuser=\"${GIT_USERNAME:?}\"\npassword=\"${GIT_PASSWORD:?}\"\nunset GIT_USERNAME GIT_PASSWORD\nauth=\"$(printf '%s:%s' \"$user\" \"$password\" | base64 | tr -d '\\n')\"\nunset user password\ngit_read() {\n  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \\\n  GIT_CONFIG_COUNT=3 \\\n  GIT_CONFIG_KEY_0=http.http://gitea.cicd.svc.cluster.local:3000/.extraHeader \\\n  GIT_CONFIG_VALUE_0=\"Authorization: Basic $auth\" \\\n  GIT_CONFIG_KEY_1=http.followRedirects GIT_CONFIG_VALUE_1=false \\\n  GIT_CONFIG_KEY_2=credential.helper GIT_CONFIG_VALUE_2= git \"$@\"\n}\nurl=\"${CLONE_URL}\"\ncase \"$url\" in *[!A-Za-z0-9._:/-]*) echo \"invalid Gitea URL\" >&2; exit 1 ;; esac\nrev=\"${REVISION}\"\nsubdir=\"${SUBDIR}\"\nprintf '%s' \"$url\" | grep -Eq '^http://gitea\\.cicd\\.svc\\.cluster\\.local:3000/[A-Za-z0-9_-]+/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.git$' || { echo \"invalid Gitea URL\" >&2; exit 1; }\ncase \"$subdir\" in\n  *[!A-Za-z0-9._-]*|.*|-*) echo \"invalid subdir\" >&2; exit 1 ;;\nesac\ncase \"$rev\" in\n  ''|*[!A-Za-z0-9._/-]*|[!A-Za-z0-9]*) echo \"invalid revision\" >&2; exit 1 ;;\nesac\nif printf '%s' \"$rev\" | grep -Eq '^[0-9a-f]+$'; then\n  [ \"${#rev}\" -eq 40 ] || { echo \"SHA must have 40 hex characters\" >&2; exit 1; }\nelse\n  git check-ref-format \"refs/heads/$rev\" >/dev/null || { echo \"invalid ref\" >&2; exit 1; }\nfi\nout=\"$(workspaces.output.path)\"\ntarget=\"${out}${subdir:+/$subdir}\"\nmkdir -p \"$target\"\nrm -rf \"${target}\"/* \"${target}\"/.[!.]* \"${target}\"/..?*\necho \"Cloning ${url} @ ${rev} into ${target} ...\"\n# A push webhook hands us a commit SHA, and `git_read clone --branch` cannot\n# take one \u2014 it resolves branch and tag names only, so every\n# webhook-triggered run died here with \"Remote branch <sha> not found\".\n# Fetch the object instead; fall back to a full clone and checkout when\n# the server will not serve a bare SHA.\nif echo \"${rev}\" | grep -qE '^[0-9a-f]{40}$'; then\n  git init -q \"${target}\"\n  cd \"${target}\"\n  git remote add origin \"${url}\"\n  if git_read fetch -q --depth=1 origin \"${rev}\" 2>/dev/null; then\n    git checkout -q --detach FETCH_HEAD\n  else\n    echo \"server refused a bare-SHA fetch \u2014 cloning in full and checking out ${rev}\"\n    cd /\n    rm -rf \"${target}\"\n    git_read clone -q \"${url}\" \"${target}\"\n    cd \"${target}\"\n    git checkout -q --detach \"${rev}\"\n  fi\nelse\n  git_read clone --depth=1 --branch \"${rev}\" \"${url}\" \"${target}\"\n  cd \"${target}\"\nfi\nunset auth\nhead_sha=\"$(git rev-parse HEAD)\"\necho \"=== HEAD ${head_sha} ===\"\nprintf '%s' \"${head_sha}\" > \"$(results.commit.path)\"\ngit log -1 --oneline\nls -la\n"
+   }
+  ],
+  "workspaces": [
+   {
+    "name": "output"
+   }
+  ]
+ },
+ "timedTaskRun": {
+  "apiVersion": "tekton.dev/v1",
+  "kind": "TaskRun",
+  "metadata": {
+   "creationTimestamp": "2026-10-30T21:15:06Z",
+   "name": "landing-ci-9d1ba242c76d103f8a48a18a-1-test-console",
+   "namespace": "cicd",
+   "ownerReferences": [
+    {
+     "apiVersion": "tekton.dev/v1",
+     "blockOwnerDeletion": true,
+     "controller": true,
+     "kind": "PipelineRun",
+     "name": "landing-ci-9d1ba242c76d103f8a48a18a-1",
+     "uid": "4ec33ba9-8f52-4096-9321-ffeaacbf6c00"
+    }
+   ],
+   "uid": "d9caf696-d30a-4b68-91f9-490bb49ed986"
+  },
+  "spec": {
+   "timeout": "8m0s"
+  },
+  "status": {
+   "completionTime": "2026-10-30T21:19:16Z",
+   "conditions": [
+    {
+     "lastTransitionTime": "2026-10-30T21:19:16Z",
+     "message": "All Steps have completed executing",
+     "reason": "Succeeded",
+     "status": "True",
+     "type": "Succeeded"
+    }
+   ],
+   "podName": "landing-ci-9d1ba242c76d103f8a48a18a-1-test-console-pod",
+   "startTime": "2026-10-30T21:15:06Z"
+  }
+ }
+}

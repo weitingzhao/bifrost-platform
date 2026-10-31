@@ -47,7 +47,7 @@ func TestC4T45ExplicitVersionSetAndMinimums(t *testing.T) {
 	if s.LiveAt.IsZero() || s.Operations["land:1"].Phase != "discarded" {
 		t.Fatal(s)
 	}
-	for _, v := range []any{1, "1.1", "1.2", "1.3", "1"} {
+	for _, v := range []any{1, "1.1", "1.2", "1.4", "1"} {
 		r := waitRecord()
 		r["v"] = v
 		_, err := Parse(r)

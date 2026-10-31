@@ -38,6 +38,7 @@ var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_fail
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
 var fields = map[string]string{
+	"s5_required": "", "s5_key": "key key_digest", "s5_run": "key_digest uid", "s5_failed": "key_digest why",
 	"enabled": "repo rule_version", "stg_enabled": "repo rule_version", "mode": "repo", "claimed": "task attempt A rule_version",
 	"prepared": "R M0 committer_date dry_run", "branch_intent": "ref R", "branch_pushed": "ref R",
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
@@ -85,6 +86,11 @@ func Parse(v any) (Record, error) {
 	if version >= 3 && r.String("kind") == "ci_seen" && m["results"] != nil {
 		allowed = append(allowed, "uid", "results")
 	}
+	// S5 §5.1: an explicit, bounded infrastructure retry opens the next
+	// generation with unchanged material (applyS5 checks the bound).
+	if version >= 4 && r.String("kind") == "s5_key" && m["retry"] != nil {
+		allowed = append(allowed, "retry")
+	}
 	if len(m) != len(allowed) {
 		return nil, fmt.Errorf("landing fields do not match %s", r.String("kind"))
 	}
@@ -97,7 +103,11 @@ func Parse(v any) (Record, error) {
 		switch k {
 		case "v":
 			n, ok := v.(json.Number)
-			valid = (ok && n.String() == "1") || slices.Contains([]string{"1.1", "1.2"}, r.String("v"))
+			// v1.3 is the S5 extension only: its own kinds and the
+			// operation's end with an S5 code. Every other kind stays at
+			// v1–v1.2, so a reader without S5 still folds a stream that has
+			// never used S5 (C1).
+			valid = (ok && n.String() == "1") || slices.Contains([]string{"1.1", "1.2"}, r.String("v")) || r.String("v") == S5Version && s5Kind(r)
 		case "rule_version", "try", "generation":
 			n, ok := v.(json.Number)
 			i, e := n.Int64()
@@ -114,6 +124,10 @@ func Parse(v any) (Record, error) {
 			valid = ok && e == nil && i >= 0
 		case "soft":
 			valid = validSoft(v)
+		case "key":
+			valid = parseS5Record(r) == nil
+		case "key_digest":
+			valid = s5Digest(r.String(k))
 		case "material":
 			valid = digest.MatchString(r.String(k))
 		case "dry_run":
@@ -143,7 +157,7 @@ func Parse(v any) (Record, error) {
 			valid = sha.MatchString(r.String(k))
 		case "uid":
 			_, valid = v.(string)
-			valid = valid && len(r.String(k)) <= 200 && (r.String("status") != "Succeeded" || r.String(k) != "")
+			valid = valid && len(r.String(k)) <= 200 && ((r.String("status") != "Succeeded" && r.String("kind") != "s5_run") || r.String(k) != "")
 		case "results":
 			valid = validCIResults(v)
 		case "digests":
@@ -155,8 +169,10 @@ func Parse(v any) (Record, error) {
 			}
 		case "reason":
 			valid = len(r.String(k)) > 0 && len(r.String(k)) <= 1000
+		case "retry":
+			valid = r.String(k) == "infra"
 		case "why":
-			valid = slices.Contains(reasons, r.String(k)) || (r.String(k) == "approval_expired" && version >= 3)
+			valid = (version >= 4 && (r.String("kind") == "s5_failed" || r.String("kind") == "failed") && S5Code(r.String(k))) || slices.Contains(reasons, r.String(k)) || (r.String(k) == "approval_expired" && version >= 3)
 			if r.String("kind") == "discarded" {
 				valid = slices.Contains([]string{"main_changed", "branch_collision"}, r.String(k))
 			}
@@ -201,6 +217,7 @@ type Entry struct {
 	Record Record
 }
 type Operation struct {
+	S5 S5State
 	// Live: born after the repository's live mode (State.LiveAt).
 	Live                                                 bool
 	Phase, Resume, Outcome, Task, Attempt, A, R, M0, Ref string
@@ -335,6 +352,9 @@ func (s *State) Apply(e Entry) error {
 		s.Reservations[r.String("root")] = op
 		return nil
 	}
+	if strings.HasPrefix(k, "s5_") {
+		return s.applyS5(Entry{At: e.At, Record: r})
+	}
 	old := s.Operations[op]
 	n := old
 	n.LastAt = e.At
@@ -383,6 +403,9 @@ func (s *State) Apply(e Entry) error {
 			return bad()
 		}
 	case "branch_intent", "branch_pushed":
+		if old.S5.Required && (old.S5.KeyDigest == "" || old.S5.Failure != "") {
+			return bad()
+		}
 		want := "prepared"
 		if k == "branch_pushed" {
 			want = "branch_intent"
@@ -418,6 +441,12 @@ func (s *State) Apply(e Entry) error {
 			n.CI = nil
 		}
 		if k == "ci_seen" {
+			if old.S5.Required && old.Phase != "awaiting_grant" {
+				name, err := old.S5.Key.RunName()
+				if err != nil || old.S5.UID == "" || old.S5.Failure != "" || r.String("run") != name {
+					return bad()
+				}
+			}
 			if r.String("R") != old.R || !r.Time("created_at").After(old.PreparedAt) || r.Time("created_at").After(e.At) {
 				return bad()
 			}
@@ -448,10 +477,13 @@ func (s *State) Apply(e Entry) error {
 		}
 		n.Files, n.Lines, n.Material = r.Int("files"), r.Int("lines"), r.String("material")
 	case "rehearsed":
-		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || !rerunObserved(op, old, old.CI.String("run"), old.CI.Time("created_at")) {
+		if old.Phase != "branch_pushed" || !old.DryRun || r.String("R") != old.R || old.CI.String("status") != "Succeeded" || (!old.S5.Required && !rerunObserved(op, old, old.CI.String("run"), old.CI.Time("created_at"))) {
 			return bad()
 		}
 	case "main_intent":
+		if old.S5.Required && old.Phase != "awaiting_grant" && (old.S5.KeyDigest == "" || old.S5.UID == "" || old.S5.Failure != "") {
+			return bad()
+		}
 		if (old.Phase != "branch_pushed" && old.Phase != "awaiting_grant") || old.DryRun || old.CI.String("status") != "Succeeded" || r.String("R") != old.R || r.String("M0") != old.M0 {
 			return bad()
 		}

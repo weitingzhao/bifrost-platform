@@ -174,6 +174,8 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return err
 		}
 		g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+		g.S5Patch = f.S5Patch
+		bindS5ReviewedPatch(&g)
 		// The root's six hours (and eight operations) as of final, under the
 		// stream lock (review 662 B-02): once main_intent is written only the
 		// reconciler ends it, so a slow read must not carry it past its
@@ -186,7 +188,50 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			decision = landing.Decision{Reason: why}
 			return nil
 		}
-		if decision = landing.EligibleToClaim(g, final); !decision.Allowed {
+		s5 := grant == nil && landing.S5AutomaticRoute(g)
+		var s5soft []rules.LandingRefusal
+		if s5 {
+			if obs.Main != o.M0 {
+				decision = landing.Decision{Reason: "S5_BINDING"}
+				return nil
+			}
+			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt())
+			if e != nil {
+				return e
+			}
+			if why != "" {
+				decision = landing.Decision{Reason: why}
+				return nil
+			}
+			// CI reads may cross rule expiry/effectivity. Re-read DB and trusted
+			// deployment material at the clock after CI, still under all locks.
+			final = DecisionAt()
+			if final.UTC().Format("2006-01-02") != day {
+				return ErrLandingDayChanged
+			}
+			latest, _, e := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
+			if e != nil {
+				return e
+			}
+			latest.SingleCommit, latest.Changes, latest.History, latest.DependenciesEffective = g.SingleCommit, g.Changes, g.History, g.DependenciesEffective
+			latest.S5Patch = g.S5Patch
+			bindS5ReviewedPatch(&latest)
+			g = latest
+			if bound := landing.RootBound(budget, o.Task, final, false); bound != "" {
+				decision = landing.Decision{Reason: bound}
+				return nil
+			}
+			why, s5soft = landing.AuthorizeLanding(g, v, final)
+			if why != "" {
+				decision = landing.Decision{Reason: why}
+				return nil
+			}
+			obs.CI = landing.CIRun{Run: ci.Run, UID: ci.UID, R: ci.Key.R, Status: ci.Status, CreatedAt: ci.CreatedAt}
+			decision = landing.PreparationDecision(g, final)
+		} else {
+			decision = landing.EligibleToClaim(g, final)
+		}
+		if !decision.Allowed {
 			return nil
 		}
 		if grant != nil && !g.GrantEnabled {
@@ -262,6 +307,9 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			}
 		}
 		_, soft := landing.PolicyChecks(g, final)
+		if s5 {
+			soft = s5soft
+		}
 		var use map[string]any
 		rule := GrantRule{ID: g.Rule.ID, Version: int64(g.Rule.Version)}
 		if waiting {

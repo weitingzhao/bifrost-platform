@@ -75,8 +75,40 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			return err
 		}
 		g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+		g.S5Patch = f.S5Patch
+		bindS5ReviewedPatch(&g)
+		s5 := landing.S5AutomaticRoute(g)
+		if s5 {
+			if obs.Main != o.M0 || obs.WindowBlocked {
+				return fmt.Errorf("S5_BINDING: main/window")
+			}
+			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt())
+			if e != nil {
+				return e
+			}
+			if why != "" {
+				return fmt.Errorf("%s", why)
+			}
+			final = DecisionAt()
+			latest, _, e := landingFactsDB(ctx, tx, src, "stg", "dry_run", o.Task, op, final)
+			if e != nil {
+				return e
+			}
+			latest.SingleCommit, latest.Changes, latest.History, latest.DependenciesEffective = g.SingleCommit, g.Changes, g.History, g.DependenciesEffective
+			latest.S5Patch = g.S5Patch
+			bindS5ReviewedPatch(&latest)
+			g = latest
+			why, soft := landing.AuthorizeLanding(g, v, final)
+			if why != "" || len(soft) > 0 {
+				return fmt.Errorf("S5 final gate: %s %v", why, soft)
+			}
+			if why = landing.RootBound(state, o.Task, final, false); why != "" {
+				return fmt.Errorf("%s", why)
+			}
+			obs.Candidate = landing.CIRun{Run: ci.Run, UID: ci.UID, R: ci.Key.R, Status: ci.Status, CreatedAt: ci.CreatedAt}
+		}
 		obs.Facts = g
-		if action := landing.NextDrill(state, op, obs, final); action.Kind != "ready" {
+		if action := landing.NextDrill(state, op, obs, final); !s5 && action.Kind != "ready" {
 			return fmt.Errorf("drill final gate: %s %s", action.Kind, action.Why)
 		}
 		for _, r := range []map[string]any{

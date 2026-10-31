@@ -139,8 +139,11 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 		c.DrillGit = nil
 		return
 	}
-	facts := s.landingRepoFacts(c, controller.MultiRepoGitFacts(c.DrillGit))
+	facts := s.landingRepoFacts(c, wireLandingS5(controller.MultiRepoGitFacts(c.DrillGit), ci))
 	c.Drill = &controller.DrillSources{Facts: facts,
+		// S5 is started only through landingci's strict adapter; the shipped
+		// UNBUILT trust root makes it refuse without creating a run.
+		EnsureS5CI: ci.EnsureLandingS5CI,
 		Main: func(ctx context.Context, repo string) (string, error) {
 			if g := readers[repo]; g != nil {
 				return g.Ref(ctx, "refs/heads/main")
@@ -207,7 +210,11 @@ func (s *Server) landingRepoFacts(c *controller.Controller, src store.LandingSou
 		}
 		return nil
 	}
-	return store.LandingSource{
+	out := store.LandingSource{
+		// S5 material and CI are server-owned (landingci). They are passed
+		// through untouched: nil stays nil and fails closed in the store.
+		S5Policy: src.S5Policy,
+		S5CI:     src.S5CI,
 		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
 			if err := check(ctx, repo); err != nil {
 				return false, nil, err
@@ -221,6 +228,32 @@ func (s *Server) landingRepoFacts(c *controller.Controller, src store.LandingSou
 			return src.History(ctx, repo, task, a, snapshot)
 		},
 	}
+	if read := src.S5Patch; read != nil {
+		out.S5Patch = func(ctx context.Context, repo, task, base, a, m0, r string) (landing.PatchEvidence, error) {
+			if err := check(ctx, repo); err != nil {
+				return landing.PatchEvidence{}, err
+			}
+			return read(ctx, repo, task, base, a, m0, r)
+		}
+	}
+	return out
+}
+
+// wireLandingS5 attaches the S5 trusted readers (S5 design §3.1, §5.1, §6.2):
+// policy from the deployment's embedded trust root, CI from the strict
+// landingci reader. Neither reads R, a rule extension or a request.
+func wireLandingS5(src store.LandingSource, ci *landingci.Client) store.LandingSource {
+	src.S5Policy = landingci.S5Policy
+	src.S5CI = ci.LandingS5CI
+	return src
+}
+
+// landingS5Deployable is the signing-order check (store.S5SigningReady):
+// the same embedded trust root the S5 gates read, so a rule that enrolls
+// S5 paths is never signed while those gates could only refuse.
+func landingS5Deployable(ctx context.Context) error {
+	_, err := landingci.S5Policy(ctx)
+	return err
 }
 
 // mainEvidenceReader reads main for the reconciler with the environment's

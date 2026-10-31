@@ -26,7 +26,7 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 		}
 		switch stage {
 		case "claim":
-			d = landing.EligibleToClaim(f, now)
+			d = landing.PreparationDecision(f, now)
 		case "push":
 			d = landing.EligibleToPush(f, now)
 		default:
@@ -40,6 +40,7 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 // DrillSources is intentionally unable to push main or start a deployment.
 // EnsureCI must use name as its idempotency key, looking it up before create.
 type DrillSources struct {
+	EnsureS5CI    func(context.Context, landing.S5CIKey) (string, error)
 	Facts         store.LandingSource
 	Main          func(context.Context, string) (string, error)
 	CI            func(context.Context, string, string, time.Time) (landing.CIRun, error)
@@ -124,13 +125,20 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		if n >= 8 {
 			return landing.DrillAction{Kind: "failed", Why: "bound"}, appendRecord("failed", map[string]any{"why": "bound"})
 		}
-		return landing.DrillAction{Kind: "replay"}, appendRecord("discarded", map[string]any{"why": "main_changed"})
+		why := ""
+		if o.S5.Required {
+			why = "S5_BINDING"
+		}
+		return landing.DrillAction{Kind: "replay", Why: why}, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	}
 	f, _, err := c.LandingDecision(ctx, src.Facts, o.Task, op, "push", now)
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
-	if repo == "bifrost-trade-infra" && o.Kicked && landing.EligibleToClaim(f, store.DecisionAt()).Allowed {
+	if o.S5.Required || landing.S5AutomaticRoute(f) {
+		return c.landingS5CI(ctx, src, op)
+	}
+	if repo == "bifrost-trade-infra" && o.Kicked && landing.PreparationDecision(f, store.DecisionAt()).Allowed {
 		if src.EnsureInfraCI == nil {
 			return landing.DrillAction{Kind: "wait"}, fmt.Errorf("infra CI creator unavailable")
 		}
@@ -308,6 +316,14 @@ func (c *Controller) finishLandingDrill(ctx context.Context, src DrillSources, o
 }
 
 func candidateCI(ctx context.Context, src DrillSources, repo string, o landing.Operation) (landing.CIRun, error) {
+	if o.S5.Required && o.Phase != "awaiting_grant" {
+		if src.Facts.S5CI == nil || !o.S5.Key.Valid() || o.S5.UID == "" {
+			return landing.CIRun{Status: "Missing"}, nil
+		}
+		ci, err := src.Facts.S5CI(ctx, o.S5.Key, o.S5.UID)
+		return s5CIRun(ci), err
+	}
+
 	if repo == "bifrost-trade-infra" {
 		if src.InfraCI == nil {
 			return landing.CIRun{}, fmt.Errorf("infra CI reader unavailable")

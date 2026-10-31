@@ -44,6 +44,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 
 	k := r.String("kind")
+	if strings.HasPrefix(k, "s5_") && (ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform") {
+		return fmt.Errorf("S5 records require the platform controller stream")
+	}
 	if (r["platform_revision"] != nil || r["results"] != nil) && (ev.Stream != "landing:bifrost-trade-infra" || ev.Actor != "controller") {
 		return fmt.Errorf("infra CI preparation and evidence require its controller stream")
 	}
@@ -121,6 +124,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 	if k == "failed" && s.Operations[r.String("op")].Phase == "" && ev.Actor != "controller" {
 		return fmt.Errorf("born-terminal landing failure requires controller")
+	}
+	if k == "failed" && landing.S5Code(r.String("why")) && (ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform") {
+		return fmt.Errorf("failed{S5_*} requires the platform controller stream")
 	}
 	if k == "failed" && r.String("why") == "main_lost" && ev.Actor != "controller" {
 		return fmt.Errorf("failed{main_lost} requires controller (an Owner answer)")

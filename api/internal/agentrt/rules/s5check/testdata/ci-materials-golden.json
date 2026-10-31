@@ -1,0 +1,42 @@
+{
+  "note": "S5 cross-language golden: Go s5check.ToolchainDigest/ComputeMaterials, ts/contracts.cjs contractDigests and infra verify_materials.toolchain_digest must all reproduce these values.",
+  "toolsLock": {
+    "go": {
+      "sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+      "url": "https://go.dev/dl/go1.26.4.linux-amd64.tar.gz",
+      "version": "1.26.4"
+    },
+    "node": {
+      "sha256": "9d942932535988091034dc94cc5f42b6dc8784d6366df3a36c4c9ccb3996f0c2",
+      "url": "https://nodejs.org/download/release/v22.14.0/node-v22.14.0-linux-x64.tar.gz",
+      "version": "22.14.0"
+    },
+    "typescript": {
+      "sha512": "8e5d6f6733c38a72ebf5e52ddc9feded5e8580d130f508ef04f772b33f4a7d00c3e357d0ac2d98e2f290762694a454f86d795bd511e12e9a7cc2d9ba3394e04b",
+      "url": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+      "version": "5.9.3"
+    }
+  },
+  "toolchainDigest": "05bdcf4a2b3596ca40667cb8010e682c5bab2630076275351876f68f8aab54e7",
+  "edgeToolsLock": {
+    "typescript": {
+      "version": "5.9.3",
+      "note": "<>& \u0001 é 😀 \"q\" \\\\"
+    },
+    "z": [
+      3,
+      2,
+      1,
+      {
+        "2": 2,
+        "10": 1
+      }
+    ],
+    "": true
+  },
+  "edgeToolchainDigest": "29397cbaa2ed45b897bc8927c044e90e2363de00f08d73005c46ceb659bbfa25",
+  "profileDigest": "ed65681518a27392c5b6d560e5a708676c8fef268939dd5cdb702cdf29317f0a",
+  "callersDigest": "4582f6fd909330aa562cd86577e383f10d888f6e34a2e52eaf10a32c8f08d02b",
+  "typesDigest": "4ef9965cfc469968b75542a4f6016fa71a2744fd4758254cf2504698b4e5a012",
+  "testsDigest": "c1b13ec63552661a5a490f8f622c655be506d7c85413aa502bba70d46dafe017"
+}

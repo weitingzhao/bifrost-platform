@@ -30,6 +30,17 @@ func DrillGitFacts(g DrillGit, repos ...string) store.LandingSource {
 		return store.LandingSource{}
 	}
 	return store.LandingSource{
+		S5Patch: func(ctx context.Context, repo, task, base, a, m0, r string) (landing.PatchEvidence, error) {
+			if repo != bound {
+				return landing.PatchEvidence{}, fmt.Errorf("unsupported S5 repo")
+			}
+			w, err := g.Open(ctx, a)
+			if err != nil {
+				return landing.PatchEvidence{}, err
+			}
+			defer w.Close()
+			return w.FetchS5Patch(ctx, task, base, a, m0, r)
+		},
 		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
 			if repo != bound {
 				return false, nil, fmt.Errorf("unsupported drill repo")
@@ -133,6 +144,17 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if c.Drill != nil {
 		source = c.Drill.Facts
 	}
+	// Before replay only A exists remotely. Once reconstructed, all rechecks
+	// use the trusted local replay, and its key must commit before branch intent.
+	var localPatch *landing.PatchEvidence
+	if read := source.S5Patch; read != nil {
+		source.S5Patch = func(ctx context.Context, repo, task, base, a, m0, r string) (landing.PatchEvidence, error) {
+			if localPatch != nil && localPatch.A == a && localPatch.Base == base && localPatch.R == r && localPatch.M0 == m0 {
+				return *localPatch, nil
+			}
+			return read(ctx, repo, task, base, a, "", "")
+		}
+	}
 	f, d, e := c.LandingDecision(ctx, source, o.Task, op, "claim", now)
 	if e != nil {
 		return e
@@ -175,7 +197,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		if err != nil {
 			return true, err
 		}
-		return !landing.EligibleToClaim(now, at).Allowed, nil
+		return !landing.PreparationDecision(now, at).Allowed, nil
 	}
 	w, e := g.Open(ctx, o.A)
 	if e != nil {
@@ -206,6 +228,14 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		}
 		return e
 	}
+	if landing.S5AutomaticRoute(f) || o.S5.Required {
+		patch, err := w.S5Patch(ctx, o.Task, f.Base, o.A, m0, r)
+		if err != nil {
+			return err
+		}
+		localPatch = &patch
+		f.S5Patch = patch
+	}
 	if stop, e := recheck(); stop || e != nil {
 		return e
 	}
@@ -232,6 +262,18 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		}
 	} else if r != o.R {
 		return put("failed", map[string]any{"why": "patch_changed"})
+	}
+	if landing.S5AutomaticRoute(f) || o.S5.Required {
+		prepared, d, err := store.PrepareS5Evidence(ctx, c.DB, source, c.Env, op, localPatch)
+		if err != nil {
+			return err
+		}
+		if !d.Allowed {
+			// A deterministic S5 refusal ends the operation here (B2); only
+			// missing evidence or a moving binding waits for the next pass.
+			_, err = c.settleS5(ctx, prepared, op, d.Reason, landing.S5CIResult{}, false)
+			return err
+		}
 	}
 	parts := strings.Split(op, ":")
 	k, e := strconv.Atoi(parts[len(parts)-1])
@@ -269,6 +311,13 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 // opening a workspace. A SHA in another repository never selects its adapter.
 func MultiRepoGitFacts(gits map[string]DrillGit) store.LandingSource {
 	return store.LandingSource{
+		S5Patch: func(ctx context.Context, repo, task, base, a, m0, r string) (landing.PatchEvidence, error) {
+			g := gits[repo]
+			if g == nil || repo != "bifrost-platform" {
+				return landing.PatchEvidence{}, fmt.Errorf("unsupported S5 repo")
+			}
+			return DrillGitFacts(g, repo).S5Patch(ctx, repo, task, base, a, m0, r)
+		},
 		Result: func(ctx context.Context, repo, task, attempt, base, a string) (bool, []rules.LandingChange, error) {
 			g := gits[repo]
 			if g == nil || !landing.RepoSupported(repo) {

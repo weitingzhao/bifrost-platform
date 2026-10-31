@@ -69,8 +69,10 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 		current.SingleCommit, current.Changes, current.History, current.DependenciesEffective =
 			facts.SingleCommit, facts.Changes, facts.History, facts.DependenciesEffective
 		current.DependenciesEffective = current.DependenciesEffective && landingDependenciesAllowed(current, again.deps)
+		current.S5Patch = facts.S5Patch
+		bindS5ReviewedPatch(&current)
 		facts = current
-		decision = landing.EligibleToClaim(facts, again.at)
+		decision = landing.PreparationDecision(facts, again.at)
 		if !decision.Allowed {
 			if why, ends := unclaimedEnd(decision, facts); ends && again.claims == 0 {
 				_, e = failUnclaimedLocked(ctx, tx, "landing:"+facts.Repo, facts.Mission, task, why, refusalEvidence(facts), decision.Detail)
@@ -95,6 +97,9 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 		_, e = Append(ctx, tx, Event{Stream: "landing:" + facts.Repo, Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{
 			"text": "Landing claimed (" + env + ")", "landing": map[string]any{"v": landing.Version, "kind": "claimed", "op": op, "task": task, "attempt": facts.Attempt, "A": facts.A, "rule_version": facts.Rule.Version},
 		}})
+		if e == nil && landing.S5AutomaticRoute(facts) {
+			_, e = Append(ctx, tx, Event{Stream: "landing:" + facts.Repo, Type: "note", Actor: "controller", MissionID: facts.Mission, TaskID: task, Body: map[string]any{"text": "S5 evidence required before authorization", "landing": map[string]any{"v": landing.S5Version, "kind": "s5_required", "op": op}}})
+		}
 		if e != nil {
 			op = ""
 		}
@@ -112,10 +117,11 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 type drillEvidence struct {
 	repo, task, attempt, a, base string
 	deps                         []landingDep
+	review                       landing.ReviewBinding
 }
 
 func evidenceOf(b drillBinding) drillEvidence {
-	return drillEvidence{b.facts.Repo, b.facts.Task, b.facts.Attempt, b.facts.A, b.facts.Base, b.deps}
+	return drillEvidence{b.facts.Repo, b.facts.Task, b.facts.Attempt, b.facts.A, b.facts.Base, b.deps, b.facts.S5Review}
 }
 
 // drillBinding is what one locked read of a drill claim found: either it is

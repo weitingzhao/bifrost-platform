@@ -1,0 +1,17 @@
+{
+  "name": "bifrost-s5check",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Trusted, non-executing S5 TypeScript content checker",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 check.test.cjs ../testdata/sensitivity.test.cjs ../testdata/behavior.test.cjs",
+    "lint": "node --check analyze.cjs && node --check check.cjs && node --check compiler.cjs && node --check contracts.cjs",
+    "build": "node --check check.cjs"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

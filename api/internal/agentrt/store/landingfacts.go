@@ -16,6 +16,10 @@ import (
 // not use MainResults, whose effective-only projection loses that distinction.
 // S2 supplies git/CI adapters; S3 supplies the full STG snapshot diff.
 type LandingSource struct {
+	// S5 readers are server-owned adapters, not request inputs. Nil fails closed.
+	S5Policy       func(context.Context) (landing.S5Policy, error)
+	S5Patch        func(context.Context, string, string, string, string, string, string) (landing.PatchEvidence, error)
+	S5CI           func(context.Context, landing.S5CIKey, string) (landing.S5CIResult, error)
 	Result         func(ctx context.Context, repo, task, attempt, base, commit string) (singleCommit bool, changes []rules.LandingChange, err error)
 	History        func(ctx context.Context, repo, task, commit, snapshot string) (landing.MainHistory, error)
 	DeploymentDiff func(ctx context.Context, repo, snapshot string) ([]rules.LandingChange, error)
@@ -118,6 +122,19 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 	}
 	f.EnabledAt = state.Fence() // the live fence on PROD (CUT §11.8 v3 item 1)
 	f.Operation = state.Operations[op]
+	if rules.S5Active(landingRuleOf(f), f.Repo) || f.Operation.S5.Required {
+		f.S5Review, err = readS5Review(ctx, tx, f)
+		if err != nil {
+			return f, nil, err
+		}
+		if src.S5Policy != nil {
+			// Material unavailable: dependent S5 gates return EVIDENCE_MISSING.
+			// An unrelated CSS/docs lane must not depend on checker availability.
+			if policy, readErr := src.S5Policy(ctx); readErr == nil {
+				f.S5Policy = policy
+			}
+		}
+	}
 	for id, o := range state.Operations {
 		if id != op && o.Task != "" && o.Active() {
 			f.OtherInFlight++
@@ -184,6 +201,13 @@ func landingFactsRead(ctx context.Context, src LandingSource, f *landing.Facts, 
 	f.SingleCommit, f.Changes, err = src.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A)
 	if err != nil {
 		return err
+	}
+	if landing.S5AutomaticRoute(*f) && src.S5Patch != nil {
+		f.S5Patch, err = src.S5Patch(ctx, f.Repo, f.Task, f.Base, f.A, f.Operation.M0, f.Operation.R)
+		if err != nil {
+			return err
+		}
+		bindS5ReviewedPatch(f)
 	}
 	if claim && !f.SingleCommit {
 		return nil
@@ -269,6 +293,15 @@ func RefreshLandingFacts(ctx context.Context, db DB, src LandingSource, environm
 		return landing.Facts{}, err
 	}
 	g.SingleCommit, g.Changes, g.History, g.DependenciesEffective = f.SingleCommit, f.Changes, f.History, f.DependenciesEffective
+	g.S5Patch = f.S5Patch
+	bindS5ReviewedPatch(&g)
 	g.DependenciesEffective = g.DependenciesEffective && landingDependenciesAllowed(g, deps)
 	return g, nil
+}
+
+func landingRuleOf(f landing.Facts) *rules.Landing {
+	if f.Rule != nil {
+		return f.Rule.Landing
+	}
+	return nil
 }

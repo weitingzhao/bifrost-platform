@@ -32,6 +32,9 @@ type MainHistory struct {
 // Facts is a fresh snapshot, shared by all gates. Unknown is deliberately not
 // Never. Versions let the caller bind its audit record to the rows it locked.
 type Facts struct {
+	S5Policy                                                S5Policy
+	S5Review                                                ReviewBinding
+	S5Patch                                                 PatchEvidence
 	Mission, Reviewers                                      string
 	Environment, Mode, Tenant, Repo, Task, Attempt, A, Base string
 	ExecutorPin                                             string
@@ -116,6 +119,10 @@ func ruleOK(f Facts, now time.Time, deploy bool) bool {
 	return reason == "" && len(refusals) == 0
 }
 func EligibleToClaim(f Facts, now time.Time) Decision {
+	return eligibleToClaim(f, now, false)
+}
+
+func eligibleToClaim(f Facts, now time.Time, preparation bool) Decision {
 	if !RepoSupported(f.Repo) {
 		return refuse("repo")
 	}
@@ -155,7 +162,10 @@ func EligibleToClaim(f Facts, now time.Time) Decision {
 	if !f.DependenciesEffective {
 		return refuse("dependencies")
 	}
-	if len(soft) > 0 && !MayAwaitGrant(f, soft) {
+	if preparation {
+		soft = rules.S5Refusals(f.Rule.Landing, f.Repo, f.Changes)
+	}
+	if len(soft) > 0 && (preparation || !MayAwaitGrant(f, soft)) {
 		if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
 			return refuse("floor")
 		}
@@ -170,6 +180,9 @@ func EligibleToPush(f Facts, now time.Time) Decision {
 	if f.History.State == Effective && f.History.Commit != "" && f.History.Commit == f.Operation.R {
 		// Already happened: the caller reconciles even after revocation.
 		return Decision{Reconcile: true, Reason: "already_on_main"}
+	}
+	if ClassifyS5PathsAndRelations(f, f.S5Policy).NeedsS5Evidence {
+		return refuse("S5_EVIDENCE_MISSING")
 	}
 	d := EligibleToClaim(f, now)
 	if !d.Allowed {
