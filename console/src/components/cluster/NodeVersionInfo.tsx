@@ -11,7 +11,7 @@ export function NodeVersionInfo({ version }: { version: string | undefined }) {
         <button
           type="button"
           className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
-          aria-label={`Version ${version}`}
+          aria-label={`K3s version ${version}`}
           onClick={event => event.stopPropagation()}
         >
           <Info className="size-3" aria-hidden />
