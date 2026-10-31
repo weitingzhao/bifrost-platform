@@ -146,11 +146,11 @@ func TestAVetoRuleAssessesTheCardsItLeaves(t *testing.T) {
 		} else {
 			signCardAutoSeconds(t, w.rt, "0", "[blocked, plan_question]")
 		}
-		_, fresh, err := store.AssessmentQuery(ctx, w.rt, s.item(s.cardOf(t, blocked)), true)
+		_, fresh, err := queryRequestedAssessment(t, ctx, w.rt, s.item(s.cardOf(t, blocked)), true)
 		if err != nil || fresh {
 			t.Fatalf("veto %v: the blocked card the rule answers: fresh %v (%v)", veto, fresh, err)
 		}
-		_, fresh, err = store.AssessmentQuery(ctx, w.rt, question, true)
+		_, fresh, err = queryRequestedAssessment(t, ctx, w.rt, question, true)
 		if err != nil || fresh != veto {
 			t.Fatalf("veto %v: the planner's question that recommends nothing: fresh %v (%v)", veto, fresh, err)
 		}

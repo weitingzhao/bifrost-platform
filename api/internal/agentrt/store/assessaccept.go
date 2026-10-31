@@ -47,6 +47,7 @@ func ApprovalOptions() []AssessOption { return slices.Clone(approvalOptions) }
 // its task, its option keys and refs) and its outcome, an assessment (the
 // option it recommends) or why there is none.
 type assessState struct {
+	requested   bool
 	asked       bool
 	askedAt     time.Time
 	task        string
@@ -73,6 +74,9 @@ func assessStateOf(ctx context.Context, tx pgx.Tx, stream string) (assessState, 
 		var at time.Time
 		if err = rows.Scan(&task, &body, &at); err != nil {
 			return st, err
+		}
+		if _, ok := body["assessment_requested"].(map[string]any); ok {
+			st.requested = true
 		}
 		if ask, ok := body["ask"].(map[string]any); ok && !st.asked {
 			st.asked, st.askedAt, st.task = true, at, task
@@ -356,6 +360,9 @@ func jsonOf(text string) (raw, why string) {
 // within AssessTimeout of its ask; its task is cancelled (a live attempt
 // with it) and its mission stopped. It returns how many it ended.
 func EndAssessments(ctx context.Context, db DB) (int, error) {
+	if err := endUnstartedAssessments(ctx, db); err != nil {
+		return 0, err
+	}
 	type open struct{ mission, stream string }
 	var list []open
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {

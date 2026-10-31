@@ -50,11 +50,13 @@ type Sources struct {
 	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time, why string) error
 	// Assessable lists what is assessed now (TD-391): the runtime's open
 	// cards and the approvals waiting for the Owner; with an error, those it
-	// could read. Evidence reads what an assessment reads outside the
+	// could read. Only Owner-requested items proceed (TD-463). CheckAssessment
+	// rechecks item eligibility before dispatch after external reads. Evidence reads what an assessment reads outside the
 	// runtime (main's commits, the ledger). nil Assessable assesses nothing;
 	// nil Evidence gives the assessments the runtime's records only.
-	Assessable func(ctx context.Context) ([]store.AssessItem, error)
-	Evidence   store.EvidenceReader
+	Assessable      func(ctx context.Context) ([]store.AssessItem, error)
+	CheckAssessment func(context.Context, string, string) error
+	Evidence        store.EvidenceReader
 }
 
 // Controller holds what the loops need. Zero intervals take the design's

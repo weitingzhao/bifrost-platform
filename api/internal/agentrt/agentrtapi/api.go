@@ -32,8 +32,10 @@ import (
 // database configured: every route answers 503, so the code can be deployed
 // before the database is wired.
 type API struct {
-	DB   store.DB
-	Head store.BranchHead
+	// CheckAssessment verifies a canonical card id or approval number is still open.
+	CheckAssessment func(context.Context, string, string) error
+	DB              store.DB
+	Head            store.BranchHead
 	// Commits reads a pushed commit, for a pinned task's result
 	// (store.CommitFacts); without it such a result answers 503.
 	Commits store.CommitReader
@@ -108,7 +110,8 @@ const claimPollLimit = 8 * time.Second
 // uploads its description and appends its own observations (reporter.go).
 // Anyone authenticated reads and may stop, pause,
 // drain or tighten a rule; operators and the Owner drain hosts; only the Owner
-// lifts a control, reads a vendor pool by hand and signs a step off.
+// lifts a control, reads a vendor pool by hand, signs a step off and requests
+// an assessment. The assess ability requests advice, not an answer or approval.
 var abilities = []struct {
 	name  string
 	roles []actuation.Role
@@ -122,6 +125,7 @@ var abilities = []struct {
 	{"lift", []actuation.Role{actuation.RoleAdmin}},
 	{"measure", []actuation.Role{actuation.RoleAdmin}},
 	{"signoff", []actuation.Role{actuation.RoleAdmin}},
+	{"assess", []actuation.Role{actuation.RoleAdmin}},
 }
 
 func may(name string) []actuation.Role {
@@ -170,6 +174,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/messages/thread", a.threadMessages)
 		r.With(propose, cfg).Post("/messages/ack", a.ackMessages)
 		r.With(read, cfg).Get("/events", a.getEvents)
+		r.With(gate("assess"), cfg).Post("/assessments/{kind}/{id}", a.requestAssessment)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)

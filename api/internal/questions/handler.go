@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
 )
 
 const sessionHeader = "X-Bifrost-Session"
@@ -52,7 +53,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeResult(w, s.Get(r.Context(), session, principal, role, chi.URLParam(r, "id")))
+	writeResult(w, s.assessmentView(r, s.Get(r.Context(), session, principal, role, chi.URLParam(r, "id"))))
 }
 
 func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +62,7 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mine := r.URL.Query().Get("mine") == "1"
-	writeResult(w, s.List(r.Context(), session, principal, role, r.URL.Query().Get("status"), mine))
+	writeResult(w, s.assessmentView(r, s.List(r.Context(), session, principal, role, r.URL.Query().Get("status"), mine)))
 }
 
 func (s *Service) HandleWithdraw(w http.ResponseWriter, r *http.Request) {
@@ -147,4 +148,33 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(v)
+}
+
+// assessmentView decorates HTTP reads only; question records and answers stay unchanged.
+func (s *Service) assessmentView(r *http.Request, res Result) Result {
+	if s.Assessment == nil || res.Code != http.StatusOK {
+		return res
+	}
+	type assessmentResponse struct {
+		Question
+		Assessment map[string]any `json:"assessment"`
+	}
+	switch body := res.Body.(type) {
+	case Question:
+		res.Body = assessmentResponse{body, s.Assessment(r.Context(), body.ID)}
+	case map[string]any:
+		if qs, ok := body["questions"].([]Question); ok {
+			ids := make([]string, 0, len(qs))
+			for _, q := range qs {
+				ids = append(ids, q.ID)
+			}
+			snapshots := assessmentview.ReadList(r.Context(), ids, s.Assessment)
+			out := make([]any, 0, len(qs))
+			for _, q := range qs {
+				out = append(out, assessmentResponse{q, snapshots[q.ID]})
+			}
+			body["questions"] = out
+		}
+	}
+	return res
 }

@@ -25,6 +25,9 @@ import (
 // Service stores approvals, runs platform actions on approve, and hands the
 // rest to an executor that claims them.
 type Service struct {
+	// Assessment reads an existing stream for HTTP views only; installed at startup.
+	// List reads are concurrent and must honor the shared context deadline.
+	Assessment  func(context.Context, string) map[string]any
 	mu          sync.Mutex
 	store       *store
 	audit       *actuation.AuditLog

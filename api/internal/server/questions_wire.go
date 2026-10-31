@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -416,4 +417,33 @@ func (rt *questionRuntime) landingCardQuestions() store.CardQuestions {
 		return store.CardQuestions{}
 	}
 	return questioncards.New(rt.svc)
+}
+
+func (s *Server) wireQuestionAssessments() {
+	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
+		s.questionRuntime.svc.Assessment = s.assessmentReader(store.AssessCard)
+	}
+}
+
+func (rt *questionRuntime) checkAssessmentCard(ctx context.Context, id string) error {
+	if rt == nil || rt.svc == nil || rt.reads == nil {
+		return fmt.Errorf("question store is unavailable")
+	}
+	q, found, err := within(ctx, rt.reads, func() (questions.Question, bool, error) { return rt.svc.Lookup(id) })
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%w: question does not exist", pgx.ErrNoRows)
+	}
+	if q.ID != id {
+		return fmt.Errorf("%w: use the question id", store.ErrState)
+	}
+	if q.Status != questions.StatusOpen || !time.Now().Before(q.ExpiresAt) {
+		return fmt.Errorf("%w: question is %s or expired; assessment requires an open question", store.ErrState, q.Status)
+	}
+	if q.Requester != agentRuntimeRequester || questions.BusinessIssueCard(q) {
+		return fmt.Errorf("%w: assessments are available for runtime decision cards only", store.ErrState)
+	}
+	return nil
 }

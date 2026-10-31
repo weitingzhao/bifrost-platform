@@ -56,8 +56,7 @@ export function QuestionRow({
         {runtime ? (
           // A runtime card: its rule's recommendation and its AI assessment (TD-391), one line when they agree.
           <AssessmentLines
-            kind="card"
-            id={question.id}
+            snapshot={question.assessment}
             rule={recommended != null && question.recommended != null ? { key: question.recommended, line: recommended } : null}
             label={key => optionLabel(question, key)}
             className="block min-w-0 break-words text-sm text-foreground"

@@ -20,7 +20,7 @@ import (
 func answeredAsks(t *testing.T, w *world, card string) (events, missions int) {
 	t.Helper()
 	stream := store.AssessStream(store.AssessCard, card)
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1`, stream).Scan(&events))
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND NOT body_json ? 'assessment_requested'`, stream).Scan(&events))
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.mission WHERE scope_json->>'assessment_of' = $1`, stream).Scan(&missions))
 	return events, missions
 }
@@ -43,7 +43,7 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 	// All listed open, as the pass lists them before it reads their evidence.
 	first, second, third := s.item(s.cardOf(t, answered)), s.item(s.cardOf(t, unread)), s.item(s.cardOf(t, lapsed))
 	ok(t, s.answer(ctx, first.ID, first.Recommended, "the Owner", time.Now().Add(time.Hour), ""))
-	if task, err := store.GiveAssessment(ctx, w.rt, first, ratchetEvidence(), s.question, false); err != nil || task != "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, first, ratchetEvidence(), s.question, false); err != nil || task != "" {
 		t.Fatalf("the answered card was asked: %q (%v)", task, err)
 	}
 	if events, missions := answeredAsks(t, w, first.ID); events != 0 || missions != 0 {
@@ -54,11 +54,11 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 		q.ExpiresAt = time.Now().Add(-time.Second) // still open in the store: its sweep has not come
 		return q, ok
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, third, ratchetEvidence(), expired, false); err != nil || task != "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, third, ratchetEvidence(), expired, false); err != nil || task != "" {
 		t.Fatalf("a card past its expiry was asked: %q (%v)", task, err)
 	}
 	unreadable := func(context.Context, string) (store.Question, bool) { return store.Question{}, false }
-	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), unreadable, false); err != nil || task != "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, second, ratchetEvidence(), unreadable, false); err != nil || task != "" {
 		t.Fatalf("a card the store cannot read was asked: %q (%v)", task, err)
 	}
 	for _, id := range []string{third.ID, second.ID} {
@@ -66,7 +66,7 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 			t.Fatalf("%s left %d events and %d missions", id, events, missions)
 		}
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), s.question, false); err != nil || task == "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, second, ratchetEvidence(), s.question, false); err != nil || task == "" {
 		t.Fatalf("the open card was not asked once it reads open: %q (%v)", task, err)
 	}
 }
@@ -88,6 +88,7 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 	}
 	card := s.cardOf(t, m)
 	item := s.item(card) // listed open
+	requestAssessment(t, w.rt, item)
 	s.aged(card, 31*time.Minute)
 	signCardAuto(t, w, "30", "[blocked]")
 	type ask struct {

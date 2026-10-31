@@ -1,3 +1,4 @@
+import type { AssessmentSnapshot } from '@/api/assessment'
 import { serverFetch } from '@/api/serverContact'
 import { actionLink, type ActionLinkView } from '@/api/agentProgress'
 import { operatorToken } from '@/api/client'
@@ -52,6 +53,7 @@ export type QuestionWithdrawal = {
 }
 
 export type Question = {
+  assessment?: AssessmentSnapshot
   id: string
   number: number
   status: QuestionStatus
@@ -296,6 +298,7 @@ export function parseQuestion(value: unknown): QuestionRecordResult {
   }
   if ('mine' in value && typeof value.mine !== 'boolean') return fail('questions: mine is not a boolean')
   const question: Question = {
+    assessment: isRecord(value.assessment) ? value.assessment as AssessmentSnapshot : undefined,
     id: value.id,
     number: value.number,
     status: value.status as QuestionStatus,

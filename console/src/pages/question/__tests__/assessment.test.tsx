@@ -118,13 +118,13 @@ describe('an AI assessment', () => {
 
   it('shows on a runtime card row and on a request row of For you', async () => {
     const q = card()
-    withQueries(<ul><QuestionRow question={q} /></ul>, streams.card)
+    withQueries(<ul><QuestionRow question={{ ...q, assessment: { events: streams.card } }} /></ul>, streams.card)
     expect(await screen.findByText('AI assessment: Do not do this task (high confidence)')).toBeTruthy()
     expect(screen.getByText(`Runtime rule: ${recommendedLine(q)!.replace('Recommended: ', '')}`)).toBeTruthy()
     cleanup()
     const item = { id: 'a_1', number: 12, action: 'deliver_platform', tier: 'C', params: {}, params_hash: '', status: 'pending', reason: 'r',
       requester: 'thread-x', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3_600_000).toISOString() } satisfies ApprovalItem
-    withQueries(<ul><ApprovalRow item={item} /></ul>, streams.approval)
+    withQueries(<ul><ApprovalRow item={{ ...item, assessment: { events: streams.approval } }} /></ul>, streams.approval)
     expect(await screen.findByText('AI assessment unavailable: its report is not an assessment: no JSON object')).toBeTruthy()
   })
 })

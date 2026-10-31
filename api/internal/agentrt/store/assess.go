@@ -20,30 +20,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
-// AI assessments of cards and approvals (TD-391, the Owner 2026-10-20 「AI
-// 评估用 A：卡和审批单一出来就派只读的评估任务，给推荐、带证据的理由和没查的东西，
-// 和规则推荐并排显示；不一致时 STG 也不自动答」). When a card the runtime asked
-// or an approval opens, the controller gives the chief of staff's seat a
-// read-only brief (role brief, effect none; its mission marked
-// scope_json.assessment_of). Its spec holds what it is assessed on, gathered
-// by the platform, each record with a ref: the item, the mission it is about
-// and that mission's events, the commits on main that name the mission's
-// tasks or the ledger items its text names, and those items in the ledger.
-// The seat hands in one JSON object: the option it recommends and how sure it
-// is, two to four reasons each citing refs of its spec, and what it could not
-// check (assessaccept.go). The controller checks it and records it on the
-// item's own stream (AssessStream), every ref resolved to the record it
-// names; an assessment that cannot be had (its task blocked or cancelled, a
-// report that is not one, none within AssessTimeout) is recorded unavailable
-// with why, and its task ends. Each item is assessed once: its stream holds
-// the ask.
-//
-// It is advice only, and nothing acts on it. A card is answered by the Owner
-// or, on STG, by the card-auto-answer rule, which takes the card's own
-// recommendation unless an assessment that has come recommends another
-// option, and then the option that changes nothing (cardkinds.go ruleChoice,
-// TD-393); an approval is decided by the Owner alone. What the item says is
-// data in the spec, never instructions.
+// AI assessments are advice only. TD-463: the Owner first opts in on the
+// item's stream; the controller then gives the existing read-only brief to
+// the chief of staff. Its evidence, limits and acceptance rules are unchanged.
+// Legacy asks and results remain valid and are never dispatched again.
 
 // The kinds of item assessed.
 const (
@@ -148,12 +128,10 @@ var (
 	commitIDs = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
 )
 
-// Assessed says whether the item was asked for already: its stream has an
-// event.
-func assessed(ctx context.Context, tx pgx.Tx, kind, id string) (bool, error) {
-	var asked bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1)`, AssessStream(kind, id)).Scan(&asked)
-	return asked, err
+// assessmentRequested says whether an Owner request is awaiting dispatch.
+func assessmentRequested(ctx context.Context, tx pgx.Tx, kind, id string) (bool, error) {
+	st, err := assessStateOf(ctx, tx, AssessStream(kind, id))
+	return st.requested && !st.asked && !st.done, err
 }
 
 // ruleAnswersItem says whether item is a card of the runtime's that the
@@ -167,7 +145,7 @@ func assessed(ctx context.Context, tx pgx.Tx, kind, id string) (bool, error) {
 // 估；PROD 不变」): on STG the rule answers such a card within seconds, an
 // assessment takes minutes, so it could only arrive after the answer. Only
 // STG's controller asks for this (controller.SkipCardsTheRuleAnswers); PROD
-// and DEV assess every card, whatever rule is in force.
+// and DEV do not apply this filter to requested cards.
 func ruleAnswersItem(ctx context.Context, tx pgx.Tx, item AssessItem) (bool, error) {
 	if item.Kind != AssessCard {
 		return false, nil
@@ -200,15 +178,15 @@ func ruleAnswersItem(ctx context.Context, tx pgx.Tx, item AssessItem) (bool, err
 }
 
 // AssessmentQuery is what the item's assessment reads outside the runtime;
-// fresh is false when it was asked for already, or skipRuled leaves it out
+// fresh is false without an Owner request, after dispatch, or when skipRuled leaves it out
 // (ruleAnswersItem), so nothing is read for it.
 func AssessmentQuery(ctx context.Context, db DB, item AssessItem, skipRuled bool) (EvidenceQuery, bool, error) {
 	var q EvidenceQuery
 	fresh := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		fresh = false
-		asked, err := assessed(ctx, tx, item.Kind, item.ID)
-		if err != nil || asked {
+		requested, err := assessmentRequested(ctx, tx, item.Kind, item.ID)
+		if err != nil || !requested {
 			return err
 		}
 		if skipRuled {
@@ -424,7 +402,7 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 }
 
 // GiveAssessment gives the item's assessment to the chief of staff's seat: in
-// one transaction, unless it was asked already, a mission marked as the
+// one transaction, only for an undispatched Owner request, a mission marked as the
 // item's assessment with one brief task whose spec holds the item, the
 // runtime's facts and the evidence read, and on the item's stream the ask,
 // with the refs the spec gives. It returns the task, or "" when the item was
@@ -451,9 +429,10 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 // was read; no event, mission or task is written for it (the stream's head
 // row lockStream makes may stay, empty).
 // Locks: the controller as a writer (every write's first), the item's stream,
-// then the mission's numbering (proposeMissionTx).
+// then the mission's numbering (proposeMissionTx). Optional checks revalidate
+// the platform item under the stream lock after evidence collection.
 func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool),
-	skipRuled bool) (string, error) {
+	skipRuled bool, checks ...func(context.Context, string, string) error) (string, error) {
 	var task string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		task = ""
@@ -465,8 +444,21 @@ func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, qu
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
-		if asked, err := assessed(ctx, tx, item.Kind, item.ID); err != nil || asked {
+		if requested, err := assessmentRequested(ctx, tx, item.Kind, item.ID); err != nil || !requested {
 			return err
+		}
+		for _, check := range checks {
+			if check == nil {
+				continue
+			}
+			if err := check(ctx, item.Kind, item.ID); err != nil {
+				if !errors.Is(err, ErrState) && !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
+					Body: map[string]any{"text": "AI assessment unavailable", "unavailable": err.Error()}})
+				return err
+			}
 		}
 		if item.Kind == AssessCard && question != nil {
 			if q, ok := question(ctx, item.ID); !ok || q.Status != "open" || (!q.ExpiresAt.IsZero() && !time.Now().Before(q.ExpiresAt)) {

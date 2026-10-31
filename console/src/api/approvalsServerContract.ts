@@ -1,3 +1,4 @@
+import type { AssessmentSnapshot } from '@/api/assessment'
 /**
  * Wire shape for GET /api/v1/approvals and GET /api/v1/approvals/{id}.
  * Source of truth: api/internal/approvals/types.go (Approval) and handler.go (list envelope).
@@ -5,6 +6,7 @@
 
 /** One approval record as JSON from platform-api. */
 export type PlatformApprovalRecord = {
+  assessment?: AssessmentSnapshot
   id: string
   action: string
   tier: string

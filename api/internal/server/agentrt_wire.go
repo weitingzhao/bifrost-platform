@@ -87,6 +87,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.api.Grants = s.landingGrantSources
+	rt.api.CheckAssessment = s.checkAssessment
+	if s.approvals != nil {
+		s.approvals.Assessment = s.assessmentReader(store.AssessApproval)
+	}
+	s.wireQuestionAssessments()
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
@@ -467,6 +472,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.MainResults = s.agentRuntimeMainResults()
 	src.Plan = s.agentRuntimePlanSources(src.Deployed)
 	src.Assessable = s.agentRuntimeAssessable()
+	src.CheckAssessment = s.checkAssessment
 	src.Evidence = s.agentRuntimeEvidence()
 	return src
 }

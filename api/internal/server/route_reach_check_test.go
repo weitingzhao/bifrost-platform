@@ -44,6 +44,10 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/ops/facts/system": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// TD-463: only the Owner may opt in to an assessment. The assess
+	// ability requires RoleAdmin; readers, agents and intake clients cannot
+	// request one. This records a request for advice, not an answer or approval.
+	"POST /api/v1/agentrt/assessments/{kind}/{id}": {"admin"},
 	// C-2: the external host's exact claim, an agentd route; the store
 	// refuses every host but the one the envelope names (claimpinned.go).
 	"POST /api/v1/agentrt/claim/pinned": {"agentd:h1"},

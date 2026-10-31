@@ -36,7 +36,7 @@ func TestWhoami(t *testing.T) {
 		{"operator", "s1", "thread:s1", "thread (registered on its first write)", "", []string{"read", "propose", "upload", "stop", "drain"}},
 		{"operator", "", "", "", "X-Bifrost-Session", []string{"read", "propose", "upload", "stop", "drain"}},
 		{"agentd:h1", "", "host:h1", "host", "", []string{"read", "claim", "upload", "stop"}},
-		{"admin", "", "owner", "owner", "", []string{"read", "propose", "upload", "stop", "drain", "lift", "measure", "signoff"}},
+		{"admin", "", "owner", "owner", "", []string{"read", "propose", "upload", "stop", "drain", "lift", "measure", "signoff", "assess"}},
 		{"seat:chief_of_staff", "", "seat:chief_of_staff", "seat", "", []string{"read", "propose", "upload", "stop"}},
 		{"seat:ghost", "", "seat:ghost", "", "not registered", []string{"read", "propose", "upload", "stop"}},
 		{"viewer", "s9", "thread:s9", "thread (registered on its first write)", "", []string{"read", "stop"}},

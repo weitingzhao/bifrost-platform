@@ -16,8 +16,8 @@ import (
 // assessment, records it and ends it calls nothing that answers, acknowledges
 // or withdraws a card, or approves, rejects, resolves or claims an approval;
 // the runtime's files of it import neither the question store nor the
-// approvals (the server's reader may, to read them). No route writes a note
-// (agentrtapi), so nothing outside the controller records one either. The one
+// approvals (the server's reader may, to read them). The Owner's route only
+// records an opt-in; the controller records dispatch and results. The one
 // reader that acts on an assessment, the card-auto-answer rule, only holds
 // its own answer back (TestAssessmentOfWorkOnMain).
 func TestAssessmentsCannotAnswer(t *testing.T) {
@@ -29,6 +29,8 @@ func TestAssessmentsCannotAnswer(t *testing.T) {
 	}{
 		{"assess.go", false},
 		{"assessaccept.go", false},
+		{"assessrequest.go", false},
+		{filepath.Join("..", "agentrtapi", "assess.go"), false},
 		{filepath.Join("..", "controller", "assess.go"), false},
 		{filepath.Join("..", "..", "server", "agentrt_assess.go"), true},
 	} {

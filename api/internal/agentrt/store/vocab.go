@@ -153,14 +153,15 @@ var bodies = map[string][]field{
 	// the controller first saw it there; pruned, an attempt branch its host
 	// deleted; prune_refused, one Gitea would not let it delete; prune_failed,
 	// one it could not reach Gitea to delete (prune.go).
-	// On an item's assessment stream (assess.go, TD-391): ask, the option
+	// On an item's assessment stream (assess.go, TD-391): assessment_requested,
+	// the Owner's opt-in naming the kind and id (TD-463); ask, the option
 	// keys and refs its spec gave; assessment, what the seat handed in, its
 	// refs resolved; unavailable, why there is none. On the exams stream,
 	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
 	// that voided the paper, which no run was handed in for.
 	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"plan_observation_pass", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
-		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
+		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
 		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
@@ -570,6 +571,9 @@ var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "
 // badValue is why v, of its field's kind already, is refused, or "". A list
 // is checked element by element.
 func badValue(eventType, name string, v any) string {
+	if eventType == "note" && name == "assessment_requested" {
+		return badAssessmentRequest(v)
+	}
 	if eventType == "note" && name == "stg_release" {
 		return badStgRelease(v)
 	}

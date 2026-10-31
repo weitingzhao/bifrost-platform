@@ -397,8 +397,8 @@ function ApprovalCard({
         {rest !== '' ? <Prose label="Why" value={rest} /> : null}
         <Prose label="If it goes wrong" value={item.rollback ?? ''} />
         {/* The request's AI assessment (TD-391): advice beside it; only the buttons below decide. */}
-        {pending && item.number != null && item.number > 0 ? (
-          <AssessmentSection kind="approval" id={String(item.number)} ruleKey={null} label={approvalOptionLabel} />
+        {item.number != null && item.number > 0 ? (
+          <AssessmentSection kind="approval" id={String(item.number)} snapshot={item.assessment} closed={!pending || Date.parse(item.expires_at) <= Date.now()} ruleKey={null} label={approvalOptionLabel} />
         ) : null}
         <div className="min-w-0 max-w-full">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Asked by</div>

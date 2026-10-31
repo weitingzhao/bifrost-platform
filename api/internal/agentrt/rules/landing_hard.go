@@ -12,6 +12,7 @@ var landingHardGo = [...]string{
 	"api/internal/approvals/",
 	"api/internal/approvalhome/",
 	"api/internal/approvalnotify/",
+	"api/internal/assessmentview/",
 	"api/internal/actions/",
 	"api/internal/actuation/",
 	"api/internal/actuationpolicy/",

@@ -1,6 +1,7 @@
 package agentrtapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -66,6 +67,7 @@ func TestAssessmentThroughTheRoutes(t *testing.T) {
 		`"unchecked": ["STG 是否已经跑着这个提交"]}` + "\n```\n", "I would approve it."}
 	codex := map[string]any{"executor": "exec:codex", "provider": "openai"}
 	for i, item := range items {
+		must(t, store.RequestAssessment(ctx, pool, store.Writer{Actor: "owner"}, item.Kind, item.ID, func(context.Context) error { return nil }))
 		id, err := store.GiveAssessment(ctx, pool, item, ev, nil, false)
 		must(t, err)
 		var mission string
@@ -120,10 +122,10 @@ func TestAssessmentThroughTheRoutes(t *testing.T) {
 		raw := get(t, s, "events?stream="+stream)
 		var rows []map[string]any
 		must(t, json.Unmarshal(raw, &rows))
-		if len(rows) != 2 || rows[0]["event_type"] != "note" {
+		if len(rows) != 3 || rows[0]["event_type"] != "note" {
 			t.Fatalf("%s: %s", stream, raw)
 		}
-		last := rows[1]["body_json"].(map[string]any)
+		last := rows[2]["body_json"].(map[string]any)
 		switch key {
 		case "card":
 			a := last["assessment"].(map[string]any)

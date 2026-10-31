@@ -32,7 +32,7 @@ func TestSTGDoesNotAssessTheCardsItsRuleAnswers(t *testing.T) {
 		Body: "STG runs 8f30a9f6 since 14:00 and its CI is green.", Options: store.ApprovalOptions(), CreatedAt: time.Now()}
 	fresh := func(it store.AssessItem) bool {
 		t.Helper()
-		_, fresh, err := store.AssessmentQuery(ctx, w.rt, it, true)
+		_, fresh, err := queryRequestedAssessment(t, ctx, w.rt, it, true)
 		ok(t, err)
 		return fresh
 	}
@@ -43,7 +43,7 @@ func TestSTGDoesNotAssessTheCardsItsRuleAnswers(t *testing.T) {
 	if fresh(card) {
 		t.Fatal("STG read the evidence of a card its rule answers")
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, card, ratchetEvidence(), s.question, true); err != nil || task != "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, card, ratchetEvidence(), s.question, true); err != nil || task != "" {
 		t.Fatalf("STG asked the assessment of a card its rule answers: %q (%v)", task, err)
 	}
 	if events, missions := answeredAsks(t, w, card.ID); events != 0 || missions != 0 {
@@ -53,15 +53,15 @@ func TestSTGDoesNotAssessTheCardsItsRuleAnswers(t *testing.T) {
 		if !fresh(it) {
 			t.Fatalf("STG left out %s %s", it.Kind, it.ID)
 		}
-		if task, err := store.GiveAssessment(ctx, w.rt, it, ratchetEvidence(), s.question, true); err != nil || task == "" {
+		if task, err := giveRequestedAssessment(t, ctx, w.rt, it, ratchetEvidence(), s.question, true); err != nil || task == "" {
 			t.Fatalf("STG did not assess %s %s: %q (%v)", it.Kind, it.ID, task, err)
 		}
 	}
 	// PROD: the same card under the same rule is assessed.
-	if _, fresh, err := store.AssessmentQuery(ctx, w.rt, card, false); err != nil || !fresh {
+	if _, fresh, err := queryRequestedAssessment(t, ctx, w.rt, card, false); err != nil || !fresh {
 		t.Fatalf("PROD left out the card: fresh %v (%v)", fresh, err)
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, card, ratchetEvidence(), s.question, false); err != nil || task == "" {
+	if task, err := giveRequestedAssessment(t, ctx, w.rt, card, ratchetEvidence(), s.question, false); err != nil || task == "" {
 		t.Fatalf("PROD did not assess the card the rule answers: %q (%v)", task, err)
 	}
 }

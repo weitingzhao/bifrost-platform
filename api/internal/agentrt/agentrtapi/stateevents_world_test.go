@@ -1,6 +1,7 @@
 package agentrtapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -39,7 +40,8 @@ const (
 // valid request does. Reads that write are listed too (an exam paper is
 // recorded when it is handed out).
 var routeExpect = map[string]string{
-	"POST claim": expectWrites, "POST claim/pinned": expectWrites, "POST landing/refresh": expectWrites, "PUT artifacts/{id}": expectWrites,
+	"POST assessments/{kind}/{id}": expectWrites,
+	"POST claim":                   expectWrites, "POST claim/pinned": expectWrites, "POST landing/refresh": expectWrites, "PUT artifacts/{id}": expectWrites,
 	"POST landing/grants/{grant_id}/revoke": expectWrites,
 	"POST attempts/{id}/start":              expectWrites, "POST attempts/{id}/heartbeat": expectAnswers,
 	"POST attempts/{id}/checkpoint": expectWrites, "POST attempts/{id}/computed": expectWrites,
@@ -73,6 +75,20 @@ var routeExpect = map[string]string{
 }
 
 var fuzzAttemptActions = []string{"heartbeat", "start", "checkpoint", "computed", "persist", "submit", "salvage", "ended"}
+
+// Check the closed route inventory even when PostgreSQL is unavailable.
+func TestWriteRoutesHaveEventExpectations(t *testing.T) {
+	for _, rt := range walkRoutes(t) {
+		if rt.method == http.MethodGet {
+			continue
+		}
+		for _, key := range routeKeys(rt) {
+			if want := routeExpect[key]; want != expectWrites && want != expectAnswers {
+				t.Errorf("%s: add its valid request and event expectation", key)
+			}
+		}
+	}
+}
 
 // routeKeys is the route's keys in routeExpect and the tally: an attempt
 // route by its action.
@@ -143,7 +159,14 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	key := rptest.NewKey(t)
 	anchor, examSet, agentHeads = key.Fingerprint, madeUpExams(t), map[string][]store.AgentHead{}
 	t.Cleanup(func() { anchor, examSet, agentHeads = "", nil, nil })
-	s := server(t, f.pool)
+	s := server(t, f.pool, func(a *agentrtapi.API) {
+		a.CheckAssessment = func(_ context.Context, kind, id string) error {
+			if (kind != store.AssessCard && kind != store.AssessApproval) || id != "463" {
+				return fmt.Errorf("%w: assessment item is missing or closed", store.ErrState)
+			}
+			return nil
+		}
+	})
 	cards, askFails = nil, false
 	ok := func(key, caller, method, path string, body any, header ...string) map[string]any {
 		t.Helper()
@@ -239,6 +262,20 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 // valid request, in an order in which each finds what it needs.
 func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, caller, method, path string, body any, header ...string) map[string]any, key rptest.Key) {
 	t.Helper()
+	for _, kind := range []string{store.AssessCard, store.AssessApproval} {
+		path := "assessments/" + kind + "/463"
+		ok("POST assessments/{kind}/{id}", "admin", "POST", path, nil)
+		// A retry answers without another event; a closed item must leave
+		// every runtime row untouched, just like any other refused write.
+		before := f.lastEvent(t)
+		ok("POST assessments/{kind}/{id}", "admin", "POST", path, nil)
+		if f.lastEvent(t) != before {
+			t.Fatal("a repeated assessment request appended another event")
+		}
+		if code, out := f.send(t, s, "POST assessments/{kind}/{id}", false, "admin", "POST", "assessments/"+kind+"/closed", nil); code != http.StatusConflict {
+			t.Fatalf("closed assessment request: %d %v", code, out)
+		}
+	}
 	spec := []byte("# implement x\n")
 	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec")
 	ok("POST missions", "operator", "POST", "missions", map[string]any{"idempotency_key": "v1", "title": "m", "goal": "g",
@@ -437,6 +474,8 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 		}
 		var pool []string
 		switch p {
+		case "{kind}":
+			pool = []string{store.AssessCard, store.AssessApproval}
 		case "{action}":
 			pool = slices.Concat(fuzzAttemptActions, fuzzAttemptActions, []string{"accept", "state", "cancel", "lost"})
 		case "{rule_id}":
@@ -444,9 +483,13 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 		case "{job}":
 			pool = []string{"chief_of_staff", "implementer", "x"}
 		default:
-			pool = f.ids(t, map[string]string{"attempts": idsAttempts, "missions": idsMissions, "tasks": idsTasks, "plan": idsNodes,
-				"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`,
-				"issues": `SELECT issue_id FROM agentrt.issue ORDER BY substr(issue_id, 4)::int`}[parts[i-1]])
+			if parts[0] == "assessments" {
+				pool = []string{"463", "closed"}
+			} else {
+				pool = f.ids(t, map[string]string{"attempts": idsAttempts, "missions": idsMissions, "tasks": idsTasks, "plan": idsNodes,
+					"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`,
+					"issues": `SELECT issue_id FROM agentrt.issue ORDER BY substr(issue_id, 4)::int`}[parts[i-1]])
+			}
 		}
 		// The world's ids three times over: most requests name a real row.
 		pool = append(slices.Concat(pool, pool, pool), "x_nope", strings.Repeat("9", 40))
@@ -520,7 +563,9 @@ func (f *stateFuzz) body(t *testing.T, rt fuzzRoute, caller, path string) (any, 
 			own = append(own, k)
 		}
 		sort.Strings(own)
-		b[f.pick(own)] = f.value(t, 0)
+		if len(own) > 0 {
+			b[f.pick(own)] = f.value(t, 0)
+		}
 	}
 	if rt.method == http.MethodPut {
 		doc, err := json.Marshal(b)
@@ -541,6 +586,8 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
 	arts := append(f.ids(t, idsArts), "x")
 	switch {
+	case rt.pattern == "assessments/{kind}/{id}":
+		return map[string]any{}
 	case rt.pattern == "claim":
 		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
 	case strings.HasPrefix(rt.pattern, "attempts/"):

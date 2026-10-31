@@ -9,8 +9,8 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
 import { decisionBlockReason } from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
-import { AssessmentPanel } from '@/pages/question/AssessmentPanel'
-import { assessmentError, useAssessment } from '@/pages/question/useAssessment'
+import { AssessmentSection } from '@/pages/question/AssessmentPanel'
+import { assessmentFromSnapshot } from '@/api/assessment'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
 import { ClosedLine, FROM_AN_AGENT, LandingOutcomeRecord, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
@@ -89,8 +89,8 @@ function QuestionSession({ id }: { id: string }) {
   const unreadable = itemQ.isError && itemQ.data == null
   // A runtime card's AI assessment (TD-391), beside the runtime rule's recommendation.
   const runtimeCard = shown != null && shown.requester === RUNTIME_REQUESTER
-  const assessQ = useAssessment('card', id, runtimeCard)
-  const aiRecommended = assessQ.data?.state === 'ready' ? assessQ.data.recommended : null
+  const assessment = assessmentFromSnapshot(shown?.assessment)
+  const aiRecommended = assessment.state === 'ready' ? assessment.recommended : null
   const landingQ = useQuery({
     queryKey: ['questions', 'landing', id],
     queryFn: ({ signal }) => fetchLandingCard(id, signal),
@@ -144,9 +144,9 @@ function QuestionSession({ id }: { id: string }) {
             {!landingQ.isError && landingQ.data != null ? <LandingOutcomeRecord card={landingQ.data} /> : null}
             {showClosed ? <ClosedLine question={shown} /> : null}
             {runtimeCard ? (
-              <AssessmentPanel
-                assessment={assessQ.data}
-                error={assessmentError(assessQ)}
+              <AssessmentSection
+                kind="card" id={shown.id} snapshot={shown.assessment}
+                closed={shown.status !== 'open' || Date.parse(shown.expires_at) <= Date.now()}
                 ruleKey={shown.recommended ?? null}
                 label={key => optionLabel(shown, key)}
               />

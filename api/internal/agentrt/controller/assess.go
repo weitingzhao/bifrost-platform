@@ -19,9 +19,9 @@ const EvidenceTimeout = 45 * time.Second
 
 // Assess is one pass of the assessments (store/assess.go, TD-391): an
 // assessment that can no longer come is recorded unavailable; then each card
-// the runtime asked and each approval waiting for the Owner that has not been
-// asked for one is given to the chief of staff's seat, a few a pass, with
-// what the repositories hold about it. A card is read again when its task is
+// the runtime asked and each approval waiting for the Owner is considered.
+// Only an explicit Owner request not yet dispatched is given to the chief of
+// staff's seat, a few a pass, with what the repositories hold about it. A card is read again when its task is
 // made, so one answered after the list (by the rule on STG, within seconds)
 // is not assessed (TD-401); on STG neither is a card the rule will answer
 // (SkipCardsTheRuleAnswers). It only reads the cards and the approvals:
@@ -64,7 +64,7 @@ func (c *Controller) Assess(ctx context.Context) (int, error) {
 			ev = c.Sources.Evidence(rctx, q)
 			cancel()
 		}
-		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question, c.SkipCardsTheRuleAnswers)
+		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question, c.SkipCardsTheRuleAnswers, c.Sources.CheckAssessment)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
 			continue

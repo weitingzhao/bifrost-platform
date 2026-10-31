@@ -1,4 +1,5 @@
 import { authedFetch } from '@/api/client'
+import { signInSafeError } from '@/lib/signInError'
 import { record, text } from '@/api/agentRuntime'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { approvalHref, goalHref } from '@/lib/shell/consoleRoutes'
@@ -7,7 +8,7 @@ import { approvalHref, goalHref } from '@/lib/shell/consoleRoutes'
  * The AI assessment of a card or an approval (TD-391, the Owner 2026-10-20): advice beside the runtime
  * rule's recommendation, never an answer. The runtime keeps it on the item's own stream,
  * `assess:card:<question id>` or `assess:approval:<number>` (api/internal/agentrt/store/assess.go), read
- * through GET /api/v1/agentrt/events?stream=: first the ask (its refs), then the assessment (its reasons,
+ * through GET /api/v1/agentrt/events?stream=: first the Owner request, then the ask (its refs), then the assessment (its reasons,
  * each ref resolved to the record it names) or why there is none. A stream with no events is an item
  * that was never asked (one older than assessments, or a platform that gives none).
  */
@@ -19,6 +20,7 @@ export type Confidence = 'high' | 'medium' | 'low'
 
 export type Assessment =
   | { state: 'none' }
+  | { state: 'requested'; requestedAt: string }
   | { state: 'pending'; askedAt: string }
   | { state: 'unavailable'; reason: string }
   | { state: 'ready'; recommended: string; confidence: Confidence; reasons: AssessmentReason[]; unchecked: string[]; by: string }
@@ -75,10 +77,12 @@ function evidenceOf(value: unknown): AssessmentRef[] {
 export function parseAssessmentStream(value: unknown): Assessment {
   if (!Array.isArray(value)) throw new Error('AI assessment: invalid platform response.')
   let asked = ''
+  let requested = ''
   for (const v of value) {
     const e = record(v)
     if (text(e.event_type) !== 'note') continue
     const body = record(e.body_json)
+    if (body.assessment_requested != null && requested === '') requested = text(e.at)
     if (body.ask != null && asked === '') asked = text(e.at)
     if (typeof body.unavailable === 'string' && body.unavailable !== '') return { state: 'unavailable', reason: body.unavailable }
     if (body.assessment != null) {
@@ -94,7 +98,7 @@ export function parseAssessmentStream(value: unknown): Assessment {
       return { state: 'ready', recommended: text(a.recommended), confidence: confidence as Confidence, reasons, unchecked, by: text(a.by) }
     }
   }
-  return asked !== '' ? { state: 'pending', askedAt: asked } : { state: 'none' }
+  return asked !== '' ? { state: 'pending', askedAt: asked } : requested !== '' ? { state: 'requested', requestedAt: requested } : { state: 'none' }
 }
 
 export function assessmentKey(kind: AssessmentKind, id: string) {
@@ -103,7 +107,7 @@ export function assessmentKey(kind: AssessmentKind, id: string) {
 
 export async function fetchAssessment(kind: AssessmentKind, id: string, signal?: AbortSignal): Promise<Assessment> {
   const params = new URLSearchParams({ stream: assessmentStream(kind, id) })
-  const r = await authedFetch('AI assessment', `/api/v1/agentrt/events?${params}`, { signal })
+  const r = await authedFetch('AI assessment', `/api/v1/agentrt/events?${params}`, { signal }, assessmentResponseError)
   return parseAssessmentStream(await r.json())
 }
 
@@ -126,10 +130,38 @@ export function assessmentLines(
 ): string[] {
   const ruleLine = rule != null ? [rule.line] : []
   if (a == null || a.state === 'none') return ruleLine
+  if (a.state === 'requested') return [...ruleLine, 'AI assessment: requested']
   if (a.state === 'pending') return [...ruleLine, 'AI assessment: in progress']
   if (a.state === 'unavailable') return [...ruleLine, `AI assessment unavailable: ${a.reason}`]
   const ai = `${label(a.recommended)} (${a.confidence} confidence)`
   if (rule != null && rule.key === a.recommended) return [`${rule.line} · the AI assessment agrees (${a.confidence} confidence)`]
   if (rule != null) return [`Runtime rule: ${rule.line.replace(/^Recommended: /, '')}`, `AI assessment: ${ai}`]
   return [`AI assessment: ${ai}`]
+}
+
+/** Snapshot carried by the ordinary approval/question read, never persisted in its material. */
+export type AssessmentSnapshot = { events?: unknown; error?: string }
+
+export function assessmentFromSnapshot(snapshot?: AssessmentSnapshot): Assessment {
+  if (snapshot?.error) return { state: 'unavailable', reason: snapshot.error }
+  try {
+    return parseAssessmentStream(snapshot?.events ?? [])
+  } catch {
+    return { state: 'unavailable', reason: 'this Console cannot read the assessment record' }
+  }
+}
+
+export async function requestAssessment(kind: AssessmentKind, id: string): Promise<Assessment> {
+  const r = await authedFetch('Request AI assessment', `/api/v1/agentrt/assessments/${kind}/${encodeURIComponent(id)}`, { method: 'POST' }, assessmentResponseError)
+  return parseAssessmentStream(await r.json())
+}
+
+// Runtime errors carry the human reason in message, and a short code in error.
+async function assessmentResponseError(prefix: string, response: Response, token = ''): Promise<Error> {
+  let message = `HTTP ${response.status}`
+  try {
+    const body = record(await response.json())
+    message = text(body.message) || text(body.error) || message
+  } catch { /* Keep the HTTP status for non-JSON failures. */ }
+  return new Error(signInSafeError(`${prefix}: ${message}`, token, response.status))
 }

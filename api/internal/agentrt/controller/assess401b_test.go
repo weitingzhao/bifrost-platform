@@ -22,6 +22,7 @@ func TestOnlySTGsControllerLeavesTheRulesCardsUnassessed(t *testing.T) {
 	for i, l := range card.Options {
 		item.Options = append(item.Options, store.AssessOption{Key: string(rune('a' + i)), Label: l})
 	}
+	must(t, store.RequestAssessment(ctx, pool, store.Writer{Actor: "owner"}, item.Kind, item.ID, func(context.Context) error { return nil }))
 	// In this order: the rule is not in force until the first pass reads the
 	// card's evidence, and stays in force after.
 	for _, env := range []struct {

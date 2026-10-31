@@ -47,6 +47,9 @@ func exempt(reason string, keys ...string) {
 var exemptions = map[string]string{}
 
 func init() {
+	exempt("Owner-requested AI advice (TD-463): admin records one opt-in event; existing read-only assessment loop dispatches it; answers no question, approves nothing, changes no material or execution authority",
+		"POST /api/v1/agentrt/assessments/{kind}/{id}",
+	)
 	exempt("owner question workflow, not a catalog action",
 		"POST /api/v1/questions",
 		"POST /api/v1/questions/{id}/answer",

@@ -77,8 +77,7 @@ export function ApprovalRow({
         </span>
         {pending && item.number != null && item.number > 0 ? (
           <AssessmentLines
-            kind="approval"
-            id={String(item.number)}
+            snapshot={item.assessment}
             rule={null}
             label={approvalOptionLabel}
             className="block min-w-0 break-words text-sm text-foreground"

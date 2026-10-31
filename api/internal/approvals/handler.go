@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
 )
 
 // SessionHeader is the caller identity stored as requester.
@@ -103,9 +105,20 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, code, body)
 		return
 	}
-	out := make([]Approval, 0, len(list))
+	ids := make([]string, 0, len(list))
 	for _, a := range list {
-		out = append(out, a.public())
+		if a.Number > 0 {
+			ids = append(ids, strconv.Itoa(a.Number))
+		}
+	}
+	snapshots := assessmentview.ReadList(r.Context(), ids, s.Assessment)
+	out := make([]any, 0, len(list))
+	for _, a := range list {
+		if snapshot, ok := snapshots[strconv.Itoa(a.Number)]; ok {
+			out = append(out, assessmentResponse{a.public(), snapshot})
+		} else {
+			out = append(out, a.public())
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"approvals": out})
 }
@@ -116,7 +129,7 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, rec.public())
+	writeJSON(w, http.StatusOK, s.assessmentView(r, rec.public()))
 }
 
 func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
@@ -289,4 +302,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// assessmentResponse adds advice to the HTTP view only, never to stored material.
+type assessmentResponse struct {
+	Approval
+	Assessment map[string]any `json:"assessment"`
+}
+
+func (s *Service) assessmentView(r *http.Request, a Approval) any {
+	if s.Assessment == nil || a.Number <= 0 {
+		return a
+	}
+	return assessmentResponse{a, s.Assessment(r.Context(), strconv.Itoa(a.Number))}
 }
