@@ -48,7 +48,7 @@ type s5Materials struct {
 	UISHA           string `json:"uiSHA"`
 }
 
-const s5ImageRepository = "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@"
+const s5ImageRepository = "192.168.10.73:30500/bifrost-s5-checker@"
 
 func loadS5Contract() (s5Contract, error) {
 	var c s5Contract

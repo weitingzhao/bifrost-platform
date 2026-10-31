@@ -1,5 +1,5 @@
 {
-  "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "image": "192.168.10.73:30500/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
   "materials": {
     "callersDigest": "0000000000000000000000000000000000000000000000000000000000000000",
     "profileDigest": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -360,7 +360,7 @@
               "value": "$(params.ciUID)"
             }
           ],
-          "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "image": "192.168.10.73:30500/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "name": "check",
           "securityContext": {
             "allowPrivilegeEscalation": false,
@@ -503,7 +503,7 @@
               "value": "$(params.ciUID)"
             }
           ],
-          "image": "registry.cicd.svc.cluster.local:5000/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "image": "192.168.10.73:30500/bifrost-s5-checker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "name": "fetch",
           "securityContext": {
             "allowPrivilegeEscalation": false,
