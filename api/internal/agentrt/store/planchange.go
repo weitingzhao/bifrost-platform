@@ -169,10 +169,14 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (b
 // 314 A2): only while the rule in force grants done_rules; only the first
 // rule of a step not done; binding nothing new (a new binding is the
 // Owner's); naming only facts the runtime itself keeps, the step's own
-// tasks and the Owner's sign-off on it, never an approval or a question (an
-// outside record the runtime may not have read yet, so that it does not hold
-// cannot be shown), a manual atom, a CI run (a fact of no step) or a gate;
-// and not already holding, so no rule makes a step done at once.
+// tasks (task_accepted, and in aggregate step_tasks, step_landed and
+// step_stg_settled, which read only the step's own tasks and their landing
+// and STG records) and the Owner's sign-off on it, never an approval or a
+// question (an outside record the runtime may not have read yet, so that it
+// does not hold cannot be shown), a manual atom, a CI run (a fact of no
+// step) or a gate; and not already holding, so no rule makes a step done at
+// once. The holding check reads no deployment (its reader is a stub), so an
+// atom read against what an environment runs must be refused here too.
 func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
 	if rule == nil || !rule.Plan.DoneRules || len(c.Bind) > 0 {
 		return false, nil

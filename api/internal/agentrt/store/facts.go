@@ -266,6 +266,7 @@ type stepFacts struct {
 	step      string
 	deployed  Deployed
 	deploys   map[string]deployment
+	landed    *stepLanding // the step's own landing, read once (stepevidence.go)
 	err       error
 }
 
@@ -388,7 +389,9 @@ func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed Deploy
 	if err != nil {
 		return "", fmt.Errorf("store: step %s: %w", stepID, err)
 	}
-	if rule.Empty() || state == "dropped" || state == "stopped" {
+	// A done step moves again only when a standing condition lapses, so a
+	// done step without one is not read (its rule may fold landing streams).
+	if rule.Empty() || state == "dropped" || state == "stopped" || state == "done" && !rule.Standing() {
 		return "", nil
 	}
 	f := &stepFacts{ctx: ctx, tx: tx, step: stepID, deployed: deployed}

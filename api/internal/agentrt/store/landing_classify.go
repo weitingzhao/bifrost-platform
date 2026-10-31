@@ -269,7 +269,7 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 				live = true
 			}
 		}
-		handoff := !fence.IsZero() && r.accepted != nil && !r.accepted.Before(fence) && !created.Before(fence) && !noMerge
+		handoff := landingHandoff(fence, r.accepted, created, noMerge)
 		if !live && !handoff {
 			continue
 		}

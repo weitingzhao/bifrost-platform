@@ -95,6 +95,9 @@ const (
 	kManual
 	kGates
 	kBound
+	kStepTasks
+	kStepLanded
+	kStepSTG
 )
 
 type gate struct{ test, spec string }
@@ -149,10 +152,27 @@ const (
 	AtomDeployment = "deployment_verified"
 	AtomReview     = "review_valid"
 	AtomExternal   = "external_verified"
+	// The step's own work, in aggregate (DESIGN-module-progress D3): no id
+	// is named in advance; the store reads the step's tasks, their landing
+	// operations and the B5 STG batches those joined. Completion is history:
+	// none of the three is a standing condition, so a step they made done
+	// stays done when its evidence later reads false (a revert, a later
+	// landing that fails, a task added afterwards).
+	AtomStepTasks  = "step_tasks"
+	AtomStepLanded = "step_landed"
+	AtomStepSTG    = "step_stg_settled"
 )
 
 var atomKinds = map[string]nodeKind{AtomTask: kTask, AtomApproval: kApproval, AtomQuestion: kQuestion, AtomCI: kCI,
-	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates, AtomMain: kBound, AtomDeployment: kBound, AtomReview: kBound, AtomExternal: kBound}
+	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates, AtomMain: kBound, AtomDeployment: kBound, AtomReview: kBound, AtomExternal: kBound,
+	AtomStepTasks: kStepTasks, AtomStepLanded: kStepLanded, AtomStepSTG: kStepSTG}
+
+// StepTaskState is the only state step_tasks counts. A done rule is
+// completion evidence: a state a proposer reaches by proposing a task
+// (proposed, ready, submitted, ...) would let a first rule set under the
+// plan-standing grant make a step done with nothing accepted, in any branch
+// of an any (review 630). The key stays so a later state can be added.
+const StepTaskState = "accepted"
 
 // Names reports whether the rule names an atom of this kind anywhere.
 func (r Rule) Names(atom string) bool {
@@ -264,6 +284,16 @@ func parseNode(obj map[string]any, depth int) (*node, error) {
 				return nil, fmt.Errorf("%w: invalid binding version", ErrRule)
 			}
 			return &node{kind: kBound, s1: id, n: version, atom: k}, nil
+		case AtomStepTasks:
+			return parseStepTasks(v)
+		case AtomStepLanded, AtomStepSTG:
+			if m, ok := v.(map[string]any); !ok || len(m) != 0 {
+				return nil, fmt.Errorf("%w: %s takes no arguments: {}", ErrRule, k)
+			}
+			if k == AtomStepLanded {
+				return &node{kind: kStepLanded}, nil
+			}
+			return &node{kind: kStepSTG}, nil
 		case "task_accepted":
 			s, ok := v.(string)
 			if !ok || !taskIDRe.MatchString(s) {
@@ -318,6 +348,32 @@ func parseNode(obj map[string]any, depth int) (*node, error) {
 		return nil, fmt.Errorf("%w: unknown atom %q", ErrRule, k)
 	}
 	return nil, fmt.Errorf("%w: empty atom", ErrRule)
+}
+
+// parseStepTasks reads {"state": "accepted", "min": <n ≥ 1>}; min may be
+// left out and is then 1.
+func parseStepTasks(v any) (*node, error) {
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 || len(m) > 2 {
+		return nil, fmt.Errorf("%w: step_tasks needs state and, optionally, min", ErrRule)
+	}
+	state, ok := m["state"].(string)
+	if !ok || state != StepTaskState {
+		return nil, fmt.Errorf("%w: step_tasks counts %s tasks only: state is %q", ErrRule, StepTaskState, StepTaskState)
+	}
+	n := &node{kind: kStepTasks, s1: state, n: 1}
+	if len(m) == 2 {
+		num, ok := m["min"].(json.Number)
+		if !ok {
+			return nil, fmt.Errorf("%w: step_tasks takes only state and min", ErrRule)
+		}
+		i, err := num.Int64()
+		if err != nil || i < 1 {
+			return nil, fmt.Errorf("%w: step_tasks min is a positive integer", ErrRule)
+		}
+		n.n = i
+	}
+	return n, nil
 }
 
 func parseGates(obj map[string]any, g any) (*node, error) {
@@ -581,6 +637,18 @@ func eval(n *node, f Facts) Result {
 		return tri(f.OwnerSignoff(n.s1), false)
 	case kManual:
 		return tri(f.ManualRecorded(n.s1), true)
+	case kStepTasks, kStepLanded, kStepSTG:
+		sf, ok := f.(StepFacts)
+		if !ok {
+			return Result{Value: Unknown}
+		}
+		switch n.kind {
+		case kStepTasks:
+			return Result{Value: sf.StepTasks(n.s1, n.n)}
+		case kStepLanded:
+			return Result{Value: sf.StepLanded()}
+		}
+		return Result{Value: sf.StepSTGSettled()}
 	case kGates:
 		out := True
 		for _, g := range n.gates {
@@ -601,6 +669,40 @@ func tri(ok, manual bool) Result {
 		return Result{Value: True, Manual: manual}
 	}
 	return Result{Value: False}
+}
+
+// StepFacts answers the aggregate atoms over the step's own work. Like
+// BoundFacts it is optional: a facts reader without it reads them Unknown,
+// so it can never make a step done.
+type StepFacts interface {
+	// StepTasks: at least min of the step's own tasks are in state (the
+	// grammar names StepTaskState only).
+	StepTasks(state string, min int64) Tri
+	// StepLanded: the step's accepted work landed on main.
+	StepLanded() Tri
+	// StepSTGSettled: that landed work was verified on STG by B5.
+	StepSTGSettled() Tri
+}
+
+func (o *onceFacts) StepTasks(state string, min int64) Tri {
+	if f, ok := o.Facts.(StepFacts); ok {
+		return f.StepTasks(state, min)
+	}
+	return Unknown
+}
+
+func (o *onceFacts) StepLanded() Tri {
+	if f, ok := o.Facts.(StepFacts); ok {
+		return f.StepLanded()
+	}
+	return Unknown
+}
+
+func (o *onceFacts) StepSTGSettled() Tri {
+	if f, ok := o.Facts.(StepFacts); ok {
+		return f.StepSTGSettled()
+	}
+	return Unknown
 }
 
 // BoundFacts is optional so legacy facts readers fail closed for PV2 atoms.
