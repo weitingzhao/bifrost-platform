@@ -35,6 +35,8 @@
     "run_probe_pod",
     "scale_deployment",
     "start_pipeline_run",
+    "stg_release_sample_create",
+    "stg_release_sample_finalize",
     "sweep_failed_backups",
     "sync_kubeconfig",
     "sync_mirrors",

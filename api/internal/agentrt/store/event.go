@@ -201,6 +201,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		return Appended{}, err
 	}
 	seq := lastSeq + 1
+	if err := checkStgSampleAppend(ctx, tx, ev, seq, at); err != nil {
+		return Appended{}, err
+	}
 	if old, err := checkStgReleaseAppend(ctx, tx, &ev, seq, at); err != nil {
 		return Appended{}, err
 	} else if old != nil {

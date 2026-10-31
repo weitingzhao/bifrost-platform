@@ -34,41 +34,43 @@ var hiddenParams = map[string]bool{
 // entry shows nothing. run_probe_pod args and command are omitted because
 // they can carry a secret. Passthrough keys are absent from every list.
 var notifySafeKeys = map[string][]string{
-	"start_pipeline_run":         {"name", "revision", "tag", "who"},
-	"release_window_hold":        {"what", "who", "ttl_minutes", "env"},
-	"release_window_release":     {"who", "force"},
-	"release_freeze":             {"who"},
-	"sync_mirrors":               {"repos"},
-	"delete_pipeline_run":        {"id", "ns"},
-	"gitops_sync_app":            {"name"},
-	"gitops_rollback_app":        {"name", "revision"},
-	"rollout_restart_deployment": {"namespace", "kind", "name"},
-	"scale_deployment":           {"namespace", "kind", "name", "replicas"},
-	"delete_pod":                 {"namespace", "name"},
-	"cordon_node":                {"name"},
-	"uncordon_node":              {"name"},
-	"drain_node":                 {"name", "force", "delete_local_data", "grace_period_seconds"},
-	"poweroff_compute_node":      {"name"},
-	"wake_compute_node":          {"name"},
-	"trigger_data_clone":         {"source", "targets", "mode"},
-	"market_data_heal":           {"dry_run", "finding_ids"},
-	"ib_mode":                    {"mode"},
-	"ib_maintenance":             {"account_id", "enabled"},
-	"ib_self_heal":               {"enabled"},
-	"unifi_firewall_apply":       {"include_default_deny"},
-	"unifi_client_fixed_ip":      {"mac", "ip", "name"},
-	"ensure_kubeconfig_secret":   {"namespaces", "sync_first"},
-	"update_data_clone_schedule": {"enabled", "interval", "source", "targets", "mode"},
-	"market_data_delete":         {"path"},
-	"plan_manifest":              {"repo", "path", "commit"},
-	"apply_manifest":             {"plan_id"},
-	"create_job_from_cronjob":    {"namespace", "cronjob"},
-	"delete_finished_jobs":       {"namespace", "names", "label_selector"},
-	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
-	"void_exam_paper":            {"environment", "run_id"},
-	"mark_missions_no_merge":     {"env", "archive_manifest_sha256"},
-	"approve_guardrail_landing":  {"env", "repo", "op", "R", "stg_release"},
-	"approve_core_landing":       {"env", "repo", "op", "R", "stg_release"},
+	"start_pipeline_run":          {"name", "revision", "tag", "who"},
+	"release_window_hold":         {"what", "who", "ttl_minutes", "env"},
+	"release_window_release":      {"who", "force"},
+	"release_freeze":              {"who"},
+	"sync_mirrors":                {"repos"},
+	"delete_pipeline_run":         {"id", "ns"},
+	"gitops_sync_app":             {"name"},
+	"gitops_rollback_app":         {"name", "revision"},
+	"rollout_restart_deployment":  {"namespace", "kind", "name"},
+	"scale_deployment":            {"namespace", "kind", "name", "replicas"},
+	"delete_pod":                  {"namespace", "name"},
+	"cordon_node":                 {"name"},
+	"uncordon_node":               {"name"},
+	"drain_node":                  {"name", "force", "delete_local_data", "grace_period_seconds"},
+	"poweroff_compute_node":       {"name"},
+	"wake_compute_node":           {"name"},
+	"trigger_data_clone":          {"source", "targets", "mode"},
+	"market_data_heal":            {"dry_run", "finding_ids"},
+	"ib_mode":                     {"mode"},
+	"ib_maintenance":              {"account_id", "enabled"},
+	"ib_self_heal":                {"enabled"},
+	"unifi_firewall_apply":        {"include_default_deny"},
+	"unifi_client_fixed_ip":       {"mac", "ip", "name"},
+	"ensure_kubeconfig_secret":    {"namespaces", "sync_first"},
+	"update_data_clone_schedule":  {"enabled", "interval", "source", "targets", "mode"},
+	"market_data_delete":          {"path"},
+	"plan_manifest":               {"repo", "path", "commit"},
+	"apply_manifest":              {"plan_id"},
+	"create_job_from_cronjob":     {"namespace", "cronjob"},
+	"delete_finished_jobs":        {"namespace", "names", "label_selector"},
+	"run_probe_pod":               {"namespace", "image", "timeout_seconds", "env_from"},
+	"void_exam_paper":             {"environment", "run_id"},
+	"mark_missions_no_merge":      {"env", "archive_manifest_sha256"},
+	"stg_release_sample_create":   {"env", "revision", "ui_revision", "infra_revision"},
+	"stg_release_sample_finalize": {"env", "run", "uid"},
+	"approve_guardrail_landing":   {"env", "repo", "op", "R", "stg_release"},
+	"approve_core_landing":        {"env", "repo", "op", "R", "stg_release"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -125,6 +127,10 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = p("env"), "Land "+shortRef(p("R"))+" ("+p("op")+") past its soft guardrails"
 	case "approve_core_landing":
 		d.Env, d.Summary = p("env"), "Trusted core change: land "+shortRef(p("R"))+" ("+p("op")+")"
+	case "stg_release_sample_create":
+		d.Env, d.Summary = p("env"), "Create the B5 first-opening sample run of "+shortRef(p("revision"))
+	case "stg_release_sample_finalize":
+		d.Env, d.Summary = p("env"), "Archive and release the B5 sample "+p("run")
 	case "void_exam_paper":
 		run := p("run_id")
 		if len(run) > 12 {

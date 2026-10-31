@@ -24,6 +24,10 @@ var (
 	ErrSTGCollision  = errors.New("STG release run identity collision")
 	ErrSTGUnknown    = errors.New("STG evidence is unknown")
 	ErrSTGWrongInput = fmt.Errorf("%w: wrong_input", ErrSTGEvidence)
+	// ErrSTGCreateUnknown: a Create was sent and neither its response nor a
+	// readback proves what the apiserver stored: both failed, or the object
+	// they returned under the run's name does not match its identity.
+	ErrSTGCreateUnknown = errors.New("create outcome unknown")
 )
 
 // STGReleaseAdapter supplies only external facts and named writes. It has no

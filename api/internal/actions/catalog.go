@@ -489,6 +489,35 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "stg_release_sample_create", Tier: TierC,
+		Description: "TD-460: create the one held sample that the first opening of automatic STG release (B5) needs before stg_release is enabled (cmd/stg-release-probe/CANARY.md). Tier C: the Owner approves it on the Console. " +
+			"Request and approve on the PROD platform at ops.bifrost.lan; the target env is stg. Params: env (stg), revision (P), ui_revision (U) and infra_revision (infra), full 40-hex commits that must match the exact successful release CI of P. " +
+			"Refused while landing:dev enables stg_release for bifrost-platform, once B5 has opened any batch, while another sample is open, or while any cicd PipelineRun still holds bifrost.io/stg-release-hold. " +
+			"The platform allocates the batch number and intent from its own stream stg-sample:bifrost-platform (never from the B5 ledger), holds the release window as who stgrel-bifrost-platform-<n>-1 (what bifrost-platform, env stg, 60 minutes; renew with release_window_hold under the same who), " +
+			"and creates PipelineRun cicd/stgrel-<n>-1-<P8> of bifrost-deliver-platform with the production constructor and the hold finalizer. The result records run, uid and who: keep the uid as the sample's independent audit. " +
+			"Rollback: request stg_release_sample_finalize for that run and uid; STG content goes back only through an ordinary approved release.",
+		Params: []Param{
+			{Name: "env", Type: "string", Required: true, In: "body"},
+			{Name: "revision", Type: "string", Required: true, In: "body"},
+			{Name: "ui_revision", Type: "string", Required: true, In: "body"},
+			{Name: "infra_revision", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
+		ID: "stg_release_sample_finalize", Tier: TierC,
+		Description: "TD-460: close the B5 first-opening sample after the probe has used it. Tier C: the Owner approves it on the Console. " +
+			"Request and approve on the PROD platform at ops.bifrost.lan; the target env is stg. Params: env (stg), run (stgrel-<n>-1-<P8>) and uid (a UUID), taken from the stg_release_sample_create result, not from a fresh GET; " +
+			"the one exception is a create that ended unknown after its POST succeeded, where the uid read by name is checked against the live run's identity before it is recorded (CANARY.md step 4). " +
+			"Refused when run or uid is malformed, when no sample of that run was created, when the uid differs from the recorded one, when the run is not terminal, or when the sample was finalized by another approval. " +
+			"In order: archive the terminal run and TaskRun evidence on stg-sample:bifrost-platform, remove only bifrost.io/stg-release-hold with a UID and resourceVersion guarded patch, record the release, then end the window if the sample's who still holds it. " +
+			"Needs patch on tekton.dev pipelineruns in cicd for the platform ServiceAccount, the same permission B5 itself needs. Rollback: none needed; the archive stays, and the PipelineRun is left to the normal Tekton cleanup.",
+		Params: []Param{
+			{Name: "env", Type: "string", Required: true, In: "body"},
+			{Name: "run", Type: "string", Required: true, In: "body"},
+			{Name: "uid", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
 		Description: "Approve an exact shell command. Tier D. The platform does not execute it. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it.",
 		Params: []Param{

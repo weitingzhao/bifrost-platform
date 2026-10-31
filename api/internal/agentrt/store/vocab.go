@@ -166,6 +166,9 @@ var bodies = map[string][]field{
 		// card on it (issuecard.go): opened or settled, ids and enums only.
 		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
 		{"stg_release", kAny, true},
+		// stg_sample: on stg-sample:bifrost-platform, the first-opening
+		// finalizer sample of B5 and its archive and release (TD-460).
+		{"stg_sample", kAny, true},
 		// landing_answer: on the repository's landing stream, how one
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.

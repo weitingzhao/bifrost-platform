@@ -240,6 +240,38 @@ func TestSTGNamedRunCollisionIsNeverAdopted(t *testing.T) {
 	}
 }
 
+// TD-460 review B2: once the POST was sent, a stored object of the run's
+// name that does not match (returned by the POST or read back after it) is an
+// unknown outcome naming the run and its UID, never a plain refusal. It still
+// wraps ErrSTGCollision for callers that test for it.
+func TestSTGMismatchAfterPostIsUnknown(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"returned", "read_back"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			a, dyn, _ := stgAdapter(t)
+			dyn.PrependReactor("create", "pipelineruns", func(action kt.Action) (bool, runtime.Object, error) {
+				obj := action.(kt.CreateAction).GetObject().(*unstructured.Unstructured).DeepCopy()
+				obj.SetUID("mutated-uid")
+				obj.SetResourceVersion("1")
+				obj.SetFinalizers(nil) // e.g. a mutating webhook dropped the hold
+				if err := dyn.Tracker().Create(pipelineRunGVR, obj, STGReleaseNamespace); err != nil {
+					return true, nil, err
+				}
+				if mode == "read_back" {
+					return true, nil, context.DeadlineExceeded
+				}
+				return true, obj, nil
+			})
+			_, _, err := a.CreateNamedDeliverRun(context.Background(), stgInput())
+			id, _ := stgInput().Identity()
+			if !errors.Is(err, ErrSTGCreateUnknown) || !errors.Is(err, ErrSTGCollision) || !strings.Contains(err.Error(), id.Name) || !strings.Contains(err.Error(), "mutated-uid") {
+				t.Fatal("want an unknown outcome naming the run and uid", err)
+			}
+		})
+	}
+}
+
 type stgArchive struct {
 	present bool
 	err     error

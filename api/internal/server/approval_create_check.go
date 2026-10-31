@@ -17,6 +17,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	if action == "void_exam_paper" && text(params["environment"]) != "prod" {
 		return errors.New("void_exam_paper is PROD only until cross-environment runtime execution is available; " + approvalhome.Required)
 	}
+	if err := stgSampleCreateCheck(action, params); err != nil {
+		return err
+	}
 	if action == "mark_missions_no_merge" {
 		_, err := s.noMergeRequest(params)
 		return err

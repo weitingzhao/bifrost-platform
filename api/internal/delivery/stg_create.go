@@ -161,11 +161,15 @@ func (a *STGReleaseAdapter) createNamedDeliverRun(ctx context.Context, in NamedD
 	if createErr != nil {
 		created, err = runs.Get(ctx, id.Name, metav1.GetOptions{})
 		if err != nil {
-			return resp, nil, fmt.Errorf("create outcome unknown: %w (readback: %v)", createErr, err)
+			return resp, nil, fmt.Errorf("%w: %w (readback: %v)", ErrSTGCreateUnknown, createErr, err)
 		}
 	}
 	if err = MatchNamedDeliverRun(created, in, true); err != nil {
-		return resp, nil, err
+		// The POST was sent and an object of this name is stored (returned by
+		// it or read back), but it does not match. Whose it is cannot be told
+		// from here, so this is an unknown outcome, not a refusal; it still
+		// wraps ErrSTGCollision. B5 resolves any send error by its bounded GET.
+		return resp, nil, fmt.Errorf("%w: run %s uid %s stored after the POST: %w", ErrSTGCreateUnknown, id.Name, created.GetUID(), err)
 	}
 	resp.OK, resp.Changed, resp.Message = true, createErr == nil, "Named STG release observed"
 	return resp, created, nil
