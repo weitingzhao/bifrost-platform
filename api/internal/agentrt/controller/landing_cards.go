@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -20,8 +21,12 @@ const landingCardCall = 20 * time.Second
 // quota is full.
 const landingCardQuotaPause = 30 * time.Minute
 
-// landingCardsRepo is the one repository landing runs for (S3).
-const landingCardsRepo = "bifrost-platform"
+// landingCardRepos are the repositories whose landing cards are carried:
+// every repository landing supports (S6 added bifrost-trade-infra), live or
+// not, so a stop or a failure in any of them reaches the Owner and a card
+// already asked is still settled after its repository leaves the live set.
+// A repository without landing events has no triggers and costs one read.
+func landingCardRepos() []string { return landing.LandingRepoNames() }
 
 // LandingCardsComplete: the question store gives all the landing cards
 // need. A new live landing starts only with them (CUT §11.6 v3 item 9);
@@ -46,7 +51,23 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	}
 	now := c.clock()
 	var errs []error
-	ask, bound, err := store.LandingCardsToSettle(ctx, c.DB, landingCardsRepo)
+	// A full quota, or no way to ask, pauses new cards only; an existing
+	// card is still taken up by its key (review 670 R-03, 672 R-04). The
+	// pause is shared by every repository: one question store.
+	mayCreate := q.AskRaw != nil && !now.Before(c.cardAsksPausedUntil())
+	for _, repo := range landingCardRepos() {
+		if err := c.landingCardsRepoPass(ctx, q, repo, now, &mayCreate); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", repo, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// landingCardsRepoPass is one repository's part of a pass: settle its bound
+// cards, ask its prepared ones, then prepare and ask new ones.
+func (c *Controller) landingCardsRepoPass(ctx context.Context, q store.CardQuestions, repo string, now time.Time, mayCreate *bool) error {
+	var errs []error
+	ask, bound, err := store.LandingCardsToSettle(ctx, c.DB, repo)
 	if err != nil {
 		return err
 	}
@@ -62,18 +83,15 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	if q.LookupKey == nil {
 		return errors.Join(errs...)
 	}
-	// A full quota, or no way to ask, pauses new cards only; an existing
-	// card is still taken up by its key (review 670 R-03, 672 R-04).
-	mayCreate := q.AskRaw != nil && !now.Before(c.cardAsksPausedUntil())
 	askOne := func(prep string) {
 		one, cancel := context.WithTimeout(ctx, landingCardCall)
 		defer cancel()
-		if _, err := store.AskLandingCard(one, c.DB, q, landingCardsRepo, prep, now, mayCreate); err != nil {
+		if _, err := store.AskLandingCard(one, c.DB, q, repo, prep, now, *mayCreate); err != nil {
 			if errors.Is(err, store.ErrCardQuota) {
 				// Shared with every card the runtime asks: pause, do not
 				// hammer it every pass; the rest of this pass still looks
 				// its cards up. Memory only: a restart tries once.
-				mayCreate = false
+				*mayCreate = false
 				c.pauseCardAsks(now.Add(landingCardQuotaPause))
 			}
 			errs = append(errs, fmt.Errorf("card %s: %w", prep, err))
@@ -82,10 +100,10 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	for _, card := range ask {
 		askOne(card.Prep)
 	}
-	if !mayCreate {
+	if !*mayCreate {
 		return errors.Join(errs...)
 	}
-	prepared, err := store.PrepareLandingCards(ctx, c.DB, landingCardsRepo, now)
+	prepared, err := store.PrepareLandingCards(ctx, c.DB, repo, now)
 	if err != nil {
 		errs = append(errs, err)
 	}

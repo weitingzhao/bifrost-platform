@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -578,5 +580,47 @@ func TestS3CardPassLookupKeyAlone(t *testing.T) {
 	ok(t, newCardCtl(w, only).cardsPassAt(at.Add(time.Hour+time.Minute)))
 	if c := cardsByN(t, w)[1]; !c.Bound || c.QuestionID != "q1" || f.asks != 1 {
 		t.Fatalf("not taken up by its key alone: %+v, %d asks", c, f.asks)
+	}
+}
+
+// Serial: FreezeEventClock. W-31 S6: a denied push stops bifrost-trade-infra
+// on its own stream; the PROD pass carries that repository's cards too, so
+// the Owner gets the stop card in Console, and answering resume writes the
+// resume on the infra stream once. bifrost-platform is untouched.
+func TestS6CardPassCarriesInfraStop(t *testing.T) {
+	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := newKernelWorld(t)
+	const infra = "landing:bifrost-trade-infra"
+	root := w.ready(t, store.Task{OffPlanReason: "infra stop"})
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := store.Append(ctx, tx, store.Event{Stream: infra, Type: "note", Actor: "controller", TaskID: root,
+			Body: map[string]any{"text": "stop", "landing_stop": map[string]any{"repo": "bifrost-trade-infra", "op": "land:i:1", "root": root, "generation": 1}}})
+		return err
+	}))
+	notes := func(stream, key string) int {
+		var n int
+		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? $2`, stream, key).Scan(&n))
+		return n
+	}
+	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
+	cc := newCardCtl(w, f.source())
+	ok(t, cc.cardsPassAt(at.Add(time.Hour)))
+	if f.asks != 1 {
+		t.Fatal("no card asked for the infra stop", f.asks)
+	}
+	v, found, err := store.ReadLandingCard(ctx, w.rt, "bifrost-trade-infra", "q1")
+	ok(t, err)
+	if !found || v.Kind != store.CardRepoStopped {
+		t.Fatalf("the infra card: %+v", v)
+	}
+	f.answer("q1", "a", at.Add(90*time.Minute))
+	ok(t, cc.cardsPassAt(at.Add(2*time.Hour)))
+	ok(t, cc.cardsPassAt(at.Add(3*time.Hour)))
+	if notes(infra, "landing_resume") != 1 || f.asks != 1 {
+		t.Fatal("infra resume not written once", notes(infra, "landing_resume"), f.asks)
+	}
+	if notes(landingRepoStream, "landing_resume") != 0 || cardEventCount(t, w, store.CardsStream("bifrost-platform")) != 0 {
+		t.Fatal("the platform stream was touched")
 	}
 }
