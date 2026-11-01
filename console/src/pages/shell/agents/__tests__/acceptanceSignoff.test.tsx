@@ -17,9 +17,11 @@ let response: typeof fixture
 beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => {}, removeItem: () => {} } })
   posts = []; response = structuredClone(fixture)
-  window.location.hash = '#work?root=R4'
+  // The acceptance sign-offs are on Work's Sign-offs tab (R5:5.5-2; they were on its Needs you card).
+  window.location.hash = '#work?tab=signoffs&root=R4'
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.as_of))
   vi.stubGlobal('fetch', vi.fn(async (url: unknown, init?: RequestInit) => {
+    if (String(url).includes('/agentrt/plan?')) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
     if (String(url).endsWith('/signoff')) {
       posts.push(JSON.parse(String(init?.body)))
       return new Response(JSON.stringify({ plan_node_id: entry.plan_node_id, ref: entry.ref, by: 'owner', at: fixture.as_of, already_signed: false, event_id: 42 }))
@@ -87,7 +89,7 @@ it('does not let an operator sign or turn blocked candidates into a signing acti
   show(<WorkPlanView />, { ...admin, canAdmin: false, caps: { ...admin.caps!, role: 'operator', can_admin: false } })
   const boxes = await screen.findAllByRole('checkbox')
   boxes.forEach(box => expect(box).toBeDisabled())
-  const needs = screen.getByRole('region', { name: 'Needs you' })
+  const needs = screen.getByRole('region', { name: 'Sign-offs' })
   expect(within(needs).getAllByRole('button', { name: 'Sign off' })).toHaveLength(1)
   expect(screen.getByRole('button', { name: 'Sign off' })).toBeDisabled()
   expect(posts).toEqual([])

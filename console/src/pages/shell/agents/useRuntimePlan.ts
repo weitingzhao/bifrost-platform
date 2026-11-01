@@ -156,10 +156,15 @@ export function useApprovalSteps(enabled = true): ApprovalStepsRead {
  * or counts none): read is 'ok' with the trees the runtime holds, in round order; 'loading' until each has answered;
  * 'error' when any read failed, or answered a tree that is not the round asked for (review 476 C2).
  */
-type RoundPlans = { read: 'ok'; docs: unknown[] } | { read: 'loading' | 'error' }
-function useRoundPlans(enabled: boolean): RoundPlans {
+type RoundPlans = { read: 'ok'; docs: unknown[]; rounds: string[] } | { read: 'loading' | 'error' }
+/**
+ * How a reader takes GET /progress: polled every 5 s itself, or (cache) from what the shell already polls on every page
+ * (ConsolePage → useNeedsYou), read once only when nothing has read it, as Work's round address does (R5:5.5-2).
+ */
+export type ProgressSource = 'poll' | 'cache'
+function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll'): RoundPlans {
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
-    enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+    enabled, retry: false, ...(source === 'cache' ? { staleTime: Infinity } : { refetchInterval: AGENT_RUNTIME_POLL_MS }) })
   const { data: progress, isError: progressFailed, isPaused: progressPaused } = progressQ
   const roundsKey = progress !== undefined ? planRounds(progress.plan).join(',') || PLAN_ROOT : progressFailed || progressPaused ? PLAN_ROOT : ''
   const rounds = useMemo(() => (roundsKey === '' ? [] : roundsKey.split(',')), [roundsKey])
@@ -174,7 +179,7 @@ function useRoundPlans(enabled: boolean): RoundPlans {
       if (doc.root !== rounds[i] || !Array.isArray(doc.nodes)) return { read: 'error' }
       docs.push(q.data.doc)
     }
-    return { read: 'ok', docs }
+    return { read: 'ok', docs, rounds }
   }, [rounds])
   return useQueries({
     queries: rounds.map(root => ({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }: { signal: AbortSignal }) => fetchRuntimePlan(root, signal),
@@ -189,11 +194,13 @@ function useRoundPlans(enabled: boolean): RoundPlans {
  * them uses waits; notStarted are the steps with a sign-off rule whose work has not started, kept apart and never
  * counted (TD-425).
  */
-export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[]; acceptanceRoots: string[] } | { read: 'loading' | 'error' }
-export function useSignoffWaits(enabled = true): SignoffWaitsRead {
-  const plans = useRoundPlans(enabled)
+export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[]; acceptanceRoots: string[]
+  /** The rounds whose GET /plan was read (PLAN_ROOT alone when GET /progress listed no R<n> round or was not read). */
+  rounds?: string[] } | { read: 'loading' | 'error' }
+export function useSignoffWaits(enabled = true, source: ProgressSource = 'poll'): SignoffWaitsRead {
+  const plans = useRoundPlans(enabled, source)
   // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
   return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans
-    : { read: 'ok', waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)),
+    : { read: 'ok', rounds: plans.rounds, waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)),
       acceptanceRoots: plans.docs.flatMap(doc => records(record(doc).nodes).some(n => (JSON.stringify(n.done_rule_json) ?? '').includes('"external_verified"')) ? [text(record(doc).root)] : []).filter(Boolean) }), [plans])
 }

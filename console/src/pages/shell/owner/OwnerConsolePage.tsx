@@ -3,7 +3,6 @@ import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
 import { ServiceVersions } from '../services/ServiceVersions'
 import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
-import { OwnerReleaseLane } from './OwnerReleaseLane'
 import { ChiefConversation } from './ChiefConversation'
 import { useEffect, useState } from 'react'
 import { GovernanceReferences } from '../progress/GovernanceReferences'
@@ -13,7 +12,7 @@ import { OwnerCapabilities } from './OwnerCapabilities'
 import { canonicalQuery, scrollAfterShell } from '@/lib/shell/useHashSection'
 import { formatShellHash, goalHref, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { GoalForm } from '@/pages/shell/agents/GoalForm'
-import { ProgressPage } from '@/pages/shell/progress/ProgressPage'
+import { useWorkView } from '@/pages/shell/agents/workViewModel'
 import { OwnerData } from './OwnerData'
 import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
@@ -77,7 +76,10 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     return () => { cancel(); window.removeEventListener('hashchange', scroll) }
   }, [entry])
   const blocks = entryBlocks(entry)
-  const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: blocks.work, chief: blocks.chief })
+  // Work's runtime-wide reads (release runs, the coordinator's note, the last result) only while its Activity page is open (R5:5.5-2).
+  const workView = useWorkView()
+  const activity = blocks.work && workView.kind === 'section' && workView.section === 'activity'
+  const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: activity, chief: blocks.chief })
   const [draft, setDraft] = useState({ text: '', key: 0 })
 
   const makeGoal = (text: string) => {
@@ -93,7 +95,6 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief active={blocks.chief} data={data} draft={draft.text} draftKey={draft.key} /></div>
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
-    {blocks.work && <><OwnerReleaseLane data={data} /><ProgressPage planView /></>}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
     {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>

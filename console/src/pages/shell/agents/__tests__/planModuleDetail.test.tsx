@@ -275,7 +275,7 @@ describe('module detail on the page', () => {
     expect(step('5.1-4')).toHaveTextContent('ReviewNo task yet')
     expect(step('5.1-5')).toHaveTextContent('Owner')
     expect(step('5.1-4')).toHaveTextContent('Agent')
-    const crumbs = within(region('Module 5.1')).getByRole('navigation', { name: 'Breadcrumb' })
+    const crumbs = within(region('Module 5.1')).getByRole('navigation', { name: 'Module path' })
     expect(within(crumbs).getByRole('link', { name: 'Back to Work' })).toHaveAttribute('href', '#work?root=R5')
     expect(within(crumbs).getByRole('link', { name: 'Round 5' })).toHaveAttribute('href', '#work?root=R5')
   })
@@ -563,12 +563,17 @@ describe('Work → Plan with a module address', () => {
     // The shell's lists are not in this test's cache: the detail says so and does not fetch them.
     expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Questions not read yet')
     expect(urls().length).toBeGreaterThan(0)
-    expect(urls().every(u => u === '/api/v1/agentrt/plan-view?root=R5')).toBe(true)
+    // The detail reads nothing of its own: the page's own reads are the plan view and, for the summary's sign-off
+    // count (R5:5.5-2), the rounds' GET /plan and the shell's GET /progress that lists them.
+    const pageReads = (u: string) => u === '/api/v1/agentrt/plan-view?root=R5' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || u === '/api/v1/agentrt/progress'
+    expect(urls().every(pageReads)).toBe(true)
+    const before = urls().length
     // With the shell's lists in the cache the detail shows them, still without a request of its own.
     act(() => seedShell())
     await waitFor(() => expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Request #7'))
-    expect(urls().every(u => u === '/api/v1/agentrt/plan-view?root=R5')).toBe(true)
-    expect(urls().some(u => /landing|questions|approvals|progress|plan\?|root=R4/.test(u))).toBe(false)
+    expect(urls().every(pageReads)).toBe(true)
+    expect(urls().slice(before).every(u => u === '/api/v1/agentrt/plan-view?root=R5' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u))).toBe(true)
+    expect(urls().some(u => /landing|questions|approvals|plan-view\?root=R4/.test(u))).toBe(false)
     // ‹ Work: the detail closes and the keyboard goes back to the module's own link in the rows.
     await act(async () => { window.location.hash = '#work?root=R5'; window.dispatchEvent(new Event('hashchange')) })
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull())

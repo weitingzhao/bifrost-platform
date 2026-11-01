@@ -23,6 +23,8 @@ function show(firstSucceeds: boolean) {
   }))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   clients.push(client)
+  // Now, Open goals and Crew are on Work's Activity page (R5:5.5-2).
+  window.location.hash = '#work?section=activity'
   render(<QueryClientProvider client={client}><Harness /></QueryClientProvider>)
   return client
 }

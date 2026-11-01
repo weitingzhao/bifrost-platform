@@ -16,7 +16,11 @@ let reply: unknown
 let status: number
 let fetcher: ReturnType<typeof vi.fn>
 /** The shell's GET /progress (ConsolePage → useNeedsYou), with R4 the newest round: Work shows the newest round the runtime lists. */
-const newestR4 = () => parseRuntimeProgress({ plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }] })
+const progressR4 = { plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }] }
+const newestR4 = () => parseRuntimeProgress(progressR4)
+async function go(hash: string) {
+  await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event('hashchange')) })
+}
 function show(hash = '#work') {
   window.location.hash = hash
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
@@ -29,71 +33,98 @@ beforeEach(() => {
   reply = fixture; status = 200
   fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
+    // GET /plan (every round's step sign-offs, the Sign-offs tab's other read): the runtime holds no such tree here.
+    if (url.includes('/agentrt/plan?')) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
+    if (url.endsWith('/agentrt/progress')) return new Response(JSON.stringify(progressR4), { status: 200 })
     return new Response(JSON.stringify(url.includes('recent_cursor=') ? page2 : reply), { status })
   })
   vi.stubGlobal('fetch', fetcher)
 })
 afterEach(() => { cleanup(); client?.clear(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); onlineManager.setOnline(true) })
+/** A fold of the round tab, opened as the Owner opens it; it is drawn once the browser's toggle event arrives. */
+async function unfold(title: RegExp) {
+  const summary = screen.getByText(title, { selector: 'summary' })
+  fireEvent.click(summary)
+  await waitFor(() => expect(summary.parentElement!.children.length).toBeGreaterThan(1))
+}
+const summary = () => screen.findByRole('region', { name: 'Where the round stands' })
+// R5:5.5-2: Main line and Needs you became the summary card and the Sign-offs tab; Live work, Recent changes, Waiting
+// on and the whole plan moved to their tab or fold. What each says is unchanged and asserted where it now is.
 describe('Work plan/live view', () => {
   it('shows main line, next responsible, all plan items, linked waits and partial Owner readiness', async () => {
     show()
     expect(screen.getByRole('status')).toHaveTextContent('Loading plan and live work')
-    const main = await screen.findByRole('region', { name: 'Main line' })
+    const main = await summary()
     expect(main).toHaveTextContent('4.1')
     expect(main).toHaveTextContent('Next ·')
     expect(main).toHaveTextContent('(plan default)')
-    expect(main).toHaveTextContent('ETA · Unknown')
-    const needs = screen.getByRole('region', { name: 'Needs you' })
-    expect(needs).toHaveTextContent('Needs you · Unknown')
-    expect(needs).toHaveTextContent('Later · 1')
-    expect(within(needs).getByRole('link', { name: 'Plan sign-offs' })).toHaveAttribute('href', '#work?section=signoff')
+    expect(main).toHaveTextContent('ETA Unknown')
+    expect(within(main).getByRole('link', { name: /^Sign-offs:/ })).toHaveAttribute('href', '#work?tab=signoffs')
+    await unfold(/^Whole plan/)
     for (const item of fixture.items) expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent(item.title)
+    await unfold(/^Dependency waits/)
+    expect(screen.getByRole('region', { name: 'Waiting on' })).toHaveTextContent('Unknown')
+    await go('#work?tab=signoffs')
+    const needs = await screen.findByRole('region', { name: 'Sign-offs' })
+    await waitFor(() => expect(needs).toHaveTextContent('Later in Round 4 · 1 · not marked ready'))
+    expect(needs).toHaveTextContent('Readiness Unknown')
+    await go('#work?tab=live')
     const live = screen.getByRole('region', { name: 'Live work' })
     expect(live).toHaveTextContent('实现全计划与现场视图')
-    expect(live).toHaveTextContent('codex · openai')
+    expect(live).toHaveTextContent('codex')
+    expect(live).toHaveTextContent('openai · External work')
     expect(live).toHaveTextContent('Last heartbeat')
     expect(live).toHaveTextContent('Not reconciled')
-    expect(screen.getByRole('region', { name: 'Waiting on' })).toHaveTextContent('Unknown')
-    expect(fetcher.mock.calls.every(([url]) => String(url).includes('/agentrt/plan-view?root=R4'))).toBe(true)
+    // Every tab reads the same plan view; the sign-offs also read the round's GET /plan, as SignoffWaiting did, and take
+    // the rounds from the shell's GET /progress in the cache: no progress read of Work's own.
+    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4', '/api/v1/agentrt/plan?root=R4']))
   })
   it('shows runtime attempts on a historical root and preserves the old round parameter', async () => {
     reply = legacy
-    show('#work?section=plan&round=R2')
+    show('#work?section=plan&round=R2&tab=live')
     const live = await screen.findByRole('region', { name: 'Live work' })
     expect(live).toHaveTextContent('Runtime attempt')
     expect(live).toHaveTextContent('exec:cursor')
     expect(live).toHaveTextContent('Host · h1')
     expect(live).toHaveTextContent('Linked external history · 1 records')
-    expect(within(live).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(within(live).getByRole('list', { name: 'Work now' })).getAllByRole('listitem')).toHaveLength(1)
+    await go('#work?section=plan&round=R2')
+    await unfold(/^Whole plan/)
     expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent('Unclassified')
     expect(fetcher.mock.calls[0][0]).toBe('/api/v1/agentrt/plan-view?root=R2')
   })
   it('distinguishes a real zero from loading, while keeping Owner readiness unknown', async () => {
-    reply = empty; show('#work?root=R3')
+    reply = empty; show('#work?root=R3&tab=live')
     expect(screen.queryByText('No active work in this snapshot.')).not.toBeInTheDocument()
     expect(await screen.findByText('No active work in this snapshot.')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent('Needs you · Unknown')
+    expect(screen.getByRole('link', { name: /^Live · 0 registered/ })).toHaveAttribute('aria-current', 'page')
+    await go('#work?root=R3&tab=signoffs')
+    const needs = screen.getByRole('region', { name: 'Sign-offs' })
+    await waitFor(() => expect(needs).toHaveTextContent('Ready for your sign-off now'))
+    expect(needs).toHaveTextContent('Later in Round 3 · 0')
   })
   it('keeps submitted external work separate from plan completion', async () => {
-    show(); const live = await screen.findByRole('region', { name: 'Live work' })
+    show('#work?tab=live'); const live = await screen.findByRole('region', { name: 'Live work' })
     expect(live).toHaveTextContent('Finished today · 1')
     expect(live).toHaveTextContent('Submitted')
+    expect(live).toHaveTextContent('Recently submitted · 1 of 1')
     expect(live).toHaveTextContent('Execution ended; this does not mean the plan is complete.')
-    expect(screen.getByRole('region', { name: 'Main line' })).toHaveTextContent('4.1')
+    expect(screen.getByRole('region', { name: 'Where the round stands' })).toHaveTextContent('4.1')
   })
   it('keeps the last successful snapshot visibly stale after a failed refresh, recovers on retry', async () => {
-    show(); await screen.findByRole('region', { name: 'Main line' })
+    show('#work?tab=live'); await summary()
     status = 503; reply = { error: 'unavailable' }
     await act(async () => { await client.invalidateQueries({ queryKey: ['agent-runtime-plan-view'] }) })
     expect(await screen.findByRole('alert')).toHaveTextContent('Stale · showing the last successful snapshot')
     expect(screen.getByRole('region', { name: 'Live work' })).toHaveTextContent('实现全计划与现场视图')
-    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent('Unknown')
+    expect(screen.getByRole('region', { name: 'Where the round stands' })).toHaveTextContent(/Stale · last read \d\d:\d\d:\d\d/)
+    expect(screen.getByRole('link', { name: /^Live · last read 1 registered/ })).toBeInTheDocument()
     reply = fixture; status = 200
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
   it.each([404, 503])('does not turn HTTP %s into an empty plan', async code => {
-    status = code; reply = { error: 'unavailable' }; show()
+    status = code; reply = { error: 'unavailable' }; show('#work?tab=live')
     expect(await screen.findByRole('alert')).toHaveTextContent('Unknown')
     expect(screen.queryByRole('region', { name: 'Live work' })).not.toBeInTheDocument()
   })
@@ -105,7 +136,7 @@ describe('Work plan/live view', () => {
   it('ages a cached heartbeat beyond 60s without another successful fetch', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(Date.parse(fixture.as_of))
-    window.location.hash = '#work'
+    window.location.hash = '#work?tab=live'
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(['agent-runtime-plan-view', 'R4'], parsePlanSnapshot(fixture, 'R4'))
     client.setQueryData(['agent-runtime-progress'], newestR4())
@@ -117,25 +148,37 @@ describe('Work plan/live view', () => {
     expect(live).toHaveTextContent('Unconfirmed')
   })
   it('loads cursor pages without duplicating changes or moving the history boundary', async () => {
-    show(); await screen.findByRole('region', { name: 'Recent changes' })
+    show('#work?tab=changes'); await screen.findByRole('region', { name: 'Recent changes' })
     const history = screen.getByRole('region', { name: 'Recent changes' })
+    // Eight first, of the twenty read (one page); the rest of the page, then the next page, on request.
+    expect(within(history).getAllByRole('listitem')).toHaveLength(8)
+    expect(history).toHaveTextContent(`Recent changes · 8 of ${fixture.recent_changes.length} read`)
+    expect(history).toHaveTextContent('older ones load on request')
+    expect(screen.queryByRole('button', { name: 'Load more changes' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: `Show ${fixture.recent_changes.length - 8} more` }))
     expect(within(history).getAllByRole('listitem')).toHaveLength(fixture.recent_changes.length)
     fireEvent.click(screen.getByRole('button', { name: 'Load more changes' }))
     await waitFor(() => expect(within(history).getAllByRole('listitem')).toHaveLength(fixture.recent_changes.length + page2.recent_changes.length))
     expect(history).toHaveTextContent(fixture.recent_as_of)
     fireEvent.click(screen.getByRole('button', { name: 'Latest changes' }))
-    await waitFor(() => expect(within(history).getAllByRole('listitem')).toHaveLength(fixture.recent_changes.length))
+    await waitFor(() => expect(within(history).getAllByRole('listitem')).toHaveLength(8))
   })
   it('locates a selected step after data arrives and follows another root without old data leakage', async () => {
     const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll
     show('#work?section=plan&root=R4&node=R4%3A4.1-2')
-    await screen.findByRole('region', { name: 'Whole plan' })
+    await screen.findByRole('region', { name: 'Module 4.1' })
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    await unfold(/^Whole plan/)
     const node = document.getElementById('plan-node-R4:4.1-2')!
     expect(node.closest('details')).toHaveAttribute('open')
-    await waitFor(() => expect(scroll).toHaveBeenCalled())
     reply = legacy
     await act(async () => { window.location.hash = '#work?section=plan&root=R2&node=R2%3A1'; window.dispatchEvent(new Event('hashchange')) })
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent('Whole plan · R2'))
+    expect(await screen.findByRole('region', { name: 'Module 1' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Modules' })).toHaveTextContent('Modules · R2')
     expect(screen.queryByText('实现全计划与现场视图')).not.toBeInTheDocument()
+    // A node with no module of its own (the round itself) opens the whole plan's fold and is found there.
+    await act(async () => { window.location.hash = '#work?section=plan&root=R2&node=R2'; window.dispatchEvent(new Event('hashchange')) })
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent('Whole plan · R2'))
+    expect(screen.queryByRole('region', { name: 'Module 1' })).toBeNull()
   })
 })

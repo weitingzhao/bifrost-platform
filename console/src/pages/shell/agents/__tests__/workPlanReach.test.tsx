@@ -7,7 +7,6 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot } from '@/api/planSnapshot'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { PlanModuleRows } from '../PlanModuleRows'
-import { SignoffWaiting } from '../SignoffWaiting'
 import { WorkPlanView } from '../WorkPlanView'
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
@@ -26,9 +25,9 @@ function planView(round: number): unknown {
 }
 type TreeNode = { plan_node_id: string; parent_plan_node_id: string | null; node_kind: string; label: string; title: string; state: string | null; done_rule_json: unknown }
 /**
- * GET /plan?root=Rn, the tree SignoffWaiting reads for every round. As PROD answered on 2026-11-01: fifteen of R4's steps
- * have an external_verified done rule (an adopted acceptance binding), so R4 is an acceptance root and its sign-off queue
- * reads R4's plan view; R2, R3 and R5 have none.
+ * GET /plan?root=Rn, the tree Work's sign-off count reads for every round (useSignoffWaits, SignoffWaiting's read). As
+ * PROD answered on 2026-11-01: fifteen of R4's steps have an external_verified done rule (an adopted acceptance binding),
+ * so R4 is an acceptance root, and its sign-off queue on Work's Sign-offs tab reads R4's plan view; R2, R3 and R5 have none.
  */
 function planTree(round: number) {
   const nodes = (planView(round) as { nodes: TreeNode[] }).nodes.map(({ plan_node_id, parent_plan_node_id, node_kind, label, title, state, done_rule_json }) =>
@@ -62,6 +61,8 @@ function modulesTitle(): Element {
   return title
 }
 const count = (list: string[], url: string) => list.filter(u => u === url).length
+/** Beside Work's tab row (R5:5.5-2): which round this is among the rounds the runtime lists. */
+const roundNote = () => document.querySelector<HTMLElement>('[data-round-note]')!
 
 beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined } })
@@ -89,9 +90,12 @@ describe('Work → Plan opens the newest round', () => {
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
     const rounds = screen.getByRole('navigation', { name: 'Plan rounds' })
     expect(within(rounds).getByRole('link', { name: /^Round 5/ })).toHaveAttribute('aria-current', 'page')
-    expect(rounds).toHaveTextContent('newest in the runtime')
-    // The shell's read is reused: no request of its own for GET /progress, and none for an earlier round.
-    expect(urls()).toEqual(planViewUrls())
+    expect(roundNote()).toHaveTextContent('newest in the runtime')
+    // The shell's read is reused: no request of its own for GET /progress (the summary's sign-off count reads it from the
+    // cache too, R5:5.5-2), and no plan view of an earlier round. Besides the plan view, the summary reads every round's
+    // GET /plan for its sign-off count (SignoffWaiting's read, on the page before R5:5.5-2 too).
+    expect(urls().filter(u => !/\/agentrt\/plan\?root=R[2-5]$/.test(u))).toEqual(planViewUrls())
+    expect(urls().some(u => u.endsWith('/agentrt/progress'))).toBe(false)
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
   })
 
@@ -111,7 +115,7 @@ describe('Work → Plan opens the newest round', () => {
     expect(newest).toHaveAttribute('href', '#work')
     expect(newest).not.toHaveAttribute('aria-current')
     expect(rounds).toHaveTextContent('Round 4')
-    expect(rounds).toHaveTextContent('an earlier round')
+    expect(roundNote()).toHaveTextContent('an earlier round')
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4']))
     await go('#work?section=plan&round=R3')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R3'))
@@ -152,11 +156,10 @@ describe('Work → Plan opens the newest round', () => {
     seedShell()
     page('#work')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
-    const rounds = screen.getByRole('navigation', { name: 'Plan rounds' })
-    expect(rounds).not.toHaveTextContent('rounds as of')
+    expect(roundNote()).not.toHaveTextContent('rounds as of')
     progressReply = { status: 503, body: { error: 'unavailable', message: 'progress unavailable' } }
     await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-progress'] }) })
-    await waitFor(() => expect(rounds).toHaveTextContent(/rounds as of \d\d:\d\d:\d\d UTC · the latest read failed: /))
+    await waitFor(() => expect(roundNote()).toHaveTextContent(/rounds as of \d\d:\d\d:\d\d UTC · the latest read failed: /))
     expect(modulesTitle()).toHaveTextContent('Modules · R5')
   })
 
@@ -184,7 +187,7 @@ describe('Work → Plan opens the newest round', () => {
     progressReply = { status: 200, body: progressBody(['R4', 'R5', 'R6b']) }
     page('#work')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
-    expect(screen.getByRole('navigation', { name: 'Plan rounds' })).toHaveTextContent('ignored, ids not R<n>: R6b')
+    expect(roundNote()).toHaveTextContent('ignored, ids not R<n>: R6b')
   })
 
   it('says it is reading which round is newest once, in the plan\'s place', () => {
@@ -197,19 +200,43 @@ describe('Work → Plan opens the newest round', () => {
 })
 
 describe('Work\'s plan reads with an acceptance root (PROD 2026-11-01)', () => {
-  it('reads the newest round for Work and R4 for its acceptance sign-offs: one plan view each, none for R2 or R3', async () => {
+  // R5:5.5-2: SignoffWaiting is no longer on Work; R4's acceptance sign-offs are read on the Sign-offs tab only.
+  it('reads the newest round for Work and R4 for its acceptance sign-offs only on Sign-offs: one plan view each, none for R2 or R3', async () => {
     seedShell()
-    window.location.hash = '#work'
-    render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><WorkPlanView /><SignoffWaiting deferScroll /></PlatformAuthContext.Provider></QueryClientProvider>)
+    page('#work')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
+    // The summary's sign-off count reads every round's tree (the Owner 2026-10-22), as SignoffWaiting did.
+    await waitFor(() => expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`))))
+    await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('R4 acceptance not counted here'))
+    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
+    await go('#work?tab=signoffs')
     await waitFor(() => expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4'))
     await waitFor(() => expect(screen.queryByText('Reading acceptance sign-offs…')).toBeNull())
-    // R5 is Work's own; R4 is the sign-off queue's (R4 holds the external_verified rules). Before R5:5.5-1 both were R4.
     expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R5')).toBe(1)
     expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R4')).toBe(1)
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4', '/api/v1/agentrt/plan-view?root=R5']))
-    // The sign-off waits read every round's tree (the Owner 2026-10-22), as they did before this change.
-    expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`)))
+  })
+})
+
+describe('the sign-off count reads every round only when the round list is whole (R5:5.5-2 review)', () => {
+  const signoffs = () => document.querySelector('[data-summary-signoffs]')!
+  it('says only R2 was read when GET /progress has no plan list, with a round in the address too, and the lamp is not green', async () => {
+    progressReply = { status: 200, body: {} }
+    page('#work?root=R5')
+    await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
+    await waitFor(() => expect(signoffs()).toHaveTextContent('not started Unknown'))
+    expect(signoffs()).toHaveTextContent("only R2 read; which rounds exist is Unknown (the runtime's progress answer has no plan list)")
+    expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['/api/v1/agentrt/plan?root=R2']))
+    const lamp = document.querySelector('[data-summary-tone]')!
+    expect(lamp).not.toHaveAttribute('data-summary-tone', 'ok')
+    expect(lamp.getAttribute('aria-label')).toContain('only R2 read')
+  })
+  it('names the rounds whose ids are not R<n> as not read, beside the good ones', async () => {
+    progressReply = { status: 200, body: progressBody(['R4', 'R5', 'R6b']) }
+    page('#work')
+    await waitFor(() => expect(signoffs()).toHaveTextContent('round R6b not read: its id is not R<n>'))
+    expect(signoffs()).toHaveTextContent('Sign-offs: 0+ ready · not started Unknown · 13 later in Round 5')
+    expect(urls().some(u => u.includes('root=R6b'))).toBe(false)
   })
 })
 
@@ -298,7 +325,7 @@ describe('the module detail goes back to Work', () => {
     const detail = document.querySelector<HTMLElement>('[data-module-detail="5.1"]')!
     expect(detail).toHaveAccessibleName('Module 5.1')
     const crumbs = detail.querySelector<HTMLElement>('nav')!
-    expect(crumbs).toHaveAccessibleName('Breadcrumb')
+    expect(crumbs).toHaveAccessibleName('Module path')
     const back = within(crumbs).getByRole('link', { name: 'Back to Work' })
     expect(back).toHaveAttribute('href', '#work?root=R5')
     expect(back).toHaveTextContent('‹ Work')

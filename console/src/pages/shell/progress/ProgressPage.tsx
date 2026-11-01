@@ -39,18 +39,24 @@ function addressTarget(): (() => HTMLElement | null) | null {
   return section ? () => document.getElementById(section) : null
 }
 
+/** One of Work's pages a step away that this page draws alone (R5:5.5-2); unset, every part. */
+export type ProgressPart = 'goals' | 'activity' | 'code-health' | 'commit-lineage'
+
 /**
- * Work's detail, below its cards (it was the Progress page; W-31 2.2b): the goal cards, the
- * overview, plan, activity, history, commit lineage and code health. What waits on
- * the Owner is For you's; new goals are given on Chief of staff. `#work?goal=M-n` puts that goal's
- * card first and brings it into view.
+ * Work's detail (it was the Progress page; W-31 2.2b): the goal cards, the overview, plan, activity, history, commit
+ * lineage and code health. What waits on the Owner is For you's; new goals are given on Chief of staff.
+ * `#work?goal=M-n` puts that goal's card first and brings it into view. Work draws one part at a time, each on its own
+ * page a step from the round (part): the goal cards, the activity, the commit lineage or the code health; nothing of
+ * the others is drawn or read there.
  */
-export function ProgressPage({ planView = false }: { planView?: boolean }) {
+export function ProgressPage({ planView = false, part }: { planView?: boolean; part?: ProgressPart }) {
   const openedAt = useRef(Date.now())
   const needs = useNeedsYou()
   const plan = useRuntimePlan(!planView)
   const planAddress = usePlanAddress()
-  const snapshot = usePlanSnapshot(planAddress.root, planView)
+  // The sign-offs are on the round's own tab once Work draws a part: no plan view is read here for them then.
+  const snapshot = usePlanSnapshot(planAddress.root, planView && part === undefined)
+  const shows = (p: ProgressPart) => part === undefined || part === p
   // One scroll per address, on arrival and on every hash change, to what the address points at:
   // returning to the same goal scrolls again, and goal and section together scroll once (review 425 B1).
   useEffect(() => {
@@ -103,20 +109,24 @@ export function ProgressPage({ planView = false }: { planView?: boolean }) {
     </>
   }
   return <NowClock><div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
-    <a href="#crew?section=references" className="self-start text-sm underline">Governance references · Blueprint, Standards, MCP and protocols</a>
-    <section id={GOALS_SECTION} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
-      <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
-      {runtimeState(null, !ids.length, 'No goals yet.')}
-      {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
-    </section>
+    {shows('goals') && <>
+      <a href="#crew?section=references" className="self-start text-sm underline">Governance references · Blueprint, Standards, MCP and protocols</a>
+      <section id={GOALS_SECTION} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
+        <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
+        {runtimeState(null, !ids.length, 'No goals yet.')}
+        {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
+      </section>
+    </>}
     {!planView && <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={unreadable} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} openedAt={openedAt.current} /></section>}
-    {planView ? <SignoffWaiting deferScroll /> : <section id="plan" aria-label="Plan" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>}
-    <section id="activity" aria-label="Activity"><AgentThreadsInProgress /><a href="#infrastructure?section=hosts">Host health and capacity · System</a></section>
-    <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
-      <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>
-    </OpsSection></section>
-    <section aria-label="Commit lineage" className="flex w-full min-w-0 flex-col"><ProgressReference id="commit-lineage" title="Commit lineage"><CommitLineagePage /></ProgressReference></section>
-    <section aria-label="Code health" className="flex w-full min-w-0 flex-col"><ProgressReference id="code-health" title="Code health"><CodeHealthPage /></ProgressReference></section>
+    {part === undefined && (planView ? <SignoffWaiting deferScroll /> : <section id="plan" aria-label="Plan" className="scroll-mt-4"><AgentsPlan deferSignoffScroll /></section>)}
+    {shows('activity') && <>
+      <section id="activity" aria-label="Activity"><AgentThreadsInProgress /><a href="#infrastructure?section=hosts">Host health and capacity · System</a></section>
+      <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
+        <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>
+      </OpsSection></section>
+    </>}
+    {shows('commit-lineage') && <section aria-label="Commit lineage" className="flex w-full min-w-0 flex-col">{part ? <div id="commit-lineage" className="flex w-full min-w-0 flex-col"><CommitLineagePage /></div> : <ProgressReference id="commit-lineage" title="Commit lineage"><CommitLineagePage /></ProgressReference>}</section>}
+    {shows('code-health') && <section aria-label="Code health" className="flex w-full min-w-0 flex-col">{part ? <div id="code-health" className="flex w-full min-w-0 flex-col"><CodeHealthPage /></div> : <ProgressReference id="code-health" title="Code health"><CodeHealthPage /></ProgressReference>}</section>}
   </div></NowClock>
 }
 

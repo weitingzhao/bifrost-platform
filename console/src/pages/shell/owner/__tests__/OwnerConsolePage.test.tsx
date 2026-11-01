@@ -17,8 +17,11 @@ import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.jso
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
+import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 
 vi.mock('../../agents/WorkPlanView', () => ({ WorkPlanView: () => <section data-testid="plan-view" /> }))
+// Code health draws a @bifrost/ui Dialog, which jsdom here cannot render (a second React); its own page is all that is asserted.
+vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p data-testid="code-health-page" /> }))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
@@ -96,9 +99,12 @@ function Shell() {
   return <OwnerConsolePage entry={entry} />
 }
 
-function show(hash = '#you') {
+const viewer = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
+function show(hash = '#you', signIn = false) {
   window.history.replaceState(null, '', hash)
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Shell /></QueryClientProvider>)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // Code health and Commit lineage read the sign-in (their own pages on Work since R5:5.5-2); the shell provides it.
+  return render(<QueryClientProvider client={client}>{signIn ? <PlatformAuthContext.Provider value={viewer}><Shell /></PlatformAuthContext.Provider> : <Shell />}</QueryClientProvider>)
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
 async function go(hash: string, heading: string) {
@@ -198,13 +204,30 @@ describe('Owner Console entries', () => {
     expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
   })
 
-  it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', () => {
-    stubRuntimeReads()
-    show('#work')
+  // R5:5.5-2: Work opens on the round (summary and tabs); what was further down the page is a step away, each part on
+  // its own page that the address names, with ‹ Work back. Nothing of a part is drawn on another.
+  it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', async () => {
+    // Every read here fails plainly (503): each part says it could not read, rather than drawing a stub's body.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 })))
+    show('#work', true)
     expect(headings()).toEqual(['Work'])
-    const progress = screen.getByTestId('merged-progress')
-    expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Waiting for your sign-off', 'Activity', 'History', 'Commit lineage', 'Code health'])
-    expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
+    expect(screen.getByTestId('plan-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('merged-progress')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Now' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Release lane' })).toBeNull()
+    const parts: [string, string[]][] = [
+      ['#work?section=goals', ['Goals']], ['#work?goal=M-2', ['Goals']], ['#work?section=activity', ['Activity', 'History']],
+      ['#work?section=commit-lineage', ['Commit lineage']], ['#work?section=code-health', ['Code health']],
+    ]
+    for (const [hash, sections] of parts) {
+      await go(hash, 'Work')
+      const progress = await screen.findByTestId('merged-progress')
+      expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(sections)
+      expect(screen.queryByTestId('plan-view')).toBeNull()
+      expect(within(screen.getByRole('navigation', { name: 'Work page' })).getByRole('link', { name: 'Back to Work' })).toHaveAttribute('href', '#work')
+    }
+    await go('#work?section=goals', 'Work')
+    expect(within(screen.getByTestId('merged-progress')).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
   })
 
@@ -283,10 +306,16 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
 
-  it('puts the aggregate plan view on Work above the existing work cards', () => {
+  it('puts the aggregate plan view on Work, and the runtime cards with the release lane on its Activity page', async () => {
     show('#work')
-    const view = screen.getByTestId('plan-view')
-    expect(view.compareDocumentPosition(screen.getByRole('region', { name: 'Now' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByTestId('plan-view')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Now' })).toBeNull()
+    await go('#work?section=activity', 'Work')
+    const now = screen.getByRole('region', { name: 'Now' })
+    for (const name of ['Open goals', 'Crew', 'Quota', 'Release lane']) {
+      expect(now.compareDocumentPosition(screen.getByRole('region', { name })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    expect(screen.queryByTestId('plan-view')).toBeNull()
   })
 
   it('counts on Now only the attempts running, says which are not, and marks a goal with work off plan (T24)', () => {
@@ -294,7 +323,7 @@ describe('Owner Console entries', () => {
     workValue.value = workNow(runtime)
     missionsValue.value = runtime.work.missions
     nowValue.value = Date.parse(runtime.generated_at) + 30_000
-    show('#work')
+    show('#work?section=activity')
     const now = screen.getByRole('region', { name: 'Now' })
     expect(within(now).getByText('running').previousSibling).toHaveTextContent('2')
     expect(within(now).getByText('Not confirmed running: 1 host lost · 1 maybe stuck (Crew)')).toBeInTheDocument()
@@ -303,7 +332,7 @@ describe('Owner Console entries', () => {
   })
 
   it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {
-    show('#work')
+    show('#work?section=activity')
     const now = screen.getByRole('region', { name: 'Now' })
     expect(now).toHaveTextContent('Owner console, first version')
     expect(now).toHaveTextContent('Note 7 min ago')
@@ -319,7 +348,7 @@ describe('Owner Console entries', () => {
   ])('says what the coordinator card read: %j', (view, line) => {
     coordinatorView.value = view
     try {
-      show('#work')
+      show('#work?section=activity')
       expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent(line)
     } finally {
       coordinatorView.value = undefined
@@ -342,7 +371,7 @@ describe('Owner Console entries', () => {
   it('gives each open goal when it should be done, as a range with its basis, or unknown with why (2.5 G8)', () => {
     missionsValue.value = parseRuntimeProgress(etaFixture).work.missions
     nowValue.value = Date.parse('2026-10-19T23:35:51Z')
-    show('#work')
+    show('#work?section=activity')
     const goals = screen.getByRole('region', { name: 'Open goals' })
     expect(goals).toHaveTextContent('Open goals · 2')
     const [m2, m1] = within(goals).getAllByRole('listitem').filter(li => li.parentElement?.parentElement === goals)

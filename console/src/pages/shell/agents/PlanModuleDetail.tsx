@@ -97,7 +97,7 @@ export function PlanModuleDetail({ view, item, step, stale }: { view: PlanSnapsh
   const back = workRoundHref(view.root)
   return <section id={moduleDetailId(item.plan_node_id)} aria-label={`Module ${item.label}`} data-module-detail={item.label}
     className="flex min-w-0 scroll-mt-4 flex-col gap-3 [overflow-wrap:anywhere]">
-    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+    <nav aria-label="Module path" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <a href={back} aria-label="Back to Work"
         className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--ops-edge)] px-3.5 text-sm font-semibold text-foreground no-underline shadow-[var(--ops-raised)] [background:var(--ops-control)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">
         <span aria-hidden="true" className="text-lg leading-none">‹</span> Work</a>

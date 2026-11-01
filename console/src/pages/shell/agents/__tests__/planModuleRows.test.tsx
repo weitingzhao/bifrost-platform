@@ -210,7 +210,8 @@ describe('Work → Plan', () => {
   it('shows the module rows above the whole plan for the PROD R4 response', async () => {
     Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined } })
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse(prod.as_of))
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(prod), { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/agentrt/plan-view')
+      ? new Response(JSON.stringify(prod), { status: 200 }) : new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })))
     window.location.hash = '#work'
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
     // The shell's GET /progress, with R4 the newest round: Work shows the newest round the runtime lists.
@@ -219,7 +220,11 @@ describe('Work → Plan', () => {
     const modules = await screen.findByRole('region', { name: 'Modules' })
     expect(modules).toHaveTextContent('10 modules · 0 / 55 steps done · 55 steps to go')
     expect(screen.getByRole('toolbar', { name: 'Steps of 4.1, 6 steps to go' })).toBeInTheDocument()
-    const tree = screen.getByRole('region', { name: 'Whole plan' })
+    // The whole plan is folded below the rows (R5:5.5-2), and drawn once opened.
+    const fold = screen.getByText(/^Whole plan/, { selector: 'summary' })
+    expect(modules.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(fold)
+    const tree = await screen.findByRole('region', { name: 'Whole plan' })
     expect(modules.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
     client.clear()

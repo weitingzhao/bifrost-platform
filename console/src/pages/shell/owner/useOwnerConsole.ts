@@ -31,8 +31,9 @@ import { current, errorText, useOwnerYours } from './useOwnerYours'
 
 /**
  * Every read the Owner Console makes. Query keys are the ones the detail pages use, so a page
- * opened after this one reads from the same cache. Release runs are read only while Work is on
- * screen; everything that feeds the verdict is always read.
+ * opened after this one reads from the same cache. Release runs, the coordinator's note and the last result are read
+ * only while Work's Activity page is on screen (work; R5:5.5-2: Work's own page reads none of them); everything that
+ * feeds the verdict is always read.
  */
 export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean; services?: boolean }) {
   const openedAt = useRef(Date.now())

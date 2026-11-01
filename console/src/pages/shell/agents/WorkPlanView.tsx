@@ -1,28 +1,35 @@
-import { SignOffButton } from './StepSignoffs'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
-import { goalHref, NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
-import { ActionLink, Card } from '../owner/OwnerParts'
 import { NowClock, useNow } from '../progress/progressClock'
-import { SIGNOFF_SECTION_HREF } from '../progress/progressPart'
 import { PlanLiveWork } from './PlanLiveWork'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
-import { PlanRoundNav } from './PlanRoundNav'
 import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
 import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
-import { responsibility, validity } from './planSnapshotModel'
 import { PlanRecentChanges } from './PlanRecentChanges'
-import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot, type PlanAddress } from './usePlanSnapshot'
+import { useSignoffWaits } from './useRuntimePlan'
+import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot } from './usePlanSnapshot'
+import { WorkSignoffs } from './WorkSignoffs'
+import { WorkSummaryCard } from './WorkSummaryCard'
+import { WorkTabs } from './WorkTabs'
+import { useWorkView, type WorkTab } from './workViewModel'
+import { dependencyWaits, signoffCount } from './workSummaryModel'
+import { moduleRows } from './planModuleModel'
 
-function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: string; failed: boolean }) {
-  const now = useNow()
-  const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
-  const current = view.nodes.find(n => n.plan_node_id === view.mainline.current?.plan_node_id)
-  const waits = view.owner_waiting.flatMap(w => 'task_id' in w ? [w] : [])
-  const signoffs = view.owner_waiting.flatMap(w => 'ref' in w && w.readiness === 'Ready' ? [w] : [])
+/** A fold of the round tab: closed, and not drawn, unless opened or the address names what is inside it. */
+function Fold({ title, open, children }: { title: string; open: boolean; children: ReactNode }) {
+  const [shown, setShown] = useState(open)
+  useEffect(() => { if (open) setShown(true) }, [open])
+  return <details open={shown} onToggle={e => setShown(e.currentTarget.open)} className="min-w-0 rounded-[16px] px-3.5 shadow-[var(--ops-inset)]">
+    <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">{title}</summary>
+    {shown && <div className="flex min-w-0 flex-col gap-3 pb-3.5">{children}</div>}
+  </details>
+}
+
+/** Work → the round tab: an opened module's detail, every module as a row, and folded: the dependency waits and the whole plan. */
+function RoundTab({ view, selected, stale }: { view: PlanSnapshot; selected: string; stale: boolean }) {
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
   // An address naming a module, or a step of one, opens that module's detail first and brings it into view.
   const opened = moduleOf(view, selected)
@@ -33,6 +40,7 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
   }, [scrollTo, detailId, selected])
   // Leaving a module's detail (‹ Work, its round in the breadcrumb, or Back) puts the keyboard on that module's own
   // link in the rows, and the row where it was on the screen when it was opened.
+  const waits = dependencyWaits(view, moduleRows(view))
   const openedId = opened?.item.plan_node_id ?? ''
   const lastOpened = useRef(openedId)
   useEffect(() => {
@@ -43,58 +51,56 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
   }, [openedId])
   return <>
     {opened && <PlanModuleDetail key={opened.item.plan_node_id} view={view} item={opened.item} step={opened.step} stale={stale} />}
-    <div className="grid min-w-0 gap-3 md:grid-cols-2">
-      <Card label="Main line" title="Main line">
-        <strong className="[overflow-wrap:anywhere]">{current ? `${current.label} ${current.title}` : 'Current position Unknown'}</strong>
-        {view.next.map((next, i) => <div key={i} className="text-sm [overflow-wrap:anywhere]"><strong>Next · </strong>{next.action}<br />{responsibility(view.nodes.find(n => n.plan_node_id === next.plan_node_id))}</div>)}
-        {view.next.length === 0 && <p className="m-0">Next · Unknown</p>}
-        {view.waiting_on.filter(w => w.edge.from.node === current?.view?.plan_node_id).map((w, i) => <span key={i} className="text-sm">Waiting on · <a className="inline-flex min-h-11 items-center" href={planNodeHref(w.edge.to.root, w.edge.to.node)}>{w.edge.to.node}</a> · {w.edge.reason}</span>)}
-        <span className="text-sm">ETA · Unknown</span>
-        <span className="text-xs text-muted-foreground">{view.freshness.database.status === 'Unknown' ? 'Unknown' : stale ? 'Stale' : 'Fresh'} · Last successful snapshot {view.as_of}</span>
-        {view.mainline.current?.current_validity && <span className="text-sm">Acceptance · {validity(view.mainline.current.current_validity)}</span>}
-        <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Basis and freshness</summary><p>{view.mainline.basis}{view.mainline.milestone_status && ` · Milestones ${view.mainline.milestone_status}`} · Verification {view.freshness.verification}</p><p>{view.eta.reason}</p>{view.warnings.map(w => <p key={w}>{w}</p>)}<p>Plan version {view.plan_version} · {view.artifact_id || 'No adopted view'}</p><p>{view.freshness.external_work}</p><p>Database observed · {view.freshness.database.observed_at}</p></details>
-      </Card>
-      <Card label="Needs you" title={signoffs.length > 0 ? `Needs you · ${signoffs.length} sign-off${signoffs.length === 1 ? '' : 's'} ready` : 'Needs you · Unknown'} accent>
-        <p className="m-0 text-sm">{waits.length} observed task waits{stale && ' at last read'}. {signoffs.length > 0 ? `${signoffs.length} acceptance sign-offs ready.` : 'Approval, question and sign-off readiness is not confirmed.'}</p>
-        {waits.map(wait => { const task = view.tasks.find(t => t.task_id === wait.task_id); return <div key={wait.task_id} className="text-sm"><span>{wait.reason}</span><ActionLink href={task ? goalHref(task.mission_id, task.task_id) : planNodeHref(view.root, wait.plan_node_id)}>Review task</ActionLink></div> })}
-        {signoffs.map(s => { const n = view.nodes.find(x => x.plan_node_id === s.plan_node_id); return <div key={s.ref} className="text-sm [overflow-wrap:anywhere]"><span>Sign off · {n ? `${n.label} ${n.title}` : s.plan_node_id} · acceptance {s.acceptance} · plan v{s.plan_version}</span><ActionLink href={planNodeHref(view.root, s.plan_node_id)}>Open step</ActionLink><SignOffButton node={s.plan_node_id} label={n?.label ?? s.plan_node_id} signoffRef={s.ref} named={false} reviewContext={JSON.stringify([s, n?.state, n?.title])} candidates={s.candidate_evidence} unavailable={stale ? 'Refresh the plan before signing.' : n && ['done', 'stopped', 'dropped'].includes(n.state ?? '') ? 'This step is closed.' : undefined} /></div> })}
-        <div className="flex flex-wrap gap-2"><ActionLink href={NEEDS_YOU_HREF}>Review requests</ActionLink><ActionLink href={SIGNOFF_SECTION_HREF}>Plan sign-offs</ActionLink></div>
-        <details><summary className="min-h-11 cursor-pointer py-3">Later · {view.owner_later.length}</summary><p>{view.freshness.owner_waiting}</p><ul>{view.owner_later.map(n => <li key={'ref' in n ? n.ref : n.plan_node_id}><a className="inline-flex min-h-11 items-center" href={planNodeHref(view.root, n.plan_node_id)}>{'title' in n ? n.title : view.nodes.find(x => x.plan_node_id === n.plan_node_id)?.title ?? n.plan_node_id}</a> · {n.readiness}<br />{n.reason}{'acceptance' in n && ` · acceptance ${n.acceptance}`}{'candidate_evidence' in n && <ul>{n.candidate_evidence.map(c => <li key={c.artifact_id}>{c.label} · {c.source}<br />{c.artifact_id}</li>)}</ul>}</li>)}</ul></details>
-      </Card>
-    </div>
-    {selected && !view.nodes.some(n => n.plan_node_id === selected || n.label === selected) && <p role="alert">Node not found in {view.root}: {selected}</p>}
+    {selected && !targetId && <p role="alert">Node not found in {view.root}: {selected}</p>}
     <PlanModuleRows view={view} selected={selected} />
-    <PlanLiveWork view={view} stale={stale} />
-    <PlanTree view={view} selected={selected} />
-    <Card label="Waiting on" title="Waiting on">
-      {view.waiting_on.length === 0 && <p>{view.freshness.verification === 'Unknown' ? 'No blocking edges recorded. Verification remains Unknown.' : 'Every required milestone is verified.'}</p>}
-      <ul className="m-0 list-none space-y-2 p-0">{view.waiting_on.map((wait, i) => <li key={i} className="[overflow-wrap:anywhere]">
-        <a className="inline-flex min-h-11 items-center" href={planNodeHref(wait.edge.from.root, wait.edge.from.node)}>{wait.edge.from.node}</a> → <a className="inline-flex min-h-11 items-center" href={planNodeHref(wait.edge.to.root, wait.edge.to.node)}>{wait.edge.to.node}</a> · {wait.edge.milestone} · {wait.status}<br />{wait.edge.reason}<br />{wait.responsible.kind} · {wait.responsible.actor_ref || wait.responsible.seat_ref}<br /><span className="text-xs">{wait.reason} · Evidence {wait.edge.sources.join(', ')}</span>
-      </li>)}</ul>
-    </Card>
-    <PlanRecentChanges view={view} />
+    <Fold title={waits.state === 'unknown' ? 'Dependency waits · Unknown' : `Dependency waits · ${waits.total}${waits.unread ? ' · some Unknown' : ''}`} open={false}>
+      <section aria-label="Waiting on" className="flex min-w-0 flex-col gap-2 text-sm">
+        {view.waiting_on.length === 0 && <p className="m-0">{waits.state === 'unknown' ? `Dependencies Unknown · ${waits.reason}.`
+          : waits.unread ? `No blocking edges recorded for the modules in the adopted plan view; ${waits.unread} module${waits.unread === 1 ? ' is' : 's are'} not in it, ${waits.unread === 1 ? 'its' : 'their'} dependencies Unknown.`
+          : view.freshness.verification === 'Unknown' ? 'No blocking edges recorded. Verification remains Unknown.' : 'Every required milestone is verified.'}</p>}
+        <ul className="m-0 list-none space-y-2 p-0">{view.waiting_on.map((wait, i) => <li key={i} className="[overflow-wrap:anywhere]">
+          <a className="inline-flex min-h-11 items-center" href={planNodeHref(wait.edge.from.root, wait.edge.from.node)}>{wait.edge.from.node}</a> → <a className="inline-flex min-h-11 items-center" href={planNodeHref(wait.edge.to.root, wait.edge.to.node)}>{wait.edge.to.node}</a> · {wait.edge.milestone} · {wait.status}<br />{wait.edge.reason}<br />{wait.responsible.kind} · {wait.responsible.actor_ref || wait.responsible.seat_ref}<br /><span className="text-xs">{wait.reason} · Evidence {wait.edge.sources.join(', ')}</span>
+        </li>)}</ul>
+      </section>
+    </Fold>
+    {/* The whole plan's cards (acceptance, steps, evidence), folded: an address naming a node outside the module rows
+        (no module of its own) opens the fold and is brought into view there. */}
+    <Fold title={`Whole plan · acceptance, steps and evidence`} open={!!targetId && !opened}>
+      <PlanTree view={view} selected={selected} />
+    </Fold>
   </>
 }
-/** Work → Plan before a round is known: the newest round is still being read, cannot be read, or the runtime holds none. */
-function NoRound({ plan }: { plan: PlanAddress }) {
-  const { rounds } = plan
-  if (rounds.state === 'reading') return <p role="status">Reading which round is newest…</p>
-  if (rounds.state === 'unknown') return <div role="alert" className="rounded-[var(--control-radius)] border border-[var(--color-warning)] p-3 [overflow-wrap:anywhere]">
-    Newest round Unknown · {rounds.reason}. This plan and live view shows no round until it is known; an address can still name a round (<code>#work?root=…</code>).
-    <button className="ml-2 min-h-11 rounded-[var(--control-radius)] border px-3" onClick={plan.retry}>Retry</button></div>
-  return <p>The runtime holds no round yet.</p>
-}
 
-export function WorkPlanView() {
+/**
+ * Work (R5:5.5-2, Design v3.6 WorkPage): where the round stands in one card, then one of four tabs: the round (its
+ * modules), Sign-offs, Live and Changes. Every tab reads the same plan view; the sign-offs also read every round's
+ * GET /plan (SignoffWaiting's read). The tab is in the address (`#work?tab=live`); with no tab, the round.
+ */
+export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
   const plan = usePlanAddress()
+  const view = useWorkView()
+  const tab = given ?? (view.kind === 'tab' ? view.tab : 'round')
   const { root, node } = plan
   const query = usePlanSnapshot(root)
+  // GET /progress (which lists the rounds) from the shell's cache: Work polls no progress of its own.
+  const waits = useSignoffWaits(true, 'cache')
   const failed = query.isError || query.isPaused
-  return <NowClock><section id="plan" aria-label="Plan and live view" className="flex min-w-0 scroll-mt-4 flex-col gap-3">
-    <PlanRoundNav plan={plan} />
-    {root === null && <NoRound plan={plan} />}
-    {root !== null && query.isPending && !failed && <p role="status">Loading plan and live work…</p>}
-    {failed && <div role="alert" className="rounded border border-[var(--color-warning)] p-3 [overflow-wrap:anywhere]">Unknown · {query.isPaused ? 'Offline' : query.error?.message}. {query.data ? `Stale · showing the last successful snapshot from ${query.data.as_of}.` : 'No successful snapshot yet.'}<button className="ml-2 min-h-11 rounded border px-3" onClick={() => void query.refetch()}>Retry</button></div>}
-    {root !== null && query.data && <Snapshot key={root} view={query.data} selected={node} failed={failed} />}
+  const count = signoffCount(waits, { view: query.data, failed: failed ? (query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed') : null, root, rounds: plan.rounds })
+  return <NowClock><section id="plan" aria-label="Plan and live view" className="flex min-w-0 scroll-mt-4 flex-col gap-2.5">
+    <WorkSummaryCard plan={plan} query={query} count={count} />
+    <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
   </section></NowClock>
+}
+
+function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<typeof usePlanAddress>; tab: WorkTab; query: ReturnType<typeof usePlanSnapshot>; count: ReturnType<typeof signoffCount>; node: string; failed: boolean }) {
+  const now = useNow()
+  const view = query.data
+  const stale = !!view && (failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh')
+  return <>
+    <WorkTabs plan={plan} tab={tab} count={count} view={view} stale={stale} />
+    {tab === 'signoffs' && <WorkSignoffs count={count} view={view} stale={stale} />}
+    {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} stale={stale} />}
+    {view && tab === 'live' && <PlanLiveWork view={view} stale={stale} />}
+    {view && tab === 'changes' && <PlanRecentChanges key={plan.root} view={view} />}
+  </>
 }
