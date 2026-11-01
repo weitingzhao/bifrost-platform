@@ -18,6 +18,10 @@ import (
 // No regeneration mode: changing production code cannot update this oracle.
 // W-31 B5 deliberately edited only the two "ensure" rows: each platform spec
 // gains repo-url (DESIGN-B5-v3 §4.2); every read row is unchanged.
+// R5:5.7-2 deliberately edited only the "release" column of the "running" and
+// "missing status" rows: a newer run with no verdict no longer hides the older
+// green of the same P. Their legacy and pinned columns, and every other row,
+// are unchanged.
 func TestS65T47PlatformGolden(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*unstructured.Unstructured){

@@ -271,3 +271,35 @@ func TestStgCardsGrantMixedGenerations(t *testing.T) {
 		t.Fatal("partial coverage granted wrong members", body, records)
 	}
 }
+
+// R5:5.7-2: a CI refusal found after B5 sent P (detail.sent) tells the Owner
+// that P is already on STG, which run went red, and what lifts the block.
+func TestStgCardsSentBlockExplainsItself(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"before send", "after send"} {
+		h := stgReady(t, stgTestMember())
+		base := stgTestBase()
+		detail := map[string]any{"members": []any{stgTestMember()}}
+		if mode == "after send" {
+			detail["sent"] = map[string]any{"batch": stgTestBatch, "try": int64(2), "permit_seq": int64(9), "run": "stgrel-1-2-bbbbbbbb", "ci_run": "ci-platform-sjc5r"}
+		}
+		h.add(stgRecord("blocked", "block", StgBlockID(stgSHA("b"), base["P"].(string), "ci_red", "v1"), "why", "ci_red", "P", stgSHA("b"), "base", base, "first_at", h.at.Format(time.RFC3339Nano), "evidence_version", "v1", "detail", detail))
+		trs := stgTriggers(h.state())
+		if len(trs) != 1 || trs[0].Kind != CardSTGBlocked {
+			t.Fatal(trs)
+		}
+		body := LandingCardRequest("bifrost-platform", trs[0], "STG release blocked")["body"].(string)
+		explained := strings.Contains(body, "P is already on STG")
+		if mode == "before send" {
+			if explained || trs[0].Sent != nil {
+				t.Fatal("a refusal before any send read as after one", body)
+			}
+			continue
+		}
+		for _, want := range []string{"batch " + stgTestBatch + ", try 2, run stgrel-1-2-bbbbbbbb", "platform CI run ci-platform-sjc5r", "ended red afterwards", "nothing was rolled back", "rerun the platform CI (bifrost-ci-platform) for revision P", "Neither a green CI of a later commit nor a manual STG release lifts this block"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("missing %q in %s", want, body)
+			}
+		}
+	}
+}

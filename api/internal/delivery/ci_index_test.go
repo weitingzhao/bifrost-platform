@@ -94,3 +94,54 @@ const (
 	factSHA4 = "4444444444444444444444444444444444444444"
 	factSHA5 = "5555555555555555555555555555555555555555"
 )
+
+func withAPIScope(u *unstructured.Unstructured, scopes ...string) *unstructured.Unstructured {
+	results := []any{}
+	for _, s := range scopes {
+		results = append(results, map[string]any{"name": "api-scope", "value": s})
+	}
+	u.Object["status"].(map[string]any)["results"] = results
+	return u
+}
+
+// R5:5.7-1 gives ci-platform an api-scope result: a console-only change runs
+// only part of the Go tests. Such a green neither vouches for the commit nor
+// stands as its newest run, so it cannot cover a full red; a run without the
+// result predates it and ran everything.
+func TestCIRunCountsOnlyFullScopeGreens(t *testing.T) {
+	t1 := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+	f := ciFacts(t,
+		ciRunAt("ci-a-red", factSHA1, "False", t1),
+		withAPIScope(ciRunAt("ci-a-console", factSHA1, "True", t2), "console"),
+		withAPIScope(ciRunAt("ci-b-console", factSHA2, "True", t1), "console"),
+		withAPIScope(ciRunAt("ci-c-full", factSHA3, "True", t1), "full"),
+		withAPIScope(ciRunAt("ci-c-console", factSHA3, "True", t2), "console"),
+		ciRunAt("ci-d-legacy", factSHA4, "True", t1),
+		withAPIScope(ciRunAt("ci-e-odd", factSHA5, "True", t1), "partial"),
+		withAPIScope(ciRunAt("ci-f-twice", factSHA6, "True", t1), "full", "console"),
+		withAPIScope(ciRunAt("ci-h-twice", factSHA8, "True", t1), "console", "full"),
+		withAPIScope(ciRunAt("ci-g-console-red", factSHA7, "False", t2), "console"),
+		ciRunAt("ci-g-green", factSHA7, "True", t1),
+	)
+	for _, tc := range []struct{ sha, status, run string }{
+		{factSHA1, CIFailed, "ci-a-red"},
+		{factSHA2, "", ""},
+		{factSHA3, CISucceeded, "ci-c-full"},
+		{factSHA4, CISucceeded, "ci-d-legacy"},
+		{factSHA5, "", ""},
+		{factSHA6, "", ""},
+		{factSHA7, CISucceeded, "ci-g-green"},
+		{factSHA8, "", ""},
+	} {
+		if status, run, err := f.CIRun(context.Background(), "repo-p", tc.sha); err != nil || status != tc.status || run != tc.run {
+			t.Errorf("%s = %q %q %v; want %q %q", tc.sha[:4], status, run, err, tc.status, tc.run)
+		}
+	}
+}
+
+const (
+	factSHA6 = "6666666666666666666666666666666666666666"
+	factSHA7 = "7777777777777777777777777777777777777777"
+	factSHA8 = "8888888888888888888888888888888888888888"
+)

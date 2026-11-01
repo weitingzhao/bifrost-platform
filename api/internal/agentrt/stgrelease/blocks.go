@@ -118,7 +118,34 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 		}
 		return finish(s, id, b, ref, false)
 	}
+	r, err := c.blockedRecord(b, why, base, ci, nil)
+	if err != nil {
+		return err
+	}
+	// Match normalized protocol identities, preserving the original interval
+	// and trigger even when a later scan has different diagnostic detail.
+	for _, block := range s.Blocks {
+		prior := block.Opened.Record
+		if block.IsOpen() && prior.String("P") == p && prior.String("why") == r.String("why") && object(prior, "base").String("P") == object(r, "base").String("P") {
+			return c.write(ctx, s, append(checks, settlement(block.Opened.Seq)...)...)
+		}
+	}
+	rs := append(checks, r)
+	rs = append(rs, settlement(s.LastSeq+int64(len(rs)))...)
+	return c.write(ctx, s, rs...)
+}
+
+// blockedRecord is the blocked{why} record for batch b's selected P: its
+// members, rule versions and the CI identity the refusal names (the batch's
+// latest accepted CI when ci is nil). sent, when not nil, marks a refusal
+// found after that send (detail.sent: batch, try, permit, runs); it is not
+// part of the interval's identity.
+func (c *Controller) blockedRecord(b *store.StgBatch, why string, base store.StgRecord, ci *store.StgCIObservation, sent map[string]any) (store.StgRecord, error) {
+	p := b.Selected.Record.String("P")
 	detail := map[string]any{"members": members(b)}
+	if sent != nil {
+		detail["sent"] = sent
+	}
 	versions := map[string]any{}
 	if rule := c.Policy().Rule; rule != nil {
 		versions[rule.Landing.Tenant] = rule.Version
@@ -145,21 +172,7 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 		detail["ci"] = map[string]any{"uid": ci.UID, "created_at": ci.CreatedAt.Format(time.RFC3339Nano), "read_at": ci.ReadAt.Format(time.RFC3339Nano)}
 	}
 	version, _ := canon.Sum(identity)
-	r, err := store.StgBlockedRecord(p, why, base, c.now(), version, detail)
-	if err != nil {
-		return err
-	}
-	// Match normalized protocol identities, preserving the original interval
-	// and trigger even when a later scan has different diagnostic detail.
-	for _, block := range s.Blocks {
-		prior := block.Opened.Record
-		if block.IsOpen() && prior.String("P") == p && prior.String("why") == r.String("why") && object(prior, "base").String("P") == object(r, "base").String("P") {
-			return c.write(ctx, s, append(checks, settlement(block.Opened.Seq)...)...)
-		}
-	}
-	rs := append(checks, r)
-	rs = append(rs, settlement(s.LastSeq+int64(len(rs)))...)
-	return c.write(ctx, s, rs...)
+	return store.StgBlockedRecord(p, why, base, c.now(), version, detail)
 }
 
 func unblockRecord(id, why string, ref any) store.StgRecord {

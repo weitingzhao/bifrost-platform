@@ -48,6 +48,9 @@ func stgCardBody(repo string, tr CardTrigger) string {
 	case CardSTGFailed:
 		lines = append(lines, "Choosing more attempts records a new budget of up to three automatic STG attempts for each still-exhausted member and closes this exhaustion interval. Already delivered or disposed members are excluded. Choosing not to release withholds the remaining members and closes this interval. No release starts from this answer; the signed rule, live switch, current inputs and every final release check still apply.")
 	case CardSTGBlocked:
+		if tr.Sent != nil {
+			lines = append(lines, stgSentBlockLines(tr)...)
+		}
 		lines = append(lines, "Noting that you will release STG manually leaves this block in place and authorizes no release. Remind later asks again in 24 hours if it still applies.")
 		if tr.Batch != "" {
 			lines = append(lines, "Accepting unreconciled risk closes this quarantine and releases its execution slot. It does not claim the run was reconciled or delivered, refund attempts, or start a release.")
@@ -57,6 +60,26 @@ func stgCardBody(repo string, tr CardTrigger) string {
 	}
 	lines = append(lines, "An answer is not an approval. Approval effect: this card creates no approval and approves no deployment. Checks not performed by this card: independent review, fresh CI, deployment verification and STG health checks. Their current results are Unknown here; release evidence is recorded separately.")
 	return strings.Join(lines, "\n\n")
+}
+
+// stgSentBlockLines explain a CI refusal found after B5 had sent P: STG
+// already runs P, nothing is rolled back, and what lifts the block.
+func stgSentBlockLines(tr CardTrigger) []string {
+	sent := StgRecord(tr.Sent)
+	unknown := func(s string) string {
+		if s == "" {
+			return "Unknown"
+		}
+		return s
+	}
+	verdict := "ended red"
+	if tr.Why == "ci_results" {
+		verdict = "ended with results that cannot be used"
+	}
+	return []string{
+		fmt.Sprintf("P is already on STG: B5 sent it in batch %s, try %d, run %s, on an earlier green platform CI of the same commit. The platform CI run %s of P, which had no verdict when B5 sent it (still running, or not yet created), %s afterwards. STG keeps running P; nothing was rolled back.", unknown(sent.String("batch")), sent.Int("try"), unknown(sent.String("run")), unknown(sent.String("ci_run")), verdict),
+		"Automatic STG release stays stopped until P has a newer green platform CI that ran the full API tests: rerun the platform CI (bifrost-ci-platform) for revision P. Neither a green CI of a later commit nor a manual STG release lifts this block; you can still release STG by hand meanwhile.",
+	}
 }
 
 func stgCardNextStep(v LandingCardView) string {

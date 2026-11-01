@@ -241,7 +241,9 @@ type CIOutcome struct {
 // CIRun reports the ci-* runs for repo at sha (matched as Succeeded does):
 // Succeeded and its run if any succeeded, else the newest run's outcome
 // (Failed, or Running while it has no verdict) and name; "" when there is
-// no such run.
+// no such run. A green whose api-scope result is not full (R5:5.7-1 runs
+// only the console's share of the Go tests for a console-only change) is
+// not counted at all: it cannot vouch for sha, nor stand as its newest run.
 func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run string, err error) {
 	idx, err := f.CIIndex(ctx)
 	o := idx[repo+"@"+sha]
@@ -293,6 +295,9 @@ func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) 
 				o.Status = CIFailed
 			}
 		}
+		if o.Status == CISucceeded && !fullAPIScope(item) {
+			continue
+		}
 		key := runRepo + "@" + params["revision"]
 		prev, seen := idx[key]
 		switch {
@@ -303,6 +308,21 @@ func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) 
 		}
 	}
 	return idx, nil
+}
+
+// fullAPIScope: the run's api-scope result is absent (it predates the result
+// and ran everything) or exactly "full". A duplicated or unknown value is not.
+func fullAPIScope(item unstructured.Unstructured) bool {
+	results, _, _ := unstructured.NestedSlice(item.Object, "status", "results")
+	n, scope := 0, ""
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		if m["name"] == "api-scope" {
+			n++
+			scope, _ = m["value"].(string)
+		}
+	}
+	return n == 0 || n == 1 && scope == "full"
 }
 
 // HeldBy is "" when who holds an open window that covers pipeline. Unlike the

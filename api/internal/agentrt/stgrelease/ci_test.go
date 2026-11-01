@@ -16,6 +16,15 @@ func TestReleaseCIObservationPreservesRefusal(t *testing.T) {
 	if _, err := ReleaseCIObservation(e).Record(); err != nil {
 		t.Fatal("success control", err)
 	}
+	// R5:5.7-2: a green chosen over newer undecided runs is accepted as is;
+	// the count is carried for the check after the send.
+	passed := e
+	passed.Undecided = []string{"ci-platform-main"}
+	if o := ReleaseCIObservation(passed); o.Undecided != 1 {
+		t.Fatal("undecided count lost", o.Undecided)
+	} else if _, err := o.Record(); err != nil {
+		t.Fatal("passed-over green refused", err)
+	}
 	for _, status := range []string{"Failed", "Running", "Unknown", "Missing"} {
 		bad := e
 		bad.Status = status

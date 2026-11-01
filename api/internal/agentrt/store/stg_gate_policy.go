@@ -35,8 +35,13 @@ type StgGateObservation struct {
 // this DTO in store avoids a cycle with landingci's grant evidence reader.
 type StgCIObservation struct {
 	Status, UID, Reason string
-	CreatedAt, ReadAt   time.Time
-	Accepted            map[string]any
+	// Run is the selected run's name, for people reading a block it names.
+	Run               string
+	CreatedAt, ReadAt time.Time
+	Accepted          map[string]any
+	// Undecided counts newer runs of the same P that had no verdict yet and
+	// were passed over (R5:5.7-2). It never makes an observation acceptable.
+	Undecided int
 }
 
 func (c StgCIObservation) Record() (map[string]any, error) {

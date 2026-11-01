@@ -60,8 +60,11 @@ type Execution interface {
 }
 
 type Sources struct {
-	Head            func(context.Context) (string, error)
-	CI              func(context.Context, string) (store.StgCIObservation, error)
+	Head func(context.Context) (string, error)
+	CI   func(context.Context, string) (store.StgCIObservation, error)
+	// SentCI is the same read as CI, for the check after a send
+	// (sent_ci.go). Nil disables that check.
+	SentCI          func(context.Context, string) (store.StgCIObservation, error)
 	Range           func(context.Context, string, string) ([]landing.ReleaseCommit, error)
 	MainEvidence    store.MainEvidenceFunc
 	ReleaseEvidence func(context.Context, store.StgState, store.StgMemberKey, string) (store.MainEvidence, error)
@@ -88,6 +91,8 @@ type Controller struct {
 	holder              *WindowHolder
 	losses              []WindowLoss
 	cleaned             map[string]bool
+	sent                map[string]*sentCIWatch
+	notice              func(string, ...any) // nil: slog.Warn
 }
 
 func (c *Controller) now() time.Time {
@@ -197,6 +202,13 @@ func (c *Controller) Pass(ctx context.Context) error {
 			}
 			c.losses = c.losses[1:]
 		}
+	}
+	// R5:5.7-2: a red verdict that arrives after a send opens the same CI
+	// block the final gate would have; a read failure never stops the pass.
+	if wrote, err := c.watchSentCI(ctx, s); wrote {
+		return errors.Join(cleanupErr, err)
+	} else if err != nil {
+		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	if b != nil {
 		return errors.Join(cleanupErr, c.batch(ctx, s, id, b))

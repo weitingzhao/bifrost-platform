@@ -66,6 +66,9 @@ func stgTriggers(s StgState) []CardTrigger {
 		for _, m := range r.object("detail").members("members") {
 			tr.Members = append(tr.Members, m.StgMemberKey)
 		}
+		if sent := r.object("detail").object("sent"); len(sent) > 0 {
+			tr.Sent = map[string]any(sent)
+		}
 		if tr.Why == "budget_exhausted" {
 			tr.Kind, tr.Choices = CardSTGFailed, []string{"retry_release", "do_not_release"}
 			tr.Members = stgExhaustedMembers(s, block.Opened)

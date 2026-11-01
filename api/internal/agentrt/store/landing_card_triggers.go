@@ -26,6 +26,9 @@ type CardTrigger struct {
 	StopGeneration       int64
 	Choices              []string
 	Floor                map[string]any
+	// Sent is an STG block's detail.sent: the refusal was found after B5 had
+	// already sent P (R5:5.7-2), so P is on STG.
+	Sent map[string]any
 }
 
 // ParkedLongAfter is how long a park (other than ci_stuck and rule) lasts

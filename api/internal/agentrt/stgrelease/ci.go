@@ -9,5 +9,5 @@ import (
 // and identity. Only a complete accepted result becomes ci_accepted material.
 func ReleaseCIObservation(e landingci.ReleaseEvidence) store.StgCIObservation {
 	r, _ := e.Record()
-	return store.StgCIObservation{Status: e.Status, Reason: e.Reason, UID: e.UID, CreatedAt: e.CreatedAt, ReadAt: e.ReadAt, Accepted: r}
+	return store.StgCIObservation{Status: e.Status, Reason: e.Reason, UID: e.UID, Run: e.Run, CreatedAt: e.CreatedAt, ReadAt: e.ReadAt, Accepted: r, Undecided: len(e.Undecided)}
 }

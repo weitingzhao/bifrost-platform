@@ -18,12 +18,32 @@ type ReleaseEvidence struct {
 	Evidence
 	PipelineRef, RepoURL string
 	ReadAt               time.Time
+	// Undecided names the runs of P newer than the selected one that have no
+	// verdict yet (R5:5.7-2). They were passed over, never trusted.
+	Undecided []string
+	// Partial names the greens of P that tested only part of the API
+	// (api-scope=console). They neither vouch for P nor hide another run.
+	Partial []string
+}
+
+// The api-scope result of a ci-platform run: what its test-api step ran.
+// A run without it predates the result and ran everything (full).
+const (
+	APIScopeResult  = "api-scope"
+	APIScopeFull    = "full"
+	APIScopeConsole = "console"
+)
+
+// fullScope: a run's results say it tested the whole API.
+func fullScope(results map[string]string) bool {
+	scope, named := results[APIScopeResult]
+	return !named || scope == APIScopeFull
 }
 
 // Record is the closed ci_accepted.ci shape consumed by B5-a. Never turn an
 // unsuccessful observation into a record just because it carries old results.
 func (e ReleaseEvidence) Record() (map[string]any, error) {
-	if e.Status != "Succeeded" || e.Reason != "" || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
+	if e.Status != "Succeeded" || e.Reason != "" || !fullScope(e.Results) || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
 		return nil, fmt.Errorf("release CI is not accepted evidence")
 	}
 	return map[string]any{"name": e.Run, "uid": e.UID, "created_at": e.CreatedAt.UTC().Format(time.RFC3339Nano), "platform_commit": e.PlatformCommit, "ui_commit": e.UICommit, "infra_commit": e.InfraCommit, "pipeline_ref": e.PipelineRef, "repo_url": e.RepoURL, "read_at": e.ReadAt.UTC().Format(time.RFC3339Nano)}, nil
@@ -32,6 +52,11 @@ func (e ReleaseEvidence) Record() (map[string]any, error) {
 // ReadRelease implements B5 §4 without changing Read/legacy selection rules.
 // Missing repo-url is unknown, never inferred from a label or today's Pipeline
 // default. Older CI installations must supply that evidence before B5 opens.
+//
+// R5:5.7-2 amends §4.3 for one case only: a newer run of P that has no
+// verdict yet (normally main's push CI, still running over the landing CI of
+// the same commit) does not hide the newest run that has one. A newer red or
+// unusable run is a verdict and still wins over an older green.
 func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvidence, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -68,6 +93,18 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 		}
 		matches = append(matches, item)
 	}
+	// A green that ran only the console's share of the API (api-scope=console)
+	// says nothing about the rest of P: set it aside before selecting. A red
+	// of any scope stays a verdict.
+	kept := matches[:0]
+	for _, item := range matches {
+		if r := releaseResult(item, revision); r.Status == "Succeeded" && r.Reason == "" && r.Results[APIScopeResult] == APIScopeConsole {
+			out.Partial = append(out.Partial, item.GetName())
+			continue
+		}
+		kept = append(kept, item)
+	}
+	matches = kept
 	if len(matches) == 0 {
 		return out, nil
 	}
@@ -78,10 +115,26 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 		}
 		return a.After(b.Time)
 	})
-	chosen := matches[0]
+	// Pass over strictly newer runs that have no verdict yet and whose own
+	// identity is valid. With nothing decided, report the newest as before.
+	// An equal creation time is a tie, never "newer": it keeps ci_tie.
+	skip := 0
+	for skip < len(matches) && undecided(matches[skip], revision) {
+		skip++
+	}
+	if skip == len(matches) {
+		skip = 0
+	}
+	for skip > 0 && matches[skip-1].GetCreationTimestamp().Time.Equal(matches[skip].GetCreationTimestamp().Time) {
+		skip--
+	}
+	for _, item := range matches[:skip] {
+		out.Undecided = append(out.Undecided, item.GetName())
+	}
+	chosen := matches[skip]
 	selected := releaseResult(chosen, revision)
 	out.Evidence = selected
-	for _, item := range matches[1:] {
+	for _, item := range matches[skip+1:] {
 		if !item.GetCreationTimestamp().Time.Equal(chosen.GetCreationTimestamp().Time) {
 			break
 		}
@@ -91,6 +144,30 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 		}
 	}
 	return out, nil
+}
+
+// undecided: the run's identity is valid and Tekton has not given a verdict.
+// Succeeded=Unknown is non-terminal by definition (Running, Pending, finally
+// tasks after a cancel); a run with no Succeeded condition has not started.
+// A completion time, or more than one Succeeded condition, is never undecided.
+func undecided(item unstructured.Unstructured, revision string) bool {
+	if releaseResult(item, revision).Reason != "" {
+		return false
+	}
+	if _, done, _ := unstructured.NestedFieldNoCopy(item.Object, "status", "completionTime"); done {
+		return false
+	}
+	conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")
+	n, open := 0, false
+	for _, cond := range conds {
+		m, _ := cond.(map[string]any)
+		if m["type"] != "Succeeded" {
+			continue
+		}
+		n++
+		open = m["status"] == "Unknown"
+	}
+	return n == 0 || n == 1 && open
 }
 
 func releaseResult(item unstructured.Unstructured, revision string) Evidence {
@@ -119,6 +196,10 @@ func releaseResult(item unstructured.Unstructured, revision string) Evidence {
 			out.Status, out.Reason = "Unknown", "ci_results"
 			return out
 		}
+	}
+	if scope, named := values[APIScopeResult]; named && scope != APIScopeFull && scope != APIScopeConsole {
+		out.Status, out.Reason = "Unknown", "ci_results"
+		return out
 	}
 	out.PlatformCommit, out.UICommit, out.InfraCommit = values["platform-commit"], values["ui-commit"], values["infra-commit"]
 	return out
