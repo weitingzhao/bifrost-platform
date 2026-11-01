@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { approvalHref, goalHref, isQuestionId, questionHref } from '@/lib/shell/consoleRoutes'
@@ -15,6 +16,17 @@ export type CellState = 'done' | 'active' | 'planned' | 'stopped' | 'unknown'
 export const cellWords: Record<CellState, string> = { done: 'done', active: 'in progress', planned: 'not started', stopped: 'stopped', unknown: 'unknown' }
 /** How a cell's state is written in its detail. */
 export const cellLabels: Record<CellState, string> = { done: 'Done', active: 'In progress', planned: 'Not started', stopped: 'Stopped', unknown: 'Unknown' }
+/**
+ * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; stopped and unknown
+ * are marked apart so that neither reads as progress. Ops tokens only (styles/opsAppearance.css).
+ */
+export const cellStyle: Record<CellState, CSSProperties> = {
+  done: { background: 'var(--primary)' },
+  active: { background: 'repeating-linear-gradient(135deg, var(--primary) 0 3px, transparent 3px 6px)', boxShadow: 'inset 0 0 0 1px var(--primary)' },
+  planned: { background: 'var(--muted)', boxShadow: 'inset 0 0 0 1px var(--border), var(--ops-inset)' },
+  stopped: { background: 'repeating-linear-gradient(45deg, var(--color-lamp-red) 0 2px, transparent 2px 5px)', boxShadow: 'inset 0 0 0 1px var(--color-lamp-red)' },
+  unknown: { background: 'transparent', outline: '1px dashed var(--color-lamp-gray)', outlineOffset: '-1px' },
+}
 
 /** A record a step links to; kind says which page the link opens. */
 export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node'; href: string; text: string; note?: string }
@@ -140,7 +152,9 @@ export function stepLinks(view: PlanSnapshot, step: PlanNode): StepLink[] {
   }
   for (const n of approvalNumbers(step.done_rule_json)) links.push({ kind: 'approval', href: approvalHref(String(n)), text: `Request #${n}` })
   for (const q of ruleQuestionIds(step.done_rule_json).filter(isQuestionId)) links.push({ kind: 'question', href: questionHref(q), text: `Question ${q}` })
-  links.push({ kind: 'node', href: planNodeHref(view.root, step.plan_node_id), text: 'Open in the whole plan' })
+  // The step's address opens its module's detail with the step marked (Work → Plan, R5:5.1-7).
+  const item = view.nodes.find(n => n.plan_node_id === step.parent_plan_node_id)
+  links.push({ kind: 'node', href: planNodeHref(view.root, step.plan_node_id), text: item ? `Open in module ${item.label}` : 'Open in its module' })
   return links
 }
 
@@ -186,6 +200,9 @@ export function moduleRows(view: PlanSnapshot): ModuleRow[] {
       stopped: count('stopped'), unknown: count('unknown'), dropped: steps.length - cells.length, toGo: cells.length - done, waits }
   })
 }
+
+/** The id of a module row's own link: the keyboard goes back to it when the module's detail closes. */
+export const moduleRowLinkId = (id: string) => `module-row-${id}`
 
 /** "N steps to go", "All steps done" at 0, "No steps" for an item without a step to count. */
 export function toGoText(row: Pick<ModuleRow, 'total' | 'toGo'>): string {

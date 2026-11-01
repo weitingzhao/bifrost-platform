@@ -1,20 +1,9 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { Card } from '../owner/OwnerParts'
 import { StepBadge } from './StepText'
-import { cellLabels, cellWords, moduleRows, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
+import { cellLabels, cellStyle, cellWords, moduleRowLinkId, moduleRows, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
 
-/**
- * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; stopped and unknown
- * are marked apart so that neither reads as progress. Ops tokens only (styles/opsAppearance.css).
- */
-const cellStyle: Record<CellState, CSSProperties> = {
-  done: { background: 'var(--primary)' },
-  active: { background: 'repeating-linear-gradient(135deg, var(--primary) 0 3px, transparent 3px 6px)', boxShadow: 'inset 0 0 0 1px var(--primary)' },
-  planned: { background: 'var(--muted)', boxShadow: 'inset 0 0 0 1px var(--border), var(--ops-inset)' },
-  stopped: { background: 'repeating-linear-gradient(45deg, var(--color-lamp-red) 0 2px, transparent 2px 5px)', boxShadow: 'inset 0 0 0 1px var(--color-lamp-red)' },
-  unknown: { background: 'transparent', outline: '1px dashed var(--color-lamp-gray)', outlineOffset: '-1px' },
-}
 const legend: CellState[] = ['done', 'active', 'planned', 'stopped', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
 
@@ -76,7 +65,7 @@ function Module({ row, initial }: { row: ModuleRow; initial: string }) {
     <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
       <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <a href={row.href} className="inline-flex min-h-6 items-center font-mono pointer-coarse:min-h-11 text-sm font-semibold underline-offset-2 hover:underline" aria-label={`Open ${row.label} in the whole plan`}>{row.label}</a>
+          <a id={moduleRowLinkId(row.id)} href={row.href} className="inline-flex min-h-6 items-center font-mono pointer-coarse:min-h-11 text-sm font-semibold underline-offset-2 hover:underline" aria-label={`Open module ${row.label}`}>{row.label}</a>
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{row.lane}</span>
           {row.current && <span className="rounded-full border border-[var(--color-info)] px-2 text-xs font-semibold">Current</span>}
         </div>

@@ -74,7 +74,7 @@ describe('module rows model', () => {
     expect(row(rows, '4.1').lane).toBe('Mainline 1')
     expect(row(rows, '4.9').lane).toBe('Branch')
     // No task, request or question is bound to an R4 step yet: the only record each step opens is its place in the plan.
-    expect(row(rows, '4.1').cells[0].links).toEqual([{ kind: 'node', href: '#work?section=plan&root=R4&node=R4%3A4.1-1', text: 'Open in the whole plan' }])
+    expect(row(rows, '4.1').cells[0].links).toEqual([{ kind: 'node', href: '#work?section=plan&root=R4&node=R4%3A4.1-1', text: 'Open in module 4.1' }])
   })
 
   it('says what each item waits on from the blocking edges not verified yet', () => {
@@ -158,7 +158,7 @@ describe('module rows on the page', () => {
     expect(detail).toHaveTextContent('Rehearse case 3 on STG')
     expect(within(detail).getByRole('link', { name: 'Request #42' })).toHaveAttribute('href', '#approvals?id=42')
     expect(within(detail).getByRole('link', { name: `Question ${QUESTION}` })).toHaveAttribute('href', `#questions?id=${QUESTION}`)
-    expect(within(detail).getByRole('link', { name: 'Open in the whole plan' })).toHaveAttribute('href', '#work?section=plan&root=R4&node=R4%3A4.1-3')
+    expect(within(detail).getByRole('link', { name: 'Open in module 4.1' })).toHaveAttribute('href', '#work?section=plan&root=R4&node=R4%3A4.1-3')
     fireEvent.keyDown(within(detail).getByRole('link', { name: 'Request #42' }), { key: 'Escape' })
     expect(screen.queryByRole('region', { name: 'Step 4.1-3' })).toBeNull()
     expect(document.activeElement).toBe(cell)
@@ -173,7 +173,7 @@ describe('module rows on the page', () => {
     const detail = screen.getByRole('region', { name: 'Step 4.1-6' })
     expect(detail).toHaveTextContent('Unknown · the runtime holds no state for this step.')
     expect(detail).toHaveTextContent('No done rule yet.')
-    expect(within(detail).getAllByRole('link').map(a => a.textContent)).toEqual(['Open in the whole plan'])
+    expect(within(detail).getAllByRole('link').map(a => a.textContent)).toEqual(['Open in module 4.1'])
   })
 
   it('moves along a bar with the arrow keys, Home and End', () => {

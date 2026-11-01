@@ -1,5 +1,5 @@
 import { SignOffButton } from './StepSignoffs'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { goalHref, NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
@@ -7,8 +7,11 @@ import { ActionLink, Card } from '../owner/OwnerParts'
 import { NowClock, useNow } from '../progress/progressClock'
 import { SIGNOFF_SECTION_HREF } from '../progress/progressPart'
 import { PlanLiveWork } from './PlanLiveWork'
+import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
+import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
 import { PlanTree } from './PlanTree'
+import { moduleRowLinkId } from './planModuleModel'
 import { responsibility, validity } from './planSnapshotModel'
 import { PlanRecentChanges } from './PlanRecentChanges'
 import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot } from './usePlanSnapshot'
@@ -20,10 +23,28 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
   const waits = view.owner_waiting.flatMap(w => 'task_id' in w ? [w] : [])
   const signoffs = view.owner_waiting.flatMap(w => 'ref' in w && w.readiness === 'Ready' ? [w] : [])
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
+  // An address naming a module, or a step of one, opens that module's detail first and brings it into view.
+  const opened = moduleOf(view, selected)
+  const detailId = opened ? moduleDetailId(opened.item.plan_node_id) : ''
+  const scrollTo = opened?.step ? moduleStepRowId(opened.step) : detailId || (targetId ? planNodeDOMId(targetId) : '')
   useEffect(() => {
-    if (targetId) return scrollAfterShell(() => document.getElementById(planNodeDOMId(targetId)))
-  }, [targetId, selected])
+    if (scrollTo) return scrollAfterShell(() => document.getElementById(scrollTo) ?? (detailId ? document.getElementById(detailId) : null))
+  }, [scrollTo, detailId, selected])
+  // Leaving a module's detail (All modules, or Back) puts the keyboard on that module's own link in the rows.
+  const openedId = opened?.item.plan_node_id ?? ''
+  const lastOpened = useRef(openedId)
+  useEffect(() => {
+    const left = lastOpened.current
+    lastOpened.current = openedId
+    if (!left || openedId) return
+    return scrollAfterShell(() => {
+      const link = document.getElementById(moduleRowLinkId(left))
+      link?.focus({ preventScroll: true })
+      return link
+    }, { block: 'center' })
+  }, [openedId])
   return <>
+    {opened && <PlanModuleDetail key={opened.item.plan_node_id} view={view} item={opened.item} step={opened.step} stale={stale} />}
     <div className="grid min-w-0 gap-3 md:grid-cols-2">
       <Card label="Main line" title="Main line">
         <strong className="[overflow-wrap:anywhere]">{current ? `${current.label} ${current.title}` : 'Current position Unknown'}</strong>
