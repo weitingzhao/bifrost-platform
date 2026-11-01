@@ -78,6 +78,7 @@ func newFrom(t testing.TB, template string) *DB {
 		create,
 		fmt.Sprintf(`REVOKE CONNECT ON DATABASE %s FROM PUBLIC`, name),
 		fmt.Sprintf(`GRANT CONNECT ON DATABASE %s TO agentrt_owner_dev, platform_agentrt_dev, agent_reader`, name),
+		asyncCommit(name),
 	} {
 		if _, err := admin.Exec(ctx, q); err != nil {
 			t.Fatalf("%s: %v", q, err)
@@ -104,6 +105,19 @@ func newFrom(t testing.TB, template string) *DB {
 		Reader:  fmt.Sprintf("%s dbname=%s user=agent_reader", b, name),
 		Foreign: fmt.Sprintf("%s dbname=%s user=platform_agentrt_stg", b, name),
 	}
+}
+
+// asyncCommit lets every session of a throwaway database commit without
+// waiting for its WAL to reach the disk. A test database never outlives a
+// crash of its server, so nothing a test can observe changes: visibility,
+// locks, isolation and constraint checks are those of synchronous commit.
+// The setting belongs to the database, so every connection to it has it,
+// whatever DSN opened it; CREATE DATABASE does not copy it from a template,
+// so each database gets its own. On a server whose fsync really flushes the
+// disk the store package took 794 s instead of 1003 s (R5:5.7-4,
+// GO_TEST_TIMING.md); it changes nothing on the server itself.
+func asyncCommit(name string) string {
+	return fmt.Sprintf(`ALTER DATABASE %s SET synchronous_commit = off`, name)
 }
 
 // Migrated is New followed by the migrations, run as the owner: a copy of a
@@ -164,6 +178,7 @@ func makeTemplate(b string) (string, error) {
 		fmt.Sprintf(`CREATE DATABASE %s OWNER agentrt_owner_dev`, name),
 		fmt.Sprintf(`REVOKE CONNECT ON DATABASE %s FROM PUBLIC`, name),
 		fmt.Sprintf(`GRANT CONNECT ON DATABASE %s TO agentrt_owner_dev`, name),
+		asyncCommit(name),
 	} {
 		if _, err = admin.Exec(ctx, q); err != nil {
 			return "", fmt.Errorf("%s: %w", q, err)
