@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { PlanSnapshot } from '@/api/planSnapshot'
+import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { NowClock, useNow } from '../progress/progressClock'
 import { PlanLiveWork } from './PlanLiveWork'
@@ -12,7 +12,7 @@ import { PlanRecentChanges } from './PlanRecentChanges'
 import { useSignoffWaits } from './useRuntimePlan'
 import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot } from './usePlanSnapshot'
 import { WorkSignoffs } from './WorkSignoffs'
-import { WorkSummaryCard } from './WorkSummaryCard'
+import { PlanReadFailure, WorkSummaryCard } from './WorkSummaryCard'
 import { WorkTabs } from './WorkTabs'
 import { useWorkView, type WorkTab } from './workViewModel'
 import { dependencyWaits, signoffCount } from './workSummaryModel'
@@ -28,29 +28,17 @@ function Fold({ title, open, children }: { title: string; open: boolean; childre
   </details>
 }
 
-/** Work → the round tab: an opened module's detail, every module as a row, and folded: the dependency waits and the whole plan. */
-function RoundTab({ view, selected, stale }: { view: PlanSnapshot; selected: string; stale: boolean }) {
+/** Work → the round tab: every module as a row, and folded: the dependency waits and the whole plan. */
+function RoundTab({ view, selected }: { view: PlanSnapshot; selected: string }) {
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
-  // An address naming a module, or a step of one, opens that module's detail first and brings it into view.
-  const opened = moduleOf(view, selected)
-  const detailId = opened ? moduleDetailId(opened.item.plan_node_id) : ''
-  const scrollTo = opened?.step ? moduleStepRowId(opened.step) : detailId || (targetId ? planNodeDOMId(targetId) : '')
+  // An address naming a node of no module (a module or a step of one opens on its own page: ModulePage) opens the
+  // whole plan's fold and brings the node into view there.
+  const scrollTo = targetId ? planNodeDOMId(targetId) : ''
   useEffect(() => {
-    if (scrollTo) return scrollAfterShell(() => document.getElementById(scrollTo) ?? (detailId ? document.getElementById(detailId) : null))
-  }, [scrollTo, detailId, selected])
-  // Leaving a module's detail (‹ Work, its round in the breadcrumb, or Back) puts the keyboard on that module's own
-  // link in the rows, and the row where it was on the screen when it was opened.
+    if (scrollTo) return scrollAfterShell(() => document.getElementById(scrollTo))
+  }, [scrollTo, selected])
   const waits = dependencyWaits(view, moduleRows(view))
-  const openedId = opened?.item.plan_node_id ?? ''
-  const lastOpened = useRef(openedId)
-  useEffect(() => {
-    const left = lastOpened.current
-    lastOpened.current = openedId
-    if (!left || openedId) return
-    return returnToModuleRow(left)
-  }, [openedId])
   return <>
-    {opened && <PlanModuleDetail key={opened.item.plan_node_id} view={view} item={opened.item} step={opened.step} stale={stale} />}
     {selected && !targetId && <p role="alert">Node not found in {view.root}: {selected}</p>}
     <PlanModuleRows view={view} selected={selected} />
     <Fold title={waits.state === 'unknown' ? 'Dependency waits · Unknown' : `Dependency waits · ${waits.total}${waits.unread ? ' · some Unknown' : ''}`} open={false}>
@@ -63,9 +51,9 @@ function RoundTab({ view, selected, stale }: { view: PlanSnapshot; selected: str
         </li>)}</ul>
       </section>
     </Fold>
-    {/* The whole plan's cards (acceptance, steps, evidence), folded: an address naming a node outside the module rows
-        (no module of its own) opens the fold and is brought into view there. */}
-    <Fold title={`Whole plan · acceptance, steps and evidence`} open={!!targetId && !opened}>
+    {/* The whole plan's cards (acceptance, steps, evidence), folded: an address naming a node of no module opens the
+        fold and is brought into view there. */}
+    <Fold title={`Whole plan · acceptance, steps and evidence`} open={!!targetId}>
       <PlanTree view={view} selected={selected} />
     </Fold>
   </>
@@ -74,7 +62,8 @@ function RoundTab({ view, selected, stale }: { view: PlanSnapshot; selected: str
 /**
  * Work (R5:5.5-2, Design v3.6 WorkPage): where the round stands in one card, then one of four tabs: the round (its
  * modules), Sign-offs, Live and Changes. Every tab reads the same plan view; the sign-offs also read every round's
- * GET /plan (SignoffWaiting's read). The tab is in the address (`#work?tab=live`); with no tab, the round.
+ * GET /plan (SignoffWaiting's read). The tab is in the address (`#work?tab=live`); with no tab, the round. An address
+ * naming a module or a step of one (`node=`) opens that module on a page of its own instead (R5:5.5-3).
  */
 export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
   const plan = usePlanAddress()
@@ -82,14 +71,45 @@ export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
   const tab = given ?? (view.kind === 'tab' ? view.tab : 'round')
   const { root, node } = plan
   const query = usePlanSnapshot(root)
-  // GET /progress (which lists the rounds) from the shell's cache: Work polls no progress of its own.
-  const waits = useSignoffWaits(true, 'cache')
+  // An address naming a module, or a step of one, opens that module on its own page (Design v3.6 ItemDetail; R5:5.5-3).
+  const opened = tab === 'round' && query.data ? moduleOf(query.data, node) : null
+  // GET /progress (which lists the rounds) from the shell's cache: Work polls no progress of its own. The rounds' GET
+  // /plan are the summary's sign-off count, which a module's page does not show: not read there.
+  const waits = useSignoffWaits(!opened, 'cache')
   const failed = query.isError || query.isPaused
   const count = signoffCount(waits, { view: query.data, failed: failed ? (query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed') : null, root, rounds: plan.rounds })
+  // Leaving a module's page (‹ Work, its round in the module path, or Back) puts the keyboard on that module's own
+  // link in the rows, and the row where it was on the screen when it was opened (R5:5.5-1, moduleRowReturn).
+  const openedId = opened?.item.plan_node_id ?? ''
+  const lastOpened = useRef(openedId)
+  useEffect(() => {
+    const left = lastOpened.current
+    lastOpened.current = openedId
+    if (!left || openedId) return
+    return returnToModuleRow(left)
+  }, [openedId])
   return <NowClock><section id="plan" aria-label="Plan and live view" className="flex min-w-0 scroll-mt-4 flex-col gap-2.5">
-    <WorkSummaryCard plan={plan} query={query} count={count} />
-    <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
+    {opened && query.data ? <ModulePage query={query} view={query.data} item={opened.item} step={opened.step} failed={failed} /> : <>
+      <WorkSummaryCard plan={plan} query={query} count={count} />
+      <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
+    </>}
   </section></NowClock>
+}
+
+/**
+ * A module's own page (Design v3.6 ItemDetail): its path back to Work and its detail, without the round's summary, tabs
+ * or rows; the step an address names is open on its timeline and in view. A plan view that can no longer be read is
+ * said here as on Work, with the last one marked Stale.
+ */
+function ModulePage({ query, view, item, step, failed }: { query: ReturnType<typeof usePlanSnapshot>; view: PlanSnapshot; item: PlanNode; step: string; failed: boolean }) {
+  const now = useNow()
+  const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
+  const scrollTo = step ? moduleStepRowId(step) : moduleDetailId(item.plan_node_id)
+  useEffect(() => scrollAfterShell(() => document.getElementById(scrollTo) ?? document.getElementById(moduleDetailId(item.plan_node_id))), [scrollTo, item.plan_node_id])
+  return <>
+    {failed && <PlanReadFailure query={query} />}
+    <PlanModuleDetail key={item.plan_node_id} view={view} item={item} step={step} stale={stale} />
+  </>
 }
 
 function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<typeof usePlanAddress>; tab: WorkTab; query: ReturnType<typeof usePlanSnapshot>; count: ReturnType<typeof signoffCount>; node: string; failed: boolean }) {
@@ -99,7 +119,7 @@ function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<ty
   return <>
     <WorkTabs plan={plan} tab={tab} count={count} view={view} stale={stale} />
     {tab === 'signoffs' && <WorkSignoffs count={count} view={view} stale={stale} />}
-    {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} stale={stale} />}
+    {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} />}
     {view && tab === 'live' && <PlanLiveWork view={view} stale={stale} />}
     {view && tab === 'changes' && <PlanRecentChanges key={plan.root} view={view} />}
   </>

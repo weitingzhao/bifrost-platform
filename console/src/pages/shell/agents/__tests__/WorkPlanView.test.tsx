@@ -167,14 +167,15 @@ describe('Work plan/live view', () => {
     const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll
     show('#work?section=plan&root=R4&node=R4%3A4.1-2')
     await screen.findByRole('region', { name: 'Module 4.1' })
-    await waitFor(() => expect(scroll).toHaveBeenCalled())
-    await unfold(/^Whole plan/)
-    const node = document.getElementById('plan-node-R4:4.1-2')!
-    expect(node.closest('details')).toHaveAttribute('open')
+    // A step of a module opens the module on its own page (R5:5.5-3), the step open on its timeline and brought into view.
+    const row = document.getElementById('module-detail-step-R4:4.1-2')!
+    expect(row).toHaveAttribute('aria-current', 'step')
+    await waitFor(() => expect(scroll.mock.contexts).toContain(row))
+    expect(screen.queryByRole('region', { name: 'Modules' })).toBeNull()
     reply = legacy
     await act(async () => { window.location.hash = '#work?section=plan&root=R2&node=R2%3A1'; window.dispatchEvent(new Event('hashchange')) })
     expect(await screen.findByRole('region', { name: 'Module 1' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Modules' })).toHaveTextContent('Modules · R2')
+    expect(within(screen.getByRole('navigation', { name: 'Module path' })).getByRole('link', { name: 'Round 2' })).toHaveAttribute('href', '#work?root=R2')
     expect(screen.queryByText('实现全计划与现场视图')).not.toBeInTheDocument()
     // A node with no module of its own (the round itself) opens the whole plan's fold and is found there.
     await act(async () => { window.location.hash = '#work?section=plan&root=R2&node=R2'; window.dispatchEvent(new Event('hashchange')) })

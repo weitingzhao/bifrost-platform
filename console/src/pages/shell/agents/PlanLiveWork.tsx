@@ -22,7 +22,8 @@ function duration(seconds: number | undefined) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
 }
-function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnapshot; stale: boolean }) {
+/** One registered piece of work now (Live and a module's Live on card): its executor, task, step, state and heartbeat. */
+export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnapshot; stale: boolean }) {
   const now = useNow()
   const drift = Math.max(0, (now - Date.parse(view.as_of)) / 1000)
   const external = 'external_work_id' in work

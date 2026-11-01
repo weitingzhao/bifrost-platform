@@ -144,15 +144,19 @@ describe('the tabs', () => {
     expect(within(signoffs).getAllByRole('listitem')).toHaveLength(8)
     fireEvent.click(within(signoffs).getByRole('button', { name: 'Show 5 more' }))
     expect(within(signoffs).getAllByRole('listitem')).toHaveLength(13)
-    // A module open in the round tab is not carried into another tab.
+    // A module opens on a page of its own (R5:5.5-3, Design v3.6 ItemDetail): no summary or tabs there; its ‹ Work goes
+    // back to the round, whose tabs do not carry the module.
     await go('#work?section=plan&root=R4&node=R4%3A4.1')
     expect(await screen.findByRole('region', { name: 'Module 4.1' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Where the round stands' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Work views' })).toBeNull()
+    await go(within(screen.getByRole('navigation', { name: 'Module path' })).getByRole('link', { name: 'Back to Work' }).getAttribute('href')!)
     expect(tab(/^Changes/)).toHaveAttribute('href', '#work?tab=changes&root=R4')
   })
 })
 
 describe('every address Work took still lands where it did', () => {
-  it('section=signoff opens the Sign-offs tab and brings it into view; plan, root, round and node open the round', async () => {
+  it('section=signoff opens the Sign-offs tab and brings it into view; plan, root and round open the round, node a module\'s page or the round', async () => {
     page('#work?section=signoff')
     const signoffs = await screen.findByRole('region', { name: 'Sign-offs' })
     expect(signoffs).toHaveAttribute('id', 'signoff')
@@ -161,9 +165,17 @@ describe('every address Work took still lands where it did', () => {
     await waitFor(() => expect(screen.getByRole('region', { name: 'Modules' })).toHaveTextContent('Modules · R4'))
     // section=plan still brings the plan into view (Work's DomainNav "Plan").
     await waitFor(() => expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(document.getElementById('plan')))
+    // node= naming a module or a step of one opens that module's own page, the step open on its timeline (R5:5.5-3,
+    // Design v3.6 ItemDetail: the round's summary, tabs and rows are a ‹ Work away)…
     await go('#work?section=plan&root=R5&node=R5%3A5.1-3')
     expect(await screen.findByRole('region', { name: 'Module 5.1' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Modules' })).toBeInTheDocument()
+    expect(document.getElementById('module-detail-step-R5:5.1-3')).toHaveAttribute('aria-current', 'step')
+    for (const name of ['Where the round stands', 'Modules']) expect(screen.queryByRole('region', { name })).toBeNull()
+    // …and naming a node of no module (the round itself) still opens the round, its whole plan unfolded.
+    await go('#work?section=plan&root=R5&node=R5')
+    expect(await screen.findByRole('region', { name: 'Whole plan' })).toBeInTheDocument()
+    for (const name of ['Where the round stands', 'Modules']) expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull()
   })
 
   it('goal= and goal=&task= open the goal cards a step away, with ‹ Work back', async () => {

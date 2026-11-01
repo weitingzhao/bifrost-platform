@@ -33,6 +33,15 @@ function NoRound({ plan }: { plan: PlanAddress }) {
   return <p className="m-0">The runtime holds no round yet.</p>
 }
 
+/** The plan view could not be read: why, the last snapshot still shown as Stale (or none yet), and Retry. */
+export function PlanReadFailure({ query }: { query: UseQueryResult<PlanSnapshot> }) {
+  const view = query.data
+  const reason = query.isPaused ? 'Offline' : query.error?.message ?? ''
+  return <div role="alert" className="rounded-[var(--control-radius)] border border-[var(--color-warning)] p-3">
+    Unknown · {reason}. {view ? `Stale · showing the last successful snapshot from ${view.as_of}.` : 'No successful snapshot yet.'}
+    <button className="ml-2 min-h-11 rounded-[var(--control-radius)] border px-3" onClick={() => void query.refetch()}>Retry</button></div>
+}
+
 /**
  * The top of Work (Design v3.6 WorkPage): where the round stands in one sentence, the mainline, the sign-offs, the
  * dependency waits and the ETA, each computed from plan-view and GET /plan (workSummaryModel.ts), with when it was read.
@@ -42,10 +51,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
   const now = useNow()
   const view = query.data
   const failed = query.isError || query.isPaused
-  const reason = query.isPaused ? 'Offline' : query.error?.message ?? ''
-  const failure = failed && <div role="alert" className="rounded-[var(--control-radius)] border border-[var(--color-warning)] p-3">
-    Unknown · {reason}. {view ? `Stale · showing the last successful snapshot from ${view.as_of}.` : 'No successful snapshot yet.'}
-    <button className="ml-2 min-h-11 rounded-[var(--control-radius)] border px-3" onClick={() => void query.refetch()}>Retry</button></div>
+  const failure = failed && <PlanReadFailure query={query} />
   if (!view) {
     return <section aria-label="Where the round stands" className={box}>
       <div className="flex flex-wrap items-center gap-2"><Lamp tone="unknown" />
