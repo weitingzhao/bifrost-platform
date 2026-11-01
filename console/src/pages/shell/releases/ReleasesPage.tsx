@@ -1,17 +1,17 @@
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow } from '@bifrost/ui'
 import { fetchApprovalList } from '@/api/approvals'
-import { operatorToken } from '@/api/client'
-import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
-import { fetchGitOpsApps } from '@/api/gitOps'
-import { fetchStgSmoke } from '@/api/promote'
-import { fetchReleaseRecords } from '@/api/releases'
+import { authedFetch, operatorToken, pathSegment } from '@/api/client'
+import type { DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, GitOpsAppsResponse, ReleaseWindowResponse, StgSmokeResponse } from '@/api/deliveryTypes'
+import type { ReleaseListResponse, RunningImagesResponse } from '@/api/releases'
+import { serverFetch } from '@/api/serverContact'
 import { RequestActionButton } from '@/components/shell/RequestActionButton'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { shellNavEntry } from '@/lib/shell/consoleRoutes'
 import { ReleaseHistorySection } from '@/pages/shell/releases/ReleaseHistorySection'
 import { ReleaseInProgressSection } from '@/pages/shell/releases/ReleaseInProgressSection'
+import { ReleaseLanesSection, type LandingRuleRead } from '@/pages/shell/releases/ReleaseLanesSection'
 import { ReleaseNeedsYouSection } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import {
   RELEASE_RECORD_LIMIT,
@@ -31,39 +31,88 @@ function errorText(error: unknown): string | null {
   return error instanceof Error ? error.message : null
 }
 
+let reading = 0
+const queued: Array<() => void> = []
+
+/**
+ * At most two of this page's reads in flight: with the release policy's and the action catalog's own reads, four at most
+ * (PROD 2026-10-31: about 40 parallel Console reads ran platform-api out of memory). A finished read hands its slot on.
+ */
+function limited<T>(read: (signal: AbortSignal) => Promise<T>): (context: { signal: AbortSignal }) => Promise<T> {
+  return async ({ signal }) => {
+    if (reading < 2) reading++
+    else await new Promise<void>(resolve => queued.push(resolve))
+    try {
+      // Cancelled while it waited (the page closed): no request.
+      if (signal.aborted) throw signal.reason ?? new Error('read cancelled')
+      return await read(signal)
+    } finally {
+      const next = queued.shift()
+      if (next != null) next()
+      else reading--
+    }
+  }
+}
+
+/** A GET that gives up after ten seconds or when React Query cancels it, so a hung read never keeps its slot. */
+async function get<T>(label: string, path: string, signal: AbortSignal, authed = false): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error(`${label}: no answer in 10 s`)), 10_000)
+  signal.addEventListener('abort', () => controller.abort(signal.reason))
+  try {
+    const r = authed ? await authedFetch(label, path, { signal: controller.signal }) : await serverFetch(path, { signal: controller.signal })
+    if (!r.ok) throw new Error(`${label}: HTTP ${r.status}`)
+    return (await r.json()) as T
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function ReleasesPage() {
   const releases = useQuery({
     queryKey: ['releases', 'records', RELEASE_RECORD_LIMIT],
-    queryFn: () => fetchReleaseRecords(RELEASE_RECORD_LIMIT),
+    queryFn: limited(signal => get<ReleaseListResponse>('releases', `/api/v1/releases?limit=${RELEASE_RECORD_LIMIT}`, signal)),
     refetchInterval: 30_000,
   })
   const gitops = useQuery({
     queryKey: ['gitops', 'apps'],
-    queryFn: fetchGitOpsApps,
+    queryFn: limited(signal => get<GitOpsAppsResponse>('gitops apps', '/api/v1/gitops/apps', signal)),
     refetchInterval: 30_000,
   })
   const pipelines = useQuery({
     queryKey: ['delivery', 'pipelines'],
-    queryFn: fetchDeliveryPipelines,
-    refetchInterval: 15_000,
+    queryFn: limited(signal => get<DeliveryPipelinesResponse>('delivery pipelines', '/api/v1/delivery/pipelines', signal)),
+    refetchInterval: 30_000,
   })
   const smoke = useQuery({
     queryKey: ['delivery', 'stg-smoke'],
-    queryFn: fetchStgSmoke,
+    queryFn: limited(signal => get<StgSmokeResponse>('stg smoke', '/api/v1/delivery/stg/smoke', signal)),
+    refetchInterval: 30_000,
+  })
+  const images = useQuery({
+    queryKey: ['releases', 'running-images'],
+    queryFn: limited(signal => get<RunningImagesResponse>('running images', '/api/v1/releases/running-images', signal)),
     refetchInterval: 30_000,
   })
   const hasToken = operatorToken() !== ''
   const releaseWindow = useQuery({
     queryKey: ['delivery', 'release-window'],
-    queryFn: fetchReleaseWindow,
+    queryFn: limited(signal => get<ReleaseWindowResponse>('release window', '/api/v1/delivery/release-window', signal, true)),
     enabled: hasToken,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   })
   const approvals = useQuery({
     queryKey: ['approvals', 'pending'],
-    queryFn: () => fetchApprovalList('pending'),
+    // fetchApprovalList aborts itself after 15 s (APPROVAL_READ_DEADLINE_MS).
+    queryFn: limited(() => fetchApprovalList('pending')),
     enabled: hasToken,
     refetchInterval: 30_000,
+  })
+  const landingRule = useQuery({
+    queryKey: ['agentrt', 'rules', 'landing:dev'],
+    queryFn: limited(signal => get<LandingRuleRead>('landing rule', `/api/v1/agentrt/rules/${pathSegment('landing:dev')}`, signal, true)),
+    enabled: hasToken,
+    refetchInterval: 60_000,
   })
 
   const pipelineNames = (pipelines.data?.pipelines ?? [])
@@ -74,8 +123,8 @@ export function ReleasesPage() {
   const runQueries = useQueries({
     queries: pipelineNames.map(name => ({
       queryKey: ['delivery', 'runs', name],
-      queryFn: () => fetchPipelineRuns(name),
-      refetchInterval: 15_000,
+      queryFn: limited(signal => get<DeliveryPipelineRunsResponse>('pipeline runs', `/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, signal)),
+      refetchInterval: 30_000,
     })),
   })
 
@@ -100,6 +149,14 @@ export function ReleasesPage() {
   const runError = runQueries.map(query => errorText(query.error)).find(message => message != null) ?? null
   const runsLoading = pipelines.isLoading || runQueries.some(query => query.isLoading)
   const runErrors = [errorText(pipelines.error), runError].filter((message): message is string => message != null)
+  const pending = pendingReleaseApprovals(approvals.data ?? [])
+  // A 200 can still carry an unread list: records and images say so in `error`, pipelines and runs in `reachability`.
+  const pipelinesUnreached = pipelines.data != null && pipelines.data.reachability !== 'ok' ? pipelines.data.detail || pipelines.data.reachability || null : null
+  const laneRuns = Object.fromEntries(pipelineNames.map((name, index) => {
+    const q = runQueries[index]
+    const unreached = q?.data != null && q.data.reachability !== 'ok' ? q.data.detail || q.data.reachability : null
+    return [name, { data: unreached == null ? q?.data?.runs : undefined, error: errorText(q?.error) ?? unreached }]
+  }))
 
   return (
     <div className="flex flex-col gap-3">
@@ -107,11 +164,23 @@ export function ReleasesPage() {
 
       <a href="#services?section=versions">Running versions · Services</a>
 
+      <ReleaseLanesSection
+        now={now}
+        hasToken={hasToken}
+        window={windowView}
+        records={{ data: releases.data?.error ? undefined : releases.data?.records, error: errorText(releases.error) ?? (releases.data?.error || null) }}
+        pipelines={{ data: pipelines.data == null || pipelinesUnreached != null ? undefined : pipelineNames, error: errorText(pipelines.error) ?? pipelinesUnreached }}
+        runs={laneRuns}
+        images={{ data: images.data == null || images.data.error ? undefined : (images.data.cells ?? []), error: errorText(images.error) ?? (images.data?.error || null) }}
+        rule={{ data: landingRule.data, error: errorText(landingRule.error) }}
+        approvals={pending}
+      />
+
       <ReleaseNeedsYouSection
         hasToken={hasToken}
         isLoading={approvals.isLoading}
         error={errorText(approvals.error)}
-        pending={pendingReleaseApprovals(approvals.data ?? [])}
+        pending={pending}
         now={now}
       />
 
