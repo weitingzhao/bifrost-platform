@@ -153,33 +153,54 @@ export function useApprovalSteps(enabled = true): ApprovalStepsRead {
 
 /**
  * Every round's plan tree, one GET /plan?root= per round GET /progress counts (PLAN_ROOT alone when that read failed
- * or counts none): read is 'ok' with the trees the runtime holds, in round order; 'loading' until each has answered;
- * 'error' when any read failed, or answered a tree that is not the round asked for (review 476 C2).
+ * or counts none), or, scoped to one round, that round's alone: read is 'ok' with the trees the runtime holds, in round
+ * order; 'loading' until each has answered (and while the one round is not known); 'error' when any read failed, or
+ * answered a tree that is not the round asked for (review 476 C2). at is when the oldest of them last answered, and
+ * oldest its round: a refresh that hangs neither fails nor answers, so a reader judges the age itself (R5:5.5-4). A
+ * refresh that failed after each had answered keeps those answers as last (R5:5.5-4: a reader lists them as last read,
+ * never counts them).
  */
-type RoundPlans = { read: 'ok'; docs: unknown[]; rounds: string[] } | { read: 'loading' | 'error' }
+type RoundTrees = { docs: unknown[]; rounds: string[]; at: number; oldest: string }
+type RoundPlans = ({ read: 'ok' } & RoundTrees) | { read: 'loading' } | { read: 'error'; last?: RoundTrees }
 /**
  * How a reader takes GET /progress: polled every 5 s itself, or (cache) from what the shell already polls on every page
  * (ConsolePage → useNeedsYou), read once only when nothing has read it, as Work's round address does (R5:5.5-2).
  */
 export type ProgressSource = 'poll' | 'cache'
-function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll'): RoundPlans {
+/**
+ * Which rounds' GET /plan a reader takes: every round GET /progress lists, or one round only (Work's round tab, R5:5.5-4:
+ * the round the address names or the newest, null while that is not known; GET /progress is then not read here at all).
+ */
+export type RoundScope = 'every' | { only: string | null }
+function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll', scope: RoundScope = 'every'): RoundPlans {
+  const every = scope === 'every'
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
-    enabled, retry: false, ...(source === 'cache' ? { staleTime: Infinity } : { refetchInterval: AGENT_RUNTIME_POLL_MS }) })
+    enabled: enabled && every, retry: false, ...(source === 'cache' ? { staleTime: Infinity } : { refetchInterval: AGENT_RUNTIME_POLL_MS }) })
   const { data: progress, isError: progressFailed, isPaused: progressPaused } = progressQ
-  const roundsKey = progress !== undefined ? planRounds(progress.plan).join(',') || PLAN_ROOT : progressFailed || progressPaused ? PLAN_ROOT : ''
+  const roundsKey = !every ? scope.only ?? ''
+    : progress !== undefined ? planRounds(progress.plan).join(',') || PLAN_ROOT : progressFailed || progressPaused ? PLAN_ROOT : ''
   const rounds = useMemo(() => (roundsKey === '' ? [] : roundsKey.split(',')), [roundsKey])
   const combine = useCallback((results: UseQueryResult<PlanAnswer>[]): RoundPlans => {
     if (rounds.length === 0) return { read: 'loading' }
-    if (results.some(q => q.isError || q.isPaused)) return { read: 'error' }
-    if (results.some(q => q.data === undefined)) return { read: 'loading' }
-    const docs: unknown[] = []
-    for (const [i, q] of results.entries()) {
-      if (!q.data?.found) continue
-      const doc = record(q.data.doc)
-      if (doc.root !== rounds[i] || !Array.isArray(doc.nodes)) return { read: 'error' }
-      docs.push(q.data.doc)
+    const trees = (): RoundTrees | null => {
+      const docs: unknown[] = []
+      let at = Infinity, oldest = rounds[0]
+      for (const [i, q] of results.entries()) {
+        if (q.dataUpdatedAt < at) { at = q.dataUpdatedAt; oldest = rounds[i] }
+        if (!q.data?.found) continue
+        const doc = record(q.data.doc)
+        if (doc.root !== rounds[i] || !Array.isArray(doc.nodes)) return null
+        docs.push(q.data.doc)
+      }
+      return { docs, rounds, at, oldest }
     }
-    return { read: 'ok', docs, rounds }
+    if (results.some(q => q.isError || q.isPaused)) {
+      const last = results.every(q => q.data !== undefined) ? trees() : null
+      return last ? { read: 'error', last } : { read: 'error' }
+    }
+    if (results.some(q => q.data === undefined)) return { read: 'loading' }
+    const whole = trees()
+    return whole ? { read: 'ok', ...whole } : { read: 'error' }
   }, [rounds])
   return useQueries({
     queries: rounds.map(root => ({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }: { signal: AbortSignal }) => fetchRuntimePlan(root, signal),
@@ -196,11 +217,17 @@ function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll'): Round
  */
 export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: SignoffWait[]; acceptanceRoots: string[]
   /** The rounds whose GET /plan was read (PLAN_ROOT alone when GET /progress listed no R<n> round or was not read). */
-  rounds?: string[] } | { read: 'loading' | 'error' }
-export function useSignoffWaits(enabled = true, source: ProgressSource = 'poll'): SignoffWaitsRead {
-  const plans = useRoundPlans(enabled, source)
+  rounds?: string[]
+  /** When the oldest of those reads last answered, and its round (R5:5.5-4: a reader says Unknown once it is old). */
+  at?: number; oldest?: string } | { read: 'loading' }
+  /** A refresh failed: what the last good answers listed, if each had answered (shown as last read, never counted). */
+  | { read: 'error'; last?: { waits: SignoffWait[]; notStarted: SignoffWait[]; at: number } }
+export function useSignoffWaits(enabled = true, source: ProgressSource = 'poll', scope: RoundScope = 'every'): SignoffWaitsRead {
+  const plans = useRoundPlans(enabled, source, scope)
   // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
-  return useMemo((): SignoffWaitsRead => (plans.read !== 'ok' ? plans
-    : { read: 'ok', rounds: plans.rounds, waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)),
+  return useMemo((): SignoffWaitsRead => (plans.read === 'loading' ? plans
+    : plans.read === 'error' ? (plans.last ? { read: 'error', last: { waits: plans.last.docs.flatMap(doc => signoffWaits(doc)),
+      notStarted: plans.last.docs.flatMap(doc => signoffNotStarted(doc)), at: plans.last.at } } : { read: 'error' })
+    : { read: 'ok', rounds: plans.rounds, at: plans.at, oldest: plans.oldest, waits: plans.docs.flatMap(doc => signoffWaits(doc)), notStarted: plans.docs.flatMap(doc => signoffNotStarted(doc)),
       acceptanceRoots: plans.docs.flatMap(doc => records(record(doc).nodes).some(n => (JSON.stringify(n.done_rule_json) ?? '').includes('"external_verified"')) ? [text(record(doc).root)] : []).filter(Boolean) }), [plans])
 }

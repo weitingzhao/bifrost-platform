@@ -10,7 +10,7 @@ import { AcceptanceSignoffQueue } from './SignoffWaiting'
 import { SignOffButton, SignOffButtons } from './StepSignoffs'
 import { StepBadge, StepTitle } from './StepText'
 import { planNodeHref } from './usePlanSnapshot'
-import { signoffGaps, signoffsComplete, stepsReach, type SignoffCount, type SignoffRow } from './workSummaryModel'
+import { lastReadRows, signoffGaps, signoffsComplete, stepsReach, type SignoffCount, type SignoffRow } from './workSummaryModel'
 
 /** How many of the later rows show before "Show n more". */
 const LATER_SHOWN = 8
@@ -20,6 +20,8 @@ const row = 'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[14px
 const chip = (dashed: boolean) => `inline-flex h-[22px] items-center whitespace-nowrap rounded-full px-2 text-xs font-semibold ${dashed ? 'border border-dashed border-[var(--color-lamp-gray)] text-muted-foreground' : 'bg-[var(--control-fill)] text-foreground'}`
 const rootOf = (node: string) => node.split(':')[0]
 const CLOSED = ['done', 'stopped', 'dropped']
+/** Why a row listed as last read cannot be signed: the words the plan's stale snapshot always gave. */
+const REFRESH = 'Refresh the plan before signing.'
 
 function Evidence({ signoff }: { signoff: AcceptanceSignoff }) {
   if (signoff.candidate_evidence.length === 0) return null
@@ -27,34 +29,61 @@ function Evidence({ signoff }: { signoff: AcceptanceSignoff }) {
     <ul className="m-0 mt-1 list-none space-y-1 p-0">{signoff.candidate_evidence.map(c => <li key={c.artifact_id}>{c.label} · {c.source}<br />{c.artifact_id}</li>)}</ul></details>
 }
 
-function ReadyRow({ entry, view, stale }: { entry: SignoffRow; view: PlanSnapshot | undefined; stale: boolean }) {
+/** A row ready for sign-off; one listed as last read (lastRead) is not signable: "Refresh the plan before signing." */
+function ReadyRow({ entry, view, stale, lastRead = false }: { entry: SignoffRow; view: PlanSnapshot | undefined; stale: boolean; lastRead?: boolean }) {
   if (entry.kind === 'step') {
     const w = entry.wait
-    return <li data-signoff-wait={w.node} className={`${row} flex-col items-stretch sm:flex-row sm:items-center`}>
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-sm"><StepBadge label={w.label} /><StepTitle text={w.title} /></div>
-      <SignOffButtons node={w.node} label={w.label} refs={w.refs} named={w.named} state={w.state} title={w.title} />
+    return <li data-signoff-wait={w.node} data-last-read={lastRead || undefined} className={`${row} flex-col items-stretch sm:flex-row sm:items-center`}>
+      <div className="flex min-w-0 flex-1 items-center gap-2 text-sm"><StepBadge label={w.label} /><StepTitle text={w.title} />{lastRead && <span className={chip(true)}>as last read</span>}</div>
+      <SignOffButtons node={w.node} label={w.label} refs={w.refs} named={w.named} state={w.state} title={w.title} unavailable={lastRead ? REFRESH : undefined} />
     </li>
   }
   if (entry.kind !== 'acceptance') return null
   const s = entry.signoff
   const n = view?.nodes.find(x => x.plan_node_id === s.plan_node_id)
-  return <li data-signoff-acceptance={s.ref} className={row}>
+  return <li data-signoff-acceptance={s.ref} data-last-read={lastRead || undefined} className={row}>
     <StepBadge label={entry.label} />
     <span className="min-w-0 flex-[1_1_15rem] text-sm">{plainTitle(entry.title) || s.plan_node_id} <span className="text-muted-foreground">· acceptance {s.acceptance} · plan v{s.plan_version}</span></span>
+    {lastRead && <span className={chip(true)}>as last read</span>}
     <SignOffButton node={s.plan_node_id} label={entry.label} signoffRef={s.ref} named={false} reviewContext={JSON.stringify([s, n?.state, n?.title])} candidates={s.candidate_evidence}
-      unavailable={stale ? 'Refresh the plan before signing.' : n && CLOSED.includes(n.state ?? '') ? 'This step is closed.' : undefined} />
+      unavailable={stale || lastRead ? REFRESH : n && CLOSED.includes(n.state ?? '') ? 'This step is closed.' : undefined} />
     <Evidence signoff={s} />
   </li>
 }
 
-function LaterRow({ entry }: { entry: SignoffRow }) {
+/**
+ * What a source too old to be said as now, or whose refresh failed, last listed (R5:5.5-4): every row, marked as last
+ * read, signing off ("Refresh the plan before signing."), in none of the counts above; why is said above (the alerts).
+ */
+function LastReadRows({ count, view }: { count: SignoffCount; view: PlanSnapshot | undefined }) {
+  const n = lastReadRows(count)
+  if (n === 0) return null
+  const { ready, tasks, notStarted, later } = count.lastRead
+  return <div data-signoff-last-read={n} className="flex min-w-0 flex-col gap-2 pt-1">
+    <span className={caps}>As last read · not counted · {n}</span>
+    <p className="m-0 text-xs text-muted-foreground">What the last read of {signoffGaps(count).length ? 'a source said above to be Unknown' : 'the sources'} listed: not in any count above, and not signable until the plan is read again.</p>
+    <ul aria-label="Sign-offs as last read" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
+      {ready.map(entry => <ReadyRow key={`r|${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} view={view} stale lastRead />)}
+      {tasks.map(wait => {
+        const task = view?.tasks.find(t => t.task_id === wait.task_id)
+        return <li key={`t|${wait.task_id}`} data-last-read className={row}><span className="min-w-0 flex-[1_1_15rem] text-sm">{task?.title || wait.task_id} <span className="text-muted-foreground">· {wait.reason}</span></span>
+          <span className={chip(true)}>as last read</span>
+          <ActionLink href={task ? goalHref(task.mission_id, task.task_id) : planNodeHref(rootOf(wait.plan_node_id), wait.plan_node_id)}>Review task</ActionLink></li>
+      })}
+      {[...notStarted, ...later].map(entry => <LaterRow key={`l|${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} lastRead />)}
+    </ul>
+  </div>
+}
+
+function LaterRow({ entry, lastRead = false }: { entry: SignoffRow; lastRead?: boolean }) {
   const state = entry.kind === 'step' ? 'Not started' : entry.kind === 'acceptance' ? entry.signoff.readiness : 'Readiness Unknown'
   const why = entry.kind === 'step' ? 'Its done rule waits on your sign-off; no work on it has started yet.'
     : entry.kind === 'acceptance' ? `${entry.signoff.reason} · acceptance ${entry.signoff.acceptance}` : entry.reason
-  return <li data-signoff-later={entry.node} className={`${row} shadow-[var(--ops-inset)] [background:transparent]`}>
+  return <li data-signoff-later={entry.node} data-last-read={lastRead || undefined} className={`${row} shadow-[var(--ops-inset)] [background:transparent]`}>
     <StepBadge label={entry.label} />
     <a href={planNodeHref(rootOf(entry.node), entry.node)} className="min-w-0 flex-[1_1_15rem] text-sm text-foreground no-underline hover:underline">{plainTitle(entry.title) || entry.node}</a>
     <span className={chip(state === 'Readiness Unknown')}>{state}</span>
+    {lastRead && <span className={chip(true)}>as last read</span>}
     <span className="basis-full text-xs text-muted-foreground">{why}</span>
     {entry.kind === 'acceptance' && <Evidence signoff={entry.signoff} />}
   </li>
@@ -84,6 +113,7 @@ export function WorkSignoffs({ count, view, stale }: { count: SignoffCount; view
     return <section ref={ref} id="signoff" aria-label="Sign-offs" className={panel}>
       {status}
       {gaps.length === 2 && <p className="m-0 text-sm text-muted-foreground">Which steps wait for your sign-off is not known.</p>}
+      <LastReadRows count={count} view={view} />
       <div className="flex flex-wrap gap-2"><ActionLink href={NEEDS_YOU_HREF}>Review requests</ActionLink></div>
     </section>
   }
@@ -99,7 +129,7 @@ export function WorkSignoffs({ count, view, stale }: { count: SignoffCount; view
       <span className="font-mono text-[22px] font-semibold" title={complete ? undefined : 'Not every source was read: this counts what was'}>{count.ready.length}{!complete && '+'}</span>
       <div className="flex min-w-0 flex-col">
         <span className="text-[15px] font-semibold">Ready for your sign-off now</span>
-        <span className="text-[13px] text-muted-foreground">Steps ({stepsReach(count)}) whose work has started and whose done rule waits on your sign-off (GET /plan), and {count.root ? roundLabel(count.root) : 'the round'}'s acceptance sign-offs its plan view marks Ready{stale && ' · as last read'}.
+        <span className="text-[13px] text-muted-foreground">Steps ({stepsReach(count)}) whose work has started and whose done rule waits on your sign-off (GET /plan), and {count.root ? roundLabel(count.root) : 'the round'}'s acceptance sign-offs its plan view marks Ready{count.lastRead.ready.length > 0 && ' · as last read: listed below, not counted'}.
           {count.uncounted.length > 0 && ` Acceptance sign-offs of ${count.uncounted.join(', ')} are below and not counted here.`}</span>
       </div>
     </div>
@@ -127,9 +157,11 @@ export function WorkSignoffs({ count, view, stale }: { count: SignoffCount; view
     <p className="m-0 text-xs text-muted-foreground">{round}'s plan view only (owner_later); other rounds' later sign-offs and Owner steps are not read here. Blocked: its other conditions or dependencies are not verified. Not started: no work on it and no candidate evidence yet. Readiness Unknown: {view?.freshness.owner_waiting ?? 'the plan view cannot judge it yet'}.</p>
     {count.later.length > 0 ? <ul aria-label="Later sign-offs" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
       {later.map(entry => <LaterRow key={`${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} />)}</ul>
-      : <p className="m-0 text-sm">{count.round === 'ok' ? `None in ${round}'s plan view.` : `${round}'s plan view not read.`}</p>}
+      : <p className="m-0 text-sm">{count.round === 'ok' ? `None in ${round}'s plan view.` : count.lastRead.later.length > 0
+        ? `None counted: ${round}'s plan view is not read now (above); what it last listed is below, as last read.` : `None counted: ${round}'s plan view is not read now (above).`}</p>}
     {count.later.length > LATER_SHOWN && !all && <button type="button" onClick={() => setAll(true)}
       className="min-h-11 self-start border-0 bg-transparent p-0 text-sm font-semibold text-[var(--primary)]">Show {count.later.length - LATER_SHOWN} more</button>}
+    <LastReadRows count={count} view={view} />
     {count.uncounted.map(root => <div key={root} className="flex min-w-0 flex-col gap-2 pt-1">
       <span className={caps}>Acceptance sign-offs in {roundLabel(root)}</span><AcceptanceSignoffQueue root={root} /></div>)}
     <div className="flex flex-wrap gap-2 pt-1"><ActionLink href={NEEDS_YOU_HREF}>Review requests</ActionLink></div>

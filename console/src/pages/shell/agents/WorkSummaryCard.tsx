@@ -7,11 +7,14 @@ import { roundLabel } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
 import type { PlanAddress } from './usePlanSnapshot'
 import { workTabHref } from './workViewModel'
-import { CLASS_MEANINGS, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
+import { NeedsCleanupEntry } from './NeedsCleanup'
+import { cleanupBreakdown } from './needsCleanupModel'
+import { useNeedsCleanup } from './useNeedsCleanup'
+import { answeredWords, progressOld, sinceWords as since } from './readAge'
+import { CLASS_MEANINGS, OTHER_ROUNDS, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
 
 const TONE_WORDS: Partial<Record<Tone, string>> = { ok: 'Nothing for you, as far as read', attention: 'Needs a look', unknown: 'Not fully known' }
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-const since = (at: number, now: number) => { const s = Math.max(0, Math.round((now - at) / 1000)); return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h` }
 
 function Lamp({ tone, why = [] }: { tone: Tone; why?: string[] }) {
   const color = TONE_COLOR[tone]
@@ -23,13 +26,18 @@ function Lamp({ tone, why = [] }: { tone: Tone; why?: string[] }) {
 const pill = 'inline-flex h-5 items-center rounded-full border border-dashed border-[var(--color-lamp-gray)] px-[7px] text-[11px] font-semibold text-muted-foreground'
 const box = 'flex min-w-0 flex-col gap-2 rounded-[20px] border border-[var(--ops-edge)] px-4 py-3.5 shadow-[var(--ops-shadow)] [background:var(--ops-panel)] [overflow-wrap:anywhere]'
 
-/** Work → the round before a plan view is read: which round is not known yet, cannot be, or the runtime holds none. */
-function NoRound({ plan }: { plan: PlanAddress }) {
+/**
+ * Work → the round before a plan view is read: which round is not known yet, cannot be, or the runtime holds none;
+ * "none" only from a round list that is now (R5:5.5-4: GET /progress older than twice its 5 s poll is as of then).
+ */
+function NoRound({ plan, now }: { plan: PlanAddress; now: number }) {
   const { rounds } = plan
   if (rounds.state === 'reading') return <p role="status" className="m-0">Reading which round is newest…</p>
   if (rounds.state === 'unknown') return <div role="alert" className="rounded-[var(--control-radius)] border border-[var(--color-warning)] p-3">
     Newest round Unknown · {rounds.reason}. This plan and live view shows no round until it is known; an address can still name a round (<code>#work?root=…</code>).
     <button className="ml-2 min-h-11 rounded-[var(--control-radius)] border px-3" onClick={plan.retry}>Retry</button></div>
+  if (rounds.failed || progressOld(rounds.at, now)) return <p role="status" className="m-0">
+    The runtime held no round as of {new Date(rounds.at).toISOString()}; whether it holds one now is Unknown · GET /progress {rounds.failed ? `failed (${rounds.failed})` : answeredWords(rounds.at, now)}.</p>
   return <p className="m-0">The runtime holds no round yet.</p>
 }
 
@@ -44,20 +52,25 @@ export function PlanReadFailure({ query }: { query: UseQueryResult<PlanSnapshot>
 
 /**
  * The top of Work (Design v3.6 WorkPage): where the round stands in one sentence, the mainline, the sign-offs, the
- * dependency waits and the ETA, each computed from plan-view and GET /plan (workSummaryModel.ts), with when it was read.
- * How each part is read is one fold away; a plan view that cannot be read says so, with the last one marked Stale.
+ * dependency waits and the ETA, each computed from plan-view and GET /plan (workSummaryModel.ts), with when it was read,
+ * and the one way to what needs cleanup (R5:5.5-4). How each part is read is one fold away; a plan view that cannot be
+ * read says so, with the last one marked Stale.
  */
 export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; query: UseQueryResult<PlanSnapshot>; count: SignoffCount }) {
   const now = useNow()
   const view = query.data
   const failed = query.isError || query.isPaused
   const failure = failed && <PlanReadFailure query={query} />
+  // What needs cleanup, from the shell's GET /progress and this plan view: no request of its own (R5:5.5-4).
+  const cleanup = useNeedsCleanup(plan, query, now)
   if (!view) {
     return <section aria-label="Where the round stands" className={box}>
       <div className="flex flex-wrap items-center gap-2"><Lamp tone="unknown" />
         <span className="text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground">{plan.root ? roundLabel(plan.root) : 'Work'}</span></div>
-      {plan.root === null ? <NoRound plan={plan} /> : !failed && <p role="status" className="m-0">Loading plan and live work…</p>}
+      {plan.root === null ? <NoRound plan={plan} now={now} /> : !failed && <p role="status" className="m-0">Loading plan and live work…</p>}
       {failure}
+      {/* The hosts of Needs cleanup do not wait on the plan view: its one entry is here too (R5:5.5-4). */}
+      <span className="text-[13px] text-muted-foreground"><NeedsCleanupEntry plan={plan} cleanup={cleanup} /></span>
     </section>
   }
   const rows = moduleRows(view)
@@ -84,10 +97,13 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
         title={signoffBreakdown(count).join('\n')}>
         Sign-offs: {signoffWords(count)}{signoffGaps(count).length > 0 && ` · ${signoffGaps(count).join('; ')}`}
         {count.tasks.length > 0 && ` · ${count.tasks.length} task${count.tasks.length === 1 ? ' waits' : 's wait'} on you`}
-        {count.uncounted.length > 0 && ` · ${count.uncounted.join(', ')} acceptance not counted here`}</a>
+        {count.uncounted.length > 0 && ` · ${count.uncounted.join(', ')} acceptance not counted here`}
+        {count.scope === 'round' && ` · ${OTHER_ROUNDS}`}</a>
       <span data-summary-waits title={waits.state === 'ok' ? `Blocking dependencies whose milestone is not verified: ${waits.blocked} Blocked, ${waits.unverified} Unknown` : undefined}>
         {dependencyWords(waits)}</span>
       <span className="inline-flex items-center gap-1.5">ETA <span className={pill} title={view.eta.reason}>{view.eta.status}</span></span>
+      {/* What was left stale (offline hosts, registered work with no heartbeat) is a step away on Activity (R5:5.5-4). */}
+      <NeedsCleanupEntry plan={plan} cleanup={cleanup} />
     </div>
     <details className="text-[13px]">
       <summary className="cursor-pointer text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:py-3">How this is read</summary>
@@ -101,6 +117,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
           <ul className="m-0 list-disc pl-5">{CLASS_MEANINGS.map(([name, meaning]) => <li key={name}>“{name}”: {meaning}</li>)}</ul></li>
         {signoffBreakdown(count).map(line => <li key={line}>Sign-offs · {line}</li>)}
         {waits.state === 'ok' && <li>Dependency waits · {waits.blocked} Blocked · {waits.unverified} milestone Unknown</li>}
+        {cleanupBreakdown(cleanup).map(line => <li key={line}>Needs cleanup · {line}</li>)}
         <li>ETA · {view.eta.status} · {view.eta.reason}</li>
         {view.warnings.map(w => <li key={w}>{w}</li>)}
         <li>Plan version {view.plan_version} · {view.artifact_id || 'No adopted view'}</li>

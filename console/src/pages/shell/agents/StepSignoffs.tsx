@@ -43,6 +43,9 @@ function SignOffAction({ node, label, signoffRef, named, reviewContext, candidat
   const acceptance = signoffRef.startsWith('plan-acceptance:')
   const [evidence, setEvidence] = useState<string[]>([])
   const evidenceBlock = acceptance ? unavailable ?? (environment !== 'PROD' ? 'Acceptance sign-offs are available on the PROD Console only.' : evidence.length === 0 ? 'Select 1–20 evidence artifacts to sign.' : undefined) : undefined
+  // Why this sign-off cannot be sent: a step's as well as an acceptance's (R5:5.5-4 review: a step row listed as last
+  // read kept its button and its POST; unavailable reached only the acceptance path).
+  const block = unavailable ?? evidenceBlock
   const identity = JSON.stringify([auth.token, auth.caps?.role, blocked, environment, node, label, signoffRef, reviewContext, evidence])
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   // Latch invalidation while reviewing, without touching an in-flight or recorded sign-off.
@@ -55,7 +58,7 @@ function SignOffAction({ node, label, signoffRef, named, reviewContext, candidat
     </p>
   }
   const send = async () => {
-    if (evidenceBlock || decisionBlockReason(auth) !== null || phase.kind !== 'confirm' || phase.identity !== identity) return
+    if (block || decisionBlockReason(auth) !== null || phase.kind !== 'confirm' || phase.identity !== identity) return
     setPhase({ kind: 'sending' })
     try {
       const answer = await postStepSignoff(node, signoffRef, auth.token, acceptance ? evidence : undefined)
@@ -87,15 +90,15 @@ function SignOffAction({ node, label, signoffRef, named, reviewContext, candidat
         on the runtime's next pass when nothing else in its rule is waited on.</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" style={{ minHeight: 44 }} className="rounded-[var(--card-radius)] border border-foreground bg-foreground px-3 text-sm font-semibold text-background"
-          disabled={!!evidenceBlock || phase.kind === 'sending' || blocked !== null || (phase.kind === 'confirm' && phase.identity !== identity)} onClick={() => { void send() }}>
+          disabled={!!block || phase.kind === 'sending' || blocked !== null || (phase.kind === 'confirm' && phase.identity !== identity)} onClick={() => { void send() }}>
           {phase.kind === 'sending' ? 'Signing off…' : 'Confirm sign-off'}
         </button>
         <button type="button" style={{ minHeight: 44 }} className="rounded-[var(--card-radius)] border border-[var(--card-border)] px-3 text-sm"
           disabled={phase.kind === 'sending'} onClick={() => setPhase({ kind: 'idle' })}>Cancel</button>
       </div>
     </div> : <button type="button" style={{ minHeight: 44 }} className="self-start rounded-[var(--card-radius)] border border-[var(--card-border)] px-3 text-sm"
-      disabled={blocked !== null || !!evidenceBlock} onClick={() => setPhase({ kind: 'confirm', identity })}>{what}</button>}
-    {evidenceBlock && <p className="m-0 text-xs text-muted-foreground">{evidenceBlock}</p>}
+      disabled={blocked !== null || !!block} onClick={() => setPhase({ kind: 'confirm', identity })}>{what}</button>}
+    {block && <p className="m-0 text-xs text-muted-foreground">{block}</p>}
     {blocked !== null ? <p className="m-0 break-words text-xs text-muted-foreground">{blocked}</p> : null}
     {phase.kind === 'failed' ? <p role="alert" className="m-0 break-words text-xs text-destructive">{phase.error} {SIGNOFF_PRESS_AGAIN}</p> : null}
   </div>
@@ -106,8 +109,10 @@ function SignOffAction({ node, label, signoffRef, named, reviewContext, candidat
  * for each ref not signed yet while the step can still move (not done, stopped or dropped).
  */
 /** The Sign off buttons of a step's refs not signed yet; each one named by its ref when the rule waits on more than one. */
-export function SignOffButtons({ node, label, refs, named, state = '', title = '' }: { node: string; label: string; refs: readonly string[]; named: boolean; state?: string; title?: string }) {
-  return <div className="flex min-w-0 flex-col gap-1">{refs.map(ref => <SignOffButton key={ref} node={node} label={label} signoffRef={ref} named={named} reviewContext={JSON.stringify([state, title, refs])} />)}</div>
+export function SignOffButtons({ node, label, refs, named, state = '', title = '', unavailable }: { node: string; label: string; refs: readonly string[]; named: boolean; state?: string; title?: string
+  /** Why signing is off here (a row listed as last read, R5:5.5-4); unset: as each button judges it. */
+  unavailable?: string }) {
+  return <div className="flex min-w-0 flex-col gap-1">{refs.map(ref => <SignOffButton key={ref} node={node} label={label} signoffRef={ref} named={named} reviewContext={JSON.stringify([state, title, refs])} unavailable={unavailable} />)}</div>
 }
 
 export function StepSignoffControls({ label, state, signoffs }: { label: string; state: string; signoffs: StepSignoffs }) {

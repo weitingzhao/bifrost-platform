@@ -92,9 +92,9 @@ describe('Work → Plan opens the newest round', () => {
     expect(within(rounds).getByRole('link', { name: /^Round 5/ })).toHaveAttribute('aria-current', 'page')
     expect(roundNote()).toHaveTextContent('newest in the runtime')
     // The shell's read is reused: no request of its own for GET /progress (the summary's sign-off count reads it from the
-    // cache too, R5:5.5-2), and no plan view of an earlier round. Besides the plan view, the summary reads every round's
-    // GET /plan for its sign-off count (SignoffWaiting's read, on the page before R5:5.5-2 too).
-    expect(urls().filter(u => !/\/agentrt\/plan\?root=R[2-5]$/.test(u))).toEqual(planViewUrls())
+    // cache too, R5:5.5-2), and no plan view of an earlier round. Besides the plan view, the summary reads this round's
+    // GET /plan for its sign-off count, and no other round's (R5:5.5-4).
+    expect(urls().filter(u => u !== '/api/v1/agentrt/plan?root=R5')).toEqual(planViewUrls())
     expect(urls().some(u => u.endsWith('/agentrt/progress'))).toBe(false)
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
   })
@@ -201,15 +201,21 @@ describe('Work → Plan opens the newest round', () => {
 
 describe('Work\'s plan reads with an acceptance root (PROD 2026-11-01)', () => {
   // R5:5.5-2: SignoffWaiting is no longer on Work; R4's acceptance sign-offs are read on the Sign-offs tab only.
+  // R5:5.5-4: so are the earlier rounds' trees: the round tab reads its own round's GET /plan and no other.
   it('reads the newest round for Work and R4 for its acceptance sign-offs only on Sign-offs: one plan view each, none for R2 or R3', async () => {
     seedShell()
     page('#work')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
-    // The summary's sign-off count reads every round's tree (the Owner 2026-10-22), as SignoffWaiting did.
-    await waitFor(() => expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`))))
-    await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('R4 acceptance not counted here'))
+    const trees = () => new Set(urls().filter(u => u.includes('/agentrt/plan?')))
+    await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('Sign-offs: 0 ready · 13 later · Round 5 only · other rounds on the Sign-offs tab'))
+    expect(trees()).toEqual(new Set(['/api/v1/agentrt/plan?root=R5']))
+    // Not having read R4's tree, the round tab cannot know R4 is an acceptance root, and does not say anything of it.
+    expect(document.querySelector('[data-summary-signoffs]')).not.toHaveTextContent('R4')
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
     await go('#work?tab=signoffs')
+    // The Sign-offs tab reads every round's tree (the Owner 2026-10-22), as SignoffWaiting did, and counts them all.
+    await waitFor(() => expect(trees()).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`))))
+    await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('R4 acceptance not counted here'))
     await waitFor(() => expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4'))
     await waitFor(() => expect(screen.queryByText('Reading acceptance sign-offs…')).toBeNull())
     expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R5')).toBe(1)
@@ -222,18 +228,23 @@ describe('the sign-off count reads every round only when the round list is whole
   const signoffs = () => document.querySelector('[data-summary-signoffs]')!
   it('says only R2 was read when GET /progress has no plan list, with a round in the address too, and the lamp is not green', async () => {
     progressReply = { status: 200, body: {} }
+    // The round tab reads the round the address names and no other: no round list is needed for its count (R5:5.5-4).
     page('#work?root=R5')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
+    await waitFor(() => expect(signoffs()).toHaveTextContent('Sign-offs: 0 ready · 13 later · Round 5 only · other rounds on the Sign-offs tab'))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['/api/v1/agentrt/plan?root=R5']))
+    // The Sign-offs tab reads every round the list holds: with no list, R2 alone, and it says so.
+    await go('#work?tab=signoffs&root=R5')
     await waitFor(() => expect(signoffs()).toHaveTextContent('not started Unknown'))
     expect(signoffs()).toHaveTextContent("only R2 read; which rounds exist is Unknown (the runtime's progress answer has no plan list)")
-    expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['/api/v1/agentrt/plan?root=R2']))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/plan?')))).toEqual(new Set(['/api/v1/agentrt/plan?root=R2', '/api/v1/agentrt/plan?root=R5']))
     const lamp = document.querySelector('[data-summary-tone]')!
     expect(lamp).not.toHaveAttribute('data-summary-tone', 'ok')
     expect(lamp.getAttribute('aria-label')).toContain('only R2 read')
   })
   it('names the rounds whose ids are not R<n> as not read, beside the good ones', async () => {
     progressReply = { status: 200, body: progressBody(['R4', 'R5', 'R6b']) }
-    page('#work')
+    page('#work?tab=signoffs')
     await waitFor(() => expect(signoffs()).toHaveTextContent('round R6b not read: its id is not R<n>'))
     expect(signoffs()).toHaveTextContent('Sign-offs: 0+ ready · not started Unknown · 13 later in Round 5')
     expect(urls().some(u => u.includes('root=R6b'))).toBe(false)

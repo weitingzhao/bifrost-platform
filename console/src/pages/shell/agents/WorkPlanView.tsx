@@ -9,13 +9,14 @@ import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
 import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
 import { PlanRecentChanges } from './PlanRecentChanges'
-import { useSignoffWaits } from './useRuntimePlan'
+import { useSignoffWaits, type SignoffWaitsRead } from './useRuntimePlan'
+import { viewOldReason } from './readAge'
 import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot } from './usePlanSnapshot'
 import { WorkSignoffs } from './WorkSignoffs'
 import { PlanReadFailure, WorkSummaryCard } from './WorkSummaryCard'
 import { WorkTabs } from './WorkTabs'
 import { useWorkView, type WorkTab } from './workViewModel'
-import { dependencyWaits, signoffCount } from './workSummaryModel'
+import { dependencyWaits, lastReadRows, signoffCount, type SignoffScope } from './workSummaryModel'
 import { moduleRows } from './planModuleModel'
 
 /** A fold of the round tab: closed, and not drawn, unless opened or the address names what is inside it. */
@@ -61,9 +62,11 @@ function RoundTab({ view, selected }: { view: PlanSnapshot; selected: string }) 
 
 /**
  * Work (R5:5.5-2, Design v3.6 WorkPage): where the round stands in one card, then one of four tabs: the round (its
- * modules), Sign-offs, Live and Changes. Every tab reads the same plan view; the sign-offs also read every round's
- * GET /plan (SignoffWaiting's read). The tab is in the address (`#work?tab=live`); with no tab, the round. An address
- * naming a module or a step of one (`node=`) opens that module on a page of its own instead (R5:5.5-3).
+ * modules), Sign-offs, Live and Changes. Every tab reads the same plan view and the round's own GET /plan for its step
+ * sign-offs; only the Sign-offs tab reads every round's GET /plan (SignoffWaiting's read; R5:5.5-4: the round tab no
+ * longer reads the earlier rounds' trees every 15 s, and its count says it is the round's only). The tab is in the
+ * address (`#work?tab=live`); with no tab, the round. An address naming a module or a step of one (`node=`) opens that
+ * module on a page of its own instead (R5:5.5-3).
  */
 export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
   const plan = usePlanAddress()
@@ -73,11 +76,12 @@ export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
   const query = usePlanSnapshot(root)
   // An address naming a module, or a step of one, opens that module on its own page (Design v3.6 ItemDetail; R5:5.5-3).
   const opened = tab === 'round' && query.data ? moduleOf(query.data, node) : null
-  // GET /progress (which lists the rounds) from the shell's cache: Work polls no progress of its own. The rounds' GET
-  // /plan are the summary's sign-off count, which a module's page does not show: not read there.
-  const waits = useSignoffWaits(!opened, 'cache')
+  // The summary's sign-off count: the shown round's GET /plan alone, every round's only on the Sign-offs tab (R5:5.5-4),
+  // with GET /progress (which lists the rounds) from the shell's cache: Work polls no progress of its own. A module's
+  // page does not show the count: nothing is read for it there.
+  const scope = tab === 'signoffs' ? 'every' : 'round'
+  const waits = useSignoffWaits(!opened, 'cache', scope === 'every' ? 'every' : { only: root })
   const failed = query.isError || query.isPaused
-  const count = signoffCount(waits, { view: query.data, failed: failed ? (query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed') : null, root, rounds: plan.rounds })
   // Leaving a module's page (‹ Work, its round in the module path, or Back) puts the keyboard on that module's own
   // link in the rows, and the row where it was on the screen when it was opened (R5:5.5-1, moduleRowReturn).
   const openedId = opened?.item.plan_node_id ?? ''
@@ -89,12 +93,27 @@ export function WorkPlanView({ tab: given }: { tab?: WorkTab }) {
     return returnToModuleRow(left)
   }, [openedId])
   return <NowClock><section id="plan" aria-label="Plan and live view" className="flex min-w-0 scroll-mt-4 flex-col gap-2.5">
-    {opened && query.data ? <ModulePage query={query} view={query.data} item={opened.item} step={opened.step} failed={failed} /> : <>
-      <WorkSummaryCard plan={plan} query={query} count={count} />
-      <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
-    </>}
+    {opened && query.data ? <ModulePage query={query} view={query.data} item={opened.item} step={opened.step} failed={failed} />
+      : <RoundView plan={plan} tab={tab} query={query} waits={waits} scope={scope} node={node} failed={failed} />}
   </section></NowClock>
 }
+
+/**
+ * The round's summary and tabs, with the sign-off count taken on the page's clock: a read whose refresh hangs stays a
+ * success, so its age is judged here each second (readAge.ts; R5:5.5-4), and an old one is Unknown, never "0 ready".
+ */
+function RoundView({ plan, tab, query, waits, scope, node, failed }: { plan: ReturnType<typeof usePlanAddress>; tab: WorkTab; query: ReturnType<typeof usePlanSnapshot>
+  waits: SignoffWaitsRead; scope: SignoffScope; node: string; failed: boolean }) {
+  const now = useNow()
+  const count = signoffCount(waits, { view: query.data, failed: failureOf(query), root: plan.root, rounds: plan.rounds, scope, now })
+  return <>
+    <WorkSummaryCard plan={plan} query={query} count={count} />
+    <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
+  </>
+}
+
+/** Why the plan view's latest read failed: offline, or its error; null while it did not. */
+const failureOf = (query: ReturnType<typeof usePlanSnapshot>) => query.isPaused ? 'Offline' : query.isError ? query.error?.message ?? 'Request failed' : null
 
 /**
  * A module's own page (Design v3.6 ItemDetail): its path back to Work and its detail, without the round's summary, tabs
@@ -118,6 +137,11 @@ function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<ty
   const stale = !!view && (failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh')
   return <>
     <WorkTabs plan={plan} tab={tab} count={count} view={view} stale={stale} />
+    {/* Every tab below counts from this plan view: when it is not now, the tab says so above its counts (R5:5.5-4). */}
+    {view && stale && <p role="status" data-tab-stale className="m-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+      As last read · {viewOldReason(view, view.root, failureOf(query), now)}. {tab !== 'signoffs' ? 'What this tab counts is that snapshot, not now.'
+        : lastReadRows(count) > 0 ? 'Rows listed below as last read, from this plan view or from GET /plan, are not counted.'
+        : 'Nothing is listed as last read, and nothing of it is counted.'}</p>}
     {tab === 'signoffs' && <WorkSignoffs count={count} view={view} stale={stale} />}
     {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} />}
     {view && tab === 'live' && <PlanLiveWork view={view} stale={stale} />}

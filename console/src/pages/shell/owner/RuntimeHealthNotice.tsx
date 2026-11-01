@@ -8,9 +8,11 @@ import { ago } from './ownerModel'
  * the workers log): the database's schema behind (or edited, or ahead of) the platform's migrations, and controller
  * loops failing the same way; and what keeps work from being taken (W-31 3.5): a host the controller reports offline
  * (30 seconds after its last poll) and an executor that cannot take work now, with the jobs left with none. Said at the
- * top of Work and System; nothing when all is well or the runtime is not read.
+ * top of Work and System; nothing when all is well or the runtime is not read. Work leaves the offline hosts out
+ * (offlineHosts false, R5:5.5-4): they are listed under Needs cleanup on its Activity page, one entry on its summary
+ * counting them; System still says them here.
  */
-export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgress | undefined; now: number }) {
+export function RuntimeHealthNotice({ progress, now, offlineHosts = true }: { progress: RuntimeProgress | undefined; now: number; offlineHosts?: boolean }) {
   if (!progress) return null
   const { schema, controller_alerts: alerts } = progress
   const lines: { key: string; text: string; detail?: string }[] = []
@@ -32,7 +34,7 @@ export function RuntimeHealthNotice({ progress, now }: { progress: RuntimeProgre
   if (progress.presence_deferred) {
     lines.push({ key: 'deferred', text: `Host presence judgment is deferred since ${ago(progress.presence_deferred.since, now)}: ${progress.presence_deferred.why}` })
   }
-  for (const h of progress.hosts) {
+  if (offlineHosts) for (const h of progress.hosts) {
     if (h.reported_offline === true) lines.push({ key: `host-${h.host_id}`, text: offlineWords(h, now) })
   }
   for (const e of progress.executors ?? []) {

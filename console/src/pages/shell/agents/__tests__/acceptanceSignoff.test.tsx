@@ -14,9 +14,11 @@ const entry = fixture.owner_waiting[0]
 let client: QueryClient
 let posts: unknown[]
 let response: typeof fixture
+/** While set, GET /plan-view answers 503 (a refresh that fails after a good read). */
+let failPlanView: boolean
 beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => {}, removeItem: () => {} } })
-  posts = []; response = structuredClone(fixture)
+  posts = []; response = structuredClone(fixture); failPlanView = false
   // The acceptance sign-offs are on Work's Sign-offs tab (R5:5.5-2; they were on its Needs you card).
   window.location.hash = '#work?tab=signoffs&root=R4'
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse(fixture.as_of))
@@ -26,6 +28,7 @@ beforeEach(() => {
       posts.push(JSON.parse(String(init?.body)))
       return new Response(JSON.stringify({ plan_node_id: entry.plan_node_id, ref: entry.ref, by: 'owner', at: fixture.as_of, already_signed: false, event_id: 42 }))
     }
+    if (failPlanView && String(url).includes('/plan-view')) return new Response(JSON.stringify({ error: 'unavailable', message: 'platform restarting' }), { status: 503 })
     return new Response(JSON.stringify(response))
   }))
 })
@@ -116,6 +119,32 @@ it('keeps signing disabled when there are no candidates or the snapshot is stale
   await client.invalidateQueries({ queryKey: ['agent-runtime-plan-view'] })
   const boxes = await screen.findAllByRole('checkbox')
   boxes.forEach(box => expect(box).toBeDisabled())
+  expect(posts).toEqual([])
+})
+
+// R5:5.5-4: a plan view not read now (older than 60 s, or a refresh that failed: a release restart, the network
+// blinking) is said Unknown with why; what it lists stays listed, as last read, signing off, and is not counted.
+it.each([
+  ['older than 60 s', () => { response = structuredClone(fixture); response.as_of = '2026-10-25T22:00:00Z' },
+    "Round 4's plan view is older than 60 s; as of 2026-10-25T22:00:00Z"],
+  ['whose refresh failed', () => { failPlanView = true }, "Round 4's plan view could not be read ("],
+])('lists a plan view %s as last read, signing off, and counts none of it', async (_, age, why) => {
+  show(<WorkPlanView />)
+  const signoffs = await screen.findByRole('region', { name: 'Sign-offs' })
+  await waitFor(() => expect(signoffs.querySelector('[data-signoff-ready]')).toHaveTextContent(/^1\+?Ready/))
+  age()
+  await client.invalidateQueries({ queryKey: ['agent-runtime-plan-view'] })
+  await waitFor(() => expect(within(signoffs).getAllByRole('alert').map(a => a.textContent).join('\n')).toContain(`Sign-offs partly Unknown · ${why}`))
+  // Not counted: ready is "0+" (the GET /plan here holds no root), and the row is under "As last read · not counted".
+  expect(signoffs.querySelector('[data-signoff-ready]')).toHaveTextContent(/^0\+Ready/)
+  expect(signoffs.querySelector('[data-signoff-ready]')).toHaveTextContent('· as last read: listed below, not counted')
+  const last = within(signoffs).getByRole('list', { name: 'Sign-offs as last read' })
+  expect(last.querySelector(`[data-signoff-acceptance="${entry.ref}"]`)).toHaveAttribute('data-last-read', 'true')
+  expect(within(signoffs).queryByRole('list', { name: 'Ready for your sign-off' })).toBeNull()
+  within(last).getAllByRole('checkbox').forEach(box => expect(box).toBeDisabled())
+  expect(within(last).getByRole('button', { name: 'Sign off' })).toBeDisabled()
+  expect(last).toHaveTextContent('Refresh the plan before signing.')
+  expect(document.querySelector('[data-tab-stale]')).toHaveTextContent('Rows listed below as last read, from this plan view or from GET /plan, are not counted.')
   expect(posts).toEqual([])
 })
 

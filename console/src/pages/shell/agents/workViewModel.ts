@@ -53,8 +53,9 @@ export function workTabHref(tab: WorkTab, root: string | null, named: boolean): 
   return formatShellHash('work', query.toString())
 }
 
-/** One of Work's pages a step away. */
-export const workSectionHref = (section: WorkSection) => formatShellHash('work', `section=${section}`)
+/** One of Work's pages a step away; with a round, the one the address names (Activity's Needs cleanup reads it). */
+export const workSectionHref = (section: WorkSection, root: string | null = null) =>
+  formatShellHash('work', new URLSearchParams({ section, ...(root ? { root } : {}) }).toString())
 
 export const WORK_SECTION_TITLES: Record<WorkSection, string> = {
   goals: 'Goals', activity: 'Activity', 'code-health': 'Code health', 'commit-lineage': 'Commit lineage',

@@ -14,6 +14,7 @@ import poolsFixture from './fixtures/pools-utc.json'
 import capabilitiesFixture from '@/api/__fixtures__/agentrt-capabilities.testdb.json'
 import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
 import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.json'
+import presenceFixture from '@/api/__fixtures__/agentrt-progress-presence.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
@@ -166,6 +167,24 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(text)
     await go('#you', 'For you')
     expect(screen.queryByRole('alert', { name: 'Agent runtime health' })).toBeNull()
+  })
+
+  // R5:5.5-4 (PROD 2026-11-01: "Host mbp-dev is offline: its last poll was 14 days ago." on top of Work for two weeks):
+  // Work's top leaves an offline host to Needs cleanup on its Activity page; System still says it; the rest stays on Work.
+  it('Work leaves an offline host to Needs cleanup, System still says it at its top, and Work keeps every other line', async () => {
+    const progress = parseRuntimeProgress(presenceFixture)
+    runtimeValue.value = progress
+    nowValue.value = Date.parse(progress.generated_at)
+    stubRuntimeReads()
+    show('#system')
+    const host = 'Host h2 is offline: its last poll was'
+    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(host)
+    await go('#work', 'Work')
+    const notice = screen.getByRole('alert', { name: 'Agent runtime health' })
+    expect(notice).not.toHaveTextContent(host)
+    expect(notice).toHaveTextContent("exec:claude is unavailable: the claude account's pools cool down until")
+    expect(notice).toHaveTextContent('No executor can take these jobs now: chief_of_staff')
+    expect(document.body).not.toHaveTextContent(host)
   })
 
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {

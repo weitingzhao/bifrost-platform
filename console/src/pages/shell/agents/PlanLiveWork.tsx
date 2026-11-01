@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
+import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
 import { workSectionHref } from './workViewModel'
@@ -29,7 +30,7 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
   const external = 'external_work_id' in work
   const run = external ? work : work.attempt!
   const heartbeatAge = run.heartbeat_age_s + drift
-  const unconfirmed = heartbeatAge > 60 || stale || run.status === 'Unconfirmed'
+  const unconfirmed = stale || heartbeatUnconfirmed(run, view, now)
   const node = view.nodes.find(n => n.plan_node_id === work.plan_node_id)
   const elapsed = run.elapsed_s === undefined ? undefined : run.elapsed_s + (stale ? 0 : drift)
   const state = unconfirmed ? 'Unconfirmed' : run.status || run.state

@@ -7,7 +7,7 @@ import { moduleRows, type ModuleRow } from '../planModuleModel'
 import type { SignoffWaitsRead } from '../useRuntimePlan'
 import { workTabHref, workViewOf } from '../workViewModel'
 import {
-  dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, moduleClass, othersSentence, roundHeader, signoffBreakdown, signoffCount,
+  dependencyWaits, dependencyWords, lastReadRows, mainlineLabels, mainlineSentence, moduleClass, othersSentence, roundHeader, signoffBreakdown, signoffCount,
   signoffGaps, signoffWords, summaryLamp,
 } from '../workSummaryModel'
 import type { RoundsRead } from '../planRoundModel'
@@ -196,6 +196,150 @@ describe('the summary lamp', () => {
     expect(lamp(signoffCount(waitsOk(), read(clean)), { mainlineUnknown: true }).tone).toBe('unknown')
     expect(lamp(signoffCount({ read: 'error' }, read(clean))).why).toEqual(['sign-offs: the plan could not be read (GET /plan)'])
     expect(lamp(signoffCount({ read: 'loading' }, read(clean))).why).toEqual(['the sign-offs are still being read'])
+  })
+})
+
+// R5:5.5-4: Work's round tab reads its own round's GET /plan alone (the earlier rounds' trees every 15 s were part of the
+// load behind the PROD OOM of 2026-10-31); every count it gives is that round's and says so, and the lamp is never green
+// for "any round". The Sign-offs tab keeps every round (above).
+describe('the sign-offs of one round (the round tab)', () => {
+  const pv2 = () => parsePlanSnapshot(signoffFixture, 'R4')
+  const one = (waits: SignoffWaitsRead, view: PlanSnapshot | undefined, o: Parameters<typeof read>[1] = {}) =>
+    signoffCount(waits, { ...read(view, o), scope: 'round' })
+  it('counts the round\'s own step sign-offs and says the reach is that round only, other rounds on the Sign-offs tab', () => {
+    const c = one({ ...waitsOk([wait('R4:4.1-1', '4.1-1')], [wait('R4:4.3-1', '4.3-1', 'planned')]), rounds: ['R4'] }, pv2())
+    expect(c.scope).toBe('round')
+    expect(signoffWords(c)).toBe('2 ready · 1 not started · 2 later · Round 4 only')
+    expect(signoffGaps(c)).toEqual([])
+    expect(signoffBreakdown(c)).toEqual([
+      "Ready 2: 1 step sign-off whose work has started, Round 4 only (GET /plan?root=R4); 1 acceptance sign-off Round 4's plan view marks Ready.",
+      'Not started 1: step sign-offs whose work has not started, Round 4 only (GET /plan?root=R4).',
+      "Later in Round 4 2: Round 4's plan view only (owner_later: acceptance sign-offs Blocked or Not started, Owner steps whose readiness is Unknown); other rounds' are not read here.",
+      "Other rounds are not read here: the Sign-offs tab reads every round's step sign-offs and lists the acceptance sign-offs of the other rounds.",
+    ])
+    expect(signoffBreakdown(c).join(' ')).not.toContain('every round (GET /plan)')
+  })
+  it('is whole once the round\'s tree answered, whatever the round list is: no other round is needed', () => {
+    const c = one({ ...waitsOk(), rounds: ['R4'] }, pv2(), { rounds: { state: 'unknown', reason: "the runtime's progress answer has no plan list" } })
+    expect(c.steps).toBe('ok')
+    expect(signoffWords(c)).toBe('1 ready · 2 later · Round 4 only')
+  })
+  it('says the round\'s tree could not be read, never 0 of its sign-offs; and reading or Unknown while the round is not known', () => {
+    const failed = one({ read: 'error' }, pv2())
+    expect(signoffGaps(failed)).toEqual(["Round 4's plan could not be read (GET /plan?root=R4)"])
+    expect(signoffWords(failed)).toBe('1+ ready · not started Unknown · 2 later · Round 4 only')
+    expect(signoffWords(one({ read: 'error' }, undefined, { root: 'R5', failed: 'Plan view: 503' }))).toBe('Unknown')
+    expect(signoffWords(one(waitsOk([wait('R5:5.1-4', '5.1-4')]), undefined, { root: 'R5', failed: 'Plan view: 503' }))).toBe('1+ ready · later Unknown · Round 5 only')
+    expect(signoffWords(one({ read: 'loading' }, undefined, { root: null, rounds: { state: 'reading' } }))).toBe('reading…')
+    expect(signoffGaps(one({ read: 'loading' }, undefined, { root: null, rounds: { state: 'unknown', reason: 'Offline' } })))
+      .toEqual(['which round to read is Unknown (Offline)', 'which round to read is Unknown (Offline)'])
+    expect(signoffGaps(one({ read: 'loading' }, undefined, { root: null, rounds: { ...roundsOk, rounds: [], newest: null } })))
+      .toEqual(['the runtime holds no round', 'the runtime holds no round'])
+  })
+  it('lights green for that round only, never "any round"; yellow says the ready sign-off is that round\'s', () => {
+    const clean = { ...pv2(), owner_waiting: [], owner_later: [] }
+    const green = summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: one({ ...waitsOk(), rounds: ['R4'] }, clean) })
+    expect(green).toEqual({ tone: 'ok', why: ['in Round 4 only, no step sign-off ready, no acceptance sign-off ready, no task waiting on you, no step stopped; other rounds are read on the Sign-offs tab'] })
+    expect(green.why.join(' ')).not.toContain('any round')
+    expect(summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: one({ ...waitsOk([wait('R4:4.1-1', '4.1-1')]), rounds: ['R4'] }, clean) }))
+      .toEqual({ tone: 'attention', why: ['1 sign-off ready for you in Round 4'] })
+    expect(summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: one({ read: 'error' }, clean) }))
+      .toEqual({ tone: 'unknown', why: ["sign-offs: Round 4's plan could not be read (GET /plan?root=R4)"] })
+  })
+})
+
+// Local review of R5:5.5-4 ("old read said as now"): a refresh that hangs neither fails nor answers, so GET /plan stayed a
+// success and its old "0 ready" lit the round green. Each read is judged by its age on the page's clock (readAge.ts).
+describe('the sign-offs from reads too old to be said as now', () => {
+  const pv2 = () => parsePlanSnapshot(signoffFixture, 'R4')
+  const NOW = Date.parse(pv2().as_of)
+  const clean = () => ({ ...pv2(), owner_waiting: [], owner_later: [] })
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const tree = (o: { at: number; oldest?: string; waits?: SignoffWait[]; rounds?: string[] }): SignoffWaitsRead =>
+    ({ ...waitsOk(o.waits ?? []), rounds: o.rounds ?? ['R4'], at: o.at, oldest: o.oldest ?? 'R4' })
+  const count = (waits: SignoffWaitsRead, view: PlanSnapshot | undefined, scope: 'round' | 'every', o: Parameters<typeof read>[1] = {}) =>
+    signoffCount(waits, { ...read(view, o), scope, now: NOW, rounds: o.rounds ?? { ...roundsOk, at: NOW } })
+  it('says the round\'s GET /plan Unknown once its answer is older than twice its 15 s poll: never "0 ready", never green', () => {
+    const old = count(tree({ at: NOW - 31_000, waits: [wait('R4:4.1-1', '4.1-1')] }), clean(), 'round')
+    const why = `GET /plan?root=R4 last answered 31 s ago (${iso(NOW - 31_000)}), older than twice its 15 s poll`
+    expect(signoffGaps(old)).toEqual([why])
+    // Its rows are left out of every count, and kept to be listed as last read: the ready step it listed.
+    expect(old.ready).toEqual([])
+    expect(old.lastRead.ready.map(r => [r.kind, r.node])).toEqual([['step', 'R4:4.1-1']])
+    expect(signoffWords(old)).toBe('0+ ready · not started Unknown · 0 later · Round 4 only')
+    expect(signoffBreakdown(old)).toContain(`Unknown: ${why}.`)
+    expect(summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: old })).toEqual({ tone: 'unknown', why: [`sign-offs: ${why}`] })
+    // 30 s is within twice the poll.
+    const fresh = count(tree({ at: NOW - 30_000 }), clean(), 'round')
+    expect(fresh.steps).toBe('ok')
+    expect(summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: fresh }).tone).toBe('ok')
+  })
+  it('says every round\'s GET /plan Unknown when the oldest is, naming that round', () => {
+    const old = count(tree({ at: NOW - 45_000, oldest: 'R3', rounds: ['R3', 'R4'] }), clean(), 'every')
+    expect(signoffGaps(old)).toEqual([`GET /plan?root=R3 last answered 45 s ago (${iso(NOW - 45_000)}), older than twice its 15 s poll`])
+    expect(signoffWords(old)).toBe('0+ ready · not started Unknown · 0 later in Round 4')
+    // The round list (GET /progress) older than twice its 5 s poll: which rounds exist is Unknown, the rows read still count.
+    const listOld = count(tree({ at: NOW, waits: [wait('R4:4.1-1', '4.1-1')] }), clean(), 'every', { rounds: { ...roundsOk, at: NOW - 11_000 } })
+    expect(signoffGaps(listOld)).toEqual([`only R4 read; which rounds exist is Unknown (GET /progress last answered 11 s ago (${iso(NOW - 11_000)}))`])
+    expect(signoffWords(listOld)).toBe('1+ ready · not started Unknown · 0 later in Round 4')
+  })
+  it('says the round\'s plan view Unknown once it is not now, and counts none of its sign-offs', () => {
+    const view = pv2()
+    const old = count(tree({ at: NOW }), view, 'round', { failed: null })
+    expect(old.round).toBe('ok')
+    const aged = signoffCount(tree({ at: NOW + 61_000 }), { ...read(view), scope: 'round', now: NOW + 61_000, rounds: { ...roundsOk, at: NOW + 61_000 } })
+    expect(signoffGaps(aged)).toEqual([`Round 4's plan view is older than 60 s; as of ${view.as_of}`])
+    expect(aged.ready).toEqual([])
+    expect(aged.later).toEqual([])
+    // Not counted, but listed as last read: its Ready acceptance sign-off and its later ones.
+    expect(aged.lastRead.ready.map(r => [r.kind, r.node])).toEqual([['acceptance', view.owner_waiting[0].plan_node_id]])
+    expect(aged.lastRead.later.map(r => r.node)).toEqual(['R4:4.2-1', 'R4:4.3-1'])
+    expect(signoffWords(aged)).toBe('0+ ready · later Unknown · Round 4 only')
+    const failed = count(tree({ at: NOW }), view, 'round', { failed: 'Plan view: 503' })
+    expect(signoffGaps(failed)).toEqual([`Round 4's plan view could not be read (Plan view: 503); as of ${view.as_of}`])
+    expect(failed.ready).toEqual([])
+    expect(failed.lastRead.ready).toHaveLength(1)
+  })
+  it('lists a failed GET /plan refresh\'s last answers as last read, counting none; with none kept, lists nothing', () => {
+    const blinked = count({ read: 'error', last: { waits: [wait('R4:4.1-1', '4.1-1')], notStarted: [wait('R4:4.3-1', '4.3-1', 'planned')], at: NOW - 5_000 } }, clean(), 'round')
+    expect(signoffGaps(blinked)).toEqual(["Round 4's plan could not be read (GET /plan?root=R4)"])
+    expect([blinked.ready, blinked.notStarted]).toEqual([[], []])
+    expect(blinked.lastRead.ready.map(r => r.node)).toEqual(['R4:4.1-1'])
+    expect(blinked.lastRead.notStarted.map(r => r.node)).toEqual(['R4:4.3-1'])
+    expect(signoffWords(blinked)).toBe('0+ ready · not started Unknown · 0 later · Round 4 only')
+    expect(count({ read: 'error' }, clean(), 'round').lastRead).toEqual({ ready: [], notStarted: [], later: [], tasks: [] })
+  })
+  // Review of 13191da1: one sign-off listed twice when both sources held it as last read, or when GET /plan was old and
+  // the view, now, listed it later. The 5.5-2 overlap: GET /plan's step and the view's acceptance on the same node|ref.
+  it('lists one sign-off once when both sources are last read: the step row, n = 1', () => {
+    const view = { ...pv2(), owner_later: [] }
+    const accepted = view.owner_waiting[0] as Extract<PlanSnapshot['owner_waiting'][number], { ref: string }>
+    const both = count({ read: 'error', last: { waits: [wait(accepted.plan_node_id, '4.1-1', 'active', [accepted.ref])], notStarted: [], at: NOW - 5_000 } },
+      view, 'round', { failed: 'Plan view: 503' })
+    expect(both.lastRead.ready.map(r => [r.kind, r.node])).toEqual([['step', accepted.plan_node_id]])
+    expect(lastReadRows(both)).toBe(1)
+    expect([both.ready, both.later]).toEqual([[], []])
+  })
+  it('lists a sign-off the view, now, lists later only there, not again as a step read before', () => {
+    const view = pv2()
+    const later = view.owner_later.find(w => 'ref' in w) as Extract<PlanSnapshot['owner_later'][number], { ref: string }>
+    const c = count(tree({ at: NOW - 31_000, waits: [wait(later.plan_node_id, 'x', 'active', [later.ref])] }), view, 'round')
+    expect(c.later.map(r => [r.kind, r.node])).toContainEqual(['acceptance', later.plan_node_id])
+    expect(c.lastRead.ready).toEqual([])
+    expect(lastReadRows(c)).toBe(0)
+  })
+  it('lists a step read before beside the same sign-off counted from a view that is now only once: counted', () => {
+    const view = pv2()
+    const accepted = view.owner_waiting[0] as Extract<PlanSnapshot['owner_waiting'][number], { ref: string }>
+    const c = count(tree({ at: NOW - 31_000, waits: [wait(accepted.plan_node_id, '4.1-1', 'active', [accepted.ref])] }), view, 'round')
+    expect(c.ready.map(r => r.kind)).toEqual(['acceptance'])
+    expect(c.lastRead.ready).toEqual([])
+  })
+  it('says no round only from a round list that is now', () => {
+    const none = { ...roundsOk, rounds: [], newest: null }
+    expect(signoffGaps(count({ read: 'loading' }, undefined, 'round', { root: null, rounds: { ...none, at: NOW } }))).toEqual(['the runtime holds no round', 'the runtime holds no round'])
+    expect(signoffGaps(count({ read: 'loading' }, undefined, 'round', { root: null, rounds: { ...none, at: NOW - 11_000 } }))[0])
+      .toBe(`which round to read is Unknown (GET /progress last answered 11 s ago (${iso(NOW - 11_000)}))`)
   })
 })
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { canonicalQuery, hashNamesSection, scrollAfterShell } from '@/lib/shell/useHashSection'
+import { NeedsCleanupSection } from '../agents/NeedsCleanup'
 import { WorkPlanView } from '../agents/WorkPlanView'
 import { WORK_SECTION_TITLES, useWorkView, type WorkSection } from '../agents/workViewModel'
 import { ProgressPage } from '../progress/ProgressPage'
@@ -25,9 +26,10 @@ function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator'];
 
 /**
  * Work (R5:5.5-2, Design v3.6 WorkPage): the round's summary and its tabs (WorkPlanView); or, a step away, one of the
- * pages that were further down the same page before: Goals (the goal cards), Activity (the runtime as a whole: Now,
- * open goals, crew, quota, the release lane, threads in progress), Code health and Commit lineage. Each is drawn, and
- * read, only while the address names it (`#work?section=…`, `#work?goal=…`).
+ * pages that were further down the same page before: Goals (the goal cards), Activity (the runtime as a whole: what
+ * needs cleanup (R5:5.5-4: offline hosts and registered work with no heartbeat, moved off Work's top), Now, open goals,
+ * crew, quota, the release lane, threads in progress), Code health and Commit lineage. Each is drawn, and read, only
+ * while the address names it (`#work?section=…`, `#work?goal=…`).
  */
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {
   const view = useWorkView()
@@ -71,6 +73,7 @@ function WorkSectionPage({ section, data }: { section: WorkSection; data: OwnerC
       <span aria-current="page" className="font-semibold">{WORK_SECTION_TITLES[section]}</span>
     </nav>
     {section === 'activity' ? <>
+      <NeedsCleanupSection />
       <OwnerRuntimeCards data={data} />
       <OwnerReleaseLane data={data} />
       <ProgressPage planView part="activity" />
