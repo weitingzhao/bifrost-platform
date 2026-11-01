@@ -122,7 +122,7 @@ describe('module rows model', () => {
     expect(cells.find(c => c.label === '4.1-3')!.rule).toEqual([{ text: 'All of these hold:', children: [
       { text: 'Request #42 is approved and executed' },
       { text: `Question ${QUESTION} is answered “yes”` },
-      { text: 'Any one of these holds:', children: [{ text: 'You sign off “land-4.1”' }, { text: 'Every accepted task of this step has landed on main' }] },
+      { text: 'Any one of these holds:', children: [{ text: 'You sign off “land-4.1”' }, { text: 'Every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step' }] },
     ] }])
     expect(row(moduleRows(advanced()), '4.10').cells[0].rule).toEqual([{ text: 'Every landed commit of this step is deployed on PROD' }])
   })

@@ -117,7 +117,7 @@ function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: numbe
     case 'main_effective': case 'deployment_verified': case 'review_valid': case 'external_verified':
       return { text: `Binding ${str(fields.binding) || '(unnamed)'} v${String(fields.version ?? '?')}: ${bound[key]}` }
     case 'step_tasks': return { text: `At least ${typeof fields.min === 'number' ? fields.min : 1} of this step's own tasks ${str(fields.state) || 'accepted'}` }
-    case 'step_landed': return { text: 'Every accepted task of this step has landed on main' }
+    case 'step_landed': return { text: 'Every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step' }
     case 'step_stg_settled': return { text: 'Every landed change of this step has settled on STG' }
     case 'step_deployed': return { text: `Every landed commit of this step is deployed on ${envName(fields.env)}` }
   }

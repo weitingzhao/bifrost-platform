@@ -51,6 +51,11 @@ func (f *stepFacts) StepTasks(state string, min int64) plan.Tri {
 // (main_intent, main_result other than non_ff): the fold itself says
 // main's answer is not known yet. An implementation that writes no code
 // (effect_class none or external) has nothing to land and is not read.
+//
+// One the Owner declined (failed{declined}) whose same change landed from
+// another root of the step does not hold it back (R5:5.6-1): the controller
+// recorded that (landing_delivered_by), and the latest such note names a
+// root landed in this very read. A root truly landed is still needed.
 func (f *stepFacts) StepLanded() plan.Tri {
 	if l := f.landing(); l != nil && f.err == nil {
 		return l.value
@@ -124,6 +129,10 @@ const (
 	rootPending
 	rootUnknown
 	rootFailed
+	// rootDelivered: declined by the Owner, its same change landed from
+	// another root of the step (landing_delivered_by): neither a no nor a
+	// landing of its own.
+	rootDelivered
 )
 
 // landing reads, once, each accepted implementation of the step that writes
@@ -159,6 +168,11 @@ func (f *stepFacts) landing() *stepLanding {
 	folds := map[string]landing.State{}
 	statuses := make([]int, 0, len(roots))
 	l := &stepLanding{}
+	type declined struct {
+		i              int
+		repo, task, op string
+	}
+	var declinedRoots []declined
 	for _, r := range roots {
 		if !landing.RepoSupported(r.repo) {
 			statuses = append(statuses, rootNone)
@@ -173,9 +187,29 @@ func (f *stepFacts) landing() *stepLanding {
 			folds[r.repo] = s
 		}
 		status, op, o := rootLanding(s, r.task, landingHandoff(s.Fence(), r.accepted, r.created, r.noMerge))
+		if status == rootFailed && o.Phase == "failed" && o.Outcome == "declined" {
+			declinedRoots = append(declinedRoots, declined{len(statuses), r.repo, r.task, op})
+		}
 		statuses = append(statuses, status)
 		if status == rootLanded {
 			l.landed = append(l.landed, landedRoot{repo: r.repo, key: StgMemberKey{Root: r.task, Op: op, R: o.R}})
+		}
+	}
+	// A declined root steps aside only for a delivery this read sees landed
+	// (DESIGN-step-landed-superseded-2026-11-01 §6 item 4): a by moved off
+	// the step, reverted, or never landed leaves it a no.
+	landed := map[string]bool{}
+	for _, x := range l.landed {
+		landed[x.key.Root] = true
+	}
+	for _, d := range declinedRoots {
+		by, err := landingDeliveredBy(f.ctx, f.tx, "landing:"+d.repo, d.task, d.op)
+		if err != nil {
+			f.err = err
+			return nil
+		}
+		if landed[by] {
+			statuses[d.i] = rootDelivered
 		}
 	}
 	l.value = landingValue(statuses)
@@ -213,7 +247,8 @@ func rootLanding(s landing.State, root string, handoff bool) (int, string, landi
 }
 
 // landingValue is step_landed over the roots' statuses (Kleene: a no
-// outweighs an unknown).
+// outweighs an unknown). A delivered root counts neither way, so a step
+// with no root truly landed stays a no.
 func landingValue(statuses []int) plan.Tri {
 	landed, unknown := false, false
 	for _, s := range statuses {

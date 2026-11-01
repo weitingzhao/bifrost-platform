@@ -31,11 +31,23 @@ import (
 //     it when the branch is handed out (a landing reverted since keeps it;
 //     review 436 A1).
 //
-// Kept: a task still open; an accepted result not on main, or reverted there;
+// Kept: a task still open; an accepted result not on main, or reverted there
+// (this keeps a declined root's A, which the delivered-by backfill fetches
+// to compare with its sibling's, R5:5.6-1: a rule that prunes declined
+// roots' branches would take that A from under the comparison);
 // a branch whose task this runtime does not have (PROD and STG push to the
 // same repositories; each cleans its own); a branch that names something
 // other than its attempt's pushed commit (moved since: nothing here says what
 // it now holds); whatever cannot be read now.
+//
+// Not kept for the backfill: the delivering task's attempt branch (its A is
+// the note's new_a) is pruned like any landed result, a day after it stood
+// on main. The backfill then fetches that A by SHA with nothing naming it,
+// which works only because Gitea serves unreferenced commits
+// (uploadpack.allowAnySHA1InWant) and keeps their objects until gc, two
+// weeks by default. Past that the fetch fails while the remote answers
+// (landinggit.ErrNotServed): no note, and the pair is read again only every
+// six hours.
 //
 // The host's agentd deletes (Prunable, through GET /agentrt/prunes), with its
 // own Gitea identity and only while the branch still names that commit, and
@@ -231,6 +243,9 @@ func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnM
 			err = tx.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
 			  AND body_json ? 'landed' ORDER BY event_id LIMIT 1`, task).Scan(&since)
 			if errors.Is(err, pgx.ErrNoRows) {
+				// Never on main (a declined root among them): kept, so
+				// the delivered-by backfill can still fetch its A
+				// (R5:5.6-1).
 				return no(nil)
 			}
 			if err != nil || now.Sub(*since) < PruneAfter {

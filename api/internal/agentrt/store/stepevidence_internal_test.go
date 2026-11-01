@@ -80,6 +80,13 @@ func TestLandingValue(t *testing.T) {
 		{[]int{rootLanded, rootPending}, plan.False},
 		{[]int{rootUnknown, rootFailed}, plan.False},
 		{[]int{rootLanded, rootFailed}, plan.False},
+		// R5:5.6-1: a declined root whose change landed from another root
+		// counts neither way; a root truly landed is still needed.
+		{[]int{rootDelivered, rootLanded}, plan.True},
+		{[]int{rootDelivered}, plan.False},
+		{[]int{rootDelivered, rootDelivered}, plan.False},
+		{[]int{rootDelivered, rootLanded, rootFailed}, plan.False},
+		{[]int{rootDelivered, rootLanded, rootUnknown}, plan.Unknown},
 	} {
 		if got := landingValue(c.statuses); got != c.want {
 			t.Errorf("%v: %s, want %s", c.statuses, got, c.want)

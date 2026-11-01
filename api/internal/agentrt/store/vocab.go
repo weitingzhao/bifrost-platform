@@ -220,6 +220,10 @@ var bodies = map[string][]field{
 		// landing_disposed: the Owner counted a landed or in-main root as
 		// delivered or not, on its card (CUT §11.8 v3 item 4).
 		{"landing_disposed", kAny, true},
+		// landing_delivered_by: the controller's record that a root the
+		// Owner declined had its same change landed from another accepted
+		// implementation of its step (landing_delivered_by.go, R5:5.6-1).
+		{"landing_delivered_by", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -621,6 +625,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_disposed" {
 		return badLandingDisposed(v)
+	}
+	if eventType == "note" && name == "landing_delivered_by" {
+		return badLandingDeliveredBy(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

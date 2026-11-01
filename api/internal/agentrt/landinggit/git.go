@@ -186,13 +186,30 @@ func (g *Git) run(ctx context.Context, dir string, network bool, input []byte, e
 	}
 	// Output is bounded (64 MiB: a history walk, never a remote's say);
 	// stderr is never kept: servers and Git can echo credentials or source.
-	out := &limitedBuffer{max: 64 << 20}
+	out := &limitedBuffer{max: outputMax}
 	cmd.Stdout = out
 	if e := runGroup(ctx, cmd); e != nil || len(out.b) == out.max {
+		if e == nil {
+			return "", outputLimit(args[0])
+		}
 		return "", fmt.Errorf("landing git %s failed", args[0])
 	}
 	return out.String(), nil
 }
+
+// outputMax bounds what one command may write (a test lowers it).
+var outputMax = 64 << 20
+
+// ErrOutputLimit: a command that ran to its end wrote outputMax bytes or
+// more. The same command writes the same again, so trying again is no help.
+var ErrOutputLimit = errors.New("landing git output over its bound")
+
+// outputLimit reads as any other failure of the command (its message is
+// unchanged for every caller) and is ErrOutputLimit.
+type outputLimit string
+
+func (o outputLimit) Error() string        { return "landing git " + string(o) + " failed" }
+func (o outputLimit) Is(target error) bool { return target == ErrOutputLimit }
 
 type Workspace struct {
 	git *Git

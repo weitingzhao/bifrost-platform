@@ -112,6 +112,22 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 		}
 		result = errors.Join(cleanupErrors...)
 	}()
+	// The delivered-by backfill (R5:5.6-1) reads Git for at most one pair,
+	// after the work below and before the cleanup, on what the work left
+	// beyond the cleanup's reservation (deliveredByShare): it never takes a
+	// pending operation's share or the cleanup's. Less than
+	// DeliveredByMinShare left, it waits for a later pass.
+	defer func() {
+		share := deliveredByShare(parent, cleanupBudget)
+		if share < DeliveredByMinShare {
+			return
+		}
+		one, cancel := context.WithTimeout(parent, share)
+		defer cancel()
+		if err := c.LandingDeliveredByPass(one, repo, state); err != nil {
+			result = errors.Join(result, err)
+		}
+	}()
 	var window grantWindowProbe // Shared only within this repository's pass.
 	for i, id := range pending {
 		o := state.Operations[id]

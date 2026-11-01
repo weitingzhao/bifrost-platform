@@ -130,6 +130,9 @@ type Controller struct {
 	// patch, and a grant the gate refuses (stale, insufficient) stays
 	// usable-looking on the stream until it expires.
 	grantTries grantTries
+	// deliveredBy remembers the delivered-by backfill's comparisons
+	// (landing_delivered_by.go, R5:5.6-1); memory only.
+	deliveredBy deliveredByMemo
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
