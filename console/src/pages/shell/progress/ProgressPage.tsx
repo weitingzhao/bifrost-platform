@@ -4,7 +4,7 @@ import { runtimeUnreadLine } from '../owner/ownerModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
-import { usePlanAddress, usePlanSnapshot } from '../agents/usePlanSnapshot'
+import { planSettled, usePlanAddress, usePlanSnapshot } from '../agents/usePlanSnapshot'
 import { SignoffWaiting } from '../agents/SignoffWaiting'
 import { AgentsPlan } from '../agents/AgentsPlan'
 import { useRuntimeArch, useRuntimePlan } from '../agents/useRuntimePlan'
@@ -49,8 +49,8 @@ export function ProgressPage({ planView = false }: { planView?: boolean }) {
   const openedAt = useRef(Date.now())
   const needs = useNeedsYou()
   const plan = useRuntimePlan(!planView)
-  const { root } = usePlanAddress()
-  const snapshot = usePlanSnapshot(root, planView)
+  const planAddress = usePlanAddress()
+  const snapshot = usePlanSnapshot(planAddress.root, planView)
   // One scroll per address, on arrival and on every hash change, to what the address points at:
   // returning to the same goal scrolls again, and goal and section together scroll once (review 425 B1).
   useEffect(() => {
@@ -92,7 +92,7 @@ export function ProgressPage({ planView = false }: { planView?: boolean }) {
   const runtime = unreadable ? undefined : runtimeQ.data
   const ids = missionIds(runtimeQ.data, submitted?.id)
   useSettledSignoffTarget(ids.slice(0, WORK_GOAL_CARDS),
-    (!runtimeQ.isPending || runtimeQ.isPaused) && (planView ? !snapshot.isPending || snapshot.isPaused : plan.from !== 'loading'))
+    (!runtimeQ.isPending || runtimeQ.isPaused) && (planView ? planSettled(planAddress, snapshot) : plan.from !== 'loading'))
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
       {runtime && <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime.generated_at}><Tick text={now => relative(runtime.generated_at || '', now)} /></time></p>}

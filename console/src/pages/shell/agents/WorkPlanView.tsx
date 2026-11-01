@@ -9,12 +9,13 @@ import { SIGNOFF_SECTION_HREF } from '../progress/progressPart'
 import { PlanLiveWork } from './PlanLiveWork'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
+import { PlanRoundNav } from './PlanRoundNav'
 import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
+import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
-import { moduleRowLinkId } from './planModuleModel'
 import { responsibility, validity } from './planSnapshotModel'
 import { PlanRecentChanges } from './PlanRecentChanges'
-import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot } from './usePlanSnapshot'
+import { planNodeDOMId, planNodeHref, usePlanAddress, usePlanSnapshot, type PlanAddress } from './usePlanSnapshot'
 
 function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: string; failed: boolean }) {
   const now = useNow()
@@ -30,18 +31,15 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
   useEffect(() => {
     if (scrollTo) return scrollAfterShell(() => document.getElementById(scrollTo) ?? (detailId ? document.getElementById(detailId) : null))
   }, [scrollTo, detailId, selected])
-  // Leaving a module's detail (All modules, or Back) puts the keyboard on that module's own link in the rows.
+  // Leaving a module's detail (‹ Work, its round in the breadcrumb, or Back) puts the keyboard on that module's own
+  // link in the rows, and the row where it was on the screen when it was opened.
   const openedId = opened?.item.plan_node_id ?? ''
   const lastOpened = useRef(openedId)
   useEffect(() => {
     const left = lastOpened.current
     lastOpened.current = openedId
     if (!left || openedId) return
-    return scrollAfterShell(() => {
-      const link = document.getElementById(moduleRowLinkId(left))
-      link?.focus({ preventScroll: true })
-      return link
-    }, { block: 'center' })
+    return returnToModuleRow(left)
   }, [openedId])
   return <>
     {opened && <PlanModuleDetail key={opened.item.plan_node_id} view={view} item={opened.item} step={opened.step} stale={stale} />}
@@ -77,13 +75,26 @@ function Snapshot({ view, selected, failed }: { view: PlanSnapshot; selected: st
     <PlanRecentChanges view={view} />
   </>
 }
+/** Work → Plan before a round is known: the newest round is still being read, cannot be read, or the runtime holds none. */
+function NoRound({ plan }: { plan: PlanAddress }) {
+  const { rounds } = plan
+  if (rounds.state === 'reading') return <p role="status">Reading which round is newest…</p>
+  if (rounds.state === 'unknown') return <div role="alert" className="rounded-[var(--control-radius)] border border-[var(--color-warning)] p-3 [overflow-wrap:anywhere]">
+    Newest round Unknown · {rounds.reason}. This plan and live view shows no round until it is known; an address can still name a round (<code>#work?root=…</code>).
+    <button className="ml-2 min-h-11 rounded-[var(--control-radius)] border px-3" onClick={plan.retry}>Retry</button></div>
+  return <p>The runtime holds no round yet.</p>
+}
+
 export function WorkPlanView() {
-  const { root, node } = usePlanAddress()
+  const plan = usePlanAddress()
+  const { root, node } = plan
   const query = usePlanSnapshot(root)
   const failed = query.isError || query.isPaused
   return <NowClock><section id="plan" aria-label="Plan and live view" className="flex min-w-0 scroll-mt-4 flex-col gap-3">
-    {query.isPending && !failed && <p role="status">Loading plan and live work…</p>}
+    <PlanRoundNav plan={plan} />
+    {root === null && <NoRound plan={plan} />}
+    {root !== null && query.isPending && !failed && <p role="status">Loading plan and live work…</p>}
     {failed && <div role="alert" className="rounded border border-[var(--color-warning)] p-3 [overflow-wrap:anywhere]">Unknown · {query.isPaused ? 'Offline' : query.error?.message}. {query.data ? `Stale · showing the last successful snapshot from ${query.data.as_of}.` : 'No successful snapshot yet.'}<button className="ml-2 min-h-11 rounded border px-3" onClick={() => void query.refetch()}>Retry</button></div>}
-    {query.data && <Snapshot key={root} view={query.data} selected={node} failed={failed} />}
+    {root !== null && query.data && <Snapshot key={root} view={query.data} selected={node} failed={failed} />}
   </section></NowClock>
 }

@@ -51,6 +51,11 @@ export type ModuleRow = {
   toGo: number
   /** The blocking edges from this item whose milestone is not verified yet (waiting_on). */
   waits: ModuleWait[]
+  /**
+   * The item is in the adopted view document (node.view): only then are its blocking edges read, so no waits means none.
+   * The server sets view only when the document parsed and lists the item (store planviewsnapshot.go).
+   */
+  inView: boolean
 }
 
 /** The deepest a done rule nests (plan/rule.go maxDepth). */
@@ -197,8 +202,17 @@ export function moduleRows(view: PlanSnapshot): ModuleRow[] {
     const done = count('done')
     return { id: item.plan_node_id, label: item.label, lane: laneWords(item), title: plainTitle(item.title), href: planNodeHref(view.root, item.plan_node_id),
       current: view.mainline.current?.plan_node_id === item.plan_node_id, cells, total: cells.length, done, active: count('active'),
-      stopped: count('stopped'), unknown: count('unknown'), dropped: steps.length - cells.length, toGo: cells.length - done, waits }
+      stopped: count('stopped'), unknown: count('unknown'), dropped: steps.length - cells.length, toGo: cells.length - done, waits, inView: item.view != null }
   })
+}
+
+/**
+ * Why an item's dependencies are not known (it has no node.view): the view document could not be read or there is
+ * none (the server's warning says which), or the document does not list the item.
+ */
+export function noViewReason(view: PlanSnapshot): string {
+  return view.warnings.find(w => /view document unavailable|has no adopted view/.test(w))
+    ?? (view.artifact_id === '' ? 'no adopted plan view' : 'this module is not in the adopted plan view')
 }
 
 /** The id of a module row's own link: the keyboard goes back to it when the module's detail closes. */

@@ -275,7 +275,9 @@ describe('module detail on the page', () => {
     expect(step('5.1-4')).toHaveTextContent('ReviewNo task yet')
     expect(step('5.1-5')).toHaveTextContent('Owner')
     expect(step('5.1-4')).toHaveTextContent('Agent')
-    expect(within(region('Module 5.1')).getByRole('link', { name: 'All modules' })).toHaveAttribute('href', '#work?section=plan&root=R5')
+    const crumbs = within(region('Module 5.1')).getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Back to Work' })).toHaveAttribute('href', '#work?root=R5')
+    expect(within(crumbs).getByRole('link', { name: 'Round 5' })).toHaveAttribute('href', '#work?root=R5')
   })
 
   it('B1: shows the step\'s own work as its latest task and the latest check\'s verdict as its review, never a failed check as Accepted', () => {
@@ -550,7 +552,7 @@ describe('Work → Plan with a module address', () => {
     page('#work?section=plan&root=R5')
     await screen.findByRole('region', { name: 'Modules' })
     expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull()
-    const link = screen.getByRole('link', { name: 'Open module 5.1' })
+    const link = screen.getByRole('link', { name: /^Open module 5\.1 ·/ })
     expect(link).toHaveAttribute('href', '#work?section=plan&root=R5&node=R5%3A5.1')
     await act(async () => { window.location.hash = link.getAttribute('href')!; window.dispatchEvent(new Event('hashchange')) })
     const module = await screen.findByRole('region', { name: 'Module 5.1' })
@@ -567,10 +569,10 @@ describe('Work → Plan with a module address', () => {
     await waitFor(() => expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Request #7'))
     expect(urls().every(u => u === '/api/v1/agentrt/plan-view?root=R5')).toBe(true)
     expect(urls().some(u => /landing|questions|approvals|progress|plan\?|root=R4/.test(u))).toBe(false)
-    // All modules: the detail closes and the keyboard goes back to the module's own link in the rows.
-    await act(async () => { window.location.hash = '#work?section=plan&root=R5'; window.dispatchEvent(new Event('hashchange')) })
+    // ‹ Work: the detail closes and the keyboard goes back to the module's own link in the rows.
+    await act(async () => { window.location.hash = '#work?root=R5'; window.dispatchEvent(new Event('hashchange')) })
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull())
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Open module 5.1' })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: /^Open module 5\.1 ·/ })))
   })
 
   it('shows Unknown, not a module, when the plan view cannot be read, and Stale once a read fails after one succeeded', async () => {

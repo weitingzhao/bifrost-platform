@@ -11,6 +11,7 @@ import { actionsLeft, approvalActivity, isStale, mergeActivity, moduleDetailId, 
   planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, stepTasks, taskActivity, taskLine, workTasks, type ShellRead, type ShellReads,
   type TaskLine } from './moduleDetailModel'
 import { cellLabels, cellStyle, toGoText, type CellState } from './planModuleModel'
+import { roundLabel, workRoundHref } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /** Recent activity shows this many rows until the Owner asks for all. */
@@ -91,8 +92,22 @@ export function PlanModuleDetail({ view, item, step, stale }: { view: PlanSnapsh
     const target = step ? document.getElementById(moduleStepRowId(step)) : heading.current
     target?.focus({ preventScroll: true })
   }, [item.plan_node_id, step])
+  // ‹ Work and the round go back to the round's rows, where the row was (moduleRowReturn); no `section=`, so nothing
+  // else on Work scrolls to the plan's top over it (R5:5.5-1, Design v3.6 item header).
+  const back = workRoundHref(view.root)
   return <section id={moduleDetailId(item.plan_node_id)} aria-label={`Module ${item.label}`} data-module-detail={item.label}
-    className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--color-info)] bg-[var(--card-fill)] p-4 [overflow-wrap:anywhere]">
+    className="flex min-w-0 scroll-mt-4 flex-col gap-3 [overflow-wrap:anywhere]">
+    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <a href={back} aria-label="Back to Work"
+        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--ops-edge)] px-3.5 text-sm font-semibold text-foreground no-underline shadow-[var(--ops-raised)] [background:var(--ops-control)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">
+        <span aria-hidden="true" className="text-lg leading-none">‹</span> Work</a>
+      <ol className="m-0 flex min-w-0 list-none flex-wrap items-baseline gap-x-1.5 p-0 text-[22px] font-[650] leading-tight tracking-[-.02em]">
+        <li><a href={back} className="text-foreground no-underline underline-offset-4 hover:text-foreground hover:underline">{roundLabel(view.root)}</a></li>
+        <li aria-hidden="true" className="text-muted-foreground">›</li>
+        <li aria-current="page">{item.label}</li>
+      </ol>
+    </nav>
+    <div className="flex min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--color-info)] bg-[var(--card-fill)] p-4">
     <header className="flex min-w-0 flex-wrap items-start gap-2">
       <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -102,7 +117,6 @@ export function PlanModuleDetail({ view, item, step, stale }: { view: PlanSnapsh
         </div>
         <h3 ref={heading} tabIndex={-1} className="m-0 break-words text-base font-semibold focus:outline-none">{row.title || 'Untitled module'}</h3>
       </div>
-      <a href={planNodeHref(view.root)} className="ml-auto inline-flex min-h-11 shrink-0 items-center rounded-[var(--control-radius)] border border-[var(--card-border)] px-3 text-sm">All modules</a>
     </header>
     <dl aria-label="Read as of" className="m-0 flex min-w-0 flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
       <div className="flex min-w-0 flex-wrap gap-1"><dt>Plan snapshot</dt><dd className="m-0"><time dateTime={view.as_of}>{view.as_of}</time> · {stale ? 'Stale' : 'Fresh'}</dd></div>
@@ -206,5 +220,6 @@ export function PlanModuleDetail({ view, item, step, stale }: { view: PlanSnapsh
       <p className="m-0 text-xs text-muted-foreground">Plan events: only the latest {view.recent_changes.length} of {view.root} up to <time dateTime={view.recent_as_of}>{view.recent_as_of}</time> (older ones under Recent changes); a step's earlier moves are not tied to it there. A plan change appears here only when one of its events in that window names a node of {item.label} or decides a question of it; the others are under Recent changes.</p>
       <p className="m-0 text-xs text-muted-foreground">Ended tasks and checks: only those among the runtime's latest 20 ended tasks of every goal. Questions: the question store keeps a bounded history of answered ones. Requests: as the Console last read them.</p>
     </section>
+    </div>
   </section>
 }

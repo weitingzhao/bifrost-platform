@@ -6,6 +6,7 @@ import fixture from '@/api/__fixtures__/plan-view-handler.json'
 import empty from '@/api/__fixtures__/plan-view-handler-empty.json'
 import legacy from '@/api/__fixtures__/plan-view-handler-legacy.json'
 import page2 from '@/api/__fixtures__/plan-view-handler-page2.json'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot } from '@/api/planSnapshot'
 import { WorkPlanView } from '../WorkPlanView'
 
@@ -14,9 +15,12 @@ let client: QueryClient
 let reply: unknown
 let status: number
 let fetcher: ReturnType<typeof vi.fn>
+/** The shell's GET /progress (ConsolePage → useNeedsYou), with R4 the newest round: Work shows the newest round the runtime lists. */
+const newestR4 = () => parseRuntimeProgress({ plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }] })
 function show(hash = '#work') {
   window.location.hash = hash
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  client.setQueryData(['agent-runtime-progress'], newestR4())
   return render(<QueryClientProvider client={client}><WorkPlanView /></QueryClientProvider>)
 }
 beforeEach(() => {
@@ -104,6 +108,7 @@ describe('Work plan/live view', () => {
     window.location.hash = '#work'
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(['agent-runtime-plan-view', 'R4'], parsePlanSnapshot(fixture, 'R4'))
+    client.setQueryData(['agent-runtime-progress'], newestR4())
     render(<QueryClientProvider client={client}><WorkPlanView /></QueryClientProvider>)
     const live = screen.getByRole('region', { name: 'Live work' })
     expect(live).toHaveTextContent('Running')

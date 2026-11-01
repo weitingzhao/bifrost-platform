@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '@/api/__fixtures__/plan-view-signoff.generated.json'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import prod from '@/api/__fixtures__/plan-view-pv2-prod-r4.json'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot } from '@/api/planSnapshot'
 import { WorkPlanView } from '../WorkPlanView'
 
@@ -24,6 +25,8 @@ afterEach(() => { cleanup(); client?.clear(); vi.unstubAllGlobals(); vi.restoreA
 function show() {
   window.location.hash = '#work'
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  // The shell's GET /progress, with R4 the newest round: Work shows the newest round the runtime lists.
+  client.setQueryData(['agent-runtime-progress'], parseRuntimeProgress({ plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }] }))
   return render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={{ token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }}><WorkPlanView /></PlatformAuthContext.Provider></QueryClientProvider>)
 }
 

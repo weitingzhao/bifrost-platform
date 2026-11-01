@@ -1,8 +1,8 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
-import { Card } from '../owner/OwnerParts'
 import { StepBadge } from './StepText'
-import { cellLabels, cellStyle, cellWords, moduleRowLinkId, moduleRows, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
+import { rememberModuleRow } from './moduleRowReturn'
+import { cellLabels, cellStyle, cellWords, moduleRowLinkId, moduleRows, noViewReason, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
 
 const legend: CellState[] = ['done', 'active', 'planned', 'stopped', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
@@ -12,8 +12,8 @@ function Rule({ lines }: { lines: RuleLine[] }) {
 }
 
 function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
-  return <div id={detailId(cell)} role="region" aria-label={`Step ${cell.label}`} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}
-    className="flex min-w-0 flex-col gap-2 rounded-[var(--control-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3 text-sm [overflow-wrap:anywhere]">
+  return <div id={detailId(cell)} role="region" aria-label={`Step ${cell.label}`} data-step-detail onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}
+    className="mx-3.5 mb-3 flex min-w-0 cursor-auto flex-col gap-2 rounded-xl bg-[var(--card)] p-3 text-sm [overflow-wrap:anywhere]">
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <StepBadge label={cell.label} />
       <strong data-step-state={cell.state}>{cellLabels[cell.state]}</strong>
@@ -41,7 +41,16 @@ function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
   </div>
 }
 
-function Module({ row, initial }: { row: ModuleRow; initial: string }) {
+/**
+ * Design v3.6 WorkPage row look: the mainline's current item outlined, the other mainline items on the selection tone,
+ * branch and support items recessed. Ops tokens only (styles/opsAppearance.css).
+ */
+function rowLook(row: ModuleRow) {
+  if (row.current) return 'border-[1.5px] border-[color-mix(in_srgb,var(--primary)_55%,transparent)] [background:var(--ops-selection)]'
+  return row.lane.startsWith('Mainline') ? 'border border-transparent [background:var(--ops-selection)]' : 'border border-transparent shadow-[var(--ops-inset)]'
+}
+
+function Module({ row, initial, noView }: { row: ModuleRow; initial: string; noView: string }) {
   const [open, setOpen] = useState(() => row.cells.some(c => c.id === initial) ? initial : '')
   const [focus, setFocus] = useState(() => Math.max(0, row.cells.findIndex(c => c.id === initial)))
   const buttons = useRef<(HTMLButtonElement | null)[]>([])
@@ -58,43 +67,57 @@ function Module({ row, initial }: { row: ModuleRow; initial: string }) {
     move(to)
   }
   const close = () => { const i = row.cells.findIndex(c => c.id === open); setOpen(''); if (i >= 0) move(i) }
+  // The whole row opens the module (Design v3.6: the row is one control). Its own controls — a step cell, a wait, the
+  // opened step — keep doing their own thing, and a drag that selected text opens nothing.
+  const openRow = (e: MouseEvent<HTMLLIElement>) => {
+    if (e.defaultPrevented || e.button !== 0 || (e.target as Element).closest('a, button, [data-step-detail]')) return
+    if (window.getSelection?.()?.toString()) return
+    rememberModuleRow(row.id)
+    window.location.hash = row.href
+  }
   const counts = [`${row.done} / ${row.total} done`, row.active && `${row.active} in progress`, row.stopped && `${row.stopped} stopped`,
     row.unknown && `${row.unknown} unknown`, row.dropped && `${row.dropped} dropped`].filter(Boolean).join(' · ')
-  return <li data-module={row.label} aria-current={row.current ? 'step' : undefined}
-    className={`flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border p-3 [overflow-wrap:anywhere] ${row.current ? 'border-[var(--color-info)] bg-[var(--control-fill)]' : 'border-[var(--card-border)] bg-[var(--card-fill)]'}`}>
-    <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
-      <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1">
+  const title = row.title || 'Untitled module'
+  // The link's focus ring is drawn around the whole row (has-[…]: below); the workspace's own ring on the link is dropped.
+  return <li data-module={row.label} aria-current={row.current ? 'step' : undefined} onClick={openRow}
+    className={`flex min-w-0 cursor-pointer flex-col rounded-2xl transition-shadow [overflow-wrap:anywhere] hover:shadow-[var(--ops-raised)] has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-offset-2 has-[[data-row-link]:focus-visible]:outline-[var(--ring)] ${rowLook(row)}`}>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2 px-3.5 py-3">
+      <div className="flex min-w-0 flex-[1_1_17.5rem] flex-col gap-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <a id={moduleRowLinkId(row.id)} href={row.href} className="inline-flex min-h-6 items-center font-mono pointer-coarse:min-h-11 text-sm font-semibold underline-offset-2 hover:underline" aria-label={`Open module ${row.label}`}>{row.label}</a>
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{row.lane}</span>
-          {row.current && <span className="rounded-full border border-[var(--color-info)] px-2 text-xs font-semibold">Current</span>}
+          <span className="font-mono text-[13px] font-semibold">{row.label}</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-muted-foreground">{row.lane}</span>
+          {row.current && <span title="The plan view's mainline position (mainline.current), not a verified milestone"
+            className="inline-flex h-5 items-center rounded-full px-[7px] text-[11px] font-bold text-[var(--primary-foreground)] [background:var(--ops-accent)]">Current</span>}
         </div>
-        <span className="break-words font-semibold">{row.title}</span>
+        <a id={moduleRowLinkId(row.id)} href={row.href} data-row-link onClick={() => rememberModuleRow(row.id)} aria-label={`Open module ${row.label} · ${title}`}
+          className="break-words text-[15px] font-semibold leading-[1.4] text-foreground no-underline [text-wrap:pretty] hover:text-foreground focus-visible:outline-none!">{title}</a>
       </div>
-      <div className="flex min-w-0 flex-[1_1_14rem] flex-col gap-1">
-        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2">
-          <span className="text-xs text-muted-foreground">Runtime steps</span>
-          <strong data-to-go className="text-sm">{toGoText(row)}</strong>
-        </div>
+      <div className="flex min-w-0 flex-[1_1_13.75rem] flex-col gap-1">
         {row.cells.length > 0 && <div role="toolbar" aria-label={`Steps of ${row.label}, ${toGoText(row)}`} className="flex min-w-0 gap-[3px]">
           {row.cells.map((cell, i) => <button key={cell.id} type="button" ref={el => { buttons.current[i] = el }}
             tabIndex={i === tabStop ? 0 : -1} aria-label={`Step ${cell.label}: ${cellWords[cell.state]}`} aria-expanded={open === cell.id}
             aria-controls={open === cell.id ? detailId(cell) : undefined} title={`${cell.label} · ${cellLabels[cell.state]} · ${cell.title}`} data-step-cell={cell.label} data-state={cell.state}
             onClick={() => { setFocus(i); setOpen(open === cell.id ? '' : cell.id) }} onKeyDown={e => onKey(e, i)} onFocus={() => setFocus(i)}
             className={`flex min-h-6 min-w-0 flex-1 cursor-pointer items-center border-0 border-b-2 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] pointer-coarse:min-h-11 ${open === cell.id ? 'border-[var(--foreground)]' : 'border-transparent'}`}>
-            <span aria-hidden="true" className="block h-2 w-full rounded-full" style={cellStyle[cell.state]} />
+            <span aria-hidden="true" className="block h-[7px] w-full rounded-[4px]" style={cellStyle[cell.state]} />
           </button>)}
         </div>}
-        <span className="text-xs text-muted-foreground">{counts}</span>
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-px text-xs leading-[1.45]">
+          <span className="text-muted-foreground">Runtime</span>
+          <span className="min-w-0"><strong data-to-go className="font-semibold">{toGoText(row)}</strong> · <span className="font-mono">{counts}</span></span>
+        </div>
       </div>
-      <div className="flex min-w-0 flex-[1_1_11rem] flex-col gap-1 text-sm">
+      <div className="flex min-w-0 flex-[1_1_11.25rem] flex-col gap-0.5 text-[13px] leading-[1.45]">
         <span className="text-xs text-muted-foreground">Waits on</span>
-        {row.waits.length === 0 ? <span>Nothing blocking</span>
-          : <ul aria-label={`${row.label} waits on`} className="m-0 flex list-none flex-wrap gap-x-3 p-0">{row.waits.map(w => <li key={w.label}>
-            <a href={w.href} title={w.reason} className="inline-flex min-h-6 items-center underline-offset-2 hover:underline pointer-coarse:min-h-11">{w.label}</a>{w.status === 'Blocked' && <span> · Blocked</span>}
-          </li>)}</ul>}
+        {row.waits.length > 0 ? <ul aria-label={`${row.label} waits on`} className="m-0 flex list-none flex-wrap gap-x-3 p-0">{row.waits.map(w => <li key={w.label}>
+          <a href={w.href} title={w.reason} className="inline-flex min-h-6 items-center underline-offset-2 hover:underline pointer-coarse:min-h-11">{w.label}</a>{w.status === 'Blocked' && <span> · Blocked</span>}
+        </li>)}</ul>
+          // waiting_on holds only the adopted view's blocking edges: none means no dependency waits, not that nothing
+          // blocks; and only for an item the view document lists (row.inView), else its dependencies are not known.
+          : <span>{row.inView ? 'No dependency waiting' : `Dependencies Unknown · ${noView}`}</span>}
         {row.waits.some(w => w.status === 'Unknown') && <span className="text-xs text-muted-foreground">Milestone verification Unknown</span>}
       </div>
+      <span aria-hidden="true" className="flex-none text-lg leading-none text-muted-foreground">›</span>
     </div>
     {opened && <StepDetail cell={opened} close={close} />}
   </li>
@@ -105,15 +128,19 @@ export function PlanModuleRows({ view, selected }: { view: PlanSnapshot; selecte
   const rows = moduleRows(view)
   const step = view.nodes.find(n => n.node_kind === 'step' && (n.plan_node_id === selected || n.label === selected))?.plan_node_id ?? ''
   const total = rows.reduce((sum, r) => sum + r.total, 0), done = rows.reduce((sum, r) => sum + r.done, 0)
-  return <Card label="Modules" title={`Modules · ${view.root}`}>
-    <p className="m-0 text-sm">{rows.length} module{rows.length === 1 ? '' : 's'} · {done} / {total} steps done · {toGoText({ total, toGo: total - done })}</p>
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      {legend.map(s => <span key={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-2 w-5 rounded-full" style={cellStyle[s]} />{cellLabels[s]}</span>)}
+  const noView = noViewReason(view)
+  return <section aria-label="Modules" className="flex min-w-0 flex-col gap-2 rounded-[20px] border border-[var(--ops-edge)] p-3.5 shadow-[var(--ops-shadow)] [background:var(--ops-panel)]">
+    <header className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
+      <h3 className="m-0 text-base font-semibold">Modules · {view.root}</h3>
+      <p className="m-0 text-sm text-muted-foreground">{rows.length} module{rows.length === 1 ? '' : 's'} · {done} / {total} steps done · {toGoText({ total, toGo: total - done })}</p>
+    </header>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
+      {legend.map(s => <span key={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}</span>)}
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states. Not acceptance, not deployment. Dropped steps are left out.</span>
     </div>
-    <p className="m-0 text-xs text-muted-foreground">Execution progress: one cell per runtime step in plan order, from the controller's step states. Not acceptance, not deployment. Dropped steps are left out.</p>
-    {rows.length === 0 ? <p className="m-0">No plan items in {view.root}.</p>
+    {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
-        {rows.map(row => <Module key={row.id} row={row} initial={step} />)}
+        {rows.map(row => <Module key={row.id} row={row} initial={step} noView={noView} />)}
       </ol>}
-  </Card>
+  </section>
 }

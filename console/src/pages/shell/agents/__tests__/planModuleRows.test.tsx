@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import prod from '@/api/__fixtures__/plan-view-pv2-prod-r4.json'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { PlanModuleRows } from '../PlanModuleRows'
@@ -142,7 +143,8 @@ describe('module rows on the page', () => {
     expect(items[0]).toHaveAttribute('aria-current', 'step')
     expect(items[3]).toHaveTextContent('All steps done')
     expect(within(items[1]).getByRole('link', { name: '4.1 on PROD' })).toHaveAttribute('href', '#work?section=plan&root=R4&node=R4%3A4.1')
-    expect(items[0]).toHaveTextContent('Nothing blocking')
+    // waiting_on holds only the plan's dependency edges: none is said as no dependency waits, not as nothing blocking.
+    expect(items[0]).toHaveTextContent('No dependency waiting')
   })
 
   it('opens a step from its cell with its state, rule and links, and closes it again', () => {
@@ -211,6 +213,8 @@ describe('Work → Plan', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(prod), { status: 200 })))
     window.location.hash = '#work'
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    // The shell's GET /progress, with R4 the newest round: Work shows the newest round the runtime lists.
+    client.setQueryData(['agent-runtime-progress'], parseRuntimeProgress({ plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }] }))
     render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={{ token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }}><WorkPlanView /></PlatformAuthContext.Provider></QueryClientProvider>)
     const modules = await screen.findByRole('region', { name: 'Modules' })
     expect(modules).toHaveTextContent('10 modules · 0 / 55 steps done · 55 steps to go')
