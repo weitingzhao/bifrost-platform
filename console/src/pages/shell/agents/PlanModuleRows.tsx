@@ -1,8 +1,13 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
+import { useNow } from '../progress/progressClock'
 import { StepBadge } from './StepText'
+import { liveLine, liveNow, liveSpoken, NOW_SHOWN, type LiveNow, type LiveStep } from './liveStepModel'
+import type { RuntimeTasks } from './moduleDetailModel'
 import { rememberModuleRow } from './moduleRowReturn'
 import { cellLabels, cellStyle, cellWords, moduleRowLinkId, moduleRows, noViewReason, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
+import { sinceWords } from './readAge'
+import { workTabHref } from './workViewModel'
 
 const legend: CellState[] = ['done', 'active', 'planned', 'stopped', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
@@ -50,7 +55,7 @@ function rowLook(row: ModuleRow) {
   return row.lane.startsWith('Mainline') ? 'border border-transparent [background:var(--ops-selection)]' : 'border border-transparent shadow-[var(--ops-inset)]'
 }
 
-function Module({ row, initial, noView }: { row: ModuleRow; initial: string; noView: string }) {
+function Module({ row, initial, noView, live }: { row: ModuleRow; initial: string; noView: string; live: Map<string, LiveStep> }) {
   const [open, setOpen] = useState(() => row.cells.some(c => c.id === initial) ? initial : '')
   const [focus, setFocus] = useState(() => Math.max(0, row.cells.findIndex(c => c.id === initial)))
   const buttons = useRef<(HTMLButtonElement | null)[]>([])
@@ -94,13 +99,20 @@ function Module({ row, initial, noView }: { row: ModuleRow; initial: string; noV
       </div>
       <div className="flex min-w-0 flex-[1_1_13.75rem] flex-col gap-1">
         {row.cells.length > 0 && <div role="toolbar" aria-label={`Steps of ${row.label}, ${toGoText(row)}`} className="flex min-w-0 gap-[3px]">
-          {row.cells.map((cell, i) => <button key={cell.id} type="button" ref={el => { buttons.current[i] = el }}
-            tabIndex={i === tabStop ? 0 : -1} aria-label={`Step ${cell.label}: ${cellWords[cell.state]}`} aria-expanded={open === cell.id}
-            aria-controls={open === cell.id ? detailId(cell) : undefined} title={`${cell.label} · ${cellLabels[cell.state]} · ${cell.title}`} data-step-cell={cell.label} data-state={cell.state}
-            onClick={() => { setFocus(i); setOpen(open === cell.id ? '' : cell.id) }} onKeyDown={e => onKey(e, i)} onFocus={() => setFocus(i)}
-            className={`flex min-h-6 min-w-0 flex-1 cursor-pointer items-center border-0 border-b-2 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] pointer-coarse:min-h-11 ${open === cell.id ? 'border-[var(--foreground)]' : 'border-transparent'}`}>
-            <span aria-hidden="true" className="block h-[7px] w-full rounded-[4px]" style={cellStyle[cell.state]} />
-          </button>)}
+          {row.cells.map((cell, i) => {
+            const running = live.get(cell.id)
+            return <button key={cell.id} type="button" ref={el => { buttons.current[i] = el }}
+              tabIndex={i === tabStop ? 0 : -1} aria-label={`Step ${cell.label}: ${cellWords[cell.state]}${running ? `, ${liveSpoken(running)}` : ''}`} aria-expanded={open === cell.id}
+              aria-controls={open === cell.id ? detailId(cell) : undefined} title={`${cell.label} · ${cellLabels[cell.state]} · ${cell.title}${running ? ` · Live now: ${running.what}` : ''}`}
+              data-step-cell={cell.label} data-state={cell.state} data-live={running ? running.quiet ? 'quiet' : 'true' : undefined}
+              onClick={() => { setFocus(i); setOpen(open === cell.id ? '' : cell.id) }} onKeyDown={e => onKey(e, i)} onFocus={() => setFocus(i)}
+              className={`relative flex min-h-6 min-w-0 flex-1 cursor-pointer items-center border-0 border-b-2 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] pointer-coarse:min-h-11 ${open === cell.id ? 'border-[var(--foreground)]' : 'border-transparent'}`}>
+              <span aria-hidden="true" className="block h-[7px] w-full rounded-[4px]" style={cellStyle[cell.state]} />
+              {/* Work running now: a slow breathing glow around the bar, still and faint for a landing gone quiet (opsWorkspace.css;
+                  still under reduced motion). */}
+              {running && <span aria-hidden="true" data-live-ring className={`work-live-ring${running.quiet ? ' work-live-ring--quiet' : ''} pointer-events-none absolute inset-x-0 top-1/2 h-[7px] -translate-y-1/2 rounded-[4px]`} />}
+            </button>
+          })}
         </div>}
         <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-px text-xs leading-[1.45]">
           <span className="text-muted-foreground">Runtime</span>
@@ -123,9 +135,47 @@ function Module({ row, initial, noView }: { row: ModuleRow; initial: string; noV
   </li>
 }
 
+/**
+ * Now: the steps with work running now (R5:5.5-8, M-267), up to NOW_SHOWN of them (the moving ones first, then the rows'
+ * order), each opening its module as the row's link does; nothing running is said only of a plan view read now, else
+ * what runs now is Unknown. What the Live tab lists that marks no step here is counted with a link to it, so that
+ * "Nothing running now" never stands beside work Live still shows.
+ */
+function NowLine({ live, now, root }: { live: LiveNow; now: number; root: string }) {
+  const label = <span className="text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground">Now</span>
+  if (live.state === 'unknown') return <p data-live-now="unknown" className="m-0 px-1 text-sm [overflow-wrap:anywhere]">
+    {label} · Unknown: {live.reason}, {sinceWords(live.asOf, now)} old. What runs now is not known from it.</p>
+  const unmarked = live.unmarked > 0 && <a href={workTabHref('live', root, true)} data-live-unmarked
+    className="inline-flex min-h-6 items-center text-xs text-muted-foreground underline-offset-2 hover:underline pointer-coarse:min-h-11">
+    {live.unmarked} registered on Live not marked here: heartbeat unconfirmed, not started, or on no step shown</a>
+  if (live.steps.length === 0) return <div data-live-now="none" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm">
+    <span>{label} · Nothing running now <span className="text-xs text-muted-foreground">· no running attempt, moving landing or running external work on a step</span></span>
+    {unmarked}</div>
+  const more = live.steps.length - NOW_SHOWN
+  return <div data-live-now="live" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm">
+    {label}
+    <ul aria-label="Running now" className="m-0 flex min-w-0 list-none flex-wrap gap-x-3 gap-y-1 p-0">
+      {live.steps.slice(0, NOW_SHOWN).map(step => <li key={step.id} className="min-w-0">
+        <a href={step.href} onClick={() => rememberModuleRow(step.row)} data-live-step={step.label}
+          className="inline-flex min-h-6 items-center gap-1.5 underline-offset-2 [overflow-wrap:anywhere] hover:underline pointer-coarse:min-h-11">
+          <span aria-hidden="true" className={`work-live-dot${step.quiet ? ' work-live-dot--quiet' : ''} shrink-0`} />{liveLine(step, now)}</a>
+      </li>)}
+    </ul>
+    {more > 0 && <span className="text-xs text-muted-foreground">+{more} more live step{more === 1 ? '' : 's'} in the rows below</span>}
+    {unmarked}
+  </div>
+}
+
 /** Work → Plan: every module (plan item) as a row of its runtime steps and how many are left (Design v3.6 WorkPage, DATA-MAP P25). */
-export function PlanModuleRows({ view, selected }: { view: PlanSnapshot; selected: string }) {
+export function PlanModuleRows({ view, selected, failed = null, runtime }: { view: PlanSnapshot; selected: string
+  /** Why the plan view's latest refresh failed (or Offline); null while it did not. */
+  failed?: string | null
+  /** The runtime's tasks from the shell's cached GET /progress, for a running task's role; none read when absent. */
+  runtime?: RuntimeTasks }) {
+  const now = useNow()
   const rows = moduleRows(view)
+  const live = liveNow(view, rows, { failed, now, runtime })
+  const liveSteps = live.state === 'ok' ? live.byStep : new Map<string, LiveStep>()
   const step = view.nodes.find(n => n.node_kind === 'step' && (n.plan_node_id === selected || n.label === selected))?.plan_node_id ?? ''
   const total = rows.reduce((sum, r) => sum + r.total, 0), done = rows.reduce((sum, r) => sum + r.done, 0)
   const noView = noViewReason(view)
@@ -134,13 +184,14 @@ export function PlanModuleRows({ view, selected }: { view: PlanSnapshot; selecte
       <h3 className="m-0 text-base font-semibold">Modules · {view.root}</h3>
       <p className="m-0 text-sm text-muted-foreground">{rows.length} module{rows.length === 1 ? '' : 's'} · {done} / {total} steps done · {toGoText({ total, toGo: total - done })}</p>
     </header>
+    <NowLine live={live} now={now} root={view.root} />
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
       {legend.map(s => <span key={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}</span>)}
-      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states. Not acceptance, not deployment. Dropped steps are left out.</span>
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
-        {rows.map(row => <Module key={row.id} row={row} initial={step} noView={noView} />)}
+        {rows.map(row => <Module key={row.id} row={row} initial={step} noView={noView} live={liveSteps} />)}
       </ol>}
   </section>
 }

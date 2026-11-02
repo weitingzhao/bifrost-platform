@@ -58,3 +58,30 @@
   .ops-workspace .ops-page-toolbar { justify-content: flex-start; }
   .ops-workspace .ops-section-header > div > div { flex-wrap: wrap; }
 }
+
+/*
+ * Work → Plan: a step with work running now (R5:5.5-8, M-267). A slow breathing glow, one 2 s ease-in-out cycle (0.5 Hz):
+ * never a blink, no flash. The lamp green is the Live tab's "Running" tone. Under reduced motion it stays a still ring.
+ */
+@keyframes work-live-breathe {
+  0%, 100% { opacity: .35; }
+  50% { opacity: 1; }
+}
+.work-live-ring {
+  box-shadow: 0 0 0 1.5px var(--color-lamp-green), 0 0 7px 1px color-mix(in srgb, var(--color-lamp-green) 55%, transparent);
+  animation: work-live-breathe 2s ease-in-out infinite;
+}
+.work-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--color-lamp-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lamp-green) 22%, transparent);
+  animation: work-live-breathe 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-live-ring, .work-live-dot { animation: none; opacity: 1; }
+}
+/* A landing with no record for over 30 min: still and faint, in either motion setting. */
+.work-live-ring.work-live-ring--quiet, .work-live-dot.work-live-dot--quiet { animation: none; opacity: .4; }

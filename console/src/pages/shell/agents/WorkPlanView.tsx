@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { NowClock, useNow } from '../progress/progressClock'
 import { PlanLiveWork } from './PlanLiveWork'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
-import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
+import { moduleDetailId, moduleOf, moduleStepRowId, runtimeTasks } from './moduleDetailModel'
 import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
 import { PlanRecentChanges } from './PlanRecentChanges'
@@ -30,7 +32,11 @@ function Fold({ title, open, children }: { title: string; open: boolean; childre
 }
 
 /** Work → the round tab: every module as a row, and folded: the dependency waits and the whole plan. */
-function RoundTab({ view, selected }: { view: PlanSnapshot; selected: string }) {
+function RoundTab({ view, selected, failed }: { view: PlanSnapshot; selected: string; failed: string | null }) {
+  // GET /progress as the shell already holds it (ConsolePage polls it every 5 s): never fetched here (enabled: false),
+  // read only for a running task's role on the rows' Now line.
+  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
+  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
   // An address naming a node of no module (a module or a step of one opens on its own page: ModulePage) opens the
   // whole plan's fold and brings the node into view there.
@@ -41,7 +47,7 @@ function RoundTab({ view, selected }: { view: PlanSnapshot; selected: string }) 
   const waits = dependencyWaits(view, moduleRows(view))
   return <>
     {selected && !targetId && <p role="alert">Node not found in {view.root}: {selected}</p>}
-    <PlanModuleRows view={view} selected={selected} />
+    <PlanModuleRows view={view} selected={selected} failed={failed} runtime={runtime} />
     <Fold title={waits.state === 'unknown' ? 'Dependency waits · Unknown' : `Dependency waits · ${waits.total}${waits.unread ? ' · some Unknown' : ''}`} open={false}>
       <section aria-label="Waiting on" className="flex min-w-0 flex-col gap-2 text-sm">
         {view.waiting_on.length === 0 && <p className="m-0">{waits.state === 'unknown' ? `Dependencies Unknown · ${waits.reason}.`
@@ -143,7 +149,7 @@ function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<ty
         : lastReadRows(count) > 0 ? 'Rows listed below as last read, from this plan view or from GET /plan, are not counted.'
         : 'Nothing is listed as last read, and nothing of it is counted.'}</p>}
     {tab === 'signoffs' && <WorkSignoffs count={count} view={view} stale={stale} />}
-    {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} />}
+    {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} failed={failureOf(query)} />}
     {view && tab === 'live' && <PlanLiveWork view={view} stale={stale} />}
     {view && tab === 'changes' && <PlanRecentChanges key={plan.root} view={view} />}
   </>
