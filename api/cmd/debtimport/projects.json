@@ -1,0 +1,18 @@
+{
+  "crew_project": "crew",
+  "projects": [
+    {"key":"crew","owns":["bifrost-platform/**","bifrost-trade-infra/agent-config/**","bifrost-trade-infra/k8s/cicd/**","bifrost-trade-infra/k8s/platform-*/**","bifrost-trade-infra/k8s/overlays/platform-*/**","bifrost-trade-infra/scripts/landing/**"]},
+    {"key":"trade","owns":["bifrost-trade-core/**","bifrost-trade-api/**","bifrost-trade-worker/**","bifrost-trade-frontend/**","bifrost-trade-infra/k8s/overlays/{dev,stg,prod}/**"]},
+    {"key":"research","owns":["bifrost-research/**"]},
+    {"key":"market-data","owns":["bifrost-platform-plugin-market-data/**"]},
+    {"key":"flex-query","owns":["bifrost-platform-plugin-flex-query/**"]},
+    {"key":"ib-gateway","owns":["bifrost-platform-plugin/**"]},
+    {"key":"shared-ui","owns":["bifrost-ui/**"]},
+    {"key":"data-layer","owns":["bifrost-trade-infra/k8s/base/**","bifrost-trade-infra/k8s/data/**"]},
+    {"key":"finance","owns":["bifrost-finance/**"]}
+  ],
+  "repo_roots": {
+    "bifrost-platform":["api/","console/","agent/","mcp/"],
+    "bifrost-trade-infra":["agent-config/","k8s/","scripts/landing/","scripts/agent-host/","scripts/agentrt/","scripts/release/","scripts/cicd/"]
+  }
+}

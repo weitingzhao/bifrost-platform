@@ -38,6 +38,7 @@ var landingHardGo = [...]string{
 	"api/internal/agentrt/gaterun/",
 	"api/internal/agentrt/plan/",
 	"api/internal/agentrt/planimport/",
+	"api/internal/agentrt/debtimport/",
 	"api/internal/agentrt/planview/",
 	"api/internal/agentrt/recorderimport/",
 	"api/internal/agentrt/seatproto/",

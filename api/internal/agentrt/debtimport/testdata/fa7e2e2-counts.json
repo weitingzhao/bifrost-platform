@@ -1,0 +1,18 @@
+{
+  "ledger_sha256": "18c370aa95cb79b49c23fdd3d83babe96cc58ffd40a86454c384ca60083737a3",
+  "ratchets_sha256": "87c79295a22f36e8e692092893be4cd9b732f527ea13fcf679b6dc39ed958ae6",
+  "distribution": {
+    "state": {
+      "": 4,
+      "awaiting_signoff": 26,
+      "doing": 59,
+      "open": 106,
+      "watching": 55
+    },
+    "priority": {
+      "P1": 33,
+      "P2": 107,
+      "P3": 110
+    }
+  }
+}
