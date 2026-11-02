@@ -680,7 +680,8 @@ type StepFacts interface {
 	StepTasks(state string, min int64) Tri
 	// StepLanded: the step's accepted work landed on main.
 	StepLanded() Tri
-	// StepSTGSettled: that landed work was verified on STG by B5.
+	// StepSTGSettled: that landed work was verified on STG by B5; work in a
+	// repository B5 does not release counts once landed.
 	StepSTGSettled() Tri
 }
 

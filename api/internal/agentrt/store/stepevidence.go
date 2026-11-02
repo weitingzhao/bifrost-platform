@@ -68,8 +68,11 @@ func (f *stepFacts) StepLanded() plan.Tri {
 // lost, keeps it from holding. Unknown while a batch holding one has not
 // settled; False for one never admitted, released, exhausted or withheld.
 // B5 releases bifrost-platform only (StgReleaseStream): work landed in any
-// other repository (bifrost-trade-infra) never joins a batch, so a step with
-// such work is False, not Unknown; it waits on nothing B5 will ever record.
+// other repository has none of B5's; one with no STG release at all
+// (noSTGRelease: bifrost-trade-infra) counts as settled once landed, and a
+// step with only such work holds with step_landed (R5:5.5-9, Owner
+// 2026-11-02: a documents-only step is done when it lands; before, it
+// stayed False for ever).
 func (f *stepFacts) StepSTGSettled() plan.Tri {
 	l := f.landing()
 	switch {
@@ -84,6 +87,9 @@ func (f *stepFacts) StepSTGSettled() plan.Tri {
 	var stg *StgState
 	for _, r := range l.landed {
 		if "landing:"+r.repo != StgReleaseStream {
+			if noSTGRelease[r.repo] {
+				continue // landed is all there is
+			}
 			l.stg = plan.False
 			return l.stg
 		}
@@ -105,6 +111,13 @@ func (f *stepFacts) StepSTGSettled() plan.Tri {
 	}
 	return l.stg
 }
+
+// noSTGRelease names the repositories the runtime lands whose work has no
+// STG release at all, so it is settled once landed (R5:5.5-9). Any other
+// repository that is not B5's may have a release of its own that no step
+// evidence reads yet, so its landed work stays False until it is named here
+// or read (review of 24642337: fail closed).
+var noSTGRelease = map[string]bool{"bifrost-trade-infra": true}
 
 // stepLanding is what the step's accepted implementations' landing comes
 // to, read once per evaluation.

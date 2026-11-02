@@ -241,15 +241,36 @@ func TestPlanStandingStepEvidence(t *testing.T) {
 
 // Serial: global clock and signing anchor. Work landed only in
 // bifrost-trade-infra never joins a B5 batch (B5 releases bifrost-platform
-// only): step_stg_settled is false, not unknown, while step_landed holds.
-func TestStepSTGSettledInfraOnlyIsFalse(t *testing.T) {
+// only), so it has no STG release to wait for: step_stg_settled holds with
+// step_landed, and the step's usual rule moves it (R5:5.5-9; before, a
+// documents-only step such as R5:5.8-1 stayed active for ever).
+func TestStepSTGSettledInfraOnlyHoldsOnceLanded(t *testing.T) {
 	w, at := s66World(t, true, 5)
 	root := s66Landed(t, w, "M-3", infraRepo, at)
 	if o := landingState(t, w, "landing:"+infraRepo).Operations["land:"+root+":1"]; o.Phase != "landed" {
 		t.Fatalf("fixture: infra operation %s", o.Phase)
 	}
 	moveToStep(t, w, root, s2)
-	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.True || ev.STG != plan.False {
+	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.True || ev.STG != plan.True {
 		t.Fatalf("infra work landed: %+v", ev)
+	}
+	w.rule(t, s2, `{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`)
+	if moved := w.evaluate(t, s2, &deployments{}); moved != "done" {
+		t.Fatalf("landed infra work did not move the step: %q", moved)
+	}
+}
+
+// Serial: global clock and signing anchor. Infra work landed beside
+// platform work B5 never admitted: the infra root settles nothing for the
+// platform one, whichever comes first (review of 24642337: a skip that
+// answered for the whole step passed every other test).
+func TestStepSTGSettledInfraBesidePlatformWaitsForB5(t *testing.T) {
+	w, at := s66World(t, true, 5)
+	infra := s66Landed(t, w, "M-3", infraRepo, at)
+	platform := s66Landed(t, w, "M-3", "bifrost-platform", at)
+	moveToStep(t, w, infra, s2)
+	moveToStep(t, w, platform, s2)
+	if ev := stepEvidence(t, w, s2, "accepted", 2); ev.Landed != plan.True || ev.STG != plan.False {
+		t.Fatalf("infra and platform landed, platform not admitted: %+v", ev)
 	}
 }
