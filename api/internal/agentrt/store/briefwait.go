@@ -252,11 +252,12 @@ func whyNoHostTakes(ctx context.Context, tx pgx.Tx, route []string, tenant strin
 			return "", err
 		}
 		who := fmt.Sprintf("%s (%s, model %s, %s)", c.executor, c.provider, c.pattern, c.status)
-		switch q, read := quota[tool]; {
+		switch q := quotaAt(quota[tool], stop); {
 		case until != nil:
 			parts = append(parts, fmt.Sprintf("%s: the %s account's pools cool down until %s.", who, tool, until.UTC().Format(time.RFC3339)))
-		case read && q.read && q.used >= stop:
-			parts = append(parts, fmt.Sprintf("%s: its pool reads %.0f%% used, at or past the routing rule's stop of %.0f%%.", who, q.used*100, stop*100))
+		case q.read && q.used >= stop:
+			parts = append(parts, fmt.Sprintf("%s: its pool reads %.0f%% used, at or past the routing rule's stop of %.0f%%, %s.", who, q.used*100,
+				stop*100, q.measuredWords()))
 		default:
 			parts = append(parts, fmt.Sprintf("%s: the platform finds no cooldown and no quota stop for it. Why no host took it is not "+
 				"known here: the platform does not record whether a host offering %s with a model matching %q asked (a host offers what "+

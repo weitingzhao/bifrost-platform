@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -130,6 +131,125 @@ func TestMeasureClaude(t *testing.T) {
 		`{"type":"result","is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed","usage":{"input_tokens":0,"output_tokens":0}}`)
 	if m = measureClaude(filepath.Join(out, "log.txt")); len(m.Pools) != 0 {
 		t.Fatalf("a failed login read as a refusal: %+v", m.Pools)
+	}
+}
+
+// PROD 11-02: a model's own weekly limit is not the account's weekly window.
+// Its utilization reads no pool, however late it comes; the latest event of
+// each of the account's own windows is that window's reading; and a model's
+// refusal still refuses the weekly pool, until that model's limit resets.
+func TestMeasureClaudeModelWeeklyLimits(t *testing.T) {
+	event := func(kind, status string, used float64, resets int64) string {
+		return `{"type":"rate_limit_event","rate_limit_info":{"status":"` + status + `","resetsAt":` + strconv.FormatInt(resets, 10) +
+			`,"rateLimitType":"` + kind + `","utilization":` + strconv.FormatFloat(used, 'f', -1, 64) + `}}`
+	}
+	measured := func(lines ...string) Measured { return measureClaude(filepath.Join(writeLog(t, lines...), "log.txt")) }
+
+	m := measured(event("seven_day", "allowed", 0.10, 1792900000), event("seven_day_opus", "allowed_warning", 0.99, 1792700000))
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || *m.Pools[0].UsedFraction != 0.10 ||
+		m.Pools[0].ResetsAt.Unix() != 1792900000 || m.Pools[0].Limited {
+		t.Fatalf("seven_day with seven_day_opus after it: %+v", m.Pools)
+	}
+	if m = measured(event("seven_day_opus", "allowed_warning", 0.99, 1792700000), event("seven_day_sonnet", "allowed", 0.5, 1792700000)); len(m.Pools) != 0 {
+		t.Fatalf("models' limits alone read a pool: %+v", m.Pools)
+	}
+	m = measured(event("five_hour", "allowed", 0.3, 1792880000))
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:short" || *m.Pools[0].UsedFraction != 0.3 || m.Pools[0].Limited {
+		t.Fatalf("five_hour: %+v", m.Pools)
+	}
+	m = measured(event("seven_day", "allowed", 0.2, 1792900000), event("seven_day", "allowed", 0.25, 1792900000))
+	if len(m.Pools) != 1 || *m.Pools[0].UsedFraction != 0.25 {
+		t.Fatalf("two seven_day events: %+v", m.Pools)
+	}
+
+	// A model's refusal refuses the weekly pool until that model's limit
+	// resets, keeping the account's own reading, but only when the run was
+	// refused: the vendor's words name it.
+	failed := `{"type":"result","is_error":true,"result":"Opus weekly limit reached ∙ resets Nov 5","total_cost_usd":0}`
+	m = measured(event("seven_day", "allowed", 0.4, 1792900000), event("seven_day_opus", "rejected", 1, 1792700000), failed)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || !m.Pools[0].Limited || *m.Pools[0].UsedFraction != 0.4 ||
+		m.Pools[0].ResetsAt.Unix() != 1792700000 || !strings.Contains(m.Pools[0].Text, "Opus weekly limit reached") {
+		t.Fatalf("a model refused: %+v", m.Pools)
+	}
+	// The same rejected model event in a run that went on (on another model)
+	// does not cool the account: the weekly pool keeps the account's reading.
+	m = measured(event("seven_day", "allowed", 0.4, 1792900000), event("seven_day_opus", "rejected", 1, 1792700000),
+		`{"type":"result","is_error":false,"result":"done","total_cost_usd":0.01}`)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || m.Pools[0].Limited || *m.Pools[0].UsedFraction != 0.4 ||
+		m.Pools[0].ResetsAt.Unix() != 1792900000 {
+		t.Fatalf("a model's rejection in a run that went on: %+v", m.Pools)
+	}
+	// A rate_limit message on the way to a run that went on (claude fell
+	// back to another model and the main thread's model answered) refuses
+	// nothing, however the run then ended: neither the weekly pool for the
+	// model's week nor a pool of its own (review of 823038ee). The run's last
+	// words may quote the limit.
+	refusedOnTheWay := `{"type":"assistant","error":"rate_limit","message":{"model":"<synthetic>","content":[{"type":"text","text":"You've hit your Opus limit · resets Nov 5"}]}}`
+	answered := `{"type":"assistant","parent_tool_use_id":null,"message":{"model":"claude-sonnet-5-5","content":[{"type":"text","text":"Reading usage.go"}]}}`
+	done := `{"type":"result","is_error":false,"result":"done","total_cost_usd":0.01}`
+	m = measured(event("seven_day", "allowed", 0.4, 1792900000), event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered, done)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || m.Pools[0].Limited || *m.Pools[0].UsedFraction != 0.4 ||
+		m.Pools[0].ResetsAt.Unix() != 1792900000 {
+		t.Fatalf("a model's refusal on the way to a run that went on: %+v", m.Pools)
+	}
+	for name, lines := range map[string][]string{
+		"a model's refusal, alone":    {event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered, done},
+		"a rate_limit message alone":  {refusedOnTheWay, answered, done},
+		"its last words quote limits": {event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered, `{"type":"result","is_error":false,"result":"Fixed: a run that hit your weekly limit, usage limit reached, no longer cools the pool"}`},
+		"killed after the answer":     {event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered},
+		"failed otherwise":            {event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered, `{"type":"result","is_error":true,"result":"stopped at the hard limit"}`},
+		"result with no is_error":     {event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered, `{"type":"result","subtype":"error_during_execution"}`},
+	} {
+		if m = measured(lines...); len(m.Pools) != 0 {
+			t.Fatalf("%s, then the run went on: %+v", name, m.Pools)
+		}
+	}
+	// A run that did not go on is refused, whatever its result's words: the
+	// main thread's model did not answer after the message (nothing came, or
+	// only a synthetic message, an error or a subagent's answer), the message
+	// came after the result, or the result itself failed on the limit.
+	for name, lines := range map[string][]string{
+		"no answer, result not marked failed": {refusedOnTheWay, `{"type":"result","is_error":false,"result":"You've hit your Opus limit · resets Nov 5"}`},
+		"no answer, result done":              {refusedOnTheWay, done},
+		"no answer, killed":                   {refusedOnTheWay},
+		"answered before the message only":    {answered, refusedOnTheWay, done},
+		"a synthetic message after it":        {refusedOnTheWay, `{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"No response requested."}]}}`, done},
+		"an error after it":                   {refusedOnTheWay, `{"type":"assistant","error":"server_error","message":{"model":"claude-sonnet-5-5","content":[{"type":"text","text":"API Error: 500"}]}}`, done},
+		"a subagent's answer after it":        {refusedOnTheWay, `{"type":"assistant","parent_tool_use_id":"toolu_01","message":{"model":"claude-sonnet-5-5","content":[{"type":"text","text":"found it"}]}}`, done},
+		"a message after the result":          {answered, done, refusedOnTheWay},
+	} {
+		m = measured(append([]string{event("seven_day_opus", "rejected", 1, 1792700000)}, lines...)...)
+		if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || !m.Pools[0].Limited || m.Pools[0].ResetsAt.Unix() != 1792700000 {
+			t.Fatalf("%s: %+v", name, m.Pools)
+		}
+	}
+	// A result that failed on a limit after the run went on past a model's
+	// message is a refusal of its own, not that model's: it does not take the
+	// model's reset (review of the round-2 fix).
+	m = measured(event("seven_day_opus", "rejected", 1, 1792700000), refusedOnTheWay, answered,
+		`{"type":"result","is_error":true,"result":"5-hour limit reached ∙ resets 3pm"}`)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:short" || !m.Pools[0].Limited || m.Pools[0].ResetsAt != nil {
+		t.Fatalf("the result refused after the run went on: %+v", m.Pools)
+	}
+	// A result's refusal goes before the message's: its words choose the
+	// pool and name the reset when no event does.
+	for name, text := range map[string]string{"same window": "5-hour limit reached ∙ resets 3pm", "message says weekly": "Weekly limit reached ∙ resets Mon"} {
+		m = measured(`{"type":"assistant","error":"rate_limit","message":{"model":"<synthetic>","content":[{"type":"text","text":"`+text+`"}]}}`,
+			`{"type":"result","is_error":true,"result":"Claude AI usage limit reached|1792880000"}`)
+		if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:short" || !m.Pools[0].Limited || m.Pools[0].ResetsAt == nil || m.Pools[0].ResetsAt.Unix() != 1792880000 {
+			t.Fatalf("result refusal first, %s: %+v", name, m.Pools)
+		}
+	}
+	m = measured(event("seven_day_opus", "rejected", 1, 1792700000),
+		`{"type":"result","is_error":true,"result":"Opus weekly limit reached ∙ resets Nov 5","total_cost_usd":0}`)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "claude:owner:weekly" || !m.Pools[0].Limited || m.Pools[0].UsedFraction != nil ||
+		m.Pools[0].ResetsAt.Unix() != 1792700000 || !strings.Contains(m.Pools[0].Text, "Opus weekly limit reached") {
+		t.Fatalf("a model refused, alone: %+v", m.Pools)
+	}
+	// The account's own weekly refusal stands as it is.
+	m = measured(event("seven_day", "rejected", 1, 1792900000), event("seven_day_opus", "rejected", 1, 1792700000))
+	if len(m.Pools) != 1 || !m.Pools[0].Limited || m.Pools[0].ResetsAt.Unix() != 1792900000 || *m.Pools[0].UsedFraction != 1 {
+		t.Fatalf("both refused: %+v", m.Pools)
 	}
 }
 

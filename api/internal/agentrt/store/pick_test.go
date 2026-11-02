@@ -210,3 +210,75 @@ func TestALongMonthStillStops(t *testing.T) {
 		t.Fatalf("claim = %+v; want claude", c)
 	}
 }
+
+// measuredAgo dates the latest reading of pool back to ago.
+func (w *world) measuredAgo(t *testing.T, pool string, ago time.Duration) {
+	t.Helper()
+	w.legacy(t, fmt.Sprintf(`UPDATE agentrt.vendor_pool SET measured_at = clock_timestamp() - make_interval(secs => %d)
+	  WHERE vendor_pool_id = '%s'`, int(ago.Seconds()), pool))
+}
+
+// PROD 11-02: a pool is read again only by an attempt that ran on it, so a
+// reading at the quota stop holds work back only while it is recent. Measured
+// now or not quite three hours ago it holds; older, it counts as not read
+// (pace 0, so claude, behind codex's pace, goes first), a claim goes through
+// and its attempt reads the pool again. A cooldown holds however old the
+// reading.
+func TestAQuotaStopReadingHoldsOnlyWhileRecent(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.legacy(t, routingRule(1, -1, 0))
+	w.ready(t, store.Task{})
+	w.reading(t, "claude:owner:weekly", 0.99, 7*24*time.Hour-time.Hour) // 45 minutes after its reset, as on PROD
+	w.reading(t, "codex:owner:weekly", 0.5, 6*24*time.Hour)             // pace ≈ +0.36
+	if c := w.claim(t, "h1", store.LeaseTTL, claude); c != nil {
+		t.Fatalf("claude at 99 %% measured now took %+v", c)
+	}
+	w.measuredAgo(t, "claude:owner:weekly", 3*time.Hour-10*time.Minute)
+	if c := w.claim(t, "h1", store.LeaseTTL, claude); c != nil {
+		t.Fatalf("claude at 99 %% measured 2 h 50 min ago took %+v", c)
+	}
+	w.measuredAgo(t, "claude:owner:weekly", 3*time.Hour+time.Minute)
+	c := w.claim(t, "h1", store.LeaseTTL, codex, claude)
+	if c == nil || c.Tool.Executor != "exec:claude" {
+		t.Fatalf("claim = %+v; want claude, its reading older than three hours", c)
+	}
+	ch := w.choice(t, c)
+	if _, read := ch["pace_permille"]; read || ch["by"] != "pace" || fmt.Sprint(ch["passed_by_quota"]) != "[]" {
+		t.Fatalf("choice = %v; want claude picked as not read", ch)
+	}
+
+	// The Owner reads claude spent, resetting in an hour: it cools down, and
+	// the cooldown holds however old the reading is.
+	w.ready(t, store.Task{})
+	w.reading(t, "claude:owner:weekly", 1, time.Hour)
+	w.measuredAgo(t, "claude:owner:weekly", 4*time.Hour)
+	if c := w.claim(t, "h2", store.LeaseTTL, claude); c != nil {
+		t.Fatalf("claude cooling down took %+v", c)
+	}
+	if c := w.claim(t, "h2", store.LeaseTTL, claude, codex); c == nil || c.Tool.Executor != "exec:codex" {
+		t.Fatalf("claim = %+v; want codex while claude cools down", c)
+	}
+}
+
+// An event that names no fraction (an "allowed" seven_day without its
+// utilization) dates nothing: the old 99 % keeps its own age and stops
+// holding after three hours, instead of being stamped fresh by the run it
+// let through (review of 61c28c4c).
+func TestAReadingWithNoFractionKeepsTheOldReadingsAge(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.legacy(t, routingRule(1, -1, 0))
+	w.ready(t, store.Task{})
+	w.reading(t, "claude:owner:weekly", 0.99, 7*24*time.Hour-time.Hour)
+	w.measuredAgo(t, "claude:owner:weekly", 3*time.Hour+time.Minute)
+	f := w.started(t, "h1", claude)
+	reset := time.Now().Add(6 * 24 * time.Hour)
+	_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
+		Pools: []store.PoolReading{{Pool: "claude:owner:weekly", ResetsAt: &reset}}})
+	ok(t, err)
+	w.ready(t, store.Task{})
+	if c := w.claim(t, "h2", store.LeaseTTL, claude); c == nil {
+		t.Fatal("claude held again: an event with no fraction made the old 99 % look freshly measured")
+	}
+}

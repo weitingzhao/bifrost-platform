@@ -265,7 +265,14 @@ func measurePools(ctx context.Context, tx pgx.Tx, actor, source string, rs []Poo
 		      -- a new fraction with no reset is not bound to a reset already past (review 285)
 		      WHEN EXCLUDED.used_fraction IS NOT NULL AND agentrt.vendor_pool.resets_at <= EXCLUDED.measured_at THEN NULL
 		      ELSE agentrt.vendor_pool.resets_at END,
-		    measured_at = EXCLUDED.measured_at, measure_source = EXCLUDED.measure_source,
+		    -- measured_at dates the fraction: an event with no fraction (an "allowed" seven_day with no
+		    -- utilization) must not make the old fraction look fresh and hold work again (review of 61c28c4c).
+		    -- A pool with no fraction yet has no age to keep: a refusal dates and sources it (landing CI
+		    -- of 4178a222, TestPools).
+		    measured_at = CASE WHEN EXCLUDED.used_fraction IS NOT NULL OR agentrt.vendor_pool.used_fraction IS NULL
+		      THEN EXCLUDED.measured_at ELSE agentrt.vendor_pool.measured_at END,
+		    measure_source = CASE WHEN EXCLUDED.used_fraction IS NOT NULL OR agentrt.vendor_pool.used_fraction IS NULL
+		      THEN EXCLUDED.measure_source ELSE agentrt.vendor_pool.measure_source END,
 		    version = agentrt.vendor_pool.version + 1
 		  RETURNING cooldown_until`, r.Pool, tool, window, used, resets, now, source).Scan(&cooling); err != nil {
 			return err

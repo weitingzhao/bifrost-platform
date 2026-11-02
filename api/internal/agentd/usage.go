@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -370,11 +372,20 @@ var claudeEpoch = regexp.MustCompile(`limit reached\|(\d{9,11})`)
 // (rate_limit_event: status, resetsAt, rateLimitType, utilization) and its
 // refusal text (an assistant message with error rate_limit) were not seen
 // yet: read as documented, to be checked on the first real one.
+//
+// Only five_hour (the short pool) and seven_day (the weekly pool) are the
+// account's own windows; the latest event of each is its reading. A model's
+// own weekly limit (seven_day_opus, seven_day_sonnet) is not the account's
+// weekly window: its utilization reads no pool, or one model near its limit
+// would hold back all claude work (PROD 11-02: the weekly pool read 99% 45
+// minutes after its reset). Its refusal is a refusal all the same, of the
+// weekly pool until that model's limit resets (modelRefusal).
 func measureClaude(logPath string) Measured {
 	var m Measured
-	var refusal string
-	var weekly bool
+	var refusal, message string
+	var weekly, wentOn bool
 	readings := map[string]PoolReading{}
+	models := map[string]PoolReading{} // the latest event of each model's own weekly limit
 	if !eachJSON(logPath, func(_ []byte, ev map[string]any) {
 		switch ev["type"] {
 		case "result":
@@ -393,38 +404,65 @@ func measureClaude(logPath string) Measured {
 			}
 		case "assistant":
 			if ev["error"] == "rate_limit" {
+				message, wentOn = "rate_limit", false
 				for _, c := range asList(obj(ev["message"])["content"]) {
 					if text, _ := obj(c)["text"].(string); text != "" {
-						refusal = text
+						message = text
 					}
 				}
-				if refusal == "" {
-					refusal = "rate_limit"
-				}
+			} else if ev["error"] == nil && ev["parent_tool_use_id"] == nil && obj(ev["message"])["model"] != "<synthetic>" {
+				wentOn = true
 			}
 		case "rate_limit_event":
 			info := obj(ev["rate_limit_info"])
 			kind, _ := info["rateLimitType"].(string)
+			r := PoolReading{ResetsAt: unixTime(info["resetsAt"]), Limited: info["status"] == "rejected"}
 			window := ""
 			switch {
 			case kind == "five_hour":
 				window = "short"
-			case strings.HasPrefix(kind, "seven_day"):
+			case kind == "seven_day":
 				window, weekly = "weekly", true
-			}
-			if window == "" {
+			case strings.HasPrefix(kind, "seven_day_"):
+				r.Pool, r.Text = pool("claude", "weekly"), refusalText(kind+" limit")
+				models[kind] = r
+				return
+			default:
 				return
 			}
-			r := PoolReading{Pool: pool("claude", window)}
+			r.Pool = pool("claude", window)
 			if u, ok := num(info["utilization"]); ok && u <= 1 {
 				r.UsedFraction = &u
 			}
-			r.ResetsAt = unixTime(info["resetsAt"])
-			r.Limited = info["status"] == "rejected"
 			readings[window] = r
 		}
 	}) {
 		return Measured{}
+	}
+	// A rate_limit message refuses the run unless the run went on past it:
+	// the main thread's model answered after the message (claude fell back
+	// to another model), however the run then ended (a killed run has no
+	// result). Otherwise one model's limit would cool all claude work until
+	// that model's reset (review of 823038ee). A subagent's answer, a
+	// synthetic message or an error is no answer. The result's words do not
+	// decide it: a refused run's result repeats the message in words the
+	// pattern may not know, and a run that went on may quote them. A result
+	// that failed with the limit's words is a refusal of its own and stands.
+	if refusal == "" && message != "" && !wentOn {
+		refusal = message
+	}
+	overcame := message != "" && wentOn
+	// A model's refusal holds the weekly pool until that model's limit
+	// resets, keeping the account's own weekly reading of the same run; a
+	// refusal of the account's own weekly window stands as it is. Only a run
+	// that was refused counts: a run that went on (on another model) must not
+	// cool the whole account for that model's week, and a later refusal in a
+	// run that went on past the model's message is not that model's.
+	if r, ok := modelRefusal(models); ok && refusal != "" && !overcame {
+		if w, read := readings["weekly"]; !read || !w.Limited {
+			r.UsedFraction = w.UsedFraction
+			readings["weekly"] = r
+		}
 	}
 	for _, w := range []string{"short", "weekly"} {
 		if r, ok := readings[w]; ok {
@@ -452,6 +490,20 @@ func measureClaude(logPath string) Measured {
 		}
 	}
 	return m
+}
+
+// modelRefusal is the refusal among the latest events of the models' own
+// weekly limits: of several, the one that resets last (a known reset over
+// none).
+func modelRefusal(models map[string]PoolReading) (PoolReading, bool) {
+	var out PoolReading
+	for _, kind := range slices.Sorted(maps.Keys(models)) {
+		r := models[kind]
+		if r.Limited && (!out.Limited || out.ResetsAt == nil || r.ResetsAt != nil && r.ResetsAt.After(*out.ResetsAt)) {
+			out = r
+		}
+	}
+	return out, out.Limited
 }
 
 func asList(v any) []any { l, _ := v.([]any); return l }

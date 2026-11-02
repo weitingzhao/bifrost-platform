@@ -208,12 +208,20 @@ func TestEachWayAnExecutorIsUnavailableIsToldOnce(t *testing.T) {
 		{name: "cooling", why: "the codex account's pools cool down until",
 			down: func(t *testing.T, w *world) { w.reading(t, "codex:owner:weekly", 1, time.Hour) },
 			up:   func(t *testing.T, w *world) { w.reading(t, "codex:owner:weekly", 0.5, time.Hour) }},
-		{name: "quota stop", why: "its pool reads 95% used, at or past the dev tenant's quota stop of 90%",
+		{name: "quota stop", why: "its pool reads 95% used, at or past the dev tenant's quota stop of 90%, as measured at ",
 			down: func(t *testing.T, w *world) {
 				w.legacy(t, routingRule(1, -1, 0))
 				w.reading(t, "codex:owner:weekly", 0.95, time.Hour)
 			},
 			up: func(t *testing.T, w *world) { w.reading(t, "codex:owner:weekly", 0.5, time.Hour) }},
+		// PROD 11-02: a reading at the stop holds work back only while it is
+		// recent; once older, the executor is available again.
+		{name: "quota stop, until the reading is old", why: "its pool reads 95% used, at or past the dev tenant's quota stop of 90%, as measured at ",
+			down: func(t *testing.T, w *world) {
+				w.legacy(t, routingRule(1, -1, 0))
+				w.reading(t, "codex:owner:weekly", 0.95, 6*24*time.Hour)
+			},
+			up: func(t *testing.T, w *world) { w.measuredAgo(t, "codex:owner:weekly", 3*time.Hour+time.Minute) }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -241,6 +249,8 @@ func TestEachWayAnExecutorIsUnavailableIsToldOnce(t *testing.T) {
 			doc, _ := w.presence(t)
 			if e := doc.executor(t, "exec:codex"); !isBool(e.Available, false) || !strings.Contains(e.Why, c.why) || len(doc.Unserved) != 0 {
 				t.Fatalf("codex %+v; jobs without an executor %v", e, doc.Unserved)
+			} else if strings.HasPrefix(c.name, "quota stop") && !strings.Contains(e.Why, " ago); the reading holds work back until ") {
+				t.Fatalf("codex's reading does not say when it was measured: %q", e.Why)
 			}
 			if e := doc.executor(t, "exec:claude"); !isBool(e.Available, true) || e.Why != "offered by h1" || len(e.Jobs) != 5 {
 				t.Fatalf("claude %+v", e)

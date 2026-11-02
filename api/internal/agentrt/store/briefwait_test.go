@@ -134,6 +134,36 @@ func TestAWaitingBriefSaysWhatThePlatformDoesNotKnow(t *testing.T) {
 	}
 }
 
+// PROD 11-02: a candidate whose reading is at the routing rule's stop is told
+// with when that reading was measured and until when it holds work back; a
+// reading older than that holds nothing, and the note does not name it.
+func TestAWaitingBriefSaysWhenItsQuotaReadingWasMeasured(t *testing.T) {
+	t.Parallel()
+	for _, old := range []bool{false, true} {
+		w, ask := mailWorld(t, "Where do we stand?")
+		takeAndReady(t, w, ask)
+		w.legacy(t, routingRule(1, -1, 0))
+		w.reading(t, "claude:owner:weekly", 0.95, 6*24*time.Hour)
+		if old {
+			w.measuredAgo(t, "claude:owner:weekly", 3*time.Hour+time.Minute)
+		}
+		now := time.Now()
+		waitsAt(t, w, now.Add(31*time.Minute))
+		if n := tellAt(t, w, now.Add(31*time.Minute)); n != 1 {
+			t.Fatalf("told %d", n)
+		}
+		notes := platformNotes(t, w)
+		if len(notes) != 1 {
+			t.Fatalf("notes %+v", notes)
+		}
+		stopped := strings.Contains(notes[0].Body, "its pool reads 95% used, at or past the routing rule's stop of 90%, as measured at ") &&
+			strings.Contains(notes[0].Body, " ago); the reading holds work back until ")
+		if stopped == old || old && strings.Contains(notes[0].Body, "at or past") {
+			t.Fatalf("a reading measured more than three hours ago %v: %s", old, notes[0].Body)
+		}
+	}
+}
+
 // Review 490 A2: a drain in force for every host keeps work from every claim,
 // and the note names it rather than guessing at the hosts.
 func TestAWaitingBriefNamesADrain(t *testing.T) {

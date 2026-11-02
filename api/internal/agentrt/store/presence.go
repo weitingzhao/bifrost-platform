@@ -384,7 +384,7 @@ func rank(ok *bool) int {
 // (unserved when every candidate of it is known not to be available, not
 // known when none is known available and some is not known).
 func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenants map[string]string, cooling map[string]time.Time,
-	quota map[string]toolQuota, stops map[string]float64) ([]ExecutorPresence, []string, []string) {
+	quota map[string][]poolQuota, stops map[string]float64) ([]ExecutorPresence, []string, []string) {
 	type acc struct {
 		e      ExecutorPresence
 		judged []judged
@@ -460,7 +460,7 @@ func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenan
 // judgeCandidate judges one candidate of a job of tenant: its account's
 // cooldown and quota stop, as a claim reads them (claim.go, pick.go), then
 // the usable hosts' offers.
-func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, cooling map[string]time.Time, quota map[string]toolQuota,
+func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, cooling map[string]time.Time, quota map[string][]poolQuota,
 	stops map[string]float64) judged {
 	tool := toolOf(jc.executor)
 	var why []string
@@ -469,14 +469,16 @@ func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, coolin
 		stop = 1
 	}
 	// A cooldown is the account's spent window: its reading at the stop is
-	// the same news.
-	switch q := quota[tool]; {
+	// the same news. A reading at the stop holds work back only while it is
+	// recent (quotaAt), and says when it was measured.
+	switch q := quotaAt(quota[tool], stop); {
 	case !cooling[tool].IsZero():
 		why = append(why, fmt.Sprintf("the %s account's pools cool down until %s", tool, cooling[tool].UTC().Format(time.RFC3339)))
 	case q.read && q.used >= stop && stop >= 1:
-		why = append(why, fmt.Sprintf("its pool is spent (it reads %.0f%% used)", q.used*100))
+		why = append(why, fmt.Sprintf("its pool is spent: it reads %.0f%% used, %s", q.used*100, q.measuredWords()))
 	case q.read && q.used >= stop:
-		why = append(why, fmt.Sprintf("its pool reads %.0f%% used, at or past the %s tenant's quota stop of %.0f%%", q.used*100, tenant, stop*100))
+		why = append(why, fmt.Sprintf("its pool reads %.0f%% used, at or past the %s tenant's quota stop of %.0f%%, %s", q.used*100, tenant,
+			stop*100, q.measuredWords()))
 	}
 	var by, unknown []string
 	for _, h := range hosts {
