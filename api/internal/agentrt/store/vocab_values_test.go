@@ -14,7 +14,7 @@ func TestEventFieldValues(t *testing.T) {
 	const ulid = "01M59KGZ56VX9YCCCN9KCR9264"
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
 	covered := map[string]bool{}
-	for _, c := range []struct{ event, field, good, bad string }{
+	for _, c := range append([]struct{ event, field, good, bad string }{
 		{"plan_node_created", "node_kind", "step", "leaf"},
 		{"plan_node_state_changed", "to", "dropped", "deleted"},
 		{"plan_node_state_changed", "from", "planned", "draft"},
@@ -153,7 +153,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"intake_client_set", "person_id", "person:p2", "person:P2"},
 		{"intake_acked", "intake_client_id", "agent:grok-owner", "agent:"},
 		{"intake_acked", "cursor", "812.40", "40"},
-	} {
+	}, debtValueCases()...) {
 		covered[c.event+"."+c.field] = true
 		if why := badValue(c.event, c.field, c.good); why != "" {
 			t.Errorf("%s.%s refused %q: %s", c.event, c.field, c.good, why)

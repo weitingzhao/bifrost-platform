@@ -221,8 +221,9 @@ func (d *Daemon) testDBKeyless(executor string, a *Attempt, sp Spawn) error {
 const noTestDB = "agentd: this host has no test database programs (initdb, postgres, redis-server; TD-403): the database tests skip"
 
 // testRoles are the roles the agentrt tests connect as (agentrttest), as
-// CI's Postgres has them.
-var testRoles = []string{"agentrt_owner_dev", "platform_agentrt_dev", "platform_agentrt_stg", "agent_reader"}
+// CI's Postgres has them; platform_agentrt_prod for the positive test of the
+// guard that only PROD's runtime writes a TD- number (0011, tech debt §10).
+var testRoles = []string{"agentrt_owner_dev", "platform_agentrt_dev", "platform_agentrt_stg", "platform_agentrt_prod", "agent_reader"}
 
 // testDBLimit is how long the database may take to start.
 const testDBLimit = 2 * time.Minute

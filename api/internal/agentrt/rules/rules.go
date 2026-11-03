@@ -202,6 +202,8 @@ type Rule struct {
 	CardAuto *CardAuto
 	Intake   *IntakeGates
 	Landing  *Landing
+	// DebtProjects is a debt-projects rule's part (debt.go).
+	DebtProjects *DebtProjects
 }
 
 // KindOf is the kind a rule_id names, and the tenant or job it is for.
@@ -216,12 +218,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindIntake:
+	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindIntake, KindDebtProjects:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, debt-projects, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -284,6 +286,8 @@ func Parse(text []byte) (Rule, error) {
 		err = r.cardAuto(o)
 	case KindIntake:
 		err = r.intake(o)
+	case KindDebtProjects:
+		err = r.debtProjects(o)
 	}
 	if err != nil {
 		return Rule{}, err
@@ -644,6 +648,10 @@ func (r Rule) Doc() map[string]any {
 		}
 	case KindIntake:
 		for k, v := range r.Intake.doc() {
+			doc[k] = v
+		}
+	case KindDebtProjects:
+		for k, v := range r.DebtProjects.doc() {
 			doc[k] = v
 		}
 	}

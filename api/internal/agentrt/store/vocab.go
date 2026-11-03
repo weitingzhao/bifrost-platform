@@ -294,6 +294,9 @@ var bodies = map[string][]field{
 }
 
 func checkBody(eventType string, body map[string]any) error {
+	if err := checkDebtMove(eventType, body); err != nil {
+		return err
+	}
 	if eventType == "note" {
 		if err := checkViewNote(body); err != nil {
 			return err
