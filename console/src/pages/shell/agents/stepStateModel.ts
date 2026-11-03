@@ -3,7 +3,7 @@ import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { attemptRuns, firstReason, landingMoving, landingQuiet, LANDING_QUIET_MS, runContext, stepRunning, type RunContext } from './liveStepModel'
 import { taskRole, type ModuleTask, type RuntimeTasks } from './moduleDetailModel'
 import { heartbeatUnconfirmed, HEARTBEAT_UNCONFIRMED_S } from './needsCleanupModel'
-import { moduleRows, ruleQuestionIds, ruleSignoffs, type HeldItem, type ModuleRow, type StepJudge, type StepNow } from './planModuleModel'
+import { moduleRows, ruleQuestionIds, ruleSignoffs, type HeldItem, type ModuleRow, type StepJudge, type StepNow, type Unverified } from './planModuleModel'
 import { viewOldReason } from './readAge'
 
 /*
@@ -17,19 +17,29 @@ import { viewOldReason } from './readAge'
  * - unknown: a live attempt stale, or its heartbeat unconfirmed (needsCleanupModel heartbeatUnconfirmed, the Live tab's
  *   60 s rule); a moving landing with no record for over 30 min (LANDING_QUIET_MS: not seen moving; the 5.5-8 ring still
  *   marks it, faint); a task leased or running with no live attempt in the plan view; a task state, attempt state or
- *   landing phase this page does not read; registered external work with no heartbeat confirmed;
+ *   landing phase this page does not read; registered external work with no heartbeat confirmed; external work submitted
+ *   whose verification reads Stale (a binding on it exists, its last successful read is over 25 min old: a stale
+ *   reading is Unknown and does not show that an earlier failure cleared, and Stale is told before a failure on another
+ *   binding: store/planfactssnapshot.go reading, planobservations.go planObservationTTL, planverificationview.go
+ *   externalVerification);
  * - queued: a task proposed, ready or back for rework; submitted or verifying (waiting for its check); a landing parked
  *   (the controller unparks it itself when its window, rule or CI clears: landing/drill.go); external work registered
  *   and not started;
  * - held: a task blocked, paused or awaiting the Owner (each moves only to ready or cancelled: store/kernel.go taskMoves,
  *   a decision); a landing awaiting the Owner's grant; an accepted work task (not a check of another) with no landing
  *   recorded (the server lands only some tasks: store/close.go; the plan view does not say which, so no landing is
- *   promised); external work submitted and not read Verified (most is never verified); none of these would ever end
- *   as progress by itself, so none is queued; not Unknown (the lists are whole) and not idle;
+ *   promised); external work submitted whose verification read failed (an adopted external_verified binding on it
+ *   read false: store/planverificationview.go externalVerification); none of these would ever end as progress by
+ *   itself, so none is queued; not Unknown (the lists are whole) and not idle;
  * - yours: an Owner step (owner_step) with none of those, with what the plan view records on it;
  * - idle: none of those.
+ * Beside any of these, external work submitted and not read Verified or failed (verification Unknown, Stale or not
+ * recorded) is a note on the step (unverified). Unknown or not recorded is the note alone, never what holds the step:
+ * its work has finished, and nothing says anything waits on its verification (the platform reads one only through an
+ * adopted external_verified binding; most external work has none and is never verified). The round's
+ * freshness.verification is not read here: Unknown there is no condition of any one step.
  * plan-view tasks are every task under the round (planviewsnapshot.go, no limit) and external_work every record of the
- * round, so "nothing queued" and "nothing held" are said of whole lists. Claims: ~/agent-work/modview/STEP_STATE_CLAIMS.md.
+ * round, so "nothing queued" and "nothing held" are said of whole lists. Claims and sources: the R5:5.5-10 hand-in report.
  */
 
 /** The page clock a plan view is judged at: why its latest refresh failed (null while it did not), now, the runtime's tasks (roles). */
@@ -71,9 +81,25 @@ function recordedAsks(view: PlanSnapshot, step: PlanNode): string[] {
 const quietWords = (name: string, l: { phase: string; observed_at: string }) =>
   `landing of ${name} at phase "${l.phase}": no landing record for over ${LANDING_QUIET_MS / 60_000} min (last ${l.observed_at})`
 
+/**
+ * External work on the step submitted and not read Verified or failed, the latest recorded first: the step's note, not
+ * its state. Under a task with a live attempt it is that attempt's history (as judgeNow reads it).
+ */
+function unverifiedWork(step: PlanNode, { view, attempted }: RunContext): Unverified[] {
+  return view.external_work.filter(w => w.plan_node_id === step.plan_node_id && !(w.task_id && attempted.has(w.task_id))
+    && w.state === 'Submitted' && w.verification !== 'Verified' && w.verification !== 'Verification failed')
+    .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at)).map(w => ({ task: w.description.task, verification: w.verification ?? '' }))
+}
+
 /** One active step, judged at ctx; old is viewOldReason's answer ('' when the read is now). */
 export function judgeStep(step: PlanNode, ctx: RunContext, old: string): StepNow {
   if (old) return { kind: 'unknown', why: [old], queued: [], held: [] }
+  const now = judgeNow(step, ctx), unverified = unverifiedWork(step, ctx)
+  return unverified.length > 0 ? { ...now, unverified } : now
+}
+
+/** One active step from a read that is now. */
+function judgeNow(step: PlanNode, ctx: RunContext): StepNow {
   const { view, now, runtime } = ctx
   // A landing silent past LANDING_QUIET_MS is not seen moving: it is Unknown below, not running.
   const moving = stepRunning(step.plan_node_id, ctx).reasons.filter(r => !r.quiet)
@@ -101,7 +127,8 @@ export function judgeStep(step: PlanNode, ctx: RunContext, old: string): StepNow
     else unknown.push(`landing of ${name}: its phase "${l.phase}" is not one this page reads`)
   }
   for (const w of view.external_work) {
-    // Cancelled has ended; under a task with a live attempt it is that attempt's history.
+    // Cancelled has ended; under a task with a live attempt it is that attempt's history; submitted and not read failed is
+    // the step's note (unverifiedWork), not held; a Stale reading is Unknown besides.
     if (w.plan_node_id !== step.plan_node_id || (w.task_id && ctx.attempted.has(w.task_id))) continue
     const what = `external work “${w.description.task}”`
     if (w.state === 'Running' || w.state === 'Registered') {
@@ -109,8 +136,8 @@ export function judgeStep(step: PlanNode, ctx: RunContext, old: string): StepNow
       else if (w.state === 'Registered') queued.push(`${what} registered, not started`)
     } else if (w.state === 'Submitted' && w.verification === 'Verification failed') {
       held.push({ kind: 'verify-failed', text: `${what} submitted · verification failed` })
-    } else if (w.state === 'Submitted' && w.verification !== 'Verified') {
-      held.push({ kind: 'unverified', text: `${what} submitted · waits for its verification (${w.verification ? `verification ${w.verification}` : 'no verification recorded'})` })
+    } else if (w.state === 'Submitted' && w.verification === 'Stale') {
+      unknown.push(`${what} submitted: its verification reading is stale (the last recorded successful read is over 25 min old; an earlier failure is not known to have cleared)`)
     }
   }
   const heldText = held.map(h => h.text)

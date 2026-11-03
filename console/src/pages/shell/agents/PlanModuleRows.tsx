@@ -5,8 +5,8 @@ import { StepBadge } from './StepText'
 import { liveLine, liveNow, liveSpoken, NOW_SHOWN, type LiveNow, type LiveStep } from './liveStepModel'
 import type { RuntimeTasks } from './moduleDetailModel'
 import { rememberModuleRow } from './moduleRowReturn'
-import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, stepCounts, toGoText, type CellState, type ModuleRow, type RuleLine,
-  type StepCell } from './planModuleModel'
+import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, stepCounts, toGoText, unverifiedNote, type CellState, type ModuleRow,
+  type RuleLine, type StepCell } from './planModuleModel'
 import { sinceWords } from './readAge'
 import { stepRows } from './stepStateModel'
 import { workTabHref } from './workViewModel'
@@ -19,6 +19,7 @@ function Rule({ lines }: { lines: RuleLine[] }) {
 }
 
 function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
+  const note = unverifiedNote(cell)
   return <div id={detailId(cell)} role="region" aria-label={`Step ${cell.label}`} data-step-detail onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}
     className="mx-3.5 mb-3 flex min-w-0 cursor-auto flex-col gap-2 rounded-xl bg-[var(--card)] p-3 text-sm [overflow-wrap:anywhere]">
     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -32,6 +33,7 @@ function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
     <p className="m-0 break-words">{cell.title || 'Untitled step'}</p>
     {cell.step === null && <p className="m-0 text-muted-foreground">Unknown · the runtime holds no state for this step.</p>}
     {nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-muted-foreground">{line}</p>)}
+    {note && <p data-step-note="unverified" className="m-0 text-xs text-muted-foreground">{note}</p>}
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">Done when</span>
       {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
@@ -195,7 +197,7 @@ export function PlanModuleRows({ view, selected, failed = null, runtime }: { vie
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
       {legend.map(s => <span key={s} data-legend={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}{s === 'idle' ? ' (idle)' : s === 'unknown' ? ' (no state)' : ''}</span>)}
       <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block size-[5px] rounded-full bg-[var(--ops-attention-text)]" />No done rule (active or stopped)</span>
-      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old or a run on it cannot be confirmed. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old, a run on it cannot be confirmed, or the verification reading of submitted external work on it is stale. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">

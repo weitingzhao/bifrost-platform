@@ -21,7 +21,7 @@ import { answeredWords, progressOld, viewOldReason } from './readAge'
  * read's own rule elsewhere on Work: GET /progress answered more than twice the shell's 5 s poll ago (the module page's
  * "Read as of", moduleDetailModel.ts isStale / SHELL_POLL_MS; PlanRoundNote's rounds the same); the plan view's
  * snapshot older than 60 s or not Fresh, or its refresh failed (the summary's Stale).
- * Claims: ~/agent-work/modview/WORK_V36_4_CLAIMS.md.
+ * Claims and sources: the R5:5.5-4 hand-in report.
  */
 
 /**

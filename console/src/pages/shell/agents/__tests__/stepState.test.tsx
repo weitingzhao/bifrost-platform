@@ -9,7 +9,7 @@ import { NowClock } from '../../progress/progressClock'
 import { liveNow } from '../liveStepModel'
 import { moduleOf } from '../moduleDetailModel'
 import { PlanModuleDetail } from '../PlanModuleDetail'
-import { cellLabels, cellStyle, moduleRows, noRuleMarked, nowLines, spokenState, stepCounts, type ModuleRow, type StepCell } from '../planModuleModel'
+import { cellLabels, cellStyle, moduleRows, noRuleMarked, nowLines, spokenState, stepCounts, unverifiedNote, type ModuleRow, type StepCell } from '../planModuleModel'
 import { PlanModuleRows } from '../PlanModuleRows'
 import { stepRows, type StepClock } from '../stepStateModel'
 import { WorkPlanView } from '../WorkPlanView'
@@ -196,29 +196,123 @@ describe('step state now (model)', () => {
     expect(cell(on514(raw => external(raw, { state: 'Cancelled', status: 'Cancelled' })), '5.1-4').now).toEqual({ kind: 'idle' })
   })
 
-  it('external work submitted and not read Verified holds the step: Active · held, counted held, never in progress; Verified has ended', () => {
+  it('external work submitted and not read Verified holds nothing: Active · nothing running with a note, counted idle; Verified has ended', () => {
     const v = on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }))
     const c = cell(v, '5.1-4')
-    expect(c).toMatchObject({ state: 'held', now: { kind: 'held', recorded: null,
-      held: [{ kind: 'unverified', text: expect.stringMatching(/^external work “.+” submitted · waits for its verification \(verification Unknown\)$/) }] } })
-    expect(cellLabels[c.state]).toBe('Active · held')
-    expect(spokenState(c)).toBe('active, held: 1 external work waits for verification')
-    expect(nowLines(c)[0]).toMatch(/^Active · held: external work “.+” submitted · waits for its verification \(verification Unknown\)\. Submitted external work leaves this only when its verification reads Verified; nothing on the step runs or is queued\.$/)
-    // A failed verification is said as such, not as waiting for one.
-    const failed = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Verification failed' })), '5.1-4')
-    expect(failed.now).toEqual({ kind: 'held', recorded: null, held: [{ kind: 'verify-failed', text: expect.stringMatching(/^external work “.+” submitted · verification failed$/) }] })
-    expect(spokenState(failed)).toBe('active, held: 1 external work failed verification')
+    expect(c).toMatchObject({ state: 'idle', now: { kind: 'idle', unverified: [{ task: expect.any(String), verification: 'Unknown' }] } })
+    expect(cellLabels[c.state]).toBe('Active · nothing running')
+    expect(spokenState(c)).toBe('active, nothing running')
+    expect(nowLines(c).join(' ')).not.toMatch(/held:|waits for its verification|In progress/)
+    expect(unverifiedNote(c)).toMatch(/^1 external work submitted, not read Verified \(verification Unknown\): “.+”$/)
     const r51 = stepRows(v, clock()).find(r => r.label === '5.1')!
-    expect(r51).toMatchObject({ held: 1, queued: 1, running: 0, idle: 0 })
-    expect(stepCounts(r51)).toBe('2 / 6 done · 1 queued · 1 held')
+    expect(r51).toMatchObject({ held: 0, idle: 1, queued: 1, running: 0 })
+    expect(stepCounts(r51)).toBe('2 / 6 done · 1 queued · 1 idle')
+    // No verification recorded is not a fact that anything waits either: said as read in the note.
+    const none = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: undefined })), '5.1-4')
+    expect(none.now?.kind).toBe('idle')
+    expect(unverifiedNote(none)).toMatch(/\(verification not recorded\)/)
+    // Verified has ended: no note.
+    const verified = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Verified' })), '5.1-4')
+    expect(verified.now).toEqual({ kind: 'idle' })
+    expect(unverifiedNote(verified)).toBeNull()
+    // Beside a queued task the step is in progress; the submitted work is its note, not held.
+    const beside = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }); addTask(raw, id('M'), 'R5:5.1-4', 'ready') }), '5.1-4')
+    expect(beside.now).toMatchObject({ kind: 'queued', why: ['task Work M ready'], held: [], unverified: [{ verification: 'Unknown' }] })
+    // An old read says nothing of it: Unknown now, no note.
+    expect(unverifiedNote(cell(v, '5.1-4', clock({ now: Date.parse(AT) + 61_000 })))).toBeNull()
+  })
+
+  it('external work whose verification read failed holds the step: a binding on it read false, so something must be decided', () => {
+    const failed = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Verification failed' })), '5.1-4')
+    expect(failed).toMatchObject({ state: 'held', now: { kind: 'held', recorded: null, held: [{ kind: 'verify-failed', text: expect.stringMatching(/^external work “.+” submitted · verification failed$/) }] } })
+    expect(failed.now).not.toHaveProperty('unverified')
+    expect(cellLabels[failed.state]).toBe('Active · held')
+    expect(spokenState(failed)).toBe('active, held: 1 external work failed verification')
+    expect(nowLines(failed)[0]).toMatch(/^Active · held: external work “.+” submitted · verification failed\. A submitted external work has a verification result of Verification failed; nothing on the step runs or is queued\.$/)
     // 5.1 with its queued step done: the module is held, not in progress.
-    const only = stepRows(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Stale' }); node(raw, 'R5:5.1-3').state = 'done' }), clock())
+    const only = stepRows(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Verification failed' }); node(raw, 'R5:5.1-3').state = 'done' }), clock())
     expect(moduleClass(row(only, '5.1'))).toBe('held')
     expect(stepCounts(row(only, '5.1'))).toBe('3 / 6 done · 1 held')
-    expect(cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Verified' })), '5.1-4').now).toEqual({ kind: 'idle' })
-    // Beside a queued task the step is in progress, and the submitted work is still listed as held.
-    const beside = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }); addTask(raw, id('M'), 'R5:5.1-4', 'ready') }), '5.1-4')
-    expect(beside.now).toEqual({ kind: 'queued', why: ['task Work M ready'], held: [expect.stringMatching(/submitted · waits for its verification/)] })
+  })
+
+  it('external work submitted whose verification reads Stale is Unknown now, named, with the note; running still comes first', () => {
+    // A Stale reading is Unknown and does not show that an earlier failure cleared (store/planfactssnapshot.go reading).
+    const STALE = /^external work “.+” submitted: its verification reading is stale \(the last recorded successful read is over 25 min old; an earlier failure is not known to have cleared\)$/
+    const stale = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Stale' })), '5.1-4')
+    expect(stale).toMatchObject({ state: 'active-unknown', now: { kind: 'unknown', why: [expect.stringMatching(STALE)], queued: [], held: [], unverified: [{ verification: 'Stale' }] } })
+    expect(spokenState(stale)).toBe('active, what runs on it now is Unknown')
+    expect(nowLines(stale)[0]).toMatch(/^Unknown · external work “.+” submitted: its verification reading is stale/)
+    expect(nowLines(stale).join(' ')).not.toMatch(/nothing running|nothing held/)
+    expect(unverifiedNote(stale)).toMatch(/\(verification Stale\)/)
+    // Unknown over queued and held, each kept.
+    const queued = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Stale' }); addTask(raw, id('M'), 'R5:5.1-4', 'ready') }), '5.1-4')
+    expect(queued.now).toMatchObject({ kind: 'unknown', why: [expect.stringMatching(STALE)], queued: ['task Work M ready'], held: [] })
+    const held = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Stale' }); addTask(raw, id('M'), 'R5:5.1-4', 'blocked') }), '5.1-4')
+    expect(held.now).toMatchObject({ kind: 'unknown', why: [expect.stringMatching(STALE)], queued: [], held: ['task Work M blocked'] })
+    // Running before Unknown.
+    const run = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Stale' }); external(raw, {}) }), '5.1-4')
+    expect(run.now).toMatchObject({ kind: 'running', unverified: [{ verification: 'Stale' }] })
+    // The round's freshness.verification is no condition of a step: Unknown or Stale there leaves a step with Unknown work idle.
+    for (const round of ['Unknown', 'Stale']) {
+      const c = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }); (raw as Full).freshness = { ...(raw as Full).freshness, verification: round } as Full['freshness'] }), '5.1-4')
+      expect(c.now).toMatchObject({ kind: 'idle', unverified: [{ verification: 'Unknown' }] })
+    }
+  })
+
+  it("external work under a task with a live attempt is that attempt's history: never in the note, its count or its latest title", () => {
+    const linked = (more: Rec, verification = 'Unknown') => on514(raw => {
+      const description = (raw as Full).external_work[0].description as Rec
+      addTask(raw, id('M'), 'R5:5.1-4', 'ready')
+      attempt(raw, id('M'), more)
+      // The linked record is the latest: had it been read, it would be counted and quoted first.
+      external(raw, { state: 'Submitted', status: 'Submitted', verification, task_id: id('M'), recorded_at: min(1), description: { ...description, task: 'Linked run' } })
+      external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown', recorded_at: min(30), description: { ...description, task: 'Loose run' } })
+    })
+    const LOOSE = '1 external work submitted, not read Verified (verification Unknown): “Loose run”'
+    const run = cell(linked({}), '5.1-4')
+    expect(run.now).toMatchObject({ kind: 'running', what: 'Task running', unverified: [{ task: 'Loose run', verification: 'Unknown' }] })
+    expect(run.now?.unverified).toHaveLength(1)
+    expect(unverifiedNote(run)).toBe(LOOSE)
+    const stale = cell(linked({ state: 'stale', heartbeat_age_s: 130 }), '5.1-4')
+    expect(stale.now).toMatchObject({ kind: 'unknown', why: ['task Work M: its attempt is stale'], unverified: [{ task: 'Loose run' }] })
+    expect(stale.now?.unverified).toHaveLength(1)
+    expect(unverifiedNote(stale)).toBe(LOOSE)
+    // A linked Stale record is the attempt's too: no Unknown reason of its own, nothing in the note.
+    const linkedStale = cell(linked({ state: 'stale', heartbeat_age_s: 130 }, 'Stale'), '5.1-4')
+    expect(linkedStale.now).toMatchObject({ kind: 'unknown', why: ['task Work M: its attempt is stale'] })
+    expect(unverifiedNote(linkedStale)).toBe(LOOSE)
+  })
+
+  it('quotes at most 80 characters of the latest title in the note; the step lists it whole', () => {
+    const long = `${'Review the plan view '.repeat(95)}end`
+    const c = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown',
+      description: { ...((raw as Full).external_work[0].description as Rec), task: long } })), '5.1-4')
+    expect(unverifiedNote(c)).toBe(`1 external work submitted, not read Verified (verification Unknown): “${long.slice(0, 80)}…”`)
+    expect(c.external).toEqual([expect.stringContaining(long)])
+    const exact = 'x'.repeat(80)
+    const fits = cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown',
+      description: { ...((raw as Full).external_work[0].description as Rec), task: exact } })), '5.1-4')
+    expect(unverifiedNote(fits)).toBe(`1 external work submitted, not read Verified (verification Unknown): “${exact}”`)
+  })
+
+  it('counts the 80-character cap in code points, not UTF-16 units: emoji and CJK are not cut in half or cut early', () => {
+    const titled = (task: string) => cell(on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown',
+      description: { ...((raw as Full).external_work[0].description as Rec), task } })), '5.1-4')
+    const prefix = '1 external work submitted, not read Verified (verification Unknown): '
+    const eighty = '😀'.repeat(80)
+    expect(unverifiedNote(titled(eighty))).toBe(`${prefix}“${eighty}”`)
+    const c81 = titled(`${eighty}😀`)
+    expect(unverifiedNote(c81)).toBe(`${prefix}“${eighty}…”`)
+    expect(c81.external).toEqual([expect.stringContaining(`${eighty}😀`)])
+    const mixed = `${'复核A'.repeat(26)}核验😀`
+    expect([...mixed].length).toBe(81)
+    expect(unverifiedNote(titled(mixed))).toBe(`${prefix}“${[...mixed].slice(0, 80).join('')}…”`)
+  })
+
+  it('running external work with its heartbeat confirmed is still in progress beside submitted work not read Verified, with the note', () => {
+    const c = cell(on514(raw => { external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }); external(raw, {}) }), '5.1-4')
+    expect(c).toMatchObject({ state: 'active', now: { kind: 'running', what: expect.stringMatching(/^External work running/), unverified: [{ verification: 'Unknown' }] } })
+    expect(spokenState(c)).toBe('in progress')
   })
 
   it('tasks blocked, paused or awaiting the Owner hold the step: its own state, not idle, not Unknown, each listed', () => {
@@ -407,6 +501,68 @@ describe('Round 5 as on PROD 2026-11-02', () => {
     const item = within(screen.getByRole('list', { name: 'Modules in mainline order' })).getAllByRole('listitem').find(li => li.dataset.module === '5.4')!
     expect(item).toHaveTextContent('0 / 6 done · 2 idle')
     expect(item).not.toHaveTextContent('in progress')
+  })
+})
+
+/*
+ * The shape PROD's R5 plan view had on 2026-11-02 for a step whose external reviews and repairs all finished (synthetic
+ * titles and ids, no record copied): one active step, its work tasks accepted and landed, its checks accepted, nine
+ * external-work records submitted through the dispatch wrapper with verification Unknown (the view's freshness.verification
+ * Unknown too). Nothing on the step runs, is queued or waits on a decision: it reads Active · nothing running with a note,
+ * never Active · held on a verification nobody reads.
+ */
+describe('a step whose external work all finished, its verification Unknown (PROD shape, 2026-11-02)', () => {
+  const finished = (n: number) => min(200 - n * 10)
+  const reviewed = () => on514(raw => {
+    const full = raw as Full
+    addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { title: 'Step state model', landing: landing('landed', 'ok') })
+    addTask(raw, id('N'), 'R5:5.1-4', 'accepted', { title: `review ${id('M')}` })
+    addTask(raw, id('P'), 'R5:5.1-4', 'accepted', { title: 'Step state repair', landing: landing('landed', 'ok') })
+    addTask(raw, id('R'), 'R5:5.1-4', 'accepted', { title: `verify ${id('P')}` })
+    const description = full.external_work[0].description as Rec
+    for (let n = 1; n <= 9; n++) {
+      external(raw, { state: 'Submitted', status: 'Submitted', type: 'submitted', verification: 'Unknown', started_at: finished(n + 1), ended_at: finished(n),
+        recorded_at: finished(n), heartbeat_age_s: 600 * n, description: { ...description, task: `${n % 2 ? 'Review' : 'Repair'} pass ${n}`, executor: 'codex' } })
+    }
+    full.freshness = { ...full.freshness, verification: 'Unknown' } as Full['freshness']
+  })
+  const NOTE = '9 external works submitted, not read Verified (verification Unknown): “Review pass 9” +8'
+
+  it('reads Active · nothing running with a short note, not held', () => {
+    const c = cell(reviewed(), '5.1-4')
+    expect(c).toMatchObject({ step: 'active', state: 'idle', now: { kind: 'idle' } })
+    expect(c.now?.unverified).toHaveLength(9)
+    expect(cellLabels[c.state]).toBe('Active · nothing running')
+    expect(spokenState(c)).toBe('active, nothing running')
+    expect(nowLines(c)).toHaveLength(1)
+    expect(nowLines(c)[0]).toMatch(/^Active · nothing running, read now: /)
+    expect(nowLines(c).join(' ')).not.toMatch(/Review pass|held:|waits for its verification/)
+    expect(unverifiedNote(c)).toBe(NOTE)
+    const r51 = row(stepRows(reviewed(), clock()), '5.1')
+    expect(r51).toMatchObject({ held: 0, idle: 1 })
+    expect(stepCounts(r51)).toBe('2 / 6 done · 1 queued · 1 idle')
+  })
+
+  it('shows the note under the state on the module page and in the opened cell, the state word idle', () => {
+    at(NOW)
+    const v = reviewed()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+    const auth = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
+    render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><NowClock>
+      <PlanModuleDetail view={v} item={moduleOf(v, 'R5:5.1')!.item} step="" stale={false} failed={null} /></NowClock></PlatformAuthContext.Provider></QueryClientProvider>)
+    const stage = document.querySelector('[data-step-row="5.1-4"]') as HTMLElement
+    expect(stage.querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running')
+    expect(stage.querySelector('[data-step-note="unverified"]')).toHaveTextContent(NOTE)
+    expect(stage).not.toHaveTextContent('Active · held')
+    // A step with no such work carries no note.
+    expect(document.querySelector('[data-step-row="5.1-3"] [data-step-note]')).toBeNull()
+    client.clear()
+    cleanup()
+    render(<NowClock><PlanModuleRows view={v} selected="" /></NowClock>)
+    fireEvent.click(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running, no done rule' }))
+    const detail = screen.getByRole('region', { name: 'Step 5.1-4' })
+    expect(detail.querySelector('[data-step-note="unverified"]')).toHaveTextContent(NOTE)
+    expect(detail).not.toHaveTextContent('Active · held')
   })
 })
 

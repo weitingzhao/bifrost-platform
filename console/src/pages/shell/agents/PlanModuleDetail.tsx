@@ -11,7 +11,7 @@ import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
   needsNow, needsYouCards, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, stepTasks, taskActivity, taskLine, workTasks,
   type ModuleScope, type RuntimeTasks, type ShellRead, type ShellReads, type TaskLine } from './moduleDetailModel'
-import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, type CellState, type ModuleRow,
+import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, unverifiedNote, type CellState, type ModuleRow,
   type RuleLine, type StepCell } from './planModuleModel'
 import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
@@ -118,6 +118,7 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
   // Every step the controller has active opens, whatever it has now (in progress, nothing running, yours or Unknown).
   const active = cell.step === 'active'
   const open = active || selected
+  const note = active ? unverifiedNote(cell) : null
   // The rule's question and the step's goal; tasks are told under Latest task and Review (a task link would list a
   // check as "accepted" beside the work it failed), a request by its number in the rule, the step's own address is here.
   const records = cell.links.filter(l => l.kind === 'question' || l.kind === 'goal')
@@ -148,6 +149,7 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
         <StateWord state={cell.state} />
       </div>
       {active && nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-[13px] leading-[1.45] text-muted-foreground">{line}</p>)}
+      {note && <p data-step-note="unverified" className="m-0 text-xs leading-[1.45] text-muted-foreground">{note}</p>}
       <div className={`flex min-w-0 flex-col gap-0.5 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}>
         {active ? <div role="group" aria-label={`Now on ${cell.label}`} className="flex min-w-0 flex-col gap-0.5">{own}</div> : own}
         <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Review</dt><dd className="m-0 inline">{reviewWords(scope, view, cell.id, runtime)}</dd></dl>

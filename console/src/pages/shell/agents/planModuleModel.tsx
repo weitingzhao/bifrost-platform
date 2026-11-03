@@ -55,16 +55,22 @@ export const cellStyle: Record<CellState, CSSProperties> = {
 /**
  * What holds an active step with nothing running or queued: a task waiting on a decision (blocked, paused, awaiting the
  * Owner), a landing waiting for the Owner's grant, an accepted task with no landing recorded, external work submitted
- * and waiting for its verification or failed it.
+ * whose verification read failed.
  */
-export type HeldItem = { kind: 'decision' | 'grant' | 'no-landing' | 'unverified' | 'verify-failed'; text: string }
-export type StepNow =
+export type HeldItem = { kind: 'decision' | 'grant' | 'no-landing' | 'verify-failed'; text: string }
+/**
+ * External work on the step submitted and not read Verified or failed: its title and its verification as read
+ * (Unknown, Stale, or '' when none is recorded). A note beside the step's state, never what holds it.
+ */
+export type Unverified = { task: string; verification: string }
+export type StepNow = (
   | { kind: 'running'; what: string; others: number }
   | { kind: 'queued'; why: string[]; held: string[] }
   | { kind: 'unknown'; why: string[]; queued: string[]; held: string[] }
   | { kind: 'held'; held: HeldItem[]; recorded: string[] | null }
   | { kind: 'yours'; recorded: string[] }
   | { kind: 'idle' }
+) & { unverified?: Unverified[] }
 /** Judges one active step; moduleRows without one judges none (each active step Unknown: not judged). */
 export type StepJudge = (step: PlanNode) => StepNow
 /** The controller's state of a step drawn (dropped steps are not drawn); null when the runtime holds none. */
@@ -326,7 +332,7 @@ export function toGoText(row: Pick<ModuleRow, 'total' | 'toGo'>): string {
 }
 
 /*
- * What an active step has now, in words (R5:5.5-10). Claims and sources: ~/agent-work/modview/STEP_STATE_CLAIMS.md.
+ * What an active step has now, in words (R5:5.5-10). Claims and sources: the R5:5.5-10 hand-in report.
  * "In progress" is said only of work running or queued; an active step with neither, read now, is "Active · nothing
  * running"; anything not judged is Unknown with the condition tested, never idle.
  */
@@ -353,20 +359,18 @@ export function noRuleText(cell: Pick<StepCell, 'noRule' | 'step'>): string {
 
 const oneOrMany = (n: number, one: string, many: string) => n === 1 ? one : many
 /** Each kind of held item aloud, counted; and what moves it on, for the detail. */
-const HELD_ORDER: HeldItem['kind'][] = ['decision', 'grant', 'no-landing', 'unverified', 'verify-failed']
+const HELD_ORDER: HeldItem['kind'][] = ['decision', 'grant', 'no-landing', 'verify-failed']
 const HELD_SPOKEN: Record<HeldItem['kind'], (n: number) => string> = {
   decision: n => `${n} ${oneOrMany(n, 'task waits', 'tasks wait')} on a decision`,
   grant: n => `${n} ${oneOrMany(n, 'landing waits', 'landings wait')} for your grant`,
   'no-landing': n => `${n} accepted ${oneOrMany(n, 'task', 'tasks')} with no landing recorded`,
-  unverified: n => `${n} external ${oneOrMany(n, 'work waits', 'works wait')} for verification`,
   'verify-failed': n => `${n} external ${oneOrMany(n, 'work', 'works')} failed verification`,
 }
 const HELD_MOVES: Record<HeldItem['kind'], string> = {
   decision: 'a held task moves only when it is made ready again or cancelled',
   grant: 'a landing awaiting the grant waits on your grant (Needs you lists grants)',
   'no-landing': 'whether an accepted task lands the plan view does not say: it may never land',
-  unverified: 'submitted external work leaves this only when its verification reads Verified',
-  'verify-failed': 'submitted external work leaves this only when its verification reads Verified',
+  'verify-failed': 'a submitted external work has a verification result of Verification failed',
 }
 /** What was read for an Owner step's records: the plan view's waits on it and its done rule, nothing else. */
 const RECORD_SOURCES = 'none in plan-view owner_waiting or its done rule'
@@ -383,11 +387,11 @@ export function spokenState(cell: StepCell): string {
 }
 
 /*
- * What an active step has now, in words (R5:5.5-10). Claims and sources: ~/agent-work/modview/STEP_STATE_CLAIMS.md.
+ * What an active step has now, in words (R5:5.5-10). Claims and sources: the R5:5.5-10 hand-in report.
  * "In progress" is said only of work running or queued; an active step with neither, read now, is held while a task on
  * it waits on a decision, else "Active · nothing running"; anything not judged is Unknown with the condition tested.
  */
-const IDLE_CHECKED = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started); nothing held (no task blocked, paused or awaiting the Owner; no landing awaiting your grant; no accepted work task with no landing recorded; no external work submitted and not read Verified)'
+const IDLE_CHECKED = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started); nothing held (no task blocked, paused or awaiting the Owner; no landing awaiting your grant; no accepted work task with no landing recorded; no external work whose verification read failed)'
 const heldLine = (held: string[]) => held.length ? [`Held: ${held.join('; ')}.`] : []
 /** An Owner step's records: "Yours ·" while that is its state, "Owner step ·" beside another (held). */
 const recordedLines = (recorded: string[], lead: string) => [recorded.length
@@ -411,4 +415,20 @@ export function nowLines(cell: StepCell): string[] {
     case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${IDLE_CHECKED}.`, ...since]
     case 'idle': return [`Active · nothing running, read now: ${IDLE_CHECKED}.`, ...since]
   }
+}
+
+/** The most of a title the note quotes (a title may run to 2000 bytes: externalwork.go); the step's external work list has it whole. */
+const NOTE_TITLE = 80
+/**
+ * The note beside an active step's state for its external work submitted and not read Verified or failed: how many,
+ * the latest title (cut at NOTE_TITLE characters), +N for the rest; null when there is none. It says what was read,
+ * never that the step waits on it.
+ */
+export function unverifiedNote(cell: Pick<StepCell, 'now'>): string | null {
+  const list = cell.now?.unverified ?? []
+  if (list.length === 0) return null
+  const read = [...new Set(list.map(w => w.verification || 'not recorded'))].join(', ')
+  const chars = [...list[0].task]
+  const title = chars.length > NOTE_TITLE ? `${chars.slice(0, NOTE_TITLE).join('')}…` : list[0].task
+  return `${list.length} external ${oneOrMany(list.length, 'work', 'works')} submitted, not read Verified (verification ${read}): “${title}”${list.length > 1 ? ` +${list.length - 1}` : ''}`
 }

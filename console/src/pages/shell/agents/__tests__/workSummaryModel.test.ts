@@ -15,7 +15,7 @@ import type { RoundsRead } from '../planRoundModel'
 
 /*
  * R5:5.5-2: Work's one sentence and its counts are computed from plan-view and GET /plan, never written by hand (the
- * Owner 2026-11-01: Work had no answer to "where are we, what do I do"). Claims: ~/agent-work/modview/WORK_V36_2_CLAIMS.md.
+ * Owner 2026-11-01: Work had no answer to "where are we, what do I do"). Claims and sources: the R5:5.5-2 hand-in report.
  */
 
 /** The PROD R4 answer (2026-10-27), with step states set as a test needs them. */

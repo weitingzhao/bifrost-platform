@@ -10,8 +10,8 @@ import { cleanupBreakdown, cleanupGaps, cleanupHosts, cleanupWork, cleanupWords,
 /*
  * R5:5.5-4: what was left stale on Work's first screen (PROD 2026-11-01: "Host mbp-dev is offline: its last poll was 14
  * days ago."; two registered external works, TD-457 and TD-459, 50 hours without a heartbeat) is one list on Work →
- * Activity, counted by the runtime's own rules, and one entry on the summary counting that same list. Claims:
- * ~/agent-work/modview/WORK_V36_4_CLAIMS.md.
+ * Activity, counted by the runtime's own rules, and one entry on the summary counting that same list. Claims and sources:
+ * the R5:5.5-4 hand-in report.
  */
 
 /** GET /progress from real rows (W-31 3.5): h1 online, h2 reported offline 45 s after its last poll. */

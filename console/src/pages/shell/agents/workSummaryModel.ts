@@ -10,8 +10,8 @@ import type { SignoffWaitsRead } from './useRuntimePlan'
 /*
  * Work's one-sentence summary and its counts (R5:5.5-2, Design v3.6 WorkPage), computed from what plan-view and
  * GET /plan answered, never written by hand. Every count is of the rows a condition picks, not a total less the others;
- * what cannot be read says Unknown with the condition that made it so. Claims: ~/agent-work/modview/WORK_V36_2_CLAIMS.md,
- * and for one round's count (R5:5.5-4) WORK_V36_4_CLAIMS.md.
+ * what cannot be read says Unknown with the condition that made it so. Claims and sources: the R5:5.5-2
+ * hand-in report, and for one round's count the R5:5.5-4 one.
  */
 
 /** The mainline's basis once acceptance bindings are adopted (store/planverificationview.go); else controller step states. */
@@ -65,10 +65,10 @@ const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
 /** What each class means, for "How this is read". */
 export const CLASS_MEANINGS: [string, string][] = [
   ['a step in progress', 'the controller has a step active and the plan view, read now, shows work on it running (a live attempt with its heartbeat confirmed, a landing with a record in the last 30 min, running external work) or queued (a task proposed, ready, back for rework, submitted or being verified; a landing parked, which the controller unparks itself; external work registered and not started).'],
-  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, and something on it waits: a task blocked, paused or awaiting the Owner (each moves only when it is made ready again or cancelled), a landing awaiting your grant, an accepted work task with no landing recorded (the plan view does not say whether it lands), or external work submitted and not read Verified (most is never verified). None of these is counted as progress.'],
+  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, and something on it waits: a task blocked, paused or awaiting the Owner (each moves only when it is made ready again or cancelled), a landing awaiting your grant, an accepted work task with no landing recorded (the plan view does not say whether it lands), or submitted external work whose verification result is Verification failed. None of these is counted as progress. Submitted external work with verification Unknown or not recorded is noted on its step separately; it does not by itself establish a hold (most is never verified). A stale verification reads Unknown now.'],
   ['an Owner step active', 'the controller has an Owner step (owner_step) active and the plan view, read now, shows nothing running, queued or held on it.'],
   ['an active step with nothing running', 'the controller has a step active and the plan view, read now, shows nothing running, queued or held on it. The active state alone is not work: the controller opens a step when a task on it is first leased, and a recorded event can move a step to active with no task on it.'],
-  ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or an attempt on the step is stale or its heartbeat unconfirmed, or a landing on it has no record for over 30 min, or a task, attempt or landing reads in a state this page does not know.'],
+  ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or an attempt on the step is stale or its heartbeat unconfirmed, or a landing on it has no record for over 30 min, or submitted external work on it has a stale verification reading (the last recorded successful read is over 25 min old), or a task, attempt or landing reads in a state this page does not know.'],
   ['no step started', 'every step is planned in the runtime: no task on it has been taken there. Work done outside the runtime (a thread, an external run not linked to a step) moves no step, so this does not say nothing was done.'],
   ['every step done', 'the controller marked each step done: not acceptance, not deployment.'],
   ['steps done and none active', 'some steps done, the rest planned, none active.'],

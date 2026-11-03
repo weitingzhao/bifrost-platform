@@ -13,7 +13,7 @@ vi.mock('@/api/client', async original => ({ ...await original<object>(), operat
  * R5:5.5-4 (PROD 2026-11-01): Work's first screen carried "Host mbp-dev is offline: its last poll was 14 days ago." for
  * two weeks, and two registered external works (TD-457, TD-459) had sent no heartbeat for 50 hours. They are true, and
  * no news to the round: they are one list, Needs cleanup, on Work → Activity, and the summary keeps one entry whose count
- * is that list's. Claims: ~/agent-work/modview/WORK_V36_4_CLAIMS.md.
+ * is that list's. Claims and sources: the R5:5.5-4 hand-in report.
  */
 
 const NOW = Date.parse(prod.as_of)
