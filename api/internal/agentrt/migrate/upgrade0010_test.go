@@ -98,7 +98,12 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 // new nullable column and the new migration record are excluded after upgrade.
 func data0010(t *testing.T, conn *pgx.Conn) map[string]string {
 	t.Helper()
-	ctx := context.Background()
+	return data0010At(context.Background(), t, conn)
+}
+
+// data0010 with the caller's context (a bounded test reads its snapshot within its budget).
+func data0010At(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]string {
+	t.Helper()
 	rows, err := conn.Query(ctx, `SELECT relname, relkind::text FROM pg_class
 	  WHERE relnamespace = 'agentrt'::regnamespace AND relkind IN ('r','S') ORDER BY relname`)
 	must0010(t, err)
@@ -132,8 +137,14 @@ func data0010(t *testing.T, conn *pgx.Conn) map[string]string {
 // columns, triggers, indexes, function definitions/ACLs and migration records.
 func schema0010(t *testing.T, conn *pgx.Conn) string {
 	t.Helper()
+	return schema0010At(context.Background(), t, conn)
+}
+
+// schema0010 with the caller's context.
+func schema0010At(ctx context.Context, t *testing.T, conn *pgx.Conn) string {
+	t.Helper()
 	var out string
-	must0010(t, conn.QueryRow(context.Background(), `SELECT jsonb_build_object(
+	must0010(t, conn.QueryRow(ctx, `SELECT jsonb_build_object(
 	  'constraints', (SELECT jsonb_agg(x ORDER BY x::text) FROM (SELECT jsonb_build_array(conrelid::regclass::text, conname, pg_get_constraintdef(oid)) x FROM pg_constraint WHERE connamespace = 'agentrt'::regnamespace) s),
 	  'columns', (SELECT jsonb_agg(x ORDER BY x::text) FROM (SELECT jsonb_build_array(table_name, column_name, data_type, is_nullable, column_default) x FROM information_schema.columns WHERE table_schema = 'agentrt') s),
 	  'triggers', (SELECT jsonb_agg(x ORDER BY x::text) FROM (SELECT pg_get_triggerdef(t.oid) x FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'agentrt'::regnamespace AND NOT t.tgisinternal) s),
