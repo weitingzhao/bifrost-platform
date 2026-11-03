@@ -29,6 +29,9 @@ type CardTrigger struct {
 	// Sent is an STG block's detail.sent: the refusal was found after B5 had
 	// already sent P (R5:5.7-2), so P is on STG.
 	Sent map[string]any
+	// Rework is a rework_landed trigger's frozen landing_rework_seen, with
+	// each sibling's title (R5:5.5-18).
+	Rework *ReworkView
 }
 
 // ParkedLongAfter is how long a park (other than ci_stuck and rule) lasts
@@ -125,6 +128,18 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			continue
 		}
 		switch {
+		case o.Phase == "failed" && o.Outcome == "declined":
+			// Declined, and reworked work landed on its step with every
+			// change different (R5:5.5-18): the Owner says whether it
+			// delivers the root's work. Its mission need not be open: the
+			// answer is step evidence only.
+			t, ok, err := reworkTrigger(ctx, tx, s, repo, o.Task, op, lastFailed[op].at)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, t)
+			}
 		case o.Phase == "failed" && o.Outcome == "in_main":
 			// Already in main before a claim (CUT §11.8 v3 item 4): the Owner
 			// counts it delivered or not; nothing else ends it.

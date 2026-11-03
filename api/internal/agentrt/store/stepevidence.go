@@ -223,6 +223,23 @@ func (f *stepFacts) landing() *stepLanding {
 		}
 		if landed[by] {
 			statuses[d.i] = rootDelivered
+			continue
+		}
+		// Or the Owner counted its work delivered by reworked siblings
+		// that are all still landed on the step (R5:5.5-18, reworkExcuse).
+		// It is not added to the landed roots: it has no STG of its own.
+		sibs, err := landedSiblings(f.ctx, f.tx, folds[d.repo], d.repo, f.step, d.task)
+		if err != nil {
+			f.err = err
+			return nil
+		}
+		ok, err := reworkExcuse(f.ctx, f.tx, "landing:"+d.repo, d.task, d.op, sibs)
+		if err != nil {
+			f.err = err
+			return nil
+		}
+		if ok {
+			statuses[d.i] = rootDelivered
 		}
 	}
 	l.value = landingValue(statuses)

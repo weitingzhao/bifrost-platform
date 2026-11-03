@@ -24,7 +24,7 @@ var section8Choices = []string{"try_again", "do_not_merge", "confirm_main_lost"}
 // cardOutcomeWhys are the outcome / why pairs a landing_card_outcome may
 // record (CUT §11.6 v3 item 5).
 var cardOutcomeWhys = map[string][]string{
-	"applied":      {"repo_resumed", "not_delivered", "counted_delivered", "release_granted", "release_withheld", "quarantine_closed"},
+	"applied":      {"repo_resumed", "not_delivered", "counted_delivered", "release_granted", "release_withheld", "quarantine_closed", "counted_replaced", "still_owed"},
 	"moot":         {"stop_superseded", "already_resumed", "trigger_gone"},
 	"refused":      {"unknown_choice", "channel", "actor"},
 	"held":         {"wait", "keep_stopped", "remind_later"},
@@ -80,7 +80,8 @@ func badCardOutcome(v any) string {
 		return "landing_card_outcome of a root names the root"
 	}
 	if m["outcome"] == "applied" {
-		ok := map[string][]string{CardRepoStopped: {"repo_resumed"}, CardLandedUnverified: {"not_delivered"}, CardInMain: {"not_delivered", "counted_delivered"}}[m["kind"].(string)]
+		ok := map[string][]string{CardRepoStopped: {"repo_resumed"}, CardLandedUnverified: {"not_delivered"}, CardInMain: {"not_delivered", "counted_delivered"},
+			CardReworkLanded: {"counted_replaced", "still_owed"}}[m["kind"].(string)]
 		if !slices.Contains(ok, m["why"].(string)) {
 			return "landing_card_outcome applies only a resume or an Owner's delivery decision; the §8 choices are landing_answer"
 		}
@@ -125,7 +126,7 @@ func badCardOutcomeChoice(m map[string]any) string {
 	case slices.Contains(section8Choices, choice):
 		return "landing_card_outcome carries a §8 choice only as moot; §8 is landing_answer"
 	case outcome == "applied":
-		if map[string]string{"repo_resume": "repo_resumed", "confirm_not_delivered": "not_delivered", "count_as_delivered": "counted_delivered", "retry_release": "release_granted", "do_not_release": "release_withheld", "accept_unreconciled": "quarantine_closed"}[choice] != why {
+		if map[string]string{"repo_resume": "repo_resumed", "confirm_not_delivered": "not_delivered", "count_as_delivered": "counted_delivered", "retry_release": "release_granted", "do_not_release": "release_withheld", "accept_unreconciled": "quarantine_closed", "count_replaced": "counted_replaced", "still_owed": "still_owed"}[choice] != why {
 			return "landing_card_outcome applied reason does not follow its choice"
 		}
 	case outcome == "acknowledged":
@@ -262,7 +263,7 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			outcome, why = res.Outcome, res.Why
 			return err
 		}
-		dispose := false
+		dispose, replace := false, false
 		body := map[string]any{"v": "1", "question_id": q.ID, "prep": c.Prep, "kind": c.Kind, "trigger_seq": c.TriggerSeq, "letter": q.Option, "choice": choice,
 			"by": q.AnsweredBy, "answered_at": answeredAt.UTC().Format(time.RFC3339Nano), "channel": q.Channel, "answer_text": q.Text}
 		if c.Root != "" {
@@ -293,6 +294,13 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			}
 			// The disposition follows its answer's record, below.
 			dispose = true
+		case choice == "count_replaced" || choice == "still_owed":
+			// R5:5.5-18: only count_replaced records landing_replaced,
+			// below, in this transaction; still_owed records nothing else.
+			outcome, why = "applied", "still_owed"
+			if choice == "count_replaced" {
+				outcome, why, replace = "applied", "counted_replaced", true
+			}
 		case choice == "ack":
 			outcome, why = "acknowledged", "ack"
 		case slices.Contains([]string{"wait", "keep_stopped", "remind_later"}, choice):
@@ -306,8 +314,15 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 		if c.Root != "" {
 			ev.TaskID, ev.MissionID = c.Root, mission
 		}
-		if _, err = Append(ctx, tx, ev); err != nil || !dispose {
+		if _, err = Append(ctx, tx, ev); err != nil {
 			return err
+		}
+		if replace {
+			hook("rework-replacing", c.Root)
+			return recordReplaced(ctx, tx, stream, c, mission, q.ID)
+		}
+		if !dispose {
+			return nil
 		}
 		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: c.Root, MissionID: mission,
 			Body: map[string]any{"text": "Landing counted by the Owner: " + why, "landing_disposed": map[string]any{"v": "1", "root": c.Root, "op": c.Op,

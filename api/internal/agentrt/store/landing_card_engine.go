@@ -71,6 +71,8 @@ var cardChoiceLabels = map[string]string{
 	"keep_stopped":          "Keep stopped (ask again in 24 hours)",
 	"confirm_not_delivered": "Count it as not delivered",
 	"count_as_delivered":    "Count it as delivered (its change is in main)",
+	"count_replaced":        "Count its work delivered by the tasks listed (the step no longer waits on it)",
+	"still_owed":            "Its work is still owed (the step stays open)",
 }
 
 // LandingCardRequest is the frozen request a trigger's card asks: title, body,
@@ -87,6 +89,7 @@ func LandingCardRequest(repo string, tr CardTrigger, title string) map[string]an
 		CardLateLanding: "nothing waits on your answer", CardCIStuck: "the landing waits for its CI",
 		CardParkedLong: "the landing stays parked until its bound", CardLandedUnverified: "the reconciler keeps reading main",
 		CardInMain: "the task's mission stays open", CardLateRevert: "nothing waits on your answer",
+		CardReworkLanded: "the step stays open until you decide",
 	}[tr.Kind]
 	if tr.Family == "stg" {
 		body, meanwhile = stgCardBody(repo, tr), "Automatic STG release stays subject to the signed rule and all release checks."
@@ -129,6 +132,9 @@ func landingCardBody(repo string, tr CardTrigger) string {
 		return fmt.Sprintf("Repository %s: %s landed, but since %s main has not shown it in effect (%s). Count it as not delivered, or decide later while main is read again.", repo, tr.Op, at, tr.Why)
 	case CardLateRevert:
 		return fmt.Sprintf("Repository %s: %s was reverted in main at %s, after its mission closed as delivered. The mission is not reopened; this is for you to know.", repo, tr.Op, at)
+	case CardReworkLanded:
+		body, _ := reworkCardBody(repo, tr)
+		return body
 	case CardInMain:
 		return fmt.Sprintf("Repository %s: this task's change was already in main when its landing was to start (%s, %s). Count it as delivered, or as not delivered.", repo, tr.Op, at)
 	}
@@ -149,7 +155,8 @@ func cardTitle(ctx context.Context, tx pgx.Tx, repo string, tr CardTrigger) (str
 	}
 	verb := map[string]string{CardRootFailed: "Landing failed", CardFloor: "Cannot land", CardOkMissing: "Push not in main",
 		CardLateLanding: "Landed late", CardCIStuck: "CI running long", CardParkedLong: "Landing parked",
-		CardLandedUnverified: "Landed, not verified", CardInMain: "Already in main", CardLateRevert: "Reverted after close"}[tr.Kind]
+		CardLandedUnverified: "Landed, not verified", CardInMain: "Already in main", CardLateRevert: "Reverted after close",
+		CardReworkLanded: "Declined, rework landed"}[tr.Kind]
 	return verb + ": " + firstLine(title), nil
 }
 
@@ -381,7 +388,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 			return err
 		}
 		c = cards[prep]
-		if c.Family == "stg" && !c.AskStarted && !c.Bound && !c.Ended() {
+		if (c.Family == "stg" || c.Kind == CardReworkLanded) && !c.AskStarted && !c.Bound && !c.Ended() {
 			applies, err := cardApplies(ctx, tx, c, DecisionAt())
 			if err != nil {
 				return err
@@ -428,7 +435,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		// An earlier Ask may have succeeded with its reply lost. Bind that
 		// question first, even if its trigger moved on, so settlement can
 		// record a moot answer or withdraw it instead of leaving an orphan.
-		if c.Family == "stg" && !ok {
+		if (c.Family == "stg" || c.Kind == CardReworkLanded) && !ok {
 			applies, err := cardApplies(ctx, tx, c, DecisionAt())
 			if err != nil {
 				return err

@@ -216,14 +216,31 @@ func LandingDeliveredByCandidates(ctx context.Context, db DB, repo string, s lan
 			return err
 		}
 		landed := map[[2]string]bool{} // root, a sibling landed on its step
+		sibs := map[string][]ReworkSibling{}
 		for _, p := range pairs {
-			if s.Operations[s.LatestOperation(p[1])].Phase == "landed" {
+			if byOp := s.LatestOperation(p[1]); s.Operations[byOp].Phase == "landed" {
 				landed[p] = true
+				sibs[p[0]] = append(sibs[p[0]], ReworkSibling{By: p[1], ByOp: byOp, NewA: s.Operations[byOp].A})
 			}
+		}
+		// A root the Owner disposed of, or whose work he counted delivered
+		// by siblings still landed (R5:5.5-18), is not compared again.
+		skip := map[string]bool{}
+		for root := range sibs {
+			op := s.LatestOperation(root)
+			why, err := landingDisposed(ctx, tx, stream, root, op)
+			if err != nil {
+				return err
+			}
+			excused, err := reworkExcuse(ctx, tx, stream, root, op, sibs[root])
+			if err != nil {
+				return err
+			}
+			skip[root] = why != "" || excused
 		}
 		for _, p := range pairs {
 			op, byOp := s.LatestOperation(p[0]), s.LatestOperation(p[1])
-			if by, ok := noted[[2]string{p[0], op}]; (ok && landed[[2]string{p[0], by}]) || !landed[p] {
+			if by, ok := noted[[2]string{p[0], op}]; (ok && landed[[2]string{p[0], by}]) || !landed[p] || skip[p[0]] {
 				continue
 			}
 			out = append(out, DeliveredByPair{Root: p[0], Op: op, OldA: s.Operations[op].A, By: p[1], ByOp: byOp, NewA: s.Operations[byOp].A})

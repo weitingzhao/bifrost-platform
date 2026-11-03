@@ -224,6 +224,10 @@ var bodies = map[string][]field{
 		// Owner declined had its same change landed from another accepted
 		// implementation of its step (landing_delivered_by.go, R5:5.6-1).
 		{"landing_delivered_by", kAny, true},
+		// landing_rework_seen / landing_replaced: a declined root whose step
+		// has reworked work landed, every change different, and the Owner's
+		// count_replaced on its card (landing_rework.go, R5:5.5-18).
+		{"landing_rework_seen", kAny, true}, {"landing_replaced", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -631,6 +635,12 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_delivered_by" {
 		return badLandingDeliveredBy(v)
+	}
+	if eventType == "note" && name == "landing_rework_seen" {
+		return badLandingReworkSeen(v)
+	}
+	if eventType == "note" && name == "landing_replaced" {
+		return badLandingReplaced(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

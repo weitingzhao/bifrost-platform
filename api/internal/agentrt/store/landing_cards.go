@@ -46,9 +46,12 @@ const (
 	CardLandedUnverified = "landed_unverified"
 	CardInMain           = "in_main"
 	CardLateRevert       = "late_revert"
-	CardSTGFailed        = "stg_failed"
-	CardSTGBlocked       = "stg_blocked"
-	CardSTGIneligible    = "stg_ineligible"
+	// CardReworkLanded: a declined root whose step has reworked work
+	// landed, every change different (R5:5.5-18, landing_rework.go).
+	CardReworkLanded  = "rework_landed"
+	CardSTGFailed     = "stg_failed"
+	CardSTGBlocked    = "stg_blocked"
+	CardSTGIneligible = "stg_ineligible"
 )
 
 // cardChoices are the semantic choices each kind may offer, in order.
@@ -63,6 +66,7 @@ var cardChoices = map[string][][]string{
 	CardLandedUnverified: {{"confirm_not_delivered", "wait"}},
 	CardInMain:           {{"count_as_delivered", "confirm_not_delivered"}},
 	CardLateRevert:       {{"ack", "remind_later"}},
+	CardReworkLanded:     {{"count_replaced", "still_owed", "wait"}},
 	CardSTGFailed:        {{"retry_release", "do_not_release"}},
 	CardSTGBlocked:       {{"ack", "remind_later"}, {"ack", "remind_later", "accept_unreconciled"}},
 	CardSTGIneligible:    {{"ack", "remind_later"}},
@@ -275,6 +279,9 @@ func checkCardAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 		}
 		if body["family"] == "stg" {
 			return checkStgCardPrepared(ctx, tx, body)
+		}
+		if body["kind"] == CardReworkLanded {
+			return checkReworkCardPrepared(ctx, tx, body)
 		}
 		return nil
 	case !exists:
