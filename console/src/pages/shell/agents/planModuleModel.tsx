@@ -10,23 +10,66 @@ import { planNodeHref } from './usePlanSnapshot'
  * these are controller step states (execution progress), not acceptance or deployment.
  */
 
-/** A step's state as its cell shows it: the controller's state, or unknown when the runtime holds none. */
-export type CellState = 'done' | 'active' | 'planned' | 'stopped' | 'unknown'
-/** How a cell's state is read aloud ("Step 4.1-3: done"). */
-export const cellWords: Record<CellState, string> = { done: 'done', active: 'in progress', planned: 'not started', stopped: 'stopped', unknown: 'unknown' }
-/** How a cell's state is written in its detail. */
-export const cellLabels: Record<CellState, string> = { done: 'Done', active: 'In progress', planned: 'Not started', stopped: 'Stopped', unknown: 'Unknown' }
 /**
- * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; stopped and unknown
- * are marked apart so that neither reads as progress. Ops tokens only (styles/opsAppearance.css).
+ * A step's state as its cell shows it (R5:5.5-10): done, not started and stopped are the controller's; an active step
+ * is shown by what it has now (stepStateModel.ts): in progress (work running or queued), held (a task waits on a
+ * decision), active with nothing running (idle), the Owner's (yours), or active with its work now Unknown; unknown is
+ * a step the runtime holds no state for.
+ */
+export type CellState = 'done' | 'active' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
+/** How a cell's state is read aloud ("Step 4.1-3: done"); spokenState says the derived ones whole. */
+export const cellWords: Record<CellState, string> = {
+  done: 'done', active: 'in progress', held: 'active, held', idle: 'active, nothing running', yours: 'yours', planned: 'not started', stopped: 'stopped',
+  'active-unknown': 'active, what runs on it now is Unknown', unknown: 'unknown',
+}
+/** How a cell's state is written in its detail and the legend. */
+export const cellLabels: Record<CellState, string> = {
+  done: 'Done', active: 'In progress', held: 'Active · held', idle: 'Active · nothing running', yours: 'Yours', planned: 'Not started', stopped: 'Stopped',
+  'active-unknown': 'Active · Unknown now', unknown: 'Unknown',
+}
+/**
+ * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; held is barred on the
+ * attention tone, an active step with nothing running an empty outline (nothing in it), the Owner's filled on the
+ * attention tone; an active step whose work now is Unknown is dashed in the primary tone, apart from a step with no
+ * state (dashed grey); stopped is hatched red. Ops tokens only (styles/opsAppearance.css).
  */
 export const cellStyle: Record<CellState, CSSProperties> = {
   done: { background: 'var(--primary)' },
   active: { background: 'repeating-linear-gradient(135deg, var(--primary) 0 3px, transparent 3px 6px)', boxShadow: 'inset 0 0 0 1px var(--primary)' },
+  held: { background: 'repeating-linear-gradient(90deg, var(--ops-attention-text) 0 2px, transparent 2px 5px)', boxShadow: 'inset 0 0 0 1px var(--ops-attention-text)' },
+  idle: { background: 'transparent', boxShadow: 'inset 0 0 0 1px var(--primary)' },
+  yours: { background: 'var(--ops-attention-fill)', boxShadow: 'inset 0 0 0 1px var(--ops-attention-text)' },
   planned: { background: 'var(--muted)', boxShadow: 'inset 0 0 0 1px var(--border), var(--ops-inset)' },
   stopped: { background: 'repeating-linear-gradient(45deg, var(--color-lamp-red) 0 2px, transparent 2px 5px)', boxShadow: 'inset 0 0 0 1px var(--color-lamp-red)' },
+  'active-unknown': { background: 'transparent', outline: '1px dashed var(--primary)', outlineOffset: '-1px' },
   unknown: { background: 'transparent', outline: '1px dashed var(--color-lamp-gray)', outlineOffset: '-1px' },
 }
+
+/**
+ * What an active step has now, derived from the plan view held (stepStateModel.ts judgeStep), each with what made it so:
+ * running (a live attempt with its heartbeat confirmed, a landing seen moving, running external work), queued, unknown
+ * (the condition tested), held (each item with what holds it; on an Owner step with what the plan view records on it),
+ * the Owner's with what the plan view records on it, or idle. Queued and Unknown keep what is held too, so that none is
+ * hidden.
+ */
+/**
+ * What holds an active step with nothing running or queued: a task waiting on a decision (blocked, paused, awaiting the
+ * Owner), a landing waiting for the Owner's grant, an accepted task with no landing recorded, external work submitted
+ * and waiting for its verification or failed it.
+ */
+export type HeldItem = { kind: 'decision' | 'grant' | 'no-landing' | 'unverified' | 'verify-failed'; text: string }
+export type StepNow =
+  | { kind: 'running'; what: string; others: number }
+  | { kind: 'queued'; why: string[]; held: string[] }
+  | { kind: 'unknown'; why: string[]; queued: string[]; held: string[] }
+  | { kind: 'held'; held: HeldItem[]; recorded: string[] | null }
+  | { kind: 'yours'; recorded: string[] }
+  | { kind: 'idle' }
+/** Judges one active step; moduleRows without one judges none (each active step Unknown: not judged). */
+export type StepJudge = (step: PlanNode) => StepNow
+/** The controller's state of a step drawn (dropped steps are not drawn); null when the runtime holds none. */
+export type ControllerState = 'done' | 'active' | 'planned' | 'stopped' | null
+const NOT_JUDGED: StepNow = { kind: 'unknown', why: ['what runs on it now is not judged here (no plan-view clock given)'], queued: [], held: [] }
 
 /** A record a step links to; kind says which page the link opens. */
 export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node'; href: string; text: string; note?: string }
@@ -34,6 +77,14 @@ export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node
 export type RuleLine = { text: string; children?: RuleLine[] }
 export type StepCell = {
   id: string; label: string; title: string; state: CellState; owner: boolean; effect: boolean
+  /** The controller's state (nodes[].state). */
+  step: ControllerState
+  /** What an active step has now (null for a step not active). */
+  now: StepNow | null
+  /** Its done rule is {}: nothing closes it by evidence (R5:5.5-10 c). */
+  noRule: boolean
+  /** When the step took its state: the time of its state event (state_event_id) while that event is in recent_changes; else null. */
+  since: string | null
   /** The done rule in words; empty for the empty rule {}. */
   rule: RuleLine[]
   links: StepLink[]
@@ -45,8 +96,13 @@ export type ModuleRow = {
   id: string; label: string; lane: string; title: string; current: boolean; href: string
   /** The steps not dropped, in plan order: a dropped step is neither drawn nor counted. */
   cells: StepCell[]
-  /** total = cells.length, the denominator store/plan CountSteps uses (every step not dropped). */
+  /**
+   * total = cells.length, the denominator store/plan CountSteps uses (every step not dropped). active: the steps the
+   * controller has active, each counted once more by what it has now (running + queued + held + idle + yours +
+   * nowUnknown = active); unknown: the steps with no state.
+   */
   total: number; done: number; active: number; stopped: number; unknown: number; dropped: number
+  running: number; queued: number; held: number; idle: number; yours: number; nowUnknown: number
   /** Steps to go: every step less the done and the dropped ones (stopped and unknown steps are still to go). */
   toGo: number
   /** The blocking edges from this item whose milestone is not verified yet (waiting_on). */
@@ -80,6 +136,11 @@ export function ruleTaskIds(rule: unknown): string[] {
 /** The question ids a done rule names (question_answered), each once. */
 export function ruleQuestionIds(rule: unknown): string[] {
   return [...new Set(atomValues(rule, 'question_answered').map(q => isRecord(q) ? str(q.question) : '').filter(Boolean))]
+}
+
+/** The sign-offs a done rule waits on (owner_signoff), each once. */
+export function ruleSignoffs(rule: unknown): string[] {
+  return [...new Set(atomValues(rule, 'owner_signoff').map(str).filter(Boolean))]
 }
 
 const envName = (v: unknown) => str(v) ? str(v).toUpperCase() : 'an unnamed environment'
@@ -129,8 +190,46 @@ export function ruleWords(rule: unknown, taskTitle: (id: string) => string = () 
   return [ruleLine(rule, taskTitle, 0)]
 }
 
-function cellState(state: PlanNode['state']): CellState | 'dropped' {
-  return state === null ? 'unknown' : state
+/** The empty rule {}: no condition, so nothing closes the step by evidence. */
+const isEmptyRule = (rule: unknown) => isRecord(rule) && Object.keys(rule).length === 0
+
+/** The cell's state: the controller's, an active step's by what it has now. */
+export function shownState(step: ControllerState, now: StepNow | null): CellState {
+  if (step === null) return 'unknown'
+  if (step !== 'active') return step
+  const kind = (now ?? NOT_JUDGED).kind
+  return kind === 'running' || kind === 'queued' ? 'active' : kind === 'unknown' ? 'active-unknown' : kind
+}
+
+/** A row's counts from its cells: each by its own condition, none a total less the others. */
+function rowCounts(cells: StepCell[]) {
+  const count = (s: CellState) => cells.filter(c => c.state === s).length
+  const nowCount = (k: StepNow['kind']) => cells.filter(c => c.now?.kind === k).length
+  const done = count('done')
+  return { total: cells.length, done, active: cells.filter(c => c.step === 'active').length, running: nowCount('running'), queued: nowCount('queued'),
+    held: nowCount('held'), idle: nowCount('idle'), yours: nowCount('yours'), nowUnknown: nowCount('unknown'), stopped: count('stopped'),
+    unknown: cells.filter(c => c.step === null).length, toGo: cells.length - done }
+}
+
+/**
+ * One row with its active steps judged again (the module page: its row judged each second on the page clock while the
+ * rest of the module's scope is built once per plan view).
+ */
+export function judgeRow(view: PlanSnapshot, row: ModuleRow, judge: StepJudge): ModuleRow {
+  const cells = row.cells.map(c => {
+    const step = c.step === 'active' ? view.nodes.find(n => n.plan_node_id === c.id) : undefined
+    if (!step) return c
+    const now = judge(step)
+    return { ...c, now, state: shownState('active', now) }
+  })
+  return { ...row, cells, ...rowCounts(cells) }
+}
+
+/** When the step took its state, from its state event while the plan's recent window holds it (no other field says). */
+function stateSince(view: PlanSnapshot, step: PlanNode): string | null {
+  if (step.state_event_id == null) return null
+  const e = view.recent_changes.find(r => r.event_id === step.state_event_id)
+  return e && e.event_type === 'plan_node_state_changed' && e.body_json.to === step.state ? e.at : null
 }
 function milestoneWords(milestone: string) {
   const env: Record<string, string> = { prod: 'on PROD', stg: 'on STG', dev: 'on DEV' }
@@ -170,8 +269,11 @@ function itemSteps(id: string, children: Map<string, PlanNode[]>, seen = new Set
   return (children.get(id) ?? []).flatMap(child => child.node_kind === 'step' ? [child] : itemSteps(child.plan_node_id, children, seen))
 }
 
-/** One row per plan item: the mainline first in its order, then the other items in plan order. */
-export function moduleRows(view: PlanSnapshot): ModuleRow[] {
+/**
+ * One row per plan item: the mainline first in its order, then the other items in plan order. An active step is shown
+ * by what judge says it has now (stepStateModel.ts stepRows); with no judge, as Unknown (not judged), never in progress.
+ */
+export function moduleRows(view: PlanSnapshot, judge?: StepJudge): ModuleRow[] {
   const children = new Map<string, PlanNode[]>()
   view.nodes.forEach(n => { if (n.parent_plan_node_id) children.set(n.parent_plan_node_id, [...(children.get(n.parent_plan_node_id) ?? []), n]) })
   for (const list of children.values()) list.sort((a, b) => a.ordinal - b.ordinal)
@@ -183,13 +285,13 @@ export function moduleRows(view: PlanSnapshot): ModuleRow[] {
   return items.map(item => {
     const steps = itemSteps(item.plan_node_id, children)
     const cells: StepCell[] = steps.flatMap(step => {
-      const state = cellState(step.state)
-      if (state === 'dropped') return []
-      return [{ id: step.plan_node_id, label: step.label, title: plainTitle(step.title), state, owner: step.owner_step, effect: step.effect_step,
+      if (step.state === 'dropped') return []
+      const now = step.state === 'active' ? judge ? judge(step) : NOT_JUDGED : null
+      return [{ id: step.plan_node_id, label: step.label, title: plainTitle(step.title), state: shownState(step.state, now), owner: step.owner_step, effect: step.effect_step,
+        step: step.state, now, noRule: isEmptyRule(step.done_rule_json), since: stateSince(view, step),
         rule: ruleWords(step.done_rule_json, taskTitle), links: stepLinks(view, step),
         external: view.external_work.filter(w => w.plan_node_id === step.plan_node_id).map(w => `${w.description.task} · ${w.description.executor} · ${w.status}${w.verification ? ` · ${w.verification}` : ''}`) }]
     })
-    const count = (s: CellState) => cells.filter(c => c.state === s).length
     const key = item.view?.plan_node_id ?? item.plan_node_id
     const seen = new Set<string>()
     const waits = view.waiting_on.filter(w => w.edge.from.root === view.root && w.edge.from.node === key).flatMap(w => {
@@ -199,10 +301,8 @@ export function moduleRows(view: PlanSnapshot): ModuleRow[] {
       seen.add(label)
       return [{ label, href: planNodeHref(w.edge.to.root, w.edge.to.node), status: w.status, reason: w.edge.reason }]
     })
-    const done = count('done')
     return { id: item.plan_node_id, label: item.label, lane: laneWords(item), title: plainTitle(item.title), href: planNodeHref(view.root, item.plan_node_id),
-      current: view.mainline.current?.plan_node_id === item.plan_node_id, cells, total: cells.length, done, active: count('active'),
-      stopped: count('stopped'), unknown: count('unknown'), dropped: steps.length - cells.length, toGo: cells.length - done, waits, inView: item.view != null }
+      current: view.mainline.current?.plan_node_id === item.plan_node_id, cells, ...rowCounts(cells), dropped: steps.length - cells.length, waits, inView: item.view != null }
   })
 }
 
@@ -223,4 +323,92 @@ export function toGoText(row: Pick<ModuleRow, 'total' | 'toGo'>): string {
   if (row.total === 0) return 'No steps'
   if (row.toGo === 0) return 'All steps done'
   return `${row.toGo} step${row.toGo === 1 ? '' : 's'} to go`
+}
+
+/*
+ * What an active step has now, in words (R5:5.5-10). Claims and sources: ~/agent-work/modview/STEP_STATE_CLAIMS.md.
+ * "In progress" is said only of work running or queued; an active step with neither, read now, is "Active · nothing
+ * running"; anything not judged is Unknown with the condition tested, never idle.
+ */
+
+/** The active steps of a row by what they have now, each part only when it holds any: "1 running", "2 idle", "1 active, Unknown now". */
+export function activeCounts(row: Pick<ModuleRow, 'running' | 'queued' | 'held' | 'idle' | 'yours' | 'nowUnknown'>): string[] {
+  return [row.running && `${row.running} running`, row.queued && `${row.queued} queued`, row.held && `${row.held} held`, row.idle && `${row.idle} idle`,
+    row.yours && `${row.yours} yours`, row.nowUnknown && `${row.nowUnknown} active, Unknown now`].filter((p): p is string => !!p)
+}
+/** A row's steps by state, each step once: "2 / 5 done · 1 running · 1 idle · 1 stopped · 1 unknown · 1 dropped". */
+export function stepCounts(row: ModuleRow): string {
+  return [`${row.done} / ${row.total} done`, ...activeCounts(row), row.stopped && `${row.stopped} stopped`,
+    row.unknown && `${row.unknown} unknown`, row.dropped && `${row.dropped} dropped`].filter(Boolean).join(' · ')
+}
+
+/** The "No done rule" pill of a step's detail and the module page's timeline: the attention tone, Ops tokens only. */
+export const NO_RULE_PILL = 'shrink-0 rounded-full px-1.5 text-xs font-semibold text-[var(--ops-attention-text)] [background:var(--ops-attention-fill)]'
+/** A done rule {} is marked on the cell only while the step is active or stopped (a planned one only in its detail). */
+export const noRuleMarked = (cell: Pick<StepCell, 'noRule' | 'step'>) => cell.noRule && (cell.step === 'active' || cell.step === 'stopped')
+/** Under "Done when" for the empty rule {}. */
+export function noRuleText(cell: Pick<StepCell, 'noRule' | 'step'>): string {
+  return `${noRuleMarked(cell) ? 'No done rule: nothing closes it by evidence.' : 'No done rule yet.'} The runtime does not move this step on evidence; it changes only by a recorded event.`
+}
+
+const oneOrMany = (n: number, one: string, many: string) => n === 1 ? one : many
+/** Each kind of held item aloud, counted; and what moves it on, for the detail. */
+const HELD_ORDER: HeldItem['kind'][] = ['decision', 'grant', 'no-landing', 'unverified', 'verify-failed']
+const HELD_SPOKEN: Record<HeldItem['kind'], (n: number) => string> = {
+  decision: n => `${n} ${oneOrMany(n, 'task waits', 'tasks wait')} on a decision`,
+  grant: n => `${n} ${oneOrMany(n, 'landing waits', 'landings wait')} for your grant`,
+  'no-landing': n => `${n} accepted ${oneOrMany(n, 'task', 'tasks')} with no landing recorded`,
+  unverified: n => `${n} external ${oneOrMany(n, 'work waits', 'works wait')} for verification`,
+  'verify-failed': n => `${n} external ${oneOrMany(n, 'work', 'works')} failed verification`,
+}
+const HELD_MOVES: Record<HeldItem['kind'], string> = {
+  decision: 'a held task moves only when it is made ready again or cancelled',
+  grant: 'a landing awaiting the grant waits on your grant (Needs you lists grants)',
+  'no-landing': 'whether an accepted task lands the plan view does not say: it may never land',
+  unverified: 'submitted external work leaves this only when its verification reads Verified',
+  'verify-failed': 'submitted external work leaves this only when its verification reads Verified',
+}
+/** What was read for an Owner step's records: the plan view's waits on it and its done rule, nothing else. */
+const RECORD_SOURCES = 'none in plan-view owner_waiting or its done rule'
+
+/**
+ * A cell's state aloud: a held step says how many tasks wait on a decision, an Owner step what the plan view records
+ * on it (or the sources it read when none), never that nothing asks the Owner.
+ */
+export function spokenState(cell: StepCell): string {
+  const now = cell.now
+  if (now?.kind === 'yours') return now.recorded.length ? `yours, recorded on it: ${now.recorded.join(', ')}` : `yours, ${RECORD_SOURCES}`
+  if (now?.kind === 'held') return `active, held: ${HELD_ORDER.flatMap(k => { const n = now.held.filter(h => h.kind === k).length; return n ? [HELD_SPOKEN[k](n)] : [] }).join(', ')}`
+  return cellWords[cell.state]
+}
+
+/*
+ * What an active step has now, in words (R5:5.5-10). Claims and sources: ~/agent-work/modview/STEP_STATE_CLAIMS.md.
+ * "In progress" is said only of work running or queued; an active step with neither, read now, is held while a task on
+ * it waits on a decision, else "Active · nothing running"; anything not judged is Unknown with the condition tested.
+ */
+const IDLE_CHECKED = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started); nothing held (no task blocked, paused or awaiting the Owner; no landing awaiting your grant; no accepted work task with no landing recorded; no external work submitted and not read Verified)'
+const heldLine = (held: string[]) => held.length ? [`Held: ${held.join('; ')}.`] : []
+/** An Owner step's records: "Yours ·" while that is its state, "Owner step ·" beside another (held). */
+const recordedLines = (recorded: string[], lead: string) => [recorded.length
+  ? `${lead} · recorded on it: ${recorded.join('; ')}. Whether each still asks you is on Needs you.`
+  : `${lead} · ${RECORD_SOURCES}: no wait for you listed on it, and no question, request or sign-off named. Questions or requests tied to it only on Needs you are not read here.`]
+
+/** What the detail says of an active step's state now, line by line; [] for a step not active. */
+export function nowLines(cell: StepCell): string[] {
+  const now = cell.now
+  if (!now) return []
+  const since = cell.since ? [`Active since ${cell.since} (its state event).`] : []
+  switch (now.kind) {
+    case 'running': return [`In progress · running now: ${now.what}${now.others > 0 ? ` (+${now.others} more)` : ''}.`, ...since]
+    case 'queued': return [`In progress · queued: ${now.why.join('; ')}. Nothing on it runs now.`, ...heldLine(now.held), ...since]
+    case 'unknown': return [`Unknown · ${now.why.join('; ')}.`, ...(now.queued.length ? [`Queued as read: ${now.queued.join('; ')}.`] : []), ...heldLine(now.held), ...since]
+    case 'held': {
+      const moves = [...new Set(HELD_ORDER.filter(k => now.held.some(h => h.kind === k)).map(k => HELD_MOVES[k]))].join('; ')
+      return [`Active · held: ${now.held.map(h => h.text).join('; ')}. ${moves[0].toUpperCase()}${moves.slice(1)}; nothing on the step runs or is queued.`,
+        ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...since]
+    }
+    case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${IDLE_CHECKED}.`, ...since]
+    case 'idle': return [`Active · nothing running, read now: ${IDLE_CHECKED}.`, ...since]
+  }
 }

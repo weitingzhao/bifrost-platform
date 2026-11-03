@@ -10,6 +10,7 @@ import { PlanModuleRows } from '../PlanModuleRows'
 import { PlanTree } from '../PlanTree'
 import { WorkPlanView } from '../WorkPlanView'
 import { moduleRows, toGoText, type ModuleRow } from '../planModuleModel'
+import { stepRows } from '../stepStateModel'
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
 
@@ -89,10 +90,14 @@ describe('module rows model', () => {
 
   it('counts done, active, stopped and unknown steps, leaves dropped ones out, and agrees with execution_progress', () => {
     const view = advanced()
-    const rows = moduleRows(view)
+    // Judged at the snapshot's time: 4.1-3 is active with no task and external work submitted, its verification Unknown:
+    // held on its verification, not in progress (R5:5.5-10: most external work is never verified).
+    const rows = stepRows(view, { failed: null, now: Date.parse(prod.as_of) })
     const r41 = row(rows, '4.1')
-    expect(r41.cells.map(c => [c.label, c.state])).toEqual([['4.1-1', 'done'], ['4.1-2', 'done'], ['4.1-3', 'active'], ['4.1-5', 'stopped'], ['4.1-6', 'unknown']])
-    expect(r41).toMatchObject({ total: 5, done: 2, active: 1, stopped: 1, unknown: 1, dropped: 1, toGo: 3 })
+    expect(r41.cells.map(c => [c.label, c.state])).toEqual([['4.1-1', 'done'], ['4.1-2', 'done'], ['4.1-3', 'held'], ['4.1-5', 'stopped'], ['4.1-6', 'unknown']])
+    expect(r41).toMatchObject({ total: 5, done: 2, active: 1, idle: 0, running: 0, queued: 0, held: 1, stopped: 1, unknown: 1, dropped: 1, toGo: 3 })
+    // Not judged (no clock): the active step is Unknown now, never in progress.
+    expect(row(moduleRows(view), '4.1').cells[2]).toMatchObject({ label: '4.1-3', step: 'active', state: 'active-unknown' })
     expect(toGoText(r41)).toBe('3 steps to go')
     expect(toGoText(row(rows, '4.10'))).toBe('All steps done')
     for (const r of rows) {
@@ -137,9 +142,9 @@ describe('module rows on the page', () => {
     expect(items.map(li => li.dataset.module)).toEqual(['4.1', '4.2', '4.4', '4.10', '4.3', '4.5', '4.6', '4.7', '4.8', '4.9'])
     const bar = screen.getByRole('toolbar', { name: 'Steps of 4.1, 3 steps to go' })
     const cells = within(bar).getAllByRole('button')
-    expect(cells.map(b => b.getAttribute('aria-label'))).toEqual(['Step 4.1-1: done', 'Step 4.1-2: done', 'Step 4.1-3: in progress', 'Step 4.1-5: stopped', 'Step 4.1-6: unknown'])
+    expect(cells.map(b => b.getAttribute('aria-label'))).toEqual(['Step 4.1-1: done', 'Step 4.1-2: done', 'Step 4.1-3: active, held: 1 external work waits for verification', 'Step 4.1-5: stopped', 'Step 4.1-6: unknown'])
     expect(cells.filter(b => b.tabIndex === 0)).toHaveLength(1)
-    expect(items[0]).toHaveTextContent('2 / 5 done · 1 in progress · 1 stopped · 1 unknown · 1 dropped')
+    expect(items[0]).toHaveTextContent('2 / 5 done · 1 held · 1 stopped · 1 unknown · 1 dropped')
     expect(items[0]).toHaveAttribute('aria-current', 'step')
     expect(items[3]).toHaveTextContent('All steps done')
     expect(within(items[1]).getByRole('link', { name: '4.1 on PROD' })).toHaveAttribute('href', '#work?section=plan&root=R4&node=R4%3A4.1')
@@ -149,13 +154,15 @@ describe('module rows on the page', () => {
 
   it('opens a step from its cell with its state, rule and links, and closes it again', () => {
     render(<PlanModuleRows view={advanced()} selected="" />)
-    const cell = screen.getByRole('button', { name: 'Step 4.1-3: in progress' })
+    const cell = screen.getByRole('button', { name: 'Step 4.1-3: active, held: 1 external work waits for verification' })
     expect(cell).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(cell)
     expect(cell).toHaveAttribute('aria-expanded', 'true')
     const detail = screen.getByRole('region', { name: 'Step 4.1-3' })
     expect(cell).toHaveAttribute('aria-controls', detail.id)
-    expect(detail).toHaveTextContent('In progress')
+    expect(detail).toHaveTextContent('Active · held: external work “Rehearse case 3 on STG” submitted · waits for its verification (verification Unknown). '
+      + 'Submitted external work leaves this only when its verification reads Verified; nothing on the step runs or is queued.')
+    expect(detail).not.toHaveTextContent('In progress')
     expect(detail).toHaveTextContent('Request #42 is approved and executed')
     expect(detail).toHaveTextContent('Rehearse case 3 on STG')
     expect(within(detail).getByRole('link', { name: 'Request #42' })).toHaveAttribute('href', '#approvals?id=42')

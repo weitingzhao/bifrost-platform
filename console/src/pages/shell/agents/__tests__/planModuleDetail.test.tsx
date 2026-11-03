@@ -91,7 +91,7 @@ describe('module detail model', () => {
     const scopes = moduleScopes(view)
     const { rows } = planActivity(view, scopes.get('R5:5.1')!, scopes, new Map())
     expect(rows.map(r => [r.kind, r.text])).toEqual([
-      ['Step', '5.1-3 · Not started → In progress · its task was leased'],
+      ['Step', '5.1-3 · Not started → Active · its task was leased'],
       ['Landing', 'Landing claimed (dev) · Module detail model'],
       ['Landing', 'Landed on main · Module detail model'],
       ['Created', '5.1-6 · 验收'],
@@ -151,8 +151,10 @@ describe('module detail on the page', () => {
   it('shows a normal module: steps to go, the step\'s own work now with its round, next in plan order and ETA Unknown', () => {
     seedShell()
     detail()
-    expect(region('Steps to go')).toHaveTextContent('4 steps to goof 6 · 2 done · 1 in progress')
-    expect(region('Steps to go')).toHaveTextContent('Execution progress from the controller\'s step states. Not acceptance, not deployment.')
+    expect(region('Steps to go')).toHaveTextContent('4 steps to goof 6 · 2 done · 1 queued')
+    expect(region('Steps to go')).toHaveTextContent('Execution progress from the controller\'s step states; an active step by what the plan view, read now, shows running or queued on it. Not acceptance, not deployment.')
+    // 5.1-3 is active with its implementation back to ready: queued, so in progress, and said so on its step (R5:5.5-10).
+    expect(step('5.1-3').querySelector('[data-step-now="queued"]')).toHaveTextContent('In progress · queued: task Module detail page ready. Nothing on it runs now.')
     // The step in progress is open on the timeline: what runs on it now is its own work, newest first.
     const now = screen.getByRole('group', { name: 'Now on 5.1-3' })
     expect(now).toHaveTextContent('Implement · Module detail page · ready · round 2 of 3')
@@ -323,7 +325,7 @@ describe('module detail on the page', () => {
     const activity = region('Recent activity on 5.1')
     fireEvent.click(within(activity).getByRole('button', { name: 'Show all 20' }))
     expect(within(activity).getAllByRole('listitem').map(li => li.textContent)).toEqual([
-      '2026-10-27T02:40:00ZStep5.1-3 · Not started → In progress · its task was leased',
+      '2026-10-27T02:40:00ZStep5.1-3 · Not started → Active · its task was leased',
       '2026-10-27T02:35:00ZCheck5.1-3 · Verify fail · Module detail page',
       '2026-10-27T02:31:00ZLandingLanded on main · Module detail model',
       '2026-10-27T02:30:00ZLandingLanding claimed (dev) · Module detail model',

@@ -35,7 +35,8 @@ const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typ
 const str = (v: unknown) => typeof v === 'string' ? v : ''
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s
 const FINISHED = new Set(['accepted', 'rejected', 'cancelled'])
-const STEP_WORDS: Record<string, string> = { planned: 'Not started', active: 'In progress', done: 'Done', stopped: 'Stopped', dropped: 'Dropped' }
+// The controller's word for a step's move: active is not "in progress" (R5:5.5-10: an active step may have nothing running).
+const STEP_WORDS: Record<string, string> = { planned: 'Not started', active: 'Active', done: 'Done', stopped: 'Stopped', dropped: 'Dropped' }
 
 /** The module (plan item) an address names: the item itself, or the item a step sits under; null for anything else. */
 export function moduleOf(view: PlanSnapshot, selected: string): { item: PlanNode; step: string } | null {
@@ -64,9 +65,12 @@ export type ModuleScope = {
   ruleQuestions: Map<string, string>; ruleApprovals: Map<number, string>
 }
 
-/** Every module of the plan view, by item id; one pass over its nodes. */
-export function moduleScopes(view: PlanSnapshot): Map<string, ModuleScope> {
-  const rows = new Map(moduleRows(view).map(r => [r.id, r]))
+/**
+ * Every module of the plan view, by item id; one pass over its nodes. rows: the module rows as shown (stepStateModel.ts
+ * stepRows, each active step by what it has now); without them every active step is Unknown (not judged).
+ */
+export function moduleScopes(view: PlanSnapshot, shown: ModuleRow[] = moduleRows(view)): Map<string, ModuleScope> {
+  const rows = new Map(shown.map(r => [r.id, r]))
   const children = new Map<string, PlanNode[]>()
   view.nodes.forEach(n => { if (n.parent_plan_node_id) children.set(n.parent_plan_node_id, [...(children.get(n.parent_plan_node_id) ?? []), n]) })
   const out = new Map<string, ModuleScope>()
@@ -331,8 +335,9 @@ export function reviewWords(scope: ModuleScope, view: PlanSnapshot, step: string
 }
 
 export type NowStep = { cell: StepCell; tasks: TaskLine[] }
+/** The steps the controller has active, each with what it has now (in progress, held, nothing running, yours or Unknown) on its cell. */
 export function nowSteps(scope: ModuleScope, runtime: RuntimeTasks): NowStep[] {
-  return scope.row.cells.filter(c => c.state === 'active').map(cell => ({ cell, tasks: workTasks(scope, cell.id, runtime).map(t => taskLine(t, runtime)) }))
+  return scope.row.cells.filter(c => c.step === 'active').map(cell => ({ cell, tasks: workTasks(scope, cell.id, runtime).map(t => taskLine(t, runtime)) }))
 }
 /** The first step not started, in plan order: plan order only, not a commitment. */
 export function nextInPlanOrder(scope: ModuleScope): StepCell | undefined {

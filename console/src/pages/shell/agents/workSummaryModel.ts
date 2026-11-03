@@ -2,7 +2,7 @@ import type { SignoffWait } from '@/api/agentRuntimePlan'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import type { AcceptanceSignoff } from '@/api/planSnapshotSchema'
 import type { Tone } from '../owner/ownerModel'
-import { noViewReason, type ModuleRow } from './planModuleModel'
+import { activeCounts, noViewReason, type ModuleRow } from './planModuleModel'
 import { roundLabel, type RoundsRead } from './planRoundModel'
 import { answeredWords, planTreeOld, progressOld, viewOldReason } from './readAge'
 import type { SignoffWaitsRead } from './useRuntimePlan'
@@ -23,10 +23,18 @@ export function roundHeader(view: PlanSnapshot): string {
   return `${roundLabel(view.root)} · ${items} item${items === 1 ? '' : 's'} · ${view.artifact_id ? `plan v${view.plan_version}` : 'no adopted plan view'}`
 }
 
-/** One module (plan item) by its steps, in this order: the first condition that holds names it. */
-export type ModuleClass = 'in-progress' | 'stopped' | 'unknown' | 'no-steps' | 'all-done' | 'not-started' | 'partly'
+/**
+ * One module (plan item) by its steps, in this order: the first condition that holds names it. An active step counts by
+ * what it has now (R5:5.5-10): work running or queued is in progress; an active step with nothing running is never
+ * folded into it, and one whose work now is Unknown is neither.
+ */
+export type ModuleClass = 'in-progress' | 'active-unknown' | 'held' | 'yours' | 'idle' | 'stopped' | 'unknown' | 'no-steps' | 'all-done' | 'not-started' | 'partly'
 export function moduleClass(row: ModuleRow): ModuleClass {
-  if (row.active > 0) return 'in-progress'
+  if (row.running + row.queued > 0) return 'in-progress'
+  if (row.nowUnknown > 0) return 'active-unknown'
+  if (row.held > 0) return 'held'
+  if (row.yours > 0) return 'yours'
+  if (row.idle > 0) return 'idle'
   if (row.stopped > 0) return 'stopped'
   if (row.unknown > 0) return 'unknown'
   if (row.total === 0) return 'no-steps'
@@ -35,13 +43,18 @@ export function moduleClass(row: ModuleRow): ModuleClass {
   return 'partly'
 }
 
-const CLASS_ORDER: ModuleClass[] = ['in-progress', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps']
+const CLASS_ORDER: ModuleClass[] = ['in-progress', 'held', 'yours', 'idle', 'active-unknown', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps']
 /**
- * Each class in the runtime's own terms (nodes[].state, the controller's record of a step): never a claim about work
- * outside it (R5:5.5-2 review: on PROD every step of 5.5-1 was still planned while its work had been done and reviewed).
+ * Each class in the runtime's own terms (nodes[].state, the controller's record of a step, and the plan view's tasks,
+ * attempts, landings and external work for an active one): never a claim about work outside it (R5:5.5-2 review: on
+ * PROD every step of 5.5-1 was still planned while its work had been done and reviewed).
  */
 const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
-  'in-progress': ['has a step active', 'have steps active'],
+  'in-progress': ['has a step in progress', 'have steps in progress'],
+  held: ['has an active step held', 'have active steps held'],
+  idle: ['has an active step with nothing running', 'have active steps with nothing running'],
+  yours: ['has an Owner step active', 'have Owner steps active'],
+  'active-unknown': ['has an active step whose work now is Unknown', 'have active steps whose work now is Unknown'],
   'not-started': ['has no step started', 'have no step started'],
   'all-done': ['has every step done', 'have every step done'],
   partly: ['has steps done and none active', 'have steps done and none active'],
@@ -51,7 +64,11 @@ const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
 }
 /** What each class means, for "How this is read". */
 export const CLASS_MEANINGS: [string, string][] = [
-  ['a step active', 'the controller has a step active: a task on it was taken. Not proof that anyone works on it now.'],
+  ['a step in progress', 'the controller has a step active and the plan view, read now, shows work on it running (a live attempt with its heartbeat confirmed, a landing with a record in the last 30 min, running external work) or queued (a task proposed, ready, back for rework, submitted or being verified; a landing parked, which the controller unparks itself; external work registered and not started).'],
+  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, and something on it waits: a task blocked, paused or awaiting the Owner (each moves only when it is made ready again or cancelled), a landing awaiting your grant, an accepted work task with no landing recorded (the plan view does not say whether it lands), or external work submitted and not read Verified (most is never verified). None of these is counted as progress.'],
+  ['an Owner step active', 'the controller has an Owner step (owner_step) active and the plan view, read now, shows nothing running, queued or held on it.'],
+  ['an active step with nothing running', 'the controller has a step active and the plan view, read now, shows nothing running, queued or held on it. The active state alone is not work: the controller opens a step when a task on it is first leased, and a recorded event can move a step to active with no task on it.'],
+  ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or an attempt on the step is stale or its heartbeat unconfirmed, or a landing on it has no record for over 30 min, or a task, attempt or landing reads in a state this page does not know.'],
   ['no step started', 'every step is planned in the runtime: no task on it has been taken there. Work done outside the runtime (a thread, an external run not linked to a step) moves no step, so this does not say nothing was done.'],
   ['every step done', 'the controller marked each step done: not acceptance, not deployment.'],
   ['steps done and none active', 'some steps done, the rest planned, none active.'],
@@ -62,7 +79,7 @@ export const CLASS_MEANINGS: [string, string][] = [
 const joinWords = (parts: string[]) => parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
 
 const stepsLine = (row: ModuleRow) => row.total === 0 ? 'no runtime steps'
-  : `runtime steps ${row.done} of ${row.total} done${row.active ? `, ${row.active} active` : ''}${row.stopped ? `, ${row.stopped} stopped` : ''}${row.unknown ? `, ${row.unknown} with no state` : ''}`
+  : `runtime steps ${row.done} of ${row.total} done${activeCounts(row).map(p => `, ${p}`).join('')}${row.stopped ? `, ${row.stopped} stopped` : ''}${row.unknown ? `, ${row.unknown} with no state` : ''}`
 
 /**
  * Where the mainline stands: plan-view's mainline.current (PV1: the first mainline item whose steps are not all done;

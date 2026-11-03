@@ -5,11 +5,13 @@ import { StepBadge } from './StepText'
 import { liveLine, liveNow, liveSpoken, NOW_SHOWN, type LiveNow, type LiveStep } from './liveStepModel'
 import type { RuntimeTasks } from './moduleDetailModel'
 import { rememberModuleRow } from './moduleRowReturn'
-import { cellLabels, cellStyle, cellWords, moduleRowLinkId, moduleRows, noViewReason, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
+import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, stepCounts, toGoText, type CellState, type ModuleRow, type RuleLine,
+  type StepCell } from './planModuleModel'
 import { sinceWords } from './readAge'
+import { stepRows } from './stepStateModel'
 import { workTabHref } from './workViewModel'
 
-const legend: CellState[] = ['done', 'active', 'planned', 'stopped', 'unknown']
+const legend: CellState[] = ['done', 'active', 'held', 'idle', 'yours', 'planned', 'stopped', 'active-unknown', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
 
 function Rule({ lines }: { lines: RuleLine[] }) {
@@ -22,16 +24,17 @@ function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <StepBadge label={cell.label} />
       <strong data-step-state={cell.state}>{cellLabels[cell.state]}</strong>
+      {noRuleMarked(cell) && <span data-no-rule className={NO_RULE_PILL}>No done rule</span>}
       {cell.owner && <span className="rounded-full bg-[var(--control-fill)] px-1.5 text-xs font-semibold" title="The Owner's step (owner_step)">Owner</span>}
       {cell.effect && <span className="rounded-full bg-[var(--control-fill)] px-1.5 text-xs font-semibold" title="An effect step (effect_step)">★</span>}
       <button type="button" onClick={close} className="ml-auto inline-flex min-h-11 items-center rounded-[var(--control-radius)] border border-[var(--card-border)] px-3 text-sm">Close</button>
     </div>
     <p className="m-0 break-words">{cell.title || 'Untitled step'}</p>
-    {cell.state === 'unknown' && <p className="m-0 text-muted-foreground">Unknown · the runtime holds no state for this step.</p>}
+    {cell.step === null && <p className="m-0 text-muted-foreground">Unknown · the runtime holds no state for this step.</p>}
+    {nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-muted-foreground">{line}</p>)}
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">Done when</span>
-      {cell.rule.length > 0 ? <Rule lines={cell.rule} />
-        : <p className="m-0">No done rule yet. The runtime does not move this step on evidence; it changes only by a recorded event.</p>}
+      {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
     </div>
     {cell.external.length > 0 && <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">External work on this step</span>
@@ -80,8 +83,7 @@ function Module({ row, initial, noView, live }: { row: ModuleRow; initial: strin
     rememberModuleRow(row.id)
     window.location.hash = row.href
   }
-  const counts = [`${row.done} / ${row.total} done`, row.active && `${row.active} in progress`, row.stopped && `${row.stopped} stopped`,
-    row.unknown && `${row.unknown} unknown`, row.dropped && `${row.dropped} dropped`].filter(Boolean).join(' · ')
+  const counts = stepCounts(row)
   const title = row.title || 'Untitled module'
   // The link's focus ring is drawn around the whole row (has-[…]: below); the workspace's own ring on the link is dropped.
   return <li data-module={row.label} aria-current={row.current ? 'step' : undefined} onClick={openRow}
@@ -101,15 +103,19 @@ function Module({ row, initial, noView, live }: { row: ModuleRow; initial: strin
         {row.cells.length > 0 && <div role="toolbar" aria-label={`Steps of ${row.label}, ${toGoText(row)}`} className="flex min-w-0 gap-[3px]">
           {row.cells.map((cell, i) => {
             const running = live.get(cell.id)
+            const noRule = noRuleMarked(cell)
             return <button key={cell.id} type="button" ref={el => { buttons.current[i] = el }}
-              tabIndex={i === tabStop ? 0 : -1} aria-label={`Step ${cell.label}: ${cellWords[cell.state]}${running ? `, ${liveSpoken(running)}` : ''}`} aria-expanded={open === cell.id}
-              aria-controls={open === cell.id ? detailId(cell) : undefined} title={`${cell.label} · ${cellLabels[cell.state]} · ${cell.title}${running ? ` · Live now: ${running.what}` : ''}`}
-              data-step-cell={cell.label} data-state={cell.state} data-live={running ? running.quiet ? 'quiet' : 'true' : undefined}
+              tabIndex={i === tabStop ? 0 : -1} aria-label={`Step ${cell.label}: ${spokenState(cell)}${running ? `, ${liveSpoken(running)}` : ''}${noRule ? ', no done rule' : ''}`} aria-expanded={open === cell.id}
+              aria-controls={open === cell.id ? detailId(cell) : undefined}
+              title={[cell.label, cellLabels[cell.state], noRule && 'No done rule', cell.title, running && `Live now: ${running.what}`, cell.since && cell.now && `active since ${cell.since}`].filter(Boolean).join(' · ')}
+              data-step-cell={cell.label} data-state={cell.state} data-live={running ? running.quiet ? 'quiet' : 'true' : undefined} data-no-rule={noRule || undefined}
               onClick={() => { setFocus(i); setOpen(open === cell.id ? '' : cell.id) }} onKeyDown={e => onKey(e, i)} onFocus={() => setFocus(i)}
               className={`relative flex min-h-6 min-w-0 flex-1 cursor-pointer items-center border-0 border-b-2 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] pointer-coarse:min-h-11 ${open === cell.id ? 'border-[var(--foreground)]' : 'border-transparent'}`}>
               <span aria-hidden="true" className="block h-[7px] w-full rounded-[4px]" style={cellStyle[cell.state]} />
               {/* Work running now: a slow breathing glow around the bar, still and faint for a landing gone quiet (opsWorkspace.css;
                   still under reduced motion). */}
+              {/* A done rule {} on an active or stopped step: a notch over the bar's end (the legend names it). */}
+              {noRule && <span aria-hidden="true" data-no-rule-mark className="pointer-events-none absolute right-0 top-0.5 size-[5px] rounded-full bg-[var(--ops-attention-text)]" />}
               {running && <span aria-hidden="true" data-live-ring className={`work-live-ring${running.quiet ? ' work-live-ring--quiet' : ''} pointer-events-none absolute inset-x-0 top-1/2 h-[7px] -translate-y-1/2 rounded-[4px]`} />}
             </button>
           })}
@@ -173,7 +179,8 @@ export function PlanModuleRows({ view, selected, failed = null, runtime }: { vie
   /** The runtime's tasks from the shell's cached GET /progress, for a running task's role; none read when absent. */
   runtime?: RuntimeTasks }) {
   const now = useNow()
-  const rows = moduleRows(view)
+  // Each active step by what it has now (R5:5.5-10), at the same clock and read as what runs now (R5:5.5-8).
+  const rows = stepRows(view, { failed, now, runtime })
   const live = liveNow(view, rows, { failed, now, runtime })
   const liveSteps = live.state === 'ok' ? live.byStep : new Map<string, LiveStep>()
   const step = view.nodes.find(n => n.node_kind === 'step' && (n.plan_node_id === selected || n.label === selected))?.plan_node_id ?? ''
@@ -186,8 +193,9 @@ export function PlanModuleRows({ view, selected, failed = null, runtime }: { vie
     </header>
     <NowLine live={live} now={now} root={view.root} />
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
-      {legend.map(s => <span key={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}</span>)}
-      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
+      {legend.map(s => <span key={s} data-legend={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}{s === 'idle' ? ' (idle)' : s === 'unknown' ? ' (no state)' : ''}</span>)}
+      <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block size-[5px] rounded-full bg-[var(--ops-attention-text)]" />No done rule (active or stopped)</span>
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old or a run on it cannot be confirmed. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">

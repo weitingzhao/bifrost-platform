@@ -1,8 +1,8 @@
-import type { UseQueryResult } from '@tanstack/react-query'
+import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { TONE_COLOR, type Tone } from '../owner/ownerModel'
 import { useNow } from '../progress/progressClock'
-import { moduleRows } from './planModuleModel'
 import { roundLabel } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
 import type { PlanAddress } from './usePlanSnapshot'
@@ -10,6 +10,8 @@ import { workTabHref } from './workViewModel'
 import { NeedsCleanupEntry } from './NeedsCleanup'
 import { cleanupBreakdown } from './needsCleanupModel'
 import { useNeedsCleanup } from './useNeedsCleanup'
+import { runtimeTasks } from './moduleDetailModel'
+import { stepRows } from './stepStateModel'
 import { answeredWords, progressOld, sinceWords as since } from './readAge'
 import { CLASS_MEANINGS, OTHER_ROUNDS, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
 
@@ -63,6 +65,10 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
   const failure = failed && <PlanReadFailure query={query} />
   // What needs cleanup, from the shell's GET /progress and this plan view: no request of its own (R5:5.5-4).
   const cleanup = useNeedsCleanup(plan, query, now)
+  // GET /progress as the shell already holds it (never fetched here: enabled false), for the tasks' roles: the same read
+  // the module rows judge with, so that a check task is told apart alike in the summary and the rows (R5:5.5-10).
+  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
+  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
   if (!view) {
     return <section aria-label="Where the round stands" className={box}>
       <div className="flex flex-wrap items-center gap-2"><Lamp tone="unknown" />
@@ -73,7 +79,8 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
       <span className="text-[13px] text-muted-foreground"><NeedsCleanupEntry plan={plan} cleanup={cleanup} /></span>
     </section>
   }
-  const rows = moduleRows(view)
+  // Each active step by what it has now (R5:5.5-10): the summary counts the same states the rows show.
+  const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, runtime })
   const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
   const mainline = mainlineSentence(view, rows)
   const others = othersSentence(rows, view.mainline.current?.plan_node_id ?? null)
@@ -113,7 +120,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
           {current?.label && ` · stands at ${current.label}: ${view.mainline.basis === 'Versioned acceptance observations' ? 'the first mainline item not verified accepted' : 'the first mainline item whose steps are not all done'}`}</li>
         {view.mainline.current?.current_validity && <li>Acceptance of {current?.label ?? view.mainline.current.plan_node_id} · {validity(view.mainline.current.current_validity)}</li>}
         <li>Lamp · {TONE_WORDS[lamp.tone]}: {lamp.why.join('; ')}.</li>
-        <li>Items by runtime step state (nodes[].state, the controller's record of each step):
+        <li>Items by runtime step state (nodes[].state, the controller's record of each step; an active step by what the plan view shows on it now):
           <ul className="m-0 list-disc pl-5">{CLASS_MEANINGS.map(([name, meaning]) => <li key={name}>“{name}”: {meaning}</li>)}</ul></li>
         {signoffBreakdown(count).map(line => <li key={line}>Sign-offs · {line}</li>)}
         {waits.state === 'ok' && <li>Dependency waits · {waits.blocked} Blocked · {waits.unverified} milestone Unknown</li>}

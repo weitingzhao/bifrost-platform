@@ -40,7 +40,7 @@ export const LANDING_QUIET_MS = 30 * 60_000
 /** Since when, as the data gives it: an attempt's or external work's start, or only the landing's last record. */
 export type LiveSince = { kind: 'started' | 'last_record'; at: number }
 /** One reason a step is live; quiet when it is a landing with no record for LANDING_QUIET_MS. */
-type Reason = { what: string; since: LiveSince | null; rank: number; quiet: boolean }
+export type Reason = { what: string; since: LiveSince | null; rank: number; quiet: boolean }
 /**
  * A step with work running now: what (the first of its reasons), since when, how many other reasons it has, and quiet
  * when its only reasons are landings silent for LANDING_QUIET_MS.
@@ -57,8 +57,15 @@ const NO_RUNTIME: RuntimeTasks = { read: false, work: new Map(), ended: new Map(
 const at = (time: string | undefined) => { const t = time ? Date.parse(time) : NaN; return Number.isFinite(t) ? t : null }
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s
 
+/** The landing is moving (landing/protocol.go Operation.Active, as LANDING_NOW lists it): main_result non_ff is Terminal. */
+export const landingMoving = (l: { phase: string; outcome: string }) => Object.hasOwn(LANDING_NOW, l.phase) && !(l.phase === 'main_result' && l.outcome === 'non_ff')
+/** A moving landing with no record for over LANDING_QUIET_MS: not a landing seen moving (still ringed, faint). */
+export const landingQuiet = (l: { observed_at: string }, now: number) => { const last = at(l.observed_at); return last === null || now - last > LANDING_QUIET_MS }
+/** Attempt states that run (ATTEMPT_NOW): leased to a host, or running. */
+export const attemptRuns = (state: string) => Object.hasOwn(ATTEMPT_NOW, state)
+
 /** The task's attempt that runs now, or null: live, not stale, its heartbeat confirmed. */
-function runningAttempt(task: ModuleTask, view: PlanSnapshot, now: number) {
+export function runningAttempt(task: ModuleTask, view: PlanSnapshot, now: number) {
   const a = task.attempt
   return a && Object.hasOwn(ATTEMPT_NOW, a.state) && !heartbeatUnconfirmed(a, view, now) ? a : null
 }
@@ -74,45 +81,65 @@ function taskReasons(task: ModuleTask, view: PlanSnapshot, now: number, runtime:
       rank: a.state === 'running' ? 0 : 2, quiet: false })
   }
   const l = task.landing
-  if (l && Object.hasOwn(LANDING_NOW, l.phase) && !(l.phase === 'main_result' && l.outcome === 'non_ff')) {
+  if (l && landingMoving(l)) {
     const last = at(l.observed_at)
     out.push({ what: `Landing ${LANDING_NOW[l.phase]}${l.phase === 'main_result' && l.outcome ? ` (${l.outcome})` : ''}`,
-      since: last === null ? null : { kind: 'last_record', at: last }, rank: 3, quiet: last === null || now - last > LANDING_QUIET_MS })
+      since: last === null ? null : { kind: 'last_record', at: last }, rank: 3, quiet: landingQuiet(l, now) })
   }
   return out
 }
 
+/** What one plan view says runs, at one time: the plan view, now, the runtime's tasks (for roles), the tasks with a live attempt. */
+export type RunContext = { view: PlanSnapshot; now: number; runtime: RuntimeTasks; attempted: Set<string> }
+export function runContext(view: PlanSnapshot, now: number, runtime: RuntimeTasks = NO_RUNTIME): RunContext {
+  return { view, now, runtime, attempted: new Set(view.tasks.filter(t => t.attempt).map(t => t.task_id)) }
+}
+
 /**
- * The steps with work running now. A step is live when the plan view is now and one of its own tasks (any role) has
- * a running attempt, or has a landing moving, or registered external work on it is Running with its heartbeat
- * confirmed (external work under a task with a live attempt is that attempt's history: planviewsnapshot.go). Dropped
- * steps are not drawn, so not listed.
+ * What runs on one step now (R5:5.5-10: the per-step classifier liveNow and the step states share): its own tasks
+ * (any role) with a running attempt or a moving landing, and registered external work on it Running with its heartbeat
+ * confirmed (external work under a task with a live attempt is that attempt's history: planviewsnapshot.go); with what
+ * of plan-view working each marks (a task by its running attempt, external work by its id). Whether the plan view is
+ * now is the caller's to judge first (viewOldReason): this reads it as now.
+ */
+export function stepRunning(step: string, ctx: RunContext): { reasons: Reason[]; marks: string[] } {
+  const { view, now, runtime } = ctx
+  const reasons: Reason[] = [], marks: string[] = []
+  for (const t of view.tasks) {
+    if (t.plan_node_id !== step) continue
+    if (runningAttempt(t, view, now)) marks.push(t.task_id)
+    reasons.push(...taskReasons(t, view, now, runtime))
+  }
+  for (const w of view.external_work) {
+    if (w.plan_node_id !== step || w.state !== 'Running' || (w.task_id && ctx.attempted.has(w.task_id)) || heartbeatUnconfirmed(w, view, now)) continue
+    marks.push(w.external_work_id)
+    const started = at(w.started_at)
+    reasons.push({ what: `External work running (${w.description.executor})`, since: started === null ? null : { kind: 'started', at: started }, rank: 1, quiet: false })
+  }
+  return { reasons, marks }
+}
+/** The reason a step names first: one seen moving before a quiet landing, then by rank (running, external, leased, landing). */
+export const firstReason = (reasons: Reason[]) => [...reasons].sort((a, b) => Number(a.quiet) - Number(b.quiet) || a.rank - b.rank)[0]
+
+/**
+ * The steps with work running now. A step is live when the plan view is now and stepRunning finds a reason on it: one
+ * of its own tasks (any role) has a running attempt, or has a landing moving, or registered external work on it is
+ * Running with its heartbeat confirmed. Dropped steps are not drawn, so not listed.
  */
 export function liveNow(view: PlanSnapshot, rows: ModuleRow[], opts: { failed: string | null; now: number; runtime?: RuntimeTasks }): LiveNow {
   const { now } = opts
   const old = viewOldReason(view, view.root, opts.failed, now)
   if (old) return { state: 'unknown', reason: old, asOf: Date.parse(view.as_of) }
-  const runtime = opts.runtime ?? NO_RUNTIME
-  const attempted = new Set(view.tasks.filter(t => t.attempt).map(t => t.task_id))
+  const ctx = runContext(view, now, opts.runtime)
   // What of plan-view working marks a step here: a task by its running attempt, external work by its id.
   const marking = new Set<string>()
   const steps: LiveStep[] = []
   for (const row of rows) {
     for (const cell of row.cells) {
-      const reasons: Reason[] = []
-      for (const t of view.tasks) {
-        if (t.plan_node_id !== cell.id) continue
-        if (runningAttempt(t, view, now)) marking.add(t.task_id)
-        reasons.push(...taskReasons(t, view, now, runtime))
-      }
-      for (const w of view.external_work) {
-        if (w.plan_node_id !== cell.id || w.state !== 'Running' || (w.task_id && attempted.has(w.task_id)) || heartbeatUnconfirmed(w, view, now)) continue
-        marking.add(w.external_work_id)
-        const started = at(w.started_at)
-        reasons.push({ what: `External work running (${w.description.executor})`, since: started === null ? null : { kind: 'started', at: started }, rank: 1, quiet: false })
-      }
+      const { reasons, marks } = stepRunning(cell.id, ctx)
+      marks.forEach(m => marking.add(m))
       if (reasons.length === 0) continue
-      const first = [...reasons].sort((a, b) => Number(a.quiet) - Number(b.quiet) || a.rank - b.rank)[0]
+      const first = firstReason(reasons)
       steps.push({ id: cell.id, label: cell.label, row: row.id, href: row.href, what: first.what, since: first.since, others: reasons.length - 1,
         quiet: reasons.every(r => r.quiet) })
     }

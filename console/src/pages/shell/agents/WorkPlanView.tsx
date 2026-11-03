@@ -133,7 +133,7 @@ function ModulePage({ query, view, item, step, failed }: { query: ReturnType<typ
   useEffect(() => scrollAfterShell(() => document.getElementById(scrollTo) ?? document.getElementById(moduleDetailId(item.plan_node_id))), [scrollTo, item.plan_node_id])
   return <>
     {failed && <PlanReadFailure query={query} />}
-    <PlanModuleDetail key={item.plan_node_id} view={view} item={item} step={step} stale={stale} />
+    <PlanModuleDetail key={item.plan_node_id} view={view} item={item} step={step} stale={stale} failed={failureOf(query)} />
   </>
 }
 

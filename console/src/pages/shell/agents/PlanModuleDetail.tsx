@@ -11,9 +11,11 @@ import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
   needsNow, needsYouCards, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, stepTasks, taskActivity, taskLine, workTasks,
   type ModuleScope, type RuntimeTasks, type ShellRead, type ShellReads, type TaskLine } from './moduleDetailModel'
-import { cellLabels, cellStyle, noViewReason, toGoText, type CellState, type ModuleRow, type RuleLine, type StepCell } from './planModuleModel'
+import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, type CellState, type ModuleRow,
+  type RuleLine, type StepCell } from './planModuleModel'
 import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
+import { stepJudge } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /** Recent activity shows this many rows until the Owner asks for all. */
@@ -69,20 +71,36 @@ function Rule({ lines }: { lines: RuleLine[] }) {
 }
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-/** A step's state word at the right of its line: the step in progress in the accent, stopped in red, unknown dashed. */
+/**
+ * A step's state word at the right of its line: the step in progress in the accent, held and the Owner's on the
+ * attention tone, an active one with nothing running outlined, an active one Unknown now dashed in the primary tone,
+ * stopped in red, unknown (no state) dashed grey.
+ */
 const STATE_LOOK: Record<CellState, string> = {
   active: 'h-[22px] rounded-full px-2 font-bold text-[var(--primary-foreground)] [background:var(--ops-accent)]',
+  held: 'h-[22px] rounded-full border border-[var(--ops-attention-text)] px-2 text-[var(--ops-attention-text)]',
+  idle: 'h-[22px] rounded-full border border-[var(--primary)] px-2 text-foreground',
+  'active-unknown': 'h-5 rounded-full border border-dashed border-[var(--primary)] px-[7px] text-foreground',
+  yours: 'h-[22px] rounded-full px-2 text-[var(--ops-attention-text)] [background:var(--ops-attention-fill)]',
   done: 'text-muted-foreground', planned: 'text-muted-foreground', stopped: 'text-[var(--color-lamp-red)]',
   unknown: 'h-5 rounded-full border border-dashed border-[var(--color-lamp-gray)] px-[7px] text-muted-foreground',
 }
 function StateWord({ state }: { state: CellState }) {
   return <span data-step-state={state} className={`ml-auto inline-flex shrink-0 items-center whitespace-nowrap text-xs font-semibold ${STATE_LOOK[state]}`}>{cellLabels[state]}</span>
 }
-/** The timeline's mark for a step: ✓ done, the accent with a halo in progress, recessed not started, hatched red stopped, dashed unknown. */
+/**
+ * The timeline's mark for a step: ✓ done, the accent with a halo in progress, the attention tone held (ring) and yours
+ * (filled), an empty ring active with nothing running, dashed primary active Unknown now, recessed not started, hatched
+ * red stopped, dashed grey unknown.
+ */
 function Dot({ state }: { state: CellState }) {
   const base = 'mt-[3px] flex size-[18px] flex-none items-center justify-center rounded-full text-[11px] leading-none'
   if (state === 'done') return <span className={`${base} bg-[var(--primary)] text-[var(--primary-foreground)]`}>✓</span>
   if (state === 'active') return <span className={`${base} shadow-[0_0_0_4px_color-mix(in_srgb,var(--primary)_22%,transparent)] [background:var(--ops-accent)]`} />
+  if (state === 'held') return <span className={`${base} border-2 border-[var(--ops-attention-text)]`} />
+  if (state === 'idle') return <span className={`${base} border-2 border-[var(--primary)]`} />
+  if (state === 'active-unknown') return <span className={`${base} border-2 border-dashed border-[var(--primary)]`} />
+  if (state === 'yours') return <span className={`${base} border-2 border-[var(--ops-attention-text)] bg-[var(--ops-attention-fill)]`} />
   if (state === 'planned') return <span className={`${base} bg-[var(--muted)] shadow-[var(--ops-inset)]`} />
   if (state === 'stopped') return <span className={`${base} border-2 border-[var(--color-lamp-red)]`} style={cellStyle.stopped} />
   return <span className={`${base} border-2 border-dashed border-[var(--color-lamp-gray)]`} />
@@ -97,7 +115,8 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
   const work = workTasks(scope, cell.id, runtime)
   const checks = stepTasks(scope, cell.id).length - work.length
   const latest = work[0] && taskLine(work[0], runtime)
-  const active = cell.state === 'active'
+  // Every step the controller has active opens, whatever it has now (in progress, nothing running, yours or Unknown).
+  const active = cell.step === 'active'
   const open = active || selected
   // The rule's question and the step's goal; tasks are told under Latest task and Review (a task link would list a
   // check as "accepted" beside the work it failed), a request by its number in the rule, the step's own address is here.
@@ -125,16 +144,17 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
         <a href={planNodeHref(view.root, cell.id)} aria-label={`Open step ${cell.label}`}
           className="inline-flex min-h-6 items-center font-mono text-xs text-muted-foreground underline-offset-2 hover:underline pointer-coarse:min-h-11">{cell.label}</a>
         <Who owner={cell.owner} />
+        {noRuleMarked(cell) && <span data-no-rule className={NO_RULE_PILL} title="Its done rule is {}: nothing closes it by evidence">No done rule</span>}
         <StateWord state={cell.state} />
       </div>
+      {active && nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-[13px] leading-[1.45] text-muted-foreground">{line}</p>)}
       <div className={`flex min-w-0 flex-col gap-0.5 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}>
         {active ? <div role="group" aria-label={`Now on ${cell.label}`} className="flex min-w-0 flex-col gap-0.5">{own}</div> : own}
         <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Review</dt><dd className="m-0 inline">{reviewWords(scope, view, cell.id, runtime)}</dd></dl>
       </div>
       {open && <div className="flex min-w-0 flex-col gap-0.5 text-[13px] leading-[1.45]">
         <span className="text-xs text-muted-foreground">Done when</span>
-        {cell.rule.length > 0 ? <Rule lines={cell.rule} />
-          : <p className="m-0">No done rule yet. The runtime does not move this step on evidence; it changes only by a recorded event.</p>}
+        {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
       </div>}
       {open && cell.external.length > 0 && <div className="flex min-w-0 flex-col gap-0.5 text-[13px]">
         <span className="text-xs text-muted-foreground">External work on this step</span>
@@ -172,18 +192,19 @@ function Head({ view, item, row, scope, runtime, reads, stale, now, heading }: {
     <section aria-label="Steps to go" className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[15px]">
       {row.total === 0 || row.toGo === 0 ? <Big>{toGoText(row)}</Big>
         : <p className="m-0" data-to-go><Big>{row.toGo}</Big> {row.toGo === 1 ? 'step' : 'steps'} to go</p>}
-      <span>of {row.total} · {row.done} done{row.active > 0 && ` · ${row.active} in progress`}{row.stopped > 0 && ` · ${row.stopped} stopped`}</span>
+      <span>of {row.total} · {row.done} done{activeCounts(row).map(p => ` · ${p}`).join('')}{row.stopped > 0 && ` · ${row.stopped} stopped`}</span>
       {row.unknown > 0 && <span>{plural(row.unknown, 'step')} without a state: Unknown</span>}
       {row.dropped > 0 && <span className="text-xs text-muted-foreground">{row.dropped} dropped, not counted</span>}
-      <span className="basis-full text-xs text-muted-foreground">Execution progress from the controller's step states. Not acceptance, not deployment.</span>
+      <span className="basis-full text-xs text-muted-foreground">Execution progress from the controller's step states; an active step by what the plan view, read now, shows running or queued on it. Not acceptance, not deployment.</span>
     </section>
     <div className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-2.5 border-t border-[var(--table-rule)] pt-2.5 sm:grid-cols-2 xl:grid-cols-4">
       <Field label="Now">
         {current.length === 0
           ? <p className="m-0">{row.unknown > 0 ? `No step in progress by the runtime's states; ${plural(row.unknown, 'step')} without a state (Unknown).` : 'No step in progress.'}</p>
           : <ul className="m-0 flex list-none flex-col gap-1 p-0">{current.map(s => <li key={s.cell.id} className="flex min-w-0 flex-wrap items-center gap-2">
-            <a href={planNodeHref(view.root, s.cell.id)} aria-label={`Step ${s.cell.label} in progress`} className="inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"><StepBadge label={s.cell.label} /></a>
-            <span className="min-w-0 break-words">{s.cell.title || 'Untitled step'}</span></li>)}</ul>}
+            <a href={planNodeHref(view.root, s.cell.id)} aria-label={`Step ${s.cell.label} ${spokenState(s.cell)}`} className="inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"><StepBadge label={s.cell.label} /></a>
+            <span className="min-w-0 break-words">{s.cell.title || 'Untitled step'}</span>
+            <span data-now-state={s.cell.state} className="text-xs text-muted-foreground">{cellLabels[s.cell.state]}</span></li>)}</ul>}
       </Field>
       <Field label="Next in plan order">
         {next ? <>
@@ -293,15 +314,20 @@ function Live({ view, item, scope, stale }: { view: PlanSnapshot; item: PlanNode
  * dependencies and live work; then what happened lately. Each from a field the Console already reads, Unknown where
  * none says (claims: MODULE_DETAIL_CLAIMS, WORK_V36_3_CLAIMS).
  */
-export function PlanModuleDetail({ view, item, step, stale }: { view: PlanSnapshot; item: PlanNode; step: string; stale: boolean }) {
+export function PlanModuleDetail({ view, item, step, stale, failed = null }: { view: PlanSnapshot; item: PlanNode; step: string; stale: boolean
+  /** Why the plan view's latest refresh failed (or Offline); null while it did not. */
+  failed?: string | null }) {
   const now = useNow()
   const reads = useShellReads()
   const heading = useRef<HTMLHeadingElement>(null)
   const [allActivity, setAllActivity] = useState(false)
-  const scopes = useMemo(() => moduleScopes(view), [view])
-  const scope = scopes.get(item.plan_node_id)!
-  const row = scope.row
   const runtime = runtimeTasks(reads.progress)
+  // The modules' scopes, once per plan view; this module's row is judged again on the page clock (R5:5.5-10): its
+  // active steps by what they have now, as the read ages and heartbeats go unconfirmed.
+  const scopes = useMemo(() => moduleScopes(view), [view])
+  const base = scopes.get(item.plan_node_id)!
+  const scope: ModuleScope = { ...base, row: judgeRow(view, base.row, stepJudge(view, { failed, now, runtime })) }
+  const row = scope.row
   const cards = needsYouCards(reads.progress)?.cards ?? new Map()
   const needs = needsNow(view, scopes, scope, reads, now)
   const actions = actionsLeft(scope, needs)

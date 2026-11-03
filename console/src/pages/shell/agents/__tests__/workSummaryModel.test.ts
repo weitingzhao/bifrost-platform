@@ -4,6 +4,7 @@ import signoffFixture from '@/api/__fixtures__/plan-view-signoff.generated.json'
 import type { SignoffWait } from '@/api/agentRuntimePlan'
 import { parsePlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
 import { moduleRows, type ModuleRow } from '../planModuleModel'
+import { stepRows } from '../stepStateModel'
 import type { SignoffWaitsRead } from '../useRuntimePlan'
 import { workTabHref, workViewOf } from '../workViewModel'
 import {
@@ -24,7 +25,7 @@ function prodView(states: Record<string, PlanSnapshot['nodes'][number]['state']>
   return parsePlanSnapshot(raw, 'R4')
 }
 const row = (o: Partial<ModuleRow>): ModuleRow => ({ id: 'R:x', label: 'x', lane: 'Support', title: '', current: false, href: '', cells: [],
-  total: 3, done: 0, active: 0, stopped: 0, unknown: 0, dropped: 0, toGo: 3, waits: [], ...o })
+  total: 3, done: 0, active: 0, running: 0, queued: 0, held: 0, idle: 0, yours: 0, nowUnknown: 0, stopped: 0, unknown: 0, dropped: 0, toGo: 3, waits: [], ...o })
 const waitsOk = (waits: SignoffWait[] = [], notStarted: SignoffWait[] = [], acceptanceRoots: string[] = []): SignoffWaitsRead => ({ read: 'ok', waits, notStarted, acceptanceRoots })
 const wait = (node: string, label: string, state = 'active', refs = ['owner-ok']): SignoffWait => ({ node, label, title: `step ${label}`, state, refs, named: false })
 const roundsOk: RoundsRead = { state: 'ok', rounds: [{ id: 'R4', title: '' }, { id: 'R5', title: '' }], newest: 'R5', ignored: [], at: 0, failed: '' }
@@ -34,10 +35,16 @@ const read = (view: PlanSnapshot | undefined, o: { failed?: string; root?: strin
 describe('the summary sentence', () => {
   it('says where the mainline stands and counts the other items by their own state, each counted directly', () => {
     const view = prodView({ 'R4:4.1-1': 'done', 'R4:4.1-2': 'done', 'R4:4.1-3': 'active', 'R4:4.5-1': 'active' })
-    const rows = moduleRows(view)
-    expect(mainlineSentence(view, rows)).toEqual({ text: 'The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 active.', unknown: false })
+    // Read at the snapshot's time: both active steps have no task, so nothing runs on either (R5:5.5-10).
+    const rows = stepRows(view, { failed: null, now: Date.parse(view.as_of) })
+    expect(mainlineSentence(view, rows)).toEqual({ text: 'The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 idle.', unknown: false })
     // In the runtime's own terms: "no step started" is the controller's record, not a claim that no work was done.
-    expect(othersSentence(rows, view.mainline.current?.plan_node_id ?? null)).toBe('By runtime step state, of the 9 other items, 1 has a step active and 8 have no step started.')
+    expect(othersSentence(rows, view.mainline.current?.plan_node_id ?? null)).toBe('By runtime step state, of the 9 other items, 1 has an active step with nothing running and 8 have no step started.')
+    // A read over 60 s old, or rows not judged at all, say the active step's work now is Unknown: never idle.
+    const old = stepRows(view, { failed: null, now: Date.parse(view.as_of) + 61_000 })
+    expect(mainlineSentence(view, old).text).toBe('The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 active, Unknown now.')
+    expect(othersSentence(old, view.mainline.current?.plan_node_id ?? null)).toBe('By runtime step state, of the 9 other items, 1 has an active step whose work now is Unknown and 8 have no step started.')
+    expect(mainlineSentence(view, moduleRows(view)).text).toBe('The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 active, Unknown now.')
     expect(mainlineLabels(view)).toEqual(['4.1', '4.2', '4.4', '4.10'])
     expect(roundHeader(view)).toBe('Round 4 · 10 items · plan v1')
   })
@@ -45,16 +52,22 @@ describe('the summary sentence', () => {
   it('names every class an item can be in, in a fixed order, and only the ones that hold any', () => {
     const rows = [
       row({ id: 'cur' }),
-      row({ id: 'a', active: 1, done: 1, toGo: 2 }), row({ id: 'b', active: 2, stopped: 1, toGo: 3 }),
+      row({ id: 'a', active: 2, running: 1, idle: 1, done: 1, toGo: 2 }), row({ id: 'b', active: 1, queued: 1, stopped: 1, toGo: 3 }),
       row({ id: 'c' }), row({ id: 'd' }),
       row({ id: 'e', done: 3, toGo: 0 }),
       row({ id: 'f', done: 1, toGo: 2 }),
       row({ id: 'g', stopped: 1, toGo: 3 }),
       row({ id: 'h', unknown: 2, toGo: 3 }),
       row({ id: 'i', total: 0, toGo: 0 }),
+      // Active with nothing running, the Owner's, held, and Unknown now beside an Owner step, a held and an idle one: never
+      // folded into in progress, and Unknown now said before any of them.
+      row({ id: 'j', active: 1, idle: 1 }), row({ id: 'k', active: 1, yours: 1 }), row({ id: 'l', active: 4, idle: 1, held: 1, yours: 1, nowUnknown: 1 }),
+      row({ id: 'm', active: 2, held: 1, yours: 1 }),
     ]
-    expect(rows.slice(1).map(moduleClass)).toEqual(['in-progress', 'in-progress', 'not-started', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps'])
-    expect(othersSentence(rows, 'cur')).toBe('By runtime step state, of the 9 other items, 2 have steps active, 2 have no step started, 1 has every step done, '
+    expect(rows.slice(1).map(moduleClass)).toEqual(['in-progress', 'in-progress', 'not-started', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps',
+      'idle', 'yours', 'active-unknown', 'held'])
+    expect(othersSentence(rows, 'cur')).toBe('By runtime step state, of the 13 other items, 2 have steps in progress, 1 has an active step held, '
+      + '1 has an Owner step active, 1 has an active step with nothing running, 1 has an active step whose work now is Unknown, 2 have no step started, 1 has every step done, '
       + '1 has steps done and none active, 1 has a stopped step, 1 has a step with no state and 1 has no steps.')
     expect(othersSentence([row({ id: 'cur' })], 'cur')).toBe('')
   })

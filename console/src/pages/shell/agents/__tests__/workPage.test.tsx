@@ -20,7 +20,7 @@ vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p data-testid=
  * until the address names it. Every block that was there is still reachable, and every address Work took still works.
  */
 
-/** The PROD R4 answer renumbered to round 5, with 5.1 two steps done and one in progress, and 5.5 one in progress. */
+/** The PROD R4 answer renumbered to round 5, with 5.1 two steps done and one active, and 5.5 one active (no task on either). */
 function planView(round: number) {
   const v = JSON.parse(JSON.stringify(prod).replace(/"R4"/g, `"R${round}"`).replace(/R4:4\./g, `R${round}:${round}.`)
     .replace(/"4\.(\d+(?:-\d+)?)"/g, `"${round}.$1"`).replace(/plan:R4/g, `plan:R${round}`))
@@ -97,7 +97,7 @@ describe('Work opens on the round', () => {
     page('#work')
     const card = await summary()
     await waitFor(() => expect(card.querySelector('[data-summary-sentence]')).toHaveTextContent(
-      'The mainline stands at 5.1 · runtime steps 2 of 6 done, 1 active. By runtime step state, of the 9 other items, 1 has a step active and 8 have no step started.'))
+      'The mainline stands at 5.1 · runtime steps 2 of 6 done, 1 idle. By runtime step state, of the 9 other items, 1 has an active step with nothing running and 8 have no step started.'))
     expect(card).toHaveTextContent('Round 5 · 10 items · plan v1')
     expect(card).toHaveTextContent('Mainline 5.1 → 5.2 → 5.4 → 5.10')
     await waitFor(() => expect(within(card).getByRole('link', { name: /^Sign-offs:/ })).toHaveTextContent('Sign-offs: 0 ready · 13 later · Round 5 only · other rounds on the Sign-offs tab'))
