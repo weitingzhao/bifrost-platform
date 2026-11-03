@@ -97,8 +97,15 @@ func TestExamVoidRefusals(t *testing.T) {
 	if _, err = store.VoidExamPaperLater(ctx, w.rt, lapsed.RunID, "too late", voidApproval, store.ExamPaperLife+time.Minute); !errors.Is(err, store.ErrState) {
 		t.Fatalf("a lapsed paper: %v", err)
 	}
+	// A run id no paper has: the lapsed paper's with its first hex digit
+	// changed, so it can never equal it (TD-426: a fixed "ab" prefix was the
+	// paper's own id about once in 256 runs).
+	missing := otherFirstDigit(lapsed.RunID)
+	if missing == lapsed.RunID || len(missing) != len(lapsed.RunID) {
+		t.Fatalf("the missing run id %q is not a different id of the same length as %q", missing, lapsed.RunID)
+	}
 	for name, c := range map[string]struct{ run, reason, approval string }{
-		"no such paper":     {"ab" + lapsed.RunID[2:], "x", voidApproval},
+		"no such paper":     {missing, "x", voidApproval},
 		"a short run id":    {lapsed.RunID[:12], "x", voidApproval},
 		"no approval":       {lapsed.RunID, "x", ""},
 		"an approval's num": {lapsed.RunID, "x", "#212"},
@@ -116,4 +123,16 @@ func TestExamVoidRefusals(t *testing.T) {
 	if _, err = store.IssueExam(ctx, w.rt, examAsk("h1", "exec:claude"), set); !errors.Is(err, store.ErrState) {
 		t.Fatalf("exec:claude after a refused void: %v", err)
 	}
+}
+
+// otherFirstDigit returns id with its first hex digit replaced by a different
+// one: '0' unless it already is '0', then '1'.
+func otherFirstDigit(id string) string {
+	if id == "" {
+		return "0"
+	}
+	if id[0] == '0' {
+		return "1" + id[1:]
+	}
+	return "0" + id[1:]
 }
