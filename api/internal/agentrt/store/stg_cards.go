@@ -39,7 +39,9 @@ func stgCardWriteAllowed(ctx context.Context, tx pgx.Tx, repo, prep string) (boo
 	return lockStgCardPolicy(ctx, tx, repo)
 }
 
-func stgCardTriggers(ctx context.Context, tx pgx.Tx, repo string) ([]CardTrigger, error) {
+// stgCardTriggersFrom lists B5's card triggers over its fold s when already
+// read in this transaction (nil: read it here).
+func stgCardTriggersFrom(ctx context.Context, tx pgx.Tx, repo string, s *StgState) ([]CardTrigger, error) {
 	if repo != "bifrost-platform" {
 		return nil, nil
 	}
@@ -47,11 +49,14 @@ func stgCardTriggers(ctx context.Context, tx pgx.Tx, repo string) ([]CardTrigger
 	if err != nil || !enabled {
 		return nil, err
 	}
-	s, err := StgReleaseState(ctx, tx)
-	if err != nil {
-		return nil, err
+	if s == nil {
+		read, err := StgReleaseState(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		s = &read
 	}
-	return stgTriggers(s), nil
+	return stgTriggers(*s), nil
 }
 
 func stgTriggers(s StgState) []CardTrigger {

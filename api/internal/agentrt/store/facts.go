@@ -268,6 +268,15 @@ type stepFacts struct {
 	deploys   map[string]deployment
 	landed    *stepLanding // the step's own landing, read once (stepevidence.go)
 	err       error
+	// An explanation's own reads (stepexplain.go): each repository's records
+	// once, and the time card triggers are read at.
+	repos     map[string]*repoExplain
+	explainAt time.Time
+	// explainRoots are the implementations of the steps this explanation
+	// explains, by repository: the only roots whose records it reads.
+	explainRoots map[string]map[string]bool
+	// atomBlockers, set only by a test, stands in for explainAtom.
+	atomBlockers func(*plan.Node) []Blocker
 }
 
 type deployment struct {

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { approvalHref, goalHref, isQuestionId, questionHref } from '@/lib/shell/consoleRoutes'
+import type { WhyLine } from './explainModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /*
@@ -19,12 +20,12 @@ import { planNodeHref } from './usePlanSnapshot'
 export type CellState = 'done' | 'active' | 'waiting' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
 /** How a cell's state is read aloud ("Step 4.1-3: done"); spokenState says the derived ones whole. */
 export const cellWords: Record<CellState, string> = {
-  done: 'done', active: 'in progress', waiting: 'waiting on you', held: 'active, held', idle: 'active, nothing running', yours: 'yours', planned: 'not started',
+  done: 'done', active: 'in progress', waiting: 'waiting on you', held: 'active, held', idle: 'active, nothing running now', yours: 'yours', planned: 'not started',
   stopped: 'stopped', 'active-unknown': 'active, what runs on it now is Unknown', unknown: 'unknown',
 }
 /** How a cell's state is written in its detail and the legend. */
 export const cellLabels: Record<CellState, string> = {
-  done: 'Done', active: 'In progress', waiting: 'Waiting on you', held: 'Active · held', idle: 'Active · nothing running', yours: 'Yours', planned: 'Not started',
+  done: 'Done', active: 'In progress', waiting: 'Waiting on you', held: 'Active · held', idle: 'Active · nothing running now', yours: 'Yours', planned: 'Not started',
   stopped: 'Stopped', 'active-unknown': 'Active · Unknown now', unknown: 'Unknown',
 }
 /**
@@ -97,6 +98,8 @@ export type StepCell = {
   step: ControllerState
   /** What an active step has now (null for a step not active). */
   now: StepNow | null
+  /** Why an active step is not done, from the plan view's explain block (R5:5.5-19, explainModel.ts); absent when not read. */
+  why?: WhyLine[]
   /** Its done rule is {}: nothing closes it by evidence (R5:5.5-10 c). */
   noRule: boolean
   /** When the step took its state: the time of its state event (state_event_id) while that event is in recent_changes; else null. */
@@ -451,7 +454,7 @@ export function nowLines(cell: StepCell): string[] {
     case 'held': return [`Active · held: ${now.held.map(h => h.text).join('; ')}. ${movesOf(now.held)}; nothing on the step runs or is queued.`,
       ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...unreadLine(now), ...since]
     case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
-    case 'idle': return [`Active · nothing running, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
+    case 'idle': return [`Active · nothing running now, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
   }
 }
 

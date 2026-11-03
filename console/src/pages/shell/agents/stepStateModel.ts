@@ -1,5 +1,6 @@
 import { approvalNumbers } from '@/api/agentRuntimePlan'
-import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
+import type { PlanNode, PlanSnapshot, PlanSnapshotRead } from '@/api/planSnapshot'
+import { whyLines } from './explainModel'
 import { attemptRuns, firstReason, landingMoving, landingQuiet, LANDING_QUIET_MS, runContext, stepRunning, type RunContext } from './liveStepModel'
 import { taskRole, type ModuleTask, type RuntimeTasks } from './moduleDetailModel'
 import { heartbeatUnconfirmed, HEARTBEAT_UNCONFIRMED_S } from './needsCleanupModel'
@@ -181,7 +182,19 @@ export function stepJudge(view: PlanSnapshot, clock: StepClock): StepJudge {
   return step => judgeStep(step, ctx, old, clock.asks)
 }
 
-/** The module rows with each active step shown by what it has now. */
-export function stepRows(view: PlanSnapshot, clock: StepClock): ModuleRow[] {
-  return moduleRows(view, stepJudge(view, clock))
+/** The module rows with each active step shown by what it has now, and why it is not done (R5:5.5-19). */
+export function stepRows(view: PlanSnapshotRead, clock: StepClock): ModuleRow[] {
+  return moduleRows(view, stepJudge(view, clock)).map(row => withWhy(view, row, clock))
+}
+
+/**
+ * The row with each active step's reasons it is not done, at the same clock and the same read age as what it has now:
+ * none while the plan view is not read now (explainModel.ts whyLines).
+ */
+export function withWhy(view: PlanSnapshotRead, row: ModuleRow, clock: StepClock): ModuleRow {
+  const old = viewOldReason(view, view.root, clock.failed, clock.now)
+  return { ...row, cells: row.cells.map(c => {
+    const step = c.step === 'active' ? view.nodes.find(n => n.plan_node_id === c.id) : undefined
+    return step ? { ...c, why: whyLines(view, step, clock.now, old, true) } : c
+  }) }
 }

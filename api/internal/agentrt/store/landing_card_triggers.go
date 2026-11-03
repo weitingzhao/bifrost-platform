@@ -44,11 +44,21 @@ const ParkedLongAfter = 2 * time.Hour
 // parked_long (not ci_stuck or rule; two hours into the park). A failed root
 // whose mission is no longer active, or no_merge, has no card.
 func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.Time) ([]CardTrigger, error) {
-	stream := "landing:" + repo
-	s, err := LandingState(ctx, tx, stream)
+	s, err := LandingState(ctx, tx, "landing:"+repo)
 	if err != nil {
 		return nil, err
 	}
+	return landingCardTriggers(ctx, tx, repo, now, s, nil, nil)
+}
+
+// landingCardTriggers is LandingCardTriggers over repo's landing fold s
+// and, for B5's repository, its fold stg when already read (nil: read it
+// here), read in this same transaction (an explanation reads each once,
+// R5:5.5-19 §5). With only, the root triggers are those of these roots
+// alone, so an explanation reads the records of the roots it explains and
+// no other (nil: every root).
+func landingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.Time, s landing.State, stg *StgState, only map[string]bool) ([]CardTrigger, error) {
+	stream := "landing:" + repo
 	rows, err := tx.Query(ctx, `SELECT seq, at, body_json FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
 	  AND (body_json->'landing'->>'kind' IN ('failed', 'parked') OR body_json ? 'landing_anomaly' OR body_json ? 'landing_stop' OR body_json ? 'landing_resume')
 	  ORDER BY seq`, stream)
@@ -115,7 +125,7 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 		out = append(out, CardTrigger{Kind: CardRepoStopped, Seq: stop.seq, At: stop.at, StopGeneration: stopGen, Choices: []string{"repo_resume", "keep_stopped"}})
 	}
 	for op, o := range s.Operations {
-		if o.Task == "" || s.LatestOperation(o.Task) != op {
+		if o.Task == "" || only != nil && !only[o.Task] || s.LatestOperation(o.Task) != op {
 			continue
 		}
 		why, err := landingDisposed(ctx, tx, stream, o.Task, op)
@@ -216,11 +226,11 @@ func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			}
 		}
 	}
-	stg, err := stgCardTriggers(ctx, tx, repo)
+	stgs, err := stgCardTriggersFrom(ctx, tx, repo, stg)
 	if err != nil {
 		return nil, err
 	}
-	out = append(out, stg...)
+	out = append(out, stgs...)
 	slices.SortFunc(out, func(a, b CardTrigger) int { return int(a.Seq - b.Seq) })
 	return out, nil
 }

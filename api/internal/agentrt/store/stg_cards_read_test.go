@@ -63,7 +63,7 @@ func TestStgCardsNoneDoesNotReadLedgerOrEmitTriggers(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		triggers, err := stgCardTriggers(context.Background(), tx, "bifrost-platform")
+		triggers, err := stgCardTriggersFrom(context.Background(), tx, "bifrost-platform", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

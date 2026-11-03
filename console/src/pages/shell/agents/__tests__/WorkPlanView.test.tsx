@@ -77,7 +77,7 @@ describe('Work plan/live view', () => {
     expect(live).toHaveTextContent('Not reconciled')
     // Every tab reads the same plan view; the sign-offs also read the round's GET /plan, as SignoffWaiting did, and take
     // the rounds from the shell's GET /progress in the cache: no progress read of Work's own.
-    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4', '/api/v1/agentrt/plan?root=R4']))
+    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1', '/api/v1/agentrt/plan?root=R4']))
   })
   it('shows runtime attempts on a historical root and preserves the old round parameter', async () => {
     reply = legacy
@@ -91,7 +91,7 @@ describe('Work plan/live view', () => {
     await go('#work?section=plan&round=R2')
     await unfold(/^Whole plan/)
     expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent('Unclassified')
-    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/agentrt/plan-view?root=R2')
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/agentrt/plan-view?root=R2&explain=1')
   })
   it('distinguishes a real zero from loading, while keeping Owner readiness unknown', async () => {
     reply = empty; show('#work?root=R3&tab=live')

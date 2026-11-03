@@ -1,0 +1,30 @@
+{
+  "status": "ok",
+  "read_at": "2026-11-03T21:40:00Z",
+  "last_attempt_at": "2026-11-03T21:40:00Z",
+  "steps": {
+    "R5:5.5-10": {
+      "node_version": 3,
+      "kind": "explained",
+      "rule": "false",
+      "blockers": [
+        {
+          "atom": "step_landed",
+          "state": "landing_declined",
+          "task_id": "t_01M6HAMB152ZEPTPSZB0Z2KKNB",
+          "op": "land:t_01M6HAMB152ZEPTPSZB0Z2KKNB:1",
+          "rework": {
+            "seen": { "set_key": "e8e527e9468cabf89e4d09264d92500bdca1c1d2c51cd39223ddc1c2feaaf740", "trigger_seq": 412, "current": true },
+            "not_asked": false,
+            "card": { "n": 1, "prep": "rework_landed:412:1", "question_id": "q_0123456789abcdef", "ask_started": true, "closed": false, "closed_why": null, "outcome": null }
+          }
+        },
+        {
+          "atom": "step_stg_settled",
+          "state": "stg_needs_landing"
+        }
+      ]
+    },
+    "R5:5.5-11": { "node_version": 1, "kind": "not_started" }
+  }
+}

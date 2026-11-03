@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,10 @@ import (
 // database configured: every route answers 503, so the code can be deployed
 // before the database is wired.
 type API struct {
+	// Explain caches the explanation of steps in progress (plan-view
+	// explain=1); nil makes one over DB on first use.
+	Explain     *store.ExplainCache
+	explainInit sync.Once
 	// CheckAssessment verifies a canonical card id or approval number is still open.
 	CheckAssessment func(context.Context, string, string) error
 	DB              store.DB

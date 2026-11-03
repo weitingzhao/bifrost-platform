@@ -373,6 +373,15 @@ func TestReworkTooManySiblingsPrepareNoCard(t *testing.T) {
 			t.Fatalf("a card was prepared for %d siblings: %v", len(sibs), prepared)
 		}
 	}
+	// The explanation says so from the same judgment (R5:5.5-19 §4.3):
+	// the current set is recorded and not asked.
+	w.rule(t, s2, `{"step_landed":{}}`)
+	exActive(t, w, s2)
+	b := exLanded(t, exStep(t, exSteps(t, w), s2))[rootTask]
+	rw, _ := b["rework"].(map[string]any)
+	if seen, _ := rw["seen"].(map[string]any); b["state"] != "landing_declined" || seen["current"] != true || rw["not_asked"] != true || rw["card"] != nil {
+		t.Fatalf("explained as %v", b)
+	}
 }
 
 // Serial: FreezeEventClock. RecordReworkSeen reads again, under the lock,

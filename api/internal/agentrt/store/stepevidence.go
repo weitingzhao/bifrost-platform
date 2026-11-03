@@ -94,12 +94,12 @@ func (f *stepFacts) StepSTGSettled() plan.Tri {
 			return l.stg
 		}
 		if stg == nil {
-			s, err := StgReleaseState(f.ctx, f.tx)
+			s, err := f.stgFold()
 			if err != nil {
 				f.err, l.stgRead = err, false
 				return plan.Unknown
 			}
-			stg = &s
+			stg = s
 		}
 		switch stgSettled(*stg, r.key) {
 		case plan.False:
@@ -110,6 +110,35 @@ func (f *stepFacts) StepSTGSettled() plan.Tri {
 		}
 	}
 	return l.stg
+}
+
+// landingFold is repo's landing fold: read here, or once for every step of
+// an explanation (f.repos, R5:5.5-19 §5).
+func (f *stepFacts) landingFold(repo string) (landing.State, error) {
+	if f.repos == nil {
+		return LandingState(f.ctx, f.tx, "landing:"+repo)
+	}
+	ex, err := f.explainRepo(repo)
+	if err != nil {
+		return landing.State{}, err
+	}
+	return ex.fold, nil
+}
+
+// stgFold is B5's fold, shared the same way.
+func (f *stepFacts) stgFold() (*StgState, error) {
+	if f.repos == nil {
+		s, err := StgReleaseState(f.ctx, f.tx)
+		return &s, err
+	}
+	ex, err := f.explainRepo(stgReleaseRepo)
+	if err == nil && ex.stg == nil {
+		err = ex.readSTG(f)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ex.stg, nil
 }
 
 // noSTGRelease names the repositories the runtime lands whose work has no
@@ -126,6 +155,23 @@ type stepLanding struct {
 	landed  []landedRoot
 	stg     plan.Tri
 	stgRead bool
+	// roots is each implementation with its final status, in task order:
+	// what the explanation reads (R5:5.5-19 §4.2), so it can never judge a
+	// root differently from the value.
+	roots []implRoot
+	// siblings are the landed siblings read for each declined root that
+	// stayed a no: the explanation's rework set is this same read.
+	siblings map[string][]ReworkSibling
+}
+
+// implRoot is one accepted implementation and where its landing stands.
+type implRoot struct {
+	task, repo string
+	status     int
+	op         string
+	o          landing.Operation
+	has        bool // the fold has op
+	accepted   *time.Time
 }
 
 // landedRoot is a root whose latest operation landed: its repository and
@@ -189,11 +235,12 @@ func (f *stepFacts) landing() *stepLanding {
 	for _, r := range roots {
 		if !landing.RepoSupported(r.repo) {
 			statuses = append(statuses, rootNone)
+			l.roots = append(l.roots, implRoot{task: r.task, repo: r.repo, status: rootNone, accepted: r.accepted})
 			continue
 		}
 		s, ok := folds[r.repo]
 		if !ok {
-			if s, err = LandingState(f.ctx, f.tx, "landing:"+r.repo); err != nil {
+			if s, err = f.landingFold(r.repo); err != nil {
 				f.err = err
 				return nil
 			}
@@ -204,6 +251,8 @@ func (f *stepFacts) landing() *stepLanding {
 			declinedRoots = append(declinedRoots, declined{len(statuses), r.repo, r.task, op})
 		}
 		statuses = append(statuses, status)
+		_, has := s.Operations[op]
+		l.roots = append(l.roots, implRoot{task: r.task, repo: r.repo, status: status, op: op, o: o, has: has, accepted: r.accepted})
 		if status == rootLanded {
 			l.landed = append(l.landed, landedRoot{repo: r.repo, key: StgMemberKey{Root: r.task, Op: op, R: o.R}})
 		}
@@ -233,6 +282,10 @@ func (f *stepFacts) landing() *stepLanding {
 			f.err = err
 			return nil
 		}
+		if l.siblings == nil {
+			l.siblings = map[string][]ReworkSibling{}
+		}
+		l.siblings[d.task] = sibs
 		ok, err := reworkExcuse(f.ctx, f.tx, "landing:"+d.repo, d.task, d.op, sibs)
 		if err != nil {
 			f.err = err
@@ -241,6 +294,9 @@ func (f *stepFacts) landing() *stepLanding {
 		if ok {
 			statuses[d.i] = rootDelivered
 		}
+	}
+	for i := range l.roots {
+		l.roots[i].status = statuses[i]
 	}
 	l.value = landingValue(statuses)
 	f.landed = l

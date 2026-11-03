@@ -35,9 +35,9 @@ export function usePlanAddress(): PlanAddress {
   return { root, node: value.node, from: value.named ? 'address' : 'newest', rounds, retry }
 }
 
-/** One round's plan view; nothing is read while the round is not known. */
+/** One round's plan view, with its explain block (R5:5.5-19); nothing is read while the round is not known. */
 export function usePlanSnapshot(root: string | null, enabled = true) {
-  return useQuery({ enabled: enabled && root !== null, queryKey: ['agent-runtime-plan-view', root ?? ''], queryFn: ({ signal }) => fetchPlanSnapshot(root ?? '', signal),
+  return useQuery({ enabled: enabled && root !== null, queryKey: ['agent-runtime-plan-view', root ?? ''], queryFn: ({ signal }) => fetchPlanSnapshot(root ?? '', signal, '', true),
     refetchInterval: 15_000, retry: false })
 }
 

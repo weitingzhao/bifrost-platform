@@ -2,6 +2,7 @@ package agentrtapi_test
 
 import (
 	"testing"
+	"time"
 )
 
 func TestExternalWorkRoutesAndPlanView(t *testing.T) {
@@ -46,5 +47,42 @@ func TestExternalWorkRoutesAndPlanView(t *testing.T) {
 	}
 	if code, out = call(t, s, "viewer", "GET", "external-work/"+id, nil); code != 200 || out["seq"] != float64(1) {
 		t.Fatalf("resume %d %v", code, out)
+	}
+}
+
+// R5:5.5-19 §5, §8: the explanation is opt-in. Without explain=1 the
+// response has no explain block; with it, the same response plus the
+// block, pending at first and computed in the background.
+func TestPlanViewExplainIsOptIn(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	code, plain := call(t, s, "viewer", "GET", "plan-view?root=R2", nil)
+	if code != 200 || plain["explain"] != nil {
+		t.Fatalf("without explain=1: %d, explain %v", code, plain["explain"])
+	}
+	code, out := call(t, s, "viewer", "GET", "plan-view?root=R2&explain=1", nil)
+	ex, _ := out["explain"].(map[string]any)
+	if code != 200 || ex == nil || ex["status"] != "pending" {
+		t.Fatalf("with explain=1: %d, explain %v", code, out["explain"])
+	}
+	for k := range plain {
+		if _, ok := out[k]; !ok {
+			t.Fatalf("explain=1 dropped %s", k)
+		}
+	}
+	if len(out) != len(plain)+1 {
+		t.Fatalf("explain=1 added more than the block: %d keys, %d without", len(out), len(plain))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for ex["status"] == "pending" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		_, out = call(t, s, "viewer", "GET", "plan-view?root=R2&explain=1", nil)
+		ex, _ = out["explain"].(map[string]any)
+	}
+	if ex["status"] != "ok" || ex["read_at"] == nil || ex["steps"] == nil {
+		t.Fatalf("computed: %v", ex)
+	}
+	if code, _ = call(t, s, "viewer", "GET", "plan-view?root=missing&explain=1", nil); code != 404 {
+		t.Fatalf("missing root with explain=1: %d", code)
 	}
 }

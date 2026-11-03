@@ -23,3 +23,6 @@ func ReadStepEvidence(ctx context.Context, db DB, step, state string, min int64)
 	})
 	return out, err
 }
+
+// ExplainContractProblem is contractProblem for the external tests.
+func ExplainContractProblem(b map[string]any) string { return contractProblem(b) }

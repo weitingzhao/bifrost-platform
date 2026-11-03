@@ -70,12 +70,12 @@ const on514 = (change: (raw: Raw) => void = () => {}) => view(raw => { activate(
 const at = (now: number) => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now) }
 
 describe('step state now (model)', () => {
-  it('an active step with nothing running, queued or held, read now, is Active · nothing running: never In progress', () => {
+  it('an active step with nothing running now, queued or held, read now, is Active · nothing running now: never In progress', () => {
     const c = cell(on514(), '5.1-4')
     expect(c).toMatchObject({ step: 'active', state: 'idle', now: { kind: 'idle' } })
-    expect(cellLabels[c.state]).toBe('Active · nothing running')
-    expect(spokenState(c)).toBe('active, nothing running')
-    expect(nowLines(c)[0]).toMatch(/^Active · nothing running, read now: no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued/)
+    expect(cellLabels[c.state]).toBe('Active · nothing running now')
+    expect(spokenState(c)).toBe('active, nothing running now')
+    expect(nowLines(c)[0]).toMatch(/^Active · nothing running now, read now: no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued/)
     expect(nowLines(c).join(' ')).not.toMatch(/In progress/)
   })
 
@@ -198,12 +198,12 @@ describe('step state now (model)', () => {
     expect(cell(on514(raw => external(raw, { state: 'Cancelled', status: 'Cancelled' })), '5.1-4').now).toEqual({ kind: 'idle' })
   })
 
-  it('external work submitted and not read Verified holds nothing: Active · nothing running with a note, counted idle; Verified has ended', () => {
+  it('external work submitted and not read Verified holds nothing: Active · nothing running now with a note, counted idle; Verified has ended', () => {
     const v = on514(raw => external(raw, { state: 'Submitted', status: 'Submitted', verification: 'Unknown' }))
     const c = cell(v, '5.1-4')
     expect(c).toMatchObject({ state: 'idle', now: { kind: 'idle', unverified: [{ task: expect.any(String), verification: 'Unknown' }] } })
-    expect(cellLabels[c.state]).toBe('Active · nothing running')
-    expect(spokenState(c)).toBe('active, nothing running')
+    expect(cellLabels[c.state]).toBe('Active · nothing running now')
+    expect(spokenState(c)).toBe('active, nothing running now')
     expect(nowLines(c).join(' ')).not.toMatch(/held:|waits for its verification|In progress/)
     expect(unverifiedNote(c)).toMatch(/^1 external work submitted, not read Verified \(verification Unknown\): “.+”$/)
     const r51 = stepRows(v, clock()).find(r => r.label === '5.1')!
@@ -424,15 +424,15 @@ describe('done rule {}', () => {
     render(<NowClock><PlanModuleRows view={view(raw => { activate(raw, 'R5:5.1-4'); node(raw, 'R5:5.1-6').state = 'stopped' })} selected="" /></NowClock>)
     const bar = screen.getByRole('toolbar', { name: /^Steps of 5\.1,/ })
     expect(within(bar).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Step 5.1-1: done', 'Step 5.1-2: done', 'Step 5.1-3: in progress',
-      'Step 5.1-4: active, nothing running, no done rule', 'Step 5.1-5: not started', 'Step 5.1-6: stopped, no done rule'])
+      'Step 5.1-4: active, nothing running now, no done rule', 'Step 5.1-5: not started', 'Step 5.1-6: stopped, no done rule'])
     expect(bar.querySelectorAll('[data-no-rule-mark]')).toHaveLength(2)
     // Every planned step of 5.2 has rule {}: none is marked in its cell.
     expect(screen.getByRole('toolbar', { name: /^Steps of 5\.2,/ }).querySelectorAll('[data-no-rule-mark]')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running, no done rule' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running now, no done rule' }))
     const active = screen.getByRole('region', { name: 'Step 5.1-4' })
     expect(active.querySelector('[data-no-rule-text]')).toHaveTextContent(/^No done rule: nothing closes it by evidence\./)
     expect(active.querySelector('[data-no-rule]')).toHaveTextContent('No done rule')
-    expect(active).toHaveTextContent('Active · nothing running')
+    expect(active).toHaveTextContent('Active · nothing running now')
     fireEvent.click(screen.getByRole('button', { name: 'Step 5.2-1: not started' }))
     const planned = screen.getByRole('region', { name: 'Step 5.2-1' })
     expect(planned.querySelector('[data-no-rule-text]')).toHaveTextContent(/^No done rule yet\./)
@@ -459,7 +459,7 @@ describe('counts of the derived states', () => {
     // 5.1 with its queued step done: an idle and an Owner step are not in progress.
     const after = stepRows(view(raw => { activate(raw, 'R5:5.1-4'); node(raw, 'R5:5.1-3').state = 'done' }), clock())
     expect(moduleClass(row(after, '5.1'))).toBe('idle')
-    expect(othersSentence(after, 'R5:5.2')).toMatch(/^By runtime step state, of the 9 other items, 1 has an active step with nothing running and /)
+    expect(othersSentence(after, 'R5:5.2')).toMatch(/^By runtime step state, of the 9 other items, 1 has an active step with nothing running now and /)
     // A held step is counted and classed apart from idle.
     const held = stepRows(view(raw => { activate(raw, 'R5:5.1-4'); node(raw, 'R5:5.1-3').state = 'done'; addTask(raw, id('M'), 'R5:5.1-4', 'blocked') }), clock())
     expect(stepCounts(row(held, '5.1'))).toBe('3 / 6 done · 1 held')
@@ -497,13 +497,13 @@ describe('counts of the derived states', () => {
 })
 
 describe('Round 5 as on PROD 2026-11-02', () => {
-  it('5.4-1 and 5.4-2, active with rule {} and no task, read Active · nothing running with the no-rule mark, not In progress', () => {
+  it('5.4-1 and 5.4-2, active with rule {} and no task, read Active · nothing running now with the no-rule mark, not In progress', () => {
     at(NOW)
     render(<NowClock><PlanModuleRows view={view(raw => { activate(raw, 'R5:5.4-1'); activate(raw, 'R5:5.4-2') })} selected="" /></NowClock>)
     for (const label of ['5.4-1', '5.4-2']) {
-      const button = screen.getByRole('button', { name: `Step ${label}: active, nothing running, no done rule` })
+      const button = screen.getByRole('button', { name: `Step ${label}: active, nothing running now, no done rule` })
       expect(button).toHaveAttribute('data-state', 'idle')
-      expect(button.getAttribute('title')).toMatch(new RegExp(`^${label.replace('.', '\\.')} · Active · nothing running · No done rule · `))
+      expect(button.getAttribute('title')).toMatch(new RegExp(`^${label.replace('.', '\\.')} · Active · nothing running now · No done rule · `))
     }
     const item = within(screen.getByRole('list', { name: 'Modules in mainline order' })).getAllByRole('listitem').find(li => li.dataset.module === '5.4')!
     expect(item).toHaveTextContent('0 / 6 done · 2 idle')
@@ -515,7 +515,7 @@ describe('Round 5 as on PROD 2026-11-02', () => {
  * The shape PROD's R5 plan view had on 2026-11-02 for a step whose external reviews and repairs all finished (synthetic
  * titles and ids, no record copied): one active step, its work tasks accepted and landed, its checks accepted, nine
  * external-work records submitted through the dispatch wrapper with verification Unknown (the view's freshness.verification
- * Unknown too). Nothing on the step runs, is queued or waits on a decision: it reads Active · nothing running with a note,
+ * Unknown too). Nothing on the step runs, is queued or waits on a decision: it reads Active · nothing running now with a note,
  * never Active · held on a verification nobody reads.
  */
 describe('a step whose external work all finished, its verification Unknown (PROD shape, 2026-11-02)', () => {
@@ -535,14 +535,14 @@ describe('a step whose external work all finished, its verification Unknown (PRO
   })
   const NOTE = '9 external works submitted, not read Verified (verification Unknown): “Review pass 9” +8'
 
-  it('reads Active · nothing running with a short note, not held', () => {
+  it('reads Active · nothing running now with a short note, not held', () => {
     const c = cell(reviewed(), '5.1-4')
     expect(c).toMatchObject({ step: 'active', state: 'idle', now: { kind: 'idle' } })
     expect(c.now?.unverified).toHaveLength(9)
-    expect(cellLabels[c.state]).toBe('Active · nothing running')
-    expect(spokenState(c)).toBe('active, nothing running')
+    expect(cellLabels[c.state]).toBe('Active · nothing running now')
+    expect(spokenState(c)).toBe('active, nothing running now')
     expect(nowLines(c)).toHaveLength(1)
-    expect(nowLines(c)[0]).toMatch(/^Active · nothing running, read now: /)
+    expect(nowLines(c)[0]).toMatch(/^Active · nothing running now, read now: /)
     expect(nowLines(c).join(' ')).not.toMatch(/Review pass|held:|waits for its verification/)
     expect(unverifiedNote(c)).toBe(NOTE)
     const r51 = row(stepRows(reviewed(), clock()), '5.1')
@@ -558,7 +558,7 @@ describe('a step whose external work all finished, its verification Unknown (PRO
     render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><NowClock>
       <PlanModuleDetail view={v} item={moduleOf(v, 'R5:5.1')!.item} step="" stale={false} failed={null} /></NowClock></PlatformAuthContext.Provider></QueryClientProvider>)
     const stage = document.querySelector('[data-step-row="5.1-4"]') as HTMLElement
-    expect(stage.querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running')
+    expect(stage.querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running now')
     expect(stage.querySelector('[data-step-note="unverified"]')).toHaveTextContent(NOTE)
     expect(stage).not.toHaveTextContent('Active · held')
     // A step with no such work carries no note.
@@ -566,7 +566,7 @@ describe('a step whose external work all finished, its verification Unknown (PRO
     client.clear()
     cleanup()
     render(<NowClock><PlanModuleRows view={v} selected="" /></NowClock>)
-    fireEvent.click(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running, no done rule' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running now, no done rule' }))
     const detail = screen.getByRole('region', { name: 'Step 5.1-4' })
     expect(detail.querySelector('[data-step-note="unverified"]')).toHaveTextContent(NOTE)
     expect(detail).not.toHaveTextContent('Active · held')
@@ -589,10 +589,10 @@ describe('the module page', () => {
     const client = page(view(raw => activate(raw, 'R5:5.1-4')))
     expect(screen.getByRole('region', { name: 'Steps to go' })).toHaveTextContent('of 6 · 2 done · 1 queued · 1 idle')
     expect(screen.getByRole('region', { name: 'Steps to go' })).not.toHaveTextContent('in progress')
-    expect(within(screen.getByRole('region', { name: 'Now' })).getByRole('link', { name: 'Step 5.1-4 active, nothing running' })).toBeInTheDocument()
-    expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running')
+    expect(within(screen.getByRole('region', { name: 'Now' })).getByRole('link', { name: 'Step 5.1-4 active, nothing running now' })).toBeInTheDocument()
+    expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running now')
     expect(stepRow('5.1-4').querySelector('[data-no-rule]')).toHaveTextContent('No done rule')
-    expect(stepRow('5.1-4').querySelector('[data-step-now="idle"]')).toHaveTextContent(/^Active · nothing running, read now:/)
+    expect(stepRow('5.1-4').querySelector('[data-step-now="idle"]')).toHaveTextContent(/^Active · nothing running now, read now:/)
     expect(stepRow('5.1-4').querySelector('[data-no-rule-text]')).toHaveTextContent(/^No done rule: nothing closes it by evidence\./)
     expect(stepRow('5.1-3').querySelector('[data-step-state]')).toHaveTextContent('In progress')
     client.clear()
@@ -611,7 +611,7 @@ describe('the module page', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
     vi.setSystemTime(NOW)
     const client = page(view(raw => activate(raw, 'R5:5.1-4')))
-    expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running')
+    expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running now')
     act(() => { vi.setSystemTime(Date.parse(AT) + 60_000); vi.advanceTimersByTime(2_000) })
     expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · Unknown now')
     expect(stepRow('5.1-4').querySelector('[data-step-now="unknown"]')).toHaveTextContent(`Unknown · Round 5's plan view is older than 60 s; as of ${AT}.`)
@@ -663,7 +663,7 @@ describe('Work with a failed refresh', () => {
     render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><WorkPlanView /></PlatformAuthContext.Provider></QueryClientProvider>)
     const summary = await screen.findByRole('region', { name: 'Where the round stands' })
     await waitFor(() => expect(summary.querySelector('[data-summary-sentence]')).toHaveTextContent('The mainline stands at 5.1 · runtime steps 2 of 6 done, 1 queued, 1 idle.'))
-    expect(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running, no done rule' })).toHaveAttribute('data-state', 'idle')
+    expect(screen.getByRole('button', { name: 'Step 5.1-4: active, nothing running now, no done rule' })).toHaveAttribute('data-state', 'idle')
     expect(fetcher.mock.calls.some(([input]) => String(input).includes('/progress'))).toBe(false)
     client.clear()
   })

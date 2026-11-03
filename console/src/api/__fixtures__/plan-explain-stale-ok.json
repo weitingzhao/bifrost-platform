@@ -1,0 +1,34 @@
+{
+  "status": "ok",
+  "read_at": "2026-11-03T21:38:30Z",
+  "last_attempt_at": "2026-11-03T21:40:00Z",
+  "last_error": "timeout",
+  "steps": {
+    "R5:5.5-10": {
+      "node_version": 3,
+      "kind": "explained",
+      "rule": "unknown",
+      "blockers": [
+        {
+          "atom": "one_of",
+          "branches": [
+            [ { "atom": "step_tasks", "state": "tasks_short", "have": 1, "need": 2, "candidates": [ { "task_id": "t_01M6HAMB152ZEPTPSZB0Z2KKNC", "task_state": "running" } ] } ],
+            [ { "atom": "step_landed", "state": "landing_pending", "task_id": "t_01M6HAMB152ZEPTPSZB0Z2KKND", "op": "land:t_01M6HAMB152ZEPTPSZB0Z2KKND:2", "phase": "awaiting_grant",
+                "last_record_at": "2026-11-03T21:10:00Z", "grant": { "approval_id": "appr_1", "number": 281, "last_status": "pending", "recorded_at": "2026-11-03T21:11:00Z" }, "cards": [] } ]
+          ]
+        },
+        {
+          "atom": "step_stg_settled",
+          "state": "stg_not_admitted",
+          "task_id": "t_01M6HAMB152ZEPTPSZB0Z2KKNE",
+          "op": "land:t_01M6HAMB152ZEPTPSZB0Z2KKNE:1",
+          "to": null,
+          "blocks": [],
+          "repo_blocks": [ { "id": "ci-7", "kind": "ci_red", "since": "2026-11-03T20:00:00Z", "trigger_seq": 900,
+            "cards": [ { "question_id": null, "prep": "stg_blocked:900:1", "kind": "stg_blocked", "family": "stg", "ask_started": true, "closed": true, "closed_why": "resolved" } ] } ],
+          "unexplained": ["budget", "policy", "repo_cards"]
+        }
+      ]
+    }
+  }
+}

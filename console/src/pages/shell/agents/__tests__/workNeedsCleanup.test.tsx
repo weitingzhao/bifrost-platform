@@ -83,7 +83,7 @@ beforeEach(() => {
   fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (failing?.test(url)) return json({ error: 'unavailable', message: 'unavailable' }, 503)
-    const pv = /plan-view\?root=R(\d+)$/.exec(url)
+    const pv = /plan-view\?root=R(\d+)(?:&explain=1)?$/.exec(url)
     if (pv) return json(view(Number(pv[1])))
     const tree = /\/agentrt\/plan\?root=(R\d+)$/.exec(url)
     if (tree && hangTrees) return new Promise<Response>(() => {})
@@ -114,7 +114,7 @@ describe('Work\'s first screen', () => {
     expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent('exec:claude is unavailable')
     // Read from what Work and the shell already read: of the runtime, one plan view, this round's tree, GET /progress.
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
-    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress']))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress']))
   })
 
   it('keeps the round an address names on the way to the list', async () => {

@@ -15,7 +15,8 @@ import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMark
   type RuleLine, type StepCell } from './planModuleModel'
 import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
-import { stepJudge } from './stepStateModel'
+import { StepWhy } from './StepWhy'
+import { stepJudge, withWhy } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /** Recent activity shows this many rows until the Owner asks for all. */
@@ -144,6 +145,7 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
         <StateWord state={cell.state} />
       </div>
       {active && nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-[13px] leading-[1.45] text-muted-foreground">{line}</p>)}
+      {active && <StepWhy cell={cell} compact />}
       {note && <p data-step-note="unverified" className="m-0 text-xs leading-[1.45] text-muted-foreground">{note}</p>}
       <div className={`flex min-w-0 flex-col gap-0.5 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}>
         {active ? <div role="group" aria-label={`Now on ${cell.label}`} className="flex min-w-0 flex-col gap-0.5">{own}</div> : own}
@@ -325,7 +327,8 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null }: { v
   // active steps by what they have now, as the read ages and heartbeats go unconfirmed.
   const scopes = useMemo(() => moduleScopes(view), [view])
   const base = scopes.get(item.plan_node_id)!
-  const scope: ModuleScope = { ...base, row: judgeRow(view, base.row, stepJudge(view, { failed, now, runtime, asks })) }
+  const clock = { failed, now, runtime, asks }
+  const scope: ModuleScope = { ...base, row: withWhy(view, judgeRow(view, base.row, stepJudge(view, clock)), clock) }
   const row = scope.row
   const cards = needsYouCards(reads.progress)?.cards ?? new Map()
   const needs = needsNow(view, scopes, scope, reads, now)

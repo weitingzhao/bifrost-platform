@@ -39,7 +39,7 @@ describe('the summary sentence', () => {
     const rows = stepRows(view, { failed: null, now: Date.parse(view.as_of) })
     expect(mainlineSentence(view, rows)).toEqual({ text: 'The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 idle.', unknown: false })
     // In the runtime's own terms: "no step started" is the controller's record, not a claim that no work was done.
-    expect(othersSentence(rows, view.mainline.current?.plan_node_id ?? null)).toBe('By runtime step state, of the 9 other items, 1 has an active step with nothing running and 8 have no step started.')
+    expect(othersSentence(rows, view.mainline.current?.plan_node_id ?? null)).toBe('By runtime step state, of the 9 other items, 1 has an active step with nothing running now and 8 have no step started.')
     // A read over 60 s old, or rows not judged at all, say the active step's work now is Unknown: never idle.
     const old = stepRows(view, { failed: null, now: Date.parse(view.as_of) + 61_000 })
     expect(mainlineSentence(view, old).text).toBe('The mainline stands at 4.1 · runtime steps 2 of 6 done, 1 active, Unknown now.')
@@ -67,7 +67,7 @@ describe('the summary sentence', () => {
     expect(rows.slice(1).map(moduleClass)).toEqual(['in-progress', 'in-progress', 'not-started', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps',
       'idle', 'yours', 'active-unknown', 'held'])
     expect(othersSentence(rows, 'cur')).toBe('By runtime step state, of the 13 other items, 2 have steps in progress, 1 has an active step held, '
-      + '1 has an Owner step active, 1 has an active step with nothing running, 1 has an active step whose work now is Unknown, 2 have no step started, 1 has every step done, '
+      + '1 has an Owner step active, 1 has an active step with nothing running now, 1 has an active step whose work now is Unknown, 2 have no step started, 1 has every step done, '
       + '1 has steps done and none active, 1 has a stopped step, 1 has a step with no state and 1 has no steps.')
     expect(othersSentence([row({ id: 'cur' })], 'cur')).toBe('')
   })

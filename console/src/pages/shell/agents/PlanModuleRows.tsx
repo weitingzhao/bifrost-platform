@@ -9,6 +9,7 @@ import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noR
   type RuleLine, type StepCell } from './planModuleModel'
 import { sinceWords } from './readAge'
 import type { OwnerAsks } from './ownerAsksModel'
+import { StepWhy } from './StepWhy'
 import { stepRows } from './stepStateModel'
 import { workTabHref } from './workViewModel'
 
@@ -34,6 +35,7 @@ function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
     <p className="m-0 break-words">{cell.title || 'Untitled step'}</p>
     {cell.step === null && <p className="m-0 text-muted-foreground">Unknown · the runtime holds no state for this step.</p>}
     {nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-muted-foreground">{line}</p>)}
+    <StepWhy cell={cell} />
     {note && <p data-step-note="unverified" className="m-0 text-xs text-muted-foreground">{note}</p>}
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">Done when</span>
@@ -200,7 +202,7 @@ export function PlanModuleRows({ view, selected, failed = null, runtime, asks }:
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
       {legend.map(s => <span key={s} data-legend={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}{s === 'idle' ? ' (idle)' : s === 'unknown' ? ' (no state)' : ''}</span>)}
       <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block size-[5px] rounded-full bg-[var(--ops-attention-text)]" />No done rule (active or stopped)</span>
-      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, waiting on you while something on it is only yours to move (a task awaiting your decision, a landing awaiting your grant, an acceptance sign-off Ready, an open question on its tasks or named by its done rule, a request its done rule names awaiting your decision), held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old, a run on it cannot be confirmed, or the verification reading of submitted external work on it is stale. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, waiting on you while something on it is only yours to move (a task awaiting your decision, a landing awaiting your grant, an acceptance sign-off Ready, an open question on its tasks or named by its done rule, a request its done rule names awaiting your decision), held while a task on it waits on a decision, else active with nothing running now, or yours for an Owner step; Unknown now while the read is old, a run on it cannot be confirmed, or the verification reading of submitted external work on it is stale. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">

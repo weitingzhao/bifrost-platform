@@ -32,7 +32,22 @@ func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// The explanation of steps in progress (R5:5.5-19) only when asked:
+	// without explain=1 the response is as it was.
+	if r.URL.Query().Get("explain") == "1" {
+		out["explain"] = a.explainCache().Get(root)
+	}
 	writeJSON(w, 200, out)
+}
+
+// explainCache is the process's one explanation cache.
+func (a *API) explainCache() *store.ExplainCache {
+	a.explainInit.Do(func() {
+		if a.Explain == nil {
+			a.Explain = &store.ExplainCache{DB: a.DB, Logf: a.Logf}
+		}
+	})
+	return a.Explain
 }
 func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 	var in store.ExternalRegistration
