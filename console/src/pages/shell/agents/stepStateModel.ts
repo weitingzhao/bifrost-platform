@@ -3,7 +3,8 @@ import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { attemptRuns, firstReason, landingMoving, landingQuiet, LANDING_QUIET_MS, runContext, stepRunning, type RunContext } from './liveStepModel'
 import { taskRole, type ModuleTask, type RuntimeTasks } from './moduleDetailModel'
 import { heartbeatUnconfirmed, HEARTBEAT_UNCONFIRMED_S } from './needsCleanupModel'
-import { moduleRows, ruleQuestionIds, ruleSignoffs, type HeldItem, type ModuleRow, type StepJudge, type StepNow, type Unverified } from './planModuleModel'
+import { stepAsks, type OwnerAsks } from './ownerAsksModel'
+import { OWNER_KINDS, moduleRows, ruleQuestionIds, ruleSignoffs, type HeldItem, type ModuleRow, type StepJudge, type StepNow, type Unverified } from './planModuleModel'
 import { viewOldReason } from './readAge'
 
 /*
@@ -25,14 +26,21 @@ import { viewOldReason } from './readAge'
  * - queued: a task proposed, ready or back for rework; submitted or verifying (waiting for its check); a landing parked
  *   (the controller unparks it itself when its window, rule or CI clears: landing/drill.go); external work registered
  *   and not started;
- * - held: a task blocked, paused or awaiting the Owner (each moves only to ready or cancelled: store/kernel.go taskMoves,
- *   a decision); a landing awaiting the Owner's grant; an accepted work task (not a check of another) with no landing
- *   recorded (the server lands only some tasks: store/close.go; the plan view does not say which, so no landing is
- *   promised); external work submitted whose verification read failed (an adopted external_verified binding on it
- *   read false: store/planverificationview.go externalVerification); none of these would ever end as progress by
- *   itself, so none is queued; not Unknown (the lists are whole) and not idle;
+ * - waiting on you (slice 2): what only the Owner moves, with nothing running, Unknown or queued: a task awaiting the
+ *   Owner (agentrt awaiting_owner, plan-view owner_waiting lists it too); a landing awaiting the Owner's grant; an
+ *   acceptance sign-off Ready for the step (plan-view owner_waiting); an open question on one of the step's tasks or
+ *   named by its done rule, a request its done rule names awaiting his decision (ownerAsksModel.ts, from the shell's lists);
+ * - held: a task blocked or paused (each moves only to ready or cancelled: store/kernel.go taskMoves, a decision); an
+ *   accepted work task (not a check of another) with no landing recorded (the server lands only some tasks:
+ *   store/close.go; the plan view does not say which, so no landing is promised); external work submitted whose
+ *   verification read failed (an adopted external_verified binding on it read false: store/planverificationview.go
+ *   externalVerification); none of these would ever end as progress by itself, so none is queued; not Unknown (the
+ *   lists are whole) and not idle;
  * - yours: an Owner step (owner_step) with none of those, with what the plan view records on it;
  * - idle: none of those.
+ * Queued and Unknown keep what waits on the Owner and what is held, so that none is hidden. When the shell's lists
+ * could tie a question or request to the step and were not read now, the step says so (unread): it is then judged by
+ * the plan view alone, and "nothing waits on you" is not said of it.
  * Beside any of these, external work submitted and not read Verified or failed (verification Unknown, Stale or not
  * recorded) is a note on the step (unverified). Unknown or not recorded is the note alone, never what holds the step:
  * its work has finished, and nothing says anything waits on its verification (the platform reads one only through an
@@ -42,8 +50,12 @@ import { viewOldReason } from './readAge'
  * round, so "nothing queued" and "nothing held" are said of whole lists. Claims and sources: the R5:5.5-10 hand-in report.
  */
 
-/** The page clock a plan view is judged at: why its latest refresh failed (null while it did not), now, the runtime's tasks (roles). */
-export type StepClock = { failed: string | null; now: number; runtime?: RuntimeTasks }
+/**
+ * The page clock a plan view is judged at: why its latest refresh failed (null while it did not), now, the runtime's
+ * tasks (roles), and the shell's open questions and requests (asks; without them none is read, as in a test of the
+ * plan view alone: every page caller passes them).
+ */
+export type StepClock = { failed: string | null; now: number; runtime?: RuntimeTasks; asks?: OwnerAsks }
 
 /** Every task state there is (agentrtapi/propose.go taskStates; store/kernel.go taskMoves). */
 const TASK_STATES = new Set(['proposed', 'awaiting_owner', 'ready', 'leased', 'running', 'submitted', 'verifying', 'accepted', 'rework', 'rejected', 'blocked', 'paused', 'cancelled'])
@@ -52,7 +64,9 @@ const QUEUED_TASK: Record<string, string> = {
   proposed: 'proposed', ready: 'ready', rework: 'back for rework', submitted: 'submitted, waiting for its check', verifying: 'being verified',
 }
 /** Task states held, not queued: each moves only to ready or cancelled (store/kernel.go taskMoves), by a decision. */
-const HELD_TASK: Record<string, string> = { blocked: 'blocked', paused: 'paused', awaiting_owner: 'awaiting the Owner' }
+const HELD_TASK: Record<string, string> = { blocked: 'blocked', paused: 'paused' }
+/** The task state only the Owner moves (a card on Needs you): it waits on him, not held. */
+const OWNER_TASK = 'awaiting_owner'
 /** The landing phases that wait (protocol.go: not Active, not Terminal): parked is the controller's to clear, the grant the Owner's. */
 const PARKED = 'parked', AWAITING_GRANT = 'awaiting_grant'
 /** Terminal landing phases (protocol.go Operation.Terminal; main_result non_ff too). */
@@ -91,15 +105,15 @@ function unverifiedWork(step: PlanNode, { view, attempted }: RunContext): Unveri
     .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at)).map(w => ({ task: w.description.task, verification: w.verification ?? '' }))
 }
 
-/** One active step, judged at ctx; old is viewOldReason's answer ('' when the read is now). */
-export function judgeStep(step: PlanNode, ctx: RunContext, old: string): StepNow {
-  if (old) return { kind: 'unknown', why: [old], queued: [], held: [] }
-  const now = judgeNow(step, ctx), unverified = unverifiedWork(step, ctx)
+/** One active step, judged at ctx; old is viewOldReason's answer ('' when the read is now); asks, the shell's lists. */
+export function judgeStep(step: PlanNode, ctx: RunContext, old: string, asks?: OwnerAsks): StepNow {
+  if (old) return { kind: 'unknown', why: [old], queued: [], held: [], waiting: [] }
+  const now = judgeNow(step, ctx, asks), unverified = unverifiedWork(step, ctx)
   return unverified.length > 0 ? { ...now, unverified } : now
 }
 
 /** One active step from a read that is now. */
-function judgeNow(step: PlanNode, ctx: RunContext): StepNow {
+function judgeNow(step: PlanNode, ctx: RunContext, asks: OwnerAsks | undefined): StepNow {
   const { view, now, runtime } = ctx
   // A landing silent past LANDING_QUIET_MS is not seen moving: it is Unknown below, not running.
   const moving = stepRunning(step.plan_node_id, ctx).reasons.filter(r => !r.quiet)
@@ -117,6 +131,7 @@ function judgeNow(step: PlanNode, ctx: RunContext): StepNow {
     } else if (!TASK_STATES.has(t.state)) unknown.push(`${name}: its state "${t.state}" is not one this page reads`)
     else if (t.state === 'leased' || t.state === 'running') unknown.push(`${name} is ${t.state}, but the plan view holds no live attempt for it`)
     else if (Object.hasOwn(QUEUED_TASK, t.state)) queued.push(`${name} ${QUEUED_TASK[t.state]}`)
+    else if (t.state === OWNER_TASK) held.push({ kind: 'owner-decision', text: `${name} awaits your decision` })
     else if (Object.hasOwn(HELD_TASK, t.state)) held.push({ kind: 'decision', text: `${name} ${HELD_TASK[t.state]}` })
     // Accepted work with no landing record: whether it will land the plan view does not say; a check of another does not land.
     else if (t.state === 'accepted' && !l && !taskRole(t, runtime).check) held.push({ kind: 'no-landing', text: `${name} accepted · no landing recorded` })
@@ -140,19 +155,30 @@ function judgeNow(step: PlanNode, ctx: RunContext): StepNow {
       unknown.push(`${what} submitted: its verification reading is stale (the last recorded successful read is over 25 min old; an earlier failure is not known to have cleared)`)
     }
   }
-  const heldText = held.map(h => h.text)
-  if (unknown.length > 0) return { kind: 'unknown', why: unknown, queued, held: heldText }
-  if (queued.length > 0) return { kind: 'queued', why: queued, held: heldText }
-  if (held.length > 0) return { kind: 'held', held, recorded: step.owner_step ? recordedAsks(view, step) : null }
-  if (step.owner_step) return { kind: 'yours', recorded: recordedAsks(view, step) }
-  return { kind: 'idle' }
+  // An acceptance sign-off Ready for the step is his to give (plan-view owner_waiting; its task waits are the tasks' own
+  // state, read above).
+  for (const w of view.owner_waiting) {
+    if (w.plan_node_id === step.plan_node_id && !('task_id' in w)) held.push({ kind: 'signoff', text: `acceptance sign-off ${w.acceptance} is Ready for you` })
+  }
+  const asked = asks ? stepAsks(view, step, asks, now) : { items: [], unread: [] }
+  held.push(...asked.items)
+  const owner = held.filter(h => OWNER_KINDS.has(h.kind)), others = held.filter(h => !OWNER_KINDS.has(h.kind))
+  const unread = asked.unread.length > 0 ? { unread: asked.unread } : {}
+  const text = (list: HeldItem[]) => list.map(h => h.text)
+  if (unknown.length > 0) return { kind: 'unknown', why: unknown, queued, held: text(others), waiting: text(owner), ...unread }
+  if (queued.length > 0) return { kind: 'queued', why: queued, held: text(others), waiting: text(owner), ...unread }
+  const recorded = step.owner_step ? recordedAsks(view, step) : null
+  if (owner.length > 0) return { kind: 'waiting', waiting: owner, held: others, recorded, ...unread }
+  if (others.length > 0) return { kind: 'held', held: others, recorded, ...unread }
+  if (step.owner_step) return { kind: 'yours', recorded: recordedAsks(view, step), ...unread }
+  return { kind: 'idle', ...unread }
 }
 
 /** The judge of one plan view at one clock: the read's age is judged once for every step. */
 export function stepJudge(view: PlanSnapshot, clock: StepClock): StepJudge {
   const old = viewOldReason(view, view.root, clock.failed, clock.now)
   const ctx = runContext(view, clock.now, clock.runtime)
-  return step => judgeStep(step, ctx, old)
+  return step => judgeStep(step, ctx, old, clock.asks)
 }
 
 /** The module rows with each active step shown by what it has now. */

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import { fetchApprovalList } from '@/api/approvals'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
@@ -9,7 +9,7 @@ import { useNow } from '../progress/progressClock'
 import { WorkRow } from './PlanLiveWork'
 import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
-  needsNow, needsYouCards, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, stepTasks, taskActivity, taskLine, workTasks,
+  needsNow, needsYouCards, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, shellRead, stepTasks, taskActivity, taskLine, workTasks,
   type ModuleScope, type RuntimeTasks, type ShellRead, type ShellReads, type TaskLine } from './moduleDetailModel'
 import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, unverifiedNote, type CellState, type ModuleRow,
   type RuleLine, type StepCell } from './planModuleModel'
@@ -20,13 +20,6 @@ import { planNodeHref } from './usePlanSnapshot'
 
 /** Recent activity shows this many rows until the Owner asks for all. */
 const ACTIVITY_ROWS = 12
-
-function shellRead<T>(q: UseQueryResult<T>): ShellRead<T> {
-  if (q.isError) return { state: 'unknown', reason: q.error instanceof Error ? q.error.message : 'Request failed' }
-  if (q.isPaused) return { state: 'unknown', reason: 'Offline' }
-  if (q.data !== undefined) return { state: 'ok', data: q.data, at: q.dataUpdatedAt }
-  return q.fetchStatus === 'fetching' ? { state: 'reading' } : { state: 'unread' }
-}
 
 /**
  * The four lists the shell already polls on every Console page (ConsolePage → useOwnerYours → useNeedsYou: questions
@@ -72,12 +65,13 @@ function Rule({ lines }: { lines: RuleLine[] }) {
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 /**
- * A step's state word at the right of its line: the step in progress in the accent, held and the Owner's on the
- * attention tone, an active one with nothing running outlined, an active one Unknown now dashed in the primary tone,
+ * A step's state word at the right of its line: the step in progress in the accent, waiting on you filled on the
+ * attention tone with a heavy ring, held and the Owner's on the attention tone, an active one with nothing running outlined, an active one Unknown now dashed in the primary tone,
  * stopped in red, unknown (no state) dashed grey.
  */
 const STATE_LOOK: Record<CellState, string> = {
   active: 'h-[22px] rounded-full px-2 font-bold text-[var(--primary-foreground)] [background:var(--ops-accent)]',
+  waiting: 'h-[22px] rounded-full border-2 border-[var(--ops-attention-text)] px-2 font-bold text-[var(--ops-attention-text)] [background:var(--ops-attention-fill)]',
   held: 'h-[22px] rounded-full border border-[var(--ops-attention-text)] px-2 text-[var(--ops-attention-text)]',
   idle: 'h-[22px] rounded-full border border-[var(--primary)] px-2 text-foreground',
   'active-unknown': 'h-5 rounded-full border border-dashed border-[var(--primary)] px-[7px] text-foreground',
@@ -89,14 +83,15 @@ function StateWord({ state }: { state: CellState }) {
   return <span data-step-state={state} className={`ml-auto inline-flex shrink-0 items-center whitespace-nowrap text-xs font-semibold ${STATE_LOOK[state]}`}>{cellLabels[state]}</span>
 }
 /**
- * The timeline's mark for a step: ✓ done, the accent with a halo in progress, the attention tone held (ring) and yours
- * (filled), an empty ring active with nothing running, dashed primary active Unknown now, recessed not started, hatched
+ * The timeline's mark for a step: ✓ done, the accent with a halo in progress, the attention tone waiting on you (filled,
+ * heavy ring), held (ring) and yours (filled), an empty ring active with nothing running, dashed primary active Unknown now, recessed not started, hatched
  * red stopped, dashed grey unknown.
  */
 function Dot({ state }: { state: CellState }) {
   const base = 'mt-[3px] flex size-[18px] flex-none items-center justify-center rounded-full text-[11px] leading-none'
   if (state === 'done') return <span className={`${base} bg-[var(--primary)] text-[var(--primary-foreground)]`}>✓</span>
   if (state === 'active') return <span className={`${base} shadow-[0_0_0_4px_color-mix(in_srgb,var(--primary)_22%,transparent)] [background:var(--ops-accent)]`} />
+  if (state === 'waiting') return <span className={`${base} border-[3px] border-[var(--ops-attention-text)] bg-[var(--ops-attention-fill)]`} />
   if (state === 'held') return <span className={`${base} border-2 border-[var(--ops-attention-text)]`} />
   if (state === 'idle') return <span className={`${base} border-2 border-[var(--primary)]`} />
   if (state === 'active-unknown') return <span className={`${base} border-2 border-dashed border-[var(--primary)]`} />
@@ -321,6 +316,8 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null }: { v
   failed?: string | null }) {
   const now = useNow()
   const reads = useShellReads()
+  // The questions and requests the step judge reads are these same shell reads (ownerAsksModel).
+  const asks = { questions: reads.questions, requests: reads.open }
   const heading = useRef<HTMLHeadingElement>(null)
   const [allActivity, setAllActivity] = useState(false)
   const runtime = runtimeTasks(reads.progress)
@@ -328,7 +325,7 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null }: { v
   // active steps by what they have now, as the read ages and heartbeats go unconfirmed.
   const scopes = useMemo(() => moduleScopes(view), [view])
   const base = scopes.get(item.plan_node_id)!
-  const scope: ModuleScope = { ...base, row: judgeRow(view, base.row, stepJudge(view, { failed, now, runtime })) }
+  const scope: ModuleScope = { ...base, row: judgeRow(view, base.row, stepJudge(view, { failed, now, runtime, asks })) }
   const row = scope.row
   const cards = needsYouCards(reads.progress)?.cards ?? new Map()
   const needs = needsNow(view, scopes, scope, reads, now)

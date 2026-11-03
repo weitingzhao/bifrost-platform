@@ -85,7 +85,7 @@ describe('step state now (model)', () => {
     expect(old).toMatchObject({ state: 'active-unknown', now: { kind: 'unknown', why: [`Round 5's plan view is older than 60 s; as of ${AT}`] } })
     expect(spokenState(old)).toBe('active, what runs on it now is Unknown')
     expect(nowLines(old)[0]).toBe(`Unknown · Round 5's plan view is older than 60 s; as of ${AT}.`)
-    expect(cell(v, '5.1-4', clock({ failed: 'Offline' })).now).toEqual({ kind: 'unknown', why: [`Round 5's plan view could not be read (Offline); as of ${AT}`], queued: [], held: [] })
+    expect(cell(v, '5.1-4', clock({ failed: 'Offline' })).now).toEqual({ kind: 'unknown', why: [`Round 5's plan view could not be read (Offline); as of ${AT}`], queued: [], held: [], waiting: [] })
     const notFresh = on514(raw => { (raw as Full).freshness.database.status = 'Stale' })
     expect(cell(notFresh, '5.1-4').now).toMatchObject({ kind: 'unknown', why: [`Round 5's plan view reads the database as Stale; as of ${AT}`] })
     // Even a step with work running reads Unknown from an old read: what runs now is not known from it.
@@ -100,7 +100,7 @@ describe('step state now (model)', () => {
     // 50 s at the snapshot is unconfirmed 15 s later (65 s): the Live tab's rule.
     const v = on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'ready'); attempt(raw, id('M'), { heartbeat_age_s: 50 }) })
     expect(cell(v, '5.1-4', clock({ now: Date.parse(AT) + 5_000 })).now).toMatchObject({ kind: 'running', what: 'Task running' })
-    expect(cell(v, '5.1-4', clock({ now: Date.parse(AT) + 15_000 })).now).toEqual({ kind: 'unknown', queued: [], held: [],
+    expect(cell(v, '5.1-4', clock({ now: Date.parse(AT) + 15_000 })).now).toEqual({ kind: 'unknown', queued: [], held: [], waiting: [],
       why: ["task Work M: its attempt's heartbeat is unconfirmed (65 s, over 60 s)"] })
     const server = on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'ready'); attempt(raw, id('M'), { status: 'Unconfirmed' }) })
     expect(cell(server, '5.1-4').now).toMatchObject({ kind: 'unknown', why: ["task Work M: its attempt's heartbeat is unconfirmed (the server says Unconfirmed)"] })
@@ -151,7 +151,7 @@ describe('step state now (model)', () => {
     expect(base).toMatchObject({ state: 'active', now: { kind: 'queued', why: ['task Module detail page ready'], held: [] } })
     expect(spokenState(base)).toBe('in progress')
     for (const [state, words] of [['proposed', 'proposed'], ['rework', 'back for rework'], ['submitted', 'submitted, waiting for its check'], ['verifying', 'being verified']]) {
-      expect(cell(view(raw => { task(raw, T3).state = state }), '5.1-3').now).toEqual({ kind: 'queued', why: [`task Module detail page ${words}`], held: [] })
+      expect(cell(view(raw => { task(raw, T3).state = state }), '5.1-3').now).toEqual({ kind: 'queued', why: [`task Module detail page ${words}`], held: [], waiting: [] })
     }
   })
 
@@ -169,26 +169,28 @@ describe('step state now (model)', () => {
     expect(cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: landing('landed', 'ok') }) }), '5.1-4').now).toEqual({ kind: 'idle' })
   })
 
-  it("a landing awaiting the grant holds the step on your grant; a parked one is queued (the controller unparks it); an ended one queues nothing", () => {
+  it("a landing awaiting the grant waits on you; a parked one is queued (the controller unparks it); an ended one queues nothing", () => {
     const grant = cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: landing('awaiting_grant') }) }), '5.1-4')
-    expect(grant).toMatchObject({ state: 'held', now: { kind: 'held', held: [{ kind: 'grant', text: 'landing of task Work M waits for your grant' }], recorded: null } })
-    expect(spokenState(grant)).toBe('active, held: 1 landing waits for your grant')
-    expect(nowLines(grant)[0]).toBe('Active · held: landing of task Work M waits for your grant. A landing awaiting the grant waits on your grant (Needs you lists grants); nothing on the step runs or is queued.')
+    expect(grant).toMatchObject({ state: 'waiting', now: { kind: 'waiting', waiting: [{ kind: 'grant', text: 'landing of task Work M waits for your grant' }], held: [], recorded: null } })
+    expect(cellLabels[grant.state]).toBe('Waiting on you')
+    expect(spokenState(grant)).toBe('waiting on you: 1 landing waits for your grant')
+    expect(nowLines(grant)[0]).toBe('Waiting on you: landing of task Work M waits for your grant. A landing awaiting the grant waits on your grant (Needs you lists grants); nothing on the step runs or is queued.')
     const parked = cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: { ...landing('parked'), reason: 'window' } }) }), '5.1-4')
-    expect(parked).toMatchObject({ state: 'active', now: { kind: 'queued', why: ['landing of task Work M parked (window)'], held: [] } })
+    expect(parked).toMatchObject({ state: 'active', now: { kind: 'queued', why: ['landing of task Work M parked (window)'], held: [], waiting: [] } })
     expect(cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: landing('parked') }) }), '5.1-4').now)
-      .toEqual({ kind: 'queued', why: ['landing of task Work M parked'], held: [] })
+      .toEqual({ kind: 'queued', why: ['landing of task Work M parked'], held: [], waiting: [] })
     for (const [phase, outcome] of [['landed', 'ok'], ['failed', 'ci_red'], ['stg_verified', ''], ['main_result', 'non_ff']]) {
       expect(cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: landing(phase, outcome) }) }), '5.1-4').now).toEqual({ kind: 'idle' })
     }
-    // Two kinds held at once are each counted aloud.
+    // What waits on you and what is held besides are each counted aloud, and both are in the detail.
     const both = cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'accepted', { landing: landing('awaiting_grant') }); addTask(raw, id('N'), 'R5:5.1-4', 'blocked') }), '5.1-4')
-    expect(spokenState(both)).toBe('active, held: 1 task waits on a decision, 1 landing waits for your grant')
+    expect(spokenState(both)).toBe('waiting on you: 1 landing waits for your grant; held: 1 task waits on a decision')
+    expect(nowLines(both)).toContain('Also held: task Work N blocked.')
   })
 
   it('external work registered and not started is queued; without a confirmed heartbeat it is Unknown', () => {
     expect(cell(on514(raw => external(raw, { state: 'Registered', status: 'Registered', started_at: undefined })), '5.1-4').now)
-      .toEqual({ kind: 'queued', why: [expect.stringMatching(/^external work “.+” registered, not started$/)], held: [] })
+      .toEqual({ kind: 'queued', why: [expect.stringMatching(/^external work “.+” registered, not started$/)], held: [], waiting: [] })
     expect(cell(on514(raw => external(raw, { state: 'Registered', status: 'Registered', started_at: undefined, heartbeat_age_s: 70 })), '5.1-4').now)
       .toMatchObject({ kind: 'unknown', why: [expect.stringMatching(/” Registered: no heartbeat confirmed for over 60 s$/)] })
     expect(cell(on514(raw => external(raw, { status: 'Unconfirmed', heartbeat_age_s: 90 })), '5.1-4').now)
@@ -315,19 +317,24 @@ describe('step state now (model)', () => {
     expect(spokenState(c)).toBe('in progress')
   })
 
-  it('tasks blocked, paused or awaiting the Owner hold the step: its own state, not idle, not Unknown, each listed', () => {
+  it('tasks blocked or paused hold the step: its own state, not idle, not Unknown, each listed; a task awaiting the Owner waits on you', () => {
     const c = cell(on514(raw => {
-      addTask(raw, id('M'), 'R5:5.1-4', 'blocked'); addTask(raw, id('N'), 'R5:5.1-4', 'paused'); addTask(raw, id('P'), 'R5:5.1-4', 'awaiting_owner')
+      addTask(raw, id('M'), 'R5:5.1-4', 'blocked'); addTask(raw, id('N'), 'R5:5.1-4', 'paused')
       addTask(raw, id('R'), 'R5:5.1-4', 'cancelled')
     }), '5.1-4')
     expect(c).toMatchObject({ state: 'held', now: { kind: 'held', recorded: null,
-      held: ['task Work M blocked', 'task Work N paused', 'task Work P awaiting the Owner'].map(text => ({ kind: 'decision', text })) } })
+      held: ['task Work M blocked', 'task Work N paused'].map(text => ({ kind: 'decision', text })) } })
     expect(cellLabels[c.state]).toBe('Active · held')
-    expect(spokenState(c)).toBe('active, held: 3 tasks wait on a decision')
-    expect(nowLines(c)[0]).toBe('Active · held: task Work M blocked; task Work N paused; task Work P awaiting the Owner. A held task moves only when it is made ready again or cancelled; nothing on the step runs or is queued.')
+    expect(spokenState(c)).toBe('active, held: 2 tasks wait on a decision')
+    expect(nowLines(c)[0]).toBe('Active · held: task Work M blocked; task Work N paused. A held task moves only when it is made ready again or cancelled; nothing on the step runs or is queued.')
+    const owner = cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'blocked'); addTask(raw, id('P'), 'R5:5.1-4', 'awaiting_owner') }), '5.1-4')
+    expect(owner).toMatchObject({ state: 'waiting', now: { kind: 'waiting', recorded: null, waiting: [{ kind: 'owner-decision', text: 'task Work P awaits your decision' }],
+      held: [{ kind: 'decision', text: 'task Work M blocked' }] } })
+    expect(spokenState(owner)).toBe('waiting on you: 1 task awaits your decision; held: 1 task waits on a decision')
+    expect(nowLines(owner)[0]).toBe('Waiting on you: task Work P awaits your decision. A task awaiting you moves when you decide on its card (Needs you lists it); nothing on the step runs or is queued.')
     // Beside a queued task the step is in progress, and the held one is still listed.
     const queued = cell(on514(raw => { addTask(raw, id('M'), 'R5:5.1-4', 'blocked'); addTask(raw, id('N'), 'R5:5.1-4', 'ready') }), '5.1-4')
-    expect(queued.now).toEqual({ kind: 'queued', why: ['task Work N ready'], held: ['task Work M blocked'] })
+    expect(queued.now).toEqual({ kind: 'queued', why: ['task Work N ready'], held: ['task Work M blocked'], waiting: [] })
     expect(nowLines(queued)).toContain('Held: task Work M blocked.')
   })
 
@@ -335,7 +342,7 @@ describe('step state now (model)', () => {
     const both = cell(on514(raw => {
       addTask(raw, id('M'), 'R5:5.1-4', 'ready'); addTask(raw, id('N'), 'R5:5.1-4', 'ready'); attempt(raw, id('N'), { state: 'stale' }); addTask(raw, id('P'), 'R5:5.1-4', 'blocked')
     }), '5.1-4')
-    expect(both.now).toEqual({ kind: 'unknown', why: ['task Work N: its attempt is stale'], queued: ['task Work M ready'], held: ['task Work P blocked'] })
+    expect(both.now).toEqual({ kind: 'unknown', why: ['task Work N: its attempt is stale'], queued: ['task Work M ready'], held: ['task Work P blocked'], waiting: [] })
     expect(nowLines(both)).toEqual(['Unknown · task Work N: its attempt is stale.', 'Queued as read: task Work M ready.', 'Held: task Work P blocked.'])
     const run = cell(on514(raw => {
       addTask(raw, id('M'), 'R5:5.1-4', 'ready'); attempt(raw, id('M'))
@@ -350,32 +357,32 @@ describe('step state now (model)', () => {
     expect(bare).toMatchObject({ owner: true, state: 'yours', now: { kind: 'yours', recorded: [] } })
     expect(cellLabels[bare.state]).toBe('Yours')
     expect(spokenState(bare)).toBe('yours, none in plan-view owner_waiting or its done rule')
-    expect(nowLines(bare)[0]).toBe('Yours · none in plan-view owner_waiting or its done rule: no wait for you listed on it, and no question, request or sign-off named. '
-      + 'Questions or requests tied to it only on Needs you are not read here.')
+    expect(nowLines(bare)[0]).toBe('Yours · none in plan-view owner_waiting or its done rule: no wait for you listed on it, and no question, request or sign-off named.')
     expect([spokenState(bare), ...nowLines(bare)].join(' ')).not.toMatch(/nothing (recorded )?asks you/)
     // 5.1-5 is the Owner's step whose done rule waits on a question: recorded, not said to ask or not.
     const ruled = cell(view(raw => activate(raw, 'R5:5.1-5')), '5.1-5')
     expect(ruled.now).toEqual({ kind: 'yours', recorded: [`question ${Q_RULE} (its done rule)`] })
     expect(spokenState(ruled)).toBe(`yours, recorded on it: question ${Q_RULE} (its done rule)`)
-    // An acceptance sign-off the plan view marks Ready on it is recorded too.
+    // An acceptance sign-off the plan view marks Ready on it waits on you now, and is recorded too.
     const accepted = cell(view(raw => { activate(raw, 'R5:5.4-3'); (raw as Full).owner_waiting.push(signoff('R5:5.4-3')) }), '5.4-3')
-    expect(accepted.now).toEqual({ kind: 'yours', recorded: ['acceptance sign-off Owner accepts 5.4 Ready (plan-view owner_waiting)'] })
+    expect(accepted.now).toEqual({ kind: 'waiting', waiting: [{ kind: 'signoff', text: 'acceptance sign-off Owner accepts 5.4 is Ready for you' }], held: [],
+      recorded: ['acceptance sign-off Owner accepts 5.4 Ready (plan-view owner_waiting)'] })
     // With work queued it is in progress, not yours.
-    expect(cell(view(raw => { activate(raw, 'R5:5.4-3'); addTask(raw, id('M'), 'R5:5.4-3', 'ready') }), '5.4-3').now).toEqual({ kind: 'queued', why: ['task Work M ready'], held: [] })
+    expect(cell(view(raw => { activate(raw, 'R5:5.4-3'); addTask(raw, id('M'), 'R5:5.4-3', 'ready') }), '5.4-3').now).toEqual({ kind: 'queued', why: ['task Work M ready'], held: [], waiting: [] })
     // An old read: Unknown now, not yours.
     expect(cell(view(raw => activate(raw, 'R5:5.4-3')), '5.4-3', clock({ now: Date.parse(AT) + 61_000 })).state).toBe('active-unknown')
   })
 
-  it('an Owner step with a task held lists it (held, with what is recorded on it); with a stale attempt it is Unknown, not yours', () => {
+  it('an Owner step with a task awaiting the Owner waits on you (with what is recorded on it, and what is held); with a stale attempt it is Unknown, not yours', () => {
     const blocked = cell(view(raw => {
       activate(raw, 'R5:5.4-3')
       addTask(raw, id('P'), 'R5:5.4-3', 'awaiting_owner')
       ;(raw as Full).owner_waiting.push({ task_id: id('P'), plan_node_id: 'R5:5.4-3', reason: 'Runtime task awaits Owner', source: 'agentrt.task' })
       addTask(raw, id('M'), 'R5:5.4-3', 'blocked')
     }), '5.4-3')
-    expect(blocked).toMatchObject({ state: 'held', now: { kind: 'held', held: ['task Work P awaiting the Owner', 'task Work M blocked'].map(text => ({ kind: 'decision', text })),
-      recorded: ['task Work P awaits you (plan-view owner_waiting)'] } })
-    // Its state reads Active · held, so its records are the Owner step's, not "Yours".
+    expect(blocked).toMatchObject({ state: 'waiting', now: { kind: 'waiting', waiting: [{ kind: 'owner-decision', text: 'task Work P awaits your decision' }],
+      held: [{ kind: 'decision', text: 'task Work M blocked' }], recorded: ['task Work P awaits you (plan-view owner_waiting)'] } })
+    // Its state reads Waiting on you, so its records are the Owner step's, not "Yours".
     expect(nowLines(blocked)).toContain('Owner step · recorded on it: task Work P awaits you (plan-view owner_waiting). Whether each still asks you is on Needs you.')
     expect(nowLines(blocked).some(l => l.startsWith('Yours'))).toBe(false)
     const stale = cell(view(raw => { activate(raw, 'R5:5.4-3'); addTask(raw, id('M'), 'R5:5.4-3', 'ready'); attempt(raw, id('M'), { state: 'stale' }) }), '5.4-3')

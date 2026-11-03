@@ -12,30 +12,32 @@ import { planNodeHref } from './usePlanSnapshot'
 
 /**
  * A step's state as its cell shows it (R5:5.5-10): done, not started and stopped are the controller's; an active step
- * is shown by what it has now (stepStateModel.ts): in progress (work running or queued), held (a task waits on a
- * decision), active with nothing running (idle), the Owner's (yours), or active with its work now Unknown; unknown is
- * a step the runtime holds no state for.
+ * is shown by what it has now (stepStateModel.ts): in progress (work running or queued), waiting on you (something on
+ * it only the Owner moves), held (a task waits on a decision), active with nothing running (idle), the Owner's (yours),
+ * or active with its work now Unknown; unknown is a step the runtime holds no state for.
  */
-export type CellState = 'done' | 'active' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
+export type CellState = 'done' | 'active' | 'waiting' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
 /** How a cell's state is read aloud ("Step 4.1-3: done"); spokenState says the derived ones whole. */
 export const cellWords: Record<CellState, string> = {
-  done: 'done', active: 'in progress', held: 'active, held', idle: 'active, nothing running', yours: 'yours', planned: 'not started', stopped: 'stopped',
-  'active-unknown': 'active, what runs on it now is Unknown', unknown: 'unknown',
+  done: 'done', active: 'in progress', waiting: 'waiting on you', held: 'active, held', idle: 'active, nothing running', yours: 'yours', planned: 'not started',
+  stopped: 'stopped', 'active-unknown': 'active, what runs on it now is Unknown', unknown: 'unknown',
 }
 /** How a cell's state is written in its detail and the legend. */
 export const cellLabels: Record<CellState, string> = {
-  done: 'Done', active: 'In progress', held: 'Active · held', idle: 'Active · nothing running', yours: 'Yours', planned: 'Not started', stopped: 'Stopped',
-  'active-unknown': 'Active · Unknown now', unknown: 'Unknown',
+  done: 'Done', active: 'In progress', waiting: 'Waiting on you', held: 'Active · held', idle: 'Active · nothing running', yours: 'Yours', planned: 'Not started',
+  stopped: 'Stopped', 'active-unknown': 'Active · Unknown now', unknown: 'Unknown',
 }
 /**
- * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; held is barred on the
- * attention tone, an active step with nothing running an empty outline (nothing in it), the Owner's filled on the
- * attention tone; an active step whose work now is Unknown is dashed in the primary tone, apart from a step with no
- * state (dashed grey); stopped is hatched red. Ops tokens only (styles/opsAppearance.css).
+ * Design v3.6 WorkPage stage bar: solid = done, hatched = in progress, recessed = not started; waiting on you is filled
+ * on the attention tone with a heavier ring, held is barred on the attention tone, an active step with nothing running
+ * an empty outline (nothing in it), the Owner's filled on the attention tone; an active step whose work now is Unknown is
+ * dashed in the primary tone, apart from a step with no state (dashed grey); stopped is hatched red. Ops tokens only
+ * (styles/opsAppearance.css).
  */
 export const cellStyle: Record<CellState, CSSProperties> = {
   done: { background: 'var(--primary)' },
   active: { background: 'repeating-linear-gradient(135deg, var(--primary) 0 3px, transparent 3px 6px)', boxShadow: 'inset 0 0 0 1px var(--primary)' },
+  waiting: { background: 'var(--ops-attention-fill)', boxShadow: 'inset 0 0 0 2px var(--ops-attention-text)' },
   held: { background: 'repeating-linear-gradient(90deg, var(--ops-attention-text) 0 2px, transparent 2px 5px)', boxShadow: 'inset 0 0 0 1px var(--ops-attention-text)' },
   idle: { background: 'transparent', boxShadow: 'inset 0 0 0 1px var(--primary)' },
   yours: { background: 'var(--ops-attention-fill)', boxShadow: 'inset 0 0 0 1px var(--ops-attention-text)' },
@@ -53,11 +55,17 @@ export const cellStyle: Record<CellState, CSSProperties> = {
  * hidden.
  */
 /**
- * What holds an active step with nothing running or queued: a task waiting on a decision (blocked, paused, awaiting the
- * Owner), a landing waiting for the Owner's grant, an accepted task with no landing recorded, external work submitted
- * whose verification read failed.
+ * What holds an active step with nothing running or queued: a task waiting on a decision (blocked, paused), an accepted
+ * task with no landing recorded, external work submitted whose verification read failed; or what waits on the Owner
+ * (OWNER_KINDS): a task awaiting him, a landing waiting for his grant, an acceptance sign-off Ready, an open question on
+ * the step, a request its done rule names awaiting his decision.
  */
-export type HeldItem = { kind: 'decision' | 'grant' | 'no-landing' | 'verify-failed'; text: string }
+export type HeldItem = {
+  kind: 'decision' | 'owner-decision' | 'grant' | 'signoff' | 'question' | 'request' | 'no-landing' | 'verify-failed'
+  text: string
+}
+/** The held items only the Owner moves: a step with any of them, and nothing running, Unknown or queued, waits on him. */
+export const OWNER_KINDS: ReadonlySet<HeldItem['kind']> = new Set(['owner-decision', 'grant', 'signoff', 'question', 'request'])
 /**
  * External work on the step submitted and not read Verified or failed: its title and its verification as read
  * (Unknown, Stale, or '' when none is recorded). A note beside the step's state, never what holds it.
@@ -65,17 +73,19 @@ export type HeldItem = { kind: 'decision' | 'grant' | 'no-landing' | 'verify-fai
 export type Unverified = { task: string; verification: string }
 export type StepNow = (
   | { kind: 'running'; what: string; others: number }
-  | { kind: 'queued'; why: string[]; held: string[] }
-  | { kind: 'unknown'; why: string[]; queued: string[]; held: string[] }
+  | { kind: 'queued'; why: string[]; held: string[]; waiting: string[] }
+  | { kind: 'unknown'; why: string[]; queued: string[]; held: string[]; waiting: string[] }
+  | { kind: 'waiting'; waiting: HeldItem[]; held: HeldItem[]; recorded: string[] | null }
   | { kind: 'held'; held: HeldItem[]; recorded: string[] | null }
   | { kind: 'yours'; recorded: string[] }
   | { kind: 'idle' }
-) & { unverified?: Unverified[] }
+  // unread: the shell's lists that could tie a question or request to the step and were not read now (ownerAsksModel).
+) & { unverified?: Unverified[]; unread?: string[] }
 /** Judges one active step; moduleRows without one judges none (each active step Unknown: not judged). */
 export type StepJudge = (step: PlanNode) => StepNow
 /** The controller's state of a step drawn (dropped steps are not drawn); null when the runtime holds none. */
 export type ControllerState = 'done' | 'active' | 'planned' | 'stopped' | null
-const NOT_JUDGED: StepNow = { kind: 'unknown', why: ['what runs on it now is not judged here (no plan-view clock given)'], queued: [], held: [] }
+const NOT_JUDGED: StepNow = { kind: 'unknown', why: ['what runs on it now is not judged here (no plan-view clock given)'], queued: [], held: [], waiting: [] }
 
 /** A record a step links to; kind says which page the link opens. */
 export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node'; href: string; text: string; note?: string }
@@ -104,11 +114,11 @@ export type ModuleRow = {
   cells: StepCell[]
   /**
    * total = cells.length, the denominator store/plan CountSteps uses (every step not dropped). active: the steps the
-   * controller has active, each counted once more by what it has now (running + queued + held + idle + yours +
-   * nowUnknown = active); unknown: the steps with no state.
+   * controller has active, each counted once more by what it has now (running + queued + waiting + held + idle + yours
+   * + nowUnknown = active); unknown: the steps with no state.
    */
   total: number; done: number; active: number; stopped: number; unknown: number; dropped: number
-  running: number; queued: number; held: number; idle: number; yours: number; nowUnknown: number
+  running: number; queued: number; waiting: number; held: number; idle: number; yours: number; nowUnknown: number
   /** Steps to go: every step less the done and the dropped ones (stopped and unknown steps are still to go). */
   toGo: number
   /** The blocking edges from this item whose milestone is not verified yet (waiting_on). */
@@ -213,7 +223,7 @@ function rowCounts(cells: StepCell[]) {
   const nowCount = (k: StepNow['kind']) => cells.filter(c => c.now?.kind === k).length
   const done = count('done')
   return { total: cells.length, done, active: cells.filter(c => c.step === 'active').length, running: nowCount('running'), queued: nowCount('queued'),
-    held: nowCount('held'), idle: nowCount('idle'), yours: nowCount('yours'), nowUnknown: nowCount('unknown'), stopped: count('stopped'),
+    waiting: nowCount('waiting'), held: nowCount('held'), idle: nowCount('idle'), yours: nowCount('yours'), nowUnknown: nowCount('unknown'), stopped: count('stopped'),
     unknown: cells.filter(c => c.step === null).length, toGo: cells.length - done }
 }
 
@@ -338,9 +348,10 @@ export function toGoText(row: Pick<ModuleRow, 'total' | 'toGo'>): string {
  */
 
 /** The active steps of a row by what they have now, each part only when it holds any: "1 running", "2 idle", "1 active, Unknown now". */
-export function activeCounts(row: Pick<ModuleRow, 'running' | 'queued' | 'held' | 'idle' | 'yours' | 'nowUnknown'>): string[] {
-  return [row.running && `${row.running} running`, row.queued && `${row.queued} queued`, row.held && `${row.held} held`, row.idle && `${row.idle} idle`,
-    row.yours && `${row.yours} yours`, row.nowUnknown && `${row.nowUnknown} active, Unknown now`].filter((p): p is string => !!p)
+export function activeCounts(row: Pick<ModuleRow, 'running' | 'queued' | 'waiting' | 'held' | 'idle' | 'yours' | 'nowUnknown'>): string[] {
+  return [row.running && `${row.running} running`, row.queued && `${row.queued} queued`, row.waiting && `${row.waiting} waiting on you`,
+    row.held && `${row.held} held`, row.idle && `${row.idle} idle`, row.yours && `${row.yours} yours`,
+    row.nowUnknown && `${row.nowUnknown} active, Unknown now`].filter((p): p is string => !!p)
 }
 /** A row's steps by state, each step once: "2 / 5 done · 1 running · 1 idle · 1 stopped · 1 unknown · 1 dropped". */
 export function stepCounts(row: ModuleRow): string {
@@ -359,14 +370,22 @@ export function noRuleText(cell: Pick<StepCell, 'noRule' | 'step'>): string {
 
 const oneOrMany = (n: number, one: string, many: string) => n === 1 ? one : many
 /** Each kind of held item aloud, counted; and what moves it on, for the detail. */
-const HELD_ORDER: HeldItem['kind'][] = ['decision', 'grant', 'no-landing', 'verify-failed']
+const HELD_ORDER: HeldItem['kind'][] = ['owner-decision', 'grant', 'signoff', 'question', 'request', 'decision', 'no-landing', 'verify-failed']
 const HELD_SPOKEN: Record<HeldItem['kind'], (n: number) => string> = {
+  'owner-decision': n => `${n} ${oneOrMany(n, 'task awaits', 'tasks await')} your decision`,
+  signoff: n => `${n} acceptance ${oneOrMany(n, 'sign-off', 'sign-offs')} Ready for you`,
+  question: n => `${n} open ${oneOrMany(n, 'question', 'questions')} for you`,
+  request: n => `${n} ${oneOrMany(n, 'request awaits', 'requests await')} your decision`,
   decision: n => `${n} ${oneOrMany(n, 'task waits', 'tasks wait')} on a decision`,
   grant: n => `${n} ${oneOrMany(n, 'landing waits', 'landings wait')} for your grant`,
   'no-landing': n => `${n} accepted ${oneOrMany(n, 'task', 'tasks')} with no landing recorded`,
   'verify-failed': n => `${n} external ${oneOrMany(n, 'work', 'works')} failed verification`,
 }
 const HELD_MOVES: Record<HeldItem['kind'], string> = {
+  'owner-decision': 'a task awaiting you moves when you decide on its card (Needs you lists it)',
+  signoff: 'an acceptance sign-off Ready is yours to give',
+  question: 'an open question moves when you answer it (Needs you lists questions)',
+  request: 'a request awaiting your decision moves when you approve or reject it (Needs you lists requests)',
   decision: 'a held task moves only when it is made ready again or cancelled',
   grant: 'a landing awaiting the grant waits on your grant (Needs you lists grants)',
   'no-landing': 'whether an accepted task lands the plan view does not say: it may never land',
@@ -381,22 +400,40 @@ const RECORD_SOURCES = 'none in plan-view owner_waiting or its done rule'
  */
 export function spokenState(cell: StepCell): string {
   const now = cell.now
+  const counted = (list: HeldItem[]) => HELD_ORDER.flatMap(k => { const n = list.filter(h => h.kind === k).length; return n ? [HELD_SPOKEN[k](n)] : [] }).join(', ')
   if (now?.kind === 'yours') return now.recorded.length ? `yours, recorded on it: ${now.recorded.join(', ')}` : `yours, ${RECORD_SOURCES}`
-  if (now?.kind === 'held') return `active, held: ${HELD_ORDER.flatMap(k => { const n = now.held.filter(h => h.kind === k).length; return n ? [HELD_SPOKEN[k](n)] : [] }).join(', ')}`
+  if (now?.kind === 'waiting') return `waiting on you: ${counted(now.waiting)}${now.held.length ? `; held: ${counted(now.held)}` : ''}`
+  if (now?.kind === 'held') return `active, held: ${counted(now.held)}`
   return cellWords[cell.state]
 }
 
 /*
- * What an active step has now, in words (R5:5.5-10). Claims and sources: the R5:5.5-10 hand-in report.
- * "In progress" is said only of work running or queued; an active step with neither, read now, is held while a task on
- * it waits on a decision, else "Active · nothing running"; anything not judged is Unknown with the condition tested.
+ * What an active step has now, in words (R5:5.5-10). Claims and sources: the R5:5.5-10 hand-in reports.
+ * "In progress" is said only of work running or queued; an active step with neither, read now, waits on you while
+ * something on it is only yours to move, is held while a task on it waits on a decision, else "Active · nothing
+ * running"; anything not judged is Unknown with the condition tested. Questions and requests are read from the shell's
+ * lists: when those were not read now, nothing is said of them but that.
  */
-const IDLE_CHECKED = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started); nothing held (no task blocked, paused or awaiting the Owner; no landing awaiting your grant; no accepted work task with no landing recorded; no external work whose verification read failed)'
-const heldLine = (held: string[]) => held.length ? [`Held: ${held.join('; ')}.`] : []
-/** An Owner step's records: "Yours ·" while that is its state, "Owner step ·" beside another (held). */
+const NOTHING_RUNS = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started)'
+const NOTHING_HELD = 'nothing held (no task blocked or paused; no accepted work task with no landing recorded; no external work whose verification read failed)'
+/** What "nothing waits on you" was read from: the plan view always, the shell's lists only when they were read now. */
+const nothingYours = (unread: boolean) => unread
+  ? 'nothing in the plan view waits on you (no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it)'
+  : 'nothing waits on you (no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it, no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision)'
+const checked = (now: StepNow) => `${NOTHING_RUNS}; ${nothingYours(!!now.unread?.length)}; ${NOTHING_HELD}`
+const heldLine = (held: string[], lead = 'Held') => held.length ? [`${lead}: ${held.join('; ')}.`] : []
+/** The shell's lists not read now: what the step's state could not include. */
+const unreadLine = (now: StepNow) => now.unread?.length
+  ? [`Not read now: ${now.unread.join('; ')}. Whether a question or request of yours waits on this step is Unknown.`] : []
+/** An Owner step's records: "Yours ·" while that is its state, "Owner step ·" beside another (held, waiting). */
 const recordedLines = (recorded: string[], lead: string) => [recorded.length
   ? `${lead} · recorded on it: ${recorded.join('; ')}. Whether each still asks you is on Needs you.`
-  : `${lead} · ${RECORD_SOURCES}: no wait for you listed on it, and no question, request or sign-off named. Questions or requests tied to it only on Needs you are not read here.`]
+  : `${lead} · ${RECORD_SOURCES}: no wait for you listed on it, and no question, request or sign-off named.`]
+/** What moves each kind of item on, once each, as one clause. */
+const movesOf = (list: HeldItem[]) => {
+  const moves = [...new Set(HELD_ORDER.filter(k => list.some(h => h.kind === k)).map(k => HELD_MOVES[k]))].join('; ')
+  return `${moves[0].toUpperCase()}${moves.slice(1)}`
+}
 
 /** What the detail says of an active step's state now, line by line; [] for a step not active. */
 export function nowLines(cell: StepCell): string[] {
@@ -405,15 +442,16 @@ export function nowLines(cell: StepCell): string[] {
   const since = cell.since ? [`Active since ${cell.since} (its state event).`] : []
   switch (now.kind) {
     case 'running': return [`In progress · running now: ${now.what}${now.others > 0 ? ` (+${now.others} more)` : ''}.`, ...since]
-    case 'queued': return [`In progress · queued: ${now.why.join('; ')}. Nothing on it runs now.`, ...heldLine(now.held), ...since]
-    case 'unknown': return [`Unknown · ${now.why.join('; ')}.`, ...(now.queued.length ? [`Queued as read: ${now.queued.join('; ')}.`] : []), ...heldLine(now.held), ...since]
-    case 'held': {
-      const moves = [...new Set(HELD_ORDER.filter(k => now.held.some(h => h.kind === k)).map(k => HELD_MOVES[k]))].join('; ')
-      return [`Active · held: ${now.held.map(h => h.text).join('; ')}. ${moves[0].toUpperCase()}${moves.slice(1)}; nothing on the step runs or is queued.`,
-        ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...since]
-    }
-    case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${IDLE_CHECKED}.`, ...since]
-    case 'idle': return [`Active · nothing running, read now: ${IDLE_CHECKED}.`, ...since]
+    case 'queued': return [`In progress · queued: ${now.why.join('; ')}. Nothing on it runs now.`, ...heldLine(now.waiting, 'Waiting on you'),
+      ...heldLine(now.held), ...unreadLine(now), ...since]
+    case 'unknown': return [`Unknown · ${now.why.join('; ')}.`, ...(now.queued.length ? [`Queued as read: ${now.queued.join('; ')}.`] : []),
+      ...heldLine(now.waiting, 'Waiting on you'), ...heldLine(now.held), ...unreadLine(now), ...since]
+    case 'waiting': return [`Waiting on you: ${now.waiting.map(h => h.text).join('; ')}. ${movesOf(now.waiting)}; nothing on the step runs or is queued.`,
+      ...heldLine(now.held.map(h => h.text), 'Also held'), ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...unreadLine(now), ...since]
+    case 'held': return [`Active · held: ${now.held.map(h => h.text).join('; ')}. ${movesOf(now.held)}; nothing on the step runs or is queued.`,
+      ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...unreadLine(now), ...since]
+    case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
+    case 'idle': return [`Active · nothing running, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
   }
 }
 

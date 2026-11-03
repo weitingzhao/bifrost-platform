@@ -11,6 +11,7 @@ import { NeedsCleanupEntry } from './NeedsCleanup'
 import { cleanupBreakdown } from './needsCleanupModel'
 import { useNeedsCleanup } from './useNeedsCleanup'
 import { runtimeTasks } from './moduleDetailModel'
+import { useOwnerAsks } from './ownerAsksModel'
 import { stepRows } from './stepStateModel'
 import { answeredWords, progressOld, sinceWords as since } from './readAge'
 import { CLASS_MEANINGS, OTHER_ROUNDS, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
@@ -69,6 +70,8 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
   // the module rows judge with, so that a check task is told apart alike in the summary and the rows (R5:5.5-10).
   const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
   const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
+  // The open questions and requests Needs you already polls, from the cache: the same asks the rows judge with.
+  const asks = useOwnerAsks()
   if (!view) {
     return <section aria-label="Where the round stands" className={box}>
       <div className="flex flex-wrap items-center gap-2"><Lamp tone="unknown" />
@@ -80,7 +83,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
     </section>
   }
   // Each active step by what it has now (R5:5.5-10): the summary counts the same states the rows show.
-  const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, runtime })
+  const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, runtime, asks })
   const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
   const mainline = mainlineSentence(view, rows)
   const others = othersSentence(rows, view.mainline.current?.plan_node_id ?? null)

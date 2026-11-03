@@ -28,10 +28,11 @@ export function roundHeader(view: PlanSnapshot): string {
  * what it has now (R5:5.5-10): work running or queued is in progress; an active step with nothing running is never
  * folded into it, and one whose work now is Unknown is neither.
  */
-export type ModuleClass = 'in-progress' | 'active-unknown' | 'held' | 'yours' | 'idle' | 'stopped' | 'unknown' | 'no-steps' | 'all-done' | 'not-started' | 'partly'
+export type ModuleClass = 'in-progress' | 'active-unknown' | 'waiting' | 'held' | 'yours' | 'idle' | 'stopped' | 'unknown' | 'no-steps' | 'all-done' | 'not-started' | 'partly'
 export function moduleClass(row: ModuleRow): ModuleClass {
   if (row.running + row.queued > 0) return 'in-progress'
   if (row.nowUnknown > 0) return 'active-unknown'
+  if (row.waiting > 0) return 'waiting'
   if (row.held > 0) return 'held'
   if (row.yours > 0) return 'yours'
   if (row.idle > 0) return 'idle'
@@ -43,7 +44,7 @@ export function moduleClass(row: ModuleRow): ModuleClass {
   return 'partly'
 }
 
-const CLASS_ORDER: ModuleClass[] = ['in-progress', 'held', 'yours', 'idle', 'active-unknown', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps']
+const CLASS_ORDER: ModuleClass[] = ['in-progress', 'waiting', 'held', 'yours', 'idle', 'active-unknown', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps']
 /**
  * Each class in the runtime's own terms (nodes[].state, the controller's record of a step, and the plan view's tasks,
  * attempts, landings and external work for an active one): never a claim about work outside it (R5:5.5-2 review: on
@@ -51,6 +52,7 @@ const CLASS_ORDER: ModuleClass[] = ['in-progress', 'held', 'yours', 'idle', 'act
  */
 const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
   'in-progress': ['has a step in progress', 'have steps in progress'],
+  waiting: ['has a step waiting on you', 'have steps waiting on you'],
   held: ['has an active step held', 'have active steps held'],
   idle: ['has an active step with nothing running', 'have active steps with nothing running'],
   yours: ['has an Owner step active', 'have Owner steps active'],
@@ -65,9 +67,10 @@ const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
 /** What each class means, for "How this is read". */
 export const CLASS_MEANINGS: [string, string][] = [
   ['a step in progress', 'the controller has a step active and the plan view, read now, shows work on it running (a live attempt with its heartbeat confirmed, a landing with a record in the last 30 min, running external work) or queued (a task proposed, ready, back for rework, submitted or being verified; a landing parked, which the controller unparks itself; external work registered and not started).'],
-  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, and something on it waits: a task blocked, paused or awaiting the Owner (each moves only when it is made ready again or cancelled), a landing awaiting your grant, an accepted work task with no landing recorded (the plan view does not say whether it lands), or submitted external work whose verification result is Verification failed. None of these is counted as progress. Submitted external work with verification Unknown or not recorded is noted on its step separately; it does not by itself establish a hold (most is never verified). A stale verification reads Unknown now.'],
-  ['an Owner step active', 'the controller has an Owner step (owner_step) active and the plan view, read now, shows nothing running, queued or held on it.'],
-  ['an active step with nothing running', 'the controller has a step active and the plan view, read now, shows nothing running, queued or held on it. The active state alone is not work: the controller opens a step when a task on it is first leased, and a recorded event can move a step to active with no task on it.'],
+  ['a step waiting on you', 'the controller has a step active, nothing on it runs or is queued, and something on it is only yours to move: a task awaiting your decision, a landing awaiting your grant, an acceptance sign-off Ready for it (the plan view), an open question on one of its tasks or named by its done rule, or a request its done rule names awaiting your decision, as Needs you counts one: pending, not expired, not a drill, not a landing request (the questions and requests Needs you reads every 30 s, while read within two of its polls; when those were not read now, the step says so and is judged by the plan view alone).'],
+  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, nothing on it was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so), and something on it waits: a task blocked or paused (each moves only when it is made ready again or cancelled), an accepted work task with no landing recorded (the plan view does not say whether it lands), or submitted external work whose verification result is Verification failed. None of these is counted as progress. Submitted external work with verification Unknown or not recorded is noted on its step separately; it does not by itself establish a hold (most is never verified). A stale verification reads Unknown now.'],
+  ['an Owner step active', 'the controller has an Owner step (owner_step) active and, read now, nothing on it runs, is queued or is held, and nothing was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so).'],
+  ['an active step with nothing running', 'the controller has a step active and, read now, nothing on it runs, is queued or is held, and nothing was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so). The active state alone is not work: the controller opens a step when a task on it is first leased, and a recorded event can move a step to active with no task on it.'],
   ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or an attempt on the step is stale or its heartbeat unconfirmed, or a landing on it has no record for over 30 min, or submitted external work on it has a stale verification reading (the last recorded successful read is over 25 min old), or a task, attempt or landing reads in a state this page does not know.'],
   ['no step started', 'every step is planned in the runtime: no task on it has been taken there. Work done outside the runtime (a thread, an external run not linked to a step) moves no step, so this does not say nothing was done.'],
   ['every step done', 'the controller marked each step done: not acceptance, not deployment.'],

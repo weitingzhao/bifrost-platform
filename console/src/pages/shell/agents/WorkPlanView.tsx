@@ -7,6 +7,7 @@ import { NowClock, useNow } from '../progress/progressClock'
 import { PlanLiveWork } from './PlanLiveWork'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
+import { useOwnerAsks } from './ownerAsksModel'
 import { moduleDetailId, moduleOf, moduleStepRowId, runtimeTasks } from './moduleDetailModel'
 import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
@@ -37,6 +38,8 @@ function RoundTab({ view, selected, failed }: { view: PlanSnapshot; selected: st
   // read only for a running task's role on the rows' Now line.
   const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
   const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
+  // The open questions and requests Needs you already polls (every 30 s), from the cache: no request of its own.
+  const asks = useOwnerAsks()
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
   // An address naming a node of no module (a module or a step of one opens on its own page: ModulePage) opens the
   // whole plan's fold and brings the node into view there.
@@ -47,7 +50,7 @@ function RoundTab({ view, selected, failed }: { view: PlanSnapshot; selected: st
   const waits = dependencyWaits(view, moduleRows(view))
   return <>
     {selected && !targetId && <p role="alert">Node not found in {view.root}: {selected}</p>}
-    <PlanModuleRows view={view} selected={selected} failed={failed} runtime={runtime} />
+    <PlanModuleRows view={view} selected={selected} failed={failed} runtime={runtime} asks={asks} />
     <Fold title={waits.state === 'unknown' ? 'Dependency waits · Unknown' : `Dependency waits · ${waits.total}${waits.unread ? ' · some Unknown' : ''}`} open={false}>
       <section aria-label="Waiting on" className="flex min-w-0 flex-col gap-2 text-sm">
         {view.waiting_on.length === 0 && <p className="m-0">{waits.state === 'unknown' ? `Dependencies Unknown · ${waits.reason}.`

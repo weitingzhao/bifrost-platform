@@ -1,3 +1,4 @@
+import type { UseQueryResult } from '@tanstack/react-query'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import { records, text, type RuntimeProgress, type RuntimeRecord, type RuntimeTask } from '@/api/agentRuntime'
 import { isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
@@ -30,6 +31,13 @@ export type ShellReads = { questions: ShellRead<Question[]>; open: ShellRead<App
 /** How often the shell polls each (useNeedsYou): a read older than twice this is stale. */
 export const SHELL_POLL_MS = { questions: 30_000, open: 30_000, all: 30_000, progress: 5_000 } as const
 export const isStale = (read: ShellRead<unknown>, poll: number, now: number) => read.state === 'ok' && now - read.at > 2 * poll
+/** A shell list from its cached query: Unknown while its latest read failed or is paused offline (a list left from before is not now). */
+export function shellRead<T>(q: Pick<UseQueryResult<T>, 'isError' | 'error' | 'isPaused' | 'data' | 'dataUpdatedAt' | 'fetchStatus'>): ShellRead<T> {
+  if (q.isError) return { state: 'unknown', reason: q.error instanceof Error ? q.error.message : 'Request failed' }
+  if (q.isPaused) return { state: 'unknown', reason: 'Offline' }
+  if (q.data !== undefined) return { state: 'ok', data: q.data, at: q.dataUpdatedAt }
+  return q.fetchStatus === 'fetching' ? { state: 'reading' } : { state: 'unread' }
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
 const str = (v: unknown) => typeof v === 'string' ? v : ''

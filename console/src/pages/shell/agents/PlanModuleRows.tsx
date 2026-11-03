@@ -8,10 +8,11 @@ import { rememberModuleRow } from './moduleRowReturn'
 import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, stepCounts, toGoText, unverifiedNote, type CellState, type ModuleRow,
   type RuleLine, type StepCell } from './planModuleModel'
 import { sinceWords } from './readAge'
+import type { OwnerAsks } from './ownerAsksModel'
 import { stepRows } from './stepStateModel'
 import { workTabHref } from './workViewModel'
 
-const legend: CellState[] = ['done', 'active', 'held', 'idle', 'yours', 'planned', 'stopped', 'active-unknown', 'unknown']
+const legend: CellState[] = ['done', 'active', 'waiting', 'held', 'idle', 'yours', 'planned', 'stopped', 'active-unknown', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
 
 function Rule({ lines }: { lines: RuleLine[] }) {
@@ -175,14 +176,16 @@ function NowLine({ live, now, root }: { live: LiveNow; now: number; root: string
 }
 
 /** Work → Plan: every module (plan item) as a row of its runtime steps and how many are left (Design v3.6 WorkPage, DATA-MAP P25). */
-export function PlanModuleRows({ view, selected, failed = null, runtime }: { view: PlanSnapshot; selected: string
+export function PlanModuleRows({ view, selected, failed = null, runtime, asks }: { view: PlanSnapshot; selected: string
   /** Why the plan view's latest refresh failed (or Offline); null while it did not. */
   failed?: string | null
   /** The runtime's tasks from the shell's cached GET /progress, for a running task's role; none read when absent. */
-  runtime?: RuntimeTasks }) {
+  runtime?: RuntimeTasks
+  /** The open questions and requests from the shell's cache (R5:5.5-10 slice 2); none read when absent. */
+  asks?: OwnerAsks }) {
   const now = useNow()
   // Each active step by what it has now (R5:5.5-10), at the same clock and read as what runs now (R5:5.5-8).
-  const rows = stepRows(view, { failed, now, runtime })
+  const rows = stepRows(view, { failed, now, runtime, asks })
   const live = liveNow(view, rows, { failed, now, runtime })
   const liveSteps = live.state === 'ok' ? live.byStep : new Map<string, LiveStep>()
   const step = view.nodes.find(n => n.node_kind === 'step' && (n.plan_node_id === selected || n.label === selected))?.plan_node_id ?? ''
@@ -197,7 +200,7 @@ export function PlanModuleRows({ view, selected, failed = null, runtime }: { vie
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
       {legend.map(s => <span key={s} data-legend={s} className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block h-[7px] w-5 rounded-[4px]" style={cellStyle[s]} />{cellLabels[s]}{s === 'idle' ? ' (idle)' : s === 'unknown' ? ' (no state)' : ''}</span>)}
       <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="inline-block size-[5px] rounded-full bg-[var(--ops-attention-text)]" />No done rule (active or stopped)</span>
-      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old, a run on it cannot be confirmed, or the verification reading of submitted external work on it is stale. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
+      <span>Execution progress: one cell per runtime step in plan order, from the controller's step states; an active step by what the plan view, read now, shows on it: in progress while work on it runs or is queued, waiting on you while something on it is only yours to move (a task awaiting your decision, a landing awaiting your grant, an acceptance sign-off Ready, an open question on its tasks or named by its done rule, a request its done rule names awaiting your decision), held while a task on it waits on a decision, else active with nothing running, or yours for an Owner step; Unknown now while the read is old, a run on it cannot be confirmed, or the verification reading of submitted external work on it is stale. Not acceptance, not deployment. Dropped steps are left out. A cell that glows has work running now; a faint still ring, a landing with no record for over 30 min.</span>
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
