@@ -25,17 +25,18 @@ import (
 
 // reachPrincipals are the callers walked, by name, with their tokens in
 // reachAuthFile; "" is anonymous.
-var reachPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor", "intake:dots-p2"}
+var reachPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor", "intake:dots-p2", "collector:h1"}
 
 const reachIntakeEnv = "SERVER_TEST_INTAKE_TOKEN"
 
 var reachTokens = map[string]string{"viewer": "fixture-reach-viewer", "reporter": "fixture-reach-reporter", "operator": "fixture-reach-operator",
 	"admin": "fixture-reach-admin", "trade-satellite": "fixture-reach-satellite", "agentd:h1": "fixture-reach-agentd",
-	"executor": "fixture-reach-executor", "intake:dots-p2": "fixture-reach-intake"}
+	"executor": "fixture-reach-executor", "intake:dots-p2": "fixture-reach-intake", "collector:h1": "fixture-reach-collector"}
 
 // reachAuthFile is the platform's auth file of the walk: one token of each
-// role PROD and STG use, an executor, and an intake client (from its own
-// key, which a platform before slice 2 ignores).
+// role PROD and STG use, an executor, an intake client (from its own key,
+// which a platform before slice 2 ignores) and a collector (R5:5.5-12 §1.2,
+// a reporter a platform before it reads as any other).
 const reachAuthFile = `tokens:
   - name: viewer
     role: viewer
@@ -58,6 +59,9 @@ const reachAuthFile = `tokens:
   - name: executor
     role: executor
     token: fixture-reach-executor
+  - name: collector:h1
+    role: reporter
+    token: fixture-reach-collector
 intake_tokens:
   - name: intake:dots-p2
     token_env: ` + reachIntakeEnv + `
@@ -108,7 +112,7 @@ func routeReach(t *testing.T, srv *Server) map[string][]string {
 			for i := len(mws) - 1; i >= 0; i-- {
 				h = mws[i](h)
 			}
-			req := httptest.NewRequest(method, "/", nil)
+			req := httptest.NewRequest(method, samplePath(route), nil)
 			if p != "" {
 				req.Header.Set("Authorization", "Bearer "+reachTokens[p])
 			}
@@ -127,6 +131,20 @@ func routeReach(t *testing.T, srv *Server) map[string][]string {
 		sort.Strings(out[p])
 	}
 	return out
+}
+
+// samplePath is a path the route serves: each parameter and a trailing
+// wildcard filled in. A gate that reads the route from the path (the
+// collector's, collectorAllowed) sees the route walked; no other gate reads
+// the path, so the old roles' reach is the same as from "/".
+func samplePath(route string) string {
+	parts := strings.Split(route, "/")
+	for i, part := range parts {
+		if part == "*" || strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			parts[i] = "p0"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // reachText is a reach as the base file holds it: "<principal>\t<route>"

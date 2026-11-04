@@ -91,6 +91,12 @@ func (r *Recorder) Admit(b Beat) (Decision, error) {
 	}
 	k := Key(b.Vendor, b.Thread)
 	t, seen := st.Threads[k]
+	// A host-bound beat (a collector's) is held to its host's threads before
+	// any key, nonce or migration is looked at: holding another host's key,
+	// or a thread with none, gives it nothing (R5:5.5-12 §1.4).
+	if foreignThread(t, seen, b) {
+		return Decision{}, ErrOtherHost
+	}
 	// A retry of a lost first response has the nonce and no key. A caller that
 	// already holds the key takes the buffered path, including during the window.
 	if !seen || t.KeyHash == "" || (b.ThreadKey == "" && nonceLive(t, b.RegisterNonce, now)) {
@@ -122,6 +128,11 @@ func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
 		wipeKeys(st, now)
 		k := Key(b.Vendor, b.Thread)
 		t, seen := st.Threads[k]
+		// Again in the update itself: the stored thread may have changed
+		// since Admit read it.
+		if foreignThread(t, seen, b) {
+			return ErrOtherHost
+		}
 		if seen && nonceLive(t, b.RegisterNonce, now) {
 			decision.Key = t.RegisterKey
 			if b.Seq > t.Seq && !olderTurn(t, b) {

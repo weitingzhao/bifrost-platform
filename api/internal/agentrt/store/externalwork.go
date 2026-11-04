@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -108,14 +109,28 @@ func (n externalNote) validate() error {
 	}
 	return nil
 }
+
+// errNotDescription is the one answer for an artifact a registration names
+// that is not an external work description: absent, of another kind, or a
+// body that does not parse as one. It says nothing of the body, which may be
+// another writer's (R5:5.5-12 §1.3: a collector names a digest it may not
+// read), so no field name or value of it reaches the caller.
+var errNotDescription = invalid("the artifact is not an external work description")
+
 func externalDescription(ctx context.Context, tx pgx.Tx, id string) (ExternalDescription, error) {
-	var d ExternalDescription
 	var raw []byte
 	err := tx.QueryRow(ctx, `SELECT b.body FROM agentrt.artifact_blob b JOIN agentrt.artifact a USING(artifact_id) WHERE a.artifact_id=$1 AND a.artifact_kind='other'`, id).Scan(&raw)
-	if err != nil {
-		return d, invalid("external description unavailable: %v", err)
+	switch {
+	case isNoRows(err):
+		return ExternalDescription{}, errNotDescription
+	case err != nil:
+		return ExternalDescription{}, err
 	}
-	return parseExternalDescription(raw)
+	d, err := parseExternalDescription(raw)
+	if err != nil {
+		return ExternalDescription{}, errNotDescription
+	}
+	return d, nil
 }
 
 // ValidateExternalDescription applies the registration's closed schema at
@@ -415,6 +430,31 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		}
 		return appendExternal(ctx, tx, w.Actor, n)
 	})
+}
+
+// ErrNotOwnRecord: the reader sees only the records it wrote (a collector,
+// R5:5.5-12 §1.3: its external work, the descriptions it uploaded first),
+// and this is not one. Another writer's record and a record that does not
+// exist answer the same, so the answer says nothing of other writers'.
+var ErrNotOwnRecord = errors.New("store: this record is not the caller's")
+
+// ReadOwnExternalWork is ReadExternalWork for a reader held to its own
+// records: the work's registrant must be actor (the registrant never
+// changes, linked included), or the answer is ErrNotOwnRecord.
+func ReadOwnExternalWork(ctx context.Context, db DB, id, actor string) (map[string]any, error) {
+	var out map[string]any
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		n, event, _, err := readExternal(ctx, tx, id)
+		switch {
+		case isNoRows(err), err == nil && n.Actor != actor:
+			return ErrNotOwnRecord
+		case err != nil:
+			return err
+		}
+		out = externalReply(n, event)
+		return nil
+	})
+	return out, err
 }
 
 // ReadExternalWork supports crash recovery. It is read-only and exposes only

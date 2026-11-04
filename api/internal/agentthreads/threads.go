@@ -63,6 +63,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -165,8 +166,17 @@ type Beat struct {
 	// an old client. It is not listed.
 	Sidebar        string `json:"sidebar,omitempty"`
 	sidebarPresent bool
+	// titlePresent: the body names a title, in any letter case
+	// encoding/json would read as one, whatever its value. A collector's
+	// beat names none (R5:5.5-12 §1.3).
+	titlePresent bool
 	// keyHash is the server-side sha256 of ThreadKey. The client cannot set it.
 	keyHash string
+	// boundHost is the host the token that sent the beat is bound to (a
+	// collector, R5:5.5-12 §1.4); "" for a token bound to none. The server
+	// sets it, never the client: such a beat writes only a thread of that
+	// host, new or already there (Apply, Recorder.Admit).
+	boundHost string
 }
 
 // UnmarshalJSON distinguishes an omitted sidebar from an explicit empty/null value.
@@ -182,6 +192,11 @@ func (b *Beat) UnmarshalJSON(raw []byte) error {
 	}
 	*b = Beat(decoded)
 	_, b.sidebarPresent = fields["sidebar"]
+	for name := range fields {
+		if strings.EqualFold(name, "title") {
+			b.titlePresent = true
+		}
+	}
 	return nil
 }
 
@@ -222,6 +237,11 @@ type Thread struct {
 	OpenedTurn bool `json:"opened_turn,omitempty"`
 	// OpenedTurnAt is the last actual turn_start, independent of later events.
 	OpenedTurnAt time.Time `json:"opened_turn_at,omitempty"`
+	// HostBound is set once a host-bound token (a collector) has written
+	// this session. Such a session supersedes sessions of its own host only
+	// (sessionSuperseded): a shared sidebar id does not reach another
+	// host's threads. It is not listed.
+	HostBound bool `json:"host_bound,omitempty"`
 	// NotifiedFor is At of the event whose silence was pushed. It is set
 	// only after the push returns. A new event moves At, so the next silence
 	// is a new one.
@@ -349,6 +369,17 @@ func (b *Beat) Validate() error {
 	return nil
 }
 
+// ErrOtherHost: a host-bound beat names a thread another host holds. The
+// thread is not changed, whatever key or nonce the beat presents.
+var ErrOtherHost = errors.New("the thread is another host's")
+
+// foreignThread says whether a host-bound beat would write a thread not of
+// its host: one it names for another host, or one stored for another host
+// under the same vendor and id (the key is global).
+func foreignThread(t Thread, seen bool, b Beat) bool {
+	return b.boundHost != "" && (b.Host != b.boundHost || seen && t.Host != b.boundHost)
+}
+
 // Apply folds one beat received at `at` into st. A sequence that is not strictly
 // newer than the one already stored is ignored. An event from an older turn is
 // not stored even when its sequence is newer. The receive time is not an
@@ -360,6 +391,9 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	}
 	k := Key(b.Vendor, b.Thread)
 	t, seen := st.Threads[k]
+	if foreignThread(t, seen, b) {
+		return false
+	}
 	if seen && olderTurn(t, b) {
 		return false
 	}
@@ -398,6 +432,9 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	}
 	if b.keyHash != "" {
 		t.KeyHash = b.keyHash
+	}
+	if b.boundHost != "" {
+		t.HostBound = true
 	}
 	t.TurnID, t.Seq = b.TurnID, b.Seq
 	if b.Sidebar != "" {

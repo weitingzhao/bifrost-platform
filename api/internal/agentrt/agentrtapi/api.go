@@ -287,7 +287,7 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
-	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrOtherHost):
+	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrOtherHost), errors.Is(err, store.ErrNotOwnRecord):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())

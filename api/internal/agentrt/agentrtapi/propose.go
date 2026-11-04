@@ -24,7 +24,10 @@ const SessionHeader = "X-Bifrost-Session"
 // any other token writes as the thread its X-Bifrost-Session header names,
 // thread:<session>, registered on its first write. The session is what the
 // thread says it is: it attributes the write, it grants nothing (the role
-// does).
+// does). A collector token (collector:<host>, R5:5.5-12 §1.2) writes as its
+// host's collector, thread:collector@<host>, whatever session it names: no
+// header reaches that name, and its first write holds it to the collector's
+// token (TD-370).
 func writer(r *http.Request) (store.Writer, error) {
 	p := actuation.PrincipalFromContext(r.Context())
 	w := store.Writer{Token: p.Name}
@@ -36,6 +39,14 @@ func writer(r *http.Request) (store.Writer, error) {
 		return w, fmt.Errorf("%w: an intake token writes only on the intake routes", store.ErrNotYours)
 	case p.Role == actuation.RoleAdmin:
 		w.Actor = "owner"
+	case actuation.IsCollector(p):
+		actor, ok := actuation.CollectorActor(p)
+		if !ok {
+			// Defence only: LoadAuth admits a name in the namespace only as
+			// a reporter named collector:<host>.
+			return w, fmt.Errorf("%w: a collector token is a reporter named %s<host>", store.ErrNotYours, actuation.CollectorPrefix)
+		}
+		w.Actor = actor
 	case strings.HasPrefix(p.Name, "seat:"):
 		w.Actor = p.Name
 	default:

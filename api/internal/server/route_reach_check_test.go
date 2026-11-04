@@ -121,6 +121,19 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 		}
 	}
 
+	// A collector (R5:5.5-12 §1.3) reaches its table and, of /api/v1,
+	// nothing else, not even what an anonymous caller does (the gate is the
+	// /api/v1 router's: /health and /metrics are before it); the old roles,
+	// below, are as they were with it configured beside them.
+	table := []string{"GET /health", "GET /metrics"}
+	for route := range collectorRoutes {
+		table = append(table, route)
+	}
+	slices.Sort(table)
+	if !slices.Equal(reach["collector:h1"], table) {
+		t.Errorf("a collector reaches %v, not its table %v", reach["collector:h1"], table)
+	}
+
 	// The old roles reach what they did on the base commit; the readers add
 	// the crew's issue routes and the exact intended additions, nothing else changes.
 	raw, err := os.ReadFile(filepath.Join("testdata", "route_reach_base.txt"))

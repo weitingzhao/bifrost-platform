@@ -19,13 +19,18 @@ type View struct {
 // actually opened a turn after t's last event. A session whose turn has ended
 // is idle, not superseded. A session of another vendor that carries the same
 // sidebar id is a job started from that thread's shell, not its successor.
-// Wrapped runs do not participate in either direction.
+// Wrapped runs do not participate in either direction. A session written by a
+// host-bound token (a collector) supersedes sessions of its own host only.
 func (c Config) sessionSuperseded(st State, t Thread, now time.Time) bool {
 	if t.Sidebar == "" || t.Event == TurnEnd || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
 		return false
 	}
 	for _, o := range st.Threads {
 		if o.Sidebar != t.Sidebar || o.Vendor != t.Vendor || Key(o.Vendor, o.Thread) == Key(t.Vendor, t.Thread) || headlessRun(o.Thread) {
+			continue
+		}
+		// A session a host-bound token wrote supersedes its own host's only.
+		if o.HostBound && o.Host != t.Host {
 			continue
 		}
 		if o.OpenedTurn && o.OpenedTurnAt.After(t.At) {

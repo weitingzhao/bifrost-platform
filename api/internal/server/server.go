@@ -400,7 +400,11 @@ func (s *Server) Router() http.Handler {
 	// Unauthenticated like /health: Prometheus scrapes it, and it exposes only
 	// what /api/v1/plugins/*/status already answers anonymously.
 	r.Get("/metrics", s.handleMetrics)
+	root := r
 	r.Route("/api/v1", func(r chi.Router) {
+		// One gate for a collector token, before every module mounts
+		// (R5:5.5-12 §1.3): it reaches collectorRoutes and nothing else.
+		r.Use(s.auth.ConfineCollectors(collectorAllowed(root)))
 		// L-1 surface. Served here for convenience while platform-api is healthy;
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)

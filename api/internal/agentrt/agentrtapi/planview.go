@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -76,15 +78,45 @@ func (a *API) postExternalEvent(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.PostExternalEvent(r.Context(), a.DB, who, chi.URLParam(r, "id"), in)
+	id := chi.URLParam(r, "id")
+	// A collector posts only to its own work, and learns nothing of anyone
+	// else's (R5:5.5-12 §1.4): work it did not register and work that does
+	// not exist are refused alike, before the event is looked at. The store
+	// checks the registrant again in its own transaction.
+	if actuation.IsCollector(actuation.PrincipalFromContext(r.Context())) {
+		if _, err := store.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	out, err := store.PostExternalEvent(r.Context(), a.DB, who, id, in)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
+
+// getExternalWork is GET /external-work/{id}. A collector reads only the
+// work it registered (R5:5.5-12 §1.3 记录级归属): anything else, whether
+// another registrant's or none at all, is 403.
 func (a *API) getExternalWork(w http.ResponseWriter, r *http.Request) {
-	out, err := store.ReadExternalWork(r.Context(), a.DB, chi.URLParam(r, "id"))
+	id := chi.URLParam(r, "id")
+	if p := actuation.PrincipalFromContext(r.Context()); actuation.IsCollector(p) {
+		who, err := writer(r)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		out, err := store.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+		return
+	}
+	out, err := store.ReadExternalWork(r.Context(), a.DB, id)
 	if err != nil {
 		a.fail(w, err)
 		return

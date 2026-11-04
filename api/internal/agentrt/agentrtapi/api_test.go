@@ -108,7 +108,9 @@ var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "f
 	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2", "seat:coordinator": "fixture-seat-coordinator", "agentd:coordinator-mbp": "fixture-agentd-coordinator",
 	// An operator not on the issue readers list (W-31 BI-1 slice 2) and an
 	// intake client's token, read from its environment variable.
-	"trade-satellite": "fixture-satellite-1", "intake:dots-p2": fixtureIntakeToken}
+	"trade-satellite": "fixture-satellite-1", "intake:dots-p2": fixtureIntakeToken,
+	// The collectors of two hosts (R5:5.5-12 §1.2).
+	"collector:h1": "fixture-collector-h1", "collector:h2": "fixture-collector-h2"}
 
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
@@ -152,7 +154,8 @@ var (
 
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
-// reporter, an operator, an admin and two seat tokens (one registered).
+// reporter, an operator, an admin, two seat tokens (one registered) and the
+// collectors of h1 and h2.
 func server(t *testing.T, db store.DB, with ...func(*agentrtapi.API)) *httptest.Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "auth.yaml")
@@ -196,6 +199,12 @@ func server(t *testing.T, db store.DB, with ...func(*agentrtapi.API)) *httptest.
   - name: trade-satellite
     role: operator
     token: fixture-satellite-1
+  - name: collector:h1
+    role: reporter
+    token: fixture-collector-h1
+  - name: collector:h2
+    role: reporter
+    token: fixture-collector-h2
 intake_tokens:
   - name: intake:dots-p2
     token_env: `+fixtureIntakeEnv+`

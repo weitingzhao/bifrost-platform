@@ -47,6 +47,9 @@ func TestFixedIPReadRequiresViewer(t *testing.T) {
 			if allowed {
 				want, wantCalls = http.StatusServiceUnavailable, 1
 			}
+			if p == "collector:h1" {
+				want = http.StatusForbidden // refused at the collector's gate (R5:5.5-12 §1.3)
+			}
 			if rec.Code != want || calls-before != wantCalls {
 				t.Fatalf("status=%d want=%d controller calls=%d want=%d", rec.Code, want, calls-before, wantCalls)
 			}
@@ -79,6 +82,11 @@ func TestFixedIPWriteMatchesFirewallApprovalBoundary(t *testing.T) {
 				rec := httptest.NewRecorder()
 				router.ServeHTTP(rec, req)
 				want := http.StatusUnauthorized
+				if p == "collector:h1" && !gateRefusal(rec) {
+					t.Fatalf("%s: the collector is not refused at its gate: %d %s", tc.path, rec.Code, rec.Body)
+				} else if p == "collector:h1" {
+					want = http.StatusForbidden
+				}
 				if fixed {
 					want = http.StatusForbidden
 					if !strings.Contains(rec.Body.String(), `"error":"approval required"`) || !strings.Contains(rec.Body.String(), tc.action) {

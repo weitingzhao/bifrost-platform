@@ -82,6 +82,71 @@ func AgentdHost(p Principal) (string, bool) {
 	return host, true
 }
 
+// CollectorPrefix starts the principal name of a collector token
+// (R5:5.5-12 §1.2): a reporter bound to one host, the host following the
+// prefix. The namespace is reserved: LoadAuth admits a name in it only as a
+// reporter whose host matches collectorName.
+const CollectorPrefix = "collector:"
+
+// collectorName is a collector token's name: collector:<host>, the host as
+// an intake client's name allows it (§1.2: as intakeName).
+var collectorName = regexp.MustCompile(`^collector:[a-z0-9-]{1,32}$`)
+
+// CollectorActorPrefix starts the runtime actor of a collector (§1.1 B):
+// thread:collector@<host>. The "@" is outside the characters of a session
+// header (store.ThreadActor), so no token naming a session can write as it.
+const CollectorActorPrefix = "thread:collector@"
+
+// IsCollector says whether a principal's name is in the collector namespace,
+// whatever its role. The route gate (ConfineCollectors) reads this, so a
+// name in the namespace is confined even if it could not derive its actor.
+func IsCollector(p Principal) bool {
+	return strings.HasPrefix(p.Name, CollectorPrefix)
+}
+
+// CollectorHost is the host a collector principal is bound to: a reporter
+// named collector:<host>.
+func CollectorHost(p Principal) (string, bool) {
+	if p.Role != RoleReporter || !collectorName.MatchString(p.Name) {
+		return "", false
+	}
+	return strings.TrimPrefix(p.Name, CollectorPrefix), true
+}
+
+// CollectorActor is the runtime actor a collector writes and reads as,
+// thread:collector@<host>; it never comes from a session header.
+func CollectorActor(p Principal) (string, bool) {
+	host, ok := CollectorHost(p)
+	if !ok {
+		return "", false
+	}
+	return CollectorActorPrefix + host, true
+}
+
+// collectorsValid refuses a configuration that puts a name in the collector
+// namespace other than as a reporter named collector:<host>, or names one
+// collector twice, whether or not its value is set: a collector is one
+// token, so the writes recorded as its actor come from one token only (TD-370
+// holds a thread to its token's name, not its value).
+func collectorsValid(tokens []TokenConfig) error {
+	seen := map[string]bool{}
+	for _, t := range tokens {
+		if !strings.HasPrefix(strings.TrimSpace(t.Name), CollectorPrefix) {
+			continue
+		}
+		switch {
+		case !collectorName.MatchString(t.Name):
+			return fmt.Errorf("platform auth: collector token %q must be named %s<host> (a-z, 0-9, -; at most 32)", t.Name, CollectorPrefix)
+		case t.Role != RoleReporter:
+			return fmt.Errorf("platform auth: collector token %q has role %q; a collector is a reporter", t.Name, t.Role)
+		case seen[t.Name]:
+			return fmt.Errorf("platform auth: collector token %q is named twice; a collector is one token", t.Name)
+		}
+		seen[t.Name] = true
+	}
+	return nil
+}
+
 type Principal struct {
 	Name string `json:"name"`
 	Role Role   `json:"role"`
@@ -156,6 +221,9 @@ func LoadAuth(path string) (*AuthService, error) {
 		return nil, fmt.Errorf("parse platform auth: %w", err)
 	}
 	if err := seatsUnique(file.Tokens); err != nil {
+		return nil, err
+	}
+	if err := collectorsValid(file.Tokens); err != nil {
 		return nil, err
 	}
 	auth := &AuthService{principals: map[string]Principal{}, issueReaders: map[string]bool{}}
@@ -326,6 +394,26 @@ func (a *AuthService) Require(min Role) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), principal)))
+		})
+	}
+}
+
+// ConfineCollectors is the one route gate of a collector token (R5:5.5-12
+// §1.3): mounted on the /api/v1 router before every module, it lets a
+// collector through only to the requests allowed admits, and answers every
+// other one 403 before any module's own gate or handler runs. A request with
+// any other token, or none, passes untouched: the gates after it decide.
+func (a *AuthService) ConfineCollectors(allowed func(*http.Request) bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if p, ok := a.Authenticate(r); ok && IsCollector(p) && !allowed(r) {
+				writeJSON(w, http.StatusForbidden, map[string]string{
+					"error":   "forbidden",
+					"message": "a collector token reaches only its own external work, descriptions and heartbeats",
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

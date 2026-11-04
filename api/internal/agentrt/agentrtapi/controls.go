@@ -32,6 +32,9 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 	if host, ok := actuation.AgentdHost(p); ok {
 		out["host_id"] = host
 	}
+	if host, ok := actuation.CollectorHost(p); ok {
+		out["host_id"] = host
+	}
 	if who, err := actorOf(r); err != nil {
 		out["actor_error"] = err.Error()
 	} else {
@@ -75,7 +78,16 @@ func kindName(actor string) string {
 	return actor
 }
 
+// collectorAbilities are all a collector may do (R5:5.5-12 §1.3; the route
+// gate holds it to them): register its external work and post its events,
+// upload their descriptions; read its own work and descriptions; send its
+// host's thread and host heartbeats and read that host's threads.
+var collectorAbilities = []string{"external_work", "read_own", "heartbeat"}
+
 func abilitiesOf(p actuation.Principal) []string {
+	if actuation.IsCollector(p) {
+		return slices.Clone(collectorAbilities)
+	}
 	var out []string
 	for _, ab := range abilities {
 		if limitedReporter(p) && (ab.name == "propose" || ab.name == "upload") {
