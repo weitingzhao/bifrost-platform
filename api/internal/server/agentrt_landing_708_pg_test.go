@@ -49,6 +49,38 @@ func sign708(t *testing.T, db store.DB, at time.Time) {
 	must708(t, err)
 }
 
+// waitDatabasePastFence708 holds the fixture until the database clock is past
+// the enable fence. The fence is stamped by the event clock (Go) and the
+// mission's created_at by the database's now(); the two drift by a
+// millisecond or so, either way (TD-456). Waiting keeps both stamps real
+// instead of rewriting created_at, and a database that never catches up
+// fails here, by name, rather than as a gate refusal later.
+func waitDatabasePastFence708(t *testing.T, rt *pgx.Conn, repo string) {
+	t.Helper()
+	ctx := context.Background()
+	var fence time.Time
+	must708(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
+		state, err := store.LandingState(ctx, tx, "landing:"+repo)
+		fence = state.Fence()
+		return err
+	}))
+	if fence.IsZero() {
+		t.Fatal("Review 708 fixture: no enable fence to wait for")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		var past bool
+		must708(t, rt.QueryRow(ctx, `SELECT clock_timestamp() > $1`, fence).Scan(&past))
+		if past {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Review 708 fixture: database clock still not past the enable fence %s after 1s", fence)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // Imported accepted rows isolate this regression from dispatch and verification
 // scheduling. Real migrations, guards, signatures, event appends, transactions
 // and row locks stay enabled. The gate must finish, not merely reach a callback.
@@ -71,6 +103,7 @@ func fixture708(t *testing.T, db *agentrttest.DB, repo, dep, env string, at time
 	} {
 		appendEvent(store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": "Review 708", "landing": rec}})
 	}
+	waitDatabasePastFence708(t, rt, repo)
 	must708(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "review708 fixture"}}); err != nil {
 			return err

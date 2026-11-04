@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -102,6 +103,29 @@ func checkLandingRequestAppend(ctx context.Context, tx pgx.Tx, ev Event, at time
 	return nil
 }
 
+// landingRequestRecorded reads, without the stream lock, whether this exact
+// observation is already in the stream and nothing under its approval id
+// disagrees with it. A yes stays true: events cannot be changed or removed
+// (the event guards), and every append of an observation passes
+// checkLandingRequestAppend under the stream lock, which refuses a second
+// identity for an approval id. Anything this read cannot match exactly,
+// such as a field of another JSON type, counts as a disagreement and goes
+// to the locked check.
+func landingRequestRecorded(ctx context.Context, db DB, r LandingGrantRequest) (bool, error) {
+	var same, mismatch bool
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT
+		  coalesce(bool_or(jsonb_typeof(g->'status')='string' AND g->>'status'=$2), false),
+		  coalesce(bool_or(jsonb_typeof(g->'op') IS DISTINCT FROM 'string' OR g->>'op' IS DISTINCT FROM $3
+		    OR jsonb_typeof(g->'params_hash') IS DISTINCT FROM 'string' OR g->>'params_hash' IS DISTINCT FROM $4
+		    OR jsonb_typeof(g->'approval_number') IS DISTINCT FROM 'number' OR g->>'approval_number' IS DISTINCT FROM $5), false)
+		FROM (SELECT body_json->'landing_grant_request' AS g FROM agentrt.event
+		  WHERE event_stream_id='landing:bifrost-platform' AND body_json->'landing_grant_request'->>'approval_id'=$1) seen`,
+			r.ApprovalID, r.Status, r.Op, r.ParamsHash, strconv.FormatInt(r.ApprovalNumber, 10)).Scan(&same, &mismatch)
+	})
+	return same && !mismatch, err
+}
+
 // RecordLandingGrantRequest deduplicates (approval_id,status) under the stream
 // lock. A rejected latest wait ends atomically; stale-generation decisions
 // remain observations. Retrying after an uncertain commit is a safe no-op.
@@ -109,8 +133,16 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 	if why := badLandingGrantRequest(r.body()); why != "" {
 		return false, invalid("%s", why)
 	}
+	// The pass offers every landing approval each round, most of them long
+	// recorded. A recorded one is settled here, before any fold or lock, so it
+	// never queues behind a landing that holds the stream (TD-514). A mismatch
+	// goes on to the locked check below, which refuses it.
+	recorded, err := landingRequestRecorded(ctx, db, r)
+	if err != nil || recorded {
+		return false, err
+	}
 	var root string
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		s, err := LandingState(ctx, tx, "landing:bifrost-platform")
 		if err != nil {
 			return err
