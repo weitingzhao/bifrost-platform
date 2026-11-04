@@ -17,6 +17,7 @@ const object = <S extends Record<string, Parser<unknown>>>(shape: S): Parser<{ [
 const version: Parser<1> = (v, p) => v === 1 ? 1 : invalid(p)
 const strings = array(str)
 const nonnegative: Parser<number> = (v, p) => { const n = num(v, p); return n >= 0 && Number.isInteger(n) ? n : invalid(p) }
+const positive: Parser<number> = (v, p) => { const n = nonnegative(v, p); return n >= 1 ? n : invalid(p) }
 const timestamp: Parser<string> = (v, p) => { const s = str(v, p); return Number.isFinite(Date.parse(s)) ? s : invalid(p) }
 const ref = object({ root: str, node: str })
 const tri = one('true', 'false', 'unknown')
@@ -51,8 +52,15 @@ const attempt = object({
   state: str, started_at: optional(timestamp), elapsed_s: optional(nonnegative), heartbeat_age_s: num, status: optional(str), reason: str,
   persisted: bool, last_checkpoint_seq: optional(nonnegative), last_checkpoint_at: optional(timestamp), unpersisted_for_s: optional(nonnegative), ended_at: optional(timestamp),
 })
-const external = object({
-  v: version, kind: one('agentrt.external_work/v1'), external_work_id: str, registrant: str, root: str, plan_node_id: str, source_run_key: str,
+// A collector's work (R5:5.5-12 §1.4, written from P-b): the host the server
+// wrote from its token and the session identity it registered with. All
+// four or none, and a sidebar only with them, checked on every external work
+// row wherever it sits (external below); any other registrant's row has none.
+const externalIdentity = {
+  host: optional(str), vendor: optional(one('claude', 'cursor', 'codex')), session: optional(str), epoch: optional(positive), sidebar: optional(str),
+}
+const externalRow = object({
+  v: version, kind: one('agentrt.external_work/v1'), external_work_id: str, registrant: str, ...externalIdentity, root: str, plan_node_id: str, source_run_key: str,
   artifact_id: str, mission_id: optional(str), task_id: optional(str), seq: nonnegative, type: one('registered', 'started', 'heartbeat', 'submitted', 'cancelled', 'linked'),
   state: one('Registered', 'Running', 'Submitted', 'Cancelled'), request_digest: str, registration_digest: str,
   observed_at: optional(timestamp), registered_at: timestamp, source_started_at: optional(timestamp), started_at: optional(timestamp), heartbeat_at: timestamp, ended_at: optional(timestamp),
@@ -61,6 +69,13 @@ const external = object({
   description: object({ v: version, kind: one('agentrt.external_work/v1'), task: str, executor: str, provider: str, repo: str, branch: str, acceptance_refs: strings, estimate_minutes: array(nonnegative) }),
   recorded_at: timestamp, heartbeat_age_s: num, status: one('Registered', 'Running', 'Submitted', 'Cancelled', 'Unconfirmed'), elapsed_s: optional(nonnegative), backfilled: bool,
 })
+const external: Parser<ReturnType<typeof externalRow>> = (v, p) => {
+  const row = externalRow(v, p)
+  const named = [row.host, row.vendor, row.session, row.epoch].filter(x => x !== undefined).length
+  if (named !== 0 && named !== 4) invalid(`${p}.identity`)
+  if (named === 0 && row.sidebar !== undefined) invalid(`${p}.sidebar`)
+  return row
+}
 const landing = object({ stream: str, operation: str, phase: str, outcome: str, reason: str, attempt: str, result: str, main_commit: str, run: str, observed_at: timestamp, basis: str })
 const task = object({ task_id: str, plan_node_id: str, mission_id: str, title: str, state: str, attempt: optional(attempt), external_work: optional(array(external)), landing: optional(landing), delivery: optional(str) })
 const working: Parser<ReturnType<typeof external> | ReturnType<typeof task>> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : task(v, p)
@@ -84,7 +99,12 @@ const snapshot = object({
     ? object({ ...signoff, readiness: one('Not started', 'Blocked') })(v, p)
     : object({ plan_node_id: str, title: str, readiness: one('Unknown'), reason: str })(v, p)),
   working: array(working), finished_today: array(finished), day_timezone: str, tasks: array(task), external_work: array(external),
-  coverage: object({ unregistered_work: nonnegative, label: str, scope: str, reconciled: bool }),
+  // sessions (R5:5.5-12 §3.2) is read from P-c1 and written from P-c2: the
+  // retained sessions by binding state, five counts and their scope.
+  coverage: object({
+    unregistered_work: nonnegative, label: str, scope: str, reconciled: bool,
+    sessions: optional(object({ linked: nonnegative, unlinked: nonnegative, refused: nonnegative, unsupported: nonnegative, unknown: nonnegative, scope: str })),
+  }),
   source_watermarks: (v: unknown, p: string) => Object.fromEntries(Object.entries(dict(v, p)).map(([k, n]) => [k, nonnegative(n, `${p}.${k}`)])),
   freshness: object({ database: object({ status: one('Fresh', 'Stale', 'Unknown'), observed_at: timestamp }), external_work: str, verification: one('Unknown', 'Fresh', 'Partial', 'Stale'), owner_waiting: str }),
   eta: object({ status: one('Unknown'), reason: str }),

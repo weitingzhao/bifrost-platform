@@ -17,6 +17,10 @@ export function lastActivityWords(event: AgentThread['event']): string {
       return 'finished a turn'
     case 'waiting_owner':
       return 'waiting for you'
+    case 'session_start':
+      return 'started a session'
+    case 'precompact':
+      return 'began compacting its context'
     default:
       return 'sent an update'
   }

@@ -522,3 +522,37 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 		t.Fatal("a plain writer posted an identity")
 	}
 }
+
+// The plan view carries a collector's host and identity on its row, as
+// registered (P-c1: the Console reads them from here), and nothing new on
+// any other registrant's row.
+func TestPlanViewCarriesCollectorIdentity(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	cw, _ := register(t, s, "collector:h1", regBody("rc", putSpec(t, s, "collector:h1", "plan view collector"), ident("cursor", "s-view", 2),
+		map[string]any{"sidebar": "local_view"}))
+	mw, _ := register(t, s, "reporter", map[string]any{"idempotency_key": "rm", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "view-mcp",
+		"artifact_id": putSpec(t, s, "reporter", "plan view mcp")})
+	code, view := call(t, s, "viewer", "GET", "plan-view?root=R2", nil)
+	if code != http.StatusOK {
+		t.Fatalf("plan-view: %d %v", code, view)
+	}
+	byID := map[string]map[string]any{}
+	for _, list := range []string{"external_work", "working"} {
+		for _, r := range view[list].([]any) {
+			row := r.(map[string]any)
+			byID[list+"/"+row["external_work_id"].(string)] = row
+		}
+	}
+	for _, list := range []string{"external_work", "working"} {
+		c, m := byID[list+"/"+cw], byID[list+"/"+mw]
+		if c == nil || m == nil || c["host"] != "h1" || c["vendor"] != "cursor" || c["session"] != "s-view" || c["epoch"] != float64(2) || c["sidebar"] != "local_view" {
+			t.Fatalf("%s: the collector's row %v, the reporter's %v", list, c, m)
+		}
+		for _, k := range []string{"host", "vendor", "session", "epoch", "sidebar"} {
+			if _, ok := m[k]; ok {
+				t.Fatalf("%s: the reporter's row carries %s: %v", list, k, m)
+			}
+		}
+	}
+}

@@ -3,6 +3,41 @@ import { viewerRead } from '@/api/approvals'
 /** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended; waiting_owner: waiting for the person; host_lost: the host's heartbeat is too old; superseded: quiet session replaced by a later sidebar turn. */
 export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle' | 'waiting_owner' | 'host_lost' | 'superseded'
 
+/**
+ * A heartbeat's event. session_start and precompact (R5:5.5-12 §4.1) are read
+ * from P-c1 and sent from P-c2: a session that began, and one about to compact.
+ */
+export type AgentThreadEvent = 'turn_start' | 'before_tool' | 'after_tool' | 'turn_end' | 'waiting_owner' | 'session_start' | 'precompact'
+
+/**
+ * Whether a session's work is in the runtime (R5:5.5-12 §3.1), the server's
+ * judgement. linked names the latest work of the same (host, vendor, session,
+ * epoch) and how many earlier epochs it had; unsupported is a Codex hook
+ * thread; unknown a record from before the host was written, or a runtime
+ * that could not be read.
+ */
+export type AgentThreadBindingState = 'linked' | 'unlinked' | 'refused' | 'unsupported' | 'unknown'
+export type AgentThreadBinding = {
+  state: AgentThreadBindingState
+  external_work_id?: string
+  root?: string
+  plan_node_id?: string
+  work_state?: string
+  history?: number
+}
+
+/** What the client said of its own binding (§3.1): a diagnosis, never a permission. */
+export type AgentThreadClientBindReason =
+  | 'no_context' | 'no_description' | 'node_rejected' | 'not_dev_tree' | 'register_failed' | 'token_missing' | 'identity_fallback' | 'no_vendor_session'
+export type AgentThreadClientBind = {
+  state: 'unlinked' | 'refused' | 'linked'
+  reason?: AgentThreadClientBindReason
+  at?: string
+}
+
+/** The server's diagnosis of a row (§3.1). */
+export type AgentThreadServerNote = 'codex_binding_after_s1_0' | 'runtime_unreadable' | 'legacy_no_host'
+
 /** One row of GET /api/v1/agent/threads (platform api/internal/agentthreads View). */
 export type AgentThread = {
   thread: string
@@ -10,7 +45,7 @@ export type AgentThread = {
   host: string
   work?: string
   title?: string
-  event: 'turn_start' | 'before_tool' | 'after_tool' | 'turn_end' | 'waiting_owner'
+  event: AgentThreadEvent
   tool?: string
   tool_timeout_s?: number
   reason?: string
@@ -21,7 +56,38 @@ export type AgentThread = {
   quiet_seconds: number
   in_turn_seconds: number
   threshold_seconds: number
+  // R5:5.5-12 §3.3: read from P-c1, written from P-c2; every one may be
+  // absent (a platform before P-c2, an old client), and a row without them
+  // reads as it did.
+  binding?: AgentThreadBinding
+  client_bind?: AgentThreadClientBind
+  server_note?: AgentThreadServerNote
+  /** When the server first heard from this (host, vendor, session, epoch). */
+  first_seen_at?: string
+  /**
+   * How many PreCompact beats the server counted, by sequence. S1-0 (design
+   * §12 D3) found PreCompact fires when a compaction is refused too, so this
+   * counts attempts; whether S1-4 counts completed ones instead (SessionStart
+   * compact or PostCompact) or renames it compaction_attempts is S1-4's to
+   * settle. Read it as a count of attempts until then.
+   */
+  compactions?: number
+  /** The vendor's raw session id (§3.1), not the transport thread id. */
+  session?: string
+  epoch?: number
+  host_id_source?: 'file' | 'env' | 'hostname'
+  /** The kind of token that sent the beats, written by the server. */
+  token_kind?: string
 }
+
+/**
+ * The fields R5:5.5-12 §3.3 adds to a row: read from P-c1, written from P-c2.
+ * The compiler holds the list to AgentThread, so a field cannot leave the
+ * type while the list (and the mixed-version test that reads it) names it.
+ */
+export const AGENT_THREAD_SESSION_FIELDS = [
+  'binding', 'client_bind', 'server_note', 'first_seen_at', 'compactions', 'session', 'epoch', 'host_id_source', 'token_kind',
+] as const satisfies readonly (keyof AgentThread)[]
 
 export type AgentVendorReport = {
   vendor: string
