@@ -37,12 +37,17 @@ const rework = object({
 export type ExplainRework = ReturnType<typeof rework>
 const member = { task_id: str, op: str }
 const landed = { atom: one('step_landed') }
+/**
+ * Since when a record is as it is (R5:5.5-20), from a server that says it: a task candidate's updated_at, an ended
+ * landing's last record. Absent from a server before it.
+ */
+const ended = { since: optional(timestamp) }
 const stg = { atom: one('step_stg_settled') }
 
 /** Each blocker state's closed shape (§7). */
 const shapes = {
   tasks_short: object({ atom: one('step_tasks'), state: one('tasks_short'), have: count, need: count,
-    candidates: array(object({ task_id: str, task_state: str })), omitted: optional(count) }),
+    candidates: array(object({ task_id: str, task_state: str, since: optional(timestamp) })), omitted: optional(count) }),
   no_task: object({ atom: one('step_tasks'), state: one('no_task') }),
   no_implementation: object({ ...landed, state: one('no_implementation') }),
   no_landing_evidence: object({ ...landed, state: one('no_landing_evidence'), task_id: str }),
@@ -51,8 +56,8 @@ const shapes = {
     grant: nullable(object({ approval_id: str, number: count, last_status: str, recorded_at: timestamp })), ...cards }),
   landing_main_unsettled: object({ ...landed, state: one('landing_main_unsettled'), ...member, phase: str, last_record_at: nullable(timestamp),
     grant: nullable(object({ approval_id: str, number: count, last_status: str, recorded_at: timestamp })), ...cards }),
-  landing_failed: object({ ...landed, state: one('landing_failed'), ...member, outcome: str, ...cards }),
-  landing_declined: object({ ...landed, state: one('landing_declined'), ...member, rework }),
+  landing_failed: object({ ...landed, state: one('landing_failed'), ...member, outcome: str, ...cards, ...ended }),
+  landing_declined: object({ ...landed, state: one('landing_declined'), ...member, rework, ...ended }),
   landing_unmapped: object({ ...landed, state: one('landing_unmapped'), ...member, phase: str, outcome: str }),
   stg_needs_landing: object({ ...stg, state: one('stg_needs_landing') }),
   stg_not_supported: object({ ...stg, state: one('stg_not_supported'), repo: str }),

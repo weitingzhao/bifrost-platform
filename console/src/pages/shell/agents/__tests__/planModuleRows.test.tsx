@@ -9,7 +9,7 @@ import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { PlanModuleRows } from '../PlanModuleRows'
 import { PlanTree } from '../PlanTree'
 import { WorkPlanView } from '../WorkPlanView'
-import { moduleRows, toGoText, type ModuleRow } from '../planModuleModel'
+import { moduleRows, ruleSentence, toGoText, type ModuleRow } from '../planModuleModel'
 import { stepRows } from '../stepStateModel'
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
@@ -124,11 +124,15 @@ describe('module rows model', () => {
   it('writes the done rule in words', () => {
     const cells = row(moduleRows(advanced()), '4.1').cells
     expect(cells[0].rule).toEqual([{ text: 'Task Cut the landing rules is accepted' }])
-    expect(cells.find(c => c.label === '4.1-3')!.rule).toEqual([{ text: 'All of these hold:', children: [
+    const rule = cells.find(c => c.label === '4.1-3')!.rule
+    expect(rule).toEqual([{ text: 'All of these hold:', join: 'all', children: [
       { text: 'Request #42 is approved and executed' },
       { text: `Question ${QUESTION} is answered “yes”` },
-      { text: 'Any one of these holds:', children: [{ text: 'You sign off “land-4.1”' }, { text: 'Every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step' }] },
+      { text: 'Any one of these holds:', join: 'any', children: [{ text: 'You sign off “land-4.1”' }, { text: 'Every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step' }] },
     ] }])
+    // In one sentence for the step card's "Done when" (R5:5.5-20): and / or, a nested group in parentheses.
+    expect(ruleSentence(rule)).toBe(`Request #42 is approved and executed, and question ${QUESTION} is answered “yes”, and (you sign off “land-4.1”, or every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step).`)
+    expect(ruleSentence([])).toBe('')
     expect(row(moduleRows(advanced()), '4.10').cells[0].rule).toEqual([{ text: 'Every landed commit of this step is deployed on PROD' }])
   })
 })
@@ -160,7 +164,9 @@ describe('module rows on the page', () => {
     expect(cell).toHaveAttribute('aria-expanded', 'true')
     const detail = screen.getByRole('region', { name: 'Step 4.1-3' })
     expect(cell).toHaveAttribute('aria-controls', detail.id)
-    expect(detail.querySelector('[data-step-now="idle"]')).toHaveTextContent(/^Active · nothing running now, read now:/)
+    // How its state was read is folded into four rows (R5:5.5-20 R6), not said as one long line.
+    expect(detail.querySelector('[data-step-now="idle"]')).toBeNull()
+    expect(within(detail).getByRole('button', { name: /^How “Active · nothing running now” was read · (\w{3} \d+ )?\d\d:\d\d$/ })).toHaveAttribute('aria-expanded', 'false')
     expect(detail.querySelector('[data-step-note="unverified"]')).toHaveTextContent(/^1 external work submitted, not read Verified \(verification Unknown\): “Rehearse case 3 on STG”$/)
     expect(detail).not.toHaveTextContent(/In progress|Active · held/)
     expect(detail).toHaveTextContent('Request #42 is approved and executed')

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { approvalHref, goalHref, isQuestionId, questionHref } from '@/lib/shell/consoleRoutes'
-import type { WhyLine } from './explainModel'
+import type { StepWhyModel } from './explainModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /*
@@ -90,16 +90,19 @@ const NOT_JUDGED: StepNow = { kind: 'unknown', why: ['what runs on it now is not
 
 /** A record a step links to; kind says which page the link opens. */
 export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node'; href: string; text: string; note?: string }
-/** A done rule in words: one line per atom, an all / any with its parts under it. */
-export type RuleLine = { text: string; children?: RuleLine[] }
+/** A done rule in words: one line per atom, an all / any with its parts under it (join says which). */
+export type RuleLine = { text: string; children?: RuleLine[]; join?: 'all' | 'any' }
 export type StepCell = {
   id: string; label: string; title: string; state: CellState; owner: boolean; effect: boolean
   /** The controller's state (nodes[].state). */
   step: ControllerState
   /** What an active step has now (null for a step not active). */
   now: StepNow | null
-  /** Why an active step is not done, from the plan view's explain block (R5:5.5-19, explainModel.ts); absent when not read. */
-  why?: WhyLine[]
+  /**
+   * Why an active step is not done, from the plan view's explain block (R5:5.5-19, laid out in R5:5.5-20: explainModel.ts
+   * stepWhy); absent or null when nothing is said of it.
+   */
+  why?: StepWhyModel | null
   /** Its done rule is {}: nothing closes it by evidence (R5:5.5-10 c). */
   noRule: boolean
   /** When the step took its state: the time of its state event (state_event_id) while that event is in recent_changes; else null. */
@@ -185,7 +188,7 @@ function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: numbe
   switch (key) {
     case 'all': case 'any': {
       const list = Array.isArray(value) ? value : []
-      return { text: key === 'all' ? 'All of these hold:' : 'Any one of these holds:',
+      return { text: key === 'all' ? 'All of these hold:' : 'Any one of these holds:', join: key,
         children: depth >= RULE_DEPTH ? [{ text: 'Nested too deep to read' }] : list.map(child => ruleLine(child, taskTitle, depth + 1)) }
     }
     case 'task_accepted': return { text: `Task ${taskTitle(str(value)) || str(value) || '(unnamed)'} is accepted` }
@@ -207,6 +210,22 @@ function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: numbe
 export function ruleWords(rule: unknown, taskTitle: (id: string) => string = () => ''): RuleLine[] {
   if (isRecord(rule) && Object.keys(rule).length === 0) return []
   return [ruleLine(rule, taskTitle, 0)]
+}
+
+/** A part of a sentence after its first: lower-cased at its start unless it starts with a name ("CI", "STG"). */
+const later = (s: string) => /^[A-Z][a-z]/.test(s) ? `${s[0].toLowerCase()}${s.slice(1)}` : s
+/**
+ * A done rule in words as one sentence (the step card's "Done when", R5:5.5-20): its parts joined with "and" for all,
+ * "or" for any, a nested group in parentheses; '' for the empty rule.
+ */
+export function ruleSentence(lines: RuleLine[]): string {
+  const part = (l: RuleLine): string => {
+    if (!l.children) return l.text
+    const parts = l.children.map((c, i) => { const t = i === 0 ? part(c) : later(part(c)); return c.children ? `(${t})` : t })
+    return parts.join(l.join === 'any' ? ', or ' : ', and ')
+  }
+  const text = lines.map(part).join('; ')
+  return text ? `${text}.` : ''
 }
 
 /** The empty rule {}: no condition, so nothing closes the step by evidence. */
@@ -417,13 +436,27 @@ export function spokenState(cell: StepCell): string {
  * running"; anything not judged is Unknown with the condition tested. Questions and requests are read from the shell's
  * lists: when those were not read now, nothing is said of them but that.
  */
-const NOTHING_RUNS = 'no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued (no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started)'
-const NOTHING_HELD = 'nothing held (no task blocked or paused; no accepted work task with no landing recorded; no external work whose verification read failed)'
+/**
+ * How an active step with nothing running, queued, waiting on you or held was read (R5:5.5-20, Design v3.15 "How “state”
+ * was read"): what each of the four was read from, one row each, the conditions judgeNow tests. Folded on the card; the
+ * state word says the result.
+ */
+export type ReadRow = { label: 'Running' | 'Queued' | 'Waits on you' | 'Held'; text: string }
 /** What "nothing waits on you" was read from: the plan view always, the shell's lists only when they were read now. */
 const nothingYours = (unread: boolean) => unread
-  ? 'nothing in the plan view waits on you (no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it)'
-  : 'nothing waits on you (no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it, no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision)'
-const checked = (now: StepNow) => `${NOTHING_RUNS}; ${nothingYours(!!now.unread?.length)}; ${NOTHING_HELD}`
+  ? 'Nothing in the plan view: no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it. Questions and requests were not read now.'
+  : 'Nothing: no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it, no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision.'
+/** The four rows of an idle step or an Owner step read now; null for any other (its own lines say what it has). */
+export function howRead(cell: Pick<StepCell, 'now'>): ReadRow[] | null {
+  const now = cell.now
+  if (now?.kind !== 'idle' && now?.kind !== 'yours') return null
+  return [
+    { label: 'Running', text: 'Nothing: no running attempt with its heartbeat confirmed, no landing seen moving, no running external work.' },
+    { label: 'Queued', text: 'Nothing: no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started.' },
+    { label: 'Waits on you', text: nothingYours(!!now.unread?.length) },
+    { label: 'Held', text: 'Nothing: no task blocked or paused; no accepted work task with no landing recorded; no external work whose verification read failed.' },
+  ]
+}
 const heldLine = (held: string[], lead = 'Held') => held.length ? [`${lead}: ${held.join('; ')}.`] : []
 /** The shell's lists not read now: what the step's state could not include. */
 const unreadLine = (now: StepNow) => now.unread?.length
@@ -438,7 +471,10 @@ const movesOf = (list: HeldItem[]) => {
   return `${moves[0].toUpperCase()}${moves.slice(1)}`
 }
 
-/** What the detail says of an active step's state now, line by line; [] for a step not active. */
+/**
+ * What the detail says of an active step's state now, line by line; [] for a step not active. An idle step and an Owner
+ * step read now say how in howRead's four rows, not here.
+ */
 export function nowLines(cell: StepCell): string[] {
   const now = cell.now
   if (!now) return []
@@ -453,8 +489,8 @@ export function nowLines(cell: StepCell): string[] {
       ...heldLine(now.held.map(h => h.text), 'Also held'), ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...unreadLine(now), ...since]
     case 'held': return [`Active · held: ${now.held.map(h => h.text).join('; ')}. ${movesOf(now.held)}; nothing on the step runs or is queued.`,
       ...(now.recorded ? recordedLines(now.recorded, 'Owner step') : []), ...unreadLine(now), ...since]
-    case 'yours': return [...recordedLines(now.recorded, 'Yours'), `An Owner step, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
-    case 'idle': return [`Active · nothing running now, read now: ${checked(now)}.`, ...unreadLine(now), ...since]
+    case 'yours': return [...recordedLines(now.recorded, 'Yours'), ...unreadLine(now), ...since]
+    case 'idle': return [...unreadLine(now), ...since]
   }
 }
 

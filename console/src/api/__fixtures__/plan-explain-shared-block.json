@@ -1,0 +1,116 @@
+{
+  "status": "ok",
+  "read_at": "2026-10-27T02:44:30Z",
+  "last_attempt_at": "2026-10-27T02:44:30Z",
+  "steps": {
+    "R5:5.2-1": {
+      "node_version": 7,
+      "kind": "explained",
+      "rule": "false",
+      "blockers": [
+        {
+          "atom": "step_stg_settled",
+          "blocks": [],
+          "op": "land:t_a:1",
+          "repo_blocks": [
+            {
+              "cards": [
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p5",
+                  "question_id": null
+                },
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p4",
+                  "question_id": null
+                },
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p3",
+                  "question_id": null
+                }
+              ],
+              "cards_omitted": 2,
+              "id": "shared",
+              "kind": "ci_red",
+              "since": "2026-11-03T22:59:30Z",
+              "trigger_seq": 12
+            }
+          ],
+          "state": "stg_not_admitted",
+          "task_id": "t_a",
+          "to": null,
+          "unexplained": [
+            "budget",
+            "policy",
+            "repo_cards"
+          ]
+        },
+        {
+          "atom": "step_stg_settled",
+          "blocks": [],
+          "op": "land:t_b:1",
+          "repo_blocks": [
+            {
+              "cards": [
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p5",
+                  "question_id": null
+                },
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p4",
+                  "question_id": null
+                },
+                {
+                  "ask_started": false,
+                  "closed": false,
+                  "closed_why": null,
+                  "family": "stg",
+                  "kind": "stg_blocked",
+                  "prep": "p3",
+                  "question_id": null
+                }
+              ],
+              "cards_omitted": 2,
+              "id": "shared",
+              "kind": "ci_red",
+              "since": "2026-11-03T22:59:30Z",
+              "trigger_seq": 12
+            }
+          ],
+          "state": "stg_not_admitted",
+          "task_id": "t_b",
+          "to": null,
+          "unexplained": [
+            "budget",
+            "policy",
+            "repo_cards"
+          ]
+        }
+      ]
+    }
+  }
+}

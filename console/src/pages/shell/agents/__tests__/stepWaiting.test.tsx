@@ -4,7 +4,7 @@ import { parsePlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
 import type { Question } from '@/api/questions'
 import { shellRead } from '../moduleDetailModel'
 import type { OwnerAsks } from '../ownerAsksModel'
-import { cellLabels, nowLines, spokenState, stepCounts, type StepCell } from '../planModuleModel'
+import { cellLabels, howRead, nowLines, spokenState, stepCounts, type StepCell } from '../planModuleModel'
 import { stepRows, type StepClock } from '../stepStateModel'
 import { CLASS_MEANINGS, moduleClass } from '../workSummaryModel'
 import { AT, id, Q_RULE, r5Raw, T3, T_OTHER, type Raw } from './moduleDetailFixture'
@@ -109,8 +109,9 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
     const unread: OwnerAsks = { questions: { state: 'unread' }, requests: { state: 'unknown', reason: 'Offline' } }
     const c = cellOf(v, '5.1-4', clock(unread))
     expect(c.now).toEqual({ kind: 'idle', unread: ['Questions: not read yet'] })
-    expect(nowLines(c).join(' ')).toMatch(/nothing in the plan view waits on you \(/)
-    expect(nowLines(c).join(' ')).not.toMatch(/no open question on its tasks/)
+    const yours = (cell: StepCell) => howRead(cell)!.find(r => r.label === 'Waits on you')!.text
+    expect(yours(c)).toMatch(/^Nothing in the plan view: .* Questions and requests were not read now\.$/)
+    expect(yours(c)).not.toMatch(/no open question on its tasks/)
     expect(nowLines(c)).toContain('Not read now: Questions: not read yet. Whether a question or request of yours waits on this step is Unknown.')
     // Stale past two of Needs you's 30 s polls, as the module page's sources read it: 60 s is now, 60.001 s is not.
     const at = (ms: number) => cellOf(v, '5.1-4', clock(lists([question(91, { task_id: tid })], [], NOW - ms))).now
@@ -118,7 +119,7 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
     expect(at(60_001)).toEqual({ kind: 'idle', unread: ['Questions: last read 60 s ago (stale)'] })
     expect(at(90_000)).toEqual({ kind: 'idle', unread: ['Questions: last read 90 s ago (stale)'] })
     // Read now and none open: the whole clause.
-    expect(nowLines(cellOf(v, '5.1-4', clock(lists([])))).join(' ')).toMatch(/no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision/)
+    expect(yours(cellOf(v, '5.1-4', clock(lists([]))))).toMatch(/no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision/)
     // A step nothing could tie a question or request to (no task, no rule naming one) reads neither list.
     expect(cellOf(view514(), '5.1-4', clock(unread)).now).toEqual({ kind: 'idle' })
   })

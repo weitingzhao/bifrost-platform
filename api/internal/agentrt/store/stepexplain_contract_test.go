@@ -20,8 +20,8 @@ var explainContract = map[string][]string{
 	"landing_unclaimed":      {"atom", "state", "task_id", "accepted_at"},
 	"landing_pending":        {"atom", "state", "task_id", "op", "phase", "last_record_at", "grant", "cards", "cards_omitted?"},
 	"landing_main_unsettled": {"atom", "state", "task_id", "op", "phase", "last_record_at", "grant", "cards", "cards_omitted?"},
-	"landing_failed":         {"atom", "state", "task_id", "op", "outcome", "cards", "cards_omitted?"},
-	"landing_declined":       {"atom", "state", "task_id", "op", "rework"},
+	"landing_failed":         {"atom", "state", "task_id", "op", "outcome", "cards", "cards_omitted?", "since?"},
+	"landing_declined":       {"atom", "state", "task_id", "op", "rework", "since?"},
 	"landing_unmapped":       {"atom", "state", "task_id", "op", "phase", "outcome"},
 	"stg_needs_landing":      {"atom", "state"},
 	"stg_not_supported":      {"atom", "state", "repo"},
@@ -31,6 +31,50 @@ var explainContract = map[string][]string{
 		"unexplained"},
 	"stg_exhausted": {"atom", "state", "task_id", "op", "cards", "cards_omitted?", "blocks", "blocks_omitted?"},
 	"stg_disposed":  {"atom", "state", "task_id", "op", "blocks", "blocks_omitted?"},
+}
+
+// candidateContract is a tasks_short candidate's key set (§7; since from
+// R5:5.5-20).
+var candidateContract = []string{"task_id", "task_state", "since?"}
+
+// keysProblem says which key of m is outside keys or which required one
+// it lacks; "" when none.
+func keysProblem(m map[string]any, keys []string) string {
+	for _, k := range keys {
+		if k[len(k)-1] != '?' {
+			if _, has := m[k]; !has {
+				return "lacks " + k
+			}
+		}
+	}
+	var extra []string
+	for k := range m {
+		if !slices.Contains(keys, k) && !slices.Contains(keys, k+"?") {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	if len(extra) > 0 {
+		return "has keys outside the contract: " + extra[0]
+	}
+	return ""
+}
+
+// explainCandidatesOf are a tasks_short blocker's candidates as the server builds
+// them or as JSON decodes them.
+func explainCandidatesOf(v any) []map[string]any {
+	switch x := v.(type) {
+	case []map[string]any:
+		return x
+	case []any:
+		var out []map[string]any
+		for _, c := range x {
+			m, _ := c.(map[string]any)
+			out = append(out, m)
+		}
+		return out
+	}
+	return nil
 }
 
 // contractProblem says what b has that §7 does not, or lacks.
@@ -53,22 +97,13 @@ func contractProblem(b map[string]any) string {
 	if !ok {
 		return "no contract for state " + state
 	}
-	for _, k := range keys {
-		if k[len(k)-1] != '?' {
-			if _, has := b[k]; !has {
-				return state + " lacks " + k
-			}
-		}
+	if p := keysProblem(b, keys); p != "" {
+		return state + " " + p
 	}
-	var extra []string
-	for k := range b {
-		if !slices.Contains(keys, k) && !slices.Contains(keys, k+"?") {
-			extra = append(extra, k)
+	for _, c := range explainCandidatesOf(b["candidates"]) {
+		if p := keysProblem(c, candidateContract); p != "" {
+			return "a tasks_short candidate " + p
 		}
-	}
-	sort.Strings(extra)
-	if len(extra) > 0 {
-		return state + " has keys outside the contract: " + extra[0]
 	}
 	return ""
 }
@@ -105,6 +140,15 @@ func TestExplainSTGContract(t *testing.T) {
 	if p := contractProblem(map[string]any{"atom": "step_landed", "state": "landing_failed", "task_id": "t", "op": "o", "outcome": "x", "cards": nil, "extra": 1}); p == "" {
 		t.Error("the check finds no extra key")
 	}
+	short := func(c map[string]any) map[string]any {
+		return map[string]any{"atom": "step_tasks", "state": "tasks_short", "have": 0, "need": 1, "candidates": []map[string]any{c}}
+	}
+	if p := contractProblem(short(map[string]any{"task_id": "t", "task_state": "ready", "since": "2026-11-03T00:00:00Z"})); p != "" {
+		t.Errorf("a candidate with its since: %s", p)
+	}
+	if p := contractProblem(short(map[string]any{"task_id": "t", "task_state": "ready", "extra": 1})); p == "" {
+		t.Error("the check finds no extra key on a candidate")
+	}
 }
 
 // The Console's contract samples (console/src/api/__fixtures__/plan-explain-
@@ -113,8 +157,8 @@ func TestExplainSTGContract(t *testing.T) {
 func TestExplainConsoleSamples(t *testing.T) {
 	t.Parallel()
 	files, err := filepath.Glob("../../../../console/src/api/__fixtures__/plan-explain-*.json")
-	if err != nil || len(files) != 4 {
-		t.Fatalf("the four samples: %v %v", files, err)
+	if err != nil || len(files) < 5 {
+		t.Fatalf("the four samples and the step card's (R5:5.5-20): %v %v", files, err)
 	}
 	for _, f := range files {
 		raw, err := os.ReadFile(f)

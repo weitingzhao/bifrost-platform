@@ -56,16 +56,34 @@ func (f *stepFacts) explainTasks(state string, min int64) []Blocker {
 	case have >= min:
 		return nil
 	}
-	rows, err := f.tx.Query(f.ctx, `SELECT task_id, state FROM agentrt.task WHERE plan_node_id = $1 AND subject_task_id IS NULL AND state <> $2
-	  ORDER BY task_id LIMIT $3`, f.step, state, explainCandidates)
+	// since is when the task entered its state (R5:5.5-20): the time of its
+	// last task_state_changed, when that moved it to the state it has (every
+	// move writes one: kernel.go moveTaskWith); a task never moved is in the
+	// state it was proposed in (write.go), since its task_proposed. Not
+	// updated_at: a plan change rebinding or moving the task sets it with
+	// no change of state (planchange.go). Anything else has no since.
+	rows, err := f.tx.Query(f.ctx, `SELECT t.task_id, t.state,
+	    CASE WHEN m.to_state IS NULL THEN CASE WHEN t.state = 'proposed' THEN p.at END WHEN m.to_state = t.state THEN m.at END
+	  FROM agentrt.task t
+	  LEFT JOIN LATERAL (SELECT e.body_json->>'to' AS to_state, e.at FROM agentrt.event e
+	    WHERE e.task_id = t.task_id AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) m ON true
+	  LEFT JOIN LATERAL (SELECT e.at FROM agentrt.event e
+	    WHERE e.task_id = t.task_id AND e.event_type = 'task_proposed' ORDER BY e.event_id LIMIT 1) p ON true
+	  WHERE t.plan_node_id = $1 AND t.subject_task_id IS NULL AND t.state <> $2
+	  ORDER BY t.task_id LIMIT $3`, f.step, state, explainCandidates)
 	if err != nil {
 		f.err = err
 		return nil
 	}
 	cands, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
 		var id, st string
-		err := row.Scan(&id, &st)
-		return map[string]any{"task_id": id, "task_state": st}, err
+		var since *time.Time
+		err := row.Scan(&id, &st, &since)
+		c := map[string]any{"task_id": id, "task_state": st}
+		if since != nil {
+			c["since"] = since.UTC().Format(time.RFC3339Nano)
+		}
+		return c, err
 	})
 	if err != nil {
 		f.err = err
@@ -147,10 +165,18 @@ func (f *stepFacts) explainRoot(r implRoot) Blocker {
 		f.addRootCards(b, r)
 		return b
 	case rootFailed:
+		// since: the time of the operation's last record (LastAt), the one
+		// that ended it, when it has one (R5:5.5-20).
+		ended := func(b Blocker) Blocker {
+			if s := at(r.o.LastAt); s != nil {
+				b["since"] = s
+			}
+			return b
+		}
 		if r.o.Phase == "failed" && r.o.Outcome == "declined" {
 			b := base("landing_declined")
 			b["op"], b["rework"] = r.op, f.explainRework(r)
-			return b
+			return ended(b)
 		}
 		b := base("landing_failed")
 		// failed{why} names its reason; any other end (reverted after it
@@ -162,7 +188,7 @@ func (f *stepFacts) explainRoot(r implRoot) Blocker {
 		}
 		b["op"], b["outcome"] = r.op, outcome
 		f.addRootCards(b, r)
-		return b
+		return ended(b)
 	}
 	b := base("landing_unmapped")
 	b["op"], b["phase"], b["outcome"] = r.op, r.o.Phase, r.o.Outcome

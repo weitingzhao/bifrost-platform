@@ -96,6 +96,7 @@ func TestExplainRootLandingStates(t *testing.T) {
 	failedOp := dbOp(t, w, c, failed, dbThirdA, "overlap")
 	dbOp(t, w, c, landed, rwA1, "landed")
 	revertedOp := dbOp(t, w, c, reverted, rwA2, "reverted")
+	short := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, BaseCommit: commitB}) // a task step_tasks still waits on
 	c.dbTick()
 
 	w.rule(t, s2, `{"all":[{"step_tasks":{"state":"accepted","min":9}},{"step_landed":{}},{"step_stg_settled":{}}]}`)
@@ -112,8 +113,32 @@ func TestExplainRootLandingStates(t *testing.T) {
 		t.Fatalf("s2: %v beside evidence %+v", s, ev)
 	}
 	bs := s["blockers"].([]store.Blocker)
-	if bs[0]["state"] != "tasks_short" || bs[0]["have"] != int64(6) || bs[0]["need"] != int64(9) || len(bs[0]["candidates"].([]map[string]any)) != 0 {
+	cands := bs[0]["candidates"].([]map[string]any)
+	if bs[0]["state"] != "tasks_short" || bs[0]["have"] != int64(6) || bs[0]["need"] != int64(9) || len(cands) != 1 ||
+		cands[0]["task_id"] != short || cands[0]["task_state"] != "ready" {
 		t.Fatalf("tasks: %v", bs[0])
+	}
+	// R5:5.5-20: each candidate says since when it is in its state: the time of the move that put it there.
+	var entered time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed' AND body_json->>'to' = 'ready'
+	  ORDER BY event_id DESC LIMIT 1`, short).Scan(&entered))
+	since, _ := cands[0]["since"].(string)
+	if got, err := time.Parse(time.RFC3339Nano, since); err != nil || !got.Equal(entered) {
+		t.Fatalf("a candidate's since %q, want %s (its move to ready): %v", since, entered, err)
+	}
+	// A change of the task's record that moves no state (planchange.go rebind_step and move_task set updated_at)
+	// leaves its since as it was.
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: a record change with no move"}}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET updated_at = updated_at + interval '2 days', version = version + 1 WHERE task_id = $1`, short)
+		return err
+	}))
+	again := exStep(t, exSteps(t, w), s2)["blockers"].([]store.Blocker)[0]["candidates"].([]map[string]any)
+	if again[0]["since"] != since {
+		t.Fatalf("a record change with no move moved since: %v, was %s", again[0]["since"], since)
 	}
 	if last := bs[len(bs)-1]; last["state"] != "stg_needs_landing" {
 		t.Fatalf("STG before landing: %v", last)
@@ -138,6 +163,12 @@ func TestExplainRootLandingStates(t *testing.T) {
 	}
 	if b := got[reverted]; b["state"] != "landing_failed" || b["op"] != revertedOp || b["outcome"] != "reverted" {
 		t.Fatalf("reverted: %v", b)
+	}
+	// R5:5.5-20: an ended root says since when: the time of its operation's last record.
+	for _, id := range []string{declined, failed, reverted} {
+		if since, _ := got[id]["since"].(string); since == "" {
+			t.Errorf("%s ended with no since: %v", got[id]["state"], got[id])
+		}
 	}
 	for id, want := range map[string]map[string]any{
 		s1:     {"kind": "not_started"},

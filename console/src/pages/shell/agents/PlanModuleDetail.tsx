@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import { fetchApprovalList } from '@/api/approvals'
-import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
+import type { PlanNode, PlanSnapshot, PlanSnapshotRead } from '@/api/planSnapshot'
 import { fetchQuestionList } from '@/api/questions'
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
@@ -15,7 +15,9 @@ import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMark
   type RuleLine, type StepCell } from './planModuleModel'
 import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
-import { StepWhy } from './StepWhy'
+import { explainBanner } from './explainModel'
+import { viewOldReason } from './readAge'
+import { HowRead, StepWhy, WhyBanner } from './StepWhy'
 import { stepJudge, withWhy } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
 
@@ -107,25 +109,34 @@ function Dot({ state }: { state: CellState }) {
  * step in progress, and the step an address names, open into a card: the rest of its own work (for a step in
  * progress, this is what runs now), its done rule in words, external work and the records its rule names.
  */
-function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshot; runtime: RuntimeTasks; selected: boolean; last: boolean }) {
-  const work = workTasks(scope, cell.id, runtime)
-  const checks = stepTasks(scope, cell.id).length - work.length
-  const latest = work[0] && taskLine(work[0], runtime)
+function Stage({ cell, scope, view, runtime, selected, last, now }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshot; runtime: RuntimeTasks; selected: boolean; last: boolean
+  now: number }) {
+  // While work on it runs, the live state stays on top and what is left to finish sits at the bottom, folded (R7).
+  const running = cell.now?.kind === 'running'
+  // Latest task is the newest of all the step's own work (the one Review is of), never an older one. A task the rows in
+  // the way show is not named again here (R5:5.5-20: a task's name appears once on the card): the newest so shown leaves
+  // out the Latest task line, the others stay earlier work. While those rows are folded (work running), none is left out.
+  const named = new Set(running ? [] : cell.why?.tasks ?? [])
+  const all = workTasks(scope, cell.id, runtime)
+  const checks = stepTasks(scope, cell.id).length - all.length
+  const latest = all[0] && !named.has(all[0].task_id) ? taskLine(all[0], runtime) : null
+  const earlier = all.slice(1).filter(t => !named.has(t.task_id))
   // Every step the controller has active opens, whatever it has now (in progress, nothing running, yours or Unknown).
   const active = cell.step === 'active'
   const open = active || selected
   const note = active ? unverifiedNote(cell) : null
+  const listed = active && !!cell.why?.list
   // The rule's question and the step's goal; tasks are told under Latest task and Review (a task link would list a
   // check as "accepted" beside the work it failed), a request by its number in the rule, the step's own address is here.
   const records = cell.links.filter(l => l.kind === 'question' || l.kind === 'goal')
   const own = <>
-    <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Latest task</dt>
-      <dd className="m-0 inline">{latest ? <Task task={latest} /> : 'None'}{work.length > 1 && ` · ${work.length - 1} earlier`}{checks > 0 && ` · ${plural(checks, 'check')}`}</dd></dl>
-    {open && work.length > 1 && <div className="flex min-w-0 flex-col gap-0.5">
+    {(latest || all.length === 0) && <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Latest task</dt>
+      <dd className="m-0 inline">{latest ? <Task task={latest} /> : 'None'}{all.length > 1 && ` · ${all.length - 1} earlier`}{checks > 0 && ` · ${plural(checks, 'check')}`}</dd></dl>}
+    {open && earlier.length > 0 && <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs text-muted-foreground">Earlier own work</span>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{work.slice(1).map(t => <li key={t.task_id}><Task task={taskLine(t, runtime)} /></li>)}</ul>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime)} /></li>)}</ul>
     </div>}
-    {active && work.length === 0 && <span className="text-muted-foreground">No work task on this step yet (checks are under Review)</span>}
+    {active && all.length === 0 && <span className="text-muted-foreground">No work task on this step yet (checks are under Review)</span>}
   </>
   return <li id={moduleStepRowId(cell.id)} tabIndex={-1} data-step-row={cell.label} data-step-open={open || undefined} aria-current={selected ? 'step' : undefined}
     className="grid min-w-0 scroll-mt-4 grid-cols-[24px_minmax(0,1fr)] gap-2.5 rounded-xl focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">
@@ -145,13 +156,14 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
         <StateWord state={cell.state} />
       </div>
       {active && nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-[13px] leading-[1.45] text-muted-foreground">{line}</p>)}
-      {active && <StepWhy cell={cell} compact />}
+      {active && !running && <StepWhy cell={cell} now={now} />}
       {note && <p data-step-note="unverified" className="m-0 text-xs leading-[1.45] text-muted-foreground">{note}</p>}
       <div className={`flex min-w-0 flex-col gap-0.5 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}>
         {active ? <div role="group" aria-label={`Now on ${cell.label}`} className="flex min-w-0 flex-col gap-0.5">{own}</div> : own}
         <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Review</dt><dd className="m-0 inline">{reviewWords(scope, view, cell.id, runtime)}</dd></dl>
       </div>
-      {open && <div className="flex min-w-0 flex-col gap-0.5 text-[13px] leading-[1.45]">
+      {/* The rows in the way say the rule in one line ("Done when: …"); without them it is said here. */}
+      {open && !listed && <div className="flex min-w-0 flex-col gap-0.5 text-[13px] leading-[1.45]">
         <span className="text-xs text-muted-foreground">Done when</span>
         {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
       </div>}
@@ -163,6 +175,8 @@ function Stage({ cell, scope, view, runtime, selected, last }: { cell: StepCell;
         {records.map(link => <li key={`${link.kind}-${link.href}`}><a href={link.href} data-step-link={link.kind}
           className="inline-flex min-h-8 items-center rounded-[10px] border border-[var(--ops-edge)] px-2.5 text-xs text-foreground no-underline shadow-[var(--ops-raised)] [background:var(--ops-control)] hover:text-foreground pointer-coarse:min-h-11">{link.text}</a></li>)}
       </ul>}
+      {active && running && <StepWhy cell={cell} now={now} />}
+      {active && <HowRead cell={cell} asOf={view.as_of} now={now} />}
     </div>
   </li>
 }
@@ -313,9 +327,11 @@ function Live({ view, item, scope, stale }: { view: PlanSnapshot; item: PlanNode
  * dependencies and live work; then what happened lately. Each from a field the Console already reads, Unknown where
  * none says (claims: MODULE_DETAIL_CLAIMS, WORK_V36_3_CLAIMS).
  */
-export function PlanModuleDetail({ view, item, step, stale, failed = null }: { view: PlanSnapshot; item: PlanNode; step: string; stale: boolean
+export function PlanModuleDetail({ view, item, step, stale, failed = null, readAgain }: { view: PlanSnapshotRead; item: PlanNode; step: string; stale: boolean
   /** Why the plan view's latest refresh failed (or Offline); null while it did not. */
-  failed?: string | null }) {
+  failed?: string | null
+  /** Reads the plan view, and its explanation, again now (the query's own refetch: no request of its own). */
+  readAgain?: () => void }) {
   const now = useNow()
   const reads = useShellReads()
   // The questions and requests the step judge reads are these same shell reads (ownerAsksModel).
@@ -338,6 +354,8 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null }: { v
   const shown = allActivity ? activity : activity.slice(0, ACTIVITY_ROWS)
   const stales = SOURCES.filter(([key]) => isStale(reads[key], SHELL_POLL_MS[key], now)).map(([, name]) => name)
   const estimate = estimateOf(view, item)
+  // What the steps wait on, when its read cannot be used as now: once above them (each card says it too).
+  const banner = explainBanner(view, row.cells.flatMap(c => view.nodes.filter(n => n.plan_node_id === c.id)), now, viewOldReason(view, view.root, failed, now))
   // Arriving at a module, or at one of its steps, puts the keyboard there: the step's row, else the module's heading.
   useEffect(() => {
     const target = step ? document.getElementById(moduleStepRowId(step)) : heading.current
@@ -364,10 +382,11 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null }: { v
     {/* Steps, then what needs the Owner (on a phone, before the activity); beside the steps on a wide screen, and the activity under them. */}
     <div className="grid min-w-0 grid-cols-1 items-start gap-2.5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] xl:grid-rows-[auto_1fr]">
       <section aria-label={`Steps of ${item.label}`} className={`${panel} gap-2.5 xl:col-start-1 xl:row-start-1`}>
-        <CardHead title="Steps · plan order"><span className="font-mono text-[11px] text-muted-foreground">plan-view nodes · tasks · runtime progress</span></CardHead>
+        <CardHead title="Steps · plan order"><span className="font-mono text-[11px] text-muted-foreground">plan-view nodes · tasks · runtime progress{view.explain && ' · explain'}</span></CardHead>
+        {banner && <WhyBanner banner={banner} readAgain={readAgain} />}
         {row.cells.length === 0 ? <p className="m-0 text-sm">No steps in this module.</p>
           : <ol className="m-0 flex min-w-0 list-none flex-col p-0">{row.cells.map((cell, i) =>
-            <Stage key={cell.id} cell={cell} scope={scope} view={view} runtime={runtime} selected={cell.id === step} last={i === row.cells.length - 1} />)}</ol>}
+            <Stage key={cell.id} cell={cell} scope={scope} view={view} runtime={runtime} selected={cell.id === step} last={i === row.cells.length - 1} now={now} />)}</ol>}
         <div className="flex min-w-0 flex-col gap-1.5 border-t border-[var(--table-rule)] pt-2.5">
           {row.dropped > 0 && <p className={note}>{plural(row.dropped, 'dropped step')} not listed.</p>}
           <p className={note}>Latest task is the step's newest own work, not its checks: a task's role is the runtime's while it lists the task (unfinished, or among its latest 20 ended), else the title the controller gives a check, else Unknown. Review is the newest check of that task only (by the task its title names); its verdict is its attempt's conclusion (done passes) while the runtime lists it among its latest 20 ended tasks. A check the controller closed without using its result is not told apart.</p>

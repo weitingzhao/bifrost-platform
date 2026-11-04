@@ -9,8 +9,9 @@ import { cellLabels, cellStyle, moduleRowLinkId, NO_RULE_PILL, noRuleMarked, noR
   type RuleLine, type StepCell } from './planModuleModel'
 import { sinceWords } from './readAge'
 import type { OwnerAsks } from './ownerAsksModel'
-import { StepWhy } from './StepWhy'
+import { HowRead, StepWhy } from './StepWhy'
 import { stepRows } from './stepStateModel'
+import { planNodeHref } from './usePlanSnapshot'
 import { workTabHref } from './workViewModel'
 
 const legend: CellState[] = ['done', 'active', 'waiting', 'held', 'idle', 'yours', 'planned', 'stopped', 'active-unknown', 'unknown']
@@ -20,7 +21,10 @@ function Rule({ lines }: { lines: RuleLine[] }) {
   return <ul className="m-0 list-disc space-y-1 pl-5">{lines.map((line, i) => <li key={i}>{line.text}{line.children && <Rule lines={line.children} />}</li>)}</ul>
 }
 
-function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
+/** The plan view a row's opened step is read from: its round, its snapshot time, and the page clock. */
+type Read = { root: string; asOf: string; now: number }
+
+function StepDetail({ cell, close, read }: { cell: StepCell; close: () => void; read: Read }) {
   const note = unverifiedNote(cell)
   return <div id={detailId(cell)} role="region" aria-label={`Step ${cell.label}`} data-step-detail onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}
     className="mx-3.5 mb-3 flex min-w-0 cursor-auto flex-col gap-2 rounded-xl bg-[var(--card)] p-3 text-sm [overflow-wrap:anywhere]">
@@ -35,7 +39,9 @@ function StepDetail({ cell, close }: { cell: StepCell; close: () => void }) {
     <p className="m-0 break-words">{cell.title || 'Untitled step'}</p>
     {cell.step === null && <p className="m-0 text-muted-foreground">Unknown · the runtime holds no state for this step.</p>}
     {nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-muted-foreground">{line}</p>)}
-    <StepWhy cell={cell} />
+    {/* The conclusion alone (Design v3.15 WorkPage Steps); its rows are on the module page's step card. */}
+    <StepWhy cell={cell} now={read.now} compact cardHref={planNodeHref(read.root, cell.id)} />
+    <HowRead cell={cell} asOf={read.asOf} now={read.now} />
     {note && <p data-step-note="unverified" className="m-0 text-xs text-muted-foreground">{note}</p>}
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">Done when</span>
@@ -63,7 +69,7 @@ function rowLook(row: ModuleRow) {
   return row.lane.startsWith('Mainline') ? 'border border-transparent [background:var(--ops-selection)]' : 'border border-transparent shadow-[var(--ops-inset)]'
 }
 
-function Module({ row, initial, noView, live }: { row: ModuleRow; initial: string; noView: string; live: Map<string, LiveStep> }) {
+function Module({ row, initial, noView, live, read }: { row: ModuleRow; initial: string; noView: string; live: Map<string, LiveStep>; read: Read }) {
   const [open, setOpen] = useState(() => row.cells.some(c => c.id === initial) ? initial : '')
   const [focus, setFocus] = useState(() => Math.max(0, row.cells.findIndex(c => c.id === initial)))
   const buttons = useRef<(HTMLButtonElement | null)[]>([])
@@ -142,7 +148,7 @@ function Module({ row, initial, noView, live }: { row: ModuleRow; initial: strin
       </div>
       <span aria-hidden="true" className="flex-none text-lg leading-none text-muted-foreground">›</span>
     </div>
-    {opened && <StepDetail cell={opened} close={close} />}
+    {opened && <StepDetail cell={opened} close={close} read={read} />}
   </li>
 }
 
@@ -206,7 +212,7 @@ export function PlanModuleRows({ view, selected, failed = null, runtime, asks }:
     </div>
     {rows.length === 0 ? <p className="m-0 px-1">No plan items in {view.root}.</p>
       : <ol aria-label="Modules in mainline order" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
-        {rows.map(row => <Module key={row.id} row={row} initial={step} noView={noView} live={liveSteps} />)}
+        {rows.map(row => <Module key={row.id} row={row} initial={step} noView={noView} live={liveSteps} read={{ root: view.root, asOf: view.as_of, now }} />)}
       </ol>}
   </section>
 }

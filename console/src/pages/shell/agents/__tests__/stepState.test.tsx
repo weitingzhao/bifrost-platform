@@ -9,7 +9,7 @@ import { NowClock } from '../../progress/progressClock'
 import { liveNow } from '../liveStepModel'
 import { moduleOf } from '../moduleDetailModel'
 import { PlanModuleDetail } from '../PlanModuleDetail'
-import { cellLabels, cellStyle, moduleRows, noRuleMarked, nowLines, spokenState, stepCounts, unverifiedNote, type ModuleRow, type StepCell } from '../planModuleModel'
+import { cellLabels, cellStyle, howRead, moduleRows, noRuleMarked, nowLines, spokenState, stepCounts, unverifiedNote, type ModuleRow, type StepCell } from '../planModuleModel'
 import { PlanModuleRows } from '../PlanModuleRows'
 import { stepRows, type StepClock } from '../stepStateModel'
 import { WorkPlanView } from '../WorkPlanView'
@@ -75,8 +75,12 @@ describe('step state now (model)', () => {
     expect(c).toMatchObject({ step: 'active', state: 'idle', now: { kind: 'idle' } })
     expect(cellLabels[c.state]).toBe('Active · nothing running now')
     expect(spokenState(c)).toBe('active, nothing running now')
-    expect(nowLines(c)[0]).toMatch(/^Active · nothing running now, read now: no running attempt with its heartbeat confirmed, landing seen moving or running external work; nothing queued/)
-    expect(nowLines(c).join(' ')).not.toMatch(/In progress/)
+    // How it was read: four rows, folded on the card (R5:5.5-20 R6), not one long line.
+    expect(nowLines(c)).toEqual([])
+    expect(howRead(c)!.map(r => r.label)).toEqual(['Running', 'Queued', 'Waits on you', 'Held'])
+    expect(howRead(c)![0].text).toMatch(/^Nothing: no running attempt with its heartbeat confirmed, no landing seen moving, no running external work\.$/)
+    expect(howRead(c)![1].text).toMatch(/^Nothing: no task proposed, ready, back for rework, submitted or being verified/)
+    expect(howRead(c)!.map(r => r.text).join(' ')).not.toMatch(/In progress/)
   })
 
   it('a stale read is Unknown now with the reason the read gives, never idle', () => {
@@ -541,9 +545,9 @@ describe('a step whose external work all finished, its verification Unknown (PRO
     expect(c.now?.unverified).toHaveLength(9)
     expect(cellLabels[c.state]).toBe('Active · nothing running now')
     expect(spokenState(c)).toBe('active, nothing running now')
-    expect(nowLines(c)).toHaveLength(1)
-    expect(nowLines(c)[0]).toMatch(/^Active · nothing running now, read now: /)
-    expect(nowLines(c).join(' ')).not.toMatch(/Review pass|held:|waits for its verification/)
+    expect(nowLines(c)).toEqual([])
+    expect(howRead(c)).toHaveLength(4)
+    expect(howRead(c)!.map(r => r.text).join(' ')).not.toMatch(/Review pass|held:|waits for its verification/)
     expect(unverifiedNote(c)).toBe(NOTE)
     const r51 = row(stepRows(reviewed(), clock()), '5.1')
     expect(r51).toMatchObject({ held: 0, idle: 1 })
@@ -592,7 +596,7 @@ describe('the module page', () => {
     expect(within(screen.getByRole('region', { name: 'Now' })).getByRole('link', { name: 'Step 5.1-4 active, nothing running now' })).toBeInTheDocument()
     expect(stepRow('5.1-4').querySelector('[data-step-state]')).toHaveTextContent('Active · nothing running now')
     expect(stepRow('5.1-4').querySelector('[data-no-rule]')).toHaveTextContent('No done rule')
-    expect(stepRow('5.1-4').querySelector('[data-step-now="idle"]')).toHaveTextContent(/^Active · nothing running now, read now:/)
+    expect(stepRow('5.1-4').querySelector('[data-step-read="idle"]')).toHaveTextContent(/^How “Active · nothing running now” was read · \d\d:\d\d/)
     expect(stepRow('5.1-4').querySelector('[data-no-rule-text]')).toHaveTextContent(/^No done rule: nothing closes it by evidence\./)
     expect(stepRow('5.1-3').querySelector('[data-step-state]')).toHaveTextContent('In progress')
     client.clear()
