@@ -48,6 +48,10 @@ func ThreadActor(session string) (string, error) {
 type Writer struct {
 	Actor, Token string
 	Relayed      bool
+	// Host is the host a host-bound writer is bound to: a collector,
+	// thread:collector@<Host> (R5:5.5-12 §1.4). Its external work carries a
+	// session identity and records the host; any other writer's has neither.
+	Host string
 }
 
 // ErrNotYours: a thread's session is another token's (TD-370); nothing was

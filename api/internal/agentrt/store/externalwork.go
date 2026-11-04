@@ -36,6 +36,13 @@ type ExternalRegistration struct {
 	Mission    string `json:"mission_id,omitempty"`
 	Task       string `json:"task_id,omitempty"`
 	ObservedAt string `json:"observed_at,omitempty"`
+	// The session identity of a collector's work (R5:5.5-12 §1.4): required
+	// of a collector, refused from anyone else, never changed. Empty, they
+	// leave the request and its digest as they were.
+	Vendor  string `json:"vendor,omitempty"`
+	Session string `json:"session,omitempty"`
+	Epoch   int64  `json:"epoch,omitempty"`
+	Sidebar string `json:"sidebar,omitempty"`
 }
 type ExternalEvent struct {
 	Key              string   `json:"idempotency_key"`
@@ -50,12 +57,25 @@ type ExternalEvent struct {
 	ReportDigest     string   `json:"report_digest,omitempty"`
 	Commits          []string `json:"commit_shas,omitempty"`
 	ExitCode         *int     `json:"exit_code,omitempty"`
+	// A collector's event names the identity its work was registered with,
+	// every event, linked included (§1.4).
+	Vendor  string `json:"vendor,omitempty"`
+	Session string `json:"session,omitempty"`
+	Epoch   int64  `json:"epoch,omitempty"`
 }
 type externalNote struct {
-	V                  int      `json:"v"`
-	Kind               string   `json:"kind"`
-	ID                 string   `json:"external_work_id"`
-	Actor              string   `json:"registrant"`
+	V     int    `json:"v"`
+	Kind  string `json:"kind"`
+	ID    string `json:"external_work_id"`
+	Actor string `json:"registrant"`
+	// A collector's work only (§1.4): the host the server writes from the
+	// collector's token, and the identity it was registered with. A note
+	// without them is any other registrant's, or a collector's from before.
+	Host               string   `json:"host,omitempty"`
+	Vendor             string   `json:"vendor,omitempty"`
+	Session            string   `json:"session,omitempty"`
+	Epoch              int64    `json:"epoch,omitempty"`
+	Sidebar            string   `json:"sidebar,omitempty"`
 	Root               string   `json:"root"`
 	Node               string   `json:"plan_node_id"`
 	RunKey             string   `json:"source_run_key"`
@@ -77,6 +97,67 @@ type externalNote struct {
 	ReportDigest       string   `json:"report_digest,omitempty"`
 	Commits            []string `json:"commit_shas,omitempty"`
 	ExitCode           *int     `json:"exit_code,omitempty"`
+}
+
+// CollectorActorPrefix starts a collector's actor, thread:collector@<host>
+// (actuation.CollectorActorPrefix; agentrtapi's tests hold the two equal).
+const CollectorActorPrefix = "thread:collector@"
+
+// ErrIdentityRequired: a collector's write lacks its session identity, or
+// names one of the wrong shape (400 identity_required). ErrIdentityMismatch:
+// an event names another identity than its work's (409 identity_mismatch).
+var (
+	ErrIdentityRequired = errors.New("store: a collector's external work names its session identity")
+	ErrIdentityMismatch = errors.New("store: the session identity is not this work's")
+)
+
+// identityVendors are the vendors a session identity names; identityShape
+// is the shape of its session and sidebar: a vendor's session id, or the
+// run key of a wrapper (§1.4: the server checks the shape, not the meaning).
+var (
+	identityVendors = []string{"claude", "cursor", "codex"}
+	identityShape   = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+)
+
+// collectorWriter checks a writer's binding: a host-bound writer is that
+// host's collector; a writer that is not host-bound is no collector.
+func collectorWriter(w Writer) (bool, error) {
+	switch {
+	case w.Host != "" && w.Actor != CollectorActorPrefix+w.Host:
+		return false, invalid("a host-bound writer is its host's collector")
+	case w.Host == "" && strings.HasPrefix(w.Actor, CollectorActorPrefix):
+		return false, invalid("a collector writes bound to its host")
+	}
+	return w.Host != "", nil
+}
+
+// checkIdentity holds the identity a write names to its writer: a
+// collector names a whole one of the right shape (ErrIdentityRequired);
+// anyone else names none.
+func checkIdentity(collector bool, vendor, session string, epoch int64, sidebar string) error {
+	if !collector {
+		if vendor != "" || session != "" || epoch != 0 || sidebar != "" {
+			return invalid("vendor, session, epoch and sidebar are a collector's")
+		}
+		return nil
+	}
+	switch {
+	case !slices.Contains(identityVendors, vendor):
+		return fmt.Errorf("%w: vendor is claude, cursor or codex", ErrIdentityRequired)
+	case !identityShape.MatchString(session):
+		return fmt.Errorf("%w: session is 1-128 of [A-Za-z0-9._:-]", ErrIdentityRequired)
+	case epoch < 1:
+		return fmt.Errorf("%w: epoch is a positive integer", ErrIdentityRequired)
+	case sidebar != "" && !identityShape.MatchString(sidebar):
+		return fmt.Errorf("%w: sidebar is 1-128 of [A-Za-z0-9._:-]", ErrIdentityRequired)
+	}
+	return nil
+}
+
+// IdentityRunKey is the source run key of a collector's work: fixed by its
+// identity, <vendor>:<session>:<epoch> (§1.4), so its work id is too.
+func IdentityRunKey(vendor, session string, epoch int64) string {
+	return fmt.Sprintf("%s:%s:%d", vendor, session, epoch)
 }
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -238,7 +319,14 @@ func readExternal(ctx context.Context, tx pgx.Tx, id string) (externalNote, int6
 	return n, event, at, err
 }
 func externalReply(n externalNote, event int64) map[string]any {
-	return map[string]any{"external_work_id": n.ID, "event_id": event, "seq": n.Seq, "state": n.State, "plan_url": "#work?section=plan&root=" + url.QueryEscape(n.Root) + "&node=" + url.QueryEscape(n.Node)}
+	out := map[string]any{"external_work_id": n.ID, "event_id": event, "seq": n.Seq, "state": n.State, "plan_url": "#work?section=plan&root=" + url.QueryEscape(n.Root) + "&node=" + url.QueryEscape(n.Node)}
+	// When it was registered (R5:5.5-12 §3.3): every note of the work
+	// carries its registration's time, so a replay and a recovery read give
+	// the first answer's.
+	if n.RegisteredAt != "" {
+		out["registered_at"] = n.RegisteredAt
+	}
+	return out
 }
 func appendExternal(ctx context.Context, tx pgx.Tx, actor string, n externalNote) (map[string]any, error) {
 	body, err := jsonObject(n)
@@ -260,6 +348,21 @@ func checkObserved(s string) error {
 	return nil
 }
 func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegistration) (map[string]any, error) {
+	collector, err := collectorWriter(w)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkIdentity(collector, in.Vendor, in.Session, in.Epoch, in.Sidebar); err != nil {
+		return nil, err
+	}
+	if collector {
+		// The run key is the identity's; a client may leave it out.
+		run := IdentityRunKey(in.Vendor, in.Session, in.Epoch)
+		if in.RunKey != "" && in.RunKey != run {
+			return nil, invalid("a collector's source_run_key is <vendor>:<session>:<epoch>, %s", run)
+		}
+		in.RunKey = run
+	}
 	if in.Key == "" || in.Root == "" || in.Node == "" || in.RunKey == "" || len(in.RunKey) > 200 || !digestPattern.MatchString(in.Artifact) {
 		return nil, invalid("registration requires key, root, node, source_run_key and artifact digest")
 	}
@@ -303,10 +406,48 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegis
 		}
 		now := timeText(eventClock())
 		n := externalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
+		if collector {
+			n.Host, n.Vendor, n.Session, n.Epoch, n.Sidebar = w.Host, in.Vendor, in.Session, in.Epoch, in.Sidebar
+		}
 		return appendExternal(ctx, tx, w.Actor, n)
 	})
 }
+
+// sameIdentityAsWork compares an event's identity with its work's, read
+// without the stream lock: once registered, a work's identity never
+// changes. A writer whose session is not the one held, and a work that is
+// missing or another writer's, are left to the usual path, which answers
+// them as it always has; only the writer's own work is compared.
+func sameIdentityAsWork(ctx context.Context, db DB, w Writer, id string, in ExternalEvent) error {
+	return InTx(ctx, db, func(tx pgx.Tx) error {
+		if holdsSessionTx(ctx, tx, w) != nil {
+			return nil
+		}
+		n, _, _, err := readExternal(ctx, tx, id)
+		switch {
+		case isNoRows(err):
+			return nil
+		case err != nil:
+			return err
+		case n.Actor != w.Actor:
+			return nil
+		case n.Vendor == "":
+			return fmt.Errorf("%w: this work was registered without one", ErrIdentityMismatch)
+		case in.Vendor != n.Vendor || in.Session != n.Session || in.Epoch != n.Epoch:
+			return ErrIdentityMismatch
+		}
+		return nil
+	})
+}
+
 func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in ExternalEvent) (map[string]any, error) {
+	collector, err := collectorWriter(w)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
+		return nil, err
+	}
 	if in.Key == "" || in.Seq < 1 || !slices.Contains([]string{"started", "heartbeat", "submitted", "cancelled", "linked"}, in.Type) {
 		return nil, invalid("invalid external event type, key or seq")
 	}
@@ -341,6 +482,16 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 	sum = "sha256:" + sum
 	if err != nil {
 		return nil, err
+	}
+	// A replay under a used key with another identity would meet the key's
+	// digest first and answer key_conflict, so a collector could not tell a
+	// reused key from a changed identity (TD-516). The identity is the work's
+	// for good once registered, so it is compared here, before the key is
+	// looked at; the check under the stream lock below stays the authority.
+	if collector {
+		if err := sameIdentityAsWork(ctx, db, w, id, in); err != nil {
+			return nil, err
+		}
 	}
 	return idempotentAs(ctx, db, w, "external-work/"+id+"/events", in.Key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
@@ -381,6 +532,17 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		}
 		if n.Root != before.Root || n.Node != before.Node {
 			return nil, ErrConflict
+		}
+		// The identity is the work's for good, read under the stream's lock in
+		// this transaction: every event names it whole, before its sequence is
+		// looked at, so a replay under another identity is refused too.
+		if collector {
+			switch {
+			case n.Vendor == "":
+				return nil, fmt.Errorf("%w: this work was registered without one", ErrIdentityMismatch)
+			case in.Vendor != n.Vendor || in.Session != n.Session || in.Epoch != n.Epoch:
+				return nil, ErrIdentityMismatch
+			}
 		}
 		if in.Seq <= n.Seq {
 			var old []byte

@@ -7,6 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -53,7 +54,8 @@ func (a *API) explainCache() *store.ExplainCache {
 }
 func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 	var in store.ExternalRegistration
-	if !decodeView(w, r, &in) {
+	raw, ok := decodeViewRaw(w, r, &in)
+	if !ok || !identityOnlyFromCollector(w, r, raw, registrationIdentity) {
 		return
 	}
 	who, err := writer(r)
@@ -70,7 +72,8 @@ func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) postExternalEvent(w http.ResponseWriter, r *http.Request) {
 	var in store.ExternalEvent
-	if !decodeView(w, r, &in) {
+	raw, ok := decodeViewRaw(w, r, &in)
+	if !ok || !identityOnlyFromCollector(w, r, raw, eventIdentity) {
 		return
 	}
 	who, err := writer(r)
@@ -124,7 +127,43 @@ func (a *API) getExternalWork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
+// The fields of a collector's session identity (R5:5.5-12 §1.4), in a
+// registration and in an event.
+var (
+	registrationIdentity = []string{"vendor", "session", "epoch", "sidebar"}
+	eventIdentity        = []string{"vendor", "session", "epoch"}
+)
+
+// identityOnlyFromCollector refuses a body that names a session identity
+// field, in any letter case encoding/json reads as it, null included, from
+// a token that is no collector: 400, as such a body was before the fields
+// existed, so every other registrant's contract is as it was.
+func identityOnlyFromCollector(w http.ResponseWriter, r *http.Request, raw []byte, fields []string) bool {
+	if actuation.IsCollector(actuation.PrincipalFromContext(r.Context())) {
+		return true
+	}
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(raw, &keys) != nil {
+		return true // decodeViewRaw read it as an object already
+	}
+	for key := range keys {
+		for _, f := range fields {
+			if strings.EqualFold(key, f) {
+				writeError(w, http.StatusBadRequest, "bad_request", "body: "+f+" is a collector's field")
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func decodeView(w http.ResponseWriter, r *http.Request, out any) bool {
+	_, ok := decodeViewRaw(w, r, out)
+	return ok
+}
+
+// decodeViewRaw is decodeView, giving the body it read too.
+func decodeViewRaw(w http.ResponseWriter, r *http.Request, out any) ([]byte, bool) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err == nil {
 		_, err = canon.Parse(raw)
@@ -136,7 +175,7 @@ func decodeView(w http.ResponseWriter, r *http.Request, out any) bool {
 	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "body: "+err.Error())
-		return false
+		return nil, false
 	}
-	return true
+	return raw, true
 }

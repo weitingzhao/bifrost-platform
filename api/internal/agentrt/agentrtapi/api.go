@@ -295,6 +295,10 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "external_host", err.Error())
 	case errors.Is(err, store.ErrNotExternal):
 		writeError(w, http.StatusForbidden, "forbidden", err.Error())
+	case errors.Is(err, store.ErrIdentityRequired):
+		writeError(w, http.StatusBadRequest, "identity_required", err.Error())
+	case errors.Is(err, store.ErrIdentityMismatch):
+		writeError(w, http.StatusConflict, "identity_mismatch", err.Error())
 	case errors.Is(err, store.ErrNotPinned):
 		writeError(w, http.StatusForbidden, "not_pinned", err.Error())
 	case errors.Is(err, store.ErrNoLease):

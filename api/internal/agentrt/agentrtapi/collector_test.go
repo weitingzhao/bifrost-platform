@@ -75,9 +75,27 @@ func collectorSpec(task string) []byte {
 	return []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"` + task + `","executor":"claude","provider":"anthropic","repo":"platform","branch":"test","acceptance_refs":["PV1"],"estimate_minutes":[1,2]}`)
 }
 
+// identityOf is the session identity a collector's work under run carries
+// in these tests (R5:5.5-12 §1.4): a hook's Claude session, its first epoch.
+func identityOf(run string) map[string]any {
+	return map[string]any{"vendor": "claude", "session": run, "epoch": 1}
+}
+
+// with is body and more, a copy.
+func with(body map[string]any, more ...map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, m := range append([]map[string]any{body}, more...) {
+		for k, v := range m {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // registerAs uploads the description of task and registers its external
-// work as caller, sending sess as its session header; it gives the work's id
-// and the description's.
+// work as caller, sending sess as its session header; a collector names
+// run's identity (and so its run key). It gives the work's id and the
+// description's.
 func registerAs(t *testing.T, s *httptest.Server, caller, sess, task, run string) (string, string) {
 	t.Helper()
 	spec := collectorSpec(task)
@@ -85,6 +103,9 @@ func registerAs(t *testing.T, s *httptest.Server, caller, sess, task, run string
 		t.Fatalf("%s uploads %s: %d %v", caller, task, code, out)
 	}
 	reg := map[string]any{"idempotency_key": "reg-" + run, "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": run, "artifact_id": artifactID(spec)}
+	if strings.HasPrefix(caller, "collector:") {
+		reg = with(reg, identityOf(run), map[string]any{"source_run_key": "claude:" + run + ":1"})
+	}
 	code, out := call(t, s, caller, "POST", "external-work", reg, session, sess)
 	if code != http.StatusOK {
 		t.Fatalf("%s registers %s: %d %v", caller, run, code, out)
@@ -290,8 +311,11 @@ func TestForeignWork_OtherToken(t *testing.T) {
 			t.Fatalf("h1's refusals differ: %v and %v", refusal, out)
 		}
 	}
-	for _, c := range []struct{ caller, sess, id string }{{"collector:h1", "", w1}, {"reporter", "local_mcp", w3}} {
-		if code, out := call(t, s, c.caller, "POST", "external-work/"+c.id+"/events", started, session, c.sess); code != http.StatusOK || out["state"] != "Running" {
+	for _, c := range []struct {
+		caller, sess, id string
+		event            map[string]any
+	}{{"collector:h1", "", w1, with(started, identityOf("run-h1"))}, {"reporter", "local_mcp", w3, started}} {
+		if code, out := call(t, s, c.caller, "POST", "external-work/"+c.id+"/events", c.event, session, c.sess); code != http.StatusOK || out["state"] != "Running" {
 			t.Fatalf("%s on its own work: %d %v", c.caller, code, out)
 		}
 	}
@@ -379,7 +403,7 @@ func TestCollectorRegistrationNamesNoForeignContent(t *testing.T) {
 		ids = append(ids, artifactID(b))
 	}
 	for i, id := range ids {
-		reg := map[string]any{"idempotency_key": fmt.Sprintf("reg-%d", i), "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": fmt.Sprintf("run-%d", i), "artifact_id": id}
+		reg := with(map[string]any{"idempotency_key": fmt.Sprintf("reg-%d", i), "root": "R2", "plan_node_id": "R2:1-1", "artifact_id": id}, identityOf(fmt.Sprintf("run-%d", i)))
 		code, out := call(t, s, "collector:h1", "POST", "external-work", reg)
 		doc := fmt.Sprint(out)
 		for _, m := range markers {
@@ -403,7 +427,7 @@ func TestCollectorRegistrationNamesNoForeignContent(t *testing.T) {
 			t.Fatalf("%s uploads the shared description: %d %v", caller, code, out)
 		}
 	}
-	reg := map[string]any{"idempotency_key": "shared", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "shared-run", "artifact_id": artifactID(spec)}
+	reg := with(map[string]any{"idempotency_key": "shared", "root": "R2", "plan_node_id": "R2:1-1", "artifact_id": artifactID(spec)}, identityOf("shared-run"))
 	code, out := call(t, s, "collector:h1", "POST", "external-work", reg)
 	if code != http.StatusOK || out["external_work_id"] == nil {
 		t.Fatalf("h1 registers with the description h2 put first: %d %v", code, out)

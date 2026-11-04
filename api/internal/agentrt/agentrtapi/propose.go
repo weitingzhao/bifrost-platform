@@ -41,12 +41,13 @@ func writer(r *http.Request) (store.Writer, error) {
 		w.Actor = "owner"
 	case actuation.IsCollector(p):
 		actor, ok := actuation.CollectorActor(p)
+		host, _ := actuation.CollectorHost(p)
 		if !ok {
 			// Defence only: LoadAuth admits a name in the namespace only as
 			// a reporter named collector:<host>.
 			return w, fmt.Errorf("%w: a collector token is a reporter named %s<host>", store.ErrNotYours, actuation.CollectorPrefix)
 		}
-		w.Actor = actor
+		w.Actor, w.Host = actor, host
 	case strings.HasPrefix(p.Name, "seat:"):
 		w.Actor = p.Name
 	default:

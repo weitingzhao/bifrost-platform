@@ -153,8 +153,11 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	finished = append(finished, ended...)
+	// Threads only: a host's collector (thread:collector@<host>, R5:5.5-12
+	// §1.1, §3.1) is a thread by its actor's kind, not a session, and is
+	// never unregistered work.
 	var unregistered int
-	err = tx.QueryRow(ctx, viewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type='note' AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
+	err = tx.QueryRow(ctx, viewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+CollectorActorPrefix+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type='note' AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
 	if err != nil {
 		return nil, err
 	}
