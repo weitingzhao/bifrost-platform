@@ -1,0 +1,8 @@
+{
+  "linked": 3,
+  "unlinked": 2,
+  "refused": 1,
+  "unsupported": 1,
+  "unknown": 0,
+  "scope": "Sessions heard from in the last 72 hours, one per host, vendor, session and epoch, across every root"
+}

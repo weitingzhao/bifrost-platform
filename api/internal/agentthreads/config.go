@@ -96,7 +96,7 @@ func (c Config) Threshold(t Thread) time.Duration {
 
 // StatusOf classifies t at now. hostLost forces every non-idle thread to host lost.
 func (c Config) StatusOf(t Thread, hostLost bool, now time.Time) Status {
-	if t.Event == TurnEnd {
+	if t.idle() {
 		return Idle
 	}
 	if hostLost {
@@ -199,7 +199,7 @@ func (c Config) HostsDue(st State, now time.Time) (push, mark []string) {
 func (c Config) MidTurn(st State, host string, now time.Time) []Thread {
 	out := make([]Thread, 0)
 	for _, t := range st.Threads {
-		if t.Host != host || t.Event == TurnEnd || headlessRun(t.Thread) || c.sessionSuperseded(st, t, now) {
+		if t.Host != host || t.idle() || headlessRun(t.Thread) || c.sessionSuperseded(st, t, now) {
 			continue
 		}
 		out = append(out, t)

@@ -13,6 +13,10 @@ type View struct {
 	QuietSeconds     int64  `json:"quiet_seconds"`
 	InTurnSeconds    int64  `json:"in_turn_seconds"`
 	ThresholdSeconds int64  `json:"threshold_seconds"`
+	// Binding and ServerNote are the server's judgement of the row's
+	// session (R5:5.5-12 §3.1), set by the list (Handler.project).
+	Binding    *Binding `json:"binding,omitempty"`
+	ServerNote string   `json:"server_note,omitempty"`
 }
 
 // sessionSuperseded requires another session of the same vendor to have
@@ -22,7 +26,7 @@ type View struct {
 // Wrapped runs do not participate in either direction. A session written by a
 // host-bound token (a collector) supersedes sessions of its own host only.
 func (c Config) sessionSuperseded(st State, t Thread, now time.Time) bool {
-	if t.Sidebar == "" || t.Event == TurnEnd || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
+	if t.Sidebar == "" || t.idle() || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
 		return false
 	}
 	for _, o := range st.Threads {
@@ -67,32 +71,57 @@ func (c Config) Views(st State, now time.Time) []View {
 	return out
 }
 
-// MarshalJSON omits the thread key, its hash, the turn id and the sequence.
+// MarshalJSON omits the thread key, its hash, the turn id, the sequence and
+// the sidebar. The event is the last one heard, a side beat included, with
+// its reason; the session's key fields and the diagnoses follow (§3.3).
 func (v View) MarshalJSON() ([]byte, error) {
 	t := v.Thread
+	// A side beat is the event shown on a row in no turn, the last thing
+	// heard there; on a row in a turn or a wait the turn's own event, its
+	// time and its reason stay what the row says (§4.1: it disturbs neither).
+	event, reason := t.Event, t.Reason
+	if t.Mark != "" && t.idle() {
+		event, reason = t.Mark, t.MarkReason
+	}
+	session, epoch := sessionKey(t.Thread, t.Session, t.Epoch)
+	var firstSeen *time.Time
+	if !t.FirstSeenAt.IsZero() {
+		firstSeen = &t.FirstSeenAt
+	}
 	out := struct {
-		Thread           string    `json:"thread"`
-		Vendor           string    `json:"vendor"`
-		Host             string    `json:"host"`
-		Work             string    `json:"work,omitempty"`
-		Title            string    `json:"title,omitempty"`
-		Event            Event     `json:"event"`
-		Tool             string    `json:"tool,omitempty"`
-		ToolTimeoutS     int       `json:"tool_timeout_s,omitempty"`
-		Reason           string    `json:"reason,omitempty"`
-		At               time.Time `json:"at"`
-		TurnStartedAt    time.Time `json:"turn_started_at"`
-		NotifiedFor      time.Time `json:"notified_for,omitempty"`
-		NotifiedAt       time.Time `json:"notified_at,omitempty"`
-		Status           Status    `json:"status"`
-		QuietSeconds     int64     `json:"quiet_seconds"`
-		InTurnSeconds    int64     `json:"in_turn_seconds"`
-		ThresholdSeconds int64     `json:"threshold_seconds"`
+		Thread           string      `json:"thread"`
+		Vendor           string      `json:"vendor"`
+		Host             string      `json:"host"`
+		Work             string      `json:"work,omitempty"`
+		Title            string      `json:"title,omitempty"`
+		Event            Event       `json:"event"`
+		Tool             string      `json:"tool,omitempty"`
+		ToolTimeoutS     int         `json:"tool_timeout_s,omitempty"`
+		Reason           string      `json:"reason,omitempty"`
+		At               time.Time   `json:"at"`
+		TurnStartedAt    time.Time   `json:"turn_started_at"`
+		NotifiedFor      time.Time   `json:"notified_for,omitempty"`
+		NotifiedAt       time.Time   `json:"notified_at,omitempty"`
+		Status           Status      `json:"status"`
+		QuietSeconds     int64       `json:"quiet_seconds"`
+		InTurnSeconds    int64       `json:"in_turn_seconds"`
+		ThresholdSeconds int64       `json:"threshold_seconds"`
+		Binding          *Binding    `json:"binding,omitempty"`
+		ClientBind       *ClientBind `json:"client_bind,omitempty"`
+		ServerNote       string      `json:"server_note,omitempty"`
+		FirstSeenAt      *time.Time  `json:"first_seen_at,omitempty"`
+		Compactions      int         `json:"compactions,omitempty"`
+		Session          string      `json:"session"`
+		Epoch            int         `json:"epoch,omitempty"`
+		HostIDSource     string      `json:"host_id_source,omitempty"`
+		TokenKind        string      `json:"token_kind,omitempty"`
 	}{
 		Thread: t.Thread, Vendor: t.Vendor, Host: t.Host, Work: t.Work, Title: t.Title,
-		Event: t.Event, Tool: t.Tool, ToolTimeoutS: t.ToolTimeoutS, Reason: t.Reason,
+		Event: event, Tool: t.Tool, ToolTimeoutS: t.ToolTimeoutS, Reason: reason,
 		At: t.At, TurnStartedAt: t.TurnStartedAt, NotifiedFor: t.NotifiedFor, NotifiedAt: t.NotifiedAt,
 		Status: v.Status, QuietSeconds: v.QuietSeconds, InTurnSeconds: v.InTurnSeconds, ThresholdSeconds: v.ThresholdSeconds,
+		Binding: v.Binding, ClientBind: t.ClientBind, ServerNote: v.ServerNote, FirstSeenAt: firstSeen, Compactions: t.Compactions,
+		Session: session, Epoch: epoch, HostIDSource: t.HostIDSource, TokenKind: t.TokenKind,
 	}
 	return json.Marshal(out)
 }

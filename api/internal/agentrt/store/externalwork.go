@@ -619,6 +619,43 @@ func ReadOwnExternalWork(ctx context.Context, db DB, id, actor string) (map[stri
 	return out, err
 }
 
+// ExternalIdentity is one external work's latest record as a session's
+// binding reads it (R5:5.5-12 §3.1): a collector's work, with the host and
+// session identity it was registered with (a record naming an identity but
+// no host has Host "").
+type ExternalIdentity struct {
+	ID, Root, Node, State, Host, Vendor, Session string
+	Epoch                                        int64
+}
+
+// ExternalIdentities lists every external work whose record names a session
+// identity, its latest note each: the plan view's query shape (one read-only
+// snapshot, the latest note of each stream).
+func ExternalIdentities(ctx context.Context, db DB) ([]ExternalIdentity, error) {
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	rows, err := tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
+	  WHERE event_type='note' AND body_json ? 'external_work' AND event_stream_id LIKE 'external-work:%' ORDER BY event_stream_id,seq DESC) x
+	  WHERE body ? 'vendor' ORDER BY body->>'external_work_id'`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ExternalIdentity, error) {
+		var raw []byte
+		var n externalNote
+		if err := r.Scan(&raw); err != nil {
+			return ExternalIdentity{}, err
+		}
+		if err := json.Unmarshal(raw, &n); err != nil {
+			return ExternalIdentity{}, err
+		}
+		return ExternalIdentity{ID: n.ID, Root: n.Root, Node: n.Node, State: n.State, Host: n.Host, Vendor: n.Vendor, Session: n.Session, Epoch: n.Epoch}, nil
+	})
+}
+
 // ReadExternalWork supports crash recovery. It is read-only and exposes only
 // the same bounded metadata shown by the plan snapshot.
 func ReadExternalWork(ctx context.Context, db DB, id string) (map[string]any, error) {

@@ -76,8 +76,9 @@ describe('Work plan/live view', () => {
     expect(live).toHaveTextContent('Last heartbeat')
     expect(live).toHaveTextContent('Not reconciled')
     // Every tab reads the same plan view; the sign-offs also read the round's GET /plan, as SignoffWaiting did, and take
-    // the rounds from the shell's GET /progress in the cache: no progress read of Work's own.
-    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1', '/api/v1/agentrt/plan?root=R4']))
+    // the rounds from the shell's GET /progress in the cache: no progress read of Work's own. Live's Unlinked sessions
+    // (R5:5.5-12 §3.3) read GET /agent/threads under the query Needs you polls in the shell: here, without the shell, once.
+    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1', '/api/v1/agentrt/plan?root=R4', '/api/v1/agent/threads']))
   })
   it('shows runtime attempts on a historical root and preserves the old round parameter', async () => {
     reply = legacy

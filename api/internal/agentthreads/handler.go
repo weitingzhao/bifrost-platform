@@ -1,8 +1,10 @@
 package agentthreads
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -23,7 +25,14 @@ type Handler struct {
 	titles TitlesFunc
 	audit  Auditor
 	now    func() time.Time
+	// works is the runtime's external work, read for each session's binding
+	// (R5:5.5-12 §3.1); without UseWorks every session's binding is unknown.
+	works workCache
 }
+
+// UseWorks wires the runtime's external work into the list and the session
+// counts (§3.1, §3.2).
+func (h *Handler) UseWorks(read WorksFunc) { h.works = workCache{read: read} }
 
 func NewHandler(rec *Recorder, cfg Config, titles TitlesFunc, audit Auditor) *Handler {
 	return &Handler{rec: rec, cfg: cfg, titles: titles, audit: audit, now: time.Now}
@@ -54,6 +63,7 @@ func (h *Handler) HandleBeat(w http.ResponseWriter, r *http.Request) {
 	if host, ok := actuation.CollectorHost(p); ok {
 		b.boundHost = host
 	}
+	b.tokenKind = tokenKind(p)
 	if actuation.IsCollector(p) && (b.titlePresent || b.Title != "") {
 		// Titles stay on the reporter's path (R5:5.5-12 C10): a collector's
 		// beat stores none, so its list never carries one.
@@ -137,6 +147,64 @@ type listResponse struct {
 	LastThreadRefusal time.Time `json:"last_thread_refusal,omitempty"`
 }
 
+// tokenKind is the kind of token a beat came with (§3.3, written by the
+// server): collector, or the principal's role.
+func tokenKind(p actuation.Principal) string {
+	if actuation.IsCollector(p) {
+		return "collector"
+	}
+	return string(p.Role)
+}
+
+// filters are the list's ?sidebar= and ?session= (§3.3, for §5's check at
+// hand-in): the rows of that desktop thread, or of that vendor session id
+// (an old client's: its thread id). Both given, a row matches both. Many
+// sessions may share one sidebar (design §12 D6: a session started inside
+// another inherits its sidebar), so each row is its own.
+type filters struct{ sidebar, session string }
+
+func readFilters(r *http.Request) (filters, error) {
+	q := r.URL.Query()
+	f := filters{sidebar: q.Get("sidebar"), session: q.Get("session")}
+	for name, v := range map[string]string{"sidebar": f.sidebar, "session": f.session} {
+		if _, given := q[name]; given && !idRe.MatchString(v) {
+			return f, fmt.Errorf("%s: want 1-128 of [A-Za-z0-9._:-]", name)
+		}
+	}
+	return f, nil
+}
+
+func (f filters) keep(t Thread) bool {
+	session, _ := sessionKey(t.Thread, t.Session, t.Epoch)
+	return (f.sidebar == "" || t.Sidebar == f.sidebar) && (f.session == "" || session == f.session)
+}
+
+// project lists st's rows that f keeps, each with its session's binding.
+func (h *Handler) project(r *http.Request, cfg Config, st State, f filters, now time.Time) []View {
+	w := h.works.get(r.Context(), now)
+	views := cfg.Views(st, now)
+	out := make([]View, 0, len(views))
+	for _, v := range views {
+		if !f.keep(v.Thread) {
+			continue
+		}
+		b, note := w.bind(v.Thread)
+		v.Binding, v.ServerNote = &b, note
+		out = append(out, v)
+	}
+	return out
+}
+
+// SessionCoverage is the plan view's coverage.sessions (§3.2): the retained
+// sessions counted by binding, one per key.
+func (h *Handler) SessionCoverage(ctx context.Context) (SessionCounts, error) {
+	st, err := h.rec.State()
+	if err != nil {
+		return SessionCounts{}, err
+	}
+	return h.cfg.sessionCounts(st, h.works.get(ctx, h.now().UTC())), nil
+}
+
 // collectorHost holds a collector token to the host its name binds it to
 // (R5:5.5-12 §1.4): a beat naming another host is refused 403 and audited,
 // as a key not held is (HandleBeat). Any other token passes: it reports for
@@ -214,6 +282,11 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		h.unavailable(w, r, err)
 		return
 	}
+	f, err := readFilters(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	if p := actuation.PrincipalFromContext(r.Context()); actuation.IsCollector(p) {
 		host, ok := actuation.CollectorHost(p)
 		if !ok {
@@ -227,7 +300,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			SilentAfterSeconds:   secs(cfg.SilentAfter),
 			ToolGraceSeconds:     secs(cfg.ToolGrace),
 			HostLostAfterSeconds: secs(cfg.HostLostAfter),
-			Threads:              cfg.Views(own, now),
+			Threads:              h.project(r, cfg, own, f, now),
 			Hosts:                cfg.HostViews(own, now),
 		})
 		return
@@ -250,7 +323,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		SilentAfterSeconds:   secs(h.cfg.SilentAfter),
 		ToolGraceSeconds:     secs(h.cfg.ToolGrace),
 		HostLostAfterSeconds: secs(h.cfg.HostLostAfter),
-		Threads:              h.cfg.Views(st, now),
+		Threads:              h.project(r, h.cfg, st, f, now),
 		Hosts:                h.cfg.HostViews(st, now),
 		ThreadsRefused:       st.ThreadsRefused,
 		LastThreadRefusal:    st.LastThreadRefusal,

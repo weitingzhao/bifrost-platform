@@ -6,6 +6,7 @@ import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
 import { workSectionHref } from './workViewModel'
+import { coverageGroups, shortSession, unlinkedSessions, type SessionsRead } from './unlinkedSessionsModel'
 
 /** How many submitted runs show before "Show n more". */
 const SUBMITTED_SHOWN = 8
@@ -57,12 +58,45 @@ export function ExternalRecord({ work }: { work: ExternalWork }) {
 const endedAt = (w: ExternalWork) => w.ended_at ?? w.heartbeat_at
 
 /**
+ * Unlinked sessions (R5:5.5-12 §3.3): sessions the platform heard from whose work is not in the runtime, one row per
+ * stable identity (vendor · host · session · epoch) with its status, first sighting, last event and why; no title (the
+ * title store is keyed by session alone). A Codex hook thread is counted, not judged. While the thread list or the
+ * runtime cannot be read, it says so instead of a count.
+ */
+export function UnlinkedSessions({ read }: { read: SessionsRead }) {
+  if (read.state === 'loading') return <section aria-label="Unlinked sessions" className="flex flex-col gap-1.5 text-sm"><h3 className={`m-0 ${caps}`}>Unlinked sessions · reading</h3></section>
+  if (read.state === 'failed') return <section aria-label="Unlinked sessions" className="flex flex-col gap-1.5 text-sm">
+    <h3 className={`m-0 ${caps}`}>Unlinked sessions · Unknown</h3>
+    <p role="status" className="m-0 [overflow-wrap:anywhere]">The thread list could not be read ({read.error}); which sessions are unlinked is Unknown.</p>
+  </section>
+  const { rows, unsupported, runtimeUnreadable } = unlinkedSessions(read.data)
+  return <section aria-label="Unlinked sessions" className="flex min-w-0 flex-col gap-1.5 text-sm">
+    <h3 className={`m-0 ${caps}`}>Unlinked sessions · {read.stale ? 'last read ' : ''}{rows.length}</h3>
+    {runtimeUnreadable && <p role="status" className="m-0">The runtime could not be read: these sessions' bindings are Unknown, not unlinked.</p>}
+    {rows.length === 0 ? <p className="m-0 text-muted-foreground">No unlinked sessions in the threads retained.</p>
+      : <ul aria-label="Unlinked sessions" className="m-0 flex list-none flex-col gap-1.5 p-0">{rows.map(row => <li key={row.key} data-session={row.key}
+        className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3 py-2 shadow-[var(--ops-inset)] [overflow-wrap:anywhere]">
+        <span className="min-w-0 flex-[1_1_15rem] leading-[1.45]">{row.vendor} · {row.host} · {shortSession(row.session)}{row.epoch > 0 ? ` · epoch ${row.epoch}` : ''}</span>
+        <span className={`${mono} whitespace-nowrap`}>{row.state} · {row.status}</span>
+        <span className="basis-full text-xs text-muted-foreground">First seen · {row.firstSeen ? <time dateTime={row.firstSeen}>{row.firstSeen}</time> : 'Unknown'} · Last event · {row.event} · {row.reason}</span>
+        <details className="basis-full text-xs"><summary className="min-h-11 cursor-pointer py-3 pointer-fine:min-h-6 pointer-fine:py-1">Details</summary>
+          <span className="block">Thread · {row.thread.thread}</span>
+          {row.thread.tool && <span className="block">Tool · {row.thread.tool}</span>}
+          {row.thread.token_kind && <span className="block">Token · {row.thread.token_kind}</span>}
+          {row.thread.host_id_source && <span className="block">Host id from · {row.thread.host_id_source}</span>}
+        </details>
+      </li>)}</ul>}
+    {unsupported > 0 && <p className="m-0 text-xs text-muted-foreground">Codex hook threads · {unsupported} · not judged until the S1-0 calibration binds them</p>}
+  </section>
+}
+
+/**
  * Work → Live (Design v3.6 WorkPage): this round's work now (plan-view working: runtime attempts and registered external
  * work, Unconfirmed after 60 s without a heartbeat) and its submitted runs, newest first. Submitted is the executor's
  * word that it ended, not verification and not plan completion. What is not registered is not seen here; the runtime
  * as a whole (running attempts, hosts, open goals, release runs) is on Activity.
  */
-export function PlanLiveWork({ view, stale }: { view: PlanSnapshot; stale: boolean }) {
+export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; stale: boolean; sessions?: SessionsRead }) {
   const [all, setAll] = useState(false)
   const submitted = view.external_work.filter(w => w.state === 'Submitted').sort((a, b) => endedAt(b).localeCompare(endedAt(a)))
   const shown = all ? submitted : submitted.slice(0, SUBMITTED_SHOWN)
@@ -94,7 +128,8 @@ export function PlanLiveWork({ view, stale }: { view: PlanSnapshot; stale: boole
       <p>Execution ended; this does not mean the plan is complete.</p>
       <ul>{view.finished_today.map(work => 'external_work_id' in work ? <ExternalRecord key={work.external_work_id} work={work} /> : <li key={work.attempt_id}>{work.task_id} · {work.state} · {work.ended_at}</li>)}</ul>
     </details>
-    <p className="m-0 text-xs text-muted-foreground">Coverage · {view.coverage.unregistered_work} unregistered · {view.coverage.reconciled ? 'Reconciled' : 'Not reconciled'} · {view.coverage.scope}</p>
+    {sessions && <UnlinkedSessions read={sessions} />}
+    <p className="m-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">Coverage · {coverageGroups(view.coverage).join(' · ')} · {view.coverage.scope}{view.coverage.sessions && ` · ${view.coverage.sessions.scope}`}</p>
     <p className="m-0 text-sm">Running attempts, hosts, open goals and release runs across the runtime: <a href={workSectionHref('activity')} className="inline-flex min-h-11 items-center">Activity ›</a></p>
   </section>
 }

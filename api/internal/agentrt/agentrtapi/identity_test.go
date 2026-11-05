@@ -1,7 +1,9 @@
 package agentrtapi_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -554,5 +557,46 @@ func TestPlanViewCarriesCollectorIdentity(t *testing.T) {
 				t.Fatalf("%s: the reporter's row carries %s: %v", list, k, m)
 			}
 		}
+	}
+}
+
+// The plan view's coverage.sessions (R5:5.5-12 §3.2, P-c2): the platform's
+// session counts as its provider gives them, the four old keys as they were;
+// a provider that fails leaves it out and says so in the warnings; none
+// wired, the view is as before.
+func TestPlanViewSessionCoverage(t *testing.T) {
+	pool, _ := world(t)
+	counts := map[string]any{"linked": 2, "unlinked": 1, "refused": 0, "unsupported": 1, "unknown": 0, "scope": "Sessions heard from in the last 72 hours"}
+	for _, c := range []struct {
+		name     string
+		sessions func(context.Context) (any, error)
+	}{
+		{"counted", func(context.Context) (any, error) { return counts, nil }},
+		{"unread", func(context.Context) (any, error) { return nil, errors.New("statefile unreadable") }},
+		{"not wired", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := server(t, pool, func(a *agentrtapi.API) { a.Sessions = c.sessions })
+			code, view := call(t, s, "viewer", "GET", "plan-view?root=R2", nil)
+			cov, _ := view["coverage"].(map[string]any)
+			if code != http.StatusOK || cov["unregistered_work"] == nil || cov["label"] == nil || cov["scope"] == nil || cov["reconciled"] == nil {
+				t.Fatalf("plan-view: %d %v", code, view["coverage"])
+			}
+			warned := strings.Contains(fmt.Sprint(view["warnings"]), "Session coverage is Unknown")
+			switch c.name {
+			case "counted":
+				if got, _ := json.Marshal(cov["sessions"]); string(got) != `{"linked":2,"refused":0,"scope":"Sessions heard from in the last 72 hours","unknown":0,"unlinked":1,"unsupported":1}` || warned {
+					t.Fatalf("sessions %s, warned %v", got, warned)
+				}
+			case "unread":
+				if cov["sessions"] != nil || !warned || strings.Contains(fmt.Sprint(view), "statefile unreadable") {
+					t.Fatalf("an unread provider: %v, warnings %v", cov, view["warnings"])
+				}
+			default:
+				if cov["sessions"] != nil || warned {
+					t.Fatalf("no provider: %v, warnings %v", cov, view["warnings"])
+				}
+			}
+		})
 	}
 }

@@ -81,6 +81,10 @@ type API struct {
 	AgentHeads  AgentHeads
 	MainResults store.MainResults
 	Now         func() time.Time
+	// Sessions counts the retained agent sessions by binding for the plan
+	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
+	// leaves it out and says why in the warnings.
+	Sessions func(context.Context) (any, error)
 	// Back is when this API's runtime routes became ready, the server's
 	// record of it: GET /hosts and /progress count a host's silence from no
 	// earlier, the API taking agentd's calls only since then (review 528

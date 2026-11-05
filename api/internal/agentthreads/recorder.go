@@ -45,6 +45,22 @@ type Recorder struct {
 	mu      sync.Mutex
 	pending []stamped
 	hosts   []hostStamped
+	// A flush writes its batch with mu released. Every reader and writer of
+	// the state (Admit, RecordHost, State) waits while it is flushing, so a
+	// synchronous write is never stored before beats admitted ahead of it
+	// and no snapshot is built while the batch is neither in the buffer nor
+	// known to be stored (P-c2 pre-review M1, and its second round: a batch
+	// replayed over a store that has written and pruned it revived the
+	// pruned row). flushed is signalled when the flush ends.
+	flushing bool
+	flushed  *sync.Cond
+	// Tests only: beforeFlushWrite runs after a flush took its batch and
+	// before it writes it, afterFlushWrite after the write returned and
+	// before the flush ends, onFlushWait (mu held) each time a caller starts
+	// waiting for a flush.
+	beforeFlushWrite func()
+	afterFlushWrite  func()
+	onFlushWait      func()
 }
 
 func NewRecorder(store *Store, cfg Config) *Recorder {
@@ -72,6 +88,7 @@ func (r *Recorder) Record(b Beat) {
 func (r *Recorder) Admit(b Beat) (Decision, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.waitFlushLocked()
 	now := r.now().UTC()
 	st, err := r.snapshotLocked()
 	if err != nil {
@@ -108,7 +125,7 @@ func (r *Recorder) Admit(b Beat) (Decision, error) {
 	if olderTurn(t, b) {
 		return Decision{}, ErrOlderTurn
 	}
-	if b.Seq <= t.Seq {
+	if b.Seq <= t.Seq || olderEpoch(t, b) {
 		return Decision{Ignored: true}, nil
 	}
 	b.keyHash = t.KeyHash
@@ -119,13 +136,24 @@ func (r *Recorder) Admit(b Beat) (Decision, error) {
 
 // admitSync writes a registration, a migration, or a nonce replay. The
 // plaintext key is returned only to this caller.
+//
+// It writes the beats still buffered first, in order, in the same update:
+// every judgement here (the epoch, the sequence and the turn of a nonce
+// replay, a migration's, a key's state inherited from another row) reads
+// the state Admit read, the stored one with every admitted beat in it, and
+// a beat written now is never followed by an older one admitted before it
+// (P-c2 review round 2: M3 by a nonce replay, M2 a buffered count taken
+// twice). The buffer is emptied only once the update is written.
 func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
 	var decision Decision
 	var refused bool
+	var folded, foldRefusedThreads, foldRefusedHosts int
 	err := r.store.Update(func(st *State) error {
 		decision = Decision{}
 		refused = false
 		wipeKeys(st, now)
+		foldRefusedThreads, foldRefusedHosts = foldBatch(st, r.pending, r.hosts, now)
+		folded = len(r.pending) + len(r.hosts)
 		k := Key(b.Vendor, b.Thread)
 		t, seen := st.Threads[k]
 		// Again in the update itself: the stored thread may have changed
@@ -135,12 +163,12 @@ func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
 		}
 		if seen && nonceLive(t, b.RegisterNonce, now) {
 			decision.Key = t.RegisterKey
-			if b.Seq > t.Seq && !olderTurn(t, b) {
+			if b.Seq > t.Seq && !olderTurn(t, b) && !olderEpoch(t, b) {
 				b.keyHash = t.KeyHash
 				b.ThreadKey = ""
 				st.Apply(b, now)
 			} else {
-				decision.Ignored = b.Seq <= t.Seq
+				decision.Ignored = b.Seq <= t.Seq || olderEpoch(t, b)
 			}
 			return nil
 		}
@@ -165,7 +193,55 @@ func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
+	if folded > 0 {
+		r.pending, r.hosts = nil, nil
+		for i := 0; i < foldRefusedThreads; i++ {
+			noteThreadRefused()
+		}
+		for i := 0; i < foldRefusedHosts; i++ {
+			noteHostRefused()
+		}
+	}
 	return decision, nil
+}
+
+// foldBatch folds buffered thread and host beats into st in the order they
+// were admitted, as a flush does, and counts what did not fit.
+func foldBatch(st *State, batch []stamped, hosts []hostStamped, now time.Time) (refusedThreads, refusedHosts int) {
+	for _, e := range batch {
+		k := Key(e.beat.Vendor, e.beat.Thread)
+		_, seen := st.Threads[k]
+		var kin map[string]Thread
+		if !seen {
+			kin = st.keyRows(e.beat)
+		}
+		if !st.Apply(e.beat, e.at) {
+			continue
+		}
+		if !seen {
+			if ferr := st.fitNewThread(k); ferr != nil {
+				delete(st.Threads, k)
+				// A refused row's beat changes nothing: its key's other rows
+				// get back the copy they held before it (shareKeyMeta).
+				for kk, o := range kin {
+					if _, still := st.Threads[kk]; still {
+						st.Threads[kk] = o
+					}
+				}
+				st.ThreadsRefused++
+				st.LastThreadRefusal = now
+				refusedThreads++
+			}
+		}
+	}
+	for _, e := range hosts {
+		if ferr := st.fitNewHost(e.beat.Host); ferr != nil {
+			refusedHosts++
+			continue
+		}
+		st.ApplyHost(e.beat, e.at)
+	}
+	return refusedThreads, refusedHosts
 }
 
 func (r *Recorder) register(st *State, b Beat, now time.Time, d *Decision, refused *bool) error {
@@ -219,7 +295,7 @@ func (r *Recorder) migrate(st *State, b Beat, now time.Time, d *Decision) error 
 	// A client-supplied key is not adopted. The server issues the key.
 	b.ThreadKey = ""
 	b.keyHash = hash
-	if cur.Seq > 0 && (olderTurn(cur, b) || b.Seq <= cur.Seq) {
+	if cur.Seq > 0 && (olderTurn(cur, b) || b.Seq <= cur.Seq || olderEpoch(cur, b)) {
 		cur.KeyHash = hash
 		cur.RegisterNonce = b.RegisterNonce
 		cur.RegisterKey = plain
@@ -292,6 +368,7 @@ func wipeKeys(st *State, now time.Time) {
 func (r *Recorder) RecordHost(b HostBeat) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.waitFlushLocked()
 	st, err := r.snapshotLocked()
 	if err != nil {
 		return err
@@ -326,45 +403,38 @@ func (r *Recorder) enqueue(b Beat) {
 // passed, and that path writes only when a key is actually expired.
 func (r *Recorder) Flush() error {
 	r.mu.Lock()
+	r.waitFlushLocked()
 	batch := r.pending
 	hosts := r.hosts
 	r.pending = nil
 	r.hosts = nil
 	now := r.now().UTC()
-	r.mu.Unlock()
 	if len(batch) == 0 && len(hosts) == 0 {
+		r.mu.Unlock()
 		return r.wipeExpiredRegisterKeys(now)
+	}
+	r.flushing = true
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.flushing = false
+		r.flushCond().Broadcast()
+		r.mu.Unlock()
+	}()
+	if r.beforeFlushWrite != nil {
+		r.beforeFlushWrite()
 	}
 	cutoff := now.Add(-r.cfg.Retain)
 	var refusedThreads, refusedHosts int
 	err := r.store.Update(func(st *State) error {
-		refusedThreads, refusedHosts = 0, 0
 		wipeKeys(st, now)
-		for _, e := range batch {
-			k := Key(e.beat.Vendor, e.beat.Thread)
-			_, seen := st.Threads[k]
-			if !st.Apply(e.beat, e.at) {
-				continue
-			}
-			if !seen {
-				if ferr := st.fitNewThread(k); ferr != nil {
-					delete(st.Threads, k)
-					st.ThreadsRefused++
-					st.LastThreadRefusal = now
-					refusedThreads++
-				}
-			}
-		}
-		for _, e := range hosts {
-			if ferr := st.fitNewHost(e.beat.Host); ferr != nil {
-				refusedHosts++
-				continue
-			}
-			st.ApplyHost(e.beat, e.at)
-		}
+		refusedThreads, refusedHosts = foldBatch(st, batch, hosts, now)
 		st.Prune(cutoff, r.cfg, now)
 		return nil
 	})
+	if r.afterFlushWrite != nil {
+		r.afterFlushWrite()
+	}
 	if err == nil {
 		for i := 0; i < refusedThreads; i++ {
 			noteThreadRefused()
@@ -434,13 +504,36 @@ func (r *Recorder) Start(ctx context.Context, interval time.Duration) {
 	}()
 }
 
-// State is the stored state with the buffered events folded in.
+// flushCond is the condition a flush signals when it ends (mu held).
+func (r *Recorder) flushCond() *sync.Cond {
+	if r.flushed == nil {
+		r.flushed = sync.NewCond(&r.mu)
+	}
+	return r.flushed
+}
+
+// waitFlushLocked waits, mu held, until no flush is writing a batch.
+func (r *Recorder) waitFlushLocked() {
+	for r.flushing {
+		if r.onFlushWait != nil {
+			r.onFlushWait()
+		}
+		r.flushCond().Wait()
+	}
+}
+
+// State is the stored state with the buffered events folded in. It waits
+// for a flush in flight, like every other caller of snapshotLocked.
 func (r *Recorder) State() (State, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.waitFlushLocked()
 	return r.snapshotLocked()
 }
 
+// snapshotLocked reads the store and folds the buffer in. mu is held and no
+// flush is in flight: every batch taken from the buffer has been written or,
+// on failure, put back at its head.
 func (r *Recorder) snapshotLocked() (State, error) {
 	st, err := r.store.Load()
 	if err != nil {

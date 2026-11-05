@@ -200,6 +200,13 @@ func TestCollectorThreadsNoTitle(t *testing.T) {
 			t.Fatalf("the collector's list carries %s: %s", leak, body)
 		}
 	}
+	// P-c2: the collector's rows carry the session's projection like any
+	// list's (§3.3), and still no title.
+	for _, field := range []string{`"binding"`, `"session"`, `"token_kind":"collector"`, `"server_note"`} {
+		if !strings.Contains(body, field) {
+			t.Fatalf("the collector's list lacks %s: %s", field, body)
+		}
+	}
 	// The row leaves the list and is taken again: still no title.
 	if err := rec.store.Update(func(st *State) error { delete(st.Threads, Key("codex", uuid)); return nil }); err != nil {
 		t.Fatal(err)

@@ -5,6 +5,8 @@ import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { NowClock, useNow } from '../progress/progressClock'
 import { PlanLiveWork } from './PlanLiveWork'
+import { useAgentThreads } from '@/hooks/useAgentThreads'
+import type { SessionsRead } from './unlinkedSessionsModel'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
 import { useOwnerAsks } from './ownerAsksModel'
@@ -140,6 +142,14 @@ function ModulePage({ query, view, item, step, failed }: { query: ReturnType<typ
   </>
 }
 
+/** Work → Live with the sessions the shell already polls (GET /agent/threads, shared with Needs you). */
+function LiveTab({ view, stale }: { view: PlanSnapshot; stale: boolean }) {
+  const threads = useAgentThreads()
+  const sessions: SessionsRead = threads.data ? { state: 'ok', data: threads.data, stale: threads.isError }
+    : threads.isError ? { state: 'failed', error: threads.error instanceof Error ? threads.error.message : String(threads.error) } : { state: 'loading' }
+  return <PlanLiveWork view={view} stale={stale} sessions={sessions} />
+}
+
 function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<typeof usePlanAddress>; tab: WorkTab; query: ReturnType<typeof usePlanSnapshot>; count: ReturnType<typeof signoffCount>; node: string; failed: boolean }) {
   const now = useNow()
   const view = query.data
@@ -153,7 +163,7 @@ function Tabbed({ plan, tab, query, count, node, failed }: { plan: ReturnType<ty
         : 'Nothing is listed as last read, and nothing of it is counted.'}</p>}
     {tab === 'signoffs' && <WorkSignoffs count={count} view={view} stale={stale} />}
     {view && tab === 'round' && <RoundTab key={plan.root} view={view} selected={node} failed={failureOf(query)} />}
-    {view && tab === 'live' && <PlanLiveWork view={view} stale={stale} />}
+    {view && tab === 'live' && <LiveTab view={view} stale={stale} />}
     {view && tab === 'changes' && <PlanRecentChanges key={plan.root} view={view} />}
   </>
 }

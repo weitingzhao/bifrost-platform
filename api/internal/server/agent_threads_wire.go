@@ -2,8 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -23,6 +26,37 @@ func agentThreadNotice(title, body, kind, id string) approvalnotify.Message {
 	return approvalnotify.Message{
 		Title: title, Message: body, ClickURL: ConsoleNeedsYou,
 		Fallback: LookFallback, Kind: kind, ID: id,
+	}
+}
+
+// wireSessionBindings joins the thread list and the agent runtime
+// (R5:5.5-12 §3): a session's binding reads the runtime's external work
+// (read when asked, so a database connected later is read), and the plan
+// view's coverage counts the sessions. Called once both are wired.
+func (s *Server) wireSessionBindings() {
+	if s.agentThreads == nil {
+		return
+	}
+	s.agentThreads.UseWorks(func(ctx context.Context) ([]agentthreads.Work, error) {
+		if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil {
+			return nil, errors.New("the agent runtime database is not configured")
+		}
+		db := s.agentRuntime.api.DB
+		if late, ok := db.(agentrtapi.Ready); ok && !late.Ready() {
+			return nil, errors.New("the agent runtime database is not connected yet")
+		}
+		ids, err := store.ExternalIdentities(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]agentthreads.Work, 0, len(ids))
+		for _, x := range ids {
+			out = append(out, agentthreads.Work{ID: x.ID, Root: x.Root, Node: x.Node, State: x.State, Host: x.Host, Vendor: x.Vendor, Session: x.Session, Epoch: int(x.Epoch)})
+		}
+		return out, nil
+	})
+	if s.agentRuntime != nil && s.agentRuntime.api != nil {
+		s.agentRuntime.api.Sessions = func(ctx context.Context) (any, error) { return s.agentThreads.SessionCoverage(ctx) }
 	}
 }
 

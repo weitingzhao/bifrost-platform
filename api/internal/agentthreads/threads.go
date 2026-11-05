@@ -65,7 +65,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -80,7 +79,46 @@ const (
 	AfterTool    Event = "after_tool"
 	TurnEnd      Event = "turn_end"
 	WaitingOwner Event = "waiting_owner"
+	// SessionStart and PreCompact (R5:5.5-12 §4.1) are a session's side
+	// beats: one began (reason the source), one is about to compact (reason
+	// the trigger). Neither opens nor ends a turn, nor changes a tool's
+	// window or a wait; each is heard from and shown as the last event.
+	SessionStart Event = "session_start"
+	PreCompact   Event = "precompact"
 )
+
+// side says whether e is a side beat: it belongs to no turn.
+func (e Event) side() bool { return e == SessionStart || e == PreCompact }
+
+// idle says whether a stored thread is in no turn: it ended one, or it has
+// sent side beats only (a session started and never prompted).
+func (t Thread) idle() bool { return t.Event == TurnEnd || t.Event.side() }
+
+// sideReasons are the reasons a side beat may carry (§4.1; design §12 D2
+// adds fork, a forked session, which the hook treats as a startup).
+var sideReasons = map[Event]map[string]struct{}{
+	SessionStart: {"startup": {}, "resume": {}, "clear": {}, "compact": {}, "fork": {}},
+	PreCompact:   {"manual": {}, "auto": {}},
+}
+
+// ClientBind is what a client says of its session's binding (§3.1): a
+// diagnosis it reports, never a permission and never the server's
+// judgement. Its reason is from a closed set.
+type ClientBind struct {
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
+	At     string `json:"at,omitempty"`
+}
+
+var (
+	clientBindStates  = map[string]struct{}{"unlinked": {}, "refused": {}, "linked": {}}
+	clientBindReasons = map[string]struct{}{"no_context": {}, "no_description": {}, "node_rejected": {}, "not_dev_tree": {},
+		"register_failed": {}, "token_missing": {}, "identity_fallback": {}, "no_vendor_session": {}}
+	hostIDSources = map[string]struct{}{"file": {}, "env": {}, "hostname": {}}
+)
+
+// maxEpoch bounds a beat's epoch, a client's count of its session's lives.
+const maxEpoch = 1 << 30
 
 // Status is how a thread looks from here.
 type Status string
@@ -166,6 +204,19 @@ type Beat struct {
 	// an old client. It is not listed.
 	Sidebar        string `json:"sidebar,omitempty"`
 	sidebarPresent bool
+	// Session is the vendor's raw session id and Epoch the client's count of
+	// that session's lives (R5:5.5-12 §3.1): with the host and vendor, the
+	// key a session is bound by. An old client sends neither; its key is its
+	// thread id and epoch 0.
+	Session string `json:"session,omitempty"`
+	Epoch   int    `json:"epoch,omitempty"`
+	// ClientBind and HostIDSource are the client's diagnoses (§3.1, §4.3).
+	ClientBind   *ClientBind `json:"client_bind,omitempty"`
+	HostIDSource string      `json:"host_id_source,omitempty"`
+	// tokenKind is the kind of token that sent the beat, set by the server
+	// (collector, or the principal's role).
+	tokenKind string
+
 	// titlePresent: the body names a title, in any letter case
 	// encoding/json would read as one, whatever its value. A collector's
 	// beat names none (R5:5.5-12 §1.3).
@@ -237,6 +288,36 @@ type Thread struct {
 	OpenedTurn bool `json:"opened_turn,omitempty"`
 	// OpenedTurnAt is the last actual turn_start, independent of later events.
 	OpenedTurnAt time.Time `json:"opened_turn_at,omitempty"`
+	// Mark and MarkReason are the last side beat since the last turn event
+	// (§4.1): listed as the event and its reason, never read for the turn.
+	Mark       Event  `json:"mark,omitempty"`
+	MarkReason string `json:"mark_reason,omitempty"`
+	// Session and Epoch are the session's key with Host and Vendor (§3.1):
+	// the vendor's session id, the thread id for an old client.
+	Session string `json:"session,omitempty"`
+	Epoch   int    `json:"epoch,omitempty"`
+	// FirstSeenAt is when the server first heard this key, each epoch its
+	// own; Compactions the precompact beats it counted for the key, by
+	// sequence, so a resend is not counted again. Design §12 D3: PreCompact
+	// fires for a refused compaction too, so these are attempts.
+	FirstSeenAt time.Time `json:"first_seen_at,omitempty"`
+	Compactions int       `json:"compactions,omitempty"`
+	// ClientBind and HostIDSource are the client's last diagnoses, kept
+	// with the key and cleared with it; TokenKind the kind of token that
+	// sent the last beat.
+	ClientBind   *ClientBind `json:"client_bind,omitempty"`
+	HostIDSource string      `json:"host_id_source,omitempty"`
+	TokenKind    string      `json:"token_kind,omitempty"`
+	// MetaAt is when this row's copy of the key's state (FirstSeenAt,
+	// Compactions, ClientBind) last changed: its first sighting, a copy
+	// taken from another row, a counted precompact, a client diagnosis. A
+	// recovered row takes the copy with the newest MetaAt. At cannot order
+	// them: a side beat in a turn leaves At alone (review M1).
+	MetaAt time.Time `json:"meta_at,omitempty"`
+	// HeardAt is when the row's last beat was stored, a side beat included.
+	// At is the turn's clock, which a side beat in a turn or a wait leaves
+	// alone; retention reads the later of the two (lastHeard).
+	HeardAt time.Time `json:"heard_at,omitempty"`
 	// HostBound is set once a host-bound token (a collector) has written
 	// this session. Such a session supersedes sessions of its own host only
 	// (sessionSuperseded): a shared sidebar id does not reach another
@@ -300,75 +381,6 @@ type State struct {
 // Key is the map key of a thread: vendor and thread id.
 func Key(vendor, thread string) string { return vendor + "/" + thread }
 
-var (
-	idRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
-	vendRe  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	hostRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
-	workRe  = regexp.MustCompile(`^[A-Z][A-Z0-9]*-[0-9A-Za-z-]{1,24}$`)
-	toolRe  = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,96}$`)
-	turnRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
-	keyRe   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	maxText = 160
-)
-
-// Validate checks a beat before it is stored.
-func (b *Beat) Validate() error {
-	b.Thread = strings.TrimSpace(b.Thread)
-	b.Vendor = strings.TrimSpace(b.Vendor)
-	b.Host = strings.TrimSpace(b.Host)
-	b.Work = strings.TrimSpace(b.Work)
-	b.Tool = strings.TrimSpace(b.Tool)
-	b.Title = strings.Join(strings.Fields(b.Title), " ")
-	b.TurnID = strings.TrimSpace(b.TurnID)
-	b.Reason = strings.TrimSpace(b.Reason)
-	b.ThreadKey = strings.TrimSpace(b.ThreadKey)
-	b.RegisterNonce = strings.TrimSpace(b.RegisterNonce)
-	b.Sidebar = strings.TrimSpace(b.Sidebar)
-	switch {
-	case !idRe.MatchString(b.Thread):
-		return fmt.Errorf("thread: want 1-128 of [A-Za-z0-9._:-]")
-	case (b.sidebarPresent || b.Sidebar != "") && !idRe.MatchString(b.Sidebar):
-		return fmt.Errorf("sidebar: want 1-128 of [A-Za-z0-9._:-]")
-	case !vendRe.MatchString(b.Vendor):
-		return fmt.Errorf("vendor: want a lowercase name")
-	case !hostRe.MatchString(b.Host):
-		return fmt.Errorf("host: want a host name")
-	case b.Work != "" && !workRe.MatchString(b.Work):
-		return fmt.Errorf("work: want an id like W-54")
-	case b.Tool != "" && !toolRe.MatchString(b.Tool):
-		return fmt.Errorf("tool: want a tool name")
-	case b.ToolTimeoutS < 0 || b.ToolTimeoutS > maxToolTimeout:
-		return fmt.Errorf("tool_timeout_s: want 0..%d", maxToolTimeout)
-	case !turnRe.MatchString(b.TurnID):
-		return fmt.Errorf("turn_id: want 1-128 of [A-Za-z0-9._:-]")
-	case b.Seq == 0:
-		return fmt.Errorf("seq: want a sequence that starts at 1")
-	case b.ThreadKey != "" && !keyRe.MatchString(b.ThreadKey):
-		return fmt.Errorf("thread_key: want 64 hex characters")
-	case b.RegisterNonce != "" && !keyRe.MatchString(b.RegisterNonce):
-		return fmt.Errorf("register_nonce: want 64 hex characters")
-	}
-	switch b.Event {
-	case TurnStart, BeforeTool, AfterTool, TurnEnd, WaitingOwner:
-	default:
-		return fmt.Errorf("event: want turn_start, before_tool, after_tool, turn_end or waiting_owner")
-	}
-	if b.Event == WaitingOwner {
-		if _, ok := waitingReasons[b.Reason]; !ok {
-			return fmt.Errorf("reason: want permission_prompt, idle_prompt or elicitation")
-		}
-	} else {
-		b.Reason = ""
-	}
-	if b.Event != BeforeTool {
-		b.ToolTimeoutS = 0
-	}
-	if r := []rune(b.Title); len(r) > maxText {
-		b.Title = string(r[:maxText])
-	}
-	return nil
-}
-
 // ErrOtherHost: a host-bound beat names a thread another host holds. The
 // thread is not changed, whatever key or nonce the beat presents.
 var ErrOtherHost = errors.New("the thread is another host's")
@@ -403,12 +415,58 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	if b.keyHash != "" && t.KeyHash != "" && b.keyHash != t.KeyHash {
 		return false
 	}
+	// The session's key (§3.1): a new one starts its own first sighting,
+	// count and client diagnosis.
+	// An older epoch of the row's own session never replaces the current
+	// one, whatever kind of beat it is (review M3).
+	if seen && olderEpoch(t, b) {
+		return false
+	}
+	// The session's key (§3.1). A beat naming no session (an old client's)
+	// keeps the row's; a key new to the row takes what the platform already
+	// holds for it on another row (a thread id recovered as <session>:n,
+	// review M2), and only a key heard nowhere starts its own first sighting,
+	// count and client diagnosis.
+	session, epoch := beatKey(t, seen, b)
+	if !seen || t.Session != session || t.Epoch != epoch || t.Host != b.Host {
+		// The key is the beat's, host included: a side beat stores no host of
+		// its own, so the row takes it here, before the key's state is read
+		// or shared (P-c2 pre-review M3).
+		t.Host = b.Host
+		t.Session, t.Epoch, t.FirstSeenAt, t.Compactions, t.ClientBind, t.MetaAt = session, epoch, at, 0, nil, at
+		// What the state holds of the key: every beat admitted before this
+		// one is in it, and none after (a sync write folds the buffer first).
+		if held := st.heldKey(k, b.Host, b.Vendor, session, epoch); held != nil {
+			t.FirstSeenAt, t.Compactions, t.ClientBind, t.MetaAt = held.FirstSeenAt, held.Compactions, held.ClientBind, held.MetaAt
+		}
+	}
+	shared := false
+	if b.ClientBind != nil {
+		cb := *b.ClientBind
+		t.ClientBind = &cb
+		t.MetaAt = at
+		shared = true
+	}
+	if b.HostIDSource != "" {
+		t.HostIDSource = b.HostIDSource
+	}
+	if b.tokenKind != "" {
+		t.TokenKind = b.tokenKind
+	}
+	if b.Event.side() {
+		return st.applySide(k, t, seen, b, at, shared)
+	}
+	t.Mark, t.MarkReason = "", ""
 	// A headless wrapper's progress beat is not the end of a tool call whose
 	// declared timeout is still running. Keep the declared window.
 	if seen && b.Event == AfterTool && b.Tool == "headless-progress" && b.TurnID == t.TurnID &&
 		t.Event == BeforeTool && t.ToolTimeoutS > 0 && at.Sub(t.At) < time.Duration(t.ToolTimeoutS)*time.Second {
 		t.Seq = b.Seq
+		t.HeardAt = at
 		st.Threads[k] = t
+		if shared {
+			st.shareKeyMeta(k, t)
+		}
 		return true
 	}
 	if seen && t.TurnID != "" && b.TurnID != t.TurnID {
@@ -445,18 +503,23 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 		t.OpenedTurnAt = at
 	}
 	t.At = at
+	t.HeardAt = at
 	// A new event is a different silence. A claim for the previous one must
 	// not block it, and must not be completed against the new timestamp.
 	t.SilenceClaimID = ""
 	t.SilenceClaimExpires = time.Time{}
 	st.Threads[k] = t
+	if shared {
+		st.shareKeyMeta(k, t)
+	}
 	return true
 }
 
 // olderTurn reports that b is not the current turn and is not a turn_start
-// that opens a turn this thread has not left.
+// that opens a turn this thread has not left. A side beat belongs to no
+// turn, so it is never an older turn's.
 func olderTurn(t Thread, b Beat) bool {
-	if t.TurnID == "" || b.TurnID == t.TurnID {
+	if t.TurnID == "" || b.TurnID == t.TurnID || b.Event.side() {
 		return false
 	}
 	for _, id := range t.PriorTurns {
@@ -512,11 +575,11 @@ func (st *State) ApplyHost(b HostBeat, at time.Time) {
 // by fitNewHost.
 func (st *State) Prune(cutoff time.Time, cfg Config, now time.Time) {
 	for k, t := range st.Threads {
-		if t.At.Before(cutoff) {
+		if lastHeard(t).Before(cutoff) {
 			delete(st.Threads, k)
 		}
 	}
-	st.evictFinishedThreads()
+	st.evictFinishedThreads("")
 	for k, h := range st.Hosts {
 		if h.At.Before(cutoff) && !cfg.hostIsLost(h, now) {
 			delete(st.Hosts, k)
@@ -526,12 +589,12 @@ func (st *State) Prune(cutoff time.Time, cfg Config, now time.Time) {
 
 // evictFinishedThreads removes the oldest finished threads until the cap
 // fits. It never removes a thread that has not ended.
-func (st *State) evictFinishedThreads() {
+func (st *State) evictFinishedThreads(keep string) {
 	for len(st.Threads) > maxThreads {
 		victim := ""
 		var oldest time.Time
 		for k, t := range st.Threads {
-			if t.Event != TurnEnd {
+			if !t.idle() || k == keep {
 				continue
 			}
 			if victim == "" || t.At.Before(oldest) {
@@ -549,7 +612,11 @@ func (st *State) evictFinishedThreads() {
 // thread stays. When every other slot is mid-turn, it returns ErrThreadFull
 // and leaves the map unchanged apart from any finished threads it removed.
 func (st *State) fitNewThread(newKey string) error {
-	st.evictFinishedThreads()
+	// The new thread is never its own victim: a row opened by a side beat is
+	// stored finished, and evicting it would confirm a registration whose
+	// key, nonce and sequence are not kept, so a retry counts again (P-c2
+	// pre-review M2). It is refused instead and the update rolls back.
+	st.evictFinishedThreads(newKey)
 	if len(st.Threads) <= maxThreads {
 		return nil
 	}
@@ -639,33 +706,6 @@ func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body st
 	}
 	body = strings.Join(parts, " · ") + ". Nothing was restarted."
 	return title, body
-}
-
-// Validate checks a host heartbeat.
-func (b *HostBeat) Validate() error {
-	b.Host = strings.TrimSpace(b.Host)
-	if !hostRe.MatchString(b.Host) {
-		return fmt.Errorf("host: want a host name")
-	}
-	if b.Vendors == nil {
-		b.Vendors = map[string]VendorReport{}
-	}
-	for name := range b.Vendors {
-		if !knownVendor(name) {
-			return fmt.Errorf("vendor: want claude, cursor or codex")
-		}
-	}
-	b.Vendors = fillVendors(b.Vendors)
-	return nil
-}
-
-func knownVendor(name string) bool {
-	for _, v := range Vendors {
-		if v == name {
-			return true
-		}
-	}
-	return false
 }
 
 func fillVendors(in map[string]VendorReport) map[string]VendorReport {

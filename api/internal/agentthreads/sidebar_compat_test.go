@@ -135,6 +135,10 @@ func TestSidebarStateRoundOneRollback(t *testing.T) {
 	got := upgraded.Threads[Key("claude", "session")]
 	want := st.Threads[Key("claude", "session")]
 	want.OpenedTurnAt = time.Time{}
+	// R5:5.5-12 P-c2's fields are new too: a binary from before drops them,
+	// and the next beat after an upgrade back starts the key's sighting again
+	// (a row without MetaAt is ordered by At, metaTime).
+	want.Session, want.FirstSeenAt, want.MetaAt, want.HeardAt = "", time.Time{}, time.Time{}, time.Time{}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("round-one rollback lost old data: %+v", got)
 	}
