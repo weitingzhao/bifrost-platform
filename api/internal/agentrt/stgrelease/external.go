@@ -88,14 +88,32 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 	}
 	ledger, ok := c.ledger().(CoverageLedger)
 	if ok && c.Sources.ReleaseEvidence != nil {
-		for _, m := range store.StgCoverageCandidates(s) {
+		members := store.StgCoverageCandidates(s)
+		st := coverStats{members: len(members), evidence: len(s.Evidence)}
+		start := time.Now()
+		defer func() { c.logCover(start, st) }()
+		for _, m := range members {
 			for _, evidence := range orderedEvidence(s) {
 				id, p := evidence.Record.String("evidence"), evidence.Record.String("P")
+				st.pairs++
+				// R5:5.7-5: a pair known not to contain R would end below in
+				// !HasR; it is skipped. Any other pair, including one that
+				// appears after a reread, is read in full as before.
+				if c.knownAbsent(p, m.R) {
+					st.known++
+					continue
+				}
 				at := c.now()
+				st.full++
 				ev, err := c.Sources.ReleaseEvidence(ctx, s, m, p)
 				if err != nil {
+					st.fullErr++
 					errs = append(errs, err)
 					continue
+				}
+				if ev.Head == p && !ev.Unreadable && !ev.HasR {
+					c.rememberAbsent(p, m.R) // a complete read: P's history has no R
+					st.remembered++
 				}
 				if ev.Head != p || ev.Unreadable || !ev.HasR || (s.InMain[m.Op] != m.R && ev.Validity != "effective") {
 					continue
@@ -104,9 +122,12 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 					return errors.Join(errs...)
 				}
 				ev.ReadAt = at
-				_, err = ledger.Cover(ctx, s.LastSeq, id, m, ev)
+				covered, err := ledger.Cover(ctx, s.LastSeq, id, m, ev)
 				if err != nil {
 					errs = append(errs, err)
+				}
+				if covered {
+					st.covers++
 				}
 				s, err = c.ledger().Read(ctx)
 				if err != nil {

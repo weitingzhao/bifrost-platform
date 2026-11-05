@@ -92,6 +92,8 @@ type Controller struct {
 	losses              []WindowLoss
 	cleaned             map[string]bool
 	sent                map[string]*sentCIWatch
+	absent              map[containKey]bool  // P's history has no R; never changes (coverreads.go)
+	coverLogged         time.Time            // last sampled coverage line (coverreads.go)
 	notice              func(string, ...any) // nil: slog.Warn
 }
 
