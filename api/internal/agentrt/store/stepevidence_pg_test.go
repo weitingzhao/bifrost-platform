@@ -210,11 +210,14 @@ func TestPlanStandingStepEvidence(t *testing.T) {
 		step, rule string
 		applied    bool
 	}{
-		"step_tasks, not holding":     {s2, `{"step_tasks":{"state":"accepted"}}`, true},
-		"landed and settled":          {s3, `{"all":[{"step_landed":{}},{"step_stg_settled":{}}]}`, true},
-		"step_tasks, holding already": {s1, `{"step_tasks":{"state":"accepted"}}`, false},
-		"beside a manual atom":        {"R2:2.1-4", `{"any":[{"step_landed":{}},{"manual":"by hand"}]}`, false},
-		"beside a CI run":             {"R2:2.1-5", `{"all":[{"step_landed":{}},{"ci_succeeded":{"repo":"bifrost-platform","commit":"` + commitA + `"}}]}`, false},
+		// R5:5.5-15: the aggregate atoms stand behind the Owner's sign-off, so
+		// such a rule never holds when it is set; "holds already" is shown
+		// with the step's own task instead.
+		"step_tasks, not holding":   {s2, `{"all":[{"step_tasks":{"state":"accepted"}},{"owner_signoff":"s2"}]}`, true},
+		"landed and settled":        {s3, `{"all":[{"step_landed":{}},{"step_stg_settled":{}},{"owner_signoff":"s3"}]}`, true},
+		"its task, holding already": {s1, `{"task_accepted":"` + t1 + `"}`, false},
+		"beside a manual atom":      {"R2:2.1-4", `{"all":[{"any":[{"step_landed":{}},{"manual":"by hand"}]},{"owner_signoff":"4"}]}`, false},
+		"beside a CI run":           {"R2:2.1-5", `{"all":[{"step_landed":{}},{"ci_succeeded":{"repo":"bifrost-platform","commit":"` + commitA + `"}},{"owner_signoff":"5"}]}`, false},
 	} {
 		cards := len(a.cards)
 		out := setRule("k-"+name, c.step, c.rule)

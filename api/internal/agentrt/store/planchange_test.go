@@ -157,6 +157,9 @@ func TestPlanChangeOutside(t *testing.T) {
 		"a node there is not":              {store.PlanChange{Op: "retitle", Node: "R2:9", Title: "x"}, "there is no"},
 		"a rule that does not parse":       {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"nonsense":1}`)}, "does not parse"},
 		"an op there is not":               {store.PlanChange{Op: "delete", Node: s3}, "one of"},
+		// R5:5.5-15: a rule counting the step's own work needs the sign-off gate.
+		"step work without a sign-off":  {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`)}, "R5:5.5-15"},
+		"step work, sign-off in an any": {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"any":[{"step_landed":{}},{"owner_signoff":"r"}]}`)}, "owner_signoff among its parts"},
 	} {
 		_, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "bad", []store.PlanChange{c.change}, a.ask)
 		if perr == nil || !containsFold(perr.Error(), c.has) {
@@ -166,6 +169,10 @@ func TestPlanChangeOutside(t *testing.T) {
 	if after := w.footprint(t); after != before || len(a.cards) != 1 {
 		t.Fatalf("refused changes left something (%s -> %s) or asked (%d cards)", before, after, len(a.cards))
 	}
+	// The same step work behind the sign-off gate is not refused (it is put to the Owner like any other change here).
+	gated := json.RawMessage(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}},{"owner_signoff":"s3 accepted"}]}`)
+	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-gated", root, "gated", []store.PlanChange{{Op: "set_done_rule", Node: s3, Rule: gated}}, a.ask)
+	ok(t, err)
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k9", root, "x", []store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, nil)
 	is(t, err, store.ErrAsk)
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k10", "R9", "x", []store.PlanChange{{Op: "retitle", Node: s2, Title: "y"}}, a.ask)
@@ -649,5 +656,42 @@ func TestMoveVerificationMeetsItsHeldSubject(t *testing.T) {
 	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
 	if err == nil || errors.Is(err, store.ErrBusy) || !containsFold(err.Error(), "must sit where its subject") {
 		t.Fatalf("the move once the subject is free: %v", err)
+	}
+}
+
+// R5:5.5-15 review round 1: a proposal queued before the sign-off gate
+// shipped, approved after it, is refused where the rule is written; the
+// approval of a rule change is not the Owner's sign-off on the step.
+func TestPlanChangeQueuedUngatedRuleIsRefusedOnApply(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	a := &asker{}
+	// A proposal made the usual way, so the writer and its card exist.
+	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-item", root, "a new item", []store.PlanChange{
+		{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"}}, a.ask)
+	ok(t, err)
+	q, err := a.ask(ctx, store.Card{})
+	ok(t, err)
+	var ungated map[string]any
+	ok(t, json.Unmarshal([]byte(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`), &ungated))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_change_proposed", Actor: "thread:s1",
+			Body: map[string]any{"changes": []any{map[string]any{"op": "set_done_rule", "node": s3, "rule": ungated}},
+				"reason": "queued before the sign-off gate", "standing": false, "token": "operator", "question_id": q}})
+		return aerr
+	}))
+	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	ok(t, err)
+	var rule string
+	ok(t, w.rt.QueryRow(ctx, `SELECT done_rule_json::text FROM agentrt.plan_node WHERE plan_node_id = $1`, s3).Scan(&rule))
+	if rule != "{}" {
+		t.Fatalf("the queued ungated rule was written: %s", rule)
+	}
+	var decision, why string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'decision', COALESCE(body_json->>'error', '') FROM agentrt.event
+	  WHERE event_type = 'plan_change_decided' AND body_json->>'question_id' = $1`, q).Scan(&decision, &why))
+	if decision != "failed" || !containsFold(why, "R5:5.5-15") {
+		t.Fatalf("decision %q (%s), want failed naming R5:5.5-15", decision, why)
 	}
 }

@@ -102,8 +102,10 @@ func checkChanges(root, reason string, changes []PlanChange) error {
 		case "set_done_rule":
 			if c.Node == "" || len(c.Rule) == 0 {
 				bad = "names the node and the rule"
-			} else if _, err := plan.Parse(c.Rule); err != nil {
+			} else if rule, err := plan.Parse(c.Rule); err != nil {
 				bad = "has a rule that does not parse: " + err.Error()
+			} else if !rule.SignoffGated() {
+				bad = "has a rule that " + plan.SignoffGateRule
 			}
 			for _, b := range c.Bind {
 				if (b.Kind != "approval" && b.Kind != "question") || b.Ref == "" {
@@ -516,6 +518,12 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 			var doc []byte
 			if doc, err = canonRule(c.Rule); err == nil {
 				parsed, _ := plan.Parse(doc)
+				// Checked where the rule is written too, not only when it is
+				// proposed: a proposal queued before this check, approved
+				// after, is refused here (R5:5.5-15 review round 1).
+				if !parsed.SignoffGated() {
+					return nil, invalid("%s: the rule %s", c.Node, plan.SignoffGateRule)
+				}
 				if err = checkBoundRule(ctx, tx, c.Node, parsed); err != nil {
 					return nil, err
 				}
