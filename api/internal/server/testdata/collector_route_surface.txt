@@ -79,6 +79,7 @@ deny	GET /api/v1/agentrt/missions/{id}
 deny	POST /api/v1/agentrt/missions/{id}/tasks
 deny	GET /api/v1/agentrt/plan
 deny	GET /api/v1/agentrt/plan-view
+deny	GET /api/v1/agentrt/plan-pace
 deny	POST /api/v1/agentrt/plan/imports
 deny	POST /api/v1/agentrt/plan/proposals
 deny	GET /api/v1/agentrt/plan/{id}

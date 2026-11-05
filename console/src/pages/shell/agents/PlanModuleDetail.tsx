@@ -17,6 +17,7 @@ import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
 import { explainBanner } from './explainModel'
 import { viewOldReason } from './readAge'
+import { StepSignoffHere } from './StepSignoffHere'
 import { HowRead, StepWhy, WhyBanner } from './StepWhy'
 import { stepJudge, withWhy } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
@@ -109,8 +110,8 @@ function Dot({ state }: { state: CellState }) {
  * step in progress, and the step an address names, open into a card: the rest of its own work (for a step in
  * progress, this is what runs now), its done rule in words, external work and the records its rule names.
  */
-function Stage({ cell, scope, view, runtime, selected, last, now }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshot; runtime: RuntimeTasks; selected: boolean; last: boolean
-  now: number }) {
+function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshot; runtime: RuntimeTasks; selected: boolean; last: boolean
+  now: number; stale: boolean }) {
   // While work on it runs, the live state stays on top and what is left to finish sits at the bottom, folded (R7).
   const running = cell.now?.kind === 'running'
   // Latest task is the newest of all the step's own work (the one Review is of), never an older one. A task the rows in
@@ -167,6 +168,7 @@ function Stage({ cell, scope, view, runtime, selected, last, now }: { cell: Step
         <span className="text-xs text-muted-foreground">Done when</span>
         {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
       </div>}
+      {open && <StepSignoffHere node={cell.id} label={cell.label} state={cell.step ?? ''} rule={view.nodes.find(n => n.plan_node_id === cell.id)?.done_rule_json} now={now} viewStale={stale} />}
       {open && cell.external.length > 0 && <div className="flex min-w-0 flex-col gap-0.5 text-[13px]">
         <span className="text-xs text-muted-foreground">External work on this step</span>
         <ul className="m-0 list-none space-y-0.5 p-0">{cell.external.map((line, i) => <li key={i}>{line}</li>)}</ul>
@@ -386,7 +388,7 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null, readA
         {banner && <WhyBanner banner={banner} readAgain={readAgain} />}
         {row.cells.length === 0 ? <p className="m-0 text-sm">No steps in this module.</p>
           : <ol className="m-0 flex min-w-0 list-none flex-col p-0">{row.cells.map((cell, i) =>
-            <Stage key={cell.id} cell={cell} scope={scope} view={view} runtime={runtime} selected={cell.id === step} last={i === row.cells.length - 1} now={now} />)}</ol>}
+            <Stage key={cell.id} cell={cell} scope={scope} view={view} runtime={runtime} selected={cell.id === step} last={i === row.cells.length - 1} now={now} stale={stale} />)}</ol>}
         <div className="flex min-w-0 flex-col gap-1.5 border-t border-[var(--table-rule)] pt-2.5">
           {row.dropped > 0 && <p className={note}>{plural(row.dropped, 'dropped step')} not listed.</p>}
           <p className={note}>Latest task is the step's newest own work, not its checks: a task's role is the runtime's while it lists the task (unfinished, or among its latest 20 ended), else the title the controller gives a check, else Unknown. Review is the newest check of that task only (by the task its title names); its verdict is its attempt's conclusion (done passes) while the runtime lists it among its latest 20 ended tasks. A check the controller closed without using its result is not told apart.</p>

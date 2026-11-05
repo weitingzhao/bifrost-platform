@@ -186,6 +186,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("assess"), cfg).Post("/assessments/{kind}/{id}", a.requestAssessment)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
+		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
 		r.With(external, cfg).Post("/external-work", a.registerExternalWork)
 		r.With(external, cfg).Post("/external-work/{id}/events", a.postExternalEvent)

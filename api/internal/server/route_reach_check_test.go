@@ -60,6 +60,9 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/landing/{op}/material":             {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/agentrt/landing/grants/{grant_id}/revoke": {"admin"},
 	"GET /api/v1/agentrt/plan-view":                         {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// R5:5.5-13 / 5.5-17 slice 1: a round's pace and its hours with no
+	// registered work, for every reader, as plan-view is (read-only).
+	"GET /api/v1/agentrt/plan-pace": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).
 	"GET /api/v1/agentrt/landing/cards/{question_id}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},

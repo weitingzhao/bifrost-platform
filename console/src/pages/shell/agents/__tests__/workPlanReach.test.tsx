@@ -93,8 +93,9 @@ describe('Work → Plan opens the newest round', () => {
     expect(roundNote()).toHaveTextContent('newest in the runtime')
     // The shell's read is reused: no request of its own for GET /progress (the summary's sign-off count reads it from the
     // cache too, R5:5.5-2), and no plan view of an earlier round. Besides the plan view, the summary reads this round's
-    // GET /plan for its sign-off count, and no other round's (R5:5.5-4).
-    expect(urls().filter(u => u !== '/api/v1/agentrt/plan?root=R5')).toEqual(planViewUrls())
+    // GET /plan for its sign-off count, and no other round's (R5:5.5-4), and its pace line reads this round's GET
+    // /plan-pace (R5:5.5-13).
+    expect(urls().filter(u => u !== '/api/v1/agentrt/plan?root=R5' && u !== '/api/v1/agentrt/plan-pace?root=R5')).toEqual(planViewUrls())
     expect(urls().some(u => u.endsWith('/agentrt/progress'))).toBe(false)
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1']))
   })

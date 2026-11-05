@@ -46,7 +46,9 @@ function SignOffAction({ node, label, signoffRef, named, reviewContext, candidat
   // Why this sign-off cannot be sent: a step's as well as an acceptance's (R5:5.5-4 review: a step row listed as last
   // read kept its button and its POST; unavailable reached only the acceptance path).
   const block = unavailable ?? evidenceBlock
-  const identity = JSON.stringify([auth.token, auth.caps?.role, blocked, environment, node, label, signoffRef, reviewContext, evidence])
+  // A change in why it cannot be sent (a read gone stale, then fresh again) voids an open confirmation too (review of
+  // R5:5.5-13: the step card's cached step stayed signable while its refresh hung).
+  const identity = JSON.stringify([auth.token, auth.caps?.role, blocked, environment, node, label, signoffRef, reviewContext, evidence, unavailable ?? ''])
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   // Latch invalidation while reviewing, without touching an in-flight or recorded sign-off.
   if (phase.kind === 'confirm' && phase.identity !== null && phase.identity !== identity) {
@@ -115,10 +117,12 @@ export function SignOffButtons({ node, label, refs, named, state = '', title = '
   return <div className="flex min-w-0 flex-col gap-1">{refs.map(ref => <SignOffButton key={ref} node={node} label={label} signoffRef={ref} named={named} reviewContext={JSON.stringify([state, title, refs])} unavailable={unavailable} />)}</div>
 }
 
-export function StepSignoffControls({ label, state, signoffs }: { label: string; state: string; signoffs: StepSignoffs }) {
+export function StepSignoffControls({ label, state, signoffs, unavailable }: { label: string; state: string; signoffs: StepSignoffs
+  /** Why signing is off here (its read is old, R5:5.5-13 review); unset: as each button judges it. */
+  unavailable?: string }) {
   const open = CLOSED.has(state) ? [] : unsignedRefs(signoffs)
   return <div data-step-signoffs={signoffs.node} className="mt-1 flex w-full min-w-0 flex-col gap-1">
     {signoffs.signed.map(s => <p key={`${s.ref}-${s.at}`} className="ops-decision-receipt m-0 break-words text-xs text-muted-foreground" data-signed-off={s.ref}>{signedLine(s)}</p>)}
-    {open.map(ref => <SignOffButton key={ref} node={signoffs.node} label={label} signoffRef={ref} named={signoffs.refs.length > 1} reviewContext={JSON.stringify([state, signoffs])} />)}
+    {open.map(ref => <SignOffButton key={ref} node={signoffs.node} label={label} signoffRef={ref} named={signoffs.refs.length > 1} reviewContext={JSON.stringify([state, signoffs])} unavailable={unavailable} />)}
   </div>
 }

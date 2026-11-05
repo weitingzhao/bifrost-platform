@@ -8,6 +8,7 @@ import { responsibility, validity } from './planSnapshotModel'
 import type { PlanAddress } from './usePlanSnapshot'
 import { workTabHref } from './workViewModel'
 import { NeedsCleanupEntry } from './NeedsCleanup'
+import { PlanPaceLine } from './PlanPaceLine'
 import { cleanupBreakdown } from './needsCleanupModel'
 import { useNeedsCleanup } from './useNeedsCleanup'
 import { runtimeTasks } from './moduleDetailModel'
@@ -101,6 +102,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
         {stale ? `Stale · last read ${clock(read)}` : `plan-view ${view.root} · read ${since(read, now)} ago`}</span>
     </div>
     <p data-summary-sentence className="m-0 text-lg font-[650] leading-[1.35] tracking-[-.01em] [text-wrap:pretty] @2xl:text-xl">{mainline.text}{others && ` ${others}`}</p>
+    <PlanPaceLine root={view.root} />
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
       <span data-summary-mainline>{labels.length ? `Mainline ${labels.join(' → ')}` : 'Mainline Unknown'}</span>
       <a href={workTabHref('signoffs', plan.root, named)} data-summary-signoffs className="text-inherit underline-offset-2 hover:underline"

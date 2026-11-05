@@ -461,8 +461,9 @@ describe('Work → Plan with a module address', () => {
     expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Questions not read yet')
     expect(urls().length).toBeGreaterThan(0)
     // The detail reads nothing of its own: the page's own reads are the plan view and, for the summary's sign-off
-    // count (R5:5.5-2), the rounds' GET /plan and the shell's GET /progress that lists them.
-    const pageReads = (u: string) => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || u === '/api/v1/agentrt/progress'
+    // count (R5:5.5-2), the rounds' GET /plan and the shell's GET /progress that lists them, and for the summary's pace
+    // line this round's GET /plan-pace (R5:5.5-13).
+    const pageReads = (u: string) => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || u === '/api/v1/agentrt/progress' || u === '/api/v1/agentrt/plan-pace?root=R5'
     expect(urls().every(pageReads)).toBe(true)
     const before = urls().length
     // With the shell's lists in the cache the detail shows them, still without a request of its own.
@@ -475,6 +476,34 @@ describe('Work → Plan with a module address', () => {
     await act(async () => { window.location.hash = '#work?root=R5'; window.dispatchEvent(new Event('hashchange')) })
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: /^Open module 5\.1 ·/ })))
+  })
+
+  it("shows the Sign off on the card of a step its own address names, with nothing to unfold (11-05)", async () => {
+    // 11-05: the Owner opened R5:5.13-3's own address, read "You sign off …" under Done when and found no button. The
+    // address a step's link gives must carry its Sign off; the card reads that step alone, GET /plan/{id}, not the plan.
+    const raw = r5Raw()
+    const gated = raw.nodes.find(n => n.plan_node_id === 'R5:5.1-4')!
+    Object.assign(gated, { state: 'active', done_rule_json: { all: [{ step_tasks: { state: 'accepted', min: 1 } }, { owner_signoff: 'result' }] } })
+    fetcher.mockImplementation(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (u.includes('/agentrt/plan-view?root=R5')) return new Response(JSON.stringify(raw), { status: 200 })
+      if (u === '/api/v1/agentrt/plan/R5:5.1-4') return new Response(JSON.stringify({ ...gated, signoffs: [] }), { status: 200 })
+      return new Response('{}', { status: 599 })
+    })
+    page('#work?section=plan&root=R5&node=R5%3A5.1-4')
+    const row = await waitFor(() => { const li = document.getElementById('module-detail-step-R5:5.1-4'); expect(li).not.toBeNull(); return li! })
+    expect(row).toHaveAttribute('aria-current', 'step')
+    expect(await within(row).findByRole('button', { name: 'Sign off' })).toBeVisible()
+    expect(urls()).toContain('/api/v1/agentrt/plan/R5:5.1-4')
+    expect(urls().filter(u => u.startsWith('/api/v1/agentrt/plan/'))).toEqual(['/api/v1/agentrt/plan/R5:5.1-4'])
+    // A step whose rule waits on no sign-off reads nothing of its own (the plan as it is: no step of 5.1 waits on one).
+    cleanup(); client.clear(); fetcher.mockClear()
+    fetcher.mockImplementation(async (input: RequestInfo | URL) => String(input).includes('/agentrt/plan-view?root=R5')
+      ? new Response(JSON.stringify(r5Raw()), { status: 200 }) : new Response('{}', { status: 599 }))
+    page('#work?section=plan&root=R5&node=R5%3A5.1-3')
+    await waitFor(() => expect(document.getElementById('module-detail-step-R5:5.1-3')).toHaveAttribute('aria-current', 'step'))
+    expect(within(document.getElementById('module-detail-step-R5:5.1-3')!).queryByRole('button', { name: 'Sign off' })).toBeNull()
+    expect(urls().some(u => u.startsWith('/api/v1/agentrt/plan/'))).toBe(false)
   })
 
   it('shows Unknown, not a module, when the plan view cannot be read, and Stale once a read fails after one succeeded', async () => {
