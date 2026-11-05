@@ -774,11 +774,13 @@ func (c *Controller) every(ctx context.Context, wg *sync.WaitGroup, name string,
 			case <-t.C:
 			}
 			var err error
+			start := time.Now()
 			completed := safego.Do(name, func() {
 				if err = pass(); err != nil && ctx.Err() == nil {
 					c.logf("%s: %v", name, err)
 				}
 			})
+			c.slow(slowPassLog, start, "%s: pass", name)
 			if !completed {
 				c.logf("%s: a pass panicked; the loop goes on", name)
 				err = errPanicked

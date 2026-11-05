@@ -132,8 +132,10 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	for i, id := range pending {
 		o := state.Operations[id]
 		one, done := drillWorkShare(ctx, len(pending)-i)
+		start := time.Now()
 		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo, &window))
 		done()
+		c.slow(slowStepLog, start, "agentrt-landing-drill: %s %s", repo, id)
 	}
 	// No current rule means no new claims, but recovery and bounds above run.
 	enabled := false

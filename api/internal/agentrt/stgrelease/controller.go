@@ -168,13 +168,17 @@ func (c *Controller) Pass(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
+	steps := newPassSteps(time.Now())
+	defer steps.done()
 	s, err := c.ledger().Read(ctx)
+	steps.mark("read", time.Now())
 	if err != nil {
 		return err
 	}
 	// Archive cleanup is retried even for closed batches and older tries.
 	// Failure does not hold verification or change its result.
 	cleanupErr := c.cleanup(ctx, s)
+	steps.mark("cleanup", time.Now())
 	id, b := openBatch(s)
 	if c.holder != nil && (b == nil || c.holder.batch != id || c.holder.try != max(b.Try, 1) || !c.Policy().Live) {
 		cleanupErr = errors.Join(cleanupErr, c.release())
@@ -205,24 +209,33 @@ func (c *Controller) Pass(ctx context.Context) error {
 	}
 	// R5:5.7-2: a red verdict that arrives after a send opens the same CI
 	// block the final gate would have; a read failure never stops the pass.
-	if wrote, err := c.watchSentCI(ctx, s); wrote {
-		return errors.Join(cleanupErr, err)
-	} else if err != nil {
-		cleanupErr = errors.Join(cleanupErr, err)
+	wrote, sentErr := c.watchSentCI(ctx, s)
+	steps.mark("sent_ci", time.Now())
+	if wrote {
+		return errors.Join(cleanupErr, sentErr)
+	} else if sentErr != nil {
+		cleanupErr = errors.Join(cleanupErr, sentErr)
 	}
 	if b != nil {
-		return errors.Join(cleanupErr, c.batch(ctx, s, id, b))
+		batchErr := c.batch(ctx, s, id, b)
+		steps.mark("batch "+b.Phase, time.Now())
+		return errors.Join(cleanupErr, batchErr)
 	}
 	if rs := unblockRecorded(s); len(rs) > 0 {
-		return errors.Join(cleanupErr, c.write(ctx, s, rs...))
+		unblockErr := c.write(ctx, s, rs...)
+		steps.mark("unblock", time.Now())
+		return errors.Join(cleanupErr, unblockErr)
 	}
 	for _, block := range s.Blocks {
 		if block.IsOpen() {
-			return errors.Join(cleanupErr, c.readBlock(ctx, s, block))
+			blockErr := c.readBlock(ctx, s, block)
+			steps.mark("block", time.Now())
+			return errors.Join(cleanupErr, blockErr)
 		}
 	}
 	if c.DB != nil && c.Policy().Live {
 		_, err = store.OpenStgBatch(ctx, c.DB, c.Tenant, func() bool { return c.Policy().Live })
+		steps.mark("open_batch", time.Now())
 	}
 	return errors.Join(cleanupErr, err)
 }

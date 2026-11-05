@@ -65,11 +65,18 @@ func (s *Server) startSTGRelease(ctx context.Context, c *controller.Controller) 
 			if release == nil {
 				release = s.newSTGRelease(ctx, c, func() stgrelease.WindowPolicy { return *policy.Load() })
 			}
+			// R5:5.7-5: the two passes share one tick and one lock; a slow tick
+			// says which of them took the time (logging only).
+			start := time.Now()
 			if err := release.ExternalPass(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("STG external release pass", "error", err)
 			}
+			external := time.Since(start)
 			if err := release.Pass(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("STG release pass", "error", err)
+			}
+			if total := time.Since(start); total >= 5*time.Second {
+				slog.Info("STG release tick took "+total.Round(time.Millisecond).String(), "external", external.Round(time.Millisecond).String())
 			}
 		}
 		safego.Do("agentrt-stg-release-pass", pass)
