@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { plainTitle } from '@/api/agentRuntimePlan'
+import { plainTitle, type SignoffWait } from '@/api/agentRuntimePlan'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import type { AcceptanceSignoff } from '@/api/planSnapshotSchema'
 import { goalHref, NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
@@ -75,7 +75,23 @@ function LastReadRows({ count, view }: { count: SignoffCount; view: PlanSnapshot
   </div>
 }
 
-function LaterRow({ entry, lastRead = false }: { entry: SignoffRow; lastRead?: boolean }) {
+/**
+ * A step not started whose work ran outside Ops (owner-run cards, a push by hand): no task on it was leased, so it never
+ * left planned and has no Sign off above (TD-425 keeps it out of Ready and every count). Folded under the row, its
+ * Sign off says plainly that Ops shows no work behind it (11-05: 5.13-2 and 5.13-3 ran on cards #286–#291 and could
+ * not be signed anywhere). The platform accepts a sign-off on a planned step; only the Console held the button back.
+ */
+function OutsideOps({ wait }: { wait: SignoffWait }) {
+  return <details data-signoff-outside={wait.node} className="basis-full text-xs">
+    <summary className="cursor-pointer text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:py-3">Done outside Ops? Sign off</summary>
+    <div className="flex min-w-0 flex-col gap-1.5 pt-1.5">
+      <p className="m-0 text-muted-foreground">No task on this step ran in Ops, so Ops shows no work behind it. Sign off only if you checked the result yourself: the step is then done.</p>
+      <SignOffButtons node={wait.node} label={wait.label} refs={wait.refs} named={wait.named} state={wait.state} title={wait.title} />
+    </div>
+  </details>
+}
+
+function LaterRow({ entry, lastRead = false, signable = false }: { entry: SignoffRow; lastRead?: boolean; signable?: boolean }) {
   const state = entry.kind === 'step' ? 'Not started' : entry.kind === 'acceptance' ? entry.signoff.readiness : 'Readiness Unknown'
   const why = entry.kind === 'step' ? 'Its done rule waits on your sign-off; no work on it has started yet.'
     : entry.kind === 'acceptance' ? `${entry.signoff.reason} · acceptance ${entry.signoff.acceptance}` : entry.reason
@@ -86,6 +102,7 @@ function LaterRow({ entry, lastRead = false }: { entry: SignoffRow; lastRead?: b
     {lastRead && <span className={chip(true)}>as last read</span>}
     <span className="basis-full text-xs text-muted-foreground">{why}</span>
     {entry.kind === 'acceptance' && <Evidence signoff={entry.signoff} />}
+    {signable && !lastRead && entry.kind === 'step' && <OutsideOps wait={entry.wait} />}
   </li>
 }
 
@@ -148,7 +165,7 @@ export function WorkSignoffs({ count, view, stale }: { count: SignoffCount; view
       <span className={`${caps} pt-1`}>Not started · {stepsPart && count.notStarted.length === 0 ? 'Unknown' : `${count.notStarted.length}${stepsPart}`} · {stepsReach(count)}</span>
       <p className="m-0 text-xs text-muted-foreground">Step sign-offs whose done rule waits on you, set ahead of the work (TD-425): no task on the step has started. A step moves up to Ready once one does. From GET /plan ({stepsReach(count)}).</p>
       {count.notStarted.length > 0 && <ul aria-label="Not started sign-offs" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
-        {count.notStarted.map(entry => <LaterRow key={entry.node} entry={entry} />)}</ul>}
+        {count.notStarted.map(entry => <LaterRow key={entry.node} entry={entry} signable={!stale} />)}</ul>}
     </>}
     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
       <span className={caps}>Later in {round} · {roundPart ? 'Unknown' : count.later.length} · not marked ready</span>
