@@ -33,6 +33,11 @@ func MainResults(ctx context.Context, acc Access, client *http.Client, repo stri
 	if err != nil {
 		return nil, err
 	}
+	return resultsForCommits(standingCommits(commits)), nil
+}
+
+// standingCommits applies the same revert rule to every main reader.
+func standingCommits(commits []giteaCommit) []giteaCommit {
 	reverts := map[string]string{} // the revert → the commit it reverts
 	for _, c := range commits {
 		subject, _ := parseMessage(c.Msg)
@@ -52,10 +57,20 @@ func MainResults(ctx context.Context, acc Access, client *http.Client, repo stri
 		}
 		return false
 	}
+	var standing []giteaCommit
+	for _, c := range commits {
+		if !undone(c.SHA, 0) {
+			standing = append(standing, c)
+		}
+	}
+	return standing
+}
+
+func resultsForCommits(commits []giteaCommit) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for _, c := range commits { // newest first
 		_, t := parseMessage(c.Msg)
-		if t.task == "" || undone(c.SHA, 0) {
+		if t.task == "" {
 			continue
 		}
 		results := out[t.task]
@@ -69,7 +84,17 @@ func MainResults(ctx context.Context, acc Access, client *http.Client, repo stri
 			}
 		}
 	}
-	return out, nil
+	for _, c := range commits {
+		for _, task := range tasksAnywhere(c.Msg) {
+			if out[task] == nil {
+				out[task] = map[string]string{}
+			}
+			if _, ok := out[task][c.SHA]; !ok {
+				out[task][c.SHA] = c.SHA
+			}
+		}
+	}
+	return out
 }
 
 // picked is the commits a message's cherry-pick lines name.
@@ -77,6 +102,18 @@ func picked(msg string) []string {
 	var out []string
 	for _, m := range pickedFrom.FindAllStringSubmatch(strings.ReplaceAll(msg, "\r\n", "\n"), -1) {
 		out = append(out, m[1])
+	}
+	return out
+}
+
+// tasksAnywhere reads folded task lines, retaining the trailer's task validation.
+func tasksAnywhere(msg string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(msg, "\r\n", "\n"), "\n") {
+		m := trailerLine.FindStringSubmatch(line)
+		if m != nil && strings.EqualFold(m[1], keyTask) && taskID.MatchString(m[2]) {
+			out = append(out, m[2])
+		}
 	}
 	return out
 }
