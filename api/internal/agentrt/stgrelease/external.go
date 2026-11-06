@@ -92,6 +92,8 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 		st := coverStats{members: len(members), evidence: len(s.Evidence)}
 		start := time.Now()
 		defer func() { c.logCover(start, st) }()
+		read, done := c.fullReads(&st)
+		defer done()
 		for _, m := range members {
 			for _, evidence := range orderedEvidence(s) {
 				id, p := evidence.Record.String("evidence"), evidence.Record.String("P")
@@ -105,7 +107,7 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 				}
 				at := c.now()
 				st.full++
-				ev, err := c.Sources.ReleaseEvidence(ctx, s, m, p)
+				ev, err := read(ctx, s, m, p)
 				if err != nil {
 					st.fullErr++
 					errs = append(errs, err)

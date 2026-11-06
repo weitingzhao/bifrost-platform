@@ -124,12 +124,23 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 			if err != nil {
 				return store.MainEvidence{}, err
 			}
-			root, a := m.Root, state.Legacy.Operations[m.Op].A
-			if state.InMain[m.Op] == m.R {
-				root, a = "", "" // O-3 asks whether the recorded H is contained in P
+			return releaseEvidence(ctx, g.ReleaseEvidence, state, m, p)
+		},
+		// R5:5.7-5 slice 4: one workspace (main fetched once) for a coverage
+		// pass; each read still fetches its own P and A.
+		EvidenceSession: func(ctx context.Context) (stgrelease.EvidenceRead, func() error, error) {
+			g, err := git()
+			if err != nil {
+				return nil, nil, err
 			}
-			head, has, hist, err := g.ReleaseEvidence(ctx, p, m.R, root, a)
-			return store.MainEvidence{Head: head, HasR: has, Validity: string(hist.State), RevertedBy: hist.RevertedBy}, err
+			er, err := g.OpenEvidence(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			read := func(ctx context.Context, state store.StgState, m store.StgMemberKey, p string) (store.MainEvidence, error) {
+				return releaseEvidence(ctx, er.ReleaseEvidence, state, m, p)
+			}
+			return read, er.Close, nil
 		},
 		MainEvidence: func(ctx context.Context, repo, root, a, r string) (store.MainEvidence, error) {
 			g, err := git()
@@ -174,4 +185,16 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 		},
 	}
 	return &stgrelease.Controller{DB: c.DB, Tenant: "dev", Cluster: cluster, Ledger: ledger, Runs: adapter, Windows: adapter, Sources: sources, Policy: policy, Lifetime: ctx}
+}
+
+// releaseEvidence asks read whether P holds the member's R. For an InMain
+// member the recorded H is asked without root and A (O-3); otherwise its
+// validity is read with the operation's root and A.
+func releaseEvidence(ctx context.Context, read func(context.Context, string, string, string, string) (string, bool, landing.MainHistory, error), state store.StgState, m store.StgMemberKey, p string) (store.MainEvidence, error) {
+	root, a := m.Root, state.Legacy.Operations[m.Op].A
+	if state.InMain[m.Op] == m.R {
+		root, a = "", "" // O-3 asks whether the recorded H is contained in P
+	}
+	head, has, hist, err := read(ctx, p, m.R, root, a)
+	return store.MainEvidence{Head: head, HasR: has, Validity: string(hist.State), RevertedBy: hist.RevertedBy}, err
 }

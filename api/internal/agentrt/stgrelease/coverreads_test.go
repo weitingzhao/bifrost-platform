@@ -314,3 +314,155 @@ func TestCoverReadsSampleTheFastPasses(t *testing.T) {
 		t.Fatal("fast pass after the sample not logged")
 	}
 }
+
+// sessionFakes counts the opens, reads and closes of a coverage workspace
+// whose reads answer as the controller's full read does.
+type sessionFakes struct {
+	opens, reads, closes int
+	openErr, closeErr    error
+}
+
+func withSession(c *Controller, f *coverFakes, sf *sessionFakes) {
+	c.Sources.EvidenceSession = func(context.Context) (EvidenceRead, func() error, error) {
+		sf.opens++
+		if sf.openErr != nil {
+			return nil, nil, sf.openErr
+		}
+		read := func(_ context.Context, _ store.StgState, _ store.StgMemberKey, p string) (store.MainEvidence, error) {
+			sf.reads++
+			return f.full(p)
+		}
+		return read, func() error { sf.closes++; return sf.closeErr }, nil
+	}
+}
+
+// R5:5.7-5 slice 4: a pass's full reads go through one workspace, opened at
+// the first full read and closed at the end of the pass; the answers and
+// the cover are the same as reading pair by pair.
+func TestCoverReadsOneWorkspacePerPass(t *testing.T) {
+	t.Parallel()
+	ctl, l, x, f := coverFixture(t)
+	newerEvidence(t, x)
+	f.full = func(p string) (store.MainEvidence, error) {
+		if p == sha("d") {
+			return store.MainEvidence{Head: p, HasR: false}, nil
+		}
+		return store.MainEvidence{Head: p, HasR: true, Validity: "effective"}, nil
+	}
+	sf := &sessionFakes{}
+	withSession(ctl, f, sf)
+	externalPass(t, ctl) // archives both runs; no member, no full read
+	if sf.opens != 0 {
+		t.Fatal("opened a workspace with nothing to read", sf.opens)
+	}
+	externalLanded(t, l, controlMember)
+	externalPass(t, ctl)
+	s := l.state(t)
+	if sf.opens != 1 || sf.reads != 2 || sf.closes != 1 || f.fulls() != 0 {
+		t.Fatal("workspace", sf.opens, sf.reads, sf.closes, "pair by pair", f.fulls())
+	}
+	if len(s.Covers) != 1 {
+		t.Fatal("covers", len(s.Covers))
+	}
+	for _, cv := range s.Covers {
+		if got := s.Evidence[cv.Record.String("evidence")].Record.String("P"); got != sha("a") {
+			t.Fatal("covered by", got)
+		}
+	}
+}
+
+// A workspace that fails to open is tried once per pass; the pass reads
+// pair by pair and covers as before.
+func TestCoverReadsWorkspaceThatFailsToOpenReadsPairByPair(t *testing.T) {
+	t.Parallel()
+	ctl, l, x, f := coverFixture(t)
+	newerEvidence(t, x)
+	f.full = func(p string) (store.MainEvidence, error) {
+		if p == sha("d") {
+			return store.MainEvidence{Head: p, HasR: false}, nil
+		}
+		return store.MainEvidence{Head: p, HasR: true, Validity: "effective"}, nil
+	}
+	sf := &sessionFakes{openErr: errors.New("main's history is not complete")}
+	withSession(ctl, f, sf)
+	externalPass(t, ctl)
+	externalLanded(t, l, controlMember)
+	externalPass(t, ctl)
+	if sf.opens != 1 || sf.reads != 0 || sf.closes != 0 || f.fulls() != 2 || len(l.state(t).Covers) != 1 {
+		t.Fatal("fallback", sf.opens, sf.reads, sf.closes, f.fulls(), len(l.state(t).Covers))
+	}
+}
+
+// The workspace is closed on every way out of the pass: the end, a close
+// that fails (the cover stands), and the return when the rule turns none
+// during a read.
+func TestCoverReadsWorkspaceClosesOnEveryReturn(t *testing.T) {
+	t.Parallel()
+	for _, way := range []string{"end", "close fails", "rule turns none"} {
+		t.Run(way, func(t *testing.T) {
+			t.Parallel()
+			ctl, l, _, f := coverFixture(t)
+			sf := &sessionFakes{}
+			if way == "close fails" {
+				sf.closeErr = errors.New("remove failed")
+			}
+			p := ctl.Policy()
+			rule := *p.Rule
+			land := *rule.Landing
+			land.Repos = append(land.Repos[:0:0], land.Repos...)
+			rule.Landing = &land
+			p.Rule = &rule
+			ctl.Policy = func() WindowPolicy { return p }
+			if way == "rule turns none" {
+				f.full = func(p string) (store.MainEvidence, error) {
+					land.Repos[0].STGRelease = "none"
+					return store.MainEvidence{Head: p, HasR: true, Validity: "effective"}, nil
+				}
+			}
+			withSession(ctl, f, sf)
+			externalLanded(t, l, controlMember)
+			_ = ctl.ExternalPass(context.Background())
+			if sf.opens != 1 || sf.closes != 1 {
+				t.Fatal("opens", sf.opens, "closes", sf.closes)
+			}
+			want := 1
+			if way == "rule turns none" {
+				want = 0
+			}
+			if n := len(l.state(t).Covers); n != want {
+				t.Fatal("covers", n, "want", want)
+			}
+		})
+	}
+}
+
+// A read through the workspace that fails is that pair's error, as before:
+// not remembered as absent, not covered, and the next evidence is read with
+// the same workspace.
+func TestCoverReadsWorkspaceReadErrorIsThatPairsOnly(t *testing.T) {
+	t.Parallel()
+	ctl, l, x, f := coverFixture(t)
+	newerEvidence(t, x)
+	f.full = func(p string) (store.MainEvidence, error) {
+		if p == sha("d") {
+			return store.MainEvidence{}, errors.New("landing git fetch failed")
+		}
+		return store.MainEvidence{Head: p, HasR: true, Validity: "effective"}, nil
+	}
+	sf := &sessionFakes{}
+	withSession(ctl, f, sf)
+	externalPass(t, ctl)
+	externalLanded(t, l, controlMember)
+	if err := ctl.ExternalPass(context.Background()); err == nil {
+		t.Fatal("the failed read's error was not returned")
+	}
+	s := l.state(t)
+	if sf.opens != 1 || sf.reads != 2 || sf.closes != 1 || len(s.Covers) != 1 || ctl.knownAbsent(sha("d"), controlMember.R) {
+		t.Fatal("workspace", sf.opens, sf.reads, sf.closes, "covers", len(s.Covers), "remembered the error", ctl.knownAbsent(sha("d"), controlMember.R))
+	}
+	for _, cv := range s.Covers {
+		if got := s.Evidence[cv.Record.String("evidence")].Record.String("P"); got != sha("a") {
+			t.Fatal("covered by", got)
+		}
+	}
+}

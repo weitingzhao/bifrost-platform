@@ -67,8 +67,16 @@ type Sources struct {
 	SentCI          func(context.Context, string) (store.StgCIObservation, error)
 	Range           func(context.Context, string, string) ([]landing.ReleaseCommit, error)
 	MainEvidence    store.MainEvidenceFunc
-	ReleaseEvidence func(context.Context, store.StgState, store.StgMemberKey, string) (store.MainEvidence, error)
+	ReleaseEvidence EvidenceRead
+	// EvidenceSession opens one workspace for a coverage pass's full reads
+	// (coverreads.go, R5:5.7-5): its read answers as ReleaseEvidence does,
+	// and its close removes the workspace. Nil reads pair by pair.
+	EvidenceSession func(context.Context) (EvidenceRead, func() error, error)
 }
+
+// EvidenceRead reads whether P's complete history holds the member's R, and
+// its validity, for STG coverage.
+type EvidenceRead func(context.Context, store.StgState, store.StgMemberKey, string) (store.MainEvidence, error)
 
 // Controller is a single repository reconciler. Everything needed after a
 // crash is in Ledger; holder/cleanup cache only avoid unnecessary I/O. Pass
