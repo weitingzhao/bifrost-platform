@@ -162,6 +162,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			c.LandingCards = s.questionRuntime.landingCardQuestions()
 		}
 		s.wireLandingDrill(c)
+		s.wireFullCI(c)
 		if env == "prod" {
 			q := c.LandingCards
 			repos := map[string]bool{}

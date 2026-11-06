@@ -173,6 +173,9 @@ var bodies = map[string][]field{
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
 		{"landing_answer", kAny, true},
+		// full_ci: on the controller's stream, the daily full CI runs started
+		// and how a red one was handled (fullci.go).
+		{"full_ci", kAny, true},
 		// landing_gate: on a main_intent, what the live second gate decided
 		// on (landing_live.go, review 662 N-02): the rule version, the
 		// decision time, the quota day and the CI run.

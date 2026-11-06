@@ -140,6 +140,7 @@ type Controller struct {
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
+	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
 }
 
 // PlanObserveEvery is how often the plan completion atoms' sources are read
@@ -641,12 +642,10 @@ func (c *Controller) Activate(ctx context.Context) (int, error) {
 // tasks whose job's candidates changed, acceptance, blocked tasks' cards (a
 // task blocked by acceptance gets its card in the same pass), dispatch of
 // proposed tasks, the closing of missions whose goal is done, plan decisions, the
-// steps whose work has started, then rules, so a change seen or a task
-// accepted is
-// evaluated at once, a task whose last dependency was just accepted is
-// ready in the same pass, and a step a decision added is evaluated with it;
-// last, the waits past their limit (Waits), read after the pass moved what
-// it moves.
+// steps whose work has started, then rules, so a change seen or a task accepted
+// is evaluated at once, a task whose last dependency was just accepted is ready
+// in the same pass, and a step a decision added is evaluated with it; last, the
+// waits past their limit (Waits), read after the pass moved what it moves.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -767,5 +766,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.startFullCI(ctx, &wg)
 	return wg.Wait
 }
