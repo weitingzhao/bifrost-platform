@@ -97,17 +97,9 @@ func (d *Daemon) followUp(ctx context.Context, r planRun, why error) (string, in
 			return "", 0, nil, errors.New("no time is left of the hard limit")
 		}
 	}
-	sp, err := r.sp.FollowUp(planFixPrompt(why))
+	sp, err := d.followUpSpawn(r, why)
 	if err != nil {
 		return "", 0, nil, err
-	}
-	if a.Walled {
-		sp.Argv = append(wallArgv(d.Self, executorWrites(cl.Tool.Executor, a, r.sibs)), sp.Argv...)
-	}
-	if r.confined {
-		if err = checkPins(d.Wall, cl.Tool.Executor, d.Self, a, r.sibs, sp); err != nil {
-			return "", 0, nil, err
-		}
 	}
 	sp.Stdout, sp.Stderr = r.log, r.log
 	// The new group is recorded before it is released, as the first was; the
@@ -148,6 +140,36 @@ func (d *Daemon) followUp(ctx context.Context, r planRun, why error) (string, in
 		return fend, fcode, nil, fmt.Errorf("no reply: %w", err)
 	}
 	return fend, fcode, reply, nil
+}
+
+// followUpSpawn is the follow-up's spawn as Run built the first run's: the
+// executor's follow-up command, behind the attempt's test database stage
+// when it has one (testDBFor), inside the wall, held to its pins when
+// confined. A confined attempt with a test database whose follow-up lacked
+// the stage never ran (11-06, t_01M6RRN1XFR4Q7MBMMQXMHAA0C).
+func (d *Daemon) followUpSpawn(r planRun, why error) (Spawn, error) {
+	a, cl := r.a, r.a.Claim
+	sp, err := r.sp.FollowUp(planFixPrompt(why))
+	if err != nil {
+		return sp, err
+	}
+	if a.testDB != nil {
+		if err = d.testDBKeyless(cl.Tool.Executor, a, sp); err != nil {
+			return sp, err
+		}
+		if sp, err = withTestDB(d.Self, a.testDB, a, sp, d.Wall != nil); err != nil {
+			return sp, err
+		}
+	}
+	if a.Walled {
+		sp.Argv = append(wallArgv(d.Self, executorWrites(cl.Tool.Executor, a, r.sibs)), sp.Argv...)
+	}
+	if r.confined {
+		if err = checkPins(d.Wall, cl.Tool.Executor, d.Self, a, r.sibs, sp); err != nil {
+			return sp, err
+		}
+	}
+	return sp, nil
 }
 
 // appendReply writes report.md as the first report, a blank line and the
