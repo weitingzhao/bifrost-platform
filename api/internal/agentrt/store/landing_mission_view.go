@@ -93,8 +93,8 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 					continue
 				}
 				rs := LandingRootStatus{LandingRootClass: r}
-				if landing.LandingRepos[repo].GrantSupported {
-					rs.Waiting, err = readLandingWaitStatus(ctx, tx, state, r.Op, at)
+				if landing.GrantSupported(repo) {
+					rs.Waiting, err = readLandingWaitStatusIn(ctx, tx, state, "landing:"+repo, r.Op, at)
 					if err != nil {
 						return err
 					}

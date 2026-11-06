@@ -17,7 +17,13 @@ const (
 	LandingPresentation LandingRefusal = "presentation"
 	LandingSize         LandingRefusal = "size"
 	LandingCore         LandingRefusal = "core"
+	// LandingFloorGrant: an infra floor-grantable path (k8s/**, scripts/**,
+	// ...). Only approve_floor_landing waives it, with rule_paths.
+	LandingFloorGrant LandingRefusal = "floor_grant"
 )
+
+// landingCategories is every refusal category, in report order.
+var landingCategories = []LandingRefusal{LandingCore, LandingFloorSoft, LandingFloorGrant, LandingRulePaths, LandingPresentation, LandingSize}
 
 // Paths returns the existing endpoints of the trusted diff. Additions have
 // only a new endpoint; deletions only an old one; rename/copy check both.
@@ -93,7 +99,9 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 	remaining := limits.MaxChangedLines
 	for _, c := range changes {
 		for _, p := range c.Paths() {
-			if LandingHardCore(repo, p) {
+			if repo == "bifrost-trade-infra" && InfraFloorEntry(p) != "" {
+				failed[LandingFloorGrant] = true
+			} else if LandingHardCore(repo, p) {
 				failed[LandingCore] = true
 			} else if LandingFloor(repo, p) && !LandingHard(repo, p) {
 				failed[LandingFloorSoft] = true
@@ -120,12 +128,14 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		}
 	}
 	var out []LandingRefusal
-	for _, category := range []LandingRefusal{LandingCore, LandingFloorSoft, LandingRulePaths, LandingPresentation, LandingSize} {
+	for _, category := range landingCategories {
 		if failed[category] {
 			out = append(out, category)
 		}
 	}
-	if repo == "bifrost-trade-infra" && slices.Contains(out, LandingRulePaths) {
+	// Infra: a path refusal outside the floor-grantable paths is final on
+	// its own; size stays beside floor_grant so it is never waived.
+	if repo == "bifrost-trade-infra" && slices.Contains(out, LandingRulePaths) && !slices.Contains(out, LandingFloorGrant) {
 		return []LandingRefusal{LandingRulePaths}
 	}
 	return out
@@ -134,7 +144,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 // LandingWaivesCover implements soft_now ⊆ waives without accepting unknown
 // categories. Grant kind/identity/validity are checked by the grant consumer.
 func LandingWaivesCover(now, waives []LandingRefusal) bool {
-	valid := []LandingRefusal{LandingCore, LandingFloorSoft, LandingRulePaths, LandingPresentation, LandingSize}
+	valid := landingCategories
 	for _, set := range [][]LandingRefusal{now, waives} {
 		for _, item := range set {
 			if !slices.Contains(valid, item) {
@@ -153,6 +163,9 @@ func LandingWaivesCover(now, waives []LandingRefusal) bool {
 // GrantSupported is intentionally independent of path hard checks. S6 owns
 // infra's automatic lane; it does not gain grant support by adding that lane.
 func GrantSupported(repo string) bool { return LandingRepositories[repo].GrantSupported }
+
+// FloorGrantSupported: repo's floor-grantable paths take approve_floor_landing.
+func FloorGrantSupported(repo string) bool { return LandingRepositories[repo].FloorGrantSupported }
 
 // legacyCheckChanges preserves the pre-grant gate's closed behavior. Grant
 // callers use the layers directly; no signed rule alone authorizes a waiver.

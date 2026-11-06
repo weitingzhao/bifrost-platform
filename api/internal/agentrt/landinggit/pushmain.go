@@ -89,6 +89,23 @@ func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Ti
 	return classifyPush(out.String(), stderr.String(), err)
 }
 
+// Pusher is the Gitea username PushMain pushes as: the lander's username
+// file, as its basic auth sends it. Only the lander has one to name.
+func (w *Workspace) Pusher() (string, error) {
+	if !w.git.lander {
+		return "", errors.New("only the lander pushes main")
+	}
+	u, err := w.git.readCredential(w.git.usernameFile)
+	if err != nil {
+		return "", errors.New("cannot read landing username file")
+	}
+	name := strings.TrimRight(string(u), "\r\n")
+	if name == "" || strings.ContainsAny(name, ":\r\n\x00") || len(name) > 255 {
+		return "", errors.New("invalid landing username file")
+	}
+	return name, nil
+}
+
 // classifyPush reads git push --porcelain: a line "<flag>\t<from>:<to>\t
 // <summary>" per ref. Flag " " or "+" is done; "=" is up to date (main is
 // already r: ok, the reconciler confirms it from main); "!" is rejected,

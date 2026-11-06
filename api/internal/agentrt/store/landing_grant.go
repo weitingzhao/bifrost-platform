@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,10 @@ const (
 	// ActionCoreLanding is the only grant a hard_core change can consume
 	// (§12.1); it also waives the soft failures of the same change.
 	ActionCoreLanding = "approve_core_landing"
+	// ActionFloorLanding is infra's only grant: it waives floor_grant (and
+	// rule_paths) for exactly the floor-grantable files it pins, each at its
+	// blob sha256 at R; never-grantable paths and size stay refused.
+	ActionFloorLanding = "approve_floor_landing"
 	// LandingGrantPurpose is the only purpose of this version.
 	LandingGrantPurpose = "landing_main"
 	// LandingGrantTTL counts from the approval's decision (E2 A).
@@ -38,8 +43,80 @@ const (
 	landingRepoStream   = "landing:bifrost-platform"
 )
 
-// GrantActions are the two D-tier actions whose approval writes a grant.
-var GrantActions = []string{ActionGuardrailLanding, ActionCoreLanding}
+// GrantActions are the D-tier actions whose approval writes a grant.
+var GrantActions = []string{ActionGuardrailLanding, ActionCoreLanding, ActionFloorLanding}
+
+// grantStream is a repository's landing stream, where its grants live.
+func grantStream(repo string) string { return "landing:" + repo }
+
+// GrantActionSupported: action's grant may be written for repo. The two
+// platform grants stay platform's (rules.GrantSupported); the floor grant
+// is infra's (rules.FloorGrantSupported).
+func GrantActionSupported(action, repo string) bool {
+	switch action {
+	case ActionFloorLanding:
+		return rules.FloorGrantSupported(repo)
+	case ActionGuardrailLanding, ActionCoreLanding:
+		return rules.GrantSupported(repo)
+	}
+	return false
+}
+
+// grantRepoOf is the repository of a landing operation's task, from the
+// database: an operation id names its task, never its repository.
+func grantRepoOf(ctx context.Context, tx pgx.Tx, op string) (string, error) {
+	m := grantOp.FindStringSubmatch(op)
+	if m == nil {
+		return "", invalid("not a landing operation: %s", op)
+	}
+	var repo string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(NULLIF(repo,''),'bifrost-platform') FROM agentrt.task WHERE task_id=$1`, m[1]).Scan(&repo)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", grantRefused("not_waiting", "no landing operation %s", op)
+	}
+	if err == nil && !landing.GrantSupported(repo) {
+		return "", grantRefused("grant_unsupported", "repository %q takes no grant", repo)
+	}
+	return repo, err
+}
+
+// GrantFloorPath is one file a floor grant pins: its path, the floor entry
+// it matched and the lowercase sha256 of its bytes at R.
+type GrantFloorPath struct {
+	Path       string `json:"path"`
+	Entry      string `json:"entry"`
+	BlobSHA256 string `json:"blob_sha256"`
+}
+
+// validFloorPaths: sorted by path, unique, each floor-grantable with its
+// own entry and a sha256; non-empty.
+func validFloorPaths(paths []GrantFloorPath) bool {
+	if len(paths) == 0 {
+		return false
+	}
+	last := ""
+	for _, p := range paths {
+		if p.Path <= last || rules.InfraFloorEntry(p.Path) != p.Entry || p.Entry == "" || !grantHex64.MatchString(p.BlobSHA256) {
+			return false
+		}
+		last = p.Path
+	}
+	return true
+}
+
+// floorWaives: a floor grant waives floor_grant, with rule_paths, and
+// nothing else.
+func floorWaives(set []string) bool {
+	if !slices.Contains(set, string(rules.LandingFloorGrant)) {
+		return false
+	}
+	for _, s := range set {
+		if s != string(rules.LandingFloorGrant) && s != string(rules.LandingRulePaths) {
+			return false
+		}
+	}
+	return true
+}
 
 // ErrGrantUncertain: a grant or revocation was committed or not, and the
 // read back could not tell. The stream decides; nothing is retried here.
@@ -96,6 +173,8 @@ type LandingGrant struct {
 	ApprovedAt      string    `json:"approved_at"`
 	GrantedAt       string    `json:"granted_at"`
 	ExpiresAt       string    `json:"expires_at"`
+	// FloorPaths: a floor grant's pinned files; absent on platform grants.
+	FloorPaths []GrantFloorPath `json:"floor_paths,omitempty"`
 }
 
 // LandingGrantRevoked is the closed landing_grant_revoked record.
@@ -192,7 +271,7 @@ func validCategories(set []string, empty bool) bool {
 	if len(set) == 0 {
 		return empty
 	}
-	known := []string{string(rules.LandingCore), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths), string(rules.LandingSize)}
+	known := []string{string(rules.LandingCore), string(rules.LandingFloorGrant), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths), string(rules.LandingSize)}
 	last := ""
 	for _, s := range set {
 		if s <= last || !slices.Contains(known, s) {
@@ -224,6 +303,9 @@ func refusalsOf(set []string) []rules.LandingRefusal {
 // failure takes the core-level approval, anything else the guardrail one.
 // The two actions' waivable categories never overlap on core.
 func GrantActionFor(soft []string) string {
+	if slices.Contains(soft, string(rules.LandingFloorGrant)) {
+		return ActionFloorLanding
+	}
 	if slices.Contains(soft, string(rules.LandingCore)) {
 		return ActionCoreLanding
 	}
@@ -237,10 +319,23 @@ func parseGrantRule(r GrantRule) bool {
 // parseLandingGrant checks a landing_grant record against §5.5 and §12.
 func parseLandingGrant(v any) (LandingGrant, error) {
 	var g LandingGrant
-	if err := closedDecode(v, &g, "v", "grant_id", "approval_id", "approval_number", "action", "params_hash", "home", "env", "tenant", "repo",
+	keys := []string{"v", "grant_id", "approval_id", "approval_number", "action", "params_hash", "home", "env", "tenant", "repo",
 		"task", "attempt", "op", "A", "base", "R", "M0", "committer_date", "candidate_digest", "material_digest", "waives",
-		"soft_at_request", "files", "lines", "rule", "checks_version", "ci", "purpose", "stg_release", "approved_at", "granted_at", "expires_at"); err != nil {
+		"soft_at_request", "files", "lines", "rule", "checks_version", "ci", "purpose", "stg_release", "approved_at", "granted_at", "expires_at"}
+	// A floor grant carries floor_paths; no other grant does.
+	if m, ok := v.(map[string]any); ok && m["action"] == ActionFloorLanding {
+		keys = append(keys, "floor_paths")
+	}
+	if err := closedDecode(v, &g, keys...); err != nil {
 		return g, fmt.Errorf("landing_grant: %w", err)
+	}
+	if m, ok := v.(map[string]any); ok && g.Action == ActionFloorLanding {
+		list, _ := m["floor_paths"].([]any)
+		for _, item := range list {
+			if err := closedDecode(item, &GrantFloorPath{}, "path", "entry", "blob_sha256"); err != nil {
+				return g, fmt.Errorf("landing_grant floor_paths: %w", err)
+			}
+		}
 	}
 	var rule, ci map[string]any
 	if m, ok := v.(map[string]any); ok {
@@ -266,8 +361,8 @@ func parseLandingGrant(v any) (LandingGrant, error) {
 		return g, fmt.Errorf("landing_grant identity: grant_id is lg_<approval_id> and the approval has a number")
 	case !slices.Contains(GrantActions, g.Action) || !grantHex64.MatchString(g.ParamsHash):
 		return g, fmt.Errorf("landing_grant action or params_hash")
-	case g.Home != "prod" || g.Env != "prod" || !grantTenant.MatchString(g.Tenant) || !rules.GrantSupported(g.Repo):
-		return g, fmt.Errorf("landing_grant is PROD only, for a repository that supports grants")
+	case g.Home != "prod" || g.Env != "prod" || !grantTenant.MatchString(g.Tenant) || !GrantActionSupported(g.Action, g.Repo):
+		return g, fmt.Errorf("landing_grant is PROD only, for a repository that supports its action")
 	case !landingRoot.MatchString(g.Task) || m == nil || m[1] != g.Task || !grantAttempt.MatchString(g.Attempt):
 		return g, fmt.Errorf("landing_grant task, attempt or op")
 	case !grantSHA.MatchString(g.A) || !grantSHA.MatchString(g.Base) || !grantSHA.MatchString(g.R) || !grantSHA.MatchString(g.M0):
@@ -276,9 +371,12 @@ func parseLandingGrant(v any) (LandingGrant, error) {
 		return g, fmt.Errorf("landing_grant digests")
 	case !validCategories(g.SoftAtRequest, false) || !slices.Equal(g.Waives, g.SoftAtRequest):
 		return g, fmt.Errorf("landing_grant waives exactly its soft_at_request, a non-empty set")
-	case GrantActionFor(g.Waives) != g.Action:
-		// §12.1: the two grants' categories never overlap on core.
+	case GrantActionFor(g.Waives) != g.Action || g.Action == ActionFloorLanding && !floorWaives(g.Waives):
+		// §12.1: the two grants' categories never overlap on core; the floor
+		// grant waives floor_grant and rule_paths alone.
 		return g, fmt.Errorf("landing_grant: %s does not waive %v", g.Action, g.Waives)
+	case (g.Action == ActionFloorLanding) != (g.FloorPaths != nil) || g.FloorPaths != nil && !validFloorPaths(g.FloorPaths):
+		return g, fmt.Errorf("landing_grant: floor_paths are a floor grant's, sorted, each floor-grantable with its blob sha256")
 	case g.Files < 0 || g.Lines < 0 || g.ChecksVersion < 1 || !parseGrantRule(g.Rule) || g.Rule.ID != "landing:"+g.Tenant:
 		return g, fmt.Errorf("landing_grant counts, rule or checks_version")
 	case g.CI.Pipeline == "" || !landingRequestID.MatchString(g.CI.Run) || g.CI.UID == "" || !okCI || g.CI.Status != "Succeeded" || g.CI.SHA != g.R:
@@ -426,7 +524,7 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 	if !hasGrant && !hasRevoked && !hasUse && !hasRefused {
 		return nil
 	}
-	if ev.Type != "note" || ev.Stream != landingRepoStream {
+	if ev.Type != "note" || !strings.HasPrefix(ev.Stream, "landing:") || !landing.GrantSupported(strings.TrimPrefix(ev.Stream, "landing:")) {
 		return invalid("landing grant records live on the repository stream")
 	}
 	_, hasLanding := ev.Body["landing"]
@@ -455,6 +553,9 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 		}
 		if ev.Actor != "controller" || hasLanding || ev.TaskID != g.Task {
 			return invalid("a landing grant is written by the approval executor (controller), alone, for its task")
+		}
+		if ev.Stream != grantStream(g.Repo) {
+			return invalid("a landing grant lives on its own repository's stream")
 		}
 		if _, exists := grants[g.GrantID]; exists {
 			return invalid("approval %s already has its grant", g.ApprovalID)
@@ -532,7 +633,14 @@ func checkLandingGrantAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 func UsableLandingGrant(ctx context.Context, db DB, op string) (string, error) {
 	usable := ""
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		s, err := LandingState(ctx, tx, landingRepoStream)
+		repo, err := grantRepoOf(ctx, tx, op)
+		if err != nil {
+			if errors.Is(err, ErrInvalid) {
+				return nil
+			}
+			return err
+		}
+		s, err := LandingState(ctx, tx, grantStream(repo))
 		if err != nil {
 			return err
 		}
@@ -540,7 +648,7 @@ func UsableLandingGrant(ctx context.Context, db DB, op string) (string, error) {
 		if !ok || o.Phase != "awaiting_grant" || s.LatestOperation(o.Task) != op {
 			return nil
 		}
-		_, order, err := readLandingGrants(ctx, tx, landingRepoStream)
+		_, order, err := readLandingGrants(ctx, tx, grantStream(repo))
 		if err != nil {
 			return err
 		}
@@ -585,11 +693,32 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	}
 	// read takes its own context: the read back runs on a fresh one, never
 	// the request's (review 694 R-01).
+	stream := ""
 	read := func(ctx context.Context, tx pgx.Tx) (*grantView, error) {
-		if err := lockStream(ctx, tx, landingRepoStream); err != nil {
+		if stream == "" {
+			// The grant's repository stream, found before its lock is taken:
+			// a grant never moves between streams.
+			for _, repo := range rules.LandingRepoNames() {
+				if !landing.GrantSupported(repo) {
+					continue
+				}
+				grants, _, err := readLandingGrants(ctx, tx, grantStream(repo))
+				if err != nil {
+					return nil, err
+				}
+				if grants[grantID] != nil {
+					stream = grantStream(repo)
+					break
+				}
+			}
+			if stream == "" {
+				return nil, invalid("no grant %s", grantID)
+			}
+		}
+		if err := lockStream(ctx, tx, stream); err != nil {
 			return nil, err
 		}
-		grants, _, err := readLandingGrants(ctx, tx, landingRepoStream)
+		grants, _, err := readLandingGrants(ctx, tx, stream)
 		if err != nil {
 			return nil, err
 		}
@@ -623,7 +752,7 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	if r := settle(g); r.Consumed || r.Revoked {
 		return r, nil
 	}
-	if _, err = Append(ctx, tx, Event{Stream: landingRepoStream, Type: "note", Actor: "owner", TaskID: g.Task,
+	if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "owner", TaskID: g.Task,
 		Body: map[string]any{"text": "Landing grant revoked by the Owner", "landing_grant_revoked": toBody(LandingGrantRevoked{
 			V: LandingGrantVersion, GrantID: grantID, By: "owner", At: DecisionAt().UTC().Format(time.RFC3339Nano)})}}); err != nil {
 		return out, err
@@ -654,107 +783,3 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	}
 	return out, fmt.Errorf("revocation not written (read back): %w", commitErr)
 }
-
-// GrantEvidence is what B5 reads of a landed operation's grant (§8).
-type GrantEvidence struct {
-	GrantID, ApprovalID, Purpose    string
-	STGRelease                      bool
-	Task, Attempt, A, R, M0         string
-	CandidateDigest, MaterialDigest string
-	Waives                          []string
-	ApprovedAt                      time.Time
-	IntentSeq                       int64
-	Action                          string
-	ApprovalNumber                  int64
-	ExpiresAt, ConsumedAt           time.Time
-}
-
-// LandingGrantEvidence is B5's read (§8): only an operation whose
-// main_intent consumed a grant, and which then landed R (and was not
-// reverted since), has evidence. B5 checks R and STGRelease itself, records
-// its own release use elsewhere, and never writes grant records.
-func LandingGrantEvidence(ctx context.Context, q pgx.Tx, repo, op string) (GrantEvidence, bool, error) {
-	if !rules.GrantSupported(repo) {
-		return GrantEvidence{}, false, nil
-	}
-	stream := "landing:" + repo
-	s, err := LandingState(ctx, q, stream)
-	if err != nil {
-		return GrantEvidence{}, false, err
-	}
-	o, ok := s.Operations[op]
-	if !ok || !o.EverLanded || o.Reverted || o.DryRun {
-		return GrantEvidence{}, false, nil
-	}
-	_, order, err := readLandingGrants(ctx, q, stream)
-	if err != nil {
-		return GrantEvidence{}, false, err
-	}
-	for _, g := range order {
-		if g.Op != op || g.ConsumedSeq == 0 || g.ConsumedOp != op || g.R != o.R {
-			continue
-		}
-		approved, _ := grantTime(g.ApprovedAt)
-		return GrantEvidence{GrantID: g.GrantID, ApprovalID: g.ApprovalID, Purpose: g.Purpose, STGRelease: g.STGRelease,
-			Task: g.Task, Attempt: g.Attempt, A: g.A, R: g.R, M0: g.M0, CandidateDigest: g.CandidateDigest,
-			MaterialDigest: g.MaterialDigest, Waives: slices.Clone(g.Waives), ApprovedAt: approved, IntentSeq: g.ConsumedSeq,
-			Action: g.Action, ApprovalNumber: g.ApprovalNumber, ExpiresAt: g.exp, ConsumedAt: g.ConsumedAt}, true, nil
-	}
-	return GrantEvidence{}, false, nil
-}
-
-// LandingGrantStatus is one grant as the status API shows it (C-6 reads it).
-type LandingGrantStatus struct {
-	GrantID        string    `json:"grant_id"`
-	ApprovalID     string    `json:"approval_id"`
-	ApprovalNumber int64     `json:"approval_number"`
-	Action         string    `json:"action"`
-	Op             string    `json:"op"`
-	Waives         []string  `json:"waives"`
-	STGRelease     bool      `json:"stg_release"`
-	ApprovedAt     time.Time `json:"approved_at"`
-	GrantedAt      time.Time `json:"granted_at"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	Revoked        bool      `json:"revoked"`
-	RevokedAt      time.Time `json:"revoked_at,omitzero"`
-	Consumed       bool      `json:"handed_to_push"`
-	Refused        bool      `json:"refused"`
-	RefusedReason  string    `json:"refused_reason,omitempty"`
-	RefusedAt      time.Time `json:"refused_at,omitzero"`
-	IntentSeq      int64     `json:"main_intent_seq,omitempty"`
-	// Valid: the grant can be consumed now — usable on the stream, and its
-	// operation still the root's latest, waiting on the same candidate.
-	// Ended says why an unspent grant cannot be (review 698 R-03):
-	// operation_discarded, operation_failed, operation_superseded, ...
-	Valid         bool   `json:"valid"`
-	Ended         string `json:"ended,omitempty"`
-	CandidateHash string `json:"candidate_digest"`
-	MaterialHash  string `json:"material_digest"`
-}
-
-// status is the grant as shown, beside its operation as the stream has it.
-func (g *grantView) status(now time.Time, o landing.Operation, latest bool) LandingGrantStatus {
-	st := g.statusOnly(now)
-	if st.Valid {
-		switch {
-		case o.Phase != "awaiting_grant" && !o.AtMain():
-			st.Valid, st.Ended = false, "operation_"+o.Phase
-		case !latest:
-			st.Valid, st.Ended = false, "operation_superseded"
-		case o.R != g.R || o.M0 != g.M0 || o.A != g.A:
-			st.Valid, st.Ended = false, "operation_changed"
-		}
-	}
-	return st
-}
-
-func (g *grantView) statusOnly(now time.Time) LandingGrantStatus {
-	return LandingGrantStatus{GrantID: g.GrantID, ApprovalID: g.ApprovalID, ApprovalNumber: g.ApprovalNumber, Action: g.Action, Op: g.Op,
-		Waives: slices.Clone(g.Waives), STGRelease: g.STGRelease, ApprovedAt: g.approved, GrantedAt: g.granted, ExpiresAt: g.exp,
-		Revoked: !g.RevokedAt.IsZero(), RevokedAt: g.RevokedAt, Consumed: g.ConsumedSeq != 0, IntentSeq: g.ConsumedSeq,
-		Refused: !g.RefusedAt.IsZero(), RefusedReason: g.RefusedWhy, RefusedAt: g.RefusedAt,
-		Valid: g.usableAt(now), CandidateHash: g.CandidateDigest, MaterialHash: g.MaterialDigest}
-}
-
-// Body is the grant as an event body value (the executor's, and tests').
-func (g LandingGrant) Body() map[string]any { return toBody(g) }

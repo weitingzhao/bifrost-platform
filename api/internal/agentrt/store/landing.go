@@ -13,11 +13,9 @@ import (
 // LandingState folds only the authoritative stream, never mission mirrors.
 // Writers call it after Append has locked the stream, in the same transaction.
 func LandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
-	if stream == "landing:bifrost-trade-infra" {
-		return infraLandingState(ctx, tx, stream)
-	}
 	// The protocol records and the grant projection (C-5, §5.3: a valid
-	// grant pauses W) come from one ordered read of the stream.
+	// grant pauses W) come from one ordered read of the stream; infra's
+	// floor grants fold the same way as platform's grants.
 	r, err := scanLandingStream(ctx, tx, stream)
 	if err != nil {
 		return landing.State{}, err
@@ -32,6 +30,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		}
 		if _, ok := ev.Body["landing_repo"]; ok {
 			return fmt.Errorf("landing_repo requires reservation")
+		}
+		if _, ok := ev.Body["landing_pusher"]; ok {
+			return fmt.Errorf("landing_pusher requires main_result")
 		}
 		return nil
 	}
@@ -49,6 +50,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 	if (r["platform_revision"] != nil || r["results"] != nil) && (ev.Stream != "landing:bifrost-trade-infra" || ev.Actor != "controller") {
 		return fmt.Errorf("infra CI preparation and evidence require its controller stream")
+	}
+	if _, ok := ev.Body["landing_pusher"]; ok && (k != "main_result" || ev.Actor != "controller") {
+		return fmt.Errorf("landing_pusher rides on the controller's main_result")
 	}
 	if named, ok := ev.Body["landing_repo"]; ok && (k != "reserved" || named != "bifrost-trade-infra") {
 		return fmt.Errorf("landing_repo is only used by infra reservations")
@@ -115,7 +119,7 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if k == "stg_enabled" && ev.Actor != "controller" {
 		return fmt.Errorf("STG enablement requires controller")
 	}
-	if k == "awaiting_grant" && ev.Stream != "landing:bifrost-platform" {
+	if k == "awaiting_grant" && !landing.GrantSupported(strings.TrimPrefix(ev.Stream, "landing:")) {
 		return fmt.Errorf("grant_unsupported")
 	}
 	s, err := LandingState(ctx, tx, ev.Stream)

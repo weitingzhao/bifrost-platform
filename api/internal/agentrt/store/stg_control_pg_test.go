@@ -221,7 +221,7 @@ func TestStgControlPGAdmissionFromLandedMember(t *testing.T) {
 	if !d.Allowed {
 		t.Fatal(d)
 	}
-	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok")
+	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "landed", "R", commitB)))
 	s, err := store.ReadStgRelease(ctx, w.rt)

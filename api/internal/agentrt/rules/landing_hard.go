@@ -204,15 +204,22 @@ func LandingHard(repo, p string) bool {
 		slices.Contains(landingHardBasenames[:], path.Base(p)) || strings.HasPrefix(path.Base(p), "Dockerfile")
 }
 
+// LandingHardAbsolute: for infra only the never-grantable paths; its
+// floor-grantable paths wait for approve_floor_landing (LandingFloorGrant).
 func LandingHardAbsolute(repo, p string) bool {
 	if repo == "bifrost-trade-infra" {
-		return !landingPath(p) || infraHard(p)
+		return InfraNeverGrantable(p)
 	}
 	return repo != "bifrost-platform" || !landingPath(p) || strings.HasPrefix(path.Base(p), ".env") ||
 		path.Base(p) == ".gitmodules" || strings.HasPrefix(p, ".github/")
 }
 
+// LandingHardCore is platform's trusted core. Infra has no core: its
+// grantable hard paths are floor-grantable (InfraFloorEntry).
 func LandingHardCore(repo, p string) bool {
+	if repo == "bifrost-trade-infra" {
+		return false
+	}
 	return !LandingHardAbsolute(repo, p) && LandingHard(repo, p)
 }
 

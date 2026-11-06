@@ -199,7 +199,8 @@ func TestLandingGrantExecutorReadsItsApprovalBack(t *testing.T) {
 	}
 }
 
-// Closed parameters: an extra key, a missing key, STG, infra.
+// Closed parameters: an extra key, a missing key, STG, a repository with no
+// grant (infra takes approve_floor_landing alone: TestFloorLandingGrantWiring).
 func TestLandingGrantParamsAreClosed(t *testing.T) {
 	t.Parallel()
 	good := grantParams()
@@ -210,7 +211,7 @@ func TestLandingGrantParamsAreClosed(t *testing.T) {
 		"extra":   func(p map[string]any) { p["waives"] = []any{"core"} },
 		"missing": func(p map[string]any) { delete(p, "stg_release") },
 		"stg":     func(p map[string]any) { p["env"] = "stg" },
-		"infra":   func(p map[string]any) { p["repo"] = "bifrost-trade-infra" },
+		"unknown": func(p map[string]any) { p["repo"] = "bifrost-research" },
 		"op":      func(p map[string]any) { p["op"] = "land:t_01JA0000000000000000000001:1" },
 	} {
 		p := grantParams()
@@ -220,9 +221,13 @@ func TestLandingGrantParamsAreClosed(t *testing.T) {
 		}
 	}
 	p := grantParams()
-	p["repo"] = "bifrost-trade-infra"
+	p["repo"] = "bifrost-research"
 	if _, err := store.DecodeGrantParams(p); err == nil || !strings.Contains(err.Error(), "grant_unsupported") {
-		t.Errorf("infra: %v", err)
+		t.Errorf("unknown repository: %v", err)
+	}
+	p["repo"] = "bifrost-trade-infra"
+	if _, err := store.DecodeGrantParams(p); err != nil {
+		t.Errorf("infra (its floor grant): %v", err)
 	}
 }
 
@@ -287,5 +292,46 @@ func TestC5R02ServerKeepsOneOpenRequestPerOperation(t *testing.T) {
 	a, b := <-codes, <-codes
 	if a+b != http.StatusCreated+http.StatusConflict {
 		t.Fatalf("statuses %d, %d", a, b)
+	}
+}
+
+// Serial: t.Setenv and the package's grant writer. approve_floor_landing is
+// wired like approve_core_landing, for infra only: tier D, the number
+// confirmed on the Console, the record read back, one open request per
+// operation; a floor grant for platform and a core grant for infra are
+// refused before the store is called.
+func TestFloorLandingGrantWiring(t *testing.T) {
+	_, do, calls, _ := grantServer(t)
+	infra := grantParams()
+	infra["repo"] = "bifrost-trade-infra"
+	infra["stg_release"] = false
+	row := requestGrant(t, do, store.ActionFloorLanding, infra)
+	if code, out := decide(do, row, "console", false); code != http.StatusBadRequest || out.Status == "executed" {
+		t.Fatalf("approved without its number: %d %+v", code, out)
+	}
+	if landingGrantOpenKey(store.ActionFloorLanding, infra) != "landing-grant:"+infra["op"].(string) {
+		t.Fatal("no open key for the floor grant")
+	}
+	code, out := decide(do, row, "console", true)
+	if code != http.StatusOK || out.Status != "executed" {
+		t.Fatalf("approve: %d %+v", code, out)
+	}
+	if len(*calls) != 1 || (*calls)[0].a.Action != store.ActionFloorLanding || (*calls)[0].p.Repo != "bifrost-trade-infra" {
+		t.Fatalf("%+v", *calls)
+	}
+	for _, tc := range []struct {
+		action, repo string
+	}{{store.ActionFloorLanding, "bifrost-platform"}, {store.ActionCoreLanding, "bifrost-trade-infra"}, {store.ActionGuardrailLanding, "bifrost-trade-infra"}} {
+		p := grantParams()
+		p["repo"] = tc.repo
+		p["op"] = "land:t_01JA0000000000000000000000:" + map[string]string{store.ActionFloorLanding: "3", store.ActionCoreLanding: "4", store.ActionGuardrailLanding: "5"}[tc.action]
+		row := requestGrant(t, do, tc.action, p)
+		code, out := decide(do, row, "console", true)
+		if code != http.StatusOK || out.Status != "failed" || !strings.Contains(out.Error, "not a landing grant for") {
+			t.Fatalf("%s for %s: %d %+v", tc.action, tc.repo, code, out)
+		}
+	}
+	if len(*calls) != 1 {
+		t.Fatal("the store was called for a grant of the wrong repository")
 	}
 }

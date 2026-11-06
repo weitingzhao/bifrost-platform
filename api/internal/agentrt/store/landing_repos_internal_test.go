@@ -24,8 +24,9 @@ func (tx *repoCIStateTx) Query(ctx context.Context, query string, args ...any) (
 	return tx.waitReviewTx.Query(ctx, query, args...)
 }
 
-// The merged CI reader preserves both repositories' state semantics:
-// platform may wait for a grant, infra may not; both use one stream read.
+// The merged CI reader preserves both repositories' state semantics: both
+// may wait for a grant (infra for approve_floor_landing), with one stream
+// read; only platform has pinned CI keys.
 // Row fixtures exercise the production folds, not PostgreSQL execution.
 func TestS6StateCIKeysKeepRepositoryGrantPolicy(t *testing.T) {
 	t.Parallel()
@@ -39,7 +40,7 @@ func TestS6StateCIKeysKeepRepositoryGrantPolicy(t *testing.T) {
 	}{
 		{"platform waiting", "bifrost-platform", "awaiting_grant", len(entries), false},
 		{"infra ordinary", "bifrost-trade-infra", "branch_pushed", 4, false},
-		{"infra waiting refused", "bifrost-trade-infra", "", len(entries), true},
+		{"infra waiting", "bifrost-trade-infra", "awaiting_grant", len(entries), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx := &repoCIStateTx{waitReviewTx: waitReviewTx{entries: entries[:tc.count]}, t: t, stream: "landing:" + tc.repo}

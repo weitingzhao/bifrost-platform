@@ -121,7 +121,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			return err
 		}
 		o = state.Operations[op]
-		if !rules.GrantSupported(repo) && o.Phase == "awaiting_grant" {
+		if !landing.GrantSupported(repo) && o.Phase == "awaiting_grant" {
 			decision = landing.Decision{Reason: "floor"}
 			return nil
 		}
@@ -246,7 +246,13 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		// the status says so); evidence not readable yet decides nothing.
 		var grantKey *GrantCIKey
 		var grantRun GrantCIEvidence
-		if grant != nil {
+		floor := grant != nil && grant.Action == ActionFloorLanding
+		if grant != nil && !GrantActionSupported(grant.Action, repo) {
+			// A grant of another repository's kind is never this one's.
+			decision = landing.Decision{Reason: "grant_insufficient"}
+			return refuseGrant(ctx, tx, grant, "grant_insufficient", final, mission)
+		}
+		if grant != nil && !floor {
 			if grantKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 				return err
 			}
@@ -270,9 +276,11 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			}
 		}
 		switch {
-		case obs.Main != o.M0 && waiting:
+		case obs.Main != o.M0 && waiting && !floor:
 			// §5.4: a waiting operation for a main that moved is spent, and
-			// its grant with it; the next claim prepares k+1.
+			// its grant with it; the next claim prepares k+1. A floor grant
+			// is held instead (main may come back to M0 within its 24
+			// hours); once it is spent or expired, the recheck discards.
 			if !landing.ValidSHA(obs.Main) {
 				decision = landing.Decision{Reason: "main_changed"}
 				return nil
@@ -337,12 +345,68 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			// Otherwise nothing is reserved or pushed; a grant refused for
 			// good is recorded spent (review 694 R-05) and a new one needed.
 			key, ci := grantKey, grantRun
-			if ci.Run == "" || grantCIProblem(o, key, ci, final) {
+			if floor {
+				// A floor grant pins files, not a CI run: infra's CI was
+				// judged green on R above, read again for this decision.
+				key, ci = nil, GrantCIEvidence{}
+				if !final.Before(grant.exp) {
+					decision = landing.Decision{Reason: "grant_expired"}
+					return nil
+				}
+				if src.FloorFiles == nil || src.grantPatchFor(repo) == nil {
+					decision = landing.Decision{Reason: "grant_evidence"}
+					return nil
+				}
+				tree, err := src.FloorFiles(ctx, repo, o.M0, o.R)
+				if err != nil {
+					return err
+				}
+				if why := floorTreeStale(grant.FloorPaths, tree); why != "" {
+					// A changed byte, an extra or missing file, a file no floor
+					// grant can pin, or R not one commit on M0: spent, unpushed.
+					decision = landing.Decision{Reason: "grant_stale", Detail: map[string]any{"floor": why}}
+					return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
+				}
+			} else if ci.Run == "" || grantCIProblem(o, key, ci, final) {
 				decision = landing.Decision{Reason: "grant_evidence"} // nothing newer yet: no verdict on the grant
 				return nil
 			}
-			patch, err := src.GrantPatch(ctx, o.A, o.M0, o.R)
+			patch, err := src.grantPatchFor(repo)(ctx, o.A, o.M0, o.R)
 			if err != nil {
+				return err
+			}
+			// The Git reads above took as long as they took: the grant is
+			// decided at the clock after them, on the facts and rule in
+			// force then, as the S5 route does after its CI reads. A grant
+			// that expired during the reads authorizes nothing.
+			final = DecisionAt()
+			if final.UTC().Format("2006-01-02") != day {
+				return ErrLandingDayChanged
+			}
+			latest, _, err := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
+			if err != nil {
+				return err
+			}
+			latest.SingleCommit, latest.Changes, latest.History, latest.DependenciesEffective = g.SingleCommit, g.Changes, g.History, g.DependenciesEffective
+			latest.S5Patch = g.S5Patch
+			bindS5ReviewedPatch(&latest)
+			g = latest
+			if why := landing.RootBound(budget, o.Task, final, false); why != "" {
+				decision = landing.Decision{Reason: why}
+				return nil
+			}
+			if d := landing.EligibleToClaim(g, final); !d.Allowed {
+				decision = d
+				return nil
+			}
+			if !g.GrantEnabled {
+				decision = landing.Decision{Reason: "grant_not_enabled"}
+				return nil
+			}
+			_, soft = landing.PolicyChecks(g, final)
+			rule = GrantRule{ID: g.Rule.ID, Version: int64(g.Rule.Version)}
+			if err = tx.QueryRow(ctx, `SELECT encode(sha256(convert_to(body_text,'UTF8')),'hex') FROM agentrt.rule WHERE rule_id=$1 AND rule_version=$2`,
+				g.Rule.ID, g.Rule.Version).Scan(&rule.SHA256); err != nil {
 				return err
 			}
 			acc, rev, err := readGrantChecks(ctx, tx, o.Task, o.Attempt)
@@ -362,7 +426,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			case !final.Before(grant.exp):
 				decision = landing.Decision{Reason: "grant_expired"}
 				return nil
-			case grantCIProblem(o, key, ci, final) || cand != grant.CandidateDigest:
+			case !floor && grantCIProblem(o, key, ci, final) || cand != grant.CandidateDigest:
 				decision = landing.Decision{Reason: "grant_stale"}
 				return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
 			case !rules.LandingWaivesCover(soft, refusalsOf(grant.Waives)):
@@ -430,6 +494,45 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 		return Authorization{}, landing.Decision{}, err
 	}
 	return auth, decision, nil
+}
+
+// floorTreeStale is why M0..R, recomputed from Git, is not what a floor
+// grant pinned ("" when it is): R one commit whose only parent is M0, the
+// same files added or modified as regular files with the same bytes'
+// sha256 at R, each still floor-grantable with no Secret, and nothing else.
+func floorTreeStale(pinned []GrantFloorPath, tree landing.FloorTree) string {
+	if !tree.OnM0 {
+		return "R is not one commit on M0"
+	}
+	want := map[string]GrantFloorPath{}
+	for _, p := range pinned {
+		want[p.Path] = p
+	}
+	seen := map[string]bool{}
+	for _, f := range tree.Files {
+		p, ok := want[f.Path]
+		switch {
+		case seen[f.Path]:
+			return "file listed twice: " + f.Path
+		case rules.InfraNeverGrantable(f.Path) || f.Secret:
+			return "never-grantable: " + f.Path
+		case !ok:
+			return "extra file: " + f.Path
+		case f.Kind != "A" && f.Kind != "M" || f.Mode != "100644":
+			return "change kind or mode: " + f.Path
+		case rules.InfraFloorEntry(f.Path) != p.Entry:
+			return "entry changed: " + f.Path
+		case f.SHA256 != p.BlobSHA256:
+			return "bytes changed: " + f.Path
+		}
+		seen[f.Path] = true
+	}
+	for _, p := range pinned {
+		if !seen[p.Path] {
+			return "missing file: " + p.Path
+		}
+	}
+	return ""
 }
 
 // LandingGateVersion is the version of the landing_gate record.
@@ -610,7 +713,10 @@ func lockLandingBinding(ctx context.Context, tx pgx.Tx, task, tenant, step, miss
 // main_result{ok}: landed follows from main's evidence (§10); denied records
 // main_result{denied}, which ReconcileDenied ends failed{denied} with the
 // repository stopped (B6); non_ff and unknown are recorded as they are.
-func RecordPushResult(ctx context.Context, db DB, auth Authorization, outcome string) (bool, error) {
+// pusher, the Gitea username the push went as (the lander's username
+// file), is recorded beside the outcome as landing_pusher ("" when the
+// push never named one).
+func RecordPushResult(ctx context.Context, db DB, auth Authorization, outcome, pusher string) (bool, error) {
 	stream := "landing:" + landing.Repository(authRepo(auth)...)
 	wrote := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -626,101 +732,16 @@ func RecordPushResult(ctx context.Context, db DB, auth Authorization, outcome st
 		if !ok || o.Phase != "main_intent" || o.R != auth.R {
 			return nil // the reconciler moved it first: its record stands
 		}
-		if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: auth.Root,
-			Body: map[string]any{"text": "Landing main_result: " + outcome, "landing": map[string]any{"v": landing.Version, "kind": "main_result", "op": auth.Op, "outcome": outcome}}}); err != nil {
+		body := map[string]any{"text": "Landing main_result: " + outcome, "landing": map[string]any{"v": landing.Version, "kind": "main_result", "op": auth.Op, "outcome": outcome}}
+		if pusher != "" {
+			body["landing_pusher"] = pusher
+			body["text"] = "Landing main_result: " + outcome + " (pushed as " + pusher + ")"
+		}
+		if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: auth.Root, Body: body}); err != nil {
 			return err
 		}
 		wrote = true
 		return nil
 	})
 	return wrote, err
-}
-
-// repoStopped: a failed{denied} stopped the repository and no Owner's
-// resume has answered that stop's generation yet (B6, CUT §11.4).
-func repoStopped(ctx context.Context, tx pgx.Tx, stream string) (bool, error) {
-	var stopped, resumed int
-	err := tx.QueryRow(ctx, `SELECT
-	    COALESCE(max((body_json->'landing_stop'->>'generation')::int), 0),
-	    COALESCE(max((body_json->'landing_resume'->>'generation')::int), 0)
-	  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'`, stream).Scan(&stopped, &resumed)
-	return stopped > resumed, err
-}
-
-// stopRepo records the repository stopped by op's denied push, in the
-// transaction that ends it failed{denied}: the stop and the ending commit
-// together or not at all (B6).
-func stopRepo(ctx context.Context, tx pgx.Tx, stream, repo, op, root string) error {
-	var gen int
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(max((body_json->'landing_stop'->>'generation')::int), 0) + 1 FROM agentrt.event
-	  WHERE event_stream_id = $1 AND event_type = 'note'`, stream).Scan(&gen); err != nil {
-		return err
-	}
-	_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: root,
-		Body: map[string]any{"text": "Landing stopped for the repository: a push to main was denied; the Owner resumes it",
-			"landing_stop": map[string]any{"repo": repo, "op": op, "root": root, "generation": gen}}})
-	return err
-}
-
-// badLandingStop is why a stop or resume body is refused, or "".
-func badLandingStop(name string, v any) string {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return name + " is not an object"
-	}
-	if r, _ := m["repo"].(string); r == "" {
-		return name + " needs repo"
-	}
-	g, ok := m["generation"].(int64)
-	if !ok {
-		if f, isF := m["generation"].(float64); isF && f == float64(int64(f)) {
-			g, ok = int64(f), true
-		} else if i, isI := m["generation"].(int); isI {
-			g, ok = int64(i), true
-		}
-	}
-	if !ok || g < 1 {
-		return name + " generation is not a positive integer"
-	}
-	if name == "landing_stop" {
-		if op, _ := m["op"].(string); op == "" {
-			return "landing_stop needs op"
-		}
-		if !landingRoot.MatchString(fmt.Sprint(m["root"])) {
-			return "landing_stop root is not a task"
-		}
-	}
-	return ""
-}
-
-// checkLandingStopAppend: only the controller stops or resumes, on the
-// repository stream, never as a landing record.
-func checkLandingStopAppend(ev Event) error {
-	_, stop := ev.Body["landing_stop"]
-	_, resume := ev.Body["landing_resume"]
-	if !stop && !resume {
-		return nil
-	}
-	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) {
-		return fmt.Errorf("a landing stop or resume is written by the controller on the repository stream")
-	}
-	if _, exists := ev.Body["landing"]; exists {
-		return fmt.Errorf("a landing stop or resume is not a landing record")
-	}
-	return nil
-}
-
-func authRepo(auth Authorization) []string {
-	if auth.Repo == "" {
-		return nil
-	}
-	return []string{auth.Repo}
-}
-
-func landingReservationBody(repo, op, root string) map[string]any {
-	b := map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": root}}
-	if repo != "bifrost-platform" {
-		b["landing_repo"] = repo
-	}
-	return b
 }

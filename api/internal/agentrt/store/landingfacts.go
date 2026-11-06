@@ -28,6 +28,23 @@ type LandingSource struct {
 	// reads use them; nil refuses every grant.
 	GrantPatch func(ctx context.Context, a, m0, r string) (GrantPatch, error)
 	GrantCI    func(ctx context.Context, key GrantCIKey, after time.Time) (GrantCIEvidence, error)
+	// RepoGrantPatch is GrantPatch for a named repository (the controller's
+	// multi-repository source); when nil, GrantPatch serves every repository.
+	RepoGrantPatch func(ctx context.Context, repo, a, m0, r string) (GrantPatch, error)
+	// FloorFiles recomputes M0..R from Git for a floor grant: R's parents,
+	// the changed files and each file's bytes' sha256 at R. Nil refuses
+	// every floor grant.
+	FloorFiles func(ctx context.Context, repo, m0, r string) (landing.FloorTree, error)
+}
+
+// grantPatchFor is the patch reader of repo's grants, nil when none.
+func (s LandingSource) grantPatchFor(repo string) func(ctx context.Context, a, m0, r string) (GrantPatch, error) {
+	if s.RepoGrantPatch != nil {
+		return func(ctx context.Context, a, m0, r string) (GrantPatch, error) {
+			return s.RepoGrantPatch(ctx, repo, a, m0, r)
+		}
+	}
+	return s.GrantPatch
 }
 
 // LandingFacts is the common reader for all three gates. The caller supplies

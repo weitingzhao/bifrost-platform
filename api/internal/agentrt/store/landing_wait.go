@@ -47,7 +47,7 @@ func appendAwaitingGrant(ctx context.Context, tx pgx.Tx, f landing.Facts, op str
 	if err != nil {
 		return err
 	}
-	_, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", TaskID: f.Task, MissionID: f.Mission,
+	_, err = Append(ctx, tx, Event{Stream: "landing:" + f.Repo, Type: "note", Actor: "controller", TaskID: f.Task, MissionID: f.Mission,
 		Body: map[string]any{"text": "Landing awaits a D-tier grant", "landing": map[string]any{
 			"v": landing.Version, "kind": "awaiting_grant", "op": op, "soft": set, "files": len(f.Changes), "lines": lines, "material": "sha256:" + sum}}})
 	return err

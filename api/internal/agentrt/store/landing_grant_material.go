@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -45,10 +46,28 @@ type GrantSources struct {
 	// Cache belongs to this runtime/source. Only immutable Git evidence is
 	// shared; CI, database facts and authorization are always read again.
 	Cache *GrantMaterialCache
+	// ByRepo, when set, gives the sources of another repository's grants
+	// (infra's Gitea reader); without it these sources serve every one.
+	ByRepo func(repo string) GrantSources
 }
 
-func (s GrantSources) complete() bool {
-	return s.Facts.Result != nil && s.Facts.History != nil && s.Facts.GrantPatch != nil && s.Facts.GrantCI != nil && s.Main != nil
+func (s GrantSources) forRepo(repo string) GrantSources {
+	if s.ByRepo != nil && repo != "bifrost-platform" {
+		return s.ByRepo(repo)
+	}
+	return s
+}
+
+// complete: every reader repo's grants need. A floor grant reads M0..R's
+// files instead of a pinned CI run.
+func (s GrantSources) complete(repo string) bool {
+	if s.Facts.Result == nil || s.Facts.History == nil || s.Facts.grantPatchFor(repo) == nil || s.Main == nil {
+		return false
+	}
+	if rules.FloorGrantSupported(repo) {
+		return s.Facts.FloorFiles != nil
+	}
+	return s.Facts.GrantCI != nil
 }
 
 // GrantParams are the approval's parameters, closed (§5.6 item 1).
@@ -72,7 +91,7 @@ func DecodeGrantParams(params map[string]any) (GrantParams, error) {
 	switch {
 	case p.Env != "prod":
 		return p, invalid("grant parameters: env is prod (a grant is PROD only)")
-	case !rules.GrantSupported(p.Repo):
+	case !landing.GrantSupported(p.Repo):
 		return p, grantRefused("grant_unsupported", "repository %q takes no grant", p.Repo)
 	case !landingRoot.MatchString(p.Task) || m == nil || m[1] != p.Task:
 		return p, invalid("grant parameters: op is land:<task>:<n> of task")
@@ -174,9 +193,15 @@ func (c GrantCandidate) Digest() (string, error) {
 	}{LandingGrantVersion, c})
 }
 
-// materialDigest = Sum({v, candidate_digest, soft_at_request, rule, checks_version}).
-func materialDigest(candidate string, soft []string, rule GrantRule, checks int64) (string, error) {
-	return sumOf(map[string]any{"v": LandingGrantVersion, "candidate_digest": candidate, "soft_at_request": soft, "rule": rule, "checks_version": checks})
+// materialDigest = Sum({v, candidate_digest, soft_at_request, rule,
+// checks_version}), with floor_paths for a floor grant's material (a
+// platform material has none, and its digest is unchanged).
+func materialDigest(candidate string, soft []string, rule GrantRule, checks int64, floor []GrantFloorPath) (string, error) {
+	v := map[string]any{"v": LandingGrantVersion, "candidate_digest": candidate, "soft_at_request": soft, "rule": rule, "checks_version": checks}
+	if floor != nil {
+		v["floor_paths"] = floor
+	}
+	return sumOf(v)
 }
 
 // LandingGrantMaterial is the material route's answer and what the create
@@ -209,10 +234,17 @@ type LandingGrantMaterial struct {
 	Grants          []LandingGrantStatus `json:"grants"`
 	Problems        []string             `json:"problems"`
 	ComputedAt      time.Time            `json:"computed_at"`
+	// FloorPaths are the files a floor grant pins, sorted by path, each at
+	// its blob sha256 at R; absent for platform operations.
+	FloorPaths []GrantFloorPath `json:"floor_paths,omitempty"`
+	// floorCI is the infra CI run the operation succeeded on, recorded in
+	// a floor grant; not part of the candidate (the gate reads CI again).
+	floorCI GrantCI
 }
 
 // grantDB is the database half of the material, read in one transaction.
 type grantDB struct {
+	repo       string
 	facts      landing.Facts
 	opID, step string
 	op         landing.Operation
@@ -230,7 +262,11 @@ type grantDB struct {
 func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, now time.Time) (grantDB, error) {
 	var d grantDB
 	d.opID = op
-	s, err := LandingState(ctx, tx, landingRepoStream)
+	var err error
+	if d.repo, err = grantRepoOf(ctx, tx, op); err != nil {
+		return d, err
+	}
+	s, err := LandingState(ctx, tx, grantStream(d.repo))
 	if err != nil {
 		return d, err
 	}
@@ -259,7 +295,7 @@ func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, n
 	if d.ciKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 		return d, err
 	}
-	_, d.grants, err = readLandingGrants(ctx, tx, landingRepoStream)
+	_, d.grants, err = readLandingGrants(ctx, tx, grantStream(d.repo))
 	return d, err
 }
 
@@ -314,6 +350,7 @@ type grantExt struct {
 	changes []rules.LandingChange
 	patch   GrantPatch
 	ci      GrantCIEvidence
+	floor   landing.FloorTree
 }
 
 func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
@@ -326,7 +363,7 @@ func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 
 func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
 	var x grantExt
-	if !src.complete() {
+	if !src.complete(d.repo) {
 		return x, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	f, o := d.facts, d.op
@@ -337,10 +374,48 @@ func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 	if x.single, x.changes, err = src.Facts.Result(ctx, f.Repo, f.Task, f.Attempt, f.Base, f.A); err != nil {
 		return x, err
 	}
-	if x.patch, err = src.Facts.GrantPatch(ctx, o.A, o.M0, o.R); err != nil {
+	if x.patch, err = src.Facts.grantPatchFor(d.repo)(ctx, o.A, o.M0, o.R); err != nil {
 		return x, err
 	}
+	if rules.FloorGrantSupported(d.repo) {
+		if x.floor, err = src.Facts.FloorFiles(ctx, d.repo, o.M0, o.R); err != nil {
+			return x, err
+		}
+	}
 	return x, nil
+}
+
+// floorPathsOf are a floor grant's pinned files from Git's M0..R, and
+// whether that tree can be granted at all: R one commit on M0, every file
+// added or modified, floor-grantable, and no Secret manifest.
+func floorPathsOf(t landing.FloorTree) ([]GrantFloorPath, bool) {
+	out := []GrantFloorPath{}
+	ok := t.OnM0 && len(t.Files) > 0
+	for _, f := range t.Files {
+		entry := rules.InfraFloorEntry(f.Path)
+		if entry == "" || f.Secret || f.Kind != "A" && f.Kind != "M" || f.Mode != "100644" || !grantHex64.MatchString(f.SHA256) {
+			ok = false
+			continue
+		}
+		out = append(out, GrantFloorPath{Path: f.Path, Entry: entry, BlobSHA256: f.SHA256})
+	}
+	slices.SortFunc(out, func(a, b GrantFloorPath) int { return strings.Compare(a.Path, b.Path) })
+	for i := 1; i < len(out); i++ {
+		if out[i].Path == out[i-1].Path {
+			ok = false
+		}
+	}
+	return out, ok
+}
+
+// floorCIOf is the infra CI success the operation is waiting on: R's run,
+// created after preparation and no later than now; zero otherwise.
+func floorCIOf(o landing.Operation, now time.Time) (GrantCI, bool) {
+	created := o.CI.Time("created_at")
+	ci := GrantCI{Pipeline: rules.LandingRepositories["bifrost-trade-infra"].CIPipeline, Run: o.CI.String("run"), UID: o.CI.String("uid"),
+		CreatedAt: created.UTC().Format(time.RFC3339Nano), Status: o.CI.String("status"), SHA: o.CI.String("R")}
+	green := ci.Status == "Succeeded" && ci.SHA == o.R && ci.Run != "" && ci.UID != "" && created.After(o.PreparedAt) && !created.After(now)
+	return ci, green
 }
 
 // buildCandidate composes candidate_digest's inputs.
@@ -407,12 +482,28 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		problem("no_soft_failure")
 	}
 	m.Action = GrantActionFor(m.SoftAtRequest)
-	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, x.patch, x.ci, d.ciKey, stg)
+	floor := m.Action == ActionFloorLanding
+	ci, key := x.ci, d.ciKey
+	if floor {
+		// A floor grant pins files, not a CI run: the gate reads infra's CI
+		// again; the material names the success the operation waits on.
+		var green bool
+		if m.floorCI, green = floorCIOf(d.op, now); !green {
+			problem("ci_not_green")
+		}
+		ci, key = GrantCIEvidence{}, nil
+		var grantable bool
+		m.FloorPaths, grantable = floorPathsOf(x.floor)
+		if !grantable || !rules.LandingFloorGrantable(landingRuleOf(f), f.Repo, f.Changes, soft) {
+			problem("floor") // M0..R holds a file no floor grant can pin
+		}
+	}
+	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, x.patch, ci, key, stg)
 	var err error
 	if m.CandidateDigest, err = m.Candidate.Digest(); err != nil {
 		return nil, err
 	}
-	if m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion); err != nil {
+	if m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion, m.FloorPaths); err != nil {
 		return nil, err
 	}
 	switch {
@@ -424,7 +515,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	if !d.enabled {
 		problem("grant_not_enabled")
 	}
-	if !rules.GrantSupported(f.Repo) {
+	if !GrantActionSupported(m.Action, f.Repo) {
 		problem("grant_unsupported")
 	}
 	if m.Action == ActionGuardrailLanding && !m.Pinned {
@@ -434,6 +525,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		problem("patch_changed")
 	}
 	switch {
+	case floor:
 	case d.ciKey == nil:
 		problem("ci_not_pinned") // its CI was not pinned to sibling commits: no grant rests on it
 	case grantCIProblem(d.op, d.ciKey, x.ci, now):
@@ -451,7 +543,11 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		m.Title = "Trusted core change"
 		m.FirstLine = "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code."
 	}
-	if stg {
+	if floor {
+		m.Title = "Infra floor change"
+		m.FirstLine = "Approving lets agentrt-lander push this commit to infra main, once, fast-forward only, if the files it changes are still exactly these at R. Nothing is applied to a cluster: an Argo sync, or apply_manifest for a path Argo does not track, is a separate step."
+	}
+	if stg && !floor {
 		m.STGNotice = "Approving also authorizes this commit to go to STG with the B5 batch."
 	}
 	for _, g := range d.grants {
@@ -487,7 +583,7 @@ func CheckLandingGrantRequest(ctx context.Context, db DB, src GrantSources, acti
 	if err := requestMatches(m, action, p); err != nil {
 		return m, err
 	}
-	head, err := src.Main(ctx)
+	head, err := src.forRepo(m.Candidate.Repo).Main(ctx)
 	if err != nil || !landing.ValidSHA(head) {
 		return m, grantRefused("main_unreadable", "main could not be read: %v", err)
 	}
@@ -535,7 +631,11 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	if a.ID == "" || a.Number < 1 || !slices.Contains(GrantActions, a.Action) || !grantHex64.MatchString(a.ParamsHash) || a.ApprovedAt.IsZero() {
 		return LandingGrant{}, invalid("grant executor: an approval record is required")
 	}
-	if !src.complete() {
+	if !GrantActionSupported(a.Action, p.Repo) {
+		return LandingGrant{}, grantRefused("grant_unsupported", "%s is not granted for %s", a.Action, p.Repo)
+	}
+	src = src.forRepo(p.Repo)
+	if !src.complete(p.Repo) {
 		return LandingGrant{}, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	grantID := "lg_" + a.ID
@@ -564,9 +664,13 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	if err != nil || !landing.ValidSHA(head) {
 		return LandingGrant{}, grantRefused("main_unreadable", "main could not be read: %v", err)
 	}
+	if pre.repo != p.Repo {
+		return LandingGrant{}, grantRefused("not_waiting", "op %s is not in %s", p.Op, p.Repo)
+	}
 	if head != pre.op.M0 {
-		// §5.4 / §5.6 item 4: main moved; the approval is stale.
-		if pre.op.Phase == "awaiting_grant" && pre.latest {
+		// §5.4 / §5.6 item 4: main moved; the approval is stale. Infra's
+		// waiting operation is discarded at its final gate instead.
+		if pre.op.Phase == "awaiting_grant" && pre.latest && pre.repo == "bifrost-platform" {
 			if werr := InTx(ctx, db, func(tx pgx.Tx) error {
 				mission, e := lockWaitingRoot(ctx, tx, pre.op.Task)
 				if e != nil {
@@ -603,7 +707,7 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 		return LandingGrant{}, err
 	}
 	hook("landing grant: binding locked", p.Op)
-	if err = lockStream(ctx, tx, landingRepoStream); err != nil {
+	if err = lockStream(ctx, tx, grantStream(pre.repo)); err != nil {
 		return LandingGrant{}, err
 	}
 	now := DecisionAt()
@@ -648,7 +752,10 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 			Status: m.Candidate.CI.Status, SHA: m.Candidate.CI.SHA},
 		Purpose: LandingGrantPurpose, STGRelease: p.STGRelease, ApprovedAt: approved.Format(time.RFC3339Nano),
 		GrantedAt: granted.Format(time.RFC3339Nano), ExpiresAt: approved.Add(LandingGrantTTL).Format(time.RFC3339Nano)}
-	if _, err = Append(ctx, tx, Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,
+	if a.Action == ActionFloorLanding {
+		g.CI, g.FloorPaths = m.floorCI, slices.Clone(m.FloorPaths)
+	}
+	if _, err = Append(ctx, tx, Event{Stream: grantStream(pre.repo), Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,
 		Body: map[string]any{"text": fmt.Sprintf("Landing grant from approval #%d (%s)", a.Number, a.Action), "landing_grant": toBody(g)}}); err != nil {
 		return LandingGrant{}, err
 	}
@@ -661,10 +768,10 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	defer cancel()
 	var back *grantView
 	rerr := InTx(rctx, db, func(tx pgx.Tx) error {
-		if e := lockStream(rctx, tx, landingRepoStream); e != nil {
+		if e := lockStream(rctx, tx, grantStream(pre.repo)); e != nil {
 			return e
 		}
-		grants, _, e := readLandingGrants(rctx, tx, landingRepoStream)
+		grants, _, e := readLandingGrants(rctx, tx, grantStream(pre.repo))
 		back = grants[grantID]
 		return e
 	})

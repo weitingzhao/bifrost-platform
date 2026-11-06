@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -318,8 +319,8 @@ func (c *Controller) failCIRed(ctx context.Context, src DrillSources, repo, op s
 // and grants enabled, as the final gate will judge them) and this process
 // can pin its CI. Pure: no read.
 func (c *Controller) pinnable(src DrillSources, f landing.Facts, o landing.Operation, at time.Time) bool {
-	if c.Env != "prod" || o.DryRun || src.EnsurePinnedCI == nil || src.SiblingHeads == nil {
-		return false
+	if c.Env != "prod" || o.DryRun || src.EnsurePinnedCI == nil || src.SiblingHeads == nil || !rules.GrantSupported(f.Repo) {
+		return false // infra's floor grant pins files, not a CI run
 	}
 	reason, soft := landing.PolicyChecks(f, at)
 	return reason == "" && len(soft) > 0 && landing.MayAwaitGrant(f, soft)

@@ -174,12 +174,12 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	if !d.Allowed {
 		t.Fatal(d)
 	}
-	wrote, err := store.RecordPushResult(ctx, w.rt, auth, "denied")
+	wrote, err := store.RecordPushResult(ctx, w.rt, auth, "denied", "agentrt-lander")
 	ok(t, err)
 	if !wrote {
 		t.Fatal("result not recorded")
 	}
-	if again, err := store.RecordPushResult(ctx, w.rt, auth, "ok"); err != nil || again {
+	if again, err := store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander"); err != nil || again {
 		t.Fatal("a second result over the first", again, err)
 	}
 	ended, err := store.ReconcileDenied(ctx, w.rt, "bifrost-platform")

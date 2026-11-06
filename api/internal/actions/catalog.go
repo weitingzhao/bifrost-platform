@@ -478,6 +478,16 @@ var catalog = []Action{
 		Params: landingGrantParams,
 	},
 	{
+		ID: "approve_floor_landing", Tier: TierD,
+		Description: "Infra floor change: grant one waiting bifrost-trade-infra landing operation whose files are all floor-grantable (k8s/**, scripts/**, docker/**, config/**, Makefile, docker-compose*.yml, mkdocs.yml, requirements*.txt, .gitignore, agent-config/** outside agent-config/work/, OWNER-STEPS-*, *RUNBOOK*, TICKET-*, REQUEST-*, RULE-*) the push to infra main by agentrt-lander, once, fast-forward only. " +
+			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-trade-infra. " +
+			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant pins R, M0 and floor_paths: each file's path, the floor entry it matched and the sha256 of its bytes at R (GET /api/v1/agentrt/landing/{op}/material). " +
+			"Just before the push the final gate checks again that the grant is unexpired, unrevoked and unused, main is still M0 and R's only parent, infra CI (bifrost-ci-infra) is green on R, the release window is not held, and M0..R recomputed from Git changes exactly those files with the same sha256 and nothing else; a changed byte, an extra or missing file or a never-grantable path spends the grant and nothing is pushed. " +
+			"Never-grantable paths (.env*, .github/, .gitea/, .gitmodules, .gitattributes, AGENTS.md, CLAUDE.md, SKILL.md, *.mdc, .claude/, .cursor/, .codex/, .vscode/, .idea/, *.code-workspace), a k8s file declaring kind: Secret, deletions, renames and more than 5 files or 1500 lines are refused and cannot be granted. " +
+			"The grant is valid 24 hours from the decision, used once, and can be revoked before the push. It writes Git only: a cluster write is separate (an Argo sync of infra main, or apply_manifest for a path Argo does not track).",
+		Params: landingGrantParams,
+	},
+	{
 		ID: "void_exam_paper", Tier: TierD,
 		Description: "Void a qualifying-exam paper no run was handed in for, so its executor can be handed a new paper (TD-407). Tier D: the Owner approves it on the Console. " +
 			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (environment: prod) until the cross-environment execution channel exists; run_id is the paper's sha256, reason one line. " +
@@ -535,7 +545,7 @@ func classifyApp(_ context.Context, params map[string]any) Tier {
 	return TierB
 }
 
-// landingGrantParams are the two landing grant actions' closed parameters
+// landingGrantParams are the landing grant actions' closed parameters
 // (coordinator v3 §5.6 item 1).
 var landingGrantParams = []Param{
 	{Name: "env", Type: "string", Required: true, In: "body"},

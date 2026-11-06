@@ -1,24 +1,42 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
 func TestInfraHardClosure(t *testing.T) {
 	t.Parallel()
-	for _, p := range []string{
-		"agent-config/agentrt-rules/landing-dev.yaml", "agent-config/landing/doc-consumers.yaml",
-		"scripts/landing/doc_policy.py", "scripts/landing/doc_consumers.py", "scripts/landing/coverage_infra.py", "scripts/landing/ci-infra.sh",
-		"k8s/cicd/tekton/pipeline-ci-infra.yaml", "k8s/cicd/tekton/task-ci-infra-clone.yaml", "k8s/cicd/tekton/pipeline-build-ci-infra-tools.yaml", "k8s/cicd/tekton/trigger-trade-ci.yaml", "k8s/cicd/tekton/rbac-trigger.yaml",
-		"docker/ci-infra/Dockerfile", "docker/ci-infra/tools.lock", "agent-config/scripts/code-health/new-scanner.sh", "agent-config/scripts/check-agent-config-parity.sh",
-		"scripts/gitea/new-check.sh", "scripts/release/push-main.sh", "agent-config/release-policy/policy.yaml", "scripts/release/db-steps.d/step.sql", "agent-config/TECH_DEBT.md", "agent-config/WORK.md",
-		".gitattributes", "x/.gitmodules", "x/.gitignore", "x/.vscode/tasks.json", "x/.idea/run.xml", "x/a.code-workspace",
-		"agent-config/work/multi-agent/reviews/SKILL.md", "agent-config/work/multi-agent/DESIGN-RUNBOOK-x.md", "x/AGENTS.md", "x/CLAUDE.md", "x/a.mdc", "x/.claude/a", "x/.cursor/a", "x/.codex/a", "x/OWNER-STEPS-a.md", "x/TICKET-a.md", "x/REQUEST-a.md", "x/RULE-a.md", "x/.env.local",
-		"Makefile", "config/x", "docker-compose.prod.yml", "mkdocs.yml", "requirements-dev.txt", ".github/workflows/a.yml", ".gitea/workflows/a.yml",
+	// Floor-grantable: hard (no automatic landing), never core, not absolute,
+	// each with the entry it matched.
+	for p, entry := range map[string]string{
+		"agent-config/agentrt-rules/landing-dev.yaml": "agent-config/**", "agent-config/landing/doc-consumers.yaml": "agent-config/**",
+		"scripts/landing/doc_policy.py": "scripts/**", "scripts/landing/doc_consumers.py": "scripts/**", "scripts/landing/coverage_infra.py": "scripts/**", "scripts/landing/ci-infra.sh": "scripts/**",
+		"k8s/cicd/tekton/pipeline-ci-infra.yaml": "k8s/**", "k8s/cicd/tekton/task-ci-infra-clone.yaml": "k8s/**", "k8s/cicd/tekton/pipeline-build-ci-infra-tools.yaml": "k8s/**",
+		"k8s/cicd/tekton/trigger-trade-ci.yaml": "k8s/**", "k8s/cicd/tekton/rbac-trigger.yaml": "k8s/**",
+		"docker/ci-infra/Dockerfile": "docker/**", "docker/ci-infra/tools.lock": "docker/**", "agent-config/scripts/code-health/new-scanner.sh": "agent-config/**",
+		"agent-config/scripts/check-agent-config-parity.sh": "agent-config/**", "scripts/gitea/new-check.sh": "scripts/**", "scripts/release/push-main.sh": "scripts/**",
+		"agent-config/release-policy/policy.yaml": "agent-config/**", "scripts/release/db-steps.d/step.sql": "scripts/**", "agent-config/TECH_DEBT.md": "agent-config/**", "agent-config/WORK.md": "agent-config/**",
+		"x/.gitignore": "**/.gitignore", ".gitignore": "**/.gitignore", "agent-config/work/multi-agent/DESIGN-RUNBOOK-x.md": "**/*RUNBOOK*", "x/OWNER-STEPS-a.md": "**/OWNER-STEPS-*",
+		"x/TICKET-a.md": "**/TICKET-*", "x/REQUEST-a.md": "**/REQUEST-*", "x/RULE-a.md": "**/RULE-*",
+		"Makefile": "Makefile", "config/x": "config/**", "docker-compose.prod.yml": "docker-compose*.yml", "mkdocs.yml": "mkdocs.yml", "requirements-dev.txt": "requirements*.txt",
 	} {
-		if !LandingHardAbsolute("bifrost-trade-infra", p) || !LandingHard("bifrost-trade-infra", p) || LandingHardCore("bifrost-trade-infra", p) {
-			t.Errorf("unprotected infra dependency: %s", p)
+		if LandingHardAbsolute("bifrost-trade-infra", p) || !LandingHard("bifrost-trade-infra", p) || LandingHardCore("bifrost-trade-infra", p) || !LandingFloor("bifrost-trade-infra", p) {
+			t.Errorf("floor-grantable path misclassified: %s", p)
+		}
+		if got := InfraFloorEntry(p); got != entry {
+			t.Errorf("%s: entry %q, want %q", p, got, entry)
+		}
+	}
+	// Never-grantable: absolute, as before, and no floor entry.
+	for _, p := range []string{
+		".gitattributes", "x/.gitmodules", "x/.vscode/tasks.json", "x/.idea/run.xml", "x/a.code-workspace",
+		"agent-config/work/multi-agent/reviews/SKILL.md", "x/AGENTS.md", "x/CLAUDE.md", "CLAUDE.md", "x/a.mdc", "x/.claude/a", "x/.cursor/a", "x/.codex/a", "x/.env.local",
+		".github/workflows/a.yml", ".gitea/workflows/a.yml", "k8s/.env", "scripts/AGENTS.md", "agent-config/.claude/settings.json", "../x.md",
+	} {
+		if !LandingHardAbsolute("bifrost-trade-infra", p) || !LandingHard("bifrost-trade-infra", p) || LandingHardCore("bifrost-trade-infra", p) || InfraFloorEntry(p) != "" {
+			t.Errorf("unprotected never-grantable infra path: %s", p)
 		}
 	}
 	for _, p := range []string{"api/internal/delivery/new_file.go", "api/internal/agentrt/infracheck/new_file.go", "api/internal/agentrt/store/repos.go", "api/cmd/infracheck/main.go"} {
@@ -27,9 +45,62 @@ func TestInfraHardClosure(t *testing.T) {
 		}
 	}
 	for _, p := range []string{"agent-config/work/multi-agent/REPORT-a.md", "agent-config/work/multi-agent/reviews/r1.md"} {
-		if LandingHard("bifrost-trade-infra", p) {
+		if LandingHard("bifrost-trade-infra", p) || InfraFloorEntry(p) != "" {
 			t.Fatal("control", p)
 		}
+	}
+}
+
+func TestInfraSoftFloorGrant(t *testing.T) {
+	t.Parallel()
+	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: InfraLandingAllow, Limits: &LandingRepoLimits{MaxFiles: 5, MaxChangedLines: 1500, MaxInFlight: 1}}},
+		Limits: LandingLimits{MaxFiles: 10, MaxChangedLines: 300}}
+	k8s := LandingChange{OldPath: "k8s/a.yaml", NewPath: "k8s/a.yaml", OldMode: "100644", NewMode: "100644", Added: 3}
+	soft := LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{k8s})
+	if !slices.Equal(soft, []LandingRefusal{LandingFloorGrant, LandingRulePaths}) || !LandingFloorGrantable(l, "bifrost-trade-infra", []LandingChange{k8s}, soft) {
+		t.Fatal("k8s", soft)
+	}
+	big := k8s
+	big.Added = 1501
+	soft = LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{big})
+	if !slices.Contains(soft, LandingSize) || LandingFloorGrantable(l, "bifrost-trade-infra", []LandingChange{big}, soft) {
+		t.Fatal("size waived", soft)
+	}
+	other := LandingChange{NewPath: "notes/x.md", NewMode: "100644", Added: 1}
+	soft = LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{other})
+	if !slices.Equal(soft, []LandingRefusal{LandingRulePaths}) || LandingFloorGrantable(l, "bifrost-trade-infra", []LandingChange{other}, soft) {
+		t.Fatal("ordinary path refusal", soft)
+	}
+	if LandingFloorGrantable(l, "bifrost-platform", []LandingChange{k8s}, []LandingRefusal{LandingFloorGrant}) {
+		t.Fatal("platform floor grant")
+	}
+	if !LandingWaivesCover([]LandingRefusal{LandingFloorGrant, LandingRulePaths}, []LandingRefusal{LandingFloorGrant, LandingRulePaths}) {
+		t.Fatal("floor_grant is a known category")
+	}
+	// Platform paths do not change.
+	if !LandingHard("bifrost-platform", "Makefile") || LandingHardAbsolute("bifrost-platform", "Makefile") || !LandingHardCore("bifrost-platform", "Makefile") {
+		t.Fatal("platform Makefile changed")
+	}
+}
+
+func TestInfraSecretManifest(t *testing.T) {
+	t.Parallel()
+	for text, want := range map[string]bool{
+		"kind: Secret\n": true, "  kind:Secret": true, "kind :\tSecret  ": true, "- kind: Secret": true, "kind: 'Secret'": true, "kind: Secret # db\n": true,
+		"kind: Secrets": false, "kind: SecretProviderClass": false, "# kind: Secret": false, "metadata:\n  name: Secret": false, "kind: ConfigMap": false,
+	} {
+		if got := InfraSecretManifest("k8s/a.yaml", text); got != want {
+			t.Errorf("%q: %v", text, got)
+		}
+	}
+	if InfraSecretManifest("docs/a.yaml", "kind: Secret") {
+		t.Fatal("outside k8s")
+	}
+	if _, bad := LandingContentViolation("bifrost-trade-infra", []LandingChange{{NewPath: "k8s/s.yaml", NewMode: "100644", AddedText: "kind: Secret\n"}}); !bad {
+		t.Fatal("secret not refused")
+	}
+	if _, bad := LandingContentViolation("bifrost-platform", []LandingChange{{NewPath: "k8s/s.yaml", NewMode: "100644", AddedText: "kind: Secret\n"}}); bad {
+		t.Fatal("platform content check")
 	}
 }
 

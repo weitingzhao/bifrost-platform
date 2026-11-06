@@ -217,6 +217,9 @@ var bodies = map[string][]field{
 		{"landing_refusal", kAny, true},
 		{"landing_floor", kAny, true},
 		{"landing_repo", kStr, true},
+		// landing_pusher: the Gitea username a push of main went as, beside
+		// its main_result (landing_live.go RecordPushResult).
+		{"landing_pusher", kStr, true},
 		// landing_disposed: the Owner counted a landed or in-main root as
 		// delivered or not, on its card (CUT §11.8 v3 item 4).
 		{"landing_disposed", kAny, true},

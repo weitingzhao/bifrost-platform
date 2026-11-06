@@ -54,7 +54,7 @@ func b5Ready(t *testing.T) *b5Fixture {
 	if !d.Allowed {
 		t.Fatal("landing prerequisite", d)
 	}
-	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok")
+	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "landed", "R", commitB)))
 	return b5Snapshot(t, w, root, op, at)
@@ -327,7 +327,7 @@ func TestStgGatePGConsumedCoreGrant(t *testing.T) {
 	if !d.Allowed {
 		t.Fatal(d)
 	}
-	_, err := store.RecordPushResult(ctx, c.w.rt, auth, "ok")
+	_, err := store.RecordPushResult(ctx, c.w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(c.op, "landed", "R", commitB)))
 	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, landingRuleBody))))

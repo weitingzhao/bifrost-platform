@@ -71,6 +71,7 @@ var notifySafeKeys = map[string][]string{
 	"stg_release_sample_finalize": {"env", "run", "uid"},
 	"approve_guardrail_landing":   {"env", "repo", "op", "R", "stg_release"},
 	"approve_core_landing":        {"env", "repo", "op", "R", "stg_release"},
+	"approve_floor_landing":       {"env", "repo", "op", "R"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -127,6 +128,8 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = p("env"), "Land "+shortRef(p("R"))+" ("+p("op")+") past its soft guardrails"
 	case "approve_core_landing":
 		d.Env, d.Summary = p("env"), "Trusted core change: land "+shortRef(p("R"))+" ("+p("op")+")"
+	case "approve_floor_landing":
+		d.Env, d.Summary = p("env"), "Infra floor change: land "+shortRef(p("R"))+" ("+p("op")+") on "+p("repo")+" main"
 	case "stg_release_sample_create":
 		d.Env, d.Summary = p("env"), "Create the B5 first-opening sample run of "+shortRef(p("revision"))
 	case "stg_release_sample_finalize":

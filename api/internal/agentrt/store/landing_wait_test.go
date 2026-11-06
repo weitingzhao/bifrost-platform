@@ -139,7 +139,7 @@ func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
 	if !d.Allowed || auth.Op != op2 {
 		t.Fatal("ordinary final gate", d)
 	}
-	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok")
+	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	effectiveRead(t, w, at.Add(3*time.Minute))
 	if p, _ := phaseOf(t, w, op2); p != "landed" {

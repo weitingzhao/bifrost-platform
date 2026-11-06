@@ -2,11 +2,9 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
@@ -67,38 +65,4 @@ func landingRuleIncludes(ctx context.Context, tx pgx.Tx, tenant, repo string) (b
 	}
 	_, includes := r.Landing.Repo(repo)
 	return includes, nil
-}
-
-// Infra never reads or folds grants, even if its stream contains a malformed
-// grant record. Grant appenders independently reject this repository.
-func infraLandingState(ctx context.Context, tx pgx.Tx, stream string) (landing.State, error) {
-	rows, err := tx.Query(ctx, `SELECT at, body_json->'landing' FROM agentrt.event WHERE event_stream_id=$1 AND event_type='note' AND body_json ? 'landing' ORDER BY seq`, stream)
-	if err != nil {
-		return landing.State{}, err
-	}
-	defer rows.Close()
-	var entries []landing.Entry
-	for rows.Next() {
-		var at time.Time
-		var raw []byte
-		if err := rows.Scan(&at, &raw); err != nil {
-			return landing.State{}, err
-		}
-		v, err := canon.Parse(raw)
-		if err != nil {
-			return landing.State{}, err
-		}
-		r, err := landing.Parse(v)
-		if err != nil {
-			return landing.State{}, err
-		}
-		if r.String("kind") == "awaiting_grant" {
-			return landing.State{}, fmt.Errorf("infra cannot await a grant")
-		}
-		entries = append(entries, landing.Entry{At: at, Record: r})
-	}
-	if err := rows.Err(); err != nil {
-		return landing.State{}, err
-	}
-	return landing.Fold(entries)
 }

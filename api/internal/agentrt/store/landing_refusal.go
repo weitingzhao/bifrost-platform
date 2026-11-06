@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"slices"
 	"time"
 
@@ -83,30 +84,71 @@ func validLandingFloor(v any) bool {
 	if !ok {
 		return false
 	}
-	for _, key := range []string{"structural", "hard", "change_kind"} {
+	for _, key := range []string{"structural", "hard", "secret", "change_kind"} {
 		if s, ok := m[key].(string); ok && s != "" {
 			return len(m) == 1
 		}
 	}
-	if len(m) != 2 || m["grant_supported"] != false {
+	_, hasPaths := m["floor_paths"]
+	if len(m) != map[bool]int{false: 2, true: 3}[hasPaths] || m["grant_supported"] != false {
 		return false
 	}
-	var items []string
-	switch soft := m["soft"].(type) {
-	case []string:
-		items = soft
+	items, ok := floorStrings(m["soft"])
+	if !ok || len(items) == 0 {
+		return false
+	}
+	last := ""
+	for _, s := range items {
+		if s <= last || !slices.Contains([]string{"floor_grant", "rule_paths", "size"}, s) {
+			return false
+		}
+		last = s
+	}
+	if hasPaths != slices.Contains(items, "floor_grant") {
+		return false
+	}
+	if !hasPaths {
+		return len(items) == 1
+	}
+	var paths []any
+	switch list := m["floor_paths"].(type) {
 	case []any:
-		for _, item := range soft {
+		paths = list
+	case []map[string]any:
+		for _, p := range list {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) == 0 {
+		return false
+	}
+	for _, p := range paths {
+		e, _ := p.(map[string]any)
+		path, _ := e["path"].(string)
+		if len(e) != 2 || path == "" || rules.InfraFloorEntry(path) == "" || e["entry"] != rules.InfraFloorEntry(path) {
+			return false
+		}
+	}
+	return true
+}
+
+// floorStrings reads a list of strings from a Go or a decoded JSON value.
+func floorStrings(v any) ([]string, bool) {
+	switch list := v.(type) {
+	case []string:
+		return list, true
+	case []any:
+		out := make([]string, 0, len(list))
+		for _, item := range list {
 			s, ok := item.(string)
 			if !ok {
-				return false
+				return nil, false
 			}
-			items = append(items, s)
+			out = append(out, s)
 		}
-	default:
-		return false
+		return out, true
 	}
-	return len(items) == 1 && (items[0] == "rule_paths" || items[0] == "size")
+	return nil, false
 }
 
 // checkLandingRefusalAppend: the controller writes it on a repository

@@ -100,6 +100,9 @@ func PolicyChecks(f Facts, now time.Time) (reason string, refusals []rules.Landi
 	if _, bad := rules.LandingAbsoluteViolation(f.Repo, f.Changes); bad {
 		return "floor", nil
 	}
+	if _, bad := rules.LandingContentViolation(f.Repo, f.Changes); bad {
+		return "floor", nil
+	}
 	if !ruleValid(f, now) {
 		return "rule", nil
 	}
@@ -159,9 +162,11 @@ func eligibleToClaim(f Facts, now time.Time, preparation bool) Decision {
 		}
 		return refuse(reason)
 	}
-	// Infra's L4/L5 failures are final even while a dependency is pending.
-	// Platform retains its existing dependency/grant ordering.
-	if f.Repo == "bifrost-trade-infra" && len(soft) > 0 {
+	// Infra's L4/L5 failures are final even while a dependency is pending,
+	// except a change of floor-grantable paths alone, which waits for the
+	// Owner's approve_floor_landing where grants are enabled (size is never
+	// waived). Platform retains its existing dependency/grant ordering.
+	if f.Repo == "bifrost-trade-infra" && len(soft) > 0 && !MayAwaitGrant(f, soft) {
 		return Decision{Reason: "floor", Detail: floorDetail(f)}
 	}
 	if !f.DependenciesEffective {
@@ -203,8 +208,23 @@ func EligibleToPush(f Facts, now time.Time) Decision {
 // MayAwaitGrant is eligibility to prepare, never permission to push. The
 // grant executor separately enforces the action, identity and waiver checks.
 func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
-	return f.Environment == "prod" && f.Mode == "live" && f.GrantEnabled && rules.GrantSupported(f.Repo) &&
-		(f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore))
+	if f.Environment != "prod" || f.Mode != "live" || !f.GrantEnabled {
+		return false
+	}
+	if rules.FloorGrantSupported(f.Repo) {
+		var l *rules.Landing
+		if f.Rule != nil {
+			l = f.Rule.Landing
+		}
+		return rules.LandingFloorGrantable(l, f.Repo, f.Changes, soft)
+	}
+	return rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore))
+}
+
+// GrantSupported: some grant can reach repo's waiting operations (the two
+// platform grants, or infra's approve_floor_landing).
+func GrantSupported(repo string) bool {
+	return rules.GrantSupported(repo) || rules.FloorGrantSupported(repo)
 }
 func EligibleToDeploy(f Facts, now time.Time) Decision {
 	if !modeOK(f) || f.Mode != "live" || f.Operation.DryRun {

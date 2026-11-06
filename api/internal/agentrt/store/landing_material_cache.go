@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -28,8 +29,9 @@ const (
 	materialWorkers    = 2
 )
 
-// The cache contains only Result(base,A,task,attempt,repo) and
-// GrantPatch(op.A,M0,R), including the full patch's digest. Neither reads
+// The cache contains only Result(base,A,task,attempt,repo),
+// GrantPatch(op.A,M0,R), including the full patch's digest, and a floor
+// grant's FloorFiles(M0,R). Neither reads
 // mutable main content: main is fetched only to obtain the named objects.
 // Every argument is keyed, together with the operation, rule/checks version
 // and STG choice. All other material inputs (review, acceptance, CI, quota,
@@ -117,7 +119,8 @@ func (c *GrantMaterialCache) read(ctx context.Context, key materialKey, work fun
 }
 
 func cloneGrantGit(x grantExt) grantExt {
-	return grantExt{single: x.single, changes: slices.Clone(x.changes), patch: x.patch}
+	return grantExt{single: x.single, changes: slices.Clone(x.changes), patch: x.patch,
+		floor: landing.FloorTree{OnM0: x.floor.OnM0, Files: slices.Clone(x.floor.Files)}}
 }
 
 func (c *GrantMaterialCache) finish(key materialKey, f *materialFlight) {
@@ -140,6 +143,9 @@ func (c *GrantMaterialCache) finish(key materialKey, f *materialFlight) {
 	size := len(x.patch.Shown) + len(x.patch.SHA256)
 	for _, ch := range x.changes {
 		size += 128 + len(ch.OldPath) + len(ch.NewPath) + len(ch.AddedText) + len(ch.Kind) + len(ch.OldMode) + len(ch.NewMode)
+	}
+	for _, f := range x.floor.Files {
+		size += 128 + len(f.Path)
 	}
 	if size > materialMaxBytes {
 		// Retain only this deterministic refusal, not the oversized payload.
@@ -184,7 +190,8 @@ func readGrantMaterial(ctx context.Context, src GrantSources, stg bool, readDB f
 	if err != nil {
 		return nil, err
 	}
-	if !src.complete() {
+	src = src.forRepo(d.repo)
+	if !src.complete(d.repo) {
 		return nil, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	key := grantMaterialKey(d, stg)
