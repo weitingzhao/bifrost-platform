@@ -23,7 +23,7 @@ if [[ ${API_SCOPE_REQUEST:-} != full ]]; then
   fi
 fi
 [[ $scope == incremental ]] || scope=full
-if [[ -n ${API_SCOPE_RESULT:-} ]]; then printf '%s\n' "$scope" > "$API_SCOPE_RESULT"; fi
+if [[ -n ${API_SCOPE_RESULT:-} ]]; then printf '%s' "$scope" > "$API_SCOPE_RESULT"; fi
 printf 'scope=%s\npackages=%s\nstore_run=%s\nwhy=%s\n' "$scope" "$packages" "$store_run" "$why"
 status=0
 run_tests() {
