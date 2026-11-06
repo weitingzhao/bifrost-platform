@@ -515,8 +515,9 @@ func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
 // so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
 const LandingsEvery = 5 * time.Minute
 
-// Landings records accepted results first seen on main (store.RecordLandings,
-// TD-383); each repository's main is read with a minute's bound. It returns
+// Landings records every implementation whose change first stands on main,
+// in whatever state, not only accepted ones, with the route it took there
+// (store.RecordLandings, TD-383); each repository's main is read with a minute's bound. It returns
 // how many it recorded.
 func (c *Controller) Landings(ctx context.Context) (int, error) {
 	if c.Sources.MainResults == nil {
