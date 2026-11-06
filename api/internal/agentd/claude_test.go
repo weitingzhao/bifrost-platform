@@ -1,6 +1,7 @@
 package agentd
 
 import (
+	"errors"
 	"maps"
 	"os"
 	"os/exec"
@@ -376,5 +377,77 @@ func TestRefusalsTellARefusalFromAFailure(t *testing.T) {
 		if !strings.HasPrefix(got[i], w) {
 			t.Errorf("%q, want it to start %q", got[i], w)
 		}
+	}
+}
+
+// A plan's follow-up resumes the session claude's output names, with every
+// pin, tool and the model of the first run, and the same environment; only
+// --resume and the prompt differ, and checkPins takes it. Its reply is the
+// result after the first run's, written apart from the report.
+func TestClaudeExecutorFollowUp(t *testing.T) {
+	const self, session = "/opt/agentd", "5f0c2a8e-1b7d-4c3e-9a51-0d2f6b7e8c91"
+	a := &Attempt{Claim: &Claimed{Role: "plan", EffectClass: "none", Tool: Tool{Model: "opus"}}, Spec: TaskSpec{Text: "# plan"},
+		Dir: t.TempDir(), Out: t.TempDir(), Walled: true}
+	sp, err := Executors(self, hostEnv, Secrets{ClaudeOAuthToken: "fixture-token"})["exec:claude"](a)
+	if err != nil || sp.FollowUp == nil {
+		t.Fatalf("claude = %+v %v", sp, err)
+	}
+	logPath := filepath.Join(a.Out, "log.txt")
+	if err = os.WriteFile(logPath, []byte(`{"type":"system","subtype":"init","session_id":"--not-a-session"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sp.FollowUp("x"); err == nil {
+		t.Fatal("a follow-up of no session")
+	}
+	first := `{"type":"system","subtype":"init","session_id":"` + session + `"}` + "\n" +
+		`{"type":"result","is_error":false,"result":"# plan","session_id":"` + session + `"}` + "\n"
+	if err = os.WriteFile(logPath, []byte(first), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	must(t, sp.After())
+	fu, err := sp.FollowUp("-the block, please")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := append(slices.Clone(sp.Argv[:len(sp.Argv)-2]), "--resume", session, "--", "-the block, please")
+	if !slices.Equal(fu.Argv, want) || !slices.Equal(fu.Env, sp.Env) || fu.Dir != a.Dir || fu.FollowUp != nil {
+		t.Fatalf("follow-up = %q\nwant %q", fu.Argv, want)
+	}
+	for flag, value := range claudeFlags(false) {
+		if i := slices.Index(fu.Argv, flag); i < 0 || fu.Argv[i+1] != value {
+			t.Errorf("%s should have value %q: %v", flag, value, fu.Argv)
+		}
+	}
+	w := &Wall{ABI: 4, Executors: map[string]bool{"exec:claude": true}}
+	fu.Argv = append(wallArgv(self, executorWrites("exec:claude", a, nil)), fu.Argv...)
+	if err = checkPins(w, "exec:claude", self, a, nil, fu); err != nil {
+		t.Fatalf("the follow-up as planFix builds it: %v", err)
+	}
+	for what, argv := range map[string][]string{
+		"another session": slices.Concat(fu.Argv[:len(fu.Argv)-3], []string{"5f0c2a8e-1b7d-4c3e-9a51-0d2f6b7e8c92", "--", "-the block, please"}),
+		"no --resume":     slices.Concat(fu.Argv[:len(fu.Argv)-4], fu.Argv[len(fu.Argv)-2:]),
+		"no tool limits":  slices.DeleteFunc(slices.Clone(fu.Argv), func(s string) bool { return s == "--strict-mcp-config" }),
+	} {
+		if checkPins(w, "exec:claude", self, a, nil, Spawn{Argv: argv, Env: fu.Env, Dir: fu.Dir}) == nil {
+			t.Errorf("%s: passed", what)
+		}
+	}
+	// The follow-up's own result, not the first run's, is its reply.
+	if err = fu.After(); err == nil {
+		t.Fatal("a follow-up with no result of its own")
+	}
+	if _, err = os.Stat(filepath.Join(a.Out, planReply)); err == nil {
+		t.Fatal("the first run's result was taken for the reply")
+	}
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0)
+	must(t, err)
+	_, err = f.WriteString(`{"type":"result","is_error":false,"result":"block","session_id":"` + session + `"}` + "\n")
+	must(t, errors.Join(err, f.Close()))
+	must(t, fu.After())
+	if b, rerr := os.ReadFile(filepath.Join(a.Out, planReply)); rerr != nil || string(b) != "block" {
+		t.Fatalf("reply = %q %v", b, rerr)
+	}
+	if b, rerr := os.ReadFile(filepath.Join(a.Out, "report.md")); rerr != nil || string(b) != "# plan" {
+		t.Fatalf("report = %q %v", b, rerr)
 	}
 }

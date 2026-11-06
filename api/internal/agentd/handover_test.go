@@ -395,7 +395,7 @@ func TestEndsWhileACheckpointHangs(t *testing.T) {
 			}
 			res := make(chan ended, 1)
 			start := time.Now()
-			go func() { how, code := d.supervise(bg, a, p, nil, &e, l); res <- ended{how, code} }()
+			go func() { how, code := d.supervise(bg, a, p, nil, &e, l, hardLimit(a.Claim)); res <- ended{how, code} }()
 			for f.count("put:log_tail") == 0 { // a checkpoint is in flight, and hangs
 				if time.Since(start) > 5*time.Second {
 					t.Fatal("no checkpoint started")
@@ -596,7 +596,7 @@ func TestGroupClearedBeforeASlowSample(t *testing.T) {
 	t.Cleanup(func() { _ = syscall.Kill(executor, syscall.SIGKILL) })
 	l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: func() {}, done: make(chan struct{})}
 	res := make(chan string, 1)
-	go func() { how, _ := d.supervise(bg, a, p, nil, &e, l); res <- how }()
+	go func() { how, _ := d.supervise(bg, a, p, nil, &e, l, hardLimit(a.Claim)); res <- how }()
 	for start := time.Now(); f.count("put:log_tail") == 0; time.Sleep(10 * time.Millisecond) {
 		if time.Since(start) > 5*time.Second {
 			t.Fatal("no sample started")

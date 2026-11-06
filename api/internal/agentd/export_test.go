@@ -21,3 +21,6 @@ func (e *Exam) GroupAliveForTest(f func(pgid int) bool) { e.groupAlive = f }
 // ProcIdentity is procIdentity: a process's identity as an exam run's record
 // keeps its leader's.
 var ProcIdentity = procIdentity
+
+// PlanReply is where a plan's follow-up writes its reply (planfix.go).
+const PlanReply = planReply

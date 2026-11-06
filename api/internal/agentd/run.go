@@ -46,6 +46,7 @@ type Attempt struct {
 	inner  []string
 	root   string       // agentd's directory, which Dir and Out are in (openWithin)
 	testDB *TestDBTools // its test database's programs, when it has one (testdb.go)
+	resume *resumed     // the executor's follow-up in its own session (planfix.go)
 }
 
 // An Executor turns an attempt into the command agentd launches.
@@ -454,8 +455,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	// The group is recorded and the start reported before the executor is
 	// released: an executor never runs unrecorded, nor before the platform
 	// knows it started (review 163 A7).
+	var started time.Time // the release, which the hard limit counts from
 	proc, err := Launch(d.Self, sp, func(pgid int, start string) error {
-		entry.PGID, entry.Start, entry.Phase = pgid, start, "running"
+		entry.PGID, entry.Start, entry.Phase, started = pgid, start, "running", time.Now()
 		if perr := d.Registry.Put(entry); perr != nil {
 			return perr
 		}
@@ -481,17 +483,21 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, &entry, "exit"))
 	}
 
-	endHow, code := d.supervise(ctx, a, proc, ws, &entry, l)
+	endHow, code := d.supervise(ctx, a, proc, ws, &entry, l, hardLimit(cl))
+	if sp.After != nil {
+		if err := sp.After(); err != nil {
+			d.logf("agentd: after %s: %v", cl.AttemptID, err)
+		}
+	}
+	// A plan's report with no block that reads goes back to the same session
+	// once, while its home and login are still there (planfix.go).
+	endHow, code = d.planFix(ctx, planRun{a: a, ws: ws, entry: &entry, l: l, sp: sp, sibs: sibs, confined: confined,
+		started: started, log: logf}, endHow, code)
 	if entry.Group == GroupCleared {
 		afterExecutor(cl.Tool.Executor, d.CodexHome, d.Root, a.Out, d.logf)
 	}
 	if endHow != "lease_lost" {
 		d.lastActions(ctx, cl.AttemptID, cl.Epoch, l)
-	}
-	if sp.After != nil {
-		if err := sp.After(); err != nil {
-			d.logf("agentd: after %s: %v", cl.AttemptID, err)
-		}
 	}
 	if endHow == "lease_lost" {
 		return d.lost(ctx, a, ws, &entry)
@@ -507,6 +513,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	return d.deliver(ctx, a, ws, &entry, l)
 }
+
+// hardLimit is the claim's hard limit, 0 for none.
+func hardLimit(cl *Claimed) time.Duration { return time.Duration(cl.HardLimitS) * time.Second }
 
 // unlaunched hands over an attempt stopped before its executor was released:
 // cancelled, concluding nothing.
@@ -525,13 +534,13 @@ func (d *Daemon) unlaunched(ctx context.Context, a *Attempt, ws *Workspace, entr
 // once the end is done and the group checked (entry.Group). Checkpoints run
 // beside it, one at a time and each within SampleLimit, so a slow upload
 // never holds up a stop, a lost lease or the hard limit (review 164 A7).
-func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Workspace, entry *Entry, l *lease) (string, int) {
-	cl := a.Claim
+// limit is what is left of the hard limit (0: none).
+func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Workspace, entry *Entry, l *lease, limit time.Duration) (string, int) {
 	exited := make(chan int, 1)
 	safego.Go("agentd-attempt-wait", func() { exited <- proc.Wait() })
 	var hard <-chan time.Time
-	if cl.HardLimitS > 0 {
-		t := time.NewTimer(time.Duration(cl.HardLimitS) * time.Second)
+	if limit > 0 {
+		t := time.NewTimer(limit)
 		defer t.Stop()
 		hard = t.C
 	}

@@ -101,6 +101,24 @@ var planFence = regexp.MustCompile("(?s)```json[ \\t]*\\r?\\n(.*?)\\r?\\n[ \\t]*
 // it; repos are the repositories its mission names. An error says what is
 // wrong in words a planner can act on: it goes into the next round's spec.
 func ParsePlan(report []byte, repos []string) (PlanDoc, error) {
+	d, err := planBlock(report)
+	if err != nil {
+		return d, err
+	}
+	return d, d.check(repos)
+}
+
+// PlanBlock says whether a report ends in a fenced json block that reads as a
+// plan, before any check of its content: what a planner's own session can
+// still fix in the same attempt (agentd planfix.go). Its errors are
+// ParsePlan's.
+func PlanBlock(report []byte) error {
+	_, err := planBlock(report)
+	return err
+}
+
+// planBlock decodes the last fenced json block of a report.
+func planBlock(report []byte) (PlanDoc, error) {
 	var d PlanDoc
 	blocks := planFence.FindAllSubmatch(report, -1)
 	if len(blocks) == 0 {
@@ -118,7 +136,7 @@ func ParsePlan(report []byte, repos []string) (PlanDoc, error) {
 	if dec.More() {
 		return d, errors.New("the plan block holds more than one value")
 	}
-	return d, d.check(repos)
+	return d, nil
 }
 
 // oneOfEachKey refuses a plan in which one object names a key twice: Go's

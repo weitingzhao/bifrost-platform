@@ -587,3 +587,29 @@ func TestParsePlan(t *testing.T) {
 		}
 	}
 }
+
+// PlanBlock says whether a report's last block reads as a plan, in
+// ParsePlan's own words, and leaves its content to ParsePlan's checks.
+func TestPlanBlock(t *testing.T) {
+	t.Parallel()
+	repos := []string{"bifrost-platform"}
+	if err := store.PlanBlock([]byte(goodPlan)); err != nil {
+		t.Fatalf("a good plan: %v", err)
+	}
+	if err := store.PlanBlock([]byte("```json\n{\"tasks\": []}\n```")); err != nil {
+		t.Fatalf("a block that reads, with no task: %v", err)
+	}
+	for name, c := range map[string]struct{ report, why string }{
+		"no block":   {"# Plan\n\nNo block.\n", "the report has no ```json block"},
+		"bad json":   {"```json\n{\"tasks\": [}\n```", "the plan does not read: "},
+		"key twice":  {"```json\n{\"tasks\": [], \"Tasks\": []}\n```", `the plan names "Tasks" twice in one object`},
+		"two values": {"```json\n{\"tasks\": []} {}\n```", "the plan block holds more than one value"},
+		"unknown":    {"```json\n{\"task\": []}\n```", "the plan does not read: "},
+	} {
+		err := store.PlanBlock([]byte(c.report))
+		_, perr := store.ParsePlan([]byte(c.report), repos)
+		if err == nil || !strings.HasPrefix(err.Error(), c.why) || perr == nil || perr.Error() != err.Error() {
+			t.Errorf("%s: %v, ParsePlan %v", name, err, perr)
+		}
+	}
+}
