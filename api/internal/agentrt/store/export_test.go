@@ -341,3 +341,11 @@ func SelfCheckForTest(c SelfCheck) error {
 	}
 	return checkBody("attempt_computed", map[string]any{"end_how": "exit", "conclusion": "done", "self_check": c.body()})
 }
+
+// DeliveryCandidate is one place a commit names a change (resolveDeliveryCommit).
+type DeliveryCandidate = deliveryCandidate
+
+// ResolveDeliveryCommitForTest is resolveDeliveryCommit.
+func ResolveDeliveryCommitForTest(prefix string, candidates []DeliveryCandidate) (DeliveryCandidate, error) {
+	return resolveDeliveryCommit(prefix, candidates)
+}
