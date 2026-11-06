@@ -98,7 +98,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	tasksRaw := []byte{}
-	err = tx.QueryRow(ctx, viewTree+`SELECT COALESCE(jsonb_agg(jsonb_build_object('task_id',t.task_id,'plan_node_id',t.plan_node_id,'mission_id',t.mission_id,'title',t.title,'state',t.state) ORDER BY t.task_id),'[]') FROM agentrt.task t JOIN tree USING(plan_node_id)`, root).Scan(&tasksRaw)
+	err = tx.QueryRow(ctx, viewTree+`SELECT COALESCE(jsonb_agg(jsonb_build_object('task_id',t.task_id,'plan_node_id',t.plan_node_id,'mission_id',t.mission_id,'title',t.title,'state',t.state,'role',t.role,'round_no',t.round_no,'max_rounds',t.max_rounds,'depends_on',ARRAY(SELECT d.depends_on_task_id FROM agentrt.task_dependency d JOIN agentrt.task o ON o.task_id=d.depends_on_task_id WHERE d.task_id=t.task_id AND o.state<>'accepted' ORDER BY d.depends_on_task_id)) ORDER BY t.task_id),'[]') FROM agentrt.task t JOIN tree USING(plan_node_id)`, root).Scan(&tasksRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +107,9 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	if err = planViewHolds(ctx, tx, root, tasks); err != nil {
+		return nil, err
+	}
+	if err = planViewWaits(ctx, tx, root, tasks, snap, live, now); err != nil {
 		return nil, err
 	}
 	working := []any{}

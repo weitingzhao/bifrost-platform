@@ -31,6 +31,7 @@ type collectorWorkViewDB struct {
 	descs map[string][]byte
 	tasks []byte
 	live  [][]any
+	waits [][]any
 }
 
 // The task whose attempt is live, its attempt, and the collector work linked to it.
@@ -70,6 +71,9 @@ func (d *collectorWorkViewDB) Query(ctx context.Context, q string, args ...any) 
 	if strings.HasPrefix(q, "SELECT a.attempt_id") {
 		return &signoffViewRows{data: d.live}, nil
 	}
+	if strings.Contains(q, planViewWaitFacts) {
+		return &signoffViewRows{data: d.waits}, nil
+	}
 	return d.signoffViewDB.Query(ctx, q, args...)
 }
 
@@ -106,7 +110,11 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 		raw, _ := json.Marshal(n)
 		f.notes = append(f.notes, []any{raw, at})
 	}
-	f.tasks, _ = json.Marshal([]map[string]any{{"task_id": fixtureLiveTask, "plan_node_id": "R4:4.3-1", "mission_id": "M-fixture", "title": "a task with a live attempt", "state": "running"}})
+	f.tasks, _ = json.Marshal([]map[string]any{{"task_id": fixtureLiveTask, "plan_node_id": "R4:4.3-1", "mission_id": "M-fixture", "title": "a task with a live attempt", "state": "running",
+		"role": "implement", "round_no": 1, "max_rounds": 3, "depends_on": []string{}}})
+	// It came into running when its attempt started; its mission is active.
+	since := at
+	f.waits = [][]any{{fixtureLiveTask, &since, "", "active", "", (*time.Time)(nil), (*string)(nil), (*time.Time)(nil), "", []byte(`[]`)}}
 	started := at
 	f.live = [][]any{{fixtureLiveAttempt, 1, fixtureLiveTask, "M-fixture", "h1", true, &at, (*bool)(nil), "exec:claude", "claude-opus", "running",
 		&started, at, "implement", "go", "running", false, (*int64)(nil), (*time.Time)(nil)}}

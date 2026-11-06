@@ -1170,11 +1170,19 @@
           "verification": "Unknown"
         }
       ],
+      "max_rounds": 3,
       "mission_id": "M-fixture",
       "plan_node_id": "R4:4.3-1",
+      "role": "implement",
+      "round_no": 1,
       "state": "running",
       "task_id": "t_fixture_live",
-      "title": "a task with a live attempt"
+      "title": "a task with a live attempt",
+      "waiting": {
+        "on": "working",
+        "reason": "attempt a_fixture_live on h1",
+        "since": "2026-10-26T21:59:50Z"
+      }
     }
   ],
   "waiting_on": [
@@ -1356,11 +1364,19 @@
           "verification": "Unknown"
         }
       ],
+      "max_rounds": 3,
       "mission_id": "M-fixture",
       "plan_node_id": "R4:4.3-1",
+      "role": "implement",
+      "round_no": 1,
       "state": "running",
       "task_id": "t_fixture_live",
-      "title": "a task with a live attempt"
+      "title": "a task with a live attempt",
+      "waiting": {
+        "on": "working",
+        "reason": "attempt a_fixture_live on h1",
+        "since": "2026-10-26T21:59:50Z"
+      }
     }
   ]
 }
