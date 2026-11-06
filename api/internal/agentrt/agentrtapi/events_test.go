@@ -69,11 +69,17 @@ func readOn(t *testing.T, s *httptest.Server, from, query string, limit int) ([]
 // readAllOn reads on from a cursor until it has listed want: other tests'
 // transactions, anywhere in the cluster, may hold the horizon a moment. It
 // fails on an event listed twice.
+// horizonWait bounds how long a read on waits for events to pass the horizon.
+// The horizon is the whole server's oldest open transaction, and packages
+// tested at the same time share the server: migrate's statement-timeout test
+// holds one for up to 37s (rollback0010_test.go), so 20s was not enough.
+const horizonWait = 90 * time.Second
+
 func readAllOn(t *testing.T, s *httptest.Server, from, query string, limit int, want []int64) []int64 {
 	t.Helper()
 	var got []int64
 	seen := map[int64]bool{}
-	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(horizonWait); ; time.Sleep(50 * time.Millisecond) {
 		more, next := readOn(t, s, from, query, limit)
 		for _, id := range more {
 			if seen[id] {
@@ -252,7 +258,7 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 	// may hold the horizon a moment), reading on from either cursor.
 	for name, cursor := range map[string]string{"read on": held, "the latest read": latest.Next} {
 		count := map[int64]int{}
-		for deadline := time.Now().Add(20 * time.Second); count[first] == 0 || count[second] == 0; time.Sleep(50 * time.Millisecond) {
+		for deadline := time.Now().Add(horizonWait); count[first] == 0 || count[second] == 0; time.Sleep(50 * time.Millisecond) {
 			if time.Now().After(deadline) {
 				t.Fatalf("from %s: %v, want %d and %d", name, count, first, second)
 			}
@@ -290,7 +296,7 @@ func TestEventsReadOnPages(t *testing.T) {
 		return tx.QueryRow(ctx, `SELECT txid_current()`).Scan(&txid)
 	}))
 	var first eventPage
-	for deadline := time.Now().Add(20 * time.Second); len(first.Events) == 0; time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(horizonWait); len(first.Events) == 0; time.Sleep(50 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the three never read on")
 		}
