@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -240,10 +239,11 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 		if err != nil {
 			return err
 		}
-		// A floor grant (the only grant of a floor repository) is held on a
-		// moved main, as the final gate holds it: main may come back to M0
-		// within its 24 hours, and the gate discards once it is spent.
-		if grant == "" || !rules.FloorGrantSupported(repo) {
+		// Only an operation with no usable grant reads main here: with one,
+		// the final gate below reads main itself and discards on a moved main
+		// (a floor grant it holds), and while the release window is closed it
+		// does no Git read at all (TD-462).
+		if grant == "" {
 			if moved, err := c.replayAwaitingGrant(ctx, id, o, repo); moved || err != nil {
 				return err
 			}

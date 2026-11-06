@@ -18,7 +18,7 @@ import (
 // M0 5661d6c4, reached awaiting_grant; another landing then moved main to
 // 632b874f, and the operation stayed waiting for a grant the final gate could
 // only throw away. Main moved past an awaiting_grant operation's M0 ends it as
-// the drill's replay does (discarded main_changed), with or without a grant;
+// the drill's replay does (discarded main_changed) when it has no grant;
 // main still M0 or unreadable leaves it waiting.
 
 // awaitingGrantRig is a rig whose core root waits in awaiting_grant on M0
@@ -106,6 +106,15 @@ func TestLandingAwaitingGrantReplaysWhenMainMoved(t *testing.T) {
 			_ = r.ctl.LandingDrillPass(ctx) // the k+1 the discard opens is not this test's
 			s := r.state(t)
 			for _, op := range ops {
+				// With a usable grant this pass leaves it to the final gate,
+				// which reads main itself and discards on a moved main; here
+				// it reads no main (TD-462: no Git read behind a closed window).
+				if c.grant {
+					if o := s.Operations[op]; o.Phase == "discarded" || op == lead && o.Phase != "awaiting_grant" {
+						t.Fatalf("%s: %s %s, want it left for the final gate", op, o.Phase, o.Outcome)
+					}
+					continue
+				}
 				if o := s.Operations[op]; o.Phase != "discarded" || o.Outcome != "main_changed" {
 					t.Fatalf("%s: %s %s, want discarded main_changed", op, o.Phase, o.Outcome)
 				}
