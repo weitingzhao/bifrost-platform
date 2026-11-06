@@ -687,6 +687,14 @@ func (o Operation) Active() bool {
 	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
 }
 
+// HoldsSlot: the operation holds the repository's slot against a granted
+// landing's final gate. Only one past its CI does: pushing to main
+// (main_intent until it ends) or deploying. One still in CI (claimed through
+// ci_rerun), waiting for its card, parked or ended does not.
+func (o Operation) HoldsSlot() bool {
+	return o.AtMain() || slices.Contains([]string{"stg_pending", "stg_snapshot", "stg_started", "stg_result"}, o.Phase)
+}
+
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the
 // Owner's retry), and for a root never claimed from its acceptance (TD-447 4).
 const ClaimWindow = 6 * time.Hour
