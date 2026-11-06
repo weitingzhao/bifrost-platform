@@ -33,6 +33,9 @@ type Client struct {
 	// FullScopeParam has a full run ask for api-scope-request=full
 	// (EnsureFullRun, AGENTRT_FULL_CI_PARAM).
 	FullScopeParam bool
+	// BaseParam has a platform landing CI name its base M0 as base=M0
+	// (EnsureLandingCI, Ensure; AGENTRT_LANDING_CI_BASE_PARAM).
+	BaseParam bool
 }
 
 func (c *Client) namespace() string {

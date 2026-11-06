@@ -25,6 +25,9 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 	}
 	if key.Repo == "bifrost-platform" {
 		params["repo-url"] = PlatformRepoURL
+		if c.BaseParam {
+			params[BaseParamName] = key.Base
+		}
 	}
 	if key.Repo == "bifrost-trade-infra" {
 		if name != landing.InfraCIName(key.Revision, key.Base, key.Siblings["bifrost-platform"], key.Generation) {
@@ -38,8 +41,13 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 // EnsureLandingCI preserves v1's platform spec, including uiRevision=main.
 // It shares all collision and uncertain-create handling with the pinned API.
 // Like every platform CI it names repo-url, which B5's ReadRelease requires.
-func (c *Client) EnsureLandingCI(ctx context.Context, name, revision string) error {
-	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, map[string]string{"revision": revision, "uiRevision": "main", "repo-url": PlatformRepoURL})
+// With BaseParam it names base=M0 too, when base is a full SHA.
+func (c *Client) EnsureLandingCI(ctx context.Context, name, revision, base string) error {
+	params := map[string]string{"revision": revision, "uiRevision": "main", "repo-url": PlatformRepoURL}
+	if c.BaseParam && fullSHA.MatchString(base) {
+		params[BaseParamName] = base
+	}
+	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, params)
 }
 func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision string, params map[string]string) error {
 	r, supported := landing.LandingRepos[repo]
@@ -70,6 +78,9 @@ func (c *Client) create(ctx context.Context, name, pipeline string, params, labe
 		_, inline, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineSpec")
 		values, counts := namedValues(*obj, "spec", "params")
 		want := withoutPreRepoURL(params, counts)
+		if pipeline == "bifrost-ci-platform" {
+			want = withoutPreBase(want, counts)
+		}
 		if inline || !reflect.DeepEqual(actualRef, expectedRef) || !reflect.DeepEqual(values, want) {
 			return fmt.Errorf("landing CI name collision")
 		}
@@ -105,12 +116,23 @@ func (c *Client) create(ctx context.Context, name, pipeline string, params, labe
 // its run: it is accepted here (landing reads never needed repo-url) and stays
 // Unknown(ci_identity) to B5's ReadRelease. Any other difference collides.
 func withoutPreRepoURL(params map[string]string, counts map[string]int) map[string]string {
-	if _, ok := params["repo-url"]; !ok || counts["repo-url"] != 0 {
+	return withoutAbsent(params, counts, "repo-url")
+}
+
+// Likewise a platform run made before BaseParam was on (no base param at
+// all) is still this operation's run; one that names another base collides.
+func withoutPreBase(params map[string]string, counts map[string]int) map[string]string {
+	return withoutAbsent(params, counts, BaseParamName)
+}
+
+// withoutAbsent drops param from params when the existing run has none.
+func withoutAbsent(params map[string]string, counts map[string]int, param string) map[string]string {
+	if _, ok := params[param]; !ok || counts[param] != 0 {
 		return params
 	}
 	out := make(map[string]string, len(params)-1)
 	for name, value := range params {
-		if name != "repo-url" {
+		if name != param {
 			out[name] = value
 		}
 	}

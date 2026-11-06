@@ -40,6 +40,7 @@ type batchRig struct {
 	paths   map[string]string // A -> the file its result changes
 	refs    map[string]string // land branches pushed
 	ensured []string          // EnsureCI names, in order
+	bases   map[string]string // EnsureCI name -> the M0 it was given
 	runs    map[string]landing.CIRun
 	status  string // the status every run reports
 	failure string // the failed TaskRun's log
@@ -125,7 +126,7 @@ limits: {max_files: 10, max_changed_lines: 300, max_landings_per_day: 20, max_in
 func newBatchRig(t *testing.T, grants bool) *batchRig {
 	t.Helper()
 	pool := setup(t)
-	r := &batchRig{pool: pool, paths: map[string]string{}, refs: map[string]string{}, runs: map[string]landing.CIRun{}, status: "Running"}
+	r := &batchRig{pool: pool, paths: map[string]string{}, refs: map[string]string{}, bases: map[string]string{}, runs: map[string]landing.CIRun{}, status: "Running"}
 	t.Cleanup(store.SetEventClock(r.now))
 	key := rptest.NewKey(t)
 	sign := func(text string) {
@@ -201,10 +202,11 @@ external_hosts:
 			}
 			return landing.LatestCI(runs, rev, after), nil
 		},
-		EnsureCI: func(_ context.Context, _ string, name, rev string) error {
+		EnsureCI: func(_ context.Context, _ string, name, rev, m0 string) error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			r.ensured = append(r.ensured, name)
+			r.bases[name] = m0
 			if _, ok := r.runs[name]; !ok {
 				r.runs[name] = landing.CIRun{Run: name, R: rev, CreatedAt: time.Now().Add(r.offset).Truncate(time.Second)}
 			}

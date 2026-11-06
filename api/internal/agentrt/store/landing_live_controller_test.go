@@ -40,7 +40,7 @@ func liveSources(src store.LandingSource, prepared time.Time) controller.DrillSo
 		CI: func(_ context.Context, _ string, r string, _ time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Run: "ci-land", R: r, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute)}, nil
 		},
-		EnsureCI: func(context.Context, string, string, string) error { return nil },
+		EnsureCI: func(context.Context, string, string, string, string) error { return nil },
 	}
 }
 

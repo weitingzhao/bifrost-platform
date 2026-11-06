@@ -87,7 +87,7 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 			}
 			return landing.CIRun{R: revision, Run: "ci-old", Status: status, CreatedAt: clock.Add(time.Second)}, nil
 		},
-		EnsureCI: func(_ context.Context, _ string, name, revision string) error {
+		EnsureCI: func(_ context.Context, _ string, name, revision, _ string) error {
 			names = append(names, name)
 			if created[name] {
 				return nil

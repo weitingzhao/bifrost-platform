@@ -22,6 +22,10 @@ const (
 	// where the pipeline declares it (Client.FullScopeParam); until then
 	// every run is full anyway.
 	APIScopeRequestParam = "api-scope-request"
+	// BaseParamName names a platform landing CI's base M0, for test-api's
+	// scoped tests. It is sent only where the pipeline declares it
+	// (Client.BaseParam); a full run never sends it.
+	BaseParamName = "base"
 	// fullTestTask is the pipeline task whose log names the failed tests.
 	fullTestTask = "test-api"
 )
@@ -50,8 +54,8 @@ type FullRun struct {
 }
 
 // EnsureFullRun creates the full run of revision on day and returns its
-// name. Its spec is EnsureLandingCI's, plus api-scope-request=full when
-// FullScopeParam is set; an existing run of that name with another spec or
+// name. Its spec is EnsureLandingCI's without base (whatever BaseParam, so
+// the run stays full), plus api-scope-request=full when FullScopeParam is set; an existing run of that name with another spec or
 // other labels is a collision, as in ensure.
 func (c *Client) EnsureFullRun(ctx context.Context, revision string, day time.Time) (string, error) {
 	if !fullSHA.MatchString(revision) || day.IsZero() {

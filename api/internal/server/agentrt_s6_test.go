@@ -71,7 +71,7 @@ func TestS6LiveRepoWorkerWiring(t *testing.T) {
 				if err == nil || run.Status == "Succeeded" {
 					t.Fatal("infra accepted foreign CI", run, err)
 				}
-				if err := c.Drill.EnsureCI(context.Background(), "bifrost-trade-infra", "same-name", strings.Repeat("a", 40)); err == nil {
+				if err := c.Drill.EnsureCI(context.Background(), "bifrost-trade-infra", "same-name", strings.Repeat("a", 40), strings.Repeat("b", 40)); err == nil {
 					t.Fatal("infra reached platform CI creator")
 				}
 			}

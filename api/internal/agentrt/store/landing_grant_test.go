@@ -367,7 +367,7 @@ func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
 		CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Status: "Missing"}, nil
 		},
-		EnsureCI:       func(context.Context, string, string, string) error { kicks++; return nil },
+		EnsureCI:       func(context.Context, string, string, string, string) error { kicks++; return nil },
 		EnsurePinnedCI: func(context.Context, string, store.GrantCIKey) error { kicks++; return nil },
 	}
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &sources,

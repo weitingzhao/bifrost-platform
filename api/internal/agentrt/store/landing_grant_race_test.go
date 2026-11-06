@@ -541,7 +541,7 @@ func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
 		Main:          func(context.Context, string) (string, error) { return c.main, nil },
 		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
 		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string, string) error { return nil }}
+		EnsureCI:      func(context.Context, string, string, string, string) error { return nil }}
 	src.Facts.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) {
 		patches++
 		return c.patch, nil

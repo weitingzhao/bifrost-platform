@@ -155,7 +155,7 @@ func TestC5B01PinnedKickForGrantOperations(t *testing.T) {
 				CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {
 					return landing.CIRun{Status: "Missing"}, nil
 				},
-				EnsureCI: func(_ context.Context, _ string, name, r string) error { legacy = append(legacy, name); return nil },
+				EnsureCI: func(_ context.Context, _ string, name, r, _ string) error { legacy = append(legacy, name); return nil },
 				EnsurePinnedCI: func(_ context.Context, name string, k store.GrantCIKey) error {
 					pinned, keys = append(pinned, name), append(keys, k)
 					return nil
@@ -205,7 +205,7 @@ func TestC5R06RuleClearsAWaitingOperation(t *testing.T) {
 		Main:          func(context.Context, string) (string, error) { return c.main, nil },
 		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
 		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string, string) error { return nil }}
+		EnsureCI:      func(context.Context, string, string, string, string) error { return nil }}
 	ctl := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &src,
 		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }}
 	ok(t, ctl.LandingDrillPass(ctx))
