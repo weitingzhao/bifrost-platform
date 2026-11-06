@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -28,9 +29,18 @@ import (
 //     one round (roundGrant): the attempts a round needs and the hours they
 //     may run, recorded as mission_amended by the Owner, the card named in its
 //     reason. While the budget has room nothing is added.
+//   - Before the pass blocks a task for its budget, it grows the budget on
+//     its own by the round the task needs, as mission_amended by the
+//     controller, while what it added stays within the budget rule's
+//     auto_grant cap (rules.AutoGrantDefault when the rule states none): one
+//     grant per mission per pass, and a task blocked only for its budget goes
+//     back to ready on it. Only once the cap is reached does the task get its
+//     card (M-308, 2026-11-06: three cards in four minutes whose only sensible
+//     answer was one more round).
 //
 // What the Owner adds is kept apart in the budget (owner_granted_attempts,
-// owner_granted_wall_hours), so the standing envelope a mission started under
+// owner_granted_wall_hours), as is what the platform adds on its own
+// (auto_granted_attempts, auto_granted_wall_hours), so the standing envelope a mission started under
 // bounds the budget it started with, not what he added on a card: without
 // that, his answer would raise the budget over the envelope's and the task
 // would wait in ready again (allows). The envelope's hosts, executors and
@@ -50,15 +60,18 @@ type budgetDoc struct {
 	MaxWallHours  int `json:"max_wall_hours"`
 	OwnerAttempts int `json:"owner_granted_attempts"`
 	OwnerHours    int `json:"owner_granted_wall_hours"`
+	AutoAttempts  int `json:"auto_granted_attempts"`
+	AutoHours     int `json:"auto_granted_wall_hours"`
 }
 
 // spend is a mission's budget and what it has used.
 type spend struct {
 	mission string
-	budget  budgetDoc // its own, or its tenant rule's when it states none
-	used    int       // attempts of all its tasks
-	hours   float64   // since it was created; hours, not a Duration, which a budget of a million hours would overflow (review 428 C1)
-	limitS  int       // the tenant rule's hard limit on an attempt
+	budget  budgetDoc    // its own, or its tenant rule's when it states none
+	used    int          // attempts of all its tasks
+	hours   float64      // since it was created; hours, not a Duration, which a budget of a million hours would overflow (review 428 C1)
+	limitS  int          // the tenant rule's hard limit on an attempt
+	auto    rules.Budget // the tenant rule's cap on what the platform adds on its own
 }
 
 // spend reads m's budget; ok is false when there is none to spend: no budget
@@ -82,7 +95,7 @@ func (m missionBudget) spend(ctx context.Context, tx pgx.Tx, rc ruleCache, missi
 	if b.MaxAttempts <= 0 || b.MaxWallHours <= 0 {
 		return spend{}, false, nil
 	}
-	s := spend{mission: mission, budget: b, limitS: rule.Budget.AttemptLimitSec}
+	s := spend{mission: mission, budget: b, limitS: rule.Budget.AttemptLimitSec, auto: rule.Budget.AutoGrant}
 	var secs float64
 	if err = tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id WHERE t.mission_id = $1),
 	    EXTRACT(EPOCH FROM clock_timestamp() - $2::timestamptz)::float8`, mission, m.created).Scan(&s.used, &secs); err != nil {
@@ -129,12 +142,35 @@ func (s spend) roundGrant(taskLimitS int) grant {
 	return g
 }
 
+// autoRoom says whether the platform may add g to the budget on its own:
+// with what it already added, g stays within the rule's cap.
+func (s spend) autoRoom(g grant) bool {
+	return g != (grant{}) && s.budget.AutoAttempts+g.attempts <= s.auto.MaxAttempts &&
+		s.budget.AutoHours+g.hours <= s.auto.MaxWallHours
+}
+
+// autoSays says that the platform has added what its cap lets it, so the
+// card is the Owner's; "" while the cap is 0 (it never adds anything).
+func (s spend) autoSays() string {
+	if s.auto == (rules.Budget{}) {
+		return ""
+	}
+	return fmt.Sprintf("the platform already added %d of its cap of %d attempts (%d of %d hours) automatically and the cap is reached, so this card is yours",
+		s.budget.AutoAttempts, s.auto.MaxAttempts, s.budget.AutoHours, s.auto.MaxWallHours)
+}
+
 // says is what a card tells the Owner one more round adds, "" for nothing.
 func (s spend) says(g grant) string {
 	if g == (grant{}) {
 		return ""
 	}
-	text := fmt.Sprintf("One round needs up to %d attempts (implementation, verification, review); mission %s has used %d of its %d attempts",
+	text := ""
+	if !s.autoRoom(g) {
+		if auto := s.autoSays(); auto != "" {
+			text = strings.ToUpper(auto[:1]) + auto[1:] + ". "
+		}
+	}
+	text += fmt.Sprintf("One round needs up to %d attempts (implementation, verification, review); mission %s has used %d of its %d attempts",
 		roundAttempts, s.mission, s.used, s.budget.MaxAttempts)
 	if g.hours > 0 {
 		text += fmt.Sprintf(" and %.1f of its %d hours", s.hours, s.budget.MaxWallHours)
@@ -168,15 +204,21 @@ func roundFor(ctx context.Context, tx pgx.Tx, t taskRow) (spend, grant, bool, er
 	if err != nil {
 		return spend{}, grant{}, false, err
 	}
-	var limitS int
-	if err = tx.QueryRow(ctx, `SELECT hard_limit_s FROM agentrt.task WHERE task_id = $1`, t.id).Scan(&limitS); err != nil {
-		return spend{}, grant{}, false, err
-	}
 	s, ok, err := m.spend(ctx, tx, ruleCache{}, t.mission)
 	if err != nil || !ok {
 		return spend{}, grant{}, false, err
 	}
-	return s, s.roundGrant(limitS), true, nil
+	g, err := s.roundOf(ctx, tx, t)
+	return s, g, err == nil, err
+}
+
+// roundOf is what one more round of task t needs of s.
+func (s spend) roundOf(ctx context.Context, tx pgx.Tx, t taskRow) (grant, error) {
+	var limitS int
+	if err := tx.QueryRow(ctx, `SELECT hard_limit_s FROM agentrt.task WHERE task_id = $1`, t.id).Scan(&limitS); err != nil {
+		return grant{}, err
+	}
+	return s.roundGrant(limitS), nil
 }
 
 // grantRound makes room in the mission's budget for one more round of task
@@ -213,6 +255,41 @@ func grantRound(ctx context.Context, tx pgx.Tx, t taskRow, question string, by a
 	_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET budget_json = budget_json || $2::jsonb, version = version + 1 WHERE mission_id = $1`,
 		t.mission, string(doc))
 	return err
+}
+
+// grantAuto grows the mission's budget on its own by g, the round task t
+// needs, which autoRoom allowed: mission_amended by the controller, the
+// budget's own figures written out as grantRound writes them, with what it
+// added kept apart from the Owner's. The caller holds t and its mission's
+// row FOR NO KEY UPDATE.
+func grantAuto(ctx context.Context, tx pgx.Tx, t taskRow, s spend, g grant) error {
+	b := s.budget
+	set := map[string]any{"max_attempts": b.MaxAttempts + g.attempts, "max_wall_hours": b.MaxWallHours + g.hours,
+		"auto_granted_attempts": b.AutoAttempts + g.attempts, "auto_granted_wall_hours": b.AutoHours + g.hours}
+	body := map[string]any{"reason": autoGrantReason(s.auto) + ": " + s.added(g)}
+	if g.attempts > 0 {
+		body["max_attempts"] = b.MaxAttempts + g.attempts
+	}
+	if g.hours > 0 {
+		body["max_wall_hours"] = b.MaxWallHours + g.hours
+	}
+	doc, err := json.Marshal(set)
+	if err != nil {
+		return err
+	}
+	if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "mission_amended", Actor: "controller",
+		MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET budget_json = budget_json || $2::jsonb, version = version + 1 WHERE mission_id = $1`,
+		t.mission, string(doc))
+	return err
+}
+
+// autoGrantReason starts the reason of an automatic grant, and of a task it
+// sent back to ready.
+func autoGrantReason(limit rules.Budget) string {
+	return fmt.Sprintf("budget grown automatically, cap %d", limit.MaxAttempts)
 }
 
 // added says what a grant adds, for mission_amended's reason.
@@ -269,11 +346,15 @@ func BlockOverBudget(ctx context.Context, db DB) (int, error) {
 }
 
 // blockOverBudget blocks the ready tasks of one mission whose budget is
-// spent. A read without locks finds them (most missions have room, and their
-// tasks are not locked); each is then blocked under its lock and its
-// mission's, shared, read again: a claim of the mission takes that row
-// exclusively to count its attempts, so a claim either leases first and is
-// counted or waits for this.
+// spent, or grows the budget on its own for one of them while the rule's cap
+// lets it (autoRoom), at most once a pass. A read without locks finds them
+// (most missions have room, and their tasks are not locked); each is then
+// read again under its lock and its mission's: shared, so a claim of the
+// mission, which takes that row exclusively to count its attempts, either
+// leases first and is counted or waits for this; FOR NO KEY UPDATE while
+// this pass may still grant, as grantRound needs. After a grant the tasks
+// left are read under the new budget, and a task blocked only for the budget
+// goes back to ready while it has room.
 func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 	var tasks []string
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -295,11 +376,12 @@ func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 		return 0, err
 	}
 	n := 0
+	granted := false
 	var errs []error
 	for _, id := range tasks {
-		did := false
+		did, grew := false, false
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
-			did = false
+			did, grew = false, false
 			t, err := readTask(ctx, tx, id, true)
 			if err != nil || t.state != "ready" {
 				return err
@@ -308,7 +390,11 @@ func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 			if member, err := isGateMember(ctx, tx, id); err != nil || member {
 				return err
 			}
-			m, err := readMissionBudget(ctx, tx, t.mission, "FOR SHARE")
+			lock := "FOR SHARE"
+			if !granted {
+				lock = "FOR NO KEY UPDATE"
+			}
+			m, err := readMissionBudget(ctx, tx, t.mission, lock)
 			if err != nil || m.state != "active" {
 				return err
 			}
@@ -316,14 +402,88 @@ func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 			if err != nil || !ok || s.why() == "" {
 				return err
 			}
+			if !granted {
+				g, err := s.roundOf(ctx, tx, t)
+				if err != nil {
+					return err
+				}
+				if s.autoRoom(g) {
+					grew = true
+					return grantAuto(ctx, tx, t, s, g)
+				}
+			}
 			did = true
 			return moveTask(ctx, tx, "controller", t, "blocked", s.why()+budgetBlockSuffix)
 		})
-		if err != nil {
+		switch {
+		case err != nil:
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
-		} else if did {
+		case did:
 			n++
+		case grew:
+			granted = true
+		}
+	}
+	if granted {
+		if err := unblockBudget(ctx, db, mission); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	return n, errors.Join(errs...)
+}
+
+// budgetBlocked is the blocked tasks of a mission whose latest block was for
+// its budget alone, with no answer on a card since.
+const budgetBlocked = `SELECT t.task_id FROM agentrt.task t ` + latestBlock + `
+  WHERE t.mission_id = $1 AND t.state = 'blocked' AND right(COALESCE(b.body_json->>'reason', ''), length($2)) = $2
+    AND NOT COALESCE((b.body_json->>'failed')::boolean, false)
+    AND NOT EXISTS (SELECT 1 FROM agentrt.event c WHERE c.task_id = t.task_id AND c.event_type = 'owner_wait_closed'
+      AND c.body_json ? 'answer' AND c.event_id > b.event_id)
+  ORDER BY t.task_id`
+
+// unblockBudget sends the tasks of an active mission blocked only for its
+// budget back to ready, after this pass grew the budget, while it has room.
+// Each is read again under its lock and its mission's, shared. Its open card
+// is left to the stale-card pass.
+func unblockBudget(ctx context.Context, db DB, mission string) error {
+	var tasks []string
+	if err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, budgetBlocked, mission, budgetBlockSuffix)
+		if err != nil {
+			return err
+		}
+		tasks, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	}); err != nil {
+		return fmt.Errorf("mission %s: %w", mission, err)
+	}
+	var errs []error
+	for _, id := range tasks {
+		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			t, err := readTask(ctx, tx, id, true)
+			if err != nil || t.state != "blocked" {
+				return err
+			}
+			if member, err := isGateMember(ctx, tx, id); err != nil || member {
+				return err
+			}
+			m, err := readMissionBudget(ctx, tx, t.mission, "FOR SHARE")
+			if err != nil || m.state != "active" {
+				return err
+			}
+			var still bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM (`+budgetBlocked+`) x WHERE x.task_id = $3)`,
+				mission, budgetBlockSuffix, id).Scan(&still); err != nil || !still {
+				return err
+			}
+			s, ok, err := m.spend(ctx, tx, ruleCache{}, t.mission)
+			if err != nil || !ok || s.why() != "" {
+				return err
+			}
+			return moveTask(ctx, tx, "controller", t, "ready", autoGrantReason(s.auto))
+		}); err != nil {
+			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+		}
+	}
+	return errors.Join(errs...)
 }

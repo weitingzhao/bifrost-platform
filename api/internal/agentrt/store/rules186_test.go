@@ -132,7 +132,7 @@ func TestMissionBudget(t *testing.T) {
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), "budget:dev", []byte(ruleText("budget:dev", 2, rules.Tighten, since, until,
-		"tenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 60\n")))
+		"tenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 60\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n")))
 	ok(t, err)
 	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.HardLimit != time.Minute {
 		t.Fatalf("hard limit under a 60 s rule: %+v", c)

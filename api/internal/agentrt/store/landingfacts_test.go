@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -51,15 +52,19 @@ func TestLandingEnableObservationSurvivesRuleVersion(t *testing.T) {
 		t.Fatal("version moved enable fence", got)
 	}
 }
-func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
+
+// R5:5.7: a mission that adopts a second plan keeps landing the first plan's
+// tasks; a task of a plan never used is still stale, and a goal task the
+// coordinator proposed directly, with no producing plan, lands.
+func TestLandingFactsReadEveryUsedPlanAndFreshHistory(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	// Create the old planner first, but adopt it last. A creation-time lookup
-	// would choose the new planner and wrongly refuse this still-wanted task.
 	old := w.ready(t, store.Task{Role: "plan", Effect: "none"})
 	w.accept(t, old)
 	newer := w.ready(t, store.Task{Role: "plan", Effect: "none"})
 	w.accept(t, newer)
+	unused := w.ready(t, store.Task{Role: "plan", Effect: "none"})
+	w.accept(t, unused)
 	use := func(id string) {
 		t.Helper()
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -67,7 +72,6 @@ func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
 			return e
 		}))
 	}
-	use(newer)
 	use(old)
 	// passRound pushes commitA, so the task must start from a different base.
 	impl := w.ready(t, store.Task{OffPlanReason: "planned by task " + old, BaseCommit: commitB})
@@ -75,7 +79,10 @@ func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
 	reads := 0
 	src := store.LandingSource{
 		Result: func(_ context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
-			if task != impl || attempt == "" || commit != commitA || base != commitB {
+			if task != impl {
+				return true, nil, nil
+			}
+			if attempt == "" || commit != commitA || base != commitB {
 				return false, nil, fmt.Errorf("wrong accepted result")
 			}
 			return true, nil, nil
@@ -85,30 +92,60 @@ func TestLandingFactsUseAdoptionOrderAndFreshHistory(t *testing.T) {
 			return landing.MainHistory{State: landing.Never}, nil
 		},
 	}
-	read := func() (landing.Facts, error) {
+	read := func(task string) (landing.Facts, error) {
 		var f landing.Facts
 		err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var e error
-			f, e = store.LandingFacts(ctx, tx, src, "prod", "live", impl, "", "", time.Now())
+			f, e = store.LandingFacts(ctx, tx, src, "prod", "live", task, "", "", time.Now())
 			return e
 		})
 		return f, err
 	}
-	f, err := read()
+	// stale: whether the plan gate refuses these facts. The enable fence is
+	// not what this test reads, so it is set to pass.
+	stale := func(f landing.Facts) bool {
+		f.EnabledAt = f.MissionCreated
+		if f.AcceptedAt.IsZero() {
+			f.AcceptedAt = f.MissionCreated
+		}
+		return landing.EligibleToClaim(f, time.Now()).Reason == "stale"
+	}
+	f, err := read(impl)
 	ok(t, err)
-	if f.LatestUsedPlan != old || f.ProducingPlan != old || !f.GoalTask || f.AcceptedAt.IsZero() {
+	if !slices.Equal(f.UsedPlans, []string{old}) || f.ProducingPlan != old || !f.GoalTask || f.AcceptedAt.IsZero() || stale(f) {
 		t.Fatal("wrong facts", f)
 	}
+	// A second, unrelated plan is adopted: the first plan's task still lands.
 	use(newer)
-	f, err = read()
+	f, err = read(impl)
 	ok(t, err)
-	if f.LatestUsedPlan != newer || reads != 2 {
-		t.Fatal("stale adoption or history", f, reads)
+	if !slices.Contains(f.UsedPlans, old) || !slices.Contains(f.UsedPlans, newer) || len(f.UsedPlans) != 2 || reads != 2 {
+		t.Fatal("used plans or history not read afresh", f, reads)
+	}
+	if stale(f) {
+		t.Fatal("task of an older used plan refused stale")
+	}
+	never := w.ready(t, store.Task{OffPlanReason: "planned by task " + unused, BaseCommit: commitB})
+	f, err = read(never)
+	ok(t, err)
+	if f.ProducingPlan != unused || !stale(f) {
+		t.Fatal("task of a plan never used not stale", f)
+	}
+	direct := store.NewTaskID()
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, e := store.ProposeTask(ctx, tx, "controller", store.Task{ID: direct, MissionID: "M-1", OffPlanReason: "proposed by the coordinator", Role: "implement",
+			Class: "goal", Title: "t", SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitB})
+		return e
+	}))
+	f, err = read(direct)
+	ok(t, err)
+	if !f.GoalTask || f.ProducingPlan != "" || stale(f) {
+		t.Fatal("directly proposed goal task refused stale", f)
 	}
 	src.History = func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{}, errors.New("history unavailable")
 	}
-	if _, err = read(); err == nil {
+	if _, err = read(impl); err == nil {
 		t.Fatal("unreadable history became never")
 	}
 }

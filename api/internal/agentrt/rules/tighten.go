@@ -39,6 +39,11 @@ func Tightens(prev, next Rule) error {
 		if n.AttemptLimitSec > p.AttemptLimitSec {
 			return errors.New("attempt_hard_limit_s goes up")
 		}
+		// What the platform may add on its own is budget too; a rule that
+		// states none has the default cap.
+		if n.AutoGrant.MaxAttempts > p.AutoGrant.MaxAttempts || n.AutoGrant.MaxWallHours > p.AutoGrant.MaxWallHours {
+			return errors.New("auto_grant goes up")
+		}
 	case KindJob:
 		return jobTightens(prev.Job, next.Job)
 	case KindFacts:

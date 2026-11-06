@@ -68,8 +68,9 @@ func lockWaitingRoot(ctx context.Context, tx pgx.Tx, root string) (string, error
 }
 
 // SettleWaitingLandingStale is independent of live, rules and Git. Pauses are
-// recoverable; stopped/done/expired missions, cancelled tasks and dropped or
-// superseded plan steps end a wait once, just as unclaimedEnd classifies them.
+// recoverable; stopped/done/expired missions, cancelled tasks and dropped
+// steps end a wait once, just as unclaimedEnd classifies them. A newer plan
+// adopted by the mission does not: every used plan's tasks may land.
 func SettleWaitingLandingStale(ctx context.Context, db DB) ([]string, error) {
 	var state landing.State
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -128,15 +129,8 @@ func waitingStaleDB(ctx context.Context, tx pgx.Tx, root string) (bool, error) {
 	err := tx.QueryRow(ctx, `SELECT m.state IN ('done','stopped','expired')
 	  OR COALESCE(m.scope_json->>'no_merge','') <> '' OR t.state='cancelled'
 	  OR COALESCE(p.state,'')='dropped'
-	  OR (COALESCE(t.off_plan_reason,'') LIKE 'planned by task %'
-	    AND latest.task_id IS NOT NULL
-	    AND substring(t.off_plan_reason FROM length('planned by task ')+1) <> latest.task_id)
 	  FROM agentrt.task t JOIN agentrt.mission m USING(mission_id)
 	  LEFT JOIN agentrt.plan_node p ON p.plan_node_id=t.plan_node_id
-	  LEFT JOIN LATERAL (SELECT e.task_id FROM agentrt.event e JOIN agentrt.task pt ON pt.task_id=e.task_id
-	    WHERE pt.mission_id=m.mission_id AND pt.role='plan' AND pt.state='accepted'
-	    AND e.event_type='task_state_changed' AND e.body_json->>'to'='accepted'
-	    AND e.body_json->>'reason' LIKE 'plan used:%' ORDER BY e.event_id DESC LIMIT 1) latest ON true
 	  WHERE t.task_id=$1`, root).Scan(&stale)
 	return stale, err
 }

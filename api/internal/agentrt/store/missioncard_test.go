@@ -123,7 +123,7 @@ func TestMissionInsideTheEnvelopeAsksNobody(t *testing.T) {
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1"))))
 	ok(t, firstErr(s.sign(w, ruleText("budget:dev", 2, rules.Tighten, since, until,
-		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\n"))))
+		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n"))))
 	a := &asker{}
 	in, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "in", store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}}, a.ask)
 	ok(t, err)
@@ -158,7 +158,7 @@ func TestMissionCardDoesNotNameTheNumber(t *testing.T) {
 			// And the default budget the proposal would get has changed
 			// (review 192 A1).
 			_, err := store.TightenRule(ctx, w.rt, wr("thread:s9"), "budget:dev", []byte(ruleText("budget:dev", 2, rules.Tighten, since, until,
-				"tenant: dev\nmission: {max_attempts: 500, max_wall_hours: 300}\nattempt_hard_limit_s: 3600\n")))
+				"tenant: dev\nmission: {max_attempts: 500, max_wall_hours: 300}\nattempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n")))
 			ok(t, err)
 		}
 		a := &asker{}

@@ -112,6 +112,7 @@ type recFacts struct {
 	kind             string
 	created, now     time.Time
 	budgetHours      int       // the mission's budget in hours, 0 when it has none to read
+	autoSays         string    // R3: what the platform added on its own up to its cap (spend.autoSays), "" for none
 	lastWork         time.Time // an attempt of the mission's last heartbeat (its lease, then each beat while it runs); zero when none ever ran
 	round, maxRounds int
 	// The task's latest check: its method and verdict, the verdict of the
@@ -140,6 +141,9 @@ func recommend(f recFacts) recommendation {
 	case f.kind == blockChain:
 		return rec(recDrop, "R2", fmt.Sprintf("its only check was dropped on its card; other work in %s %s, so drop only this task", f.mission, lastWorkText(f)))
 	case f.kind == blockBudget && age < recOldMission && (!f.checkedThisRound || f.verdict == "pass"):
+		if f.autoSays != "" {
+			return rec(recRetry, "R3", "only the budget stopped it; "+f.autoSays)
+		}
 		return rec(recRetry, "R3", "only the budget stopped it")
 	case f.kind == blockBudget && age >= recOldMission:
 		return rec(recNone, "", fmt.Sprintf("only the budget stopped it, but %s started %s and is under %d× its hours", f.mission, ago(age), recOverHours))
@@ -232,6 +236,7 @@ func recommendBlocked(ctx context.Context, tx pgx.Tx, t taskRow, d taskDetail, r
 	}
 	if ok {
 		f.budgetHours = s.budget.MaxWallHours
+		f.autoSays = s.autoSays()
 	}
 	var last *time.Time
 	if err := tx.QueryRow(ctx, `SELECT m.created_at, clock_timestamp(),
