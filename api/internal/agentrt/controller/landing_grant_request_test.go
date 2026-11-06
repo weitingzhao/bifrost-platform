@@ -16,6 +16,7 @@ const grantTestTask = "t_00000000000000000000000001"
 var (
 	grantTestOp = "land:" + grantTestTask + ":1"
 	grantTestR  = strings.Repeat("a", 40)
+	grantTestM0 = strings.Repeat("d", 40)
 )
 
 type grantAsk struct {
@@ -31,13 +32,14 @@ type grantRequestWorld struct {
 	hardCore  bool
 	usable    string
 	held      bool
+	main      string // main's head; "" unreadable
 	approvals []store.LandingGrantRequest
 	asks      []grantAsk
 	requestFn func(ctx context.Context, action string, params map[string]any, reason string) (string, error)
 }
 
 func newGrantRequestWorld(t *testing.T) *grantRequestWorld {
-	w := &grantRequestWorld{phase: "awaiting_grant"}
+	w := &grantRequestWorld{phase: "awaiting_grant", main: grantTestM0}
 	w.requestFn = func(_ context.Context, action string, params map[string]any, reason string) (string, error) {
 		w.asks = append(w.asks, grantAsk{action, reason, params})
 		r, _ := params["R"].(string)
@@ -68,13 +70,19 @@ func newGrantRequestWorld(t *testing.T) *grantRequestWorld {
 	grantRequestReads.usable = func(context.Context, store.DB, string) (string, error) { return w.usable, nil }
 	grantRequestReads.held = func(context.Context, store.DB, string) (bool, error) { return w.held, nil }
 	grantRequestReads.material = func(_ context.Context, _ store.DB, _ store.GrantSources, op string) (*store.LandingGrantMaterial, error) {
-		m := &store.LandingGrantMaterial{Candidate: store.GrantCandidate{Repo: "bifrost-platform", Task: grantTestTask, Op: op, R: grantTestR},
+		m := &store.LandingGrantMaterial{Candidate: store.GrantCandidate{Repo: "bifrost-platform", Task: grantTestTask, Op: op, R: grantTestR, M0: grantTestM0},
 			MaterialDigest: "sha256:" + strings.Repeat("b", 64), SoftAtRequest: []string{"files"}, Action: store.ActionGuardrailLanding}
 		if w.hardCore {
 			m.Candidate.HardCorePaths = []store.GrantHardPath{{Path: "api/internal/approvals/service.go", Entry: "approvals"}}
 			m.SoftAtRequest, m.Action = []string{"core"}, store.ActionCoreLanding
 		}
 		return m, nil
+	}
+	grantRequestReads.main = func(_ context.Context, _ store.GrantSources, repo string) (string, error) {
+		if w.main == "" {
+			return "", errors.New("main unreadable")
+		}
+		return w.main, nil
 	}
 	return w
 }
@@ -223,5 +231,26 @@ func TestGrantRequestErrorAndRefusedMaterial(t *testing.T) {
 	w.pass(t)
 	if len(w.asks) != 0 {
 		t.Fatalf("problems: asked %d", len(w.asks))
+	}
+}
+
+// main_is_M0 false asks nothing: on PROD 2026-11-06 an operation waiting for
+// a grant on M0 5661d6c4 saw main move to 632b874f, and a card for it would
+// ask the Owner for a grant the final gate can only throw away. An
+// unreadable main asks nothing either; once main reads M0 it asks.
+func TestGrantRequestMainNotM0AsksNothing(t *testing.T) {
+	for _, main := range []string{strings.Repeat("e", 40), ""} {
+		w := newGrantRequestWorld(t)
+		w.main = main
+		w.pass(t)
+		if len(w.asks) != 0 {
+			t.Fatalf("main %q: asked %d", main, len(w.asks))
+		}
+		w.main = grantTestM0
+		w.c.Reconcile.askWaits = nil
+		w.pass(t)
+		if len(w.asks) != 1 {
+			t.Fatalf("main back on M0: asked %d, want 1", len(w.asks))
+		}
 	}
 }

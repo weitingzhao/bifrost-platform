@@ -57,6 +57,16 @@ func (s GrantSources) forRepo(repo string) GrantSources {
 	return s
 }
 
+// MainOf reads main's head of repo with the sources its grants use, as the
+// create check does.
+func (s GrantSources) MainOf(ctx context.Context, repo string) (string, error) {
+	src := s.forRepo(repo)
+	if src.Main == nil {
+		return "", fmt.Errorf("main of %s is not read here", repo)
+	}
+	return src.Main(ctx)
+}
+
 // complete: every reader repo's grants need. A floor grant reads M0..R's
 // files instead of a pinned CI run.
 func (s GrantSources) complete(repo string) bool {

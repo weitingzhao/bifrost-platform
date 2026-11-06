@@ -38,6 +38,7 @@ var grantRequestReads = struct {
 	usable   func(ctx context.Context, db store.DB, op string) (string, error)
 	held     func(ctx context.Context, db store.DB, task string) (bool, error)
 	material func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error)
+	main     func(ctx context.Context, src store.GrantSources, repo string) (string, error)
 }{
 	state: func(ctx context.Context, db store.DB, repo string) (s landing.State, err error) {
 		err = store.InTx(ctx, db, func(tx pgx.Tx) error {
@@ -50,6 +51,9 @@ var grantRequestReads = struct {
 	held:   store.TaskStopHeld,
 	material: func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error) {
 		return store.ReadLandingGrantMaterial(ctx, db, src, op, false)
+	},
+	main: func(ctx context.Context, src store.GrantSources, repo string) (string, error) {
+		return src.MainOf(ctx, repo)
 	},
 }
 
@@ -168,12 +172,18 @@ func (c *Controller) askLandingGrant(ctx context.Context, w grantWaiting) error 
 	} else if grant != "" {
 		return errGrantNotNow // the final gate takes it from here
 	}
-	m, err := grantRequestReads.material(ctx, c.DB, r.Grants(), w.Op)
+	src := r.Grants()
+	m, err := grantRequestReads.material(ctx, c.DB, src, w.Op)
 	if err != nil {
 		return err
 	}
 	if len(m.Problems) > 0 || m.Candidate.R != w.R {
 		return errGrantNotNow // the create check would refuse it: read again later
+	}
+	// main_is_M0 false: a grant the final gate could only throw away; the
+	// operation replays (replayAwaitingGrant). Unreadable main counts so too.
+	if head, err := grantRequestReads.main(ctx, src, m.Candidate.Repo); err != nil || head == "" || head != m.Candidate.M0 {
+		return errGrantNotNow
 	}
 	action := store.ActionGuardrailLanding
 	if len(m.Candidate.HardCorePaths) > 0 {

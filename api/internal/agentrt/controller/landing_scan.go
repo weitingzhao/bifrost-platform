@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -230,13 +231,22 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 	case o.Phase == "awaiting_grant":
 		// C-5: only a grant the stream shows usable takes the operation to
 		// the final gate, which verifies and consumes it. Without one: no
-		// Git/CI polling, branch rewrite, repeated event or card.
+		// CI polling, branch rewrite, repeated event or card; main alone is
+		// read, so that an operation main moved past replays.
 		if c.Env != "prod" || !c.Live {
 			return nil
 		}
-		grant, err := store.UsableLandingGrant(ctx, c.DB, id)
+		grant, err := usableLandingGrant(ctx, c.DB, id)
 		if err != nil {
 			return err
+		}
+		// A floor grant (the only grant of a floor repository) is held on a
+		// moved main, as the final gate holds it: main may come back to M0
+		// within its 24 hours, and the gate discards once it is spent.
+		if grant == "" || !rules.FloorGrantSupported(repo) {
+			if moved, err := c.replayAwaitingGrant(ctx, id, o, repo); moved || err != nil {
+				return err
+			}
 		}
 		if grant != "" {
 			key := id + "/" + grant
@@ -299,6 +309,46 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 	default:
 		return c.LandingDrillBranch(ctx, c.DrillGit[repo], id, now, repo)
 	}
+}
+
+// usableLandingGrant is store.UsableLandingGrant; a variable so a test can
+// stand a grant on an operation without the approval path.
+var usableLandingGrant = store.UsableLandingGrant
+
+// replayAwaitingGrant ends an operation waiting in awaiting_grant whose main
+// moved past its M0, as LandingDrillCI's replay does: discarded main_changed
+// (its batch released so), failed bound for a root's eighth operation. Once
+// the rule recheck has its answer for the rule in force the gate is not run
+// again without a grant, so it would otherwise wait out its WaitWindow (PROD
+// 2026-11-06). A grant on it is then moot; the settle path withdraws its
+// card. An unreadable main changes nothing (moved false).
+func (c *Controller) replayAwaitingGrant(ctx context.Context, id string, o landing.Operation, repo string) (bool, error) {
+	if c.Drill == nil || c.Drill.Main == nil || o.M0 == "" {
+		return false, nil
+	}
+	main, err := c.Drill.Main(ctx, repo)
+	if err != nil || main == "" || main == o.M0 {
+		return false, nil
+	}
+	s, err := c.landingState(ctx, repo)
+	if err != nil {
+		return true, err
+	}
+	if s.Operations[id].Phase != "awaiting_grant" {
+		return true, nil // moved meanwhile: the next pass reads it again
+	}
+	b, inBatch, err := c.landingBatchFor(ctx, repo, id, s)
+	if err != nil {
+		return true, err
+	}
+	c.logf("agentrt landing %s: main %s is not M0 %s while it awaits a grant: replayed", id, main, o.M0)
+	if inBatch {
+		return true, c.releaseBatch(ctx, b, "main_changed", repo)
+	}
+	if _, n := landing.RootBudget(s, o.Task); n >= 8 {
+		return true, c.appendLanding(ctx, id, "failed", map[string]any{"why": "bound"}, repo)
+	}
+	return true, c.appendLanding(ctx, id, "discarded", map[string]any{"why": "main_changed"}, repo)
 }
 
 // unsettled leaves out the tasks ClaimLandingDrill would refuse from the
