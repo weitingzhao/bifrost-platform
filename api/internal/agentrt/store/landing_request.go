@@ -16,8 +16,11 @@ import (
 // source is the workers' approval reader, outside every PostgreSQL transaction.
 type LandingGrantRequest struct {
 	Op, ApprovalID, Status, ParamsHash string
-	ApprovalNumber                     int64
-	SeenAt                             time.Time
+	// R is the request's R parameter: the controller's own request reads it
+	// (landing_grant_request.go). Not part of the recorded observation.
+	R              string
+	ApprovalNumber int64
+	SeenAt         time.Time
 }
 
 func (r LandingGrantRequest) body() map[string]any {

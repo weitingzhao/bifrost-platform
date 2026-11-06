@@ -29,8 +29,16 @@ func (s *Server) wireLandingRequests(c *controller.Controller) {
 			if op == "" {
 				continue
 			}
-			out = append(out, store.LandingGrantRequest{Op: op, ApprovalID: a.ID, ApprovalNumber: int64(a.Number), Status: a.Status, ParamsHash: a.ParamsHash, SeenAt: seen})
+			r, _ := a.Params["R"].(string)
+			out = append(out, store.LandingGrantRequest{Op: op, R: r, ApprovalID: a.ID, ApprovalNumber: int64(a.Number), Status: a.Status, ParamsHash: a.ParamsHash, SeenAt: seen})
 		}
 		return out, nil
+	}
+	// The platform asks for the Owner's card itself once an operation waits
+	// on a grant (R5:5.7 goal 3); the create check runs as for any request.
+	c.Reconcile.Grants = s.landingGrantSources
+	c.Reconcile.RequestGrant = func(ctx context.Context, action string, params map[string]any, reason string) (string, error) {
+		a, err := s.approvals.Request(ctx, "controller", action, reason, "Reject the card: nothing lands without a grant.", params)
+		return a.ID, err
 	}
 }

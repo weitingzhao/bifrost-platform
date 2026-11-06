@@ -8,6 +8,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
+// recordLandingGrantRequest is a variable so the tests of the grant request
+// (landing_grant_request.go) can run a whole pass without a database.
+var recordLandingGrantRequest = store.RecordLandingGrantRequest
+
 // LandingRequestsPass reads approvals before entering PostgreSQL. Approval
 // failures/unknowns are observations, never grant availability. One bad record
 // does not prevent the remaining roots' rejection settlements.
@@ -21,9 +25,12 @@ func (c *Controller) LandingRequestsPass(ctx context.Context) error {
 	}
 	var errs []error
 	for _, r := range requests {
-		if _, err := store.RecordLandingGrantRequest(ctx, c.DB, r); err != nil {
+		if _, err := recordLandingGrantRequest(ctx, c.DB, r); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", r.ApprovalID, err))
 		}
+	}
+	if err := c.requestLandingGrants(ctx, requests); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
