@@ -97,3 +97,7 @@ build-operator-plane:
 	@# its own to be grantable at all. Re-sign only when this host can.
 	@if [ "$(GOOS)" = "darwin" ] && command -v codesign >/dev/null 2>&1; then 		codesign --force --sign - --identifier com.bifrost.operator-plane api/bin/operator-plane && 		echo "Signed api/bin/operator-plane as com.bifrost.operator-plane"; 	fi
 	@echo "Built api/bin/operator-plane"
+
+.PHONY: test-console-scoped
+test-console-scoped:
+	./scripts/ci/test_console_scoped.sh "$(BASE)" "$(HEAD)"
