@@ -185,9 +185,16 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if err != nil {
 			return refuse(err.Error())
 		}
+		// A plan may only lower the mission's budget: a raise is dropped, the
+		// mission keeps its own.
 		maxAttempts, maxHours := budgetInt(budget, "max_attempts"), budgetInt(budget, "max_wall_hours")
-		if (p.Mission.MaxAttempts > 0 && p.Mission.MaxAttempts > maxAttempts) || (p.Mission.MaxWallHours > 0 && p.Mission.MaxWallHours > maxHours) {
-			return refuse(fmt.Sprintf("the plan raises the mission's budget (%d attempts, %d hours); a plan may only lower it", maxAttempts, maxHours))
+		if p.Mission.MaxAttempts > maxAttempts {
+			p.Notes = append(p.Notes, fmt.Sprintf("mission.max_attempts %d dropped: a plan may only lower the mission's %d", p.Mission.MaxAttempts, maxAttempts))
+			p.Mission.MaxAttempts = 0
+		}
+		if p.Mission.MaxWallHours > maxHours {
+			p.Notes = append(p.Notes, fmt.Sprintf("mission.max_wall_hours %d dropped: a plan may only lower the mission's %d", p.Mission.MaxWallHours, maxHours))
+			p.Mission.MaxWallHours = 0
 		}
 		// Each task starts from its repository's main as the goal read it
 		// (scope_json.bases); the planning task's own repository from the
@@ -282,7 +289,14 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 					verify = append(verify, c)
 				}
 			}
-			spec, err := ImplementSpec(pt.Title, pt.Text, Repos[pt.Repo], verify, HandInChecks(Repos[pt.Repo], pt.Verify))
+			repo := Repos[pt.Repo]
+			if len(pt.Siblings) > 0 {
+				repo.Siblings = slices.Clone(repo.Siblings)
+				for _, s := range pt.Siblings {
+					repo.Siblings = append(repo.Siblings, Sibling{Repo: s, Ref: "main"})
+				}
+			}
+			spec, err := ImplementSpec(pt.Title, pt.Text, repo, verify, HandInChecks(repo, pt.Verify))
 			if err != nil {
 				return err
 			}
@@ -343,9 +357,31 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			}
 			reason += ", ignored keys: " + strings.Join(named, ", ")
 		}
+		if len(p.Notes) > 0 {
+			reason += ", fixed: " + planNotes(p.Notes)
+		}
 		return moveTask(ctx, tx, "controller", t, "accepted", reason)
 	})
 	return did, err
+}
+
+// planNotesMax is how many of a used plan's notes its reason names, each cut
+// to planNoteBytes.
+const (
+	planNotesMax  = 12
+	planNoteBytes = 200
+)
+
+// planNotes are a used plan's notes (PlanDoc.Notes) as its reason names them.
+func planNotes(notes []string) string {
+	named := []string{}
+	for _, n := range notes[:min(len(notes), planNotesMax)] {
+		named = append(named, cutBytes(n, planNoteBytes))
+	}
+	if len(notes) > planNotesMax {
+		named = append(named, fmt.Sprintf("and %d more", len(notes)-planNotesMax))
+	}
+	return strings.Join(named, "; ")
 }
 
 // readMainHead reads main's head of repo within planMainTimeout; a read that

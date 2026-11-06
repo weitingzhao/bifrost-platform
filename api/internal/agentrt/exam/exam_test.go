@@ -125,7 +125,7 @@ func TestRules(t *testing.T) {
 		{"G1", plan(task, `{"question": "Which?", "options": ["`+strings.Repeat("ſ", 79)+`", "OK"], "recommended": 1, "meanwhile": "Wait", "owner_duty": "rule"}`), []string{"card"}},
 		{"B1", "M-7 parser done. codex behind 7%.", []string{"all", "why", "until", "empty", "zh"}},
 		{"B1", "完成：M-7 parser 已收下。被拒：没有被拒的。\u2028卡住：M-8 卡住，原因不明。\u2028额度：codex 落后 7 个百分点，冷却到明早 8 点。\u2028四\u2028五", []string{"lines"}},
-		{"G1", plan(`{"ref": "t1", "title": "Prepare", "repo": "bifrost-platform", "text": "Prepare.", "verify": [["\u0072ule.yaml"]]}`, ""), []string{"reads", "card", "rule-file"}},
+		{"G1", plan(`{"ref": "t1", "title": "Prepare", "repo": "bifrost-platform", "text": "Prepare.", "verify": [["\u0072ule.yaml"]]}`, ""), []string{"card", "rule-file"}}, // the bad check is dropped: the plan reads
 	} {
 		got := failed(t, s, c.item, c.answer)
 		if !slices.Equal(got, c.fail) {

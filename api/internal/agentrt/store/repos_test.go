@@ -219,22 +219,32 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	}
 
 	// A check of the plan's own on infra is not taken: there is no module a
-	// plan may test there. Nor may a platform goal's plan name infra. (The
-	// implementation above is cancelled, and each refused plan after it, so
-	// the planner claims the next plan.)
+	// plan may test there; it is dropped and the plan used, with a note (the
+	// Owner, 2026-11-06). A platform goal's plan may not name infra. (Each
+	// implementation and refused plan is cancelled, so the planner claims the
+	// next plan.)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", impl, "cancelled", "test") }))
-	for key, c := range map[string]struct{ repo, report, why string }{
-		"g2": {infra, strings.Replace(infraPlan, `"verify": []`, `"verify": [["python3", "-m", "pytest", "scripts/agentrt"]]`, 1),
-			"this repository takes no checks of a plan's own; leave verify empty"},
-		"g3": {"bifrost-platform", infraPlan, `repo is one of bifrost-platform, not "bifrost-trade-infra"`},
-	} {
-		_, plan = goal(key, c.repo)
-		w.work(t, plan, c.report, "done")
-		if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "rework" ||
-			!strings.Contains(lastReason(t, w, plan), c.why) {
-			t.Fatalf("%s: %q %v %q", key, did, err, lastReason(t, w, plan))
-		}
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", plan, "cancelled", "test") }))
+	m2, plan := goal("g2", infra)
+	w.work(t, plan, strings.Replace(infraPlan, `"verify": []`, `"verify": [["python3", "-m", "pytest", "scripts/agentrt"]]`, 1), "done")
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "accepted" {
+		t.Fatalf("g2: %q %v", did, err)
+	}
+	var reason string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
+	  AND body_json->>'to' = 'accepted'`, plan).Scan(&reason))
+	if !strings.Contains(reason, "fixed: tasks[0].verify dropped: this repository takes no checks of a plan's own") {
+		t.Fatalf("g2's accepted reason: %q", reason)
+	}
+	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1 AND role = 'implement'`, m2).Scan(&impl))
+	if text(impl) != string(want) {
+		t.Fatalf("g2's implementation:\n%s", text(impl))
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", impl, "cancelled", "test") }))
+	_, plan = goal("g3", "bifrost-platform")
+	w.work(t, plan, infraPlan, "done")
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "rework" ||
+		!strings.Contains(lastReason(t, w, plan), `repo is one of bifrost-platform, not "bifrost-trade-infra"`) {
+		t.Fatalf("g3: %q %v %q", did, err, lastReason(t, w, plan))
 	}
 }
 

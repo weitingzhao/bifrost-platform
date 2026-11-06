@@ -261,7 +261,8 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"verify holds only the checks you add (maybe none); core is true or false (left out: false). questions: up to " +
 		fmt.Sprint(PlanMaxQuestions) + "; recommended is the\n" +
 		"1-based option; owner_duty is goal, rule or irreversible. decisions: up to " + fmt.Sprint(PlanMaxDecisions) + ". The controller\n" +
-		"checks the block; one that does not read blocks this task and the Owner sees why.\n"
+		"checks the block: a slip of form (a long title, an extra question, a check not in the form above) is fixed or dropped\n" +
+		"and noted; one that does not read blocks this task and the Owner sees why.\n"
 	spec := map[string]any{"text": text}
 	if len(repos) > 1 {
 		sibs := make([]any, 0, len(repos)-1)
@@ -287,9 +288,8 @@ func coreRule(repos []string) string {
 	}
 	return "- Mark a task \"core\": true when it is core work (see Core work below) and false otherwise; you judge which by that\n" +
 		"  section, nothing else. A core task's text names the files it changes under its repository's core directories, each\n" +
-		"  as a path from the repository's root (for example api/internal/agentd/run.go). Core is refused on a task in a\n" +
-		"  repository with no core work (" + noCore(repos) + "), on one whose text names no such file, and as anything but\n" +
-		"  true or false.\n"
+		"  as a path from the repository's root (for example api/internal/agentd/run.go). Core is read as false on a task in\n" +
+		"  a repository with no core work (" + noCore(repos) + ") and on one whose text names no such file.\n"
 }
 
 // noCore lists the repositories of a goal that have no core work.
@@ -317,12 +317,13 @@ func checkouts(repos []string) string {
 		fmt.Fprintf(&b, "  - a task in %s has %s.\n", r, CheckoutOf(r))
 	}
 	if len(repos) > 1 {
-		b.WriteString("  The repositories beside you now are for your reading only; no task has them.\n")
+		b.WriteString("  The repositories beside you now are for your reading only; a task has none of them unless its text names it.\n")
 	}
 	b.WriteString("  A task cannot read, run or change anything outside its checkout, and neither can its checks: a change, a command to\n" +
 		"  run, a check or a way to tell it is done that needs another repository is a task in that repository. depends_on orders\n" +
 		"  tasks and nothing more: every task starts from its repository's commit named above, never from another task's work,\n" +
-		"  so no task sees what another one changed. A task whose text names ../<repository> its checkout does not have is refused.\n")
+		"  so no task sees what another one changed. A task whose text names ../<repository> its checkout does not have gets that\n" +
+		"  repository beside it at main when this goal names it; a plan naming any other is refused.\n")
 	return b.String()
 }
 
