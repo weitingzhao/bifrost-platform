@@ -2,6 +2,8 @@ package stgrelease
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -111,6 +113,17 @@ func finishMembers(s store.StgState, id string, b *store.StgBatch, ref int64, ve
 }
 
 func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id string, b *store.StgBatch, why string, base store.StgRecord, ci *store.StgCIObservation, checks ...store.StgRecord) error {
+	return c.blockAndFinishDetail(ctx, s, id, b, why, base, ci, nil, checks...)
+}
+
+// blockRule opens (or ends the batch against) a "rule" block. reason is
+// WindowPolicy.disabled as the batch read it: detail.rule_disabled, logged
+// once at WARN when the interval opens.
+func (c *Controller) blockRule(ctx context.Context, s store.StgState, id string, b *store.StgBatch, base store.StgRecord, reason map[string]any) error {
+	return c.blockAndFinishDetail(ctx, s, id, b, "rule", base, nil, map[string]any{"rule_disabled": reason})
+}
+
+func (c *Controller) blockAndFinishDetail(ctx context.Context, s store.StgState, id string, b *store.StgBatch, why string, base store.StgRecord, ci *store.StgCIObservation, extra map[string]any, checks ...store.StgRecord) error {
 	p := b.Selected.Record.String("P")
 	settlement := func(ref int64) []store.StgRecord {
 		if why == "budget_exhausted" {
@@ -118,7 +131,7 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 		}
 		return finish(s, id, b, ref, false)
 	}
-	r, err := c.blockedRecord(b, why, base, ci, nil)
+	r, err := c.blockedRecord(b, why, base, ci, extra)
 	if err != nil {
 		return err
 	}
@@ -132,19 +145,32 @@ func (c *Controller) blockAndFinish(ctx context.Context, s store.StgState, id st
 	}
 	rs := append(checks, r)
 	rs = append(rs, settlement(s.LastSeq+int64(len(rs)))...)
-	return c.write(ctx, s, rs...)
+	if err := c.write(ctx, s, rs...); err != nil {
+		return err
+	}
+	if reason, ok := extra["rule_disabled"].(map[string]any); ok {
+		args := []any{"batch", id, "P", p, "block", r.String("block")}
+		for _, k := range slices.Sorted(maps.Keys(reason)) {
+			args = append(args, k, reason[k])
+		}
+		c.logNotice("STG release blocked: the STG window policy reads not enabled", args...)
+	}
+	return nil
 }
 
 // blockedRecord is the blocked{why} record for batch b's selected P: its
 // members, rule versions and the CI identity the refusal names (the batch's
 // latest accepted CI when ci is nil). sent, when not nil, marks a refusal
-// found after that send (detail.sent: batch, try, permit, runs); it is not
-// part of the interval's identity.
-func (c *Controller) blockedRecord(b *store.StgBatch, why string, base store.StgRecord, ci *store.StgCIObservation, sent map[string]any) (store.StgRecord, error) {
+// found after that send (detail.sent: batch, try, permit, runs); a "rule"
+// refusal names the part of the policy that failed (detail.rule_disabled).
+// extra is merged into detail and is not part of the interval's identity.
+func (c *Controller) blockedRecord(b *store.StgBatch, why string, base store.StgRecord, ci *store.StgCIObservation, extra map[string]any) (store.StgRecord, error) {
 	p := b.Selected.Record.String("P")
 	detail := map[string]any{"members": members(b)}
-	if sent != nil {
-		detail["sent"] = sent
+	for k, v := range extra {
+		if v != nil {
+			detail[k] = v
+		}
 	}
 	versions := map[string]any{}
 	if rule := c.Policy().Rule; rule != nil {
@@ -224,9 +250,13 @@ func (c *Controller) readBlock(ctx context.Context, s store.StgState, block stor
 		}
 	}
 	if why == "rule" {
-		rule := c.Policy().Rule
-		if rule != nil {
-			proof := store.StgRecord{"v": "1", "scope": "block", "kind": "rule_observed", "block": r["block"], "interval_seq": block.Opened.Seq, "rule_id": rule.ID, "rule_version": rule.Version, "read_at": c.now().Format(time.RFC3339Nano)}
+		// Read as batch reads it before opening a "rule" block: live is
+		// the send's own check. An enabled read lifts the block even for the
+		// blocked rule version; a disabled one never does.
+		p := c.Policy()
+		p.Live = true
+		if rule := p.Rule; rule != nil {
+			proof := store.StgRecord{"v": "1", "scope": "block", "kind": "rule_observed", "block": r["block"], "interval_seq": block.Opened.Seq, "rule_id": rule.ID, "rule_version": rule.Version, "read_at": c.now().Format(time.RFC3339Nano), "enabled": p.enabled(c.now())}
 			if store.StgCanObserveRule(s, proof, c.now()) {
 				return c.write(ctx, s, proof, unblockRecord(r.String("block"), "rule_changed", s.LastSeq+1))
 			}

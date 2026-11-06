@@ -113,6 +113,10 @@ func ParseStgRelease(v any) (StgRecord, error) {
 	if k == "withheld" && r.String("why") == "owner" {
 		fields += " question_id"
 	}
+	// Observations from before R5:5.7's B5 fix carry no enabled flag.
+	if _, ok := r["enabled"]; k == "rule_observed" && ok {
+		fields += " enabled"
+	}
 	if !stgKeys(r, fields) {
 		return fail("fields do not match kind")
 	}
@@ -221,6 +225,8 @@ func ParseStgRelease(v any) (StgRecord, error) {
 			}
 		case "ref":
 			valid = stgString(val) || stgInteger(val, 1)
+		case "enabled":
+			_, valid = val.(bool)
 		default:
 			valid = stgIDRE.MatchString(s)
 		}
