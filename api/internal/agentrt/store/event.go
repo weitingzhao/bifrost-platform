@@ -206,6 +206,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if err := checkLandingReplacedAppend(ctx, tx, ev); err != nil {
 		return Appended{}, err
 	}
+	if err := checkLandingBatchAppend(ctx, tx, ev); err != nil {
+		return Appended{}, err
+	}
 	if err := checkLandingRefusalAppend(ev); err != nil {
 		return Appended{}, err
 	}
@@ -332,4 +335,12 @@ func VerifyStream(ctx context.Context, db interface {
 		return 0, &ChainBreak{stream, lastSeq, "stream head does not match its last event"}
 	}
 	return want - 1, nil
+}
+
+// SetEventClock makes the event clock read clock until the returned function
+// restores the wall clock. Tests of other packages move time with it, as
+// this package's own tests do (FreezeEventClock); nothing else calls it.
+func SetEventClock(clock func() time.Time) func() {
+	eventClock = clock
+	return func() { eventClock = time.Now }
 }

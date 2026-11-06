@@ -161,6 +161,20 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 			f.Terminal = true
 		}
 	}
+	// A batch is one landing in flight (landing_batch.go): its members do
+	// not count against each other. Read only when something else is in
+	// flight, so a lone operation's facts cost what they did.
+	if f.OtherInFlight > 0 && op != "" && f.Repo == "bifrost-platform" {
+		mates, err := landingBatchMates(ctx, tx, "landing:"+f.Repo, op)
+		if err != nil {
+			return f, nil, err
+		}
+		for id := range mates {
+			if o := state.Operations[id]; o.Task != "" && o.Active() {
+				f.OtherInFlight--
+			}
+		}
+	}
 	quota, err := LandingState(ctx, tx, "landing-quota:"+f.Tenant+":"+now.UTC().Format("2006-01-02"))
 	if err != nil {
 		return f, nil, err

@@ -74,13 +74,29 @@ func RecheckWaitingLanding(ctx context.Context, db DB, src LandingSource, op str
 }
 
 func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool, repo string) (Authorization, landing.Decision, error) {
-	stream := "landing:" + repo
 	if !landing.RepoSupported(repo) {
 		return Authorization{}, landing.Decision{Reason: "repo"}, nil
 	}
 	var auth Authorization
 	var decision landing.Decision
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var err error
+		auth, decision, err = authorizeLandingPushTx(ctx, tx, src, op, observe, recheck, repo)
+		return err
+	})
+	if err != nil {
+		return Authorization{}, landing.Decision{}, err
+	}
+	return auth, decision, nil
+}
+
+// authorizeLandingPushTx is the gate's judgment of op in tx, as
+// AuthorizeLandingPush describes it: its locks, reads, decision and records.
+// The batch gate (AuthorizeBatchPush) runs it for each member in one
+// transaction.
+func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool, repo string) (auth Authorization, decision landing.Decision, err error) {
+	stream := "landing:" + repo
+	err = func() error {
 		auth, decision = Authorization{}, landing.Decision{}
 		state, err := LandingState(ctx, tx, stream)
 		if err != nil {
@@ -489,11 +505,8 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			Deadline: a.At.Add(PushTimeout), RuleVersion: g.Rule.Version, QuotaDay: day}
 		decision = landing.Decision{Allowed: true}
 		return nil
-	})
-	if err != nil {
-		return Authorization{}, landing.Decision{}, err
-	}
-	return auth, decision, nil
+	}()
+	return auth, decision, err
 }
 
 // floorTreeStale is why M0..R, recomputed from Git, is not what a floor

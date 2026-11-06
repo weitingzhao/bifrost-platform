@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -240,6 +239,9 @@ type LandingGrantMaterial struct {
 	// floorCI is the infra CI run the operation succeeded on, recorded in
 	// a floor grant; not part of the candidate (the gate reads CI again).
 	floorCI GrantCI
+	// Batch, when the operation leads a batch (landing_batch.go): the
+	// patch is the batch's whole change M0..R, and these are its members.
+	Batch *GrantBatch `json:"batch,omitempty"`
 }
 
 // grantDB is the database half of the material, read in one transaction.
@@ -255,6 +257,7 @@ type grantDB struct {
 	enabled    bool
 	grants     []*grantView
 	ciKey      *GrantCIKey
+	batch      *GrantBatch
 }
 
 // readGrantDB reads every database input of an operation's material. It
@@ -294,6 +297,18 @@ func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, n
 	d.enabled = d.facts.GrantEnabled
 	if d.ciKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 		return d, err
+	}
+	batches, _, err := readLandingBatches(ctx, tx, grantStream(d.repo))
+	if err != nil {
+		return d, err
+	}
+	for _, b := range batches {
+		if slices.Contains(b.Members, op) {
+			d.batch = &GrantBatch{Batch: b.Batch, Members: []GrantBatchMember{}}
+			for _, m := range b.Members {
+				d.batch.Members = append(d.batch.Members, GrantBatchMember{Op: m, Task: s.Operations[m].Task, A: s.Operations[m].A})
+			}
+		}
 	}
 	_, d.grants, err = readLandingGrants(ctx, tx, grantStream(d.repo))
 	return d, err
@@ -385,39 +400,6 @@ func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 	return x, nil
 }
 
-// floorPathsOf are a floor grant's pinned files from Git's M0..R, and
-// whether that tree can be granted at all: R one commit on M0, every file
-// added or modified, floor-grantable, and no Secret manifest.
-func floorPathsOf(t landing.FloorTree) ([]GrantFloorPath, bool) {
-	out := []GrantFloorPath{}
-	ok := t.OnM0 && len(t.Files) > 0
-	for _, f := range t.Files {
-		entry := rules.InfraFloorEntry(f.Path)
-		if entry == "" || f.Secret || f.Kind != "A" && f.Kind != "M" || f.Mode != "100644" || !grantHex64.MatchString(f.SHA256) {
-			ok = false
-			continue
-		}
-		out = append(out, GrantFloorPath{Path: f.Path, Entry: entry, BlobSHA256: f.SHA256})
-	}
-	slices.SortFunc(out, func(a, b GrantFloorPath) int { return strings.Compare(a.Path, b.Path) })
-	for i := 1; i < len(out); i++ {
-		if out[i].Path == out[i-1].Path {
-			ok = false
-		}
-	}
-	return out, ok
-}
-
-// floorCIOf is the infra CI success the operation is waiting on: R's run,
-// created after preparation and no later than now; zero otherwise.
-func floorCIOf(o landing.Operation, now time.Time) (GrantCI, bool) {
-	created := o.CI.Time("created_at")
-	ci := GrantCI{Pipeline: rules.LandingRepositories["bifrost-trade-infra"].CIPipeline, Run: o.CI.String("run"), UID: o.CI.String("uid"),
-		CreatedAt: created.UTC().Format(time.RFC3339Nano), Status: o.CI.String("status"), SHA: o.CI.String("R")}
-	green := ci.Status == "Succeeded" && ci.SHA == o.R && ci.Run != "" && ci.UID != "" && created.After(o.PreparedAt) && !created.After(now)
-	return ci, green
-}
-
 // buildCandidate composes candidate_digest's inputs.
 func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc []GrantAcceptance, rev GrantReview,
 	patch GrantPatch, ci GrantCIEvidence, key *GrantCIKey, stg bool) GrantCandidate {
@@ -464,7 +446,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	f.SingleCommit, f.Changes = x.single, x.changes
 	m := &LandingGrantMaterial{Phase: d.op.Phase, Latest: d.latest, Pinned: f.ExecutorPin != "", GrantEnabled: d.enabled,
 		Rule: d.rule, ChecksVersion: rules.LandingChecksVersion, WaitingSoft: slices.Clone(d.op.Soft), Problems: []string{}, ComputedAt: now,
-		Patch: x.patch.Shown, PatchTruncated: x.patch.Truncated, PatchSize: x.patch.Size, Grants: []LandingGrantStatus{}}
+		Patch: x.patch.Shown, PatchTruncated: x.patch.Truncated, PatchSize: x.patch.Size, Grants: []LandingGrantStatus{}, Batch: d.batch}
 	if m.WaitingSoft == nil {
 		m.WaitingSoft = []string{}
 	}

@@ -55,6 +55,15 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 			return fmt.Errorf("landing repo has no current rule")
 		}
 	}
+	// A batch member goes to main with its whole batch (landing_batch.go).
+	if c.batching(repo) {
+		if b, in, err := store.LandingBatchOf(ctx, c.DB, repo, op); err != nil || in {
+			if err != nil {
+				return err
+			}
+			return c.landBatch(ctx, src, b, recheck, decided, repo)
+		}
+	}
 	var w LiveWorkspace
 	var err error
 	if c.OpenLive != nil {

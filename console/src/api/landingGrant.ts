@@ -43,7 +43,10 @@ export type LandingMaterial = {
   phase: string; latest: boolean; pinned: boolean; grant_enabled: boolean; patch?: string; patch_truncated: boolean; patch_size: number
   compare_url: string; gitea_notice: string; quota_reserved_today: number; quota_max_per_day: number; quota_note: string; stg_notice?: string
   grants: LandingGrant[]; problems: string[]; computed_at: string
+  /** Present when the operation leads a batch: the patch is the batch's whole change M0..R. */
+  batch?: LandingBatch
 }
+export type LandingBatch = { batch: string; members: { op: string; task: string; A: string }[] }
 export type LandingMaterialResponse = { material: LandingMaterial; main: string; main_known: boolean; main_is_M0: boolean }
 export class LandingMaterialPending extends Error {}
 export type LandingRevoke = { grant_id: string; op: string; revoked: boolean; already: boolean; handed_to_push: boolean; main_intent_seq?: number; message: string }
@@ -77,6 +80,11 @@ function candidate(v: unknown): boolean {
     && object(v.ci.siblings) && Object.values(v.ci.siblings).every(string)
 }
 
+function batch(v: unknown): boolean {
+  return object(v) && string(v.batch) && Array.isArray(v.members) && v.members.length > 1
+    && list(v.members, m => object(m) && fields(m, 'op task A', string))
+}
+
 function floorPaths(v: unknown): boolean {
   const paths = new Set<string>()
   return list(v, p => {
@@ -95,7 +103,7 @@ export function parseLandingMaterial(v: unknown): LandingMaterialResponse | null
     || !fields(m, 'soft_at_request waiting_soft problems', strings) || !isLandingAction(m.action)
     || !fields(m, 'latest pinned grant_enabled patch_truncated', bool)
     || !fields(m, 'checks_version patch_size quota_reserved_today quota_max_per_day', count)
-    || !optional(m, 'floor_paths', floorPaths)
+    || !optional(m, 'floor_paths', floorPaths) || !optional(m, 'batch', batch)
     || !optional(m, 'patch first_line stg_notice', string) || !time(m.computed_at) || !list(m.grants, grant)
     || !object(m.rule) || !fields(m.rule, 'id sha256', string) || !count(m.rule.version)) return null
   return v as LandingMaterialResponse

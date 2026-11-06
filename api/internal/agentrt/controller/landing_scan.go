@@ -180,6 +180,11 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	// pass's start: a slow read must not use up the wait it earns (review
 	// 653 R653-2).
 	tasks = c.repoWaits(repo).due(unsettled(tasks, settled.Operations), drillGeneration(settled), c.clock())
+	// On PROD the platform's waiting roots are stacked into one batch
+	// instead of the first that claims (landing_batch.go).
+	if batched, err := c.claimBatch(ctx, repo, tasks, settled, now); batched {
+		return errors.Join(append(errs, err)...)
+	}
 	for i, task := range tasks {
 		one, done := drillWorkShare(ctx, len(tasks)-i)
 		op, d, e := store.ClaimLanding(one, c.DB, c.Drill.Facts, c.Env, task, now)

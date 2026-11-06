@@ -62,6 +62,9 @@ type DrillSources struct {
 	InfraPlatformHead func(context.Context) (string, error)
 	InfraCI           func(context.Context, landing.Operation) (landing.CIRun, error)
 	EnsureInfraCI     func(context.Context, landing.Operation) error
+	// OpenBatch opens the workspace a batch is replayed in, holding main
+	// and commit (landing_batch.go); nil opens the repository's DrillGit.
+	OpenBatch func(ctx context.Context, repo, commit string) (BatchWorkspace, error)
 }
 
 // LandingDrillCI resumes an existing branch_pushed/parked operation from its
@@ -107,8 +110,28 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		}
 		return landing.DrillAction{Kind: "cleanup"}, nil
 	}
+	if o.AtMain() && c.batching(repo) {
+		// A batch member visited after its lead took the batch to main
+		// within the same pass: the reconciler's now.
+		if _, in, err := c.landingBatchFor(ctx, repo, op, s); err != nil || in {
+			return landing.DrillAction{Kind: "wait"}, err
+		}
+	}
 	if o.Phase != "branch_pushed" && o.Phase != "parked" {
 		return landing.DrillAction{}, fmt.Errorf("operation not awaiting CI")
+	}
+	// A batch's lead runs the one CI of every member and the others follow
+	// it; the lead counts from the batch's last preparation (landing_batch.go).
+	b, inBatch, err := c.landingBatchFor(ctx, repo, op, s)
+	if err != nil {
+		return landing.DrillAction{}, err
+	}
+	if inBatch {
+		if follow, err := c.batchFollows(ctx, b, s, op, repo); follow || err != nil {
+			return landing.DrillAction{Kind: "wait"}, err
+		}
+		o.PreparedAt = batchPrepared(s, b)
+		s.Operations[op] = o
 	}
 	// Bounds are checked before any external read: an unavailable Gitea or
 	// window must not keep the active slot forever.
@@ -127,6 +150,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return landing.DrillAction{Kind: "wait"}, fmt.Errorf("main head unreadable")
 	}
 	if main != o.M0 {
+		if inBatch {
+			return landing.DrillAction{Kind: "replay"}, c.releaseBatch(ctx, b, "main_changed", repo)
+		}
 		if n >= 8 {
 			return landing.DrillAction{Kind: "failed", Why: "bound"}, appendRecord("failed", map[string]any{"why": "bound"})
 		}
@@ -200,6 +226,11 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			return a, err
 		}
 	}
+	if inBatch {
+		if err = c.batchCISeen(ctx, b, s, ci, at, repo); err != nil {
+			return a, err
+		}
+	}
 	switch a.Kind {
 	case "ready":
 		if c.Env == "prod" {
@@ -207,10 +238,22 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		}
 		return a, c.finishLandingDrill(ctx, src, op, now, repo)
 	case "replay":
+		if inBatch {
+			return a, c.releaseBatch(ctx, b, "main_changed", repo)
+		}
 		return a, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	case "failed":
+		if a.Why == "ci_red" && inBatch {
+			return a, c.failBatchRed(ctx, src, repo, b, ci, now)
+		}
 		if a.Why == "ci_red" {
 			return a, c.failCIRed(ctx, src, repo, op, ci)
+		}
+		if inBatch {
+			if err = appendRecord("failed", map[string]any{"why": a.Why}); err != nil {
+				return a, err
+			}
+			return a, c.releaseBatch(ctx, b, "stale", repo)
 		}
 		return a, appendRecord("failed", map[string]any{"why": a.Why})
 	case "parked":

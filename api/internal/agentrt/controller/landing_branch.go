@@ -98,6 +98,17 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	if !ok {
 		return fmt.Errorf("unknown operation")
 	}
+	// A batch member is prepared and pushed with its batch, never replayed
+	// alone (landing_batch.go).
+	if b, in, err := c.landingBatchFor(ctx, repo, op, s); err != nil {
+		return err
+	} else if in {
+		source := DrillGitFacts(g, repo)
+		if c.Drill != nil {
+			source = c.Drill.Facts
+		}
+		return c.landingBatchBranch(ctx, g, source, b, now, repo, nil)
+	}
 	put := func(kind string, fields map[string]any) error {
 		fields["v"], fields["kind"], fields["op"] = landing.Version, kind, op
 		return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {

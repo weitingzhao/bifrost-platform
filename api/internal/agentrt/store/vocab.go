@@ -234,6 +234,10 @@ var bodies = map[string][]field{
 		// has reworked work landed, every change different, and the Owner's
 		// count_replaced on its card (landing_rework.go, R5:5.5-18).
 		{"landing_rework_seen", kAny, true}, {"landing_replaced", kAny, true},
+		// landing_batch / landing_batch_red: a batch of operations landed
+		// on one landing CI, and how a red one ended (landing_batch.go,
+		// R5:5.7 goal 2).
+		{"landing_batch", kAny, true}, {"landing_batch_red", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -647,6 +651,12 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_replaced" {
 		return badLandingReplaced(v)
+	}
+	if eventType == "note" && name == "landing_batch" {
+		return badLandingBatch(v)
+	}
+	if eventType == "note" && name == "landing_batch_red" {
+		return badLandingBatchRed(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)
