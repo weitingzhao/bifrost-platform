@@ -440,10 +440,9 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 // card, so their places in the question store are free for this pass), a
 // ready task no executor may take any more (store.BlockWithdrawn, TD-395)
 // and one its mission's budget no longer lets run
-// are blocked with the reason (store.BlockOverBudget, TD-384; before it
-// blocks, that pass grows the budget on its own by the round the task needs,
-// up to the budget rule's auto_grant cap, so only a mission past the cap
-// gets a card), then every
+// are blocked with the reason (store.BlockOverBudget, TD-384; the pass first
+// grows the budget a round at a time up to the rule's auto_grant cap, so only
+// a mission past the cap gets a card), then every
 // blocked task that needs a card and has none open gets one
 // (store.AskBlocked), the tasks blocked before this pass included. Without a
 // question store there are no cards, and nothing is blocked for want of
