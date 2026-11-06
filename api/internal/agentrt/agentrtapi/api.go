@@ -199,6 +199,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
 		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
+		r.With(read, cfg).Get("/check-value", a.getCheckValue)
 		r.With(read, cfg).Get("/pin-share", a.getPinShare)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
 		r.With(external, cfg).Post("/external-work", a.registerExternalWork)

@@ -25,6 +25,7 @@ deny	GET /api/v1/agentrt/attempts/{id}/actions
 deny	POST /api/v1/agentrt/attempts/{id}/{action}
 deny	POST /api/v1/agentrt/benchmark
 deny	GET /api/v1/agentrt/capabilities
+deny	GET /api/v1/agentrt/check-value
 deny	POST /api/v1/agentrt/claim
 deny	POST /api/v1/agentrt/claim/pinned
 deny	GET /api/v1/agentrt/controls

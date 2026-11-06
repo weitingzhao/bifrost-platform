@@ -766,6 +766,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.startCheckValue(ctx, &wg)
 	c.startFullCI(ctx, &wg)
 	return wg.Wait
 }

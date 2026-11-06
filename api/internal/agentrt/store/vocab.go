@@ -176,6 +176,9 @@ var bodies = map[string][]field{
 		// full_ci: on the controller's stream, the daily full CI runs started
 		// and how a red one was handled (fullci.go).
 		{"full_ci", kAny, true},
+		// check_value: on the controller's stream, the goal proposed to
+		// delete a check or retry the check value table marked (checkvalue.go).
+		{"check_value", kAny, true},
 		// landing_gate: on a main_intent, what the live second gate decided
 		// on (landing_live.go, review 662 N-02): the rule version, the
 		// decision time, the quota day and the CI run.
