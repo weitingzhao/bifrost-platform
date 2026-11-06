@@ -226,7 +226,9 @@ func TestReview751QuotaRecoveryBeforeCIKick(t *testing.T) {
 					t.Fatalf("want %s, got %+v: %v", want, a, err)
 				}
 			}
-			step(at.Add(time.Minute), "wait") // positive control before the shared quota fills
+			// Positive control before the shared quota fills: 10 s after preparing,
+			// inside the platform's 30 s and infra's 10 min wait for a CI (R5:5.7-5).
+			step(at.Add(10*time.Second), "wait")
 			seed("landing-quota:dev:"+at.Format("2006-01-02"), "reserved", at.Add(2*time.Minute), map[string]any{"root": "t_00000000000000000000000002"})
 			step(at.Add(11*time.Minute), "parked")
 			parked := read()

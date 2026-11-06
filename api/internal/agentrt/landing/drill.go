@@ -128,7 +128,15 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 	}
 	switch ci.Status {
 	case "Missing":
-		if !o.Kicked && !now.Before(o.PreparedAt.Add(10*time.Minute)) {
+		// R5:5.7-5: a platform land branch push no longer starts a webhook
+		// CI (the trigger leaves refs/heads/land/ out), so a platform
+		// operation makes its own run after platformMissingCIWait instead of
+		// missingCIWait. Other repositories keep missingCIWait.
+		wait := missingCIWait
+		if obs.Facts.Repo == "bifrost-platform" {
+			wait = platformMissingCIWait
+		}
+		if !o.Kicked && !now.Before(o.PreparedAt.Add(wait)) {
 			return DrillAction{Kind: "ci_kick"}
 		}
 	case "Running":
@@ -191,6 +199,18 @@ func RootBudget(s State, task string) (first time.Time, n int) {
 	}
 	return
 }
+
+// missingCIWait is how long an operation waits for its push's webhook CI
+// before it makes its own. A platform land push starts none, so a platform
+// operation waits only platformMissingCIWait: its own run must be created
+// in a later second than PreparedAt, because a run counts only when its
+// creation time (whole seconds) is after PreparedAt (review of R5:5.7-5
+// round 2). Thirty seconds also covers clock skew between the controller
+// and the API server.
+const (
+	missingCIWait         = 10 * time.Minute
+	platformMissingCIWait = 30 * time.Second
+)
 
 // CIName is stable and DNS-safe even when op contains colons or slashes.
 func CIName(op string, attempt int) string {
