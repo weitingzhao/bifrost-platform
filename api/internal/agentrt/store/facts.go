@@ -114,6 +114,11 @@ type Question struct {
 	// not say. The store marks it expired only at its next sweep, so an open
 	// one past it can no longer be answered though it still reads open.
 	ExpiresAt time.Time
+	// Recommended is the option key the card recommends, as the card read
+	// gives it; empty when it recommends none or the reader does not say.
+	// question_seen keeps it (R5:5.7, the check value table); nothing
+	// decides by it here.
+	Recommended string
 }
 
 // SeeQuestion reads a question and records a change of its status and, once
@@ -131,13 +136,15 @@ func SeeQuestion(ctx context.Context, db DB, id string, question func(context.Co
 }
 
 // questionSeenBody is the question_seen body of a question as read: its
-// status and, once answered, the whole answer.
+// status and, once answered, the whole answer, and the option the card
+// recommends when the reader gave it.
 func questionSeenBody(id string, q Question) (map[string]any, bool, error) {
 	if q.Status == QuestionAnswered && (q.Option == "" || q.AnsweredBy == "" || q.AnsweredAt == "") {
 		return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
 	}
 	body := map[string]any{"question": id, "status": q.Status}
-	for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt} {
+	for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt,
+		"recommended": q.Recommended} {
 		if v != "" {
 			body[k] = v
 		}

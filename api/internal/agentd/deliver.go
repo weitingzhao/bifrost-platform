@@ -159,7 +159,9 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 // at again, and a fenced answer marks the lease lost (review 266 B5, B7).
 func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64, l *lease) {
 	t := l.tail.Load()
-	if t == nil || l.isLost() || l.noActions.Load() {
+	// read even when the platform takes no actions: the hand-in commands'
+	// count needs the log's last results (SelfCheck)
+	if t == nil || l.isLost() || l.noActions.Load() && t.self == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, lastActionsBudget)
@@ -174,7 +176,7 @@ func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64,
 	rctx, rcancel := context.WithTimeout(ctx, 2*time.Second)
 	read := t.flush(rctx)
 	rcancel()
-	if !read {
+	if !read || l.noActions.Load() {
 		return
 	}
 	acts := t.take(actions.MaxPerBeat, time.Now())
@@ -251,6 +253,11 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			// What the attempt used, read from its output each time this phase
 			// runs (again after a restart: the output is still there).
 			m := measure(cl.Tool.Executor, e.Workdir+".out")
+			// The hand-in commands' count lives in this run's tail only: after
+			// a restart there is none, and none is sent.
+			if l != nil {
+				m.SelfCheck = l.tail.Load().selfCheck()
+			}
 			err = d.retry(ctx, func() error {
 				refused, err := d.Client.Computed(ctx, cl.AttemptID, cl.Epoch, e.ExitCode, e.EndHow, e.Conclusion, m)
 				if refused != "" {

@@ -40,7 +40,7 @@ func New(svc *questions.Service) store.CardQuestions {
 			}
 			f.Option, f.Text, f.AnsweredBy, f.AnsweredAt = option, text, by, at.UTC().Format(time.RFC3339)
 		}
-		f.Options, f.ExpiresAt = len(q.Options), q.ExpiresAt
+		f.Options, f.ExpiresAt, f.Recommended = len(q.Options), q.ExpiresAt, q.Recommended
 		if q.Answer != nil {
 			f.Channel = q.Answer.Channel
 			// Service.Answer and the answer route require the admin role;

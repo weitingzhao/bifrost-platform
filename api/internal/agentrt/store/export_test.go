@@ -322,3 +322,22 @@ func ViewExecutionProgressForTest(nodes, tasks []map[string]any) map[string]map[
 	}
 	return out
 }
+
+// QuestionSeenBodyForTest is the question_seen body of q as read, checked
+// against the event's vocabulary.
+func QuestionSeenBodyForTest(id string, q Question) (map[string]any, error) {
+	body, _, err := questionSeenBody(id, q)
+	if err != nil {
+		return nil, err
+	}
+	return body, checkBody("question_seen", body)
+}
+
+// SelfCheckForTest says whether c is a self-check an ending keeps, and the
+// attempt_computed body it makes, checked against the event's vocabulary.
+func SelfCheckForTest(c SelfCheck) error {
+	if err := c.check(); err != nil {
+		return err
+	}
+	return checkBody("attempt_computed", map[string]any{"end_how": "exit", "conclusion": "done", "self_check": c.body()})
+}

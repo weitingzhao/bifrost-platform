@@ -564,6 +564,9 @@ type attemptBody struct {
 	// (review 274 A2).
 	Usage json.RawMessage `json:"usage"`
 	Pools json.RawMessage `json:"pools"`
+	// And how its executor ran the spec's hand-in commands (R5:5.7), raw
+	// until then too.
+	SelfCheck json.RawMessage `json:"self_check"`
 }
 
 func present(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "null" }
@@ -592,6 +595,28 @@ func usageReport(b attemptBody) (*store.Usage, []store.PoolReading, string) {
 	return u, pools, ""
 }
 
+// selfCheckReport parses an ending's self-check, strictly and whole; what
+// does not parse is dropped with the reason (store.ComputedWith drops one
+// whose counts cannot be).
+func selfCheckReport(raw json.RawMessage) (*store.SelfCheck, string) {
+	if !present(raw) {
+		return nil, ""
+	}
+	var c struct {
+		Runs, Red, Fixed, Seconds *int
+		LastGreen                 *bool `json:"last_green"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&c); err != nil {
+		return nil, "self_check: " + err.Error()
+	}
+	if c.Runs == nil || c.Red == nil || c.Fixed == nil || c.Seconds == nil || c.LastGreen == nil {
+		return nil, "self_check: runs, red, fixed, last_green and seconds are all required"
+	}
+	return &store.SelfCheck{Runs: *c.Runs, Red: *c.Red, Fixed: *c.Fixed, LastGreen: *c.LastGreen, Seconds: *c.Seconds}, ""
+}
+
 func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	id, action := chi.URLParam(r, "id"), chi.URLParam(r, "action")
 	var b attemptBody
@@ -604,6 +629,10 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	}
 	if action != "computed" && (present(b.Usage) || present(b.Pools)) {
 		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries usage and pool readings")
+		return
+	}
+	if action != "computed" && present(b.SelfCheck) {
+		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries a self_check")
 		return
 	}
 	f := store.Fence{AttemptID: id, HostID: b.HostID, Epoch: b.Epoch}
@@ -626,9 +655,15 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 		out, err = store.Checkpoint(ctx, a.DB, f, b.CheckpointSeq, b.Artifacts, b.TooLarge)
 	case "computed":
 		u, pools, refused := usageReport(b)
+		sc, scRefused := selfCheckReport(b.SelfCheck)
 		if out, err = store.ComputedWith(ctx, a.DB, f, store.Ending{ExitCode: b.ExitCode, EndHow: b.EndHow, Conclusion: b.Conclusion,
-			Usage: u, Pools: pools}); err == nil && refused != "" {
-			out["usage_refused"] = refused
+			Usage: u, Pools: pools, SelfCheck: sc}); err == nil {
+			if refused != "" {
+				out["usage_refused"] = refused
+			}
+			if scRefused != "" {
+				out["self_check_refused"] = scRefused
+			}
 		}
 	case "persist":
 		out, err = store.PersistChecked(ctx, a.DB, f, res, a.Head, a.Commits)

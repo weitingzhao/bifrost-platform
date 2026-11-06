@@ -48,6 +48,9 @@ type actionTail struct {
 	skip    bool // inside a line longer than maxBody
 	pending []actions.Action
 	cmds    map[string]cleanCmd // a call id → its command, for its result
+	// self counts the hand-in commands' results over the whole attempt, not
+	// bounded by pending (SelfCheck); nil when the spec prints none.
+	self *selfCount
 }
 
 // flushReq is a last read asked for, with the asker's context.
@@ -59,6 +62,7 @@ type flushReq struct {
 type cleanCmd struct {
 	target string
 	cut    bool
+	raw    string // as the log wrote it, for self; "" past maxHandInLine
 }
 
 const (
@@ -233,8 +237,28 @@ func (t *actionTail) read(now time.Time) {
 }
 
 func (t *actionTail) add(kind actions.Kind, target string, now time.Time, code *int) {
+	t.count(kind, target, now, code)
 	target, cut := t.clean(target)
 	t.addClean(kind, target, cut, now, code)
+}
+
+// count gives self a command's run or result, raw as the log wrote it.
+func (t *actionTail) count(kind actions.Kind, raw string, now time.Time, code *int) {
+	switch {
+	case kind == actions.Run:
+		t.self.run(raw, t.dir, now)
+	case kind == actions.Result && code != nil:
+		t.self.result(raw, t.dir, now, *code)
+	}
+}
+
+// selfCheck is how the attempt ran its hand-in commands so far, nil when it
+// ran none or its executor's log carries no exit codes.
+func (t *actionTail) selfCheck() *SelfCheck {
+	if t == nil {
+		return nil
+	}
+	return t.self.check()
 }
 
 // addClean queues an action whose target is clean already.
@@ -363,12 +387,17 @@ func parseCursor(t *actionTail, ev map[string]any, now time.Time) {
 		case sub == "started" && (tool == "shell" || tool == "terminal" || tool == "runterminalcommand"):
 			// kept clean: a command cut before it is masked could keep part
 			// of a credential (review 267 A1)
-			cmd, cut := t.clean(firstOf(args, "command", "commandLine"))
+			raw := firstOf(args, "command", "commandLine")
+			cmd, cut := t.clean(raw)
+			t.count(actions.Run, raw, now, nil)
+			if len(raw) > maxHandInLine {
+				raw = ""
+			}
 			if id != "" { // bounded: a start whose end never comes cannot grow the table (review 265 B11)
 				if len(t.cmds) >= maxCmds {
 					t.cmds = map[string]cleanCmd{}
 				}
-				t.cmds[id] = cleanCmd{cmd, cut}
+				t.cmds[id] = cleanCmd{cmd, cut, raw}
 			}
 			t.addClean(actions.Run, cmd, cut, now, nil)
 		case sub == "completed" && t.cmds[id].target != "":
@@ -378,6 +407,7 @@ func parseCursor(t *actionTail, ev map[string]any, now time.Time) {
 				code = intp(obj(res["failure"])["exitCode"])
 			}
 			if c := t.cmds[id]; code != nil {
+				t.count(actions.Result, c.raw, now, code)
 				t.addClean(actions.Result, c.target, c.cut, now, code)
 			}
 			delete(t.cmds, id)

@@ -234,6 +234,36 @@ type Ending struct {
 	EndHow, Conclusion string
 	Usage              *Usage
 	Pools              []PoolReading
+	SelfCheck          *SelfCheck
+}
+
+// SelfCheck is how an implementation's executor ran the spec's hand-in
+// commands in its own session, as agentd counted them over the attempt
+// (R5:5.7, the check value table): results seen, those that exited non-zero,
+// a red command's later exit 0, whether the last result of every hand-in
+// command that ran exited 0, and the seconds from run to result, summed.
+type SelfCheck struct {
+	Runs      int  `json:"runs"`
+	Red       int  `json:"red"`
+	Fixed     int  `json:"fixed"`
+	LastGreen bool `json:"last_green"`
+	Seconds   int  `json:"seconds"`
+}
+
+// check says what makes a count impossible: a negative one, more fixed than
+// red, or more red than runs.
+func (c SelfCheck) check() error {
+	switch {
+	case c.Runs < 0 || c.Red < 0 || c.Fixed < 0 || c.Seconds < 0:
+		return fmt.Errorf("%w: self_check: a negative count", ErrInvalid)
+	case c.Fixed > c.Red || c.Red > c.Runs:
+		return fmt.Errorf("%w: self_check: fixed %d, red %d and runs %d are not fixed <= red <= runs", ErrInvalid, c.Fixed, c.Red, c.Runs)
+	}
+	return nil
+}
+
+func (c SelfCheck) body() map[string]any {
+	return map[string]any{"runs": c.Runs, "red": c.Red, "fixed": c.Fixed, "last_green": c.LastGreen, "seconds": c.Seconds}
 }
 
 // ComputedWith is Computed with the attempt's usage and pool readings: the
@@ -249,8 +279,8 @@ func ComputedWith(ctx context.Context, db DB, f Fence, e Ending) (map[string]any
 	if exitCode != nil {
 		req["exit_code"], body["exit_code"] = *exitCode, *exitCode
 	}
-	// The usage is not part of the request's identity: a retry after agentd
-	// restarted measures again from the output, and must get the first
+	// The usage and the self-check are not part of the request's identity: a
+	// retry after agentd restarted measures again from the output, and must get the first
 	// answer, never a key conflict that would hold the ending forever. The
 	// first report is the one kept.
 	return idempotent(ctx, db, hostActor(f.HostID), "computed", f.AttemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
@@ -274,6 +304,14 @@ func ComputedWith(ctx context.Context, db DB, f Fence, e Ending) (map[string]any
 		if rerr := checkPoolReport(executor, e.Usage, e.Pools); rerr != nil {
 			e.Usage, e.Pools = nil, nil
 			out["usage_refused"] = rerr.Error()
+		}
+		// A self-check that cannot be is dropped the same way.
+		if e.SelfCheck != nil {
+			if cerr := e.SelfCheck.check(); cerr != nil {
+				out["self_check_refused"] = cerr.Error()
+			} else {
+				body["self_check"] = e.SelfCheck.body()
+			}
 		}
 		var pools []string
 		if e.Usage != nil {
