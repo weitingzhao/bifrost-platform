@@ -116,6 +116,9 @@ type graph struct {
 	packages       map[string]*pkg
 	dirs           map[string]string
 	deps           map[string]map[string]bool
+	// codeDeps is each package's dependencies without its tests' (deps holds
+	// both): what a store file reaches through the packages it imports.
+	codeDeps map[string]map[string]bool
 }
 
 func plain(s string) string { return strings.Split(s, " [")[0] }
@@ -128,7 +131,7 @@ func load(module string) (*graph, error) {
 	if e != nil {
 		return nil, e
 	}
-	g := &graph{module: abs, prefix: strings.TrimSpace(string(b)), packages: map[string]*pkg{}, dirs: map[string]string{}, deps: map[string]map[string]bool{}}
+	g := &graph{module: abs, prefix: strings.TrimSpace(string(b)), packages: map[string]*pkg{}, dirs: map[string]string{}, deps: map[string]map[string]bool{}, codeDeps: map[string]map[string]bool{}}
 	b, e = command(abs, "go", "list", "-buildvcs=false", "-json", "-deps", "-test", "./...")
 	if e != nil {
 		return nil, e
@@ -164,6 +167,13 @@ func load(module string) (*graph, error) {
 			}
 			for _, v := range p.Deps {
 				g.deps[name][plain(v)] = true
+			}
+			if p.ForTest == "" && !strings.Contains(p.ImportPath, " [") {
+				code := map[string]bool{}
+				for _, v := range p.Deps {
+					code[plain(v)] = true
+				}
+				g.codeDeps[name] = code
 			}
 		}
 	}

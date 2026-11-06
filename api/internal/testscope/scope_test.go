@@ -103,6 +103,23 @@ func TestStoreSelection(t *testing.T) {
 	if r.StoreRun != "" {
 		t.Fatalf("store cap: %+v", r)
 	}
+	// A package only a store test imports selects that test file's tests, not
+	// every external test that imports the store package itself.
+	put(t, root, "reached/r.go", "package reached\nimport _ \"example.org/api/p5\"\n")
+	put(t, root, dir+"gamma_test.go", "package store_test\nimport (\"testing\";_ \"example.org/api/reached\";_ \"example.org/api/internal/agentrt/store\")\nfunc TestGamma(t *testing.T){}")
+	r = SelectChanges(root, strings.NewReader("M\tapi/p5/p.go"))
+	if r.Scope != "incremental" || r.StoreRun != "^(TestGamma)$" {
+		t.Fatalf("test-only dependency: %+v", r)
+	}
+	// A helper file with no tests selects the tests that use its names; its
+	// blank identifier (var _ I = ...) names nothing.
+	put(t, root, "reached6/r.go", "package reached6\nimport _ \"example.org/api/p6\"\nconst Y=1\n")
+	put(t, root, dir+"helper_test.go", "package store_test\nimport r \"example.org/api/reached6\"\nvar _ = r.Y\nfunc useHelper() int { return r.Y }\n")
+	put(t, root, dir+"delta_test.go", "package store_test\nimport \"testing\"\nfunc TestDelta(t *testing.T){ _ = useHelper() }")
+	r = SelectChanges(root, strings.NewReader("M\tapi/p6/p.go"))
+	if r.Scope != "incremental" || r.StoreRun != "^(TestDelta)$" {
+		t.Fatalf("helper file: %+v", r)
+	}
 }
 
 // Every walking test file is automatically guarded, even when the walk is in a helper.
