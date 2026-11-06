@@ -51,11 +51,13 @@ func TestB5HCrossPGLostLeaseThenExternal(t *testing.T) {
 	x.runs.external = []*unstructured.Unstructured{external.Run}
 	x.runs.work = b5hWork("d", "f")
 	ok(t, x.c.ExternalPass(ctx))
+	ok(t, x.c.CoverPass(ctx))
 	x.advance(t, 3*time.Minute)
 	x.restart(t)
 	for range 3 {
 		ok(t, x.c.Pass(ctx))
 		ok(t, x.c.ExternalPass(ctx))
+		ok(t, x.c.CoverPass(ctx))
 	}
 	s = x.state(t)
 	tr := s.Batches[b5Batch].Tries[1]
@@ -93,6 +95,7 @@ func TestB5HCrossPGNoneAfterGateRead(t *testing.T) {
 	x.policy.Store(&p)
 	for range 3 {
 		ok(t, x.c.ExternalPass(ctx))
+		ok(t, x.c.CoverPass(ctx))
 		ok(t, x.c.Pass(ctx))
 	}
 	if x.state(t).LastSeq != after.LastSeq || reads != 1 {

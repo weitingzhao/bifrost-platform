@@ -16,14 +16,6 @@ type ExternalExecution interface {
 	ListSucceededSTG(context.Context) ([]*unstructured.Unstructured, error)
 }
 
-type CoverageLedger interface {
-	Cover(context.Context, int64, string, store.StgMemberKey, store.MainEvidence) (bool, error)
-}
-
-func (l PostgresLedger) Cover(ctx context.Context, seq int64, id string, m store.StgMemberKey, ev store.MainEvidence) (bool, error) {
-	return store.CommitStgCoverage(ctx, l.DB, l.Tenant, seq, id, m, ev)
-}
-
 // A matching started intent owns a run even before bound is durable. A
 // bound UID stays reserved even if labels/annotations are later damaged.
 func automaticRun(s store.StgState, run *unstructured.Unstructured) bool {
@@ -66,7 +58,7 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 	var errs []error
 	runs, err := x.ListSucceededSTG(ctx)
 	if err != nil {
-		errs = append(errs, err) // already archived evidence can still cover members
+		errs = append(errs, err) // runs already archived stay archived
 	}
 	for _, run := range runs {
 		id := fmt.Sprintf("%s/%s/%s", c.Cluster, run.GetNamespace(), run.GetUID())
@@ -86,62 +78,6 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 			return errors.Join(append(errs, err)...)
 		}
 	}
-	ledger, ok := c.ledger().(CoverageLedger)
-	if ok && c.Sources.ReleaseEvidence != nil {
-		members := store.StgCoverageCandidates(s)
-		st := coverStats{members: len(members), evidence: len(s.Evidence)}
-		start := time.Now()
-		defer func() { c.logCover(start, st) }()
-		read, done := c.fullReads(&st)
-		defer done()
-		for _, m := range members {
-			for _, evidence := range orderedEvidence(s) {
-				id, p := evidence.Record.String("evidence"), evidence.Record.String("P")
-				st.pairs++
-				// R5:5.7-5: a pair known not to contain R would end below in
-				// !HasR; it is skipped. Any other pair, including one that
-				// appears after a reread, is read in full as before.
-				if c.knownAbsent(p, m.R) {
-					st.known++
-					continue
-				}
-				at := c.now()
-				st.full++
-				ev, err := read(ctx, s, m, p)
-				if err != nil {
-					st.fullErr++
-					errs = append(errs, err)
-					continue
-				}
-				if ev.Head == p && !ev.Unreadable && !ev.HasR {
-					c.rememberAbsent(p, m.R) // a complete read: P's history has no R
-					st.remembered++
-				}
-				if ev.Head != p || ev.Unreadable || !ev.HasR || (s.InMain[m.Op] != m.R && ev.Validity != "effective") {
-					continue
-				}
-				if !c.configured() {
-					return errors.Join(errs...)
-				}
-				ev.ReadAt = at
-				covered, err := ledger.Cover(ctx, s.LastSeq, id, m, ev)
-				if err != nil {
-					errs = append(errs, err)
-				}
-				if covered {
-					st.covers++
-				}
-				s, err = c.ledger().Read(ctx)
-				if err != nil {
-					return errors.Join(append(errs, err)...)
-				}
-				break
-			}
-		}
-	}
-	// Pass alone settles batches. A terminal archive is no longer occupied,
-	// but still owes input verification and the remaining members' budget
-	// decision. Coverage must never bypass either by closing the batch here.
 	return errors.Join(errs...)
 }
 

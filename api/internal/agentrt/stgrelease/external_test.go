@@ -105,6 +105,9 @@ func externalPass(t *testing.T, c *Controller) {
 	if err := c.ExternalPass(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	if err := c.CoverPass(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestExternalSameRunBackfillsLaterMembers(t *testing.T) {
@@ -199,7 +202,7 @@ func TestExternalSameDigestsNeedEachRunsDeploymentProof(t *testing.T) {
 			}
 			r.listed = append(r.listed, other.Run)
 			r.byUID["second-uid"] = other
-			err := c.ExternalPass(context.Background())
+			err := errors.Join(c.ExternalPass(context.Background()), c.CoverPass(context.Background()))
 			if (err == nil) != valid {
 				t.Fatal("deployment proof acceptance", err)
 			}
@@ -246,6 +249,7 @@ func TestExternalRefusalsHaveSameEntrySuccess(t *testing.T) {
 				}
 			}
 			_ = c.ExternalPass(context.Background())
+			_ = c.CoverPass(context.Background())
 			if (len(l.state(t).Covers) == 1) != (mode == "success") {
 				t.Fatal("coverage accepted wrong proof", mode)
 			}

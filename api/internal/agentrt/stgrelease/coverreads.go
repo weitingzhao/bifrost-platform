@@ -9,10 +9,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// R5:5.7-5. While a landed member waits for STG, ExternalPass asks every
+// R5:5.7-5. While a landed member waits for STG, CoverPass asks every
 // archived evidence, newest first, whether it covers the member, each with a
 // full ReleaseEvidence read (a fresh workspace, two fetches). 11-05: from the
-// landing on, ticks 15 s apart went 3 minutes apart, the external pass's
+// landing on, ticks 15 s apart went 3 minutes apart, the coverage pass's
 // budget, on every tick until the member was delivered. Most pairs cannot
 // cover: R is not in P's history and the read ends in !HasR. Such a pair,
 // once read in full, is remembered and skipped on later passes. Nothing else
@@ -106,5 +106,5 @@ func (c *Controller) logCover(start time.Time, st coverStats) {
 		return
 	}
 	c.coverLogged = now
-	slog.Info("STG external coverage took "+took.Round(time.Millisecond).String(), "reads", st.String(), "remembered_total", len(c.absent))
+	slog.Info("STG coverage took "+took.Round(time.Millisecond).String(), "reads", st.String(), "remembered_total", len(c.absent))
 }

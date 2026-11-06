@@ -55,6 +55,7 @@ func (x *b5hWorld) assertDelivered(t *testing.T, tries int) {
 	before := s.LastSeq
 	for range 3 {
 		ok(t, x.c.ExternalPass(ctx))
+		ok(t, x.c.CoverPass(ctx))
 		ok(t, x.c.Pass(ctx))
 	}
 	if x.state(t).LastSeq != before {
@@ -235,7 +236,7 @@ func TestB5HCrossPGUnknownLeaseAndNone(t *testing.T) {
 	}
 }
 
-// Serial: PG; ExternalPass must not settle an archived but unverified try.
+// Serial: PG; ExternalPass and CoverPass must not settle an archived but unverified try.
 func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 	for _, externalFirst := range []bool{true, false} {
 		t.Run(fmt.Sprint(externalFirst), func(t *testing.T) {
@@ -259,6 +260,7 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 			x.runs.work = b5hWork("d", "f")
 			if externalFirst {
 				ok(t, x.c.ExternalPass(ctx))
+				ok(t, x.c.CoverPass(ctx))
 				if !x.state(t).Batches[b5Batch].Tries[1].Occupied() {
 					t.Fatal("external cover freed running slot")
 				}
@@ -266,6 +268,7 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 			ok(t, x.c.Pass(ctx))
 			if !externalFirst {
 				ok(t, x.c.ExternalPass(ctx))
+				ok(t, x.c.CoverPass(ctx))
 			}
 			x.restart(t)
 			x.until(t, b5hClosed)
@@ -283,6 +286,7 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 			before := s.LastSeq
 			for range 3 {
 				ok(t, x.c.ExternalPass(ctx))
+				ok(t, x.c.CoverPass(ctx))
 				ok(t, x.c.Pass(ctx))
 			}
 			if x.state(t).LastSeq != before {

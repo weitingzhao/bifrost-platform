@@ -93,6 +93,7 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	x.runs.observations[baseObs.Identity.UID] = baseObs
 	x.runs.external = []*unstructured.Unstructured{baseObs.Run}
 	ok(t, x.c.ExternalPass(ctx))
+	ok(t, x.c.CoverPass(ctx))
 	x.runs.external = nil
 	for range 8 {
 		ok(t, x.c.Pass(ctx))

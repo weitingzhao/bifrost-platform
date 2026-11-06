@@ -101,7 +101,9 @@ func TestCoverReadsRememberOnlyCompleteFullReads(t *testing.T) {
 			}
 			externalLanded(t, l, controlMember)
 			_ = ctl.ExternalPass(context.Background())
+			_ = ctl.CoverPass(context.Background())
 			_ = ctl.ExternalPass(context.Background())
+			_ = ctl.CoverPass(context.Background())
 			want := 2
 			if c.remember {
 				want = 1
@@ -186,7 +188,7 @@ func TestCoverReadsBreakAfterARefusedCover(t *testing.T) {
 		ledger := &refusingCover{memoryLedger: l, err: err}
 		ctl.Ledger = ledger
 		externalLanded(t, l, controlMember)
-		passErr := ctl.ExternalPass(context.Background())
+		passErr := ctl.CoverPass(context.Background()) // the run is archived: only coverage reads the ledger
 		if ledger.calls != 1 || f.fullByP[sha("d")] != 1 || f.fullByP[sha("a")] != 0 || len(l.state(t).Covers) != 0 {
 			t.Fatal("refused cover", err, ledger.calls, f.fullByP)
 		}
@@ -266,7 +268,9 @@ func TestCoverReadsRereadAfterCoverSeesNewEvidence(t *testing.T) {
 	second := store.StgMemberKey{Root: "t_01ARZ3NDEKTSV4RRFFQ69G5FAW", Op: "land:two:1", R: sha("2")}
 	externalLanded(t, l, controlMember)
 	externalLanded(t, l, second)
-	externalPass(t, ctl)
+	if err := ctl.CoverPass(context.Background()); err != nil { // the run is archived: only coverage reads the ledger
+		t.Fatal(err)
+	}
 	s = l.state(t)
 	if !ledger.added || len(s.Covers) != 2 || f.fullByP[sha("a")] != 1 || f.fullByP[sha("e")] != 1 {
 		t.Fatal("covers", len(s.Covers), "reads by P", f.fullByP)
@@ -422,6 +426,7 @@ func TestCoverReadsWorkspaceClosesOnEveryReturn(t *testing.T) {
 			withSession(ctl, f, sf)
 			externalLanded(t, l, controlMember)
 			_ = ctl.ExternalPass(context.Background())
+			_ = ctl.CoverPass(context.Background())
 			if sf.opens != 1 || sf.closes != 1 {
 				t.Fatal("opens", sf.opens, "closes", sf.closes)
 			}
@@ -453,7 +458,7 @@ func TestCoverReadsWorkspaceReadErrorIsThatPairsOnly(t *testing.T) {
 	withSession(ctl, f, sf)
 	externalPass(t, ctl)
 	externalLanded(t, l, controlMember)
-	if err := ctl.ExternalPass(context.Background()); err == nil {
+	if err := errors.Join(ctl.ExternalPass(context.Background()), ctl.CoverPass(context.Background())); err == nil {
 		t.Fatal("the failed read's error was not returned")
 	}
 	s := l.state(t)
@@ -464,5 +469,39 @@ func TestCoverReadsWorkspaceReadErrorIsThatPairsOnly(t *testing.T) {
 		if got := s.Evidence[cv.Record.String("evidence")].Record.String("P"); got != sha("a") {
 			t.Fatal("covered by", got)
 		}
+	}
+}
+
+// R5:5.7-11: coverage needs no manual-run reader. With no ExternalExecution
+// on Runs, CoverPass covers a landed member from B5's own archived run.
+func TestCoverPassCoversFromAutomaticEvidenceWithoutExternalReader(t *testing.T) {
+	t.Parallel()
+	c, l, _, _ := controlFixture(t, "Succeeded")
+	if _, ok := c.Runs.(ExternalExecution); ok {
+		t.Fatal("fixture Runs reads manual runs")
+	}
+	pass(t, c)
+	pass(t, c)
+	auto := l.state(t).Evidence["cluster/cicd/run-uid"]
+	if auto.Record.String("source") != "automatic" || auto.Record.String("P") != sha("a") {
+		t.Fatal("no automatic evidence", auto.Record)
+	}
+	second := store.StgMemberKey{Root: "t_01ARZ3NDEKTSV4RRFFQ69G5FAW", Op: "land:two:1", R: sha("2")}
+	externalLanded(t, l, second)
+	c.Sources.ReleaseEvidence = func(_ context.Context, _ store.StgState, _ store.StgMemberKey, p string) (store.MainEvidence, error) {
+		return store.MainEvidence{Head: p, HasR: p == sha("a"), Validity: "effective"}, nil
+	}
+	if err := c.CoverPass(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	s := l.state(t)
+	var covered []string
+	for k := range s.Covers {
+		if k.Member == second {
+			covered = append(covered, k.Evidence)
+		}
+	}
+	if len(covered) != 1 || covered[0] != "cluster/cicd/run-uid" {
+		t.Fatal("covers of the landed member", covered, s.Covers)
 	}
 }
