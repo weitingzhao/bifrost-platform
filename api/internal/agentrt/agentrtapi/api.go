@@ -225,6 +225,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
 		r.With(read, cfg).Get("/hosts", a.listHosts)
 		r.With(read, cfg).Get("/progress", a.progress)
+		r.With(read, cfg).Get("/leak-value", a.getLeakValue)
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 		r.With(read, cfg).Get("/pools", a.listPools)
 		r.With(read, cfg).Get("/capabilities", a.capabilities)

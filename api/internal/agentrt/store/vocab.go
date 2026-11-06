@@ -169,6 +169,7 @@ var bodies = map[string][]field{
 		// stg_sample: on stg-sample:bifrost-platform, the first-opening
 		// finalizer sample of B5 and its archive and release (TD-460).
 		{"stg_sample", kAny, true},
+		{"leak_value", kAny, true},
 		// landing_answer: on the repository's landing stream, how one
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.

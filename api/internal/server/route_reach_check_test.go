@@ -67,6 +67,8 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/pin-share": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5:5.7: the check value table, read-only, every reader.
 	"GET /api/v1/agentrt/check-value": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// The leak value projection, read-only, every reader, as /progress is.
+	"GET /api/v1/agentrt/leak-value": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// S3 B3: what a landing card asked and what became of its answer, for
 	// every reader (CUT §11.6 v3 item 8).
 	"GET /api/v1/agentrt/landing/cards/{question_id}": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},

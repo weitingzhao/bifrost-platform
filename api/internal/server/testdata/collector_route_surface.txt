@@ -71,6 +71,7 @@ deny	GET /api/v1/agentrt/landing/missions/{id}
 deny	GET /api/v1/agentrt/landing/operations/{op}
 deny	POST /api/v1/agentrt/landing/refresh
 deny	GET /api/v1/agentrt/landing/{op}/material
+deny	GET /api/v1/agentrt/leak-value
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack

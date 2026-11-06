@@ -760,6 +760,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.startLeakValue(ctx, &wg)
 	if c.PageOwner != nil {
 		c.every(ctx, &wg, "agentrt-disk-pages", DiskPagesEvery, func() error {
 			_, err := c.DiskPages(ctx)
