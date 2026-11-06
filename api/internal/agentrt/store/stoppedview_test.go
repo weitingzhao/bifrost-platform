@@ -79,7 +79,7 @@ func newStopWorld(t *testing.T) *stopWorld {
 	ok(t, err)
 	w.goalMission(t, "M-3")
 	w.goal = w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{proposal("w", w.spec)})
+	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{proposal("w", w.impl)})
 	ok(t, err)
 	w.withdrawn = taskIDs(out)["w"]
 	w.cancelled = w.ready(t, store.Task{})

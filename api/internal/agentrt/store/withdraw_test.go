@@ -43,7 +43,7 @@ func (w *world) withdrawal(t *testing.T, task string) (actor, reason string) {
 func TestWithdrawReadyTaskByItsProposer(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec))["a"]
+	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl))["a"]
 	w.markReady(t, a)
 	out, err := store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w1", []string{a}, "the spec was wrong:\n  it names the wrong repo")
 	ok(t, err)
@@ -56,7 +56,7 @@ func TestWithdrawReadyTaskByItsProposer(t *testing.T) {
 		t.Fatalf("move by %s: %q", actor, reason)
 	}
 	long := strings.Repeat("é", 600)
-	b := w.proposedBy(t, "thread:s1", "p2", proposal("b", w.spec))["b"]
+	b := w.proposedBy(t, "thread:s1", "p2", proposal("b", w.impl))["b"]
 	_, err = store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w2", []string{b}, long)
 	ok(t, err)
 	if _, reason = w.withdrawal(t, b); len([]rune(reason)) != 500 || !strings.HasPrefix(reason, "withdrawn by thread:s1: éé") {
@@ -72,7 +72,7 @@ func TestWithdrawByTheMissionsProposer(t *testing.T) {
 	m, err := store.ProposeMission(ctx, w.rt, wr("thread:lead"), "m1", mission, nil)
 	ok(t, err)
 	id := m["mission_id"].(string)
-	out, err := store.ProposeTasks(ctx, w.rt, wr("seat:chief_of_staff"), "p1", id, []store.TaskProposal{offPlan(proposal("a", w.spec))})
+	out, err := store.ProposeTasks(ctx, w.rt, wr("seat:chief_of_staff"), "p1", id, []store.TaskProposal{offPlan(proposal("a", w.impl))})
 	ok(t, err)
 	a := taskIDs(out)["a"]
 	_, err = store.WithdrawTasks(ctx, w.rt, wr("thread:lead"), "w1", []string{a}, "not needed")
@@ -90,7 +90,7 @@ func TestWithdrawByTheMissionsProposer(t *testing.T) {
 func TestWithdrawRefusesWhoDidNotPropose(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec))["a"]
+	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl))["a"]
 	w.markReady(t, a)
 	_, err := store.ProposeMission(ctx, w.rt, wr("thread:other"), "m1", mission, nil)
 	ok(t, err)
@@ -127,10 +127,10 @@ func TestWithdrawRefusesWhoDidNotPropose(t *testing.T) {
 func TestWithdrawRefusesStartedWork(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	leased := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec))["a"]
+	leased := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl))["a"]
 	w.markReady(t, leased)
 	w.claimed(t, leased, "h1", codex, false)
-	ended := w.proposedBy(t, "thread:s1", "p2", proposal("b", w.spec))["b"]
+	ended := w.proposedBy(t, "thread:s1", "p2", proposal("b", w.impl))["b"]
 	w.markReady(t, ended)
 	c := w.claimed(t, ended, "h2", codex, false)
 	_, err := store.Ended(ctx, w.rt, c.AttemptID, "h2", "daemon_restart", false)
@@ -155,7 +155,7 @@ func TestWithdrawRefusesStartedWork(t *testing.T) {
 func TestWithdrawBlockedTask(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec))["a"]
+	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl))["a"]
 	w.markReady(t, a)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", a, "blocked") }))
 	_, err := store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w1", []string{a}, "abandoned")
@@ -170,7 +170,7 @@ func TestWithdrawBlockedTask(t *testing.T) {
 func TestWithdrawDependents(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	id := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec), proposal("b", w.spec, "a"))
+	id := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl), proposal("b", w.impl, "a"))
 	before := w.footprint(t)
 	_, err := store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w1", []string{id["a"]}, "wrong spec")
 	is(t, err, store.ErrState)
@@ -196,7 +196,7 @@ func TestWithdrawDependents(t *testing.T) {
 func TestWithdrawCancelsChecks(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec))["a"]
+	a := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl))["a"]
 	check, err := w.task(t, "M-1", s1, a, "verify")
 	ok(t, err)
 	out, err := store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w1", []string{a}, "wrong spec")
@@ -215,7 +215,7 @@ func TestWithdrawCancelsChecks(t *testing.T) {
 func TestWithdrawRetry(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	id := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.spec), proposal("b", w.spec))
+	id := w.proposedBy(t, "thread:s1", "p1", proposal("a", w.impl), proposal("b", w.impl))
 	first, err := store.WithdrawTasks(ctx, w.rt, wr("thread:s1"), "w1", []string{id["b"], id["a"]}, "wrong spec")
 	ok(t, err)
 	before := w.footprint(t)

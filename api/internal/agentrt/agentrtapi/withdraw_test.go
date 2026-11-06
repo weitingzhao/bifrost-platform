@@ -18,7 +18,7 @@ func withdrawWorld(t *testing.T) (*pgxpool.Pool, map[string]string, string) {
 	t.Helper()
 	pool, own := world(t)
 	s := server(t, pool)
-	spec := []byte("# withdraw me\n")
+	spec := implSpec(t, "# withdraw me\n")
 	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("spec: %d %v", code, out)
 	}

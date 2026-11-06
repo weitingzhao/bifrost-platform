@@ -276,7 +276,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 			t.Fatalf("closed assessment request: %d %v", code, out)
 		}
 	}
-	spec := []byte("# implement x\n")
+	spec := implSpec(t, "implement x")
 	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec")
 	ok("POST missions", "operator", "POST", "missions", map[string]any{"idempotency_key": "v1", "title": "m", "goal": "g",
 		"success": []string{"it works"}, "budget": map[string]any{"max_attempts": 4, "max_wall_hours": 2}})

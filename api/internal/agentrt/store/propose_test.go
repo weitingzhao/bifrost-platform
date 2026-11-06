@@ -277,13 +277,13 @@ func TestProposeTasks(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	existing := w.ready(t, store.Task{})
-	b := proposal("b", w.spec, "a")
+	b := proposal("b", w.impl, "a")
 	b.PlanNode, b.OffPlanReason = "", "found while doing a"
 	// Core work is an implementation in a repository with core directories
 	// (core.go; a plan task marked core is refused, TestBatchHoldsCoreToImplementations).
-	c := proposal("c", w.spec, existing)
+	c := proposal("c", w.impl, existing)
 	c.Core, c.Needs = true, []string{"git_commit"}
-	batch := []store.TaskProposal{proposal("a", w.spec), b, c}
+	batch := []store.TaskProposal{proposal("a", w.impl), b, c}
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1", batch)
 	ok(t, err)
 	id := taskIDs(out)
@@ -311,7 +311,7 @@ func TestProposeTasks(t *testing.T) {
 	}
 
 	report := w.artifact(t, "report", "# not a spec\n")
-	other, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-2", []store.TaskProposal{offPlan(proposal("x", w.spec))})
+	other, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-2", []store.TaskProposal{offPlan(proposal("x", w.impl))})
 	ok(t, err)
 	otherTask := taskIDs(other)["x"]
 	const s4 = "R2:2.1-4"
@@ -322,9 +322,9 @@ func TestProposeTasks(t *testing.T) {
 	}))
 	before := w.footprint(t)
 	edit := func(f func(*store.TaskProposal)) []store.TaskProposal {
-		p := proposal("a", w.spec)
+		p := proposal("a", w.impl)
 		f(&p)
-		return []store.TaskProposal{proposal("ok", w.spec), p}
+		return []store.TaskProposal{proposal("ok", w.impl), p}
 	}
 	for name, c := range map[string]struct {
 		batch   []store.TaskProposal
@@ -355,7 +355,7 @@ func TestProposeTasks(t *testing.T) {
 		"on an item":             {edit(func(p *store.TaskProposal) { p.PlanNode = item }), false},
 		"another mission's step": {edit(func(p *store.TaskProposal) { p.PlanNode = s4 }), false},
 		"cycle": {func() []store.TaskProposal {
-			return []store.TaskProposal{proposal("x", w.spec, "y"), proposal("y", w.spec, "x")}
+			return []store.TaskProposal{proposal("x", w.impl, "y"), proposal("y", w.impl, "x")}
 		}(), false},
 		"base commit": {edit(func(p *store.TaskProposal) { p.BaseCommit = "main" }), false},
 	} {
@@ -370,9 +370,9 @@ func TestProposeTasks(t *testing.T) {
 	// A stopped mission takes no task that would otherwise fit (review 175 B6).
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-2", "stopped", "test") }))
 	before = w.footprint(t)
-	_, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k3", "M-2", []store.TaskProposal{offPlan(proposal("a", w.spec))})
+	_, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k3", "M-2", []store.TaskProposal{offPlan(proposal("a", w.impl))})
 	is(t, err, store.ErrState)
-	_, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k4", "M-99", []store.TaskProposal{offPlan(proposal("a", w.spec))})
+	_, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k4", "M-99", []store.TaskProposal{offPlan(proposal("a", w.impl))})
 	is(t, err, pgx.ErrNoRows)
 	if after := w.footprint(t); after != before {
 		t.Fatalf("refused batches left something: %s -> %s", before, after)
@@ -387,10 +387,10 @@ func TestDispatch(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1",
-		[]store.TaskProposal{proposal("a", w.spec), proposal("b", w.spec, "a"), proposal("d", w.spec), proposal("c", w.spec, "d")})
+		[]store.TaskProposal{proposal("a", w.impl), proposal("b", w.impl, "a"), proposal("d", w.impl), proposal("c", w.impl, "d")})
 	ok(t, err)
 	id := taskIDs(out)
-	idle, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-2", []store.TaskProposal{offPlan(proposal("e", w.spec))})
+	idle, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-2", []store.TaskProposal{offPlan(proposal("e", w.impl))})
 	ok(t, err)
 	e := taskIDs(idle)["e"]
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", id["d"], "cancelled") }))
@@ -445,7 +445,7 @@ func TestDispatchRechecksMission(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	out, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1",
-		[]store.TaskProposal{proposal("free", w.spec), proposal("d", w.spec), proposal("c", w.spec, "d")})
+		[]store.TaskProposal{proposal("free", w.impl), proposal("d", w.impl), proposal("c", w.impl, "d")})
 	ok(t, err)
 	id := taskIDs(out)
 	ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", id["d"], "cancelled") }))
@@ -475,18 +475,18 @@ func TestDispatchPages(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	gate, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "gate", "M-1", []store.TaskProposal{proposal("gate", w.spec)})
+	gate, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "gate", "M-1", []store.TaskProposal{proposal("gate", w.impl)})
 	ok(t, err)
 	g := taskIDs(gate)["gate"]
 	for b := 0; b < 11; b++ { // 550 tasks that wait for the gate
 		batch := make([]store.TaskProposal, 0, store.MaxBatch)
 		for i := range store.MaxBatch {
-			batch = append(batch, proposal(fmt.Sprintf("w%d", i), w.spec, g))
+			batch = append(batch, proposal(fmt.Sprintf("w%d", i), w.impl, g))
 		}
 		_, err = store.ProposeTasks(ctx, pool, wr("thread:s1"), fmt.Sprintf("b%d", b), "M-1", batch)
 		ok(t, err)
 	}
-	last, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "last", "M-1", []store.TaskProposal{proposal("last", w.spec)})
+	last, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "last", "M-1", []store.TaskProposal{proposal("last", w.impl)})
 	ok(t, err)
 	moved, err := store.Dispatch(ctx, pool)
 	ok(t, err)
@@ -503,10 +503,10 @@ func TestDependencyAgainstDispatch(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	// x first, so it is the first task Dispatch looks at.
-	first, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k0", "M-1", []store.TaskProposal{proposal("x", w.spec)})
+	first, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k0", "M-1", []store.TaskProposal{proposal("x", w.impl)})
 	ok(t, err)
 	out, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1",
-		[]store.TaskProposal{proposal("t", w.spec), proposal("u", w.spec, "v"), proposal("v", w.spec)})
+		[]store.TaskProposal{proposal("t", w.impl), proposal("u", w.impl, "v"), proposal("v", w.impl)})
 	ok(t, err)
 	id := taskIDs(out)
 	id["x"] = taskIDs(first)["x"]
@@ -547,7 +547,7 @@ func TestBatchAgainstDependency(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	base, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k0", "M-1",
-		[]store.TaskProposal{proposal("p", w.spec), proposal("q", w.spec)})
+		[]store.TaskProposal{proposal("p", w.impl), proposal("q", w.impl)})
 	ok(t, err)
 	id := taskIDs(base)
 	hold, reached := make(chan struct{}), make(chan struct{})
@@ -564,7 +564,7 @@ func TestBatchAgainstDependency(t *testing.T) {
 	batch := make(chan error, 1)
 	go func() {
 		_, berr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1",
-			[]store.TaskProposal{proposal("n1", w.spec, id["p"]), proposal("n2", w.spec, "n1")})
+			[]store.TaskProposal{proposal("n1", w.impl, id["p"]), proposal("n2", w.impl, "n1")})
 		batch <- berr
 	}()
 	<-reached
@@ -609,7 +609,7 @@ func TestBatchAndControlOfOneWriter(t *testing.T) {
 	})()
 	batch := make(chan error, 1)
 	go func() {
-		_, berr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.spec, target)})
+		_, berr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.impl, target)})
 		batch <- berr
 	}()
 	<-reached
@@ -641,7 +641,7 @@ func TestBatchAgainstHeldTasks(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, perr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.spec, a, b)})
+		_, perr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.impl, a, b)})
 		done <- perr
 	}()
 	select {
@@ -716,7 +716,7 @@ func TestTokenOnEveryWrite(t *testing.T) {
 	b := store.Writer{Actor: "thread:s", Token: "first"}
 	m, err := store.ProposeMission(ctx, w.rt, b, "k2", mission, nil)
 	ok(t, err)
-	tasks, err := store.ProposeTasks(ctx, w.rt, b, "k3", "M-1", []store.TaskProposal{proposal("a", w.spec)})
+	tasks, err := store.ProposeTasks(ctx, w.rt, b, "k3", "M-1", []store.TaskProposal{proposal("a", w.impl)})
 	ok(t, err)
 	c, err := store.RequestControl(ctx, w.rt, b, "k4", "global", "", "pause", "test")
 	ok(t, err)
@@ -765,7 +765,7 @@ func TestBatchRetriesBusyStep(t *testing.T) {
 		return tx
 	}
 	released := releaseLater(t, lock(), 100*time.Millisecond)
-	_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("a", w.spec)})
+	_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("a", w.impl)})
 	ok(t, err)
 	ok(t, released())
 	// Held until the batch has given up, not for a time it might outlast
@@ -773,7 +773,7 @@ func TestBatchRetriesBusyStep(t *testing.T) {
 	held := hold()
 	before := w.footprint(t)
 	is(t, whileHeld(t, "a batch", func() error {
-		_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{proposal("b", w.spec)})
+		_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{proposal("b", w.impl)})
 		return err
 	}), store.ErrBusy)
 	ok(t, held.Rollback(ctx))

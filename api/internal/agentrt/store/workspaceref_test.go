@@ -88,8 +88,8 @@ func TestWorkspaceRef(t *testing.T) {
 func TestWorkspaceRefRefused(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	clean := w.artifact(t, "task_spec", "# task\nbuild on the report of "+someTask)
-	leaky := w.artifact(t, "task_spec", "# task\nstart from tasks/"+someTask+"/a1, it is nearly done")
+	clean := w.artifact(t, "task_spec", string(specOf(t, "# task\nbuild on the report of "+someTask)))
+	leaky := w.artifact(t, "task_spec", string(specOf(t, "# task\nstart from tasks/"+someTask+"/a1, it is nearly done")))
 	before := w.lastSeq(t, "mission:M-1")
 	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{
 		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
@@ -115,7 +115,7 @@ func TestWorkspaceRefRefused(t *testing.T) {
 	if _, err = store.SendMessage(ctx, w.rt, wr("thread:s1"), store.Seat, "ask", []byte(branch)); err != nil {
 		t.Fatalf("a message naming a branch: %v", err)
 	}
-	onBranch := w.artifact(t, "task_spec", "# task\n"+branch)
+	onBranch := w.artifact(t, "task_spec", string(specOf(t, "# task\n"+branch)))
 	if _, err = store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k3", "M-1", []store.TaskProposal{
 		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: onBranch, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA},
 	}); err != nil {

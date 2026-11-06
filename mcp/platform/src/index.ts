@@ -632,7 +632,7 @@ reg(
 
 reg(
   'propose_tasks',
-  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
+  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). An implement task on a branch has as its spec the JSON task spec store.ImplementSpec builds ({"text", "verify": [[argv...]], "setup": [[argv...]], ...}), with its repository's verify commands and setup; a markdown spec, or one without verify or setup, is refused. depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
   {
     mission_id: z.string(),
     tasks: z.array(

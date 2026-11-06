@@ -128,6 +128,9 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 					return nil, err
 				}
 				hook("pin rules held", w.Actor)
+				if err := checkImplementSpecs(ctx, tx, props, pins); err != nil {
+					return nil, err
+				}
 				return proposeBatchTx(ctx, tx, w, missionID, props, p)
 			})
 		if !lockNotAvailable(err) {

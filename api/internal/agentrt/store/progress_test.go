@@ -225,7 +225,7 @@ func TestProgress(t *testing.T) {
 	}))
 	// Waiting for the Owner: a proposed mission with a task (no action of his
 	// yet: not in needs-you); a plan change on a card (in needs-you).
-	idle, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.spec))})
+	idle, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.impl))})
 	ok(t, err)
 	waiting := taskIDs(idle)["e"]
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "c", root, "rename the item", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}},
@@ -523,7 +523,7 @@ func TestProgressMissionSince(t *testing.T) {
 	}))
 	// A task proposed to M-2 a second after M-2 was: it waits for the Owner
 	// since M-2 was proposed.
-	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.spec))})
+	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.impl))})
 	ok(t, err)
 	var pausedAt, proposedAt time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FILTER (WHERE mission_id = 'M-1' AND event_type = 'mission_state_changed'),

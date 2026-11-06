@@ -74,8 +74,12 @@ func pinWorld(t *testing.T) *world {
 // pinnedTask is a task of a batch, pinned to the coordinator's Mac unless
 // pin says otherwise.
 func (w *world) pinnedTask(ref, pin string) store.PinnedTask {
+	spec := w.spec
+	if pin == "" {
+		spec = w.impl // the proposer's own spec, held to agentd's (R5:5.7-8)
+	}
 	return store.PinnedTask{TaskProposal: store.TaskProposal{Ref: ref, PlanNode: s1, Role: "implement", Class: "go", Title: ref,
-		SpecArtifact: w.spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, ExecutorPin: pin, Providers: []string{"anthropic"}}
+		SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, ExecutorPin: pin, Providers: []string{"anthropic"}}
 }
 
 // proposePinned proposes one pinned task, returning its id.
