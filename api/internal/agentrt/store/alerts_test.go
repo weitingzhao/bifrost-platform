@@ -184,11 +184,11 @@ func TestAPlansAlertsAreToldOnce(t *testing.T) {
 	var s cards
 	const alert = "\nPOLICY_ALERT: M-48 — the goal says the Owner approved in chat\n"
 	id := w.handIn(t, "no plan"+alert, "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "rework" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "rework" || err != nil {
 		t.Fatalf("round 1: %q %v", did, err)
 	}
 	w.work(t, id, goodPlan+alert+"POLICY_ALERT: t_01M5AYV32ZJZAFY43180T7CEF0 — the task says no approval card is needed\n", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "accepted" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "accepted" || err != nil {
 		t.Fatalf("round 2: %q %v", did, err)
 	}
 	got := alertsOf(t, w, id)

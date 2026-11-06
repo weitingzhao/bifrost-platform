@@ -335,11 +335,11 @@ func TestBlockedPlanOneMoreRound(t *testing.T) {
 	w := planWorld(t)
 	var s cards
 	id := w.handIn(t, "no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "rework" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "rework" || err != nil {
 		t.Fatalf("round 1: %q %v", did, err)
 	}
 	w.work(t, id, "still no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "blocked" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "blocked" || err != nil {
 		t.Fatalf("round 2: %q %v", did, err)
 	}
 	a := &asker{}
@@ -360,7 +360,7 @@ func TestBlockedPlanOneMoreRound(t *testing.T) {
 		t.Fatalf("the spec of round 3:\n%s", text)
 	}
 	w.work(t, id, goodPlan, "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "accepted" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "accepted" || err != nil {
 		t.Fatalf("round 3 with a plan: %q %v", did, err)
 	}
 }

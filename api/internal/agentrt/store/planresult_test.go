@@ -139,7 +139,7 @@ func TestAcceptPlanRecordsIt(t *testing.T) {
 		t.Fatalf("pending plans %v %v", ids, err)
 	}
 	var s cards
-	did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw)
+	did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil)
 	if err != nil || did != "accepted" || w.state(t, "task", plan) != "accepted" {
 		t.Fatalf("accept: %q %v; the plan is %s", did, err, w.state(t, "task", plan))
 	}
@@ -222,7 +222,7 @@ func TestAcceptPlanRecordsIt(t *testing.T) {
 		t.Fatalf("the first decision %v", body)
 	}
 	// Used once: another pass finds nothing to do and asks nothing.
-	if did, err = store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw); did != "" || err != nil || len(s.asked) != 1 {
+	if did, err = store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); did != "" || err != nil || len(s.asked) != 1 {
 		t.Fatalf("again: %q %v, cards %d", did, err, len(s.asked))
 	}
 	if ids, err := store.PendingPlans(ctx, w.rt); err != nil || len(ids) != 0 {
@@ -246,7 +246,7 @@ func TestAcceptPlanInheritsItsStep(t *testing.T) {
 	plan := w.ready(t, store.Task{MissionID: "M-3", PlanNode: step, Role: "plan", Effect: "none", BaseCommit: commitA})
 	w.work(t, plan, goodPlan, "done")
 	var s cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw); err != nil || did != "accepted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, err)
 	}
 	rows, err := w.rt.Query(ctx, `SELECT t.task_id, t.title, COALESCE(t.plan_node_id, ''), t.off_plan, t.off_plan_reason IS NULL,
@@ -311,14 +311,14 @@ func TestAcceptPlanReworks(t *testing.T) {
 		"go run":      {plan(`["go", "-C", "api", "test", "./internal`, `["go", "-C", "api", "run", "./internal`), "done", "a check is go -C <api> test"},
 		"cycle":       {plan(`"verify": [["go"`, `"depends_on": ["t2"], "verify": [["go"`), "done", "cycle"},
 		"more budget": {plan(`"max_attempts": 6`, `"max_attempts": 40`), "done", "raises the mission's budget"},
-		"unknown key": {plan(`"mission": {`, `"surprise": 1, "mission": {`), "done", "does not read"},
+		"key twice":   {plan(`"mission": {`, `"Tasks": [], "mission": {`), "done", "twice in one object"},
 		"bad default": {plan(`"recommended": 1`, `"recommended": 3`), "done", "recommended"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := planWorld(t)
 			id := w.handIn(t, c.report, c.conclusion)
 			var s cards
-			did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+			did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
 			if err != nil || did != "rework" || w.state(t, "task", id) != "ready" || !strings.Contains(lastReason(t, w, id), c.why) {
 				t.Fatalf("%q %v; %s: %q", did, err, w.state(t, "task", id), lastReason(t, w, id))
 			}
@@ -343,21 +343,21 @@ func TestAcceptPlanRounds(t *testing.T) {
 	w := planWorld(t)
 	var s cards
 	id := w.handIn(t, "no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "rework" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "rework" || err != nil {
 		t.Fatalf("round 1: %q %v", did, err)
 	}
 	w.work(t, id, goodPlan, "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "accepted" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "accepted" || err != nil {
 		t.Fatalf("round 2 with a plan: %q %v", did, err)
 	}
 
 	w = planWorld(t)
 	id = w.handIn(t, "no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "rework" || err != nil {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "rework" || err != nil {
 		t.Fatalf("round 1: %q %v", did, err)
 	}
 	w.work(t, id, "still no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "blocked" || err != nil ||
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "blocked" || err != nil ||
 		w.state(t, "task", id) != "blocked" || !strings.Contains(lastReason(t, w, id), "round 2 of 2") {
 		t.Fatalf("round 2 refused: %q %v %s %q", did, err, w.state(t, "task", id), lastReason(t, w, id))
 	}
@@ -366,7 +366,7 @@ func TestAcceptPlanRounds(t *testing.T) {
 	w = planWorld(t)
 	id = w.handIn(t, goodPlan, "done")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-3", "stopped", "test") }))
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "blocked" || err != nil ||
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "blocked" || err != nil ||
 		!strings.Contains(lastReason(t, w, id), "the mission is stopped") {
 		t.Fatalf("a stopped mission: %q %v %q", did, err, lastReason(t, w, id))
 	}
@@ -379,7 +379,7 @@ func TestAcceptPlanWithdrawsARefusedRoundsCards(t *testing.T) {
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{refuse: map[int]bool{1: true}}
-	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
 	if err != nil || did != "rework" || !strings.Contains(lastReason(t, w, id), "questions[1]") {
 		t.Fatalf("%q %v %q", did, err, lastReason(t, w, id))
 	}
@@ -390,7 +390,7 @@ func TestAcceptPlanWithdrawsARefusedRoundsCards(t *testing.T) {
 	// Round 2 asks under keys of its own.
 	w.work(t, id, goodPlan, "done")
 	s.refuse = nil
-	if did, err = store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); did != "accepted" || err != nil {
+	if did, err = store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "accepted" || err != nil {
 		t.Fatalf("round 2: %q %v", did, err)
 	}
 	if s.asked[2].Key == s.asked[0].Key {
@@ -406,12 +406,12 @@ func TestAcceptPlanRetriesAFailedWithdrawal(t *testing.T) {
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{refuse: map[int]bool{1: true, 3: true}, failWith: 1}
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); !errors.Is(err, store.ErrAsk) || did != "" ||
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); !errors.Is(err, store.ErrAsk) || did != "" ||
 		w.state(t, "task", id) != "submitted" || len(s.withdrawn) != 0 {
 		t.Fatalf("the withdrawal failed: %q %v %s %v", did, err, w.state(t, "task", id), s.withdrawn)
 	}
 	nothingWritten(t, w)
-	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
 	if err != nil || did != "rework" || s.asked[2].Key != s.asked[0].Key || !slices.Equal(s.withdrawn, []string{s.ids[s.asked[0].Key]}) {
 		t.Fatalf("the next pass: %q %v, asked %d, withdrawn %v", did, err, len(s.asked), s.withdrawn)
 	}
@@ -425,7 +425,7 @@ func TestAcceptPlanAskedBefore(t *testing.T) {
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{before: map[int]bool{0: true}}
-	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
 	var reason string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
 	  ORDER BY event_id DESC LIMIT 1`, id).Scan(&reason))
@@ -441,14 +441,14 @@ func TestAcceptPlanWaitsForTheQuestionStore(t *testing.T) {
 	w := planWorld(t)
 	id := w.handIn(t, goodPlan, "done")
 	s := cards{down: errors.New("the question store is down")}
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); !errors.Is(err, store.ErrAsk) || did != "" || w.state(t, "task", id) != "submitted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); !errors.Is(err, store.ErrAsk) || did != "" || w.state(t, "task", id) != "submitted" {
 		t.Fatalf("store down: %q %v %s", did, err, w.state(t, "task", id))
 	}
-	if did, err := store.AcceptPlan(ctx, w.rt, id, nil, nil); !errors.Is(err, store.ErrAsk) || did != "" {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, nil, nil, nil); !errors.Is(err, store.ErrAsk) || did != "" {
 		t.Fatalf("no store: %q %v", did, err)
 	}
 	s.down = nil
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); err != nil || did != "accepted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
 		t.Fatalf("store back: %q %v", did, err)
 	}
 	if len(s.asked) != 2 || s.asked[0].Key != s.asked[1].Key || len(s.withdrawn) != 0 {
@@ -498,7 +498,7 @@ func acceptPlanAndABatchTogether(t *testing.T, report string) {
 	go func() {
 		defer wg.Done()
 		var s cards
-		did, planErr = store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+		did, planErr = store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
 	}()
 	// The plan is waiting for a lock before the batch goes on.
 	deadline := time.Now().Add(10 * time.Second)
@@ -561,7 +561,7 @@ func TestGoalToPlan(t *testing.T) {
 	}
 	w.work(t, plan, goodPlan, "done")
 	var s cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw); err != nil || did != "accepted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, err)
 	}
 	if _, err = store.Dispatch(ctx, w.rt); err != nil {
@@ -650,7 +650,6 @@ func TestPlanBlock(t *testing.T) {
 		"bad json":   {"```json\n{\"tasks\": [}\n```", "the plan does not read: "},
 		"key twice":  {"```json\n{\"tasks\": [], \"Tasks\": []}\n```", `the plan names "Tasks" twice in one object`},
 		"two values": {"```json\n{\"tasks\": []} {}\n```", "the plan block holds more than one value"},
-		"unknown":    {"```json\n{\"task\": []}\n```", "the plan does not read: "},
 	} {
 		err := store.PlanBlock([]byte(c.report))
 		_, perr := store.ParsePlan([]byte(c.report), repos)

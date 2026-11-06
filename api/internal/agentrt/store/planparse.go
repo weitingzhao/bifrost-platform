@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,6 +51,11 @@ type PlanDoc struct {
 	Tasks     []PlannedTask     `json:"tasks"`
 	Questions []PlannedQuestion `json:"questions"`
 	Decisions []PlannedDecision `json:"decisions"`
+
+	// Ignored are the keys the plan named that a plan does not have, as
+	// tasks[0].goal: read past, not refused, so a planner's spec that asks
+	// for more than the reader uses costs no round.
+	Ignored []string `json:"-"`
 }
 
 // PlannedMission is what a plan says about its mission; empty keeps what the
@@ -117,26 +123,131 @@ func PlanBlock(report []byte) error {
 	return err
 }
 
-// planBlock decodes the last fenced json block of a report.
+// planBlock decodes the plan block of a report (lastPlanBlock). A key a plan
+// does not have is read past and named in Ignored; a key named twice is
+// still refused.
 func planBlock(report []byte) (PlanDoc, error) {
 	var d PlanDoc
-	blocks := planFence.FindAllSubmatch(report, -1)
-	if len(blocks) == 0 {
+	block := lastPlanBlock(report)
+	if block == nil {
 		return d, errors.New("the report has no ```json block")
 	}
-	block := blocks[len(blocks)-1][1]
 	if err := oneOfEachKey(block); err != nil {
 		return d, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(block))
-	dec.DisallowUnknownFields()
 	if err := dec.Decode(&d); err != nil {
 		return d, fmt.Errorf("the plan does not read: %v", err)
 	}
 	if dec.More() {
 		return d, errors.New("the plan block holds more than one value")
 	}
+	d.Ignored = ignoredKeys(block)
 	return d, nil
+}
+
+// lastPlanBlock is the content of the last ```json block of a report; with
+// none, of the last block fenced ```JSON or ``` with no language whose
+// content starts with {, as a planner that forgot the language writes it;
+// nil with neither.
+func lastPlanBlock(report []byte) []byte {
+	if blocks := planFence.FindAllSubmatch(report, -1); len(blocks) > 0 {
+		return blocks[len(blocks)-1][1]
+	}
+	var last []byte
+	lines := bytes.SplitAfter(report, []byte("\n"))
+	for i := 0; i < len(lines); i++ {
+		open := bytes.TrimSpace(lines[i])
+		if !bytes.HasPrefix(open, []byte("```")) {
+			continue
+		}
+		lang := string(bytes.TrimSpace(open[3:]))
+		end := i + 1
+		for end < len(lines) && string(bytes.TrimSpace(lines[end])) != "```" {
+			end++
+		}
+		if end == len(lines) {
+			break // a fence never closed holds no block
+		}
+		content := bytes.Join(lines[i+1:end], nil)
+		if (lang == "" || lang == "JSON") && bytes.HasPrefix(bytes.TrimSpace(content), []byte("{")) {
+			last = content
+		}
+		i = end
+	}
+	return last
+}
+
+// planIgnoredMax is how many ignored keys a used plan's reason names.
+const planIgnoredMax = 5
+
+// ignoredKeys names the keys of a plan block that PlanDoc does not have: at
+// the top level, in mission and in each task, question and decision, in that
+// order. A key matches a field whatever its case, as the decoder matches it.
+func ignoredKeys(block []byte) []string {
+	var ignored []string
+	unknown := func(at string, raw json.RawMessage, of any) {
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			return
+		}
+		known := jsonKeys(of)
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			if !known[strings.ToLower(k)] {
+				keys = append(keys, k)
+			}
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			if at != "" {
+				k = at + "." + k
+			}
+			ignored = append(ignored, k)
+		}
+	}
+	var top map[string]json.RawMessage
+	if json.Unmarshal(block, &top) != nil {
+		return nil
+	}
+	unknown("", block, PlanDoc{})
+	field := func(name string) json.RawMessage {
+		for k, v := range top {
+			if strings.EqualFold(k, name) {
+				return v
+			}
+		}
+		return nil
+	}
+	if m := field("mission"); m != nil {
+		unknown("mission", m, PlannedMission{})
+	}
+	for _, list := range []struct {
+		name string
+		of   any
+	}{{"tasks", PlannedTask{}}, {"questions", PlannedQuestion{}}, {"decisions", PlannedDecision{}}} {
+		var items []json.RawMessage
+		if json.Unmarshal(field(list.name), &items) != nil {
+			continue
+		}
+		for i, it := range items {
+			unknown(fmt.Sprintf("%s[%d]", list.name, i), it, list.of)
+		}
+	}
+	return ignored
+}
+
+// jsonKeys are the lower-cased JSON keys of a struct's fields.
+func jsonKeys(v any) map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(v)
+	for i := 0; i < t.NumField(); i++ {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys[strings.ToLower(name)] = true
+		}
+	}
+	return keys
 }
 
 // oneOfEachKey refuses a plan in which one object names a key twice: Go's
