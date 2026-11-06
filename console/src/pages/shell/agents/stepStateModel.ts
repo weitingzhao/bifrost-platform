@@ -124,6 +124,11 @@ function judgeNow(step: PlanNode, ctx: RunContext, asks: OwnerAsks | undefined):
   for (const t of view.tasks) {
     if (t.plan_node_id !== step.plan_node_id) continue
     const name = taskName(t), a = t.attempt, l = t.landing
+    if (t.withdrawn) continue
+    if (t.stopped) {
+      held.push({ kind: 'stopped', text: `${name} stopped by ${t.stopped.by}: ${t.stopped.reason}; only you can lift it` })
+      continue
+    }
     // A task with a live attempt is told by its attempt: one that ran now was a running reason above.
     if (a) {
       if (a.state === 'stale') unknown.push(`${name}: its attempt is stale`)

@@ -67,7 +67,7 @@ func TestWaitsPastTheirLimit(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1",
-		[]store.TaskProposal{proposal("first", w.spec), proposal("second", w.spec)})
+		[]store.TaskProposal{proposal("first", w.impl), proposal("second", w.impl)})
 	ok(t, err)
 	ids := taskIDs(out)
 	_, err = store.Dispatch(ctx, w.rt)
@@ -418,7 +418,7 @@ func TestAWaitAtItsEdge(t *testing.T) {
 func TestAChecksWaitCallsTheWorksProposer(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	p := proposal("impl", w.spec)
+	p := proposal("impl", w.impl)
 	p.BaseCommit = commitB // the run pushes commitA: a change against another base (a branch task names one, TD-421)
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{p})
 	ok(t, err)

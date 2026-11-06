@@ -46,13 +46,19 @@ func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision stri
 	if !supported || !r.CINamePattern.MatchString(name) || !fullSHA.MatchString(revision) {
 		return fmt.Errorf("invalid landing CI identity")
 	}
-	res, err := c.resource()
-	if err != nil {
-		return err
-	}
 	labels := map[string]string{"tekton.dev/pipeline": pipeline, "bifrost.io/repo": repo, "bifrost.io/trigger": "agentrt-landing-drill", "bifrost.io/revision": revision}
 	if repo == "bifrost-trade-infra" {
 		labels["bifrost.io/base"], labels["bifrost.io/purpose"] = params["base"], "landing"
+	}
+	return c.create(ctx, name, pipeline, params, labels)
+}
+
+// create creates the PipelineRun name once: an existing run of that name is
+// accepted only with this spec and these labels, else it collides.
+func (c *Client) create(ctx context.Context, name, pipeline string, params, labels map[string]string) error {
+	res, err := c.resource()
+	if err != nil {
+		return err
 	}
 	desired := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "PipelineRun", "spec": platformSpec(pipeline, params)}}
 	desired.SetName(name)

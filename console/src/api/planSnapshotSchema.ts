@@ -77,7 +77,7 @@ const external: Parser<ReturnType<typeof externalRow>> = (v, p) => {
   return row
 }
 const landing = object({ stream: str, operation: str, phase: str, outcome: str, reason: str, attempt: str, result: str, main_commit: str, run: str, observed_at: timestamp, basis: str })
-const task = object({ task_id: str, plan_node_id: str, mission_id: str, title: str, state: str, attempt: optional(attempt), external_work: optional(array(external)), landing: optional(landing), delivery: optional(str) })
+const task = object({ stopped: optional(object({ control_id: str, by: str, reason: str, since: timestamp })), withdrawn: optional(object({ by: str, reason: str, at: timestamp })), task_id: str, plan_node_id: str, mission_id: str, title: str, state: str, attempt: optional(attempt), external_work: optional(array(external)), landing: optional(landing), delivery: optional(str) })
 const working: Parser<ReturnType<typeof external> | ReturnType<typeof task>> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : task(v, p)
 const finished: Parser<ReturnType<typeof external> | { attempt_id: string; task_id: string; state: string; ended_at: string; meaning: string }> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : object({ attempt_id: str, task_id: str, state: str, ended_at: timestamp, meaning: str })(v, p)
 // PV1 entries carry the execution state; PV2 entries (a view with bindings) the verified milestone and current validity.

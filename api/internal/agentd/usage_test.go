@@ -445,3 +445,21 @@ func TestALongCodexLogKeepsItsThread(t *testing.T) {
 		t.Fatalf("measured %+v %+v", m.Usage, m.Pools)
 	}
 }
+
+// A plan's follow-up is a second run in the same log: claude's and cursor's
+// usage is that of every result, not the last's alone.
+func TestMeasureAddsUpEveryResult(t *testing.T) {
+	out := writeLog(t, `{"type":"result","is_error":false,"result":"plan","total_cost_usd":0.5,"usage":{"input_tokens":10,"cache_creation_input_tokens":100,"output_tokens":1000}}`,
+		"agentd: the plan's report had no block that reads",
+		`{"type":"result","is_error":false,"result":"block","total_cost_usd":0.25,"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"output_tokens":3}}`)
+	m := measureClaude(filepath.Join(out, "log.txt"))
+	if m.Usage == nil || *m.Usage.Tokens != 1116 || m.Usage.USD == nil || *m.Usage.USD != 0.75 {
+		t.Fatalf("claude = %+v", m.Usage)
+	}
+	out = writeLog(t, `{"type":"result","is_error":false,"result":"plan","usage":{"inputTokens":10,"outputTokens":20,"cacheWriteTokens":30}}`,
+		`{"type":"result","is_error":false,"result":"block","usage":{"inputTokens":1,"outputTokens":2,"cacheWriteTokens":3}}`)
+	m = measureCursor(filepath.Join(out, "log.txt"))
+	if m.Usage == nil || *m.Usage.Tokens != 66 {
+		t.Fatalf("cursor = %+v", m.Usage)
+	}
+}

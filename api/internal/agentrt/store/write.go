@@ -286,11 +286,11 @@ type Task struct {
 	Needs                                                                                     []string
 	HardLimit                                                                                 time.Duration
 	Token                                                                                     string // the proposing token, when a route did
-	// pin and viaSession: the executor pin and the session header of a
-	// pinned proposal, set only by proposeBatchTx after checkPin (pin.go);
+	// pin, viaSession and pinReason: the executor pin, the session header
+	// and the reason (pinreason.go) of a pinned proposal, set only by proposeBatchTx after checkPin (pin.go);
 	// nothing outside this package, and nothing else in it, sets them.
-	pin, viaSession string
-	providers       []string
+	pin, viaSession, pinReason string
+	providers                  []string
 }
 
 // ProposeTask writes task_proposed and the task. A task outside the plan
@@ -320,6 +320,9 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	if t.pin != "" {
 		body["executor_pin"], body["via_session"], body["providers"] = t.pin, t.viaSession, t.providers
+		if t.pinReason != "" {
+			body["pin_reason"] = t.pinReason
+		}
 	}
 	needs, err := canon.Encode(nonNil(t.Needs))
 	if err != nil {

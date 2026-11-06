@@ -256,7 +256,7 @@ func TestStartDispatches(t *testing.T) {
 			return err
 		}
 		var err error
-		spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# t\n"))
+		spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", implSpec(t))
 		return err
 	}))
 	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
@@ -596,4 +596,14 @@ func TestBlockedCardsBlockATaskOverBudget(t *testing.T) {
 	if hours != 53 {
 		t.Fatalf("max_wall_hours %d; want 53", hours)
 	}
+}
+
+// implSpec is an implementation's spec in bifrost-platform as a plan's is
+// (store.ImplementSpec): one a proposal takes (R5:5.7-8).
+func implSpec(t *testing.T) []byte {
+	t.Helper()
+	r := store.Repos["bifrost-platform"]
+	b, err := store.ImplementSpec("t", "t", r, r.Verify, store.HandInChecks(r, nil))
+	must(t, err)
+	return b
 }

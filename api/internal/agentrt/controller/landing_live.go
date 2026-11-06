@@ -55,6 +55,15 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 			return fmt.Errorf("landing repo has no current rule")
 		}
 	}
+	// A batch member goes to main with its whole batch (landing_batch.go).
+	if c.batching(repo) {
+		if b, in, err := store.LandingBatchOf(ctx, c.DB, repo, op); err != nil || in {
+			if err != nil {
+				return err
+			}
+			return c.landBatch(ctx, src, b, recheck, decided, repo)
+		}
+	}
 	var w LiveWorkspace
 	var err error
 	if c.OpenLive != nil {
@@ -112,9 +121,16 @@ func (c *Controller) landLiveWith(ctx context.Context, src DrillSources, op, r s
 		// stops the repository); the reconciler reads main past the fence.
 		outcome = string(landinggit.PushUnknown)
 	}
+	// The identity the push went as is recorded beside its outcome.
+	pusher := ""
+	if p, ok := w.(interface{ Pusher() (string, error) }); ok {
+		if name, err := p.Pusher(); err == nil {
+			pusher = name
+		}
+	}
 	rec, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
 	defer cancel()
-	wrote, err := store.RecordPushResult(rec, c.DB, auth, outcome)
-	c.logf("agentrt landing %s: push of main %s (recorded %v)", op, out, wrote)
+	wrote, err := store.RecordPushResult(rec, c.DB, auth, outcome, pusher)
+	c.logf("agentrt landing %s: push of main %s as %q (recorded %v)", op, out, pusher, wrote)
 	return err
 }

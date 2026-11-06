@@ -191,3 +191,27 @@ func TestLiveLandingPushesNothingPastTheDeadline(t *testing.T) {
 		t.Fatal("another intent's licence", cur, err, task)
 	}
 }
+
+// namedPusher is a lander workspace that names its Gitea username.
+type namedPusher struct{ livePusher }
+
+func (p *namedPusher) Pusher() (string, error) { return "agentrt-lander", nil }
+
+// Serial: FreezeEventClock. (e): the push result names the identity the
+// push went as (the lander's username file), beside the outcome.
+func TestLiveLandingRecordsThePusher(t *testing.T) {
+	w, _, op, src, prepared := liveReady(t)
+	at := prepared.Add(10 * time.Minute)
+	defer store.FreezeEventClock(at)()
+	p := &namedPusher{livePusher{outcome: landinggit.PushOK}}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
+		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }}
+	_, err := ctl.LandingDrillCI(ctx, liveSources(src, prepared), op, at)
+	ok(t, err)
+	var pusher string
+	ok(t, w.rt.QueryRow(ctx, `SELECT COALESCE(body_json->>'landing_pusher','') FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_result'`,
+		landingRepoStream).Scan(&pusher))
+	if len(p.pushes) != 1 || pusher != "agentrt-lander" {
+		t.Fatal("pusher", p.pushes, pusher)
+	}
+}

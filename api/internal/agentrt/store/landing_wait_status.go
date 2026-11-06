@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -58,6 +59,12 @@ func (s *LandingWaitStatus) ObserveMain(head string) {
 }
 
 func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, op string, at time.Time) (*LandingWaitStatus, error) {
+	return readLandingWaitStatusIn(ctx, tx, state, landingRepoStream, op, at)
+}
+
+// readLandingWaitStatusIn is readLandingWaitStatus for the operation of the
+// repository stream state was folded from: its grants live there.
+func readLandingWaitStatusIn(ctx context.Context, tx pgx.Tx, state landing.State, stream, op string, at time.Time) (*LandingWaitStatus, error) {
 	o := state.Operations[op]
 	if o.AwaitingAt.IsZero() {
 		return nil, nil
@@ -111,7 +118,7 @@ func readLandingWaitStatus(ctx context.Context, tx pgx.Tx, state landing.State, 
 		w.ApprovalNumber, _ = cardNumber(picked["approval_number"])
 		w.ApprovalURL = "/api/v1/approvals/" + w.ApprovalID
 	}
-	_, grants, err := readLandingGrants(ctx, tx, landingRepoStream)
+	_, grants, err := readLandingGrants(ctx, tx, stream)
 	if err != nil {
 		return nil, err
 	}
@@ -175,11 +182,18 @@ func landingRequestProgress(m map[string]any) int {
 func ReadLandingWait(ctx context.Context, db DB, op string) (*LandingWaitStatus, error) {
 	var out *LandingWaitStatus
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		s, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		repo, err := grantRepoOf(ctx, tx, op)
+		if errors.Is(err, ErrInvalid) {
+			return nil // not a waiting operation of a repository with grants
+		}
 		if err != nil {
 			return err
 		}
-		out, err = readLandingWaitStatus(ctx, tx, s, op, DecisionAt())
+		s, err := LandingState(ctx, tx, grantStream(repo))
+		if err != nil {
+			return err
+		}
+		out, err = readLandingWaitStatusIn(ctx, tx, s, grantStream(repo), op, DecisionAt())
 		return err
 	})
 	return out, err

@@ -30,6 +30,9 @@ type Client struct {
 	// a red run's failure (Failure); nil, the failure is told by its
 	// messages alone.
 	Logs func(ctx context.Context, pod, container string) (string, error)
+	// FullScopeParam has a full run ask for api-scope-request=full
+	// (EnsureFullRun, AGENTRT_FULL_CI_PARAM).
+	FullScopeParam bool
 }
 
 func (c *Client) namespace() string {

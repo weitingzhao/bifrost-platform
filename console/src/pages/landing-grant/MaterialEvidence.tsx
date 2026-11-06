@@ -26,6 +26,10 @@ export function MaterialEvidence({ data }: { data: LandingMaterialResponse }) {
       {compare ? <a className="underline" href={compare} target="_blank" rel="noopener noreferrer">Compare M0...R in Gitea</a> : <p>Gitea comparison link unavailable.</p>}
       <p>{c.decision_chain ? <strong>{GITEA_NOTICE}</strong> : GITEA_NOTICE}</p>
     </section>
+    {m.batch && <section aria-label="Batch" className="space-y-2"><h3 className="font-semibold">Batch · {m.batch.members.length} members</h3>
+      <p>This operation leads batch {m.batch.batch}: one landing CI and one push of R carry every member below. The patch is the batch&apos;s whole change, M0..R.</p>
+      <ol>{m.batch.members.map(b => <li key={b.op}>{b.op} · task {b.task} · A {b.A}</li>)}</ol>
+    </section>}
     <section aria-label="Candidate identity"><h3 className="font-semibold">Candidate identity</h3><dl>
       {(['env', 'tenant', 'repo', 'mission', 'plan_step', 'task', 'attempt', 'op', 'A', 'base', 'R', 'M0', 'committer_date'] as const).map(key => <div key={key}><dt className="inline font-medium">{key}: </dt><dd className="inline">{c[key] || 'None'}</dd></div>)}
     </dl></section>

@@ -40,6 +40,9 @@ type world struct {
 	db   *agentrttest.DB
 	rt   *pgx.Conn
 	spec string
+	// impl is an implementation's spec as a plan's is (store.ImplementSpec),
+	// the one a proposed implementation needs (R5:5.7-8).
+	impl string
 }
 
 const (
@@ -81,6 +84,15 @@ func newWorld(t *testing.T) *world {
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		w.spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
+		if err != nil {
+			return err
+		}
+		r := store.Repos["bifrost-platform"]
+		body, err := store.ImplementSpec("task", "", r, r.Verify, store.HandInChecks(r, nil))
+		if err != nil {
+			return err
+		}
+		w.impl, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", body)
 		return err
 	}))
 	return w

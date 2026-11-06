@@ -212,7 +212,7 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 	first := repos[0]
 	where := "repository " + first
 	read := "Read this repository as you need to (it is checked out here at " + bases[first] + "); do not edit anything.\n\n"
-	scope := "- Every task is in " + first + ", the goal's repository, and runs its checks listed above. " + ownChecks(Repos[first])
+	scope := "- Every task is in " + first + ", the goal's repository, and runs its checks listed above. " + checksRun + ownChecks(Repos[first])
 	if len(repos) > 1 {
 		where = "repositories " + strings.Join(repos, ", ")
 		var beside, own []string
@@ -225,7 +225,8 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		read = "Read these repositories as you need to: " + first + " is checked out here at " + bases[first] + "; " +
 			strings.Join(beside, "; ") + ". Do not edit anything.\n\n"
 		scope = "- Every task is in one of the goal's repositories and runs that repository's checks listed above; a change that\n" +
-			"  spans repositories is one task in each, ordered with depends_on. Checks of a plan's own, by repository:\n" +
+			"  spans repositories is one task in each, ordered with depends_on. " + checksRun +
+			"Checks of a plan's own, by repository:\n" +
 			strings.Join(own, "")
 	}
 	text := "# Plan: " + g.Title + "\n\nThe Owner's goal, typed in the Console (mission " + mission + ", " + where + "):\n\n" +
@@ -325,6 +326,13 @@ func checkouts(repos []string) string {
 	return b.String()
 }
 
+// checksRun says where a task's checks run: the executor's quick hand-in
+// checks with the test databases off, then the platform's full ones on the
+// commit; so a plan's own check is best a targeted one.
+const checksRun = "Before handing in, the executor runs the\n" +
+	"  repository's quick hand-in checks plus the plan's own, without the test databases (tests that need one skip); the\n" +
+	"  platform then runs the repository's full checks plus the plan's own on the commit. "
+
 // ownChecks says which checks of its own a plan may add to a task in repo:
 // tests of a Go module, as checkTest takes them, or none where repo has no
 // module a plan may test.
@@ -334,7 +342,8 @@ func ownChecks(repo Repo) string {
 	}
 	return "Add a check only when it proves this task:\n" +
 		"  a test of the package you change, written exactly as `go -C " + strings.Join(repo.TestDirs, "|") +
-		" test [-run <pattern>] ./<package path>` (nothing else is taken).\n"
+		" test [-run <pattern>] ./<package path>` (nothing else is taken).\n" +
+		"  " + preferRun(repo) + "\n"
 }
 
 // ownChecksOf is ownChecks for one repository of several.
@@ -343,7 +352,14 @@ func ownChecksOf(repo Repo) string {
 		return "none: leave verify empty.\n"
 	}
 	return "a test of the package you change, only when it proves the task, written exactly as\n" +
-		"    `go -C " + strings.Join(repo.TestDirs, "|") + " test [-run <pattern>] ./<package path>` (nothing else is taken).\n"
+		"    `go -C " + strings.Join(repo.TestDirs, "|") + " test [-run <pattern>] ./<package path>` (nothing else is taken).\n" +
+		"    " + preferRun(repo) + "\n"
+}
+
+// preferRun asks for a targeted check: it runs before hand-in and again in
+// the platform's check (checksRun).
+func preferRun(repo Repo) string {
+	return "Keep it targeted: prefer `go -C " + repo.TestDirs[0] + " test -run <pattern> ./<package>` over a whole package."
 }
 
 // verifyExample is the verify of the plan format's example task.

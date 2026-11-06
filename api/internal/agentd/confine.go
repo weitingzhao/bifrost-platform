@@ -419,7 +419,11 @@ func executorArgv(executor, self, codex string, a *Attempt, sibs []string, argv 
 		if model != "" {
 			want = append(want, "--model", model)
 		}
-		if !slices.Equal(argv, append(want, "--", Prompt(a))) {
+		prompt := Prompt(a)
+		if a.resume != nil { // a plan's follow-up in the same session (planfix.go)
+			want, prompt = append(want, "--resume", a.resume.Session), a.resume.Prompt
+		}
+		if !slices.Equal(argv, append(want, "--", prompt)) {
 			return "claude's command as agentd makes it"
 		}
 	case "exec:cursor":

@@ -428,7 +428,7 @@ func TestC5T49B5Evidence(t *testing.T) {
 	if evidence(c.op) {
 		t.Fatal("evidence before landed")
 	}
-	_, err := store.RecordPushResult(ctx, c.w.rt, auth, "ok")
+	_, err := store.RecordPushResult(ctx, c.w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	effectiveRead(t, c.w, c.at.Add(time.Minute))
 	if c.phase(t) != "landed" {

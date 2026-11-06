@@ -274,7 +274,7 @@ func checkLandingRuleClearAppend(ctx context.Context, tx pgx.Tx, ev Event, at ti
 // refuseGrant records the final gate's refusal of a grant for good, in the
 // gate's transaction (review 694 R-05).
 func refuseGrant(ctx context.Context, tx pgx.Tx, g *grantView, reason string, at time.Time, mission string) error {
-	_, err := Append(ctx, tx, Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,
+	_, err := Append(ctx, tx, Event{Stream: grantStream(g.Repo), Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,
 		Body: map[string]any{"text": "Landing grant " + g.GrantID + " refused at the final gate: " + reason + "; a new request is needed",
 			"landing_grant_refused": toBody(LandingGrantRefused{V: LandingGrantVersion, GrantID: g.GrantID, Reason: reason,
 				DecidedAt: at.UTC().Format(time.RFC3339Nano)})}})

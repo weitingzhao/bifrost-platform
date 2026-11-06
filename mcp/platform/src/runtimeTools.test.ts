@@ -13,6 +13,9 @@ import {
   RUNTIME_SESSION_REFUSAL,
   RUNTIME_WRITES_OFF,
   STOP_KEY_RULE,
+  WITHDRAW_KEY_RULE,
+  WITHDRAW_TASKS_INPUT,
+  withdrawTasks,
   getArtifact,
   searchArtifacts,
   getMission,
@@ -42,6 +45,7 @@ import {
   MESSAGE_DATA_NOTE,
   type RuntimeDeps,
 } from './runtimeTools.js'
+import { platformSend, resetClientCacheForTests } from './platformClient.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
 import type { WritesMode } from './writeGate.js'
 
@@ -300,6 +304,69 @@ describe('agent runtime writes', () => {
     assert.equal(calls[1].contentType, 'application/json')
   })
 
+  it('withdraws tasks with the caller key and refuses invalid inputs before sending', async () => {
+    const { d, calls } = deps()
+    const input = { task_ids: ['t_a', 't_b'], reason: '  superseded  ', idempotency_key: 'withdraw-1' }
+    let method: string | undefined
+    const writer = { ...d, send: async (m: 'POST', path: string, body: unknown) => {
+      method = m
+      await d.send(m, path, body)
+      return { withdrawn: input.task_ids, checks_cancelled: 1, by: 'thread:s1' }
+    } }
+    for (const bad of [undefined, '']) {
+      assert.deepEqual(await withdrawTasks({ ...input, idempotency_key: bad as unknown as string }, writer),
+        { error: 'idempotency_key is required', hint: WITHDRAW_KEY_RULE })
+    }
+    for (const reason of [undefined, '', '  ']) {
+      assert.ok((await withdrawTasks({ ...input, reason: reason as unknown as string }, writer) as { error: string }).error)
+    }
+    for (const task_ids of [[], Array(51).fill('t_a'), ['']]) {
+      assert.ok((await withdrawTasks({ ...input, task_ids }, writer) as { error: string }).error)
+    }
+    assert.equal(calls.length, 0)
+    assert.deepEqual(await withdrawTasks(input, writer), { withdrawn: input.task_ids, checks_cancelled: 1, by: 'thread:s1' })
+    assert.equal(method, 'POST')
+    assert.deepEqual(calls, [{ kind: 'send', path: '/api/v1/agentrt/tasks/withdraw', body: input }])
+    const schema = z.object(WITHDRAW_TASKS_INPUT)
+    assert.equal(schema.safeParse(input).success, true)
+    assert.equal(schema.safeParse({ ...input, task_ids: Array(50).fill('t_a') }).success, true)
+    assert.equal(schema.safeParse({ ...input, reason: undefined }).success, false)
+    assert.equal(schema.safeParse({ ...input, idempotency_key: undefined }).success, false)
+  })
+
+  it('withdrawal sends the session header and passes back route errors, including a refused viewer', async () => {
+    const originalFetch = globalThis.fetch
+    const saved = { ...process.env }
+    const input = { task_ids: ['t_a'], reason: 'superseded', idempotency_key: 'withdraw-1' }
+    try {
+      process.env.PLATFORM_API_URL = 'https://platform.example'
+      process.env.PLATFORM_TOKEN_ENV_KEY = 'PLATFORM_VIEWER_TOKEN'
+      process.env.PLATFORM_VIEWER_TOKEN = 'viewer-token'
+      process.env.CLAUDE_CODE_HOST_SESSION_ID = 's1'
+      resetClientCacheForTests()
+      for (const [status, body] of [
+        [403, { error: 'forbidden: viewer' }],
+        [409, { error: 'withdrawal refused', refused: [{ task_id: 't_a', reason: 'an attempt exists' }] }],
+      ] as const) {
+        globalThis.fetch = (async (url, init) => {
+          assert.equal(String(url), 'https://platform.example/api/v1/agentrt/tasks/withdraw')
+          assert.equal(init?.method, 'POST')
+          assert.deepEqual(JSON.parse(init?.body as string), input)
+          assert.equal((init?.headers as Record<string, string>)['X-Bifrost-Session'], 's1')
+          assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer viewer-token')
+          return new Response(JSON.stringify(body), { status })
+        }) as typeof fetch
+        await assert.rejects(withdrawTasks(input, { ...deps().d, send: platformSend }),
+          (err: Error) => err.message === `POST /api/v1/agentrt/tasks/withdraw: HTTP ${status} ${JSON.stringify(body)}`)
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+      for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]
+      Object.assign(process.env, saved)
+      resetClientCacheForTests()
+    }
+  })
+
   it('request_stop sends the control with the caller\'s key, and none without one', async () => {
     const { d, calls } = deps()
     const missing = await requestStop({ scope: 'global', kind: 'pause', reason: 'look first', idempotency_key: '' }, d)
@@ -323,6 +390,7 @@ describe('agent runtime writes', () => {
         await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'k' }, d),
         await proposePlanChange({ root: 'R2', reason: 'r', changes: [{ op: 'retitle', node: 'R2', title: 't' }], idempotency_key: 'k' }, d),
         await putArtifact({ kind: 'task_spec', content: 'x' }, d),
+        await withdrawTasks({ task_ids: ['t_a'], reason: 'x', idempotency_key: 'k' }, d),
         await requestStop({ scope: 'global', kind: 'stop', reason: 'x', idempotency_key: 'k' }, d),
       ]) {
         assert.equal((got as { hint: string }).hint, hint)
@@ -395,10 +463,11 @@ describe('agent runtime tools are served', () => {
     assert.match(index, /registerPlanImportTools\(reg\)/)
     const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'agentrt_withdraw_tasks', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }
+    assert.match(index, /reg\(\s*'agentrt_withdraw_tasks',\s*`[^`]*`,\s*WITHDRAW_TASKS_INPUT,/)
     // The schema the tests above check is the one served.
     assert.match(index, /reg\(\s*'propose_mission',\s*`[^`]*`,\s*PROPOSE_MISSION_INPUT,/)
   })

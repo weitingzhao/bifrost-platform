@@ -79,6 +79,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'put_artifact',
   'search_artifacts',
   'get_artifact',
+  'agentrt_withdraw_tasks',
   'request_stop',
   'send_message',
   'wait_for_messages',

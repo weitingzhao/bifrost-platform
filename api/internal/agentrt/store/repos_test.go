@@ -103,7 +103,7 @@ func TestInfraImplementSpec(t *testing.T) {
 		t.Fatalf("pins = %d in %q", pins, pip)
 	}
 
-	body, err := store.ImplementSpec("Test the probe", "Add a test.", r, r.Verify)
+	body, err := store.ImplementSpec("Test the probe", "Add a test.", r, r.Verify, store.HandInChecks(r, nil))
 	ok(t, err)
 	var spec struct {
 		Text     string
@@ -133,6 +133,7 @@ func TestInfraImplementSpec(t *testing.T) {
 func TestImplementSpecQuotesCommands(t *testing.T) {
 	t.Parallel()
 	body, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"echo", "it's", "a b", "", "./...", "--x=:all:", "if", "A=B"},
+		{"go", "-C", "api", "vet", "./..."}, {"A=B", "x"}, {"if", "x"}}, [][]string{{"echo", "it's", "a b", "", "./...", "--x=:all:", "if", "A=B"},
 		{"go", "-C", "api", "vet", "./..."}, {"A=B", "x"}, {"if", "x"}})
 	ok(t, err)
 	var spec struct{ Text string }
@@ -211,7 +212,7 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	ok(t, w.rt.QueryRow(ctx, `SELECT task_id, repo, base_commit, task_class FROM agentrt.task WHERE mission_id = $1 AND role = 'implement'`,
 		mission).Scan(&impl, &repo, &base, &class))
 	r := store.Repos[infra]
-	want, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", r, r.Verify)
+	want, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", r, r.Verify, store.HandInChecks(r, nil))
 	ok(t, err)
 	if repo != infra || base != commitA || class != "goal" || text(impl) != string(want) {
 		t.Fatalf("the implementation: %s %s %s\n%s", repo, base, class, text(impl))
@@ -247,7 +248,7 @@ func TestPlatformSetupDownloadsGoModules(t *testing.T) {
 	if len(r.Setup) == 0 || !slices.Equal(r.Setup[0], []string{"go", "-C", "api", "mod", "download"}) {
 		t.Fatalf("the platform's setup does not download Go's modules first: %q", r.Setup)
 	}
-	body, err := store.ImplementSpec("t", "x", r, r.Verify)
+	body, err := store.ImplementSpec("t", "x", r, r.Verify, store.HandInChecks(r, nil))
 	ok(t, err)
 	var spec struct {
 		Text  string
@@ -268,5 +269,83 @@ func TestOnlyThePlatformGetsATestDatabase(t *testing.T) {
 		if r.TestDB != (repo == "bifrost-platform") {
 			t.Errorf("%s: TestDB %v", repo, r.TestDB)
 		}
+	}
+}
+
+// The hand-in section lists only the fast checks an executor's sandbox can
+// run; the spec's verify, what runs on the commit, keeps the full list. A
+// plan's own check is handed in without the test databases, so its database
+// tests skip, and verified with them.
+func TestImplementSpecHandInPlatform(t *testing.T) {
+	t.Parallel()
+	r := store.Repos["bifrost-platform"]
+	own := []string{"go", "-C", "api", "test", "-run", "Pinned", "./internal/agentrt/store"}
+	verify := append(slices.Clone(r.Verify), own)
+	body, err := store.ImplementSpec("t", "x", r, verify, store.HandInChecks(r, [][]string{own}))
+	ok(t, err)
+	var spec struct {
+		Text   string
+		Verify [][]string
+	}
+	ok(t, json.Unmarshal(body, &spec))
+	if !slices.EqualFunc(spec.Verify, verify, slices.Equal) {
+		t.Fatalf("verify = %q, want %q", spec.Verify, verify)
+	}
+	_, handIn, found := strings.Cut(spec.Text, "- Before you hand in, run from the repository root:\n\n")
+	handIn, _, _ = strings.Cut(handIn, "\n\n")
+	if !found {
+		t.Fatalf("no hand-in section:\n%s", spec.Text)
+	}
+	const env = "env AGENTRT_TEST_PG= AGENTRT_TEST_REDIS= AGENTRT_TEST_REQUIRED=0 "
+	want := "    go -C api build ./...\n    go -C api vet ./...\n    npm --prefix console run lint\n" +
+		"    " + env + "go -C api test -run Pinned ./internal/agentrt/store"
+	if handIn != want {
+		t.Fatalf("hand-in section = %q, want %q", handIn, want)
+	}
+	for _, out := range []string{"npm --prefix console test", "npm --prefix console run build"} {
+		if strings.Contains(handIn, out) {
+			t.Errorf("the hand-in section runs %s", out)
+		}
+	}
+	if slices.ContainsFunc(spec.Verify, func(c []string) bool { return c[0] == "env" }) {
+		t.Errorf("verify carries the hand-in env: %q", spec.Verify)
+	}
+	for _, words := range []string{"quick checks", "skip here; that is expected", "full checks on your commit", "sends the work back"} {
+		if !strings.Contains(spec.Text, words) {
+			t.Errorf("the text lacks %q:\n%s", words, spec.Text)
+		}
+	}
+	if _, err := store.ImplementSpec("t", "x", r, verify, nil); err == nil {
+		t.Fatal("an empty hand-in list is taken")
+	}
+}
+
+// HandInChecks lists each command once, the repository's first.
+func TestHandInChecksNoDuplicates(t *testing.T) {
+	t.Parallel()
+	r := store.Repos["bifrost-platform"]
+	own := []string{"go", "-C", "api", "test", "./internal/agentrt/store"}
+	got := store.HandInChecks(r, [][]string{own, own, {"go", "-C", "api", "vet", "./..."}})
+	want := append(slices.Clone(r.HandIn), append([]string{"env", "AGENTRT_TEST_PG=", "AGENTRT_TEST_REDIS=", "AGENTRT_TEST_REQUIRED=0"}, own...))
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("hand-in = %q, want %q", got, want)
+	}
+}
+
+// The infra repository's quick check needs no services: it is both handed in
+// and verified.
+func TestImplementSpecHandInInfra(t *testing.T) {
+	t.Parallel()
+	r := store.Repos[infra]
+	body, err := store.ImplementSpec("t", "x", r, r.Verify, store.HandInChecks(r, nil))
+	ok(t, err)
+	var spec struct {
+		Text   string
+		Verify [][]string
+	}
+	ok(t, json.Unmarshal(body, &spec))
+	if !slices.EqualFunc(spec.Verify, r.Verify, slices.Equal) || !slices.EqualFunc(r.HandIn, r.Verify, slices.Equal) ||
+		!strings.Contains(spec.Text, "run from the repository root:\n\n    sh -c '"+r.Verify[0][2]+"'\n\n") {
+		t.Fatalf("spec = %s", body)
 	}
 }

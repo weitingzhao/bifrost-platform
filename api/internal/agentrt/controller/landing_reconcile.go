@@ -43,11 +43,22 @@ type LandingReconcile struct {
 	// Discover retries a failed startup discovery; cleared after success.
 	Discover func(context.Context) ([]string, error)
 	Requests func(context.Context) ([]store.LandingGrantRequest, error)
+	// Grants are the material route's Git and CI reads; RequestGrant asks
+	// the approval service for a landing grant card and answers its id. Nil
+	// when not wired: no card is requested (landing_grant_request.go).
+	Grants       func() store.GrantSources
+	RequestGrant func(ctx context.Context, action string, params map[string]any, reason string) (string, error)
+	// SettleGrant withdraws a pending landing approval whose operation no
+	// longer waits (store.SettledLandingGrantRequests). Nil: none is.
+	SettleGrant func(ctx context.Context, approvalID, reason string) error
 
 	mu            sync.Mutex
 	waits         map[string]reconcileWait
 	start         int
 	discoveryWait reconcileWait
+	// askWaits: an operation whose card could not be requested yet (its
+	// material refuses one, or a read failed) is read again after this.
+	askWaits map[string]time.Time
 }
 
 type reconcileWait struct {

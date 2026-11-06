@@ -48,6 +48,9 @@ type PinnedTask struct {
 	// provider its entry names, alone. Its spec is the platform's
 	// (ImplementSpec), whatever SpecArtifact says.
 	Providers []string
+	// PinReason is why an implement task is pinned to the coordinator
+	// (pinreason.go), recorded in its task_proposed body; "" for none.
+	PinReason string
 }
 
 // ErrMixedSource: a pinned task declares no provider, or one besides its
@@ -64,6 +67,7 @@ const generatedSpec = "generated"
 type pinning struct {
 	pins       map[string]string
 	providers  map[string][]string
+	reasons    map[string]string
 	viaSession string
 }
 
@@ -75,10 +79,15 @@ type pinning struct {
 // only to the writer who may pin (§2.6).
 func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, viaSession string, tasks []PinnedTask) (map[string]any, error) {
 	props := make([]TaskProposal, 0, len(tasks))
-	pins, providers := map[string]string{}, map[string][]string{}
+	pins, providers, reasons := map[string]string{}, map[string][]string{}, map[string]string{}
 	for _, t := range tasks {
+		// The mode is the route's (CheckPinReason there); here only the
+		// reason's own shape, whoever calls.
+		if _, err := CheckPinReason(t, PinReasonWarn); err != nil {
+			return nil, err
+		}
 		if t.ExecutorPin != "" {
-			pins[t.Ref], providers[t.Ref] = t.ExecutorPin, slices.Clone(t.Providers)
+			pins[t.Ref], providers[t.Ref], reasons[t.Ref] = t.ExecutorPin, slices.Clone(t.Providers), t.PinReason
 			if t.SpecArtifact == "" {
 				t.SpecArtifact = generatedSpec
 			}
@@ -107,10 +116,15 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 		if t.ExecutorPin != "" {
 			req["tasks"].([]any)[i].(map[string]any)["executor_pin"] = t.ExecutorPin
 			req["tasks"].([]any)[i].(map[string]any)["providers"] = nonNil(t.Providers)
+			if t.PinReason != "" {
+				// Only when given, so a retry of a batch from before the
+				// field digests as it did.
+				req["tasks"].([]any)[i].(map[string]any)["pin_reason"] = t.PinReason
+			}
 		}
 	}
 	req["via_session"] = viaSession
-	p := &pinning{pins: pins, providers: providers, viaSession: viaSession}
+	p := &pinning{pins: pins, providers: providers, reasons: reasons, viaSession: viaSession}
 	for try := 1; ; try++ {
 		out, err := idempotentHeld(ctx, db, w, "missions/"+missionID+"/tasks", key, req,
 			func(pgx.Tx) error { return pinWriter(w) },
@@ -128,6 +142,9 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 					return nil, err
 				}
 				hook("pin rules held", w.Actor)
+				if err := checkImplementSpecs(ctx, tx, props, pins); err != nil {
+					return nil, err
+				}
 				return proposeBatchTx(ctx, tx, w, missionID, props, p)
 			})
 		if !lockNotAvailable(err) {
@@ -212,7 +229,7 @@ func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t Task
 func pinnedSpec(ctx context.Context, tx pgx.Tx, t TaskProposal) (string, error) {
 	repo := Repos[t.Repo]
 	spec, err := ImplementSpec(t.Title, "Handed in by the coordinator: one commit on the task's base, made before it was handed in. "+
-		"The checks below run on that commit.", repo, slices.Clone(repo.Verify))
+		"The repository's checks run on that commit.", repo, slices.Clone(repo.Verify), HandInChecks(repo, nil))
 	if err != nil {
 		return "", err
 	}

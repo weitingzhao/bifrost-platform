@@ -18,6 +18,9 @@ import {
   PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
   STOP_KEY_RULE,
+  WITHDRAW_KEY_RULE,
+  WITHDRAW_TASKS_INPUT,
+  withdrawTasks,
   getArtifact,
   searchArtifacts,
   getMission,
@@ -632,7 +635,7 @@ reg(
 
 reg(
   'propose_tasks',
-  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
+  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). An implement task on a branch has as its spec the JSON task spec store.ImplementSpec builds ({"text", "verify": [[argv...]], "setup": [[argv...]], ...}), with its repository's verify commands and setup; a markdown spec, or one without verify or setup, is refused. depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
   {
     mission_id: z.string(),
     tasks: z.array(
@@ -723,6 +726,13 @@ reg(
   `Read an agent runtime artifact (sha256:…). ${RUNTIME_DATA_NOTE}`,
   { id: z.string() },
   async ({ id }) => jsonResult(await getArtifact(id)),
+)
+
+reg(
+  'agentrt_withdraw_tasks',
+  `Cancel tasks this session (or its mission's proposer) proposed, provided no attempt has started. This is not a stop: stop work that has started with request_stop; only the Owner lifts a stop. ${WITHDRAW_KEY_RULE}`,
+  WITHDRAW_TASKS_INPUT,
+  async (input) => jsonResult(await withdrawTasks(input)),
 )
 
 reg(

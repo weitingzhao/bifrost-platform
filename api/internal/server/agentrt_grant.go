@@ -8,6 +8,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
@@ -15,8 +16,9 @@ import (
 )
 
 // Landing grants' approval side (W-31 round 4, core block C-5;
-// DESIGN-coordinator-landing-v3-2026-10-29.md §5.6, §12.2). Two D-tier
-// actions, PROD only: approve_guardrail_landing and approve_core_landing.
+// DESIGN-coordinator-landing-v3-2026-10-29.md §5.6, §12.2). Three D-tier
+// actions, PROD only: approve_guardrail_landing and approve_core_landing for
+// platform, approve_floor_landing for infra's floor-grantable paths.
 // The create check refuses a request whose material is not the server's own
 // recomputation; the executor writes the grant only after reading the
 // approval record back from the approval service. Nothing here pushes: the
@@ -47,6 +49,34 @@ func (s *Server) landingGrantSources() store.GrantSources {
 	src.Facts.GrantCI = ci.GrantCI // the strict read of the pinned key (review 694 B-01)
 	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
 	src.Cache = &rt.materialCache
+	src.ByRepo = s.landingGrantSourcesFor
+	return src
+}
+
+// landingGrantSourcesFor are another repository's grant reads: infra's
+// approve_floor_landing reads bifrost-trade-infra with the same read-only
+// Gitea reader (its patch and M0..R's files; no pinned CI). Incomplete
+// where the process has no reader for it.
+func (s *Server) landingGrantSourcesFor(repo string) store.GrantSources {
+	var src store.GrantSources
+	rt := s.agentRuntime
+	if rt == nil || rt.env != "prod" || s.cluster == nil || repo != "bifrost-trade-infra" {
+		return src
+	}
+	g, err := landinggit.ReaderFromEnv(repo)
+	if err != nil {
+		return src
+	}
+	src.Facts = controller.DrillGitFacts(g, repo)
+	src.Facts.GrantPatch = landingGrantPatch(g)
+	src.Facts.FloorFiles = func(ctx context.Context, got, m0, r string) (landing.FloorTree, error) {
+		if got != repo {
+			return landing.FloorTree{}, fmt.Errorf("the %s reader does not read %s", repo, got)
+		}
+		return g.FloorFiles(ctx, m0, r)
+	}
+	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
+	src.Cache = &rt.materialCache
 	return src
 }
 
@@ -66,6 +96,10 @@ func (s *Server) landingGrantRequest(action string, params map[string]any) (stor
 	p, err := store.DecodeGrantParams(params)
 	if err != nil {
 		return p, err
+	}
+	if !store.GrantActionSupported(action, p.Repo) {
+		// approve_floor_landing is infra's alone; the other two platform's.
+		return p, fmt.Errorf("grant_unsupported: %s is not a landing grant for %s", action, p.Repo)
 	}
 	if !approvalhome.IsProd() {
 		return p, errors.New(action + " is PROD only: " + approvalhome.Required)

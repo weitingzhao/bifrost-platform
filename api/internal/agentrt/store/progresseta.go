@@ -51,6 +51,10 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 	type basisKey struct{ role, class string }
 	basis := map[basisKey]usualTime{}
 	for _, t := range m.tasks {
+		if t.Status == StatusStopped {
+			// It waits for the Owner to lift the stop, not as queued work.
+			return unknownETA(fmt.Sprintf("task %s is stopped: a wait for the Owner has no usual time", t.TaskID))
+		}
 		switch t.State {
 		case "submitted", "verifying":
 			continue // its acceptance and review are tasks of their own

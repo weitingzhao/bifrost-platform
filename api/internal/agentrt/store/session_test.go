@@ -46,7 +46,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	for name, write := range map[string]func() error{
 		"a mission": func() error { _, e := store.ProposeMission(ctx, w.rt, second, "k2", mission, nil); return e },
 		"tasks": func() error {
-			_, e := store.ProposeTasks(ctx, w.rt, second, "k3", "M-1", []store.TaskProposal{proposal("a", w.spec)})
+			_, e := store.ProposeTasks(ctx, w.rt, second, "k3", "M-1", []store.TaskProposal{proposal("a", w.impl)})
 			return e
 		},
 		"a plan change": func() error {

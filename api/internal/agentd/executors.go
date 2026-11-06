@@ -276,6 +276,9 @@ func codexExecutor(env []string, master, bin string) Executor {
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "-m", m)
 		}
+		// No FollowUp: codex exec resume (0.163 --help) has neither -s nor -C,
+		// so a resumed run would not have the workspace-write sandbox its
+		// confinement was proven with.
 		return Spawn{Argv: append(argv, Prompt(a)), Env: withEnv(own, "CODEX_HOME", home), Dir: a.Dir}, nil
 	}
 }
@@ -335,6 +338,9 @@ func cursorExecutor(env []string) Executor {
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
+		// No FollowUp: cursor-agent's --resume takes the first run's flags
+		// (2026.10.16 --help), but which field of its output names the chat,
+		// and whether --mode ask holds a resumed chat, are not measured.
 		return Spawn{Argv: append(argv, Prompt(a)), Env: own, Dir: a.Dir,
 			After: func() error {
 				return streamResultReport("cursor", a.root, a.Out)
@@ -407,30 +413,87 @@ func claudeExecutor(env []string) Executor {
 			}
 		}
 		own = withEnv(withEnv(withEnv(own, "CLAUDE_CONFIG_DIR", dir), "CLAUDE_CODE_TMPDIR", tmp), "DISABLE_AUTOUPDATER", "1")
-		argv := []string{"claude", "-p", "--output-format", "stream-json"}
-		for _, p := range claudePins {
-			argv = append(argv, p...)
-		}
-		argv = append(argv, claudeTools(writes)...)
-		if m := a.Claim.Tool.Model; m != "" {
-			argv = append(argv, "--model", m)
-		}
-		// The tool lists take every word that follows, and a prompt that begins
-		// with "-" is refused as an unknown option; "--" ends both (measured
-		// 10-15, claude 2.1.295; review 215 B1, B2).
-		return Spawn{Argv: append(argv, "--", Prompt(a)), Env: own, Dir: a.Dir,
+		return Spawn{Argv: claudeArgv(a), Env: own, Dir: a.Dir,
 			After: func() error {
 				return streamResultReport("claude", a.root, a.Out)
+			},
+			// The session is resumed with the same pins, tools, model and
+			// environment (its configuration directory holds the session):
+			// only --resume and the prompt differ (claude 2.1.302 --help).
+			FollowUp: func(prompt string) (Spawn, error) {
+				session, from, err := claudeSession(filepath.Join(a.Out, "log.txt"))
+				if err != nil {
+					return Spawn{}, err
+				}
+				a.resume = &resumed{Session: session, Prompt: prompt}
+				return Spawn{Argv: claudeArgv(a), Env: own, Dir: a.Dir,
+					After: func() error {
+						return streamResult("claude", a.root, a.Out, from, planReply)
+					}}, nil
 			}}, nil
 	}
+}
+
+// resumed is a run that goes on in an executor's session: the session's id
+// and what it is asked.
+type resumed struct{ Session, Prompt string }
+
+// claudeArgv is claude's command for an attempt, or for its follow-up in the
+// same session when a.resume is set.
+func claudeArgv(a *Attempt) []string {
+	argv := []string{"claude", "-p", "--output-format", "stream-json"}
+	for _, p := range claudePins {
+		argv = append(argv, p...)
+	}
+	argv = append(argv, claudeTools(claudeWriter(a))...)
+	if m := a.Claim.Tool.Model; m != "" {
+		argv = append(argv, "--model", m)
+	}
+	prompt := Prompt(a)
+	if a.resume != nil {
+		argv, prompt = append(argv, "--resume", a.resume.Session), a.resume.Prompt
+	}
+	// The tool lists take every word that follows, and a prompt that begins
+	// with "-" is refused as an unknown option; "--" ends both (measured
+	// 10-15, claude 2.1.295; review 215 B1, B2).
+	return append(argv, "--", prompt)
+}
+
+// sessionID is a session id as claude writes it, a UUID: nothing that could
+// read as an option.
+var sessionID = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+// claudeSession is the session claude's stream-json output in logPath names
+// (its init and result events carry session_id), the last one, and the log's
+// length now: what the session says from here on is the follow-up's.
+func claudeSession(logPath string) (string, int64, error) {
+	st, err := os.Lstat(logPath)
+	if err != nil {
+		return "", 0, err
+	}
+	var session string
+	if !eachJSON(logPath, func(_ []byte, ev map[string]any) {
+		if id, _ := ev["session_id"].(string); sessionID.MatchString(id) {
+			session = id
+		}
+	}) || session == "" {
+		return "", 0, errors.New("agentd: claude's output names no session")
+	}
+	return session, st.Size(), nil
 }
 
 // streamResultReport writes the result of a vendor's stream-json output (its last
 // result event) as the report. The output is read a line at a time and a
 // line over maxBody is skipped, never held (review 164 B1).
 func streamResultReport(vendor, root, out string) error {
+	return streamResult(vendor, root, out, 0, "report.md")
+}
+
+// streamResult is streamResultReport of what the log says from byte from on,
+// written to name.
+func streamResult(vendor, root, out string, from int64, name string) error {
 	logPath := filepath.Join(out, "log.txt")
-	f, err := openRegular(logPath, maxMeasured) // never waits on what the executor left in its place (review 274 A3)
+	f, err := openRegularFrom(logPath, from, maxMeasured) // never waits on what the executor left in its place (review 274 A3)
 	if err != nil {
 		return err
 	}
@@ -464,7 +527,7 @@ func streamResultReport(vendor, root, out string) error {
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	return writeOwn(r, "report.md", []byte(result))
+	return writeOwn(r, name, []byte(result))
 }
 
 // oneLine is s on one line, cut to at most max bytes without splitting a

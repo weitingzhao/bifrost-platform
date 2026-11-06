@@ -74,7 +74,7 @@ var bodies = map[string][]field{
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"question_id", kID, true}, {"answer", kStr, true}},
 	"mission_amended":         {{"reason", kStr, false}, {"success", kAny, true}, {"out_of_scope", kAny, true}, {"max_attempts", kInt, true}, {"max_wall_hours", kInt, true}, {"no_merge", kStr, true}, {"approval_id", kStr, true}, {"archive_manifest_sha256", kStr, true}, {"env", kStr, true}, {"expected_version", kInt, true}, {"version", kInt, true}},
 	"decision_recorded":       {{"decision", kStr, false}, {"why", kStr, false}, {"dropped", kStr, true}, {"reverse", kStr, true}},
-	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}},
+	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"failed", kBool, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
 	"route_decided":           {{"job", kStr, false}, {"candidates", kAny, false}, {"excluded", kAny, false}, {"inputs", kAny, false}, {"fingerprint", kStr, false}},
@@ -173,6 +173,9 @@ var bodies = map[string][]field{
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
 		{"landing_answer", kAny, true},
+		// full_ci: on the controller's stream, the daily full CI runs started
+		// and how a red one was handled (fullci.go).
+		{"full_ci", kAny, true},
 		// landing_gate: on a main_intent, what the live second gate decided
 		// on (landing_live.go, review 662 N-02): the rule version, the
 		// decision time, the quota day and the CI run.
@@ -217,6 +220,9 @@ var bodies = map[string][]field{
 		{"landing_refusal", kAny, true},
 		{"landing_floor", kAny, true},
 		{"landing_repo", kStr, true},
+		// landing_pusher: the Gitea username a push of main went as, beside
+		// its main_result (landing_live.go RecordPushResult).
+		{"landing_pusher", kStr, true},
 		// landing_disposed: the Owner counted a landed or in-main root as
 		// delivered or not, on its card (CUT §11.8 v3 item 4).
 		{"landing_disposed", kAny, true},
@@ -228,6 +234,10 @@ var bodies = map[string][]field{
 		// has reworked work landed, every change different, and the Owner's
 		// count_replaced on its card (landing_rework.go, R5:5.5-18).
 		{"landing_rework_seen", kAny, true}, {"landing_replaced", kAny, true},
+		// landing_batch / landing_batch_red: a batch of operations landed
+		// on one landing CI, and how a red one ended (landing_batch.go,
+		// R5:5.7 goal 2).
+		{"landing_batch", kAny, true}, {"landing_batch_red", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -641,6 +651,12 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_replaced" {
 		return badLandingReplaced(v)
+	}
+	if eventType == "note" && name == "landing_batch" {
+		return badLandingBatch(v)
+	}
+	if eventType == "note" && name == "landing_batch_red" {
+		return badLandingBatchRed(v)
 	}
 	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
 		return badLandingStop(name, v)

@@ -61,7 +61,7 @@ func reviewOpenPG(t *testing.T) (*b5Fixture, store.LandingSource) {
 	if !d.Allowed {
 		t.Fatal("original landing prerequisite", d)
 	}
-	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok")
+	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "landed", "R", commitB)))
 	x := b5StateFixture(t, w, root, op, at, false)
@@ -98,7 +98,7 @@ func reviewLandReversalPG(t *testing.T, x *b5Fixture, src store.LandingSource, p
 	if !d.Allowed {
 		t.Fatal("reversal authority", d)
 	}
-	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok")
+	_, err = store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "landed", "R", p)))
 	return root, op

@@ -23,24 +23,6 @@ const checkpointOf = `LEFT JOIN LATERAL (SELECT (e.body_json->>'checkpoint_seq')
 	    WHERE e.task_id = a.task_id AND e.attempt_id = a.attempt_id AND e.event_type = 'attempt_checkpointed'
 	    ORDER BY e.event_id DESC LIMIT 1) cp ON true`
 
-// keep records what of a's work is persisted: its result (persisted), its
-// last checkpoint (seq and at, nil for none) and, when its result is not
-// persisted, how long since anything of it was: since that checkpoint, or
-// since it started.
-func (a *ProgressAttempt) keep(persisted bool, seq *int64, at *time.Time, now time.Time) {
-	a.Persisted = persisted
-	a.LastCheckpointSeq = seq
-	since := a.started
-	if at != nil {
-		a.LastCheckpointAt = at.UTC().Format(time.RFC3339Nano)
-		since = *at
-	}
-	if !persisted && !since.IsZero() {
-		s := int64(now.Sub(since) / time.Second)
-		a.UnpersistedForS = &s
-	}
-}
-
 // notPersisted is what a reason adds for an attempt whose result is not
 // persisted, "" for one whose is.
 func notPersisted(a *ProgressAttempt) string {

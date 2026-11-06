@@ -62,7 +62,7 @@ export const cellStyle: Record<CellState, CSSProperties> = {
  * the step, a request its done rule names awaiting his decision.
  */
 export type HeldItem = {
-  kind: 'decision' | 'owner-decision' | 'grant' | 'signoff' | 'question' | 'request' | 'no-landing' | 'verify-failed'
+  kind: 'stopped' | 'decision' | 'owner-decision' | 'grant' | 'signoff' | 'question' | 'request' | 'no-landing' | 'verify-failed'
   text: string
 }
 /** The held items only the Owner moves: a step with any of them, and nothing running, Unknown or queued, waits on him. */
@@ -392,12 +392,13 @@ export function noRuleText(cell: Pick<StepCell, 'noRule' | 'step'>): string {
 
 const oneOrMany = (n: number, one: string, many: string) => n === 1 ? one : many
 /** Each kind of held item aloud, counted; and what moves it on, for the detail. */
-const HELD_ORDER: HeldItem['kind'][] = ['owner-decision', 'grant', 'signoff', 'question', 'request', 'decision', 'no-landing', 'verify-failed']
+const HELD_ORDER: HeldItem['kind'][] = ['owner-decision', 'grant', 'signoff', 'question', 'request', 'stopped', 'decision', 'no-landing', 'verify-failed']
 const HELD_SPOKEN: Record<HeldItem['kind'], (n: number) => string> = {
   'owner-decision': n => `${n} ${oneOrMany(n, 'task awaits', 'tasks await')} your decision`,
   signoff: n => `${n} acceptance ${oneOrMany(n, 'sign-off', 'sign-offs')} Ready for you`,
   question: n => `${n} open ${oneOrMany(n, 'question', 'questions')} for you`,
   request: n => `${n} ${oneOrMany(n, 'request awaits', 'requests await')} your decision`,
+  stopped: n => `${n} ${oneOrMany(n, 'task is', 'tasks are')} stopped`,
   decision: n => `${n} ${oneOrMany(n, 'task waits', 'tasks wait')} on a decision`,
   grant: n => `${n} ${oneOrMany(n, 'landing waits', 'landings wait')} for your grant`,
   'no-landing': n => `${n} accepted ${oneOrMany(n, 'task', 'tasks')} with no landing recorded`,
@@ -408,6 +409,7 @@ const HELD_MOVES: Record<HeldItem['kind'], string> = {
   signoff: 'an acceptance sign-off Ready is yours to give',
   question: 'an open question moves when you answer it (Needs you lists questions)',
   request: 'a request awaiting your decision moves when you approve or reject it (Needs you lists requests)',
+  stopped: 'only you can lift a stopped task',
   decision: 'a held task moves only when it is made ready again or cancelled',
   grant: 'a landing awaiting the grant waits on your grant (Needs you lists grants)',
   'no-landing': 'whether an accepted task lands the plan view does not say: it may never land',

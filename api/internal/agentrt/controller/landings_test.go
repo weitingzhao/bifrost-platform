@@ -23,7 +23,7 @@ func TestSlowMainDoesNotHoldUpDispatch(t *testing.T) {
 			return err
 		}
 		var err error
-		if spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# t\n")); err != nil {
+		if spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", implSpec(t)); err != nil {
 			return err
 		}
 		evidence, err = store.PutArtifact(ctx, tx, "controller", "report", "text/plain", []byte("pass\n"))

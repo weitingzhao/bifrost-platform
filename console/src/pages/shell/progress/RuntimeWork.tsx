@@ -10,7 +10,7 @@ import { TaskTimeline } from '../agents/TaskTimeline'
 function State({ state, status }: { state: string; status?: string }) {
   const value = ['failed', 'blocked', 'lost'].includes(state) || status === 'blocked' ? 'fail'
     : ['accepted', 'done', 'running'].includes(state) ? 'ok' : 'unknown'
-  return <span className="inline-flex items-center gap-1"><StatusLamp value={value} />{state || 'Unknown'}{status && ` / ${status}`}</span>
+  return <span className="inline-flex items-center gap-1"><StatusLamp value={value} />{state === 'stopped' ? 'Stopped' : state || 'Unknown'}{state !== 'stopped' && status && ` / ${status}`}</span>
 }
 export function TaskRow({ mission, task }: { mission: string; task: RuntimeTask }) {
   const [open, setOpen] = useState(['running', 'awaiting_owner', 'waiting_owner'].includes(task.state) || task.status === 'waiting_owner')
@@ -19,10 +19,10 @@ export function TaskRow({ mission, task }: { mission: string; task: RuntimeTask 
       className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-2 text-left text-sm">
       <span>{open ? '▾' : '▸'} {task.role || 'Unknown role'}</span>
       <strong>{task.title || task.task_id || 'Untitled task'}</strong>
-      <State state={task.state} status={task.status} />
+      <State state={task.withdrawn_by ? 'Withdrawn' : task.status === 'stopped' || task.stopped ? 'stopped' : task.state} status={task.withdrawn_by ? undefined : task.status} />
       <span>Round {task.round_no ?? '?'}/{task.max_rounds ?? '?'}</span>
       <span className="break-all text-xs text-muted-foreground">{task.task_id}</span>
-      <span className="w-full break-words">{task.reason || 'No reason reported'} · Since {task.since || 'unknown'}</span>
+      <span className="w-full break-words">{task.withdrawn_by ? `Withdrawn by ${task.withdrawn_by}: ${task.withdraw_reason || 'No reason reported'}` : task.stopped ? `stopped by ${task.stopped.by}: ${task.stopped.reason}; only the Owner can lift it` : task.status === 'stopped' || task.state === 'stopped' ? `${task.reason || 'No reason reported'}; only the Owner can lift it` : task.reason || 'No reason reported'} · Since {task.since || 'unknown'}</span>
     </button>
     {(task.state === 'awaiting_owner' || task.status === 'waiting_owner') && <a href={NEEDS_YOU_HREF} className="text-sm underline">Waiting for you · See For you</a>}
     {open && <TaskTimeline mission={mission} task={task.task_id} finished={['accepted', 'cancelled', 'rejected', 'failed'].includes(task.state)} />}

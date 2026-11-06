@@ -244,6 +244,17 @@ func (g *Git) Open(ctx context.Context, commit string) (w *Workspace, err error)
 	}
 	return w, nil
 }
+
+// Fetch brings commit into the workspace: a batch replays several results
+// in one workspace, each on the one before.
+func (w *Workspace) Fetch(ctx context.Context, commit string) error {
+	if !fullSHA.MatchString(commit) {
+		return errors.New("invalid commit SHA")
+	}
+	_, err := w.git.run(ctx, w.dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", commit)
+	return err
+}
+
 func (w *Workspace) local(ctx context.Context, args ...string) (string, error) {
 	return w.git.run(ctx, w.dir, false, nil, nil, args...)
 }

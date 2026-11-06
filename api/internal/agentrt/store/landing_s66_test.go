@@ -334,7 +334,7 @@ func TestS66T50SharedQuotaDualRemotePG(t *testing.T) {
 				if out != landinggit.PushOK {
 					t.Fatal("push failed", repo, out)
 				}
-				_, err = store.RecordPushResult(ctx, w.rt, r.auth, "ok")
+				_, err = store.RecordPushResult(ctx, w.rt, r.auth, "ok", "agentrt-lander")
 				ok(t, err)
 			}
 			q := landingState(t, w, "landing-quota:dev:"+at.Add(2*time.Minute).Format("2006-01-02"))

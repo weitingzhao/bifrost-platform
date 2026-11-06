@@ -572,7 +572,8 @@ func lockNotAvailable(err error) bool {
 // ProposeTasks records a batch of tasks of one mission in one transaction:
 // every task_proposed, then every dependency. Any task that does not fit
 // (the checks above, the mission's state and max_action, the spec being a
-// task_spec artifact, and every guard of the database: the step's mission,
+// task_spec artifact, an implementation's being one agentd can check
+// (checkImplementSpecs), and every guard of the database: the step's mission,
 // a dependency cycle) leaves nothing of the batch. Tasks start proposed; the
 // dispatch pass makes them ready. A mission that stops while the batch is
 // written keeps it proposed: dispatch only readies tasks of active missions.
@@ -599,6 +600,9 @@ func proposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, t
 	return idempotentAs(ctx, db, w, "missions/"+missionID+"/tasks", key, batchRequest(missionID, tasks), nil,
 		func(tx pgx.Tx) (map[string]any, error) {
 			if err := ensureWriter(ctx, tx, w, true); err != nil {
+				return nil, err
+			}
+			if err := checkImplementSpecs(ctx, tx, tasks, nil); err != nil {
 				return nil, err
 			}
 			return proposeTasksTx(ctx, tx, w, missionID, tasks)
@@ -669,7 +673,7 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 			SpecArtifact: specID, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
 			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}
 		if pinned {
-			task.pin, task.viaSession, task.providers = p.pins[t.Ref], p.viaSession, p.providers[t.Ref]
+			task.pin, task.viaSession, task.providers, task.pinReason = p.pins[t.Ref], p.viaSession, p.providers[t.Ref], p.reasons[t.Ref]
 		}
 		if _, err := ProposeTask(ctx, tx, w.Actor, task); err != nil {
 			return nil, err

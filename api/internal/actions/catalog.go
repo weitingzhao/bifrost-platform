@@ -465,16 +465,26 @@ var catalog = []Action{
 		Description: "Grant one waiting landing operation of the agent runtime (a pinned coordinator commit whose only failures are soft guardrails) the push to main by the lander identity. " +
 			"Tier D: only the Owner approves on the Console, with the approval number confirmed. Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
 			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release} as handin.sh status prints them: op must be the root's latest operation, waiting for a grant, and material_digest the server's own recomputation of its material (GET /api/v1/agentrt/landing/{op}/material). " +
-			"The approval writes a grant valid 24 hours from the decision; the final gate pushes only if every unwaivable check passes then and the rule in force then fails nothing beyond what was waived. A core (hard_core) change takes approve_core_landing instead. stg_release true also authorizes the commit to go to STG with the B5 batch. " +
+			"The approval writes a grant valid 24 hours from the decision; the final gate pushes only if every unwaivable check passes then and the rule in force then fails nothing beyond what was waived. A change under a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) takes approve_core_landing instead. Other former core paths land on a green landing CI. stg_release true also authorizes the commit to go to STG with the B5 batch. " +
 			"The Owner may revoke the grant before the push (POST /api/v1/agentrt/landing/grants/{grant_id}/revoke).",
 		Params: landingGrantParams,
 	},
 	{
 		ID: "approve_core_landing", Tier: TierD,
-		Description: "Trusted core change: grant one waiting landing operation whose commit changes approval, identity or landing-gate code (hard_core) the push to main by the lander identity; later approvals are handled by the new code. " +
+		Description: "Permission path change: grant one waiting landing operation whose commit changes a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) the push to main by the lander identity; later approvals are handled by the new code. Other former core paths land on a green landing CI. " +
 			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}; the review must have answered the trust chain questions. The grant also waives the change's soft failures, is valid 24 hours from the decision, and can be revoked before the push. " +
+			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant also waives the change's soft failures, is valid 24 hours from the decision, and can be revoked before the push. " +
 			"hard_absolute paths (.env*, .gitmodules, .github/) are never granted.",
+		Params: landingGrantParams,
+	},
+	{
+		ID: "approve_floor_landing", Tier: TierD,
+		Description: "Infra floor change: grant one waiting bifrost-trade-infra landing operation whose files are all floor-grantable (k8s/**, scripts/**, docker/**, config/**, Makefile, docker-compose*.yml, mkdocs.yml, requirements*.txt, .gitignore, agent-config/** outside agent-config/work/, OWNER-STEPS-*, *RUNBOOK*, TICKET-*, REQUEST-*, RULE-*) the push to infra main by agentrt-lander, once, fast-forward only. " +
+			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-trade-infra. " +
+			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant pins R, M0 and floor_paths: each file's path, the floor entry it matched and the sha256 of its bytes at R (GET /api/v1/agentrt/landing/{op}/material). " +
+			"Just before the push the final gate checks again that the grant is unexpired, unrevoked and unused, main is still M0 and R's only parent, infra CI (bifrost-ci-infra) is green on R, the release window is not held, and M0..R recomputed from Git changes exactly those files with the same sha256 and nothing else; a changed byte, an extra or missing file or a never-grantable path spends the grant and nothing is pushed. " +
+			"Never-grantable paths (.env*, .github/, .gitea/, .gitmodules, .gitattributes, AGENTS.md, CLAUDE.md, SKILL.md, *.mdc, .claude/, .cursor/, .codex/, .vscode/, .idea/, *.code-workspace), a k8s file declaring kind: Secret, deletions, renames and more than 5 files or 1500 lines are refused and cannot be granted. " +
+			"The grant is valid 24 hours from the decision, used once, and can be revoked before the push. It writes Git only: a cluster write is separate (an Argo sync of infra main, or apply_manifest for a path Argo does not track).",
 		Params: landingGrantParams,
 	},
 	{
@@ -535,7 +545,7 @@ func classifyApp(_ context.Context, params map[string]any) Tier {
 	return TierB
 }
 
-// landingGrantParams are the two landing grant actions' closed parameters
+// landingGrantParams are the landing grant actions' closed parameters
 // (coordinator v3 §5.6 item 1).
 var landingGrantParams = []Param{
 	{Name: "env", Type: "string", Required: true, In: "body"},

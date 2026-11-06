@@ -85,11 +85,22 @@ type API struct {
 	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
 	// leaves it out and says why in the warnings.
 	Sessions func(context.Context) (any, error)
+	// PinReason is what an implement task pinned to the coordinator without
+	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
+	PinReason store.PinReasonMode
 	// Back is when this API's runtime routes became ready, the server's
 	// record of it: GET /hosts and /progress count a host's silence from no
 	// earlier, the API taking agentd's calls only since then (review 528
 	// A1b). nil counts from the host's contact alone.
 	Back func() time.Time
+}
+
+// pinReason is PinReason, warn when unset.
+func (a *API) pinReason() store.PinReasonMode {
+	if a.PinReason == "" {
+		return store.PinReasonWarn
+	}
+	return a.PinReason
 }
 
 // back is Back, or the zero time.
@@ -173,6 +184,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/missions", a.proposeMission)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)
 		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
+		r.With(propose, cfg).Post("/tasks/withdraw", a.withdrawTasks)
 		r.With(propose, cfg).Post("/goals", a.proposeGoal)
 		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
@@ -187,6 +199,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
 		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
+		r.With(read, cfg).Get("/pin-share", a.getPinShare)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
 		r.With(external, cfg).Post("/external-work", a.registerExternalWork)
 		r.With(external, cfg).Post("/external-work/{id}/events", a.postExternalEvent)

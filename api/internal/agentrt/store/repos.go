@@ -23,8 +23,12 @@ import (
 // executor's and a check's, a throwaway Postgres and Redis of their own for
 // the tests that need them (agentd testdb.go, TD-403); agentd reads it from
 // this table, so the spec carries nothing an older agentd would refuse.
+// HandIn are the fast commands an executor runs before it hands in, from the
+// repository root: what its sandbox, which cannot open local sockets, can run
+// in a minute or two; Verify still runs in full on the commit (HandInChecks).
 type Repo struct {
 	Verify   [][]string
+	HandIn   [][]string
 	TestDirs []string
 	Setup    [][]string
 	Siblings []Sibling
@@ -84,6 +88,11 @@ var Repos = map[string]Repo{
 			{"npm", "--prefix", "console", "test"},
 			{"npm", "--prefix", "console", "run", "build"},
 		},
+		HandIn: [][]string{
+			{"go", "-C", "api", "build", "./..."},
+			{"go", "-C", "api", "vet", "./..."},
+			{"npm", "--prefix", "console", "run", "lint"},
+		},
 		TestDirs: []string{"api"},
 		Setup: [][]string{
 			{"go", "-C", "api", "mod", "download"},
@@ -96,6 +105,7 @@ var Repos = map[string]Repo{
 	},
 	"bifrost-trade-infra": {
 		Verify: [][]string{{"sh", "-c", infracheck.Check()}},
+		HandIn: [][]string{{"sh", "-c", infracheck.Check()}},
 		Setup:  infracheck.Setup(""),
 	},
 }
@@ -135,16 +145,45 @@ func RepoNames() []string {
 // its commands.
 const SpecTimeoutS = 900
 
+// noTestDB is what a plan's own check runs under before an executor hands
+// it in: no test database, so the tests that need one skip. agentd's
+// testdb.go sets these for an executor too, with AGENTRT_TEST_REQUIRED=1,
+// which would make those tests fail instead.
+var noTestDB = []string{"env", "AGENTRT_TEST_PG=", "AGENTRT_TEST_REDIS=", "AGENTRT_TEST_REQUIRED=0"}
+
+// HandInChecks are the commands an implementation's executor runs before it
+// hands in: the repository's HandIn first, then each of the plan's own
+// checks (go -C <dir> test ..., as checkTest admits) run without the test
+// databases; no command twice. The full list, the spec's verify, runs on the
+// commit.
+func HandInChecks(repo Repo, own [][]string) [][]string {
+	out := slices.Clone(repo.HandIn)
+	for _, c := range own {
+		if len(c) >= 4 && c[0] == "go" && c[1] == "-C" && c[3] == "test" {
+			c = append(slices.Clone(noTestDB), c...)
+		}
+		if !slices.ContainsFunc(out, func(v []string) bool { return slices.Equal(v, c) }) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // ImplementSpec is the task spec agentd runs for an implementation: what to
 // do, the house rules and the checks, as canonical JSON (agentd's ParseSpec),
 // with the repository's siblings and setup when it has them. verify holds the
-// repository's own checks first; a plan may add more.
-func ImplementSpec(title, text string, repo Repo, verify [][]string) ([]byte, error) {
+// repository's own checks first; a plan may add more. handIn is what the
+// executor is told to run before it hands in (HandInChecks); verify is what
+// runs on its commit.
+func ImplementSpec(title, text string, repo Repo, verify, handIn [][]string) ([]byte, error) {
 	if len(verify) == 0 {
 		return nil, errors.New("store: an implementation without checks")
 	}
+	if len(handIn) == 0 {
+		return nil, errors.New("store: an implementation without hand-in checks")
+	}
 	var cmds, setup strings.Builder
-	for _, c := range verify {
+	for _, c := range handIn {
 		cmds.WriteString("    " + shellLine(c) + "\n")
 	}
 	for _, c := range repo.Setup {
@@ -155,7 +194,9 @@ func ImplementSpec(title, text string, repo Repo, verify [][]string) ([]byte, er
 		"- Change what the task needs in this repository and nothing else.\n" +
 		installed(setup.String()) +
 		"- Before you hand in, run from the repository root:\n\n" + cmds.String() + "\n" +
-		"  The platform runs the same commands on your commit; a failing one sends the work back.\n" +
+		"  These are quick checks. Tests that need a database skip here; that is expected.\n" +
+		"  The platform runs the repository's full checks on your commit (the spec's verify: the Console's tests\n" +
+		"  and build and the package tests, with their databases); a failing one sends the work back.\n" +
 		"- If the task is unclear or too big for one change, do the part you can and say in your report what is left and why.\n" +
 		"- Your report says what you changed, what you ran and how it ended, and what you could not do.\n"
 	list := make([]any, 0, len(verify))

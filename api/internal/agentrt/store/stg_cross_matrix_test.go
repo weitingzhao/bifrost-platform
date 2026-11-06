@@ -256,8 +256,10 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 			}
 			external := b5hObservation(t, delivery.NamedDeliverInput{Batch: 901, Try: 1, IntentSeq: 1, P: x.p, U: commitA, Infra: commitA}, "Succeeded", "external-uid", "d", "f")
 			x.runs.observations[external.Identity.UID] = external
+			x.manual(external.Run)
 			x.runs.external = []*unstructured.Unstructured{external.Run}
 			x.runs.work = b5hWork("d", "f")
+			manual := x.waitManual(t) // only a block a manual run lifts makes ExternalPass read runs
 			if externalFirst {
 				ok(t, x.c.ExternalPass(ctx))
 				ok(t, x.c.CoverPass(ctx))
@@ -275,13 +277,19 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 			s := x.state(t)
 			tr := s.Batches[b5Batch].Tries[1]
 			m := store.StgMemberKey{Root: x.root, Op: x.op, R: x.p}
-			if tr.Verify.Record.String("why") != "wrong_input" || len(s.Blocks) != 1 || len(s.Covers) != 1 || b5hCount(s, "settled") != 1 || b5hCount(s, "member") != 1 || s.Members[m].To != "covered" || s.Budget[store.StgBudgetKey{R: x.p, Gen: 1}] != 1 || tr.Bound.Record.String("uid") != uid || x.runs.creates != 1 || len(x.runs.uids) != 1 {
+			if tr.Verify.Record.String("why") != "wrong_input" || len(s.Blocks) != 2 || len(s.Covers) != 1 || b5hCount(s, "settled") != 1 || b5hCount(s, "member") != 1 || s.Members[m].To != "covered" || s.Budget[store.StgBudgetKey{R: x.p, Gen: 1}] != 1 || tr.Bound.Record.String("uid") != uid || x.runs.creates != 1 || len(x.runs.uids) != 1 {
 				t.Fatal("external coverage erased verification or block", s.Blocks, tr.Verify)
 			}
-			for _, block := range s.Blocks {
-				if block.Opened.Record.String("why") != "wrong_input" || !block.IsOpen() {
+			for id, block := range s.Blocks {
+				if id != manual && (block.Opened.Record.String("why") != "wrong_input" || !block.IsOpen()) {
 					t.Fatal(block)
 				}
+			}
+			// With the batch closed, the external run lifts the manual block.
+			ok(t, x.c.Pass(ctx))
+			s = x.state(t)
+			if b := s.Blocks[manual]; b.IsOpen() || b.Closed.Record.String("why") != "external_release" || b.Closed.Record.String("ref") != "cluster/cicd/external-uid" {
+				t.Fatal("manual block", b.Closed.Record)
 			}
 			before := s.LastSeq
 			for range 3 {

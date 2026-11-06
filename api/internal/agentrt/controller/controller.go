@@ -140,6 +140,7 @@ type Controller struct {
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
+	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
 }
 
 // PlanObserveEvery is how often the plan completion atoms' sources are read
@@ -434,33 +435,36 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 // §5.2 「验收编排」): an answered card gives its task one more round, drops
 // it or closes its mission (store.DecideBlocked), a task that landed in a
 // mission after the Owner closed it is cancelled (store.CancelAfterClose),
-// the open cards of missions
-// that have ended are withdrawn, and so are cards asked before the third
-// option (store.WithdrawStaleCards: the other cards of a mission closed on a
-// card, so their places in the question store are free for this pass), a
-// ready task no executor may take any more (store.BlockWithdrawn, TD-395)
-// and one its mission's budget no longer lets run
-// are blocked with the reason (store.BlockOverBudget, TD-384; the pass first
-// grows the budget a round at a time up to the rule's auto_grant cap, so only
-// a mission past the cap gets a card), then every
-// blocked task that needs a card and has none open gets one
+// the pending checks of a stopped task are cancelled, as they can never be
+// used (store.CloseStoppedChecks), the open cards of missions that have
+// ended are withdrawn, and so are those of such checks, of tasks no longer
+// blocked and cards asked before the third option (store.WithdrawStaleCards:
+// the other cards of a mission closed on a card, so their places in the
+// question store are free for this pass), a ready task no executor may take
+// any more (store.BlockWithdrawn, TD-395) and one its mission's budget no
+// longer lets run are blocked with the reason (store.BlockOverBudget,
+// TD-384; the pass first grows the budget up to the rule's auto_grant cap,
+// and a check of a stopped task is closed before, never blocked for budget),
+// then every blocked task that needs a card and has none open gets one
 // (store.AskBlocked), the tasks blocked before this pass included. Without a
 // question store there are no cards, and nothing is blocked for want of
 // budget (no answer could release it). It returns how many cards it closed,
-// withdrew and asked and how many tasks it blocked.
+// withdrew and asked and how many tasks it cancelled and blocked.
 func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil || c.Sources.Ask == nil {
 		return 0, nil
 	}
 	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
 	late, lerr := store.CancelAfterClose(ctx, c.DB)
+	// Before the withdrawals, so their cards are withdrawn in this pass.
+	moot, merr := store.CloseStoppedChecks(ctx, c.DB)
 	withdrawn, werr := store.WithdrawStaleCards(ctx, c.DB, c.question, c.boundedWithdraw())
 	// Withdrawn before budget: a task nobody may take is blocked for that,
 	// not given budget on a card first (R3) only to be blocked again.
 	gone, gerr := store.BlockWithdrawn(ctx, c.DB)
 	spent, serr := store.BlockOverBudget(ctx, c.DB)
 	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + late + withdrawn + gone + spent + asked, errors.Join(derr, lerr, werr, gerr, serr, aerr)
+	return decided + late + moot + withdrawn + gone + spent + asked, errors.Join(derr, lerr, merr, werr, gerr, serr, aerr)
 }
 
 // CardRuleEvery is how often the cards are answered by rule: a loop of its
@@ -638,12 +642,10 @@ func (c *Controller) Activate(ctx context.Context) (int, error) {
 // tasks whose job's candidates changed, acceptance, blocked tasks' cards (a
 // task blocked by acceptance gets its card in the same pass), dispatch of
 // proposed tasks, the closing of missions whose goal is done, plan decisions, the
-// steps whose work has started, then rules, so a change seen or a task
-// accepted is
-// evaluated at once, a task whose last dependency was just accepted is
-// ready in the same pass, and a step a decision added is evaluated with it;
-// last, the waits past their limit (Waits), read after the pass moved what
-// it moves.
+// steps whose work has started, then rules, so a change seen or a task accepted
+// is evaluated at once, a task whose last dependency was just accepted is ready
+// in the same pass, and a step a decision added is evaluated with it; last, the
+// waits past their limit (Waits), read after the pass moved what it moves.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -764,37 +766,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.startFullCI(ctx, &wg)
 	return wg.Wait
-}
-
-func (c *Controller) every(ctx context.Context, wg *sync.WaitGroup, name string, d time.Duration, pass func() error) {
-	wg.Add(1)
-	safego.Go(name, func() {
-		defer wg.Done()
-		t := time.NewTicker(d)
-		defer t.Stop()
-		var run failureRun // the loop's failures in a row (loopalert.go, TD-411)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
-			var err error
-			start := time.Now()
-			completed := safego.Do(name, func() {
-				if err = pass(); err != nil && ctx.Err() == nil {
-					c.logf("%s: %v", name, err)
-				}
-			})
-			c.slow(slowPassLog, start, "%s: pass", name)
-			if !completed {
-				c.logf("%s: a pass panicked; the loop goes on", name)
-				err = errPanicked
-			}
-			if ctx.Err() == nil {
-				c.track(ctx, name, &run, err)
-			}
-		}
-	})
 }

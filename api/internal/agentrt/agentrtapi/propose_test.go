@@ -14,6 +14,16 @@ import (
 
 const session = "X-Bifrost-Session"
 
+// implSpec is an implementation's spec in bifrost-platform as a plan's is
+// (store.ImplementSpec): one a proposal takes (R5:5.7-8).
+func implSpec(t *testing.T, text string) []byte {
+	t.Helper()
+	r := store.Repos["bifrost-platform"]
+	b, err := store.ImplementSpec("t", text, r, r.Verify, store.HandInChecks(r, nil))
+	must(t, err)
+	return b
+}
+
 // Proposing a mission over HTTP: who may, who it is recorded as, a retry and
 // a reused key, and refusals with their reasons.
 func TestProposeMissionRoute(t *testing.T) {
@@ -110,7 +120,7 @@ func TestProposeMissionRoute(t *testing.T) {
 func TestProposeTasksRoute(t *testing.T) {
 	pool, existing := world(t)
 	s := server(t, pool)
-	spec := []byte("# implement x\n")
+	spec := implSpec(t, "# implement x\n")
 	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("an operator uploads a spec: %d %v", code, out)
 	}
@@ -223,7 +233,7 @@ func TestUploadAttribution(t *testing.T) {
 func TestHardLimitBounds(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
-	spec := []byte("# spec\n")
+	spec := implSpec(t, "# spec\n")
 	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("spec: %d %v", code, out)
 	}
@@ -263,7 +273,7 @@ func TestHardLimitBounds(t *testing.T) {
 func TestBusyIs503(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
-	spec := []byte("# busy\n")
+	spec := implSpec(t, "# busy\n")
 	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("spec: %d %v", code, out)
 	}
@@ -286,7 +296,7 @@ func TestBusyIs503(t *testing.T) {
 func TestProposeAgainAfterCancel(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
-	spec := []byte("# again\n")
+	spec := implSpec(t, "# again\n")
 	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("spec: %d %v", code, out)
 	}
@@ -372,7 +382,7 @@ func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
 		return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test")
 	}))
 	const seat = "seat:chief_of_staff"
-	spec := []byte("# the seat's task\n")
+	spec := implSpec(t, "the seat's task")
 	if code, out := call(t, s, seat, "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec"); code != http.StatusOK {
 		t.Fatalf("the seat uploads a spec: %d %v", code, out)
 	}
@@ -409,5 +419,50 @@ func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
 	  WHERE t.task_id = $1`, id, seat).Scan(&by, &evBy, &keys))
 	if by != seat || evBy != seat || keys != 1 {
 		t.Fatalf("the seat's task is recorded as %s, its event as %s; %d keys of the seat's", by, evBy, keys)
+	}
+}
+
+// R5:5.7-8: an implementation proposed with a spec agentd cannot check (as
+// M-308's six markdown specs were) is refused with 422, naming the task and
+// what is missing, and the batch writes nothing; a plan's markdown spec is
+// taken as before.
+func TestProposeRefusesAnImplementSpecWithoutChecksRoute(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	put := func(spec []byte) string {
+		t.Helper()
+		if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
+			t.Fatalf("spec: %d %v", code, out)
+		}
+		return artifactID(spec)
+	}
+	task := func(ref, spec string) map[string]any {
+		return map[string]any{"ref": ref, "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": ref,
+			"spec_artifact_id": spec, "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}
+	}
+	good := put(implSpec(t, "the change"))
+	for name, c := range map[string]struct{ spec, has string }{
+		"markdown":  {"# implement x\n", "task a: spec %s lacks verify"},
+		"no verify": {`{"text":"implement x"}`, "task a: spec %s lacks verify"},
+		"no setup":  {`{"text":"implement x","verify":[["go","-C","api","build","./..."]]}`, "task a: spec %s lacks setup"},
+	} {
+		bad := put([]byte(c.spec))
+		code, out := call(t, s, "operator", "POST", "missions/M-1/tasks",
+			map[string]any{"idempotency_key": "r-" + name, "tasks": []any{task("fine", good), task("a", bad)}}, session, "s1")
+		if code != http.StatusUnprocessableEntity || out["error"] != "invalid" || !strings.Contains(out["message"].(string), fmt.Sprintf(c.has, bad)) {
+			t.Errorf("%s: %d %v", name, code, out)
+		}
+	}
+	var n int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE created_by_actor_id = 'thread:s1'`).Scan(&n))
+	if n != 0 {
+		t.Fatalf("refused batches wrote %d tasks", n)
+	}
+	plan := map[string]any{"ref": "p", "off_plan_reason": "think first", "role": "plan", "task_class": "goal", "title": "p",
+		"spec_artifact_id": put([]byte("# plan it\n")), "effect_class": "none"}
+	code, out := call(t, s, "operator", "POST", "missions/M-1/tasks",
+		map[string]any{"idempotency_key": "k1", "tasks": []any{task("a", good), plan}}, session, "s1")
+	if code != http.StatusOK || len(out["tasks"].([]any)) != 2 {
+		t.Fatalf("an ImplementSpec implementation and a markdown plan: %d %v", code, out)
 	}
 }

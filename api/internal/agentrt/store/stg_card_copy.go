@@ -51,6 +51,9 @@ func stgCardBody(repo string, tr CardTrigger) string {
 		if tr.Sent != nil {
 			lines = append(lines, stgSentBlockLines(tr)...)
 		}
+		if line := stgCIScopeLine(tr); line != "" {
+			lines = append(lines, line)
+		}
 		lines = append(lines, "Noting that you will release STG manually leaves this block in place and authorizes no release. Remind later asks again in 24 hours if it still applies.")
 		if tr.Batch != "" {
 			lines = append(lines, "Accepting unreconciled risk closes this quarantine and releases its execution slot. It does not claim the run was reconciled or delivered, refund attempts, or start a release.")
@@ -80,6 +83,28 @@ func stgSentBlockLines(tr CardTrigger) []string {
 		fmt.Sprintf("P is already on STG: B5 sent it in batch %s, try %d, run %s, on an earlier green platform CI of the same commit. The platform CI run %s of P, which had no verdict when B5 sent it (still running, or not yet created), %s afterwards. STG keeps running P; nothing was rolled back.", unknown(sent.String("batch")), sent.Int("try"), unknown(sent.String("run")), unknown(sent.String("ci_run")), verdict),
 		"Automatic STG release stays stopped until P has a newer green platform CI that ran the full API tests: rerun the platform CI (bifrost-ci-platform) for revision P. Neither a green CI of a later commit nor a manual STG release lifts this block; you can still release STG by hand meanwhile.",
 	}
+}
+
+// stgCIScopeLine says, for a CI block, which CI scope decided P and how old
+// the last full green was when B5 blocked: an incremental green stands for P
+// only while that full green is within the cap.
+func stgCIScopeLine(tr CardTrigger) string {
+	if tr.CIScope == nil {
+		return ""
+	}
+	c := StgRecord(tr.CIScope)
+	scope := c.String("scope")
+	if scope == "" {
+		scope = "none yet"
+	}
+	line := fmt.Sprintf("Platform CI scope of P: %s.", scope)
+	if c.Int("stale") > 0 {
+		line += fmt.Sprintf(" %d incremental green CI run(s) of P set aside.", c.Int("stale"))
+	}
+	if c.Int("last_full_age_h") < 0 || c.String("last_full_run") == "" {
+		return line + fmt.Sprintf(" No full CI green found; an incremental green counts only while the last full green is at most %d h old (cap %d h).", c.Int("cap_h"), c.Int("cap_h"))
+	}
+	return line + fmt.Sprintf(" Last full CI green %d h ago (run %s, commit %s), cap %d h.", c.Int("last_full_age_h"), c.String("last_full_run"), c.String("last_full_commit"), c.Int("cap_h"))
 }
 
 func stgCardNextStep(v LandingCardView) string {

@@ -7,12 +7,15 @@ import (
 	"errors"
 	"os"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // CandidatePatch is the Git half of a landing grant's material (coordinator
 // v3 §5.6 item 3): the full patch M0..R and its sha256, the patch shown to
 // the Owner (cut at ShownLimit bytes), and whether R's patch is A's (stable
-// patch-id of M0..R against A's own parent..A). It is read with the
+// patch-id of M0..R against A's own parent..A; for a batch's R, of M0 to the
+// stack's first commit, the lead's own). It is read with the
 // environment's Git identity in a temporary clone that is removed after.
 type CandidatePatch struct {
 	SHA256    string
@@ -47,17 +50,22 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 		"+refs/heads/main:refs/remotes/origin/main", a, r); err != nil {
 		return out, err
 	}
-	// R's parent must be M0: the patch shown is exactly what main receives.
-	parents, err := g.run(ctx, dir, false, nil, nil, "rev-list", "--parents", "-n", "1", r)
+	// R is one commit on M0, or a batch's stack of at most BatchMax single
+	// commits on M0 whose first is the lead's (landing.BatchMax): the patch
+	// shown is exactly what main receives, M0..R.
+	first, err := stackOn(ctx, g, dir, m0, r)
 	if err != nil {
 		return out, err
-	}
-	if p := strings.Fields(parents); len(p) != 2 || p[1] != m0 {
-		return out, errors.New("R is not one commit on M0")
 	}
 	patch, err := g.run(ctx, dir, false, nil, nil, "diff", "--no-ext-diff", "--no-textconv", "--binary", m0, r, "--")
 	if err != nil {
 		return out, err
+	}
+	own := patch
+	if first != r {
+		if own, err = g.run(ctx, dir, false, nil, nil, "diff", "--no-ext-diff", "--no-textconv", "--binary", m0, first, "--"); err != nil {
+			return out, err
+		}
 	}
 	original, err := g.run(ctx, dir, false, nil, nil, "diff", "--no-ext-diff", "--no-textconv", "--binary", a+"^", a, "--")
 	if err != nil {
@@ -68,12 +76,34 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 	if err != nil {
 		return out, err
 	}
-	y, err := g.run(ctx, dir, false, []byte(patch), nil, "patch-id", "--stable")
+	y, err := g.run(ctx, dir, false, []byte(own), nil, "patch-id", "--stable")
 	if err != nil {
 		return out, err
 	}
 	out.Match = len(strings.Fields(x)) > 0 && len(strings.Fields(y)) > 0 && strings.Fields(x)[0] == strings.Fields(y)[0]
 	return out, nil
+}
+
+// stackOn is the first commit of R on M0: R itself when R is one commit on
+// M0, else the bottom of a stack of at most landing.BatchMax commits, each of
+// one parent, from M0 up to R (a batch, landing/batch.go).
+func stackOn(ctx context.Context, g *Git, dir, m0, r string) (string, error) {
+	at := r
+	for range landing.BatchMax {
+		parents, err := g.run(ctx, dir, false, nil, nil, "rev-list", "--parents", "-n", "1", at)
+		if err != nil {
+			return "", err
+		}
+		p := strings.Fields(parents)
+		if len(p) != 2 {
+			break
+		}
+		if p[1] == m0 {
+			return at, nil
+		}
+		at = p[1]
+	}
+	return "", errors.New("R is not one commit on M0, nor a batch's stack on it")
 }
 
 // patchEvidence is the digest of the whole patch and what of it is shown:

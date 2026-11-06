@@ -156,9 +156,9 @@ func Run(ctx context.Context, cfg *rest.Config, httpClient *http.Client, o Optio
 			return "", err
 		}
 		if _, err = evidence.Record(); err != nil {
-			return "", fmt.Errorf("exact latest CI: status=%s reason=%s", evidence.Status, evidence.Reason)
+			return "", fmt.Errorf("exact latest CI: status=%s reason=%s stale=%v %s", evidence.Status, evidence.Reason, evidence.Stale, evidence.ScopeNote())
 		}
-		return fmt.Sprintf("name=%s UID=%s P=%s U=%s infra=%s", evidence.Run, evidence.UID, evidence.PlatformCommit, evidence.UICommit, evidence.InfraCommit), nil
+		return fmt.Sprintf("name=%s UID=%s P=%s U=%s infra=%s %s", evidence.Run, evidence.UID, evidence.PlatformCommit, evidence.UICommit, evidence.InfraCommit, evidence.ScopeNote()), nil
 	})
 	check("run_and_task_evidence", func() (string, error) {
 		if o.Sample == "" || o.SampleUID == "" {

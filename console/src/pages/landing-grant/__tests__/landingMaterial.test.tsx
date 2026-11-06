@@ -25,6 +25,19 @@ describe('C-6 authorization material', () => {
     expect(screen.getByRole('link', { name: /Compare M0/ }).getAttribute('href')).toBe(wire.core.material.compare_url)
     expect(screen.getByRole('region', { name: 'Patch' }).textContent).toContain('+line')
   })
+  it('names every member of the batch a waiting lead leads, and refuses a malformed batch', () => {
+    const body = structuredClone(wire.core) as typeof wire.core & { material: { batch?: unknown } }
+    const members = [{ op: 'land:t_A:1', task: 't_A', A: 'a'.repeat(40) }, { op: 'land:t_B:1', task: 't_B', A: 'b'.repeat(40) }]
+    body.material.batch = { batch: 'batch:land:t_A:1', members }
+    render(<MaterialEvidence data={parseLandingMaterial(body)!} />)
+    const batch = screen.getByRole('region', { name: 'Batch' }).textContent!
+    for (const m of members) for (const v of [m.op, m.task, m.A]) expect(batch).toContain(v)
+    expect(batch).toContain('whole change, M0..R')
+    body.material.batch = { batch: 'batch:land:t_A:1', members: [members[0]] }
+    expect(parseLandingMaterial(body)).toBeNull()
+    body.material.batch = { batch: 'batch:land:t_A:1', members: [members[0], { op: 'land:t_B:1' }] }
+    expect(parseLandingMaterial(body)).toBeNull()
+  })
   it('shows a patch at 512 KB, hides oversize and UTF-8 oversize text, keeping every file row and Gitea link', () => {
     const data = parseLandingMaterial(structuredClone(wire.core))!
     data.material.patch = 'x'.repeat(PATCH_LIMIT)

@@ -45,10 +45,12 @@ func TestApprovalClaimPhrases(t *testing.T) {
 	}
 }
 
-// specOf is a task spec with text and the usual check.
+// specOf is a task spec with text, the usual check and bifrost-platform's
+// setup.
 func specOf(t *testing.T, text string) []byte {
 	t.Helper()
-	b, err := json.Marshal(map[string]any{"text": text, "verify": [][]string{{"go", "test", "./..."}}})
+	b, err := json.Marshal(map[string]any{"text": text, "verify": [][]string{{"go", "test", "./..."}},
+		"setup": store.Repos["bifrost-platform"].Setup})
 	ok(t, err)
 	return b
 }

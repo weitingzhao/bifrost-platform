@@ -39,8 +39,8 @@ func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 	return platformWith(t, store.Task{Effect: "none"}, nil)
 }
 
-// platformWith is platform with the task's effect, repository and base
-// commit as given, and a branch head reader for persist.
+// platformWith is platform with the task's effect, repository, base commit
+// and role (implement when empty) as given, and a branch head reader for persist.
 func platformWith(t *testing.T, shape store.Task, head store.BranchHead) (*pgxpool.Pool, string, string) {
 	t.Helper()
 	return platformSpec(t, shape, head, "text/markdown", []byte("# task\n"))
@@ -83,6 +83,9 @@ func platformSpec(t *testing.T, shape store.Task, head store.BranchHead, media s
 			`INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('implementer', 'dev', 'job:test', 1)`,
 			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status, rule_id, rule_version)
 			 VALUES ('implementer/exec:cursor/cursor-mix', 'implementer', 'exec:cursor', 'cursor-mix', 'active', 'job:test', 1)`,
+			`INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('planner', 'dev', 'job:test', 1)`,
+			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status, rule_id, rule_version)
+			 VALUES ('planner/exec:cursor/cursor-mix', 'planner', 'exec:cursor', 'cursor-mix', 'active', 'job:test', 1)`,
 		} {
 			if _, err := tx.Exec(ctx, q); err != nil {
 				return err
@@ -90,14 +93,17 @@ func platformSpec(t *testing.T, shape store.Task, head store.BranchHead, media s
 		}
 		return nil
 	})
-	task := store.NewTaskID()
+	task, role := store.NewTaskID(), shape.Role
+	if role == "" {
+		role = "implement"
+	}
 	var spec string
 	tx(func(tx pgx.Tx) error {
 		var err error
 		if spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", media, specBody); err != nil {
 			return err
 		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: role,
 			Class: "go", Title: "t", SpecArtifact: spec, Effect: shape.Effect, Repo: shape.Repo, BaseCommit: shape.BaseCommit}); err != nil {
 			return err
 		}

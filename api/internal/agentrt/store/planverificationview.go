@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (s *planFactsSnapshot) itemValue(root, node string) plan.Tri {
+func snapshotItemValue(s *planFactsSnapshot, root, node string) plan.Tri {
 	d := s.Docs[root]
 	if d == nil {
 		return plan.Unknown
@@ -109,7 +109,7 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 	for _, n := range d.Items {
 		if row := byID[adoption.Nodes[n.Node]]; row != nil {
 			row["acceptance_status"] = statuses[n.Node]
-			row["current_validity"] = s.itemValue(root, n.Node).String()
+			row["current_validity"] = snapshotItemValue(s, root, n.Node).String()
 		}
 	}
 	for _, edge := range graph.Edges {
@@ -138,7 +138,7 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 		next = []any{}
 		var current any
 		for _, ref := range graph.Mainline {
-			v := s.itemValue(ref.Root, ref.Node)
+			v := snapshotItemValue(s, ref.Root, ref.Node)
 			entry := map[string]any{"ref": ref, "plan_node_id": adoption.Nodes[ref.Node], "milestone_status": v.String(), "current_validity": v.String()}
 			path = append(path, entry)
 			if current == nil && v != plan.True {
@@ -151,7 +151,7 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 	return mainline, next, waiting, ready, later, freshness
 }
 
-func (s *planFactsSnapshot) taskDelivery(task string) string {
+func snapshotTaskDelivery(s *planFactsSnapshot, task string) string {
 	label := "Landing unverified"
 	onMain, deployFailed, deployPassed := false, false, false
 	for _, d := range s.Docs {
@@ -188,7 +188,7 @@ func (s *planFactsSnapshot) taskDelivery(task string) string {
 
 // Landing lifecycle is folded from note.landing by the existing reducer. It
 // explains waiting/delivery but cannot replace fresh Git and deployment proof.
-func (s *planFactsSnapshot) taskLanding(task string) map[string]any {
+func snapshotTaskLanding(s *planFactsSnapshot, task string) map[string]any {
 	var latest time.Time
 	var out map[string]any
 	for stream, state := range s.Landings {
@@ -203,7 +203,7 @@ func (s *planFactsSnapshot) taskLanding(task string) map[string]any {
 	return out
 }
 
-func (s *planFactsSnapshot) externalVerification(id string) string {
+func snapshotExternalVerification(s *planFactsSnapshot, id string) string {
 	found, unknown, stale, failed := false, false, false, false
 	for _, d := range s.Docs {
 		bs, _ := d.Bindings()

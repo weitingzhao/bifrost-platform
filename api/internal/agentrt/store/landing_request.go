@@ -16,8 +16,11 @@ import (
 // source is the workers' approval reader, outside every PostgreSQL transaction.
 type LandingGrantRequest struct {
 	Op, ApprovalID, Status, ParamsHash string
-	ApprovalNumber                     int64
-	SeenAt                             time.Time
+	// R is the request's R parameter: the controller's own request reads it
+	// (landing_grant_request.go). Not part of the recorded observation.
+	R              string
+	ApprovalNumber int64
+	SeenAt         time.Time
 }
 
 func (r LandingGrantRequest) body() map[string]any {
@@ -203,4 +206,22 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 		return err
 	})
 	return wrote, err
+}
+
+// SettledLandingGrantRequests are the pending requests whose operation in s
+// no longer waits on a grant: it went on without one (a rule that clears
+// it, landing_rule_clear, or a newer operation of its task) or ended. No
+// grant can be written for them any more (the executor refuses not_waiting),
+// so the controller withdraws them from the Owner's list rather than leave
+// them to expire there. An operation s does not know is left alone.
+func SettledLandingGrantRequests(s landing.State, requests []LandingGrantRequest) []LandingGrantRequest {
+	var out []LandingGrantRequest
+	for _, r := range requests {
+		o, known := s.Operations[r.Op]
+		if r.Status != "pending" || !known || o.Task == "" || o.Phase == "awaiting_grant" && s.LatestOperation(o.Task) == r.Op {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }

@@ -69,29 +69,31 @@ func infraChange() rules.LandingChange {
 }
 
 // Serial: FreezeEventClock and the signing test anchor. T1–T12 through the
-// real claim/append transaction. Each negative has a successful same-entry
+// real claim/append transaction. Grants are not enabled here, so a
+// floor-grantable change (T1, T4-runbook) is refused as soft, with its
+// floor paths; deletions of hard paths fail their change kind first. Each negative has a successful same-entry
 // control; no branch, intent or quota can be produced by a refusal.
 func TestS6InfraClaimLayersPG(t *testing.T) {
 	for _, tc := range []struct {
 		name, layer string
 		changes     func() []rules.LandingChange
 	}{
-		{"T1", "hard", func() []rules.LandingChange {
+		{"T1", "soft", func() []rules.LandingChange {
 			c := infraChange()
 			c.OldPath = "k8s/overlays/prod/kustomization.yaml"
 			c.NewPath = c.OldPath
 			return []rules.LandingChange{c}
 		}},
-		{"T2", "hard", func() []rules.LandingChange {
+		{"T2", "change_kind", func() []rules.LandingChange {
 			return []rules.LandingChange{{OldPath: "k8s/base-platform/manifest.yaml", OldMode: "100644", Deleted: 20}}
 		}},
-		{"T3", "hard", func() []rules.LandingChange {
+		{"T3", "change_kind", func() []rules.LandingChange {
 			return []rules.LandingChange{{OldPath: infraPath, OldMode: "100644", Deleted: 20}, {NewPath: "agent-config/scripts/x.md", NewMode: "100644", Added: 20}}
 		}},
 		{"T4-skill", "hard", func() []rules.LandingChange {
 			return []rules.LandingChange{{NewPath: "agent-config/work/multi-agent/reviews/SKILL.md", NewMode: "100644", Added: 20}}
 		}},
-		{"T4-runbook", "hard", func() []rules.LandingChange {
+		{"T4-runbook", "soft", func() []rules.LandingChange {
 			return []rules.LandingChange{{NewPath: "agent-config/work/multi-agent/DESIGN-RUNBOOK-x.md", NewMode: "100644", Added: 20}}
 		}},
 		{"T5", "structural", func() []rules.LandingChange {
@@ -432,7 +434,7 @@ func TestS6ClosedInfraUnknownAndMainLostPG(t *testing.T) {
 			if !d.Allowed {
 				t.Fatal(d)
 			}
-			_, err = store.RecordPushResult(ctx, w.rt, auth, outcome)
+			_, err = store.RecordPushResult(ctx, w.rt, auth, outcome, "agentrt-lander")
 			ok(t, err)
 			store.FreezeEventClock(at.Add(time.Hour))
 			ctl := controller.Controller{DB: w.rt, Env: "prod", LiveRepos: []string{}, Reconcile: &controller.LandingReconcile{Repos: []string{infraRepo}, MainEvidence: func(_ context.Context, repo, root, a, r string) (store.MainEvidence, error) {

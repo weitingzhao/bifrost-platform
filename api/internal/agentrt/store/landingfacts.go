@@ -28,6 +28,23 @@ type LandingSource struct {
 	// reads use them; nil refuses every grant.
 	GrantPatch func(ctx context.Context, a, m0, r string) (GrantPatch, error)
 	GrantCI    func(ctx context.Context, key GrantCIKey, after time.Time) (GrantCIEvidence, error)
+	// RepoGrantPatch is GrantPatch for a named repository (the controller's
+	// multi-repository source); when nil, GrantPatch serves every repository.
+	RepoGrantPatch func(ctx context.Context, repo, a, m0, r string) (GrantPatch, error)
+	// FloorFiles recomputes M0..R from Git for a floor grant: R's parents,
+	// the changed files and each file's bytes' sha256 at R. Nil refuses
+	// every floor grant.
+	FloorFiles func(ctx context.Context, repo, m0, r string) (landing.FloorTree, error)
+}
+
+// grantPatchFor is the patch reader of repo's grants, nil when none.
+func (s LandingSource) grantPatchFor(repo string) func(ctx context.Context, a, m0, r string) (GrantPatch, error) {
+	if s.RepoGrantPatch != nil {
+		return func(ctx context.Context, a, m0, r string) (GrantPatch, error) {
+			return s.RepoGrantPatch(ctx, repo, a, m0, r)
+		}
+	}
+	return s.GrantPatch
 }
 
 // LandingFacts is the common reader for all three gates. The caller supplies
@@ -142,6 +159,20 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 		}
 		if o.Task == taskID && o.BlocksClaim() {
 			f.Terminal = true
+		}
+	}
+	// A batch is one landing in flight (landing_batch.go): its members do
+	// not count against each other. Read only when something else is in
+	// flight, so a lone operation's facts cost what they did.
+	if f.OtherInFlight > 0 && op != "" && f.Repo == "bifrost-platform" {
+		mates, err := landingBatchMates(ctx, tx, "landing:"+f.Repo, op)
+		if err != nil {
+			return f, nil, err
+		}
+		for id := range mates {
+			if o := state.Operations[id]; o.Task != "" && o.Active() {
+				f.OtherInFlight--
+			}
 		}
 	}
 	quota, err := LandingState(ctx, tx, "landing-quota:"+f.Tenant+":"+now.UTC().Format("2006-01-02"))

@@ -52,7 +52,7 @@ func S5Refusals(l *Landing, repo string, changes []LandingChange) []LandingRefus
 		}
 	}
 	var out []LandingRefusal
-	for _, r := range []LandingRefusal{LandingCore, LandingFloorSoft, LandingRulePaths, LandingPresentation, LandingSize} {
+	for _, r := range landingCategories {
 		if failed[r] {
 			out = append(out, r)
 		}

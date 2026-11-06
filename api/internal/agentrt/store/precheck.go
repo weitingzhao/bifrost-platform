@@ -27,16 +27,26 @@ import (
 //     for any accepted attempt;
 //   - where the landing runs no CI, the deterministic check stays and its
 //     pass accepts the attempt, with no review;
-//   - when the landing CI of an attempt accepted on submission is red
-//     (failed{ci_red}) and the task has rounds left, the task goes back for
-//     its next round instead of a root_failed card: the failure is recorded
-//     as a failed landing_ci verification of that attempt (its failed
-//     TaskRuns, as the landing CI reader saw them), which the next round's
-//     claim names like a failed deterministic check (claimfailed.go). Once a
-//     later attempt is accepted, the controller retries the landing
-//     (retryReworkedLanding), as the Owner's try_again would.
+//   - when the landing CI of an accepted attempt is red (failed{ci_red}),
+//     the task goes back to its executor for its next round instead of a
+//     root_failed card: the failure is recorded as a failed landing_ci
+//     verification of that attempt (its failed TaskRuns, as the landing CI
+//     reader saw them), which the next round's claim names like a failed
+//     deterministic check (claimfailed.go). Once a later attempt is
+//     accepted, the controller retries the landing (retryReworkedLanding),
+//     as the Owner's try_again would.
+// Since R5:5.7 goal 1 (the Owner 11-05: verify once at the end; whoever
+// breaks it fixes it) the red landing CI goes back whatever accepted the
+// attempt, the landing CI on submission or the deterministic check, and a
+// task in its last round goes back too, its bound raised with the round as
+// the Owner's retry raises it (blockedcard.go): a red CI is the executor's
+// to fix, not a card the Owner has to answer to say so. What bounds it is
+// the landing's root bound (landing.ClaimWindow operations, then
+// failed{bound}) and the mission's attempt budget (missionbudget.go).
 // Precheck verify keeps what was before: the deterministic check, then the
-// review, and a red landing CI is the Owner's card.
+// review, and a red landing CI is the Owner's card; so do a mission no
+// longer active or no_merge, a closed step, a stopped task and an operation
+// that is not its root's latest.
 
 // Precheck is how a submitted implementation is checked (AGENTRT_PRECHECK).
 type Precheck string
@@ -202,15 +212,15 @@ var landingReworkMoves = map[string][]string{"accepted": {"rework"}}
 
 // RecordLandingCIRed ends repo's operation op failed{ci_red}, as the
 // landing drill does (text is its note's text), and in the same
-// transaction, when its root's attempt was accepted on submission and p is
-// ci, sends the root back for its next round (R5:5.7-10): the failure, as
-// the landing CI reader saw it, becomes the failed landing_ci check of that
-// attempt, which the next round's claim names; the root goes back to ready
-// in round + 1. It does not when the root has no round left, its mission is
-// no longer active or no_merge, its step is closed, it is stopped, or the
-// operation is not the one of its accepted attempt: the operation fails as
-// before and the Owner gets its root_failed card. It returns whether the
-// root went back.
+// transaction, when the operation lands its root's accepted attempt and p
+// is ci, sends the root back for its next round (R5:5.7-10): the failure,
+// as the landing CI reader saw it, becomes the failed landing_ci check of
+// that attempt, which the next round's claim names; the root goes back to
+// ready in round + 1, its max_rounds raised when that is past it. It does
+// not when the root's mission is no longer active or no_merge, its step is
+// closed, it is stopped, or the operation is not the one of its accepted
+// attempt: the operation fails as before and the Owner gets its root_failed
+// card. It returns whether the root went back.
 //
 // Lock order: the step, the task, the mission's stream, then the
 // repository's stream last.
@@ -251,13 +261,15 @@ func reworkRedLanding(ctx context.Context, tx pgx.Tx, o landing.Operation, op st
 		return false, err
 	}
 	d, err := readDetail(ctx, tx, t.id)
-	if err != nil || d.round+1 > d.maxRounds {
+	if err != nil {
 		return false, err
 	}
-	var accepted, method string
-	err = tx.QueryRow(ctx, `SELECT attempt_id, method FROM agentrt.verification WHERE task_id = $1 AND accepts_attempt
-	  ORDER BY created_at DESC, verification_id DESC LIMIT 1`, t.id).Scan(&accepted, &method)
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && (accepted != o.Attempt || method != MethodLandingCI) {
+	// Whatever accepted the attempt: the landing CI on submission or the
+	// deterministic check.
+	var accepted string
+	err = tx.QueryRow(ctx, `SELECT attempt_id FROM agentrt.verification WHERE task_id = $1 AND accepts_attempt
+	  ORDER BY created_at DESC, verification_id DESC LIMIT 1`, t.id).Scan(&accepted)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && accepted != o.Attempt {
 		return false, nil
 	}
 	if err != nil {
@@ -287,10 +299,16 @@ func reworkRedLanding(ctx context.Context, tx pgx.Tx, o landing.Operation, op st
 		return false, err
 	}
 	why := fmt.Sprintf("the landing CI of %s failed in round %d of %d", op, d.round, d.maxRounds)
+	if d.round+1 > d.maxRounds {
+		why = fmt.Sprintf("the landing CI of %s failed; one more round past its bound", op)
+	}
 	if err = moveTaskBy(ctx, tx, "controller", t, "rework", why, landingReworkMoves); err != nil {
 		return false, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE agentrt.task SET round_no = round_no + 1 WHERE task_id = $1`, t.id); err != nil {
+	// Past its bound, the bound goes up with the round, as the Owner's
+	// retry raises it (blockedcard.go).
+	if _, err = tx.Exec(ctx, `UPDATE agentrt.task SET round_no = round_no + 1, max_rounds = GREATEST(max_rounds, round_no + 1)
+	  WHERE task_id = $1`, t.id); err != nil {
 		return false, err
 	}
 	t.state = "rework"

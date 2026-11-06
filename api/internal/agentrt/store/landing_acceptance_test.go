@@ -75,7 +75,7 @@ func TestLiveTighteningAfterTheIntentStillLands(t *testing.T) {
 		[]byte(ruleText("landing:dev", 2, "tighten", at.Add(time.Minute).Format(time.RFC3339), until, body)))
 	ok(t, err)
 	store.FreezeEventClock(at.Add(2 * time.Minute))
-	wrote, err := store.RecordPushResult(ctx, w.rt, auth, "ok")
+	wrote, err := store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	if !wrote {
 		t.Fatal("result not recorded")

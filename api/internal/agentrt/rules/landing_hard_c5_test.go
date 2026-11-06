@@ -4,7 +4,7 @@ import "testing"
 
 // The core-level approval's material (§12.2 item 2): the §4.2 entry each
 // hard_core path matches, and whether it is on the Owner's decision chain.
-// hard_absolute and soft paths have neither.
+// hard_absolute, open and soft paths have neither.
 func TestLandingHardCoreEntryAndDecisionChain(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -12,6 +12,15 @@ func TestLandingHardCoreEntryAndDecisionChain(t *testing.T) {
 		chain       bool
 	}{
 		{"api/internal/agentrt/store/zz_new.go", "api/internal/agentrt/store/", false},
+		{"api/internal/agentrt/store/sub/x.go", "api/internal/agentrt/store/", false},
+		{"api/internal/agentrt/store/landing_grant.go", "api/internal/agentrt/store/landing*", false},
+		{"api/internal/agentrt/store/signals.go", "api/internal/agentrt/store/signals.go", false},
+		{"api/internal/agentrt/store/progressneeds.go", "", false},
+		{"api/internal/agentrt/controller/x.go", "", false},
+		{"api/cmd/agentd/main.go", "api/cmd/agentd/", false},
+		{"api/cmd/agentrt-gate/main.go", "", false},
+		{"console/tsconfig.app.json", "", false},
+		{"console/src/api/questions.ts", "console/src/api/questions.ts", true},
 		{"api/internal/approvals/service.go", "api/internal/approvals/", true},
 		{"api/internal/approvalhome/home.go", "api/internal/approvalhome/", true},
 		{"api/internal/actuation/auth.go", "api/internal/actuation/", true},

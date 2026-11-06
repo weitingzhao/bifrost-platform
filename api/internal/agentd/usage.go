@@ -92,6 +92,16 @@ func openRegular(path string, max int64) (io.ReadCloser, error) { return openBou
 
 // openBounded is openRegular reading the first max bytes when tail is false.
 func openBounded(path string, max int64, tail bool) (io.ReadCloser, error) {
+	return openFrom(path, 0, max, tail)
+}
+
+// openRegularFrom is openRegular reading from byte from on, or from the
+// last max bytes when they start later.
+func openRegularFrom(path string, from, max int64) (io.ReadCloser, error) {
+	return openFrom(path, from, max, true)
+}
+
+func openFrom(path string, from, max int64, tail bool) (io.ReadCloser, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
@@ -101,8 +111,11 @@ func openBounded(path string, max int64, tail bool) (io.ReadCloser, error) {
 		_ = f.Close()
 		return nil, fmt.Errorf("agentd: %s is not a regular file", path)
 	}
-	if tail && st.Size() > max {
-		if _, err = f.Seek(st.Size()-max, io.SeekStart); err != nil {
+	if tail && st.Size()-max > from {
+		from = st.Size() - max
+	}
+	if from > 0 {
+		if _, err = f.Seek(from, io.SeekStart); err != nil {
 			_ = f.Close()
 			return nil, err
 		}
@@ -327,7 +340,9 @@ func codexLimits(home, thread string) []PoolReading {
 }
 
 // measureCursor: cursor-agent's result event carries usage (inputTokens,
-// outputTokens, cacheReadTokens, cacheWriteTokens; measured 10-12). Out of
+// outputTokens, cacheReadTokens, cacheWriteTokens; measured 10-12), added
+// up over every result of the log (a plan's follow-up is a second turn,
+// planfix.go). Out of
 // quota it writes "ActionRequiredError: You've hit your usage limit …" to
 // stderr, names no reset and exits 1 with no result (measured 10-18). Only
 // that line is a refusal, and not when a result says the run succeeded: a
@@ -350,8 +365,10 @@ func measureCursor(logPath string) Measured {
 				succeeded = true
 			}
 			if u := obj(ev["usage"]); u != nil {
-				n := sumOf(u, "inputTokens", "outputTokens", "cacheWriteTokens")
-				m.Usage = &Usage{Pool: pool("cursor", "monthly"), Tokens: &n}
+				if m.Usage == nil {
+					m.Usage = &Usage{Pool: pool("cursor", "monthly"), Tokens: new(int64)}
+				}
+				*m.Usage.Tokens += sumOf(u, "inputTokens", "outputTokens", "cacheWriteTokens")
 			}
 		}
 	}) {
@@ -368,7 +385,8 @@ func measureCursor(logPath string) Measured {
 var claudeEpoch = regexp.MustCompile(`limit reached\|(\d{9,11})`)
 
 // measureClaude: claude's result event carries usage and total_cost_usd
-// (measured 10-18, claude 2.1.302). Its rate-limit events
+// (measured 10-18, claude 2.1.302), added up over every result of the log
+// (a plan's follow-up resumes the session in a second run, planfix.go). Its rate-limit events
 // (rate_limit_event: status, resetsAt, rateLimitType, utilization) and its
 // refusal text (an assistant message with error rate_limit) were not seen
 // yet: read as documented, to be checked on the first real one.
@@ -391,10 +409,15 @@ func measureClaude(logPath string) Measured {
 		case "result":
 			u := obj(ev["usage"])
 			if u != nil {
-				n := sumOf(u, "input_tokens", "cache_creation_input_tokens", "output_tokens")
-				m.Usage = &Usage{Pool: pool("claude", "weekly"), Tokens: &n}
+				if m.Usage == nil {
+					m.Usage = &Usage{Pool: pool("claude", "weekly"), Tokens: new(int64)}
+				}
+				*m.Usage.Tokens += sumOf(u, "input_tokens", "cache_creation_input_tokens", "output_tokens")
 				if usd, ok := num(ev["total_cost_usd"]); ok && usd > 0 {
-					m.Usage.USD = &usd
+					if m.Usage.USD == nil {
+						m.Usage.USD = new(float64)
+					}
+					*m.Usage.USD += usd
 				}
 			}
 			if failed, _ := ev["is_error"].(bool); failed {

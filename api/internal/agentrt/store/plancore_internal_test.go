@@ -81,3 +81,25 @@ func TestSpecsSayWhatCoreWorkIs(t *testing.T) {
 		t.Error("a goal in a repository with no core work is not told so")
 	}
 }
+
+// A plan's own checks run twice (t1): before hand-in with the test databases
+// off, and in full in the platform's check. The planner is told so, in a goal
+// of one repository and of two, and asked for a targeted check.
+func TestPlanSpecSaysWhereChecksRun(t *testing.T) {
+	t.Parallel()
+	bases := map[string]string{"bifrost-platform": "abc", "bifrost-trade-infra": "def"}
+	for name, repos := range map[string][]string{"one": {"bifrost-platform"}, "two": {"bifrost-platform", "bifrost-trade-infra"}} {
+		b, err := planSpec(Goal{Title: "a goal", Text: "do it"}, repos, bases, "M-1", "Taken now.")
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec := string(b)
+		for _, want := range []string{strings.ReplaceAll(checksRun, "\n", `\n`), "without the test databases",
+			"platform then runs the repository's full checks plus the plan's own on the commit",
+			"prefer `go -C api test -run <pattern> ./<package>` over a whole package"} {
+			if !strings.Contains(spec, want) {
+				t.Errorf("the %s-repository plan spec lacks %q:\n%s", name, want, spec)
+			}
+		}
+	}
+}

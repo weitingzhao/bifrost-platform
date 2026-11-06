@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strconv"
 	"time"
 
@@ -35,10 +37,31 @@ func automaticRun(s store.StgState, run *unstructured.Unstructured) bool {
 	return false
 }
 
+// manualRunsNeeded says whether only a recorded manual run can move B5 on
+// (R5:5.7-11): with no trusted baseline the gate has nothing to compare live
+// Deployments with, and a block of one of store.StgManualRunCauses is lifted
+// only by a newer source=external record. The time is the trusted baseline's
+// deployed.at, zero when there is none: a run created before B5's current
+// deployment cannot be what STG runs now.
+func manualRunsNeeded(s store.StgState) (bool, time.Time) {
+	base, known := store.StgTrustedBaseline(s)
+	if !known {
+		return true, time.Time{}
+	}
+	at := store.StgDeployedAt(s, base.String("evidence"))
+	for _, b := range s.Blocks {
+		if b.IsOpen() && slices.Contains(store.StgManualRunCauses, b.Opened.Record.String("why")) {
+			return true, at
+		}
+	}
+	return false, at
+}
+
 // ExternalPass observes only: no lease, live gate, Create or debit. The
 // signed none rule stops it before any I/O, as required by the rollout brief.
 // It is scheduled independently of Pass so a bad external read never prevents
 // archiving an automatic run, and automatic/external scheduling order is safe.
+// It reads the cluster only while manualRunsNeeded.
 func (c *Controller) ExternalPass(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -55,16 +78,28 @@ func (c *Controller) ExternalPass(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	needed, after := manualRunsNeeded(s)
+	if !needed {
+		return nil
+	}
+	start, listed, observed := time.Now(), 0, 0
+	defer func() {
+		if took := time.Since(start); took >= time.Second {
+			slog.Info("STG manual run read took "+took.Round(time.Millisecond).String(), "listed", listed, "observed", observed)
+		}
+	}()
 	var errs []error
 	runs, err := x.ListSucceededSTG(ctx)
 	if err != nil {
 		errs = append(errs, err) // runs already archived stay archived
 	}
+	listed = len(runs)
 	for _, run := range runs {
 		id := fmt.Sprintf("%s/%s/%s", c.Cluster, run.GetNamespace(), run.GetUID())
-		if s.Evidence[id].Seq > 0 || automaticRun(s, run) {
+		if !run.GetCreationTimestamp().After(after) || s.Evidence[id].Seq > 0 || automaticRun(s, run) {
 			continue
 		}
+		observed++
 		r, err := c.externalEvidence(ctx, run, id)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))

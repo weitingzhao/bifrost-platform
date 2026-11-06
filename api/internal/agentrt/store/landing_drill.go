@@ -37,10 +37,18 @@ func ClaimLandingDrill(ctx context.Context, db DB, src LandingSource, task strin
 // ClaimLanding is ClaimLandingDrill for an environment: "stg" claims for the
 // drill (dry_run), "prod" for the live landing (S3); the same three steps.
 func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task string, now time.Time) (op string, decision landing.Decision, err error) {
+	return ClaimLandingInBatch(ctx, db, src, env, task, now, nil)
+}
+
+// ClaimLandingInBatch is ClaimLanding for a member of a batch being formed
+// (landing_batch.go): with are the operations already claimed for the same
+// batch, which, still claimed, do not count as others in flight; the batch
+// is one landing in flight.
+func ClaimLandingInBatch(ctx context.Context, db DB, src LandingSource, env, task string, now time.Time, with []string) (op string, decision landing.Decision, err error) {
 	var first drillBinding
 	if err = InTx(ctx, db, func(tx pgx.Tx) error {
 		var e error
-		first, e = bindDrillClaim(ctx, tx, src, env, task, now)
+		first, e = bindDrillClaim(ctx, tx, src, env, task, now, with)
 		return e
 	}); err != nil || first.settled {
 		return "", first.decision, err
@@ -51,7 +59,7 @@ func ClaimLanding(ctx context.Context, db DB, src LandingSource, env, task strin
 	}
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		op = ""
-		again, e := bindDrillClaim(ctx, tx, src, env, task, now)
+		again, e := bindDrillClaim(ctx, tx, src, env, task, now, with)
 		decision = again.decision
 		if e != nil || again.settled {
 			return e
@@ -144,7 +152,7 @@ type drillBinding struct {
 // orders this claim against a close: the close decides first and the facts
 // read the mission done, or this claim commits first and CloseMissions sees
 // it (landingHolds).
-func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task string, now time.Time) (drillBinding, error) {
+func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task string, now time.Time, with []string) (drillBinding, error) {
 	var b drillBinding
 	var mission, repo, tenant, step string
 	if err := tx.QueryRow(ctx, `SELECT t.mission_id, COALESCE(t.repo,''), m.tenant, COALESCE(t.plan_node_id,'')
@@ -220,6 +228,11 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 		mode = "live"
 	}
 	b.facts, b.deps, err = landingFactsDB(ctx, tx, src, env, mode, task, "", now)
+	for _, id := range with {
+		if o := state.Operations[id]; o.Phase == "claimed" && o.Task != task {
+			b.facts.OtherInFlight--
+		}
+	}
 	if err == nil && repo == "bifrost-trade-infra" {
 		if b.facts.Rule == nil || b.facts.Rule.Landing == nil {
 			b.settled, b.decision = true, landing.Decision{Reason: "rule"}

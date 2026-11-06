@@ -291,7 +291,7 @@ export function taskLine(task: ModuleTask, runtime: RuntimeTasks): TaskLine {
   const a = task.attempt
   const role = taskRole(task, runtime)
   const landing = task.landing ? `landing ${task.landing.phase} · ${task.landing.outcome}` : ''
-  return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.state, round: roundWords(task, runtime),
+  return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
     attempt: a ? `attempt ${a.attempt_no} · ${a.executor}${a.status ? ` · ${a.status}` : ''}` : '', href: goalHref(task.mission_id, task.task_id),
     detail: [task.delivery, landing].filter(Boolean).join(' · ') }
 }

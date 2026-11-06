@@ -84,7 +84,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), Commits: s.agentRuntimeCommits(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
-		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+		Exams:       examSetFromEnv(), DiskFloor: diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.api.Grants = s.landingGrantSources
 	rt.api.CheckAssessment = s.checkAssessment
@@ -162,6 +162,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			c.LandingCards = s.questionRuntime.landingCardQuestions()
 		}
 		s.wireLandingDrill(c)
+		s.wireFullCI(c)
 		if env == "prod" {
 			q := c.LandingCards
 			repos := map[string]bool{}
@@ -229,6 +230,18 @@ func precheckFromEnv() store.Precheck {
 		slog.Error("agentrt precheck", "error", err, "using", p)
 	}
 	return p
+}
+
+// pinReasonFromEnv is what an implement task pinned to the coordinator
+// without a pin_reason gets (store/pinreason.go), read once at start from
+// AGENTRT_PIN_REASON: warn (the default: accepted, counted as unexplained)
+// or refuse (422). Any other value is logged and warn is used.
+func pinReasonFromEnv() store.PinReasonMode {
+	m, err := store.ParsePinReason(os.Getenv("AGENTRT_PIN_REASON"))
+	if err != nil {
+		slog.Error("agentrt pin reason", "error", err, "using", m)
+	}
+	return m
 }
 
 // cardRuleOnlyOnSTG leaves the controller the card-auto-answer loop's

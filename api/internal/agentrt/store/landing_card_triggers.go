@@ -29,6 +29,9 @@ type CardTrigger struct {
 	// Sent is an STG block's detail.sent: the refusal was found after B5 had
 	// already sent P (R5:5.7-2), so P is on STG.
 	Sent map[string]any
+	// CIScope is an STG block's detail.ci_scope: the CI scope that decided P
+	// and how old the last full green was when B5 blocked.
+	CIScope map[string]any
 	// Rework is a rework_landed trigger's frozen landing_rework_seen, with
 	// each sibling's title (R5:5.5-18).
 	Rework *ReworkView

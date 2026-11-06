@@ -117,11 +117,15 @@ func TestCIRunCountsOnlyFullScopeGreens(t *testing.T) {
 		withAPIScope(ciRunAt("ci-b-console", factSHA2, "True", t1), "console"),
 		withAPIScope(ciRunAt("ci-c-full", factSHA3, "True", t1), "full"),
 		withAPIScope(ciRunAt("ci-c-console", factSHA3, "True", t2), "console"),
+		withAPIScope(ciRunAt("ci-c-incremental", factSHA3, "True", t2.Add(time.Minute)), "incremental"),
 		ciRunAt("ci-d-legacy", factSHA4, "True", t1),
 		withAPIScope(ciRunAt("ci-e-odd", factSHA5, "True", t1), "partial"),
 		withAPIScope(ciRunAt("ci-f-twice", factSHA6, "True", t1), "full", "console"),
 		withAPIScope(ciRunAt("ci-h-twice", factSHA8, "True", t1), "console", "full"),
 		withAPIScope(ciRunAt("ci-g-console-red", factSHA7, "False", t2), "console"),
+		// PROD needs a full green of its exact commit: incremental is not one,
+		// even with a recent full green elsewhere (ci-c-full).
+		withAPIScope(ciRunAt("ci-i-incremental", factSHA9, "True", t2), "incremental"),
 		ciRunAt("ci-g-green", factSHA7, "True", t1),
 	)
 	for _, tc := range []struct{ sha, status, run string }{
@@ -133,6 +137,7 @@ func TestCIRunCountsOnlyFullScopeGreens(t *testing.T) {
 		{factSHA6, "", ""},
 		{factSHA7, CISucceeded, "ci-g-green"},
 		{factSHA8, "", ""},
+		{factSHA9, "", ""},
 	} {
 		if status, run, err := f.CIRun(context.Background(), "repo-p", tc.sha); err != nil || status != tc.status || run != tc.run {
 			t.Errorf("%s = %q %q %v; want %q %q", tc.sha[:4], status, run, err, tc.status, tc.run)
@@ -144,4 +149,5 @@ const (
 	factSHA6 = "6666666666666666666666666666666666666666"
 	factSHA7 = "7777777777777777777777777777777777777777"
 	factSHA8 = "8888888888888888888888888888888888888888"
+	factSHA9 = "9999999999999999999999999999999999999999"
 )

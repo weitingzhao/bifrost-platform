@@ -89,7 +89,8 @@ func (d *signoffViewDB) Query(_ context.Context, q string, _ ...any) (pgx.Rows, 
 				r.data = append(r.data, []any{step, c.Artifact, c.Label, c.Source})
 			}
 		}
-	case strings.HasPrefix(q, "SELECT body,at FROM"), strings.HasPrefix(q, "SELECT a.attempt_id"), strings.HasPrefix(q, "SELECT event_stream_id"), strings.HasPrefix(q, "SELECT to_jsonb(e)"):
+	case strings.HasPrefix(q, "SELECT body,at FROM"), strings.HasPrefix(q, "SELECT a.attempt_id"), strings.HasPrefix(q, "SELECT event_stream_id"), strings.HasPrefix(q, "SELECT to_jsonb(e)"),
+		strings.Contains(q, stopColumns): // no task is stopped or withdrawn
 	default:
 		return nil, fmt.Errorf("unexpected fixture SQL: %s", q)
 	}

@@ -271,7 +271,7 @@ func TestMissionOnACardSaysSo(t *testing.T) {
 	a := &asker{}
 	id, q := proposeOutside(t, w, a.ask, "a")
 	bare, bq := proposeOutside(t, w, a.ask, "b")
-	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "t", id, []store.TaskProposal{offPlan(proposal("e", w.spec))})
+	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "t", id, []store.TaskProposal{offPlan(proposal("e", w.impl))})
 	ok(t, err)
 	doc := w.progress(t)
 	for _, m := range doc.Work.Missions {

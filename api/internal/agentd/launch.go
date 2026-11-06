@@ -258,6 +258,11 @@ type Spawn struct {
 	// After runs once the executor has exited, before its results are read
 	// (cursor's report is the last event of its output).
 	After func() error
+	// FollowUp is the same executor asked prompt in the session this spawn
+	// ran, once it has exited (a plan's missing block, planfix.go); its After
+	// writes the reply to planReply. nil: the executor cannot go on in the
+	// same session with every pin of its first run.
+	FollowUp func(prompt string) (Spawn, error)
 }
 
 // Proc is a launched process group.

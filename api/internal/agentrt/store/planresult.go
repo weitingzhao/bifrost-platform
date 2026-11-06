@@ -236,7 +236,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 					verify = append(verify, c)
 				}
 			}
-			spec, err := ImplementSpec(pt.Title, pt.Text, Repos[pt.Repo], verify)
+			spec, err := ImplementSpec(pt.Title, pt.Text, Repos[pt.Repo], verify, HandInChecks(Repos[pt.Repo], pt.Verify))
 			if err != nil {
 				return err
 			}

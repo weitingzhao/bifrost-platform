@@ -13,6 +13,10 @@ type LandingRepository struct {
 	CIResults                       map[string]string
 	Siblings                        []string
 	GrantSupported                  bool
+	// FloorGrantSupported: the repository's floor-grantable paths may land
+	// with approve_floor_landing (infra only); GrantSupported is the two
+	// platform grants'.
+	FloorGrantSupported bool
 }
 
 var LandingRepositories = map[string]LandingRepository{
@@ -28,7 +32,7 @@ var LandingRepositories = map[string]LandingRepository{
 		Remote:     "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-trade-infra.git",
 		CIPipeline: "bifrost-ci-infra", CINamePattern: regexp.MustCompile(`^landing-ci-infra-[0-9a-f]{24}-[1-9][0-9]*$`),
 		CIResults: map[string]string{"revision": "infra-commit", "base": "base-commit", "platform": "platform-commit", "tools": "tools-from", "policy": "doc-policy", "purpose": "purpose"},
-		Siblings:  []string{"bifrost-platform"}, GrantSupported: false,
+		Siblings:  []string{"bifrost-platform"}, GrantSupported: false, FloorGrantSupported: true,
 	},
 }
 

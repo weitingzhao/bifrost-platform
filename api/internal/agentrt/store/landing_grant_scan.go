@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,9 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 		}
 		return canon.Parse(raw)
 	}
+	// Grants live on every repository stream a grant supports (the
+	// platform's two, infra's floor grant); pinned CI keys only on platform's.
+	grantsHere := strings.HasPrefix(stream, "landing:") && landing.GrantSupported(strings.TrimPrefix(stream, "landing:"))
 	for rows.Next() {
 		var seq int64
 		var at time.Time
@@ -68,12 +72,12 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 			}
 			entries = append(entries, landing.Entry{At: at, Record: rec})
 		}
-		if stream != landingRepoStream {
+		if !grantsHere {
 			continue
 		}
 		if x, err := parse(rawKey); err != nil {
 			return fail(err)
-		} else if x != nil {
+		} else if x != nil && stream == landingRepoStream {
 			k, err := parseLandingCIKey(x)
 			if err != nil {
 				return fail(err)
@@ -142,10 +146,6 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 // LandingStateCIKeys is LandingState with the operations' pinned CI keys,
 // from the same single read (the controller's CI step).
 func LandingStateCIKeys(ctx context.Context, tx pgx.Tx, stream string) (landing.State, map[string]GrantCIKey, error) {
-	if stream == "landing:bifrost-trade-infra" {
-		st, err := infraLandingState(ctx, tx, stream)
-		return st, nil, err
-	}
 	r, err := scanLandingStream(ctx, tx, stream)
 	if err != nil {
 		return landing.State{}, nil, err

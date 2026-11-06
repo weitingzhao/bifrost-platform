@@ -35,7 +35,7 @@ func TestC6ConsoleFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion)
+		m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
