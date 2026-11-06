@@ -25,6 +25,11 @@ func CIRecord(op string, ci CIRun) map[string]any {
 		}
 		r["uid"], r["results"] = ci.UID, values
 	}
+	// What a platform run's test-api ran, so the landing's events say what
+	// its green or red tested. CIChanged does not compare it.
+	if ci.Scope != (CIScope{}) {
+		r["api_scope"], r["api_packages"], r["api_store_run"], r["api_scope_why"] = ci.Scope.Scope, ci.Scope.Packages, ci.Scope.StoreRun, ci.Scope.Why
+	}
 	return r
 }
 

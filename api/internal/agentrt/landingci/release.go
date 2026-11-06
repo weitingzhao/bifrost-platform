@@ -40,9 +40,15 @@ const FullMaxAge = 48 * time.Hour
 // The api-scope result of a ci-platform run: what its test-api step ran.
 // A run without it predates the result and ran everything (full).
 const (
-	APIScopeResult  = "api-scope"
-	APIScopeFull    = "full"
-	APIScopeConsole = "console"
+	APIScopeResult = "api-scope"
+	// What the run's test-api tested: its packages (relative to the api
+	// module, space separated), the store package's -run pattern ("" for
+	// all of it) and why it chose its scope.
+	APIPackagesResult = "api-packages"
+	APIStoreRunResult = "api-store-run"
+	APIScopeWhyResult = "api-scope-why"
+	APIScopeFull      = "full"
+	APIScopeConsole   = "console"
 	// An incremental run tested the API packages its change reaches (R5:5.7-1).
 	APIScopeIncremental = "incremental"
 )

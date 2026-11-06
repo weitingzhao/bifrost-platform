@@ -30,6 +30,7 @@ func (r Record) Time(k string) time.Time { t, _ := time.Parse(time.RFC3339Nano, 
 
 var sha = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var ident = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_:./-]{0,199}$`)
+var ciScopeKeys = []string{"api_scope", "api_packages", "api_store_run", "api_scope_why"}
 var task = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
 var attempt = regexp.MustCompile(`^a_[0-9A-HJKMNP-TV-Z]{26}$`)
 var digest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -85,6 +86,11 @@ func Parse(v any) (Record, error) {
 	}
 	if version >= 3 && r.String("kind") == "ci_seen" && m["results"] != nil {
 		allowed = append(allowed, "uid", "results")
+	}
+	// A platform run's api scope (CIRecord) rides on ci_seen as all four
+	// keys or none.
+	if version >= 3 && r.String("kind") == "ci_seen" && (m["api_scope"] != nil || m["api_packages"] != nil || m["api_store_run"] != nil || m["api_scope_why"] != nil) {
+		allowed = append(allowed, ciScopeKeys...)
 	}
 	// S5 §5.1: an explicit, bounded infrastructure retry opens the next
 	// generation with unchanged material (applyS5 checks the bound).
@@ -160,6 +166,13 @@ func Parse(v any) (Record, error) {
 			valid = valid && len(r.String(k)) <= 200 && ((r.String("status") != "Succeeded" && r.String("kind") != "s5_run") || r.String(k) != "")
 		case "results":
 			valid = validCIResults(v)
+		case "api_scope":
+			valid = slices.Contains([]string{"", "full", "console", "incremental"}, r.String(k))
+			_, text := v.(string)
+			valid = valid && text
+		case "api_packages", "api_store_run", "api_scope_why":
+			s, text := v.(string)
+			valid = text && len(s) <= CIScopeMax
 		case "digests":
 			a, ok := v.(map[string]any)
 			valid = ok && len(a) == 3
