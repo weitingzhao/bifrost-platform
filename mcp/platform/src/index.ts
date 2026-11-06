@@ -18,6 +18,9 @@ import {
   PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
   STOP_KEY_RULE,
+  WITHDRAW_KEY_RULE,
+  WITHDRAW_TASKS_INPUT,
+  withdrawTasks,
   getArtifact,
   searchArtifacts,
   getMission,
@@ -723,6 +726,13 @@ reg(
   `Read an agent runtime artifact (sha256:…). ${RUNTIME_DATA_NOTE}`,
   { id: z.string() },
   async ({ id }) => jsonResult(await getArtifact(id)),
+)
+
+reg(
+  'agentrt_withdraw_tasks',
+  `Cancel tasks this session (or its mission's proposer) proposed, provided no attempt has started. This is not a stop: stop work that has started with request_stop; only the Owner lifts a stop. ${WITHDRAW_KEY_RULE}`,
+  WITHDRAW_TASKS_INPUT,
+  async (input) => jsonResult(await withdrawTasks(input)),
 )
 
 reg(

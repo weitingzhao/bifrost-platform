@@ -454,6 +454,27 @@ export async function getArtifact(artifactId: string, d: RuntimeDeps = defaultRu
   return { artifact_id: artifactId, media_type: got.media_type, content: got.text, note: RUNTIME_DATA_NOTE }
 }
 
+export const WITHDRAW_KEY_RULE =
+  'idempotency_key names this one withdrawal: reuse it only to retry the same request; a new withdrawal needs a new key, or the platform answers with the old withdrawal.'
+
+export const WITHDRAW_TASKS_INPUT = {
+  task_ids: z.array(z.string().min(1)).min(1).max(50),
+  reason: z.string().refine((s) => s.trim() !== '', 'reason is required and non-empty'),
+  idempotency_key: z.string().min(1).describe('One key per withdrawal; see the description'),
+}
+
+export async function withdrawTasks(
+  input: z.infer<z.ZodObject<typeof WITHDRAW_TASKS_INPUT>>,
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: WITHDRAW_KEY_RULE }
+  const parsed = z.object(WITHDRAW_TASKS_INPUT).safeParse(input)
+  if (!parsed.success) return { error: parsed.error.message, hint: 'No request was sent.' }
+  return d.send('POST', `${BASE}/tasks/withdraw`, input)
+}
+
 export const STOP_KEY_RULE =
   'idempotency_key names this one stop: reuse it only to retry the same request; a new stop (for example after the Owner lifted the last one) needs a new key, or the platform answers with the old stop.'
 
