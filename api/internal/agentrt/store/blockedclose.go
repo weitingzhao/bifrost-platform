@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // Closing a whole mission on a blocked task's card (the Owner 2026-10-20:
@@ -154,10 +157,16 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 		}
 		// Nothing moves when the mission has ended (a second close
 		// included), the task is in another mission now (its next card names
-		// that one), or the task left the block the card is about (review
-		// 439 C2, as one more round and not doing it go).
+		// that one), the task left the block the card is about (review
+		// 439 C2, as one more round and not doing it go), or a stop holds the
+		// task or the mission (blockedcard.go's stopHolds; both rows are
+		// locked above).
+		stopped, err := stopHolds(ctx, tx, t)
+		if err != nil {
+			return err
+		}
 		acted := OutcomeClosed
-		if (mstate != "active" && mstate != "paused") || t.mission != mission || t.state != "blocked" || latest != c.block {
+		if (mstate != "active" && mstate != "paused") || t.mission != mission || t.state != "blocked" || latest != c.block || stopped {
 			acted = OutcomeMoot
 		}
 		by := answerOf(q)
@@ -357,15 +366,20 @@ const closedWithCheck = checkClosed + ` AND EXISTS (SELECT 1 FROM agentrt.event 
 
 // WithdrawStaleCards withdraws every open blocked card of a mission that has
 // ended (done, stopped or expired), on which no answer can move anything;
-// every one whose task a plan change moved to another mission since (its
-// third option names the old one); every one of a check of a stopped task
-// (stoppedchecks.go: CloseStoppedChecks closes it as moot, and it is still
-// open in the question store); every one whose task is no longer blocked;
-// and every one that offers fewer options than a card does now. Only a card
-// the question store says is open is withdrawn; one answered, expired or
-// withdrawn is the next DecideBlocked's to close, and one it cannot read is
-// left alone. A card the store does not withdraw now is tried again by the
-// next pass. It returns how many it withdrew.
+// every one whose task has ended (accepted, rejected or cancelled, a task its
+// proposer withdrew among them), with the reason of the move that ended it;
+// every one whose task a stop holds, its own or its mission's (blockedcard.go:
+// only the Owner lifts a stop, and AskBlocked asks a new card for a task still
+// blocked then); every one whose task a plan change moved to another mission
+// since (its third option names the old one); every one of a check of a
+// stopped task (stoppedchecks.go: CloseStoppedChecks closes it as moot, and it
+// is still open in the question store); every one whose task is no longer
+// blocked; and every one that offers fewer options than a card does now. Only
+// a card the question store says is open is withdrawn; one answered, expired
+// or withdrawn is the next DecideBlocked's to close (an answer on a stopped or
+// ended task's card moves nothing), and one it cannot read is left alone. A
+// card the store does not withdraw now is tried again by the next pass. It
+// returns how many it withdrew.
 func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Context, string) (Question, bool), withdraw Withdraw) (int, error) {
 	if question == nil || withdraw == nil {
 		return 0, nil
@@ -376,19 +390,25 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 	size := int(blockedPage.Load())
 	for {
 		type card struct {
-			event                    int64
-			question, mission, state string
-			now                      string // the mission the card's task is in now
-			task, role               string // the card's task's state and role now
-			subject, subjectState    string // the task it checks, if any, and that task's state
+			event                          int64
+			question, task, mission, state string
+			now                            string  // the mission the card's task is in now
+			taskState, role, moved         string  // the task's state and role now, and the reason of its last move
+			stop                           *string // the reason of a stop that holds the task, if any
+			subject, subjectState          string  // the task it checks, if any, and that task's state
 		}
 		var page []card
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
 			// The mission the card was asked in, the one its option names
-			// (review 439 A4). A card CloseStoppedChecks closed as moot is
-			// still open in the question store: it is read too, for a week.
-			rows, err := tx.Query(ctx, `SELECT o.event_id, o.body_json->>'question_id', m.mission_id, m.state, t.mission_id,
-			    t.state, t.role, COALESCE(s.task_id, ''), COALESCE(s.state, '') FROM agentrt.event o
+			// (review 439 A4); a stop on the task's own (stopOn). A card
+			// CloseStoppedChecks closed as moot is still open in the question
+			// store: it is read too, for a week.
+			rows, err := tx.Query(ctx, `SELECT o.event_id, o.body_json->>'question_id', t.task_id, m.mission_id, m.state, t.mission_id, t.state, t.role,
+			    COALESCE((SELECT e.body_json->>'reason' FROM agentrt.event e WHERE e.task_id = t.task_id AND e.event_type = 'task_state_changed'
+			      ORDER BY e.event_id DESC LIMIT 1), ''),
+			    (SELECT k.reason FROM `+stopOn+` ORDER BY k.scope = 'task' DESC, k.set_at DESC LIMIT 1),
+			    COALESCE(s.task_id, ''), COALESCE(s.state, '')
+			  FROM agentrt.event o
 			  JOIN agentrt.task t ON t.task_id = o.task_id JOIN agentrt.mission m ON m.mission_id = o.mission_id
 			  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id
 			  WHERE o.event_type = 'owner_wait_opened' AND o.event_id > $1 AND (`+cardOpen+` OR `+closedWithCheck+`)
@@ -398,7 +418,8 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 			}
 			page, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (card, error) {
 				var c card
-				return c, r.Scan(&c.event, &c.question, &c.mission, &c.state, &c.now, &c.task, &c.role, &c.subject, &c.subjectState)
+				return c, r.Scan(&c.event, &c.question, &c.task, &c.mission, &c.state, &c.now, &c.taskState, &c.role, &c.moved, &c.stop,
+					&c.subject, &c.subjectState)
 			})
 			return err
 		}); err != nil {
@@ -413,11 +434,16 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 			switch {
 			case c.state == "done" || c.state == "stopped" || c.state == "expired":
 				why = fmt.Sprintf("mission %s has ended (%s); this card no longer decides anything", c.mission, c.state)
-			case c.now != c.mission:
-				why = fmt.Sprintf("its task is in mission %s now; a card naming that mission takes its place", c.now)
 			case (c.role == "verify" || c.role == "review") && slices.Contains([]string{"blocked", "cancelled", "rejected"}, c.subjectState):
 				why = fmt.Sprintf("it checks task %s, which is %s; the check was closed", c.subject, c.subjectState)
-			case c.task != "blocked":
+			case slices.Contains([]string{"accepted", "rejected", "cancelled"}, c.taskState):
+				why = fitWithdrawal(fmt.Sprintf("task %s is %s: ", c.task, c.taskState), c.moved, "")
+			case c.stop != nil:
+				why = fitWithdrawal(fmt.Sprintf("task %s is stopped (", c.task), *c.stop,
+					"); only the Owner lifts a stop, and a new card is asked if it is still blocked then")
+			case c.now != c.mission:
+				why = fmt.Sprintf("its task is in mission %s now; a card naming that mission takes its place", c.now)
+			case c.taskState != "blocked":
 				why = "its task is no longer blocked; this card no longer decides anything"
 			case q.Options > 0 && q.Options < len(blockedOptions(c.mission)):
 				why = "replaced by a card that can also close mission " + c.mission + " and says what it recommends"
@@ -434,5 +460,20 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 			return n, errors.Join(errs...)
 		}
 		after = page[len(page)-1].event
+	}
+}
+
+// fitWithdrawal is head, words on one line and tail, with words cut until the
+// whole fits the question store's limit on a withdrawal's reason.
+func fitWithdrawal(head, words, tail string) string {
+	r := []rune(strings.Join(strings.Fields(words), " "))
+	for k := len(r); ; k = k * 3 / 4 {
+		why := head + string(r[:k]) + tail
+		if k < len(r) {
+			why = head + string(r[:k]) + "…" + tail
+		}
+		if questions.BodyBytes(why) <= questions.ReasonLimit || k == 0 {
+			return why
+		}
 	}
 }

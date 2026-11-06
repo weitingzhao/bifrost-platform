@@ -72,9 +72,10 @@ func init() {
 		"POST /api/v1/agentrt/landing/refresh",
 		"POST /api/v1/agentrt/claim/pinned",
 	)
-	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card; PV1 adopt_plan_view uses the same plan/proposals decision path), a note on an architecture row only adds words beside the tick its done rule decides, a control only stops or pauses work, and only the Owner (admin) lifts one; not a cluster write",
+	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card; PV1 adopt_plan_view uses the same plan/proposals decision path), a note on an architecture row only adds words beside the tick its done rule decides, a control only stops or pauses work, and only the Owner (admin) lifts one, a withdrawal only cancels the proposer's own tasks that have not started; not a cluster write",
 		"POST /api/v1/agentrt/missions",
 		"POST /api/v1/agentrt/missions/{id}/tasks",
+		"POST /api/v1/agentrt/tasks/withdraw",
 		"POST /api/v1/agentrt/goals",
 		"POST /api/v1/agentrt/messages",
 		"POST /api/v1/agentrt/messages/ack",

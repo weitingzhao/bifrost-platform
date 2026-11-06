@@ -76,6 +76,14 @@ import (
 //   - a check of a task that is stopped (blocked, cancelled or rejected): it
 //     can never be used, and the controller's pass cancels it
 //     (stoppedchecks.go).
+//   - a task a stop holds: an uncleared control of kind stop on the task
+//     itself or on its mission (kernel.go's held). A stop is a hold only the
+//     Owner lifts, and while it holds no answer on a card can move the task
+//     (the coordinator, 2026-11-06: the Owner answered the cards of stopped
+//     work). Its open card is withdrawn (WithdrawStaleCards), an answer on
+//     one moves nothing (moot), and once the stop is lifted a task still
+//     blocked gets a new card. Only the task's own stop and its mission's: a
+//     check whose subject is stopped is the bullet above's.
 
 // The options of a blocked task's card, in the order the question store keys
 // them: the first (CardApplyKey) gives it one more round, the second
@@ -92,7 +100,7 @@ const (
 	OutcomeRetried = "retried"
 	OutcomeDropped = "dropped"
 	OutcomeNone    = "none"
-	OutcomeMoot    = "moot" // answered after the task moved on, or its mission ended: nothing moves
+	OutcomeMoot    = "moot" // answered after the task moved on, its mission ended or a stop held it: nothing moves
 )
 
 // blockedPage is how many blocked tasks or open cards a pass reads at a time.
@@ -116,8 +124,21 @@ const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('ac
     AND (a.state IN ('leased','running','stale') OR (a.state IN ('lost','failed') AND NOT EXISTS (SELECT 1 FROM agentrt.event x
       WHERE x.task_id = t.task_id AND x.attempt_id = a.attempt_id AND x.event_type = 'attempt_ended'
         AND (x.body_json->>'group_cleared')::boolean)))))
+  AND NOT EXISTS (SELECT 1 FROM ` + stopOn + `)
   AND NOT EXISTS (SELECT 1 FROM agentrt.event o WHERE o.task_id = t.task_id AND o.event_type = 'owner_wait_opened'
     AND (o.body_json->>'blocked_event_id')::bigint = b.event_id AND ` + cardOpen + `)`
+
+// stopOn is the uncleared stops (k) that hold task t: its own and its
+// mission's, as held reads controls.
+const stopOn = `agentrt.control k WHERE k.cleared_at IS NULL AND k.control_kind = 'stop'
+    AND ((k.scope = 'task' AND k.scope_ref = t.task_id) OR (k.scope = 'mission' AND k.scope_ref = t.mission_id))`
+
+// stopHolds reports whether a stop holds task t, its own or its mission's.
+// The caller holds t's row and its mission's, which a stop being set takes
+// (setControl): one set after this read waits for the caller to commit.
+func stopHolds(ctx context.Context, tx pgx.Tx, t taskRow) (bool, error) {
+	return held(ctx, tx, []scope{{"task", t.id}, {"mission", t.mission}}, "stop")
+}
 
 // cardOpen: the card owner_wait_opened o names has not been closed.
 const cardOpen = `NOT EXISTS (SELECT 1 FROM agentrt.event c WHERE c.task_id = o.task_id AND c.event_type = 'owner_wait_closed'
@@ -609,9 +630,16 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		// A card acts in the mission it was asked in: once a plan change moved
 		// its task (a rebind writes no task_state_changed), an answer on it is
 		// moot, as closing is (review 443 A1); the next card names the mission.
+		// Nor does it move a task a stop holds, its own or its mission's
+		// (both rows are locked above, as setting a stop locks them): only the
+		// Owner lifts a stop, and the task still blocked then gets a new card.
+		stopped, err := stopHolds(ctx, tx, t)
+		if err != nil {
+			return err
+		}
 		acted := outcome
 		if (outcome == OutcomeRetried || outcome == OutcomeDropped) && (t.state != "blocked" || latest != c.block || t.mission != asked ||
-			(mstate != "active" && mstate != "paused")) {
+			(mstate != "active" && mstate != "paused") || stopped) {
 			acted = OutcomeMoot
 		}
 		var spec string

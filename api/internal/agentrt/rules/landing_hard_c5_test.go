@@ -12,6 +12,14 @@ func TestLandingHardCoreEntryAndDecisionChain(t *testing.T) {
 		chain       bool
 	}{
 		{"api/internal/agentrt/store/zz_new.go", "api/internal/agentrt/store/", false},
+		{"api/internal/agentrt/store/sub/repos.go", "api/internal/agentrt/store/", false},
+		{"api/internal/agentrt/store/repos.go", "api/internal/agentrt/store/repos.go", false},
+		{"api/internal/agentrt/store/landing_grant.go", "api/internal/agentrt/store/landing*", false},
+		{"api/internal/agentrt/store/progress.go", "", false},
+		{"api/cmd/agentd/main.go", "api/cmd/agentd/", false},
+		{"api/cmd/agentrt-gate/main.go", "", false},
+		{"api/internal/agentrt/controller/loop.go", "", false},
+		{"console/src/api/questions.ts", "", false},
 		{"api/internal/approvals/service.go", "api/internal/approvals/", true},
 		{"api/internal/approvalhome/home.go", "api/internal/approvalhome/", true},
 		{"api/internal/actuation/auth.go", "api/internal/actuation/", true},

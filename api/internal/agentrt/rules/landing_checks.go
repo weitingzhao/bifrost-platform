@@ -7,7 +7,7 @@ import (
 
 // LandingChecksVersion identifies the coordinator v3 checks, including §12.
 // It is audit evidence, not a substitute for recomputing the refusal set.
-const LandingChecksVersion = 2
+const LandingChecksVersion = 3
 
 type LandingRefusal string
 
@@ -78,6 +78,7 @@ func LandingAbsoluteViolation(repo string, changes []LandingChange) (string, boo
 // LandingSoftRefusals is the single predicate used at request and consumption
 // time. §12 extends its four policy categories with core. Core paths do not
 // also count as floor_soft, but can independently fail paths, size or display.
+// Open paths (LandingOpen) fail only deny and size.
 // Structural/absolute checks and rule validity must precede this function.
 // A missing repo fails closed; it is never an empty (waiver-free) set.
 func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []LandingRefusal {
@@ -101,6 +102,12 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		for _, p := range c.Paths() {
 			if repo == "bifrost-trade-infra" && InfraFloorEntry(p) != "" {
 				failed[LandingFloorGrant] = true
+			} else if LandingOpen(repo, p) {
+				// Open paths are outside the Owner's review: only deny refuses one.
+				if landingMatches(r.Deny, p) {
+					failed[LandingRulePaths] = true
+				}
+				continue
 			} else if LandingHardCore(repo, p) {
 				failed[LandingCore] = true
 			} else if LandingFloor(repo, p) && !LandingHard(repo, p) {
@@ -110,13 +117,21 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 				failed[LandingRulePaths] = true
 			}
 		}
-		// Display checks apply only to changes entirely inside allow. A path
-		// refusal is not mislabelled as an additional presentation refusal.
-		allowed := len(c.Paths()) > 0
-		for _, p := range c.Paths() {
+		// Display checks apply only to the change's other sides, and only when
+		// they are all inside allow. A path refusal is not mislabelled as an
+		// additional presentation refusal.
+		shown := c
+		if LandingOpen(repo, c.OldPath) {
+			shown.OldPath = ""
+		}
+		if LandingOpen(repo, c.NewPath) {
+			shown.NewPath = ""
+		}
+		allowed := len(shown.Paths()) > 0
+		for _, p := range shown.Paths() {
 			allowed = allowed && landingMatches(r.Allow, p)
 		}
-		if repo != "bifrost-trade-infra" && allowed && !LandingPresentationOnly(r.Allow, []LandingChange{c}) {
+		if repo != "bifrost-trade-infra" && allowed && !LandingPresentationOnly(r.Allow, []LandingChange{shown}) {
 			failed[LandingPresentation] = true
 		}
 		for _, n := range []int{c.Added, c.Deleted} {

@@ -56,7 +56,10 @@ func scanConsole(root string, covered func(string) bool) ([]string, error) {
 }
 func TestLandingHardConsoleCallSites(t *testing.T) {
 	t.Parallel()
-	missing, err := scanConsole(repositoryRoot(t), func(p string) bool { return inLandingEntries(p, landingHardConsole[:]) })
+	missing, err := scanConsole(repositoryRoot(t), func(p string) bool {
+		// An open entry's reason says why its call site is not a decision.
+		return inLandingEntries(p, landingHardConsole[:]) || inLandingOpen(p)
+	})
 	if err != nil || len(missing) > 0 {
 		t.Fatalf("unprotected decision/credential call sites: %v: %v", missing, err)
 	}

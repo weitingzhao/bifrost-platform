@@ -39,7 +39,7 @@ func TestInfraHardClosure(t *testing.T) {
 			t.Errorf("unprotected never-grantable infra path: %s", p)
 		}
 	}
-	for _, p := range []string{"api/internal/delivery/new_file.go", "api/internal/agentrt/infracheck/new_file.go", "api/internal/agentrt/store/repos.go", "api/cmd/infracheck/main.go"} {
+	for _, p := range []string{"api/internal/agentrt/landingci/new_file.go", "api/internal/agentrt/infracheck/new_file.go", "api/internal/agentrt/store/repos.go", "api/cmd/infracheck/main.go"} {
 		if !LandingHard("bifrost-platform", p) {
 			t.Errorf("unprotected platform dependency: %s", p)
 		}
