@@ -230,6 +230,52 @@ func TestAcceptPlanRecordsIt(t *testing.T) {
 	}
 }
 
+// A planning task on a step: the tasks its plan makes hang on that step, not
+// off the plan, and the plan view counts them there.
+func TestAcceptPlanInheritsItsStep(t *testing.T) {
+	t.Parallel()
+	w := planWorld(t)
+	const step = "R3:3.1-1"
+	for _, n := range []store.PlanNode{
+		{ID: "R3", Kind: "round", Label: "3", Title: "round 3", Ordinal: 1, Root: "R3"},
+		{ID: "R3:3.1", Parent: "R3", Kind: "item", Label: "3.1", Title: "the goal", Root: "R3"},
+		{ID: step, Parent: "R3:3.1", Kind: "step", Label: "3.1-1", Title: "plan it", MissionID: "M-3", StepKind: "agent", Root: "R3"},
+	} {
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
+	}
+	plan := w.ready(t, store.Task{MissionID: "M-3", PlanNode: step, Role: "plan", Effect: "none", BaseCommit: commitA})
+	w.work(t, plan, goodPlan, "done")
+	var s cards
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw); err != nil || did != "accepted" {
+		t.Fatalf("accept: %q %v", did, err)
+	}
+	rows, err := w.rt.Query(ctx, `SELECT t.task_id, t.title, COALESCE(t.plan_node_id, ''), t.off_plan, t.off_plan_reason IS NULL,
+	  (SELECT COALESCE(e.plan_node_id, '') FROM agentrt.event e WHERE e.task_id = t.task_id AND e.event_type = 'task_proposed')
+	  FROM agentrt.task t WHERE t.mission_id = 'M-3' AND t.role = 'implement' ORDER BY t.title`)
+	ok(t, err)
+	var ids []string
+	for rows.Next() {
+		var id, title, node, evNode string
+		var offPlan, noReason bool
+		ok(t, rows.Scan(&id, &title, &node, &offPlan, &noReason, &evNode))
+		if node != step || offPlan || !noReason || evNode != step {
+			t.Fatalf("%s: step %q, off plan %v, no reason %v, task_proposed on %q", title, node, offPlan, noReason, evNode)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	ok(t, rows.Err())
+	if len(ids) != 2 {
+		t.Fatalf("tasks %v", ids)
+	}
+	// Document GoalRepos (the first by title) after Document MainHead.
+	var dep string
+	ok(t, w.rt.QueryRow(ctx, `SELECT depends_on_task_id FROM agentrt.task_dependency WHERE task_id = $1`, ids[0]).Scan(&dep))
+	if dep != ids[1] {
+		t.Fatalf("Document GoalRepos depends on %s, not on Document MainHead %s", dep, ids[1])
+	}
+}
+
 // nothingWritten fails when a refused plan wrote tasks or records.
 func nothingWritten(t *testing.T, w *world) {
 	t.Helper()

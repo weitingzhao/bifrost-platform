@@ -25,7 +25,9 @@ import (
 //   - the mission amended: its criteria, what is out of scope, a budget no
 //     larger than it had (mission_amended);
 //   - the implementation tasks, each with the repository's checks and the
-//     plan's own, on the commit the planner read (task_proposed);
+//     plan's own, on the commit the planner read (task_proposed); they hang
+//     on the planning task's step when it has one, and are off the plan,
+//     "planned by task ...", when it has none;
 //   - the choices the planner made, for the Owner to audit (decision_recorded,
 //     the Owner's D2 A);
 //   - the planning task accepted.
@@ -39,8 +41,9 @@ import (
 // cards a refused round made are withdrawn in the same pass, before the
 // refusal is written (review 217 B1).
 //
-// Lock order: the planning task's attempt, the task, the mission's row, the
-// seat as a writer, the dependency graph and steps (lockBatch), then the
+// Lock order: the planning task's step (lockStep, as accept.go), its
+// attempt, the task, the mission's row, the seat as a writer, the dependency
+// graph and steps (lockBatch, the planning task's step again), then the
 // streams. The graph lock comes before any event, as ProposeTasks over HTTP
 // takes it before its own (review 216 A2).
 
@@ -87,6 +90,14 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 	var did string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = ""
+		// The planning task's step before its attempt, as a plan change takes
+		// steps before tasks; lockBatch takes it again for the tasks below.
+		if _, err := lockStep(ctx, tx, taskID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
 		_, conclusion, report, _, err := submittedAttempt(ctx, tx, taskID, "FOR UPDATE")
 		if errors.Is(err, errNoSubmitted) {
 			return nil
@@ -244,7 +255,13 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			if err != nil {
 				return err
 			}
-			tasks = append(tasks, TaskProposal{Ref: pt.Ref, OffPlanReason: "planned by task " + taskID, Role: "implement",
+			// On a step the tasks hang on the planning task's step; off the
+			// plan they say who planned them.
+			node, offPlan := t.step, ""
+			if node == "" {
+				offPlan = "planned by task " + taskID
+			}
+			tasks = append(tasks, TaskProposal{Ref: pt.Ref, PlanNode: node, OffPlanReason: offPlan, Role: "implement",
 				Class: "goal", Title: pt.Title, SpecArtifact: id, Effect: "branch", Repo: pt.Repo, BaseCommit: baseOf(pt.Repo),
 				Core: pt.IsCore(), DependsOn: pt.DependsOn})
 		}
