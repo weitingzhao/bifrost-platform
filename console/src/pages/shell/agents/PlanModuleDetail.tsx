@@ -61,6 +61,7 @@ function Task({ task }: { task: TaskLine }) {
   return <span className="min-w-0">
     {task.role} · <a href={task.href} className="underline-offset-2 hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center">{task.title}</a>
     {' · '}{task.state}{task.round && ` · ${task.round}`}{task.attempt && ` · ${task.attempt}`}{task.detail && ` · ${task.detail}`}
+    {task.waiting && <span className="block text-xs text-muted-foreground">{task.waitingHref ? <a href={task.waitingHref} className="underline-offset-2 hover:underline">{task.waiting}</a> : task.waiting}</span>}
   </span>
 }
 function Rule({ lines }: { lines: RuleLine[] }) {

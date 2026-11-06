@@ -14,7 +14,7 @@ import { NowClock } from '../../progress/progressClock'
 import { PlanModuleDetail } from '../PlanModuleDetail'
 import { PlanModuleRows } from '../PlanModuleRows'
 import { WorkPlanView } from '../WorkPlanView'
-import { actionsLeft, moduleOf, moduleScopes, needsNow, planActivity, type ShellReads } from '../moduleDetailModel'
+import { actionsLeft, roundWords, runtimeTasks, taskLine, moduleOf, moduleScopes, needsNow, planActivity, type ShellReads } from '../moduleDetailModel'
 import { allRequests, AT, FAR, id, openRequests, progress, Q_BLOCKED, Q_CHANGE, Q_GONE, Q_MISSION, Q_OPEN, Q_RULE, question, questions, r5, r5Raw, T2, T3, T5,
   T_OTHER } from './moduleDetailFixture'
 
@@ -534,4 +534,34 @@ it('shows snapshot stop and withdrawal details on task rows and accepts old snap
   detail(parsed)
   expect(screen.getAllByText(/Stopped by coordinator: Review first/).length).toBeGreaterThan(0)
   expect(screen.getAllByText(/Withdrawn by Owner: Scope changed/).length).toBeGreaterThan(0)
+})
+
+it('shows plan-view rounds and waiting reasons in the step task rows', () => {
+  seedShell()
+  const view = r5()
+  const base = view.tasks.find(t => t.plan_node_id.startsWith('R5:5.1-'))!
+  const waits = [
+    { on: 'checks', reason: 'checks running', checks: [{ task_id: 't_ABC123', role: 'verify', state: 'ready' }] },
+    { on: 'landing', reason: 'grant pending' },
+    { on: 'owner', reason: 'card open', question_id: 'q-owner' },
+    { on: 'stop', reason: 'Owner paused work' },
+    undefined,
+  ]
+  view.tasks = waits.map((waiting, i) => ({ ...base, task_id: `waiting-${i}`, title: `Waiting work ${i}`, state: i === 4 ? 'accepted' : 'blocked', round_no: 2, max_rounds: 3, waiting }))
+  detail(view, base.plan_node_id)
+  const rows = within(region('Steps of 5.1'))
+  expect(rows.getAllByText(/round 2 of 3/)).toHaveLength(4)
+  for (const text of ['Waits on checks: verify t_…ABC123 ready', 'Waits on landing: grant pending', 'Waits on the Owner: question q-owner', 'Stopped: Owner paused work']) expect(rows.getByText(text)).toBeInTheDocument()
+  expect(rows.getByRole('link', { name: 'Waits on the Owner: question q-owner' })).toHaveAttribute('href', questionHref('q-owner'))
+})
+
+it('prefers progress rounds, falls back to plan rounds, and preserves old responses', () => {
+  const task = { ...r5().tasks.find(t => t.task_id === T2)!, state: 'blocked', round_no: 2, max_rounds: 3 }
+  const unread = runtimeTasks({ state: 'unread' })
+  expect(roundWords(task, unread)).toBe('round 2 of 3')
+  const runtime = { ...unread, read: true, work: new Map([[task.task_id, { ...task, round_no: 1, max_rounds: 4 }]]) }
+  expect(roundWords(task, runtime as ReturnType<typeof runtimeTasks>)).toBe('round 1 of 4')
+  const old = { ...r5().tasks.find(t => t.task_id === T2)!, state: 'blocked' }
+  expect(taskLine(old, unread).waiting).toBe('')
+  expect(roundWords(old, unread)).toBe('round Unknown (runtime progress not read)')
 })

@@ -40,3 +40,20 @@ describe('PlanTree deep links and bound tasks (review 629)', () => {
     expect(screen.getAllByRole('link', { name: /Step task · running/ })).toHaveLength(1)
   })
 })
+
+it.each(['R4:4.1-2', 'R4:4.5.pv'])('shows task rounds and waits on %s', node => {
+  const input = structuredClone(fixture) as Record<string, unknown>
+  const waits = [
+    { on: 'checks', reason: 'checks running', checks: [{ task_id: 't_ABC123', role: 'verify', state: 'ready' }] },
+    { on: 'landing', reason: 'grant pending' },
+    { on: 'owner', reason: 'card open', question_id: 'q-owner' },
+    { on: 'stop', reason: 'Owner paused work' },
+    undefined,
+  ]
+  input.tasks = waits.map((waiting, i) => ({ task_id: `t-${i}`, plan_node_id: node, mission_id: 'm', title: `Work ${i}`, state: i === 4 ? 'accepted' : 'blocked', round_no: 2, max_rounds: 3, waiting }))
+  render(<PlanTree view={parsePlanSnapshot(input, 'R4')} selected={node} />)
+  expect(screen.getAllByRole('link', { name: /round 2 of 3/ })).toHaveLength(4)
+  for (const text of ['Waits on checks: verify t_…ABC123 ready', 'Waits on landing: grant pending', 'Waits on the Owner: question q-owner', 'Stopped: Owner paused work']) expect(screen.getByText(text)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Waits on the Owner: question q-owner' })).toHaveAttribute('href', expect.stringContaining('q-owner'))
+  expect(screen.getByRole('link', { name: 'Work 4 · accepted' }).parentElement).not.toHaveTextContent('Waits')
+})
