@@ -16,7 +16,8 @@ import (
 // checks (submitted or verifying), else what TaskStatus (progress.go) says
 // of it. An accepted task waits on its landing while its latest landing
 // operation has not ended. A finished task with no landing to wait on has no
-// waiting.
+// waiting, nor has a task on main (on_main, progressstop.go), whatever its
+// state.
 
 // The values of waiting.on.
 const (
@@ -62,7 +63,7 @@ type planViewWaitFact struct {
 }
 
 // planViewWaits adds waiting to the plan view's tasks, read in the view's
-// transaction after planViewHolds (whose stopped it reads). The task query's
+// transaction after planViewHolds (whose stopped and on_main it reads). The task query's
 // depends_on (its dependencies not yet accepted) is read here and not shown.
 func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[string]any, snap *planFactsSnapshot, live map[string]*ProgressAttempt, now time.Time) error {
 	open := false
@@ -99,6 +100,9 @@ func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 		delete(t, "depends_on")
 		id, _ := t["task_id"].(string)
 		state, _ := t["state"].(string)
+		if t["on_main"] != nil {
+			continue
+		}
 		if taskFinished(state) {
 			if state == "accepted" {
 				if w := landingWait(snap, id); w != nil {

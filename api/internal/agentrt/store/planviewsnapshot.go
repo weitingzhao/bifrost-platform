@@ -138,7 +138,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		if t["state"] == "accepted" {
 			t["delivery"] = "Accepted · " + snapshotTaskDelivery(snap, t["task_id"].(string))
 		}
-		if t["state"] == "awaiting_owner" {
+		if t["state"] == "awaiting_owner" && t["on_main"] == nil {
 			ownerWaiting = append(ownerWaiting, map[string]any{"task_id": t["task_id"], "plan_node_id": t["plan_node_id"], "reason": "Runtime task awaits Owner", "source": "agentrt.task"})
 		}
 		if a := live[t["task_id"].(string)]; a != nil {

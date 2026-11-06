@@ -49,6 +49,58 @@ const withdrawnSQL = ` LEFT JOIN LATERAL (SELECT e.actor_id AS withdrawn_by, COA
     WHERE t.state = 'cancelled' AND e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'cancelled'
       AND (e.actor_id LIKE 'thread:%' OR e.actor_id LIKE 'seat:%' OR e.actor_id LIKE 'agent:%')) wd ON true `
 
+// A task whose change is on main (a landed note, RecordLandings in prune.go)
+// reads finished whatever its state: it is not open work, not stopped,
+// blocked or queued, not withdrawn, waits for nothing and adds nothing to an
+// estimate. A cancelled one stays cancelled; it is only read as finished.
+
+// ProgressOnMain is the commit main holds a task's change as and how the
+// change got there (the note's landed_via; "on main" for a note older than
+// that key).
+type ProgressOnMain struct {
+	Commit string `json:"commit"`
+	Via    string `json:"via"`
+}
+
+// landedNote joins, as landed, task t's latest landed note: its commit and
+// landed_via.
+const landedNote = ` LEFT JOIN LATERAL (SELECT e.body_json->>'landed' AS commit, COALESCE(e.body_json->>'landed_via', '') AS via
+    FROM agentrt.event e WHERE e.task_id = t.task_id AND e.event_type = 'note' AND e.body_json ? 'landed'
+    ORDER BY e.event_id DESC LIMIT 1) landed ON true `
+
+// landedColumns are landedNote's columns, with the task's repository.
+const landedColumns = `landed.commit, landed.via, COALESCE(t.repo, '')`
+
+// landedScan receives landedColumns.
+type landedScan struct {
+	commit, via *string
+	repo        string
+}
+
+func (l *landedScan) dest() []any { return []any{&l.commit, &l.via, &l.repo} }
+
+// onMain is the note scanned, nil when the task has none.
+func (l *landedScan) onMain() *ProgressOnMain {
+	if l.commit == nil {
+		return nil
+	}
+	via := *l.via
+	if via == "" {
+		via = "on main"
+	}
+	return &ProgressOnMain{Commit: *l.commit, Via: via}
+}
+
+// words is a task on main's reason.
+func (l *landedScan) words() string {
+	o := l.onMain()
+	main12 := o.Commit
+	if len(main12) > 12 {
+		main12 = main12[:12]
+	}
+	return "on main of " + l.repo + " as " + main12 + " (" + o.Via + ")"
+}
+
 // stopScan receives stopColumns.
 type stopScan struct {
 	id, by, reason *string
@@ -66,12 +118,13 @@ func (s *stopScan) stop(format func(time.Time) string) *ProgressStop {
 }
 
 // planViewHolds adds to the plan view's tasks the stop that holds an
-// unfinished one (stopped) and how a cancelled one was withdrawn (withdrawn),
-// read in the view's transaction.
+// unfinished one (stopped), how a cancelled one was withdrawn (withdrawn) and,
+// instead of either, the commit main holds a task's change as (on_main), read
+// in the view's transaction.
 func planViewHolds(ctx context.Context, tx pgx.Tx, root string, tasks []map[string]any) error {
 	rows, err := tx.Query(ctx, viewTree+`SELECT t.task_id, t.state NOT IN ('accepted','rejected','cancelled'), `+stopColumns+`,
-	    wd.withdrawn_by, wd.withdraw_reason, wd.withdrawn_at
-	  FROM agentrt.task t JOIN tree USING(plan_node_id)`+stopHolding+withdrawnSQL, root)
+	    wd.withdrawn_by, wd.withdraw_reason, wd.withdrawn_at, `+landedColumns+`
+	  FROM agentrt.task t JOIN tree USING(plan_node_id)`+stopHolding+withdrawnSQL+landedNote, root)
 	if err != nil {
 		return err
 	}
@@ -86,11 +139,16 @@ func planViewHolds(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 		var s stopScan
 		var by, reason *string
 		var at *time.Time
-		if err = rows.Scan(append(append([]any{&id, &open}, s.dest()...), &by, &reason, &at)...); err != nil {
+		var l landedScan
+		if err = rows.Scan(append(append(append([]any{&id, &open}, s.dest()...), &by, &reason, &at), l.dest()...)...); err != nil {
 			return err
 		}
 		t := byID[id]
 		if t == nil {
+			continue
+		}
+		if o := l.onMain(); o != nil {
+			t["on_main"] = o
 			continue
 		}
 		if st := s.stop(timeText); st != nil && open {
