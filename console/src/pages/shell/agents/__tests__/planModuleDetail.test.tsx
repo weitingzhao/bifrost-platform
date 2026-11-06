@@ -523,3 +523,15 @@ describe('Work → Plan with a module address', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Stale · showing the last successful snapshot')
   })
 })
+
+it('shows snapshot stop and withdrawal details on task rows and accepts old snapshots', () => {
+  const raw = r5Raw()
+  Object.assign(raw.tasks.find(t => t.task_id === T3)!, { stopped: { control_id: 's1', by: 'coordinator', reason: 'Review first', since: AT } })
+  Object.assign(raw.tasks.find(t => t.task_id === T2)!, { state: 'cancelled', withdrawn: { by: 'Owner', reason: 'Scope changed', at: AT } })
+  const parsed = parsePlanSnapshot(raw, 'R5')
+  expect(parsed.tasks.find(t => t.task_id === T3)?.stopped?.by).toBe('coordinator')
+  expect(() => parsePlanSnapshot(r5Raw(), 'R5')).not.toThrow()
+  detail(parsed)
+  expect(screen.getAllByText(/Stopped by coordinator: Review first/).length).toBeGreaterThan(0)
+  expect(screen.getAllByText(/Withdrawn by Owner: Scope changed/).length).toBeGreaterThan(0)
+})

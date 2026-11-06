@@ -70,6 +70,15 @@ const on514 = (change: (raw: Raw) => void = () => {}) => view(raw => { activate(
 const at = (now: number) => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now) }
 
 describe('step state now (model)', () => {
+  it('holds a ready task with a stop, without queuing its step; older tasks stay queued', () => {
+    const stopped = { control_id: 'stop-1', by: 'coordinator', reason: 'Wait for review', since: AT }
+    const v = view(raw => Object.assign(task(raw, T3), { stopped }))
+    const c = cell(v, '5.1-3')
+    expect(c.now).toMatchObject({ kind: 'held', held: [{ kind: 'stopped', text: expect.stringContaining('stopped by coordinator: Wait for review; only you can lift it') }] })
+    expect(cell(view(), '5.1-3').now?.kind).toBe('queued')
+    expect(row(stepRows(v, clock()), '5.1')).toMatchObject({ queued: 0, held: 1 })
+  })
+
   it('an active step with nothing running now, queued or held, read now, is Active · nothing running now: never In progress', () => {
     const c = cell(on514(), '5.1-4')
     expect(c).toMatchObject({ step: 'active', state: 'idle', now: { kind: 'idle' } })

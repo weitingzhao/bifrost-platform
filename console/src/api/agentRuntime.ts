@@ -13,6 +13,8 @@ export type RuntimeTask = {
   task_id: string; title: string; role: string; state: string; status: string; reason: string
   since: string; round_no?: number; max_rounds?: number; depends_on: string[]
   /** Its latest lost attempt that no later persisted result superseded (TD-352). */
+  stopped?: { control_id: string; by: string; reason: string; since: string }
+  withdrawn_by?: string; withdraw_reason?: string
   lost_attempt?: RuntimeAttempt
   /** Work outside the plan, with why (v5 §5.1.1: Progress marks it "off plan"); unset by an answer that does not say. */
   off_plan?: boolean; off_plan_reason?: string
@@ -121,6 +123,12 @@ export function parseRuntimeTask(v: unknown): RuntimeTask {
   const task: RuntimeTask = { task_id: text(r.task_id), title: text(r.title), role: text(r.role), state: text(r.state),
     status: text(r.status), reason: text(r.reason), since: text(r.since) || text(r.ended_at),
     round_no: number(r.round_no), max_rounds: number(r.max_rounds), depends_on: strings(r.depends_on) }
+  if (r.stopped !== null && typeof r.stopped === 'object' && !Array.isArray(r.stopped)) {
+    const stopped = record(r.stopped)
+    task.stopped = { control_id: text(stopped.control_id), by: text(stopped.by), reason: text(stopped.reason), since: text(stopped.since) }
+  }
+  if (typeof r.withdrawn_by === 'string') task.withdrawn_by = r.withdrawn_by
+  if (typeof r.withdraw_reason === 'string') task.withdraw_reason = r.withdraw_reason
   if (r.lost_attempt !== null && typeof r.lost_attempt === 'object') task.lost_attempt = parseRuntimeAttempt(r.lost_attempt)
   if (typeof r.off_plan === 'boolean') task.off_plan = r.off_plan
   if (r.off_plan === true) task.off_plan_reason = text(r.off_plan_reason)
