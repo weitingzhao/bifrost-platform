@@ -181,12 +181,60 @@ func trigger(p string) string {
 	if p == "scripts/ci/test_api_scoped.sh" {
 		return "selector script"
 	}
-	for _, v := range strings.Split(p, "/") {
+	return ""
+}
+
+// testdataOwner returns the directory, relative to the module, that owns the
+// first testdata element of rel.
+func testdataOwner(rel string) (string, bool) {
+	parts := strings.Split(rel, "/")
+	for i, v := range parts[:len(parts)-1] {
 		if v == "testdata" {
-			return "testdata"
+			return strings.Join(parts[:i], "/"), true
 		}
 	}
-	return ""
+	return "", false
+}
+
+// testdataReaders maps each package to the base names of the changed testdata
+// files it reads: the owner of each file, and every package whose test files
+// name the file's base name or its path relative to the module.
+func testdataReaders(g *graph, data map[string][]string) (map[string]map[string]bool, error) {
+	out := map[string]map[string]bool{}
+	add := func(p, base string) {
+		if out[p] == nil {
+			out[p] = map[string]bool{}
+		}
+		out[p][base] = true
+	}
+	for owner, rels := range data {
+		for _, rel := range rels {
+			add(owner, filepath.Base(rel))
+		}
+	}
+	for name, p := range g.packages {
+		entries, e := os.ReadDir(p.Dir)
+		if e != nil {
+			return nil, e
+		}
+		for _, v := range entries {
+			if !strings.HasSuffix(v.Name(), "_test.go") {
+				continue
+			}
+			b, e := os.ReadFile(filepath.Join(p.Dir, v.Name()))
+			if e != nil {
+				return nil, e
+			}
+			for _, rels := range data {
+				for _, rel := range rels {
+					if bytes.Contains(b, []byte(filepath.Base(rel))) || bytes.Contains(b, []byte(rel)) {
+						add(name, filepath.Base(rel))
+					}
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 // ExplicitGuards supplements guards discovered by scanning test source.
@@ -285,12 +333,25 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 	}
 	changed := map[string]bool{}
 	files := map[string][]string{}
+	data := map[string][]string{}
 	for _, c := range changes {
 		for _, p := range c.Paths {
 			if !strings.HasPrefix(p, "api/") {
 				continue
 			}
 			rel := strings.TrimPrefix(p, "api/")
+			if dir, ok := testdataOwner(rel); ok {
+				name := g.dirs[filepath.Join(g.module, dir)]
+				if name == "" {
+					return Full("unresolved testdata package")
+				}
+				q := g.packages[name]
+				if strings.HasSuffix(q.Name, "test") || strings.HasSuffix(q.Name, "testutil") {
+					return Full("shared test helper package")
+				}
+				data[name] = append(data[name], rel)
+				continue
+			}
 			name := g.dirs[filepath.Join(g.module, filepath.Dir(rel))]
 			if name == "" {
 				if strings.HasSuffix(p, ".go") {
@@ -323,13 +384,31 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 			}
 		}
 	}
-	if len(selected)*100 > len(g.packages)*40 {
-		return Full("package selection exceeds 40%")
-	}
 	store := g.prefix + "/internal/agentrt/store"
+	code := selected[store]
+	why := "changed packages, test dependents, and guards"
+	readers := map[string]map[string]bool{}
+	if len(data) > 0 {
+		readers, e = testdataReaders(g, data)
+		if e != nil {
+			return Full("testdata scan error: " + e.Error())
+		}
+		var names []string
+		for p := range readers {
+			selected[p] = true
+			names = append(names, p)
+		}
+		sort.Strings(names)
+		why += "; testdata: " + strings.Join(names, " ")
+	}
 	run := ""
 	if selected[store] {
-		run, e = storeRun(g, store, files[store], changed)
+		var bases []string
+		for b := range readers[store] {
+			bases = append(bases, b)
+		}
+		sort.Strings(bases)
+		run, e = storeRun(g, store, files[store], changed, code, bases)
 		if e != nil {
 			return Full("store selection error: " + e.Error())
 		}
@@ -341,5 +420,5 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 		}
 	}
 	sort.Strings(names)
-	return Result{"incremental", strings.Join(names, " "), run, "changed packages, test dependents, and guards"}
+	return Result{"incremental", strings.Join(names, " "), run, why}
 }
