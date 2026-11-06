@@ -465,15 +465,15 @@ var catalog = []Action{
 		Description: "Grant one waiting landing operation of the agent runtime (a pinned coordinator commit whose only failures are soft guardrails) the push to main by the lander identity. " +
 			"Tier D: only the Owner approves on the Console, with the approval number confirmed. Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
 			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release} as handin.sh status prints them: op must be the root's latest operation, waiting for a grant, and material_digest the server's own recomputation of its material (GET /api/v1/agentrt/landing/{op}/material). " +
-			"The approval writes a grant valid 24 hours from the decision; the final gate pushes only if every unwaivable check passes then and the rule in force then fails nothing beyond what was waived. A core (hard_core) change takes approve_core_landing instead. stg_release true also authorizes the commit to go to STG with the B5 batch. " +
+			"The approval writes a grant valid 24 hours from the decision; the final gate pushes only if every unwaivable check passes then and the rule in force then fails nothing beyond what was waived. A change under a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) takes approve_core_landing instead. Other former core paths land on a green landing CI. stg_release true also authorizes the commit to go to STG with the B5 batch. " +
 			"The Owner may revoke the grant before the push (POST /api/v1/agentrt/landing/grants/{grant_id}/revoke).",
 		Params: landingGrantParams,
 	},
 	{
 		ID: "approve_core_landing", Tier: TierD,
-		Description: "Trusted core change: grant one waiting landing operation whose commit changes approval, identity or landing-gate code (hard_core) the push to main by the lander identity; later approvals are handled by the new code. " +
+		Description: "Permission path change: grant one waiting landing operation whose commit changes a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) the push to main by the lander identity; later approvals are handled by the new code. Other former core paths land on a green landing CI. " +
 			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}; the review must have answered the trust chain questions. The grant also waives the change's soft failures, is valid 24 hours from the decision, and can be revoked before the push. " +
+			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant also waives the change's soft failures, is valid 24 hours from the decision, and can be revoked before the push. " +
 			"hard_absolute paths (.env*, .gitmodules, .github/) are never granted.",
 		Params: landingGrantParams,
 	},
