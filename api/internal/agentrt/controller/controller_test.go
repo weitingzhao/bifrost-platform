@@ -603,7 +603,7 @@ func TestBlockedCardsBlockATaskOverBudget(t *testing.T) {
 func implSpec(t *testing.T) []byte {
 	t.Helper()
 	r := store.Repos["bifrost-platform"]
-	b, err := store.ImplementSpec("t", "t", r, r.Verify)
+	b, err := store.ImplementSpec("t", "t", r, r.Verify, store.HandInChecks(r, nil))
 	must(t, err)
 	return b
 }

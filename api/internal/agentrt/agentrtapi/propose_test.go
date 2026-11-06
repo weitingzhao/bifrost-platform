@@ -19,7 +19,7 @@ const session = "X-Bifrost-Session"
 func implSpec(t *testing.T, text string) []byte {
 	t.Helper()
 	r := store.Repos["bifrost-platform"]
-	b, err := store.ImplementSpec("t", text, r, r.Verify)
+	b, err := store.ImplementSpec("t", text, r, r.Verify, store.HandInChecks(r, nil))
 	must(t, err)
 	return b
 }

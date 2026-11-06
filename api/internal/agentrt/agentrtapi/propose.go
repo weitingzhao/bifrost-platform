@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -131,6 +132,9 @@ type taskBody struct {
 	// Providers declares whose work a pinned task's commit holds (§2.8):
 	// only the entry's provider, alone, is taken.
 	Providers []string `json:"providers"`
+	// PinReason says why an implement task is pinned to the coordinator
+	// (store/pinreason.go): required under AGENTRT_PIN_REASON=refuse.
+	PinReason string `json:"pin_reason"`
 }
 
 type tasksBody struct {
@@ -154,6 +158,7 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	tasks := make([]store.PinnedTask, 0, len(b.Tasks))
 	pinned := false
+	var unexplained []string // pinned to the coordinator with no reason, accepted under warn
 	for _, t := range b.Tasks {
 		// Bounded before it becomes a duration, which a large number would
 		// wrap (review 175 B5).
@@ -162,10 +167,20 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("task %s: hard_limit_s is from 0 to %d", t.Ref, int(store.MaxHardLimit/time.Second)))
 			return
 		}
-		tasks = append(tasks, store.PinnedTask{TaskProposal: store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
+		task := store.PinnedTask{TaskProposal: store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
-			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers})
+			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers,
+			PinReason: t.PinReason}
+		missing, err := store.CheckPinReason(task, a.pinReason())
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		if missing {
+			unexplained = append(unexplained, t.Ref)
+		}
+		tasks = append(tasks, task)
 		pinned = pinned || t.ExecutorPin != ""
 	}
 	var out map[string]any
@@ -181,6 +196,10 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.fail(w, err)
 		return
+	}
+	if len(unexplained) > 0 {
+		a.logf("mission %s: %s pinned tasks %v to %s without a pin_reason (AGENTRT_PIN_REASON=warn: accepted, counted as unexplained)",
+			chi.URLParam(r, "id"), who.Actor, unexplained, rules.PinCoordinator)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

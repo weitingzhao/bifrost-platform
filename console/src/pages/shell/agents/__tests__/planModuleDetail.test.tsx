@@ -462,8 +462,9 @@ describe('Work → Plan with a module address', () => {
     expect(urls().length).toBeGreaterThan(0)
     // The detail reads nothing of its own: the page's own reads are the plan view and, for the summary's sign-off
     // count (R5:5.5-2), the rounds' GET /plan and the shell's GET /progress that lists them, and for the summary's pace
-    // line this round's GET /plan-pace (R5:5.5-13).
+    // line this round's GET /plan-pace (R5:5.5-13), and for its coordinator pin line GET /pin-share (R5:5.7-8).
     const pageReads = (u: string) => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || u === '/api/v1/agentrt/progress' || u === '/api/v1/agentrt/plan-pace?root=R5'
+      || u === '/api/v1/agentrt/pin-share'
     expect(urls().every(pageReads)).toBe(true)
     const before = urls().length
     // With the shell's lists in the cache the detail shows them, still without a request of its own.

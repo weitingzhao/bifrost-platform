@@ -88,7 +88,7 @@ func newWorld(t *testing.T) *world {
 			return err
 		}
 		r := store.Repos["bifrost-platform"]
-		body, err := store.ImplementSpec("task", "", r, r.Verify)
+		body, err := store.ImplementSpec("task", "", r, r.Verify, store.HandInChecks(r, nil))
 		if err != nil {
 			return err
 		}

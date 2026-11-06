@@ -214,9 +214,10 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 	}
 	rows.Close()
 	platformSpec, err := store.ImplementSpec("Say so in the store", "Name the test in repos.go.", store.Repos[platform],
-		append(slices.Clone(store.Repos[platform].Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}))
+		append(slices.Clone(store.Repos[platform].Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}),
+		store.HandInChecks(store.Repos[platform], [][]string{{"go", "-C", "api", "test", "./internal/agentrt/store/"}}))
 	must(t, err)
-	infraSpec, err := store.ImplementSpec("Test the probe's summary", "Add scripts/agentrt/test_summary.py.", store.Repos[infra], store.Repos[infra].Verify)
+	infraSpec, err := store.ImplementSpec("Test the probe's summary", "Add scripts/agentrt/test_summary.py.", store.Repos[infra], store.Repos[infra].Verify, store.HandInChecks(store.Repos[infra], nil))
 	must(t, err)
 	if len(impls) != 2 || impls[0] != (implRow{platform, platformBase, "proposed", string(platformSpec)}) ||
 		impls[1] != (implRow{infra, infraBase, "ready", string(infraSpec)}) {

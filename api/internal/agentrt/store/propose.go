@@ -673,7 +673,7 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 			SpecArtifact: specID, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
 			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}
 		if pinned {
-			task.pin, task.viaSession, task.providers = p.pins[t.Ref], p.viaSession, p.providers[t.Ref]
+			task.pin, task.viaSession, task.providers, task.pinReason = p.pins[t.Ref], p.viaSession, p.providers[t.Ref], p.reasons[t.Ref]
 		}
 		if _, err := ProposeTask(ctx, tx, w.Actor, task); err != nil {
 			return nil, err

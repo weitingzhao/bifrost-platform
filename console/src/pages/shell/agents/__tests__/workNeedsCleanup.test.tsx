@@ -113,9 +113,10 @@ describe('Work\'s first screen', () => {
     // The other lines of the health notice stay on Work's top.
     expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent('exec:claude is unavailable')
     // Read from what Work and the shell already read: of the runtime, one plan view, this round's tree, GET /progress;
-    // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13).
+    // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13), and its coordinator pin line, GET /pin-share
+    // (R5:5.7-8).
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
-    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5']))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5', '/api/v1/agentrt/pin-share']))
   })
 
   it('keeps the round an address names on the way to the list', async () => {

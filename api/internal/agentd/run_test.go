@@ -491,7 +491,7 @@ func TestRunAChecksPreparationIsItsSubjects(t *testing.T) {
 // (agentd ships first; CUT-agentd-console-checks-2026-10-16).
 func TestPlatformImplementSpecParses(t *testing.T) {
 	repo := store.Repos["bifrost-platform"]
-	body, err := store.ImplementSpec("title", "text", repo, repo.Verify)
+	body, err := store.ImplementSpec("title", "text", repo, repo.Verify, store.HandInChecks(repo, nil))
 	must(t, err)
 	s, err := agentd.ParseSpec(body)
 	if err != nil {
@@ -520,13 +520,13 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 		s.Siblings[0] != (agentd.Sibling{Repo: "bifrost-ui", Ref: "main"}) || s.TimeoutS != store.SpecTimeoutS {
 		t.Fatalf("spec = %+v", s)
 	}
-	for _, want := range []string{"npm --prefix console test", "Dependencies were installed before you started", "npm --prefix ../bifrost-ui ci"} {
+	for _, want := range []string{"npm --prefix console run lint", "Dependencies were installed before you started", "npm --prefix ../bifrost-ui ci"} {
 		if !strings.Contains(s.Text, want) {
 			t.Fatalf("the instructions lack %q:\n%s", want, s.Text)
 		}
 	}
 	// A repository with no setup writes neither field (an older agentd reads it).
-	plain, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"go", "vet"}})
+	plain, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"go", "vet"}}, [][]string{{"go", "vet"}})
 	must(t, err)
 	if strings.Contains(string(plain), "setup") || strings.Contains(string(plain), "siblings") || strings.Contains(string(plain), "installed before") {
 		t.Fatalf("plain spec = %s", plain)

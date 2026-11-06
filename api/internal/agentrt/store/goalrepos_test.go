@@ -144,9 +144,10 @@ func TestGoalOfTwoRepos(t *testing.T) {
 	rows.Close()
 	platform := store.Repos["bifrost-platform"]
 	platformSpec, err := store.ImplementSpec("Name the test", "Name it in repos.go.", platform,
-		append(slices.Clone(platform.Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}))
+		append(slices.Clone(platform.Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}),
+		store.HandInChecks(platform, [][]string{{"go", "-C", "api", "test", "./internal/agentrt/store/"}}))
 	ok(t, err)
-	infraSpec, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", store.Repos[infra], store.Repos[infra].Verify)
+	infraSpec, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", store.Repos[infra], store.Repos[infra].Verify, store.HandInChecks(store.Repos[infra], nil))
 	ok(t, err)
 	if want := []string{"bifrost-platform|" + commitA + "|" + string(platformSpec), infra + "|" + commitB + "|" + string(infraSpec)}; !slices.Equal(got, want) {
 		t.Fatalf("the implementations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
