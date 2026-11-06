@@ -1,6 +1,7 @@
 package testscope
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -13,7 +14,10 @@ import (
 	"strings"
 )
 
-func storeRun(g *graph, store string, changedFiles []string, changed map[string]bool) (string, error) {
+// storeRun selects store tests by name; "" runs the whole store package. code
+// says the store was selected by a code change or as a guard; data holds the
+// base names of changed testdata files the store reads.
+func storeRun(g *graph, store string, changedFiles []string, changed map[string]bool, code bool, data []string) (string, error) {
 	p := g.packages[store]
 	if p == nil {
 		return "", fmt.Errorf("store missing")
@@ -24,24 +28,30 @@ func storeRun(g *graph, store string, changedFiles []string, changed map[string]
 	}
 	sources := map[string]*ast.File{}
 	tests := map[string]*ast.File{}
+	texts := map[string][]byte{}
 	all := map[string]bool{}
 	for _, v := range entries {
 		if !strings.HasSuffix(v.Name(), ".go") {
 			continue
 		}
-		f, e := parser.ParseFile(token.NewFileSet(), filepath.Join(p.Dir, v.Name()), nil, 0)
+		b, e := os.ReadFile(filepath.Join(p.Dir, v.Name()))
+		if e != nil {
+			return "", e
+		}
+		f, e := parser.ParseFile(token.NewFileSet(), filepath.Join(p.Dir, v.Name()), b, 0)
 		if e != nil {
 			return "", e
 		}
 		sources[v.Name()] = f
 		if strings.HasSuffix(v.Name(), "_test.go") {
 			tests[v.Name()] = f
+			texts[v.Name()] = b
 			for _, n := range testNames(f) {
 				all[n] = true
 			}
 		}
 	}
-	if len(changedFiles) == 0 {
+	if code && len(changedFiles) == 0 {
 		// A store import is the nearest package to store on its dependency path.
 		// Keep every such path, including longer paths alongside a direct import:
 		// choosing only the shortest path could miss another affected source file.
@@ -144,6 +154,26 @@ func storeRun(g *graph, store string, changedFiles []string, changed map[string]
 					selected[n] = true
 				}
 			}
+		}
+	}
+	// A testdata file selects the tests whose files name it; a file no store
+	// test names needs every store test.
+	for _, d := range data {
+		found := false
+		for tn, tf := range tests {
+			if bytes.Contains(texts[tn], []byte(d)) {
+				ns := testNames(tf)
+				if len(ns) == 0 {
+					return "", nil
+				}
+				for _, n := range ns {
+					selected[n] = true
+				}
+				found = true
+			}
+		}
+		if !found {
+			return "", nil
 		}
 	}
 	if len(selected) == 0 || len(selected)*2 > len(all) {

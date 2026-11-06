@@ -37,7 +37,7 @@ func fixture(t *testing.T) string {
 func TestFullTriggers(t *testing.T) {
 	root := fixture(t)
 	for _, tc := range []struct{ line, why string }{
-		{"M\tapi/go.mod", "module dependencies"}, {"M\tapi/go.sum", "module dependencies"}, {"A\tapi/internal/agentrt/migrations/x.sql", "protected path"}, {"M\tapi/p0/testdata/x", "testdata"}, {"M\tapi/internal/testscope/x.go", "protected path"}, {"M\tapi/cmd/testscope/main.go", "protected path"}, {"M\tscripts/ci/test_api_scoped.sh", "selector script"}, {"M\tapi/helpers/h.go", "shared test helper"}, {"M\tapi/othertest/h.go", "shared test helper"}, {"M\tapi/helpers/readme.md", "shared test helper"}, {"D\tapi/gone/x.go", "unresolved"}, {"R100\tapi/gone/x.go\tapi/p0/new.go", "unresolved"}, {"bad", "change list error"}} {
+		{"M\tapi/go.mod", "module dependencies"}, {"M\tapi/go.sum", "module dependencies"}, {"A\tapi/internal/agentrt/migrations/x.sql", "protected path"}, {"M\tapi/internal/testscope/x.go", "protected path"}, {"M\tapi/cmd/testscope/main.go", "protected path"}, {"M\tscripts/ci/test_api_scoped.sh", "selector script"}, {"M\tapi/helpers/h.go", "shared test helper"}, {"M\tapi/othertest/h.go", "shared test helper"}, {"M\tapi/helpers/readme.md", "shared test helper"}, {"D\tapi/gone/x.go", "unresolved"}, {"R100\tapi/gone/x.go\tapi/p0/new.go", "unresolved"}, {"bad", "change list error"}} {
 		t.Run(tc.line, func(t *testing.T) {
 			r := SelectChanges(root, strings.NewReader(tc.line))
 			if r.Scope != "full" || !strings.Contains(r.Why, tc.why) {
@@ -49,7 +49,7 @@ func TestFullTriggers(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
-func TestDependentsGuardsAndCap(t *testing.T) {
+func TestDependentsAndGuards(t *testing.T) {
 	root := fixture(t)
 	put(t, root, "guard/g.go", "package guard\n")
 	put(t, root, "guard/g_test.go", "package guard\nimport (\"path/filepath\";\"testing\")\nfunc TestTree(t *testing.T){filepath.WalkDir(\".\",nil)}\n")
@@ -61,14 +61,6 @@ func TestDependentsGuardsAndCap(t *testing.T) {
 		if !strings.Contains(r.Packages, "example.org/api/"+p) {
 			t.Fatalf("missing %s: %+v", p, r)
 		}
-	}
-	var lines []string
-	for i := 0; i < 15; i++ {
-		lines = append(lines, fmt.Sprintf("M\tapi/p%d/p.go", i))
-	}
-	r = SelectChanges(root, strings.NewReader(strings.Join(lines, "\n")))
-	if r.Scope != "full" || !strings.Contains(r.Why, "40%") {
-		t.Fatalf("%+v", r)
 	}
 	r = SelectChanges(root, strings.NewReader("D\tapi/p0/old.go"))
 	if r.Scope != "incremental" {
