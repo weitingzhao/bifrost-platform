@@ -62,8 +62,18 @@ func storeRun(g *graph, store string, changedFiles []string, changed map[string]
 				if err != nil {
 					return "", err
 				}
+				// The store package itself is no path: every external store
+				// test imports it, and through the tests' own imports it
+				// depends on what they reach, so counting it picked every
+				// test file and the whole package ran (CI 2026-11-06: one line
+				// in internal/delivery ran all 1251 store tests).
+				if i == store {
+					continue
+				}
+				// Through i's code, not its tests: a package whose own
+				// tests reach the change does not change for the store.
 				for c := range changed {
-					if i == c || g.deps[i][c] {
+					if i == c || g.codeDeps[i][c] {
 						nearest[i] = true
 					}
 				}
@@ -89,14 +99,15 @@ func storeRun(g *graph, store string, changedFiles []string, changed map[string]
 			return "", nil // A resolved package with a removed file needs every store test.
 		}
 		if strings.HasSuffix(name, "_test.go") {
-			ns := testNames(f)
-			if len(ns) == 0 {
-				return "", nil
+			// A test file selects its own tests. One with none holds helpers
+			// (a fixture file): it selects the tests that use what it declares,
+			// as a source file does below.
+			if ns := testNames(f); len(ns) > 0 {
+				for _, n := range ns {
+					selected[n] = true
+				}
+				continue
 			}
-			for _, n := range ns {
-				selected[n] = true
-			}
-			continue
 		}
 		ids := map[string]bool{}
 		for _, d := range f.Decls {
@@ -118,6 +129,11 @@ func storeRun(g *graph, store string, changedFiles []string, changed map[string]
 				}
 			}
 		}
+		// The blank identifier and init name nothing another file can use;
+		// "_" in a helper file (var _ I = (*T)(nil)) matched every test file
+		// that has a blank identifier (CI 2026-11-06).
+		delete(ids, "_")
+		delete(ids, "init")
 		stem := strings.TrimSuffix(name, ".go")
 		for tn, tf := range tests {
 			ts := strings.TrimSuffix(strings.TrimSuffix(tn, "_test.go"), "_internal")

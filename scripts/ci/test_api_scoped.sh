@@ -32,8 +32,20 @@ run_tests() {
   cat "$tmp/part" >> "$tmp/events"
 }
 : > "$tmp/events"
+# API_SCOPED_PART (store or rest) runs one share of the selection, so CI runs the
+# store package beside the rest as its full runs do (R5:5.7 CI time); unset, or
+# anything else, runs both here, as before.
+part=${API_SCOPED_PART:-all}
+[[ $part == store || $part == rest ]] || part=all
 if [[ $scope == full ]]; then
-  run_tests ./...
+  case $part in
+    store) run_tests ./internal/agentrt/store ;;
+    rest)
+      read -r -a others <<< "$(go list ./... | grep -v '/internal/agentrt/store$' | tr '\n' ' ')"
+      run_tests "${others[@]}"
+      ;;
+    *) run_tests ./... ;;
+  esac
 else
   read -r -a selected <<< "$packages"
   rest=()
@@ -41,8 +53,8 @@ else
   for p in "${selected[@]}"; do
     if [[ $p == */internal/agentrt/store ]]; then store=$p; else rest+=("$p"); fi
   done
-  if (( ${#rest[@]} )); then run_tests "${rest[@]}"; fi
-  if [[ -n $store ]]; then
+  if [[ $part != store ]] && (( ${#rest[@]} )); then run_tests "${rest[@]}"; fi
+  if [[ $part != rest && -n $store ]]; then
     if [[ -n $store_run ]]; then run_tests "$store" -run "$store_run"; else run_tests "$store"; fi
   fi
 fi
