@@ -28,26 +28,42 @@ func stopWords(s *ProgressStop) string {
 	return "stopped by " + s.By + ": " + s.Reason + " (control " + s.ControlID + "); only the Owner lifts it"
 }
 
+// stopScope is the condition that stop control c names task t: the task
+// itself, its subject, or its mission.
+const stopScope = `((c.scope = 'task' AND (c.scope_ref = t.task_id OR c.scope_ref = t.subject_task_id))
+        OR (c.scope = 'mission' AND c.scope_ref = t.mission_id))`
+
 // stopHolding joins, as stop, the uncleared stop control that holds task t:
 // one naming the task first, then its subject, then its mission, the oldest
 // of each first.
 const stopHolding = ` LEFT JOIN LATERAL (SELECT c.control_id, c.set_by_actor_id, c.reason, c.set_at FROM agentrt.control c
     WHERE c.control_kind = 'stop' AND c.cleared_at IS NULL
-      AND ((c.scope = 'task' AND (c.scope_ref = t.task_id OR c.scope_ref = t.subject_task_id))
-        OR (c.scope = 'mission' AND c.scope_ref = t.mission_id))
+      AND ` + stopScope + `
     ORDER BY c.scope_ref = t.task_id DESC, c.scope = 'task' DESC, c.set_at, c.control_id LIMIT 1) stop ON true `
 
 // stopColumns are stopHolding's columns.
 const stopColumns = `stop.control_id, stop.set_by_actor_id, stop.reason, stop.set_at`
 
+// lastCancelEvent is, as e, task t's last task_state_changed or
+// task_cancelled event.
+const lastCancelEvent = `(SELECT x.event_type, x.actor_id, x.body_json, x.at FROM agentrt.event x WHERE x.task_id = t.task_id
+      AND x.event_type IN ('task_state_changed','task_cancelled') ORDER BY x.event_id DESC LIMIT 1) e`
+
+// withdrawal is the condition that e, read as lastCancelEvent, withdrew the
+// cancelled task t.
+const withdrawal = `t.state = 'cancelled' AND e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'cancelled'
+      AND (e.actor_id LIKE 'thread:%' OR e.actor_id LIKE 'seat:%' OR e.actor_id LIKE 'agent:%')`
+
 // withdrawnSQL is, for a cancelled task t, the actor and reason of the event
 // that cancelled it when that is a withdrawal, else nulls (the columns
 // withdrawn_by, withdraw_reason, withdrawn_at).
 const withdrawnSQL = ` LEFT JOIN LATERAL (SELECT e.actor_id AS withdrawn_by, COALESCE(e.body_json->>'reason', '') AS withdraw_reason,
-    e.at AS withdrawn_at FROM (SELECT x.event_type, x.actor_id, x.body_json, x.at FROM agentrt.event x WHERE x.task_id = t.task_id
-      AND x.event_type IN ('task_state_changed','task_cancelled') ORDER BY x.event_id DESC LIMIT 1) e
-    WHERE t.state = 'cancelled' AND e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'cancelled'
-      AND (e.actor_id LIKE 'thread:%' OR e.actor_id LIKE 'seat:%' OR e.actor_id LIKE 'agent:%')) wd ON true `
+    e.at AS withdrawn_at FROM ` + lastCancelEvent + `
+    WHERE ` + withdrawal + `) wd ON true `
+
+// withdrawnTask is the condition that task t was withdrawn, as withdrawnSQL
+// reads it.
+const withdrawnTask = `EXISTS (SELECT 1 FROM ` + lastCancelEvent + ` WHERE ` + withdrawal + `)`
 
 // stopScan receives stopColumns.
 type stopScan struct {
