@@ -36,6 +36,7 @@ type grantWaiting struct {
 var grantRequestReads = struct {
 	state    func(ctx context.Context, db store.DB, repo string) (landing.State, error)
 	usable   func(ctx context.Context, db store.DB, op string) (string, error)
+	held     func(ctx context.Context, db store.DB, task string) (bool, error)
 	material func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error)
 }{
 	state: func(ctx context.Context, db store.DB, repo string) (s landing.State, err error) {
@@ -46,6 +47,7 @@ var grantRequestReads = struct {
 		return s, err
 	},
 	usable: store.UsableLandingGrant,
+	held:   store.TaskStopHeld,
 	material: func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error) {
 		return store.ReadLandingGrantMaterial(ctx, db, src, op, false)
 	},
@@ -156,6 +158,11 @@ var (
 
 func (c *Controller) askLandingGrant(ctx context.Context, w grantWaiting) error {
 	r := c.Reconcile
+	if held, err := grantRequestReads.held(ctx, c.DB, w.Task); err != nil {
+		return err
+	} else if held {
+		return errGrantNotNow // a stop holds the task: nothing is asked until the Owner lifts it
+	}
 	if grant, err := grantRequestReads.usable(ctx, c.DB, w.Op); err != nil {
 		return err
 	} else if grant != "" {

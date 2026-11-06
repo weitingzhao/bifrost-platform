@@ -30,6 +30,7 @@ type grantRequestWorld struct {
 	phase     string
 	hardCore  bool
 	usable    string
+	held      bool
 	approvals []store.LandingGrantRequest
 	asks      []grantAsk
 	requestFn func(ctx context.Context, action string, params map[string]any, reason string) (string, error)
@@ -44,9 +45,11 @@ func newGrantRequestWorld(t *testing.T) *grantRequestWorld {
 		return "approval_1", nil
 	}
 	w.c = &Controller{Env: "prod", Reconcile: &LandingReconcile{
-		Repos:    []string{"bifrost-platform"},
-		Requests: func(context.Context) ([]store.LandingGrantRequest, error) { return append([]store.LandingGrantRequest(nil), w.approvals...), nil },
-		Grants:   func() store.GrantSources { return store.GrantSources{} },
+		Repos: []string{"bifrost-platform"},
+		Requests: func(context.Context) ([]store.LandingGrantRequest, error) {
+			return append([]store.LandingGrantRequest(nil), w.approvals...), nil
+		},
+		Grants: func() store.GrantSources { return store.GrantSources{} },
 		RequestGrant: func(ctx context.Context, action string, params map[string]any, reason string) (string, error) {
 			return w.requestFn(ctx, action, params, reason)
 		},
@@ -63,6 +66,7 @@ func newGrantRequestWorld(t *testing.T) *grantRequestWorld {
 		}}, nil
 	}
 	grantRequestReads.usable = func(context.Context, store.DB, string) (string, error) { return w.usable, nil }
+	grantRequestReads.held = func(context.Context, store.DB, string) (bool, error) { return w.held, nil }
 	grantRequestReads.material = func(_ context.Context, _ store.DB, _ store.GrantSources, op string) (*store.LandingGrantMaterial, error) {
 		m := &store.LandingGrantMaterial{Candidate: store.GrantCandidate{Repo: "bifrost-platform", Task: grantTestTask, Op: op, R: grantTestR},
 			MaterialDigest: "sha256:" + strings.Repeat("b", 64), SoftAtRequest: []string{"files"}, Action: store.ActionGuardrailLanding}
@@ -154,6 +158,23 @@ func TestGrantRequestOnlyAwaitingGrant(t *testing.T) {
 	w.pass(t)
 	if len(w.asks) != 0 {
 		t.Fatalf("usable grant: asked %d", len(w.asks))
+	}
+}
+
+// A task a stop holds asks the Owner nothing: on 11-06 three harvested,
+// stopped tasks still had operations in awaiting_grant.
+func TestGrantRequestHeldTaskAsksNothing(t *testing.T) {
+	w := newGrantRequestWorld(t)
+	w.held = true
+	w.pass(t)
+	if len(w.asks) != 0 {
+		t.Fatalf("held task: asked %d", len(w.asks))
+	}
+	w.held = false
+	w.c.Reconcile.askWaits = nil
+	w.pass(t)
+	if len(w.asks) != 1 {
+		t.Fatalf("stop lifted: asked %d, want 1", len(w.asks))
 	}
 }
 
