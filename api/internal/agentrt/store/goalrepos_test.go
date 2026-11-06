@@ -102,7 +102,10 @@ func TestGoalOfTwoRepos(t *testing.T) {
 	}
 	for _, want := range []string{"repositories bifrost-platform, bifrost-trade-infra",
 		"bifrost-platform is checked out here at " + commitA, "bifrost-trade-infra is beside it, at ../bifrost-trade-infra (the head of its main; its tasks start from " + commitB,
-		"one task in each, ordered with depends_on", "  - bifrost-platform: a test of the package you change", "  - bifrost-trade-infra: none: leave verify empty.",
+		"one task in each, ordered with depends_on", "  - bifrost-platform: a test of the package you change",
+		// Where checks run (t1): fast before hand-in, in full in the platform's check.
+		"runs the\n  repository's quick hand-in checks plus the plan's own, without the test databases",
+		"prefer `go -C api test -run <pattern> ./<package>` over a whole package.", "  - bifrost-trade-infra: none: leave verify empty.",
 		// What each task works in (T26's first run): its own checkout and nothing else.
 		"  - a task in bifrost-platform has bifrost-platform, with ../bifrost-ui at the head of its main beside it.\n",
 		"  - a task in bifrost-trade-infra has bifrost-trade-infra alone.\n", "The repositories beside you now are for your reading only; no task has them.",
