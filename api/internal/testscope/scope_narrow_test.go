@@ -119,3 +119,35 @@ func TestScopeNarrowFullCauses(t *testing.T) {
 		t.Fatalf("git error: %+v", r)
 	}
 }
+
+func TestGuardOnlySelection(t *testing.T) {
+	root := fixture(t)
+	dir := "internal/agentrt/agentrtapi/"
+	pkg := "example.org/api/internal/agentrt/agentrtapi"
+	put(t, root, dir+"api.go", "package agentrtapi\n")
+	put(t, root, dir+"walk_test.go", "package agentrtapi\nimport (\"path/filepath\";\"testing\";_ \"example.org/api/p0\")\nfunc TestWalk(t *testing.T){filepath.WalkDir(\".\",nil)}\nfunc TestAnother(t *testing.T){}\n")
+	put(t, root, dir+"pool_test.go", "package agentrtapi\nimport \"testing\"\nfunc TestPools(t *testing.T){}\n")
+	r := SelectChanges(root, strings.NewReader("M\tapi/p1/p.go"))
+	if r.Scope != "incremental" || r.GuardPackages != pkg || r.GuardRun != "^(TestAnother|TestPools|TestWalk)$" || strings.Contains(r.Packages, pkg) {
+		t.Fatalf("leaf: %+v", r)
+	}
+	for _, line := range []string{"M\tapi/p0/p.go", "M\tapi/" + dir + "api.go", "M\tapi/" + dir + "testdata/x"} {
+		r = SelectChanges(root, strings.NewReader(line))
+		if r.Scope != "incremental" || !strings.Contains(r.Packages, pkg) || r.GuardPackages != "" || r.GuardRun != "" {
+			t.Fatalf("whole %s: %+v", line, r)
+		}
+	}
+	put(t, root, dir+"helper_test.go", "package agentrtapi\nimport \"path/filepath\"\nfunc walkHelper(){filepath.Walk(\".\",nil)}\n")
+	r = SelectChanges(root, strings.NewReader("M\tapi/p1/p.go"))
+	if r.Scope != "incremental" || !strings.Contains(r.Packages, pkg) || r.GuardPackages != "" || r.GuardRun != "" {
+		t.Fatalf("helper: %+v", r)
+	}
+}
+
+func TestFullWritesEmptyGuards(t *testing.T) {
+	var out strings.Builder
+	Full("reason").Write(&out)
+	if out.String() != "scope=full\npackages=\nstore_run=\nguard_packages=\nguard_run=\nwhy=reason\n" {
+		t.Fatal(out.String())
+	}
+}

@@ -57,10 +57,13 @@ func TestDependentsAndGuards(t *testing.T) {
 	if r.Scope != "incremental" {
 		t.Fatalf("%+v", r)
 	}
-	for _, p := range []string{"p0", "consumer", "testconsumer", "guard"} {
+	for _, p := range []string{"p0", "consumer", "testconsumer"} {
 		if !strings.Contains(r.Packages, "example.org/api/"+p) {
 			t.Fatalf("missing %s: %+v", p, r)
 		}
+	}
+	if r.GuardPackages != "example.org/api/guard" || r.GuardRun != "^(TestTree)$" {
+		t.Fatalf("guards: %+v", r)
 	}
 	r = SelectChanges(root, strings.NewReader("D\tapi/p0/old.go"))
 	if r.Scope != "incremental" {
@@ -145,7 +148,7 @@ func TestRepositoryWalkingTestsAreGuarded(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if walks(f) && !set[name] {
+			if walks(f) && set[name] == nil {
 				t.Errorf("walking tests in %s are not guarded", v.Name())
 			}
 		}
