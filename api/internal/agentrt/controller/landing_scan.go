@@ -66,6 +66,11 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	if _, err = store.SettleUnclaimed(ctx, c.DB, repo, now); err != nil {
 		errs = append(errs, err)
 	}
+	// A failed{in_main} root whose change is on main ends without a card,
+	// from the database alone too.
+	if _, err = store.SettleInMain(ctx, c.DB, repo); err != nil {
+		errs = append(errs, err)
+	}
 	ids := make([]string, 0, len(state.Operations))
 	for id := range state.Operations {
 		ids = append(ids, id)

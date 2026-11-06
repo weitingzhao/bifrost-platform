@@ -348,8 +348,9 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 			c.Class, c.Reason = RootDisposed, "owner"
 		case r.dropped:
 			c.Class, c.Reason = RootDisposed, "dropped"
-		case o.Phase == "failed" && o.Outcome == "in_main" && dispWhy == "owner_delivered":
-			// The Owner counted the change already in main as delivered.
+		case o.Phase == "failed" && o.Outcome == "in_main" && deliveredDisposal(dispWhy):
+			// The Owner counted the change already in main as delivered, or
+			// the controller found it landed on main (SettleInMain).
 			if none {
 				c.Class, c.Reason = RootDelivered, "in_main"
 			} else if repo == "bifrost-platform" {
@@ -395,9 +396,16 @@ func classifyLandingRepo(ctx context.Context, tx pgx.Tx, folds landingFolds, mis
 	return inScope, roots, ruleNote, nil
 }
 
+// deliveredDisposal: a disposition that counts the root delivered, the
+// Owner's owner_delivered or the controller's main_delivered.
+func deliveredDisposal(why string) bool {
+	return why == "owner_delivered" || why == "main_delivered"
+}
+
 // landingDisposed is how the Owner counted this root's operation on its card
 // (landing_disposed, B4 v3 item 4): "owner" (not delivered),
-// "owner_delivered", or "" for no decision. The latest counts.
+// "owner_delivered", the controller's "main_delivered" (SettleInMain), or ""
+// for no decision. The latest counts.
 func landingDisposed(ctx context.Context, tx pgx.Tx, stream, root, op string) (string, error) {
 	var why string
 	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body_json->'landing_disposed'->>'why' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
