@@ -39,6 +39,10 @@ drift-scan-all:
 test-api:
 	cd api && go test ./...
 
+.PHONY: test-api-scoped
+test-api-scoped:
+	./scripts/ci/test_api_scoped.sh "$(BASE)" "$(HEAD)"
+
 install-lint-api:
 	@command -v golangci-lint >/dev/null 2>&1 && { golangci-lint --version; exit 0; }; \
 	if command -v brew >/dev/null 2>&1; then \

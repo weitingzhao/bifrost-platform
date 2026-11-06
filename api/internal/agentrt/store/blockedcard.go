@@ -72,7 +72,10 @@ import (
 //     must not fill ahead of a plan's or a mission's;
 //   - a task of a mission that is not active or paused (a planning task
 //     blocked because its mission ended, planresult.go): nothing is left to
-//     decide.
+//     decide;
+//   - a check of a task that is stopped (blocked, cancelled or rejected): it
+//     can never be used, and the controller's pass cancels it
+//     (stoppedchecks.go).
 
 // The options of a blocked task's card, in the order the question store keys
 // them: the first (CardApplyKey) gives it one more round, the second
@@ -107,6 +110,8 @@ const latestBlock = `JOIN LATERAL (SELECT e.event_id, e.body_json FROM agentrt.e
 // needsCard is a blocked task (t, its mission m, its block b) that needs a
 // card now: as the comment above says, with no card of this block open.
 const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('active','paused')
+  AND NOT EXISTS (SELECT 1 FROM agentrt.task s WHERE t.role IN ('verify','review') AND s.task_id = t.subject_task_id
+    AND s.state IN ` + stoppedStates + `)
   AND (t.effect_class <> 'external' OR NOT EXISTS (SELECT 1 FROM agentrt.attempt a WHERE a.task_id = t.task_id
     AND (a.state IN ('leased','running','stale') OR (a.state IN ('lost','failed') AND NOT EXISTS (SELECT 1 FROM agentrt.event x
       WHERE x.task_id = t.task_id AND x.attempt_id = a.attempt_id AND x.event_type = 'attempt_ended'

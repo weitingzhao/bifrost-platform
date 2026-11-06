@@ -96,6 +96,7 @@ deny	POST /api/v1/agentrt/rules/{rule_id}/proposals
 deny	POST /api/v1/agentrt/rules/{rule_id}/sign
 deny	POST /api/v1/agentrt/rules/{rule_id}/tighten
 deny	GET /api/v1/agentrt/tasks
+deny	POST /api/v1/agentrt/tasks/withdraw
 deny	GET /api/v1/agentrt/tasks/{id}
 allow	GET /api/v1/agentrt/whoami
 deny	GET /api/v1/approvals

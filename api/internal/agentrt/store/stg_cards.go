@@ -74,6 +74,9 @@ func stgTriggers(s StgState) []CardTrigger {
 		if sent := r.object("detail").object("sent"); len(sent) > 0 {
 			tr.Sent = map[string]any(sent)
 		}
+		if scope := r.object("detail").object("ci_scope"); len(scope) > 0 {
+			tr.CIScope = map[string]any(scope)
+		}
 		if tr.Why == "budget_exhausted" {
 			tr.Kind, tr.Choices = CardSTGFailed, []string{"retry_release", "do_not_release"}
 			tr.Members = stgExhaustedMembers(s, block.Opened)

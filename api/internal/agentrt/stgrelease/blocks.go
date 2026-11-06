@@ -155,6 +155,13 @@ func (c *Controller) blockedRecord(b *store.StgBatch, why string, base store.Stg
 	if b.Try > 0 {
 		identity["inputs"] = b.Tries[b.Try].Snapshot.Record["inputs"]
 	}
+	if ci != nil {
+		// Not part of the interval's identity: a later read of the same
+		// wait has another age.
+		if scope := ci.ScopeDetail(); scope != nil {
+			detail["ci_scope"] = scope
+		}
+	}
 	if ci == nil {
 		var latest store.StgEvent
 		for _, accepted := range b.CI {

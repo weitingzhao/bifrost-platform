@@ -71,8 +71,11 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/external-work/{id}":         {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/agentrt/external-work":             {"reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/agentrt/external-work/{id}/events": {"reporter", "operator", "admin", "trade-satellite"},
-	"GET /api/v1/network/clients/{mac}":              {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	"POST /api/v1/network/clients/fixed-ip":          {"operator", "admin", "trade-satellite"},
+	// A proposer withdraws its unstarted tasks: whoever may propose them
+	// (POST /missions/{id}/tasks); the store holds it to their proposer.
+	"POST /api/v1/agentrt/tasks/withdraw":   {"operator", "admin", "trade-satellite"},
+	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},
 }
 
 // Work 611 narrows plain reporters to external-work registration and their

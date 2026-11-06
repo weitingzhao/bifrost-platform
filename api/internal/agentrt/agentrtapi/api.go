@@ -173,6 +173,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/missions", a.proposeMission)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)
 		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
+		r.With(propose, cfg).Post("/tasks/withdraw", a.withdrawTasks)
 		r.With(propose, cfg).Post("/goals", a.proposeGoal)
 		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)

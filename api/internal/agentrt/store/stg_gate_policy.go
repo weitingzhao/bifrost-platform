@@ -42,6 +42,30 @@ type StgCIObservation struct {
 	// Undecided counts newer runs of the same P that had no verdict yet and
 	// were passed over (R5:5.7-2). It never makes an observation acceptable.
 	Undecided int
+	// Scope is the api-scope of the run that decided P ("" when none has);
+	// Stale counts P's incremental greens set aside because the last full
+	// green (LastFull*, any revision) was older than FullMaxAge. They explain
+	// why P waits and never make an observation acceptable.
+	Scope                       string
+	Stale                       int
+	LastFullRun, LastFullCommit string
+	LastFullAt                  time.Time
+	FullMaxAge                  time.Duration
+}
+
+// ScopeDetail is the CI scope a block shows its reader: the deciding run's
+// scope, the stale incremental greens, the last full green and its age in
+// hours at ReadAt (-1: none found) and the cap. nil when not read from CI.
+func (c StgCIObservation) ScopeDetail() map[string]any {
+	if c.FullMaxAge <= 0 || c.ReadAt.IsZero() {
+		return nil
+	}
+	age := int64(-1)
+	if c.LastFullRun != "" && !c.LastFullAt.IsZero() {
+		age = int64(c.ReadAt.Sub(c.LastFullAt) / time.Hour)
+	}
+	return map[string]any{"scope": c.Scope, "stale": int64(c.Stale), "last_full_run": c.LastFullRun, "last_full_commit": c.LastFullCommit,
+		"last_full_age_h": age, "cap_h": int64(c.FullMaxAge / time.Hour)}
 }
 
 func (c StgCIObservation) Record() (map[string]any, error) {

@@ -62,6 +62,9 @@ var landingHardGo = [...]string{
 	"api/internal/releases/",
 	"api/internal/agentrt/exam/",
 	"api/internal/workactions/",
+	// It picks the tests a landing CI runs (R5:5.7-1), so a change to it
+	// decides what is checked.
+	"api/internal/testscope/",
 	"api/cmd/",
 }
 

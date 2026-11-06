@@ -3,13 +3,16 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/stgrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -121,6 +124,7 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 		}
 	}
 	ci := s.landingCIClient()
+	scopeLog := &ciScopeLog{}
 	// Construct the existing read-only identity lazily. none never even reads
 	// credential paths, and no candidate code or Git push enters this loop.
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
@@ -164,10 +168,12 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 		},
 		CI: func(ctx context.Context, p string) (store.StgCIObservation, error) {
 			result, err := ci.ReadRelease(ctx, p)
+			scopeLog.note(p, result, err)
 			return stgrelease.ReleaseCIObservation(result), err
 		},
 		SentCI: func(ctx context.Context, p string) (store.StgCIObservation, error) {
 			result, err := ci.ReadRelease(ctx, p)
+			scopeLog.note(p, result, err)
 			return stgrelease.ReleaseCIObservation(result), err
 		},
 		Range: func(ctx context.Context, base, p string) ([]landing.ReleaseCommit, error) {
@@ -191,6 +197,33 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 		},
 	}
 	return &stgrelease.Controller{DB: c.DB, Tenant: "dev", Cluster: cluster, Ledger: ledger, Runs: adapter, Windows: adapter, Sources: sources, Policy: policy, Lifetime: ctx}
+}
+
+// ciScopeLog says once per P and verdict why P's CI does not stand for it at
+// STG: the deciding run's scope and the last full green's run, commit, age
+// and cap (for example: last full CI green 51 h ago, cap 48 h). The age
+// within a wait is not a new verdict, so it does not log again by itself.
+type ciScopeLog struct {
+	mu   sync.Mutex
+	last string
+}
+
+func (l *ciScopeLog) note(p string, e landingci.ReleaseEvidence, err error) {
+	if err != nil {
+		return
+	}
+	if _, recErr := e.Record(); recErr == nil && len(e.Stale) == 0 {
+		return
+	}
+	key := fmt.Sprint(p, e.Status, e.Reason, e.Run, e.Scope(), len(e.Stale), e.LastFullRun)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if key == l.last {
+		return
+	}
+	l.last = key
+	slog.Info("STG release CI of P "+e.ScopeNote(), "P", p, "status", e.Status, "reason", e.Reason, "ci_run", e.Run, "scope", e.Scope(), "stale", e.Stale,
+		"last_full_run", e.LastFullRun, "last_full_commit", e.LastFullCommit, "last_full_age_h", e.LastFullAgeHours(), "cap_h", int(landingci.FullMaxAge.Hours()))
 }
 
 // releaseEvidence asks read whether P holds the member's R. For an InMain

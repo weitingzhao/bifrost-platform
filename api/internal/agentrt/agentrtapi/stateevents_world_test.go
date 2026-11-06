@@ -47,7 +47,7 @@ var routeExpect = map[string]string{
 	"POST attempts/{id}/checkpoint": expectWrites, "POST attempts/{id}/computed": expectWrites,
 	"POST attempts/{id}/persist": expectWrites, "POST attempts/{id}/submit": expectWrites,
 	"POST attempts/{id}/salvage": expectWrites, "POST attempts/{id}/ended": expectWrites,
-	"POST missions": expectWrites, "POST missions/{id}/tasks": expectWrites, "POST goals": expectWrites,
+	"POST missions": expectWrites, "POST missions/{id}/tasks": expectWrites, "POST goals": expectWrites, "POST tasks/withdraw": expectWrites,
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
 	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites, "POST hosts/{id}/drain": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
@@ -283,6 +283,12 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST missions/{id}/tasks", "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "v2", "tasks": []any{
 		map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a",
 			"spec_artifact_id": artifactID(spec), "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}})
+	// A task the operator's thread proposes and withdraws before it runs.
+	gone := ok("POST missions/{id}/tasks", "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "v2-withdrawn", "tasks": []any{
+		map[string]any{"ref": "w", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "w",
+			"spec_artifact_id": artifactID(spec), "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}})
+	ok("POST tasks/withdraw", "operator", "POST", "tasks/withdraw", map[string]any{"idempotency_key": "v2-withdraw",
+		"task_ids": []any{gone["tasks"].([]any)[0].(map[string]any)["task_id"]}, "reason": "fuzz"})
 	ok("POST goals", "admin", "POST", "goals", map[string]any{"idempotency_key": "v3", "goal": "do this", "repo": "bifrost-platform"})
 	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": store.Seat, "kind": "ask", "body": "status?"})
 	ok("POST messages/ack", "seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []any{msg["message_id"]}})
@@ -606,6 +612,8 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 		return map[string]any{"idempotency_key": key, "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement",
 			"task_class": "go", "title": "a", "spec_artifact_id": f.pick(arts), "effect_class": "branch", "repo": "bifrost-platform",
 			"base_commit": commitA}}}
+	case rt.pattern == "tasks/withdraw":
+		return map[string]any{"idempotency_key": key, "task_ids": []string{f.pick(append(f.ids(t, idsTasks), "x"))}, "reason": "fuzz"}
 	case rt.pattern == "plan/proposals":
 		return map[string]any{"idempotency_key": key, "root": "R2", "reason": "fuzz", "changes": []any{map[string]any{"op": "add_node",
 			"parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}}

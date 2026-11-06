@@ -24,7 +24,18 @@ type ReleaseEvidence struct {
 	// Partial names the greens of P that tested only part of the API
 	// (api-scope=console). They neither vouch for P nor hide another run.
 	Partial []string
+	// Stale names the incremental greens of P set aside because no full green
+	// of any revision is at most FullMaxAge old at ReadAt.
+	Stale []string
+	// LastFull* is the newest full-scope green of any revision (any P); a
+	// zero LastFullAt means none was found.
+	LastFullRun, LastFullCommit string
+	LastFullAt                  time.Time
 }
+
+// FullMaxAge is how old the last full green may be for an incremental green
+// to stand for P at STG. PROD keeps needing a full green of its own commit.
+const FullMaxAge = 48 * time.Hour
 
 // The api-scope result of a ci-platform run: what its test-api step ran.
 // A run without it predates the result and ran everything (full).
@@ -32,6 +43,8 @@ const (
 	APIScopeResult  = "api-scope"
 	APIScopeFull    = "full"
 	APIScopeConsole = "console"
+	// An incremental run tested the API packages its change reaches (R5:5.7-1).
+	APIScopeIncremental = "incremental"
 )
 
 // fullScope: a run's results say it tested the whole API.
@@ -40,10 +53,61 @@ func fullScope(results map[string]string) bool {
 	return !named || scope == APIScopeFull
 }
 
+// FullFresh: a last full green exists and is at most FullMaxAge old at ReadAt.
+func (e ReleaseEvidence) FullFresh() bool {
+	return e.LastFullRun != "" && !e.LastFullAt.IsZero() && !e.ReadAt.Before(e.LastFullAt) && e.ReadAt.Sub(e.LastFullAt) <= FullMaxAge
+}
+
+// releaseScope: the results vouch for P at STG, as a full run or as an
+// incremental one while the last full green is fresh.
+func (e ReleaseEvidence) releaseScope(results map[string]string) bool {
+	return fullScope(results) || results[APIScopeResult] == APIScopeIncremental && e.FullFresh()
+}
+
+// Scope is the api-scope of the run that decided P, for people reading why P
+// waits: an incremental green set aside as stale reads incremental, a
+// verdict without the result full, and a run with no scope yet (none,
+// running) "".
+func (e ReleaseEvidence) Scope() string {
+	if scope, named := e.Results[APIScopeResult]; named && e.Run != "" {
+		return scope
+	}
+	if e.Run != "" && (e.Status == "Succeeded" || e.Status == "Failed") {
+		return APIScopeFull
+	}
+	if len(e.Stale) > 0 {
+		return APIScopeIncremental
+	}
+	return ""
+}
+
+// LastFullAgeHours is the last full green's age at ReadAt in whole hours, -1
+// when there is none.
+func (e ReleaseEvidence) LastFullAgeHours() int {
+	if e.LastFullRun == "" || e.LastFullAt.IsZero() {
+		return -1
+	}
+	return int(e.ReadAt.Sub(e.LastFullAt).Hours())
+}
+
+// ScopeNote says which scope decided P and how old the last full green is,
+// e.g. "scope=incremental; last full CI green 51 h ago (run r, commit c), cap 48 h".
+func (e ReleaseEvidence) ScopeNote() string {
+	scope := e.Scope()
+	if scope == "" {
+		scope = "none"
+	}
+	maxAge := int(FullMaxAge.Hours())
+	if e.LastFullAgeHours() < 0 {
+		return fmt.Sprintf("scope=%s; no full CI green found, cap %d h", scope, maxAge)
+	}
+	return fmt.Sprintf("scope=%s; last full CI green %d h ago (run %s, commit %s), cap %d h", scope, e.LastFullAgeHours(), e.LastFullRun, e.LastFullCommit, maxAge)
+}
+
 // Record is the closed ci_accepted.ci shape consumed by B5-a. Never turn an
 // unsuccessful observation into a record just because it carries old results.
 func (e ReleaseEvidence) Record() (map[string]any, error) {
-	if e.Status != "Succeeded" || e.Reason != "" || !fullScope(e.Results) || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
+	if e.Status != "Succeeded" || e.Reason != "" || !e.releaseScope(e.Results) || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
 		return nil, fmt.Errorf("release CI is not accepted evidence")
 	}
 	return map[string]any{"name": e.Run, "uid": e.UID, "created_at": e.CreatedAt.UTC().Format(time.RFC3339Nano), "platform_commit": e.PlatformCommit, "ui_commit": e.UICommit, "infra_commit": e.InfraCommit, "pipeline_ref": e.PipelineRef, "repo_url": e.RepoURL, "read_at": e.ReadAt.UTC().Format(time.RFC3339Nano)}, nil
@@ -70,6 +134,7 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 	if err != nil {
 		return out, err
 	}
+	out.LastFullRun, out.LastFullCommit, out.LastFullAt = lastFull(items, out.ReadAt)
 	var matches []unstructured.Unstructured
 	for _, item := range items {
 		params, counts := namedValues(item, "spec", "params")
@@ -95,11 +160,19 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 	}
 	// A green that ran only the console's share of the API (api-scope=console)
 	// says nothing about the rest of P: set it aside before selecting. A red
-	// of any scope stays a verdict.
+	// of any scope stays a verdict. An incremental green counts as a full one
+	// only while the last full green is at most FullMaxAge old; otherwise it
+	// is set aside the same way (Stale).
 	kept := matches[:0]
 	for _, item := range matches {
-		if r := releaseResult(item, revision); r.Status == "Succeeded" && r.Reason == "" && r.Results[APIScopeResult] == APIScopeConsole {
+		r := releaseResult(item, revision)
+		green := r.Status == "Succeeded" && r.Reason == ""
+		if green && r.Results[APIScopeResult] == APIScopeConsole {
 			out.Partial = append(out.Partial, item.GetName())
+			continue
+		}
+		if green && r.Results[APIScopeResult] == APIScopeIncremental && !out.FullFresh() {
+			out.Stale = append(out.Stale, item.GetName())
 			continue
 		}
 		kept = append(kept, item)
@@ -144,6 +217,30 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 		}
 	}
 	return out, nil
+}
+
+// lastFull finds the newest bifrost-ci-platform green of any revision whose
+// identity is valid as releaseResult checks it and that tested the whole API
+// (api-scope full, or none: older runs ran everything). A run created after
+// readAt is not trusted to be the last one.
+func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, string, time.Time) {
+	var run, commit string
+	var at time.Time
+	for _, item := range items {
+		params, counts := namedValues(item, "spec", "params")
+		created := item.GetCreationTimestamp().Time
+		if counts["revision"] != 1 || created.IsZero() || created.After(readAt) {
+			continue
+		}
+		r := releaseResult(item, params["revision"])
+		if r.Status != "Succeeded" || r.Reason != "" || !fullScope(r.Results) {
+			continue
+		}
+		if run == "" || created.After(at) || created.Equal(at) && r.Run < run {
+			run, commit, at = r.Run, r.PlatformCommit, created
+		}
+	}
+	return run, commit, at
 }
 
 // undecided: the run's identity is valid and Tekton has not given a verdict.
@@ -197,7 +294,7 @@ func releaseResult(item unstructured.Unstructured, revision string) Evidence {
 			return out
 		}
 	}
-	if scope, named := values[APIScopeResult]; named && scope != APIScopeFull && scope != APIScopeConsole {
+	if scope, named := values[APIScopeResult]; named && scope != APIScopeFull && scope != APIScopeConsole && scope != APIScopeIncremental {
 		out.Status, out.Reason = "Unknown", "ci_results"
 		return out
 	}
