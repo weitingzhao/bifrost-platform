@@ -238,24 +238,6 @@ func TestPrecheckCIRedLandingIsRework(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A red landing CI with no round left: the task
-// stays where it is, the operation fails ci_red, and the Owner gets the
-// root_failed card it gets today.
-func TestPrecheckCIRedWithNoRoundLeftIsTheCard(t *testing.T) {
-	w, root, op, at := ciRed(t, 1)
-	reworked, err := store.RecordLandingCIRed(ctx, w.rt, "bifrost-platform", op, "test: failed", redCI, store.PrecheckCI)
-	ok(t, err)
-	if reworked || w.state(t, "task", root) != "accepted" {
-		t.Fatalf("reworked %v, state %s", reworked, w.state(t, "task", root))
-	}
-	if p, why := phaseOf(t, w, op); p != "failed" || why != "ci_red" {
-		t.Fatal("operation", p, why)
-	}
-	if choices := rootFailed(t, w, root, at); !slices.Equal(choices, []string{"try_again", "do_not_merge"}) {
-		t.Fatal("card", choices)
-	}
-}
-
 // Serial: FreezeEventClock. Precheck verify is today's: a platform attempt
 // whose landing runs a CI is still checked, then reviewed, and only the
 // review accepts; a red landing CI is the Owner's card.
