@@ -273,6 +273,14 @@ func undecided(item unstructured.Unstructured, revision string) bool {
 	return n == 0 || n == 1 && open
 }
 
+// emptyResultAllowed are the results a green run may leave empty: no failed
+// tests, a full run's empty package list and store pattern, and a scope with
+// nothing to explain (infra test-api, countdown 20). Every other result must
+// be named once and non-empty.
+var emptyResultAllowed = map[string]bool{
+	FailedTestsResult: true, APIPackagesResult: true, APIStoreRunResult: true, APIScopeWhyResult: true,
+}
+
 func releaseResult(item unstructured.Unstructured, revision string) Evidence {
 	var out Evidence
 	out.Run, out.UID, out.R = item.GetName(), string(item.GetUID()), revision
@@ -289,7 +297,7 @@ func releaseResult(item unstructured.Unstructured, revision string) Evidence {
 	}
 	values, resultCounts := namedValues(item, "status", "results")
 	for name, count := range resultCounts {
-		if name == "" || count != 1 || values[name] == "" {
+		if name == "" || count != 1 || values[name] == "" && !emptyResultAllowed[name] {
 			out.Status, out.Reason = "Unknown", "ci_results"
 			return out
 		}
