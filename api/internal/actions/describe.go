@@ -212,7 +212,12 @@ func describeApply(ctx context.Context, planID string) (string, string) {
 	if where == "" {
 		where = "plan " + planID
 	}
-	return env, fmt.Sprintf("%s · %d objects", where, sum.Objects)
+	line := fmt.Sprintf("%s · %d objects", where, sum.Objects)
+	if sum.Migrated > 0 {
+		warning := fmt.Sprintf(" · takes field ownership of %d cicd objects from kubectl client-side apply", sum.Migrated)
+		line = clip(line, summaryMax-len(warning)-len("…")) + warning
+	}
+	return env, line
 }
 
 // highestNamespace is the namespace with the highest manifest tier in the

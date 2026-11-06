@@ -67,3 +67,29 @@ func TestRunnerOf(t *testing.T) {
 		t.Fatalf("owner is the default and is dropped from params: %v", p)
 	}
 }
+
+func TestDescribeApplyOwnership(t *testing.T) {
+	actMu.RLock()
+	previous := planLookup
+	actMu.RUnlock()
+	t.Cleanup(func() { SetPlanLookup(previous) })
+	for _, count := range []int{0, 2} {
+		for _, path := range []string{"k8s/cicd", strings.Repeat("long-path/", 30)} {
+			SetPlanLookup(func(_ context.Context, id string) (PlanSummary, error) {
+				if id != "plan-test" {
+					t.Fatalf("plan id = %q", id)
+				}
+				return PlanSummary{Namespaces: []string{"cicd"}, Path: path, Objects: 3, Migrated: count}, nil
+			})
+			a, _ := ByID("apply_manifest")
+			d := a.Describe(context.Background(), map[string]any{"plan_id": "plan-test"}, "")
+			warning := "takes field ownership of 2 cicd objects from kubectl client-side apply"
+			if count > 0 && !strings.Contains(d.Summary, warning) {
+				t.Fatalf("missing warning: %q", d.Summary)
+			}
+			if count == 0 && strings.Contains(d.Summary, "takes field ownership") {
+				t.Fatalf("unexpected warning: %q", d.Summary)
+			}
+		}
+	}
+}

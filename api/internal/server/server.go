@@ -354,7 +354,7 @@ func New(cfg *config.Config) (*Server, error) {
 			if err != nil {
 				return actions.PlanSummary{}, err
 			}
-			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects)}, nil
+			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects), Migrated: sum.Migrated}, nil
 		})
 	}
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))

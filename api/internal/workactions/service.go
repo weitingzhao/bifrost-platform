@@ -92,7 +92,18 @@ func (s *Service) Apply(ctx context.Context, planID string) (map[string]any, err
 	if tier == "X" {
 		return nil, fmt.Errorf("plan renders a daemon deployment and cannot be applied")
 	}
+	migrated := 0
 	for _, obj := range summary.Objects {
+		switch obj.Ownership {
+		case "", "ssa":
+		case "migrate":
+			if obj.Namespace != s.Policy.Delivery.Namespace {
+				return nil, fmt.Errorf("ownership migration is only allowed in the delivery namespace")
+			}
+			migrated++
+		default:
+			return nil, fmt.Errorf("unknown ownership %q for %s/%s", obj.Ownership, obj.Namespace, obj.Name)
+		}
 		if err := s.Policy.KindAllowed(obj.Namespace, obj.Kind); err != nil {
 			return nil, err
 		}
@@ -106,6 +117,7 @@ func (s *Service) Apply(ctx context.Context, planID string) (map[string]any, err
 		"plan_id":   planID,
 		"tier":      tier,
 		"objects":   len(summary.Objects),
+		"migrated":  migrated,
 	}, nil
 }
 
@@ -115,6 +127,7 @@ type Object struct {
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Tier      string `json:"tier"`
+	Ownership string `json:"ownership,omitempty"`
 }
 
 // Summary is what an approval card shows for a plan.
@@ -124,6 +137,7 @@ type Summary struct {
 	Namespaces []string
 	Daemon     bool
 	Objects    []Object
+	Migrated   int
 	Repo       string
 	Path       string
 	Commit     string
@@ -149,10 +163,15 @@ func (s *Service) Summarize(ctx context.Context, planID string) (Summary, error)
 	out.Policy, _ = resultOf(obj, "policy")
 	raw, _ := resultOf(obj, "objects")
 	if raw != "" {
-		_ = json.Unmarshal([]byte(raw), &out.Objects)
+		if err := json.Unmarshal([]byte(raw), &out.Objects); err != nil {
+			return out, fmt.Errorf("read plan objects: %w", err)
+		}
 	}
 	seen := map[string]bool{}
 	for _, o := range out.Objects {
+		if o.Ownership == "migrate" {
+			out.Migrated++
+		}
 		if !seen[o.Namespace] {
 			seen[o.Namespace] = true
 			out.Namespaces = append(out.Namespaces, o.Namespace)
