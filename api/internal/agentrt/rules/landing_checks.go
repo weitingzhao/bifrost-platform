@@ -78,7 +78,8 @@ func LandingAbsoluteViolation(repo string, changes []LandingChange) (string, boo
 // LandingSoftRefusals is the single predicate used at request and consumption
 // time. §12 extends its four policy categories with core. Core paths do not
 // also count as floor_soft, but can independently fail paths, size or display.
-// Open paths (LandingOpen) fail only deny and size.
+// An open path (LandingOpen) adds no core, floor_soft or presentation refusal
+// and needs no allow match; deny still refuses it and it still counts in size.
 // Structural/absolute checks and rule validity must precede this function.
 // A missing repo fails closed; it is never an empty (waiver-free) set.
 func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []LandingRefusal {
@@ -100,26 +101,22 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 	remaining := limits.MaxChangedLines
 	for _, c := range changes {
 		for _, p := range c.Paths() {
+			open := LandingOpen(repo, p)
 			if repo == "bifrost-trade-infra" && InfraFloorEntry(p) != "" {
 				failed[LandingFloorGrant] = true
-			} else if LandingOpen(repo, p) {
-				// Open paths are outside the Owner's review: only deny refuses one.
-				if landingMatches(r.Deny, p) {
-					failed[LandingRulePaths] = true
-				}
-				continue
 			} else if LandingHardCore(repo, p) {
 				failed[LandingCore] = true
-			} else if LandingFloor(repo, p) && !LandingHard(repo, p) {
+			} else if !open && LandingFloor(repo, p) && !LandingHard(repo, p) {
 				failed[LandingFloorSoft] = true
 			}
-			if !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) || repo == "bifrost-trade-infra" && !landingMatches(InfraLandingAllow, p) {
+			if !open && !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) || repo == "bifrost-trade-infra" && !landingMatches(InfraLandingAllow, p) {
 				failed[LandingRulePaths] = true
 			}
 		}
-		// Display checks apply only to the change's other sides, and only when
-		// they are all inside allow. A path refusal is not mislabelled as an
-		// additional presentation refusal.
+		// Display checks apply only to changes entirely inside allow. A path
+		// refusal is not mislabelled as an additional presentation refusal.
+		// Open endpoints are not displayed: only the others are checked, and
+		// a change all of whose endpoints are open has no display check.
 		shown := c
 		if LandingOpen(repo, c.OldPath) {
 			shown.OldPath = ""

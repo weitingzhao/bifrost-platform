@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// B-02: wide allow rules must still request core review for the actual
-// identity configuration and injected policy providers. The read transports
-// and evidence readers are open: they need neither core review nor allow.
+// B-02: wide allow rules must still request core review for the identity
+// configuration and the injected policy providers. The transports and
+// evidence readers B-02 also held are open since checks version 3.
 func TestReview686TrustTransportClassification(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -21,12 +21,8 @@ func TestReview686TrustTransportClassification(t *testing.T) {
 		{"api/internal/config/clusters.go", []LandingRefusal{"core"}},
 		{"api/internal/opscontext/load.go", []LandingRefusal{"core"}},
 		{"api/internal/workactions/new.go", []LandingRefusal{"core"}},
-		{"api/internal/cluster/client.go", nil},
-		{"api/internal/placement/new.go", nil},
-		{"api/internal/probe/new.go", nil},
-		{"api/internal/delivery/new.go", nil},
-		{"api/internal/lineage/new.go", nil},
-		{"api/internal/releases/new.go", nil},
+		{"api/internal/cluster/client.go", nil}, {"api/internal/placement/new.go", nil}, {"api/internal/probe/new.go", nil},
+		{"api/internal/delivery/new.go", nil}, {"api/internal/lineage/new.go", nil}, {"api/internal/releases/new.go", nil},
 		{"api/internal/agentrt/exam/new.go", nil},
 	} {
 		t.Run(c.path, func(t *testing.T) {
@@ -38,22 +34,22 @@ func TestReview686TrustTransportClassification(t *testing.T) {
 			}
 			ch.OldPath, ch.NewPath = c.path, c.path
 			if LandingHardCore("bifrost-platform", c.path) != (c.want != nil) || LandingOpen("bifrost-platform", c.path) != (c.want == nil) {
-				t.Errorf("misclassified: %s", c.path)
+				t.Errorf("%s: core %v, open %v", c.path, LandingHardCore("bifrost-platform", c.path), LandingOpen("bifrost-platform", c.path))
 			}
 			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{ch}); !slices.Equal(got, c.want) {
-				t.Errorf("%s got %v, want %v", c.path, got, c.want)
+				t.Errorf("got %v, want %v", got, c.want)
 			}
 		})
 	}
 }
 
 // No import is added here: remove coverage for an already-used dependency.
-// No assembly exemption may hide any of these existing edges.
+// A broad assembly exemption used to hide all these existing edges.
 func TestReview686ClosureExistingTrustEdges(t *testing.T) {
 	t.Parallel()
 	pkgs := listDependencies(t, filepath.Join(repositoryRoot(t), "api"), "./internal/server", "./cmd/platform-api", "./cmd/operator-plane")
 	protected := func(string) bool { return true }
-	if got := uncoveredDependencies(pkgs, modulePath, protected); len(got) != 0 {
+	if got := uncoveredDependencies(pkgs, modulePath, protected, assemblyEdge); len(got) != 0 {
 		t.Fatal("fully covered control", got)
 	}
 	for _, edge := range []struct{ from, to string }{
@@ -71,7 +67,7 @@ func TestReview686ClosureExistingTrustEdges(t *testing.T) {
 	} {
 		t.Run(edge.from+"->"+edge.to, func(t *testing.T) {
 			want := modulePath + edge.from + " -> " + modulePath + edge.to
-			got := uncoveredDependencies(pkgs, modulePath, func(p string) bool { return p != modulePath+edge.to })
+			got := uncoveredDependencies(pkgs, modulePath, func(p string) bool { return p != modulePath+edge.to }, assemblyEdge)
 			if !slices.Contains(got, want) {
 				t.Fatalf("existing trust edge hidden: want %s in %v", want, got)
 			}

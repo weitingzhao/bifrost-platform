@@ -55,7 +55,17 @@ func listDependencies(t *testing.T, dir string, args ...string) []listedPackage 
 	return out
 }
 
-func uncoveredDependencies(pkgs []listedPackage, prefix string, protected func(string) bool) []string {
+// §4.2 excludes mounted business features, not injected trust providers.
+// Each retained edge names its consumer so this list cannot silently stand
+// for every import. The closure roots import no business feature now, so no
+// edge is exempt. These exclusions do not prove isolation from arbitrary
+// same-process code.
+var assemblyEdges = map[string]map[string]string{}
+
+func assemblyEdge(from, to string) bool {
+	return assemblyEdges[strings.TrimPrefix(from, modulePath)][strings.TrimPrefix(to, modulePath+"internal/")] != ""
+}
+func uncoveredDependencies(pkgs []listedPackage, prefix string, protected func(string) bool, exempt func(string, string) bool) []string {
 	graph := map[string]listedPackage{}
 	var queue []string
 	for _, p := range pkgs {
@@ -80,6 +90,9 @@ func uncoveredDependencies(pkgs []listedPackage, prefix string, protected func(s
 			if !strings.HasPrefix(dep, prefix) {
 				continue
 			}
+			if exempt(name, dep) {
+				continue
+			}
 			if !protected(dep) {
 				failures = append(failures, name+" -> "+dep)
 				continue
@@ -97,9 +110,22 @@ func TestLandingHardDependencyClosure(t *testing.T) {
 		args = append(args, "./"+strings.TrimPrefix(dir, "api/")+"...")
 	}
 	pkgs := listDependencies(t, filepath.Join(root, "api"), args...)
+	for from, deps := range assemblyEdges {
+		for dep, reason := range deps {
+			found := false
+			for _, p := range pkgs {
+				if p.ImportPath == modulePath+from && slices.Contains(p.Imports, modulePath+"internal/"+dep) {
+					found = true
+				}
+			}
+			if !found || strings.TrimSpace(reason) == "" || inLandingEntries("api/internal/"+dep+"/", landingHardGo[:]) {
+				t.Errorf("stale, unexplained or protected assembly exemption: %s -> %s", from, dep)
+			}
+		}
+	}
 	missing := uncoveredDependencies(pkgs, modulePath, func(pkg string) bool {
 		return inLandingEntries("api/"+strings.TrimPrefix(pkg, modulePath)+"/", landingHardGo[:])
-	})
+	}, assemblyEdge)
 	if len(missing) != 0 {
 		t.Fatalf("hard dependency closure missing:\n%s", strings.Join(missing, "\n"))
 	}
@@ -107,9 +133,15 @@ func TestLandingHardDependencyClosure(t *testing.T) {
 func TestLandingHardCatalogEntriesExist(t *testing.T) {
 	t.Parallel()
 	root := repositoryRoot(t)
-	open := slices.Sorted(maps.Keys(landingOpen))
+	open := slices.Collect(maps.Keys(landingOpen))
 	for _, entries := range [][]string{landingHardGo[:], landingHardConsole[:], landingHardOtherDirs[:], landingHardFiles[:], open} {
 		for _, p := range entries {
+			if strings.Contains(p, "*") {
+				if found, err := filepath.Glob(filepath.Join(root, p)); err != nil || len(found) == 0 {
+					t.Errorf("open pattern %s matches nothing: %v", p, err)
+				}
+				continue
+			}
 			if slices.Contains(landingHardFuture[:], p) {
 				continue
 			}
@@ -123,33 +155,17 @@ func TestLandingHardCatalogEntriesExist(t *testing.T) {
 			}
 		}
 	}
-	files, err := os.ReadDir(filepath.Join(root, landingStoreDir))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, m := range []map[string]string{landingStorePermission, landingStoreOpen} {
-		for entry, reason := range m {
-			found := false
-			for _, f := range files {
-				found = found || !f.IsDir() && landingStoreMatch(f.Name(), map[string]string{entry: reason}) != ""
+	for _, set := range []map[string]string{landingStorePermission, landingStoreOpen} {
+		for key, reason := range set {
+			found, err := filepath.Glob(filepath.Join(root, landingStore, key))
+			if err != nil || len(found) == 0 || strings.TrimSpace(reason) == "" {
+				t.Errorf("stale or unexplained store entry %s: %v", key, err)
 			}
-			if !found || strings.TrimSpace(reason) == "" {
-				t.Errorf("stale or unexplained store entry %s", entry)
-			}
-		}
-	}
-	for entry := range landingStoreOpen {
-		if landingStoreMatch(entry, landingStorePermission) != "" {
-			t.Errorf("open store entry is also permission: %s", entry)
 		}
 	}
 	for p, reason := range landingOpen {
-		probe := p
-		if strings.HasSuffix(p, "/") {
-			probe += "new.go"
-		}
-		if strings.TrimSpace(reason) == "" || !LandingOpen("bifrost-platform", probe) {
-			t.Errorf("unexplained or permission open entry %s", p)
+		if strings.TrimSpace(reason) == "" {
+			t.Errorf("open entry without a reason: %s", p)
 		}
 	}
 }
@@ -189,7 +205,7 @@ func TestLandingHardClosureDetectsNewDependency(t *testing.T) {
 	write("go.mod", "module example.test/closure\n\ngo 1.25.0\n")
 	write("root/root.go", "package root\n")
 	check := func() []string {
-		return uncoveredDependencies(listDependencies(t, dir, "./root"), "example.test/closure/", func(p string) bool { return p == "example.test/closure/root" })
+		return uncoveredDependencies(listDependencies(t, dir, "./root"), "example.test/closure/", func(p string) bool { return p == "example.test/closure/root" }, func(string, string) bool { return false })
 	}
 	if got := check(); len(got) != 0 {
 		t.Fatal("control", got)

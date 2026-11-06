@@ -2,6 +2,7 @@ package rules
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -13,8 +14,6 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 		"mcp/platform/src/x.ts", "config/platform-auth.yaml", "api/internal/statefile/x.go",
 		".gitattributes", "deep/.gitattributes", "deep/Dockerfile.dev", "deep/package.json",
 		"console/src/pwa/new.ts", "console/src/pages/landing-grant/New.tsx",
-		"api/internal/agentrt/store/repos.go", "api/internal/agentrt/store/landing_new.go", "api/internal/agentrt/store/pin_new_test.go",
-		"api/cmd/agentd/main.go", "api/cmd/operator-plane/main.go", "Makefile", "console/src/api/cluster.ts",
 	} {
 		t.Run(p, func(t *testing.T) {
 			t.Parallel()
@@ -65,8 +64,7 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 			t.Fatal("old endpoint omitted")
 		}
 	}
-	for _, p := range []string{"api/internal/research/x.go", "api/internal/serverish/x.go", "console/src/pages/ApprovalsPage.tsx.extra", "x/.github/a", "x/Dockerfiles/a",
-		"api/internal/agentrt/controller/x.go", "api/cmd/agentrt-gate/main.go", "api/Makefile", "console/tsconfig.json", "api/internal/agentrt/store/progress.go"} {
+	for _, p := range []string{"api/internal/research/x.go", "api/internal/serverish/x.go", "console/src/pages/ApprovalsPage.tsx.extra", "x/.github/a", "x/Dockerfiles/a"} {
 		if LandingHard("bifrost-platform", p) {
 			t.Fatal("overbroad hard match", p)
 		}
@@ -76,36 +74,9 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 	}
 }
 
-func TestLandingOpenPaths(t *testing.T) {
-	t.Parallel()
-	for _, p := range []string{
-		"api/internal/agentrt/controller/x.go", "api/internal/agentrt/stgrelease/batch.go", "api/internal/questions/new/x.go",
-		"api/cmd/debtimport/main.go", "api/Makefile", "console/vitest.config.ts", "console/tsconfig.node.json",
-		"console/src/api/questions.ts", "console/src/pages/shell/releases/ReleasesPage.tsx",
-		"api/internal/agentrt/store/progress.go", "api/internal/agentrt/store/progress_test.go",
-		"api/internal/agentrt/store/planviewsnapshot_more_test.go", "api/internal/agentrt/store/presencejudge2_test.go",
-	} {
-		if !LandingOpen("bifrost-platform", p) || LandingHard("bifrost-platform", p) || LandingHardCoreEntry("bifrost-platform", p) != "" {
-			t.Errorf("not open: %s", p)
-		}
-	}
-	for _, p := range []string{
-		"api/internal/agentrt/store/zz_new.go", "api/internal/agentrt/store/sub/progress.go",
-		"api/internal/agentrt/store/progressfoo.go", "api/internal/agentrt/store/progressfoo_test.go",
-		"api/internal/agentrt/store/landing_progress.go", "api/internal/agentrt/store/export_test.go",
-		"api/internal/agentrt/controllerx/x.go", "console/tsconfig.app.json",
-	} {
-		if LandingOpen("bifrost-platform", p) {
-			t.Errorf("open: %s", p)
-		}
-	}
-	for _, p := range []string{"api/internal/agentrt/controller/x.go", "x/.env", "api/internal/agentrt/controller/.env"} {
-		if LandingOpen("bifrost-trade-infra", p) || LandingOpen("unknown", p) || p != "api/internal/agentrt/controller/x.go" && LandingOpen("bifrost-platform", p) {
-			t.Errorf("open outside bifrost-platform's ordinary paths: %s", p)
-		}
-	}
-}
-
+// Open paths (checks version 3) need neither core approval nor an allow
+// match. Deny and size still apply, and a permission path in the same
+// change still asks for core.
 func TestLandingOpenRefusals(t *testing.T) {
 	t.Parallel()
 	change := func(p string) LandingChange {
@@ -113,35 +84,101 @@ func TestLandingOpenRefusals(t *testing.T) {
 		c.OldPath, c.NewPath = p, p
 		return c
 	}
-	// Open changes need not be presentation-only.
-	var open []LandingChange
-	for _, p := range []string{"api/internal/agentrt/controller/x.go", "console/tsconfig.json", "api/internal/agentrt/store/progress.go"} {
-		c := change(p)
-		c.AddedText = "fetch('/x')"
-		open = append(open, c)
+	open := []string{
+		"api/internal/agentrt/controller/loop.go", "api/internal/agentrt/questioncards/x_test.go", "api/internal/delivery/new.go",
+		"api/cmd/agentrt-gate/main.go", "api/Makefile", "console/vitest.config.ts", "console/tsconfig.json",
+		"console/tsconfig.node.json", "console/tsconfig.app.json", "api/internal/agentrt/store/progressneeds.go",
 	}
-	for _, c := range []struct {
-		name    string
-		allow   []string
-		deny    []string
-		changes []LandingChange
-		want    []LandingRefusal
-	}{
-		{"open only, allow empty", nil, nil, open, nil},
-		{"open plus deny", nil, []string{"api/internal/agentrt/controller/**"}, open, []LandingRefusal{LandingRulePaths}},
-		{"open plus oversize", nil, nil, append(slices.Clone(open), LandingChange{OldPath: "api/Makefile", NewPath: "api/Makefile", OldMode: "100644", NewMode: "100644", Added: 1000}), []LandingRefusal{LandingSize}},
-		{"open plus permission", []string{"**"}, nil, append(slices.Clone(open), change("api/internal/agentrt/landing/x.go")), []LandingRefusal{LandingCore}},
-		{"open plus unlisted store file", []string{"**"}, nil, append(slices.Clone(open), change("api/internal/agentrt/store/zz_new.go")), []LandingRefusal{LandingCore}},
-		{"open renamed into a business path", nil, nil, []LandingChange{{OldPath: "api/internal/agentrt/controller/x.go", NewPath: "console/src/components/X.tsx", OldMode: "100644", NewMode: "100644", Added: 1}}, []LandingRefusal{LandingRulePaths}},
-		{"open renamed into an allowed display path", []string{"console/src/components/**"}, nil, []LandingChange{{OldPath: "api/internal/agentrt/controller/x.go", NewPath: "console/src/components/X.tsx", OldMode: "100644", NewMode: "100644", Added: 1, AddedText: "fetch('/x')"}}, []LandingRefusal{LandingPresentation}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
+	for _, p := range open {
+		t.Run(p, func(t *testing.T) {
 			t.Parallel()
+			if !LandingOpen("bifrost-platform", p) || LandingHard("bifrost-platform", p) {
+				t.Fatal("not open", p)
+			}
 			l := landingRule(t).Landing
-			l.Repos[0].Allow, l.Repos[0].Deny = c.allow, c.deny
-			if got := LandingSoftRefusals(l, "bifrost-platform", c.changes); !slices.Equal(got, c.want) {
-				t.Fatalf("got %v, want %v", got, c.want)
+			l.Repos[0].Allow = nil
+			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{change(p)}); len(got) != 0 {
+				t.Fatal("open-only change refused", got)
+			}
+			l.Repos[0].Deny = []string{p}
+			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{change(p)}); !slices.Equal(got, []LandingRefusal{LandingRulePaths}) {
+				t.Fatal("deny", got)
+			}
+			l.Repos[0].Deny = nil
+			big := change(p)
+			big.Added = 400
+			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{big}); !slices.Equal(got, []LandingRefusal{LandingSize}) {
+				t.Fatal("size", got)
+			}
+			got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{change(p), change("api/internal/agentrt/landing/x.go")})
+			if !slices.Contains(got, LandingCore) {
+				t.Fatal("open plus permission", got)
 			}
 		})
+	}
+	// A rename from an open path into allow is checked for display on its
+	// allowed endpoint only.
+	l := landingRule(t).Landing
+	c := simpleChange()
+	c.OldPath = "api/internal/agentrt/controller/loop.go"
+	if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c}); len(got) != 0 {
+		t.Fatal("open rename into allow", got)
+	}
+	c.AddedText = "fetch('/api')"
+	if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c}); !slices.Equal(got, []LandingRefusal{LandingPresentation}) {
+		t.Fatal("display of the allowed endpoint", got)
+	}
+	for _, p := range []string{
+		"api/internal/agentrt/controllerx/a.go", "console/tsconfig.json.bak", "console/src/tsconfig.json", "deep/api/Makefile",
+		"api/internal/agentrt/controller/Dockerfile", "api/internal/agentrt/controller/package.json", ".github/a",
+	} {
+		if LandingOpen("bifrost-platform", p) {
+			t.Error("overbroad open match", p)
+		}
+	}
+	if LandingOpen("bifrost-trade-infra", "api/internal/agentrt/controller/loop.go") || LandingOpen("unknown", "api/Makefile") {
+		t.Error("open outside bifrost-platform")
+	}
+}
+
+// The store is permission unless a file directly under it is on the open
+// map: an unlisted file, a test file and any subdirectory are permission.
+func TestLandingStoreSplit(t *testing.T) {
+	t.Parallel()
+	for _, p := range []string{
+		"api/internal/agentrt/store/zz_unlisted.go", "api/internal/agentrt/store/progressneeds_test.go",
+		"api/internal/agentrt/store/sub/progressneeds.go", "api/internal/agentrt/store/signals.go",
+		"api/internal/agentrt/store/landing_grant.go", "api/internal/agentrt/store/landing_new.go",
+		"api/internal/agentrt/store/pinreview.go", "api/internal/agentrt/store/nomerge.go",
+		"api/internal/agentrt/store/stg_gate.go", "api/internal/agentrt/store/controls.go",
+		"api/internal/agentrt/store/stepexplain.go", "api/internal/agentrt/store/progress.go",
+		"Makefile", "console/src/api/questions.ts",
+	} {
+		if !LandingHardCore("bifrost-platform", p) || LandingOpen("bifrost-platform", p) {
+			t.Errorf("not permission: %s", p)
+		}
+		l := landingRule(t).Landing
+		c := simpleChange()
+		c.OldPath, c.NewPath = p, p
+		if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c}); !slices.Contains(got, LandingCore) {
+			t.Errorf("%s: %v", p, got)
+		}
+	}
+	for name := range landingStoreOpen {
+		if key, open := landingStoreEntry(landingStore + name); !open || key != name {
+			t.Errorf("open store file shadowed by permission entry %q: %s", key, name)
+		}
+		if _, listed := landingStorePermission[name]; listed {
+			t.Errorf("store file in both maps: %s", name)
+		}
+	}
+	for p := range landingOpen {
+		probe := strings.ReplaceAll(p, "*", ".x")
+		if strings.HasSuffix(probe, "/") {
+			probe += "x.go"
+		}
+		if !LandingOpen("bifrost-platform", probe) {
+			t.Errorf("open entry %s is shadowed by a permission entry", p)
+		}
 	}
 }

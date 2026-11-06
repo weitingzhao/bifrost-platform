@@ -8,15 +8,14 @@ import (
 
 // Coordinator v3 §4.2 / §12.1. Prefixes protect entire packages, including
 // future files, subpackages, tests, fixtures and build-tagged sources. These
-// are permission paths: a change to one can widen what agents may do without
-// the Owner, so it needs the Owner's core approval (hard_core).
+// are the permission paths: a change to one needs the Owner's core approval.
 var landingHardGo = [...]string{
-	// The landing gate itself: its rules, git reader and CI evidence.
+	// The landing gate and its CI.
 	"api/internal/agentrt/rules/",
 	"api/internal/agentrt/landing/",
 	"api/internal/agentrt/landinggit/",
 	"api/internal/agentrt/landingci/",
-	// Approvals and what they let run.
+	// The Owner's approvals and what they actuate.
 	"api/internal/approvals/",
 	"api/internal/approvalhome/",
 	"api/internal/approvalnotify/",
@@ -25,23 +24,22 @@ var landingHardGo = [...]string{
 	"api/internal/actuationpolicy/",
 	"api/internal/releasepolicy/",
 	"api/internal/workactions/",
-	// The processes that hold the credentials, and their configuration.
+	// Assembly, routes and identity configuration.
 	"api/internal/server/",
 	"api/internal/agentrt/agentrtapi/",
 	"api/internal/config/",
 	"api/cmd/platform-api/",
 	"api/cmd/operator-plane/",
 	"api/cmd/s5check/",
-	// The schema the runtime's records live in.
+	// The schema and the agent host.
 	"api/internal/agentrt/migrate/",
 	"api/internal/agentrt/migrations/",
-	// The agent host: what an executor runs, where and with which token.
 	"api/internal/agentd/",
 	"api/cmd/agentd/",
 	"api/internal/agentrt/plan/",
 	"api/internal/agentrt/infracheck/",
 	"api/cmd/infracheck/",
-	// Held by the dependency closure of the roots above.
+	// Held by the closure of the roots above, or by agentd and the runtime API.
 	"api/internal/agentrt/canon/",
 	"api/internal/statefile/",
 	"api/internal/notice/",
@@ -54,8 +52,7 @@ var landingHardGo = [...]string{
 	"api/internal/agentrt/actions/",
 }
 
-// The roots whose non-test dependency closure must stay inside landingHardGo
-// (landing_hard_closure_test.go).
+// The dependency closure of these packages must stay inside landingHardGo.
 var landingHardRoots = [...]string{
 	"api/internal/agentrt/rules/",
 	"api/internal/agentrt/landing/",
@@ -73,7 +70,183 @@ var landingHardRoots = [...]string{
 	"api/internal/agentrt/infracheck/",
 }
 
-// The Console's approval, sign-in and page-loading files.
+// The agent runtime's store is split by file. A file in neither map, and any
+// subdirectory, is permission. Each file is classified by one test: can it
+// widen what agents may do without the Owner? Keys are basenames; a key with
+// "*" is a path.Match pattern.
+const landingStore = "api/internal/agentrt/store/"
+
+var landingStorePermission = map[string]string{
+	"landing*":             "landing state, grants, cards, CI reads and rework: the gate that lands agent commits",
+	"pin*":                 "pinned checks and their reviews: what a task's commit must pass",
+	"nomerge*":             "no-merge marks that hold a commit back from landing",
+	"rules.go":             "stores and reads the Owner's signed rules",
+	"rulerows.go":          "which version of a signed rule is in force",
+	"envelope.go":          "a task's envelope: what its attempt may touch",
+	"missiondecide.go":     "applies the Owner's answers on mission cards",
+	"proposebounds.go":     "the bounds an agent's proposal must keep",
+	"propose.go":           "agents' proposals of missions and tasks",
+	"signoff.go":           "records the Owner's sign-off on a step",
+	"acceptancesignoff.go": "an acceptance sign-off makes a step done",
+	"controls.go":          "the Owner's stop, pause and drain controls",
+	"cardauto.go":          "answers cards without the Owner, by rule or assessment",
+	"cardkinds.go":         "card kinds and the answers each accepts",
+	"route.go":             "which executors and hosts a task may go to",
+	"claim.go":             "a host claiming a task's attempt",
+	"pick.go":              "which ready task a host is given",
+	"competence.go":        "executor competence that routing trusts",
+	"repos.go":             "the repositories a mission may write",
+	"core.go":              "store primitives every write goes through",
+	"close.go":             "closing missions and tasks",
+	"event.go":             "the append-only event log and its checks",
+	"write.go":             "writer identity and idempotent writes",
+	"vocab.go":             "the event types each writer may append",
+	"keyed.go":             "idempotency keys of requests",
+	"accept.go":            "starts verification and concludes a task: its acceptance",
+	"adopt.go":             "adopts a salvaged attempt's work as the task's",
+	"alerts.go":            "records policy alerts and tells the Owner of them",
+	"artifactsearch.go":    "artifact search; hides exam artifacts from Agent hosts",
+	"assess.go":            "assessments, including whether a signed rule already answers an item",
+	"assessaccept.go":      "takes an assessment's answer to an Owner card",
+	"assessrequest.go":     "starts and ends assessment requests",
+	"attempt.go":           "an attempt's fenced start, heartbeat, checkpoint and result",
+	"benchmark.go":         "benchmark runs that scores and routing read",
+	"blockedcard.go":       "asks and decides blocked-task cards",
+	"blockedclose.go":      "closes a mission and cancels its work on a card's answer",
+	"blockedexcerpt.go":    "the check report blockedcard.go puts before the Owner",
+	"blockedrecommend.go":  "the option a blocked card recommends, which cardauto.go may take",
+	"brief.go":             "turns mail into brief tasks, or refuses it",
+	"briefdue.go":          "schedules briefs and the Owner's nudges",
+	"briefwait.go":         "tells the Owner when no host can take a brief",
+	"claimfailed.go":       "the failed checks a retried implementation is told of",
+	"claims.go":            "detects claims of the Owner's approval in messages",
+	"claimsubject.go":      "what a check is told of the attempt it checks",
+	"conclusion.go":        "posts the platform's own conclusions",
+	"debtcheck.go":         "the grammar of a debt's acceptance spec",
+	"debtfloor.go":         "raises a debt floor",
+	"debtlinks.go":         "links debts and ends their edges",
+	"debts.go":             "files debts and their evidence",
+	"debtvocab.go":         "the debt moves each event may make",
+	"dispatch.go":          "readies proposed tasks and decides their route",
+	"eventcursor.go":       "event reads and the events hidden from intake clients",
+	"exam.go":              "issues the exams that grade executors",
+	"examgrade.go":         "grades exam answers",
+	"examspec.go":          "the specs an exam renders with the runtime's own functions",
+	"examvoid.go":          "voids an exam paper",
+	"externalwork.go":      "collector identity and external work bindings",
+	"facts.go":             "records external facts and evaluates steps",
+	"gateconclude.go":      "concludes a gate task's verdict",
+	"gateend.go":           "ends gate batches",
+	"gates.go":             "dispatches gate runs",
+	"gatesplan.go":         "guards plan changes to gates",
+	"goal.go":              "proposes a goal's mission and its planning task",
+	"hostdisk.go":          "the disk floor below which a host gets no new work",
+	"ids.go":               "mints task, attempt, message and control ids",
+	"intake.go":            "intake clients, their tokens and what they see",
+	"intakeupdates.go":     "the updates an intake client may read",
+	"issuebrief.go":        "issue briefs, replies and answers to asks",
+	"issuecard.go":         "asks the Owner on issue cards",
+	"issuecarddecide.go":   "applies the Owner's answers on issue cards",
+	"issueclose.go":        "closes, parks, resumes, reopens and merges issues",
+	"issuedesign.go":       "issue designs and their reviews",
+	"issueevidence.go":     "issue classification, close checks and the Owner's evidence",
+	"issueread.go":         "issue reads, scoped to an intake client's view",
+	"issues.go":            "issue state and its locks",
+	"issueshown.go":        "what an issue shows a client",
+	"issuesubmit.go":       "submits an issue and checks whom a writer speaks for",
+	"issuetake.go":         "an agent taking an issue",
+	"kernel.go":            "the mission, task and attempt state machine",
+	"localpath.go":         "the artifact kinds that skip the local-path scan",
+	"loopalert.go":         "tells the Owner of failing controller loops",
+	"messages.go":          "message sends and the kinds a writer may send",
+	"missionbudget.go":     "mission budgets and round grants",
+	"planactivate.go":      "activates leased plan steps",
+	"planbindings.go":      "installs plan bindings and bound done rules",
+	"planchange.go":        "applies plan changes",
+	"plandecide.go":        "decides plan changes on the Owner's cards",
+	"planfactssnapshot.go": "the plan facts bound done rules read",
+	"planimport.go":        "imports a plan tree",
+	"planimportcard.go":    "proposes a plan import on an Owner card",
+	"plannote.go":          "writes notes on plan rows",
+	"planobservations.go":  "collects the observations bound steps read",
+	"planparse.go":         "parses a planner's plan, its tasks and their core marks",
+	"planproposal.go":      "proposes plan changes on an Owner card",
+	"planresult.go":        "accepts or refuses a planner's plan",
+	"planview.go":          "adopts plan views and their bindings",
+	"pools.go":             "usage pools that hold work back",
+	"preparefailed.go":     "attempts that failed before their executor started",
+	"presence.go":          "host offers and presence that routing reads",
+	"presencejudge.go":     "presence switches",
+	"presencelive.go":      "host liveness that claims read",
+	"presencepass.go":      "sets hosts aside and back",
+	"progress.go":          "the progress projection; presence reads its HostLostAfter",
+	"progressarch.go":      "architecture rows; gates read its recorded deploys",
+	"progressgates.go":     "gate status for progressarch.go",
+	"prune.go":             "prunes attempt branches and records landings",
+	"recorderimport.go":    "proposes and decides recorder imports",
+	"retry.go":             "failure backoff, holds and handover",
+	"scores.go":            "computes the executor scores routing reads",
+	"seat.go":              "registers the platform's own seats",
+	"seed.go":              "seeds capability facts",
+	"signals.go":           "outbox, mailboxes, ready marks and SetControl/ClearControl for the Owner's controls",
+	"snapshot.go":          "the runtime snapshot and envelope lines planners and exams are given",
+	"stepevidence.go":      "the step evidence done rules read",
+	"stepexplain.go":       "explanations; stepevidence.go reads its repository and STG readers",
+	"stg_*":                "STG release state, gate, cards, coverage and recovery",
+	"waits.go":             "records waits past their limit",
+	"withdrawn.go":         "blocks a task no executor may take",
+	"workspaceref.go":      "the artifact kinds that skip the workspace-path scan",
+}
+
+var landingStoreOpen = map[string]string{
+	"explaincache.go":         "caches plan-view explanations for the plan view API; reads only",
+	"explainroot.go":          "explains why a root's steps are not done, for the plan view; reads only",
+	"planpace.go":             "a round's pace and quiet hours, for the Console; reads only",
+	"planverificationview.go": "the plan view's verification column; reads only",
+	"planviewrecent.go":       "the plan view's recent changes; reads only",
+	"planviewsnapshot.go":     "the plan view, read from one snapshot; reads only",
+	"planviewsummary.go":      "the plan view's execution summary; reads only",
+	"planevidence.go":         "evidence suggestions in the plan view, never facts; reads only",
+	"progresseta.go":          "a mission's ETA in the progress projection; reads only",
+	"progressneeds.go":        "Needs you in the progress projection; reads only",
+	"progressnext.go":         "when the Owner is next needed, in the progress projection",
+	"progresspersist.go":      "what of an attempt is persisted, in the progress projection; reads only",
+	"progressschema.go":       "loop failures and schema state in the progress projection; reads only",
+}
+
+// Open paths may change without the Owner: no core, floor_soft or
+// presentation refusal, and no rule_paths refusal for being outside allow.
+// Deny and size still apply. Like assemblyEdges, each entry names its reason.
+var landingOpen = map[string]string{
+	"api/internal/agentrt/questioncards/":  "adapts the question service to landing and STG cards; the answers stay the question service's",
+	"api/internal/agentrt/stgrelease/":     "B5's opt-in STG release controller; the signed rule and switch it reads are permission",
+	"api/internal/agentrt/stgpreflight/":   "composes B5 readers and non-persisted probes; not wired into workers",
+	"api/internal/agentrt/controller/":     "runs the runtime's loops through the store's permission code",
+	"api/internal/agentrt/relay/":          "Redis change signals; PostgreSQL stays the record",
+	"api/internal/agentrt/agentrttest/":    "test database harness",
+	"api/internal/agentrt/gaterun/":        "runs gate tests and reports them",
+	"api/internal/agentrt/planimport/":     "parses the work ledger into an import request; reads and writes nothing",
+	"api/internal/agentrt/debtimport/":     "parses debt ledgers into proposals; no I/O",
+	"api/internal/agentrt/planview/":       "validates the offline plan-view artifact; grants nothing",
+	"api/internal/agentrt/recorderimport/": "checks and masks recorder logs for import",
+	"api/internal/agentrt/seatproto/":      "the seat protocol's duties and answer lines",
+	"api/internal/agentrt/exam/":           "exam sets and their rendering",
+	"api/internal/questions/":              "stores Owner questions; an answer authorizes nothing",
+	"api/internal/cluster/":                "cluster reads and data clone",
+	"api/internal/placement/":              "workload placement reads",
+	"api/internal/probe/":                  "connectivity probes",
+	"api/internal/delivery/":               "delivery pipeline reads and STG windows",
+	"api/internal/lineage/":                "commit trailers and lineage",
+	"api/internal/releases/":               "records the commits each delivery built",
+	"api/cmd/agentrt-gate/":                "command around gaterun",
+	"api/cmd/agentrt-plan-import/":         "command around planimport",
+	"api/cmd/debtimport/":                  "command around debtimport; reads files and git history only",
+	"api/cmd/stg-release-probe/":           "checks B5 prerequisites without persisting cluster objects",
+	"api/Makefile":                         "developer targets; no credentialed pipeline runs it (the root Makefile, which deploy_mac_mini.sh runs, stays permission)",
+	"console/vitest.config.ts":             "test runner configuration",
+	"console/tsconfig*.json":               "TypeScript compiler configuration",
+}
+
 var landingHardConsole = [...]string{
 	"console/package.json",
 	"console/package-lock.json",
@@ -120,6 +293,13 @@ var landingHardConsole = [...]string{
 	"console/src/pages/shell/needs-you/ApprovalRow.tsx",
 	"console/src/pages/shell/needs-you/useNeedsYou.ts",
 	"console/src/components/shell/RequestActionButton.tsx",
+	// These send or read the operator token (TestLandingHardConsoleCallSites):
+	// questions.ts posts the Owner's answers with it. They stay permission.
+	"console/src/api/issues.ts",
+	"console/src/api/agentRuntimePlan.ts",
+	"console/src/api/questions.ts",
+	"console/src/pages/shell/releases/ReleasesPage.tsx",
+	"console/src/pages/shell/owner/useOwnerConsole.ts",
 }
 
 var landingHardOtherDirs = [...]string{
@@ -131,8 +311,7 @@ var landingHardOtherDirs = [...]string{
 var landingHardFiles = [...]string{
 	"api/go.mod",
 	"api/go.sum",
-	// scripts/agent/deploy_mac_mini.sh runs its build-operator-plane target
-	// with the Mac minis' SSH access and installs what it builds there.
+	// deploy_mac_mini.sh runs it to build the operator plane it deploys.
 	"Makefile",
 	"config/actions-catalog.json",
 	"config/actuation-policy.yaml",
@@ -155,257 +334,6 @@ var landingHardFuture = [...]string{
 	"console/src/pages/landing-grant/",
 }
 
-// The runtime's store is split by file (§12.1): what decides who may do what,
-// and what only reads, projects or words it. A name ending in "*" is a prefix.
-// A file in neither map, and any subdirectory, is permission.
-const landingStoreDir = "api/internal/agentrt/store/"
-
-var landingStorePermission = map[string]string{
-	"landing*":                "the landing gate's requests, grants, cards and evidence",
-	"pin*":                    "pinning work to a host or executor",
-	"nomerge*":                "what keeps a delivery from being merged",
-	"rules.go":                "the signed rules in force",
-	"rulerows.go":             "the signed rules' rows",
-	"envelope.go":             "the standing envelope agents work inside",
-	"missiondecide.go":        "the Owner's decisions on missions",
-	"proposebounds.go":        "what a proposal may ask for",
-	"propose.go":              "proposing missions and tasks",
-	"signoff.go":              "the Owner's sign-off",
-	"acceptancesignoff.go":    "the Owner's sign-off of an acceptance",
-	"controls.go":             "the Owner's switches",
-	"cardauto.go":             "cards the runtime answers itself",
-	"cardkinds.go":            "which cards exist and who answers them",
-	"route.go":                "which executor a task goes to",
-	"claim.go":                "a host taking a task",
-	"pick.go":                 "which task a claim gets",
-	"competence.go":           "what an executor is trusted with",
-	"repos.go":                "the repositories the runtime may touch",
-	"core.go":                 "writers, actors and their registration",
-	"close.go":                "closing missions and tasks",
-	"event.go":                "appending events",
-	"write.go":                "the write path every record takes",
-	"vocab.go":                "the event vocabulary Append accepts",
-	"keyed.go":                "idempotent keyed writes",
-	"accept.go":               "accepting a submitted implementation through verification and review",
-	"adopt.go":                "accepting a salvaged result",
-	"alerts.go":               "telling the Owner a record claims an authority it lacks",
-	"assess.go":               "dispatching an assessment only once the Owner opts in",
-	"assessrequest.go":        "the Owner's opt-in record for an assessment",
-	"attempt.go":              "attempts, their leases and what they hand in",
-	"benchmark.go":            "benchmark results that feed routing",
-	"blockedcard.go":          "the Owner's card on a blocked task and what its answers do",
-	"blockedclose.go":         "closing a mission on the Owner's answer",
-	"brief.go":                "turning a message to the seat into a mission",
-	"briefdue.go":             "the controller's own notes to the seat",
-	"claims.go":               "deciding a claim of the Owner's approval by records",
-	"claimsubject.go":         "what a check is told of the work it checks",
-	"conclusion.go":           "the platform's own conclusions",
-	"debtcheck.go":            "a debt's acceptance spec",
-	"debtfloor.go":            "the debt numbering floor only the Owner or runtime raises",
-	"debtlinks.go":            "whether a debt can start",
-	"debts.go":                "debt records and their writers",
-	"debtvocab.go":            "the debt event vocabulary",
-	"dispatch.go":             "readying proposed tasks",
-	"exam.go":                 "the qualifying exam an executor must pass",
-	"examgrade.go":            "grading the qualifying exam",
-	"examvoid.go":             "voiding a paper, the Owner's only",
-	"externalwork.go":         "external runs and the collector's identity",
-	"facts.go":                "external facts rules are evaluated against",
-	"gateconclude.go":         "whether a gate passed",
-	"gateend.go":              "ending a gate batch",
-	"gates.go":                "the runtime's gate runs",
-	"gatesplan.go":            "plan changes and the gates",
-	"goal.go":                 "turning the Owner's goal into a mission",
-	"intake.go":               "intake clients, their tokens and limits",
-	"intakeupdates.go":        "what an intake client may read",
-	"issuebrief.go":           "the person's confirmation of a brief",
-	"issuecard.go":            "the Owner's cards on business issues",
-	"issuecarddecide.go":      "applying the Owner's answers on business issues",
-	"issueclose.go":           "the close predicate of an issue",
-	"issuedesign.go":          "a design and its independent review",
-	"issueevidence.go":        "the evidence an issue's gates read",
-	"issueread.go":            "who may read which issues",
-	"issues.go":               "business issues",
-	"issuesubmit.go":          "bringing an issue and an intake client's limits",
-	"issuetake.go":            "the take predicate that gives an issue work",
-	"kernel.go":               "the mission, task and attempt state machine",
-	"localpath.go":            "which artifacts are scanned for local paths",
-	"messages.go":             "who may send which message kinds",
-	"missionbudget.go":        "a mission's budget and the Owner's extra rounds",
-	"planactivate.go":         "activating a step under the signed rule",
-	"planbindings.go":         "installing the conditions of an adopted plan",
-	"planchange.go":           "plan changes within the standing authorization",
-	"plandecide.go":           "applying the Owner's decision on a plan change",
-	"planfactssnapshot.go":    "the facts a step's done rule reads",
-	"planimport.go":           "importing a plan",
-	"planimportcard.go":       "the Owner's card on a plan import",
-	"planobservations.go":     "the observations a done rests on",
-	"planparse.go":            "the program check of a planner's plan",
-	"planproposal.go":         "the Owner's card on a plan change",
-	"planresult.go":           "recording a plan",
-	"planview.go":             "adopting a plan view",
-	"pools.go":                "vendor pools and the budget ledger",
-	"prune.go":                "deleting attempt branches",
-	"recorderimport.go":       "the Owner's card on a recorder import and landing it",
-	"retry.go":                "retrying after a failure",
-	"scores.go":               "in-job scores that feed routing",
-	"seat.go":                 "seats the platform registers",
-	"seed.go":                 "the initial capability facts",
-	"stepevidence.go":         "a step's own work as evidence for its done rule",
-	"stg_block_record.go":     "STG's closed block records",
-	"stg_card_answer.go":      "applying the Owner's STG card answers",
-	"stg_card_protocol.go":    "STG card identities",
-	"stg_cards.go":            "STG's cards under the supervisor's rule",
-	"stg_control.go":          "STG's signed control rule",
-	"stg_coverage.go":         "STG coverage proofs that settle members",
-	"stg_gate.go":             "authorizing an STG release",
-	"stg_gate_policy.go":      "the STG gate's policy",
-	"stg_gate_recovery.go":    "STG run recovery",
-	"stg_landing.go":          "STG's closing snapshots",
-	"stg_release.go":          "the STG release ledger",
-	"stg_release_proofs.go":   "STG release proofs",
-	"stg_release_protocol.go": "the STG release protocol and its writers",
-	"stg_release_scopes.go":   "STG's Owner-only ledger edges",
-	"stg_release_store.go":    "the STG release stream",
-	"stg_sample.go":           "the Tier C sample actions",
-	"workspaceref.go":         "keeping a task from naming another task's workspace",
-}
-
-// A _test.go file whose name starts with an open file's stem, followed by
-// nothing, a digit or "_", is open with it.
-var landingStoreOpen = map[string]string{
-	"artifactsearch.go":       "lists artifact metadata, reads nothing it could not before",
-	"assessaccept.go":         "records an assessment, which is advice only",
-	"blockedexcerpt.go":       "what a blocked card quotes",
-	"blockedrecommend.go":     "a card's recommended answer, which the Owner still gives",
-	"briefwait.go":            "says a brief has no host",
-	"claimfailed.go":          "what a retry is told of earlier rounds",
-	"eventcursor.go":          "reads events in order",
-	"examspec.go":             "renders exam specs from given records",
-	"explaincache.go":         "caches read-only explanations",
-	"explainroot.go":          "a read-only explanation",
-	"hostdisk.go":             "a host's free disk and its alert",
-	"ids.go":                  "id spelling",
-	"issueshown.go":           "an issue's displayed state",
-	"loopalert.go":            "alerts on a failing controller loop",
-	"planevidence.go":         "read-only evidence suggestions",
-	"plannote.go":             "notes shown beside a row, never its tick",
-	"planpace.go":             "a round's pace, a projection",
-	"planverificationview.go": "a read-only landing view",
-	"planviewrecent.go":       "the recent changes listing",
-	"planviewsnapshot.go":     "a read-only plan snapshot",
-	"planviewsummary.go":      "a progress summary",
-	"preparefailed.go":        "blocks a task whose setup failed; grants nothing",
-	"presence.go":             "a host's presence view",
-	"presencejudge.go":        "alerts when presence cannot be judged",
-	"presencelive.go":         "when a host counts as alive",
-	"presencepass.go":         "presence alerts",
-	"progress.go":             "the progress projection",
-	"progressarch.go":         "the architecture table projection",
-	"progresseta.go":          "a mission's expected end",
-	"progressgates.go":        "why a gate has not passed, a projection",
-	"progressneeds.go":        "what waits on the Owner, a projection",
-	"progressnext.go":         "when the Owner is next needed, a projection",
-	"progresspersist.go":      "whether an attempt's work is saved, a projection",
-	"progressschema.go":       "the platform's own health, a projection",
-	"signals.go":              "outbox topic names",
-	"snapshot.go":             "what the runtime knows, read for the seat",
-	"stepexplain.go":          "what keeps a step from done, read-only",
-	"stg_card_copy.go":        "STG card wording",
-	"stg_lease.go":            "an STG lease diagnostic that changes no state",
-	"waits.go":                "alerts on waits past their limit",
-	"withdrawn.go":            "a card for a task no executor may take",
-}
-
-// Open paths: a change to one cannot widen what agents may do without the
-// Owner, so it needs neither the core approval nor the signed allow list.
-var landingOpen = map[string]string{
-	"api/internal/agentrt/questioncards/":               "renders question cards; the answers are read by approvals",
-	"api/internal/agentrt/stgrelease/":                  "drives STG releases the store's ledger authorizes",
-	"api/internal/agentrt/stgpreflight/":                "read-only checks before an STG release",
-	"api/internal/agentrt/controller/":                  "schedules the store's passes; each decides for itself",
-	"api/internal/agentrt/relay/":                       "carries messages the store checks",
-	"api/internal/agentrt/agentrttest/":                 "test helpers",
-	"api/internal/agentrt/gaterun/":                     "runs gate commands whose verdict the store judges",
-	"api/internal/agentrt/planimport/":                  "parses an import the Owner's card decides",
-	"api/internal/agentrt/debtimport/":                  "parses the debt ledger, no writes",
-	"api/internal/agentrt/planview/":                    "parses and renders plan views",
-	"api/internal/agentrt/recorderimport/":              "parses a recorder log the Owner's card decides",
-	"api/internal/agentrt/seatproto/":                   "parses the seat's protocol lines",
-	"api/internal/agentrt/exam/":                        "the exam's items; grading is the store's",
-	"api/internal/questions/":                           "questions; their answers grant nothing",
-	"api/internal/cluster/":                             "the cluster read transport",
-	"api/internal/placement/":                           "where workloads run, a read",
-	"api/internal/probe/":                               "health probes",
-	"api/internal/delivery/":                            "delivery status, a read",
-	"api/internal/lineage/":                             "release lineage, a read",
-	"api/internal/releases/":                            "the releases listing",
-	"api/cmd/agentrt-gate/":                             "a gate runner the store judges",
-	"api/cmd/agentrt-plan-import/":                      "submits an import the Owner decides",
-	"api/cmd/debtimport/":                               "the debt ledger's importer and exporter",
-	"api/cmd/stg-release-probe/":                        "a read-only STG probe",
-	"api/Makefile":                                      "developer targets; no credentialed pipeline runs it",
-	"console/vitest.config.ts":                          "the Console's test runner",
-	"console/tsconfig.json":                             "type checking only",
-	"console/tsconfig.node.json":                        "type checking only",
-	"console/src/api/issues.ts":                         "sends the operator token only to the issue routes",
-	"console/src/api/agentRuntimePlan.ts":               "sends the operator token only to the plan routes",
-	"console/src/api/questions.ts":                      "sends the operator token only to the question routes",
-	"console/src/pages/shell/releases/ReleasesPage.tsx": "reads whether a token is set",
-	"console/src/pages/shell/owner/useOwnerConsole.ts":  "reads whether a token is set",
-}
-
-func landingStoreMatch(name string, m map[string]string) string {
-	for entry := range m {
-		if name == entry || strings.HasSuffix(entry, "*") && strings.HasPrefix(name, strings.TrimSuffix(entry, "*")) {
-			return entry
-		}
-	}
-	return ""
-}
-
-// landingStoreOpenFile: name is a file directly in the store, open, and not
-// matched by a permission entry.
-func landingStoreOpenFile(name string) bool {
-	if strings.Contains(name, "/") || landingStoreMatch(name, landingStorePermission) != "" {
-		return false
-	}
-	if _, ok := landingStoreOpen[name]; ok {
-		return true
-	}
-	base, ok := strings.CutSuffix(name, "_test.go")
-	if !ok {
-		return false
-	}
-	for entry := range landingStoreOpen {
-		rest, ok := strings.CutPrefix(base, strings.TrimSuffix(entry, ".go"))
-		if ok && (rest == "" || rest[0] == '_' || rest[0] >= '0' && rest[0] <= '9') {
-			return true
-		}
-	}
-	return false
-}
-
-func inLandingOpen(p string) bool {
-	if name, ok := strings.CutPrefix(p, landingStoreDir); ok {
-		return landingStoreOpenFile(name)
-	}
-	for entry := range landingOpen {
-		if p == entry || strings.HasSuffix(entry, "/") && strings.HasPrefix(p, entry) {
-			return true
-		}
-	}
-	return false
-}
-
-// LandingOpen: p is a bifrost-platform path on the open list and on no
-// permission or absolute entry. LandingSoftRefusals gives it no core,
-// floor_soft or presentation refusal, and no rule_paths refusal for being
-// outside allow; deny and size still apply.
-func LandingOpen(repo, p string) bool {
-	return repo == "bifrost-platform" && !LandingHardAbsolute(repo, p) && !LandingHard(repo, p) && inLandingOpen(p)
-}
-
 func inLandingEntries(p string, entries []string) bool {
 	for _, entry := range entries {
 		if p == entry || strings.HasSuffix(entry, "/") && strings.HasPrefix(p, entry) {
@@ -413,6 +341,45 @@ func inLandingEntries(p string, entries []string) bool {
 		}
 	}
 	return false
+}
+
+// landingStoreEntry is the store map key a file directly under the store
+// matches, permission first, and whether that key is open. A subdirectory
+// or an unlisted file matches no key and is permission.
+func landingStoreEntry(p string) (key string, open bool) {
+	name, ok := strings.CutPrefix(p, landingStore)
+	if !ok || strings.Contains(name, "/") {
+		return "", false
+	}
+	for key := range landingStorePermission {
+		if ok, _ := path.Match(key, name); ok {
+			return key, false
+		}
+	}
+	if _, ok := landingStoreOpen[name]; ok {
+		return name, true
+	}
+	return "", false
+}
+
+// landingOpenEntry: p is on the open list. A "/" entry is a prefix, one with
+// "*" a path.Match pattern, any other an exact path.
+func landingOpenEntry(p string) bool {
+	if _, open := landingStoreEntry(p); open {
+		return true
+	}
+	for entry := range landingOpen {
+		if ok, _ := path.Match(entry, p); ok || inLandingEntries(p, []string{entry}) {
+			return true
+		}
+	}
+	return false
+}
+
+// LandingOpen: p may change without the Owner's core approval or an allow
+// match (LandingSoftRefusals). Permission entries win over the open list.
+func LandingOpen(repo, p string) bool {
+	return repo == "bifrost-platform" && !LandingHardAbsolute(repo, p) && !LandingHard(repo, p) && landingOpenEntry(p)
 }
 
 // LandingHard is the union of core and absolute. Unknown repositories remain
@@ -424,8 +391,8 @@ func LandingHard(repo, p string) bool {
 	if LandingHardAbsolute(repo, p) {
 		return true
 	}
-	if name, ok := strings.CutPrefix(p, landingStoreDir); ok {
-		return !landingStoreOpenFile(name)
+	if _, open := landingStoreEntry(p); strings.HasPrefix(p, landingStore) && !open {
+		return true
 	}
 	return inLandingEntries(p, landingHardGo[:]) || inLandingEntries(p, landingHardConsole[:]) ||
 		inLandingEntries(p, landingHardOtherDirs[:]) || inLandingEntries(p, landingHardFiles[:]) ||
@@ -458,11 +425,9 @@ func LandingHardCoreEntry(repo, p string) string {
 	if !LandingHardCore(repo, p) {
 		return ""
 	}
-	if name, ok := strings.CutPrefix(p, landingStoreDir); ok {
-		if entry := landingStoreMatch(name, landingStorePermission); entry != "" && !strings.Contains(name, "/") {
-			return landingStoreDir + entry
-		}
-		return landingStoreDir
+	if strings.HasPrefix(p, landingStore) {
+		key, _ := landingStoreEntry(p)
+		return landingStore + key
 	}
 	for _, list := range [][]string{landingHardGo[:], landingHardConsole[:], landingHardOtherDirs[:], landingHardFiles[:]} {
 		for _, entry := range list {
