@@ -88,7 +88,6 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption, candidates, attemptedSteps)
 	ext, err := snapshotExternal(ctx, tx, root, now)
 	if err != nil {
 		return nil, err
@@ -112,6 +111,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err = planViewWaits(ctx, tx, root, tasks, snap, live, now); err != nil {
 		return nil, err
 	}
+	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, tasks, graph, adoption, candidates, attemptedSteps)
 	working := []any{}
 	ownerWaiting := acceptanceReady
 	finished := []any{}

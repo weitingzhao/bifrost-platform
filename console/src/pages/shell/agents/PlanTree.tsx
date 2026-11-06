@@ -25,7 +25,7 @@ function NodeCard({ node, view, selected, children }: { node: PlanNode; view: Pl
   }
   return <li id={planNodeDOMId(node.plan_node_id)} tabIndex={-1} aria-current={current ? 'step' : undefined} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border p-3 [overflow-wrap:anywhere] ${current || selected === node.plan_node_id || selected === node.label ? 'border-[var(--color-info)] bg-[var(--control-fill)]' : 'border-[var(--card-border)] bg-[var(--card-fill)]'}`}>
     <div className="flex flex-wrap items-center gap-2"><a className="inline-flex min-h-11 items-center font-semibold" href={planNodeHref(view.root, node.plan_node_id)}>{node.label} {node.title}</a>{current && <strong>Current</strong>}</div>
-    <p className="m-0 text-sm">{node.lane_kind} · Execution {counts.state} · {counts.done}/{counts.total} steps · Acceptance {validity(node.current_validity)}{node.owner_step && ' · Owner'}{node.effect_step && ' · ★'}</p>
+    <p className="m-0 text-sm">{node.lane_kind} · Execution {counts.state} · {counts.done}/{counts.total} {counts.unit === 'tasks' ? 'tasks' : 'steps'} · Acceptance {validity(node.current_validity)}{node.owner_step && ' · Owner'}{node.effect_step && ' · ★'}</p>
     <p className="m-0 text-sm">Next responsible · {responsibility(node)}</p>
     {item && <p className="m-0 text-xs text-muted-foreground">Parent · {item.parent} · {item.work_id}</p>}
     {dependencies.length > 0 && <ul className="my-2 space-y-1 text-sm">{dependencies.map((edge, i) => <li key={i}>

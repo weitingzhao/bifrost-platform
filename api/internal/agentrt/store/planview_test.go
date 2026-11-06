@@ -450,3 +450,35 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 	first.Items = append(first.Items, alias)
 	is(t, apply(first, "alias"), store.ErrInvalid)
 }
+
+func TestPlanViewStepCountsItsTasks(t *testing.T) {
+	t.Parallel()
+	nodes := []map[string]any{
+		{"plan_node_id": "R9", "node_kind": "round"},
+		{"plan_node_id": "R9:9.1", "parent_plan_node_id": "R9", "node_kind": "item"},
+		{"plan_node_id": "R9:9.1-1", "parent_plan_node_id": "R9:9.1", "node_kind": "step", "state": "active"},
+		{"plan_node_id": "R9:9.1-2", "parent_plan_node_id": "R9:9.1", "node_kind": "step", "state": "planned"},
+	}
+	tasks := []map[string]any{
+		{"task_id": "t_a", "plan_node_id": "R9:9.1-1", "role": "implement", "state": "accepted"},
+		{"task_id": "t_b", "plan_node_id": "R9:9.1-1", "role": "implement", "state": "cancelled"},
+		{"task_id": "t_c", "plan_node_id": "R9:9.1-1", "role": "implement", "state": "ready"},
+		{"task_id": "t_v", "plan_node_id": "R9:9.1-1", "role": "verify", "state": "accepted"},
+	}
+	got := store.ViewExecutionProgressForTest(nodes, tasks)
+	want := func(id string, state string, done, total, stopped int, unit string) {
+		t.Helper()
+		p := got[id]
+		if p["state"] != state || p["done"] != done || p["total"] != total || p["stopped"] != stopped || p["unit"] != unit {
+			t.Errorf("%s: %v, want %s %d/%d stopped %d %s", id, p, state, done, total, stopped, unit)
+		}
+	}
+	want("R9:9.1-1", "active", 1, 3, 1, "tasks")
+	want("R9:9.1-2", "planned", 0, 1, 0, "steps")
+	want("R9:9.1", "active", 0, 2, 0, "steps")
+	want("R9", "active", 0, 2, 0, "steps")
+	// A task a stop holds counts as stopped while unfinished.
+	tasks[2]["stopped"] = map[string]any{"control_id": "c1"}
+	got = store.ViewExecutionProgressForTest(nodes, tasks)
+	want("R9:9.1-1", "active", 1, 3, 2, "tasks")
+}

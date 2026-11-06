@@ -29,8 +29,8 @@ func snapshotItemValue(s *planFactsSnapshot, root, node string) plan.Tri {
 	return plan.Unknown
 }
 
-func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence, attemptedSteps map[string]bool) (map[string]any, []any, []map[string]any, []any, []any, string) {
-	mainline, next, later := viewExecutionSummary(nodes, graph, adoption)
+func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, tasks []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence, attemptedSteps map[string]bool) (map[string]any, []any, []map[string]any, []any, []any, string) {
+	mainline, next, later := viewExecutionSummary(nodes, tasks, graph, adoption)
 	waiting := []map[string]any{}
 	ready := []any{}
 	freshness := "Unknown"

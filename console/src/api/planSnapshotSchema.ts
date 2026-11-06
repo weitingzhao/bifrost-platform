@@ -44,7 +44,7 @@ const node = object({
   done_rule_json: dict, state: nullable(one('planned', 'active', 'done', 'stopped', 'dropped')), state_event_id: nullable(nonnegative),
   usual_s: nullable(nonnegative), created_by_actor_id: str, created_at: timestamp, version: nonnegative,
   lane_kind: one('mainline', 'branch', 'support', 'Unclassified'), view: optional(item),
-  execution_progress: object({ state: one('planned', 'active', 'done', 'stopped'), done: nonnegative, total: nonnegative, stopped: nonnegative, basis: str }),
+  execution_progress: object({ state: one('planned', 'active', 'done', 'stopped'), done: nonnegative, total: nonnegative, stopped: nonnegative, unit: optional(one('steps', 'tasks')), basis: str }),
   acceptance_status: optional(nullable(array(acceptanceStatus))), current_validity: optional(tri),
 })
 const attempt = object({

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
 // RuleChoiceForTest is ruleChoice for a card of kind that recommends rec,
@@ -309,4 +310,15 @@ func PinnedReviewForTest(ctx context.Context, tx pgx.Tx, subject, attempt string
 		return 0, err
 	}
 	return pinnedReview(ctx, tx, subject, &spec)
+}
+
+// ViewExecutionProgressForTest is the execution_progress viewExecutionSummary
+// writes on nodes, given the plan view's tasks, keyed by plan_node_id.
+func ViewExecutionProgressForTest(nodes, tasks []map[string]any) map[string]map[string]any {
+	viewExecutionSummary(nodes, tasks, planview.Graph{}, viewAdoption{})
+	out := map[string]map[string]any{}
+	for _, n := range nodes {
+		out[n["plan_node_id"].(string)] = n["execution_progress"].(map[string]any)
+	}
+	return out
 }
