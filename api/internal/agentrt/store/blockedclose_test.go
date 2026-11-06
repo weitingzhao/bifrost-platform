@@ -79,7 +79,7 @@ func TestCloseMissionOnCard(t *testing.T) {
 	// Work under verification, its check running on h2.
 	checked := w.ready(t, goal)
 	w.run(t, "h1", cursor, "done")
-	check, err := store.StartVerification(ctx, w.rt, checked)
+	check, err := startVerify(ctx, w.rt, checked)
 	ok(t, err)
 	checking := w.claimed(t, check, "h2", deterministic, true)
 	running := w.ready(t, goal)
@@ -345,15 +345,15 @@ func TestBlockedCardRecommends(t *testing.T) {
 		impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
 		for round, want := range []string{"rework", "blocked"} {
 			w.run(t, fmt.Sprintf("h%d", 3*round+1), cursor, "done")
-			v, err := store.StartVerification(ctx, w.rt, impl)
+			v, err := startVerify(ctx, w.rt, impl)
 			ok(t, err)
 			w.run(t, fmt.Sprintf("h%d", 3*round+2), deterministic, "done")
-			if did, err := store.Conclude(ctx, w.rt, v); err != nil || did != "review" {
+			if did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode); err != nil || did != "review" {
 				t.Fatalf("round %d's verification: %q %v", round+1, did, err)
 			}
 			review := w.checker(t, impl, "review")
 			w.run(t, fmt.Sprintf("h%d", 3*round+3), codex, "failed")
-			if did, err := store.Conclude(ctx, w.rt, review); err != nil || did != want {
+			if did, err := store.ConcludeWith(ctx, w.rt, review, verifyMode); err != nil || did != want {
 				t.Fatalf("round %d's review: %q %v", round+1, did, err)
 			}
 		}

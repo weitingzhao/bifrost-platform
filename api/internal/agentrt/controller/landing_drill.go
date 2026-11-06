@@ -47,6 +47,10 @@ type DrillSources struct {
 	WindowBlocked func(context.Context, string) (bool, error)
 	EnsureCI      func(context.Context, string, string, string) error
 	Delete        func(context.Context, string, string, string) error
+	// CIFailure reads what a red landing CI run failed on, for its root's
+	// next round (store.RecordLandingCIRed); nil, the round is told the run
+	// alone.
+	CIFailure func(ctx context.Context, run string) (landing.CIFailure, error)
 	// EnsurePinnedCI creates CI pinned to a key's sibling commits, and
 	// SiblingHeads reads the siblings' main heads to pin (C-5): only an
 	// operation that needs a grant uses them. Nil: no operation can be
@@ -204,6 +208,9 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	case "replay":
 		return a, appendRecord("discarded", map[string]any{"why": "main_changed"})
 	case "failed":
+		if a.Why == "ci_red" {
+			return a, c.failCIRed(ctx, src, repo, op, ci)
+		}
 		return a, appendRecord("failed", map[string]any{"why": a.Why})
 	case "parked":
 		if o.Phase == "parked" {
@@ -284,6 +291,27 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 		return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R)
 	}
 	return a, nil
+}
+
+// failCIRed ends op failed{ci_red} and, with precheck ci, sends a root
+// accepted on submission back for its next round, told what the red run ci
+// failed on (store.RecordLandingCIRed). A failure that cannot be read does
+// not hold the rework back: the round is told the run and why.
+func (c *Controller) failCIRed(ctx context.Context, src DrillSources, repo, op string, ci landing.CIRun) error {
+	failure := landing.CIFailure{Pipeline: landing.LandingRepos[repo].CIPipeline, Run: ci.Run}
+	if src.CIFailure != nil && ci.Run != "" {
+		read, err := src.CIFailure(ctx, ci.Run)
+		if err != nil {
+			failure.ReadError = err.Error()
+		} else {
+			failure = read
+		}
+	}
+	reworked, err := store.RecordLandingCIRed(ctx, c.DB, repo, op, landingText(c.Env)+"failed", failure, c.Precheck)
+	if err == nil && reworked {
+		c.logf("landing %s: CI %s red; its root goes back for its next round", op, ci.Run)
+	}
+	return err
 }
 
 // pinnable: the operation needs a grant to reach main (its soft failures

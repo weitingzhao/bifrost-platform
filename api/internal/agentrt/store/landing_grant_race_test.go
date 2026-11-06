@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -467,16 +466,21 @@ func TestC5T49B5Evidence(t *testing.T) {
 
 // Serial: FreezeEventClock. The create check's store half (§5.6 item 2):
 // the request as handin.sh status prints it passes; main moved refuses it;
-// a stale digest refuses it; a core change's review without the trust
-// chain's answers refuses it (§12.2 item 3).
+// a stale digest refuses it. A core change whose review has no trust
+// chain's answers needs none (R5:5.7-9): its material has no problem.
 func TestC5CreateCheck(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
+	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
+	ok(t, err)
+	if len(m.Problems) != 0 || m.Action != store.ActionCoreLanding {
+		t.Fatal("a review without the trust answers:", m.Action, m.Problems)
+	}
 	p := c.params(t)
 	if _, err := store.CheckLandingGrantRequest(ctx, c.w.rt, c.gsrc, store.ActionCoreLanding, p); err != nil {
 		t.Fatal(err)
 	}
 	c.main = commitC
-	_, err := store.CheckLandingGrantRequest(ctx, c.w.rt, c.gsrc, store.ActionCoreLanding, p)
+	_, err = store.CheckLandingGrantRequest(ctx, c.w.rt, c.gsrc, store.ActionCoreLanding, p)
 	refusedWith(t, err, "main_changed")
 	c.main = commitA
 	q := p
@@ -485,42 +489,6 @@ func TestC5CreateCheck(t *testing.T) {
 	refusedWith(t, err, "material_mismatch")
 	_, err = store.CheckLandingGrantRequest(ctx, c.w.rt, c.gsrc, store.ActionGuardrailLanding, p)
 	refusedWith(t, err, "action_mismatch")
-	// Without the trust review's answers: refused.
-	d := c5WaitNoTrust(t)
-	m, err := store.ReadLandingGrantMaterial(ctx, d.w.rt, d.gsrc, d.op, true)
-	ok(t, err)
-	if !slices.Contains(m.Problems, "trust_review_missing") {
-		t.Fatal(m.Problems)
-	}
-	_, err = store.CheckLandingGrantRequest(ctx, d.w.rt, d.gsrc, store.ActionCoreLanding, store.GrantParams{Env: "prod", Repo: "bifrost-platform",
-		Task: d.root, Op: d.op, R: commitB, MaterialDigest: m.MaterialDigest, STGRelease: true})
-	refusedWith(t, err, "trust_review_missing")
-}
-
-// c5WaitNoTrust is c5Wait without the trust chain's answers: the latest
-// passing review is the round's own report.
-func c5WaitNoTrust(t *testing.T) *c5 {
-	t.Helper()
-	c := c5Wait(t, c5Core, false, true)
-	ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
-		var attempt, reviewer string
-		if err := tx.QueryRow(ctx, `SELECT attempt_id, verifier_attempt_id FROM agentrt.verification WHERE task_id=$1 AND method='review' ORDER BY created_at LIMIT 1`,
-			c.root).Scan(&attempt, &reviewer); err != nil {
-			return err
-		}
-		evidence, err := store.PutArtifact(ctx, tx, "controller", "review", "text/markdown", []byte("Looks right.\n"+c.root))
-		if err != nil {
-			return err
-		}
-		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: a review without the trust answers"}}); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verifier_attempt_id, verdict, evidence_artifact_id, created_at)
-		  VALUES ($1, $2, $3, 'review', $4, 'pass', $5, now() + interval '1 hour')`, store.NewVerificationID(), c.root, attempt, reviewer, evidence)
-		return err
-	}))
-	return c
 }
 
 // Serial: FreezeEventClock. §5.5: the grant is usable only for the candidate

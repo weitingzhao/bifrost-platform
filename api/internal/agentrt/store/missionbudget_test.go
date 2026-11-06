@@ -125,7 +125,7 @@ hosts: [h1, h2, h3, h4]
 	}
 	impl = w.ready(t, store.Task{MissionID: mission, OffPlanReason: "a goal"})
 	w.run(t, "h1", codex, "done")
-	check, err = store.StartVerification(ctx, w.rt, impl)
+	check, err = startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if c := w.claim(t, "h2", time.Hour, deterministic); c != nil {
 		t.Fatalf("claimed %s on a spent budget", c.TaskID)
@@ -331,7 +331,7 @@ func TestDroppingAnOldCheckLeavesTheWork(t *testing.T) {
 	ok(t, err)
 	_, err = store.Submit(ctx, w.rt, f)
 	ok(t, err)
-	current, err := store.StartVerification(ctx, w.rt, task)
+	current, err := startVerify(ctx, w.rt, task)
 	ok(t, err)
 	if current == "" || w.state(t, "task", task) != "verifying" {
 		t.Fatalf("verification %q, the work %s", current, w.state(t, "task", task))
@@ -459,7 +459,7 @@ func TestDroppingTheLastCurrentCheckBlocksTheWork(t *testing.T) {
 			w.goalMission(t, "M-3")
 			impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
 			cl := w.run(t, "h1", codex, "done")
-			own, err := store.StartVerification(ctx, w.rt, impl)
+			own, err := startVerify(ctx, w.rt, impl)
 			ok(t, err)
 			spec := w.spec
 			if c.otherSpec {

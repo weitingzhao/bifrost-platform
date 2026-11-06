@@ -104,7 +104,7 @@ func TestAdoptSalvagedResult(t *testing.T) {
 	if vc.TaskID != v || vc.BaseCommit != commitA {
 		t.Fatalf("verification claim = %+v", vc)
 	}
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" || w.state(t, "task", task) != "running" || w.state(t, "attempt", fresh.AttemptID) != "running" {
 		t.Fatalf("conclude did %q; task %s", did, w.state(t, "task", task))
@@ -117,7 +117,7 @@ func TestAdoptSalvagedResult(t *testing.T) {
 	if rc.TaskID != review {
 		t.Fatalf("review claim = %+v", rc)
 	}
-	did, err = store.Conclude(ctx, w.rt, review)
+	did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "accepted" || w.state(t, "task", task) != "accepted" || w.state(t, "attempt", fresh.AttemptID) != "cancelled" ||
 		w.state(t, "attempt", old) != "lost" {
@@ -174,7 +174,7 @@ func TestAdoptRollsBackWhole(t *testing.T) {
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
 	ok(t, err)
 	w.run(t, "h3", deterministic, "done")
-	_, err = store.Conclude(ctx, w.rt, v)
+	_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	review := w.checker(t, task, "review")
 	w.run(t, "h4", cursor, "done")
@@ -185,7 +185,7 @@ func TestAdoptRollsBackWhole(t *testing.T) {
 	})
 	func() {
 		defer func() { _ = recover() }()
-		_, _ = store.Conclude(ctx, w.rt, review)
+		_, _ = store.ConcludeWith(ctx, w.rt, review, verifyMode)
 		t.Error("the injected failure did not happen")
 	}()
 	unhook()
@@ -196,7 +196,7 @@ func TestAdoptRollsBackWhole(t *testing.T) {
 		t.Fatalf("after the failure: %d cancellations, attempt %s, task %s, review %s, %d verifications", w.cancellations(t),
 			w.state(t, "attempt", fresh.AttemptID), w.state(t, "task", task), w.state(t, "task", review), accepting)
 	}
-	did, err := store.Conclude(ctx, w.rt, review)
+	did, err := store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "accepted" || w.cancellations(t) != 1 || w.state(t, "attempt", fresh.AttemptID) != "cancelled" {
 		t.Fatalf("the next pass did %q", did)
@@ -213,13 +213,13 @@ func TestAdoptWithoutALiveAttemptAndFailing(t *testing.T) {
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
 	ok(t, err)
 	w.finish(t, v, "h3", deterministic, "done")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" {
 		t.Fatalf("conclude did %q", did)
 	}
 	w.finish(t, w.checker(t, task, "review"), "h4", cursor, "done")
-	did, err = store.Conclude(ctx, w.rt, w.checker2(t, task, "review"))
+	did, err = store.ConcludeWith(ctx, w.rt, w.checker2(t, task, "review"), verifyMode)
 	ok(t, err)
 	if did != "accepted" || w.state(t, "task", task) != "accepted" {
 		t.Fatalf("conclude did %q; task %s", did, w.state(t, "task", task))
@@ -230,7 +230,7 @@ func TestAdoptWithoutALiveAttemptAndFailing(t *testing.T) {
 	v2, err := store.StartSalvageCheck(ctx, w2.rt, old2)
 	ok(t, err)
 	w2.finish(t, v2, "h3", deterministic, "failed")
-	did, err = store.Conclude(ctx, w2.rt, v2)
+	did, err = store.ConcludeWith(ctx, w2.rt, v2, verifyMode)
 	ok(t, err)
 	if did != "closed" || w2.state(t, "task", task2) != "running" || w2.state(t, "attempt", fresh2.AttemptID) != "running" {
 		t.Fatalf("a failed salvage check did %q; task %s", did, w2.state(t, "task", task2))
@@ -264,7 +264,7 @@ func TestAdoptRacesTheNewAttempt(t *testing.T) {
 			v, err := store.StartSalvageCheck(ctx, w.rt, old)
 			ok(t, err)
 			w.run(t, "h3", deterministic, "done")
-			_, err = store.Conclude(ctx, w.rt, v)
+			_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 			ok(t, err)
 			review := w.checker(t, task, "review")
 			w.run(t, "h4", cursor, "done")
@@ -291,7 +291,7 @@ func TestAdoptRacesTheNewAttempt(t *testing.T) {
 					go func() { defer close(done); _, submitErr = store.Submit(ctx, pool, f) }()
 					w.waitFor(t, "WHERE attempt_id = $1 FOR UPDATE", deadline)
 				})
-				did, concludeErr = store.Conclude(ctx, pool, review)
+				did, concludeErr = store.ConcludeWith(ctx, pool, review, verifyMode)
 				unhook()
 				<-done
 				ok(t, concludeErr)
@@ -305,7 +305,7 @@ func TestAdoptRacesTheNewAttempt(t *testing.T) {
 					if point != "submitting" || arg != fresh.AttemptID {
 						return
 					}
-					go func() { defer close(done); did, concludeErr = store.Conclude(ctx, pool, review) }()
+					go func() { defer close(done); did, concludeErr = store.ConcludeWith(ctx, pool, review, verifyMode) }()
 					w.waitFor(t, "state IN ('leased','running','stale') FOR UPDATE", deadline)
 				})
 				_, submitErr = store.Submit(ctx, pool, f)
@@ -338,7 +338,7 @@ func TestAdoptLiveAttemptAppears(t *testing.T) {
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
 	ok(t, err)
 	w.finish(t, v, "h3", deterministic, "done")
-	_, err = store.Conclude(ctx, w.rt, v)
+	_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	review := w.checker(t, task, "review")
 	w.finish(t, review, "h4", cursor, "done")
@@ -353,13 +353,13 @@ func TestAdoptLiveAttemptAppears(t *testing.T) {
 		claimed, cerr = store.ClaimFor(ctx, pool, store.ClaimRequest{HostID: "h5", FreeSlots: 1, Tools: []store.Tool{codex}}, store.LeaseTTL)
 		ok(t, cerr)
 	})
-	did, err := store.Conclude(ctx, w.rt, review)
+	did, err := store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	unhook()
 	ok(t, err)
 	if !fired.Load() || claimed == nil || claimed.TaskID != task || did != "" || w.state(t, "task", task) != "leased" {
 		t.Fatalf("did %q with a new attempt %+v; task %s", did, claimed, w.state(t, "task", task))
 	}
-	did, err = store.Conclude(ctx, w.rt, review)
+	did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "accepted" || w.state(t, "task", task) != "accepted" || w.state(t, "attempt", claimed.AttemptID) != "cancelled" {
 		t.Fatalf("next pass did %q; task %s, new attempt %s", did, w.state(t, "task", task), w.state(t, "attempt", claimed.AttemptID))
@@ -388,10 +388,10 @@ func TestNoSalvageCheckAfterALaterSubmit(t *testing.T) {
 	ok(t, err)
 	_, err = store.Submit(ctx, w.rt, f)
 	ok(t, err)
-	v, err := store.StartVerification(ctx, w.rt, task)
+	v, err := startVerify(ctx, w.rt, task)
 	ok(t, err)
 	w.finish(t, v, "h3", deterministic, "failed")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "rework" || w.state(t, "task", task) != "ready" {
 		t.Fatalf("conclude did %q; task %s", did, w.state(t, "task", task))
@@ -461,10 +461,10 @@ func TestHandSalvagePins(t *testing.T) {
 			ok(t, err)
 			_, err = store.Submit(ctx, w.rt, f)
 			ok(t, err)
-			v, err := store.StartVerification(ctx, w.rt, task)
+			v, err := startVerify(ctx, w.rt, task)
 			ok(t, err)
 			w.finish(t, v, "h3", deterministic, "failed")
-			_, err = store.Conclude(ctx, w.rt, v)
+			_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 			ok(t, err)
 			_, err = store.Salvage(ctx, w.rt, old.AttemptID, "h1", store.Result{Report: w.artifact(t, "report", "# late\n"), Ref: old.PushedRef, Commit: commitA},
 				heads(map[string]string{old.PushedRef: commitA}, &calls))
@@ -476,7 +476,7 @@ func TestHandSalvagePins(t *testing.T) {
 			v, err := store.StartSalvageCheck(ctx, w.rt, old)
 			ok(t, err)
 			w.finish(t, v, "h3", deterministic, "failed")
-			_, err = store.Conclude(ctx, w.rt, v)
+			_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 			ok(t, err)
 			return task, w.handSalvage(t, "verify", task, old, 1, "")
 		},
@@ -488,10 +488,10 @@ func TestHandSalvagePins(t *testing.T) {
 			task, old := w.passedSalvage(t)
 			other := w.ready(t, store.Task{})
 			w.run(t, "h5", codex, "done")
-			v, err := store.StartVerification(ctx, w.rt, other)
+			v, err := startVerify(ctx, w.rt, other)
 			ok(t, err)
 			w.finish(t, v, "h6", deterministic, "done")
-			_, err = store.Conclude(ctx, w.rt, v)
+			_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 			ok(t, err)
 			var pass string
 			ok(t, w.rt.QueryRow(ctx, `SELECT verification_id FROM agentrt.verification WHERE task_id = $1 AND method = 'deterministic'`, other).Scan(&pass))
@@ -529,7 +529,7 @@ func TestHandSalvagePins(t *testing.T) {
 			before := len(w.verifications(t, task))
 			state := w.state(t, "task", task)
 			w.finish(t, check, "h4", cursor, "done")
-			did, err := store.Conclude(ctx, w.rt, check)
+			did, err := store.ConcludeWith(ctx, w.rt, check, verifyMode)
 			ok(t, err)
 			if did != "closed" || len(w.verifications(t, task)) != before || w.state(t, "task", task) != state || w.cancellations(t) != 0 {
 				t.Fatalf("did %q; %d verifications (was %d); task %s (was %s)", did, len(w.verifications(t, task)), before, w.state(t, "task", task), state)
@@ -547,11 +547,11 @@ func TestSalvageReviewFails(t *testing.T) {
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
 	ok(t, err)
 	w.run(t, "h3", deterministic, "done")
-	_, err = store.Conclude(ctx, w.rt, v)
+	_, err = store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	review := w.checker(t, task, "review")
 	w.run(t, "h4", cursor, "failed")
-	did, err := store.Conclude(ctx, w.rt, review)
+	did, err := store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "closed" || w.state(t, "task", task) != "running" || w.state(t, "attempt", fresh.AttemptID) != "running" {
 		t.Fatalf("did %q; task %s, new attempt %s", did, w.state(t, "task", task), w.state(t, "attempt", fresh.AttemptID))
@@ -569,7 +569,7 @@ func (w *world) passedSalvage(t *testing.T) (task, old string) {
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
 	ok(t, err)
 	w.finish(t, v, "h3", deterministic, "done")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" {
 		t.Fatalf("the deterministic check did %q", did)
@@ -624,12 +624,12 @@ func TestAdoptTwoPassesAtOnce(t *testing.T) {
 		t.Fatalf("two starts made %q", ids)
 	}
 	w.run(t, "h3", deterministic, "done")
-	_, err := store.Conclude(ctx, w.rt, ids[1])
+	_, err := store.ConcludeWith(ctx, w.rt, ids[1], verifyMode)
 	ok(t, err)
 	review := w.checker(t, task, "review")
 	w.run(t, "h4", cursor, "done")
 	dids := staged("adopting", task, "state = 'submitted' ORDER BY attempt_no DESC LIMIT 1 FOR UPDATE", func(db store.DB) (string, error) {
-		return store.Conclude(tctx, db, review)
+		return store.ConcludeWith(tctx, db, review, verifyMode)
 	})
 	if dids[0] != "" || dids[1] != "accepted" || w.events(t, "attempt_cancelled", fresh.AttemptID) != 1 {
 		t.Fatalf("two conclusions did %q; %d cancellations", dids, w.events(t, "attempt_cancelled", fresh.AttemptID))

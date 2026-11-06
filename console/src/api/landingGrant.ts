@@ -1,9 +1,10 @@
 import { authedFetch, pathSegment, parseError } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
 
-export const LANDING_ACTIONS = ['approve_guardrail_landing', 'approve_core_landing'] as const
+export const LANDING_ACTIONS = ['approve_guardrail_landing', 'approve_core_landing', 'approve_floor_landing'] as const
 export type LandingAction = typeof LANDING_ACTIONS[number]
 export const isLandingAction = (v: unknown): v is LandingAction => LANDING_ACTIONS.some(a => a === v)
+export const FLOOR_LANDING_TITLE = 'Hard-floor change'
 export const CORE_LANDING_TITLE = 'Trust-core change'
 export const CORE_LANDING_NOTICE = 'Approval authorizes the landing identity to push this commit to main. It changes approval, identity or landing-gate code; subsequent approvals will be handled by the new code.'
 export const STG_LANDING_NOTICE = 'Approval also authorizes this commit to go to STG with the B5 batch.'
@@ -33,9 +34,10 @@ export type LandingCandidate = {
   review: { task: string; attempt: string; executor: string; provider: string; conclusion: string; artifact: string }
   review_patch_match: boolean
   ci: { pipeline: string; run: string; uid: string; created_at: string; status: string; sha: string; siblings: Record<string, string> }
-  stg_release: boolean; hard_core_paths: { path: string; entry: string }[]; decision_chain: boolean; trust_review: boolean
+  stg_release: boolean; hard_core_paths: { path: string; entry: string }[]; decision_chain: boolean
 }
 export type LandingMaterial = {
+  floor_paths?: { path: string; entry: string; blob_sha256: string }[]
   candidate: LandingCandidate; candidate_digest: string; material_digest: string; soft_at_request: string[]; waiting_soft: string[]
   rule: { id: string; version: number; sha256: string }; checks_version: number; action: LandingAction; title: string; first_line?: string
   phase: string; latest: boolean; pinned: boolean; grant_enabled: boolean; patch?: string; patch_truncated: boolean; patch_size: number
@@ -66,13 +68,23 @@ function grant(v: unknown): boolean {
 function candidate(v: unknown): boolean {
   if (!object(v) || !fields(v, 'env tenant repo mission plan_step task attempt op A base R M0 committer_date patch_sha256', string)
     || !time(v.committer_date) || !fields(v, 'files lines', count)
-    || !fields(v, 'review_patch_match stg_release decision_chain trust_review', bool)) return false
+    || !fields(v, 'review_patch_match stg_release decision_chain', bool)) return false
   return list(v.changes, c => object(c) && fields(c, 'old new old_mode new_mode', string) && fields(c, 'added deleted', delta))
     && list(v.acceptance, a => object(a) && fields(a, 'verification_id result', string))
     && list(v.hard_core_paths, p => object(p) && fields(p, 'path entry', string))
     && object(v.review) && fields(v.review, 'task attempt executor provider conclusion artifact', string)
     && object(v.ci) && fields(v.ci, 'pipeline run uid created_at status sha', string) && time(v.ci.created_at)
     && object(v.ci.siblings) && Object.values(v.ci.siblings).every(string)
+}
+
+function floorPaths(v: unknown): boolean {
+  const paths = new Set<string>()
+  return list(v, p => {
+    if (!object(p) || !fields(p, 'path entry blob_sha256', string)
+      || !/^[0-9a-f]{64}$/.test(p.blob_sha256 as string) || paths.has(p.path as string)) return false
+    paths.add(p.path as string)
+    return true
+  })
 }
 
 /** Read the handler's envelope and Go JSON tags, never substitute empty data for malformed evidence. */
@@ -83,6 +95,7 @@ export function parseLandingMaterial(v: unknown): LandingMaterialResponse | null
     || !fields(m, 'soft_at_request waiting_soft problems', strings) || !isLandingAction(m.action)
     || !fields(m, 'latest pinned grant_enabled patch_truncated', bool)
     || !fields(m, 'checks_version patch_size quota_reserved_today quota_max_per_day', count)
+    || !optional(m, 'floor_paths', floorPaths)
     || !optional(m, 'patch first_line stg_notice', string) || !time(m.computed_at) || !list(m.grants, grant)
     || !object(m.rule) || !fields(m.rule, 'id sha256', string) || !count(m.rule.version)) return null
   return v as LandingMaterialResponse

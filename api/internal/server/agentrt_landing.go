@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -156,6 +157,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			}
 			return ci.LandingCI(ctx, r, after)
 		},
+		CIFailure: ci.Failure,
 		EnsureCI: func(ctx context.Context, repo, name, r string) error {
 			if repo != "bifrost-platform" {
 				return errors.New("landing CI requires a prepared repository key")
@@ -321,6 +323,14 @@ func (s *Server) landingCIClient() *landingci.Client {
 			return nil, false, err
 		}
 		return cm.Data, true, nil
+	}, Logs: func(ctx context.Context, pod, container string) (string, error) {
+		client, _, err := s.cluster.Service().KubernetesClient()
+		if err != nil {
+			return "", err
+		}
+		lines, limit := int64(200), int64(4*landing.CIFailureLogBytes)
+		b, err := client.CoreV1().Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &lines, LimitBytes: &limit}).DoRaw(ctx)
+		return string(b), err
 	}}
 }
 

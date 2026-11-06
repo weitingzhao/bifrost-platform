@@ -36,7 +36,7 @@ export function MaterialEvidence({ data }: { data: LandingMaterialResponse }) {
       <p>Acceptance:</p><ul>{c.acceptance.map(a => <li key={a.verification_id}>{a.verification_id}: {a.result}</li>)}</ul>
       <dl>{Object.entries(c.review).map(([key, value]) => <div key={key}><dt className="inline font-medium">Review {key}: </dt><dd className="inline">{value || 'None'}</dd></div>)}</dl>
       <p>A and R stable patch IDs match: {String(c.review_patch_match)}</p>
-      <p>Decision chain: {String(c.decision_chain)} · Trust review answers present: {String(c.trust_review)}</p>
+      <p>Decision chain: {String(c.decision_chain)}</p>
       {core && <ul aria-label="Trust-core paths">{c.hard_core_paths.map(p => <li key={p.path}>{p.path} · {p.entry}</li>)}</ul>}
     </section>
     <section aria-label="CI evidence"><h3 className="font-semibold">CI evidence</h3>

@@ -212,10 +212,23 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 // 「PROD 不变」). PROD and DEV assess every card, whatever rule is in force.
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
 	stg := env == "stg"
-	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg,
+	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg, Precheck: precheckFromEnv(),
 		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, PageOwner: diskPage, WatchPresence: true, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
+}
+
+// precheckFromEnv is how the controller checks a submitted implementation
+// (store/precheck.go), read once at start from AGENTRT_PRECHECK: ci (the
+// default: the landing CI where the landing runs one, else the
+// deterministic check, never a review) or verify (the deterministic check,
+// then a review). Any other value is logged and ci is used.
+func precheckFromEnv() store.Precheck {
+	p, err := store.ParsePrecheck(os.Getenv("AGENTRT_PRECHECK"))
+	if err != nil {
+		slog.Error("agentrt precheck", "error", err, "using", p)
+	}
+	return p
 }
 
 // cardRuleOnlyOnSTG leaves the controller the card-auto-answer loop's

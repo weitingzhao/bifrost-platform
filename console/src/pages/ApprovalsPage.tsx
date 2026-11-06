@@ -296,6 +296,7 @@ function ApprovalCard({
   const evidence = landingQ.displayData
   const matches = typeof item.params?.stg_release === 'boolean' && item.params.env === 'prod'
     && evidence?.material.material_digest === item.params?.material_digest && evidence?.material.candidate.R === item.params?.R
+    && (item.action !== 'approve_floor_landing' || evidence?.material.candidate.repo === 'bifrost-trade-infra')
     && evidence?.material.action === item.action && evidence?.material.candidate.task === item.params?.task && evidence?.material.candidate.repo === item.params?.repo
   const [checkedVersion, setCheckedVersion] = useState('')
   const version = JSON.stringify([item.id, item.params_hash, evidence?.material.material_digest, evidence?.material.candidate.decision_chain])
@@ -461,7 +462,7 @@ function ApprovalCard({
           </label>
           <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row">
             {/* A drill has no approval to give (v4 §20.5 scenario 9): no button for one; reject closes it. */}
-            {item.drill === true ? null : (
+            {item.drill === true || (item.action === 'approve_floor_landing' && !landingReady) ? null : (
               <ApprovalReviewButton
                 item={item}
                 type="button"

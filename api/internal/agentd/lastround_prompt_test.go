@@ -35,6 +35,16 @@ func TestPriorChecksInThePrompt(t *testing.T) {
 			[]string{"No command failed; its reason: the spec names no verify command\n"}, "", 0},
 		"not verify.json": {PriorCheck{FailedCheck{"deterministic", 1, "a"}, []byte("plain words")},
 			[]string{"failed. Its report:\n\n```\nplain words\n```\n"}, "", 0},
+		// R5:5.7-10: a red landing CI, as the platform recorded it.
+		"landing CI": {PriorCheck{FailedCheck{"landing_ci", 1, "a"}, []byte(`{"landing_ci":{"op":"land:t:1","pipeline":"bifrost-ci-platform",` +
+			`"run":"landing-ci-0123-2","task_runs":[{"name":"landing-ci-0123-2-go-test","pipeline_task":"go-test","step":"test",` +
+			`"message":"\"step-test\" exited with code 1","log_tail":"--- FAIL: TestX (0.01s)\nFAIL\tstore\t0.1s\n"}]}}`)},
+			[]string{"The landing CI of attempt 1 failed: it ran the full pipeline on the commit replayed on main. Pipeline bifrost-ci-platform, run landing-ci-0123-2.\n" +
+				"\nFailed TaskRun landing-ci-0123-2-go-test (pipeline task go-test), step test: \"step-test\" exited with code 1. Its log ends:\n\n```\n--- FAIL: TestX (0.01s)\nFAIL\tstore\t0.1s\n```\n"},
+			"", 0},
+		"landing CI unread": {PriorCheck{FailedCheck{"landing_ci", 2, "a"}, []byte(`{"landing_ci":{"pipeline":"bifrost-ci-platform","run":"r-2","task_runs":[],"read_error":"forbidden"}}`)},
+			[]string{"The landing CI of attempt 2 failed: it ran the full pipeline on the commit replayed on main. Pipeline bifrost-ci-platform, run r-2. Its TaskRuns could not be read: forbidden.\n"},
+			"Failed TaskRun", 0},
 		"review": {PriorCheck{FailedCheck{"review", 3, "a"}, []byte(review)},
 			[]string{"The review of attempt 3 failed it. Its report:\n\n````\n## Findings\n\nA1: the test imports go/token", "(cut: the report is "},
 			"VERDICT: FAIL", priorReviewBytes + 512},

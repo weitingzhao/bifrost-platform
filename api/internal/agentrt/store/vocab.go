@@ -509,7 +509,7 @@ var fieldValues = map[string]map[string]value{
 	"attempt_cancelled":       {"accepted_attempt": attemptID},
 	"host_registered":         {"host_kind": oneOf(hostKinds...)},
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
-	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
+	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", MethodLandingCI), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},

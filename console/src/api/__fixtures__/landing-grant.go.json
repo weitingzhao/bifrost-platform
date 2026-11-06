@@ -65,11 +65,10 @@
             "entry": "console/src/api/approvals.ts"
           }
         ],
-        "decision_chain": true,
-        "trust_review": true
+        "decision_chain": true
       },
-      "candidate_digest": "sha256:e14430ecb68be4fcd0b4c5e660f9bf181d2f9c350783af08810ed95f7d098713",
-      "material_digest": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f",
+      "candidate_digest": "sha256:f9c59024f00d0543c197be367e3e29ae310b63f494b67284a5aa1c2fa2decb7d",
+      "material_digest": "sha256:dd02b119e08b5e0b27abee0c1b18987ae026d850318093afff08a2beb8a53284",
       "soft_at_request": [
         "core",
         "files"
@@ -166,11 +165,10 @@
         },
         "stg_release": true,
         "hard_core_paths": [],
-        "decision_chain": false,
-        "trust_review": false
+        "decision_chain": false
       },
-      "candidate_digest": "sha256:416f341d89cf3e05f7a3767ecb1a26211f5383f421e3f1d90758bb66fdb81b9e",
-      "material_digest": "sha256:34508a0e9d7eb056e49f0b60acb398434eb6e615d73fc98afcd743ce3794ec87",
+      "candidate_digest": "sha256:087d6abca418800cc40c2e5ceab9c0eb81fd4ce7fd73f29935ca903218ef5416",
+      "material_digest": "sha256:e3c5ba76b85ae8dfff176f055f20eccaf35ca7c123adfc3c747afe85a590c345",
       "soft_at_request": [
         "files"
       ],
@@ -230,7 +228,7 @@
     ],
     "files": 1,
     "lines": 3,
-    "waiting_snapshot": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f",
+    "waiting_snapshot": "sha256:dd02b119e08b5e0b27abee0c1b18987ae026d850318093afff08a2beb8a53284",
     "R": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "M0": "cccccccccccccccccccccccccccccccccccccccc",
     "execution_seconds": 30,
@@ -262,8 +260,8 @@
         "handed_to_push": false,
         "refused": false,
         "valid": true,
-        "candidate_digest": "sha256:e14430ecb68be4fcd0b4c5e660f9bf181d2f9c350783af08810ed95f7d098713",
-        "material_digest": "sha256:511d5e8d9a5edfec2187c72fd9a8af3b710ca630924f7babb09cd2863223f06f"
+        "candidate_digest": "sha256:f9c59024f00d0543c197be367e3e29ae310b63f494b67284a5aa1c2fa2decb7d",
+        "material_digest": "sha256:dd02b119e08b5e0b27abee0c1b18987ae026d850318093afff08a2beb8a53284"
       }
     ]
   }

@@ -519,7 +519,7 @@ var catalog = []Action{
 	},
 	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
-		Description: "Approve an exact shell command. Tier D. The platform does not execute it. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it.",
+		Description: "Approve an exact shell command. Tier D. The platform does not execute it. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it. Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead.",
 		Params: []Param{
 			{Name: "command", Type: "string", Required: true, In: "body"},
 			{Name: "reason", Type: "string", Required: true, In: "body"},

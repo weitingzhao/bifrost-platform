@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -24,7 +25,8 @@ func TestExportedActionsCatalogMatchesCatalog(t *testing.T) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var doc struct {
-		Actions []string `json:"actions"`
+		Actions      []string          `json:"actions"`
+		Descriptions map[string]string `json:"descriptions"`
 	}
 	if err := dec.Decode(&doc); err != nil {
 		t.Fatal(err)
@@ -32,6 +34,10 @@ func TestExportedActionsCatalogMatchesCatalog(t *testing.T) {
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
 		t.Fatalf("trailing JSON: %v", err)
+	}
+	owner, _ := ByID("owner_run_command")
+	if description := doc.Descriptions[owner.ID]; description == "" || !strings.Contains(owner.Description, description) {
+		t.Fatal("exported owner_run_command refusal description differs from catalog")
 	}
 	got := Catalog()
 	if len(doc.Actions) != len(got) {

@@ -49,7 +49,7 @@ func TestSearchArtifacts(t *testing.T) {
 	}
 	var report string
 	ok(t, w.rt.QueryRow(ctx, `SELECT report_artifact_id FROM agentrt.attempt WHERE attempt_id = $1`, ic.AttemptID).Scan(&report))
-	check, err := store.StartVerification(ctx, w.rt, impl)
+	check, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	var checkSpec string
 	ok(t, w.rt.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, check).Scan(&checkSpec))
@@ -73,7 +73,7 @@ func TestSearchArtifacts(t *testing.T) {
 	ok(t, err)
 	_, err = store.Submit(ctx, w.rt, fence(cc, "h2"))
 	ok(t, err)
-	_, err = store.Conclude(ctx, w.rt, check)
+	_, err = store.ConcludeWith(ctx, w.rt, check, verifyMode)
 	ok(t, err)
 	var evidence string
 	ok(t, w.rt.QueryRow(ctx, `SELECT evidence_artifact_id FROM agentrt.verification WHERE task_id = $1`, impl).Scan(&evidence))

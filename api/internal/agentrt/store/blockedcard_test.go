@@ -23,10 +23,10 @@ func (w *world) failRound(t *testing.T, impl, author, checker string) string {
 	if c := w.run(t, author, cursor, "done"); c.TaskID != impl {
 		t.Fatalf("claimed %s, not %s", c.TaskID, impl)
 	}
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, checker, deterministic, "failed")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	return did
 }
@@ -655,18 +655,18 @@ func TestBlockedRetryThenAccepted(t *testing.T) {
 	_, err = store.DecideBlocked(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	third := w.run(t, "h5", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if pin := w.checkSpec(t, v); third.TaskID != impl || third.AttemptNo != 3 || pin["attempt"] != third.AttemptID || fmt.Sprint(pin["round"]) != "3" {
 		t.Fatalf("round 3: claim %+v, check pins %v", third, pin)
 	}
 	w.run(t, "h6", deterministic, "done")
-	if did, cerr := store.Conclude(ctx, w.rt, v); cerr != nil || did != "review" {
+	if did, cerr := store.ConcludeWith(ctx, w.rt, v, verifyMode); cerr != nil || did != "review" {
 		t.Fatalf("round 3's verification: %q %v", did, cerr)
 	}
 	review := w.checker(t, impl, "review")
 	w.run(t, "h7", codex, "done")
-	if did, cerr := store.Conclude(ctx, w.rt, review); cerr != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
+	if did, cerr := store.ConcludeWith(ctx, w.rt, review, verifyMode); cerr != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
 		t.Fatalf("round 3's review: %q %v; task %s", did, cerr, w.state(t, "task", impl))
 	}
 	if closed, cerr := store.CloseMissions(ctx, w.rt); cerr != nil || !slices.Equal(closed, []string{"M-3"}) || w.state(t, "mission", "M-3") != "done" {

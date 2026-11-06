@@ -345,7 +345,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			if err != nil {
 				return err
 			}
-			acc, rev, body, err := readGrantChecks(ctx, tx, o.Task, o.Attempt)
+			acc, rev, err := readGrantChecks(ctx, tx, o.Task, o.Attempt)
 			if err != nil {
 				return err
 			}
@@ -353,8 +353,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 			if err = tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id,'') FROM agentrt.task WHERE task_id=$1`, o.Task).Scan(&stepID); err != nil {
 				return err
 			}
-			trust := grant.Action == ActionCoreLanding && trustAnswered(body)
-			cand, err := buildCandidate(g, stepID, op, o, acc, rev, trust, patch, ci, key, grant.STGRelease).Digest()
+			cand, err := buildCandidate(g, stepID, op, o, acc, rev, patch, ci, key, grant.STGRelease).Digest()
 			if err != nil {
 				return err
 			}

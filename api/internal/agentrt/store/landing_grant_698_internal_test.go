@@ -62,28 +62,6 @@ func TestC5B01FirstPinnedKeyMayRideOnARerun(t *testing.T) {
 	}
 }
 
-// N-02: obvious placeholders are no answer; the full answers still are.
-// (On 082125dd all three placeholders were accepted.)
-func TestC5N02TrustPlaceholders(t *testing.T) {
-	t.Parallel()
-	body := func(why string) []byte {
-		b := "## Trust chain answers\n"
-		for _, id := range []string{"1", "2", "3", "4"} {
-			b += "T" + id + ": No, " + why + "\n"
-		}
-		return []byte(b)
-	}
-	for _, why := range []string{"[explain what in the diff shows it]", "TBD TBD TBD TBD TBD", "the token is still read from ...",
-		"the token is still read from the same file", "todo fill this in later please", "same same same same same"} {
-		if trustAnswered(body(why)) {
-			t.Errorf("placeholder accepted: %s", why)
-		}
-	}
-	if !trustAnswered(body("the approval roles in approvals/service.go are untouched")) {
-		t.Error("a real answer refused")
-	}
-}
-
 // N-03: a rule_clear is the final gate's own certificate: without its
 // landing_gate, on a rule version or text that does not exist, or other
 // checks, it is refused; the gate's own passes. (On 082125dd an invented
@@ -132,22 +110,24 @@ func TestC5N03RuleClearIsTheGatesOwn(t *testing.T) {
 	}
 }
 
-// R-05: pinnedReview reads its subject once, pinned or not (on 082125dd an
-// unpinned review made a second read for the trust chain's questions).
+// R-05: pinnedReview reads its subject once, and an unpinned subject's
+// review needs nothing more (on 082125dd an unpinned review made a second
+// read for the trust chain's questions, which a review no longer asks).
 func TestC5R05ReviewReadsItsSubjectOnce(t *testing.T) {
 	t.Parallel()
 	tx := &rowTx{row: func(sql string, dest ...any) error {
-		if !strings.Contains(sql, "SELECT COALESCE(executor_pin, '')") || len(dest) < 5 {
+		if !strings.Contains(sql, "SELECT COALESCE(executor_pin, '')") || len(dest) != 1 {
 			t.Fatalf("unexpected read: %s", sql)
 		}
-		*dest[0].(*string), *dest[1].(*bool), *dest[2].(*string), *dest[3].(*string), *dest[4].(*string) = "", true, "bifrost-platform", "implement", "dev"
+		*dest[0].(*string) = ""
 		return nil
 	}}
 	spec := checkSpec{check: "review", attempt: "a"}
-	if _, err := pinnedReview(context.Background(), tx, "t", &spec); err != nil {
+	limit, err := pinnedReview(context.Background(), tx, "t", &spec)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if tx.queries != 1 || spec.text != "" {
-		t.Fatalf("%d reads, text %q", tx.queries, spec.text)
+	if tx.queries != 1 || limit != 0 {
+		t.Fatalf("%d reads, limit %s", tx.queries, limit)
 	}
 }

@@ -188,6 +188,12 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	if err = actions.NormalizeRunner(act.ID, norm); err != nil {
 		return fail(400, err.Error())
 	}
+	if act.ID == "owner_run_command" {
+		command, _ := norm["command"].(string)
+		if repo, path, covered := actions.CoveredBy(command); covered {
+			return fail(400, fmt.Sprintf("this command applies %s/%s, which plan_manifest then apply_manifest cover: request plan_manifest with repo, path and commit instead", repo, path))
+		}
+	}
 	if missing := act.Missing(norm); missing != "" {
 		return fail(400, "missing param: "+missing)
 	}

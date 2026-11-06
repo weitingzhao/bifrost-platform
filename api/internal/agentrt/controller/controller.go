@@ -95,6 +95,9 @@ type Controller struct {
 	// FailFirstVerify honours store.TestNeedFailFirstVerify: on STG only
 	// (T26's rework path, the Owner 2026-10-18).
 	FailFirstVerify bool
+	// Precheck is how a submitted implementation is checked
+	// (AGENTRT_PRECHECK, store/precheck.go): the zero value is ci.
+	Precheck store.Precheck
 	// SkipCardsTheRuleAnswers leaves unassessed the cards the
 	// card-auto-answer rule in force answers (store.ruleAnswersItem): on STG
 	// only (TD-401's second half, the Owner 2026-10-20 20:0x 「STG 上规则会答
@@ -285,7 +288,8 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 }
 
 // Accept is one pass of the acceptance loop (v5 §5.2 控制器「验收编排」):
-// every submitted implementation goes to verification, every submitted
+// every submitted implementation is checked as c.Precheck says (accepted on
+// submission where its landing runs a CI, else verified), every submitted
 // verification or review result is used, and every salvaged result still to
 // be checked gets its verification. One that fails does not stop the
 // others. It returns how many tasks it moved.
@@ -296,17 +300,18 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 	}
 	moved := 0
 	var errs []error
+	opts := store.ConcludeOptions{FailFirstVerify: c.FailFirstVerify, Precheck: c.Precheck}
 	for _, id := range implementations {
-		v, err := store.StartVerification(ctx, c.DB, id)
+		v, accepted, err := store.StartVerificationWith(ctx, c.DB, id, opts)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
 		}
-		if v != "" {
+		if v != "" || accepted {
 			moved++
 		}
 	}
 	for _, id := range checks {
-		did, err := store.ConcludeWith(ctx, c.DB, id, store.ConcludeOptions{FailFirstVerify: c.FailFirstVerify})
+		did, err := store.ConcludeWith(ctx, c.DB, id, opts)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
 		}

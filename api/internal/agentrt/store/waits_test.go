@@ -178,7 +178,7 @@ func TestAWaitsLimitIsTwiceTheUsualTime(t *testing.T) {
 	w2 := newKernelWorld(t)
 	impl := w2.ready(t, store.Task{Repo: "bifrost-platform"})
 	w2.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w2.rt, impl)
+	v, err := startVerify(ctx, w2.rt, impl)
 	ok(t, err)
 	vc := w2.claim(t, "h2", time.Hour, deterministic)
 	if vc == nil || vc.TaskID != v {
@@ -426,7 +426,7 @@ func TestAChecksWaitCallsTheWorksProposer(t *testing.T) {
 	_, err = store.Dispatch(ctx, w.rt)
 	ok(t, err)
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.control(t, "c1", "task", impl, "pause")
 	since := w.readySince(t, v)
