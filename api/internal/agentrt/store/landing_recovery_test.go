@@ -40,7 +40,7 @@ func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
 			}
 			return landing.CIRun{Run: name, R: revision, Status: status, CreatedAt: at}, nil
 		},
-		EnsureCI: func(_ context.Context, _ string, name, revision string) error {
+		EnsureCI: func(_ context.Context, _ string, name, revision, _ string) error {
 			if !created {
 				if name != landing.CIName(op, 2) || revision != commitB {
 					t.Fatal("wrong create identity")

@@ -63,7 +63,7 @@ func TestEnsuredPlatformRunsCarryRepoURL(t *testing.T) {
 			ctx, name := context.Background(), landing.CIName("repo-url", 1)
 			ensure := func() error {
 				if mode == "legacy" {
-					return c.EnsureLandingCI(ctx, name, factSHA1)
+					return c.EnsureLandingCI(ctx, name, factSHA1, "")
 				}
 				return c.Ensure(ctx, name, pinnedKey())
 			}
@@ -111,7 +111,7 @@ func TestEnsureRepoURLCollisionAndPreB5Run(t *testing.T) {
 			t.Parallel()
 			c, d := drillService(t)
 			ctx, name := context.Background(), landing.CIName("pre-b5", 1)
-			if err := c.EnsureLandingCI(ctx, name, factSHA1); err != nil {
+			if err := c.EnsureLandingCI(ctx, name, factSHA1, ""); err != nil {
 				t.Fatal(err)
 			}
 			res := d.Resource(pipelineRunGVR).Namespace("cicd")
@@ -138,7 +138,7 @@ func TestEnsureRepoURLCollisionAndPreB5Run(t *testing.T) {
 			if _, err = res.Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
-			err = c.EnsureLandingCI(ctx, name, factSHA1)
+			err = c.EnsureLandingCI(ctx, name, factSHA1, "")
 			if change == "absent" {
 				if err != nil {
 					t.Fatal("pre-B5 run not adopted", err)

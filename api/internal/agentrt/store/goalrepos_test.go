@@ -131,7 +131,7 @@ func TestGoalOfTwoRepos(t *testing.T) {
 	ok(t, err)
 	w.work(t, plan, twoRepoPlan, "done")
 	var c cards
-	if did, aerr := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw); aerr != nil || did != "accepted" {
+	if did, aerr := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw, nil); aerr != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, aerr)
 	}
 	rows, err := w.rt.Query(ctx, `SELECT t.repo, t.base_commit, b.body FROM agentrt.task t
@@ -174,7 +174,7 @@ func TestPlanWithoutABaseIsSentBack(t *testing.T) {
 	plan := w.ready(t, store.Task{MissionID: "M-3", Role: "plan", Effect: "none", OffPlanReason: "a goal", BaseCommit: commitA})
 	w.work(t, plan, twoRepoPlan, "done")
 	var c cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw); err != nil || did != "rework" ||
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw, nil); err != nil || did != "rework" ||
 		!strings.Contains(lastReason(t, w, plan), "tasks[0]: the goal recorded no commit of bifrost-trade-infra to start from") {
 		t.Fatalf("a plan without a base: %q %v %q", did, err, lastReason(t, w, plan))
 	}

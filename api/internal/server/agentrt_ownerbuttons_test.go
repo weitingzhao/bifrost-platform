@@ -403,7 +403,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	// AcceptPlan asks it. The Owner's answer moves nothing: the plan's task
 	// goes on as the plan made it.
 	planTask := b.handInPlan("M-20")
-	if did, err := store.AcceptPlan(ctx, b.conn, planTask, ask, b.rt.agentRuntimeWithdraw()); err != nil || did == "" {
+	if did, err := store.AcceptPlan(ctx, b.conn, planTask, ask, b.rt.agentRuntimeWithdraw(), nil); err != nil || did == "" {
 		t.Fatalf("the plan: %q %v", did, err)
 	}
 	var planner string

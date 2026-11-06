@@ -46,8 +46,9 @@ type DrillSources struct {
 	Main          func(context.Context, string) (string, error)
 	CI            func(context.Context, string, string, time.Time) (landing.CIRun, error)
 	WindowBlocked func(context.Context, string) (bool, error)
-	EnsureCI      func(context.Context, string, string, string) error
-	Delete        func(context.Context, string, string, string) error
+	// EnsureCI's arguments are repo, name, R and the operation's base M0.
+	EnsureCI func(ctx context.Context, repo, name, r, m0 string) error
+	Delete   func(context.Context, string, string, string) error
 	// CIFailure reads what a red landing CI run failed on, for its root's
 	// next round (store.RecordLandingCIRed); nil, the round is told the run
 	// alone.
@@ -309,7 +310,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			if err = appendRecord(a.Kind, map[string]any{"try": n}); err != nil {
 				return a, err
 			}
-			return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R)
+			return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R, o.M0)
 		}
 		if err = store.AppendCIKick(ctx, c.DB, op, a.Kind, n, key, landingText(c.Env)+a.Kind+" (pinned for a grant)"); err != nil {
 			return a, err
@@ -332,7 +333,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			}
 			return a, nil // made sure of above, before readiness
 		}
-		return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R)
+		return a, src.EnsureCI(ctx, repo, landing.CIName(op, n), o.R, o.M0)
 	}
 	return a, nil
 }

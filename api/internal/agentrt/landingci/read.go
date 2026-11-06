@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,9 @@ type Client struct {
 	// FullScopeParam has a full run ask for api-scope-request=full
 	// (EnsureFullRun, AGENTRT_FULL_CI_PARAM).
 	FullScopeParam bool
+	// BaseParam has a platform landing CI name its base M0 as base=M0
+	// (EnsureLandingCI, Ensure; AGENTRT_LANDING_CI_BASE_PARAM).
+	BaseParam bool
 }
 
 func (c *Client) namespace() string {
@@ -270,6 +274,9 @@ func (c *Client) latest(ctx context.Context, pipeline, revision string, after ti
 			run.Status = "Unknown"
 		}
 		run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
+		if pipeline == landing.LandingRepos["bifrost-platform"].CIPipeline {
+			run.Scope = scopeResults(item)
+		}
 		runs = append(runs, run)
 		items[run.Run] = item
 	}
@@ -362,4 +369,35 @@ func landingCIResults(item unstructured.Unstructured) (platform, ui, infra strin
 		ui = values[names["ui"]]
 	}
 	return
+}
+
+// scopeResults reads what a platform run's test-api ran. Like the commits,
+// a result named more than once is not read; an api-scope outside the known
+// three is not read; a value over landing.CIScopeMax bytes is cut.
+func scopeResults(item unstructured.Unstructured) landing.CIScope {
+	values, counts := namedValues(item, "status", "results")
+	value := func(name string) string {
+		if counts[name] != 1 {
+			return ""
+		}
+		return cutScope(values[name])
+	}
+	out := landing.CIScope{Packages: value(APIPackagesResult), StoreRun: value(APIStoreRunResult), Why: value(APIScopeWhyResult)}
+	switch scope := value(APIScopeResult); scope {
+	case APIScopeFull, APIScopeConsole, APIScopeIncremental:
+		out.Scope = scope
+	}
+	return out
+}
+
+// cutScope cuts s to landing.CIScopeMax bytes, never inside a character.
+func cutScope(s string) string {
+	if len(s) <= landing.CIScopeMax {
+		return s
+	}
+	n := landing.CIScopeMax
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }

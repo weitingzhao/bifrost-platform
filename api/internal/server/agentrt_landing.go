@@ -158,11 +158,11 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			return ci.LandingCI(ctx, r, after)
 		},
 		CIFailure: ci.Failure,
-		EnsureCI: func(ctx context.Context, repo, name, r string) error {
+		EnsureCI: func(ctx context.Context, repo, name, r, m0 string) error {
 			if repo != "bifrost-platform" {
 				return errors.New("landing CI requires a prepared repository key")
 			}
-			return ci.EnsureLandingCI(ctx, name, r)
+			return ci.EnsureLandingCI(ctx, name, r, m0)
 		},
 		WindowBlocked: func(ctx context.Context, repo string) (bool, error) {
 			if !landing.RepoSupported(repo) {
@@ -321,7 +321,7 @@ func (s *Server) landingCIClient() *landingci.Client {
 			namespace = entry.ResolvedStackNamespace()
 		}
 	}
-	return &landingci.Client{Namespace: namespace, Dynamic: func() (dynamic.Interface, error) {
+	return &landingci.Client{Namespace: namespace, BaseParam: controller.LandingCIBaseParam(os.Getenv), Dynamic: func() (dynamic.Interface, error) {
 		cfg, _, err := s.cluster.Service().RestConfig()
 		if err != nil {
 			return nil, err

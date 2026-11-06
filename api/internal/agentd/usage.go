@@ -44,10 +44,12 @@ type PoolReading struct {
 	Text         string     `json:"text,omitempty"`
 }
 
-// Measured is an attempt's usage and pool readings.
+// Measured is an attempt's usage and pool readings, and how it ran its
+// hand-in commands (SelfCheck; nil when it ran none).
 type Measured struct {
-	Usage *Usage
-	Pools []PoolReading
+	Usage     *Usage
+	Pools     []PoolReading
+	SelfCheck *SelfCheck
 }
 
 func (m Measured) empty() bool { return m.Usage == nil && len(m.Pools) == 0 }

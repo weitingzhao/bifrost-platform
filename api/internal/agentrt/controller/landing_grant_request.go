@@ -18,13 +18,19 @@ import (
 // once an operation waits in awaiting_grant, with no usable grant and no
 // request of its own, the controller reads its material as the material
 // route does and asks for the action and parameters that route gives the
-// coordinator (stg_release false). The approval service's create check and
-// rules apply unchanged. The approvals are the record: a pass that sees one
-// open for the operation, or one answered for its R, asks nothing.
+// coordinator, stg_release true as that route's default: the Owner's one
+// approval covers main and STG, so B5 can send the landed commit to STG
+// (R5:5.7). The approval service's create check and rules apply unchanged.
+// The approvals are the record: a pass that sees one open for the
+// operation, or one answered for its R, asks nothing.
 
 // grantAskWait is how long an operation whose card could not be requested
 // (its material refuses one, or a read failed) waits before it is read again.
 const grantAskWait = 2 * time.Minute
+
+// grantAskSTGRelease is the stg_release the controller asks with. The
+// material is read with it too: it is part of the material digest.
+const grantAskSTGRelease = true
 
 // grantWaiting is an operation in awaiting_grant, the latest of its task.
 type grantWaiting struct {
@@ -37,7 +43,8 @@ var grantRequestReads = struct {
 	state    func(ctx context.Context, db store.DB, repo string) (landing.State, error)
 	usable   func(ctx context.Context, db store.DB, op string) (string, error)
 	held     func(ctx context.Context, db store.DB, task string) (bool, error)
-	material func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error)
+	material func(ctx context.Context, db store.DB, src store.GrantSources, op string, stg bool) (*store.LandingGrantMaterial, error)
+	main     func(ctx context.Context, src store.GrantSources, repo string) (string, error)
 }{
 	state: func(ctx context.Context, db store.DB, repo string) (s landing.State, err error) {
 		err = store.InTx(ctx, db, func(tx pgx.Tx) error {
@@ -46,10 +53,11 @@ var grantRequestReads = struct {
 		})
 		return s, err
 	},
-	usable: store.UsableLandingGrant,
-	held:   store.TaskStopHeld,
-	material: func(ctx context.Context, db store.DB, src store.GrantSources, op string) (*store.LandingGrantMaterial, error) {
-		return store.ReadLandingGrantMaterial(ctx, db, src, op, false)
+	usable:   store.UsableLandingGrant,
+	held:     store.TaskStopHeld,
+	material: store.ReadLandingGrantMaterial,
+	main: func(ctx context.Context, src store.GrantSources, repo string) (string, error) {
+		return src.MainOf(ctx, repo)
 	},
 }
 
@@ -168,19 +176,25 @@ func (c *Controller) askLandingGrant(ctx context.Context, w grantWaiting) error 
 	} else if grant != "" {
 		return errGrantNotNow // the final gate takes it from here
 	}
-	m, err := grantRequestReads.material(ctx, c.DB, r.Grants(), w.Op)
+	src := r.Grants()
+	m, err := grantRequestReads.material(ctx, c.DB, src, w.Op, grantAskSTGRelease)
 	if err != nil {
 		return err
 	}
 	if len(m.Problems) > 0 || m.Candidate.R != w.R {
 		return errGrantNotNow // the create check would refuse it: read again later
 	}
+	// main_is_M0 false: a grant the final gate could only throw away; the
+	// operation replays (replayAwaitingGrant). Unreadable main counts so too.
+	if head, err := grantRequestReads.main(ctx, src, m.Candidate.Repo); err != nil || head == "" || head != m.Candidate.M0 {
+		return errGrantNotNow
+	}
 	action := store.ActionGuardrailLanding
 	if len(m.Candidate.HardCorePaths) > 0 {
 		action = store.ActionCoreLanding
 	}
 	params := map[string]any{"env": "prod", "repo": m.Candidate.Repo, "task": m.Candidate.Task, "op": w.Op,
-		"R": m.Candidate.R, "material_digest": m.MaterialDigest, "stg_release": false}
+		"R": m.Candidate.R, "material_digest": m.MaterialDigest, "stg_release": grantAskSTGRelease}
 	why := fmt.Sprintf("its change fails soft checks %s", strings.Join(m.SoftAtRequest, ", "))
 	if action == store.ActionCoreLanding {
 		why = "its change touches trusted core paths"

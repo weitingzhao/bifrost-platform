@@ -52,6 +52,35 @@ type TaskSpec struct {
 	// Salvage: the check is of a lost attempt's salvaged result (platform
 	// store/adopt.go, T34 case 8); it runs as any other check.
 	Salvage bool `json:"salvage,omitempty"`
+
+	// HandIn are the commands the text tells an implementation's executor to
+	// run before it hands in, each a line as the spec printed it (the
+	// platform's store.ImplementSpec, shellLine); read from the text, never
+	// sent.
+	HandIn []string `json:"-"`
+}
+
+// handInHead starts the list of hand-in commands in an implementation's text
+// (store.ImplementSpec): each follows on a line of its own, indented by four
+// spaces.
+const handInHead = "- Before you hand in, run from the repository root:\n\n"
+
+// handInLines are the hand-in commands text prints, none when it prints no
+// list.
+func handInLines(text string) []string {
+	_, rest, found := strings.Cut(text, handInHead)
+	if !found {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(rest, "\n") {
+		cmd, ok := strings.CutPrefix(line, "    ")
+		if !ok || strings.TrimSpace(cmd) == "" {
+			break
+		}
+		out = append(out, strings.TrimSpace(cmd))
+	}
+	return out
 }
 
 // ParseSpec reads a spec: JSON when it is a JSON object, else markdown text.
@@ -62,7 +91,7 @@ func ParseSpec(body []byte) (TaskSpec, error) {
 	}
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return TaskSpec{Text: string(body)}, nil
+		return TaskSpec{Text: string(body), HandIn: handInLines(string(body))}, nil
 	}
 	var s TaskSpec
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
@@ -96,6 +125,7 @@ func ParseSpec(body []byte) (TaskSpec, error) {
 		}
 		seen[sib.Repo] = true
 	}
+	s.HandIn = handInLines(s.Text)
 	return s, nil
 }
 

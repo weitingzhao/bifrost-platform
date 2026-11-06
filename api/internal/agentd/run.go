@@ -425,6 +425,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	sp.Stdout, sp.Stderr = logf, logf
 	if t := newActionTail(cl.Tool.Executor, filepath.Join(a.Out, "log.txt"), a.Dir, a.Out); t != nil {
+		if a.Spec.Check == "" { // an implementation's own hand-in commands (SelfCheck)
+			t.self = newSelfCount(a.Spec.HandIn)
+		}
 		l.tail.Store(t)
 		tctx, tcancel := context.WithCancel(ctx)
 		defer tcancel()

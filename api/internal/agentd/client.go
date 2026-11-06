@@ -317,26 +317,33 @@ func (c *Client) Checkpoint(ctx context.Context, attempt string, epoch int64, se
 }
 
 // UsageUnsupported starts what Computed reports when the platform does not
-// take usage at all (a platform from before W-31 2.4).
-const UsageUnsupported = "the platform does not take usage"
+// take usage at all (a platform from before W-31 2.4), and
+// SelfCheckUnsupported when it does not take the hand-in commands' count (from
+// before R5:5.7).
+const (
+	UsageUnsupported     = "the platform does not take usage"
+	SelfCheckUnsupported = "the platform does not take self_check"
+)
 
 // Computed records that the executor exited and how, with what it used and
-// what its vendor said about its pools (W-31 2.4 slice ①). A platform from
-// before 2.4 refuses a body with them (400, unknown field): computed is sent
-// again at once without them, so an ending never depends on its usage while
-// the PROD platform and agentd are on different versions. refused says why
-// the platform kept no usage (the attempt is computed anyway).
+// what its vendor said about its pools (W-31 2.4 slice ①), and how it ran its
+// hand-in commands (self_check, R5:5.7). A platform from before either
+// refuses a body with them (400, unknown field): computed is sent again at
+// once without what it refused, so an ending never depends on them while the
+// PROD platform and agentd are on different versions. refused says why the
+// platform kept no usage or no self_check (the attempt is computed anyway).
 func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exitCode *int, endHow, conclusion string, m Measured) (refused string, err error) {
 	body := map[string]any{"exit_code": exitCode, "end_how": endHow, "conclusion": conclusion, "lease_epoch": epoch}
 	if epoch == 0 {
 		delete(body, "lease_epoch")
 	}
-	var dropped string
+	var dropped []string
 	if !m.empty() {
 		// a report that cannot even be encoded is left out, never the ending
 		// (review 274 A1)
 		if _, merr := json.Marshal(map[string]any{"usage": m.Usage, "pools": m.Pools}); merr != nil {
-			dropped, m = "usage not sent: "+oneLine(merr.Error(), 200), Measured{}
+			dropped = append(dropped, "usage not sent: "+oneLine(merr.Error(), 200))
+			m.Usage, m.Pools = nil, nil
 		}
 	}
 	if m.Usage != nil {
@@ -345,24 +352,46 @@ func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exit
 	if len(m.Pools) > 0 {
 		body["pools"] = m.Pools
 	}
+	if m.SelfCheck != nil {
+		body["self_check"] = m.SelfCheck
+	}
 	var out struct {
-		Refused string `json:"usage_refused"`
+		Refused     string `json:"usage_refused"`
+		SelfRefused string `json:"self_check_refused"`
 	}
 	path := "/attempts/" + attempt + "/computed"
 	code, err := c.post(ctx, path, body, &out)
-	if err != nil && !m.empty() && code == http.StatusBadRequest &&
-		(strings.Contains(err.Error(), `unknown field "usage"`) || strings.Contains(err.Error(), `unknown field "pools"`)) {
+	// each refused field is dropped once, only on the refusal of the field
+	// itself (review 267 B6, as Heartbeat): an older platform may refuse
+	// self_check and then usage
+	for range 2 {
+		if err == nil || code != http.StatusBadRequest {
+			break
+		}
 		first := err
-		delete(body, "usage")
-		delete(body, "pools")
-		if _, err = c.post(ctx, path, body, &out); err == nil {
-			out.Refused = UsageUnsupported + ": " + oneLine(first.Error(), 200)
+		switch {
+		case body["self_check"] != nil && strings.Contains(err.Error(), `unknown field "self_check"`):
+			delete(body, "self_check")
+			dropped = append(dropped, SelfCheckUnsupported+": "+oneLine(first.Error(), 200))
+		case (body["usage"] != nil || body["pools"] != nil) &&
+			(strings.Contains(err.Error(), `unknown field "usage"`) || strings.Contains(err.Error(), `unknown field "pools"`)):
+			delete(body, "usage")
+			delete(body, "pools")
+			dropped = append(dropped, UsageUnsupported+": "+oneLine(first.Error(), 200))
+		default:
+			return "", err
+		}
+		code, err = c.post(ctx, path, body, &out)
+	}
+	if err != nil {
+		return "", err
+	}
+	for _, r := range []string{out.Refused, out.SelfRefused} {
+		if r != "" {
+			dropped = append(dropped, r)
 		}
 	}
-	if dropped != "" && err == nil {
-		out.Refused = dropped
-	}
-	return out.Refused, err
+	return strings.Join(dropped, "; "), nil
 }
 
 func (r Result) body() map[string]any {

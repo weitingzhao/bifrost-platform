@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -81,13 +84,30 @@ func PendingPlans(ctx context.Context, db DB) ([]string, error) {
 	return ids, err
 }
 
+// ReadMain reads the head commit of a repository's main.
+type ReadMain func(ctx context.Context, repo string) (string, error)
+
+// planMainTimeout bounds one read of a repository's main for a plan.
+const planMainTimeout = 10 * time.Second
+
+// planMainWarned holds the task and repository pairs whose failed read of
+// main was logged: once each, not on every pass.
+var planMainWarned sync.Map
+
 // AcceptPlan uses the plan a planning task handed in. It returns "accepted",
 // "rework" (another round, the reason in its spec), "blocked" (no round left,
 // or the mission is closed; the reason is on the task) or "" when there was
 // nothing to do. An error leaves everything as it was; cards the question
 // store already holds are found again by their keys on the next pass.
-func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Withdraw) (string, error) {
+//
+// readMain gives a task whose repository the goal recorded no base for, and
+// that is not the planning task's own, main's head: the planner did nothing
+// wrong when the goal kept no base. When the read fails the plan stays
+// submitted, its round unused, for the next pass ("" and no error); nil
+// refuses such a plan as before.
+func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Withdraw, readMain ReadMain) (string, error) {
 	var did string
+	heads := map[string]string{} // main's heads read, one read per repository across retries
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = ""
 		// The planning task's step before its attempt, as a plan change takes
@@ -171,8 +191,9 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		}
 		// Each task starts from its repository's main as the goal read it
 		// (scope_json.bases); the planning task's own repository from the
-		// planning task's base, as before goals kept bases. A repository with
-		// neither has no commit to start from: never another repository's.
+		// planning task's base, as before goals kept bases; a repository with
+		// neither from main's head as readMain reads it now. Without readMain
+		// it has no commit to start from: never another repository's.
 		bases := map[string]string{}
 		if b, ok := scope["bases"].(map[string]any); ok {
 			for r, v := range b {
@@ -188,12 +209,26 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			if repo == d.repo {
 				return d.base
 			}
-			return ""
+			return heads[repo]
 		}
 		for i, pt := range p.Tasks {
-			if baseOf(pt.Repo) == "" {
+			if baseOf(pt.Repo) != "" {
+				continue
+			}
+			if readMain == nil {
 				return refuse(fmt.Sprintf("tasks[%d]: the goal recorded no commit of %s to start from", i, pt.Repo))
 			}
+			head, rerr := readMainHead(ctx, readMain, pt.Repo)
+			if rerr != nil {
+				// Not the planner's mistake: no round is used, the next pass
+				// reads again.
+				if _, warned := planMainWarned.LoadOrStore(taskID+"\x00"+pt.Repo, true); !warned {
+					slog.Warn("Plan waits for main's head", "task", taskID, "repo", pt.Repo, "error", rerr)
+				}
+				did = ""
+				return nil
+			}
+			heads[pt.Repo] = head
 		}
 		var made, asked []string // cards this round made; questions asked before
 		byRule := false
@@ -301,9 +336,31 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if len(asked) > 0 {
 			reason += ", asked before: " + strings.Join(asked, "; ")
 		}
+		if len(p.Ignored) > 0 {
+			named := []string{}
+			for _, k := range p.Ignored[:min(len(p.Ignored), planIgnoredMax)] {
+				named = append(named, cutBytes(k, 80))
+			}
+			reason += ", ignored keys: " + strings.Join(named, ", ")
+		}
 		return moveTask(ctx, tx, "controller", t, "accepted", reason)
 	})
 	return did, err
+}
+
+// readMainHead reads main's head of repo within planMainTimeout; a read that
+// gives no commit is an error.
+func readMainHead(ctx context.Context, readMain ReadMain, repo string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, planMainTimeout)
+	defer cancel()
+	head, err := readMain(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	if head = strings.TrimSpace(head); head == "" {
+		return "", errors.New("main's head read as no commit")
+	}
+	return head, nil
 }
 
 // refusePlan sends a plan that did not pass back for another round, with the

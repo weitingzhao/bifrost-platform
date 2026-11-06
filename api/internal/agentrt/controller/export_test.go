@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // RunLoopForTest runs pass as the controller runs a loop named name, every d,
@@ -20,4 +22,13 @@ func SetPresencePassLimitForTest(d time.Duration) func() {
 	old := presencePassLimit
 	presencePassLimit = d
 	return func() { presencePassLimit = old }
+}
+
+// SetUsableLandingGrantForTest sets what the drill pass reads as an
+// awaiting_grant operation's usable grant and returns the function that
+// restores it.
+func SetUsableLandingGrantForTest(f func(ctx context.Context, db store.DB, op string) (string, error)) func() {
+	old := usableLandingGrant
+	usableLandingGrant = f
+	return func() { usableLandingGrant = old }
 }

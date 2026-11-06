@@ -1,8 +1,16 @@
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
-import { goalHref } from '@/lib/shell/consoleRoutes'
+import { runtimeTasks, taskLine, type ModuleTask } from './moduleDetailModel'
 import { responsibility, validity } from './planSnapshotModel'
 import { ExternalRecord } from './PlanLiveWork'
 import { planNodeDOMId, planNodeHref } from './usePlanSnapshot'
+
+const unreadRuntime = runtimeTasks({ state: 'unread' })
+function TreeTask({ task }: { task: ModuleTask }) {
+  const line = taskLine(task, unreadRuntime)
+  return <><a className="inline-flex min-h-11 items-center" href={line.href}>{line.title} · {line.state}{task.round_no != null && line.round && ` · ${line.round}`}</a>
+    {line.waiting && <span className="block text-xs text-muted-foreground">{line.waitingHref ? <a href={line.waitingHref} className="underline-offset-2 hover:underline">{line.waiting}</a> : line.waiting}</span>}
+    {line.detail && <span className="block text-xs">{line.detail}</span>}</>
+}
 
 function NodeCard({ node, view, selected, children }: { node: PlanNode; view: PlanSnapshot; selected: string; children?: React.ReactNode }) {
   const current = view.mainline.current?.plan_node_id === node.plan_node_id
@@ -25,7 +33,7 @@ function NodeCard({ node, view, selected, children }: { node: PlanNode; view: Pl
   }
   return <li id={planNodeDOMId(node.plan_node_id)} tabIndex={-1} aria-current={current ? 'step' : undefined} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border p-3 [overflow-wrap:anywhere] ${current || selected === node.plan_node_id || selected === node.label ? 'border-[var(--color-info)] bg-[var(--control-fill)]' : 'border-[var(--card-border)] bg-[var(--card-fill)]'}`}>
     <div className="flex flex-wrap items-center gap-2"><a className="inline-flex min-h-11 items-center font-semibold" href={planNodeHref(view.root, node.plan_node_id)}>{node.label} {node.title}</a>{current && <strong>Current</strong>}</div>
-    <p className="m-0 text-sm">{node.lane_kind} · Execution {counts.state} · {counts.done}/{counts.total} steps · Acceptance {validity(node.current_validity)}{node.owner_step && ' · Owner'}{node.effect_step && ' · ★'}</p>
+    <p className="m-0 text-sm">{node.lane_kind} · Execution {counts.state} · {counts.done}/{counts.total} {counts.unit === 'tasks' ? 'tasks' : 'steps'} · Acceptance {validity(node.current_validity)}{node.owner_step && ' · Owner'}{node.effect_step && ' · ★'}</p>
     <p className="m-0 text-sm">Next responsible · {responsibility(node)}</p>
     {item && <p className="m-0 text-xs text-muted-foreground">Parent · {item.parent} · {item.work_id}</p>}
     {dependencies.length > 0 && <ul className="my-2 space-y-1 text-sm">{dependencies.map((edge, i) => <li key={i}>
@@ -40,10 +48,10 @@ function NodeCard({ node, view, selected, children }: { node: PlanNode; view: Pl
         <p>Plan estimate · {item.estimate.work_days?.join('–') ?? 'Unknown'} work days · {item.estimate.review_rounds} review rounds · {item.estimate.confidence}<br />{item.estimate.reason}</p>
         <ul>{item.evidence.map((e, i) => <li key={i}>{e.classification} · {e.assessment}<span className="block text-xs">{e.source} · {e.observed_at} · {e.live_verified ? 'Verified' : 'Not live verified'}</span></li>)}</ul>
       </> : <p>Unclassified · No adopted acceptance metadata.</p>}
-      {ownTasks.length > 0 && <ul aria-label="Tasks on this node" className="space-y-1">{ownTasks.map(t => <li key={t.task_id}><a className="inline-flex min-h-11 items-center" href={goalHref(t.mission_id, t.task_id)}>{t.title} · {t.state}</a>{t.delivery && <span className="block text-xs">{t.delivery}</span>}</li>)}</ul>}
+      {ownTasks.length > 0 && <ul aria-label="Tasks on this node" className="space-y-1">{ownTasks.map(t => <li key={t.task_id}><TreeTask task={t} /></li>)}</ul>}
       <ul className="space-y-2">{steps.map(step => <li key={step.plan_node_id} id={planNodeDOMId(step.plan_node_id)} tabIndex={-1} className="scroll-mt-4">
         <a className="inline-flex min-h-11 items-center" href={planNodeHref(view.root, step.plan_node_id)}>{step.label} {step.title}</a> · {step.state ?? 'Unknown'} {step.owner_step && '· Owner'} {step.effect_step && '· ★'}
-        {view.tasks.filter(t => t.plan_node_id === step.plan_node_id).map(t => <div key={t.task_id}><a className="inline-flex min-h-11 items-center" href={goalHref(t.mission_id, t.task_id)}>{t.title} · {t.state}</a>{t.delivery && <span className="block text-xs">{t.delivery}</span>}</div>)}
+        {view.tasks.filter(t => t.plan_node_id === step.plan_node_id).map(t => <div key={t.task_id}><TreeTask task={t} /></div>)}
         <ul>{view.external_work.filter(w => w.plan_node_id === step.plan_node_id).map(w => <ExternalRecord key={w.external_work_id} work={w} />)}</ul>
       </li>)}</ul>
       {work.length > 0 && <ul>{work.map(w => <ExternalRecord key={w.external_work_id} work={w} />)}</ul>}

@@ -195,7 +195,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 		`test "$(git -C ../bifrost-trade-infra rev-parse HEAD)" = "`+infraBase+`" && cat "`+planFile+`" > "$OUT/report.md"`))
 	var cards []store.Card
 	ask := func(_ context.Context, c store.Card) (string, error) { cards = append(cards, c); return "q", nil }
-	if did, aerr := store.AcceptPlan(ctx, pool, plan.TaskID, ask, func(context.Context, string, string) error { return nil }); aerr != nil || did != "accepted" {
+	if did, aerr := store.AcceptPlan(ctx, pool, plan.TaskID, ask, func(context.Context, string, string) error { return nil }, nil); aerr != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, aerr)
 	}
 	_, err = store.Dispatch(ctx, pool)

@@ -43,12 +43,12 @@ func (c *Controller) batch(ctx context.Context, s store.StgState, id string, b *
 	}
 	p := c.Policy()
 	p.Live = true
-	if (b.Phase == "OPEN" || b.Phase == "SNAP") && b.Selected.Seq > 0 && !p.enabled(c.now()) {
+	if reason := p.disabled(c.now()); (b.Phase == "OPEN" || b.Phase == "SNAP") && b.Selected.Seq > 0 && reason != nil {
 		base, known := store.StgTrustedBaseline(s)
 		if known && t != nil {
 			base = object(t.Snapshot.Record, "base")
 		}
-		return errors.Join(c.release(), c.blockAndFinish(ctx, s, id, b, "rule", base, nil))
+		return errors.Join(c.release(), c.blockRule(ctx, s, id, b, base, reason))
 	}
 	if b.Try == 0 {
 		return c.prepare(ctx, s, id, b)

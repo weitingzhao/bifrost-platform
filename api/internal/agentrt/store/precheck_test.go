@@ -330,7 +330,7 @@ func TestPrecheckCIRedFromTheDrill(t *testing.T) {
 			}
 			return landing.CIRun{Run: "main", R: commitA, Status: "Succeeded", CreatedAt: at.Add(-time.Hour)}, nil
 		},
-		EnsureCI: func(context.Context, string, string, string) error { return nil },
+		EnsureCI: func(context.Context, string, string, string, string) error { return nil },
 		CIFailure: func(_ context.Context, run string) (landing.CIFailure, error) {
 			read = run
 			return redCI, nil

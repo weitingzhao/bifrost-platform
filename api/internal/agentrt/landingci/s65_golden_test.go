@@ -97,7 +97,7 @@ func TestS65T47PlatformGolden(t *testing.T) {
 		name := landing.CIName("golden", 1)
 		var err error
 		if mode == "legacy" {
-			err = c.EnsureLandingCI(context.Background(), name, factSHA1)
+			err = c.EnsureLandingCI(context.Background(), name, factSHA1, "")
 		} else {
 			err = c.Ensure(context.Background(), name, pinnedKey())
 		}

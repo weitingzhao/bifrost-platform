@@ -83,7 +83,7 @@ var bodies = map[string][]field{
 	"attempt_checkpointed":    {{"checkpoint_seq", kInt, false}, {"artifacts", kIDs, true}, {"too_large", kBool, true}},
 	"attempt_stale":           {{"lease_expires_at", kStr, false}},
 	"attempt_renewed":         {{"lease_expires_at", kStr, false}},
-	"attempt_computed":        {{"end_how", kStr, false}, {"conclusion", kStr, false}, {"exit_code", kInt, true}},
+	"attempt_computed":        {{"end_how", kStr, false}, {"conclusion", kStr, false}, {"exit_code", kInt, true}, {"self_check", kAny, true}},
 	"attempt_submitted":       {},
 	"attempt_lost":            {{"reason", kStr, false}},
 	"attempt_ended":           {{"end_how", kStr, false}, {"group_cleared", kBool, false}},
@@ -145,7 +145,7 @@ var bodies = map[string][]field{
 	"rule_proposed":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
 	"candidate_status_changed": {{"job_candidate_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}, {"rule_id", kID, false}, {"rule_version", kInt, false}},
 	"approval_seen":            {{"approval", kInt, false}, {"status", kStr, false}},
-	"question_seen":            {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}},
+	"question_seen":            {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}, {"recommended", kStr, true}},
 	"ci_seen":                  {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
 	"deploy_seen":              {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
 	"owner_signoff":            {{"ref", kStr, false}, {"binding_sha256", kStr, true}, {"plan_version", kInt, true}, {"acceptance_sha256", kStr, true}, {"evidence", kIDs, true}},
@@ -169,6 +169,7 @@ var bodies = map[string][]field{
 		// stg_sample: on stg-sample:bifrost-platform, the first-opening
 		// finalizer sample of B5 and its archive and release (TD-460).
 		{"stg_sample", kAny, true},
+		{"leak_value", kAny, true},
 		// landing_answer: on the repository's landing stream, how one
 		// answered landing card was handled (landing_answer.go, CUT §8): the
 		// question, root and operation, applied / moot / refused and why.
@@ -176,6 +177,9 @@ var bodies = map[string][]field{
 		// full_ci: on the controller's stream, the daily full CI runs started
 		// and how a red one was handled (fullci.go).
 		{"full_ci", kAny, true},
+		// check_value: on the controller's stream, the goal proposed to
+		// delete a check or retry the check value table marked (checkvalue.go).
+		{"check_value", kAny, true},
 		// landing_gate: on a main_intent, what the live second gate decided
 		// on (landing_live.go, review 662 N-02): the rule version, the
 		// decision time, the quota day and the CI run.

@@ -111,7 +111,7 @@ func TestAcceptPlanCarriesCore(t *testing.T) {
 	w := planWorld(t)
 	plan := w.handIn(t, corePlan, "done")
 	var s cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw); err != nil || did != "accepted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, err)
 	}
 	rows, err := w.rt.Query(ctx, `SELECT t.title, t.core, COALESCE(e.body_json->'core', 'false')::text FROM agentrt.task t

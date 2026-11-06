@@ -133,7 +133,7 @@ func TestDrillCIStepKicksNothingUnderARuleThatEndedDuringItsReads(t *testing.T) 
 			}
 			return landing.CIRun{Status: "Missing"}, nil
 		},
-		EnsureCI: func(context.Context, string, string, string) error { ensured++; return nil },
+		EnsureCI: func(context.Context, string, string, string, string) error { ensured++; return nil },
 	}
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	a, err := ctl.LandingDrillCI(ctx, drill, op, start)

@@ -338,7 +338,7 @@ func TestS6SameSHAIsolatedCandidatesAndCIPG(t *testing.T) {
 				return landing.CIRun{R: r, Status: "Missing"}, nil
 			},
 			WindowBlocked: func(_ context.Context, got string) (bool, error) { check(got); return false, nil },
-			EnsureCI:      func(_ context.Context, got, name, r string) error { check(got); kicks++; return nil }}
+			EnsureCI:      func(_ context.Context, got, name, r, _ string) error { check(got); kicks++; return nil }}
 		sources.InfraCI = func(_ context.Context, o landing.Operation) (landing.CIRun, error) {
 			check(infraRepo)
 			ciReads++

@@ -52,7 +52,7 @@ func pinSources(src store.LandingSource, calls *ciCalls, ci *landing.CIRun, main
 			}
 			return *ci, nil
 		},
-		EnsureCI: func(_ context.Context, _, name, _ string) error {
+		EnsureCI: func(_ context.Context, _, name, _, _ string) error {
 			calls.legacy = append(calls.legacy, name)
 			return nil
 		},
@@ -140,7 +140,7 @@ func TestC5R01RecheckRetriesUntilItsStableAnswer(t *testing.T) {
 		Main:          func(context.Context, string) (string, error) { return c.main, nil },
 		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
 		CI:            func(context.Context, string, string, time.Time) (landing.CIRun, error) { return c.ci, nil },
-		EnsureCI:      func(context.Context, string, string, string) error { return nil }}
+		EnsureCI:      func(context.Context, string, string, string, string) error { return nil }}
 	ctl := controller.Controller{DB: c.w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}}, Drill: &src, Now: func() time.Time { return clock },
 		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) {
 			opens++

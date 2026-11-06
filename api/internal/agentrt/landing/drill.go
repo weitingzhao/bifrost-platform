@@ -22,7 +22,19 @@ type CIRun struct {
 	InfraCommit string
 	// Results is present only on infra's repository-aware evidence.
 	Results map[string]string
+	// Scope is what a platform run's test-api ran; empty when the run
+	// gives none of its results.
+	Scope CIScope
 }
+
+// CIScope is a platform run's api-scope, api-packages, api-store-run and
+// api-scope-why results.
+type CIScope struct {
+	Scope, Packages, StoreRun, Why string
+}
+
+// CIScopeMax bounds each CIScope value; a longer one is cut.
+const CIScopeMax = 1500
 
 func LatestCI(runs []CIRun, revision string, after time.Time) CIRun {
 	matches := []CIRun{}

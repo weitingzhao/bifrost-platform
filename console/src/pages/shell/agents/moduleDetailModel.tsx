@@ -276,23 +276,33 @@ export function stepTasks(scope: ModuleScope, step: string): ModuleTask[] {
  */
 export function roundWords(task: ModuleTask, runtime: RuntimeTasks): string {
   if (FINISHED.has(task.state)) return ''
+  const round = runtime.work.get(task.task_id)
+  const number = round?.round_no ?? task.round_no
+  const max = round?.max_rounds ?? task.max_rounds
+  if (number != null && max != null) return `round ${number} of ${max}`
   if (!runtime.read) return 'round Unknown (runtime progress not read)'
   const t = runtime.work.get(task.task_id)
   if (!t) return "round Unknown (not among the runtime's unfinished tasks)"
   return t.round_no != null && t.max_rounds != null ? `round ${t.round_no} of ${t.max_rounds}` : 'round Unknown (the runtime gives no round)'
 }
 
-export type TaskLine = { id: string; role: string; title: string; state: string; round: string; attempt: string; href: string; detail: string }
+export type TaskLine = { id: string; role: string; title: string; state: string; round: string; attempt: string; href: string; detail: string; waiting: string; waitingHref: string }
 /** Why a role is Unknown: the runtime's lists were not read, or they were and do not list the task (and its title is no check's). */
 const roleUnknown = (runtime: RuntimeTasks) => runtime.read ? "Role Unknown (not in the runtime's lists)" : 'Role Unknown (runtime progress not read)'
 
 /** A task of the step's own work, with its role (or why it is Unknown). */
 export function taskLine(task: ModuleTask, runtime: RuntimeTasks): TaskLine {
+  const w = task.waiting
+  const waiting = !w ? '' : w.on === 'checks' ? `Waits on checks: ${(w.checks ?? []).map(c => `${c.role} ${shortTask(c.task_id)} ${c.state}`).join(', ')}`
+    : w.on === 'landing' ? `Waits on landing: ${w.reason ?? ''}`
+    : w.on === 'owner' ? `Waits on the Owner: question ${w.question_id ?? ''}`
+    : w.on === 'stop' ? `Stopped: ${w.reason ?? ''}` : `Waits: ${w.reason ?? ''}`
   const a = task.attempt
   const role = taskRole(task, runtime)
   const landing = task.landing ? `landing ${task.landing.phase} · ${task.landing.outcome}` : ''
   return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
     attempt: a ? `attempt ${a.attempt_no} · ${a.executor}${a.status ? ` · ${a.status}` : ''}` : '', href: goalHref(task.mission_id, task.task_id),
+    waiting, waitingHref: w?.on === 'owner' && w.question_id ? questionHref(w.question_id) : '',
     detail: [task.delivery, landing].filter(Boolean).join(' · ') }
 }
 /** The step's own work, newest first: every task that is not a check (one whose role is Unknown is kept, and says so). */

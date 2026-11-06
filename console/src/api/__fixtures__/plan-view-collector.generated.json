@@ -550,7 +550,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 3
+        "total": 3,
+        "unit": "steps"
       },
       "label": "4",
       "lane_kind": "Unclassified",
@@ -595,7 +596,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "steps"
       },
       "label": "4.1",
       "lane_kind": "mainline",
@@ -699,7 +701,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "steps"
       },
       "label": "4.1-1",
       "lane_kind": "Unclassified",
@@ -744,7 +747,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "steps"
       },
       "label": "4.2",
       "lane_kind": "mainline",
@@ -860,7 +864,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "steps"
       },
       "label": "4.2-1",
       "lane_kind": "Unclassified",
@@ -905,7 +910,8 @@
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "steps"
       },
       "label": "4.3",
       "lane_kind": "mainline",
@@ -1005,11 +1011,12 @@
       },
       "effect_step": false,
       "execution_progress": {
-        "basis": "Existing controller step states; not delivery verification",
+        "basis": "Tasks on this step (checks not counted); the state is the step's",
         "done": 0,
         "state": "planned",
         "stopped": 0,
-        "total": 1
+        "total": 1,
+        "unit": "tasks"
       },
       "label": "4.3-1",
       "lane_kind": "Unclassified",
@@ -1170,11 +1177,19 @@
           "verification": "Unknown"
         }
       ],
+      "max_rounds": 3,
       "mission_id": "M-fixture",
       "plan_node_id": "R4:4.3-1",
+      "role": "implement",
+      "round_no": 1,
       "state": "running",
       "task_id": "t_fixture_live",
-      "title": "a task with a live attempt"
+      "title": "a task with a live attempt",
+      "waiting": {
+        "on": "working",
+        "reason": "attempt a_fixture_live on h1",
+        "since": "2026-10-26T21:59:50Z"
+      }
     }
   ],
   "waiting_on": [
@@ -1356,11 +1371,19 @@
           "verification": "Unknown"
         }
       ],
+      "max_rounds": 3,
       "mission_id": "M-fixture",
       "plan_node_id": "R4:4.3-1",
+      "role": "implement",
+      "round_no": 1,
       "state": "running",
       "task_id": "t_fixture_live",
-      "title": "a task with a live attempt"
+      "title": "a task with a live attempt",
+      "waiting": {
+        "on": "working",
+        "reason": "attempt a_fixture_live on h1",
+        "since": "2026-10-26T21:59:50Z"
+      }
     }
   ]
 }

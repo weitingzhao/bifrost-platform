@@ -109,7 +109,7 @@ func TestLandingDrillCreateIdempotencyAndCollision(t *testing.T) {
 		return true, nil, errors.New("connection lost after create")
 	})
 	for range 3 {
-		if e := s.EnsureLandingCI(ctx, name, factSHA1); e != nil {
+		if e := s.EnsureLandingCI(ctx, name, factSHA1, ""); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -122,13 +122,13 @@ func TestLandingDrillCreateIdempotencyAndCollision(t *testing.T) {
 	if creates != 1 {
 		t.Fatal("duplicate run", creates)
 	}
-	if e := s.EnsureLandingCI(ctx, name, factSHA2); e == nil {
+	if e := s.EnsureLandingCI(ctx, name, factSHA2, ""); e == nil {
 		t.Fatal("adopted wrong revision")
 	}
-	if e := s.EnsureLandingCI(ctx, "bifrost-deliver-platform", factSHA1); e == nil {
+	if e := s.EnsureLandingCI(ctx, "bifrost-deliver-platform", factSHA1, ""); e == nil {
 		t.Fatal("delivery name accepted")
 	}
-	if e := s.EnsureLandingCI(ctx, landing.CIName("operation", 2), "main"); e == nil {
+	if e := s.EnsureLandingCI(ctx, landing.CIName("operation", 2), "main", ""); e == nil {
 		t.Fatal("floating ref accepted")
 	}
 }

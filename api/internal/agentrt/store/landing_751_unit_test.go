@@ -203,7 +203,7 @@ func TestReview751QuotaRecoveryBeforeCIKick(t *testing.T) {
 					}
 					return ci, nil
 				},
-				EnsureCI: func(_ context.Context, got, name, revision string) error {
+				EnsureCI: func(_ context.Context, got, name, revision, _ string) error {
 					if repo != "bifrost-platform" || got != repo || revision != r {
 						t.Fatal("wrong legacy CI key")
 					}

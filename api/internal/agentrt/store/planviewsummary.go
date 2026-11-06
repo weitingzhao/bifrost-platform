@@ -7,7 +7,10 @@ import (
 
 // Only existing controller states contribute to execution progress. In
 // particular a submitted external run never contributes a done step here.
-func viewExecutionSummary(nodes []map[string]any, graph planview.Graph, adoption viewAdoption) (map[string]any, []any, []any) {
+// A step with work tasks (role not verify or review) counts those tasks, so
+// the Owner sees how far its tasks are; its state stays the step's. Items,
+// roots and the main line keep counting steps.
+func viewExecutionSummary(nodes []map[string]any, tasks []map[string]any, graph planview.Graph, adoption viewAdoption) (map[string]any, []any, []any) {
 	byID := map[string]map[string]any{}
 	children := map[string][]string{}
 	for _, n := range nodes {
@@ -33,11 +36,36 @@ func viewExecutionSummary(nodes []map[string]any, graph planview.Graph, adoption
 		}
 		return out
 	}
+	work := map[string][]map[string]any{}
+	for _, t := range tasks {
+		if t["role"] == "verify" || t["role"] == "review" {
+			continue
+		}
+		node, _ := t["plan_node_id"].(string)
+		work[node] = append(work[node], t)
+	}
 	later := []any{}
 	for _, n := range nodes {
 		id := n["plan_node_id"].(string)
 		count := plan.CountSteps(steps(id))
-		n["execution_progress"] = map[string]any{"state": count.State, "done": count.Done, "total": count.Total, "stopped": count.Stopped, "basis": "Existing controller step states; not delivery verification"}
+		progress := map[string]any{"state": count.State, "done": count.Done, "total": count.Total, "stopped": count.Stopped, "unit": "steps", "basis": "Existing controller step states; not delivery verification"}
+		if ts := work[id]; n["node_kind"] == "step" && len(ts) > 0 {
+			done, stopped := 0, 0
+			for _, t := range ts {
+				switch t["state"] {
+				case "accepted":
+					done++
+				case "rejected", "cancelled":
+					stopped++
+				default:
+					if t["stopped"] != nil {
+						stopped++
+					}
+				}
+			}
+			progress = map[string]any{"state": count.State, "done": done, "total": len(ts), "stopped": stopped, "unit": "tasks", "basis": "Tasks on this step (checks not counted); the state is the step's"}
+		}
+		n["execution_progress"] = progress
 		if n["owner_step"] == true && n["state"] != "done" && n["state"] != "dropped" {
 			later = append(later, map[string]any{"plan_node_id": id, "title": n["title"], "readiness": "Unknown", "reason": "Owner readiness verification requires PV2"})
 		}

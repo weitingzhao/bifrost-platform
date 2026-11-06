@@ -205,7 +205,7 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	}
 	w.work(t, plan, infraPlan, "done")
 	var c2 cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw); err != nil || did != "accepted" {
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "accepted" {
 		t.Fatalf("accept: %q %v", did, err)
 	}
 	var impl, repo, base, class string
@@ -230,7 +230,7 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	} {
 		_, plan = goal(key, c.repo)
 		w.work(t, plan, c.report, "done")
-		if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw); err != nil || did != "rework" ||
+		if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "rework" ||
 			!strings.Contains(lastReason(t, w, plan), c.why) {
 			t.Fatalf("%s: %q %v %q", key, did, err, lastReason(t, w, plan))
 		}

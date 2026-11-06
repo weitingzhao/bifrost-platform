@@ -25,6 +25,7 @@ deny	GET /api/v1/agentrt/attempts/{id}/actions
 deny	POST /api/v1/agentrt/attempts/{id}/{action}
 deny	POST /api/v1/agentrt/benchmark
 deny	GET /api/v1/agentrt/capabilities
+deny	GET /api/v1/agentrt/check-value
 deny	POST /api/v1/agentrt/claim
 deny	POST /api/v1/agentrt/claim/pinned
 deny	GET /api/v1/agentrt/controls
@@ -70,6 +71,7 @@ deny	GET /api/v1/agentrt/landing/missions/{id}
 deny	GET /api/v1/agentrt/landing/operations/{op}
 deny	POST /api/v1/agentrt/landing/refresh
 deny	GET /api/v1/agentrt/landing/{op}/material
+deny	GET /api/v1/agentrt/leak-value
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack

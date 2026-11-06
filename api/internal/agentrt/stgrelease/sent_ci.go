@@ -240,7 +240,7 @@ func (c *Controller) watchSentCI(ctx context.Context, s store.StgState) (bool, e
 		base = next.base
 	}
 	sent := map[string]any{"batch": next.id, "try": next.n, "permit_seq": next.permit, "run": next.run, "ci_run": ci.Run}
-	r, err := c.blockedRecord(next.b, why, base, &ci, sent)
+	r, err := c.blockedRecord(next.b, why, base, &ci, map[string]any{"sent": sent})
 	if err != nil {
 		return false, err
 	}

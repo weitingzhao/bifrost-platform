@@ -15,13 +15,20 @@ func StgCanObserveCI(s StgState, r StgRecord, at time.Time) bool {
 	b := s.Blocks[r.String("block")]
 	return b.IsOpen() && stgCICause(b.Opened.Record.String("why")) && s.checkCIProof(b, StgEvent{Seq: s.LastSeq + 1, At: at, Record: r}) == nil
 }
+// A rule observation lifts a "rule" block when the policy read enabled after
+// the block opened: for a newer rule version, or for the blocked version
+// itself, since a block can open on a transient misread (R5:5.7 B5 fix). An
+// observation saying enabled=false never lifts it; one without the flag
+// (recorded before the fix) counts only for a newer version.
 func StgCanObserveRule(s StgState, r StgRecord, at time.Time) bool {
 	b := s.Blocks[r.String("block")]
 	tenant := strings.TrimPrefix(r.String("rule_id"), "landing:")
 	old := b.Opened.Record.object("detail").object("rules")
 	_, known := old[tenant]
+	enabled, flagged := r["enabled"].(bool)
+	version := r.Int("rule_version") > old.Int(tenant) && (!flagged || enabled) || r.Int("rule_version") == old.Int(tenant) && enabled
 	return b.IsOpen() && b.Opened.Record.String("why") == "rule" && r.Int("interval_seq") == b.Opened.Seq &&
-		strings.HasPrefix(r.String("rule_id"), "landing:") && known && r.Int("rule_version") > old.Int(tenant) &&
+		strings.HasPrefix(r.String("rule_id"), "landing:") && known && version &&
 		r.Time("read_at").After(b.Opened.At) && !r.Time("read_at").After(at)
 }
 

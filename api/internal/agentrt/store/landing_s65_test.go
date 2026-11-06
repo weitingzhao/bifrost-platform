@@ -75,7 +75,10 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 					t.Fatal("infra used legacy CI")
 					return landing.CIRun{}, nil
 				},
-				EnsureCI:          func(context.Context, string, string, string) error { t.Fatal("infra used legacy creator"); return nil },
+				EnsureCI: func(context.Context, string, string, string, string) error {
+					t.Fatal("infra used legacy creator")
+					return nil
+				},
 				WindowBlocked:     func(context.Context, string) (bool, error) { return false, nil },
 				InfraPlatformHead: func(context.Context) (string, error) { headReads++; return platformHead, nil },
 			}

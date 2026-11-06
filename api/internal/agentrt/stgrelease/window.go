@@ -41,13 +41,45 @@ type WindowPolicy struct {
 	Rule        *rules.Rule
 }
 
-func (p WindowPolicy) enabled(at time.Time) bool {
+func (p WindowPolicy) enabled(at time.Time) bool { return p.disabled(at) == nil }
+
+// disabled is nil when the policy is enabled at at; otherwise it names the
+// first part that failed, with the values read (R5:5.7 B5 fix). A "rule"
+// block records it as detail.rule_disabled.
+func (p WindowPolicy) disabled(at time.Time) map[string]any {
 	r := p.Rule
-	if p.Environment != "prod" || !p.Live || r == nil || r.Kind != rules.KindLanding || r.Version < 1 || r.Landing == nil || at.Before(r.Effective) || !at.Before(r.Expires) {
-		return false
+	switch {
+	case p.Environment != "prod":
+		return map[string]any{"part": "environment", "environment": p.Environment}
+	case !p.Live:
+		return map[string]any{"part": "live", "live": false}
+	case r == nil:
+		return map[string]any{"part": "no_rule"}
+	}
+	read := map[string]any{"rule_id": r.ID, "rule_version": r.Version}
+	reason := func(part string, kv ...any) map[string]any {
+		read["part"] = part
+		for i := 0; i+1 < len(kv); i += 2 {
+			read[kv[i].(string)] = kv[i+1]
+		}
+		return read
+	}
+	switch {
+	case r.Kind != rules.KindLanding || r.Version < 1 || r.Landing == nil:
+		return reason("kind_or_version", "kind", string(r.Kind), "landing", r.Landing != nil)
+	case at.Before(r.Effective):
+		return reason("not_yet_effective", "effective_at", r.Effective.UTC().Format(time.RFC3339Nano), "at", at.UTC().Format(time.RFC3339Nano))
+	case !at.Before(r.Expires):
+		return reason("expired", "expires_at", r.Expires.UTC().Format(time.RFC3339Nano), "at", at.UTC().Format(time.RFC3339Nano))
 	}
 	repo, ok := r.Landing.Repo("bifrost-platform")
-	return ok && repo.STGRelease == delivery.STGReleasePipeline
+	if !ok {
+		return reason("stg_release", "repo", false)
+	}
+	if repo.STGRelease != delivery.STGReleasePipeline {
+		return reason("stg_release", "repo", true, "stg_release", repo.STGRelease)
+	}
+	return nil
 }
 
 type WindowConfig struct {

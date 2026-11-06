@@ -325,8 +325,14 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 	if perr != nil {
 		errs = append(errs, perr)
 	}
+	// A task in a repository the goal kept no base for starts from main's
+	// head, read as the landing drill reads it; with no drill, none is read.
+	var readMain store.ReadMain
+	if c.Drill != nil && c.Drill.Main != nil {
+		readMain = c.Drill.Main
+	}
 	for _, id := range plans {
-		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk(), c.boundedWithdraw())
+		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk(), c.boundedWithdraw(), readMain)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("plan %s: %w", id, err))
 		}
@@ -760,12 +766,14 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.startLeakValue(ctx, &wg)
 	if c.PageOwner != nil {
 		c.every(ctx, &wg, "agentrt-disk-pages", DiskPagesEvery, func() error {
 			_, err := c.DiskPages(ctx)
 			return err
 		})
 	}
+	c.startCheckValue(ctx, &wg)
 	c.startFullCI(ctx, &wg)
 	return wg.Wait
 }
