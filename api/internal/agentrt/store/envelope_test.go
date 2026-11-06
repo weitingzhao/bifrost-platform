@@ -89,7 +89,7 @@ func TestEnvelopeStartsMission(t *testing.T) {
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1, h2"))))
 	ok(t, firstErr(s.sign(w, ruleText("budget:dev", 2, rules.Tighten, since, until,
-		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\n"))))
+		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n"))))
 	propose := func(key string, p store.MissionProposal) map[string]any {
 		t.Helper()
 		p.Title, p.Goal, p.Success = "m", "g", []string{"done"}

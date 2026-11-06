@@ -67,21 +67,37 @@ func TestLandingActualEnableFence(t *testing.T) {
 		t.Fatal("new version discarded queued work")
 	}
 }
-func TestLandingLatestAdoptedPlan(t *testing.T) {
+
+// Any used plan of the mission may land its goal tasks, not only the latest
+// one adopted (R5:5.7: a second plan staled every task of the first).
+func TestLandingAnyUsedPlan(t *testing.T) {
 	f := eligibleFacts()
 	f.GoalTask = true
 	f.ProducingPlan = "old"
-	f.LatestUsedPlan = "old"
+	f.UsedPlans = []string{"old"}
 	if !EligibleToClaim(f, epoch.Add(time.Hour)).Allowed {
-		t.Fatal("still adopted plan denied")
+		t.Fatal("used plan denied")
 	}
-	f.LatestUsedPlan = "new"
-	if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed {
-		t.Fatal("superseded plan admitted")
+	f.UsedPlans = []string{"new", "old"}
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
+		t.Fatal("older used plan denied", d.Reason)
 	}
-	f.LatestUsedPlan = ""
-	if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed {
-		t.Fatal("unknown adoption admitted")
+	f.UsedPlans = []string{"new"}
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Allowed || d.Reason != "stale" {
+		t.Fatal("never used plan admitted", d)
+	}
+	f.UsedPlans = nil
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Allowed || d.Reason != "stale" {
+		t.Fatal("unknown adoption admitted", d)
+	}
+	// Proposed directly by the coordinator: no producing plan to be used.
+	f.ProducingPlan = ""
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
+		t.Fatal("directly proposed goal task denied", d.Reason)
+	}
+	f.UsedPlans = []string{"new"}
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
+		t.Fatal("directly proposed goal task denied", d.Reason)
 	}
 }
 func TestLandingHistoryFailClosed(t *testing.T) {

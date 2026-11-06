@@ -244,10 +244,11 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 // unclaimedEnd: the record a refusal of a root never claimed leaves, when
 // no later pass can turn it around without the Owner (CUT §7.7): stale only
 // for what does not recover (a mission done, stopped or expired, a dropped
-// step, a goal whose producing plan another plan replaced); result;
+// step); result;
 // in_main or reverted when A is already in main's history. A paused mission,
-// a stopped step, unknown history, dependencies, rule and limit can change by
-// themselves: no record, the next pass tries again, the window ends it.
+// a stopped step, a goal whose producing plan is not used yet, unknown
+// history, dependencies, rule and limit can change by themselves: no record,
+// the next pass tries again, the window ends it.
 func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
 	if !inHandoff(f) {
 		return "", false
@@ -255,8 +256,7 @@ func unclaimedEnd(d landing.Decision, f landing.Facts) (string, bool) {
 	switch d.Reason {
 	case "stale":
 		switch {
-		case slices.Contains([]string{"done", "stopped", "expired"}, f.MissionState), f.StepState == "dropped",
-			f.GoalTask && f.ProducingPlan != "" && f.LatestUsedPlan != "" && f.ProducingPlan != f.LatestUsedPlan:
+		case slices.Contains([]string{"done", "stopped", "expired"}, f.MissionState), f.StepState == "dropped":
 			return "stale", true
 		}
 	case "result":

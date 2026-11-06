@@ -87,10 +87,11 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 		if f.ProducingPlan == offPlan {
 			f.ProducingPlan = ""
 		}
-		// Acceptance of a used plan orders adoption, not task creation time.
-		err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT e.task_id FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.task_id
+		// Every plan of the mission accepted as used, not only the latest:
+		// adopting a new plan does not stale an earlier plan's tasks.
+		err = tx.QueryRow(ctx, `SELECT COALESCE(array_agg(DISTINCT e.task_id ORDER BY e.task_id),'{}') FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.task_id
    WHERE t.mission_id=$1 AND t.role='plan' AND t.state='accepted' AND e.event_type='task_state_changed'
-   AND e.body_json->>'to'='accepted' AND e.body_json->>'reason' LIKE 'plan used:%' ORDER BY e.event_id DESC LIMIT 1),'')`, mission).Scan(&f.LatestUsedPlan)
+   AND e.body_json->>'to'='accepted' AND e.body_json->>'reason' LIKE 'plan used:%'`, mission).Scan(&f.UsedPlans)
 		if err != nil {
 			return f, nil, err
 		}

@@ -91,7 +91,8 @@ type missionBudget struct {
 // mission that started inside a standing envelope still fits the envelope in
 // force, with the task's effect too. The budget the envelope bounds is the
 // one the mission started with: what the Owner added on a blocked card is
-// his own decision (TD-384).
+// his own decision (TD-384), and what the platform added on its own is within
+// the budget rule's auto_grant cap.
 func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c candidate) (int, bool, error) {
 	s, ok, err := m.spend(ctx, tx, rc, c.mission)
 	if err != nil || !ok || s.why() != "" {
@@ -103,8 +104,8 @@ func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c ca
 			return 0, false, err
 		}
 		e, b := env.Envelope, s.budget
-		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts-b.OwnerAttempts > e.Budget.MaxAttempts ||
-			b.MaxWallHours-b.OwnerHours > e.Budget.MaxWallHours {
+		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts-b.OwnerAttempts-b.AutoAttempts > e.Budget.MaxAttempts ||
+			b.MaxWallHours-b.OwnerHours-b.AutoHours > e.Budget.MaxWallHours {
 			return 0, false, nil
 		}
 	}

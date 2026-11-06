@@ -271,7 +271,8 @@ func (db *DB) Pool(t testing.TB, dsn string) *pgxpool.Pool {
 // The two rules the Owner signs that dispatch needs, as rows a test inserts
 // as the runtime role: concurrency (one live attempt a host) and the dev
 // tenant's budget (missions that state none get 1000 attempts and 720 hours;
-// an attempt at most a day). Without both in force the runtime dispatches
+// an attempt at most a day; auto_grant 0, so the budget pass grows no budget
+// on its own and blocks as before). Without both in force the runtime dispatches
 // nothing. Each row's text and body_json agree (store's TestFixtureRule reads
 // them back).
 const (
@@ -289,8 +290,8 @@ const concurrencyRow = `('concurrency', 1,
     'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
 
 const devBudgetRow = `('budget:dev', 1,
-    '{"attempt_hard_limit_s":86400,"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","mission":{"max_attempts":1000,"max_wall_hours":720},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}',
-    E'rule_id: budget:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 86400\n',
+    '{"attempt_hard_limit_s":86400,"auto_grant":{"max_attempts":0,"max_wall_hours":0},"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","mission":{"max_attempts":1000,"max_wall_hours":720},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}',
+    E'rule_id: budget:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 86400\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n',
     'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
 
 // TestJobRule is the job rule the test fixtures' candidates belong to

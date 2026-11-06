@@ -120,7 +120,19 @@ type BudgetRule struct {
 	Tenant          string
 	Mission         Budget
 	AttemptLimitSec int
+	// AutoGrant is how far the platform grows an over-budget mission's
+	// budget on its own, a round at a time, before the Owner is asked
+	// (auto_grant; AutoGrantDefault when the rule states none).
+	AutoGrant Budget
+	// AutoGrantStated says the rule stated auto_grant; only then is it in
+	// the rule's doc, so a rule without it keeps its canonical doc.
+	AutoGrantStated bool
 }
+
+// AutoGrantDefault is the cap on what the platform adds to a mission's
+// budget on its own when a budget rule states no auto_grant: 10 rounds of 3
+// attempts, and a day.
+var AutoGrantDefault = Budget{MaxAttempts: 30, MaxWallHours: 24}
 
 // Candidate is one executor and model a job may route to.
 type Candidate struct {
@@ -430,6 +442,25 @@ func (r *Rule) budget(o *object, arg string) error {
 	if b.AttemptLimitSec, err = o.integer("attempt_hard_limit_s", 60, MaxAttemptLimitS); err != nil {
 		return err
 	}
+	b.AutoGrant = AutoGrantDefault
+	if n, err := o.node("auto_grant", true); err != nil {
+		return err
+	} else if n != nil {
+		a, err := o.object("auto_grant")
+		if err != nil {
+			return err
+		}
+		if b.AutoGrant.MaxAttempts, err = a.integer("max_attempts", 0, MaxMissionAttempts); err != nil {
+			return err
+		}
+		if b.AutoGrant.MaxWallHours, err = a.integer("max_wall_hours", 0, MaxMissionWallHours); err != nil {
+			return err
+		}
+		if err = a.done(); err != nil {
+			return err
+		}
+		b.AutoGrantStated = true
+	}
 	r.Budget = b
 	return nil
 }
@@ -606,6 +637,9 @@ func (r Rule) Doc() map[string]any {
 		b := r.Budget
 		doc["tenant"], doc["attempt_hard_limit_s"] = b.Tenant, b.AttemptLimitSec
 		doc["mission"] = map[string]any{"max_attempts": b.Mission.MaxAttempts, "max_wall_hours": b.Mission.MaxWallHours}
+		if b.AutoGrantStated {
+			doc["auto_grant"] = map[string]any{"max_attempts": b.AutoGrant.MaxAttempts, "max_wall_hours": b.AutoGrant.MaxWallHours}
+		}
 	case KindJob:
 		cands := make([]any, 0, len(r.Job.Candidates))
 		for _, c := range r.Job.Candidates {

@@ -199,3 +199,64 @@ func TestTightens(t *testing.T) {
 		}
 	}
 }
+
+// A budget rule's auto_grant is optional: stated, it is read (0 allowed) and
+// written into the doc; absent, the cap is AutoGrantDefault and the doc stays
+// as it was.
+func TestBudgetAutoGrant(t *testing.T) {
+	r := parse(t, budget)
+	if r.Budget.AutoGrantStated || r.Budget.AutoGrant != rules.AutoGrantDefault || rules.AutoGrantDefault != (rules.Budget{MaxAttempts: 30, MaxWallHours: 24}) {
+		t.Errorf("no auto_grant: %+v, want the default 30/24 unstated", r.Budget)
+	}
+	r = parse(t, budget+"auto_grant: {max_attempts: 6, max_wall_hours: 2}\n")
+	if !r.Budget.AutoGrantStated || r.Budget.AutoGrant != (rules.Budget{MaxAttempts: 6, MaxWallHours: 2}) {
+		t.Errorf("auto_grant 6/2: %+v", r.Budget)
+	}
+	if body, err := r.BodyJSON(); err != nil || !strings.Contains(string(body), `"auto_grant":{"max_attempts":6,"max_wall_hours":2}`) {
+		t.Errorf("body %s has no auto_grant", body)
+	}
+	r = parse(t, budget+"auto_grant: {max_attempts: 0, max_wall_hours: 0}\n")
+	if !r.Budget.AutoGrantStated || r.Budget.AutoGrant != (rules.Budget{}) {
+		t.Errorf("auto_grant 0/0: %+v", r.Budget)
+	}
+	for name, s := range map[string]string{
+		"a negative cap":   budget + "auto_grant: {max_attempts: -1, max_wall_hours: 0}\n",
+		"a cap past bound": budget + "auto_grant: {max_attempts: 1001, max_wall_hours: 0}\n",
+		"hours left out":   budget + "auto_grant: {max_attempts: 3}\n",
+		"an unknown field": budget + "auto_grant: {max_attempts: 3, max_wall_hours: 1, rounds: 2}\n",
+		"not a mapping":    budget + "auto_grant: 3\n",
+	} {
+		if _, err := rules.Parse([]byte(s)); err == nil {
+			t.Errorf("%s: parsed", name)
+		}
+	}
+}
+
+// Raising auto_grant loosens, lowering it tightens; an unstated one is the
+// default's.
+func TestBudgetAutoGrantTightens(t *testing.T) {
+	next := func(s string) string {
+		return strings.Replace(s, "rule_version: 1\ndirection: initial", "rule_version: 2\ndirection: tighten", 1)
+	}
+	with := func(a, h string) string {
+		return budget + "auto_grant: {max_attempts: " + a + ", max_wall_hours: " + h + "}\n"
+	}
+	for name, c := range map[string]struct {
+		prev, next string
+		tighter    bool
+	}{
+		"lowered attempts":      {with("6", "2"), next(with("3", "2")), true},
+		"lowered to 0":          {with("6", "2"), next(with("0", "0")), true},
+		"raised attempts":       {with("6", "2"), next(with("9", "2")), false},
+		"raised hours":          {with("6", "2"), next(with("6", "3")), false},
+		"stated under default":  {budget, next(with("30", "24")), true},
+		"stated over default":   {budget, next(with("31", "24")), false},
+		"dropped, so default":   {with("6", "2"), next(budget), false},
+		"dropped from default+": {with("40", "48"), next(budget), true},
+	} {
+		err := rules.Tightens(parse(t, c.prev), parse(t, c.next))
+		if (err == nil) != c.tighter {
+			t.Errorf("%s: tightens %v (%v); want %v", name, err == nil, err, c.tighter)
+		}
+	}
+}

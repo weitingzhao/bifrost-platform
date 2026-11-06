@@ -42,8 +42,11 @@ type Facts struct {
 	// coordinator's external host for Repo (§2.1). Until it does, nothing
 	// waits for a grant: core and soft failures are refused as before
 	// (review 694 R-03).
-	GrantEnabled                                                     bool
-	MissionState, StepState, ProducingPlan, LatestUsedPlan           string
+	GrantEnabled                           bool
+	MissionState, StepState, ProducingPlan string
+	// UsedPlans: every plan task of the mission accepted as used ("plan
+	// used:"), in no order. A newer plan does not stale an older one's tasks.
+	UsedPlans                                                        []string
 	ReservedToday, OtherInFlight                                     int
 	MissionVersion, StepVersion                                      int
 	GoalTask, NoMerge, SingleCommit, DependenciesEffective, Terminal bool
@@ -69,7 +72,9 @@ func planOK(f Facts) bool {
 	if f.StepState != "" && !slices.Contains([]string{"planned", "active", "done"}, f.StepState) {
 		return false
 	}
-	return !f.GoalTask || f.ProducingPlan != "" && f.ProducingPlan == f.LatestUsedPlan
+	// A goal task lands when any used plan of its mission produced it, or
+	// when no plan did (proposed directly). A plan never used stays stale.
+	return !f.GoalTask || f.ProducingPlan == "" || slices.Contains(f.UsedPlans, f.ProducingPlan)
 }
 
 // ruleValid deliberately does not check paths, presentation or size. Missing
