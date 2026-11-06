@@ -175,6 +175,8 @@ type LandingGrant struct {
 	ExpiresAt       string    `json:"expires_at"`
 	// FloorPaths: a floor grant's pinned files; absent on platform grants.
 	FloorPaths []GrantFloorPath `json:"floor_paths,omitempty"`
+	// Batch: on a batch lead's grant, the batch its material covered.
+	Batch *LandingGrantBatch `json:"batch,omitempty"`
 }
 
 // LandingGrantRevoked is the closed landing_grant_revoked record.
@@ -326,6 +328,7 @@ func parseLandingGrant(v any) (LandingGrant, error) {
 	if m, ok := v.(map[string]any); ok && m["action"] == ActionFloorLanding {
 		keys = append(keys, "floor_paths")
 	}
+	keys = append(keys, grantBatchKeys(v)...)
 	if err := closedDecode(v, &g, keys...); err != nil {
 		return g, fmt.Errorf("landing_grant: %w", err)
 	}
@@ -377,6 +380,8 @@ func parseLandingGrant(v any) (LandingGrant, error) {
 		return g, fmt.Errorf("landing_grant: %s does not waive %v", g.Action, g.Waives)
 	case (g.Action == ActionFloorLanding) != (g.FloorPaths != nil) || g.FloorPaths != nil && !validFloorPaths(g.FloorPaths):
 		return g, fmt.Errorf("landing_grant: floor_paths are a floor grant's, sorted, each floor-grantable with its blob sha256")
+	case g.Batch != nil && badGrantBatch(v, g) != "":
+		return g, fmt.Errorf("landing_grant batch: %s", badGrantBatch(v, g))
 	case g.Files < 0 || g.Lines < 0 || g.ChecksVersion < 1 || !parseGrantRule(g.Rule) || g.Rule.ID != "landing:"+g.Tenant:
 		return g, fmt.Errorf("landing_grant counts, rule or checks_version")
 	case g.CI.Pipeline == "" || !landingRequestID.MatchString(g.CI.Run) || g.CI.UID == "" || !okCI || g.CI.Status != "Succeeded" || g.CI.SHA != g.R:

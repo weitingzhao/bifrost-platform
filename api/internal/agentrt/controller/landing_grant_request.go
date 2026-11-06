@@ -189,8 +189,10 @@ func (c *Controller) askLandingGrant(ctx context.Context, w grantWaiting) error 
 	if head, err := grantRequestReads.main(ctx, src, m.Candidate.Repo); err != nil || head == "" || head != m.Candidate.M0 {
 		return errGrantNotNow
 	}
+	// A batch's lead asks for the whole batch: its material's action is the
+	// one every member's soft checks together take.
 	action := store.ActionGuardrailLanding
-	if len(m.Candidate.HardCorePaths) > 0 {
+	if len(m.Candidate.HardCorePaths) > 0 || m.Action == store.ActionCoreLanding {
 		action = store.ActionCoreLanding
 	}
 	params := map[string]any{"env": "prod", "repo": m.Candidate.Repo, "task": m.Candidate.Task, "op": w.Op,
@@ -198,6 +200,9 @@ func (c *Controller) askLandingGrant(ctx context.Context, w grantWaiting) error 
 	why := fmt.Sprintf("its change fails soft checks %s", strings.Join(m.SoftAtRequest, ", "))
 	if action == store.ActionCoreLanding {
 		why = "its change touches trusted core paths"
+	}
+	if b := m.Batch; b != nil && len(b.Members) > 1 && b.Members[0].Op == w.Op {
+		why += fmt.Sprintf("; it leads batch %s of %d, and this one grant lands every member", b.Batch, len(b.Members))
 	}
 	reason := fmt.Sprintf("Task %s, landing operation %s, waits on the Owner's grant (awaiting_grant): %s.", m.Candidate.Task, w.Op, why)
 	if _, err := r.RequestGrant(ctx, action, params, reason); err != nil {

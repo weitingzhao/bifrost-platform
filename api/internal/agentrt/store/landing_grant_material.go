@@ -268,6 +268,7 @@ type grantDB struct {
 	grants     []*grantView
 	ciKey      *GrantCIKey
 	batch      *GrantBatch
+	mates      []grantBatchMate // the batch's other members, when op leads it
 }
 
 // readGrantDB reads every database input of an operation's material. It
@@ -308,17 +309,8 @@ func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, n
 	if d.ciKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 		return d, err
 	}
-	batches, _, err := readLandingBatches(ctx, tx, grantStream(d.repo))
-	if err != nil {
+	if d.batch, d.mates, err = readGrantBatch(ctx, tx, src, s, grantStream(d.repo), op, now); err != nil {
 		return d, err
-	}
-	for _, b := range batches {
-		if slices.Contains(b.Members, op) {
-			d.batch = &GrantBatch{Batch: b.Batch, Members: []GrantBatchMember{}}
-			for _, m := range b.Members {
-				d.batch.Members = append(d.batch.Members, GrantBatchMember{Op: m, Task: s.Operations[m].Task, A: s.Operations[m].A})
-			}
-		}
 	}
 	_, d.grants, err = readLandingGrants(ctx, tx, grantStream(d.repo))
 	return d, err
@@ -376,6 +368,7 @@ type grantExt struct {
 	patch   GrantPatch
 	ci      GrantCIEvidence
 	floor   landing.FloorTree
+	mates   map[string]grantMateExt // each mate's result, by operation
 }
 
 func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
@@ -400,6 +393,9 @@ func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 		return x, err
 	}
 	if x.patch, err = src.Facts.grantPatchFor(d.repo)(ctx, o.A, o.M0, o.R); err != nil {
+		return x, err
+	}
+	if x.mates, err = readGrantBatchGit(ctx, src, d.mates); err != nil {
 		return x, err
 	}
 	if rules.FloorGrantSupported(d.repo) {
@@ -466,6 +462,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		}
 	}
 	reason, soft := landing.PolicyChecks(f, now)
+	soft = batchSoft(m, d, x, soft, now, problem)
 	m.SoftAtRequest = refusalSet(soft)
 	if reason != "" {
 		problem(reason) // floor (structural or absolute) or rule: no grant waives these
@@ -495,7 +492,10 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	if m.CandidateDigest, err = m.Candidate.Digest(); err != nil {
 		return nil, err
 	}
-	if m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion, m.FloorPaths); err != nil {
+	if m.MaterialDigest, err = materialDigest(m.CandidateDigest, m.SoftAtRequest, m.Rule, m.ChecksVersion, m.FloorPaths); err == nil {
+		err = m.batchDigest(d)
+	}
+	if err != nil {
 		return nil, err
 	}
 	switch {
@@ -747,6 +747,7 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	if a.Action == ActionFloorLanding {
 		g.CI, g.FloorPaths = m.floorCI, slices.Clone(m.FloorPaths)
 	}
+	g.Batch = grantBatchOf(m, d)
 	if _, err = Append(ctx, tx, Event{Stream: grantStream(pre.repo), Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,
 		Body: map[string]any{"text": fmt.Sprintf("Landing grant from approval #%d (%s)", a.Number, a.Action), "landing_grant": toBody(g)}}); err != nil {
 		return LandingGrant{}, err

@@ -24,8 +24,7 @@ func batchTasks(cs []BatchCandidate) []string {
 
 // R5:5.7 goal 2: a batch is the platform's waiting roots in candidate
 // order, at most BatchMax and what the day's quota leaves; never an S5 root
-// or another repository's; at most one root that may wait for a grant, and
-// that one leads.
+// or another repository's; the first root that may wait for a grant leads.
 func TestBatchFormation(t *testing.T) {
 	t.Parallel()
 	now := epoch.Add(time.Hour)
@@ -58,7 +57,7 @@ func TestBatchFormation(t *testing.T) {
 		t.Fatal("S5 or infra in a batch", got)
 	}
 	// Two roots that may wait for a grant (a core path, grants enabled): the
-	// first leads, the second waits for the next batch.
+	// first leads, the second stays in its place.
 	granted := slices.Clone(cands[:4])
 	for _, i := range []int{2, 3} {
 		f := granted[i].Facts
@@ -70,8 +69,8 @@ func TestBatchFormation(t *testing.T) {
 		}
 		granted[i].Facts = f
 	}
-	if got := batchTasks(FormBatch(granted, now)); !slices.Equal(got, []string{granted[2].Task, granted[0].Task, granted[1].Task}) {
-		t.Fatal("the grant root does not lead alone", got)
+	if got := batchTasks(FormBatch(granted, now)); !slices.Equal(got, []string{granted[2].Task, granted[0].Task, granted[1].Task, granted[3].Task}) {
+		t.Fatal("the first grant root does not lead", got)
 	}
 	// Another tenant waits; one candidate is a batch of one.
 	other := slices.Clone(cands[:3])

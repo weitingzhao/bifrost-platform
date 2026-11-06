@@ -567,4 +567,6 @@ type GrantBatchMember struct {
 	Op   string `json:"op"`
 	Task string `json:"task"`
 	A    string `json:"A"`
+	// Soft: on the lead's material, the member's own soft checks.
+	Soft []string `json:"soft,omitempty"`
 }

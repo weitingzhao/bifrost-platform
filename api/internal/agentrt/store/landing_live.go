@@ -81,7 +81,7 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 	var decision landing.Decision
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
-		auth, decision, err = authorizeLandingPushTx(ctx, tx, src, op, observe, recheck, repo)
+		auth, decision, err = authorizeLandingPushTx(ctx, tx, src, op, observe, recheck, repo, nil)
 		return err
 	})
 	if err != nil {
@@ -93,8 +93,9 @@ func authorizeLandingPush(ctx context.Context, db DB, src LandingSource, op stri
 // authorizeLandingPushTx is the gate's judgment of op in tx, as
 // AuthorizeLandingPush describes it: its locks, reads, decision and records.
 // The batch gate (AuthorizeBatchPush) runs it for each member in one
-// transaction.
-func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool, repo string) (auth Authorization, decision landing.Decision, err error) {
+// transaction; cover, for a member other than the lead, is the lead's grant
+// as the batch may use it (landing_batch_grant.go).
+func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), recheck bool, repo string, cover *batchCover) (auth Authorization, decision landing.Decision, err error) {
 	stream := "landing:" + repo
 	err = func() error {
 		auth, decision = Authorization{}, landing.Decision{}
@@ -451,7 +452,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			}
 			use = toBody(LandingGrantUse{V: LandingGrantVersion, GrantID: grant.GrantID, CandidateDigest: cand, SoftNow: softNow,
 				Rule: rule, ChecksVersion: rules.LandingChecksVersion, DecidedAt: final.UTC().Format(time.RFC3339Nano)})
-		} else if len(soft) > 0 {
+		} else if len(soft) > 0 && !cover.covers(op, o, g, soft, final) {
 			decision = landing.Decision{Reason: "awaiting_grant"}
 			return appendAwaitingGrant(ctx, tx, g, op, obs.CI, soft)
 		}
@@ -492,6 +493,9 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		if clear != nil {
 			body["landing_rule_clear"] = clear
 			body["text"] = fmt.Sprintf("Landing main_intent: rule version %d now fails nothing of the waiting operation", g.Rule.Version)
+		}
+		if use == nil && len(soft) > 0 {
+			cover.record(body, op, soft, final, g.Rule.Version)
 		}
 		hook("landing gate: before main_intent", op)
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: body})

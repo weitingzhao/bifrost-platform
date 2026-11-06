@@ -35,11 +35,15 @@ func BatchID(lead string) string { return "batch:" + lead }
 // FormBatch picks a batch's members from cands, in their order: at most
 // BatchMax, and no more than the day's quota leaves; bifrost-platform
 // roots of one tenant only (every other repository keeps the one-operation
-// path); no root that S5 must check (S5 keeps its own path, alone); and at
-// most one root that may wait for a grant (PolicyChecks and MayAwaitGrant on
-// its facts): it leads the batch, since only the lead's CI is pinned and only
-// the lead waits; a second such root waits for the next batch. A batch of
-// one is today's single landing.
+// path); no root that S5 must check (S5 keeps its own path, alone); and no
+// root its claim refuses on policy (a floor or rule refusal, or soft checks
+// no grant may wait on): the controller claims that one alone, so its
+// refusal is recorded. Any number of roots that may wait for a grant
+// (PolicyChecks and MayAwaitGrant on their facts) join; the first of them
+// leads the batch, since only the lead's CI is pinned and only the lead
+// waits: its one grant covers every member's soft checks (the lead's
+// material is the batch's, store/landing_batch_grant.go). A batch of one
+// is today's single landing.
 func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
 	var out []BatchCandidate
 	grant := -1
@@ -58,10 +62,11 @@ func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
 		if len(out) >= limit {
 			break
 		}
-		if reason, soft := PolicyChecks(f, now); reason == "" && len(soft) > 0 && MayAwaitGrant(f, soft) {
-			if grant >= 0 {
-				continue
-			}
+		reason, soft := PolicyChecks(f, now)
+		if reason != "" || len(soft) > 0 && !MayAwaitGrant(f, soft) {
+			continue
+		}
+		if len(soft) > 0 && grant < 0 {
 			grant = len(out)
 		}
 		out = append(out, c)

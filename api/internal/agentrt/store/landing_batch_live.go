@@ -21,7 +21,9 @@ var errBatchRefused = errors.New("landing batch gate: a member is refused")
 // each member's step, task and mission, each tenant's quota stream, the
 // repository stream), then judges every member with the gate's per-operation
 // judgment (authorizeLandingPushTx) and appends each member's reserved and
-// main_intent, the lead's with its grant use when it awaited one. One
+// main_intent, the lead's with its grant use when it awaited one, and a
+// member's whose soft checks the lead's grant waives with that grant
+// (landing_batch_grant.go: the lead's material is the batch's). One
 // Authorization per member, all for the same R and M0: the caller pushes R
 // once. Any member refused, the decision is its refusal (Detail names the
 // op) and nothing is appended; only the lead's own records of a refusal
@@ -54,7 +56,8 @@ func authorizeBatchPush(ctx context.Context, db DB, src LandingSource, ops []str
 		if err != nil {
 			return err
 		}
-		if b, ok := findBatch(batches, landing.BatchID(ops[0])); !ok || !slices.Equal(b.Members, ops) {
+		b, ok := findBatch(batches, landing.BatchID(ops[0]))
+		if !ok || !slices.Equal(b.Members, ops) {
 			decision = landing.Decision{Reason: "not_ready", Detail: map[string]any{"op": ops[0]}}
 			return nil
 		}
@@ -100,8 +103,9 @@ func authorizeBatchPush(ctx context.Context, db DB, src LandingSource, ops []str
 		if err = lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
+		var cover *batchCover
 		for i, op := range ops {
-			a, d, err := authorizeLandingPushTx(ctx, tx, src, op, observe, recheck && i == 0, repo)
+			a, d, err := authorizeLandingPushTx(ctx, tx, src, op, observe, recheck && i == 0, repo, cover)
 			if err != nil {
 				return err
 			}
@@ -121,6 +125,11 @@ func authorizeBatchPush(ctx context.Context, db DB, src LandingSource, ops []str
 				return fmt.Errorf("landing batch members authorized for different commits")
 			}
 			auths = append(auths, a)
+			if i == 0 {
+				if cover, err = leadGrantCover(ctx, tx, stream, b, a); err != nil {
+					return err
+				}
+			}
 		}
 		decision = landing.Decision{Allowed: true}
 		return nil
