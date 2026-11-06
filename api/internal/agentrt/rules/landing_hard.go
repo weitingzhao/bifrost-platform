@@ -50,6 +50,9 @@ var landingHardGo = [...]string{
 	"api/internal/opscontext/",
 	"api/internal/localpath/",
 	"api/internal/agentrt/actions/",
+	// Signed-rule rows the open test harness inserts; they name the rule
+	// table (TestLandingOpenPathsNameNoPermissionRecord).
+	"api/internal/agentrt/agentrttest/rules.go",
 }
 
 // The dependency closure of these packages must stay inside landingHardGo.

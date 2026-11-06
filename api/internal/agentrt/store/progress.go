@@ -96,6 +96,24 @@ type ProgressAttempt struct {
 	taskState         string
 }
 
+// keep records what of a's work is persisted: its result (persisted), its
+// last checkpoint (seq and at, nil for none) and, when its result is not
+// persisted, how long since anything of it was: since that checkpoint, or
+// since it started.
+func (a *ProgressAttempt) keep(persisted bool, seq *int64, at *time.Time, now time.Time) {
+	a.Persisted = persisted
+	a.LastCheckpointSeq = seq
+	since := a.started
+	if at != nil {
+		a.LastCheckpointAt = at.UTC().Format(time.RFC3339Nano)
+		since = *at
+	}
+	if !persisted && !since.IsZero() {
+		s := int64(now.Sub(since) / time.Second)
+		a.UnpersistedForS = &s
+	}
+}
+
 // ProgressTask is an unfinished task of a mission.
 type ProgressTask struct {
 	TaskID               string           `json:"task_id"`

@@ -163,7 +163,7 @@ func ExplainRootWithin(ctx context.Context, db DB, root string, lim ExplainBound
 		f := &stepFacts{ctx: ctx, tx: tx, step: x.id, repos: shared, explainAt: now, explainRoots: roots,
 			deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false }}
 		n, _, _ := x.rule.Explain(f)
-		blockers, omitted := f.blockers(n.Blocking())
+		blockers, omitted := stepBlockers(f, n.Blocking())
 		if f.err == nil {
 			f.err = ctx.Err() // a fold that cannot be stopped may have run past the deadline
 		}
@@ -188,14 +188,14 @@ func ExplainRootWithin(ctx context.Context, db DB, root string, lim ExplainBound
 	return out, now, nil
 }
 
-// blockers turns a rule's blocking into the contract's blockers within
+// stepBlockers turns a rule's blocking into the contract's blockers within
 // explainItems items (each blocker, task candidate, card and block one
 // item; a one_of is its branches' items), in rule order, and how many
 // blockers were left out once the budget ran out, inside a one_of's
 // branches as at the top (§5). The rule's value is not touched.
-func (f *stepFacts) blockers(bs []plan.Blocking) ([]Blocker, int) {
+func stepBlockers(f *stepFacts, bs []plan.Blocking) ([]Blocker, int) {
 	b := &itemBudget{left: explainItems}
-	out := f.within(bs, b)
+	out := stepWithin(f, bs, b)
 	if f.err != nil {
 		return nil, 0
 	}
@@ -209,7 +209,7 @@ type itemBudget struct {
 	full          bool
 }
 
-func (f *stepFacts) within(bs []plan.Blocking, b *itemBudget) []Blocker {
+func stepWithin(f *stepFacts, bs []plan.Blocking, b *itemBudget) []Blocker {
 	out := []Blocker{}
 	for _, x := range bs {
 		if f.err != nil {
@@ -222,7 +222,7 @@ func (f *stepFacts) within(bs []plan.Blocking, b *itemBudget) []Blocker {
 			branches := make([][]Blocker, len(x.OneOf))
 			shown := false
 			for i, br := range x.OneOf {
-				branches[i] = f.within(br, b)
+				branches[i] = stepWithin(f, br, b)
 				shown = shown || len(branches[i]) > 0
 			}
 			if shown { // a one_of with nothing left in any branch says nothing: its blockers are counted

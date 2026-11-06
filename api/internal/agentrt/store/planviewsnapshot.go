@@ -114,7 +114,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	finished := []any{}
 	linked := map[string][]map[string]any{}
 	for _, e := range ext {
-		e["verification"] = snap.externalVerification(e["external_work_id"].(string))
+		e["verification"] = snapshotExternalVerification(snap, e["external_work_id"].(string))
 		task, _ := e["task_id"].(string)
 		if task != "" {
 			linked[task] = append(linked[task], e)
@@ -129,11 +129,11 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		}
 	}
 	for _, t := range tasks {
-		if l := snap.taskLanding(t["task_id"].(string)); l != nil {
+		if l := snapshotTaskLanding(snap, t["task_id"].(string)); l != nil {
 			t["landing"] = l
 		}
 		if t["state"] == "accepted" {
-			t["delivery"] = "Accepted · " + snap.taskDelivery(t["task_id"].(string))
+			t["delivery"] = "Accepted · " + snapshotTaskDelivery(snap, t["task_id"].(string))
 		}
 		if t["state"] == "awaiting_owner" {
 			ownerWaiting = append(ownerWaiting, map[string]any{"task_id": t["task_id"], "plan_node_id": t["plan_node_id"], "reason": "Runtime task awaits Owner", "source": "agentrt.task"})

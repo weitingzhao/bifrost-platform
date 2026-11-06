@@ -261,7 +261,7 @@ func TestExplainBudget(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s not supported", doc)
 		}
-		return f.blockers(node.Blocking())
+		return stepBlockers(f, node.Blocking())
 	}
 	// any(step_landed) with 51: one one_of, 50 shown, 1 counted.
 	out, omitted := run(`{"any":[{"step_landed":{}}]}`, map[string]int{plan.AtomStepLanded: 51})
@@ -307,7 +307,7 @@ func TestExplainBudgetStopsOnCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _, _ := r.Explain(exNone{})
-	out, omitted := f.blockers(n.Blocking())
+	out, omitted := stepBlockers(f, n.Blocking())
 	if !errors.Is(f.err, context.Canceled) || out != nil || omitted != 0 {
 		t.Fatalf("after a cancel: err %v, %d shown, %d omitted", f.err, len(out), omitted)
 	}
