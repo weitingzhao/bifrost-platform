@@ -71,6 +71,10 @@ func ciRunSpec(name, revision, repo string) map[string]any {
 	}
 	if name == "bifrost-ci-platform" {
 		params = append(params, map[string]any{"name": "repo-url", "value": platformCIRepoURL})
+		// The webhook trigger passes the commit a push moved from (infra
+		// trigger-trade-ci.yaml, R5:5.7 CI time); a run started here names
+		// none, so it tests the whole suite.
+		params = append(params, map[string]any{"name": "base", "value": ""})
 	}
 	size := "2Gi"
 	if name == "bifrost-ci-frontend" {
