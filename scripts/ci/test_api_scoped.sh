@@ -12,11 +12,13 @@ trap 'rm -rf "$tmp"' EXIT
 scope=full
 packages=
 store_run=
+guard_packages=
+guard_run=
 why='API_SCOPE_REQUEST=full'
 if [[ ${API_SCOPE_REQUEST:-} != full ]]; then
   if go run ./cmd/testscope -module . "${1:-}" "${2:-}" > "$tmp/scope"; then
     while IFS='=' read -r key value; do
-      case "$key" in scope) scope=$value ;; packages) packages=$value ;; store_run) store_run=$value ;; why) why=$value ;; esac
+      case "$key" in scope) scope=$value ;; packages) packages=$value ;; store_run) store_run=$value ;; guard_packages) guard_packages=$value ;; guard_run) guard_run=$value ;; why) why=$value ;; esac
     done < "$tmp/scope"
   else
     why='testscope command failed'
@@ -24,10 +26,10 @@ if [[ ${API_SCOPE_REQUEST:-} != full ]]; then
 fi
 [[ $scope == incremental ]] || scope=full
 if [[ -n ${API_SCOPE_RESULT:-} ]]; then printf '%s' "$scope" > "$API_SCOPE_RESULT"; fi
-printf 'scope=%s\npackages=%s\nstore_run=%s\nwhy=%s\n' "$scope" "$packages" "$store_run" "$why"
+printf 'scope=%s\npackages=%s\nstore_run=%s\nguard_packages=%s\nguard_run=%s\nwhy=%s\n' "$scope" "$packages" "$store_run" "$guard_packages" "$guard_run" "$why"
 status=0
 run_tests() {
-  go test -json "$@" > "$tmp/part" 2>&1 || status=1
+  go test -json -count=1 "$@" > "$tmp/part" 2>&1 || status=1
   cat "$tmp/part"
   cat "$tmp/part" >> "$tmp/events"
 }
@@ -54,6 +56,10 @@ else
     if [[ $p == */internal/agentrt/store ]]; then store=$p; else rest+=("$p"); fi
   done
   if [[ $part != store ]] && (( ${#rest[@]} )); then run_tests "${rest[@]}"; fi
+  if [[ $part != store && -n $guard_packages ]]; then
+    read -r -a guards <<< "$guard_packages"
+    run_tests "${guards[@]}" -run "$guard_run"
+  fi
   if [[ $part != rest && -n $store ]]; then
     if [[ -n $store_run ]]; then run_tests "$store" -run "$store_run"; else run_tests "$store"; fi
   fi

@@ -19,13 +19,13 @@ import (
 	"unicode/utf8"
 )
 
-type Result struct{ Scope, Packages, StoreRun, Why string }
+type Result struct{ Scope, Packages, StoreRun, GuardPackages, GuardRun, Why string }
 
 func Full(why string) Result {
 	return Result{Scope: "full", Why: strings.Join(strings.Fields(why), " ")}
 }
 func (r Result) Write(w io.Writer) {
-	fmt.Fprintf(w, "scope=%s\npackages=%s\nstore_run=%s\nwhy=%s\n", r.Scope, r.Packages, r.StoreRun, r.Why)
+	fmt.Fprintf(w, "scope=%s\npackages=%s\nstore_run=%s\nguard_packages=%s\nguard_run=%s\nwhy=%s\n", r.Scope, r.Packages, r.StoreRun, r.GuardPackages, r.GuardRun, r.Why)
 }
 
 type Change struct {
@@ -294,11 +294,17 @@ func walks(f *ast.File) bool {
 	})
 	return found
 }
-func guards(g *graph) (map[string]bool, error) {
-	out := map[string]bool{}
-	for p := range ExplicitGuards {
+
+type guard struct {
+	names []string
+	whole bool
+}
+
+func guards(g *graph) (map[string]*guard, error) {
+	out := map[string]*guard{}
+	for p, names := range ExplicitGuards {
 		if g.packages[g.prefix+"/"+p] != nil {
-			out[g.prefix+"/"+p] = true
+			out[g.prefix+"/"+p] = &guard{names: append([]string(nil), names...)}
 		}
 	}
 	for name, p := range g.packages {
@@ -313,7 +319,14 @@ func guards(g *graph) (map[string]bool, error) {
 					return nil, e
 				}
 				if walks(f) {
-					out[name] = true
+					if out[name] == nil {
+						out[name] = &guard{}
+					}
+					names := testNames(f)
+					out[name].names = append(out[name].names, names...)
+					if len(names) == 0 {
+						out[name].whole = true
+					}
 				}
 			}
 		}
@@ -380,10 +393,11 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 			files[name] = append(files[name], filepath.Base(p))
 		}
 	}
-	selected, e := guards(g)
+	guardTests, e := guards(g)
 	if e != nil {
 		return Full("guard scan error: " + e.Error())
 	}
+	selected := map[string]bool{}
 	for p := range g.packages {
 		if changed[p] {
 			selected[p] = true
@@ -395,6 +409,9 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 		}
 	}
 	store := g.prefix + "/internal/agentrt/store"
+	if guardTests[store] != nil {
+		selected[store] = true
+	}
 	code := selected[store]
 	why := "changed packages, test dependents, and guards"
 	readers := map[string]map[string]bool{}
@@ -423,6 +440,27 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 			return Full("store selection error: " + e.Error())
 		}
 	}
+	var guardPackages, guardNames []string
+	unique := map[string]bool{}
+	for p, tests := range guardTests {
+		if selected[p] || tests.whole || p == store {
+			selected[p] = true
+			continue
+		}
+		guardPackages = append(guardPackages, p)
+		for _, name := range tests.names {
+			unique[name] = true
+		}
+	}
+	for name := range unique {
+		guardNames = append(guardNames, name)
+	}
+	sort.Strings(guardPackages)
+	sort.Strings(guardNames)
+	guardRun := ""
+	if len(guardNames) > 0 {
+		guardRun = "^(" + strings.Join(guardNames, "|") + ")$"
+	}
 	var names []string
 	for p := range selected {
 		if g.packages[p] != nil {
@@ -430,5 +468,5 @@ func SelectChanges(module string, r io.Reader) (result Result) {
 		}
 	}
 	sort.Strings(names)
-	return Result{"incremental", strings.Join(names, " "), run, why}
+	return Result{Scope: "incremental", Packages: strings.Join(names, " "), StoreRun: run, GuardPackages: strings.Join(guardPackages, " "), GuardRun: guardRun, Why: why}
 }
