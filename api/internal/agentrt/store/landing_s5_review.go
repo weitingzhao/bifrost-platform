@@ -11,15 +11,18 @@ import (
 
 // Read the latest review, INCLUDING fail and unbound rows. An inner join or
 // verdict='pass' predicate here would resurrect an earlier authorization.
+// An attempt accepted by a check that is no review (precheck ci: on
+// submission, or a deterministic pass; R5:5.7-9) binds its acceptance alone
+// (NoReview): no review is read.
 func readS5Review(ctx context.Context, tx pgx.Tx, f landing.Facts) (landing.ReviewBinding, error) {
 	b := landing.ReviewBinding{Repo: f.Repo, Task: f.Task, AcceptedAttempt: f.Attempt, A: f.A, Base: f.Base}
-	var accepted, commit, host, hostKind string
-	err := tx.QueryRow(ctx, `SELECT v.verification_id, COALESCE(v.attempt_id,''), COALESCE(a.pushed_commit,''),
+	var accepted, commit, host, hostKind, method string
+	err := tx.QueryRow(ctx, `SELECT v.verification_id, v.method, COALESCE(v.attempt_id,''), COALESCE(a.pushed_commit,''),
  COALESCE(a.attempt_id,''), COALESCE(a.executor_actor_id,''), COALESCE(a.model_provider,''), COALESCE(a.host_id,''), COALESCE(h.host_kind,'')
  FROM agentrt.verification v LEFT JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id AND a.task_id=v.task_id
  LEFT JOIN agentrt.host h ON h.host_id=a.host_id
  WHERE v.task_id=$1 AND v.accepts_attempt ORDER BY v.created_at DESC,v.verification_id DESC LIMIT 1`, f.Task).
-		Scan(&b.AcceptanceVerificationID, &accepted, &commit, &b.ImplementerAttempt, &b.ImplementerExecutor, &b.ImplementerProvider, &host, &hostKind)
+		Scan(&b.AcceptanceVerificationID, &method, &accepted, &commit, &b.ImplementerAttempt, &b.ImplementerExecutor, &b.ImplementerProvider, &host, &hostKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		b.Problem = "S5_REVIEW_BINDING"
 		return b, nil
@@ -38,6 +41,10 @@ func readS5Review(ctx context.Context, tx pgx.Tx, f landing.Facts) (landing.Revi
 		if e != nil || entry.Executor != b.ImplementerExecutor || entry.Provider != b.ImplementerProvider {
 			b.Problem = "S5_REVIEW_PROVIDER"
 		}
+	}
+	if method != "review" {
+		b.NoReview = true
+		return b, nil
 	}
 	var target, subjectCommit, subjectTask, role, mission, reviewHost string
 	var body []byte

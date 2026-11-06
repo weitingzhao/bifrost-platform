@@ -244,7 +244,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 
 	// The check: the subject's setup, then infra's command on the pushed
 	// commit, from the checkout, the environment first on PATH.
-	check, err := store.StartVerification(ctx, pool, impl.TaskID)
+	check, err := startVerify(ctx, pool, impl.TaskID)
 	if err != nil || check == "" {
 		t.Fatalf("verification: %q %v", check, err)
 	}
@@ -281,7 +281,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 	if got := lines[len(want)]; got != "cache|"+checkTmp+"|"+checkTmp+"/go-build" {
 		t.Fatalf("the check's cache: %q (its temporary directory is %s)", got, checkTmp)
 	}
-	if did, err := store.Conclude(ctx, pool, check); err != nil || did != "review" {
+	if did, err := store.ConcludeWith(ctx, pool, check, verifyMode); err != nil || did != "review" {
 		t.Fatalf("conclude: %q %v", did, err)
 	}
 	if len(cards) != 0 {

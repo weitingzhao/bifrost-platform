@@ -40,7 +40,7 @@ const ParkedLongAfter = 2 * time.Hour
 
 // LandingCardTriggers lists the triggers that apply now on repo's landing
 // stream, at most one kind per event: root_failed (not declined, main_lost or
-// floor), floor, ok_missing, late_landing, repo_stopped, ci_stuck and
+// floor, nor a red CI that sent its root back for another round), floor, ok_missing, late_landing, repo_stopped, ci_stuck and
 // parked_long (not ci_stuck or rule; two hours into the park). A failed root
 // whose mission is no longer active, or no_merge, has no card.
 func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.Time) ([]CardTrigger, error) {
@@ -202,6 +202,17 @@ func landingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			}
 			if !active {
 				continue
+			}
+			// A red CI that sent its root back for another round is the
+			// root's own rework, not the Owner's card (precheck.go).
+			if o.Outcome == "ci_red" {
+				reworked, err := landingCIReworked(ctx, tx, o.Task, op)
+				if err != nil {
+					return nil, err
+				}
+				if reworked {
+					continue
+				}
 			}
 			t := CardTrigger{Kind: CardRootFailed, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: o.Outcome, Choices: []string{"do_not_merge", "wait"}}
 			switch {

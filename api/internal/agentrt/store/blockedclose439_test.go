@@ -79,7 +79,7 @@ func (w *world) stalled(t *testing.T, tries *atomic.Int32) {
 }
 
 // Review 439 A1: a task made in the mission while the close read its tasks
-// (a check StartVerification makes under the work's lock, then commits) is
+// (a check StartVerificationWith makes under the work's lock, then commits) is
 // cancelled with the rest, not left ready in a mission that ended.
 // Serial: it holds the package's test hook (SetHook).
 func TestCloseMissionTakesALateTask(t *testing.T) {

@@ -125,13 +125,13 @@ func Test695PinnedReviewClaim(t *testing.T) {
 			ok(t, err)
 			_, err = store.Submit(ctx, w.rt, r.fence)
 			ok(t, err)
-			v, err := store.StartVerification(ctx, w.rt, r.task)
+			v, err := startVerify(ctx, w.rt, r.task)
 			ok(t, err)
 			vc := w.run(t, "h1", deterministic, "done")
 			if vc.TaskID != v {
 				t.Fatalf("claimed verification %s, want %s", vc.TaskID, v)
 			}
-			did, err := store.Conclude(ctx, w.rt, v)
+			did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 			ok(t, err)
 			if did != "review" {
 				t.Fatalf("conclude: %s", did)

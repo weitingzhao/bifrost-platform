@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,17 @@ import (
 )
 
 var deterministic = store.Tool{Executor: "exec:deterministic", Provider: "local"}
+
+// verifyMode is precheck verify (store/precheck.go): the deterministic
+// check, then a review. The tests of that path ask for it; the default,
+// precheck ci, has its own (precheck_test.go).
+var verifyMode = store.ConcludeOptions{Precheck: store.PrecheckVerify}
+
+// startVerify starts task's deterministic check with precheck verify.
+func startVerify(ctx context.Context, db store.DB, task string) (string, error) {
+	id, _, err := store.StartVerificationWith(ctx, db, task, verifyMode)
+	return id, err
+}
 
 // run claims the next task tool may take on host and carries it through to
 // submit with the given conclusion; a branch task pushes its own branch.
@@ -92,7 +104,7 @@ func TestAcceptanceFlow(t *testing.T) {
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
 	ic := w.run(t, "h1", cursor, "done")
 
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if v == "" || w.state(t, "task", impl) != "verifying" || w.state(t, "task", v) != "ready" {
 		t.Fatalf("verification task %q; implementation %s", v, w.state(t, "task", impl))
@@ -104,7 +116,7 @@ func TestAcceptanceFlow(t *testing.T) {
 		pin["task_spec"] != implSpec || fmt.Sprint(pin["round"]) != "1" || pin["repo"] != "bifrost-platform" {
 		t.Fatalf("the verification's spec pins %v", pin)
 	}
-	again, err := store.StartVerification(ctx, w.rt, impl)
+	again, err := startVerify(ctx, w.rt, impl)
 	if err != nil || again != "" {
 		t.Fatalf("a second start made %q (%v)", again, err)
 	}
@@ -113,12 +125,12 @@ func TestAcceptanceFlow(t *testing.T) {
 	if vc.TaskID != v || vc.Repo != "bifrost-platform" || vc.BaseCommit != commitA {
 		t.Fatalf("the verification's claim = %+v; want the subject's repository at its commit", vc)
 	}
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" || w.state(t, "task", v) != "accepted" || w.state(t, "task", impl) != "verifying" {
 		t.Fatalf("conclude did %q", did)
 	}
-	if did, err = store.Conclude(ctx, w.rt, v); err != nil || did != "" {
+	if did, err = store.ConcludeWith(ctx, w.rt, v, verifyMode); err != nil || did != "" {
 		t.Fatalf("a second conclude did %q (%v)", did, err)
 	}
 	review := w.checker(t, impl, "review")
@@ -127,7 +139,7 @@ func TestAcceptanceFlow(t *testing.T) {
 	if rc.TaskID != review || rc.Repo != "bifrost-platform" || rc.BaseCommit != commitA || w.checkSpec(t, review)["attempt"] != ic.AttemptID {
 		t.Fatalf("review claim = %+v", rc)
 	}
-	did, err = store.Conclude(ctx, w.rt, review)
+	did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "accepted" || w.state(t, "task", impl) != "accepted" || w.state(t, "task", review) != "accepted" {
 		t.Fatalf("conclude did %q; implementation %s", did, w.state(t, "task", impl))
@@ -162,7 +174,7 @@ func TestCoreWorkIsAccepted(t *testing.T) {
 	if ic.TaskID != impl {
 		t.Fatalf("claude claimed %s", ic.TaskID)
 	}
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if c := w.claim(t, "h2", store.LeaseTTL, claude, cursor); c != nil {
 		t.Fatalf("the verification of core work went to %s", c.Tool.Executor)
@@ -171,7 +183,7 @@ func TestCoreWorkIsAccepted(t *testing.T) {
 	if vc.TaskID != v {
 		t.Fatalf("the check claimed %s, not the verification %s", vc.TaskID, v)
 	}
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" {
 		t.Fatalf("conclude did %q", did)
@@ -184,7 +196,7 @@ func TestCoreWorkIsAccepted(t *testing.T) {
 	if rc.TaskID != review {
 		t.Fatalf("codex claimed %s, not the review %s", rc.TaskID, review)
 	}
-	if did, err = store.Conclude(ctx, w.rt, review); err != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
+	if did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode); err != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
 		t.Fatalf("conclude did %q (%v); implementation %s", did, err, w.state(t, "task", impl))
 	}
 }
@@ -216,7 +228,7 @@ func TestCoreVerificationRoutedBeforeIsRoutedAgain(t *testing.T) {
 	const check = "verifier/exec:deterministic/local/*"
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform", Core: true})
 	w.run(t, "h1", claude, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	fingerprint := func(rec map[string]any) string {
 		doc, eerr := canon.Encode(rec)
@@ -271,10 +283,10 @@ func TestAcceptanceRework(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "failed")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	var round int
 	ok(t, w.rt.QueryRow(ctx, `SELECT round_no FROM agentrt.task WHERE task_id = $1`, impl).Scan(&round))
@@ -286,15 +298,15 @@ func TestAcceptanceRework(t *testing.T) {
 	if second.TaskID != impl || second.AttemptNo != 2 {
 		t.Fatalf("round 2 claim = %+v", second)
 	}
-	v2, err := store.StartVerification(ctx, w.rt, impl)
+	v2, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h4", deterministic, "done")
-	if did, err = store.Conclude(ctx, w.rt, v2); err != nil || did != "review" {
+	if did, err = store.ConcludeWith(ctx, w.rt, v2, verifyMode); err != nil || did != "review" {
 		t.Fatalf("round 2 verification: %q (%v)", did, err)
 	}
 	review := w.checker(t, impl, "review")
 	w.run(t, "h5", codex, "failed")
-	if did, err = store.Conclude(ctx, w.rt, review); err != nil || did != "blocked" || w.state(t, "task", impl) != "blocked" {
+	if did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode); err != nil || did != "blocked" || w.state(t, "task", impl) != "blocked" {
 		t.Fatalf("a failed review in the last round: %q (%v), implementation %s", did, err, w.state(t, "task", impl))
 	}
 	for _, v := range w.verifications(t, impl) {
@@ -314,7 +326,7 @@ func TestConcludeOnce(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	impl := w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
 	var wg sync.WaitGroup
@@ -324,7 +336,7 @@ func TestConcludeOnce(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			dids[i], errs[i] = store.Conclude(ctx, pool, v)
+			dids[i], errs[i] = store.ConcludeWith(ctx, pool, v, verifyMode)
 		}(i)
 	}
 	wg.Wait()
@@ -347,10 +359,10 @@ func TestConcludeOnce(t *testing.T) {
 func TestFailFirstVerifySwitch(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	on := store.ConcludeOptions{FailFirstVerify: true}
+	on := store.ConcludeOptions{FailFirstVerify: true, Precheck: store.PrecheckVerify}
 	impl := w.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
 	did, err := store.ConcludeWith(ctx, w.rt, v, on)
@@ -376,7 +388,7 @@ func TestFailFirstVerifySwitch(t *testing.T) {
 		t.Fatalf("the verification row says %q %q; want the switch and stg", rowRef, rowEnv)
 	}
 	w.run(t, "h3", cursor, "done")
-	v2, err := store.StartVerification(ctx, w.rt, impl)
+	v2, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h4", deterministic, "done")
 	if did, err = store.ConcludeWith(ctx, w.rt, v2, on); err != nil || did != "review" {
@@ -387,10 +399,10 @@ func TestFailFirstVerifySwitch(t *testing.T) {
 	w2 := newKernelWorld(t)
 	other := w2.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})
 	w2.run(t, "h1", cursor, "done")
-	v3, err := store.StartVerification(ctx, w2.rt, other)
+	v3, err := startVerify(ctx, w2.rt, other)
 	ok(t, err)
 	w2.run(t, "h2", deterministic, "done")
-	if did, err = store.Conclude(ctx, w2.rt, v3); err != nil || did != "review" {
+	if did, err = store.ConcludeWith(ctx, w2.rt, v3, verifyMode); err != nil || did != "review" {
 		t.Fatalf("without the switch: %q (%v)", did, err)
 	}
 }

@@ -48,5 +48,8 @@
     "update_data_clone_schedule",
     "void_exam_paper",
     "wake_compute_node"
-  ]
+  ],
+  "descriptions": {
+    "owner_run_command": "Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead."
+  }
 }

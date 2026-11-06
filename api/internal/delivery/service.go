@@ -1505,11 +1505,11 @@ func (s *Service) fetchGiteaCompareFiles(ctx context.Context, repo, from, to, us
 
 // platformDeclaredDeliverTasks are the platform pipelines' tasks that run as
 // tekton-deliver once the installed Pipeline declares them: PROD's source gate
-// (W-56) and STG's agentrt migration Job (TD-411; its Role in bifrost-platform-stg
-// binds tekton-deliver, and on cicd's default ServiceAccount the first real run
-// was refused creating the Job, 2026-10-22 02:01Z).
+// (W-56) and the agentrt migration Job in STG and PROD (TD-411; PROD now as STG).
+// The migration Job's Role binds tekton-deliver; STG's first real run on cicd's
+// default ServiceAccount was refused creating the Job, 2026-10-22 02:01Z.
 var platformDeclaredDeliverTasks = map[string][]string{
-	"bifrost-deliver-platform-prod": {"check-source"},
+	"bifrost-deliver-platform-prod": {"check-source", "agentrt-migrate"},
 	"bifrost-deliver-platform":      {"agentrt-migrate"},
 }
 

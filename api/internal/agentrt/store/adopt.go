@@ -14,7 +14,8 @@ import (
 // lease stays lost; once the grace has passed its host may salvage its
 // result, which persists it (Salvage). The controller checks that result as
 // it checks a submitted one: a deterministic verification pinned to the lost
-// attempt, then a review, their specs marked salvage. A passing review
+// attempt, then, with precheck verify, a review, their specs marked salvage.
+// The pass that accepts (the review's, else the deterministic check's)
 // accepts the lost attempt, and the same transaction cancels the task's live
 // new attempt, if there is one (attempt_cancelled), and accepts the task:
 // one accepted attempt, nothing left running for it. The task does not move
@@ -198,9 +199,10 @@ func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd 
 	return "", nil
 }
 
-// adopt accepts the salvaged attempt: the subject's live attempt (locked
-// before the subject) is cancelled, and the subject is accepted.
-func adopt(ctx context.Context, tx pgx.Tx, s taskRow, accepted, live string) error {
+// adopt accepts the salvaged attempt, whose check (role) passed: the
+// subject's live attempt (locked before the subject) is cancelled, and the
+// subject is accepted.
+func adopt(ctx context.Context, tx pgx.Tx, s taskRow, accepted, live, role string) error {
 	if live != "" {
 		if err := attemptEvent(ctx, tx, "controller", attemptRow{id: live, task: s.id}, "attempt_cancelled",
 			map[string]any{"reason": "the salvaged result of attempt " + accepted + " was accepted", "accepted_attempt": accepted}); err != nil {
@@ -211,5 +213,9 @@ func adopt(ctx context.Context, tx pgx.Tx, s taskRow, accepted, live string) err
 		}
 		hook("cancelled", live)
 	}
-	return moveTaskBy(ctx, tx, "controller", s, "accepted", "the salvaged result of attempt "+accepted+" passed review", adoptMoves)
+	passed := "review"
+	if role == "verify" {
+		passed = "deterministic verification"
+	}
+	return moveTaskBy(ctx, tx, "controller", s, "accepted", "the salvaged result of attempt "+accepted+" passed "+passed, adoptMoves)
 }

@@ -5,11 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
@@ -159,7 +156,6 @@ type GrantCandidate struct {
 	STGRelease       bool              `json:"stg_release"`
 	HardCorePaths    []GrantHardPath   `json:"hard_core_paths"`
 	DecisionChain    bool              `json:"decision_chain"`
-	TrustReview      bool              `json:"trust_review"`
 }
 
 func sumOf(v any) (string, error) {
@@ -223,7 +219,6 @@ type grantDB struct {
 	latest     bool
 	acceptance []GrantAcceptance
 	review     GrantReview
-	reviewBody []byte
 	rule       GrantRule
 	enabled    bool
 	grants     []*grantView
@@ -250,7 +245,7 @@ func readGrantDB(ctx context.Context, tx pgx.Tx, src LandingSource, op string, n
 	if err = tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id,'') FROM agentrt.task WHERE task_id=$1`, o.Task).Scan(&d.step); err != nil {
 		return d, err
 	}
-	if d.acceptance, d.review, d.reviewBody, err = readGrantChecks(ctx, tx, o.Task, o.Attempt); err != nil {
+	if d.acceptance, d.review, err = readGrantChecks(ctx, tx, o.Task, o.Attempt); err != nil {
 		return d, err
 	}
 	if r := d.facts.Rule; r != nil {
@@ -285,115 +280,33 @@ func grantEnabled(ctx context.Context, tx pgx.Tx, tenant, repo string) (bool, er
 }
 
 // readGrantChecks: the accepted attempt's checks (acceptance) and its latest
-// passing review, with the review's evidence body for the trust questions.
-func readGrantChecks(ctx context.Context, tx pgx.Tx, task, attempt string) ([]GrantAcceptance, GrantReview, []byte, error) {
+// passing review, if it had one (precheck verify; none with precheck ci).
+func readGrantChecks(ctx context.Context, tx pgx.Tx, task, attempt string) ([]GrantAcceptance, GrantReview, error) {
 	acc := []GrantAcceptance{}
 	var rev GrantReview
 	if attempt == "" {
-		return acc, rev, nil, nil
+		return acc, rev, nil
 	}
 	rows, err := tx.Query(ctx, `SELECT verification_id, verdict FROM agentrt.verification WHERE task_id=$1 AND attempt_id=$2 AND method<>'review' ORDER BY verification_id`, task, attempt)
 	if err != nil {
-		return nil, rev, nil, err
+		return nil, rev, err
 	}
 	acc, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (GrantAcceptance, error) {
 		var a GrantAcceptance
 		return a, r.Scan(&a.VerificationID, &a.Result)
 	})
 	if err != nil {
-		return nil, rev, nil, err
+		return nil, rev, err
 	}
-	var body []byte
-	err = tx.QueryRow(ctx, `SELECT a.task_id, a.attempt_id, a.executor_actor_id, COALESCE(a.model_provider,''), v.verdict, v.evidence_artifact_id, COALESCE(b.body,''::bytea)
+	err = tx.QueryRow(ctx, `SELECT a.task_id, a.attempt_id, a.executor_actor_id, COALESCE(a.model_provider,''), v.verdict, v.evidence_artifact_id
 	  FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id=v.verifier_attempt_id
-	  LEFT JOIN agentrt.artifact_blob b ON b.artifact_id=v.evidence_artifact_id
 	  WHERE v.task_id=$1 AND v.attempt_id=$2 AND v.method='review' AND v.verdict='pass'
-	  ORDER BY v.created_at DESC, v.verification_id DESC LIMIT 1`, task, attempt).Scan(&rev.Task, &rev.Attempt, &rev.Executor, &rev.Provider, &rev.Conclusion, &rev.Artifact, &body)
+	  ORDER BY v.created_at DESC, v.verification_id DESC LIMIT 1`, task, attempt).Scan(&rev.Task, &rev.Attempt, &rev.Executor, &rev.Provider, &rev.Conclusion, &rev.Artifact)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return acc, GrantReview{}, nil, nil
+		return acc, GrantReview{}, nil
 	}
-	return acc, rev, body, err
+	return acc, rev, err
 }
-
-var (
-	trustHeading = regexp.MustCompile(`(?i)^#{2,3}\s*trust chain answers\s*$`)
-	trustLine    = regexp.MustCompile(`^(?:[-*]\s+)?\**T([1-4])\**\s*:\s*(.*)$`)
-	trustAnswer  = regexp.MustCompile(`(?i)^\**(yes|no)\b\**[\s,.;:\x{2014}\x{2013}-]+(\S.{11,})$`)
-)
-
-// trustAnswered: the review's evidence ends in the trust chain's answer
-// section (store.TrustReviewText): under the heading "## Trust chain
-// answers", exactly one line for each of T1-T4, each Yes or No followed by
-// at least a dozen characters of explanation that is not a question and
-// does not copy a question (§12.2 item 3, review 694 B-02). It rejects the
-// question text alone, an unrelated numbered list, a missing or empty
-// answer. Its boundary, stated: it proves four structured answers exist,
-// not that they are true, nor that the reviewer read the diff; that rests
-// on the reviewer being another vendor and on the Owner's own check.
-func trustAnswered(body []byte) bool {
-	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
-	start := -1
-	for i, l := range lines {
-		if trustHeading.MatchString(strings.TrimSpace(l)) {
-			start = i + 1
-		}
-	}
-	if start < 0 {
-		return false
-	}
-	seen := map[string]bool{}
-	for _, l := range lines[start:] {
-		l = strings.TrimSpace(l)
-		if strings.HasPrefix(l, "#") {
-			break
-		}
-		m := trustLine.FindStringSubmatch(l)
-		if m == nil {
-			continue
-		}
-		if seen[m[1]] || !trustAnswerValid(m[2]) {
-			return false
-		}
-		seen[m[1]] = true
-	}
-	return len(seen) == 4
-}
-
-func trustAnswerValid(answer string) bool {
-	m := trustAnswer.FindStringSubmatch(strings.TrimSpace(answer))
-	if m == nil {
-		return false
-	}
-	why := strings.ToLower(strings.TrimSpace(m[2]))
-	if strings.HasSuffix(why, "?") || strings.HasPrefix(why, "<") || strings.HasPrefix(why, "...") {
-		return false
-	}
-	for _, q := range trustQuestions {
-		if strings.Contains(why, q) {
-			return false
-		}
-	}
-	// Review 698 N-02: obvious placeholders are not answers — a bracketed
-	// or angled blank, an ellipsis, TBD/TODO-like fillers, the prompt's own
-	// example, an explanation of fewer than three distinct words.
-	if strings.ContainsAny(why, "[]<>…") || strings.Contains(why, "...") || strings.Contains(why, trustExample) {
-		return false
-	}
-	words := map[string]bool{}
-	for _, w := range strings.FieldsFunc(why, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
-		if slices.Contains(trustFillers, w) {
-			return false
-		}
-		words[w] = true
-	}
-	return len(words) >= 3
-}
-
-// trustExample is the example answer TrustReviewText gives, which is no
-// answer; trustFillers are words that only stand in for one.
-const trustExample = "the token is still read from"
-
-var trustFillers = []string{"tbd", "todo", "tba", "fixme", "xxx", "placeholder", "lorem", "ipsum"}
 
 // grantExt is the external half: the result's diff, R's patch and R's CI.
 type grantExt struct {
@@ -431,7 +344,7 @@ func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 }
 
 // buildCandidate composes candidate_digest's inputs.
-func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc []GrantAcceptance, rev GrantReview, trust bool,
+func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc []GrantAcceptance, rev GrantReview,
 	patch GrantPatch, ci GrantCIEvidence, key *GrantCIKey, stg bool) GrantCandidate {
 	siblings := map[string]string{}
 	if key != nil {
@@ -440,7 +353,7 @@ func buildCandidate(f landing.Facts, step, op string, o landing.Operation, acc [
 	c := GrantCandidate{Env: "prod", Tenant: f.Tenant, Repo: f.Repo, Mission: f.Mission, PlanStep: step, Task: f.Task, Attempt: o.Attempt,
 		Op: op, A: o.A, Base: f.Base, R: o.R, M0: o.M0, CommitterDate: o.CommitterDate.UTC().Format(time.RFC3339Nano),
 		Changes: []GrantChange{}, PatchSHA256: patch.SHA256, Files: len(f.Changes), Acceptance: acc, Review: rev,
-		ReviewPatchMatch: patch.Match, STGRelease: stg, HardCorePaths: []GrantHardPath{}, TrustReview: trust,
+		ReviewPatchMatch: patch.Match, STGRelease: stg, HardCorePaths: []GrantHardPath{},
 		CI: GrantCandidateCI{Pipeline: ci.Pipeline, Run: ci.Run, UID: ci.UID, CreatedAt: ci.CreatedAt.UTC().Format(time.RFC3339Nano),
 			Status: ci.Status, SHA: ci.Candidate, Siblings: siblings}}
 	if c.Acceptance == nil {
@@ -494,8 +407,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		problem("no_soft_failure")
 	}
 	m.Action = GrantActionFor(m.SoftAtRequest)
-	trust := m.Action == ActionCoreLanding && trustAnswered(d.reviewBody)
-	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, trust, x.patch, x.ci, d.ciKey, stg)
+	m.Candidate = buildCandidate(f, d.step, d.opID, d.op, d.acceptance, d.review, x.patch, x.ci, d.ciKey, stg)
 	var err error
 	if m.CandidateDigest, err = m.Candidate.Digest(); err != nil {
 		return nil, err
@@ -517,12 +429,6 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	}
 	if m.Action == ActionGuardrailLanding && !m.Pinned {
 		problem("not_pinned") // §3.4: only a pinned root waits on soft failures alone
-	}
-	if d.review.Task == "" {
-		problem("review_missing")
-	}
-	if m.Action == ActionCoreLanding && !trust {
-		problem("trust_review_missing")
 	}
 	if !x.patch.Match {
 		problem("patch_changed")

@@ -114,17 +114,17 @@ func passReal704(t *testing.T, w *world, root, sha string) {
 	ok(t, err)
 	_, err = store.Submit(ctx, w.rt, f)
 	ok(t, err)
-	v, err := store.StartVerification(ctx, w.rt, root)
+	v, err := startVerify(ctx, w.rt, root)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
-	did, err := store.Conclude(ctx, w.rt, v)
+	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 	ok(t, err)
 	if did != "review" {
 		t.Fatal(did)
 	}
 	review := w.checker(t, root, "review")
 	w.run(t, "h3", codex, "done")
-	did, err = store.Conclude(ctx, w.rt, review)
+	did, err = store.ConcludeWith(ctx, w.rt, review, verifyMode)
 	ok(t, err)
 	if did != "accepted" {
 		t.Fatal(did)

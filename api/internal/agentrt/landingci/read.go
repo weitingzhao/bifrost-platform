@@ -26,6 +26,10 @@ type Client struct {
 	Namespace string
 	Dynamic   func() (dynamic.Interface, error)
 	ConfigMap func(context.Context, string) (map[string]string, bool, error)
+	// Logs reads the end of a container's log in a pod of Namespace, for
+	// a red run's failure (Failure); nil, the failure is told by its
+	// messages alone.
+	Logs func(ctx context.Context, pod, container string) (string, error)
 }
 
 func (c *Client) namespace() string {

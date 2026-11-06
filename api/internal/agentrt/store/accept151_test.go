@@ -129,7 +129,7 @@ func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
 	}
 	done := make(chan started, 1)
 	go func() {
-		id, err := store.StartVerification(ctx, pool, impl)
+		id, err := startVerify(ctx, pool, impl)
 		done <- started{id, err}
 	}()
 	w.waitFor(t, "FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE", time.Now().Add(10*time.Second))
@@ -141,7 +141,7 @@ func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
 	if got.id != "" || w.state(t, "task", impl) != "submitted" {
 		t.Fatalf("started %q across a move", got.id)
 	}
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if v == "" {
 		t.Fatal("the next pass did not start the verification")
@@ -151,7 +151,7 @@ func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
 	m = w.migration(t, pool, s3, s1)
 	concluded := make(chan started, 1)
 	go func() {
-		did, concludeErr := store.Conclude(ctx, pool, v)
+		did, concludeErr := store.ConcludeWith(ctx, pool, v, verifyMode)
 		concluded <- started{did, concludeErr}
 	}()
 	w.waitFor(t, "FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE", time.Now().Add(10*time.Second))
@@ -165,7 +165,7 @@ func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
 	if got.id != "" || w.state(t, "task", v) != "submitted" {
 		t.Fatalf("concluded %q across a move", got.id)
 	}
-	if did, err := store.Conclude(ctx, w.rt, v); err != nil || did != "review" {
+	if did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode); err != nil || did != "review" {
 		t.Fatalf("the next pass concluded %q (%v)", did, err)
 	}
 }
@@ -213,23 +213,23 @@ func TestChecksAreAboutOneAttempt(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
-	v1, err := store.StartVerification(ctx, w.rt, impl)
+	v1, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	duplicate := w.handCheck(t, "verify", impl, first.AttemptID, 1)
 	if c := w.run(t, "h2", deterministic, "failed"); c.TaskID != v1 {
 		t.Fatalf("took %s first", c.TaskID)
 	}
-	did, err := store.Conclude(ctx, w.rt, v1)
+	did, err := store.ConcludeWith(ctx, w.rt, v1, verifyMode)
 	if err != nil || did != "rework" {
 		t.Fatalf("round 1: %q (%v)", did, err)
 	}
 	w.run(t, "h3", cursor, "done")
-	_, err = store.StartVerification(ctx, w.rt, impl)
+	_, err = startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if c := w.run(t, "h4", deterministic, "done"); c.TaskID != duplicate {
 		t.Fatalf("took %s, not the round 1 duplicate", c.TaskID)
 	}
-	did, err = store.Conclude(ctx, w.rt, duplicate)
+	did, err = store.ConcludeWith(ctx, w.rt, duplicate, verifyMode)
 	ok(t, err)
 	var reviews int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'review'`, impl).Scan(&reviews))
@@ -240,7 +240,7 @@ func TestChecksAreAboutOneAttempt(t *testing.T) {
 	w2 := newKernelWorld(t)
 	impl2 := w2.ready(t, store.Task{})
 	a := w2.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w2.rt, impl2)
+	v, err := startVerify(ctx, w2.rt, impl2)
 	ok(t, err)
 	if c := w2.claim(t, "h2", store.LeaseTTL, deterministic); c == nil || c.TaskID != v {
 		t.Fatalf("verification claim = %+v", c)
@@ -249,7 +249,7 @@ func TestChecksAreAboutOneAttempt(t *testing.T) {
 	if c := w2.run(t, "h3", codex, "done"); c.TaskID != early {
 		t.Fatalf("took %s", c.TaskID)
 	}
-	did, err = store.Conclude(ctx, w2.rt, early)
+	did, err = store.ConcludeWith(ctx, w2.rt, early, verifyMode)
 	if err != nil || did != "closed" || w2.state(t, "task", impl2) != "verifying" {
 		t.Fatalf("an early review: %q (%v), implementation %s", did, err, w2.state(t, "task", impl2))
 	}
@@ -278,7 +278,7 @@ func TestStartVerificationOnce(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			ids[i], errs[i] = store.StartVerification(ctx, pool, impl)
+			ids[i], errs[i] = startVerify(ctx, pool, impl)
 		}(i)
 	}
 	wg.Wait()
@@ -367,7 +367,7 @@ func TestCheckVersionIsTheAttempts(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
 	first := w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	if c := w.claim(t, "h2", store.LeaseTTL, deterministic); c == nil || c.TaskID != v {
 		t.Fatalf("claim = %+v", c)
@@ -377,14 +377,14 @@ func TestCheckVersionIsTheAttempts(t *testing.T) {
 	if c := w.run(t, "h3", deterministic, "done"); c.TaskID != wrongBase {
 		t.Fatalf("took %s", c.TaskID)
 	}
-	did, concludeErr := store.Conclude(ctx, w.rt, wrongBase)
+	did, concludeErr := store.ConcludeWith(ctx, w.rt, wrongBase, verifyMode)
 	if concludeErr != nil || did != "closed" {
 		t.Fatalf("a check on another checkout: %q (%v)", did, concludeErr)
 	}
 	if c := w.run(t, "h4", deterministic, "done"); c.TaskID != right {
 		t.Fatalf("took %s", c.TaskID)
 	}
-	did, concludeErr = store.Conclude(ctx, w.rt, right)
+	did, concludeErr = store.ConcludeWith(ctx, w.rt, right, verifyMode)
 	if concludeErr != nil || did != "review" {
 		t.Fatalf("a check bound right: %q (%v)", did, concludeErr)
 	}
@@ -397,22 +397,22 @@ func TestOldAttemptCannotPoseAsCurrent(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
-	v1, err := store.StartVerification(ctx, w.rt, impl)
+	v1, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "failed")
-	did, concludeErr := store.Conclude(ctx, w.rt, v1)
+	did, concludeErr := store.ConcludeWith(ctx, w.rt, v1, verifyMode)
 	if concludeErr != nil || did != "rework" {
 		t.Fatalf("round 1: %q (%v)", did, concludeErr)
 	}
 	w.run(t, "h3", cursor, "done")
-	_, err = store.StartVerification(ctx, w.rt, impl)
+	_, err = startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	posing := w.handCheck(t, "verify", impl, first.AttemptID, 2, commitA, "", commitA)
 	w.claim(t, "h4", store.LeaseTTL, deterministic) // the controller's own round 2 check
 	if c := w.run(t, "h5", deterministic, "done"); c.TaskID != posing {
 		t.Fatalf("took %s", c.TaskID)
 	}
-	did, concludeErr = store.Conclude(ctx, w.rt, posing)
+	did, concludeErr = store.ConcludeWith(ctx, w.rt, posing, verifyMode)
 	if concludeErr != nil || did != "closed" || len(w.verifications(t, impl)) != 1 {
 		t.Fatalf("an old attempt posing as round 2: %q (%v)", did, concludeErr)
 	}
@@ -426,7 +426,7 @@ func TestClosedOnlyCheckIsReplaced(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	unpinned := w.handCheck(t, "verify", impl, first.AttemptID, 1)
 	if c := w.run(t, "h2", deterministic, "done"); c.TaskID != v {
@@ -436,7 +436,7 @@ func TestClosedOnlyCheckIsReplaced(t *testing.T) {
 	if c := w.run(t, "h3", deterministic, "done"); c.TaskID != unpinned {
 		t.Fatalf("took %s", c.TaskID)
 	}
-	did, concludeErr := store.Conclude(ctx, w.rt, unpinned)
+	did, concludeErr := store.ConcludeWith(ctx, w.rt, unpinned, verifyMode)
 	if concludeErr != nil || did != "closed" {
 		t.Fatalf("%q (%v)", did, concludeErr)
 	}
@@ -449,12 +449,12 @@ func TestClosedOnlyCheckIsReplaced(t *testing.T) {
 	w2 := newKernelWorld(t)
 	impl2 := w2.ready(t, store.Task{})
 	a := w2.run(t, "h1", cursor, "done")
-	v2, err := store.StartVerification(ctx, w2.rt, impl2)
+	v2, err := startVerify(ctx, w2.rt, impl2)
 	ok(t, err)
 	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", v2, "cancelled", "test") }))
 	lone := w2.handCheck(t, "verify", impl2, a.AttemptID, 1)
 	w2.run(t, "h2", deterministic, "done")
-	did, concludeErr = store.Conclude(ctx, w2.rt, lone)
+	did, concludeErr = store.ConcludeWith(ctx, w2.rt, lone, verifyMode)
 	if concludeErr != nil || did != "closed" {
 		t.Fatalf("%q (%v)", did, concludeErr)
 	}

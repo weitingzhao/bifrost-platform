@@ -19,15 +19,15 @@ func (w *world) passRound(t *testing.T, impl, author, checker, reviewer string) 
 	if c := w.run(t, author, cursor, "done"); c.TaskID != impl {
 		t.Fatalf("claimed %s, not %s", c.TaskID, impl)
 	}
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, checker, deterministic, "done")
-	if did, err := store.Conclude(ctx, w.rt, v); err != nil || did != "review" {
+	if did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode); err != nil || did != "review" {
 		t.Fatalf("the verification did %q (%v)", did, err)
 	}
 	review := w.checker(t, impl, "review")
 	w.run(t, reviewer, codex, "done")
-	if did, err := store.Conclude(ctx, w.rt, review); err != nil || did != "accepted" {
+	if did, err := store.ConcludeWith(ctx, w.rt, review, verifyMode); err != nil || did != "accepted" {
 		t.Fatalf("the review did %q (%v)", did, err)
 	}
 }

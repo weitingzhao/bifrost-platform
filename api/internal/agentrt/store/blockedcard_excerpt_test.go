@@ -213,10 +213,10 @@ func TestBlockedCardReadsTheWholeReport(t *testing.T) {
 		if c := w.run(t, hosts[0], cursor, "done"); c.TaskID != impl {
 			t.Fatalf("claimed %s, not %s", c.TaskID, impl)
 		}
-		v, err := store.StartVerification(ctx, w.rt, impl)
+		v, err := startVerify(ctx, w.rt, impl)
 		ok(t, err)
 		w.runReporting(t, hosts[1], deterministic, "failed", report)
-		did, err := store.Conclude(ctx, w.rt, v)
+		did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
 		ok(t, err)
 		if want := []string{"rework", "blocked"}[round]; did != want {
 			t.Fatalf("round %d did %q, not %q", round+1, did, want)

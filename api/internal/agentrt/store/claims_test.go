@@ -303,7 +303,7 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 		impl := w.ready(t, store.Task{})
 		var o outcome
 		conclude := func(task string) {
-			did, err := store.Conclude(ctx, w.rt, task)
+			did, err := store.ConcludeWith(ctx, w.rt, task, verifyMode)
 			ok(t, err)
 			o.did = append(o.did, did)
 		}
@@ -321,13 +321,13 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 			o.rerouted += n + routes() - before // nothing returned, nothing written (review 342 B1)
 		}
 		w.runSaying(t, "h1", cursor, "done", words)
-		v, err := store.StartVerification(ctx, w.rt, impl)
+		v, err := startVerify(ctx, w.rt, impl)
 		ok(t, err)
 		reroute()
 		w.runSaying(t, "h2", deterministic, "failed", words) // its report says pass
 		conclude(v)
 		w.runSaying(t, "h3", cursor, "done", words)
-		v2, err := store.StartVerification(ctx, w.rt, impl)
+		v2, err := startVerify(ctx, w.rt, impl)
 		ok(t, err)
 		reroute()
 		w.runSaying(t, "h4", deterministic, "done", words) // its report says fail

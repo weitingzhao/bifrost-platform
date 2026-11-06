@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // What an implementation in a round after the first is told of the rounds
@@ -13,13 +15,16 @@ import (
 // same spec; on PROD M-23 codex, told nothing of the check that sent the last
 // round back, handed in the same compile error three rounds running. The
 // claim names the checks the task's earlier rounds failed (the platform's
-// store/claimfailed.go: its last deterministic check and its last review,
-// each when it failed); agentd reads their reports and Prompt puts them after
-// the spec: for a deterministic check its first failed command and the end of
-// that command's output, for a review the reviewer's report.
+// store/claimfailed.go: its last deterministic check, its last review and
+// its last landing CI, each when it failed); agentd reads their reports and
+// Prompt puts them after the spec: for a deterministic check its first failed
+// command and the end of that command's output, for a review the reviewer's
+// report, for a red landing CI (R5:5.7-10, the platform's store/precheck.go)
+// each failed TaskRun's failure message and the end of its log.
 
 // PriorCheck is a check an earlier round failed, with its report: agentd's
-// verify.json for a deterministic check, the reviewer's report for a review.
+// verify.json for a deterministic check, the reviewer's report for a review,
+// what the landing CI reader saw of a red run for the landing CI.
 type PriorCheck struct {
 	FailedCheck
 	Report []byte
@@ -85,6 +90,8 @@ func priorText(checks []PriorCheck, quota int) string {
 			fmt.Fprintf(&b, "\nThe deterministic check of attempt %d failed. %s", c.AttemptNo, failedCommand(c.Report, quota))
 		case "review":
 			fmt.Fprintf(&b, "\nThe review of attempt %d failed it. Its report:\n\n%s", c.AttemptNo, fenced(cutStart(c.Report, quota)))
+		case "landing_ci":
+			fmt.Fprintf(&b, "\nThe landing CI of attempt %d failed: it ran the full pipeline on the commit replayed on main. %s", c.AttemptNo, failedTaskRuns(c.Report, quota))
 		}
 	}
 	return b.String()
@@ -115,6 +122,45 @@ func failedCommand(report []byte, quota int) string {
 		return head + "; it wrote nothing.\n"
 	}
 	return "No command failed; its reason: " + oneLine(v.Reason, 300) + "\n"
+}
+
+// failedTaskRuns is what a red landing CI failed on: the pipeline and run,
+// then each failed TaskRun with its failure message and the end of its
+// failed step's log, the logs sharing quota bytes (and never more than the
+// reader keeps of one); a report that is not the landing CI's, its start.
+func failedTaskRuns(report []byte, quota int) string {
+	var doc struct {
+		CI *landing.CIFailure `json:"landing_ci"`
+	}
+	if json.Unmarshal(report, &doc) != nil || doc.CI == nil {
+		return "Its report:\n\n" + fenced(cutStart(report, quota))
+	}
+	f := doc.CI
+	var b strings.Builder
+	fmt.Fprintf(&b, "Pipeline %s, run %s.", oneLine(f.Pipeline, 100), oneLine(f.Run, 100))
+	if f.ReadError != "" {
+		fmt.Fprintf(&b, " Its TaskRuns could not be read: %s.", oneLine(f.ReadError, 300))
+	}
+	b.WriteString("\n")
+	share := quota / max(len(f.TaskRuns), 1)
+	for _, t := range f.TaskRuns {
+		fmt.Fprintf(&b, "\nFailed TaskRun %s", oneLine(t.Name, 200))
+		if t.PipelineTask != "" {
+			fmt.Fprintf(&b, " (pipeline task %s)", oneLine(t.PipelineTask, 100))
+		}
+		if t.Step != "" {
+			fmt.Fprintf(&b, ", step %s", oneLine(t.Step, 100))
+		}
+		if msg := strings.TrimSpace(t.Message); msg != "" {
+			fmt.Fprintf(&b, ": %s", oneLine(msg, 1000))
+		}
+		if tail := strings.TrimRight(strings.ToValidUTF8(t.LogTail, "?"), " \t\r\n"); tail != "" {
+			b.WriteString(". Its log ends:\n\n" + fenced(cutEnd(tail, min(share, landing.CIFailureLogBytes))))
+		} else {
+			b.WriteString(".\n")
+		}
+	}
+	return b.String()
 }
 
 // fenced is s in a markdown code block whose fence is longer than any run of

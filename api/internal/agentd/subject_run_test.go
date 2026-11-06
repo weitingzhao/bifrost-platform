@@ -63,10 +63,10 @@ func TestAReviewOfEffectNoneSeesTheReport(t *testing.T) {
 		return cl
 	}
 	run(cursor, "implement")
-	check, err := store.StartVerification(ctx, pool, task)
+	check, err := startVerify(ctx, pool, task)
 	must(t, err)
 	run(agentd.Tool{Executor: "exec:deterministic", Provider: "local"}, "verify")
-	if did, cerr := store.Conclude(ctx, pool, check); cerr != nil || did != "review" {
+	if did, cerr := store.ConcludeWith(ctx, pool, check, verifyMode); cerr != nil || did != "review" {
 		t.Fatalf("conclude: %q %v", did, cerr)
 	}
 	rc := run(agentd.Tool{Executor: "exec:codex", Provider: "openai"}, "review")

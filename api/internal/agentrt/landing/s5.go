@@ -198,6 +198,10 @@ type ReviewBinding struct {
 	ReviewArtifactSHA256     string `json:"reviewArtifactSHA256"`
 	ReviewedPatchSHA256      string `json:"reviewedPatchSHA256"`
 	ReviewedStablePatchID    string `json:"reviewedStablePatchID"`
+	// NoReview: the attempt was accepted by a check that is no review (on
+	// submission, the landing CI its check, or a deterministic pass; R5:5.7-9),
+	// so the review fields are empty and no review is bound.
+	NoReview bool `json:"noReview,omitempty"`
 	// Internal reader's refusal survives empty/invalid rows; never candidate input.
 	Problem string `json:"-"`
 }
@@ -206,6 +210,9 @@ func ValidateS5Review(f Facts, b ReviewBinding) string {
 	if b.Problem != "" {
 		return b.Problem
 	}
+	if b.NoReview {
+		return validateS5Acceptance(f, b)
+	}
 	if b.ReviewVerificationID == "" || b.ReviewArtifactID == "" || !s5Digest(b.ReviewArtifactSHA256) {
 		return "S5_REVIEW_MISSING"
 	}
@@ -213,6 +220,23 @@ func ValidateS5Review(f Facts, b ReviewBinding) string {
 		return "S5_REVIEW_PROVIDER"
 	}
 	if b.Repo != f.Repo || b.Task != f.Task || b.AcceptedAttempt != f.Attempt || b.ImplementerAttempt != f.Attempt || b.A != f.A || b.Base != f.Base || b.AcceptanceVerificationID == "" || b.ReviewerAttempt == "" || b.ReviewerAttempt == f.Attempt || b.ReviewerTask == "" || b.ReviewerTask == f.Task || b.Verdict != "pass" {
+		return "S5_REVIEW_BINDING"
+	}
+	if b.ReviewedPatchSHA256 != f.S5Patch.SourcePatchSHA256 || b.ReviewedStablePatchID != f.S5Patch.SourceStablePatchID {
+		return "S5_REVIEW_BINDING"
+	}
+	return ""
+}
+
+// validateS5Acceptance binds an attempt accepted with no review: its
+// implementer and acceptance, the result and the patch, with every review
+// field empty.
+func validateS5Acceptance(f Facts, b ReviewBinding) string {
+	if b.ImplementerProvider == "" || b.ImplementerExecutor == "" {
+		return "S5_REVIEW_PROVIDER"
+	}
+	if b.Repo != f.Repo || b.Task != f.Task || b.AcceptedAttempt != f.Attempt || b.ImplementerAttempt != f.Attempt || b.A != f.A || b.Base != f.Base || b.AcceptanceVerificationID == "" ||
+		b.ReviewVerificationID != "" || b.ReviewerTask != "" || b.ReviewerAttempt != "" || b.ReviewArtifactID != "" || b.Verdict != "" {
 		return "S5_REVIEW_BINDING"
 	}
 	if b.ReviewedPatchSHA256 != f.S5Patch.SourcePatchSHA256 || b.ReviewedStablePatchID != f.S5Patch.SourceStablePatchID {

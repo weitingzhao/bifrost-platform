@@ -26,7 +26,7 @@ func TestRetriedImplementationClaimCarriesTheFailedCheck(t *testing.T) {
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
 	noFailedChecks(t, "round 1's claim", first)
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	noFailedChecks(t, "a check's claim", w.run(t, "h2", deterministic, "failed"))
 	concludeAs(t, w, v, "rework")
@@ -45,7 +45,7 @@ func TestRetriedImplementationClaimCarriesTheFailedReview(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
 	concludeAs(t, w, v, "review")
@@ -69,7 +69,7 @@ func noFailedChecks(t *testing.T, what string, c *store.Claim) {
 
 func concludeAs(t *testing.T, w *world, check, want string) {
 	t.Helper()
-	if did, err := store.Conclude(ctx, w.rt, check); err != nil || did != want {
+	if did, err := store.ConcludeWith(ctx, w.rt, check, verifyMode); err != nil || did != want {
 		t.Fatalf("conclude did %q (%v), want %q", did, err, want)
 	}
 }
@@ -81,10 +81,10 @@ func TestRetriedClaimLeavesOutAnInjectedFailure(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
-	if did, cerr := store.ConcludeWith(ctx, w.rt, v, store.ConcludeOptions{FailFirstVerify: true}); cerr != nil || did != "rework" {
+	if did, cerr := store.ConcludeWith(ctx, w.rt, v, store.ConcludeOptions{FailFirstVerify: true, Precheck: store.PrecheckVerify}); cerr != nil || did != "rework" {
 		t.Fatalf("round 1 with the switch: %q (%v)", did, cerr)
 	}
 	if c := w.run(t, "h3", cursor, "done"); c.AttemptNo != 2 || len(c.Failed) != 0 {

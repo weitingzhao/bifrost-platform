@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -192,54 +191,6 @@ func TestC5B01PinnedKickForGrantOperations(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. B-02: an ordinary (unpinned) core
-// implementation's review asks the trust chain's questions once grants are
-// enabled, since its change may then be granted (§12.3 last item); before,
-// reviews are as they were, and a non-core task's review never changes.
-func TestC5B02TrustQuestionsForOrdinaryCoreReviewsOnceEnabled(t *testing.T) {
-	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
-	w := liveWorld(t, "none", at)
-	attempts := map[string]string{}
-	for _, c := range []bool{true, false} {
-		id := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 B-02", BaseCommit: commitB, Core: c})
-		run := w.run(t, "h1", claude, "done")
-		if run.TaskID != id {
-			t.Fatal("claimed", run.TaskID)
-		}
-		attempts[id] = run.AttemptID
-	}
-	var core, plain string
-	for id := range attempts {
-		var c bool
-		ok(t, w.rt.QueryRow(ctx, `SELECT core FROM agentrt.task WHERE task_id=$1`, id).Scan(&c))
-		if c {
-			core = id
-		} else {
-			plain = id
-		}
-	}
-	text := func(task string) string {
-		var out string
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, s, err := store.PinnedReviewForTest(ctx, tx, task, attempts[task])
-			out = s
-			return err
-		}))
-		return out
-	}
-	if got := text(core); got != "" {
-		t.Fatalf("before the entry: %q", got)
-	}
-	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
-	if got := text(core); got != store.TrustReviewText {
-		t.Fatalf("after the entry: %q", got)
-	}
-	if got := text(plain); got != "" {
-		t.Fatalf("a non-core review: %q", got)
-	}
-}
-
 // Serial: FreezeEventClock. R-06 (§5.1 step 4): a pinned root waits on
 // rule_paths with no request yet; the Owner signs a rule that allows its
 // path. The controller's next pass rechecks it once and pushes it on the
@@ -288,7 +239,6 @@ func TestC5B01UnpinnedCINeverGranted(t *testing.T) {
 		return store.GrantCIEvidence{}, nil
 	}
 	gsrc := store.GrantSources{Facts: src, Main: func(context.Context) (string, error) { return commitA, nil }}
-	c5Trust(t, w, root)
 	m, err := store.ReadLandingGrantMaterial(ctx, w.rt, gsrc, op, true)
 	ok(t, err)
 	if !containsString(m.Problems, "ci_not_pinned") {

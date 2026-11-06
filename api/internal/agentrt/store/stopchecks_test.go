@@ -16,7 +16,7 @@ func TestAStopReachesTheTasksChecks(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	first := store.NewControlID()
 	w.control(t, first, "task", impl, "stop")
@@ -63,14 +63,14 @@ func TestAStoppedTasksChecksWait(t *testing.T) {
 		before, recorded := look(w, impl), len(w.verifications(t, impl))
 		id := store.NewControlID()
 		w.control(t, id, "task", impl, "stop")
-		if did, err := store.Conclude(ctx, w.rt, check); err != nil || did != "" {
+		if did, err := store.ConcludeWith(ctx, w.rt, check, verifyMode); err != nil || did != "" {
 			t.Fatalf("a check of a stopped task was used: %q (%v)", did, err)
 		}
 		if after := look(w, impl); after != before || len(w.verifications(t, impl)) != recorded || w.state(t, "task", check) != "submitted" {
 			t.Fatalf("while stopped: %+v, was %+v; check %s", after, before, w.state(t, "task", check))
 		}
 		w.clear(t, id)
-		if did, err := store.Conclude(ctx, w.rt, check); err != nil || did != then {
+		if did, err := store.ConcludeWith(ctx, w.rt, check, verifyMode); err != nil || did != then {
 			t.Fatalf("after the lift the check did %q (%v), want %q", did, err, then)
 		}
 	}
@@ -79,7 +79,7 @@ func TestAStoppedTasksChecksWait(t *testing.T) {
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "failed")
 	stopped(w, impl, v, "rework")
@@ -88,10 +88,10 @@ func TestAStoppedTasksChecksWait(t *testing.T) {
 	w = newKernelWorld(t)
 	impl = w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
-	v, err = store.StartVerification(ctx, w.rt, impl)
+	v, err = startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	w.run(t, "h2", deterministic, "done")
-	if did, err := store.Conclude(ctx, w.rt, v); err != nil || did != "review" {
+	if did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode); err != nil || did != "review" {
 		t.Fatalf("verification: %q (%v)", did, err)
 	}
 	review := w.checker(t, impl, "review")

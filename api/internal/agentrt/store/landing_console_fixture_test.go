@@ -23,7 +23,7 @@ func TestC6ConsoleFixture(t *testing.T) {
 		PatchSHA256: strings.Repeat("7", 64), Acceptance: []GrantAcceptance{{VerificationID: "v_console", Result: "pass"}},
 		Review:           GrantReview{Task: "t_review", Attempt: "a_review", Executor: "codex", Provider: "openai", Conclusion: "pass", Artifact: "sha256:" + strings.Repeat("8", 64)},
 		ReviewPatchMatch: true, CI: GrantCandidateCI{Pipeline: "bifrost-ci-platform", Run: "ci-platform-console", UID: "ci-uid", CreatedAt: at.Format(time.RFC3339), Status: "Succeeded", SHA: r, Siblings: map[string]string{"bifrost-ui": a, "bifrost-trade-infra": m0}},
-		STGRelease: true, HardCorePaths: []GrantHardPath{{Path: "console/src/api/approvals.ts", Entry: "console/src/api/approvals.ts"}}, DecisionChain: true, TrustReview: true}
+		STGRelease: true, HardCorePaths: []GrantHardPath{{Path: "console/src/api/approvals.ts", Entry: "console/src/api/approvals.ts"}}, DecisionChain: true}
 	m := LandingGrantMaterial{Candidate: c, SoftAtRequest: []string{"core", "files"}, WaitingSoft: []string{"core", "files"}, Rule: GrantRule{ID: "landing:dev", Version: 1, SHA256: strings.Repeat("9", 64)}, ChecksVersion: 1,
 		Action: ActionCoreLanding, Title: "Trusted core change", FirstLine: "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code.",
 		Phase: "awaiting_grant", Latest: true, Pinned: true, GrantEnabled: true, Patch: "diff --git a/x b/x\n-old\n+new\n+line\n", CompareURL: GiteaWebBase + "/bifrost/bifrost-platform/compare/" + m0 + "..." + r,
@@ -45,7 +45,7 @@ func TestC6ConsoleFixture(t *testing.T) {
 	guardrail.Action, guardrail.Title, guardrail.FirstLine = ActionGuardrailLanding, "Soft guardrail change", ""
 	guardrail.SoftAtRequest, guardrail.WaitingSoft = []string{"files"}, []string{"files"}
 	guardrail.Candidate.HardCorePaths = []GrantHardPath{}
-	guardrail.Candidate.DecisionChain, guardrail.Candidate.TrustReview = false, false
+	guardrail.Candidate.DecisionChain = false
 	guardrail.Candidate.Changes = []GrantChange{{Old: "console/src/example.ts", New: "console/src/example.ts", OldMode: "100644", NewMode: "100644", Added: 2, Deleted: 1}}
 	digests(&guardrail)
 	g := LandingGrantStatus{GrantID: "lg_approval_console", ApprovalID: "approval_console", ApprovalNumber: 51, Action: m.Action, Op: op, Waives: m.SoftAtRequest, STGRelease: true, ApprovedAt: at, GrantedAt: at, ExpiresAt: at.Add(24 * time.Hour), Valid: true, CandidateHash: m.CandidateDigest, MaterialHash: m.MaterialDigest}

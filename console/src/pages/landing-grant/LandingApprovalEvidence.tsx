@@ -5,6 +5,7 @@ export function LandingApprovalEvidence({ item, data, error, checked, onCheck }:
   item: ApprovalItem; data?: LandingMaterialResponse; error: boolean; checked: boolean; onCheck: (checked: boolean) => void
 }) {
   const op = typeof item.params?.op === 'string' ? item.params.op : ''
+  const floor = item.action === 'approve_floor_landing'
   const core = item.action === 'approve_core_landing'
   const m = data?.material
   const compare = m && giteaCompareHref(m.compare_url)
@@ -14,6 +15,13 @@ export function LandingApprovalEvidence({ item, data, error, checked, onCheck }:
     {op && <a className="underline" href={landingGrantHref(op, item.params?.stg_release !== false)}>Open landing authorization material</a>}
     {error ? <p role="alert">Landing material unavailable or no longer matches this request. Refresh the material before approving.</p>
       : !m ? <p>Reading landing approval material…</p> : <>
+        {floor && <>
+          <p>R (<code>{m.candidate.R}</code>) is pushed to bifrost-trade-infra main by agentrt-lander. A cluster write is separate (Argo sync, or apply_manifest).</p>
+          <div className="overflow-x-auto"><table className="w-full text-left" aria-label="Pinned floor paths">
+            <thead><tr><th>Path</th><th>Entry</th><th>Blob SHA-256</th></tr></thead>
+            <tbody>{m.floor_paths?.map(p => <tr key={p.path}><td>{p.path}</td><td>{p.entry}</td><td><code>{p.blob_sha256}</code></td></tr>)}</tbody>
+          </table></div>
+        </>}
         <p>Soft checks: {m.soft_at_request.join(', ') || 'None'}</p>
         <p>Main still M0? {data?.main_known ? data.main_is_M0 ? 'Yes' : 'No — ask the coordinator to refresh' : 'Unknown — approval unavailable'}</p>
         {!m.latest && <p role="alert">This operation is no longer the latest candidate. Open the replacement request before approving.</p>}

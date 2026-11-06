@@ -13,6 +13,16 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
+// verifyMode is precheck verify (the platform's store/precheck.go): the
+// deterministic check, then a review, as these tests drive it.
+var verifyMode = store.ConcludeOptions{Precheck: store.PrecheckVerify}
+
+// startVerify starts task's deterministic check with precheck verify.
+func startVerify(ctx context.Context, db store.DB, task string) (string, error) {
+	id, _, err := store.StartVerificationWith(ctx, db, task, verifyMode)
+	return id, err
+}
+
 // TD-405 (PROD M-23: codex handed in the same compile error three rounds
 // running): an implementation whose first round failed its deterministic
 // check is told, in round 2, what failed: the claim names the check, agentd
@@ -79,12 +89,12 @@ func TestRetriedImplementationIsToldWhatFailed(t *testing.T) {
 	if first := run(cursor, "implement"); len(first.FailedChecks) != 0 {
 		t.Fatalf("round 1's claim names %+v", first.FailedChecks)
 	}
-	check, err := store.StartVerification(ctx, pool, task)
+	check, err := startVerify(ctx, pool, task)
 	must(t, err)
 	if cl := run(agentd.Tool{Executor: "exec:deterministic", Provider: "local"}, "verify"); cl.TaskID != check || len(cl.FailedChecks) != 0 {
 		t.Fatalf("the check's claim: %+v", cl)
 	}
-	if did, cerr := store.Conclude(ctx, pool, check); cerr != nil || did != "rework" {
+	if did, cerr := store.ConcludeWith(ctx, pool, check, verifyMode); cerr != nil || did != "rework" {
 		t.Fatalf("conclude: %q %v", did, cerr)
 	}
 	second := run(cursor, "implement")

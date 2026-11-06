@@ -506,7 +506,7 @@ func TestPinnedReviewRoute(t *testing.T) {
 		t.Fatalf("a review of a subject with no provider routes to %v", got)
 	}
 
-	// The limit and the questions, from what the result's check recorded.
+	// The limit, from what the result's check recorded.
 	r := w.pinnedRun(t, "c", time.Hour)
 	facts := goodCommit(r.task)
 	facts.Lines, facts.Paths = 650, []string{"api/internal/server/x.go"}
@@ -514,19 +514,19 @@ func TestPinnedReviewRoute(t *testing.T) {
 	_, err = store.PersistChecked(ctx, w.rt, r.fence, store.Result{Report: r.report, Ref: store.AttemptRef(r.task, 1), Commit: commitB}, head, commits)
 	ok(t, err)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		limit, text, err := store.PinnedReviewForTest(ctx, tx, r.task, r.attempt)
+		limit, err := store.PinnedReviewForTest(ctx, tx, r.task, r.attempt)
 		if err != nil {
 			return err
 		}
-		if limit != 2*time.Hour+30*time.Minute || text != store.TrustReviewText {
-			t.Errorf("a 650-line commit in server/: %v, %q", limit, text)
+		if limit != 2*time.Hour+30*time.Minute {
+			t.Errorf("a 650-line commit in server/: %v", limit)
 		}
-		limit, text, err = store.PinnedReviewForTest(ctx, tx, plain, c.AttemptID)
+		limit, err = store.PinnedReviewForTest(ctx, tx, plain, c.AttemptID)
 		if err != nil {
 			return err
 		}
-		if limit != 0 || text != "" {
-			t.Errorf("an ordinary review: %v, %q", limit, text)
+		if limit != 0 {
+			t.Errorf("an ordinary review: %v", limit)
 		}
 		return nil
 	}))

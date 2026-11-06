@@ -156,7 +156,7 @@ func (w *world) handInGate(t *testing.T, f store.Fence, task, conclusion, report
 	ok(t, err)
 	_, err = store.Submit(ctx, w.rt, f)
 	ok(t, err)
-	did, err := store.Conclude(ctx, w.rt, task)
+	did, err := store.ConcludeWith(ctx, w.rt, task, verifyMode)
 	ok(t, err)
 	return did
 }
@@ -294,7 +294,7 @@ func TestGateVerdicts(t *testing.T) {
 				tick = "false"
 			}
 			wantTick(t, w.archRows(t)["ARCH:a"], tick, c.reason)
-			if did, err := store.Conclude(ctx, w.rt, task); err != nil || did != "" {
+			if did, err := store.ConcludeWith(ctx, w.rt, task, verifyMode); err != nil || did != "" {
 				t.Fatalf("a second use did %q (%v)", did, err)
 			}
 		})

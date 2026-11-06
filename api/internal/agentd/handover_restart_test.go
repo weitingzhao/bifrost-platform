@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // How far a request agentd dies on got: held at the proxy (the platform never
@@ -238,7 +237,7 @@ func TestRestartDuringTheHandOver(t *testing.T) {
 			if m, lerr := reg.Load(); lerr != nil || len(m) != 0 {
 				t.Fatalf("registry after the takeover = %v %v", m, lerr)
 			}
-			check, err := store.StartVerification(ctx, w.pool, w.task)
+			check, err := startVerify(ctx, w.pool, w.task)
 			if err != nil || check == "" {
 				t.Fatalf("the task cannot be verified: %q %v", check, err)
 			}

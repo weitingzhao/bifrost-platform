@@ -42,12 +42,19 @@ var c5RuleBody = strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-
 const c5Core = "api/internal/agentrt/store/c5.go"
 const c5Soft = "api/internal/research/c5.go"
 
-// c5Wait: a root prepared and waiting at the final gate (C-4), the review
-// with the trust chain's answers, and grants enabled: the Owner's signed
+// c5Wait: a root prepared and waiting at the final gate (C-4), its round
+// checked and reviewed (precheck verify), and grants enabled: the Owner's signed
 // envelope names the coordinator's external host (§2.1). pinned makes the
 // root a pinned one (the fixture sets the column as an operator would not
 // be able to: the pin path itself is C-1/C-2's tests').
 func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
+	t.Helper()
+	return c5WaitAccepted(t, path, pinned, enabled, func(w *world, root string) { w.passRound(t, root, "h1", "h2", "h3") })
+}
+
+// c5WaitAccepted is c5Wait with the root's round carried to accepted by
+// accept.
+func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func(w *world, root string)) *c5 {
 	t.Helper()
 	// Grant expiry during a read must not accidentally cross the quota day
 	// first (T35). All relative grant times derive from this injected clock.
@@ -57,7 +64,7 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 	c.w = liveWorld(t, "none", at)
 	store.FreezeEventClock(at.Add(-40 * time.Minute))
 	c.root = c.w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C5", BaseCommit: commitB})
-	c.w.passRound(t, c.root, "h1", "h2", "h3")
+	accept(c.w, c.root)
 	if pinned {
 		c5Pin(t, c.w, c.root)
 	}
@@ -97,7 +104,6 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 	if d.Reason != "awaiting_grant" {
 		t.Fatal("not waiting", d)
 	}
-	c5Trust(t, c.w, c.root)
 	c.gsrc = store.GrantSources{Facts: c.src, Main: func(context.Context) (string, error) { return c.main, nil }}
 	store.FreezeEventClock(at)
 	return c
@@ -144,39 +150,6 @@ func c5Pin(t *testing.T, w *world, task string) {
 	_, err = admin.Exec(ctx, `UPDATE agentrt.task SET executor_pin = 'external:coordinator' WHERE task_id = $1`, task)
 	ok(t, err)
 }
-
-// c5Trust records a passing review of the accepted attempt whose report
-// answers the trust chain's four questions (store.TrustReviewText).
-func c5Trust(t *testing.T, w *world, task string) {
-	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		var attempt, reviewer string
-		if err := tx.QueryRow(ctx, `SELECT attempt_id, verifier_attempt_id FROM agentrt.verification WHERE task_id=$1 AND method='review' AND verdict='pass'
-		  ORDER BY created_at DESC LIMIT 1`, task).Scan(&attempt, &reviewer); err != nil {
-			return err
-		}
-		body := c5TrustAnswers
-		evidence, err := store.PutArtifact(ctx, tx, "controller", "review", "text/markdown", []byte(body+task))
-		if err != nil {
-			return err
-		}
-		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: the trust chain review"}}); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verifier_attempt_id, verdict, evidence_artifact_id)
-		  VALUES ($1, $2, $3, 'review', $4, 'pass', $5)`, store.NewVerificationID(), task, attempt, reviewer, evidence)
-		return err
-	}))
-}
-
-// c5TrustAnswers is a review report that answers the trust chain in the
-// shape store.TrustReviewText asks for.
-const c5TrustAnswers = "Correct and complete.\n\n## Trust chain answers\n" +
-	"- T1: No, the approval roles and tiers are untouched by this diff.\n" +
-	"- T2: No, the material and its digests are computed as before.\n" +
-	"- T3: No, no token or credential is read or kept differently.\n" +
-	"- T4: No, the landing gate's checks and their order are unchanged.\n"
 
 var c5Approvals = 0
 
@@ -236,7 +209,7 @@ func TestC5GrantWrittenAndConsumed(t *testing.T) {
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
 	if len(m.Problems) != 0 || m.Action != store.ActionCoreLanding || !slices.Equal(m.SoftAtRequest, []string{"core", "rule_paths"}) ||
-		len(m.Candidate.HardCorePaths) != 1 || m.Candidate.HardCorePaths[0].Entry != "api/internal/agentrt/store/" || !m.Candidate.TrustReview ||
+		len(m.Candidate.HardCorePaths) != 1 || m.Candidate.HardCorePaths[0].Entry != "api/internal/agentrt/store/" ||
 		m.Rule.ID != "landing:dev" || m.Rule.SHA256 == "" || m.FirstLine == "" || m.STGNotice == "" {
 		t.Fatalf("material: %+v", m)
 	}

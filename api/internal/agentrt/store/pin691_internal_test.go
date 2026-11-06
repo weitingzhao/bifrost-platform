@@ -147,7 +147,7 @@ func Test691SalvageCannotReplaceReviewFacts(t *testing.T) {
 			if len(args) == 2 && args[1] == oldResult {
 				facts = persistedFacts
 			}
-			return reviewValues(int(facts["changed_lines"].(float64)), facts["hard"].(bool))
+			return reviewValues(int(facts["changed_lines"].(float64)))
 		default:
 			t.Fatalf("unexpected query: %s", sql)
 			return reviewRow{err: errors.New("unexpected SQL")}
@@ -179,8 +179,8 @@ func Test691SalvageCannotReplaceReviewFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limit != 3*time.Hour || spec.text != TrustReviewText {
-		t.Fatalf("review A used B facts: %v %q", limit, spec.text)
+	if limit != 3*time.Hour {
+		t.Fatalf("review A used B facts: %v", limit)
 	}
 }
 
@@ -301,28 +301,27 @@ func Test691ReviewFactsMatchCommit(t *testing.T) {
 		}
 		if strings.Contains(sql, "changed_lines") {
 			if len(args) == 2 && args[1] == "A" {
-				return reviewValues(1200, true)
+				return reviewValues(1200)
 			}
-			return reviewValues(1, false)
+			return reviewValues(1)
 		}
 		t.Fatalf("unexpected query %s", sql)
 		return reviewRow{}
 	}}
 	spec := checkSpec{check: "review", attempt: "attempt", commit: "A"}
 	limit, err := pinnedReview(context.Background(), q, "task", &spec)
-	if err != nil || limit != 3*time.Hour || spec.text != TrustReviewText {
-		t.Fatalf("review A: %v %v %q", limit, err, spec.text)
+	if err != nil || limit != 3*time.Hour {
+		t.Fatalf("review A: %v %v", limit, err)
 	}
 	spec = checkSpec{check: "review", attempt: "attempt", commit: "B"}
 	limit, err = pinnedReview(context.Background(), q, "task", &spec)
-	if err != nil || limit != 90*time.Minute || spec.text != "" {
-		t.Fatalf("review B control: %v %v %q", limit, err, spec.text)
+	if err != nil || limit != 90*time.Minute {
+		t.Fatalf("review B control: %v %v", limit, err)
 	}
 }
 
 // pinnedTaskRow is pinnedReview's one read of a pinned task (review 698
 // R-05): the pin, core, repository, role, tenant and no envelope.
 func pinnedTaskRow() pgx.Row {
-	return reviewValues(rules.PinCoordinator, false, "bifrost-platform", "implement", "dev",
-		(*int)(nil), (*string)(nil), (*time.Time)(nil), (*time.Time)(nil), (*string)(nil), []byte(nil), (*string)(nil))
+	return reviewValues(rules.PinCoordinator)
 }

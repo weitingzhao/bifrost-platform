@@ -21,8 +21,9 @@ import (
 // left out.
 
 // FailedCheck is a check an earlier round of a task failed: its method
-// (deterministic or review), the number of the attempt it checked, and the
-// artifact of its report (the verification's evidence).
+// (deterministic, review, or landing_ci: the attempt's red landing CI,
+// precheck.go), the number of the attempt it checked, and the artifact of
+// its report (the verification's evidence).
 type FailedCheck struct {
 	Method    string
 	AttemptNo int
@@ -30,14 +31,15 @@ type FailedCheck struct {
 }
 
 // failedChecks are the checks the claim of attempt n of an implementation
-// carries: of the attempts before it, the last deterministic check and the
-// last review, each only when it failed, and none in the task's first round.
+// carries: of the attempts before it, the last deterministic check, the last
+// review and the last landing CI, each only when it failed, and none in the
+// task's first round.
 func failedChecks(ctx context.Context, tx pgx.Tx, task string, n int) ([]FailedCheck, error) {
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (v.method) v.method, v.verdict, a.attempt_no, v.evidence_artifact_id
 	  FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id JOIN agentrt.task t ON t.task_id = v.task_id
-	  WHERE v.task_id = $1 AND t.round_no > 1 AND a.attempt_no < $2 AND v.method IN ('deterministic', 'review')
+	  WHERE v.task_id = $1 AND t.round_no > 1 AND a.attempt_no < $2 AND v.method IN ('deterministic', 'review', $4)
 	    AND v.check_ref IS DISTINCT FROM $3
-	  ORDER BY v.method, v.created_at DESC, v.verification_id DESC`, task, n, TestNeedFailFirstVerify)
+	  ORDER BY v.method, v.created_at DESC, v.verification_id DESC`, task, n, TestNeedFailFirstVerify, MethodLandingCI)
 	if err != nil {
 		return nil, err
 	}

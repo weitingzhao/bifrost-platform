@@ -21,7 +21,7 @@ func TestACheckClaimNamesTheReportItChecks(t *testing.T) {
 	}
 	var report string
 	ok(t, w.rt.QueryRow(ctx, `SELECT report_artifact_id FROM agentrt.attempt WHERE attempt_id = $1`, first.AttemptID).Scan(&report))
-	v, err := store.StartVerification(ctx, w.rt, impl)
+	v, err := startVerify(ctx, w.rt, impl)
 	ok(t, err)
 	vc := w.run(t, "h2", deterministic, "done")
 	if vc.TaskID != v || vc.SubjectReport != report || vc.SubjectEffect != "none" {

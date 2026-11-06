@@ -10,15 +10,17 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
-// Acceptance (design v5 §5.2 控制器「验收编排」). A submitted implementation
-// goes to verifying and gets a deterministic verification task; a passing
-// verification gets a review task (routed at claim time, where independence
-// is checked again under the subject's lock); a passing review records the
-// verification that accepts the implementation's attempt, and the
-// implementation is accepted. A failure sends the implementation back for
-// rework while rounds remain (round_no + 1 <= max_rounds), else blocks it.
-// Verification and review tasks are accepted once their result is used;
-// they are not verified in turn.
+// Acceptance (design v5 §5.2 控制器「验收编排」; R5:5.7-9, precheck.go). By
+// default (precheck ci) a submitted implementation whose landing runs a CI
+// is accepted on submission, the landing CI its check; any other goes to
+// verifying and gets a deterministic verification task, whose pass records
+// the verification that accepts the attempt, and the implementation is
+// accepted. With precheck verify, a passing verification gets a review task
+// instead (routed at claim time, where independence is checked again under
+// the subject's lock), and only a passing review accepts. A failure sends
+// the implementation back for rework while rounds remain (round_no + 1 <=
+// max_rounds), else blocks it. Verification and review tasks are accepted
+// once their result is used; they are not verified in turn.
 //
 // A check is about one attempt: its task spec pins the subject's attempt,
 // round and commit, and its claim starts from the subject's repository at
@@ -91,16 +93,12 @@ type checkSpec struct {
 	round                                           int64
 	verification, verifyReport                      string // a review's deterministic pass
 	salvage                                         bool   // the attempt is a lost one whose result was salvaged (adopt.go)
-	text                                            string // what the checker is told before the subject (pinreview.go)
 }
 
 func (c checkSpec) put(ctx context.Context, tx pgx.Tx) (string, error) {
 	doc := map[string]any{"check": c.check, "subject_task": c.subject, "attempt": c.attempt, "round": c.round, "task_spec": c.taskSpec}
 	if c.salvage {
 		doc["salvage"] = true
-	}
-	if c.text != "" {
-		doc["text"] = c.text
 	}
 	for k, v := range map[string]string{"commit": c.commit, "repo": c.repo, "verification": c.verification, "verify_report": c.verifyReport} {
 		if v != "" {
@@ -169,14 +167,17 @@ func proposeChecker(ctx context.Context, tx pgx.Tx, subject taskRow, d taskDetai
 	return id, MarkReady(ctx, tx, "controller", id)
 }
 
-// StartVerification moves a submitted implementation to verifying and
-// proposes its deterministic verification task, ready to claim, pinned to
-// the submitted attempt. It returns the new task's id, or "" when the task
-// is not a submitted implementation (or moved while this ran: the next pass
-// tries again).
-func StartVerification(ctx context.Context, db DB, taskID string) (string, error) {
-	var id string
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+// StartVerificationWith checks a submitted implementation as opts.Precheck
+// says. With precheck ci, an attempt whose landing runs a CI (landingCIOf)
+// is accepted on submission (accepted is true, and no task is proposed).
+// Otherwise the implementation moves to verifying and its deterministic
+// verification task is proposed, ready to claim, pinned to the submitted
+// attempt; id is the new task's. Both are zero when the task is not a
+// submitted implementation (or moved while this ran: the next pass tries
+// again).
+func StartVerificationWith(ctx context.Context, db DB, taskID string, opts ConcludeOptions) (id string, accepted bool, err error) {
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		id, accepted = "", false
 		step, err := lockStep(ctx, tx, taskID)
 		if err != nil {
 			return err
@@ -197,6 +198,16 @@ func StartVerification(ctx context.Context, db DB, taskID string) (string, error
 		if err != nil {
 			return err
 		}
+		if !opts.Precheck.reviews() {
+			pipeline, err := landingCIOf(ctx, tx, t.id, commit)
+			if err != nil {
+				return err
+			}
+			if pipeline != "" {
+				accepted = true
+				return acceptOnSubmission(ctx, tx, t, sa, commit, pipeline)
+			}
+		}
 		if err = moveTask(ctx, tx, "controller", t, "verifying", "deterministic verification"); err != nil {
 			return err
 		}
@@ -205,17 +216,21 @@ func StartVerification(ctx context.Context, db DB, taskID string) (string, error
 			commit: commit, repo: d.repo, taskSpec: d.spec})
 		return err
 	})
-	return id, err
+	if err != nil {
+		return "", false, err
+	}
+	return id, accepted, nil
 }
 
 // Conclude uses the result of a verification or review task whose attempt
 // was submitted. A result about the subject's current attempt and round
 // records the verification (verification_recorded) and moves the subject
 // on; any other closes the check and moves nothing. A check of a salvaged
-// result goes by adopt.go: a pass of its review accepts the lost attempt and
-// cancels the live one; a failure moves nothing. It returns what it did:
-// "review" (a review task was proposed), "accepted", "rework", "blocked",
-// "closed", or "" when there was nothing to do.
+// result goes by adopt.go: a pass of the check that accepts (its review with
+// precheck verify, else its deterministic check) accepts the lost attempt
+// and cancels the live one; a failure moves nothing. It returns what it did:
+// "review" (a review task was proposed: precheck verify only), "accepted",
+// "rework", "blocked", "closed", or "" when there was nothing to do.
 func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 	return ConcludeWith(ctx, db, taskID, ConcludeOptions{})
 }
@@ -227,13 +242,16 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 // again. Elsewhere it is a need nothing holds a fact on, and does nothing.
 const TestNeedFailFirstVerify = "test:fail-first-verify"
 
-// ConcludeOptions are the controller's test switches.
+// ConcludeOptions are the controller's switches.
 type ConcludeOptions struct {
 	// FailFirstVerify honours TestNeedFailFirstVerify (STG only).
 	FailFirstVerify bool
+	// Precheck is how an implementation is checked (precheck.go); the zero
+	// value is PrecheckCI.
+	Precheck Precheck
 }
 
-// ConcludeWith is Conclude with the controller's test switches.
+// ConcludeWith is Conclude with the controller's switches.
 func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOptions) (string, error) {
 	var did string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -385,7 +403,9 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 		if injected {
 			why = method + " (a failure the STG test switch injected)"
 		}
-		accepts := v.role == "review" && verdict == "pass"
+		// A review's pass accepts; so does a deterministic pass unless a
+		// review follows it (precheck verify).
+		accepts := verdict == "pass" && (v.role == "review" || !opts.Precheck.reviews())
 		vid := NewVerificationID()
 		if _, err = Append(ctx, tx, Event{Stream: MissionStream(s.mission), Type: "verification_recorded", Actor: "controller",
 			MissionID: s.mission, PlanNode: s.step, TaskID: s.id, AttemptID: spec.attempt,
@@ -409,10 +429,17 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 		switch {
 		case accepts && spec.salvage:
 			did = "accepted"
-			return adopt(ctx, tx, s, spec.attempt, live)
+			return adopt(ctx, tx, s, spec.attempt, live, v.role)
 		case accepts:
 			did = "accepted"
-			return moveTask(ctx, tx, "controller", s, "accepted", "review passed")
+			passed := "review passed"
+			if v.role == "verify" {
+				passed = "deterministic verification passed"
+			}
+			if err = moveTask(ctx, tx, "controller", s, "accepted", passed); err != nil {
+				return err
+			}
+			return retryReworkedLanding(ctx, tx, s, spec.attempt)
 		case verdict == "pass":
 			did = "review"
 			review := spec
