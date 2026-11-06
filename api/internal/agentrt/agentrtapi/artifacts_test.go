@@ -13,6 +13,7 @@ import (
 // newest first, never a body; an agentd token is shown no exam artifact; a
 // query that cannot be answered is 400; no token is 401.
 func TestSearchArtifactsRoute(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	var exam, handover string

@@ -73,6 +73,7 @@ func TestExternalDescriptionStrictValidation(t *testing.T) {
 }
 
 func TestReporterDescriptionPersistenceBoundary(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	admin, err := pgx.Connect(ctx, os.Getenv("AGENTRT_TEST_PG")+" dbname="+pool.Config().ConnConfig.Database)
 	must(t, err)

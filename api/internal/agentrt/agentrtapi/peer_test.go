@@ -11,6 +11,7 @@ import (
 // that is not an agentd's is refused the routes (401: no such ability). The
 // attempt is as it was, and its holder carries on.
 func TestPeerReachesNoOtherAttempt(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}

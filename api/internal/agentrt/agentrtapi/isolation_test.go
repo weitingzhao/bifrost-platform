@@ -10,6 +10,7 @@ import (
 // included; raw output and one that names an attempt's branch are let
 // through.
 func TestUploadNamingAWorkspace(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	ref := []byte("# task\nstart from tasks/t_01M57YSQN6B43ZFNESD9VQ2HA9/a1\n")

@@ -12,6 +12,7 @@ import (
 // readings, no other route does; anyone reads the pools; only the Owner reads
 // one by hand.
 func TestPools(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	call2 := func(caller, method, path string, body any) (int, map[string]any) {
@@ -71,6 +72,7 @@ func TestPools(t *testing.T) {
 // field it does not know, a time that is not one) is dropped; the ending is
 // not refused.
 func TestComputedWithAReportThatDoesNotParse(t *testing.T) {
+	t.Parallel()
 	for name, extra := range map[string]map[string]any{
 		"tokens past int64":  {"usage": json.RawMessage(`{"pool":"cursor:owner:monthly","tokens":9223372036854775808}`)},
 		"an unknown field":   {"usage": json.RawMessage(`{"pool":"cursor:owner:monthly","seconds":3}`)},

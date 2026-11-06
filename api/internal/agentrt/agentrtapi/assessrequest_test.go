@@ -50,6 +50,7 @@ func TestAssessmentRequestIsOwnerOnlyEvenWithoutDB(t *testing.T) {
 }
 
 func TestAssessmentRequestRouteRecordsOnceAndRejectsClosed(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	closed := false
 	s := server(t, pool, func(a *agentrtapi.API) {

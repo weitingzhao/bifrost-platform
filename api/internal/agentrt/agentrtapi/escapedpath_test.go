@@ -15,6 +15,7 @@ import (
 // 404, and Work showed no plan). Every route of Mount unescapes its
 // parameters once, and only when the path was escaped: %253A stays %3A.
 func TestEscapedPathsNameTheSameRows(t *testing.T) {
+	t.Parallel()
 	pool := seeded(t)
 	s := server(t, pool)
 	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {

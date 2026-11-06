@@ -9,6 +9,7 @@ import (
 // registers the host it is bound to, naming the token; a second claim does
 // not register it again.
 func TestFirstClaimRegistersTheHost(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	var before int
@@ -40,6 +41,7 @@ func TestFirstClaimRegistersTheHost(t *testing.T) {
 // Review 190 B5: a claim refused as malformed registers nothing; two first
 // claims at once both succeed, and the host is registered once.
 func TestFirstClaimRegistrationEdges(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	bad := map[string]any{"host_id": "h3", "free_slots": 1, "tools": []any{map[string]any{"executor": "exec:cursor"}}}

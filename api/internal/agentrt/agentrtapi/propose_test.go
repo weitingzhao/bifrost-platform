@@ -118,6 +118,7 @@ func TestProposeMissionRoute(t *testing.T) {
 // nothing, a guard of the database answers 422 with the rule it broke (T32
 // through the interface), and the list reads them back.
 func TestProposeTasksRoute(t *testing.T) {
+	t.Parallel()
 	pool, existing := world(t)
 	s := server(t, pool)
 	spec := implSpec(t, "# implement x\n")
@@ -186,6 +187,7 @@ func TestProposeTasksRoute(t *testing.T) {
 // Review 175 B4: an upload is recorded as its writer, like a proposal; one
 // whose writer may not write leaves nothing, not even a thread.
 func TestUploadAttribution(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	for i, c := range []struct{ who, session, actor string }{
@@ -231,6 +233,7 @@ func TestUploadAttribution(t *testing.T) {
 
 // Review 175 B5: hard_limit_s is bounded before it becomes a duration.
 func TestHardLimitBounds(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := implSpec(t, "# spec\n")
@@ -271,6 +274,7 @@ func TestHardLimitBounds(t *testing.T) {
 
 // A batch whose step stays locked answers 503 with Retry-After, not 500.
 func TestBusyIs503(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := implSpec(t, "# busy\n")
@@ -294,6 +298,7 @@ func TestBusyIs503(t *testing.T) {
 // first were cancelled, are new tasks; a retry with the old key is answered
 // with the old ones.
 func TestProposeAgainAfterCancel(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := implSpec(t, "# again\n")
@@ -373,6 +378,7 @@ func TestPlanProposalRoute(t *testing.T) {
 // seat's. (STG gives no agent thread a seat token, so this is that case's
 // route; the rule itself is the database's, whoever proposes.)
 func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
@@ -427,6 +433,7 @@ func TestSeatTaskOntoAnotherMissionsStep(t *testing.T) {
 // what is missing, and the batch writes nothing; a plan's markdown spec is
 // taken as before.
 func TestProposeRefusesAnImplementSpecWithoutChecksRoute(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	put := func(spec []byte) string {

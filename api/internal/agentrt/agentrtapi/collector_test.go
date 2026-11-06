@@ -148,6 +148,7 @@ func heldTo(t *testing.T, pool *pgxpool.Pool, actor string) string {
 // whoami says a collector is its host's collector, bound to the host, and
 // may do what the route gate lets it do and nothing more.
 func TestCollectorWhoami(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	code, out := call(t, s, "collector:h1", "GET", "whoami", nil, session, "local_0b8e2f4a")
@@ -171,6 +172,7 @@ func TestCollectorWhoami(t *testing.T) {
 // write holds the actor to its own token; another host's collector is
 // another actor.
 func TestCollectorNameReserved(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := collectorSpec("reserved")
@@ -218,6 +220,7 @@ func TestCollectorNameReserved(t *testing.T) {
 // there. A description another uploader put first stays unread even after
 // the collector uploads the same bytes. Other readers read as before.
 func TestCollectorOwnRecordsOnly(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	w1, d1 := registerAs(t, s, "collector:h1", "", "h1 work", "run-h1")
@@ -286,6 +289,7 @@ func TestCollectorOwnRecordsOnly(t *testing.T) {
 // (another registrant's, or none) is 403 with one answer. The registrants
 // go on with their own.
 func TestForeignWork_OtherToken(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	w1, _ := registerAs(t, s, "collector:h1", "", "h1 work", "run-h1")
@@ -331,6 +335,7 @@ func TestForeignWork_OtherToken(t *testing.T) {
 // session's; neither takes the other's: the session's thread stays held to
 // the MCP's token, the collector's to the collector's, and both go on.
 func TestHookAndMcpWriteSameSession(t *testing.T) {
+	t.Parallel()
 	const sess = "local_0b8e2f4a"
 	for _, order := range [][]string{{"hook", "mcp"}, {"mcp", "hook"}} {
 		t.Run(order[0]+" first", func(t *testing.T) {
@@ -387,6 +392,7 @@ func TestHookAndMcpWriteSameSession(t *testing.T) {
 // collector put first, the same bytes the collector holds itself, registers
 // (§1.3: it keeps its own copy).
 func TestCollectorRegistrationNamesNoForeignContent(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	bodies := [][]byte{[]byte(`{"private-h2-field":123}`), []byte(`{"v":987654321012345678901234567890}`),

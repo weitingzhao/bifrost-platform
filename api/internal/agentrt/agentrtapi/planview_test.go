@@ -6,6 +6,7 @@ import (
 )
 
 func TestExternalWorkRoutesAndPlanView(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"测试","executor":"codex","provider":"openai","repo":"platform","branch":"test","acceptance_refs":["PV1"],"estimate_minutes":[1,2]}`)
@@ -54,6 +55,7 @@ func TestExternalWorkRoutesAndPlanView(t *testing.T) {
 // response has no explain block; with it, the same response plus the
 // block, pending at first and computed in the background.
 func TestPlanViewExplainIsOptIn(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	code, plain := call(t, s, "viewer", "GET", "plan-view?root=R2", nil)
