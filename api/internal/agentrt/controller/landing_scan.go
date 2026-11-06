@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -129,14 +130,38 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 		}
 	}()
 	var window grantWindowProbe // Shared only within this repository's pass.
-	for i, id := range pending {
+	// Pending operations take turns (R5 phase 2, PROD 2026-11-06): with dozens of
+	// them, an even split of the work budget left each a few seconds, less than a
+	// fresh workspace fetch takes, so every visit timed out and no claim below was
+	// ever reached. Visits now use at most half the work budget, each gets at least
+	// drillMinShare, and each pass starts one further along, so an operation left
+	// out of this pass is visited early in a later one. The other half is the
+	// claims' (and the batch's) below.
+	// While an even split still gives every visit drillMinShare, nothing changes.
+	visits, cancelVisits := context.WithCancel(ctx)
+	offset, crowded := 0, drillCrowded(ctx, len(pending))
+	if crowded {
+		cancelVisits()
+		visits, cancelVisits = context.WithTimeout(ctx, drillVisitBudget(ctx))
+		offset = drillTurn(len(pending))
+	}
+	for k := range pending {
+		if crowded && k > 0 && !drillHasShare(visits) {
+			break
+		}
+		id := pending[(offset+k)%len(pending)]
 		o := state.Operations[id]
-		one, done := drillWorkShare(ctx, len(pending)-i)
+		one, done := drillWorkShare(visits, len(pending)-k)
+		if crowded {
+			done()
+			one, done = drillVisitShare(visits, len(pending)-k)
+		}
 		start := time.Now()
 		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo, &window))
 		done()
 		c.slow(slowStepLog, start, "agentrt-landing-drill: %s %s", repo, id)
 	}
+	cancelVisits()
 	// No current rule means no new claims, but recovery and bounds above run.
 	enabled := false
 	var enabledAt time.Time
@@ -216,6 +241,60 @@ func (c *Controller) appendDrill(ctx context.Context, op, kind string, fields ma
 		_, err := store.Append(ctx, tx, store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": "STG drill: " + kind, "landing": fields}})
 		return err
 	})
+}
+
+// drillMinShare is the least a visit of a pending operation gets: a fresh
+// workspace init and fetch of main and the result (landinggit.Open).
+const drillMinShare = 20 * time.Second
+
+// drillTurns rotates where the pending visits start, one further each pass.
+var drillTurns atomic.Uint64
+
+func drillTurn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return int((drillTurns.Add(1) - 1) % uint64(n))
+}
+
+// drillCrowded: an even split of what ctx has left gives n visits less than
+// drillMinShare each, while half of it still holds one such visit. Without a
+// deadline, or with a budget too short for even one (tests), the even split
+// stays as it was.
+func drillCrowded(ctx context.Context, n int) bool {
+	deadline, ok := ctx.Deadline()
+	if !ok || n == 0 {
+		return false
+	}
+	left := max(time.Duration(0), time.Until(deadline))
+	return left/time.Duration(n) < drillMinShare && left/2 >= drillMinShare
+}
+
+// drillVisitBudget is half of what ctx has left (two minutes without a
+// deadline): the visits' part of a pass.
+func drillVisitBudget(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return 2 * time.Minute
+	}
+	return max(time.Duration(0), time.Until(deadline)) / 2
+}
+
+// drillHasShare: ctx still has at least drillMinShare for one more visit.
+func drillHasShare(ctx context.Context) bool {
+	deadline, ok := ctx.Deadline()
+	return !ok || time.Until(deadline) >= drillMinShare
+}
+
+// drillVisitShare is an even split of what ctx has left over the visits still
+// due, but never less than drillMinShare (ctx's deadline still bounds it).
+func drillVisitShare(ctx context.Context, remaining int) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	share := max(time.Duration(0), time.Until(deadline)) / time.Duration(max(1, remaining))
+	return context.WithTimeout(ctx, max(share, drillMinShare))
 }
 
 // Callers supply a bounded phase context; each pending item is visited even
