@@ -144,6 +144,11 @@ func (c *Client) Read(ctx context.Context, key Key, after time.Time) (out Eviden
 	}
 	out.Results, _ = namedValues(item, "status", "results")
 	out.InfraCommit = out.Results["infra-commit"]
+	if key.Repo == "bifrost-platform" && latest.Status == "Unknown" {
+		if _, counts := namedValues(item, "status", "results"); counts["tested-by"] > 0 {
+			out.Reason = "ci_reuse"
+		}
+	}
 	if latest.Status != "Succeeded" {
 		return out, nil
 	}
@@ -276,6 +281,13 @@ func (c *Client) latest(ctx context.Context, pipeline, revision string, after ti
 		run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
 		if pipeline == landing.LandingRepos["bifrost-platform"].CIPipeline {
 			run.Scope = scopeResults(item)
+			_, counts := namedValues(item, "status", "results")
+			if counts["tested-by"] > 0 {
+				checked := landingReuse(item, all, revision)
+				if checked.Reason != "" {
+					run.Status = "Unknown"
+				}
+			}
 		}
 		runs = append(runs, run)
 		items[run.Run] = item
