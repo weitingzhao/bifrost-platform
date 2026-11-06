@@ -423,8 +423,8 @@ func TestTaskStatusOrder(t *testing.T) {
 		t.Errorf("a paused mission's task's reason: %q", reason)
 	}
 	// A mission shows the first of every two neighbours in the order (§3.2).
-	order := []string{store.StatusHostLost, store.StatusMaybeStuck, store.StatusUnknown, store.StatusWaitingOwner, store.StatusBlocked,
-		store.StatusSlow, store.StatusWorking, store.StatusWaitingRole, store.StatusQueued}
+	order := []string{store.StatusHostLost, store.StatusMaybeStuck, store.StatusUnknown, store.StatusWaitingOwner, store.StatusStopped,
+		store.StatusBlocked, store.StatusSlow, store.StatusWorking, store.StatusWaitingRole, store.StatusQueued}
 	for i := 1; i < len(order); i++ {
 		if got := store.WorstForTest(order[i], order[i-1]); got != order[i-1] {
 			t.Errorf("%s and %s show %s; want %s", order[i], order[i-1], got, order[i-1])

@@ -25,6 +25,7 @@ const (
 	StatusMaybeStuck   = "maybe_stuck"
 	StatusUnknown      = "unknown"
 	StatusWaitingOwner = "waiting_owner"
+	StatusStopped      = "stopped" // only the Owner lifts a stop (progressstop.go)
 	StatusBlocked      = "blocked"
 	StatusSlow         = "slow"
 	StatusWorking      = "working"
@@ -32,8 +33,8 @@ const (
 	StatusQueued       = "queued"
 )
 
-var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusBlocked, StatusSlow,
-	StatusWorking, StatusWaitingRole, StatusQueued}
+var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked,
+	StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued}
 
 // HostLostAfter is how long since its last poll a host counts as lost: 30
 // seconds (W-31 round 3, 3.5: 「主机掉线或执行者不可用，Console 和参谋长简报 1
@@ -115,6 +116,7 @@ type ProgressTask struct {
 	UsualS               *int64           `json:"usual_s,omitempty"`
 	ComputedNotPersisted bool             `json:"computed_not_persisted"`
 	LostAttempt          *ProgressAttempt `json:"lost_attempt,omitempty"` // its latest lost attempt no later result superseded
+	Stopped              *ProgressStop    `json:"stopped,omitempty"`
 
 	class       string
 	stateReason string
@@ -125,6 +127,7 @@ type ProgressTask struct {
 type StatusInput struct {
 	TaskState, MissionState, StateReason, MissionReason string
 	Attempt                                             *ProgressAttempt
+	Stop                                                *ProgressStop // the stop control holding the task, its mission or its subject
 	Usual                                               *time.Duration
 	WaitingDeps                                         int
 	Now                                                 time.Time
@@ -147,6 +150,8 @@ func TaskStatus(in StatusInput) (string, string) {
 		}
 	}
 	switch {
+	case in.Stop != nil:
+		return StatusStopped, stopWords(in.Stop)
 	case in.TaskState == "awaiting_owner":
 		return StatusWaitingOwner, "the task waits for the Owner"
 	case in.MissionState == "proposed" || in.MissionState == "awaiting_owner":
@@ -519,7 +524,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	// not updated_at, which a plan migration moves), why, and the roles of
 	// the unfinished verifications and reviews of them.
 	trows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, t.role, COALESCE(t.plan_node_id, ''), t.off_plan,
-	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''),
+	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''), `+stopColumns+`,
 	    ARRAY(SELECT d.depends_on_task_id FROM agentrt.task_dependency d JOIN agentrt.task o ON o.task_id = d.depends_on_task_id
 	      WHERE d.task_id = t.task_id AND o.state <> 'accepted' ORDER BY d.depends_on_task_id),
 	    COALESCE((SELECT a.computed_at IS NOT NULL AND a.persisted_at IS NULL FROM agentrt.attempt a WHERE a.task_id = t.task_id
@@ -528,7 +533,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	      AND c.state NOT IN ('accepted','rejected','cancelled') ORDER BY c.role)
 	  FROM agentrt.task t
 	  LEFT JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.task_id = t.task_id
-	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true
+	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true`+stopHolding+`
 	  WHERE t.mission_id = ANY($1) AND t.state NOT IN ('accepted','rejected','cancelled')
 	  ORDER BY t.created_at, t.task_id`, ids)
 	if err != nil {
@@ -539,12 +544,13 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		t := &ProgressTask{}
 		var missionID string
 		var since *time.Time
-		if err = trows.Scan(&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
-			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason, &t.DependsOn, &t.ComputedNotPersisted, &t.checkers); err != nil {
+		var stop stopScan
+		if err = trows.Scan(append(append([]any{&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
+			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason}, stop.dest()...), &t.DependsOn, &t.ComputedNotPersisted, &t.checkers)...); err != nil {
 			return nil, nil, err
 		}
 		m := byID[missionID]
-		t.Since = stamp(since)
+		t.Since, t.Stopped = stamp(since), stop.stop(func(at time.Time) string { return stamp(&at) })
 		t.Attempt, t.LostAttempt = live[t.TaskID], lost[t.TaskID]
 		u := usualOf(usual, t.Role, t.class)
 		if u != nil {
@@ -552,8 +558,10 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 			t.UsualS = &s
 		}
 		t.Status, t.Reason = TaskStatus(StatusInput{TaskState: t.State, MissionState: m.state, StateReason: t.stateReason,
-			MissionReason: m.stateReason, Attempt: t.Attempt, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
-		if byMission(t.Status, t.State) {
+			MissionReason: m.stateReason, Attempt: t.Attempt, Stop: t.Stopped, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
+		if t.Status == StatusStopped {
+			t.Since = t.Stopped.Since
+		} else if byMission(t.Status, t.State) {
 			t.Since = m.stateAt
 		}
 		if t.Status == StatusWaitingRole {
@@ -616,7 +624,7 @@ func missionDoc(m *progressMission, eta map[string]any) map[string]any {
 			reason = missionCardReason(m)
 		}
 		switch status {
-		case StatusWaitingOwner:
+		case StatusWaitingOwner, StatusStopped:
 			waiting = "owner"
 		case StatusWaitingRole:
 			waiting = "role"
@@ -757,38 +765,4 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 		out = append(out, doc)
 	}
 	return out, nil
-}
-
-// recentView is the last ended tasks, by the event that ended them, and the
-// last failed attempts, whatever came of their tasks (SPEC §2.6, T06). Both
-// read the events newest first through the (event_type, at) index, and break
-// ties of time by event id at every step, so the same events always give the
-// same lists.
-func recentView(ctx context.Context, tx pgx.Tx) (map[string]any, error) {
-	var tasks, failed []byte
-	err := tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.ended_event_id DESC), '[]'::jsonb) FROM (
-	    SELECT t.task_id, t.mission_id, t.title, t.role, t.state, e.at AS ended_at, e.event_id AS ended_event_id, a.conclusion,
-	      a.report_artifact_id
-	    FROM (SELECT DISTINCT ON (task_id) task_id, at, event_id FROM (
-	        (SELECT task_id, at, event_id FROM agentrt.event WHERE event_type = 'task_state_changed'
-	          AND body_json->>'to' IN ('accepted','rejected','cancelled') ORDER BY at DESC, event_id DESC LIMIT $1 * 2)
-	        UNION ALL
-	        (SELECT task_id, at, event_id FROM agentrt.event WHERE event_type = 'task_cancelled' ORDER BY at DESC, event_id DESC LIMIT $1 * 2)) x
-	      ORDER BY task_id, at DESC, event_id DESC) e
-	    JOIN agentrt.task t ON t.task_id = e.task_id AND t.state IN ('accepted','rejected','cancelled')
-	    LEFT JOIN LATERAL (SELECT conclusion, report_artifact_id FROM agentrt.attempt WHERE task_id = t.task_id
-	      ORDER BY attempt_no DESC LIMIT 1) a ON true
-	    ORDER BY e.at DESC, e.event_id DESC LIMIT $1) r`, progressRecent).Scan(&tasks)
-	if err != nil {
-		return nil, err
-	}
-	err = tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.ended_event_id DESC), '[]'::jsonb) FROM (
-	    SELECT a.attempt_id, a.task_id, t.mission_id, e.at AS ended_at, e.event_id AS ended_event_id, a.report_artifact_id
-	    FROM agentrt.event e JOIN agentrt.attempt a ON a.attempt_id = e.attempt_id JOIN agentrt.task t ON t.task_id = a.task_id
-	    WHERE e.event_type = 'attempt_computed' AND e.body_json->>'conclusion' = 'failed'
-	    ORDER BY e.at DESC, e.event_id DESC LIMIT $1) r`, progressRecent).Scan(&failed)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"tasks": rawJSON(tasks), "failed_attempts": rawJSON(failed)}, nil
 }

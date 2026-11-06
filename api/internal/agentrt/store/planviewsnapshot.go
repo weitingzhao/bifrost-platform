@@ -106,6 +106,9 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err = json.Unmarshal(tasksRaw, &tasks); err != nil {
 		return nil, err
 	}
+	if err = planViewHolds(ctx, tx, root, tasks); err != nil {
+		return nil, err
+	}
 	working := []any{}
 	ownerWaiting := acceptanceReady
 	finished := []any{}
