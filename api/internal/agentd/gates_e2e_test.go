@@ -88,6 +88,7 @@ func TestNeedsTheDatabase(t *testing.T) {
 // passes no AGENTRT_TEST_PG to an executor; TD-403 will), fails: its row is
 // not passed, and says the test failed, never a skip taken for a pass.
 func TestGateRunsOnTheDeployedCommit(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, commit := gateRepo(t, env)
 	db := agentrttest.Migrated(t)

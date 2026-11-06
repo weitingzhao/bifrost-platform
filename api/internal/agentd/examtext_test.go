@@ -17,6 +17,7 @@ import (
 // workspace, ~ as the home, a Grep's pattern as no path, a pattern's fixed
 // start as where it searches, a link as where it leads now.
 func TestExamReadsOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
 	ws := filepath.Join(t.TempDir(), "tasks", "t_x", "a1")
 	away := t.TempDir()
 	must(t, os.MkdirAll(filepath.Join(ws, "sub"), 0o700))

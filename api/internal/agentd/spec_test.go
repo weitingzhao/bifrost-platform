@@ -41,6 +41,7 @@ func TestParseSpec(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	env := os.Environ()
 	v := Verify(context.Background(), dir, env, [][]string{{"sh", "-c", "echo one"}, {"sh", "-c", "echo two; exit 3"}, {"touch", "never"}}, time.Minute)
@@ -77,6 +78,7 @@ func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "?") == s }
 // command past its time (the descendant itself is ended with the attempt's
 // group, TestVerifyStaysInTheAttemptGroup), and the output kept is bounded.
 func TestVerifyReturnsOnTimeAndBoundsOutput(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	start := time.Now()
 	v := Verify(context.Background(), dir, os.Environ(), [][]string{{"sh", "-c", "sleep 30 & wait"}}, 200*time.Millisecond)

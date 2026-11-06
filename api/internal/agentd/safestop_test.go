@@ -81,6 +81,7 @@ func waitFile(t *testing.T, path string, within time.Duration) {
 // recorded: the branch on the remote and the commit the platform holds are
 // the same, or both absent. A stop never cuts a hand-over.
 func TestAStopDuringThePush(t *testing.T) {
+	t.Parallel()
 	for _, refuse := range []bool{false, true} {
 		name := "pushed"
 		if refuse {

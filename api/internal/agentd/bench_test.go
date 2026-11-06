@@ -49,6 +49,7 @@ func benchRepo(t *testing.T, env []string) (bare, base, fix string) {
 // takes its change but no protected file and no link, and takes its removals;
 // a check leaves nothing running; a run goes on from its results.
 func TestBench(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, base, fix := benchRepo(t, env)
 	q := func(id, test string) agentd.BenchQuestion {
@@ -231,6 +232,7 @@ func TestBenchQuestionsRefused(t *testing.T) {
 // the question unrunnable before the executor is called; nothing of it
 // stays.
 func TestBenchSiblings(t *testing.T) {
+	t.Parallel()
 	if _, err := osexec.LookPath("npm"); err != nil {
 		t.Skip("no npm")
 	}
@@ -338,6 +340,7 @@ func TestBenchSiblings(t *testing.T) {
 // the tree before the fix and the judgement install that one resolution, not
 // one each.
 func TestBenchNpmResolvedOnce(t *testing.T) {
+	t.Parallel()
 	npm, err := osexec.LookPath("npm")
 	if err != nil {
 		t.Skip("no npm")

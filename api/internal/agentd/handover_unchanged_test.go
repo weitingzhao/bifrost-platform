@@ -80,6 +80,7 @@ func computedConclusions(t *testing.T, f *fakePlatform) []string {
 // the tree the base's), concludes none and is only ended; the reason is in
 // its log.
 func TestDeliverEndsAnUnchangedImplementation(t *testing.T) {
+	t.Parallel()
 	for _, reverted := range []bool{false, true} {
 		f := newFake()
 		d := fakeDaemon(t, f)
@@ -116,6 +117,7 @@ func TestDeliverEndsAnUnchangedImplementation(t *testing.T) {
 // found unchanged when its commit is made, and ended, never handed the
 // base.
 func TestUnchangedHoldsAfterARestart(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	d := fakeDaemon(t, f)
 	e, a, ws, bare, env := unchangedEntry(t, d, "exited")
@@ -151,6 +153,7 @@ func TestUnchangedHoldsAfterARestart(t *testing.T) {
 // TD-360: an unchanged implementation whose lease is lost is neither
 // pushed nor salvaged: it is ended.
 func TestLostEndsAnUnchangedImplementation(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	d := fakeDaemon(t, f)
 	e, a, ws, bare, env := unchangedEntry(t, d, "lost")

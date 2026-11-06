@@ -14,6 +14,7 @@ import (
 // and hand in nothing the platform takes. A task with no effect has no checkout
 // and still runs.
 func TestABranchClaimWithoutACheckoutNeverStarts(t *testing.T) {
+	t.Parallel()
 	for name, c := range map[string]struct{ effect, repo, base, says string }{
 		"no base commit": {"branch", "bifrost-platform", "", "it names no base_commit"},
 		"no repo":        {"branch", "", strings.Repeat("a", 40), "it names no repo"},

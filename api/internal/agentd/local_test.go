@@ -103,6 +103,7 @@ func TestRegistry(t *testing.T) {
 // R1: the executor runs only after its group is recorded; a group whose
 // record failed never runs it.
 func TestLaunchRecordsBeforeRelease(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mark := filepath.Join(dir, "ran")
 	sp := Spawn{Argv: []string{"touch", mark}, Env: launcherEnv(), Dir: dir}
@@ -162,6 +163,7 @@ func TestLauncherWithoutReleaseExits(t *testing.T) {
 // The group is the executor and everything it starts: terminating it ends
 // them all, and Alive tells the recorded group from a reused id.
 func TestTerminateEndsTheGroup(t *testing.T) {
+	t.Parallel()
 	sp := Spawn{Argv: []string{"sh", "-c", "sleep 60 & sleep 60"}, Env: launcherEnv()}
 	var start string
 	p, err := Launch(os.Args[0], sp, func(_ int, s string) error { start = s; return nil })

@@ -128,6 +128,7 @@ var cursor = agentd.Tool{Executor: "exec:cursor", Provider: "cursor-mix"}
 // checkpoint, computed, upload, persist, submit (twice); the platform's
 // refusals come back as the errors agentd acts on.
 func TestClientPath(t *testing.T) {
+	t.Parallel()
 	pool, task, base := platform(t)
 	c := &agentd.Client{Base: base, Host: "h1", Token: "fixture-agentd-h1"}
 

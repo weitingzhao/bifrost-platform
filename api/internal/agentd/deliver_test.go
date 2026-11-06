@@ -81,6 +81,7 @@ func branchPlatform(t *testing.T) branchWorld {
 // Review 163 A3: commits the executor made itself are delivered, folded into
 // one commit with the trailers.
 func TestRunFoldsTheExecutorsCommits(t *testing.T) {
+	t.Parallel()
 	w := branchPlatform(t)
 	task, baseCommit, bare, env := w.task, w.baseCommit, w.bare, w.env
 	d := daemon(t, w.base, script(`echo one > a.txt; git add a.txt; git commit -q -m "executor's own"; printf '# done\n' > "$OUT/report.md"`), bare, env)
@@ -113,6 +114,7 @@ func withEnv(e agentd.Executor, env []string) agentd.Executor {
 // journal, the attempt not ended; the next takeover pushes the same commit
 // and hands the result over.
 func TestHandOverWaitsForThePlatform(t *testing.T) {
+	t.Parallel()
 	w := branchPlatform(t)
 	task, bare, env := w.task, w.bare, w.env
 	proxied, f := faultProxy(t, w.base)
@@ -168,6 +170,7 @@ func TestHandOverLosesItsLease(t *testing.T) {
 // Review 163 A7: an executor is released only once the platform knows it
 // started; one whose start was never taken never runs.
 func TestStartBeforeRelease(t *testing.T) {
+	t.Parallel()
 	pool, task, base := platform(t)
 	proxied, f := faultProxy(t, base)
 	marker := filepath.Join(t.TempDir(), "ran")
@@ -192,6 +195,7 @@ func TestStartBeforeRelease(t *testing.T) {
 
 // The platform's stop and the task's hard limit end the executor's group.
 func TestStopAndHardLimit(t *testing.T) {
+	t.Parallel()
 	pool, task, base := platform(t)
 	d := daemon(t, base, script(`exec sleep 30`), "", nil)
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
@@ -235,6 +239,7 @@ func TestStopAndHardLimit(t *testing.T) {
 // pushed, persisted or submitted, the platform's ended fails the attempt and
 // the task goes back to ready, with no verification of an unchanged tree.
 func TestRunNeverHandsInAnUnchangedImplementation(t *testing.T) {
+	t.Parallel()
 	unchangedRun(t, `printf '# done\nnothing to change\n' > "$OUT/report.md"`)
 }
 
@@ -242,6 +247,7 @@ func TestRunNeverHandsInAnUnchangedImplementation(t *testing.T) {
 // change and reverts it itself leaves HEAD past the base and the tree as the
 // base's, and the attempt is unchanged as well.
 func TestRunNeverHandsInAChangeRevertedByItsExecutor(t *testing.T) {
+	t.Parallel()
 	unchangedRun(t, `echo one > a.txt && git add a.txt && git commit -q -m "executor's own" && git revert --no-edit HEAD >/dev/null &&
 test "$(git rev-parse HEAD)" != "$(git rev-parse HEAD~2)" && printf '# done\n' > "$OUT/report.md"`)
 }

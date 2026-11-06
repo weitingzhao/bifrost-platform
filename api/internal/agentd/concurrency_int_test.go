@@ -41,6 +41,7 @@ func readyTask(t *testing.T, tx func(func(pgx.Tx) error)) string {
 // third; they run side by side; Recover between claims leaves both alone; a
 // stop ends one and the other is handed over.
 func TestTwoAttemptsAtOnceOnOneHost(t *testing.T) {
+	t.Parallel()
 	pool, _, base := platform(t)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {

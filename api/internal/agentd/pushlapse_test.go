@@ -25,6 +25,7 @@ import (
 // task and the other host's attempt are as they were before the push landed,
 // and nothing of the lost attempt is persisted or submitted.
 func TestPushAsTheLeaseLapses(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	sig := t.TempDir()

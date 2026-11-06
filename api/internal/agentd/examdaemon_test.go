@@ -22,6 +22,7 @@ import (
 // gone, even when that process started in the same second: nothing is
 // killed.
 func TestExamRunLeftBlocksTheDaemon(t *testing.T) {
+	t.Parallel()
 	d := fakeDaemon(t, newFake())
 	dir := filepath.Join(d.Root, "exam", "chief_of_staff-claude")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
