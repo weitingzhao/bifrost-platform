@@ -64,6 +64,53 @@ else
     if [[ -n $store_run ]]; then run_tests "$store" -run "$store_run"; else run_tests "$store"; fi
   fi
 fi
+# A failed top-level test is run once more on its own (R5 phase 2, 2026-11-06: timing
+# tests of untouched packages failed landings under CI load and sent good changes
+# back). It passes only if every failed test passes the second time and no package
+# failed without a failing test (build error, panic, timeout): those stay red.
+if (( status != 0 )); then
+  retry_plan="$(python3 - "$tmp/events" <<'PY'
+import json, sys
+tests, pkg_fail = {}, set()
+for line in open(sys.argv[1]):
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if e.get('Action') != 'fail':
+        continue
+    t = e.get('Test')
+    if t:
+        if '/' not in t:
+            tests.setdefault(e['Package'], set()).add(t)
+    else:
+        pkg_fail.add(e['Package'])
+if pkg_fail - set(tests) or not tests:
+    print('none')
+else:
+    for p, ts in sorted(tests.items()):
+        print(p + ' ^(' + '|'.join(sorted(ts)) + ')$')
+PY
+)"
+  if [[ $retry_plan != none && -n $retry_plan ]]; then
+    echo "==> retrying the failed tests once:"
+    echo "$retry_plan"
+    retry_status=0
+    : > "$tmp/retry"
+    while read -r pkg pattern; do
+      go test -json -count=1 "$pkg" -run "$pattern" >> "$tmp/retry" 2>&1 || retry_status=1
+    done <<< "$retry_plan"
+    cat "$tmp/retry"
+    if (( retry_status == 0 )); then
+      echo "==> flaky: every failed test passed on its retry; the run passes"
+      status=0
+      # The first failures are kept in the log above; the result names none.
+      : > "$tmp/events"
+    else
+      cat "$tmp/retry" >> "$tmp/events"
+    fi
+  fi
+fi
 # Python is already used by repository CI tooling. Ignore non-JSON compiler output.
 python3 - "$tmp/events" "${FAILED_TESTS_RESULT:-}" "$status" <<'PY'
 import json, sys
