@@ -48,6 +48,9 @@ type LandingReconcile struct {
 	// when not wired: no card is requested (landing_grant_request.go).
 	Grants       func() store.GrantSources
 	RequestGrant func(ctx context.Context, action string, params map[string]any, reason string) (string, error)
+	// SettleGrant withdraws a pending landing approval whose operation no
+	// longer waits (store.SettledLandingGrantRequests). Nil: none is.
+	SettleGrant func(ctx context.Context, approvalID, reason string) error
 
 	mu            sync.Mutex
 	waits         map[string]reconcileWait

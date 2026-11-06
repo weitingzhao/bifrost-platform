@@ -84,3 +84,41 @@ func TestGrantRequestRunsCreateCheck(t *testing.T) {
 		t.Fatalf("create check ran %d times, want 3: %v", len(seen), seen)
 	}
 }
+
+// A pending landing request whose operation went on without it is withdrawn
+// off the Owner's list (expired, with the reason); a decided one, or one of
+// another action, is not.
+func TestGrantRequestWithdraw(t *testing.T) {
+	svc := grantRequestService(t)
+	a, err := svc.Request(context.Background(), "controller", "approve_core_landing", "why", "", grantRequestParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Withdraw(a.ID, ""); err == nil {
+		t.Fatal("withdrawn without a reason")
+	}
+	if err := svc.Withdraw(a.ID, "landed on the rule"); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _ := svc.Lookup(a.ID)
+	if got.Status != StatusExpired || !strings.Contains(got.Error, "landed on the rule") || len(svc.Pending()) != 0 {
+		t.Fatalf("%+v", got)
+	}
+	if err := svc.Withdraw(a.ID, "again"); err != nil {
+		t.Fatal("expired twice", err)
+	}
+	b, err := svc.Request(context.Background(), "controller", "approve_guardrail_landing", "why", "", grantRequestParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := svc.reject(b.ID, "no"); d.Status != 200 {
+		t.Fatal(d)
+	}
+	var re *RequestError
+	if err := svc.Withdraw(b.ID, "landed"); !errors.As(err, &re) || re.Status != 409 {
+		t.Fatal("a rejected request withdrawn", err)
+	}
+	if err := svc.Withdraw("nope", "landed"); !errors.As(err, &re) || re.Status != 404 {
+		t.Fatal(err)
+	}
+}

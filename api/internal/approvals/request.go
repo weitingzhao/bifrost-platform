@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
@@ -44,4 +45,51 @@ func (s *Service) Request(ctx context.Context, requester, action, reason, rollba
 		fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s drill=%t", a.Number, a.Action, a.Tier, a.Runner, a.Requester, a.Drill)}})
 	s.deliver(ctx, approvalnotify.KindCreated, a)
 	return a, nil
+}
+
+// Withdraw takes back a pending landing grant request (requestable) that
+// can no longer run, off the Owner's list: its operation landed, or ended,
+// without it. It becomes expired, with reason; one already expired is left
+// so. A request already decided otherwise, or one of any other action, is
+// refused and left as it is.
+func (s *Service) Withdraw(ref, reason string) error {
+	reason = oneLine(Redact(strings.TrimSpace(reason)))
+	if reason == "" {
+		return &RequestError{Status: http.StatusBadRequest, Body: map[string]any{"error": "reason is required"}}
+	}
+	now := s.clock()
+	var refusal *RequestError
+	var evs []event
+	err := s.store.update(func(doc *file) error {
+		refusal = nil
+		evs = sweep(doc, now)
+		found, ok := doc.find(strings.TrimSpace(ref))
+		switch {
+		case !ok:
+			refusal = &RequestError{Status: http.StatusNotFound, Body: map[string]any{"error": "not found"}}
+		case !requestable[found.Action]:
+			refusal = &RequestError{Status: http.StatusForbidden, Body: map[string]any{"error": found.Action + " cannot be withdrawn by the platform"}}
+		case found.Status == StatusExpired:
+			return keepSwept(evs)
+		case found.Status != StatusPending:
+			refusal = &RequestError{Status: http.StatusConflict, Body: map[string]any{"error": "already decided", "status": found.Status}}
+		}
+		if refusal != nil {
+			return keepSwept(evs)
+		}
+		found.Status = StatusExpired
+		found.Error = "withdrawn: " + reason
+		found.DecidedAt = now
+		doc.put(found)
+		evs = append(evs, event{"approval.withdraw", found.ID, StatusExpired, reason})
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("store approvals: %w", err)
+	}
+	s.record(nil, evs)
+	if refusal != nil {
+		return refusal
+	}
+	return nil
 }

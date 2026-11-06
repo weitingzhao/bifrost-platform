@@ -56,6 +56,21 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 // accept.
 func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func(w *world, root string)) *c5 {
 	t.Helper()
+	c := c5Prepared(t, c4Source(path), pinned, enabled, accept)
+	store.FreezeEventClock(c.at.Add(-20 * time.Minute))
+	_, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, c.observe())
+	ok(t, err)
+	if d.Reason != "awaiting_grant" {
+		t.Fatal("not waiting", d)
+	}
+	store.FreezeEventClock(c.at)
+	return c
+}
+
+// c5Ready is c5WaitAccepted's accepted root of M-3, before its claim, the
+// change read from src.
+func c5Ready(t *testing.T, src store.LandingSource, pinned, enabled bool, accept func(w *world, root string)) *c5 {
+	t.Helper()
 	// Grant expiry during a read must not accidentally cross the quota day
 	// first (T35). All relative grant times derive from this injected clock.
 	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
@@ -72,7 +87,7 @@ func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func
 	if enabled {
 		c.enable(t, 1)
 	}
-	c.src = c4Source(path)
+	c.src = src
 	c.src.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) { return c.patch, nil }
 	c.src.GrantCI = func(context.Context, store.GrantCIKey, time.Time) (store.GrantCIEvidence, error) {
 		ev := store.GrantCIEvidence{Run: c.ci.Run, UID: c.ci.UID, CreatedAt: c.ci.CreatedAt, Status: c.ci.Status, Reason: c.ciReason,
@@ -82,6 +97,15 @@ func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func
 		}
 		return ev, nil
 	}
+	return c
+}
+
+// c5Prepared is c5Ready claimed and prepared: its branch pushed and CI
+// kicked, before the final gate has run. c.ci is green.
+func c5Prepared(t *testing.T, src store.LandingSource, pinned, enabled bool, accept func(w *world, root string)) *c5 {
+	t.Helper()
+	c := c5Ready(t, src, pinned, enabled, accept)
+	at := c.at
 	store.FreezeEventClock(at.Add(-30 * time.Minute))
 	op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", c.root, at)
 	ok(t, err)
@@ -98,14 +122,7 @@ func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func
 	c.ci = landing.CIRun{Run: "green", UID: "uid-green", R: commitB, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute),
 		PlatformCommit: commitB, UICommit: commitC, InfraCommit: commitA}
 	c.patch = store.GrantPatch{SHA256: strings.Repeat("7", 64), Shown: "diff --git a/x b/x\n", Size: 19, Match: true}
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
-	_, d, err = store.AuthorizeLandingPush(ctx, c.w.rt, c.src, op, c.observe())
-	ok(t, err)
-	if d.Reason != "awaiting_grant" {
-		t.Fatal("not waiting", d)
-	}
 	c.gsrc = store.GrantSources{Facts: c.src, Main: func(context.Context) (string, error) { return c.main, nil }}
-	store.FreezeEventClock(at)
 	return c
 }
 

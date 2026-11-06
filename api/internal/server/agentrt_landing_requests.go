@@ -41,4 +41,9 @@ func (s *Server) wireLandingRequests(c *controller.Controller) {
 		a, err := s.approvals.Request(ctx, "controller", action, reason, "Reject the card: nothing lands without a grant.", params)
 		return a.ID, err
 	}
+	// A pending card whose operation landed or ended without it is taken
+	// back, not left on the Owner's list until it expires.
+	c.Reconcile.SettleGrant = func(_ context.Context, id, reason string) error {
+		return s.approvals.Withdraw(id, reason)
+	}
 }

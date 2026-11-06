@@ -207,3 +207,21 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 	})
 	return wrote, err
 }
+
+// SettledLandingGrantRequests are the pending requests whose operation in s
+// no longer waits on a grant: it went on without one (a rule that clears
+// it, landing_rule_clear, or a newer operation of its task) or ended. No
+// grant can be written for them any more (the executor refuses not_waiting),
+// so the controller withdraws them from the Owner's list rather than leave
+// them to expire there. An operation s does not know is left alone.
+func SettledLandingGrantRequests(s landing.State, requests []LandingGrantRequest) []LandingGrantRequest {
+	var out []LandingGrantRequest
+	for _, r := range requests {
+		o, known := s.Operations[r.Op]
+		if r.Status != "pending" || !known || o.Task == "" || o.Phase == "awaiting_grant" && s.LatestOperation(o.Task) == r.Op {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}

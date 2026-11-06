@@ -218,7 +218,22 @@ func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
 		}
 		return rules.LandingFloorGrantable(l, f.Repo, f.Changes, soft)
 	}
-	return rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore))
+	return rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore) ||
+		touchesOpen(f) && !slices.Contains(soft, rules.LandingRulePaths))
+}
+
+// touchesOpen: some endpoint of f's change is an open path (rules.LandingOpen).
+// Such a change fails only size or the checks of its other paths, which
+// approve_guardrail_landing waives; a deny match (rule_paths) stays refused.
+func touchesOpen(f Facts) bool {
+	for _, c := range f.Changes {
+		for _, p := range c.Paths() {
+			if rules.LandingOpen(f.Repo, p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // GrantSupported: some grant can reach repo's waiting operations (the two

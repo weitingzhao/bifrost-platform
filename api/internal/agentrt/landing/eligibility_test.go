@@ -167,3 +167,45 @@ func TestLandingRuleLimitsAtEachGate(t *testing.T) {
 		}
 	}
 }
+
+// An open change (rules.LandingOpen) that fails size waits for the Owner's
+// approve_guardrail_landing where grants are enabled; a deny match on it, a
+// change with no open path, or grants not enabled are refused as rule.
+func TestLandingOpenLaneMayAwaitGrant(t *testing.T) {
+	// Open and outside the floor: a refusal of it is rule, never floor.
+	const open = "console/vitest.config.ts"
+	now := epoch.Add(time.Hour)
+	for _, tc := range []struct {
+		name, path string
+		deny       []string
+		enabled    bool
+		want       string
+	}{
+		{"open oversized", open, nil, true, "awaiting_grant"},
+		{"grants not enabled", open, nil, false, "rule"},
+		{"open under deny", open, []string{open}, true, "rule"},
+		{"no open path", "console/src/components/A.tsx", nil, true, "rule"},
+	} {
+		f := eligibleFacts()
+		f.GrantEnabled = tc.enabled
+		f.Changes[0].OldPath, f.Changes[0].NewPath, f.Changes[0].Added = tc.path, tc.path, 400
+		f.Rule.Landing.Repos[0].Deny = tc.deny
+		claim, push := EligibleToClaim(f, now), EligibleToPush(f, now)
+		switch tc.want {
+		case "awaiting_grant":
+			if !claim.Allowed || push.Allowed || push.Reason != "awaiting_grant" {
+				t.Fatal(tc.name, claim, push)
+			}
+		default:
+			if claim.Allowed || claim.Reason != tc.want || push.Allowed {
+				t.Fatal(tc.name, claim, push)
+			}
+		}
+	}
+	f := eligibleFacts()
+	f.GrantEnabled = true
+	f.Changes[0].OldPath, f.Changes[0].NewPath = open, open
+	if !EligibleToClaim(f, now).Allowed || !EligibleToPush(f, now).Allowed {
+		t.Fatal("open change within limits")
+	}
+}
