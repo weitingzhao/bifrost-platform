@@ -18,6 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -91,6 +92,7 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	// Baseline evidence is acquired through ExternalPass, not synthesized.
 	baseObs := b5hObservation(t, delivery.NamedDeliverInput{Batch: 900, Try: 1, IntentSeq: 1, P: base, U: commitA, Infra: commitA}, "Succeeded", "baseline", "a", "c")
 	x.runs.observations[baseObs.Identity.UID] = baseObs
+	x.manual(baseObs.Run) // with no evidence, any manual run is read (R5:5.7-11)
 	x.runs.external = []*unstructured.Unstructured{baseObs.Run}
 	ok(t, x.c.ExternalPass(ctx))
 	ok(t, x.c.CoverPass(ctx))
@@ -104,6 +106,31 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	}
 	t.Fatalf("fixture did not reach SNAP from production paths (PG anchor %s): %+v", at, x.state(t))
 	return nil
+}
+
+// manual makes run a manual run created now; ExternalPass reads only runs
+// created after the trusted baseline was deployed.
+func (x *b5hWorld) manual(run *unstructured.Unstructured) {
+	run.SetCreationTimestamp(metav1.NewTime(x.clock.Now().Add(time.Second)))
+}
+
+// waitManual opens a baseline_moved block of P against the trusted baseline,
+// one only a recorded manual run can lift, so ExternalPass reads manual runs.
+func (x *b5hWorld) waitManual(t *testing.T) string {
+	t.Helper()
+	s := x.state(t)
+	base, known := store.StgTrustedBaseline(s)
+	if !known {
+		t.Fatal("no trusted baseline")
+	}
+	set := []any{}
+	for _, raw := range s.Batches[b5Batch].Opened.Record["members"].([]any) {
+		set = append(set, raw)
+	}
+	r, err := store.StgBlockedRecord(x.p, "baseline_moved", base, x.clock.Now(), "manual-run", map[string]any{"members": set})
+	ok(t, err)
+	b5Append(t, x.w, r)
+	return r.String("block")
 }
 
 func (x *b5hWorld) controller(db store.DB) *stgrelease.Controller {

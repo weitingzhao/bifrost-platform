@@ -48,8 +48,10 @@ func TestB5HCrossPGLostLeaseThenExternal(t *testing.T) {
 	}
 	external := b5hObservation(t, delivery.NamedDeliverInput{Batch: 901, Try: 1, IntentSeq: 1, P: x.p, U: commitA, Infra: commitA}, "Succeeded", "external-after-loss", "d", "f")
 	x.runs.observations[external.Identity.UID] = external
+	x.manual(external.Run)
 	x.runs.external = []*unstructured.Unstructured{external.Run}
 	x.runs.work = b5hWork("d", "f")
+	x.waitManual(t) // only a block a manual run lifts makes ExternalPass read runs
 	ok(t, x.c.ExternalPass(ctx))
 	ok(t, x.c.CoverPass(ctx))
 	x.advance(t, 3*time.Minute)

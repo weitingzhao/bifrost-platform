@@ -36,6 +36,18 @@ func (s StgState) deploymentObservation(id string) StgEvent {
 	return s.Evidence[id]
 }
 
+// StgDeployedAt is when evidence id's deployment was observed, read through
+// the same observation StgTrustedBaseline uses.
+func StgDeployedAt(s StgState, id string) time.Time {
+	return s.deploymentObservation(id).Record.object("deployed").Time("at")
+}
+
+// StgManualRunCauses are the block causes that checkUnblock lets
+// external_release or evidence_changed clear: only a newly recorded manual
+// STG run can lift them. stgrelease.manualRunsNeeded lists manual runs only
+// while one is open (R5:5.7-11).
+var StgManualRunCauses = []string{"diff_unlanded", "non_linear", "no_merge_after_landing", "baseline_moved", "baseline_unknown", "hard_floor"}
+
 // Unblock references are recorded proofs, never free-form revision strings.
 // The conservative table implements only changes this stream can prove.
 // Rule versions and arbitrary Git ancestry need B5-c/e acquisition contracts
@@ -47,6 +59,7 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 	switch original.String("why") {
 	case "wrong_input", "ci_red", "ci_results", "ci_missing":
 		allowed = why == "inputs_changed"
+	// These and hard_floor are StgManualRunCauses; keep the two in step.
 	case "diff_unlanded", "non_linear", "no_merge_after_landing", "baseline_moved", "baseline_unknown":
 		allowed = why == "inputs_changed" || why == "external_release" || why == "evidence_changed"
 	case "hard_floor":

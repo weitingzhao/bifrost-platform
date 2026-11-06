@@ -44,7 +44,7 @@ func coverFixture(t *testing.T) (*Controller, *memoryLedger, *externalRuns, *cov
 func newerEvidence(t *testing.T, x *externalRuns) {
 	t.Helper()
 	o := controlObservationUID(t, delivery.NamedDeliverInput{Batch: 3, Try: 1, IntentSeq: 31, P: sha("d"), U: sha("b"), Infra: sha("c")}, "Succeeded", "manual-uid-2")
-	o.Run.SetAnnotations(nil)
+	manualRun(o, x.listed[0].GetCreationTimestamp().Add(time.Second))
 	x.listed = append(x.listed, o.Run)
 	x.byUID["manual-uid-2"] = o
 }

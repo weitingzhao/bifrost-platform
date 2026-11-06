@@ -9,8 +9,16 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// manualRun makes o a run B5 did not start, created at at (R5:5.7-11:
+// ExternalPass observes only runs created after the trusted baseline).
+func manualRun(o delivery.STGRunObservation, at time.Time) {
+	o.Run.SetAnnotations(nil)
+	o.Run.SetCreationTimestamp(metav1.NewTime(at))
+}
 
 type externalRuns struct {
 	*controlRuns
@@ -64,7 +72,7 @@ func externalFixture(t *testing.T) (*Controller, *memoryLedger, *externalRuns, *
 	c, l, r, w := controlFixture(t, "Succeeded")
 	l.entries = nil
 	o := controlObservationUID(t, delivery.NamedDeliverInput{Batch: 2, Try: 1, IntentSeq: 30, P: sha("a"), U: sha("b"), Infra: sha("c")}, "Succeeded", "manual-uid")
-	o.Run.SetAnnotations(nil)
+	manualRun(o, l.clock.Now().Add(time.Second))
 	x := &externalRuns{controlRuns: r, listed: []*unstructured.Unstructured{o.Run}, byUID: map[string]delivery.STGRunObservation{"manual-uid": o}}
 	c.Runs = x
 	c.Sources.ReleaseEvidence = func(_ context.Context, _ store.StgState, m store.StgMemberKey, p string) (store.MainEvidence, error) {
@@ -155,6 +163,7 @@ func TestExternalAutomaticBeforeAndAfterBinding(t *testing.T) {
 		t.Run(order, func(t *testing.T) {
 			t.Parallel()
 			c, l, r, w := controlFixture(t, "Succeeded")
+			r.obs.Run.SetCreationTimestamp(metav1.NewTime(l.clock.Now().Add(time.Second)))
 			x := &externalRuns{controlRuns: r, listed: []*unstructured.Unstructured{r.obs.Run}, byUID: map[string]delivery.STGRunObservation{"run-uid": r.obs}}
 			c.Runs = x
 			if order == "before-bound" {
@@ -164,11 +173,16 @@ func TestExternalAutomaticBeforeAndAfterBinding(t *testing.T) {
 				pass(t, c)
 				pass(t, c)
 			}
+			// Manual runs are listed: under a block, or with no single
+			// trusted baseline once the automatic run is archived.
+			if _, ok := store.StgTrustedBaseline(l.state(t)); ok {
+				openBlock(t, l, "baseline_moved")
+			}
 			before := l.state(t).LastSeq
 			externalPass(t, c)
 			s := l.state(t)
-			if s.LastSeq != before {
-				t.Fatal("external pass adopted automatic run")
+			if s.LastSeq != before || x.lists != 1 {
+				t.Fatal("external pass adopted automatic run", x.lists)
 			}
 			for _, e := range s.Evidence {
 				if e.Record.String("run") == r.obs.Identity.Name && e.Record.String("source") != "automatic" {
@@ -196,7 +210,7 @@ func TestExternalSameDigestsNeedEachRunsDeploymentProof(t *testing.T) {
 			t.Parallel()
 			c, l, r, _ := externalFixture(t)
 			other := controlObservationUID(t, delivery.NamedDeliverInput{Batch: 3, Try: 1, IntentSeq: 40, P: sha("2"), U: sha("b"), Infra: sha("c")}, "Succeeded", "second-uid")
-			other.Run.SetAnnotations(nil)
+			manualRun(other, l.clock.Now().Add(time.Second))
 			if !valid {
 				delete(other.Children, "gitops-sync")
 			}
@@ -316,9 +330,11 @@ func TestExternalCoveragePreservesExecutionSlot(t *testing.T) {
 				l.entries = l.entries[:len(l.entries)-2]
 			}
 			externalLanded(t, l, controlMember)
+			openBlock(t, l, "baseline_moved") // the manual run is observed
 			o := controlObservationUID(t, delivery.NamedDeliverInput{Batch: 2, Try: 1, IntentSeq: 30, P: sha("a"), U: sha("b"), Infra: sha("c")}, "Succeeded", "manual-uid")
-			o.Run.SetAnnotations(nil)
-			c.Runs = &externalRuns{controlRuns: r, listed: []*unstructured.Unstructured{o.Run}, byUID: map[string]delivery.STGRunObservation{"manual-uid": o}}
+			manualRun(o, l.clock.Now().Add(time.Second))
+			x := &externalRuns{controlRuns: r, listed: []*unstructured.Unstructured{o.Run}, byUID: map[string]delivery.STGRunObservation{"manual-uid": o, "run-uid": r.obs}}
+			c.Runs = x
 			c.Sources.ReleaseEvidence = func(_ context.Context, _ store.StgState, _ store.StgMemberKey, p string) (store.MainEvidence, error) {
 				return store.MainEvidence{Head: p, HasR: true, Validity: "effective"}, nil
 			}
@@ -333,6 +349,9 @@ func TestExternalCoveragePreservesExecutionSlot(t *testing.T) {
 			}
 			s := l.state(t)
 			b := s.Batches[leaseBatch]
+			if s.Evidence["cluster/cicd/manual-uid"].Record.String("source") != "external" {
+				t.Fatal("manual run not archived")
+			}
 			if len(s.Covers) != 1 || (b.Phase == "CLOSED") == occupied || b.Tries[b.Try].Occupied() != occupied {
 				t.Fatal("coverage changed outstanding execution", b.Phase)
 			}

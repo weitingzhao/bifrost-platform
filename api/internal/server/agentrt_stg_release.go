@@ -69,7 +69,10 @@ func (s *Server) startSTGRelease(ctx context.Context, c *controller.Controller) 
 				release = s.newSTGRelease(ctx, c, func() stgrelease.WindowPolicy { return *policy.Load() })
 			}
 			// R5:5.7-5: the passes share one tick and one lock; a slow tick
-			// says which of them took the time (logging only).
+			// says which of them took the time (logging only). ExternalPass runs
+			// first so an unblock and a new baseline are seen in this tick; it
+			// reads the cluster only while a manual run is needed and logs its
+			// own slow reads (R5:5.7-11).
 			start := time.Now()
 			if err := release.ExternalPass(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("STG external release pass", "error", err)
