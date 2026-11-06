@@ -31,6 +31,9 @@ type Sources struct {
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
+	// Unacked lists the runtime's answered cards it has not acknowledged
+	// (AckUsedAnswers); nil acknowledges none of them.
+	Unacked func(ctx context.Context) ([]store.AnsweredCard, error)
 	// Ask puts a plan's decision cards to the Owner (store.AcceptPlan); nil
 	// leaves a plan with questions submitted until there is one. Withdraw
 	// takes back the cards of a plan's round that was refused; nil leaves
@@ -81,13 +84,17 @@ type Controller struct {
 	cardPause    time.Time // asking landing cards pauses until then (quota)
 	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
 	// runs none. Apart from the drill: any environment, any rule.
-	Reconcile   *LandingReconcile
-	DB          store.DB
-	Sources     Sources
-	Logf        func(format string, args ...any)
-	LeaseEvery  time.Duration
-	FactsEvery  time.Duration
-	ReadTimeout time.Duration // per source read; zero means 10 seconds
+	Reconcile *LandingReconcile
+	DB        store.DB
+	Sources   Sources
+	Logf      func(format string, args ...any)
+	// Infof logs what the controller did that needs no one's attention (an
+	// answer it acknowledged); nil uses Logf.
+	Infof          func(format string, args ...any)
+	answersAckedAt time.Time // the last AckUsedAnswers pass of the facts loop
+	LeaseEvery     time.Duration
+	FactsEvery     time.Duration
+	ReadTimeout    time.Duration // per source read; zero means 10 seconds
 	// Briefs has the controller leave the chief of staff its scheduled briefs
 	// and nudges (W-31 2.4 slice ④); Now is the clock they and the waits
 	// (Waits) read, time.Now when nil.
@@ -737,10 +744,11 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, perr := c.PlanDecisions(ctx)
 		_, merr := c.MissionDecisions(ctx)
 		_, ierr := c.IssueCards(ctx)
+		_, qerr := c.ackUsedAnswersDue(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
 		_, werr := c.Waits(ctx)
-		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, ierr, verr, rerr, werr)
+		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, ierr, qerr, verr, rerr, werr)
 	})
 	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
 		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {

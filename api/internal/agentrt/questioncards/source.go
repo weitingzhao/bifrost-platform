@@ -176,3 +176,32 @@ func New(svc *questions.Service) store.CardQuestions {
 		},
 	}
 }
+
+// Unacked lists the questions the runtime asked that the Owner answered and
+// the runtime has not acknowledged (each counts against its quota until it
+// is); it writes nothing. nil without a question store.
+func Unacked(svc *questions.Service) func(ctx context.Context) ([]store.AnsweredCard, error) {
+	if svc == nil {
+		return nil
+	}
+	return func(ctx context.Context) ([]store.AnsweredCard, error) {
+		res := svc.List(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", "unread", true)
+		if res.Code != http.StatusOK {
+			return nil, fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+		}
+		body, _ := res.Body.(map[string]any)
+		qs, ok := body["questions"].([]questions.Question)
+		if !ok {
+			return nil, fmt.Errorf("the question store's list is not a list of questions: %T", body["questions"])
+		}
+		var out []store.AnsweredCard
+		for _, q := range qs {
+			if q.Requester != questions.RuntimeSession || q.Status != questions.StatusAnswered || q.Answer == nil || q.Answer.Read != nil {
+				continue
+			}
+			out = append(out, store.AnsweredCard{ID: q.ID, Number: q.Number, TaskID: q.TaskID, AnsweredAt: q.Answer.At,
+				ByRule: q.Answer.Channel == questions.RuleChannel})
+		}
+		return out, nil
+	}
+}

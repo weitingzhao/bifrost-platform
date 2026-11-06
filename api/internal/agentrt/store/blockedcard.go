@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -143,6 +144,32 @@ func TaskStopHeld(ctx context.Context, db DB, task string) (bool, error) {
 		  AND EXISTS (SELECT 1 FROM `+stopOn+`))`, task).Scan(&on)
 	})
 	return on, err
+}
+
+// AnsweredCard is one of the runtime's cards the Owner answered that the
+// runtime has not acknowledged: an unacknowledged answer counts against the
+// runtime's question quota.
+type AnsweredCard struct {
+	ID         string
+	Number     int
+	TaskID     string // empty when the card names no task
+	AnsweredAt time.Time
+	// ByRule: a card-auto-answer rule answered it, and the rule's pass
+	// finishes it (its note) and acknowledges it (AnswerByRule).
+	ByRule bool
+}
+
+// TaskWait reads what an answered card's task is now: its state and whether
+// a stop holds it (stopOn); found false when no such task exists.
+func TaskWait(ctx context.Context, db DB, task string) (state string, stopped, found bool, err error) {
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT t.state, EXISTS (SELECT 1 FROM `+stopOn+`) FROM agentrt.task t WHERE t.task_id = $1`,
+			task).Scan(&state, &stopped)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, false, nil
+	}
+	return state, stopped, err == nil, err
 }
 
 // stopHolds reports whether a stop holds task t, its own or its mission's.

@@ -216,6 +216,8 @@ func agentRuntimeController(env string, db store.DB, src controller.Sources) *co
 	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg, Precheck: precheckFromEnv(),
 		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, PageOwner: diskPage, WatchPresence: true, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
+		}, Infof: func(format string, args ...any) {
+			slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 }
 
@@ -494,6 +496,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
 	src.Ack = s.questionRuntime.agentRuntimeAck()
+	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
 	src.Cards = s.questionRuntime.agentRuntimeCards()
