@@ -47,6 +47,7 @@ func remote(t *testing.T, env []string) (string, string) {
 }
 
 func TestWorkspace(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -112,6 +113,7 @@ func TestWorkspace(t *testing.T) {
 }
 
 func TestPrepareRefusesAnUnknownBase(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, _ := remote(t, env)
 	if _, err := Prepare(context.Background(), filepath.Join(t.TempDir(), "a1"), bare, strings.Repeat("0", 40), env); err == nil {
@@ -124,6 +126,7 @@ func TestPrepareRefusesAnUnknownBase(t *testing.T) {
 // changes an executor's configuration fails, whether the change is left in
 // the tree or committed by the executor; other changes do not count.
 func TestUnwantedChanges(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -232,6 +235,7 @@ func remoteWith(t *testing.T, env []string, files map[string]string) (string, st
 // under another name (A2), a first path that begins with a space (B4), and a
 // check cut short by its context (B3).
 func TestUnwantedChangesReview239(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	ctx := context.Background()
 	checkout := func(files map[string]string) (*Workspace, string) {
@@ -315,6 +319,7 @@ func TestUnwantedChangesReview239(t *testing.T) {
 // Review 239 B3: a check cut short leaves the journal unchecked, so the next
 // pass (after a restart too) checks; a finished check is journalled.
 func TestCheckChangesIsJournalled(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -358,6 +363,7 @@ func TestCheckChangesIsJournalled(t *testing.T) {
 // directory or added as a gitlink, is seen; a top-level directory named
 // cli.json is not configuration and its contents are not listed.
 func TestUnwantedChangesReview241(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	ctx := context.Background()
 	bare, base := remoteWith(t, env, map[string]string{".gitignore": "scratch/\n/cli.json/\n"})
@@ -406,6 +412,7 @@ func TestUnwantedChangesReview241(t *testing.T) {
 // Review 241 B5: indexes and locks a killed check left are removed once they
 // are old; a recent one, possibly a running check's, is kept.
 func TestChangesRemovesStaleIndexes(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -440,6 +447,7 @@ func TestChangesRemovesStaleIndexes(t *testing.T) {
 // stops before anything is sent, and the outcome it returns says what the
 // check found.
 func TestCheckOutcomeWhenTheJournalFails(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	d := fakeDaemon(t, f)
 	env := gitEnv(t.TempDir())
@@ -471,6 +479,7 @@ func TestCheckOutcomeWhenTheJournalFails(t *testing.T) {
 // goes through the workspace's wall: the checkout's .git/config can name
 // commands (an fsmonitor, a filter) that git would run.
 func TestWorkspaceGitGoesThroughItsWall(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -515,6 +524,7 @@ func TestWorkspaceGitGoesThroughItsWall(t *testing.T) {
 // checkout's .git outside the wall; a .git the executor made a link out of
 // the checkout is not followed, whether or not git runs.
 func TestIndexFilesNotThroughALinkedGitDir(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()

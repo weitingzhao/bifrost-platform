@@ -34,6 +34,7 @@ func agentsRepo(t *testing.T, env []string, mirror, task string) (string, string
 }
 
 func TestPrepareFetchingFindsAPushedCommit(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	mirror, _ := remote(t, env)
 	agents, pushed := agentsRepo(t, env, mirror, "t_A")
@@ -70,6 +71,7 @@ func TestPrepareFetchingLeavesTheOtherRemoteWhenTheBaseIsThere(t *testing.T) {
 }
 
 func TestCheckoutOfACheckFetchesTheCheckedTask(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	mirror, base := remote(t, env)
 	agents, pushed := agentsRepo(t, env, mirror, "t_A")
@@ -112,6 +114,7 @@ func TestCheckoutOfACheckFetchesTheCheckedTask(t *testing.T) {
 }
 
 func TestPushGoesWhereBranchesGo(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	mirror, base := remote(t, env)
 	agents := filepath.Join(t.TempDir(), "agents.git")

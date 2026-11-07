@@ -11,6 +11,7 @@ import (
 // GET /leak-value answers the projection for 1 to 12 full weeks (default 8)
 // and the current one, and refuses any other number of weeks.
 func TestLeakValueRoute(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	now := time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC)
 	s := server(t, pool, func(a *agentrtapi.API) { a.Now = func() time.Time { return now } })

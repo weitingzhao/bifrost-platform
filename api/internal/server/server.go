@@ -354,7 +354,7 @@ func New(cfg *config.Config) (*Server, error) {
 			if err != nil {
 				return actions.PlanSummary{}, err
 			}
-			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects)}, nil
+			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects), Migrated: sum.Migrated}, nil
 		})
 	}
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
@@ -363,7 +363,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
 	srv.approvals.SetCreateCheck(srv.approvalCreateCheck)
-	srv.approvals.SetOpenKey(landingGrantOpenKey) // one open landing grant request per operation (review 694 R-02)
+	srv.approvals.SetOpenKey(approvalOpenKey) // one open landing grant request per operation (review 694 R-02), one open deploy_agentd card per host
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)

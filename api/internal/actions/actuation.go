@@ -18,8 +18,9 @@ type PlanSummary struct {
 	Namespaces []string
 	Daemon     bool
 	// Path and Objects feed the approval summary only.
-	Path    string
-	Objects int
+	Path     string
+	Objects  int
+	Migrated int
 }
 
 var (

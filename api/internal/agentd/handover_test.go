@@ -162,6 +162,7 @@ var bg = context.Background()
 // Review 164 A3: the lease is renewed while the submit is in flight, and not
 // after it is taken (release waits for a heartbeat in flight).
 func TestSubmitKeepsTheLease(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	f.delay["submit"] = 300 * time.Millisecond
 	d := fakeDaemon(t, f)
@@ -267,6 +268,7 @@ func TestPrepareAfterACancel(t *testing.T) {
 // branch is pushed; a push that fails leaves it pending, and the next try
 // pushes the same commit and salvages it.
 func TestLostPushesBeforeSalvage(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	f := newFake()
@@ -310,6 +312,7 @@ func TestLostPushesBeforeSalvage(t *testing.T) {
 // is the next sample taken. The patch is the net change against the base,
 // commits the executor made included.
 func TestCheckpointResendsItsRequest(t *testing.T) {
+	t.Parallel()
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	f := newFake()
@@ -421,6 +424,7 @@ func TestEndsWhileACheckpointHangs(t *testing.T) {
 // Review 164 A7: a lost lease or a stop that comes while the start is being
 // reported cuts it short: the executor is never released.
 func TestStartCutShort(t *testing.T) {
+	t.Parallel()
 	for _, why := range []string{"lease_lost", "cancelled"} {
 		t.Run(why, func(t *testing.T) {
 			f := newFake()
@@ -461,6 +465,7 @@ func TestStartCutShort(t *testing.T) {
 // grace) neither loops nor holds up the others; it is tried again only
 // after SalvageEvery.
 func TestRecoverEndsGroupsFirstAndIsBounded(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	f.set("salvage", always(http.StatusConflict, "in_grace"))
 	d := fakeDaemon(t, f)
@@ -578,6 +583,7 @@ func TestCheckpointWrittenBeforeSent(t *testing.T) {
 // Review 165 A2: once the leader is gone the group is cleared at once, even
 // while a sample is still finishing (one that ignores its cancellation).
 func TestGroupClearedBeforeASlowSample(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	f.hang["put:log_tail"] = 6 * time.Second
 	d := fakeDaemon(t, f)

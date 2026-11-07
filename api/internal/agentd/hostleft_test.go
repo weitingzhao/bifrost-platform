@@ -107,6 +107,7 @@ func TestABenchRunLeftBlocksTheDaemon(t *testing.T) {
 // ended, or the record does not read, agentd takes no new work (Blocked) and
 // LeftOnHost says why.
 func TestABenchRunLeftIsEndedByTheNextHolder(t *testing.T) {
+	t.Parallel()
 	d := fakeDaemon(t, newFake())
 	dir := filepath.Join(d.Root, "bench", "bench-20261021T000000-codex")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

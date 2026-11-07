@@ -56,7 +56,7 @@ func TestIntakeGatesRefuses(t *testing.T) {
 		"an item twice":                            strings.Replace(intake, "small: [brief_confirmed,", "small: [brief_confirmed, brief_confirmed,", 1),
 		"a class missing":                          strings.Replace(intake, "  small: [brief_confirmed, classified, owner_priority, quota, rule_in_force]\n", "", 1),
 		"a class nobody has":                       strings.Replace(intake, "classes:\n", "classes:\n  tiny: [brief_confirmed]\n", 1),
-		"a bound past the limit":                   strings.Replace(intake, "max_live_per_product: 1", "max_live_per_product: 21", 1),
+		"a bound past the limit":                   strings.Replace(intake, "max_live_per_product: 1", "max_live_per_product: 1001", 1),
 		"an exception nobody has":                  strings.Replace(intake, "[fault_small, answer_only]", "[fault_small, vip]", 1),
 		"no exceptions field":                      strings.Replace(intake, "exceptions: [fault_small, answer_only]\n", "", 1),
 		"an argument in the id":                    strings.Replace(intake, "rule_id: intake-gates", "rule_id: intake-gates:screening", 1),

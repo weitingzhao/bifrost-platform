@@ -116,6 +116,7 @@ func assertRefreshed(t *testing.T, pool *pgxpool.Pool, op string) {
 // Serial: uses server's shared fixture configuration. Public store entry,
 // real permission SQL, same-entry positive control and one changed input.
 func TestC4Review690RefreshStorePermissions(t *testing.T) {
+	t.Parallel()
 	for _, afterMain := range []bool{false, true} {
 		for _, field := range []string{"", "host_kind", "pin", "host_id", "accepted"} {
 			t.Run(fmt.Sprintf("%s/afterMain=%v", field, afterMain), func(t *testing.T) {
@@ -153,6 +154,7 @@ func TestC4Review690RefreshStorePermissions(t *testing.T) {
 // catalog's production exemptions (these work-queue routes are not actions).
 // The permitted request is a real claim/pinned -> handin -> refresh chain.
 func TestC4Review690RefreshHTTPPermissions(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"claim/pinned", "landing/refresh"} {
 		if actions.ExemptionReason("POST", "/api/v1/agentrt/"+path) == "" {
 			t.Fatal("missing work-queue exemption", path)

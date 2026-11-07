@@ -10,6 +10,7 @@ import (
 // Benchmark runs over HTTP (W-31 2.4 slice ⑤): only an agentd token, for the
 // host it is bound to; a run handed in twice is recorded once.
 func TestBenchmark(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	// One start time for every hand-in: read per call, two calls on either

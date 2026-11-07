@@ -68,12 +68,14 @@ func get(t *testing.T, s *httptest.Server, path string) []byte {
 }
 
 func TestPlanImportMatchesLedger(t *testing.T) {
+	t.Parallel()
 	checkImport(t, fixtureLedger, fixtureBoard, fixtureStars)
 }
 
 // The real ledger, when it is named (see planimport's
 // TestParseRealLedgerMatchesBoard for the three variables).
 func TestPlanImportRealLedger(t *testing.T) {
+	t.Parallel()
 	path, board := os.Getenv("AGENTRT_PLAN_LEDGER"), os.Getenv("AGENTRT_PLAN_BOARD")
 	if path == "" || board == "" {
 		t.Skip("set AGENTRT_PLAN_LEDGER and AGENTRT_PLAN_BOARD to import the real ledger")
@@ -296,6 +298,7 @@ func importHead(t *testing.T, s *httptest.Server, root string) string {
 // recommended entry (CUT §4 A) the proposal and its decision come first, and
 // a stream can hold more than a page (500) before it (review 311 A2).
 func TestPlanImportHeadAfterOtherEvents(t *testing.T) {
+	t.Parallel()
 	pool := seeded(t)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := 0; i < 501; i++ {
@@ -329,6 +332,7 @@ func counts(t *testing.T, pool *pgxpool.Pool) [3]int {
 // Importing twice writes nothing the second time, even after the plan has
 // moved on; a different request for the same root is refused whole.
 func TestPlanImportTwice(t *testing.T) {
+	t.Parallel()
 	pool := seeded(t)
 	req := ledger(t, fixtureLedger)
 	first, err := store.ImportPlan(ctx, pool, "controller", req)
@@ -372,6 +376,7 @@ func TestPlanImportTwice(t *testing.T) {
 // a step added to 2.1 is 2.1-6, an item added to the round is 2.5 (2.2b is
 // not a number and is passed over).
 func TestPlanImportNumberingContinues(t *testing.T) {
+	t.Parallel()
 	pool := seeded(t)
 	_, err := store.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
 	must(t, err)
@@ -412,6 +417,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 // An import that fails part way leaves nothing: here a round already holds
 // the root's place, which the first node's insert finds.
 func TestPlanImportAllOrNothing(t *testing.T) {
+	t.Parallel()
 	pool := seeded(t)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})

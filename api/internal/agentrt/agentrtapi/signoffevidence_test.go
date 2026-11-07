@@ -10,6 +10,7 @@ import (
 )
 
 func TestAcceptanceSignoffEvidenceHTTP(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	raw, err := os.ReadFile("../planview/testdata/r4-v1.json")

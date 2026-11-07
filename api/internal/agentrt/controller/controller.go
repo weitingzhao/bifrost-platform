@@ -148,6 +148,9 @@ type Controller struct {
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
 	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
+	// AgentdDeploy proposes deploy_agentd cards (agentddeploy.go); nil
+	// proposes none.
+	AgentdDeploy *AgentdDeploy
 }
 
 // PlanObserveEvery is how often the plan completion atoms' sources are read
@@ -516,6 +519,13 @@ func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
 // so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
 const LandingsEvery = 5 * time.Minute
 
+// DrillPassCeiling bounds one landing drill pass, a ceiling for a hung pass,
+// not a schedule: a pass ends when its work does. 2026-11-07 at 5 minutes,
+// split between two repositories and a cleanup, bifrost-platform had 90
+// seconds: four operations each needing ~25s of Git fetches got 22.5s, were
+// cut off every pass, and no claim ever ran.
+const DrillPassCeiling = 15 * time.Minute
+
 // Landings records every implementation whose change first stands on main,
 // in whatever state, not only accepted ones, with the route it took there
 // (store.RecordLandings, TD-383); each repository's main is read with a minute's bound. It returns
@@ -691,7 +701,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		safego.Go("agentrt-landing-drill", func() {
 			defer wg.Done()
 			run := func() error {
-				passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+				passCtx, cancel := context.WithTimeout(ctx, DrillPassCeiling)
 				defer cancel()
 				return c.LandingDrillPass(passCtx)
 			}
@@ -782,5 +792,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	}
 	c.startCheckValue(ctx, &wg)
 	c.startFullCI(ctx, &wg)
+	c.startAgentdDeploy(ctx, &wg)
 	return wg.Wait
 }

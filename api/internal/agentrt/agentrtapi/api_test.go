@@ -115,6 +115,10 @@ var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "f
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
 
+// recordMu orders the appends to heads and cards: tests that run in parallel
+// serve beside each other (those that read either run alone).
+var recordMu sync.Mutex
+
 // cards records the decision cards the API asked the Owner; askFails makes
 // the next asks fail, as a full question store would; anchor is the key a
 // signed rule must verify against.
@@ -215,6 +219,8 @@ intake_tokens:
 	// load one pass can take longer than a few hundred milliseconds.
 	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
 		Head: func(_ context.Context, repo, ref string) (string, error) {
+			recordMu.Lock()
+			defer recordMu.Unlock()
 			heads = append(heads, repo+"|"+ref)
 			return pushedAt, nil
 		},
@@ -222,6 +228,8 @@ intake_tokens:
 			if askFails {
 				return "", fmt.Errorf("store full")
 			}
+			recordMu.Lock()
+			defer recordMu.Unlock()
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
 		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
@@ -490,6 +498,7 @@ func TestNotConfigured(t *testing.T) {
 // Uploads: every kind but the four H8 lets through is scanned, whoever
 // uploads it; a kind the schema does not have is refused (review 156 A2, B3).
 func TestUploadKinds(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	leaky := []byte("input at /home/ci/private-input\n")
@@ -517,6 +526,7 @@ func TestUploadKinds(t *testing.T) {
 // Review 157 B1: the same body uploaded twice at once is stored and
 // recorded once.
 func TestUploadRace(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	body := []byte("# race\n")

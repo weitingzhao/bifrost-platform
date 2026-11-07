@@ -63,6 +63,10 @@ var intendedRouteAdditions = map[string][]string{
 	// R5:5.5-13 / 5.5-17 slice 1: a round's pace and its hours with no
 	// registered work, for every reader, as plan-view is (read-only).
 	"GET /api/v1/agentrt/plan-pace": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// R5 phase 2 step 6: the plan's step timeline and the delivery stages,
+	// read-only, for every reader, as plan-view is.
+	"GET /api/v1/agentrt/plan-timeline": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"GET /api/v1/agentrt/delivery":      {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5:5.7-8 slice 1: the coordinator pins' share, read-only, every reader.
 	"GET /api/v1/agentrt/pin-share": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5:5.7: the check value table, read-only, every reader.

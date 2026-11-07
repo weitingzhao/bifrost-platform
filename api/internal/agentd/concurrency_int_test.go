@@ -41,6 +41,7 @@ func readyTask(t *testing.T, tx func(func(pgx.Tx) error)) string {
 // third; they run side by side; Recover between claims leaves both alone; a
 // stop ends one and the other is handed over.
 func TestTwoAttemptsAtOnceOnOneHost(t *testing.T) {
+	t.Parallel()
 	pool, _, base := platform(t)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {
@@ -59,7 +60,7 @@ func TestTwoAttemptsAtOnceOnOneHost(t *testing.T) {
 	d.Confined = func(*agentd.Claimed, agentd.TaskSpec) bool { return true }
 	var cls []*agentd.Claimed
 	for i := 0; i < 2; i++ {
-		cl, err := d.Client.Claim(ctx, agentd.MaxSlots-i, []agentd.Tool{cursor})
+		cl, err := d.Client.Claim(ctx, agentd.DefaultSlots-i, []agentd.Tool{cursor})
 		if err != nil || cl == nil {
 			t.Fatalf("claim %d = %+v %v", i, cl, err)
 		}

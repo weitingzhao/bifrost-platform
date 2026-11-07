@@ -30,6 +30,7 @@ func startVerify(ctx context.Context, db store.DB, task string) (string, error) 
 // of its output after the spec, before the hand-in rules. Round 1 is told
 // nothing of the kind.
 func TestRetriedImplementationIsToldWhatFailed(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	head := func(_ context.Context, _, ref string) (string, error) {

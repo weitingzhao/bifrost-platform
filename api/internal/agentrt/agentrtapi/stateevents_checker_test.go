@@ -22,6 +22,7 @@ import (
 // starting. Two retained cases held before too: a move with no reason and
 // nothing else in its transaction, and events that end elsewhere than the row.
 func TestStateEventCheckerCatches(t *testing.T) {
+	t.Parallel()
 	// ev is a move; each sibling is "<id> <type>".
 	ev := func(id int64, typ, from, to string, reason bool, siblings ...string) fuzzEvent {
 		body := map[string]any{"from": from, "to": to}

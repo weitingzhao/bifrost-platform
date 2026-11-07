@@ -85,6 +85,9 @@ type API struct {
 	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
 	// leaves it out and says why in the warnings.
 	Sessions func(context.Context) (any, error)
+	// ReleaseCycles reads the PROD release cycles for GET /delivery; nil
+	// means not wired, and the PROD stages are unknown with a warning.
+	ReleaseCycles func(context.Context) ([]store.ReleaseCycle, error)
 	// PinReason is what an implement task pinned to the coordinator without
 	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
 	PinReason store.PinReasonMode
@@ -198,6 +201,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("assess"), cfg).Post("/assessments/{kind}/{id}", a.requestAssessment)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
+		r.With(read, cfg).Get("/plan-timeline", a.getPlanTimeline)
+		r.With(read, cfg).Get("/delivery", a.getDelivery)
 		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
 		r.With(read, cfg).Get("/check-value", a.getCheckValue)
 		r.With(read, cfg).Get("/pin-share", a.getPinShare)
@@ -404,6 +409,9 @@ type claimRequest struct {
 	// on (TD-415); an agentd from before it sends neither.
 	DiskFree *int64 `json:"disk_free_bytes,omitempty"`
 	RootFree *int64 `json:"root_free_bytes,omitempty"`
+	// The agentd build the host runs: its commit, whether the work tree had
+	// changes, and its binary's sha256; an agentd from before it sends none.
+	Build *store.AgentdBuild `json:"build,omitempty"`
 }
 
 // claim is the long poll for work: it tries until a task is leased or the
@@ -424,6 +432,12 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	case req.DiskFree != nil:
 		cr.Disk = &store.HostDisk{Host: *req.DiskFree, Root: *req.RootFree}
+	}
+	if req.Build != nil {
+		if err := req.Build.Check(); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "build is a commit of 40 hex, a sha256 of 64 hex and modified")
+			return
+		}
 	}
 	for _, t := range req.Tools {
 		if t.Executor == "" || t.Provider == "" {
@@ -459,6 +473,14 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	// poll leases nothing (store.ClaimRequest.Disk).
 	if cr.Disk != nil {
 		if _, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	// The build it runs, likewise once a request and when it changed: the
+	// platform knows which build a host runs before and after a deploy.
+	if req.Build != nil {
+		if _, err := store.RecordHostBuild(ctx, a.DB, req.HostID, *req.Build); err != nil {
 			a.fail(w, err)
 			return
 		}

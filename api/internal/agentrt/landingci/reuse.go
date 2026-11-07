@@ -5,6 +5,17 @@ import (
 	"time"
 )
 
+// ValidReuse verifies a tested-by run against the listed bifrost-ci-platform
+// runs. Callers apply their own scope policy.
+func ValidReuse(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) bool {
+	_, counts := namedValues(item, "status", "results")
+	if counts["tested-by"] == 0 {
+		return false
+	}
+	out := reuseResult(item, items, revision)
+	return out.Status == "Succeeded" && out.Reason == ""
+}
+
 // reuseResult checks the tree-reuse contract against the reader's existing
 // bifrost-ci-platform run list. Every new run reports platform-tree, the
 // 40-hex tree it tested. A reuse of P is Succeeded, reports platform-commit=P,

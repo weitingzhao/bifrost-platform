@@ -11,6 +11,7 @@ import (
 var externalSpec = []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"reporter dispatch","executor":"codex","provider":"openai","repo":"platform","branch":"test","acceptance_refs":["PV1"],"estimate_minutes":[1,2]}`)
 
 func TestReporterExternalWork(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	upload := "artifacts/" + artifactID(externalSpec)
@@ -79,6 +80,7 @@ func TestReporterExternalWork(t *testing.T) {
 }
 
 func TestReporterUploadScope(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	var before int

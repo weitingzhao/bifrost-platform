@@ -47,7 +47,11 @@ import (
 //
 // The seed is fixed; AGENTRT_FUZZ_SEED tries another, AGENTRT_FUZZ_N sets the
 // bodies per route and caller in each world.
+//
+// The four worlds are four databases and run at once, each counting into its
+// own tally; the counts are added up once all four are done.
 func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
+	t.Parallel()
 	routes := walkRoutes(t)
 	if len(routes) < 40 {
 		t.Fatalf("walked %d routes; the walk found less than Mount serves", len(routes))
@@ -63,19 +67,57 @@ func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 		n, err = strconv.Atoi(v)
 		must(t, err)
 	}
+	tallies := make([]map[string]*routeTally, len(fuzzStages))
+	movesOf := make([]map[string]int, len(fuzzStages))
+	done := make([]bool, len(fuzzStages))
+	t.Run("stages", func(t *testing.T) {
+		for i, st := range fuzzStages {
+			tallies[i], movesOf[i] = map[string]*routeTally{}, map[string]int{}
+			t.Run(st, func(t *testing.T) {
+				t.Parallel()
+				t.Logf("stage %q: seed %d", st, seed)
+				f := newStateFuzz(t, seed, n, tallies[i], movesOf[i])
+				f.label = fmt.Sprintf("stage %q, seed %d", st, seed)
+				s := f.stage(t, st)
+				f.round(t, s, routes)
+				t.Logf("stage %q: seed %d, %d requests, %d answered, %d rows checked", st, seed, f.requests, f.answered, f.checked)
+				streams := f.ids(t, `SELECT event_stream_id FROM agentrt.event_stream ORDER BY 1`)
+				for _, id := range streams {
+					if _, err := store.VerifyStream(ctx, f.pool, id); err != nil {
+						t.Errorf("stage %q, seed %d: stream %s: %v", st, seed, id, err)
+					}
+				}
+				done[i] = true
+			})
+		}
+	})
+	// A stage that failed may have counted only part of its routes: the
+	// checks below would name routes it never reached. One that skipped had
+	// no database.
+	if t.Failed() {
+		t.FailNow()
+	}
+	if slices.Contains(done, false) {
+		t.Skip("a stage did not run")
+	}
 	tally := map[string]*routeTally{}
 	moves := map[string]int{}
-	for _, st := range fuzzStages {
-		t.Logf("stage %q: seed %d", st, seed)
-		f := newStateFuzz(t, seed, n, tally, moves)
-		s := f.stage(t, st)
-		f.round(t, s, routes, st)
-		t.Logf("stage %q: seed %d, %d requests, %d answered, %d rows checked", st, seed, f.requests, f.answered, f.checked)
-		streams := f.ids(t, `SELECT event_stream_id FROM agentrt.event_stream ORDER BY 1`)
-		for _, id := range streams {
-			if _, err := store.VerifyStream(ctx, f.pool, id); err != nil {
-				t.Errorf("stage %q: stream %s: %v", st, id, err)
+	for i := range fuzzStages {
+		for k, c := range tallies[i] {
+			sum := tally[k]
+			if sum == nil {
+				sum = &routeTally{}
+				tally[k] = sum
 			}
+			sum.valid += c.valid
+			sum.validWrote += c.validWrote
+			sum.answered += c.answered
+			sum.wrote += c.wrote
+			sum.refused += c.refused
+			sum.moves += c.moves
+		}
+		for k, m := range movesOf[i] {
+			moves[k] += m
 		}
 	}
 
@@ -178,6 +220,7 @@ type stateFuzz struct {
 	digestQ  string // one query: a digest of every table of the runtime
 	tally    map[string]*routeTally
 	moves    map[string]int
+	label    string // the stage and seed, before each failure
 	requests int
 	answered int
 	checked  int
@@ -314,6 +357,9 @@ func (f *stateFuzz) send(t *testing.T, s *httptest.Server, key string, valid boo
 func (f *stateFuzz) check(t *testing.T, key string, valid bool, what string, code int, before map[rowKey]string, digest map[string]string, since int64) {
 	t.Helper()
 	if err := f.judge(t, key, valid, code, before, digest, since); err != nil {
+		if f.label != "" {
+			what = f.label + ": " + what
+		}
 		t.Fatalf("%s: %v", what, err)
 	}
 }

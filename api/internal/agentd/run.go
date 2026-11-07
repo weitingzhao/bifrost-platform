@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -169,9 +171,24 @@ func blockedBy(id string) error {
 	return fmt.Errorf("agentd: the process group of %s is not gone; nothing starts beside it", id)
 }
 
-// MaxSlots is how many attempts agentd asks for at most; the platform leases
-// no more than the signed concurrency rule's per_host.
-const MaxSlots = 3
+// DefaultSlots is how many attempts agentd asks for at most where
+// AGENTD_SLOTS does not say; the platform leases no more than the signed
+// concurrency rule's per_host.
+const DefaultSlots = 3
+
+// Slots reads AGENTD_SLOTS: empty is DefaultSlots, otherwise a whole number
+// from 1 to the per_host ceiling.
+func Slots(v string) (int, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return DefaultSlots, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > rules.PerHostCeiling {
+		return 0, fmt.Errorf("AGENTD_SLOTS: %q is not a whole number from 1 to %d", v, rules.PerHostCeiling)
+	}
+	return n, nil
+}
 
 // Hold marks an attempt as run by this process, before its Run starts.
 func (d *Daemon) Hold(id string) {

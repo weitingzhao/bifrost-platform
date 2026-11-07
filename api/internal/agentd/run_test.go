@@ -97,6 +97,7 @@ func taskState(t *testing.T, pool *pgxpool.Pool, task string) (state, report str
 // A task that pushes nothing: claimed, run, its report and log handed over,
 // submitted, and forgotten on the host.
 func TestRunAnAttempt(t *testing.T) {
+	t.Parallel()
 	pool, task, base := platform(t)
 	d := daemon(t, base, script(`echo compiling; printf '# done\nall good\n' > "$OUT/report.md"`), "", nil)
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
@@ -126,6 +127,7 @@ func TestRunAnAttempt(t *testing.T) {
 // A branch task: the change is committed with its lineage trailers and
 // pushed to the attempt's own branch, and the platform checks the head.
 func TestRunPushesTheAttemptBranch(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	head := func(_ context.Context, repo, ref string) (string, error) {
@@ -191,6 +193,7 @@ func specRun(t *testing.T, spec, body string) (agentd.Outcome, string, string, e
 // The sibling is beside the checkout and the setup has run before the
 // executor starts: the executor finds both, and the attempt records them.
 func TestRunPreparesSiblingsAndSetup(t *testing.T) {
+	t.Parallel()
 	spec := `{"text":"t","siblings":[{"repo":"ui","ref":"main"}],` +
 		`"setup":[["sh","-c","test -f ../ui/README.md && touch ../setup-ran"]]}`
 	out, outDir, taskDir, err := specRun(t, spec,
@@ -214,6 +217,7 @@ func TestRunPreparesSiblingsAndSetup(t *testing.T) {
 // A setup that fails ends the attempt before the executor starts: failed, as
 // an executor that handed in nothing.
 func TestRunEndsAnAttemptWhoseSetupFails(t *testing.T) {
+	t.Parallel()
 	spec := `{"text":"t","setup":[["sh","-c","echo registry down >&2; exit 9"]]}`
 	out, outDir, _, err := specRun(t, spec, `touch "$OUT/executor-ran"; printf '# done\n' > "$OUT/report.md"`)
 	if err != nil || out.Conclusion != "failed" || out.ExitCode != 3 {
@@ -230,6 +234,7 @@ func TestRunEndsAnAttemptWhoseSetupFails(t *testing.T) {
 // A sibling that cannot be had (no such branch) stops the run before any
 // executor: as a checkout that fails.
 func TestRunStopsWhenASiblingCannotBeHad(t *testing.T) {
+	t.Parallel()
 	spec := `{"text":"t","siblings":[{"repo":"ui","ref":"no-such-branch"}]}`
 	_, outDir, _, err := specRun(t, spec, `touch "$OUT/executor-ran"`)
 	if err == nil || !strings.Contains(err.Error(), "sibling ui") {
@@ -266,6 +271,7 @@ func fencingProxy(t *testing.T, base string) (string, *atomic.Int32) {
 // it left goes only to salvage, which the platform refuses while the
 // lease's grace runs: the attempt is then pending in the registry.
 func TestRunLosesItsLease(t *testing.T) {
+	t.Parallel()
 	for _, code := range []int32{http.StatusConflict, http.StatusServiceUnavailable} {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
 			pool, task, base := platform(t)
@@ -275,9 +281,19 @@ func TestRunLosesItsLease(t *testing.T) {
 			if err != nil || cl == nil {
 				t.Fatalf("claim = %+v %v", cl, err)
 			}
-			time.AfterFunc(300*time.Millisecond, func() { mode.Store(code) })
 			runCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 			defer cancel()
+			// The lease is lost once the executor runs (its report written).
+			report := filepath.Join(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)+".out", "report.md")
+			go func() {
+				for runCtx.Err() == nil {
+					if _, serr := os.Stat(report); serr == nil {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				mode.Store(code)
+			}()
 			start := time.Now()
 			out, err := d.Run(runCtx, cl)
 			if out.EndHow != "lease_lost" || out.Submitted || out.Salvaged || !errors.Is(err, agentd.ErrPending) {
@@ -302,6 +318,7 @@ func TestRunLosesItsLease(t *testing.T) {
 // claim: a group still running is ended and reported, never run on; an
 // attempt whose executor had finished hands its result over.
 func TestRecover(t *testing.T) {
+	t.Parallel()
 	pool, task, base := platform(t)
 	d := daemon(t, base, nil, "", nil)
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
@@ -418,6 +435,7 @@ func TestRunTakesCheckpoints(t *testing.T) {
 // Review 163 A6: a process the executor leaves behind in its group is ended
 // with it, and the platform is told the group is gone only when it is.
 func TestRunClearsTheGroup(t *testing.T) {
+	t.Parallel()
 	pool, _, base := platform(t)
 	d := daemon(t, base, script(`sleep 30 >/dev/null 2>&1 & echo $! > "$OUT/bg.pid"; printf '# done\n' > "$OUT/report.md"`), "", nil)
 	d.KeepWorkspaces = true // the test reads what the attempt left after its end (TD-415)
@@ -449,6 +467,7 @@ func TestRunClearsTheGroup(t *testing.T) {
 // and checks the subject's commit: the executor finds the sibling and the
 // setup's mark, for a verify and for a review (review 227 C1).
 func TestRunAChecksPreparationIsItsSubjects(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"verify", "review"} {
 		t.Run(kind, func(t *testing.T) {
 			env := gitEnvT(t.TempDir())
@@ -537,6 +556,7 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 // configuration into the checkout fails, and the reason is in the log tail
 // the platform keeps.
 func TestRunFailsAnAttemptThatChangesExecutorConfig(t *testing.T) {
+	t.Parallel()
 	out, outDir, _, err := specRun(t, `{"text":"t"}`,
 		`mkdir -p .cursor/rules && echo noop > .cursor/rules/allow-shell.mdc && echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
 	if err != nil || out.Conclusion != "failed" || !out.Submitted {

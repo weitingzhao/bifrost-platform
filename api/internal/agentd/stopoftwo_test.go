@@ -63,16 +63,26 @@ func stopsSeen(t *testing.T, base string) (string, func(attempt string) bool) {
 // are classed confined as the older concurrency test classes them: the wall
 // and its pins under concurrency are 06's walk, not this Mac's.
 func TestAGlobalStopOnAHostOfTwo(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("runs at production's heartbeat pace")
 	}
+	// Both at once, in the one parallel slot this test holds: each mostly
+	// waits for a heartbeat, and parallel subtests would queue for slots
+	// behind the package's other parallel tests.
+	var wg sync.WaitGroup
 	for _, refuse := range []bool{false, true} {
 		name := "pushed"
 		if refuse {
 			name = "refused"
 		}
-		t.Run(name, func(t *testing.T) { stopOnAHostOfTwo(t, refuse) })
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t.Run(name, func(t *testing.T) { stopOnAHostOfTwo(t, refuse) })
+		}()
 	}
+	wg.Wait()
 }
 
 func stopOnAHostOfTwo(t *testing.T, refuse bool) {
@@ -118,7 +128,7 @@ func stopOnAHostOfTwo(t *testing.T, refuse bool) {
 	d.Beat, d.KillGrace = 30*time.Second, 10*time.Second
 	byTask := map[string]*agentd.Claimed{}
 	for i := 0; i < 2; i++ {
-		cl, err := d.Client.Claim(ctx, agentd.MaxSlots-i, []agentd.Tool{cursor})
+		cl, err := d.Client.Claim(ctx, agentd.DefaultSlots-i, []agentd.Tool{cursor})
 		if err != nil || cl == nil {
 			t.Fatalf("claim %d = %+v %v", i, cl, err)
 		}

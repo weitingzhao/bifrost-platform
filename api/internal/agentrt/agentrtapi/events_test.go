@@ -114,6 +114,7 @@ func sortedIDs(t *testing.T, pool *pgxpool.Pool, where string) []int64 {
 // first, a type filter, paging back by before_event_id and on by the cursor
 // it gives; the stream form is as it was.
 func TestEventsAcrossStreams(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	// A rolled-back append leaves a hole in the ids between two stored events.
@@ -218,6 +219,7 @@ func TestEventsAcrossStreams(t *testing.T) {
 // in between shows the later one; reading on from its next lists both, once
 // each (review 351 B1).
 func TestEventsReadOnSeesALateCommit(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	all := sortedIDs(t, pool, `true`)
@@ -277,6 +279,7 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 // Reading on pages within one transaction's events, moves to the horizon on
 // a short page and keeps a cursor ahead of it (review 351 B1).
 func TestEventsReadOnPages(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	all := sortedIDs(t, pool, `true`)

@@ -13,6 +13,7 @@ import (
 // client was served (400) and changes nothing; later replies are still
 // delivered from the cursor it was handed.
 func TestIntakeUpdatesRefuseAFutureCursor(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	issueFixture(t, pool)
 	s := server(t, pool)

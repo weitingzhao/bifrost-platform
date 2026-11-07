@@ -16,6 +16,7 @@
 //	AGENTD_CURSOR_KEY_FILE optional: cursor's API key (mode 0600), given to the cursor executor alone
 //	AGENTD_CLAUDE_TOKEN_FILE optional: Claude's OAuth token (mode 0600), given to the claude executor alone
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
+//	AGENTD_SLOTS           optional: attempts at once, 1 to 32; default 3 (the signed per_host still caps it)
 //
 // The first argument "launch" makes it the launcher of one executor, and
 // "verify" the deterministic executor; neither is for people. "bench" runs
@@ -104,8 +105,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// This binary's build goes with every claim, so the platform knows which
+	// build the host runs before and after a deploy.
+	build, err := agentd.ReadBuild(self)
+	if err != nil {
+		log.Printf("agentd: %v; claims go without the build", err)
+	} else {
+		log.Printf("agentd: build commit %s modified=%v sha256 %s", build.Commit, build.Modified, build.SHA256)
+	}
 	d := &agentd.Daemon{
-		Client:   &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token},
+		Client:   &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token, Build: build},
 		Registry: reg,
 		Root:     cfg.root,
 		Self:     self,
@@ -152,7 +161,7 @@ func run() error {
 		log.Printf("agentd: write wall: %s", line)
 	}
 	d.Wall, d.CodexHome = wall, agentd.CodexHome(os.Environ())
-	// Up to MaxSlots attempts at once (W-31 2.4 slice ③); the platform
+	// Up to cfg.slots attempts at once (W-31 2.4 slice ③); the platform
 	// leases no more than the signed concurrency rule's per_host. Each runs in
 	// its own goroutine; on SIGTERM every one hands over before agentd exits.
 	var runs sync.WaitGroup
@@ -185,7 +194,7 @@ func run() error {
 		}
 		// With every slot taken (or the host overloaded) the claim asks for
 		// none: it still keeps the host's poll fresh, and waits its long poll.
-		free := agentd.MaxSlots - d.Running()
+		free := cfg.slots - d.Running()
 		if free < 0 || overloaded() {
 			free = 0
 		}
@@ -224,6 +233,7 @@ type settings struct {
 	platform, host, token, gitBase, root, cursorKey, claudeToken string
 	gitEnv                                                       []string
 	tools                                                        []agentd.Tool
+	slots                                                        int
 }
 
 func config() (settings, error) {
@@ -264,6 +274,9 @@ func config() (settings, error) {
 		}
 	}
 	if s.tools, err = tools(os.Getenv("AGENTD_TOOLS")); err != nil {
+		return s, err
+	}
+	if s.slots, err = agentd.Slots(os.Getenv("AGENTD_SLOTS")); err != nil {
 		return s, err
 	}
 	return s, nil

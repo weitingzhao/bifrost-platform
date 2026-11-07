@@ -565,14 +565,17 @@ func (s *State) Apply(e Entry) error {
 			}
 			// A crash may leave discarded as the last record until the root
 			// budget expires. Its successor is born terminal in one event;
-			// the discarded operation itself remains immutable.
-			if !slices.Contains([]string{"bound", "approval_expired"}, r.String("why")) {
+			// the discarded operation itself remains immutable. So is the
+			// successor the claim finds A already in main for (in_main: a
+			// batch merged by hand), within the root's bound.
+			if !slices.Contains([]string{"bound", "approval_expired", "in_main"}, r.String("why")) {
 				return bad()
 			}
 			for id, previous := range s.Operations {
 				_, count := RootBudget(*s, previous.Task)
+				bound := RootBound(*s, previous.Task, e.At, true)
 				if s.LatestOperation(previous.Task) == id && s.AwaitsNext(previous.Task) &&
-					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && RootBound(*s, previous.Task, e.At, true) == r.String("why") {
+					op == fmt.Sprintf("land:%s:%d", previous.Task, count+1) && (bound == r.String("why") || bound == "" && r.String("why") == "in_main") {
 					n.Task, n.Attempt, n.A = previous.Task, previous.Attempt, previous.A
 					n.RuleVersion, n.DryRun = previous.RuleVersion, previous.DryRun
 					n.ClaimNumber, n.ClaimedAt = count+1, e.At
@@ -753,6 +756,8 @@ var RetryableReasons = []string{"bound", "stale", "ci_red", "approval_expired"}
 // claimed may carry (TD-447 4, CUT §7.7): its result cannot be claimed
 // (result), A is in main already (in_main: merged by hand, not "undelivered"),
 // or was and was reverted (reverted). stale and bound end such a root too.
+// in_main also ends a root whose last operation awaits its k+1, born as that
+// k+1 (its change reached main another way while it was in progress).
 var ClaimRefusals = []string{"result", "in_main", "reverted"}
 
 // ValidSHA: a full lowercase commit id, as the protocol stores them.

@@ -23,6 +23,7 @@ func diskRecords(t *testing.T, pool *pgxpool.Pool) (alerts, back int) {
 // host reports room again it takes the ready task, and that is recorded
 // once. Each value goes with the other.
 func TestAHostLowOnDiskTakesNoWorkUntilItHasRoom(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}

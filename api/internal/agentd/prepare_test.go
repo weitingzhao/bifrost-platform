@@ -65,6 +65,7 @@ func handedIn(t *testing.T, pool *pgxpool.Pool, attempt string) map[string][]str
 // end of its output, and the log's tail; it still ends failed with exit 3
 // and the executor never runs.
 func TestAFailedSetupHandsInWhatFailed(t *testing.T) {
+	t.Parallel()
 	const line = "npm ERR! code E403 403 Forbidden - GET https://registry.npmjs.org/left-pad"
 	spec := `{"text":"t","setup":[["sh","-c","echo installed"],["sh","-c","echo '` + line + `' >&2; exit 9"]]}`
 	pool, cl, out, err := prepareRun(t, spec, `touch "$OUT/executor-ran"; printf '# done\n' > "$OUT/report.md"`)
@@ -93,6 +94,7 @@ func TestAFailedSetupHandsInWhatFailed(t *testing.T) {
 // An attempt whose executor fails on its own hands in no such report: its
 // own report and log go as they did.
 func TestAnExecutorFailureIsNotAPreparationFailure(t *testing.T) {
+	t.Parallel()
 	pool, cl, out, err := prepareRun(t, `{"text":"t","setup":[["sh","-c","echo installed"]]}`, `echo 'package x' > x.go; exit 3`)
 	if err != nil || out.Conclusion != "failed" || out.ExitCode != 3 {
 		t.Fatalf("run = %+v %v", out, err)
@@ -107,6 +109,7 @@ func TestAnExecutorFailureIsNotAPreparationFailure(t *testing.T) {
 // A sibling that cannot be had ends the attempt before its executor is
 // launched: the report says why, as agentd's error does.
 func TestASiblingThatCannotBeHadHandsInWhy(t *testing.T) {
+	t.Parallel()
 	pool, cl, _, err := prepareRun(t, `{"text":"t","siblings":[{"repo":"ui","ref":"no-such-branch"}]}`, `touch "$OUT/executor-ran"`)
 	if err == nil || !strings.Contains(err.Error(), "sibling ui") {
 		t.Fatalf("run err = %v", err)
@@ -134,6 +137,7 @@ func endHow(t *testing.T, pool *pgxpool.Pool, attempt string) string {
 // whose sibling cannot be had, ends prepare_failed, the platform's mark of a
 // failure before any executor started.
 func TestAFailureBeforeTheExecutorEndsPrepareFailed(t *testing.T) {
+	t.Parallel()
 	pool, cl, out, err := prepareRun(t, `{"text":"t","setup":[["sh","-c","exit 9"]]}`, `printf '# done\n' > "$OUT/report.md"`)
 	if err != nil || out.EndHow != "prepare_failed" || endHow(t, pool, cl.AttemptID) != "prepare_failed" {
 		t.Fatalf("a failed setup: run = %+v %v, recorded %q", out, err, endHow(t, pool, cl.AttemptID))
@@ -148,6 +152,7 @@ func TestAFailureBeforeTheExecutorEndsPrepareFailed(t *testing.T) {
 // ends the attempt as exit then, as it did, its report handed in all the
 // same.
 func TestAnOlderPlatformTakesExitInstead(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	head := func(_ context.Context, _, ref string) (string, error) {

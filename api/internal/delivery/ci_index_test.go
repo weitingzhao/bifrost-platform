@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,21 +161,20 @@ func TestCIRunUnverifiedReuseDoesNotCount(t *testing.T) {
 			results := reuse.Object["status"].(map[string]any)["results"].([]any)
 			reuse.Object["status"].(map[string]any)["results"] = append(results, map[string]any{"name": "tested-by", "value": value})
 			objects := []runtime.Object{reuse}
-			wantStatus, wantRun := "", ""
+			wantStatus, wantRun := "Unknown", "reuse"
 			if olderRed {
 				objects = append(objects, ciRunAt("red", factSHA1, "False", at))
-				wantStatus, wantRun = CIFailed, "red"
 			}
 			f := ciFacts(t, objects...)
 			status, run, err := f.CIRun(context.Background(), "repo-p", factSHA1)
-			if err != nil || status != wantStatus || run != wantRun {
+			if err == nil || !strings.Contains(err.Error(), "reuse") || status != wantStatus || run != wantRun {
 				t.Errorf("tested-by=%v olderRed=%v: got %q %q %v; want %q %q", value, olderRed, status, run, err, wantStatus, wantRun)
 			}
 			idx, err := f.CIIndex(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, seen := idx["repo-p@"+factSHA1]; seen != olderRed {
+			if _, seen := idx["repo-p@"+factSHA1]; !seen {
 				t.Errorf("tested-by=%v olderRed=%v: index presence = %v", value, olderRed, seen)
 			}
 		}

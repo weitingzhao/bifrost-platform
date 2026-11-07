@@ -339,6 +339,7 @@ func TestALongTargetIsCutAtABlank(t *testing.T) {
 
 // A flush whose time ran out is not read later (review 267 B2).
 func TestAnExpiredFlushIsNotRead(t *testing.T) {
+	t.Parallel()
 	tail, write := tailOf(t, "exec:codex")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -479,6 +480,7 @@ func TestLastActionsGiveUpOnTheKeepersTurn(t *testing.T) {
 // A lease lost while the last heartbeat waits for its turn is not
 // heartbeated; a fenced answer marks the lease lost (review 266 B7).
 func TestLastActionsAfterTheLeaseIsLost(t *testing.T) {
+	t.Parallel()
 	d, f, l, _ := lastLease(t)
 	l.beat <- struct{}{}
 	done := lastActionsReturns(t, context.Background(), d, l)
@@ -527,6 +529,7 @@ func TestLastActionsToAnOlderPlatform(t *testing.T) {
 // Masking stays linear on inputs built to make it walk far (review 268 6):
 // nested $( that never close, many commands, many names in quotes.
 func TestScrubIsBounded(t *testing.T) {
+	t.Parallel()
 	for _, s := range []string{strings.Repeat("$(", 30000), strings.Repeat("a;", 30000), strings.Repeat("'TOKEN=$('", 6000),
 		strings.Repeat("TOKEN=a;", 8000), strings.Repeat(`\"token\":\"`, 5000), strings.Repeat("rg 'token:.*|", 5000), strings.Repeat("\\", 60000)} {
 		done := make(chan struct{})

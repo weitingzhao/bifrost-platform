@@ -99,6 +99,7 @@ func TestRecoverNeverTakesOverFromAnOldRead(t *testing.T) {
 // waits for them and has it alone; the confined that come after a waiting
 // unconfined one wait behind it; a wait that is given up lets them go.
 func TestHostShare(t *testing.T) {
+	t.Parallel()
 	var h hostShare
 	r1, err := h.take(bg, false)
 	if err != nil {
@@ -158,6 +159,7 @@ func TestHostShare(t *testing.T) {
 }
 
 func TestConfined(t *testing.T) {
+	t.Parallel()
 	// Without a wall proven on the host (this Mac, a kernel without Landlock,
 	// a probe that failed) no attempt shares it (TD-371); with one, only the
 	// executors it holds.
@@ -249,6 +251,7 @@ func TestAFailureBeforeTheLaunchEndsAsPrepareFailed(t *testing.T) {
 // a lost lease ends the wait (and the attempt, unreleased) while another holds
 // the host; a wait cut by agentd's shutdown leaves its entry for Recover.
 func TestWaitingForTheHostHearsTheLease(t *testing.T) {
+	t.Parallel()
 	for _, why := range []string{"cancelled", "lease_lost", "daemon_restart"} {
 		t.Run(why, func(t *testing.T) {
 			f := newFake()
@@ -354,6 +357,7 @@ func TestCheckoutRefusesLinksAndTheUsersGitConfig(t *testing.T) {
 // prepared, followed by a failure of the preparation, ends the attempt as the
 // stop or the lost lease would, not as exit.
 func TestAStopDuringPreparationIsNoExit(t *testing.T) {
+	t.Parallel()
 	for _, why := range []string{"cancelled", "lease_lost"} {
 		t.Run(why, func(t *testing.T) {
 			f := newFake()
