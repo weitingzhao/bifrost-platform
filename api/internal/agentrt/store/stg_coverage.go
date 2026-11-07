@@ -33,7 +33,7 @@ func StgCoverageCandidates(s StgState) []StgMemberKey {
 		r := o.R
 		if o.Phase == "failed" && o.Outcome == "in_main" {
 			r = s.InMain[op]
-			if s.Disposals[op].Record.String("why") != "owner_delivered" {
+			if !deliveredDisposal(s.Disposals[op].Record.String("why")) {
 				continue
 			}
 		} else if !o.EverLanded || o.Reverted {
@@ -68,10 +68,11 @@ func (s StgState) canCover(m StgMemberKey, p string) bool {
 	if s.effective(m, p) {
 		return true
 	}
-	// O-3: Owner's decision plus H in the release's history. It does not
-	// fabricate a landed operation or require the abandoned result branch.
+	// O-3: Owner's decision (or the controller's main_delivered) plus H in
+	// the release's history. It does not fabricate a landed operation or
+	// require the abandoned result branch.
 	r := s.Validity[StgValidityKey{m, p}].Record
-	return s.InMain[m.Op] == m.R && s.Disposals[m.Op].Record.String("why") == "owner_delivered" && r["has_r"] == true
+	return s.InMain[m.Op] == m.R && deliveredDisposal(s.Disposals[m.Op].Record.String("why")) && r["has_r"] == true
 }
 
 // StgCoverageEvents builds a historical Git observation and its coverage

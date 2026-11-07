@@ -235,7 +235,8 @@ var bodies = map[string][]field{
 		// its main_result (landing_live.go RecordPushResult).
 		{"landing_pusher", kStr, true},
 		// landing_disposed: the Owner counted a landed or in-main root as
-		// delivered or not, on its card (CUT §11.8 v3 item 4).
+		// delivered or not, on its card (CUT §11.8 v3 item 4); or the
+		// controller found an in-main root landed (main_delivered).
 		{"landing_disposed", kAny, true},
 		// landing_delivered_by: the controller's record that a root the
 		// Owner declined had its same change landed from another accepted
