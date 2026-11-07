@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Batch landing (R5:5.7 goal 2, landing/batch.go): on PROD, the
@@ -135,11 +136,11 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 	var wg sync.WaitGroup
 	for i, task := range tasks {
 		wg.Add(1)
-		go func() {
+		safego.Go("agentrt-landing-batch-read", func() {
 			defer wg.Done()
 			f, d, err := c.LandingDecision(ctx, c.Drill.Facts, task, "", "claim", now)
 			reads[i] = read{f, d, err}
-		}()
+		})
 	}
 	wg.Wait()
 	var errs []error
