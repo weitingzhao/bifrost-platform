@@ -700,12 +700,35 @@ func (o Operation) Active() bool {
 	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
 }
 
-// HoldsSlot: the operation holds the repository's slot against a granted
-// landing's final gate. Only one past its CI does: pushing to main
-// (main_intent until it ends) or deploying. One still in CI (claimed through
-// ci_rerun), waiting for its card, parked or ended does not.
+// HoldsGrantedSlot: the operation holds the slot against a granted landing's
+// final gate (R5 phase 2 #11): only one pushing to main does. One still in CI,
+// waiting for its card, parked, ended, or landed and deploying (#40: a landed
+// change never holds the slot) does not.
+func (o Operation) HoldsGrantedSlot() bool {
+	return o.HoldsSlot() && o.AtMain()
+}
+
+// HoldsSlot: the operation counts toward its repository's landing slot
+// (max_in_flight). Only an active operation not yet recorded landed
+// holds it, through a main push reported ok until reconciliation records it
+// landed (TD-462: the next claim waits for that record). A landed change never
+// holds it, whatever its STG release does (blocked, waiting, sent).
+// 2026-11-06 landed changes waiting on a blocked STG kept the slot and nothing
+// else could land.
 func (o Operation) HoldsSlot() bool {
-	return o.AtMain() || slices.Contains([]string{"stg_pending", "stg_snapshot", "stg_started", "stg_result"}, o.Phase)
+	return o.Active() && !o.EverLanded && !strings.HasPrefix(o.Phase, "stg_")
+}
+
+// InFlight counts the root operations other than except that hold the
+// repository's landing slot.
+func (s State) InFlight(except string) int {
+	n := 0
+	for id, o := range s.Operations {
+		if id != except && o.Task != "" && o.HoldsSlot() {
+			n++
+		}
+	}
+	return n
 }
 
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the

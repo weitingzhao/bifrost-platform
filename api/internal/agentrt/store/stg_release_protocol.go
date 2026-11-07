@@ -66,6 +66,7 @@ var stgSpecs = map[string]stgSpec{
 	"withheld":           {"grant", "members why trigger_seq"},
 	"blocked":            {"block", "why P base first_at evidence_version detail"},
 	"ci_observed":        {"block", "interval_seq P ci status"},
+	"ci_unreadable":      {"block", "interval_seq P error read_at"},
 	"rule_observed":      {"block", "interval_seq rule_id rule_version read_at"},
 	"unblocked":          {"block", "why ref"},
 	"diag":               {"batch", "try what gen"},
@@ -221,12 +222,14 @@ func ParseStgRelease(v any) (StgRecord, error) {
 			case "withheld":
 				valid = s == "owner" || s == "hard_floor"
 			case "unblocked":
-				valid = slices.Contains([]string{"inputs_changed", "rule_changed", "evidence_changed", "granted", "external_release"}, s)
+				valid = slices.Contains([]string{"inputs_changed", "rule_changed", "evidence_changed", "granted", "external_release", "superseded", "ci_unreadable"}, s)
 			}
 		case "ref":
 			valid = stgString(val) || stgInteger(val, 1)
 		case "enabled":
 			_, valid = val.(bool)
+		case "error":
+			valid = stgString(val) && len(s) <= StgCIErrorMax
 		default:
 			valid = stgIDRE.MatchString(s)
 		}

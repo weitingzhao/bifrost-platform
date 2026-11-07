@@ -2,9 +2,9 @@ package landing
 
 import "testing"
 
-// A granted landing's final gate yields only to an operation past its CI:
-// pushing to main or deploying (PROD 2026-11-06).
-func TestHoldsSlotEveryPhase(t *testing.T) {
+// A granted landing's final gate yields only to an operation pushing to main
+// (PROD 2026-11-06); a landed change, deploying or not, never holds the slot.
+func TestHoldsGrantedSlotEveryPhase(t *testing.T) {
 	for _, c := range []struct {
 		phase, outcome string
 		holds          bool
@@ -17,7 +17,7 @@ func TestHoldsSlotEveryPhase(t *testing.T) {
 		{"awaiting_grant", "", false},
 		{"parked", "", false},
 		{"main_intent", "", true},
-		{"main_result", "ok", true},
+		{"main_result", "ok", true}, // pushed, not yet reconciled landed
 		{"main_result", "unknown", true},
 		{"main_result", "non_ff", false},
 		{"landed", "", false},
@@ -25,18 +25,18 @@ func TestHoldsSlotEveryPhase(t *testing.T) {
 		{"failed", "bound", false},
 		{"discarded", "main_changed", false},
 		{"rehearsed", "", false},
-		{"stg_pending", "", true},
-		{"stg_snapshot", "", true},
-		{"stg_started", "", true},
-		{"stg_result", "failed", true},
+		{"stg_pending", "", false},
+		{"stg_snapshot", "", false},
+		{"stg_started", "", false},
+		{"stg_result", "failed", false},
 		{"stg_verified", "", false},
 		{"stg_failed", "", false},
 	} {
 		o := Operation{Phase: c.phase, Outcome: c.outcome}
-		if got := o.HoldsSlot(); got != c.holds {
-			t.Errorf("%s/%s: HoldsSlot %v, want %v", c.phase, c.outcome, got, c.holds)
+		if got := o.HoldsGrantedSlot(); got != c.holds {
+			t.Errorf("%s/%s: HoldsGrantedSlot %v, want %v", c.phase, c.outcome, got, c.holds)
 		}
-		if o.HoldsSlot() && !o.Active() {
+		if o.HoldsGrantedSlot() && !o.Active() {
 			t.Errorf("%s/%s holds the slot but is not active", c.phase, c.outcome)
 		}
 	}

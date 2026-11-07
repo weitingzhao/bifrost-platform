@@ -108,10 +108,8 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 	}
 	// A landing in flight (a batch or one operation) refuses every claim
 	// for the limit: the one-at-a-time loop records that, reading no more.
-	for _, o := range s.Operations {
-		if o.Task != "" && o.Active() {
-			return false, nil
-		}
+	if s.InFlight("") > 0 {
+		return false, nil
 	}
 	roots, after, err := store.PendingBatchHalf(ctx, c.DB, repo)
 	if err != nil {
