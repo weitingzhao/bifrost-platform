@@ -32,6 +32,24 @@ func TestDescribeSummaries(t *testing.T) {
 	}
 }
 
+// deploy_agentd's card shows the host, the short commit and the sha256 the
+// Owner compares with the package.
+func TestDescribeDeployAgentd(t *testing.T) {
+	a, ok := ByID("deploy_agentd")
+	if !ok || a.Tier != TierD {
+		t.Fatal("deploy_agentd is not a tier D action")
+	}
+	sha := strings.Repeat("ab", 32)
+	d := a.Describe(context.Background(), map[string]any{"env": "prod", "host": "mini-1",
+		"commit": "0123456789abcdef0123456789abcdef01234567", "sha256": sha}, "request reason")
+	if d.Env != "prod" || d.Summary != "Deploy agentd 0123456 on host mini-1 (sha256 "+sha+")" {
+		t.Fatalf("env %q summary %q", d.Env, d.Summary)
+	}
+	if d.KeyParams["host"] != "mini-1" || d.KeyParams["commit"] != "0123456" || d.KeyParams["sha256"] != sha {
+		t.Fatalf("key params %#v", d.KeyParams)
+	}
+}
+
 func TestDescribeFallsBackToTheReason(t *testing.T) {
 	a, _ := ByID("trigger_data_clone")
 	d := a.Describe(context.Background(), map[string]any{"source": "prod", "targets": []any{"dev"}, "confirmation_token": "tok", "confirm": true}, "x")

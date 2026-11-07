@@ -17,10 +17,10 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); onlineManager.setOnline(true) })
 
-function setup(kind: 'core' | 'guardrail' | 'other' = 'core', mutate?: (m: LandingMaterialResponse) => void, status = 200) {
+function setup(kind: 'core' | 'guardrail' | 'other' | 'agentd' = 'core', mutate?: (m: LandingMaterialResponse) => void, status = 200) {
   const data = parseLandingMaterial(structuredClone(kind === 'guardrail' ? wire.guardrail : wire.core))!
   const c = data.material.candidate
-  const item = buildPlatformApproval({ id: 'approval_console', number: 51, action: kind === 'other' ? 'gitops_sync_app' : data.material.action, tier: 'D',
+  const item = buildPlatformApproval({ id: 'approval_console', number: 51, action: kind === 'other' ? 'gitops_sync_app' : kind === 'agentd' ? 'deploy_agentd' : data.material.action, tier: 'D',
     params: { env: 'prod', repo: c.repo, task: c.task, op: c.op, R: c.R, material_digest: data.material.material_digest, stg_release: c.stg_release } })
   mutate?.(data)
   const posts: { url: string; body: Record<string, unknown> }[] = []
@@ -164,6 +164,14 @@ describe('C-6 approval branches', () => {
     expect(posts[0].body).toEqual({ channel: 'console', approval_line: expect.any(String), params_hash: 'fixture-params-hash' })
     expect(fetch.mock.calls.some(([url]) => String(url).includes('/material?'))).toBe(false)
     expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+  it('sends confirm_number for deploy_agentd, which the API refuses to approve without it', async () => {
+    const { posts, fetch } = setup('agentd')
+    render(wrapper(<ApprovalsPage />))
+    clickDecisionControl(await screen.findByRole('button', { name: 'Approve deploy_agentd' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toEqual({ channel: 'console', approval_line: expect.any(String), params_hash: 'fixture-params-hash', confirm_number: 51 })
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('/material?'))).toBe(false)
   })
   it('shows soft checks and STG authorization in the approval list', async () => {
     const { item } = setup('guardrail')

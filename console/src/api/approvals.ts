@@ -230,6 +230,11 @@ export async function postApprovalResolve(
   return (await r.json()) as ApprovalDecision
 }
 
+// Actions whose approval repeats the card's number: the API refuses their
+// approval without it (approvals service, confirmRequired).
+const CONFIRM_NUMBER_ACTIONS = ['approve_guardrail_landing', 'approve_core_landing', 'approve_floor_landing', 'deploy_agentd'] as const
+export const confirmsNumber = (action: unknown): boolean => CONFIRM_NUMBER_ACTIONS.some(a => a === action)
+
 export async function postApprovalDecision(
   id: string,
   token: string,

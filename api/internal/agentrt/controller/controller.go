@@ -148,6 +148,9 @@ type Controller struct {
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
 	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
+	// AgentdDeploy proposes deploy_agentd cards (agentddeploy.go); nil
+	// proposes none.
+	AgentdDeploy *AgentdDeploy
 }
 
 // PlanObserveEvery is how often the plan completion atoms' sources are read
@@ -789,5 +792,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	}
 	c.startCheckValue(ctx, &wg)
 	c.startFullCI(ctx, &wg)
+	c.startAgentdDeploy(ctx, &wg)
 	return wg.Wait
 }
