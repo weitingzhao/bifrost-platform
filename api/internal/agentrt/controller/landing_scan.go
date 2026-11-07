@@ -142,12 +142,12 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	// drillMinShare, and each pass starts one further along, so an operation left
 	// out of this pass is visited early in a later one. The other half is the
 	// claims' (and the batch's) below.
-	// While an even split still gives every visit drillMinShare, nothing changes.
-	visits, cancelVisits := context.WithCancel(ctx)
+	// The claims keep their half even when every visit gets drillMinShare:
+	// 2026-11-07 four visits split all of a 90s budget and the claims got
+	// nothing, pass after pass.
+	visits, cancelVisits := context.WithTimeout(ctx, drillVisitBudget(ctx))
 	offset, crowded := 0, drillCrowded(ctx, len(pending))
 	if crowded {
-		cancelVisits()
-		visits, cancelVisits = context.WithTimeout(ctx, drillVisitBudget(ctx))
 		offset = drillTurn(len(pending))
 	}
 	for k := range pending {
