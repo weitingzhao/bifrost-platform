@@ -146,3 +146,107 @@ func TestGrantedLandingRetrySharesWindowProbe(t *testing.T) {
 		t.Fatal("waiting grants did not share the window probe", reads)
 	}
 }
+
+// Only an operation past its CI holds the slot against a granted landing,
+// in the probe as in the final gate: one in its CI or parked does not.
+func TestGrantedLandingProbeCountsOnlyMain(t *testing.T) {
+	at := time.Now()
+	for _, c := range []struct {
+		phase, outcome string
+		holds          bool
+	}{{"claimed", "", false}, {"branch_pushed", "", false}, {"parked", "", false}, {"awaiting_grant", "", false},
+		{"main_intent", "", true}, {"main_result", "ok", true}, {"main_result", "unknown", true}, {"main_result", "non_ff", false},
+		{"failed", "bound", false}, {"discarded", "main_changed", false}} {
+		t.Run(c.phase+"/"+c.outcome, func(t *testing.T) {
+			s := landing.State{Operations: map[string]landing.Operation{
+				"land:a:1": {Task: "a", Phase: "awaiting_grant"},
+				"land:b:1": {Task: "b", Phase: c.phase, Outcome: c.outcome},
+			}}
+			f := grantRetryFacts(at)
+			f.OtherInFlight = grantSlotHolders(s, "land:a:1")
+			if grantCapacityAvailable(f, at) == c.holds {
+				t.Fatal("capacity", f.OtherInFlight)
+			}
+		})
+	}
+}
+
+// A grant refused for the limit while another operation holds main_intent
+// is tried in the pass after that operation ends; its CI-bound neighbour does
+// not keep it waiting.
+func TestGrantedLandingTriedAfterMainIntentEnds(t *testing.T) {
+	at := time.Now()
+	clock := func() time.Time { return at }
+	var g grantTries
+	s := landing.State{Operations: map[string]landing.Operation{
+		"land:a:1": {Task: "a", Phase: "awaiting_grant"},
+		"land:b:1": {Task: "b", Phase: "branch_pushed"},
+		"land:c:1": {Task: "c", Phase: "main_intent"},
+	}}
+	g.observe("bifrost-platform", s)
+	if !g.due("land:a:1/grant_1", at) {
+		t.Fatal("a new grant is not due at once")
+	}
+	g.record("land:a:1/grant_1", landing.Decision{Reason: "limit"}, nil)
+	probe := func(string) (bool, error) {
+		f := grantRetryFacts(at)
+		f.OtherInFlight = grantSlotHolders(s, "land:a:1")
+		return grantCapacityAvailable(f, at), nil
+	}
+	at = at.Add(15 * time.Second)
+	g.observe("bifrost-platform", s)
+	if ready, err := g.ready("land:a:1/grant_1", clock, probe); ready || err != nil {
+		t.Fatal("tried while C holds main_intent", ready, err)
+	}
+	s.Operations["land:c:1"] = landing.Operation{Task: "c", Phase: "failed", Outcome: "bound"}
+	at = at.Add(15 * time.Second)
+	g.observe("bifrost-platform", s)
+	if ready, err := g.ready("land:a:1/grant_1", clock, probe); !ready || err != nil {
+		t.Fatal("not tried the pass after C ended", ready, err)
+	}
+}
+
+// A change of the repository stream (an operation moved, a grant recorded)
+// clears the ten-minute wait of its operations' grants, as drillBackoff does
+// with drillGeneration; the same stream keeps it, and the rule rechecks
+// without a grant keep theirs.
+func TestGrantedLandingStreamChangeClearsWait(t *testing.T) {
+	at := time.Now()
+	s := landing.State{Operations: map[string]landing.Operation{
+		"land:a:1": {Task: "a", Phase: "awaiting_grant"},
+		"land:b:1": {Task: "b", Phase: "branch_pushed"},
+	}}
+	var g grantTries
+	g.observe("bifrost-platform", s)
+	for _, key := range []string{"land:a:1/grant_1", "land:a:1/rule:1", "land:x:1/grant_9"} {
+		if !g.due(key, at) {
+			t.Fatal("first try not due", key)
+		}
+		g.record(key, landing.Decision{Reason: "ci"}, nil)
+	}
+	waiting := func(key string) bool { return !g.due(key, at) }
+	at = at.Add(time.Minute)
+	g.observe("bifrost-platform", s)
+	if !waiting("land:a:1/grant_1") {
+		t.Fatal("an unchanged stream cleared the wait")
+	}
+	moved := landing.State{Operations: map[string]landing.Operation{
+		"land:a:1": {Task: "a", Phase: "awaiting_grant"},
+		"land:b:1": {Task: "b", Phase: "discarded", Outcome: "main_changed"},
+	}}
+	at = at.Add(time.Minute)
+	g.observe("bifrost-platform", moved)
+	if waiting("land:a:1/grant_1") {
+		t.Fatal("an operation moved and the grant still waits")
+	}
+	if !waiting("land:a:1/rule:1") || !waiting("land:x:1/grant_9") {
+		t.Fatal("the stream change cleared a rule recheck or another repository's grant")
+	}
+	g.record("land:a:1/grant_1", landing.Decision{Reason: "ci"}, nil)
+	granted := landing.State{Operations: moved.Operations, Grants: map[string][]landing.Interval{"land:a:1": {{Start: at, End: at.Add(time.Hour)}}}}
+	at = at.Add(time.Minute)
+	g.observe("bifrost-platform", granted)
+	if waiting("land:a:1/grant_1") {
+		t.Fatal("a grant recorded and the grant still waits")
+	}
+}

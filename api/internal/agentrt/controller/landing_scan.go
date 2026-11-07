@@ -140,6 +140,9 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	pending, err = c.endLandedOnMain(ctx, repo, state, pending)
 	errs = append(errs, err)
 	var window grantWindowProbe // Shared only within this repository's pass.
+	// A grant recorded or an operation moved since the last pass: its
+	// grants are due again in this one.
+	c.grantTries.observe(repo, state)
 	// Pending operations take turns (R5 phase 2, PROD 2026-11-06): with dozens of
 	// them, an even split of the work budget left each a few seconds, less than a
 	// fresh workspace fetch takes, so every visit timed out and no claim below was
@@ -345,8 +348,15 @@ func (c *Controller) resumeLandingDrill(ctx context.Context, id string, o landin
 				}
 				// Reuse the store's database-only counts and rule selection.
 				// No Git/CI read or final-gate lock is taken for this probe.
+				// The slot is counted as the final gate counts it against a
+				// usable grant: only an operation past its CI holds it.
 				at := c.clock()
 				f, err := store.RefreshLandingFacts(ctx, c.DB, c.Drill.Facts, "prod", "live", o.Task, id, landing.Facts{}, at)
+				if err != nil {
+					return false, err
+				}
+				s, err := c.landingState(ctx, repo)
+				f.OtherInFlight = grantSlotHolders(s, id)
 				return grantCapacityAvailable(f, at), err
 			})
 			if err != nil || !ready {
@@ -604,10 +614,13 @@ type grantTries struct {
 	last    map[string]time.Time
 	done    map[string]bool
 	waiting map[string]string // operation/grant -> limit or window refusal
+	// generation is each repository's grantGeneration last observed.
+	generation map[string]string
 }
 
 // due says whether key (operation/grant) may be tried at now, and if so
-// records the try. The first try of a grant is always due.
+// records the try. The first try of a grant is always due: a grant the
+// controller has not tried yet is tried in the pass that first sees it.
 func (g *grantTries) due(key string, now time.Time) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()

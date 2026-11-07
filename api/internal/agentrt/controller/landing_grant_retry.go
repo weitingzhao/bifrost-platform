@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
@@ -45,6 +47,10 @@ func (g *grantTries) record(key string, d landing.Decision, err error) {
 	}
 }
 
+// grantCapacityAvailable judges f as the final gate of a granted landing
+// does: the caller sets f.OtherInFlight to grantSlotHolders, so only an
+// operation pushing to main holds the slot, not one still in CI or waiting
+// for its card (landing.Operation.HoldsGrantedSlot, PROD 2026-11-06).
 func grantCapacityAvailable(f landing.Facts, at time.Time) bool {
 	if f.Rule == nil || f.Rule.Landing == nil || at.Before(f.Rule.Effective) || !at.Before(f.Rule.Expires) {
 		return false
@@ -54,6 +60,60 @@ func grantCapacityAvailable(f landing.Facts, at time.Time) bool {
 	}
 	return f.ReservedToday < f.Rule.Landing.Limits.MaxLandingsPerDay &&
 		f.OtherInFlight < f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo
+}
+
+// grantSlotHolders counts the operations of s other than op that hold the
+// slot against a granted landing's final gate (store.landingFactsGate with a
+// usable grant). Batch mates are not subtracted: at worst the probe waits a
+// pass longer than the gate would, never shorter.
+func grantSlotHolders(s landing.State, op string) int {
+	n := 0
+	for id, o := range s.Operations {
+		if id != op && o.Task != "" && o.HoldsGrantedSlot() {
+			n++
+		}
+	}
+	return n
+}
+
+// grantGeneration changes whenever an operation of the repository stream is
+// added or moves, or a grant is recorded on it.
+func grantGeneration(s landing.State) string {
+	keys := make([]string, 0, len(s.Operations)+len(s.Grants))
+	for id, o := range s.Operations {
+		keys = append(keys, id+"="+o.Phase+"/"+o.Outcome)
+	}
+	for op, periods := range s.Grants {
+		for _, p := range periods {
+			keys = append(keys, op+"+"+p.Start.String())
+		}
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
+// observe forgets the ten-minute wait of every grant of repo's operations
+// when the stream moved (an operation ended, parked, pushed to main; a grant
+// was recorded), as drillBackoff does with drillGeneration: the next pass
+// tries them again. A limit or window wait keeps its probe, which runs every
+// pass anyway; the rule rechecks without a grant keep their interval.
+func (g *grantTries) observe(repo string, s landing.State) {
+	generation := grantGeneration(s)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.generation == nil {
+		g.generation = map[string]string{}
+	}
+	if g.generation[repo] == generation {
+		return
+	}
+	g.generation[repo] = generation
+	for key := range g.last {
+		op, grant, _ := strings.Cut(key, "/")
+		if _, ok := s.Operations[op]; ok && !strings.HasPrefix(grant, "rule:") {
+			delete(g.last, key)
+		}
+	}
 }
 
 // A window is read at most once for waiting grants per repository/pass.
