@@ -128,6 +128,11 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 			result = errors.Join(result, err)
 		}
 	}()
+	// An operation whose task's change reached main another way (a 'landed'
+	// note: a batch the Owner merged) ends from the database alone, before
+	// any Git or CI read; the claim below then records failed{in_main}.
+	pending, err = c.endLandedOnMain(ctx, repo, state, pending)
+	errs = append(errs, err)
 	var window grantWindowProbe // Shared only within this repository's pass.
 	for i, id := range pending {
 		o := state.Operations[id]
@@ -349,6 +354,60 @@ func (c *Controller) replayAwaitingGrant(ctx context.Context, id string, o landi
 		return true, c.appendLanding(ctx, id, "failed", map[string]any{"why": "bound"}, repo)
 	}
 	return true, c.appendLanding(ctx, id, "discarded", map[string]any{"why": "main_changed"}, repo)
+}
+
+// endLandedOnMain ends each pending operation whose task has a 'landed' note
+// with the record a moved main leads to, as replayAwaitingGrant does:
+// discarded main_changed (its batch released so), failed bound for a root's
+// eighth operation. None of them is resumed: no CI poll, no branch push. One
+// not in a phase a discard ends (claimed, prepared) is resumed as before. It
+// returns pending without the operations it ended.
+func (c *Controller) endLandedOnMain(ctx context.Context, repo string, state landing.State, pending []string) ([]string, error) {
+	tasks := make([]string, 0, len(pending))
+	for _, id := range pending {
+		tasks = append(tasks, state.Operations[id].Task)
+	}
+	landed, err := store.LandedOnMain(ctx, c.DB, tasks)
+	if err != nil || len(landed) == 0 {
+		return pending, err
+	}
+	var errs []error
+	ended := map[string]bool{}
+	for _, id := range pending {
+		sha, ok := landed[state.Operations[id].Task]
+		if !ok || ended[id] {
+			continue
+		}
+		s, err := c.landingState(ctx, repo)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		o := s.Operations[id]
+		if !slices.Contains([]string{"branch_intent", "branch_pushed", "parked", "awaiting_grant"}, o.Phase) || s.LatestOperation(o.Task) != id {
+			continue
+		}
+		b, inBatch, err := c.landingBatchFor(ctx, repo, id, s)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		ended[id] = true
+		c.logf("agentrt landing %s: its task's change is on main as %s: ended", id, sha)
+		switch _, n := landing.RootBudget(s, o.Task); {
+		case inBatch:
+			for _, m := range b.Members {
+				ended[m] = true
+			}
+			err = c.releaseBatch(ctx, b, "main_changed", repo)
+		case n >= 8:
+			err = c.appendLanding(ctx, id, "failed", map[string]any{"why": "bound"}, repo)
+		default:
+			err = c.appendLanding(ctx, id, "discarded", map[string]any{"why": "main_changed"}, repo)
+		}
+		errs = append(errs, err)
+	}
+	return slices.DeleteFunc(pending, func(id string) bool { return ended[id] }), errors.Join(errs...)
 }
 
 // unsettled leaves out the tasks ClaimLandingDrill would refuse from the
