@@ -290,6 +290,9 @@ export type TaskLine = { id: string; role: string; title: string; state: string;
 /** Why a role is Unknown: the runtime's lists were not read, or they were and do not list the task (and its title is no check's). */
 const roleUnknown = (runtime: RuntimeTasks) => runtime.read ? "Role Unknown (not in the runtime's lists)" : 'Role Unknown (runtime progress not read)'
 
+/** A task whose change is on main reads finished, as an accepted one, whatever its state (store/progressstop.go). */
+const onMainWords = (o: { commit: string; via: string }) => `Finished · on main as ${o.commit.slice(0, 12)} (${o.via})`
+
 /** A task of the step's own work, with its role (or why it is Unknown). */
 export function taskLine(task: ModuleTask, runtime: RuntimeTasks): TaskLine {
   const w = task.waiting
@@ -300,7 +303,7 @@ export function taskLine(task: ModuleTask, runtime: RuntimeTasks): TaskLine {
   const a = task.attempt
   const role = taskRole(task, runtime)
   const landing = task.landing ? `landing ${task.landing.phase} · ${task.landing.outcome}` : ''
-  return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
+  return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.on_main ? onMainWords(task.on_main) : task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
     attempt: a ? `attempt ${a.attempt_no} · ${a.executor}${a.status ? ` · ${a.status}` : ''}` : '', href: goalHref(task.mission_id, task.task_id),
     waiting, waitingHref: w?.on === 'owner' && w.question_id ? questionHref(w.question_id) : '',
     detail: [task.delivery, landing].filter(Boolean).join(' · ') }

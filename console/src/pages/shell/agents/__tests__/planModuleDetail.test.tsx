@@ -536,6 +536,15 @@ it('shows snapshot stop and withdrawal details on task rows and accepts old snap
   expect(screen.getAllByText(/Withdrawn by Owner: Scope changed/).length).toBeGreaterThan(0)
 })
 
+it('shows a task whose change is on main as finished, not stopped', () => {
+  const raw = r5Raw()
+  Object.assign(raw.tasks.find(t => t.task_id === T3)!, { state: 'ready', on_main: { commit: '0123456789abcdef0123', via: 'on main' } })
+  const parsed = parsePlanSnapshot(raw, 'R5')
+  expect(parsed.tasks.find(t => t.task_id === T3)?.on_main?.commit).toBe('0123456789abcdef0123')
+  detail(parsed)
+  expect(screen.getAllByText(/Finished · on main as 0123456789ab \(on main\)/).length).toBeGreaterThan(0)
+})
+
 it('shows plan-view rounds and waiting reasons in the step task rows', () => {
   seedShell()
   const view = r5()
