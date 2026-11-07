@@ -14,7 +14,7 @@ const testTask2 = "t_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 // R5:5.7 goal 2 (landing/batch.go): a batch replays its members in one
 // workspace, each on the one before, and its grant material reads R as the
 // batch's stack on M0: the patch is the whole change, the match the lead's
-// own. A member that touches what the stack already changed overlaps.
+// own. A member that rewrites a line the stack already changed conflicts.
 func TestBatchStackReplayAndPatch(t *testing.T) {
 	g, in, src := fixture(t)
 	ctx := context.Background()
@@ -68,8 +68,8 @@ func TestBatchStackReplayAndPatch(t *testing.T) {
 	}
 	over := in
 	over.A, over.M0, over.Task, over.Operation = third, r2, testTask2, "land:"+testTask2+":2"
-	if _, e := w.Replay(ctx, over); !errors.Is(e, ErrOverlap) {
-		t.Fatal("a member on what the stack changed does not overlap", e)
+	if _, e := w.Replay(ctx, over); !errors.Is(e, ErrConflict) {
+		t.Fatal("a member that rewrites the line the stack changed does not conflict", e)
 	}
 	ref := "refs/heads/land/stg/" + testTask2 + "/1"
 	if e := w.Push(ctx, ref, r2); e != nil {

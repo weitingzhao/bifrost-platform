@@ -69,10 +69,10 @@ func LatestCI(runs []CIRun, revision string, after time.Time) CIRun {
 }
 
 type DrillObservation struct {
-	Facts             Facts
-	Main              string
-	Candidate, MainCI CIRun
-	WindowBlocked     bool
+	Facts         Facts
+	Main          string
+	Candidate     CIRun
+	WindowBlocked bool
 	// PinCI: the operation needs a grant to reach main and its CI is not
 	// pinned yet (C-5, review 698 B-01). Its pinned run is then the next
 	// step whatever any other run of R says: a kick, or a rerun when the
@@ -81,8 +81,7 @@ type DrillObservation struct {
 }
 type DrillAction struct{ Kind, Why string }
 
-// NextDrill checks main even while parked on an old red main. This pure
-// judgement is persisted through the v1.1 discarded/rehearsed transitions.
+// NextDrill checks main even while parked. This pure judgement is persisted through the v1.1 discarded/rehearsed transitions.
 func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAction {
 	o := s.Operations[op]
 	if o.Terminal() {
@@ -169,18 +168,17 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		if obs.Facts.Repo == "bifrost-trade-infra" {
 			return DrillAction{Kind: "failed", Why: "ci_red"}
 		}
-		switch obs.MainCI.Status {
-		case "Failed":
-			return DrillAction{Kind: "parked", Why: "main_red"}
-		case "Succeeded":
-			if o.Phase == "parked" {
-				return DrillAction{Kind: "unparked"}
-			}
-			if !o.Rerun {
-				return DrillAction{Kind: "ci_rerun"}
-			}
-			return DrillAction{Kind: "failed", Why: "ci_red"}
+		// The landing CI tests main plus the change: its own result
+		// decides, whatever main's CI says or whether it ran (Owner
+		// 2026-11-06). One rerun, then the operation ends and frees the
+		// repository's slot; it never waits on another run's result.
+		if o.Phase == "parked" {
+			return DrillAction{Kind: "unparked"}
 		}
+		if !o.Rerun {
+			return DrillAction{Kind: "ci_rerun"}
+		}
+		return DrillAction{Kind: "failed", Why: "ci_red"}
 	}
 	return DrillAction{Kind: "wait"}
 }

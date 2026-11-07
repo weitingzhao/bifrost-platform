@@ -225,17 +225,8 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	}
 	r, e := w.Replay(ctx, landinggit.ReplayInput{A: o.A, Base: f.Base, M0: m0, Task: o.Task, Attempt: o.Attempt, Mission: f.Mission, Reviewers: f.Reviewers, Operation: op, RuleVersion: o.RuleVersion, AcceptedAt: f.AcceptedAt, CommitterDate: date, Env: c.Env})
 	if e != nil {
-		why := ""
-		switch {
-		case errors.Is(e, landinggit.ErrOverlap):
-			why = "overlap"
-		case errors.Is(e, landinggit.ErrConflict):
-			why = "conflict"
-		case errors.Is(e, landinggit.ErrPatchChanged):
-			why = "patch_changed"
-		}
-		if why != "" {
-			return put("failed", map[string]any{"why": why})
+		if errors.Is(e, landinggit.ErrConflict) {
+			return c.failConflict(ctx, repo, op, e)
 		}
 		return e
 	}
@@ -272,7 +263,10 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 			return e
 		}
 	} else if r != o.R {
-		return put("failed", map[string]any{"why": "patch_changed"})
+		// The recorded replay no longer gives the prepared R (its M0 and
+		// committer date are the operation's): what the branch would carry
+		// is not what was prepared. The operation ends and frees the slot.
+		return put("failed", map[string]any{"why": "stale"})
 	}
 	if landing.S5AutomaticRoute(f) || o.S5.Required {
 		prepared, d, err := store.PrepareS5Evidence(ctx, c.DB, source, c.Env, op, localPatch)

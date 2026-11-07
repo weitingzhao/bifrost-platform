@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -193,18 +194,26 @@ func retryReworkedLanding(ctx context.Context, tx pgx.Tx, t taskRow, attempt str
 	}
 	op := s.LatestOperation(t.id)
 	o, ok := s.Operations[op]
-	if !ok || o.Phase != "failed" || o.Outcome != "ci_red" || o.Retried || o.Attempt == attempt {
+	if !ok || o.Phase != "failed" || !slices.Contains(reworkedOutcomes, o.Outcome) || o.Retried || o.Attempt == attempt {
 		return nil
 	}
 	if reworked, err := landingCIReworked(ctx, tx, t.id, op); err != nil || !reworked {
 		return err
 	}
+	of, after := "red CI", "red landing CI"
+	if o.Outcome == "conflict" {
+		of, after = "replay conflict", "replay conflict"
+	}
 	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: t.id, MissionID: t.mission,
-		Body: map[string]any{"text": "Landing retried: attempt " + attempt + " was accepted after the red CI of " + op,
+		Body: map[string]any{"text": "Landing retried: attempt " + attempt + " was accepted after the " + of + " of " + op,
 			"landing": map[string]any{"v": landing.Version, "kind": "retry", "op": op, "root": t.id, "after_op": op,
-				"reason": "rework: attempt " + attempt + " accepted after the red landing CI", "by": "controller"}}})
+				"reason": "rework: attempt " + attempt + " accepted after the " + after, "by": "controller"}}})
 	return err
 }
+
+// reworkedOutcomes are the failed reasons that may send a root back for its
+// next round: a red landing CI and a replay conflict (recordLandingRed).
+var reworkedOutcomes = []string{"ci_red", "conflict"}
 
 // landingReworkMoves are the task moves of a red landing CI's rework: the
 // accepted task goes back through rework to ready.
@@ -225,6 +234,41 @@ var landingReworkMoves = map[string][]string{"accepted": {"rework"}}
 // Lock order: the step, the task, the mission's stream, then the
 // repository's stream last.
 func RecordLandingCIRed(ctx context.Context, db DB, repo, op, text string, failure landing.CIFailure, p Precheck) (bool, error) {
+	return recordLandingRed(ctx, db, repo, op, text, "ci_red", ciRed(op, failure), p)
+}
+
+// RecordLandingConflict ends repo's operation op failed{conflict}: its
+// change did not merge three-way onto m0, in paths. As RecordLandingCIRed
+// does for a red CI, and on the same conditions, it sends the root back
+// for its next round, told m0 and the conflicting paths (the failed
+// landing_ci check of its attempt, which the next round's claim names).
+func RecordLandingConflict(ctx context.Context, db DB, repo, op, text, m0 string, paths []string, p Precheck) (bool, error) {
+	return recordLandingRed(ctx, db, repo, op, text, "conflict", replayConflict(op, m0, paths), p)
+}
+
+// landingRed is what a landing that ends its operation tells the root's
+// next round: the landing_ci evidence and, for the task's move, what
+// happened ("the landing CI of op failed").
+type landingRed struct {
+	evidence map[string]any
+	what     string
+}
+
+func ciRed(op string, failure landing.CIFailure) landingRed {
+	return landingRed{evidence: map[string]any{"op": op, "pipeline": failure.Pipeline, "run": failure.Run,
+		"task_runs": failedTasks(failure.TaskRuns), "read_error": failure.ReadError}, what: "the landing CI of " + op + " failed"}
+}
+
+func replayConflict(op, m0 string, paths []string) landingRed {
+	if paths == nil {
+		paths = []string{}
+	}
+	return landingRed{evidence: map[string]any{"op": op, "M0": m0, "conflict_paths": paths,
+		"text": "The change does not merge onto main " + m0 + ": both changed the same lines of the conflict paths. Rebase onto main and resolve them."},
+		what: "the replay of " + op + " onto main conflicted"}
+}
+
+func recordLandingRed(ctx context.Context, db DB, repo, op, text, why string, red landingRed, p Precheck) (bool, error) {
 	stream := "landing:" + repo
 	var reworked bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -238,12 +282,12 @@ func RecordLandingCIRed(ctx context.Context, db DB, repo, op, text string, failu
 			return fmt.Errorf("unknown landing operation %s", op)
 		}
 		if !p.reviews() && s.LatestOperation(o.Task) == op && !o.Terminal() {
-			if reworked, err = reworkRedLanding(ctx, tx, o, op, failure); err != nil {
+			if reworked, err = reworkRedLanding(ctx, tx, o, op, red); err != nil {
 				return err
 			}
 		}
 		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
-			Body: map[string]any{"text": text, "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "ci_red"}}})
+			Body: map[string]any{"text": text, "landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": why}}})
 		return err
 	})
 	return reworked, err
@@ -251,7 +295,7 @@ func RecordLandingCIRed(ctx context.Context, db DB, repo, op, text string, failu
 
 // reworkRedLanding sends o's root back for its next round when it may go
 // (RecordLandingCIRed), and says whether it went.
-func reworkRedLanding(ctx context.Context, tx pgx.Tx, o landing.Operation, op string, failure landing.CIFailure) (bool, error) {
+func reworkRedLanding(ctx context.Context, tx pgx.Tx, o landing.Operation, op string, red landingRed) (bool, error) {
 	step, err := lockStep(ctx, tx, o.Task)
 	if err != nil {
 		return false, err
@@ -286,21 +330,24 @@ func reworkRedLanding(ctx context.Context, tx pgx.Tx, o landing.Operation, op st
 	if stopped, err := held(ctx, tx, []scope{{"task", t.id}}, "stop"); err != nil || stopped {
 		return false, err
 	}
-	body, err := json.Marshal(map[string]any{MethodLandingCI: map[string]any{"op": op, "R": o.R, "pipeline": failure.Pipeline,
-		"run": failure.Run, "task_runs": failedTasks(failure.TaskRuns), "read_error": failure.ReadError}})
+	evidence := map[string]any{"R": o.R}
+	for k, v := range red.evidence {
+		evidence[k] = v
+	}
+	body, err := json.Marshal(map[string]any{MethodLandingCI: evidence})
 	if err != nil {
 		return false, err
 	}
-	evidence, err := PutArtifact(ctx, tx, "controller", "log_tail", "application/json", body)
+	artifact, err := PutArtifact(ctx, tx, "controller", "log_tail", "application/json", body)
 	if err != nil {
 		return false, err
 	}
-	if err = recordLandingCI(ctx, tx, t, o.Attempt, o.A, "fail", evidence, landingCIRef(op)); err != nil {
+	if err = recordLandingCI(ctx, tx, t, o.Attempt, o.A, "fail", artifact, landingCIRef(op)); err != nil {
 		return false, err
 	}
-	why := fmt.Sprintf("the landing CI of %s failed in round %d of %d", op, d.round, d.maxRounds)
+	why := fmt.Sprintf("%s in round %d of %d", red.what, d.round, d.maxRounds)
 	if d.round+1 > d.maxRounds {
-		why = fmt.Sprintf("the landing CI of %s failed; one more round past its bound", op)
+		why = red.what + "; one more round past its bound"
 	}
 	if err = moveTaskBy(ctx, tx, "controller", t, "rework", why, landingReworkMoves); err != nil {
 		return false, err

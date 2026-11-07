@@ -54,7 +54,7 @@ func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
 								put("branch_pushed", "ref", ref, "R", commitB)
 								switch phase {
 								case "parked":
-									put("parked", "why", "main_red", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))
+									put("parked", "why", "ci_stuck", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))
 								case "failed":
 									put("failed", "why", "bound")
 								case "discarded":
@@ -120,7 +120,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 	at := time.Now().Add(-7 * time.Hour)
 	t.Cleanup(store.FreezeEventClock(at))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
-	reasons := []string{"bound", "stale", "ci_red", "ci_failed", "declined", "conflict", "patch_changed", "overlap", "floor", "limit", "denied", "rule", "main_red", "ci_stuck", "window"}
+	reasons := []string{"bound", "stale", "ci_red", "ci_failed", "declined", "conflict", "floor", "limit", "denied", "rule", "ci_stuck", "window"}
 	for i, why := range reasons {
 		store.FreezeEventClock(at)
 		op := fmt.Sprintf("retry:%d", i)

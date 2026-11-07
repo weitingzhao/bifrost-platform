@@ -93,7 +93,7 @@ func TestExplainRootLandingStates(t *testing.T) {
 	reverted := dbAccepted(t, w, c, s2, "bifrost-platform")
 	pendingOp := dbOp(t, w, c, pending, dbOldA, "intent")
 	declinedOp := dbOp(t, w, c, declined, dbNewA, "declined")
-	failedOp := dbOp(t, w, c, failed, dbThirdA, "overlap")
+	failedOp := dbOp(t, w, c, failed, dbThirdA, "conflict")
 	dbOp(t, w, c, landed, rwA1, "landed")
 	revertedOp := dbOp(t, w, c, reverted, rwA2, "reverted")
 	short := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, BaseCommit: commitB}) // a task step_tasks still waits on
@@ -158,7 +158,7 @@ func TestExplainRootLandingStates(t *testing.T) {
 	if b := got[declined]; b["state"] != "landing_declined" || b["op"] != declinedOp || !reflect.DeepEqual(b["rework"], wantRework) {
 		t.Fatalf("declined with no rework record: %v", b)
 	}
-	if b := got[failed]; b["state"] != "landing_failed" || b["op"] != failedOp || b["outcome"] != "overlap" {
+	if b := got[failed]; b["state"] != "landing_failed" || b["op"] != failedOp || b["outcome"] != "conflict" {
 		t.Fatalf("failed: %v", b)
 	}
 	if b := got[reverted]; b["state"] != "landing_failed" || b["op"] != revertedOp || b["outcome"] != "reverted" {

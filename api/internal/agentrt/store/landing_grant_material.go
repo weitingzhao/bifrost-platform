@@ -513,9 +513,9 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	if m.Action == ActionGuardrailLanding && !m.Pinned {
 		problem("not_pinned") // §3.4: only a pinned root waits on soft failures alone
 	}
-	if !x.patch.Match {
-		problem("patch_changed")
-	}
+	// A's and R's patch IDs are shown (review_patch_match), not judged: a
+	// three-way merge onto main may change R's context, and the landing CI
+	// tests what lands (patch_changed is gone, Owner 2026-11-06).
 	switch {
 	case floor:
 	case d.ciKey == nil:
