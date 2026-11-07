@@ -38,7 +38,8 @@ import (
 
 // Lease timing (v5 §5.2, §6.2): a lease lasts LeaseTTL from the last
 // heartbeat; once it lapses the attempt is stale and its host may still renew
-// it within Grace; after that it is lost.
+// it within Grace; after that it is lost. A claim and a heartbeat take the
+// tuning rule's lease_ttl_s instead, when one is in force (leaseTTL).
 const (
 	LeaseTTL = 120 * time.Second
 	Grace    = 15 * time.Minute

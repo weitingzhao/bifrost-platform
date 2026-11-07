@@ -58,9 +58,10 @@ type PinnedClaimRequest struct {
 // the same key with another task is ErrConflict; two calls with one key at
 // once lease once. A refusal stores nothing.
 func ClaimPinned(ctx context.Context, db DB, r PinnedClaimRequest) (map[string]any, error) {
-	return claimPinned(ctx, db, r, LeaseTTL)
+	return claimPinned(ctx, db, r, 0)
 }
 
+// claimPinned leases for ttl, zero the tuning rule's (leaseTTL).
 func claimPinned(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Duration) (map[string]any, error) {
 	switch {
 	case r.Key == "":

@@ -103,8 +103,12 @@ func Heartbeat(ctx context.Context, db DB, f Fence) (Beat, error) {
 		if err != nil {
 			return err
 		}
+		ttl, err := leaseTTL(ctx, tx)
+		if err != nil {
+			return err
+		}
 		if a.state == "stale" || !a.now.Before(a.expires) {
-			next := a.now.Add(LeaseTTL)
+			next := a.now.Add(ttl)
 			to := "leased"
 			if a.started {
 				to = "running"
@@ -119,7 +123,7 @@ func Heartbeat(ctx context.Context, db DB, f Fence) (Beat, error) {
 			}
 		} else if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt
 		  SET lease_expires_at = GREATEST(lease_expires_at, clock_timestamp() + make_interval(secs => $2)), heartbeat_at = clock_timestamp()
-		  WHERE attempt_id = $1`, a.id, LeaseTTL.Seconds()); err != nil {
+		  WHERE attempt_id = $1`, a.id, ttl.Seconds()); err != nil {
 			return err
 		}
 		if err = tx.QueryRow(ctx, `SELECT lease_expires_at FROM agentrt.attempt WHERE attempt_id = $1`, a.id).Scan(&b.LeaseExpiresAt); err != nil {

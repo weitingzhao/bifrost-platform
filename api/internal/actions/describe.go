@@ -66,6 +66,7 @@ var notifySafeKeys = map[string][]string{
 	"delete_finished_jobs":        {"namespace", "names", "label_selector"},
 	"run_probe_pod":               {"namespace", "image", "timeout_seconds", "env_from"},
 	"void_exam_paper":             {"environment", "run_id"},
+	"agentrt_rule_approve":        {"env", "rule_id", "rule_version"},
 	"mark_missions_no_merge":      {"env", "archive_manifest_sha256"},
 	"stg_release_sample_create":   {"env", "revision", "ui_revision", "infra_revision"},
 	"stg_release_sample_finalize": {"env", "run", "uid"},
@@ -130,7 +131,7 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 	case "approve_core_landing":
 		d.Env, d.Summary = p("env"), "Trusted core change: land "+shortRef(p("R"))+" ("+p("op")+")"
 	case "approve_floor_landing":
-		d.Env, d.Summary = p("env"), "Infra floor change: land "+shortRef(p("R"))+" ("+p("op")+") on "+p("repo")+" main"
+		d.Env, d.Summary = p("env"), "Floor change: land "+shortRef(p("R"))+" ("+p("op")+") on "+p("repo")+" main"
 	case "deploy_agentd":
 		d.Env, d.Summary = p("env"), "Deploy agentd "+shortRef(p("commit"))+" on host "+p("host")+" (sha256 "+p("sha256")+")"
 		if d.KeyParams != nil && d.KeyParams["commit"] != "" {
@@ -140,6 +141,8 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = p("env"), "Create the B5 first-opening sample run of "+shortRef(p("revision"))
 	case "stg_release_sample_finalize":
 		d.Env, d.Summary = p("env"), "Archive and release the B5 sample "+p("run")
+	case "agentrt_rule_approve":
+		d.Env, d.Summary = p("env"), describeRuleApprove(ctx, params)
 	case "void_exam_paper":
 		run := p("run_id")
 		if len(run) > 12 {
@@ -200,6 +203,28 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 	}
 	d.Summary = clip(d.Summary, summaryMax)
 	return d
+}
+
+// describeRuleApprove is an agentrt_rule_approve card's line: the rule, the
+// version, and each capacity field's old and new value as the installed
+// reader computes them from the draft.
+func describeRuleApprove(ctx context.Context, params map[string]any) string {
+	line := "Capacity change: " + str(params["rule_id"]) + " v" + scalar(params["rule_version"])
+	actMu.RLock()
+	look := ruleChangeLookup
+	actMu.RUnlock()
+	if look == nil {
+		return line
+	}
+	changes, err := look(ctx, params)
+	if err != nil || len(changes) == 0 {
+		return line
+	}
+	parts := make([]string, 0, len(changes))
+	for _, c := range changes {
+		parts = append(parts, c.Field+" "+c.Old+" → "+c.New)
+	}
+	return line + ": " + strings.Join(parts, ", ")
 }
 
 func describeApply(ctx context.Context, planID string) (string, string) {

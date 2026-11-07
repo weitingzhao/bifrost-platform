@@ -32,7 +32,7 @@ type field struct {
 }
 
 // eventTypes is the closed vocabulary, as the database's event_type_closed
-// constraint has it (migrations 0009); TestEventTypesAreTheDatabases holds
+// constraint has it (migrations 0009, 0013); TestEventTypesAreTheDatabases holds
 // the two together. bodies below covers only the types the store writes.
 var eventTypes = map[string]bool{
 	"plan_node_created": true, "plan_node_retitled": true, "plan_node_state_changed": true,
@@ -46,13 +46,14 @@ var eventTypes = map[string]bool{
 	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true,
 	"owner_signoff": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
 	"host_retired": true, "control_set": true, "control_cleared": true, "rule_proposed": true, "rule_signed": true,
-	"rule_tightened": true, "rule_expired": true, "capability_scored": true, "candidate_status_changed": true,
+	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "message_posted": true,
 	"message_acked": true, "policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
 	"legacy_imported": true, "issue_submitted": true, "issue_added": true, "issue_brief_drafted": true, "issue_asked": true,
 	"issue_answered": true, "issue_classified": true, "issue_design_put": true, "issue_reviewed": true,
 	"issue_owner_decided": true, "issue_priority_set": true, "issue_taken": true, "issue_replied": true,
 	"issue_state_changed": true, "issue_merged": true, "intake_client_set": true, "intake_acked": true,
+	"host_slots_set": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
@@ -91,6 +92,7 @@ var bodies = map[string][]field{
 	"attempt_cancelled":       {{"reason", kStr, false}, {"accepted_attempt", kID, true}},
 	"host_registered":         {{"host_id", kID, false}, {"actor_id", kID, false}, {"host_kind", kStr, false}, {"token", kStr, true}},
 	"host_state_changed":      {{"host_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}},
+	"host_slots_set":          {{"host_id", kID, false}, {"policy", kStr, false}, {"params", kAny, false}, {"signals", kAny, false}, {"old", kInt, false}, {"new", kInt, false}, {"reason", kStr, false}},
 	"attempt_persisted":       {{"pushed_commit", kStr, true}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}, {"changed_lines", kInt, true}, {"hard", kBool, true}},
 	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}, {"injected", kBool, true}},
 	"artifact_put":            {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
@@ -140,8 +142,12 @@ var bodies = map[string][]field{
 	// body as kept, masked when its local paths were; recorderimport.go).
 	"legacy_imported": {{"source", kStr, false}, {"count", kInt, true}, {"work_id", kStr, true}, {"seq", kInt, true},
 		{"digest", kStr, true}, {"record", kStr, true}, {"masked", kBool, true}},
-	"rule_signed":              {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
-	"rule_tightened":           {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"capability_facts", kIDs, true}},
+	"rule_signed":    {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
+	"rule_tightened": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"capability_facts", kIDs, true}},
+	// rule_approved: a capacity change the Owner approved on a card
+	// (ruleapprove.go): the approval, the draft's artifact and each field it
+	// changes with its old and new value.
+	"rule_approved":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"approval_id", kID, false}, {"text_artifact_id", kID, false}, {"changes", kAny, false}},
 	"rule_proposed":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
 	"candidate_status_changed": {{"job_candidate_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}, {"rule_id", kID, false}, {"rule_version", kInt, false}},
 	"approval_seen":            {{"approval", kInt, false}, {"status", kStr, false}},
@@ -259,6 +265,10 @@ var bodies = map[string][]field{
 		// claims report (commit, sha256, modified), when it changed
 		// (presence.go).
 		{"agentd_build", kAny, true},
+		// headroom: on a host's headroom stream, the load and memory its
+		// claim reports, integers only, when it moved or got old
+		// (slotsignals.go, R5 phase 2 step 3b).
+		{"headroom", kAny, true},
 		// prune_round: on a host's prune stream, a round of deleting the
 		// attempt branches it was handed, opened or closed (presencelive.go,
 		// review 526 A1).
@@ -535,6 +545,7 @@ var fieldValues = map[string]map[string]value{
 	"attempt_cancelled":       {"accepted_attempt": attemptID},
 	"host_registered":         {"host_kind": oneOf(hostKinds...)},
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
+	"host_slots_set":          {"policy": oneOf(rules.SlotPolicies...)},
 	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", MethodLandingCI), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
@@ -553,6 +564,7 @@ var fieldValues = map[string]map[string]value{
 	"pool_measured":            {"source": oneOf("reading", "exit_text", "owner"), "resets_at": instant},
 	"budget_charged":           {"attempt_id": attemptID},
 	"rule_proposed":            {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
+	"rule_approved":            {"approval_id": approvalRef, "text_artifact_id": artifactID},
 	"candidate_status_changed": {"from": oneOf(candidateStatus...), "to": oneOf(candidateStatus...)},
 	"question_seen":            {"answered_at": instant},
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},

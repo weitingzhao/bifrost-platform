@@ -214,12 +214,12 @@ func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, sign
 	if err := releasepolicy.VerifyAnchored([]byte(signature), text, rules.Namespace, anchor); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnsigned, err)
 	}
-	return writeRule(ctx, db, w, r, text, func(why error) error {
+	return writeRule(ctx, db, w, r, text, func(_ *StoredRule, why error) error {
 		if r.Direction == rules.Tighten && why != nil {
 			return invalid("the rule is marked tighten but %v", why)
 		}
 		return nil
-	}, signature, anchor)
+	}, ruleRecord{signature: signature, signedBy: anchor})
 }
 
 // S5SigningReady reports whether the deployment's trusted S5 contract is
@@ -261,16 +261,29 @@ func TightenRule(ctx context.Context, db DB, w Writer, id string, text []byte) (
 	if r.Direction != rules.Tighten {
 		return nil, fmt.Errorf("%w: a rule marked %s is never taken unsigned", ErrUnsigned, r.Direction)
 	}
-	return writeRule(ctx, db, w, r, text, func(why error) error {
+	return writeRule(ctx, db, w, r, text, func(_ *StoredRule, why error) error {
 		if why != nil {
 			return fmt.Errorf("%w: it is not a tightening: %v", ErrUnsigned, why)
 		}
 		return nil
-	}, "", "")
+	}, ruleRecord{})
 }
 
-func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, allow func(why error) error,
-	signature, signedBy string) (map[string]any, error) {
+// ruleRecord is what lets a rule version take effect besides a shown
+// tightening: the Owner's signature and the key it verified against, or the
+// approval of a card for a capacity change (ruleapprove.go), with what the
+// card showed.
+type ruleRecord struct {
+	signature, signedBy string
+	approval            *ruleApproval
+}
+
+// writeRule writes r as the next version of its rule once allow, given the
+// version before and whether r only tightens it, lets it. For a card's
+// version (rec.approval) it asks first, under the same locks, whether that
+// approval already wrote it (its executor retried) and answers what it wrote.
+func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, allow func(prev *StoredRule, why error) error,
+	rec ruleRecord) (map[string]any, error) {
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		// The writer first, registration and all: a control holds the
@@ -302,6 +315,13 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 		if (r.Kind == rules.KindJob || r.Kind == rules.KindFacts) && r.Effective.After(now) {
 			return invalid("a %s rule takes effect when it is written: effective_at %s is in the future", r.Kind, r.Effective.Format(time.RFC3339))
 		}
+		if rec.approval != nil {
+			done, err := rec.approval.done(ctx, tx, r)
+			if err != nil || done != nil {
+				out = done
+				return err
+			}
+		}
 		prev, err := latestRule(ctx, tx, r.ID)
 		if err != nil {
 			return err
@@ -310,13 +330,13 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 		if err != nil {
 			return err
 		}
-		if err = allow(why); err != nil {
+		if err = allow(prev, why); err != nil {
 			return err
 		}
 		if err = knownNames(ctx, tx, r); err != nil {
 			return err
 		}
-		out, err = insertRule(ctx, tx, w, r, text, signature, signedBy)
+		out, err = insertRule(ctx, tx, w, r, text, rec)
 		return err
 	})
 	return out, err
@@ -362,14 +382,18 @@ func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
 	return nil
 }
 
-func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []byte, signature, signedBy string) (map[string]any, error) {
+func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []byte, rec ruleRecord) (map[string]any, error) {
 	body, err := r.BodyJSON()
 	if err != nil {
 		return nil, err
 	}
+	signature, signedBy := rec.signature, rec.signedBy
 	signed := signature != ""
 	eventType := "rule_signed"
-	if !signed {
+	switch {
+	case rec.approval != nil:
+		eventType = "rule_approved"
+	case !signed:
 		eventType = "rule_tightened"
 	}
 	plan, err := planRows(ctx, tx, r, signed, r.Direction == rules.Tighten)
@@ -383,13 +407,27 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	if len(plan.factIDs()) > 0 {
 		evBody["capability_facts"] = plan.factIDs()
 	}
+	var approvalID *string
+	if a := rec.approval; a != nil {
+		evBody["approval_id"], evBody["text_artifact_id"], evBody["changes"] = a.ID, a.TextArtifactID, capacityDoc(a.changes)
+		approvalID = &a.ID
+	}
 	ev, err := Append(ctx, tx, Event{Stream: RuleStream(r.ID), Type: eventType, Actor: w.Actor, Body: evBody})
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
-	    effective_at, expires_at, proposed_by_actor_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10)`,
-		r.ID, r.Version, string(body), string(text), r.Direction, nullable(signedBy), nullable(signature), r.Effective, r.Expires, w.Actor); err != nil {
+	if approvalID == nil {
+		_, err = tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
+		    effective_at, expires_at, proposed_by_actor_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10)`,
+			r.ID, r.Version, string(body), string(text), r.Direction, nullable(signedBy), nullable(signature), r.Effective, r.Expires, w.Actor)
+	} else {
+		// Only a card's version names approval_id (0013): the signed and
+		// tighten routes write what they wrote before.
+		_, err = tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction,
+		    effective_at, expires_at, proposed_by_actor_id, approval_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)`,
+			r.ID, r.Version, string(body), string(text), r.Direction, r.Effective, r.Expires, w.Actor, *approvalID)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if err = plan.write(ctx, tx, w, r, signed); err != nil {
@@ -399,9 +437,13 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	if err = json.Unmarshal(body, &doc); err != nil {
 		return nil, err
 	}
-	return map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction, "signed": signed,
+	out := map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction, "signed": signed,
 		"effective_at": r.Effective.Format(time.RFC3339), "expires_at": r.Expires.Format(time.RFC3339), "event_id": ev.EventID,
-		"body": doc}, nil
+		"body": doc}
+	if a := rec.approval; a != nil {
+		out["approval_id"], out["changes"] = a.ID, capacityDoc(a.changes)
+	}
+	return out, nil
 }
 
 // RuleInForce is CurrentRule at the database's clock, in a read-only

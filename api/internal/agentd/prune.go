@@ -26,8 +26,9 @@ import (
 
 // PruneEvery is how often agentd asks; PruneWork bounds a round's asking and
 // git; PruneReport bounds sending what it did, on a clock of its own, so a
-// round that ran out still reports (review 436 B1).
-const (
+// round that ran out still reports (review 436 B1). AGENTD_PRUNE_* set them
+// (config.go).
+var (
 	PruneEvery  = 10 * time.Minute
 	PruneWork   = 2 * time.Minute
 	PruneReport = 30 * time.Second

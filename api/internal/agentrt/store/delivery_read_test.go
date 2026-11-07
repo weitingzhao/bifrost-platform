@@ -66,7 +66,7 @@ func TestResolveDeliveryCommit(t *testing.T) {
 }
 
 // One read of a change's delivery stages, by commit or by task, against the
-// migrated database. Serial: FreezeEventClock.
+// migrated database.
 // Serial: FreezeEventClock
 func TestReadDelivery(t *testing.T) {
 	w := newWorld(t)

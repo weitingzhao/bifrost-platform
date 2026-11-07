@@ -39,7 +39,7 @@ func runBench(args []string) int {
 	executor := fs.String("executor", "", "the executor to run them with, e.g. exec:codex")
 	runID := fs.String("run-id", "", "the run to start or go on with (default: a new one)")
 	only := fs.String("only", "", "only these questions, comma-separated")
-	limit := fs.Duration("limit", 30*time.Minute, "the executor's time on one question")
+	limit := fs.Duration("limit", 0, "the executor's time on one question (default AGENTD_BENCH_LIMIT, 30m)")
 	post := fs.String("post", "", "hand in this run again instead of running anything")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -55,6 +55,10 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 	cfg, err := config()
 	if err != nil {
 		return err
+	}
+	cfg.tune.Apply()
+	if limit <= 0 {
+		limit = cfg.tune.Duration(agentd.EnvBenchLimit)
 	}
 	lockPath, err := agentd.HostLockPath()
 	if err != nil {
@@ -160,7 +164,7 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 		}
 	}
 	b := &agentd.Bench{Root: root, Self: self, GitEnv: cfg.gitEnv, CheckEnv: agentd.AllowedEnv(os.Environ()), Executor: ex,
-		Tool: tool, Limit: limit, Logf: log.Printf, Sandbox: agentd.BwrapSandbox(bwrap), GoModCache: modCache, Secrets: secrets,
+		Tool: tool, Limit: limit, CheckLimit: cfg.tune.Duration(agentd.EnvBenchCheckLimit), Logf: log.Printf, Sandbox: agentd.BwrapSandbox(bwrap), GoModCache: modCache, Secrets: secrets,
 		CodexHome: agentd.CodexHome(os.Environ()),
 		Remote:    func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" }}
 	if err = b.Preflight(ctx); err != nil {

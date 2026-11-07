@@ -67,16 +67,23 @@ func (s GrantSources) MainOf(ctx context.Context, repo string) (string, error) {
 	return src.Main(ctx)
 }
 
-// complete: every reader repo's grants need. A floor grant reads M0..R's
-// files instead of a pinned CI run.
-func (s GrantSources) complete(repo string) bool {
+// complete: every reader repo's grants need, floor saying whether the
+// grant is a floor one (readsFloor). A floor grant reads M0..R's files;
+// platform's grants read the pinned CI run, its floor grant as well.
+func (s GrantSources) complete(repo string, floor bool) bool {
 	if s.Facts.Result == nil || s.Facts.History == nil || s.Facts.grantPatchFor(repo) == nil || s.Main == nil {
 		return false
 	}
-	if rules.FloorGrantSupported(repo) {
-		return s.Facts.FloorFiles != nil
+	if (floor || repo == "bifrost-trade-infra") && s.Facts.FloorFiles == nil {
+		return false
 	}
-	return s.Facts.GrantCI != nil
+	return repo != "bifrost-platform" || s.Facts.GrantCI != nil
+}
+
+// readsFloor: an operation of repo waiting on soft takes a floor grant, so
+// its material reads M0..R's files (infra's always do).
+func readsFloor(repo string, soft []string) bool {
+	return repo == "bifrost-trade-infra" || GrantActionFor(repo, soft) == ActionFloorLanding
 }
 
 // GrantParams are the approval's parameters, closed (§5.6 item 1).
@@ -244,10 +251,11 @@ type LandingGrantMaterial struct {
 	Problems        []string             `json:"problems"`
 	ComputedAt      time.Time            `json:"computed_at"`
 	// FloorPaths are the files a floor grant pins, sorted by path, each at
-	// its blob sha256 at R; absent for platform operations.
+	// its blob sha256 at R; absent for the other grants.
 	FloorPaths []GrantFloorPath `json:"floor_paths,omitempty"`
 	// floorCI is the infra CI run the operation succeeded on, recorded in
-	// a floor grant; not part of the candidate (the gate reads CI again).
+	// an infra floor grant; not part of the candidate (the gate reads CI
+	// again). A platform floor grant records its pinned run instead.
 	floorCI GrantCI
 	// Batch, when the operation leads a batch (landing_batch.go): the
 	// patch is the batch's whole change M0..R, and these are its members.
@@ -361,7 +369,8 @@ func readGrantChecks(ctx context.Context, tx pgx.Tx, task, attempt string) ([]Gr
 	return acc, rev, err
 }
 
-// grantExt is the external half: the result's diff, R's patch and R's CI.
+// grantExt is the external half: the result's diff, R's patch, R's CI and,
+// for a floor grant, M0..R's files.
 type grantExt struct {
 	single  bool
 	changes []rules.LandingChange
@@ -381,7 +390,8 @@ func readGrantExt(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 
 func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, error) {
 	var x grantExt
-	if !src.complete(d.repo) {
+	floor := readsFloor(d.repo, d.op.Soft)
+	if !src.complete(d.repo, floor) {
 		return x, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	f, o := d.facts, d.op
@@ -398,7 +408,7 @@ func readGrantGit(ctx context.Context, src GrantSources, d grantDB) (grantExt, e
 	if x.mates, err = readGrantBatchGit(ctx, src, d.mates); err != nil {
 		return x, err
 	}
-	if rules.FloorGrantSupported(d.repo) {
+	if floor {
 		if x.floor, err = src.Facts.FloorFiles(ctx, d.repo, o.M0, o.R); err != nil {
 			return x, err
 		}
@@ -470,19 +480,25 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	if len(m.SoftAtRequest) == 0 {
 		problem("no_soft_failure")
 	}
-	m.Action = GrantActionFor(m.SoftAtRequest)
+	m.Action = GrantActionFor(f.Repo, m.SoftAtRequest)
 	floor := m.Action == ActionFloorLanding
+	// pinsCI: the grant names R's pinned CI run (every platform grant, its
+	// floor grant too); infra's floor grant does not.
+	pinsCI := !floor || f.Repo == "bifrost-platform"
 	ci, key := x.ci, d.ciKey
 	if floor {
-		// A floor grant pins files, not a CI run: the gate reads infra's CI
-		// again; the material names the success the operation waits on.
-		var green bool
-		if m.floorCI, green = floorCIOf(d.op, now); !green {
-			problem("ci_not_green")
+		if !pinsCI {
+			// Infra's floor grant pins files, not a CI run: the gate reads
+			// infra's CI again; the material names the success the operation
+			// waits on.
+			var green bool
+			if m.floorCI, green = floorCIOf(d.op, now); !green {
+				problem("ci_not_green")
+			}
+			ci, key = GrantCIEvidence{}, nil
 		}
-		ci, key = GrantCIEvidence{}, nil
 		var grantable bool
-		m.FloorPaths, grantable = floorPathsOf(x.floor)
+		m.FloorPaths, grantable = floorPathsOf(f.Repo, x.floor)
 		if !grantable || !rules.LandingFloorGrantable(landingRuleOf(f), f.Repo, f.Changes, soft) {
 			problem("floor") // M0..R holds a file no floor grant can pin
 		}
@@ -517,7 +533,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	// three-way merge onto main may change R's context, and the landing CI
 	// tests what lands (patch_changed is gone, Owner 2026-11-06).
 	switch {
-	case floor:
+	case !pinsCI:
 	case d.ciKey == nil:
 		problem("ci_not_pinned") // its CI was not pinned to sibling commits: no grant rests on it
 	case grantCIProblem(d.op, d.ciKey, x.ci, now):
@@ -535,11 +551,15 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		m.Title = "Trusted core change"
 		m.FirstLine = "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code."
 	}
-	if floor {
+	switch {
+	case floor && f.Repo == "bifrost-platform":
+		m.Title = "Platform floor change"
+		m.FirstLine = "Approving lets agentrt-lander push this commit to platform main, once, fast-forward only, if the files it changes are still exactly these at R and platform CI is green on it."
+	case floor:
 		m.Title = "Infra floor change"
 		m.FirstLine = "Approving lets agentrt-lander push this commit to infra main, once, fast-forward only, if the files it changes are still exactly these at R. Nothing is applied to a cluster: an Argo sync, or apply_manifest for a path Argo does not track, is a separate step."
 	}
-	if stg && !floor {
+	if stg && pinsCI {
 		m.STGNotice = "Approving also authorizes this commit to go to STG with the B5 batch."
 	}
 	for _, g := range d.grants {
@@ -627,7 +647,7 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 		return LandingGrant{}, grantRefused("grant_unsupported", "%s is not granted for %s", a.Action, p.Repo)
 	}
 	src = src.forRepo(p.Repo)
-	if !src.complete(p.Repo) {
+	if !src.complete(p.Repo, a.Action == ActionFloorLanding) {
 		return LandingGrant{}, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	grantID := "lg_" + a.ID
@@ -745,7 +765,10 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 		Purpose: LandingGrantPurpose, STGRelease: p.STGRelease, ApprovedAt: approved.Format(time.RFC3339Nano),
 		GrantedAt: granted.Format(time.RFC3339Nano), ExpiresAt: approved.Add(LandingGrantTTL).Format(time.RFC3339Nano)}
 	if a.Action == ActionFloorLanding {
-		g.CI, g.FloorPaths = m.floorCI, slices.Clone(m.FloorPaths)
+		g.FloorPaths = slices.Clone(m.FloorPaths)
+		if p.Repo != "bifrost-platform" {
+			g.CI = m.floorCI
+		}
 	}
 	g.Batch = grantBatchOf(m, d)
 	if _, err = Append(ctx, tx, Event{Stream: grantStream(pre.repo), Type: "note", Actor: "controller", TaskID: g.Task, MissionID: mission,

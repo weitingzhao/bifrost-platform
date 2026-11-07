@@ -51,7 +51,15 @@ export type RuntimeHost = {
    * heartbeats (false), or not known yet (null; review 527 A3).
    */
   claiming?: boolean | null
+  /**
+   * Elastic slots (R5 phase 2 step 3b; store/hostslots.go): the count the platform's slots pass recorded for it, null while
+   * none is (the concurrency rule's per_host, or its slots block's start, then holds), and its latest moves, newest first.
+   * Unset by a platform before them.
+   */
+  effective_slots?: number | null; slot_moves?: RuntimeSlotMove[]
 }
+/** A move of a host's slots: when, by which policy, from and to how many, and why. */
+export type RuntimeSlotMove = { at: string; policy: string; old: number; new: number; reason: string }
 /**
  * An executor some job's candidate names (W-31 3.5; store/presence.go): available, or not with why, or not known (null)
  * while a host that could take work has not said what it offers; the hosts that offer it and its jobs.
@@ -229,6 +237,11 @@ export function parseRuntimeHost(v: unknown): RuntimeHost {
   if (typeof h.disk_low === 'boolean') host.disk_low = h.disk_low
   if (typeof h.pruning === 'boolean') host.pruning = h.pruning
   if (typeof h.claiming === 'boolean' || h.claiming === null) host.claiming = h.claiming
+  if (h.effective_slots === null || number(h.effective_slots) !== undefined) host.effective_slots = number(h.effective_slots) ?? null
+  if (Array.isArray(h.slot_moves)) {
+    host.slot_moves = records(h.slot_moves).map(m => ({ at: text(m.at), policy: text(m.policy), old: number(m.old) ?? 0,
+      new: number(m.new) ?? 0, reason: text(m.reason) }))
+  }
   return host
 }
 const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const

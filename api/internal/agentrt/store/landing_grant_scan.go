@@ -52,7 +52,7 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 		return canon.Parse(raw)
 	}
 	// Grants live on every repository stream a grant supports (the
-	// platform's two, infra's floor grant); pinned CI keys only on platform's.
+	// platform's three, infra's floor grant); pinned CI keys only on platform's.
 	grantsHere := strings.HasPrefix(stream, "landing:") && landing.GrantSupported(strings.TrimPrefix(stream, "landing:"))
 	for rows.Next() {
 		var seq int64

@@ -30,6 +30,10 @@ type ClaimRequest struct {
 	// claim leases nothing, as with no free slot (hostdisk.go).
 	Disk      *HostDisk
 	DiskFloor int64
+	// Signals is the headroom the host reports, nil when it reports none (an
+	// agentd from before elastic slots); kept for the slots pass
+	// (hostslots.go).
+	Signals *HostSignals
 }
 
 // Claim is a leased attempt and what agentd needs to run it.
@@ -48,6 +52,9 @@ type Claim struct {
 	// SubjectEffect its task's effect class, for a check (TD-409,
 	// claimsubject.go).
 	SubjectReport, SubjectEffect string
+	// GrantedSlots is how many attempts the host may hold at once now, the
+	// lease included (hostslots.go): agentd asks for no more.
+	GrantedSlots int
 }
 
 // dispatched are the effect classes round 2 hands out. External work is not
@@ -56,7 +63,7 @@ type Claim struct {
 var dispatched = []string{"none", "branch"}
 
 type claimOpts struct {
-	ttl     time.Duration
+	ttl     time.Duration // zero: the tuning rule's (leaseTTL)
 	effects []string
 	// authorize runs after the host and capability locks, before routing.
 	authorize func(context.Context, pgx.Tx, ClaimRequest) (ClaimRequest, error)
@@ -87,7 +94,7 @@ const candidatePage = 100
 // take never hide the ones it may (review 148 B2). A task whose preparation
 // failed in a row is blocked instead, ending this poll without a lease.
 func ClaimNext(ctx context.Context, db DB, r ClaimRequest) (*Claim, error) {
-	return claimNext(ctx, db, r, claimOpts{ttl: LeaseTTL, effects: dispatched})
+	return claimNext(ctx, db, r, claimOpts{effects: dispatched})
 }
 
 func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim, error) {
@@ -163,10 +170,19 @@ type candidateSource func(ctx context.Context, tx pgx.Tx, after *candidate) ([]c
 func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource, o claimOpts, pinned bool) (*Claim, string, error) {
 	var state, kind string
 	var slots int
-	// A host that states no slots has the most a rule may give, the
-	// ceiling (2.4 slice ③): the signed per_host decides how many run.
-	err := tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = $1
-	  RETURNING state, host_kind, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.PerHostCeiling).Scan(&state, &kind, &slots)
+	var effective *int
+	signals, err := signalsArg(r.Signals)
+	if err != nil {
+		return nil, "", err
+	}
+	// A host that states no slots has the most a rule may give (2.4 slice
+	// ③): the signed per_host decides how many run, and under a slots block
+	// the count the slots pass recorded (hostslots.go). The headroom the host
+	// reports is liveness too (0014), the time it was read with it.
+	err = tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp(),
+	    signals_json = COALESCE($3::jsonb || jsonb_build_object('at', clock_timestamp()), signals_json) WHERE host_id = $1
+	  RETURNING state, host_kind, COALESCE((capacity_json->>'slots')::int, $2), (capacity_json->>'effective_slots')::int`,
+		r.HostID, rules.PerHostCeiling, signals).Scan(&state, &kind, &slots, &effective)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
 	}
@@ -199,7 +215,7 @@ func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource
 	}
 	// The concurrency rule caps the host's slots; without one nothing is
 	// dispatched (proposal §2).
-	if slots, err = perHost(ctx, tx, slots); err != nil || slots == 0 {
+	if slots, err = grantedSlots(ctx, tx, slots, effective); err != nil || slots == 0 {
 		return nil, "no concurrency rule in force gives the host a slot", err
 	}
 	var live int
@@ -246,6 +262,9 @@ func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource
 				}
 			}
 			claim, blocked, err := tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st)
+			if claim != nil {
+				claim.GrantedSlots = slots
+			}
 			if err != nil || claim != nil {
 				return claim, "", err
 			}
@@ -503,6 +522,12 @@ func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, 
 	var n int
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(attempt_no), 0) + 1 FROM agentrt.attempt WHERE task_id = $1`, c.id).Scan(&n); err != nil {
 		return nil, err
+	}
+	if ttl == 0 {
+		var err error
+		if ttl, err = leaseTTL(ctx, tx); err != nil {
+			return nil, err
+		}
 	}
 	id, epoch, err := leaseAttemptWith(ctx, tx, "controller", c.mission, c.id, tl, hostID, n, ttl, why)
 	if err != nil {

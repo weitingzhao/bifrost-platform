@@ -59,6 +59,7 @@ func sitExam(job, executor, only string, limit time.Duration, dev bool) error {
 	if err != nil {
 		return err
 	}
+	cfg.tune.Apply()
 	var tool agentd.Tool
 	for _, tl := range cfg.tools {
 		if tl.Executor == executor {

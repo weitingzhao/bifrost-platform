@@ -28,9 +28,7 @@ func Tightens(prev, next Rule) error {
 	case KindEnvelope:
 		return envelopeTightens(prev.Envelope, next.Envelope)
 	case KindConcurrency:
-		if *next.PerHost > *prev.PerHost {
-			return errors.New("per_host goes up")
-		}
+		return slotsTighten(prev, next)
 	case KindBudget:
 		p, n := prev.Budget, next.Budget
 		if err := budgetTightens(p.Mission, n.Mission); err != nil {

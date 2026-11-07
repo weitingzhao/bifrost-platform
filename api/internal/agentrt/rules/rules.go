@@ -218,6 +218,9 @@ type Rule struct {
 	Kind     string
 	Envelope *Envelope
 	PerHost  *int
+	// Slots is a concurrency rule's slots block, nil when it has none
+	// (slots.go).
+	Slots    *Slots
 	Budget   *BudgetRule
 	Job      *Job
 	Facts    []Fact
@@ -228,6 +231,8 @@ type Rule struct {
 	Landing  *Landing
 	// DebtProjects is a debt-projects rule's part (debt.go).
 	DebtProjects *DebtProjects
+	// Tuning is a tuning rule's part (tuning.go).
+	Tuning *Tuning
 }
 
 // KindOf is the kind a rule_id names, and the tenant or job it is for.
@@ -242,12 +247,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindIntake, KindDebtProjects:
+	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindIntake, KindDebtProjects, KindTuning:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, debt-projects, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, debt-projects, tuning, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -295,6 +300,7 @@ func Parse(text []byte) (Rule, error) {
 		var n int
 		if n, err = o.integer("per_host", 0, PerHostCeiling); err == nil {
 			r.PerHost = &n
+			err = r.slots(o)
 		}
 	case KindBudget:
 		err = r.budget(o, arg)
@@ -312,6 +318,8 @@ func Parse(text []byte) (Rule, error) {
 		err = r.intake(o)
 	case KindDebtProjects:
 		err = r.debtProjects(o)
+	case KindTuning:
+		err = r.tuning(o)
 	}
 	if err != nil {
 		return Rule{}, err
@@ -645,6 +653,9 @@ func (r Rule) Doc() map[string]any {
 		}
 	case KindConcurrency:
 		doc["per_host"] = *r.PerHost
+		if r.Slots != nil {
+			doc["slots"] = r.Slots.doc()
+		}
 	case KindBudget:
 		b := r.Budget
 		doc["tenant"], doc["attempt_hard_limit_s"] = b.Tenant, b.AttemptLimitSec
@@ -698,6 +709,10 @@ func (r Rule) Doc() map[string]any {
 		}
 	case KindDebtProjects:
 		for k, v := range r.DebtProjects.doc() {
+			doc[k] = v
+		}
+	case KindTuning:
+		for k, v := range r.Tuning.doc() {
 			doc[k] = v
 		}
 	}

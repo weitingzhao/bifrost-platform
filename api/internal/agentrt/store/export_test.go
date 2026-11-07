@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
@@ -410,3 +411,18 @@ type DeliveryCandidate = deliveryCandidate
 func ResolveDeliveryCommitForTest(prefix string, candidates []DeliveryCandidate) (DeliveryCandidate, error) {
 	return resolveDeliveryCommit(prefix, candidates)
 }
+
+// ParseLandingGrantForTest is parseLandingGrant: a landing_grant body's
+// closed-schema and §5.5/§12 check, without a database.
+func ParseLandingGrantForTest(v any) (LandingGrant, error) { return parseLandingGrant(v) }
+
+// FloorTreeStaleForTest is floorTreeStale: why M0..R is not what a floor
+// grant of repo pinned, "" when it is.
+func FloorTreeStaleForTest(repo string, pinned []GrantFloorPath, tree landing.FloorTree) string {
+	return floorTreeStale(repo, pinned, tree)
+}
+
+// BadLandingRefusalForTest is badLandingRefusal, and RefusalAppendForTest
+// checkLandingRefusalAppend: a landing_refusal body and its event.
+func BadLandingRefusalForTest(v any) string { return badLandingRefusal(v) }
+func RefusalAppendForTest(ev Event) error   { return checkLandingRefusalAppend(ev) }

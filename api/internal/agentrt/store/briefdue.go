@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
@@ -39,7 +40,8 @@ var briefSlots = []struct {
 const briefLate = 2 * time.Hour
 
 // NudgeAfter is how long a decision waits on the Owner before the chief of
-// staff tells him; a blocked task is told at once.
+// staff tells him; a blocked task is told at once. It and nudgesPerPass are
+// the tuning rule's nudge_after_s and nudges_per_pass when one is in force.
 const NudgeAfter = 2 * time.Hour
 
 // nudgesPerPass bounds how many nudges one pass leaves, so a backlog does not
@@ -95,8 +97,13 @@ func ScheduleBrief(ctx context.Context, db DB, now time.Time) (bool, error) {
 // NudgeAfter.
 func Nudges(ctx context.Context, db DB, now time.Time) (int, error) {
 	var bodies []string
+	var tune *rules.Tuning
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		bodies = nil
+		var err error
+		if tune, err = tuningIn(ctx, tx); err != nil {
+			return err
+		}
 		// What was nudged already is left out before the limit (review 280
 		// B1): the body is the note's artifact id, so the query asks for the
 		// note it would leave. Decision cards wait for as long as no decision
@@ -128,7 +135,7 @@ func Nudges(ctx context.Context, db DB, now time.Time) (int, error) {
 			if i == 0 {
 				rows, err = tx.Query(ctx, c.sql)
 			} else {
-				rows, err = tx.Query(ctx, c.sql, now, NudgeAfter.Seconds())
+				rows, err = tx.Query(ctx, c.sql, now, tune.Duration(rules.TuneNudgeAfter).Seconds())
 			}
 			if err != nil {
 				return err
@@ -148,7 +155,7 @@ func Nudges(ctx context.Context, db DB, now time.Time) (int, error) {
 	}
 	left := 0
 	for _, b := range bodies {
-		if left == nudgesPerPass {
+		if left == tune.Int(rules.TuneNudgesPerPass) {
 			break
 		}
 		did, err := leaveNote(ctx, db, b)

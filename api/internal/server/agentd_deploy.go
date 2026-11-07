@@ -116,6 +116,9 @@ func approvalOpenKey(action string, params map[string]any) string {
 	if k := landingGrantOpenKey(action, params); k != "" {
 		return k
 	}
+	if k := ruleApproveOpenKey(action, params); k != "" {
+		return k
+	}
 	return agentdDeployOpenKey(action, params)
 }
 

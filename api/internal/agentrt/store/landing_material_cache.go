@@ -31,7 +31,7 @@ const (
 
 // The cache contains only Result(base,A,task,attempt,repo),
 // GrantPatch(op.A,M0,R), including the full patch's digest, and a floor
-// grant's FloorFiles(M0,R). Neither reads
+// grant's FloorFiles(M0,R) (Floor: whether they were read). Neither reads
 // mutable main content: main is fetched only to obtain the named objects.
 // Every argument is keyed, together with the operation, rule/checks version
 // and STG choice. All other material inputs (review, acceptance, CI, quota,
@@ -40,13 +40,13 @@ type materialKey struct {
 	Op, Repo, Task, Attempt, Base, A, OpA, M0, R string
 	Rule                                         GrantRule
 	Checks                                       int64
-	STG                                          bool
+	STG, Floor                                   bool
 }
 
 func grantMaterialKey(d grantDB, stg bool) materialKey {
 	return materialKey{Op: d.opID, Repo: d.facts.Repo, Task: d.facts.Task, Attempt: d.facts.Attempt,
 		Base: d.facts.Base, A: d.facts.A, OpA: d.op.A, M0: d.op.M0, R: d.op.R,
-		Rule: d.rule, Checks: rules.LandingChecksVersion, STG: stg}
+		Rule: d.rule, Checks: rules.LandingChecksVersion, STG: stg, Floor: readsFloor(d.repo, d.op.Soft)}
 }
 
 type materialEntry struct {
@@ -191,7 +191,7 @@ func readGrantMaterial(ctx context.Context, src GrantSources, stg bool, readDB f
 		return nil, err
 	}
 	src = src.forRepo(d.repo)
-	if !src.complete(d.repo) {
+	if !src.complete(d.repo, readsFloor(d.repo, d.op.Soft)) {
 		return nil, errors.New("landing grant evidence unavailable: no Git or CI reader in this process")
 	}
 	key := grantMaterialKey(d, stg)

@@ -70,7 +70,7 @@ func TestS5FirstClaimIsPreparationOnly(t *testing.T) {
 	if EligibleToClaim(f, now).Allowed || EligibleToPush(f, now).Allowed {
 		t.Fatal("legacy granted S5")
 	}
-	if why, soft := AuthorizeLanding(f, VerifiedS5{}, now); why == "" || !slices.Contains(soft, rules.LandingFloorSoft) {
+	if why, soft := AuthorizeLanding(f, VerifiedS5{}, now); why == "" || !slices.Contains(soft, rules.LandingFloorGrant) {
 		t.Fatal(why, soft)
 	}
 	if f.ReservedToday != 0 || f.Operation.R != "" {

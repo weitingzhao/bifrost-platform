@@ -70,7 +70,7 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 		}
 	}
 	if v, ok := ev.Body["landing_floor"]; ok {
-		if ev.Actor != "controller" || k != "failed" || r.String("why") != "floor" || ev.Stream != "landing:bifrost-trade-infra" || !validLandingFloor(v) {
+		if ev.Actor != "controller" || k != "failed" || r.String("why") != "floor" || ev.Stream != "landing:bifrost-trade-infra" || !validLandingFloor("bifrost-trade-infra", v) {
 			return fmt.Errorf("floor detail requires controller floor failure")
 		}
 	}

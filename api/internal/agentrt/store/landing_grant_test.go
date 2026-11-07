@@ -40,7 +40,12 @@ type c5 struct {
 var c5RuleBody = strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: none", 1)
 
 const c5Core = "api/internal/agentrt/store/c5.go"
-const c5Soft = "api/internal/research/c5.go"
+
+// c5Soft fails rule_paths alone (the guardrail grant's); c5Floor is a
+// platform floor path neither hard nor open: it fails floor_grant, with
+// rule_paths, and takes approve_floor_landing.
+const c5Soft = "console/src/pages/C5Soft.tsx"
+const c5Floor = "api/internal/research/c5.go"
 
 // c5Wait: a root prepared and waiting at the final gate (C-4), its round
 // checked and reviewed (precheck verify), and grants enabled: the Owner's signed

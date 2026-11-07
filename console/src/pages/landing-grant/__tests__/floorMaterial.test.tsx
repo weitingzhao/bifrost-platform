@@ -7,6 +7,7 @@ import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { approvalsPageHooks, json, wrapper } from '@/pages/__tests__/approvalsPageTestKit'
 import { clickDecisionControl } from '@/pages/__tests__/clickDecisionControl'
+import { MaterialEvidence } from '../MaterialEvidence'
 import { LandingApprovalEvidence } from '../LandingApprovalEvidence'
 
 approvalsPageHooks()
@@ -77,4 +78,18 @@ it.each([false, true])('gates floor approval on valid material and confirms the 
     clickDecisionControl(button)
     await waitFor(() => expect(posts[0]?.confirm_number).toBe(51))
   }
+})
+
+it.each(['approval', 'material'])('renders platform floor paths and pinned CI in the %s view', view => {
+  const data = fixture()
+  data.material.candidate.repo = 'bifrost-platform'
+  data.material.candidate.ci.pipeline = 'bifrost-ci-platform'
+  data.material.floor_paths = [{ path: 'api/internal/testscope/scope.go', entry: 'hard_floor:testscope', blob_sha256: 'ef'.repeat(32) }]
+  render(view === 'approval'
+    ? <LandingApprovalEvidence item={buildPlatformApproval({ action: data.material.action })} data={data} error={false} checked={false} onCheck={() => {}} />
+    : <MaterialEvidence data={data} />)
+  const floor = screen.getByRole('region', { name: 'Floor material' })
+  for (const value of Object.values(data.material.floor_paths[0])) expect(floor.textContent).toContain(value)
+  for (const value of [data.material.candidate.ci.pipeline, data.material.candidate.ci.run, data.material.candidate.ci.uid]) expect(floor.textContent).toContain(value)
+  expect(floor.textContent).toContain('is pushed to bifrost-platform main')
 })

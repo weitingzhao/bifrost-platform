@@ -18,6 +18,14 @@
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
 //	AGENTD_SLOTS           optional: attempts at once, 1 to 32; default 3 (the signed per_host still caps it)
 //
+// Timeouts and retries, each optional with the default the code had
+// (internal/agentd/config.go): AGENTD_SETUP_LIMIT (10m), AGENTD_TESTDB_LIMIT
+// (2m), AGENTD_DELIVER_MAX_FAILS (3), AGENTD_PRUNE_EVERY (10m),
+// AGENTD_PRUNE_WORK (2m), AGENTD_PRUNE_REPORT (30s), AGENTD_COLLECT_EVERY
+// (2s), AGENTD_SPEC_LIMIT (15m), AGENTD_BENCH_LIMIT (30m),
+// AGENTD_BENCH_CHECK_LIMIT (15m). One that does not read or is out of its
+// bounds stops agentd at start.
+//
 // The first argument "launch" makes it the launcher of one executor, and
 // "verify" the deterministic executor; neither is for people. "bench" runs
 // the benchmark question set with one executor instead of the daemon
@@ -33,9 +41,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -88,6 +94,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	cfg.tune.Apply()
 	lockPath, err := agentd.HostLockPath()
 	if err != nil {
 		return err
@@ -121,6 +128,7 @@ func run() error {
 		Remote:   func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" },
 		GitEnv:   cfg.gitEnv,
 		Logf:     log.Printf,
+		MaxFails: cfg.tune.Count(agentd.EnvDeliverMaxFails),
 	}
 	// The programs a test database needs (TD-403): without them, no attempt
 	// gets one, and its database tests skip as before.
@@ -162,12 +170,15 @@ func run() error {
 	}
 	d.Wall, d.CodexHome = wall, agentd.CodexHome(os.Environ())
 	// Up to cfg.slots attempts at once (W-31 2.4 slice ③); the platform
-	// leases no more than the signed concurrency rule's per_host. Each runs in
-	// its own goroutine; on SIGTERM every one hands over before agentd exits.
+	// leases no more than the signed concurrency rule's per_host, and under
+	// its slots block no more than the count it grants the host now (elastic
+	// slots), which agentd asks for no more than. Each runs in its own
+	// goroutine; on SIGTERM every one hands over before agentd exits.
 	var runs sync.WaitGroup
 	defer runs.Wait()
 	var lastPrune time.Time
-	diskErr := "" // the last free-disk reading that failed, logged once
+	diskErr := ""     // the last free-disk reading that failed, logged once
+	lastGranted := -1 // the granted slots last logged
 	for ctx.Err() == nil {
 		// what a previous run left, and hand-overs that waited for the platform
 		if err := d.Recover(ctx); err != nil {
@@ -192,10 +203,20 @@ func run() error {
 			sleep(ctx, time.Minute)
 			continue
 		}
-		// With every slot taken (or the host overloaded) the claim asks for
-		// none: it still keeps the host's poll fresh, and waits its long poll.
-		free := cfg.slots - d.Running()
-		if free < 0 || overloaded() {
+		// With every slot taken (or the host overloaded: the local brake,
+		// whatever the platform grants) the claim asks for none: it still
+		// keeps the host's poll fresh, and waits its long poll.
+		room := agentd.MeasureHeadroom(func(args ...string) ([]byte, error) { return execOutput("sysctl", args...) })
+		limit := cfg.slots
+		if g, ok := d.Client.Granted(); ok {
+			limit = min(limit, g)
+			if g != lastGranted {
+				lastGranted = g
+				log.Printf("agentd: the platform grants this host %d slots", g)
+			}
+		}
+		free := limit - d.Running()
+		if free < 0 || room.Overloaded() {
 			free = 0
 		}
 		// The host's free disk goes with every claim; below the platform's
@@ -208,7 +229,7 @@ func run() error {
 			diskErr = derr.Error()
 			log.Printf("agentd: %v; claims go without the free disk until it reads", derr)
 		}
-		cl, err := d.Client.ClaimWith(ctx, free, offered, disk)
+		cl, err := d.Client.ClaimHost(ctx, free, offered, disk, &room)
 		if err != nil {
 			log.Printf("agentd: claim: %v", err)
 			sleep(ctx, 15*time.Second)
@@ -234,6 +255,7 @@ type settings struct {
 	gitEnv                                                       []string
 	tools                                                        []agentd.Tool
 	slots                                                        int
+	tune                                                         agentd.Config
 }
 
 func config() (settings, error) {
@@ -277,6 +299,9 @@ func config() (settings, error) {
 		return s, err
 	}
 	if s.slots, err = agentd.Slots(os.Getenv("AGENTD_SLOTS")); err != nil {
+		return s, err
+	}
+	if s.tune, err = agentd.ConfigFromEnv(os.Getenv); err != nil {
 		return s, err
 	}
 	return s, nil
@@ -327,25 +352,6 @@ func tools(spec string) ([]agentd.Tool, error) {
 		return nil, errors.New("AGENTD_TOOLS names no executor")
 	}
 	return out, nil
-}
-
-// overloaded: the one-minute load is above the number of cores (lesson 105):
-// the host asks for nothing until it eases.
-func overloaded() bool {
-	out, err := os.ReadFile("/proc/loadavg")
-	if err != nil {
-		b, xerr := execOutput("sysctl", "-n", "vm.loadavg")
-		if xerr != nil {
-			return false
-		}
-		out = []byte(strings.Trim(strings.TrimSpace(string(b)), "{} "))
-	}
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return false
-	}
-	load, err := strconv.ParseFloat(fields[0], 64)
-	return err == nil && load > float64(runtime.NumCPU())
 }
 
 // execOutput runs a tool agentd needs (sysctl) with the allowed environment

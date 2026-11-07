@@ -18,7 +18,7 @@ import (
 // Landing grants' approval side (W-31 round 4, core block C-5;
 // DESIGN-coordinator-landing-v3-2026-10-29.md §5.6, §12.2). Three D-tier
 // actions, PROD only: approve_guardrail_landing and approve_core_landing for
-// platform, approve_floor_landing for infra's floor-grantable paths.
+// platform, approve_floor_landing for infra and platform floor-grantable paths.
 // The create check refuses a request whose material is not the server's own
 // recomputation; the executor writes the grant only after reading the
 // approval record back from the approval service. Nothing here pushes: the
@@ -46,6 +46,7 @@ func (s *Server) landingGrantSources() store.GrantSources {
 	ci := s.landingCIClient()
 	src.Facts = controller.DrillGitFacts(g)
 	src.Facts.GrantPatch = landingGrantPatch(g)
+	src.Facts.FloorFiles = landingFloorFiles(g, "bifrost-platform")
 	src.Facts.GrantCI = ci.GrantCI // the strict read of the pinned key (review 694 B-01)
 	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
 	src.Cache = &rt.materialCache
@@ -69,15 +70,19 @@ func (s *Server) landingGrantSourcesFor(repo string) store.GrantSources {
 	}
 	src.Facts = controller.DrillGitFacts(g, repo)
 	src.Facts.GrantPatch = landingGrantPatch(g)
-	src.Facts.FloorFiles = func(ctx context.Context, got, m0, r string) (landing.FloorTree, error) {
+	src.Facts.FloorFiles = landingFloorFiles(g, repo)
+	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
+	src.Cache = &rt.materialCache
+	return src
+}
+
+func landingFloorFiles(g *landinggit.Git, repo string) func(context.Context, string, string, string) (landing.FloorTree, error) {
+	return func(ctx context.Context, got, m0, r string) (landing.FloorTree, error) {
 		if got != repo {
 			return landing.FloorTree{}, fmt.Errorf("the %s reader does not read %s", repo, got)
 		}
 		return g.FloorFiles(ctx, m0, r)
 	}
-	src.Main = func(ctx context.Context) (string, error) { return g.Ref(ctx, "refs/heads/main") }
-	src.Cache = &rt.materialCache
-	return src
 }
 
 func landingGrantPatch(g *landinggit.Git) func(context.Context, string, string, string) (store.GrantPatch, error) {
@@ -98,7 +103,7 @@ func (s *Server) landingGrantRequest(action string, params map[string]any) (stor
 		return p, err
 	}
 	if !store.GrantActionSupported(action, p.Repo) {
-		// approve_floor_landing is infra's alone; the other two platform's.
+		// approve_floor_landing is infra's and platform's; the other two platform's alone.
 		return p, fmt.Errorf("grant_unsupported: %s is not a landing grant for %s", action, p.Repo)
 	}
 	if !approvalhome.IsProd() {

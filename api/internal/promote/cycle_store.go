@@ -57,6 +57,13 @@ func (s *CycleStore) loadLocked(lane ReleaseCycleLane) ([]ReleaseCycleRecord, er
 	return entries, nil
 }
 
+// Records reads the persisted release cycles for a lane.
+func (s *CycleStore) Records(lane ReleaseCycleLane) ([]ReleaseCycleRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadLocked(lane)
+}
+
 func (s *CycleStore) saveLocked(lane ReleaseCycleLane, entries []ReleaseCycleRecord) error {
 	if len(entries) > maxCycleEntries {
 		entries = entries[len(entries)-maxCycleEntries:]

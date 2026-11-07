@@ -15,13 +15,7 @@ export function LandingApprovalEvidence({ item, data, error, checked, onCheck }:
     {op && <a className="underline" href={landingGrantHref(op, item.params?.stg_release !== false)}>Open landing authorization material</a>}
     {error ? <p role="alert">Landing material unavailable or no longer matches this request. Refresh the material before approving.</p>
       : !m ? <p>Reading landing approval material…</p> : <>
-        {floor && <>
-          <p>R (<code>{m.candidate.R}</code>) is pushed to bifrost-trade-infra main by agentrt-lander. A cluster write is separate (Argo sync, or apply_manifest).</p>
-          <div className="overflow-x-auto"><table className="w-full text-left" aria-label="Pinned floor paths">
-            <thead><tr><th>Path</th><th>Entry</th><th>Blob SHA-256</th></tr></thead>
-            <tbody>{m.floor_paths?.map(p => <tr key={p.path}><td>{p.path}</td><td>{p.entry}</td><td><code>{p.blob_sha256}</code></td></tr>)}</tbody>
-          </table></div>
-        </>}
+        {floor && <FloorMaterial material={m} />}
         <p>Soft checks: {m.soft_at_request.join(', ') || 'None'}</p>
         <p>Main still M0? {data?.main_known ? data.main_is_M0 ? 'Yes' : 'No — ask the coordinator to refresh' : 'Unknown — approval unavailable'}</p>
         {!m.latest && <p role="alert">This operation is no longer the latest candidate. Open the replacement request before approving.</p>}
@@ -35,5 +29,16 @@ export function LandingApprovalEvidence({ item, data, error, checked, onCheck }:
           <p>This checkbox is a UI constraint only; it is not a mechanical guarantee of independent review.</p>
         </>}
       </>}
+  </section>
+}
+
+export function FloorMaterial({ material: m }: { material: LandingMaterialResponse['material'] }) {
+  return <section aria-label="Floor material" className="space-y-2">
+    <p>R (<code>{m.candidate.R}</code>) is pushed to {m.candidate.repo} main by agentrt-lander. A cluster write is separate (Argo sync, or apply_manifest).</p>
+    <div className="overflow-x-auto"><table className="w-full text-left" aria-label="Pinned floor paths">
+      <thead><tr><th>Path</th><th>Entry</th><th>Blob SHA-256</th></tr></thead>
+      <tbody>{m.floor_paths?.map(p => <tr key={p.path}><td>{p.path}</td><td>{p.entry}</td><td><code>{p.blob_sha256}</code></td></tr>)}</tbody>
+    </table></div>
+    {m.candidate.repo === 'bifrost-platform' && <p>Platform CI: {m.candidate.ci.pipeline} · Run: {m.candidate.ci.run} · UID: {m.candidate.ci.uid} · Status: {m.candidate.ci.status} · SHA: <code>{m.candidate.ci.sha}</code></p>}
   </section>
 }

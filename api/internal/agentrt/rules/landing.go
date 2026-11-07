@@ -254,8 +254,13 @@ func LandingFloor(repo, p string) bool {
 	if strings.HasPrefix(b, ".env") || slices.Contains([]string{"go.mod", "go.sum", "package.json", "package-lock.json"}, b) {
 		return true
 	}
-	return landingMatches([]string{"api/**", "console/vite.config.*", "console/tsconfig*", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/**", "console/src/lib/**", "console/src/hooks/**", "console/src/pwa/**", "mcp/**", "agent/**", "scripts/**", "config/**", "Makefile", ".husky/**"}, p)
+	return landingMatches(PlatformLandingFloor, p)
 }
+
+// PlatformLandingFloor are platform's floor globs (LandingFloor). A floor
+// path that is neither hard nor open is floor-grantable with the glob it
+// matches as its entry (FloorEntry).
+var PlatformLandingFloor = []string{"api/**", "console/vite.config.*", "console/tsconfig*", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/**", "console/src/lib/**", "console/src/hooks/**", "console/src/pwa/**", "mcp/**", "agent/**", "scripts/**", "config/**", "Makefile", ".husky/**"}
 
 // Change comes from a trusted diff reader, not an executor's report. Modes
 // are git's six-digit modes; an absent side is empty (add/delete).

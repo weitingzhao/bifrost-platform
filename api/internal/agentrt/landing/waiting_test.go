@@ -247,8 +247,9 @@ func TestC4PreparationEligibilityAndFinalPolicy(t *testing.T) {
 				t.Fatal("same entry success control")
 			}
 			f.Changes[0].OldPath, f.Changes[0].NewPath = path, path
-			core := strings.Contains(path, "agentrt")
-			allowed := path != ".env.local" && (core || pin)
+			// The research path is floor-grantable: it waits for
+			// approve_floor_landing with or without a pin.
+			allowed := path != ".env.local"
 			if EligibleToClaim(f, now).Allowed != allowed {
 				t.Fatal(pin, path, EligibleToClaim(f, now))
 			}

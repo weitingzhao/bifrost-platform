@@ -207,7 +207,11 @@ func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error 
 			return err
 		}
 		hook("counted", w.Actor)
-		if recent >= ThreadsPerDay {
+		tune, err := tuningIn(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if recent >= tune.Int(rules.TuneThreadsPerDay) {
 			return invalid("%d threads were registered in the last day, the most there may be; %s must wait", recent, w.Actor)
 		}
 	}

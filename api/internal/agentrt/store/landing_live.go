@@ -266,12 +266,16 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		var grantKey *GrantCIKey
 		var grantRun GrantCIEvidence
 		floor := grant != nil && grant.Action == ActionFloorLanding
+		// pinsCI: the grant names R's pinned CI run, judged as every
+		// platform grant's (a platform floor grant's too); infra's floor
+		// grant names none.
+		pinsCI := grant != nil && (!floor || repo == "bifrost-platform")
 		if grant != nil && !GrantActionSupported(grant.Action, repo) {
 			// A grant of another repository's kind is never this one's.
 			decision = landing.Decision{Reason: "grant_insufficient"}
 			return refuseGrant(ctx, tx, grant, "grant_insufficient", final, mission)
 		}
-		if grant != nil && !floor {
+		if pinsCI {
 			if grantKey, err = landingCIKeyOf(ctx, tx, op); err != nil {
 				return err
 			}
@@ -295,10 +299,10 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			}
 		}
 		switch {
-		case obs.Main != o.M0 && waiting && !floor:
+		case obs.Main != o.M0 && waiting && (!floor || repo == "bifrost-platform"):
 			// §5.4: a waiting operation for a main that moved is spent, and
-			// its grant with it; the next claim prepares k+1. A floor grant
-			// is held instead (main may come back to M0 within its 24
+			// its grant with it; the next claim prepares k+1. Infra's floor
+			// grant is held instead (main may come back to M0 within its 24
 			// hours); once it is spent or expired, the recheck discards.
 			if !landing.ValidSHA(obs.Main) {
 				decision = landing.Decision{Reason: "main_changed"}
@@ -364,10 +368,17 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			// Otherwise nothing is reserved or pushed; a grant refused for
 			// good is recorded spent (review 694 R-05) and a new one needed.
 			key, ci := grantKey, grantRun
+			if pinsCI && (ci.Run == "" || grantCIProblem(o, key, ci, final)) {
+				decision = landing.Decision{Reason: "grant_evidence"} // nothing newer yet: no verdict on the grant
+				return nil
+			}
 			if floor {
-				// A floor grant pins files, not a CI run: infra's CI was
-				// judged green on R above, read again for this decision.
-				key, ci = nil, GrantCIEvidence{}
+				// A floor grant pins files. Infra's pins no CI run: its CI was
+				// judged green on R above, read again for this decision; a
+				// platform floor grant's pinned run was judged just now.
+				if !pinsCI {
+					key, ci = nil, GrantCIEvidence{}
+				}
 				if !final.Before(grant.exp) {
 					decision = landing.Decision{Reason: "grant_expired"}
 					return nil
@@ -380,15 +391,12 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 				if err != nil {
 					return err
 				}
-				if why := floorTreeStale(grant.FloorPaths, tree); why != "" {
+				if why := floorTreeStale(repo, grant.FloorPaths, tree); why != "" {
 					// A changed byte, an extra or missing file, a file no floor
 					// grant can pin, or R not one commit on M0: spent, unpushed.
 					decision = landing.Decision{Reason: "grant_stale", Detail: map[string]any{"floor": why}}
 					return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
 				}
-			} else if ci.Run == "" || grantCIProblem(o, key, ci, final) {
-				decision = landing.Decision{Reason: "grant_evidence"} // nothing newer yet: no verdict on the grant
-				return nil
 			}
 			patch, err := src.grantPatchFor(repo)(ctx, o.A, o.M0, o.R)
 			if err != nil {
@@ -445,7 +453,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			case !final.Before(grant.exp):
 				decision = landing.Decision{Reason: "grant_expired"}
 				return nil
-			case !floor && grantCIProblem(o, key, ci, final) || cand != grant.CandidateDigest:
+			case pinsCI && grantCIProblem(o, key, ci, final) || cand != grant.CandidateDigest:
 				decision = landing.Decision{Reason: "grant_stale"}
 				return refuseGrant(ctx, tx, grant, "grant_stale", final, mission)
 			case !rules.LandingWaivesCover(soft, refusalsOf(grant.Waives)):
@@ -516,10 +524,11 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 }
 
 // floorTreeStale is why M0..R, recomputed from Git, is not what a floor
-// grant pinned ("" when it is): R one commit whose only parent is M0, the
-// same files added or modified as regular files with the same bytes'
-// sha256 at R, each still floor-grantable with no Secret, and nothing else.
-func floorTreeStale(pinned []GrantFloorPath, tree landing.FloorTree) string {
+// grant of repo pinned ("" when it is): R one commit whose only parent is
+// M0, the same files added or modified as regular files with the same
+// bytes' sha256 at R, each still floor-grantable in repo (rules.FloorEntry)
+// with no Secret, and nothing else.
+func floorTreeStale(repo string, pinned []GrantFloorPath, tree landing.FloorTree) string {
 	if !tree.OnM0 {
 		return "R is not one commit on M0"
 	}
@@ -533,13 +542,13 @@ func floorTreeStale(pinned []GrantFloorPath, tree landing.FloorTree) string {
 		switch {
 		case seen[f.Path]:
 			return "file listed twice: " + f.Path
-		case rules.InfraNeverGrantable(f.Path) || f.Secret:
+		case repo == "bifrost-trade-infra" && rules.InfraNeverGrantable(f.Path) || f.Secret:
 			return "never-grantable: " + f.Path
 		case !ok:
 			return "extra file: " + f.Path
 		case f.Kind != "A" && f.Kind != "M" || f.Mode != "100644":
 			return "change kind or mode: " + f.Path
-		case rules.InfraFloorEntry(f.Path) != p.Entry:
+		case rules.FloorEntry(repo, f.Path) != p.Entry:
 			return "entry changed: " + f.Path
 		case f.SHA256 != p.BlobSHA256:
 			return "bytes changed: " + f.Path

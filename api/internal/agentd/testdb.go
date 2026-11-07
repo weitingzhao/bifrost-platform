@@ -148,7 +148,7 @@ func pgSocket(dir string) string { return filepath.Join(dir, ".s.PGSQL.5432") }
 func testDBArgv(self string, t *TestDBTools, root, out string, walled bool) []string {
 	dir, sock := testDBDir(out), testDBSockDir(root, out)
 	argv := []string{self, TestDBArg, "--dir", dir, "--sock", sock, "--out", filepath.Join(out, "testdb.json"),
-		"--initdb", t.Initdb, "--postgres", t.Postgres, "--redis", t.Redis}
+		"--initdb", t.Initdb, "--postgres", t.Postgres, "--redis", t.Redis, "--limit", testDBLimit.String()}
 	if walled {
 		argv = append(argv, "--write", dir)
 		if sock != dir {
@@ -225,8 +225,9 @@ const noTestDB = "agentd: this host has no test database programs (initdb, postg
 // guard that only PROD's runtime writes a TD- number (0011, tech debt §10).
 var testRoles = []string{"agentrt_owner_dev", "platform_agentrt_dev", "platform_agentrt_stg", "platform_agentrt_prod", "agent_reader"}
 
-// testDBLimit is how long the database may take to start.
-const testDBLimit = 2 * time.Minute
+// testDBLimit is how long the database may take to start (AGENTD_TESTDB_LIMIT,
+// config.go); the stage gets the daemon's on its command line (--limit).
+var testDBLimit = 2 * time.Minute
 
 // testDB is a running test database.
 type testDB struct {
@@ -267,13 +268,15 @@ func RunTestDB(args []string) int {
 	fset.StringVar(&t.Initdb, "initdb", "", "initdb")
 	fset.StringVar(&t.Postgres, "postgres", "", "postgres")
 	fset.StringVar(&t.Redis, "redis", "", "redis-server")
+	limit := fset.Duration("limit", testDBLimit, "how long the database may take to start")
 	var writes stringsFlag
 	fset.Var(&writes, "write", "a directory the database's programs may write (repeated)")
 	if i < 0 || i == len(args)-1 || fset.Parse(args[:i]) != nil || fset.NArg() > 0 || !filepath.IsAbs(*dir) || !filepath.IsAbs(*sock) || *out == "" ||
-		t.Initdb == "" || t.Postgres == "" || t.Redis == "" {
-		fmt.Fprintln(os.Stderr, "usage: agentd testdb --dir <dir> --sock <dir> --out <file> --initdb <path> --postgres <path> --redis <path> [--write <dir>...] -- <command> [args...]")
+		t.Initdb == "" || t.Postgres == "" || t.Redis == "" || *limit <= 0 {
+		fmt.Fprintln(os.Stderr, "usage: agentd testdb --dir <dir> --sock <dir> --out <file> --initdb <path> --postgres <path> --redis <path> [--limit <duration>] [--write <dir>...] -- <command> [args...]")
 		return 2
 	}
+	testDBLimit = *limit
 	argv := args[i+1:]
 	path, err := exec.LookPath(argv[0])
 	if err != nil {

@@ -5,13 +5,15 @@ import (
 	"errors"
 	"regexp"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // A loop that keeps failing the same way is told (TD-411: STG's facts pass
 // failed every 15 seconds for two hours on a check constraint the database's
 // schema lacked, a warning each time and nothing else). After
-// store.FailuresToAlert failures in a row with the same error the loop records
+// store.FailuresToAlert failures in a row (the tuning rule's
+// failures_to_alert, as the last pass read it) with the same error the loop records
 // an alert the Owner sees (store.AlertFailingLoop: a policy_alert, listed by
 // Progress, said on Work and System); once it passes again, a note
 // (store.NoteLoopPasses). Errors are the same when they differ only in
@@ -69,7 +71,7 @@ func (c *Controller) track(ctx context.Context, name string, run *failureRun, er
 		run.n, run.key, run.alerted = 0, key, false
 	}
 	run.n++
-	if run.n < store.FailuresToAlert || run.alerted {
+	if run.n < c.tuned().Int(rules.TuneFailuresToAlert) || run.alerted {
 		return
 	}
 	if aerr := store.AlertFailingLoop(ctx, c.DB, name, run.n, err.Error()); aerr != nil {

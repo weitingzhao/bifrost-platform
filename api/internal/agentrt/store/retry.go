@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Retrying after a failure (TD-381, TD-382; v5 §5.1.2 「分流顺序」, §6.2).
@@ -35,7 +37,8 @@ import (
 
 const (
 	// retryBackoff is how long an executor waits after its first failure
-	// in a row; each further failure doubles it.
+	// in a row; each further failure doubles it. The tuning rule's
+	// retry_backoff_s, when one is in force.
 	retryBackoff = 30 * time.Second
 	// failuresToStop is the number of failures in a row after which an
 	// executor is no longer offered the task.
@@ -53,6 +56,9 @@ type failureRun struct {
 	// lifted: the task was given one more round past its withdrawals, and
 	// each run's since counts its failures leased after that.
 	lifted bool
+	// first is the wait after a first failure, as the tuning rule had it
+	// when the run was read; zero is retryBackoff.
+	first time.Duration
 }
 
 type runOf struct {
@@ -67,6 +73,11 @@ type runOf struct {
 // by its executor's doing.
 func readFailureRun(ctx context.Context, tx pgx.Tx, taskID string) (failureRun, error) {
 	run := failureRun{by: map[string]runOf{}}
+	tune, err := tuningIn(ctx, tx)
+	if err != nil {
+		return run, err
+	}
+	run.first = tune.Duration(rules.TuneRetryBackoff)
 	// The clock and a page of the newest attempts in one statement (review
 	// 400 C1); a further page only while the run has not ended (review 401
 	// B1: a run from before the stop existed can be longer than a page).
@@ -161,11 +172,22 @@ func (run *failureRun) readLift(ctx context.Context, tx pgx.Tx, taskID string) e
 const runRows = 64
 
 // backoff is how long an executor waits after n failures in a row.
-func backoff(n int) time.Duration {
+func backoff(n int) time.Duration { return backoffFrom(retryBackoff, n) }
+
+// backoffFrom is backoff with first the wait after the first failure.
+func backoffFrom(first time.Duration, n int) time.Duration {
 	if n <= 0 {
 		return 0
 	}
-	return retryBackoff << (n - 1)
+	return first << (n - 1)
+}
+
+// backoff is how long the run's executor waits after n failures in a row.
+func (run failureRun) backoff(n int) time.Duration {
+	if run.first > 0 {
+		return backoffFrom(run.first, n)
+	}
+	return backoff(n)
 }
 
 // holdsBack says why the run keeps executor from the task now, or "".
@@ -187,7 +209,7 @@ func (run failureRun) hold(executor string) (string, bool) {
 		return "failed the task " + strconv.Itoa(r.n) + " times in a row, once more after it was offered it again", true
 	case r.n >= failuresToStop:
 		return "failed the task " + strconv.Itoa(r.n) + " times in a row", true
-	case r.n > 0 && run.now.Before(r.last.Add(backoff(r.n))):
+	case r.n > 0 && run.now.Before(r.last.Add(run.backoff(r.n))):
 		return "waiting after " + strconv.Itoa(r.n) + " failures in a row", false
 	}
 	return "", false

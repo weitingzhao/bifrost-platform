@@ -24,6 +24,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	if action == agentdeploy.DeployAgentdAction {
 		return agentdDeployCreateCheck(params)
 	}
+	if action == RuleApproveAction {
+		return s.ruleApproveCreateCheck(ctx, params)
+	}
 	if action == "mark_missions_no_merge" {
 		_, err := s.noMergeRequest(params)
 		return err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -45,9 +46,9 @@ func (c *Controller) Assess(ctx context.Context) (int, error) {
 	if x.err != nil {
 		errs = append(errs, fmt.Errorf("what is assessed: %w", x.err))
 	}
-	asked := 0
+	asked, most := 0, c.readTuning(ctx).Int(rules.TuneAssessPerPass)
 	for _, it := range x.items {
-		if asked == store.AssessPerPass {
+		if asked == most {
 			break
 		}
 		q, fresh, err := store.AssessmentQuery(ctx, c.DB, it, c.SkipCardsTheRuleAnswers)

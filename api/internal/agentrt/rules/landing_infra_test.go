@@ -83,6 +83,67 @@ func TestInfraSoftFloorGrant(t *testing.T) {
 	}
 }
 
+func TestPlatformSoftFloorGrant(t *testing.T) {
+	t.Parallel()
+	const repo = "bifrost-platform"
+	ts := LandingChange{OldPath: "api/internal/testscope/x.go", NewPath: "api/internal/testscope/x.go", OldMode: "100644", NewMode: "100644", Added: 3, Deleted: 1}
+	ci := LandingChange{NewPath: "scripts/ci/y.sh", NewMode: "100644", Added: 2}
+	for p, entry := range map[string]string{
+		"api/internal/testscope/x.go": "api/**", "scripts/ci/y.sh": "scripts/**", "console/src/lib/x.ts": "console/src/lib/**", "mcp/other/a.go": "mcp/**",
+		"api/internal/agentrt/rules/x.go": "", "Makefile": "", "api/internal/cluster/x.go": "", "x/.env.local": "", "console/src/components/A.tsx": "",
+	} {
+		if got := FloorEntry(repo, p); got != entry {
+			t.Errorf("%s: entry %q, want %q", p, got, entry)
+		}
+	}
+	for _, p := range []string{"k8s/a.yaml", "scripts/release/push-main.sh", "agent-config/WORK.md", "CLAUDE.md"} {
+		if FloorEntry("bifrost-trade-infra", p) != InfraFloorEntry(p) {
+			t.Errorf("infra entry changed: %s", p)
+		}
+	}
+	changes := []LandingChange{ts, ci}
+	l := landingRule(t).Landing
+	soft := LandingSoftRefusals(l, repo, changes)
+	if !slices.Equal(soft, []LandingRefusal{LandingFloorGrant, LandingRulePaths}) || !LandingFloorGrantable(l, repo, changes, soft) {
+		t.Fatal("outside allow", soft)
+	}
+	if fp := FloorPaths(repo, changes); !slices.Equal(fp, [][2]string{{"api/internal/testscope/x.go", "api/**"}, {"scripts/ci/y.sh", "scripts/**"}}) {
+		t.Fatal("floor paths", fp)
+	}
+	l.Repos[0].Allow = []string{"**"}
+	if soft = LandingSoftRefusals(l, repo, changes); !slices.Equal(soft, []LandingRefusal{LandingFloorGrant}) || !LandingFloorGrantable(l, repo, changes, soft) {
+		t.Fatal("inside allow", soft)
+	}
+	core := append(slices.Clone(changes), LandingChange{OldPath: "api/internal/agentrt/rules/x.go", NewPath: "api/internal/agentrt/rules/x.go", OldMode: "100644", NewMode: "100644", Added: 1})
+	if soft = LandingSoftRefusals(l, repo, core); !slices.Equal(soft, []LandingRefusal{LandingCore, LandingFloorGrant}) || LandingFloorGrantable(l, repo, core, soft) {
+		t.Fatal("core", soft)
+	}
+	open := LandingChange{NewPath: "api/internal/cluster/x.go", NewMode: "100644", Added: 1}
+	if soft = LandingSoftRefusals(l, repo, []LandingChange{open}); len(soft) != 0 || LandingFloorGrantable(l, repo, []LandingChange{open}, []LandingRefusal{LandingFloorGrant}) {
+		t.Fatal("open alone", soft)
+	}
+	withOpen := append(slices.Clone(changes), open)
+	if soft = LandingSoftRefusals(l, repo, withOpen); !slices.Equal(soft, []LandingRefusal{LandingFloorGrant}) || LandingFloorGrantable(l, repo, withOpen, soft) {
+		t.Fatal("open path beside floor paths is pinned by no floor grant", soft)
+	}
+	absolute := []LandingChange{{NewPath: "scripts/.env.local", NewMode: "100644", Added: 1}}
+	if _, bad := LandingAbsoluteViolation(repo, absolute); !bad || LandingFloorGrantable(l, repo, absolute, []LandingRefusal{LandingFloorGrant}) {
+		t.Fatal("hard_absolute")
+	}
+	big := slices.Clone(changes)
+	big[0].Added = 301
+	if soft = LandingSoftRefusals(l, repo, big); !slices.Contains(soft, LandingSize) || LandingFloorGrantable(l, repo, big, soft) {
+		t.Fatal("size waived", soft)
+	}
+	l.Repos[0].Deny = []string{"scripts/ci/**"}
+	if soft = LandingSoftRefusals(l, repo, changes); !slices.Equal(soft, []LandingRefusal{LandingFloorGrant, LandingRulePaths}) || LandingFloorGrantable(l, repo, changes, soft) {
+		t.Fatal("deny waived", soft)
+	}
+	if LandingFloorGrantable(nil, repo, changes, []LandingRefusal{LandingFloorGrant}) {
+		t.Fatal("no rule")
+	}
+}
+
 func TestInfraSecretManifest(t *testing.T) {
 	t.Parallel()
 	for text, want := range map[string]bool{

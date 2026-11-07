@@ -36,9 +36,33 @@ func InfraNeverGrantable(p string) bool {
 	return !landingPath(p) || landingMatches(infraNever, p)
 }
 
-// InfraFloorEntry is the floor-grantable pattern an infra path matches, ""
+// FloorEntry is the floor-grantable pattern p matches in repo, "" when p
+// is not floor-grantable there. Infra's are its hard paths a grant may
+// reach (infraFloor); platform's are its floor paths that are neither hard
+// (core or absolute) nor open, with the PlatformLandingFloor glob matched.
+func FloorEntry(repo, p string) string {
+	switch repo {
+	case "bifrost-trade-infra":
+		return infraFloorEntry(p)
+	case "bifrost-platform":
+		if !LandingFloor(repo, p) || LandingHard(repo, p) || LandingOpen(repo, p) {
+			return ""
+		}
+		for _, entry := range PlatformLandingFloor {
+			if landingMatches([]string{entry}, p) {
+				return entry
+			}
+		}
+	}
+	return ""
+}
+
+// InfraFloorEntry is FloorEntry for infra.
+func InfraFloorEntry(p string) string { return FloorEntry("bifrost-trade-infra", p) }
+
+// infraFloorEntry is the floor-grantable pattern an infra path matches, ""
 // when the path is never-grantable or not hard at all.
-func InfraFloorEntry(p string) string {
+func infraFloorEntry(p string) string {
 	if InfraNeverGrantable(p) {
 		return ""
 	}
@@ -91,13 +115,14 @@ func LandingContentViolation(repo string, changes []LandingChange) (string, bool
 	return "", false
 }
 
-// LandingFloorGrantable: an infra change waits for approve_floor_landing
-// rather than being refused. Its soft set is floor_grant, with rule_paths
-// only when every path that refuses is floor-grantable; size is never
+// LandingFloorGrantable: a change waits for approve_floor_landing rather
+// than being refused. Its soft set is floor_grant, with rule_paths only when
+// every path that refuses is floor-grantable; size and core are never
 // waived, and every changed path is floor-grantable (the grant pins exactly
 // the files it changes, and the gate requires M0..R to change nothing else).
+// On platform a path the signed rule denies stays refused.
 func LandingFloorGrantable(l *Landing, repo string, changes []LandingChange, soft []LandingRefusal) bool {
-	if repo != "bifrost-trade-infra" || !slices.Contains(soft, LandingFloorGrant) || len(changes) == 0 {
+	if !FloorGrantSupported(repo) || !slices.Contains(soft, LandingFloorGrant) || len(changes) == 0 {
 		return false
 	}
 	for _, s := range soft {
@@ -108,12 +133,20 @@ func LandingFloorGrantable(l *Landing, repo string, changes []LandingChange, sof
 	if _, bad := LandingChangeKindViolation(repo, changes); bad {
 		return false
 	}
+	var deny []string
+	if repo == "bifrost-platform" {
+		r, ok := l.Repo(repo)
+		if !ok {
+			return false
+		}
+		deny = r.Deny
+	}
 	for _, c := range changes {
 		if len(c.Paths()) == 0 {
 			return false
 		}
 		for _, p := range c.Paths() {
-			if InfraFloorEntry(p) == "" {
+			if FloorEntry(repo, p) == "" || landingMatches(deny, p) {
 				return false
 			}
 		}
@@ -121,17 +154,17 @@ func LandingFloorGrantable(l *Landing, repo string, changes []LandingChange, sof
 	return true
 }
 
-// FloorPaths are the floor-grantable paths of an infra change with their
-// entries, sorted by path.
+// FloorPaths are the floor-grantable paths of a change with their entries,
+// sorted by path.
 func FloorPaths(repo string, changes []LandingChange) [][2]string {
-	if repo != "bifrost-trade-infra" {
+	if !FloorGrantSupported(repo) {
 		return nil
 	}
 	seen := map[string]bool{}
 	var out [][2]string
 	for _, c := range changes {
 		for _, p := range c.Paths() {
-			if e := InfraFloorEntry(p); e != "" && !seen[p] {
+			if e := FloorEntry(repo, p); e != "" && !seen[p] {
 				seen[p] = true
 				out = append(out, [2]string{p, e})
 			}

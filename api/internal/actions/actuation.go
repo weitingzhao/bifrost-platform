@@ -27,6 +27,8 @@ var (
 	actMu      sync.RWMutex
 	actPolicy  *actuationpolicy.Policy
 	planLookup func(ctx context.Context, planID string) (PlanSummary, error)
+	// ruleChangeLookup reads what an agentrt_rule_approve draft changes.
+	ruleChangeLookup func(ctx context.Context, params map[string]any) ([]RuleChange, error)
 	// commandRunner is installed only by tests. ExecuteOwnerRunCommand never calls it.
 	commandRunner func(ctx context.Context, command string) error
 )
@@ -42,6 +44,20 @@ func SetActuationPolicy(p *actuationpolicy.Policy) {
 func SetPlanLookup(fn func(ctx context.Context, planID string) (PlanSummary, error)) {
 	actMu.Lock()
 	planLookup = fn
+	actMu.Unlock()
+}
+
+// RuleChange is one field an agentrt_rule_approve card changes, its old and
+// new value as text ("none" where a version does not state it).
+type RuleChange struct {
+	Field, Old, New string
+}
+
+// SetRuleChangeLookup installs the reader of the fields an
+// agentrt_rule_approve draft changes, for its card's summary.
+func SetRuleChangeLookup(fn func(ctx context.Context, params map[string]any) ([]RuleChange, error)) {
+	actMu.Lock()
+	ruleChangeLookup = fn
 	actMu.Unlock()
 }
 

@@ -29,7 +29,7 @@ func TestReview686TrustTransportClassification(t *testing.T) {
 			l, ch := landingRule(t).Landing, simpleChange()
 			l.Repos[0].Allow = []string{"**"}
 			ch.OldPath, ch.NewPath = "api/internal/research/new.go", "api/internal/research/new.go"
-			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{ch}); !slices.Equal(got, []LandingRefusal{"floor_soft"}) {
+			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{ch}); !slices.Equal(got, []LandingRefusal{"floor_grant"}) {
 				t.Fatal("business control", got)
 			}
 			ch.OldPath, ch.NewPath = c.path, c.path

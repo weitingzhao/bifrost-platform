@@ -179,6 +179,10 @@ type CommandTrace struct {
 
 const tailBytes = 4096
 
+// SpecLimit is a spec's verify commands' time when it states no timeout_s
+// (AGENTD_SPEC_LIMIT, config.go).
+var SpecLimit = 15 * time.Minute
+
 // Verify runs cmds in dir one after another, each with an argument array and
 // the given environment, stopping at the first failure, within limit in all.
 func Verify(ctx context.Context, dir string, env []string, cmds [][]string, limit time.Duration) Verification {
@@ -188,7 +192,7 @@ func Verify(ctx context.Context, dir string, env []string, cmds [][]string, limi
 		return v
 	}
 	if limit <= 0 {
-		limit = 15 * time.Minute
+		limit = SpecLimit
 	}
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()

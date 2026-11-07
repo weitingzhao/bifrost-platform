@@ -173,6 +173,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("void_exam_paper", s.voidExamPaper)
 	actions.RegisterExecutor("mark_missions_no_merge", s.markMissionsNoMerge)
 	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
+	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	actions.RegisterExecutor(stgrelease.SampleCreateAction, s.stgSampleCreate)
 	actions.RegisterExecutor(stgrelease.SampleFinalizeAction, s.stgSampleFinalize)
 	for _, action := range store.GrantActions {

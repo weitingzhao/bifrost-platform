@@ -31,8 +31,9 @@ import (
 // its executor.
 const SetupArg = "setup"
 
-// SetupLimit is how long a task's setup may run, all of its commands.
-const SetupLimit = 10 * time.Minute
+// SetupLimit is how long a task's setup may run, all of its commands
+// (AGENTD_SETUP_LIMIT, config.go).
+var SetupLimit = 10 * time.Minute
 
 // setupFailed is the exit code of a setup that did not pass.
 const setupFailed = 3

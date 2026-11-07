@@ -7,6 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -73,13 +74,18 @@ func badLandingRefusal(v any) string {
 	if r, _ := m["reason"].(string); !slices.Contains(claimRefusalReasons, r) {
 		return "landing_refusal reason is not a claim refusal"
 	}
-	if detail, ok := m["detail"]; ok && (m["reason"] != "floor" || !validLandingFloor(detail)) {
+	if detail, ok := m["detail"]; ok && (m["reason"] != "floor" || !slices.ContainsFunc(rules.LandingRepoNames(), func(repo string) bool { return validLandingFloor(repo, detail) })) {
 		return "landing_refusal detail is not a floor refusal"
 	}
 	return ""
 }
 
-func validLandingFloor(v any) bool {
+// validLandingFloor: v is a floor refusal's detail for repo: one violation,
+// or its soft set with grant_supported as repo has it and, with
+// floor_grant, the floor-grantable paths each with its entry in repo
+// (rules.FloorEntry). checkLandingRefusalAppend holds it to its stream's
+// repository.
+func validLandingFloor(repo string, v any) bool {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return false
@@ -90,7 +96,7 @@ func validLandingFloor(v any) bool {
 		}
 	}
 	_, hasPaths := m["floor_paths"]
-	if len(m) != map[bool]int{false: 2, true: 3}[hasPaths] || m["grant_supported"] != false {
+	if len(m) != map[bool]int{false: 2, true: 3}[hasPaths] || m["grant_supported"] != rules.GrantSupported(repo) {
 		return false
 	}
 	items, ok := floorStrings(m["soft"])
@@ -125,7 +131,7 @@ func validLandingFloor(v any) bool {
 	for _, p := range paths {
 		e, _ := p.(map[string]any)
 		path, _ := e["path"].(string)
-		if len(e) != 2 || path == "" || rules.InfraFloorEntry(path) == "" || e["entry"] != rules.InfraFloorEntry(path) {
+		if len(e) != 2 || path == "" || rules.FloorEntry(repo, path) == "" || e["entry"] != rules.FloorEntry(repo, path) {
 			return false
 		}
 	}
@@ -164,6 +170,9 @@ func checkLandingRefusalAppend(ev Event) error {
 	}
 	if _, exists := ev.Body["landing"]; exists {
 		return fmt.Errorf("landing_refusal is not a landing record")
+	}
+	if detail, ok := m["detail"]; ok && !validLandingFloor(strings.TrimPrefix(ev.Stream, "landing:"), detail) {
+		return fmt.Errorf("landing_refusal detail is not a floor refusal of %s", ev.Stream)
 	}
 	return nil
 }

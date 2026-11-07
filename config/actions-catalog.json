@@ -1,5 +1,6 @@
 {
   "actions": [
+    "agentrt_rule_approve",
     "apply_manifest",
     "approve_core_landing",
     "approve_floor_landing",

@@ -3,6 +3,7 @@ package landing
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -216,6 +217,107 @@ func TestInfraFloorGrantableWaits(t *testing.T) {
 				t.Fatalf("unwaivable change waits: %+v", d)
 			}
 		})
+	}
+}
+
+// Platform floor paths neither core nor open (testscope, scripts/ci) wait
+// for approve_floor_landing; core keeps the core rule, and deny, size, an
+// open path and a hard_absolute path are not floor-grantable.
+func TestPlatformFloorGrantableWaits(t *testing.T) {
+	t.Parallel()
+	now := epoch.Add(time.Hour)
+	platformFacts := func() Facts {
+		f := eligibleFacts()
+		f.GrantEnabled = true
+		f.Changes = []rules.LandingChange{
+			{OldPath: "api/internal/testscope/x.go", NewPath: "api/internal/testscope/x.go", OldMode: "100644", NewMode: "100644", Added: 3, Deleted: 1},
+			{NewPath: "scripts/ci/y.sh", NewMode: "100644", Added: 2},
+		}
+		return f
+	}
+	f := platformFacts()
+	soft := rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
+	if !reflect.DeepEqual(soft, []rules.LandingRefusal{rules.LandingFloorGrant, rules.LandingRulePaths}) {
+		t.Fatalf("soft %v", soft)
+	}
+	if reason, _ := PolicyChecks(f, now); reason != "" || !MayAwaitGrant(f, soft) {
+		t.Fatalf("floor-grantable change does not wait: %q", reason)
+	}
+	if d := EligibleToClaim(f, now); !d.Allowed {
+		t.Fatalf("refused instead of waiting: %+v", d)
+	}
+	if d := EligibleToPush(f, now); d.Reason != "awaiting_grant" {
+		t.Fatalf("pushable without a grant: %+v", d)
+	}
+	f.Rule.Landing.Repos[0].Allow = append(f.Rule.Landing.Repos[0].Allow, "api/**", "scripts/**")
+	if soft = rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes); !reflect.DeepEqual(soft, []rules.LandingRefusal{rules.LandingFloorGrant}) || !MayAwaitGrant(f, soft) {
+		t.Fatalf("inside allow: %v", soft)
+	}
+	for _, off := range []func(*Facts){
+		func(f *Facts) { f.GrantEnabled = false },
+		func(f *Facts) { f.Environment, f.Mode = "stg", "dry_run" },
+	} {
+		f := platformFacts()
+		off(&f)
+		if MayAwaitGrant(f, rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)) || EligibleToClaim(f, now).Allowed {
+			t.Fatal("waits without grants in prod/live")
+		}
+	}
+	// A core path keeps the core rule (approve_core_landing), pin or not.
+	f = platformFacts()
+	f.Changes = append(f.Changes, rules.LandingChange{OldPath: "api/internal/agentrt/rules/x.go", NewPath: "api/internal/agentrt/rules/x.go", OldMode: "100644", NewMode: "100644", Added: 1})
+	soft = rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
+	if !slices.Contains(soft, rules.LandingCore) || !slices.Contains(soft, rules.LandingFloorGrant) || rules.LandingFloorGrantable(f.Rule.Landing, f.Repo, f.Changes, soft) {
+		t.Fatalf("core soft %v", soft)
+	}
+	if !MayAwaitGrant(f, soft) || !EligibleToClaim(f, now).Allowed {
+		t.Fatal("core change lost approve_core_landing")
+	}
+	if f.GrantEnabled = false; MayAwaitGrant(f, soft) {
+		t.Fatal("core waits without grants")
+	}
+	for name, edit := range map[string]func(*Facts){
+		"deny": func(f *Facts) { f.Rule.Landing.Repos[0].Deny = []string{"scripts/ci/**"} },
+		"size": func(f *Facts) { f.Changes[0].Added = 301 },
+	} {
+		f := platformFacts()
+		edit(&f)
+		soft := rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
+		if !slices.Contains(soft, rules.LandingFloorGrant) || MayAwaitGrant(f, soft) {
+			t.Fatalf("%s: waits (%v)", name, soft)
+		}
+		if d := EligibleToClaim(f, now); d.Allowed || d.Reason != "floor" {
+			t.Fatalf("%s: %+v", name, d)
+		}
+	}
+	// A floor path beside an allowed one is no floor grant's; a pinned root
+	// still waits under platform's own rule, as it did with floor_soft.
+	f = platformFacts()
+	f.Rule.Landing.Repos[0].Allow = append(f.Rule.Landing.Repos[0].Allow, "api/**", "scripts/**")
+	f.Changes = append(f.Changes, eligibleFacts().Changes[0])
+	soft = rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
+	if !reflect.DeepEqual(soft, []rules.LandingRefusal{rules.LandingFloorGrant}) || rules.LandingFloorGrantable(f.Rule.Landing, f.Repo, f.Changes, soft) || MayAwaitGrant(f, soft) {
+		t.Fatalf("mixed unpinned: %v", soft)
+	}
+	if f.ExecutorPin = "external:coordinator"; !MayAwaitGrant(f, soft) {
+		t.Fatal("pinned root lost its wait")
+	}
+	f = platformFacts()
+	f.Changes = []rules.LandingChange{{NewPath: "api/internal/cluster/x.go", NewMode: "100644", Added: 1}}
+	if soft = rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes); len(soft) != 0 || rules.LandingFloorGrantable(f.Rule.Landing, f.Repo, f.Changes, []rules.LandingRefusal{rules.LandingFloorGrant}) {
+		t.Fatalf("open alone: %v", soft)
+	}
+	// hard_absolute is refused at the floor with the platform's event body.
+	f = platformFacts()
+	f.Changes = append(f.Changes, rules.LandingChange{NewPath: "scripts/.env.local", NewMode: "100644", Added: 1})
+	if d := EligibleToClaim(f, now); d.Allowed || d.Reason != "floor" || d.Detail != nil {
+		t.Fatalf("hard_absolute: %+v", d)
+	}
+	// A floor-grantable change refused at the floor reports its layer.
+	f = platformFacts()
+	f.Changes[1].Binary = true
+	if d := EligibleToClaim(f, now); d.Allowed || d.Reason != "floor" || d.Detail["structural"] == nil {
+		t.Fatalf("structural: %+v", d)
 	}
 }
 

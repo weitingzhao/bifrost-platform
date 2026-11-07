@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,10 @@ type Client struct {
 	// platform from before the build.
 	Build        *Build
 	noBuildUntil atomic.Int64
+	// noHeadroomUntil: the same for the host's headroom (a platform from
+	// before R5 phase 2 step 3b refused it), with HeadroomRetryAfter.
+	noHeadroomUntil atomic.Int64
+	granted         atomic.Int64
 }
 
 // Build is the build of agentd a claim reports: the commit it was built from,
@@ -50,6 +55,13 @@ type Build struct {
 // after a platform refused it, before they try it again: a platform released
 // since takes it (review 497 A1).
 var DiskRetryAfter = 10 * time.Minute
+
+// HeadroomRetryAfter is DiskRetryAfter for the host's headroom.
+var HeadroomRetryAfter = 10 * time.Minute
+
+// headroomFields are the claim's headroom fields, in the order a refusal may
+// name the first of them.
+var headroomFields = []string{"cpus", "load1", "mem_avail_bytes", "mem_total_bytes"}
 
 // The platform's refusals agentd acts on (409 and its code), and a platform
 // it cannot use now (unreachable, 5xx, 503): the latter is retried, the
@@ -95,6 +107,9 @@ type Claimed struct {
 	// from before it sends neither.
 	SubjectReport string `json:"subject_report_id,omitempty"`
 	SubjectEffect string `json:"subject_effect,omitempty"`
+	// GrantedSlots is how many attempts the host may hold now, this one
+	// included (elastic slots); nil from a platform from before them.
+	GrantedSlots *int `json:"granted_slots,omitempty"`
 }
 
 // FailedCheck is a check an earlier round of the task failed: deterministic
@@ -124,9 +139,15 @@ func (c *Client) http() *http.Client {
 // call sends one request and decodes a JSON answer into out (nil: ignore).
 // It returns the status for callers that tell 200 from 204.
 func (c *Client) call(ctx context.Context, method, path string, body io.Reader, header map[string]string, out any) (int, error) {
+	code, _, err := c.callHeader(ctx, method, path, body, header, out)
+	return code, err
+}
+
+// callHeader is call, with the answer's header (nil when there was none).
+func (c *Client) callHeader(ctx context.Context, method, path string, body io.Reader, header map[string]string, out any) (int, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.Base, "/")+path, body)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	if body != nil && req.Header.Get("Content-Type") == "" {
@@ -137,21 +158,21 @@ func (c *Client) call(ctx context.Context, method, path string, body io.Reader, 
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s %s: %v", ErrUnavailable, method, path, redact(err.Error(), c.Token))
+		return 0, nil, fmt.Errorf("%w: %s %s: %v", ErrUnavailable, method, path, redact(err.Error(), c.Token))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return resp.StatusCode, fmt.Errorf("%w: %s %s: %v", ErrUnavailable, method, path, err)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w: %s %s: %v", ErrUnavailable, method, path, err)
 	}
 	switch {
 	case resp.StatusCode == http.StatusOK && out != nil:
 		if err := json.Unmarshal(raw, out); err != nil {
-			return resp.StatusCode, fmt.Errorf("agentd: %s %s: %w", method, path, err)
+			return resp.StatusCode, resp.Header, fmt.Errorf("agentd: %s %s: %w", method, path, err)
 		}
-		return resp.StatusCode, nil
+		return resp.StatusCode, resp.Header, nil
 	case resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent:
-		return resp.StatusCode, nil
+		return resp.StatusCode, resp.Header, nil
 	}
 	var e struct {
 		Code    string `json:"error"`
@@ -161,17 +182,17 @@ func (c *Client) call(ctx context.Context, method, path string, body io.Reader, 
 	detail := fmt.Sprintf("%s %s: %d %s %s", method, path, resp.StatusCode, e.Code, e.Message)
 	switch {
 	case resp.StatusCode == http.StatusConflict && e.Code == "fenced":
-		return resp.StatusCode, fmt.Errorf("%w (%s)", ErrFenced, detail)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w (%s)", ErrFenced, detail)
 	case resp.StatusCode == http.StatusConflict && e.Code == "key_conflict":
-		return resp.StatusCode, fmt.Errorf("%w (%s)", ErrKeyConflict, detail)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w (%s)", ErrKeyConflict, detail)
 	case resp.StatusCode == http.StatusConflict && e.Code == "in_grace":
-		return resp.StatusCode, fmt.Errorf("%w (%s)", ErrInGrace, detail)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w (%s)", ErrInGrace, detail)
 	case resp.StatusCode == http.StatusConflict:
-		return resp.StatusCode, fmt.Errorf("%w (%s)", ErrState, detail)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w (%s)", ErrState, detail)
 	case resp.StatusCode >= 500:
-		return resp.StatusCode, fmt.Errorf("%w (%s)", ErrUnavailable, detail)
+		return resp.StatusCode, resp.Header, fmt.Errorf("%w (%s)", ErrUnavailable, detail)
 	}
-	return resp.StatusCode, fmt.Errorf("agentd: %s", detail)
+	return resp.StatusCode, resp.Header, fmt.Errorf("agentd: %s", detail)
 }
 
 const maxBody = 1 << 20
@@ -193,6 +214,16 @@ func (c *Client) post(ctx context.Context, path string, body map[string]any, out
 		return 0, err
 	}
 	return c.call(ctx, http.MethodPost, path, bytes.NewReader(b), nil, out)
+}
+
+// postHeader is post, with the answer's header.
+func (c *Client) postHeader(ctx context.Context, path string, body map[string]any, out any) (int, http.Header, error) {
+	body["host_id"] = c.Host
+	b, err := json.Marshal(body)
+	if err != nil {
+		return 0, nil, err
+	}
+	return c.callHeader(ctx, http.MethodPost, path, bytes.NewReader(b), nil, out)
 }
 
 // Benchmark hands in a benchmark run (agentd bench) as this host and returns
@@ -250,11 +281,32 @@ func (c *Client) Claim(ctx context.Context, freeSlots int, tools []Tool) (*Claim
 // host keeps taking work while the platform and agentd are on different
 // versions and reports it again once the platform is released.
 func (c *Client) ClaimWith(ctx context.Context, freeSlots int, tools []Tool, disk *Disk) (*Claimed, error) {
+	return c.ClaimWithHeadroom(ctx, freeSlots, tools, disk, nil)
+}
+
+// ClaimWithHeadroom is ClaimWith with the host's headroom, when measured (R5
+// phase 2 step 3b): the fields it read go with the claim. A platform from
+// before it refuses them (400, unknown field) as one from before TD-415
+// refuses the disk, and the claim goes without them the same way, for
+// HeadroomRetryAfter; a platform from before both refuses one, then the
+// other.
+func (c *Client) ClaimWithHeadroom(ctx context.Context, freeSlots int, tools []Tool, disk *Disk, head *Headroom) (*Claimed, error) {
 	var cl Claimed
 	body := map[string]any{"free_slots": freeSlots, "tools": tools}
 	now := time.Now().UnixNano()
 	if disk != nil && now >= c.noDiskUntil.Load() {
 		body["disk_free_bytes"], body["root_free_bytes"] = disk.Host, disk.Root
+	}
+	if head != nil && now >= c.noHeadroomUntil.Load() {
+		if head.Load1 != nil {
+			body["load1"] = *head.Load1
+		}
+		if head.CPUs > 0 {
+			body["cpus"] = head.CPUs
+		}
+		if head.MemAvail != nil && head.MemTotal != nil {
+			body["mem_avail_bytes"], body["mem_total_bytes"] = *head.MemAvail, *head.MemTotal
+		}
 	}
 	if c.Build != nil && now >= c.noBuildUntil.Load() {
 		body["build"] = c.Build
@@ -265,31 +317,81 @@ func (c *Client) ClaimWith(ctx context.Context, freeSlots int, tools []Tool, dis
 		field  string
 		fields []string
 		until  *atomic.Int64
+		retry  time.Duration
 	}{
-		{"build", []string{"build"}, &c.noBuildUntil},
-		{"disk_free_bytes", []string{"disk_free_bytes", "root_free_bytes"}, &c.noDiskUntil},
+		{"build", []string{"build"}, &c.noBuildUntil, DiskRetryAfter},
+		{"disk_free_bytes", []string{"disk_free_bytes", "root_free_bytes"}, &c.noDiskUntil, DiskRetryAfter},
 	}
-	code, err := c.post(ctx, "/claim", body, &cl)
+	for _, field := range headroomFields {
+		optional = append(optional, struct {
+			field  string
+			fields []string
+			until  *atomic.Int64
+			retry  time.Duration
+		}{field, headroomFields, &c.noHeadroomUntil, HeadroomRetryAfter})
+	}
+	code, header, err := c.postHeader(ctx, "/claim", body, &cl)
 	// only the refusal of the field itself (review 267 B6, as Heartbeat); a
 	// platform older than both refuses one, then the other
 	for retried := true; retried && err != nil && code == http.StatusBadRequest; {
 		retried = false
 		for _, o := range optional {
 			if body[o.field] != nil && strings.Contains(err.Error(), `unknown field "`+o.field+`"`) {
-				o.until.Store(time.Now().Add(DiskRetryAfter).UnixNano())
+				o.until.Store(time.Now().Add(o.retry).UnixNano())
 				for _, f := range o.fields {
 					delete(body, f)
 				}
-				code, err = c.post(ctx, "/claim", body, &cl)
+				code, header, err = c.postHeader(ctx, "/claim", body, &cl)
 				retried = true
 				break
 			}
 		}
 	}
-	if err != nil || code == http.StatusNoContent {
+	if err != nil {
 		return nil, err
 	}
+	c.noteGranted(header, cl.GrantedSlots)
+	if code == http.StatusNoContent {
+		return nil, nil
+	}
 	return &cl, nil
+}
+
+// refusesHeadroom says whether refused is the platform's refusal of a
+// headroom field body carries.
+func refusesHeadroom(body map[string]any, refused string) bool {
+	for _, f := range headroomFields {
+		if body[f] != nil && strings.Contains(refused, `unknown field "`+f+`"`) {
+			return true
+		}
+	}
+	return false
+}
+
+// GrantedSlotsHeader is the platform's header with a claim's granted slots
+// (agentrtapi.GrantedSlotsHeader).
+const GrantedSlotsHeader = "X-Agentrt-Granted-Slots"
+
+// noteGranted keeps the granted slots a claim's answer gave: the body's on
+// a lease, else the header's; an answer with neither (a platform from
+// before elastic slots) leaves what was known.
+func (c *Client) noteGranted(h http.Header, body *int) {
+	n := -1
+	if body != nil {
+		n = *body
+	} else if v, err := strconv.Atoi(h.Get(GrantedSlotsHeader)); err == nil {
+		n = v
+	}
+	if n >= 0 {
+		c.granted.Store(int64(n) + 1)
+	}
+}
+
+// Granted is the slots the platform's latest claim answer granted the host:
+// how many attempts it may hold at once; ok false while no answer said.
+func (c *Client) Granted() (int, bool) {
+	g := c.granted.Load()
+	return int(g - 1), g > 0
 }
 
 func (c *Client) attempt(ctx context.Context, id, action string, epoch int64, body map[string]any, out any) error {
@@ -501,4 +603,9 @@ func (c *Client) GetArtifact(ctx context.Context, id string) ([]byte, error) {
 		return nil, fmt.Errorf("agentd: artifact %s does not match its content", id)
 	}
 	return body, nil
+}
+
+// ClaimHost sends headroom and remembers the platform slot grant.
+func (c *Client) ClaimHost(ctx context.Context, freeSlots int, tools []Tool, disk *Disk, room *Headroom) (*Claimed, error) {
+	return c.ClaimWithHeadroom(ctx, freeSlots, tools, disk, room)
 }

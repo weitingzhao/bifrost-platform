@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
@@ -295,13 +296,25 @@ func TestC5R02ServerKeepsOneOpenRequestPerOperation(t *testing.T) {
 	}
 }
 
-// Serial: t.Setenv and the package's grant writer. approve_floor_landing is
-// wired like approve_core_landing, for infra only: tier D, the number
-// confirmed on the Console, the record read back, one open request per
-// operation; a floor grant for platform and a core grant for infra are
-// refused before the store is called.
+// Serial: t.Setenv and the package grant writer. Both repositories accept floor requests.
 func TestFloorLandingGrantWiring(t *testing.T) {
-	_, do, calls, _ := grantServer(t)
+	srv, do, calls, _ := grantServer(t)
+	t.Setenv(landinggit.ReaderDirEnv, t.TempDir())
+	for _, repo := range []string{"bifrost-platform", "bifrost-trade-infra"} {
+		src := srv.landingGrantSources()
+		if repo != "bifrost-platform" {
+			src = src.ByRepo(repo)
+		}
+		if src.Facts.FloorFiles == nil {
+			t.Fatalf("no floor material reader for %s", repo)
+		}
+		if _, err := src.Facts.FloorFiles(context.Background(), "wrong-repo", "", ""); err == nil || !strings.Contains(err.Error(), "the "+repo+" reader does not read") {
+			t.Fatalf("floor material uses wrong repository: %v", err)
+		}
+		if _, err := src.Facts.FloorFiles(context.Background(), repo, "", ""); err == nil || err.Error() != "invalid M0 or R" {
+			t.Fatalf("floor material did not reach Git reader: %v", err)
+		}
+	}
 	infra := grantParams()
 	infra["repo"] = "bifrost-trade-infra"
 	infra["stg_release"] = false
@@ -319,9 +332,16 @@ func TestFloorLandingGrantWiring(t *testing.T) {
 	if len(*calls) != 1 || (*calls)[0].a.Action != store.ActionFloorLanding || (*calls)[0].p.Repo != "bifrost-trade-infra" {
 		t.Fatalf("%+v", *calls)
 	}
+	platform := grantParams()
+	platform["op"] = "land:t_01JA0000000000000000000000:2"
+	row = requestGrant(t, do, store.ActionFloorLanding, platform)
+	code, out = decide(do, row, "console", true)
+	if code != http.StatusOK || out.Status != "executed" || len(*calls) != 2 || (*calls)[1].p.Repo != "bifrost-platform" || (*calls)[1].a.Action != store.ActionFloorLanding {
+		t.Fatalf("platform floor: %d %+v calls=%+v", code, out, *calls)
+	}
 	for _, tc := range []struct {
 		action, repo string
-	}{{store.ActionFloorLanding, "bifrost-platform"}, {store.ActionCoreLanding, "bifrost-trade-infra"}, {store.ActionGuardrailLanding, "bifrost-trade-infra"}} {
+	}{{store.ActionCoreLanding, "bifrost-trade-infra"}, {store.ActionGuardrailLanding, "bifrost-trade-infra"}} {
 		p := grantParams()
 		p["repo"] = tc.repo
 		p["op"] = "land:t_01JA0000000000000000000000:" + map[string]string{store.ActionFloorLanding: "3", store.ActionCoreLanding: "4", store.ActionGuardrailLanding: "5"}[tc.action]
@@ -331,7 +351,7 @@ func TestFloorLandingGrantWiring(t *testing.T) {
 			t.Fatalf("%s for %s: %d %+v", tc.action, tc.repo, code, out)
 		}
 	}
-	if len(*calls) != 1 {
+	if len(*calls) != 2 {
 		t.Fatal("the store was called for a grant of the wrong repository")
 	}
 }

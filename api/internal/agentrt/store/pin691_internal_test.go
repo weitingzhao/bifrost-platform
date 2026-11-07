@@ -217,7 +217,7 @@ func Test691ClaimRereadsAuthorityAfterLock(t *testing.T) {
 				case strings.Contains(sql, "SELECT host_kind"):
 					return reviewValues(HostExternal)
 				case strings.Contains(sql, "UPDATE agentrt.host"):
-					return reviewValues("active", HostExternal, 1)
+					return reviewValues("active", HostExternal, 1, (*int)(nil))
 				case strings.Contains(sql, "SELECT COALESCE(t.executor_pin"):
 					if strings.Contains(sql, "COALESCE(t.repo") {
 						repo := "bifrost-platform"

@@ -40,3 +40,6 @@ func SetTaskWaitForTest(f func(ctx context.Context, db store.DB, task string) (s
 	taskWait = f
 	return func() { taskWait = old }
 }
+
+// ReadTuningForTest reads the tuning rule as a pass does.
+func (c *Controller) ReadTuningForTest(ctx context.Context) { c.readTuning(ctx) }

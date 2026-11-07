@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The rules the runtime acts on (design v5 §5.2; proposal §2), each read at
@@ -30,16 +28,6 @@ func inForce(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
 		return nil, nil
 	}
 	return r, err
-}
-
-// perHost is how many live attempts a host may hold now: its own slots, no
-// more than the concurrency rule allows, and none without the rule.
-func perHost(ctx context.Context, tx pgx.Tx, slots int) (int, error) {
-	r, err := inForce(ctx, tx, rules.KindConcurrency)
-	if err != nil || r == nil {
-		return 0, err
-	}
-	return min(slots, *r.PerHost), nil
 }
 
 // envelopeFit says whether a mission falls inside the standing envelope in

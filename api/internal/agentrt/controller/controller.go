@@ -11,10 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -82,6 +84,8 @@ type Controller struct {
 	LandingCards store.CardQuestions
 	cardMu       sync.Mutex
 	cardPause    time.Time // asking landing cards pauses until then (quota)
+	// tuning is the tuning rule the last pass read (tuning.go).
+	tuning atomic.Pointer[rules.Tuning]
 	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
 	// runs none. Apart from the drill: any environment, any rule.
 	Reconcile *LandingReconcile
@@ -529,16 +533,18 @@ const DrillPassCeiling = 15 * time.Minute
 // Landings records every implementation whose change first stands on main,
 // in whatever state, not only accepted ones, with the route it took there
 // (store.RecordLandings, TD-383); each repository's main is read with a minute's bound. It returns
-// how many it recorded.
+// how many it recorded and closed through CloseOnMain.
 func (c *Controller) Landings(ctx context.Context) (int, error) {
 	if c.Sources.MainResults == nil {
 		return 0, nil
 	}
-	return store.RecordLandings(ctx, c.DB, func(ctx context.Context, repo string) (store.OnMain, bool) {
+	n, err := store.RecordLandings(ctx, c.DB, func(ctx context.Context, repo string) (store.OnMain, bool) {
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
 		return c.Sources.MainResults(rctx, repo)
 	})
+	closed, cerr := store.CloseOnMain(ctx, c.DB)
+	return n + closed, errors.Join(err, cerr)
 }
 
 // Close is one pass of closing the missions whose tasks are all finished
@@ -743,6 +749,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		})
 	}
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
+		c.readTuning(ctx)
 		_, ferr := c.Facts(ctx)
 		_, gerr := c.Gates(ctx)
 		_, oerr := store.Reroute(ctx, c.DB)
@@ -783,6 +790,10 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			return err
 		})
 	}
+	c.every(ctx, &wg, "agentrt-slots", SlotsEvery, func() error {
+		_, err := c.Slots(ctx)
+		return err
+	})
 	c.startLeakValue(ctx, &wg)
 	if c.PageOwner != nil {
 		c.every(ctx, &wg, "agentrt-disk-pages", DiskPagesEvery, func() error {

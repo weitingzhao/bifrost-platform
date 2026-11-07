@@ -31,13 +31,14 @@ func S5Active(l *Landing, repo string) bool {
 	return false
 }
 
-// S5Refusals removes floor/display ONLY for each enrolled ordinary modification.
+// S5Refusals removes floor/display ONLY for each enrolled ordinary modification
+// (floor is floor_soft or, for a floor-grantable path, floor_grant).
 // All other changes keep the original predicate, including mixed display diffs.
 // Size is checked over the original whole diff, never separate subsets.
 func S5Refusals(l *Landing, repo string, changes []LandingChange) []LandingRefusal {
 	failed := map[LandingRefusal]bool{}
 	for _, r := range LandingSoftRefusals(l, repo, changes) {
-		if r != LandingFloorSoft && r != LandingPresentation {
+		if !s5Removable(r) {
 			failed[r] = true
 		}
 	}
@@ -46,7 +47,7 @@ func S5Refusals(l *Landing, repo string, changes []LandingChange) []LandingRefus
 			continue
 		}
 		for _, r := range LandingSoftRefusals(l, repo, []LandingChange{c}) {
-			if r == LandingFloorSoft || r == LandingPresentation {
+			if s5Removable(r) {
 				failed[r] = true
 			}
 		}
@@ -58,6 +59,10 @@ func S5Refusals(l *Landing, repo string, changes []LandingChange) []LandingRefus
 		}
 	}
 	return out
+}
+
+func s5Removable(r LandingRefusal) bool {
+	return r == LandingFloorSoft || r == LandingFloorGrant || r == LandingPresentation
 }
 
 // S5Enrolled lists the S5 paths a landing rule's allow covers (after deny

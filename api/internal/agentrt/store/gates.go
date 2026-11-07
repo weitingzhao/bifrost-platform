@@ -55,7 +55,8 @@ const (
 	GateBatchHours = 6
 	// GateUnclaimed is how long a ready gate task waits for a host.
 	GateUnclaimed = 2 * time.Hour
-	// gateAttemptsEach is the attempts a batch's budget allows each task.
+	// gateAttemptsEach is the attempts a batch's budget allows each task
+	// (the tuning rule's gate_attempts_each when one is in force).
 	gateAttemptsEach = 2
 	// gatePassTimeout bounds one dispatch, its locks and its live read.
 	gatePassTimeout = 30 * time.Second
@@ -287,6 +288,10 @@ func dispatchGates(ctx context.Context, db DB, env, repo string, deployed Deploy
 		if err != nil || envelope == nil || envelope.Envelope == nil {
 			return err
 		}
+		tune, err := tuningIn(ctx, tx)
+		if err != nil {
+			return err
+		}
 		run := gateRun{Env: env, Commit: commit, Ref: ref}
 		for _, g := range missing {
 			run.Gates = append(run.Gates, gateEntry{Task: NewTaskID(), Test: g.Test, Spec: g.Spec})
@@ -294,7 +299,7 @@ func dispatchGates(ctx context.Context, db DB, env, repo string, deployed Deploy
 		p, err := MissionProposal{Title: fmt.Sprintf("Gates of %s %s on %s", repo, commit[:12], env),
 			Goal:    fmt.Sprintf("Run the architecture table's gates on %s at %s, the commit %s runs", repo, commit, env),
 			Success: []string{GateSuccess}, Repos: []string{repo}, MaxAction: "none",
-			MaxAttempts:  min(envelope.Envelope.Budget.MaxAttempts, gateAttemptsEach*len(run.Gates)),
+			MaxAttempts:  min(envelope.Envelope.Budget.MaxAttempts, tune.Int(rules.TuneGateAttemptsEach)*len(run.Gates)),
 			MaxWallHours: min(envelope.Envelope.Budget.MaxWallHours, GateBatchHours),
 			Deadline:     time.Now().Add(24 * time.Hour), gateRun: run.doc()}.check()
 		if err != nil {

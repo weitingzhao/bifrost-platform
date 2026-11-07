@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Vendor pools and the budget ledger (design v5 §5.1.2 ⑥; W-31 2.4 slice ①,
@@ -140,6 +142,12 @@ func checkReading(r PoolReading) error {
 // handed over after its reset, review 274 B6). A reset further ahead than
 // maxReset is not believed, and the refusal counts as one that named none.
 func cooldownUntil(r PoolReading, now time.Time) time.Time {
+	return cooldownUntilWith(r, now, unknownResetCooldown)
+}
+
+// cooldownUntilWith is cooldownUntil with unknown the cooling of a refusal
+// that names no reset (the tuning rule's unknown_reset_cooldown_s).
+func cooldownUntilWith(r PoolReading, now time.Time, unknown time.Duration) time.Time {
 	full := r.UsedFraction != nil && *r.UsedFraction >= 1
 	if !r.Limited && !full {
 		return time.Time{}
@@ -147,7 +155,7 @@ func cooldownUntil(r PoolReading, now time.Time) time.Time {
 	switch {
 	case r.ResetsAt == nil || r.ResetsAt.Sub(now) > maxReset:
 		if r.Limited {
-			return now.Add(unknownResetCooldown)
+			return now.Add(unknown)
 		}
 		return time.Time{}
 	case !r.ResetsAt.After(now):
@@ -230,6 +238,10 @@ func measurePools(ctx context.Context, tx pgx.Tx, actor, source string, rs []Poo
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return err
 	}
+	tune, err := tuningIn(ctx, tx)
+	if err != nil {
+		return err
+	}
 	for _, r := range rs {
 		tool, _, window, ok := ParsePool(r.Pool)
 		if !ok {
@@ -277,7 +289,7 @@ func measurePools(ctx context.Context, tx pgx.Tx, actor, source string, rs []Poo
 		  RETURNING cooldown_until`, r.Pool, tool, window, used, resets, now, source).Scan(&cooling); err != nil {
 			return err
 		}
-		until := cooldownUntil(r, now)
+		until := cooldownUntilWith(r, now, tune.Duration(rules.TuneUnknownResetCooldown))
 		inForce := cooling != nil && cooling.After(now)
 		switch {
 		case !until.IsZero() && (source == "owner" || !inForce || until.After(*cooling)):

@@ -174,7 +174,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 	s.wireInfraLandingCI(c, ci)
 	if c.Env == "prod" {
 		// A grant's Git evidence for every repository with a reader: R's
-		// patch, and M0..R's files for infra's floor grant (rechecked at the
+		// patch, and M0..R's files for floor grants (rechecked at the
 		// final gate just before the push).
 		c.Drill.Facts.RepoGrantPatch = func(ctx context.Context, repo, a, m0, r string) (store.GrantPatch, error) {
 			g := readers[repo]
@@ -188,7 +188,7 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 			if g == nil {
 				return landing.FloorTree{}, errors.New("landing repo unavailable")
 			}
-			return g.FloorFiles(ctx, m0, r)
+			return landingFloorFiles(g, repo)(ctx, repo, m0, r)
 		}
 		if g := readers["bifrost-platform"]; g != nil {
 			c.Drill.Facts.GrantPatch = landingGrantPatch(g)

@@ -1,4 +1,5 @@
-import { CORE_LANDING_NOTICE, CORE_LANDING_TITLE, GITEA_NOTICE, STG_LANDING_NOTICE, giteaCompareHref, type LandingMaterialResponse } from '@/api/landingGrant'
+import { FloorMaterial } from './LandingApprovalEvidence'
+import { CORE_LANDING_NOTICE, CORE_LANDING_TITLE, FLOOR_LANDING_TITLE, GITEA_NOTICE, STG_LANDING_NOTICE, giteaCompareHref, type LandingMaterialResponse } from '@/api/landingGrant'
 
 export const PATCH_LIMIT = 512 * 1024
 
@@ -9,7 +10,7 @@ export function MaterialEvidence({ data }: { data: LandingMaterialResponse }) {
   const patchFits = !m.patch_truncated && m.patch_size <= PATCH_LIMIT && new TextEncoder().encode(m.patch ?? '').length <= PATCH_LIMIT
   return <div className="space-y-4 text-sm [overflow-wrap:anywhere]">
     <section aria-label="Landing authorization" className="space-y-2">
-      <h2 className="text-base font-semibold">{core ? CORE_LANDING_TITLE : 'Soft guardrail change'}</h2>
+      <h2 className="text-base font-semibold">{m.action === 'approve_floor_landing' ? FLOOR_LANDING_TITLE : core ? CORE_LANDING_TITLE : 'Soft guardrail change'}</h2>
       {core && <p>{CORE_LANDING_NOTICE}</p>}
       {c.stg_release && <p>{STG_LANDING_NOTICE}</p>}
       <p>Main still M0? <strong>{data.main_known ? data.main_is_M0 ? 'Yes' : 'No — refresh required' : 'Unknown'}</strong> · Read at {m.computed_at}</p>
@@ -43,6 +44,7 @@ export function MaterialEvidence({ data }: { data: LandingMaterialResponse }) {
       <p>Decision chain: {String(c.decision_chain)}</p>
       {core && <ul aria-label="Trust-core paths">{c.hard_core_paths.map(p => <li key={p.path}>{p.path} · {p.entry}</li>)}</ul>}
     </section>
+    {m.action === 'approve_floor_landing' && <FloorMaterial material={m} />}
     <section aria-label="CI evidence"><h3 className="font-semibold">CI evidence</h3>
       <dl>{Object.entries(c.ci).filter(([k]) => k !== 'siblings').map(([key, value]) => <div key={key}><dt className="inline font-medium">{key}: </dt><dd className="inline">{String(value)}</dd></div>)}</dl>
       <ul>{Object.entries(c.ci.siblings).map(([repo, sha]) => <li key={repo}>{repo}: {sha}</li>)}</ul>

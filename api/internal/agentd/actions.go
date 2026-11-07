@@ -65,12 +65,14 @@ type cleanCmd struct {
 	raw    string // as the log wrote it, for self; "" past maxHandInLine
 }
 
+// collectEvery is how often the log is read (AGENTD_COLLECT_EVERY, config.go).
+var collectEvery = 2 * time.Second
+
 const (
 	maxPending    = 200
 	maxReadAtOne  = 4 << 20
 	maxCmds       = 256      // cursor's started commands waiting for their result (review 265 B11)
 	maxBatchBytes = 64 << 10 // the targets of one heartbeat's actions
-	collectEvery  = 2 * time.Second
 	// maxTargetRunes: a target is cut here to the platform's limit, so a
 	// heartbeat is never refused for its size (review 265 A9).
 	maxTargetRunes = actions.MaxTarget

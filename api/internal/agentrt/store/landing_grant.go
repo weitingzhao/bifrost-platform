@@ -30,9 +30,10 @@ const (
 	// ActionCoreLanding is the only grant a hard_core change can consume
 	// (§12.1); it also waives the soft failures of the same change.
 	ActionCoreLanding = "approve_core_landing"
-	// ActionFloorLanding is infra's only grant: it waives floor_grant (and
-	// rule_paths) for exactly the floor-grantable files it pins, each at its
-	// blob sha256 at R; never-grantable paths and size stay refused.
+	// ActionFloorLanding waives floor_grant (and rule_paths) for exactly the
+	// floor-grantable files it pins (rules.FloorEntry), each at its blob
+	// sha256 at R; never-grantable paths, core and size stay refused. It is
+	// infra's only grant; on platform it also names the pinned CI run.
 	ActionFloorLanding = "approve_floor_landing"
 	// LandingGrantPurpose is the only purpose of this version.
 	LandingGrantPurpose = "landing_main"
@@ -51,7 +52,8 @@ func grantStream(repo string) string { return "landing:" + repo }
 
 // GrantActionSupported: action's grant may be written for repo. The two
 // platform grants stay platform's (rules.GrantSupported); the floor grant
-// is infra's (rules.FloorGrantSupported).
+// is every repository's whose floor-grantable paths take it
+// (rules.FloorGrantSupported: infra and platform).
 func GrantActionSupported(action, repo string) bool {
 	switch action {
 	case ActionFloorLanding:
@@ -88,15 +90,15 @@ type GrantFloorPath struct {
 	BlobSHA256 string `json:"blob_sha256"`
 }
 
-// validFloorPaths: sorted by path, unique, each floor-grantable with its
-// own entry and a sha256; non-empty.
-func validFloorPaths(paths []GrantFloorPath) bool {
+// validFloorPaths: sorted by path, unique, each floor-grantable in repo
+// with its own entry and a sha256; non-empty.
+func validFloorPaths(repo string, paths []GrantFloorPath) bool {
 	if len(paths) == 0 {
 		return false
 	}
 	last := ""
 	for _, p := range paths {
-		if p.Path <= last || rules.InfraFloorEntry(p.Path) != p.Entry || p.Entry == "" || !grantHex64.MatchString(p.BlobSHA256) {
+		if p.Path <= last || rules.FloorEntry(repo, p.Path) != p.Entry || p.Entry == "" || !grantHex64.MatchString(p.BlobSHA256) {
 			return false
 		}
 		last = p.Path
@@ -173,7 +175,7 @@ type LandingGrant struct {
 	ApprovedAt      string    `json:"approved_at"`
 	GrantedAt       string    `json:"granted_at"`
 	ExpiresAt       string    `json:"expires_at"`
-	// FloorPaths: a floor grant's pinned files; absent on platform grants.
+	// FloorPaths: a floor grant's pinned files; absent on the other grants.
 	FloorPaths []GrantFloorPath `json:"floor_paths,omitempty"`
 	// Batch: on a batch lead's grant, the batch its material covered.
 	Batch *LandingGrantBatch `json:"batch,omitempty"`
@@ -301,15 +303,18 @@ func refusalsOf(set []string) []rules.LandingRefusal {
 	return out
 }
 
-// GrantActionFor is the one action that may waive soft (§12.1): a core
-// failure takes the core-level approval, anything else the guardrail one.
-// The two actions' waivable categories never overlap on core.
-func GrantActionFor(soft []string) string {
-	if slices.Contains(soft, string(rules.LandingFloorGrant)) {
-		return ActionFloorLanding
-	}
+// GrantActionFor is the one action that may waive repo's soft (§12.1): a
+// core failure takes the core-level approval (on platform it waives a
+// floor_grant beside core too), a floor_grant failure the floor one, and
+// anything else the guardrail one. Infra has no core, so its floor_grant
+// always takes the floor grant. The actions' waivable categories never
+// overlap on core.
+func GrantActionFor(repo string, soft []string) string {
 	if slices.Contains(soft, string(rules.LandingCore)) {
 		return ActionCoreLanding
+	}
+	if slices.Contains(soft, string(rules.LandingFloorGrant)) {
+		return ActionFloorLanding
 	}
 	return ActionGuardrailLanding
 }
@@ -374,11 +379,11 @@ func parseLandingGrant(v any) (LandingGrant, error) {
 		return g, fmt.Errorf("landing_grant digests")
 	case !validCategories(g.SoftAtRequest, false) || !slices.Equal(g.Waives, g.SoftAtRequest):
 		return g, fmt.Errorf("landing_grant waives exactly its soft_at_request, a non-empty set")
-	case GrantActionFor(g.Waives) != g.Action || g.Action == ActionFloorLanding && !floorWaives(g.Waives):
+	case GrantActionFor(g.Repo, g.Waives) != g.Action || g.Action == ActionFloorLanding && !floorWaives(g.Waives):
 		// §12.1: the two grants' categories never overlap on core; the floor
 		// grant waives floor_grant and rule_paths alone.
 		return g, fmt.Errorf("landing_grant: %s does not waive %v", g.Action, g.Waives)
-	case (g.Action == ActionFloorLanding) != (g.FloorPaths != nil) || g.FloorPaths != nil && !validFloorPaths(g.FloorPaths):
+	case (g.Action == ActionFloorLanding) != (g.FloorPaths != nil) || g.FloorPaths != nil && !validFloorPaths(g.Repo, g.FloorPaths):
 		return g, fmt.Errorf("landing_grant: floor_paths are a floor grant's, sorted, each floor-grantable with its blob sha256")
 	case g.Batch != nil && badGrantBatch(v, g) != "":
 		return g, fmt.Errorf("landing_grant batch: %s", badGrantBatch(v, g))

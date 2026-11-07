@@ -11,6 +11,7 @@ func TestDescribeSummaries(t *testing.T) {
 		id, env, summary string
 		params           map[string]any
 	}{
+		{"approve_floor_landing", "prod", "Floor change: land abcdef0 (land:task:1) on bifrost-platform main", map[string]any{"env": "prod", "repo": "bifrost-platform", "R": "abcdef0123456789abcdef0123456789abcdef01", "op": "land:task:1"}},
 		{"start_pipeline_run", "prod", "bifrost-deliver-platform-prod @ 66496a6", map[string]any{"name": "bifrost-deliver-platform-prod", "revision": "66496a6000000000000000000000000000000000"}},
 		{"rollout_restart_deployment", "bifrost-prod", "Restart Deployment bifrost-prod/api", map[string]any{"namespace": "bifrost-prod", "kind": "Deployment", "name": "api"}},
 		{"drain_node", "node", "Drain node ubt-k3s-02 (force)", map[string]any{"name": "ubt-k3s-02", "force": true}},
@@ -108,6 +109,21 @@ func TestDescribeApplyOwnership(t *testing.T) {
 			if count == 0 && strings.Contains(d.Summary, "takes field ownership") {
 				t.Fatalf("unexpected warning: %q", d.Summary)
 			}
+		}
+	}
+}
+
+func TestDescribeFloorLandingRepositories(t *testing.T) {
+	a, _ := ByID("approve_floor_landing")
+	for _, repo := range []string{"bifrost-platform", "bifrost-trade-infra"} {
+		d := a.Describe(context.Background(), map[string]any{"env": "prod", "repo": repo, "R": "abcdef0123456789abcdef0123456789abcdef01", "op": "land:task:1"}, "")
+		if d.Summary != "Floor change: land abcdef0 (land:task:1) on "+repo+" main" || d.KeyParams["repo"] != repo {
+			t.Fatalf("%s: %+v", repo, d)
+		}
+	}
+	for _, wording := range []string{"bifrost-trade-infra", "bifrost-platform", "floor paths that are not permission paths", "api/internal/testscope/", "scripts/ci/", "bifrost-ci-platform", "final gate checks that pinned run", "{env, repo, task, op, R, material_digest, stg_release}"} {
+		if !strings.Contains(a.Description, wording) {
+			t.Fatalf("floor description missing %q", wording)
 		}
 	}
 }

@@ -9,14 +9,15 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
-// floorPathsOf are a floor grant's pinned files from Git's M0..R, and
-// whether that tree can be granted at all: R one commit on M0, every file
-// added or modified, floor-grantable, and no Secret manifest.
-func floorPathsOf(t landing.FloorTree) ([]GrantFloorPath, bool) {
+// floorPathsOf are a floor grant's pinned files from Git's M0..R in repo,
+// and whether that tree can be granted at all: R one commit on M0, every
+// file added or modified, floor-grantable in repo, and no Secret manifest
+// (infra's k8s files).
+func floorPathsOf(repo string, t landing.FloorTree) ([]GrantFloorPath, bool) {
 	out := []GrantFloorPath{}
 	ok := t.OnM0 && len(t.Files) > 0
 	for _, f := range t.Files {
-		entry := rules.InfraFloorEntry(f.Path)
+		entry := rules.FloorEntry(repo, f.Path)
 		if entry == "" || f.Secret || f.Kind != "A" && f.Kind != "M" || f.Mode != "100644" || !grantHex64.MatchString(f.SHA256) {
 			ok = false
 			continue
@@ -33,7 +34,9 @@ func floorPathsOf(t landing.FloorTree) ([]GrantFloorPath, bool) {
 }
 
 // floorCIOf is the infra CI success the operation is waiting on: R's run,
-// created after preparation and no later than now; zero otherwise.
+// created after preparation and no later than now; zero otherwise. A
+// platform floor grant names its pinned CI run instead, as the other
+// platform grants do.
 func floorCIOf(o landing.Operation, now time.Time) (GrantCI, bool) {
 	created := o.CI.Time("created_at")
 	ci := GrantCI{Pipeline: rules.LandingRepositories["bifrost-trade-infra"].CIPipeline, Run: o.CI.String("run"), UID: o.CI.String("uid"),

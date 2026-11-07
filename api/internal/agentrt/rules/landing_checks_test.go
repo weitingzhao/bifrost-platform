@@ -62,7 +62,7 @@ func TestLandingSoftRefusalsIndependentCategories(t *testing.T) {
 		want   LandingRefusal
 		mutate func(*Landing, *LandingChange)
 	}{
-		{"floor", LandingFloorSoft, func(l *Landing, c *LandingChange) {
+		{"floor", LandingFloorGrant, func(l *Landing, c *LandingChange) {
 			l.Repos[0].Allow = []string{"**"}
 			c.OldPath, c.NewPath = "api/internal/research/x.go", "api/internal/research/x.go"
 		}},
@@ -139,7 +139,7 @@ func TestLandingMixedCoreAndSoftEndpoints(t *testing.T) {
 	}
 	c.OldPath, c.NewPath = "api/internal/research/x.go", "api/internal/agentrt/store/x.go"
 	got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c})
-	if !reflect.DeepEqual(got, []LandingRefusal{LandingCore, LandingFloorSoft}) {
+	if !reflect.DeepEqual(got, []LandingRefusal{LandingCore, LandingFloorGrant}) {
 		t.Fatal(got)
 	}
 }

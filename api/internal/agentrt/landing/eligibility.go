@@ -211,15 +211,20 @@ func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
 	if f.Environment != "prod" || f.Mode != "live" || !f.GrantEnabled {
 		return false
 	}
-	if rules.FloorGrantSupported(f.Repo) {
-		var l *rules.Landing
-		if f.Rule != nil {
-			l = f.Rule.Landing
-		}
-		return rules.LandingFloorGrantable(l, f.Repo, f.Changes, soft)
+	// A floor-grantable change waits for approve_floor_landing. Platform
+	// keeps its own rule beside it: a core path (never floor-grantable)
+	// waits for approve_core_landing, a pinned root as before.
+	return rules.LandingFloorGrantable(landingOf(f), f.Repo, f.Changes, soft) ||
+		rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore) ||
+			touchesOpen(f) && !slices.Contains(soft, rules.LandingRulePaths))
+}
+
+// landingOf is f's signed landing rule, nil without one.
+func landingOf(f Facts) *rules.Landing {
+	if f.Rule == nil {
+		return nil
 	}
-	return rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore) ||
-		touchesOpen(f) && !slices.Contains(soft, rules.LandingRulePaths))
+	return f.Rule.Landing
 }
 
 // touchesOpen: some endpoint of f's change is an open path (rules.LandingOpen).
@@ -237,7 +242,7 @@ func touchesOpen(f Facts) bool {
 }
 
 // GrantSupported: some grant can reach repo's waiting operations (the two
-// platform grants, or infra's approve_floor_landing).
+// platform grants, or approve_floor_landing).
 func GrantSupported(repo string) bool {
 	return rules.GrantSupported(repo) || rules.FloorGrantSupported(repo)
 }
@@ -285,12 +290,10 @@ func Evaluate(ctx context.Context, read FactsReader, task, stage string, now tim
 }
 
 func floorDetail(f Facts) map[string]any {
-	if f.Repo != "bifrost-trade-infra" {
+	l := landingOf(f)
+	if f.Repo != "bifrost-trade-infra" && (f.Repo != "bifrost-platform" ||
+		!rules.LandingFloorGrantable(l, f.Repo, f.Changes, rules.LandingSoftRefusals(l, f.Repo, f.Changes))) {
 		return nil // Preserve platform's existing event body and grant evidence.
-	}
-	var l *rules.Landing
-	if f.Rule != nil {
-		l = f.Rule.Landing
 	}
 	return rules.PolicyFloorDetail(l, f.Repo, f.Changes)
 }

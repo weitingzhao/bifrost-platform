@@ -307,7 +307,8 @@ func TestFloorGrantExpiresDuringGitReads(t *testing.T) {
 
 // Serial: FreezeEventClock and the signing anchor. (b) and (d): a material
 // over a never-grantable tree cannot be granted; a guardrail or core grant
-// is never written for infra, and a floor grant never for platform.
+// is never written for infra, and a platform core change never takes a
+// floor grant.
 func TestFloorGrantKinds(t *testing.T) {
 	c := floorWait(t)
 	for _, action := range []string{store.ActionGuardrailLanding, store.ActionCoreLanding} {
@@ -332,7 +333,7 @@ func TestFloorGrantKinds(t *testing.T) {
 	core.FloorPaths = nil
 	err = appendGrant(t, c, infraStream, core)
 	refusedWith(t, err, "landing_grant")
-	if !store.GrantActionSupported(store.ActionFloorLanding, infraRepo) || store.GrantActionSupported(store.ActionFloorLanding, "bifrost-platform") {
+	if !store.GrantActionSupported(store.ActionFloorLanding, infraRepo) || !store.GrantActionSupported(store.ActionFloorLanding, "bifrost-platform") {
 		t.Fatal("floor grant support")
 	}
 	// Revocable on its own stream, as the other grants.
@@ -347,10 +348,14 @@ func TestFloorGrantKinds(t *testing.T) {
 
 	p := c5Wait(t, c5Core, false, true)
 	params := p.params(t)
+	p.src.FloorFiles = func(context.Context, string, string, string) (landing.FloorTree, error) {
+		return landing.FloorTree{OnM0: true, Files: []landing.FloorFile{{Path: c5Core, Kind: "M", Mode: "100644", SHA256: floorSHA}}}, nil
+	}
+	p.gsrc.Facts.FloorFiles = p.src.FloorFiles
 	_, err = store.WriteLandingGrant(ctx, p.w.rt, p.gsrc, p.approval(store.ActionFloorLanding, time.Minute), params)
-	refusedWith(t, err, "grant_unsupported")
+	refusedWith(t, err, "action_mismatch")
 	if n := p.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'landing_grant'`, landingRepoStream); n != 0 {
-		t.Fatal("platform floor grant written", n)
+		t.Fatal("platform floor grant written for a core change", n)
 	}
 }
 
@@ -362,4 +367,326 @@ func appendGrant(t *testing.T, c *floorCase, stream string, g store.LandingGrant
 	_, err = store.Append(ctx, tx, store.Event{Stream: stream, Type: "note", Actor: "controller", TaskID: g.Task,
 		Body: map[string]any{"text": "test: a hand-written grant", "landing_grant": g.Body()}})
 	return err
+}
+
+// floor_grant takes the floor grant on both repositories; core takes the
+// core grant, a floor_grant beside it included; anything else the guardrail.
+func TestGrantActionForRepo(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		repo   string
+		soft   []string
+		action string
+	}{
+		{infraRepo, []string{"floor_grant", "rule_paths"}, store.ActionFloorLanding},
+		{infraRepo, []string{"floor_grant"}, store.ActionFloorLanding},
+		{"bifrost-platform", []string{"floor_grant", "rule_paths"}, store.ActionFloorLanding},
+		{"bifrost-platform", []string{"core", "floor_grant"}, store.ActionCoreLanding},
+		{"bifrost-platform", []string{"core"}, store.ActionCoreLanding},
+		{"bifrost-platform", []string{"rule_paths"}, store.ActionGuardrailLanding},
+		{"bifrost-platform", []string{"floor_soft"}, store.ActionGuardrailLanding},
+	} {
+		if got := store.GrantActionFor(tc.repo, tc.soft); got != tc.action {
+			t.Errorf("%s %v: %s, want %s", tc.repo, tc.soft, got, tc.action)
+		}
+	}
+	for _, repo := range []string{infraRepo, "bifrost-platform"} {
+		if !store.GrantActionSupported(store.ActionFloorLanding, repo) {
+			t.Errorf("floor grant unsupported for %s", repo)
+		}
+	}
+}
+
+// The platform fixtures' paths fail what the grant tests rely on: c5Soft
+// rule_paths alone (the guardrail grant), c5Floor floor_grant with
+// rule_paths (the floor grant), c5Core core.
+func TestPlatformGrantFixturePaths(t *testing.T) {
+	t.Parallel()
+	r, err := rules.Parse([]byte(ruleText("landing:dev", 1, "initial", since, until, c5RuleBody)))
+	ok(t, err)
+	for path, want := range map[string][]rules.LandingRefusal{
+		c5Soft:  {rules.LandingRulePaths},
+		c5Floor: {rules.LandingFloorGrant, rules.LandingRulePaths},
+		c5Core:  {rules.LandingCore, rules.LandingRulePaths},
+	} {
+		changes := []rules.LandingChange{{OldPath: path, NewPath: path, OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1}}
+		soft := rules.LandingSoftRefusals(r.Landing, "bifrost-platform", changes)
+		if !slices.Equal(soft, want) || rules.LandingFloorGrantable(r.Landing, "bifrost-platform", changes, soft) != (path == c5Floor) {
+			t.Errorf("%s: soft %v, want %v", path, soft, want)
+		}
+	}
+}
+
+// platformFloorGrant is a well-formed platform floor grant of c5Floor, as
+// the executor writes it: its pinned files and the platform's pinned run.
+func platformFloorGrant() store.LandingGrant {
+	now := time.Now().UTC().Truncate(time.Second)
+	sha := strings.Repeat("a", 40)
+	digest := "sha256:" + strings.Repeat("b", 64)
+	task := "t_00000000000000000000000001"
+	return store.LandingGrant{V: "1", GrantID: "lg_appr_pf", ApprovalID: "appr_pf", ApprovalNumber: 1,
+		Action: store.ActionFloorLanding, ParamsHash: strings.Repeat("c", 64), Home: "prod", Env: "prod", Tenant: "dev", Repo: "bifrost-platform",
+		Task: task, Attempt: "a_00000000000000000000000001", Op: "land:" + task + ":1", A: sha, Base: sha, R: sha, M0: sha,
+		CommitterDate: now.Format(time.RFC3339Nano), CandidateDigest: digest, MaterialDigest: digest,
+		Waives: []string{"floor_grant", "rule_paths"}, SoftAtRequest: []string{"floor_grant", "rule_paths"}, Files: 1, Lines: 2,
+		Rule: store.GrantRule{ID: "landing:dev", Version: 1, SHA256: strings.Repeat("d", 64)}, ChecksVersion: 1,
+		CI:      store.GrantCI{Pipeline: "bifrost-ci-platform", Run: "green", UID: "uid", CreatedAt: now.Format(time.RFC3339Nano), Status: "Succeeded", SHA: sha},
+		Purpose: store.LandingGrantPurpose, ApprovedAt: now.Format(time.RFC3339Nano), GrantedAt: now.Format(time.RFC3339Nano),
+		ExpiresAt:  now.Add(store.LandingGrantTTL).Format(time.RFC3339Nano),
+		FloorPaths: []store.GrantFloorPath{{Path: c5Floor, Entry: "api/**", BlobSHA256: floorSHA}}}
+}
+
+// parseLandingGrant takes a platform floor grant whose floor_paths carry
+// rules.FloorEntry's entry in its own repository, and refuses one whose
+// entry is another's (or none), whatever the other repository says.
+func TestPlatformFloorGrantParse(t *testing.T) {
+	t.Parallel()
+	if _, err := store.ParseLandingGrantForTest(platformFloorGrant().Body()); err != nil {
+		t.Fatal("a well-formed platform floor grant:", err)
+	}
+	for name, edit := range map[string]func(*store.LandingGrant){
+		"another glob": func(g *store.LandingGrant) { g.FloorPaths[0].Entry = "scripts/**" },
+		"infra's entry": func(g *store.LandingGrant) {
+			g.FloorPaths = []store.GrantFloorPath{{Path: floorManifest, Entry: "k8s/**", BlobSHA256: floorSHA}}
+		},
+		"core path": func(g *store.LandingGrant) {
+			g.FloorPaths[0] = store.GrantFloorPath{Path: c5Core, Entry: "api/**", BlobSHA256: floorSHA}
+		},
+		"open path":      func(g *store.LandingGrant) { g.FloorPaths[0].Path = "api/internal/cluster/x.go" },
+		"no floor_paths": func(g *store.LandingGrant) { g.FloorPaths = nil },
+		"core waived": func(g *store.LandingGrant) {
+			g.Waives, g.SoftAtRequest = []string{"core", "floor_grant"}, []string{"core", "floor_grant"}
+		},
+		"pinned CI not R's": func(g *store.LandingGrant) { g.CI.SHA = strings.Repeat("e", 40) },
+	} {
+		g := platformFloorGrant()
+		edit(&g)
+		if _, err := store.ParseLandingGrantForTest(g.Body()); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	// A core grant on platform waives a floor_grant beside core; it pins no
+	// files.
+	core := platformFloorGrant()
+	core.Action, core.FloorPaths = store.ActionCoreLanding, nil
+	core.Waives, core.SoftAtRequest = []string{"core", "floor_grant"}, []string{"core", "floor_grant"}
+	if _, err := store.ParseLandingGrantForTest(core.Body()); err != nil {
+		t.Fatal("core grant waiving floor_grant:", err)
+	}
+	// Infra's floor grant is unchanged: its own entries pass, a platform
+	// path with a platform entry does not.
+	infra := platformFloorGrant()
+	infra.Repo, infra.CI.Pipeline = infraRepo, "bifrost-ci-infra"
+	infra.FloorPaths = []store.GrantFloorPath{{Path: floorManifest, Entry: "k8s/**", BlobSHA256: floorSHA}}
+	if _, err := store.ParseLandingGrantForTest(infra.Body()); err != nil {
+		t.Fatal("infra floor grant:", err)
+	}
+	infra.FloorPaths = []store.GrantFloorPath{{Path: c5Floor, Entry: "api/**", BlobSHA256: floorSHA}}
+	if _, err := store.ParseLandingGrantForTest(infra.Body()); err == nil {
+		t.Fatal("infra floor grant pinned a platform entry")
+	}
+}
+
+// The final gate's file check, per repository: the pinned files exactly,
+// each with FloorEntry's entry in the operation's repository.
+func TestFloorTreeStalePerRepo(t *testing.T) {
+	t.Parallel()
+	pinned := []store.GrantFloorPath{{Path: c5Floor, Entry: "api/**", BlobSHA256: floorSHA}}
+	file := landing.FloorFile{Path: c5Floor, Kind: "M", Mode: "100644", SHA256: floorSHA}
+	tree := func(files ...landing.FloorFile) landing.FloorTree { return landing.FloorTree{OnM0: true, Files: files} }
+	if why := store.FloorTreeStaleForTest("bifrost-platform", pinned, tree(file)); why != "" {
+		t.Fatal("exactly the pinned file:", why)
+	}
+	changed := file
+	changed.SHA256 = strings.Repeat("6", 64)
+	extra := landing.FloorFile{Path: "api/internal/research/other.go", Kind: "A", Mode: "100644", SHA256: floorSHA}
+	core := landing.FloorFile{Path: c5Core, Kind: "A", Mode: "100644", SHA256: floorSHA}
+	for name, tc := range map[string]struct {
+		repo string
+		tree landing.FloorTree
+		want string
+	}{
+		"changed byte":         {"bifrost-platform", tree(changed), "bytes changed"},
+		"extra file":           {"bifrost-platform", tree(file, extra), "extra file"},
+		"core file":            {"bifrost-platform", tree(file, core), "extra file"},
+		"missing file":         {"bifrost-platform", tree(), "missing file"},
+		"not on M0":            {"bifrost-platform", landing.FloorTree{Files: []landing.FloorFile{file}}, "R is not one commit"},
+		"another repo's entry": {infraRepo, tree(file), "entry changed"},
+	} {
+		if why := store.FloorTreeStaleForTest(tc.repo, pinned, tc.tree); !strings.HasPrefix(why, tc.want) {
+			t.Errorf("%s: %q, want %q", name, why, tc.want)
+		}
+	}
+	// An entry that is no longer FloorEntry's in the repository spends it.
+	if why := store.FloorTreeStaleForTest("bifrost-platform", []store.GrantFloorPath{{Path: c5Floor, Entry: "scripts/**", BlobSHA256: floorSHA}}, tree(file)); !strings.HasPrefix(why, "entry changed") {
+		t.Fatal("entry:", why)
+	}
+	// Infra's check is unchanged.
+	infraPinned := []store.GrantFloorPath{{Path: floorManifest, Entry: "k8s/**", BlobSHA256: floorSHA}}
+	infraFile := landing.FloorFile{Path: floorManifest, Kind: "M", Mode: "100644", SHA256: floorSHA}
+	if why := store.FloorTreeStaleForTest(infraRepo, infraPinned, tree(infraFile)); why != "" {
+		t.Fatal("infra:", why)
+	}
+	gh := landing.FloorFile{Path: ".github/workflows/x.yml", Kind: "A", Mode: "100644", SHA256: floorSHA}
+	if why := store.FloorTreeStaleForTest(infraRepo, infraPinned, tree(infraFile, gh)); !strings.HasPrefix(why, "never-grantable") {
+		t.Fatal("infra never-grantable:", why)
+	}
+}
+
+// A floor refusal's detail names its repository's floor paths: platform's
+// with grant_supported true, infra's false, each entry FloorEntry's in the
+// stream's repository.
+func TestFloorRefusalDetailPerRepo(t *testing.T) {
+	t.Parallel()
+	task := "t_00000000000000000000000001"
+	detail := func(supported bool, path, entry string) map[string]any {
+		return map[string]any{"soft": []any{"floor_grant", "rule_paths"}, "grant_supported": supported,
+			"floor_paths": []any{map[string]any{"path": path, "entry": entry}}}
+	}
+	event := func(stream string, d map[string]any) store.Event {
+		body := map[string]any{"v": "1", "task": task, "reason": "floor", "detail": d}
+		return store.Event{Stream: stream, Type: "note", Actor: "controller", TaskID: task, Body: map[string]any{"landing_refusal": body}}
+	}
+	for name, tc := range map[string]struct {
+		stream string
+		detail map[string]any
+		good   bool
+	}{
+		"platform":                   {landingRepoStream, detail(true, c5Floor, "api/**"), true},
+		"infra":                      {infraStream, detail(false, floorManifest, "k8s/**"), true},
+		"platform detail on infra":   {infraStream, detail(true, c5Floor, "api/**"), false},
+		"infra detail on platform":   {landingRepoStream, detail(false, floorManifest, "k8s/**"), false},
+		"platform with another glob": {landingRepoStream, detail(true, c5Floor, "scripts/**"), false},
+		"platform core path":         {landingRepoStream, detail(true, c5Core, "api/**"), false},
+	} {
+		ev := event(tc.stream, tc.detail)
+		bad := store.BadLandingRefusalForTest(ev.Body["landing_refusal"]) != "" || store.RefusalAppendForTest(ev) != nil
+		if bad == tc.good {
+			t.Errorf("%s: refused %v, want %v", name, bad, !tc.good)
+		}
+	}
+}
+
+const platformFloorFirstLine = "Approving lets agentrt-lander push this commit to platform main, once, fast-forward only, if the files it changes are still exactly these at R and platform CI is green on it."
+
+// platformFloorWait is c5Wait of c5Floor, an unpinned platform floor change
+// waiting at the final gate, with its M0..R read from tree.
+func platformFloorWait(t *testing.T) (*c5, *landing.FloorTree) {
+	t.Helper()
+	c := c5Wait(t, c5Floor, false, true)
+	tree := &landing.FloorTree{OnM0: true, Files: []landing.FloorFile{{Path: c5Floor, Kind: "M", Mode: "100644", SHA256: floorSHA}}}
+	c.src.FloorFiles = func(_ context.Context, repo, m0, r string) (landing.FloorTree, error) {
+		if repo != "bifrost-platform" || m0 != commitA || r != commitB {
+			t.Fatalf("floor files of %s %s..%s", repo, m0, r)
+		}
+		return landing.FloorTree{OnM0: tree.OnM0, Files: slices.Clone(tree.Files)}, nil
+	}
+	c.gsrc.Facts.FloorFiles = c.src.FloorFiles
+	if c.phase(t) != "awaiting_grant" {
+		t.Fatal("the platform floor change does not wait")
+	}
+	return c, tree
+}
+
+// Serial: FreezeEventClock and the signing anchor. A platform floor change
+// takes approve_floor_landing: its material pins the files and the pinned
+// CI run, the grant records both, and the final gate pushes R once with
+// landing_grant_use.
+func TestPlatformFloorGrantPinsFilesAndCI(t *testing.T) {
+	c, tree := platformFloorWait(t)
+	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
+	ok(t, err)
+	if len(m.Problems) != 0 || m.Action != store.ActionFloorLanding || !slices.Equal(m.SoftAtRequest, []string{"floor_grant", "rule_paths"}) ||
+		len(m.FloorPaths) != 1 || m.FloorPaths[0] != (store.GrantFloorPath{Path: c5Floor, Entry: "api/**", BlobSHA256: floorSHA}) ||
+		m.Title != "Platform floor change" || m.FirstLine != platformFloorFirstLine || len(m.Candidate.HardCorePaths) != 0 {
+		t.Fatalf("material: %+v", m)
+	}
+	// The pinned CI run and its key are in the candidate, as on the other
+	// platform grants.
+	if m.Candidate.CI.Run != "green" || m.Candidate.CI.UID != "uid-green" || m.Candidate.CI.Pipeline != "bifrost-ci-platform" || m.Candidate.CI.Siblings["bifrost-ui"] != commitC {
+		t.Fatalf("candidate CI: %+v", m.Candidate.CI)
+	}
+	// The pinned files are in material_digest alone.
+	tree.Files[0].SHA256 = strings.Repeat("6", 64)
+	other, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
+	ok(t, err)
+	if other.MaterialDigest == m.MaterialDigest || other.CandidateDigest != m.CandidateDigest {
+		t.Fatal("floor_paths are not in material_digest alone")
+	}
+	tree.Files[0].SHA256 = floorSHA
+	// The guardrail grant is not this change's.
+	_, err = store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(store.ActionGuardrailLanding, time.Minute), c.params(t))
+	refusedWith(t, err, "action_mismatch")
+	g := c.grant(t, store.ActionFloorLanding)
+	if g.Action != store.ActionFloorLanding || g.Repo != "bifrost-platform" || !slices.Equal(g.Waives, []string{"floor_grant", "rule_paths"}) ||
+		!slices.Equal(g.FloorPaths, m.FloorPaths) || g.MaterialDigest != m.MaterialDigest ||
+		g.CI.Pipeline != "bifrost-ci-platform" || g.CI.Run != "green" || g.CI.UID != "uid-green" || g.CI.SHA != commitB {
+		t.Fatalf("grant: %+v", g)
+	}
+	if n := c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'landing_grant'`, landingRepoStream); n != 1 {
+		t.Fatal("grants on landing:bifrost-platform", n)
+	}
+	auth, d := c.gate(t)
+	if !d.Allowed || auth.R != commitB || auth.M0 != commitA {
+		t.Fatalf("gate: %+v %+v", d, auth)
+	}
+	var use string
+	ok(t, c.w.rt.QueryRow(ctx, `SELECT body_json->'landing_grant_use'->>'grant_id' FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent'`,
+		landingRepoStream).Scan(&use))
+	if use != g.GrantID || c.phase(t) != "main_intent" {
+		t.Fatal("consumption", use, c.phase(t))
+	}
+	if _, d = c.gate(t); d.Allowed {
+		t.Fatal("authorized twice")
+	}
+}
+
+// Serial: FreezeEventClock and the signing anchor. The final gate of a
+// platform floor grant: a changed byte, an extra file or a newer CI run of
+// R spend the grant and nothing is pushed; CI not green yet holds it.
+func TestPlatformFloorGrantFinalGate(t *testing.T) {
+	stale := map[string]func(*c5, *landing.FloorTree){
+		"changed byte": func(_ *c5, tree *landing.FloorTree) { tree.Files[0].SHA256 = strings.Repeat("6", 64) },
+		"extra file": func(_ *c5, tree *landing.FloorTree) {
+			tree.Files = append(tree.Files, landing.FloorFile{Path: "api/internal/research/extra.go", Kind: "A", Mode: "100644", SHA256: floorSHA})
+		},
+		"core file": func(_ *c5, tree *landing.FloorTree) {
+			tree.Files = append(tree.Files, landing.FloorFile{Path: c5Core, Kind: "A", Mode: "100644", SHA256: floorSHA})
+		},
+		"newer CI run": func(c *c5, _ *landing.FloorTree) {
+			c.ci.Run, c.ci.UID, c.ci.CreatedAt = "green-2", "uid-green-2", c.ci.CreatedAt.Add(time.Minute)
+		},
+	}
+	for name, edit := range stale {
+		t.Run("stale/"+name, func(t *testing.T) {
+			c, tree := platformFloorWait(t)
+			g := c.grant(t, store.ActionFloorLanding)
+			edit(c, tree)
+			if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" {
+				t.Fatalf("gate: %+v", d)
+			}
+			if c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing_grant_refused'->>'grant_id'=$2`, landingRepoStream, g.GrantID) != 1 ||
+				c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent'`, landingRepoStream) != 0 {
+				t.Fatal("grant not spent, or pushed")
+			}
+			if usable, err := store.HasUsableLandingGrant(ctx, c.w.rt, c.op); err != nil || usable {
+				t.Fatal("spent grant usable", err)
+			}
+		})
+	}
+	t.Run("held/CI running", func(t *testing.T) {
+		c, _ := platformFloorWait(t)
+		c.grant(t, store.ActionFloorLanding)
+		c.ci.Status = "Running"
+		if _, d := c.gate(t); d.Allowed {
+			t.Fatalf("gate: %+v", d)
+		}
+		if c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'landing_grant_refused'`, landingRepoStream) != 0 {
+			t.Fatal("grant spent while CI ran")
+		}
+		c.ci.Status = "Succeeded"
+		if auth, d := c.gate(t); !d.Allowed || auth.R != commitB {
+			t.Fatalf("held grant did not push once green: %+v", d)
+		}
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,7 +72,11 @@ func headSQL(stream string) string {
 // started reporting that build; its latest claim is last_poll_at), and whether the controller reports it
 // offline (reported_offline: lost, active, not the external host, and no
 // stop or drain on it or on every host). The external host (0010) polls
-// only when the coordinator hands work in, so its silence is no news.
+// only when the coordinator hands work in, so its silence is no news. Elastic
+// slots (hostslots.go) add the count the slots pass recorded
+// (effective_slots, null while none is), the headroom of its latest claim
+// that sent one (the row's signals_json) and its latest moves, newest first
+// (slot_moves: at, policy, old, new, reason; at most SlotMovesShown).
 func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
@@ -85,7 +90,12 @@ func HostsSQL(now string) string {
 	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
 	    'reported_offline', h.state = 'active' AND h.host_kind <> 'external' AND ` + hostSilentSQL(now) + `
 	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
-	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))))
+	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))),
+	    'effective_slots', h.capacity_json->'effective_slots',
+	    'slot_moves', COALESCE((SELECT jsonb_agg(jsonb_build_object('at', m.at, 'policy', m.body_json->'policy', 'old', m.body_json->'old',
+	      'new', m.body_json->'new', 'reason', m.body_json->'reason') ORDER BY m.seq DESC)
+	      FROM (SELECT e.seq, e.at, e.body_json FROM agentrt.event e WHERE e.event_stream_id = 'host:' || h.host_id
+	        AND e.event_type = 'host_slots_set' ORDER BY e.seq DESC LIMIT ` + strconv.Itoa(SlotMovesShown) + `) m), '[]'::jsonb))
 	  ORDER BY h.host_id), '[]'::jsonb)
 	  FROM agentrt.host h
 	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o

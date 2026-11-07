@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -412,7 +413,42 @@ type claimRequest struct {
 	// The agentd build the host runs: its commit, whether the work tree had
 	// changes, and its binary's sha256; an agentd from before it sends none.
 	Build *store.AgentdBuild `json:"build,omitempty"`
+	// The host's headroom (R5 phase 2 step 3b, slotsignals.go): its
+	// one-minute load and cpus, its available and total memory; an agentd
+	// from before it sends none, one that cannot read a field leaves it out.
+	Load1    *float64 `json:"load1,omitempty"`
+	CPUs     *int     `json:"cpus,omitempty"`
+	MemAvail *int64   `json:"mem_avail_bytes,omitempty"`
+	MemTotal *int64   `json:"mem_total_bytes,omitempty"`
 }
+
+// signals is the headroom the request reports, nil when it reports none, or
+// why it cannot be taken.
+func (c claimRequest) signals() (*store.HostSignals, string) {
+	switch {
+	case (c.MemAvail == nil) != (c.MemTotal == nil):
+		return nil, "mem_avail_bytes and mem_total_bytes go together"
+	case c.CPUs != nil && *c.CPUs < 1:
+		return nil, "cpus is at least 1"
+	case c.MemTotal != nil && *c.MemTotal < 1:
+		return nil, "mem_total_bytes is at least 1"
+	case (c.Load1 == nil || c.CPUs == nil) && c.MemTotal == nil:
+		return nil, ""
+	}
+	s := &store.HostSignals{}
+	if c.Load1 != nil && c.CPUs != nil {
+		s.Load1, s.CPUs = *c.Load1, *c.CPUs
+	}
+	if c.MemTotal != nil {
+		s.MemAvail, s.MemTotal = *c.MemAvail, *c.MemTotal
+	}
+	return s, s.Valid()
+}
+
+// GrantedSlotsHeader carries a claim's granted_slots on every answer, the
+// 204 of a long poll that leased nothing included (store.GrantedSlots), so
+// agentd learns its count without a lease.
+const GrantedSlotsHeader = "X-Agentrt-Granted-Slots"
 
 // claim is the long poll for work: it tries until a task is leased or the
 // wait is over (204).
@@ -439,6 +475,17 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	head := store.Headroom{Load1: req.Load1, CPUs: req.CPUs, MemAvail: req.MemAvail, MemTotal: req.MemTotal}
+	if err := head.Check(); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	sig, why := req.signals()
+	if why != "" {
+		writeError(w, http.StatusBadRequest, "bad_request", why)
+		return
+	}
+	cr.Signals = sig
 	for _, t := range req.Tools {
 		if t.Executor == "" || t.Provider == "" {
 			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
@@ -484,6 +531,11 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, err)
 			return
 		}
+	}
+	// Its headroom too, when it moved or its record got old (slotsignals.go).
+	if _, err := store.RecordHostHeadroom(ctx, a.DB, req.HostID, head); err != nil {
+		a.fail(w, err)
+		return
 	}
 	// What the host offers is recorded once a request too, when it changed
 	// (W-31 3.5): the controller judges the executors from it. A host that
@@ -538,16 +590,35 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			if cl.SubjectEffect != "" {
 				body["subject_effect"] = cl.SubjectEffect
 			}
+			// How many attempts the host may hold now, this one included
+			// (elastic slots); an agentd from before it ignores the field.
+			body["granted_slots"] = cl.GrantedSlots
+			w.Header().Set(GrantedSlotsHeader, strconv.Itoa(cl.GrantedSlots))
 			writeJSON(w, http.StatusOK, body)
 			return
 		}
 		select {
 		case <-ctx.Done():
+			a.grantedHeader(w, r.Context(), req.HostID)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		case <-time.After(poll):
 		}
 	}
+}
+
+// grantedHeader sets GrantedSlotsHeader for host on a claim that leased
+// nothing; a count that cannot be read is left out (agentd keeps the one it
+// has) and logged.
+func (a *API) grantedHeader(w http.ResponseWriter, ctx context.Context, host string) {
+	gctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claimPollLimit)
+	defer cancel()
+	n, err := store.GrantedSlots(gctx, a.DB, host)
+	if err != nil {
+		a.logf("agentrt: the granted slots of host %s could not be read: %v", host, err)
+		return
+	}
+	w.Header().Set(GrantedSlotsHeader, strconv.Itoa(n))
 }
 
 // touch records a call of host's agentd claim loop other than a claim as

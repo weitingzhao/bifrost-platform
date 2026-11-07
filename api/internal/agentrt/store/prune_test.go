@@ -151,6 +151,12 @@ func TestPrunableFollowsTheRule(t *testing.T) {
 	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 0 {
 		t.Fatalf("landings again: %d (%v)", n, err)
 	}
+	var via string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'landed_via' FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
+	  AND body_json ? 'landed'`, accepted).Scan(&via))
+	if via != store.LandedViaHarvest {
+		t.Fatalf("the landing came %q", via)
+	}
 	if need, err := store.PruneMainsNeeded(ctx, w.rt, heads, later); err != nil || len(need) != 1 || need[0] != "bifrost-platform" {
 		t.Fatalf("mains needed a week after the landing: %v %v", need, err)
 	}

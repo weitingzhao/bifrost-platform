@@ -479,10 +479,10 @@ var catalog = []Action{
 	},
 	{
 		ID: "approve_floor_landing", Tier: TierD,
-		Description: "Infra floor change: grant one waiting bifrost-trade-infra landing operation whose files are all floor-grantable (k8s/**, scripts/**, docker/**, config/**, Makefile, docker-compose*.yml, mkdocs.yml, requirements*.txt, .gitignore, agent-config/** except its work directory, OWNER-STEPS-*, *RUNBOOK*, TICKET-*, REQUEST-*, RULE-*) the push to infra main by agentrt-lander, once, fast-forward only. " +
-			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-trade-infra. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant pins R, M0 and floor_paths: each file's path, the floor entry it matched and the sha256 of its bytes at R (GET /api/v1/agentrt/landing/{op}/material). " +
-			"Just before the push the final gate checks again that the grant is unexpired, unrevoked and unused, main is still M0 and R's only parent, infra CI (bifrost-ci-infra) is green on R, the release window is not held, and M0..R recomputed from Git changes exactly those files with the same sha256 and nothing else; a changed byte, an extra or missing file or a never-grantable path spends the grant and nothing is pushed. " +
+		Description: "Floor change: grant one waiting bifrost-trade-infra landing operation whose files are all floor-grantable (k8s/**, scripts/**, docker/**, config/**, Makefile, docker-compose*.yml, mkdocs.yml, requirements*.txt, .gitignore, agent-config/** except its work directory, OWNER-STEPS-*, *RUNBOOK*, TICKET-*, REQUEST-*, RULE-*) or a bifrost-platform operation whose files are all floor paths that are not permission paths (for example api/internal/testscope/, scripts/ci/), the push to its repository main by agentrt-lander, once, fast-forward only. " +
+			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-trade-infra or bifrost-platform. " +
+			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. For bifrost-platform the grant also pins the platform CI run (bifrost-ci-platform), and the final gate checks that pinned run. The grant pins R, M0 and floor_paths: each file's path, the floor entry it matched and the sha256 of its bytes at R (GET /api/v1/agentrt/landing/{op}/material). " +
+			"Just before the push the final gate checks again that the grant is unexpired, unrevoked and unused, main is still M0 and R's only parent, the repository CI (bifrost-ci-infra or bifrost-ci-platform) is green on R, the release window is not held, and M0..R recomputed from Git changes exactly those files with the same sha256 and nothing else; a changed byte, an extra or missing file or a never-grantable path spends the grant and nothing is pushed. " +
 			"Never-grantable paths (.env*, .github/, .gitea/, .gitmodules, .gitattributes, AGENTS.md, CLAUDE.md, SKILL.md, *.mdc, .claude/, .cursor/, .codex/, .vscode/, .idea/, *.code-workspace), a k8s file declaring kind: Secret, deletions, renames and more than 5 files or 1500 lines are refused and cannot be granted. " +
 			"The grant is valid 24 hours from the decision, used once, and can be revoked before the push. It writes Git only: a cluster write is separate (an Argo sync of infra main, or apply_manifest for a path Argo does not track).",
 		Params: landingGrantParams,
@@ -496,6 +496,19 @@ var catalog = []Action{
 			{Name: "environment", Type: "string", Required: true, In: "body"},
 			{Name: "run_id", Type: "string", Required: true, In: "body"},
 			{Name: "reason", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
+		ID: "agentrt_rule_approve", Tier: TierD,
+		Description: "Approve a capacity change of an agent runtime rule: the proposed next version (rule_proposed) takes effect without the Owner's signature, recorded with this approval (rule_approved). Tier D: only the Owner approves on the Console. " +
+			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod); rule_id, rule_version and text_artifact_id name the draft exactly as rule_proposed recorded it. " +
+			"Refused when created unless the draft exists, is the rule's next version and changes only capacity fields within their ceilings: concurrency per_host and its slots block, budget:<tenant>, landing:<tenant> limits and repo limits except max_in_flight, intake-gates max_live_per_product and routing quota_stop_percent; anything else, including the validity, still needs the Owner's signature. " +
+			"The card shows each changed field's old and new value. One open request per rule_id. The executor checks the draft again under the rule's lock; the same approval again is idempotent.",
+		Params: []Param{
+			{Name: "env", Type: "string", Required: true, In: "body"},
+			{Name: "rule_id", Type: "string", Required: true, In: "body"},
+			{Name: "rule_version", Type: "integer", Required: true, In: "body"},
+			{Name: "text_artifact_id", Type: "string", Required: true, In: "body"},
 		},
 	},
 	{

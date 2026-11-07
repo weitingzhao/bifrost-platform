@@ -186,6 +186,11 @@ func deterministicExecutor(self string, env []string) Executor {
 		if a.Subject != nil {
 			spec = *a.Subject
 		}
+		// The verify runs in a process of its own, which reads no
+		// AGENTD_* setting: a spec without a timeout carries this host's.
+		if spec.TimeoutS == 0 {
+			spec.TimeoutS = int(SpecLimit / time.Second)
+		}
 		body, err := json.Marshal(spec)
 		if err != nil {
 			return Spawn{}, err
