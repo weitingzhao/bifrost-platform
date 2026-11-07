@@ -114,7 +114,7 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 		"role": "implement", "round_no": 1, "max_rounds": 3, "depends_on": []string{}}})
 	// It came into running when its attempt started; its mission is active.
 	since := at
-	f.waits = [][]any{{fixtureLiveTask, &since, "", "active", "", (*time.Time)(nil), (*string)(nil), (*time.Time)(nil), "", []byte(`[]`)}}
+	f.waits = [][]any{{fixtureLiveTask, &since, "", "active", "", (*time.Time)(nil), (*string)(nil), (*time.Time)(nil), "", []byte(`[]`), "", []string(nil)}}
 	started := at
 	f.live = [][]any{{fixtureLiveAttempt, 1, fixtureLiveTask, "M-fixture", "h1", true, &at, (*bool)(nil), "exec:claude", "claude-opus", "running",
 		&started, at, "implement", "go", "running", false, (*int64)(nil), (*time.Time)(nil)}}

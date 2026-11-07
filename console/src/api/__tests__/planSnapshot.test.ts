@@ -48,6 +48,36 @@ describe('PV1 snapshot contract captured from the HTTP handler', () => {
     expect(view.working).toHaveLength(1)
     expect(view.nodes.every(n => n.lane_kind === 'Unclassified')).toBe(true)
   })
+  it('reads what a wait names: dependencies, the landing slot holder, the executor', () => {
+    const value = structuredClone(legacy)
+    const { attempt: _attempt, external_work: _external, ...base } = value.tasks[0]
+    const wait = (task_id: string, waiting: Record<string, unknown>) => ({ ...base, task_id, waiting })
+    const tasks = [
+      wait('t_01M6SZ4Z5SJKN0H2DN8KMX1BV1', { on: 'dependencies', reason: 'waits for 2 dependencies to be accepted', since: '2026-11-07T08:00:00Z',
+        depends_on: [{ task_id: 't_01M6SZ4Z5SJKN0H2DN8KMX1BV2', title: 'store', state: 'running' }, { task_id: 't_01M6SZ4Z5SJKN0H2DN8KMX1BV3', title: 'console', state: 'ready' }] }),
+      wait('t_01M6SZ4Z5SJKN0H2DN8KMX1BV4', { on: 'landing', reason: 'landing land:2 is in phase claimed', since: '2026-11-07T08:00:00Z',
+        slot_holder: { operation: 'land:3', task_id: 't_01M6SZ4Z5SJKN0H2DN8KMX1BV5', title: 'other root', phase: 'main_intent', since: '2026-11-07T08:01:00Z' } }),
+      wait('t_01M6SZ4Z5SJKN0H2DN8KMX1BV6', { on: 'queued', reason: 'waits for a host', executor: { executor: 'external:coordinator' } }),
+      wait('t_01M6SZ4Z5SJKN0H2DN8KMX1BV7', { on: 'host', reason: 'the host stopped answering', executor: { executor: 'exec:codex', host_id: 'h1' } }),
+      wait('t_01M6SZ4Z5SJKN0H2DN8KMX1BV8', { on: 'queued', reason: 'waits for a host; the store names no executor or pool it requires' }),
+    ]
+    const view = parsePlanSnapshot({ ...value, tasks: [...value.tasks, ...tasks] }, 'R2')
+    const waits = view.tasks.slice(-5).map(t => t.waiting)
+    expect(waits[0]?.depends_on?.map(d => d.title)).toEqual(['store', 'console'])
+    expect(waits[1]?.slot_holder).toMatchObject({ operation: 'land:3', phase: 'main_intent', title: 'other root' })
+    expect(waits[2]?.executor).toEqual({ executor: 'external:coordinator' })
+    expect(waits[3]?.executor).toEqual({ executor: 'exec:codex', host_id: 'h1' })
+    expect(waits[4]?.executor).toBeUndefined()
+    for (const change of [
+      (w: Record<string, unknown>) => { w.slot_holder = { ...(w.slot_holder as object), fabricated: true } },
+      (w: Record<string, unknown>) => { w.depends_on = [{ task_id: 't_01M6SZ4Z5SJKN0H2DN8KMX1BV2' }] },
+    ]) {
+      const bad = structuredClone(tasks)
+      change(bad[0].waiting)
+      change(bad[1].waiting)
+      expect(() => parsePlanSnapshot({ ...value, tasks: [...value.tasks, ...bad] }, 'R2')).toThrow(/Plan view/)
+    }
+  })
   it.each([
     ['version', (x: Record<string, unknown>) => { x.schema = 'agentrt.plan_view_response/v2' }],
     ['external version', (x: Record<string, unknown>) => { x.working = [{ ...fixture.working[0], v: 2 }] }],

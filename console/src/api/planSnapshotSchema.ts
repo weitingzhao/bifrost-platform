@@ -81,6 +81,11 @@ const landing = object({ stream: str, operation: str, phase: str, outcome: str, 
 const taskWaiting = object({
   on: one('stop', 'owner', 'checks', 'landing', 'dependencies', 'host', 'queued', 'rework', 'blocked', 'working'), reason: str, since: optional(timestamp),
   question_id: optional(str), checks: optional(array(object({ task_id: str, role: str, state: str }))),
+  // Each named only when it applies: the dependencies, the operation holding
+  // the landing slot, the executor a host or queued wait is for.
+  depends_on: optional(array(object({ task_id: str, title: str, state: str }))),
+  slot_holder: optional(object({ operation: str, task_id: str, title: str, phase: str, since: optional(timestamp) })),
+  executor: optional(object({ pool: optional(str), executor: optional(str), host_id: optional(str) })),
 })
 const task = object({ stopped: optional(object({ control_id: str, by: str, reason: str, since: timestamp })), withdrawn: optional(object({ by: str, reason: str, at: timestamp })), on_main: optional(object({ commit: str, via: str })), task_id: str, plan_node_id: str, mission_id: str, title: str, state: str, role: optional(str), round_no: optional(nonnegative), max_rounds: optional(nonnegative), waiting: optional(taskWaiting), attempt: optional(attempt), external_work: optional(array(external)), landing: optional(landing), delivery: optional(str) })
 const working: Parser<ReturnType<typeof external> | ReturnType<typeof task>> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : task(v, p)

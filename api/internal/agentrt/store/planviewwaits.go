@@ -36,13 +36,17 @@ const (
 // planViewWaitFacts are, per unfinished task of the root, the facts its wait
 // is read from: when and why it came into its state, its mission's state and
 // why, the open Owner card on it and the reason it was blocked with, and its
-// unfinished verify and review tasks.
+// unfinished verify and review tasks, its executor pin and the executors its
+// route's candidates name.
 const planViewWaitFacts = `SELECT t.task_id, s.at, COALESCE(s.body_json->>'reason', ''),
     COALESCE(m.state, ''), COALESCE(ms.body_json->>'reason', ''), ms.at,
     card.question_id, card.at, COALESCE(card.reason, ''),
     COALESCE((SELECT jsonb_agg(jsonb_build_object('task_id', c.task_id, 'role', c.role, 'state', c.state) ORDER BY c.task_id)
       FROM agentrt.task c WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review')
-        AND c.state NOT IN ('accepted','rejected','cancelled')), '[]')
+        AND c.state NOT IN ('accepted','rejected','cancelled')), '[]'),
+    COALESCE(t.executor_pin, ''),
+    ARRAY(SELECT DISTINCT j.executor_actor_id FROM jsonb_array_elements_text(t.route_json) r(id)
+      JOIN agentrt.job_candidate j ON j.job_candidate_id = r.id ORDER BY 1)
   FROM agentrt.task t JOIN tree USING(plan_node_id)
   LEFT JOIN agentrt.mission m ON m.mission_id = t.mission_id
   LEFT JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.task_id = t.task_id
@@ -60,11 +64,14 @@ type planViewWaitFact struct {
 	reason, mission, missionReason, why string
 	question                            *string
 	checks                              []map[string]any
+	pin                                 string
+	routeExecutors                      []string
 }
 
 // planViewWaits adds waiting to the plan view's tasks, read in the view's
 // transaction after planViewHolds (whose stopped and on_main it reads). The task query's
-// depends_on (its dependencies not yet accepted) is read here and not shown.
+// depends_on (its dependencies not yet accepted) is read here and not shown
+// as such: a task waiting on dependencies names each in waiting.depends_on.
 func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[string]any, snap *planFactsSnapshot, live map[string]*ProgressAttempt, now time.Time) error {
 	open := false
 	for _, t := range tasks {
@@ -80,7 +87,7 @@ func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 			var id string
 			var f planViewWaitFact
 			var checks []byte
-			if err = rows.Scan(&id, &f.since, &f.reason, &f.mission, &f.missionReason, &f.missionSince, &f.question, &f.cardAt, &f.why, &checks); err != nil {
+			if err = rows.Scan(&id, &f.since, &f.reason, &f.mission, &f.missionReason, &f.missionSince, &f.question, &f.cardAt, &f.why, &checks, &f.pin, &f.routeExecutors); err != nil {
 				rows.Close()
 				return err
 			}
@@ -95,9 +102,35 @@ func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 			return err
 		}
 	}
+	// Each wait names what it waits on: the dependencies and the task holding
+	// the landing slot are read by id (they may be tasks of another root).
+	deps := map[string][]string{}
+	holders := map[string]slotHolder{}
+	named := map[string]bool{}
 	for _, t := range tasks {
-		deps, _ := t["depends_on"].([]any)
+		raw, _ := t["depends_on"].([]any)
 		delete(t, "depends_on")
+		id, _ := t["task_id"].(string)
+		for _, d := range raw {
+			if d, _ := d.(string); d != "" {
+				deps[id] = append(deps[id], d)
+				named[d] = true
+			}
+		}
+		if t["state"] == "accepted" {
+			if h, ok := landingSlotHolder(snap, id); ok {
+				holders[id] = h
+				if h.o.Task != "" {
+					named[h.o.Task] = true
+				}
+			}
+		}
+	}
+	names, err := planViewTaskNames(ctx, tx, named)
+	if err != nil {
+		return err
+	}
+	for _, t := range tasks {
 		id, _ := t["task_id"].(string)
 		state, _ := t["state"].(string)
 		if t["on_main"] != nil {
@@ -106,6 +139,9 @@ func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 		if taskFinished(state) {
 			if state == "accepted" {
 				if w := landingWait(snap, id); w != nil {
+					if h, ok := holders[id]; ok {
+						w["slot_holder"] = h.view(names)
+					}
 					t["waiting"] = w
 				}
 			}
@@ -113,7 +149,81 @@ func planViewWaits(ctx context.Context, tx pgx.Tx, root string, tasks []map[stri
 		}
 		f := facts[id]
 		stop, _ := t["stopped"].(*ProgressStop)
-		t["waiting"] = taskWait(state, f, stop, len(deps), live[id], now)
+		w := taskWait(state, f, stop, len(deps[id]), live[id], now)
+		switch w["on"] {
+		case WaitDependencies:
+			list := []map[string]any{}
+			for _, d := range deps[id] {
+				n := names[d]
+				list = append(list, map[string]any{"task_id": d, "title": n.title, "state": n.state})
+			}
+			w["depends_on"] = list
+		case WaitHost:
+			if e := hostExecutor(live[id]); e != nil {
+				w["executor"] = e
+			}
+		case WaitQueued:
+			if e := f.executor(); e != nil {
+				w["executor"] = e
+			} else {
+				w["reason"] = w["reason"].(string) + "; the store names no executor or pool it requires"
+			}
+		}
+		t["waiting"] = w
+	}
+	return nil
+}
+
+type taskName struct{ title, state string }
+
+// planViewTaskNames reads the title and state of each task named.
+func planViewTaskNames(ctx context.Context, tx pgx.Tx, named map[string]bool) (map[string]taskName, error) {
+	names := map[string]taskName{}
+	if len(named) == 0 {
+		return names, nil
+	}
+	ids := make([]string, 0, len(named))
+	for id := range named {
+		ids = append(ids, id)
+	}
+	rows, err := tx.Query(ctx, `SELECT task_id, title, state FROM agentrt.task WHERE task_id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	var id string
+	var n taskName
+	_, err = pgx.ForEachRow(rows, []any{&id, &n.title, &n.state}, func() error {
+		names[id] = n
+		return nil
+	})
+	return names, err
+}
+
+// hostExecutor is the executor of a task waiting on its host: the live
+// attempt's executor and host.
+func hostExecutor(a *ProgressAttempt) map[string]any {
+	if a == nil || a.Executor == "" && a.HostID == "" {
+		return nil
+	}
+	e := map[string]any{}
+	if a.Executor != "" {
+		e["executor"] = a.Executor
+	}
+	if a.HostID != "" {
+		e["host_id"] = a.HostID
+	}
+	return e
+}
+
+// executor is what a queued task requires to be claimed, as the claim path
+// reads it (claim.go): its executor pin, else the one executor every
+// candidate of its route names. nil when the store requires none.
+func (f planViewWaitFact) executor() map[string]any {
+	switch {
+	case f.pin != "":
+		return map[string]any{"executor": f.pin}
+	case len(f.routeExecutors) == 1:
+		return map[string]any{"executor": f.routeExecutors[0]}
 	}
 	return nil
 }
@@ -219,17 +329,60 @@ func landingWait(snap *planFactsSnapshot, task string) map[string]any {
 // latestTaskLanding is the task's landing operation last written, the one
 // snapshotTaskLanding (planverificationview.go) shows.
 func latestTaskLanding(s *planFactsSnapshot, task string) (string, landing.Operation, bool) {
+	_, id, o, ok := latestTaskLandingStream(s, task)
+	return id, o, ok
+}
+
+// latestTaskLandingStream is latestTaskLanding with the stream it is in.
+func latestTaskLandingStream(s *planFactsSnapshot, task string) (string, string, landing.Operation, bool) {
 	var latest time.Time
-	var id string
+	var stream, id string
 	var out landing.Operation
 	found := false
-	for _, state := range s.Landings {
+	for name, state := range s.Landings {
 		for op, o := range state.Operations {
 			if o.Task != task || !o.LastAt.After(latest) {
 				continue
 			}
-			latest, id, out, found = o.LastAt, op, o, true
+			latest, stream, id, out, found = o.LastAt, name, op, o, true
 		}
 	}
-	return id, out, found
+	return stream, id, out, found
+}
+
+// slotHolder is the operation holding the landing slot of a stream.
+type slotHolder struct {
+	op string
+	o  landing.Operation
+}
+
+// landingSlotHolder is another operation of the same landing stream as the
+// task's latest landing operation that holds the repository's slot
+// (landing.Operation.HoldsSlot), one pushing to main first, then by id. An
+// operation pushing to main itself is past the slot and waits on no holder.
+func landingSlotHolder(s *planFactsSnapshot, task string) (slotHolder, bool) {
+	stream, own, o, ok := latestTaskLandingStream(s, task)
+	if !ok || o.Phase == "" || o.Terminal() || o.AtMain() {
+		return slotHolder{}, false
+	}
+	var out slotHolder
+	found := false
+	for op, other := range s.Landings[stream].Operations {
+		if op == own || !other.HoldsSlot() {
+			continue
+		}
+		if found && (out.o.AtMain() && !other.AtMain() || out.o.AtMain() == other.AtMain() && op > out.op) {
+			continue
+		}
+		out, found = slotHolder{op: op, o: other}, true
+	}
+	return out, found
+}
+
+func (h slotHolder) view(names map[string]taskName) map[string]any {
+	v := map[string]any{"operation": h.op, "task_id": h.o.Task, "title": names[h.o.Task].title, "phase": h.o.Phase}
+	if !h.o.LastAt.IsZero() {
+		v["since"] = timeText(h.o.LastAt)
+	}
+	return v
 }
