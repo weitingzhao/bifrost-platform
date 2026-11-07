@@ -77,9 +77,9 @@ func (g batchGit) Delete(context.Context, string, string) error { return nil }
 // was replayed from.
 type batchWorkspace struct{ r *batchRig }
 
-func (w batchWorkspace) Main(context.Context) (string, error) { return batchM0, nil }
-func (w batchWorkspace) Fetch(context.Context, string) error  { return nil }
-func (w batchWorkspace) Close() error                         { return nil }
+func (w batchWorkspace) Main(context.Context) (string, error)   { return batchM0, nil }
+func (w batchWorkspace) Fetch(context.Context, ...string) error { return nil }
+func (w batchWorkspace) Close() error                           { return nil }
 func (w batchWorkspace) Push(_ context.Context, ref, sha string) error {
 	w.r.mu.Lock()
 	defer w.r.mu.Unlock()

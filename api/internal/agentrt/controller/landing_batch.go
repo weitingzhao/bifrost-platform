@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,7 +35,7 @@ import (
 // on the one before, and the land branches pushed.
 type BatchWorkspace interface {
 	Main(ctx context.Context) (string, error)
-	Fetch(ctx context.Context, commit string) error
+	Fetch(ctx context.Context, commits ...string) error
 	Replay(ctx context.Context, in landinggit.ReplayInput) (string, error)
 	Push(ctx context.Context, ref, sha string) error
 	Close() error
@@ -120,30 +121,45 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 	} else {
 		after = ""
 	}
+	// Every candidate's facts are read at once, each with the whole claim
+	// budget: one read is a Git fetch of a few seconds, and read one after
+	// another (or on an even split of the pass) 24 candidates never fit, so
+	// no batch formed (2026-11-06). The reads only read; the claims below
+	// stay in candidate order.
+	type read struct {
+		f   landing.Facts
+		d   landing.Decision
+		err error
+	}
+	reads := make([]read, len(tasks))
+	var wg sync.WaitGroup
+	for i, task := range tasks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f, d, err := c.LandingDecision(ctx, c.Drill.Facts, task, "", "claim", now)
+			reads[i] = read{f, d, err}
+		}()
+	}
+	wg.Wait()
 	var errs []error
 	var cands []landing.BatchCandidate
 	for i, task := range tasks {
 		if len(landing.FormBatch(cands, now)) >= landing.BatchMax {
 			break
 		}
-		// At least drillMinShare each: an even split of the pass among 24
-		// candidates left each a few seconds, under one Git fetch, and every
-		// read failed (2026-11-06); what a read leaves goes to the next.
-		one, done := drillVisitShare(ctx, len(tasks)-i)
-		f, d, err := c.LandingDecision(one, c.Drill.Facts, task, "", "claim", now)
+		f, d, err := reads[i].f, reads[i].d, reads[i].err
 		switch {
 		case err != nil:
 			c.repoWaits(repo).record(task, false, c.clock())
 		case !d.Allowed:
 			var op string
-			if op, err = c.claimOne(one, repo, task, now); op != "" {
-				done()
+			if op, err = c.claimOne(ctx, repo, task, now); op != "" {
 				return true, errors.Join(append(errs, err, c.LandingDrillBranch(ctx, c.DrillGit[repo], op, now, repo))...)
 			}
 		default:
 			cands = append(cands, landing.BatchCandidate{Task: task, Facts: f})
 		}
-		done()
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -216,8 +232,16 @@ func (c *Controller) formBatch(ctx context.Context, repo string, members []landi
 				if m0, err = w.Main(ctx); err != nil {
 					return err
 				}
-			} else if err = w.Fetch(ctx, f.A); err != nil {
-				return err
+				// Every other member's result in one fetch, not one each.
+				var rest []string
+				for _, m := range members {
+					if !out[m.Task] && m.Facts.A != f.A {
+						rest = append(rest, m.Facts.A)
+					}
+				}
+				if err = w.Fetch(ctx, rest...); err != nil {
+					return err
+				}
 			}
 			_, n := landing.RootBudget(s, cand.Task)
 			op := fmt.Sprintf("land:%s:%d", cand.Task, n+1)
@@ -377,8 +401,13 @@ func (c *Controller) landingBatchBranch(ctx context.Context, g DrillGit, source 
 					return err
 				}
 				defer w.Close()
-			} else if err = w.Fetch(ctx, o.A); err != nil {
-				return err
+				var rest []string
+				for _, m := range b.Members[1:] {
+					rest = append(rest, s.Operations[m].A)
+				}
+				if err = w.Fetch(ctx, rest...); err != nil {
+					return err
+				}
 			}
 			r, err := w.Replay(ctx, landinggit.ReplayInput{A: o.A, Base: f.Base, M0: on, Task: o.Task, Attempt: o.Attempt, Mission: f.Mission,
 				Reviewers: f.Reviewers, Operation: op, RuleVersion: o.RuleVersion, AcceptedAt: f.AcceptedAt, CommitterDate: b.CommitterDate, Env: c.Env})
