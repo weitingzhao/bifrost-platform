@@ -85,6 +85,9 @@ type API struct {
 	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
 	// leaves it out and says why in the warnings.
 	Sessions func(context.Context) (any, error)
+	// ReleaseCycles reads the PROD release cycles for GET /delivery; nil
+	// means not wired, and the PROD stages are unknown with a warning.
+	ReleaseCycles func(context.Context) ([]store.ReleaseCycle, error)
 	// PinReason is what an implement task pinned to the coordinator without
 	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
 	PinReason store.PinReasonMode
@@ -198,6 +201,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("assess"), cfg).Post("/assessments/{kind}/{id}", a.requestAssessment)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
+		r.With(read, cfg).Get("/plan-timeline", a.getPlanTimeline)
+		r.With(read, cfg).Get("/delivery", a.getDelivery)
 		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
 		r.With(read, cfg).Get("/check-value", a.getCheckValue)
 		r.With(read, cfg).Get("/pin-share", a.getPinShare)
