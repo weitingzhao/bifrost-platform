@@ -35,6 +35,10 @@ import (
 // HostOffersStream holds what a host's claims offer (RecordHostOffered).
 func HostOffersStream(host string) string { return "offers:host:" + host }
 
+// HostBuildStream holds the agentd builds a host's claims report
+// (RecordHostBuild).
+func HostBuildStream(host string) string { return "build:host:" + host }
+
 // HostPresenceStream holds a host's presence turns (presencepass.go).
 func HostPresenceStream(host string) string { return "presence:host:" + host }
 
@@ -62,7 +66,9 @@ func headSQL(stream string) string {
 // (disk_low), whether it is deleting attempt branches it was handed
 // (pruning), its last contact (contact_at), whether it takes work
 // (claiming: true, false, or null while
-// not known yet; review 527 A3), and whether the controller reports it
+// not known yet; review 527 A3), the agentd build its claims last reported
+// (build, null until one is recorded, with build_at: when its claims
+// started reporting that build; its latest claim is last_poll_at), and whether the controller reports it
 // offline (reported_offline: lost, active, not the external host, and no
 // stop or drain on it or on every host). The external host (0010) polls
 // only when the coordinator hands work in, so its silence is no news.
@@ -74,6 +80,7 @@ func HostsSQL(now string) string {
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
+	    'build', b.head->'body'->'agentd_build', 'build_at', b.head->'at',
 	    'pruning', ` + pruneOpenSQL(now) + `, 'contact_at', hc.at,
 	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
 	    'reported_offline', h.state = 'active' AND h.host_kind <> 'external' AND ` + hostSilentSQL(now) + `
@@ -82,6 +89,7 @@ func HostsSQL(now string) string {
 	  ORDER BY h.host_id), '[]'::jsonb)
 	  FROM agentrt.host h
 	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o
+	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'build:host:' || h.host_id`) + ` AS head OFFSET 0) b
 	  ` + hostLiveJoins
 }
 
@@ -192,20 +200,117 @@ func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool, di
 	return recorded && err == nil, err
 }
 
+// AgentdBuild is the build of agentd a host runs, as its claims report it: the
+// commit it was built from, whether the work tree had changes then, and the
+// sha256 of its binary. The platform knows by it which build a host runs,
+// before and after agentd is deployed.
+type AgentdBuild struct {
+	Commit   string `json:"commit"`
+	SHA256   string `json:"sha256"`
+	Modified bool   `json:"modified"`
+}
+
+// Check says why b is not a build a claim may report, nil when it is: a
+// commit of 40 hex and a sha256 of 64, both lower case.
+func (b AgentdBuild) Check() error {
+	switch {
+	case !commitRE.MatchString(b.Commit):
+		return fmt.Errorf("store: an agentd build's commit is 40 lower-case hex, not %q", b.Commit)
+	case !sha256RE.MatchString(b.SHA256):
+		return fmt.Errorf("store: an agentd build's sha256 is 64 lower-case hex, not %q", b.SHA256)
+	}
+	return nil
+}
+
+func (b AgentdBuild) words() string {
+	w := "commit " + b.Commit[:12] + ", binary sha256 " + b.SHA256[:12]
+	if b.Modified {
+		w += ", built from a work tree with changes"
+	}
+	return w
+}
+
+// badAgentdBuild is why v is not a note's agentd_build, or "".
+func badAgentdBuild(v any) string {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return err.Error()
+	}
+	var m map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &m); err != nil || len(m) != 3 || m["commit"] == nil || m["sha256"] == nil || m["modified"] == nil {
+		return "an agentd build is exactly commit, sha256 and modified"
+	}
+	var b AgentdBuild
+	if err = json.Unmarshal(raw, &b); err != nil {
+		return err.Error()
+	}
+	if err = b.Check(); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+var latestBuildSQL = `SELECT ` + headSQL("$1::text") + `->'body'->'agentd_build'`
+
+// RecordHostBuild records the agentd build host's claim reports when it
+// differs from what its build stream last recorded (or nothing is recorded
+// yet): a note with it, whose time is when the host's claims started
+// reporting it. It reports whether it recorded one. A claim request calls it
+// once, before its polls; the stream is locked before its head is read
+// again, so two claims of one host record a change once.
+func RecordHostBuild(ctx context.Context, db DB, host string, b AgentdBuild) (bool, error) {
+	if err := b.Check(); err != nil {
+		return false, err
+	}
+	stream := HostBuildStream(host)
+	same := func(tx pgx.Tx) (bool, error) {
+		var raw []byte
+		if err := tx.QueryRow(ctx, latestBuildSQL, stream).Scan(&raw); err != nil || raw == nil {
+			return false, err
+		}
+		var last AgentdBuild
+		if err := json.Unmarshal(raw, &last); err != nil {
+			return false, err
+		}
+		return last == b, nil
+	}
+	recorded := false
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		recorded = false
+		if s, err := same(tx); err != nil || s {
+			return err
+		}
+		if err := lockStream(ctx, tx, stream); err != nil {
+			return err
+		}
+		if s, err := same(tx); err != nil || s {
+			return err
+		}
+		_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
+			Body: map[string]any{"text": "Host " + host + " runs agentd " + b.words() + ".",
+				"agentd_build": map[string]any{"commit": b.Commit, "sha256": b.SHA256, "modified": b.Modified}}})
+		recorded = err == nil
+		return err
+	})
+	return recorded && err == nil, err
+}
+
 // HostPresence is a host as the hosts document has it.
 type HostPresence struct {
-	HostID          string     `json:"host_id"`
-	HostKind        string     `json:"host_kind"`
-	State           string     `json:"state"`
-	LastPollAt      *time.Time `json:"last_poll_at"`
-	Online          bool       `json:"online"`
-	ReportedOffline bool       `json:"reported_offline"`
-	Pruning         bool       `json:"pruning"`
-	Claiming        *bool      `json:"claiming"`
-	ContactAt       *time.Time `json:"contact_at"`
-	DiskLow         bool       `json:"disk_low"`
-	LiveAttempts    int        `json:"live_attempts"`
-	Offered         *[]Offer   `json:"offered"`
+	HostID          string       `json:"host_id"`
+	HostKind        string       `json:"host_kind"`
+	State           string       `json:"state"`
+	LastPollAt      *time.Time   `json:"last_poll_at"`
+	Online          bool         `json:"online"`
+	ReportedOffline bool         `json:"reported_offline"`
+	Pruning         bool         `json:"pruning"`
+	Claiming        *bool        `json:"claiming"`
+	ContactAt       *time.Time   `json:"contact_at"`
+	DiskLow         bool         `json:"disk_low"`
+	LiveAttempts    int          `json:"live_attempts"`
+	Offered         *[]Offer     `json:"offered"`
+	Build           *AgentdBuild `json:"build"`
+	BuildAt         *time.Time   `json:"build_at"`
 	Controls        []struct {
 		Kind string `json:"kind"`
 	} `json:"controls"`

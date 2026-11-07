@@ -104,8 +104,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// This binary's build goes with every claim, so the platform knows which
+	// build the host runs before and after a deploy.
+	build, err := agentd.ReadBuild(self)
+	if err != nil {
+		log.Printf("agentd: %v; claims go without the build", err)
+	} else {
+		log.Printf("agentd: build commit %s modified=%v sha256 %s", build.Commit, build.Modified, build.SHA256)
+	}
 	d := &agentd.Daemon{
-		Client:   &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token},
+		Client:   &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token, Build: build},
 		Registry: reg,
 		Root:     cfg.root,
 		Self:     self,

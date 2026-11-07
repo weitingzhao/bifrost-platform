@@ -247,6 +247,10 @@ var bodies = map[string][]field{
 		// it reports is below the floor, when either changed (presence.go,
 		// W-31 3.5).
 		{"offered", kAny, true}, {"disk_below", kBool, true},
+		// agentd_build: on a host's build stream, the agentd build its
+		// claims report (commit, sha256, modified), when it changed
+		// (presence.go).
+		{"agentd_build", kAny, true},
 		// prune_round: on a host's prune stream, a round of deleting the
 		// attempt branches it was handed, opened or closed (presencelive.go,
 		// review 526 A1).
@@ -604,6 +608,9 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "stg_release" {
 		return badStgRelease(v)
+	}
+	if eventType == "note" && name == "agentd_build" {
+		return badAgentdBuild(v)
 	}
 	if eventType == "note" && name == "landing" {
 		if _, err := landing.Parse(v); err != nil {
