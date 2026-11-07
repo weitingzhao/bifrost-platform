@@ -19,8 +19,9 @@ import (
 // nothing maps the batch is split in half and tested again. No protocol kind
 // is new: the batch itself is a controller note beside the protocol.
 
-// BatchMax is the most members a batch has.
-const BatchMax = 8
+// BatchMax is the most members a batch has (Owner 2026-11-06: 1000); the
+// rule's limits.max_batch may set fewer, and the day's quota left bounds it.
+const BatchMax = 1000
 
 // BatchCandidate is a root that may join a batch, with the facts its claim
 // would be judged on (read with no operation yet).
@@ -33,7 +34,8 @@ type BatchCandidate struct {
 func BatchID(lead string) string { return "batch:" + lead }
 
 // FormBatch picks a batch's members from cands, in their order: at most
-// BatchMax, and no more than the day's quota leaves; bifrost-platform
+// the rule's limits.max_batch when set, and no more than the day's quota
+// leaves (at most BatchMax); bifrost-platform
 // roots of one tenant only (every other repository keeps the one-operation
 // path); no root that S5 must check (S5 keeps its own path, alone); and no
 // root its claim refuses on policy (a floor or rule refusal, or soft checks
@@ -58,6 +60,9 @@ func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
 		}
 		if f.Rule != nil && f.Rule.Landing != nil {
 			limit = min(limit, f.Rule.Landing.Limits.MaxLandingsPerDay-f.ReservedToday)
+			if m := f.Rule.Landing.Limits.MaxBatch; m > 0 {
+				limit = min(limit, m)
+			}
 		}
 		if len(out) >= limit {
 			break
