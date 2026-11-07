@@ -32,7 +32,7 @@ func TestS66LegacySignedBodyGolden(t *testing.T) {
 	if fmt.Sprintf("%x", sha256.Sum256(raw)) != "ddeacc2a9235816d1c1be1f3cf10ff0612902cda09a842034865e7363a3ee145" {
 		t.Fatal("signed fixture changed")
 	}
-	if len(r.Landing.Repos) != 1 || r.Landing.Repos[0].Limits != nil || r.Landing.EffectiveLimits("bifrost-platform") != (LandingLimits{10, 300, 5, 1}) {
+	if len(r.Landing.Repos) != 1 || r.Landing.Repos[0].Limits != nil || r.Landing.EffectiveLimits("bifrost-platform") != (LandingLimits{10, 300, 5, 1, 0}) {
 		t.Fatal("legacy rule expanded", r.Landing)
 	}
 	if _, ok := r.Landing.Repo("bifrost-trade-infra"); ok {

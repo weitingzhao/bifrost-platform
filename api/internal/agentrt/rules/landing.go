@@ -37,7 +37,9 @@ func (l *Landing) EffectiveLimits(repo string) LandingLimits {
 	return v
 }
 
-type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo int }
+// MaxBatch is the most members a landing batch has; 0 (the field left out)
+// sets no cap of its own, only the day's quota left bounds a batch.
+type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo, MaxBatch int }
 
 func (r *Rule) landing(o *object, arg string) error {
 	l := &Landing{}
@@ -126,6 +128,11 @@ func (r *Rule) landing(o *object, arg string) error {
 			return err
 		}
 	}
+	if _, ok := lim.fields["max_batch"]; ok {
+		if l.Limits.MaxBatch, err = lim.integer("max_batch", 1, 1<<30); err != nil {
+			return err
+		}
+	}
 	if err := lim.done(); err != nil {
 		return err
 	}
@@ -141,7 +148,11 @@ func (l *Landing) doc() map[string]any {
 		}
 		repos = append(repos, row)
 	}
-	return map[string]any{"tenant": l.Tenant, "repos": repos, "limits": map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_landings_per_day": l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}}
+	limits := map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_landings_per_day": l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}
+	if l.Limits.MaxBatch > 0 {
+		limits["max_batch"] = l.Limits.MaxBatch
+	}
+	return map[string]any{"tenant": l.Tenant, "repos": repos, "limits": limits}
 }
 func (l *Landing) Repo(name string) (LandingRepo, bool) {
 	if l != nil {

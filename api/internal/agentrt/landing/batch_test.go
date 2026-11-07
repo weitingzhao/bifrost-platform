@@ -23,7 +23,8 @@ func batchTasks(cs []BatchCandidate) []string {
 }
 
 // R5:5.7 goal 2: a batch is the platform's waiting roots in candidate
-// order, at most BatchMax and what the day's quota leaves; never an S5 root
+// order, at most the rule's max_batch (none set: no cap) and what the day's
+// quota leaves; never an S5 root
 // or another repository's; the first root that may wait for a grant leads.
 func TestBatchFormation(t *testing.T) {
 	t.Parallel()
@@ -34,8 +35,21 @@ func TestBatchFormation(t *testing.T) {
 		c.Facts.Rule.Landing.Limits.MaxLandingsPerDay = 20
 		cands = append(cands, c)
 	}
-	if got := FormBatch(cands, now); len(got) != BatchMax || !slices.Equal(batchTasks(got), batchTasks(cands[:BatchMax])) {
-		t.Fatal("not the first BatchMax in order", batchTasks(got))
+	// No max_batch: all ten, past the old fixed 8 (2026-11-06 Owner: the
+	// batch size is the rule's, not the code's).
+	if got := FormBatch(cands, now); !slices.Equal(batchTasks(got), batchTasks(cands)) {
+		t.Fatal("not every root in order", batchTasks(got))
+	}
+	capped := slices.Clone(cands)
+	for i := range capped {
+		f := capped[i].Facts
+		r := *f.Rule
+		l := *r.Landing
+		l.Limits.MaxBatch, r.Landing, f.Rule = 3, &l, &r
+		capped[i].Facts = f
+	}
+	if got := FormBatch(capped, now); !slices.Equal(batchTasks(got), batchTasks(cands[:3])) {
+		t.Fatal("not the rule's max_batch first in order", batchTasks(got))
 	}
 	// The day's quota: five a day, two reserved already, leaves three.
 	quota := slices.Clone(cands[:6])
