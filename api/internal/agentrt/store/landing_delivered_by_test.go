@@ -535,16 +535,16 @@ func TestDeliveredByRunsAfterTheWork(t *testing.T) {
 		t.Fatal("a backfill started on less than DeliveredByMinShare")
 	}
 
-	// 12 s: 6 s for the cleanup, 6 s of work, all of it the one pending
-	// operation's; the backfill gets the rest of the work's 6 s.
+	// 12 s: 6 s for the cleanup, 6 s of work, the visits' half (3 s) the one
+	// pending operation's; the backfill gets the rest of the work's 6 s.
 	g, start, end := run(12 * time.Second)
 	switch {
 	case g.changesAt.IsZero():
 		t.Fatal("the backfill did not run after the work")
 	case !g.refAt.Before(g.changesAt):
 		t.Fatalf("the backfill ran before the work: ref %s, changes %s", g.refAt.Sub(start), g.changesAt.Sub(start))
-	case g.refDeadline.Sub(start) < 5500*time.Millisecond:
-		t.Fatalf("the pending operation's share ends %s after the pass began, want about 6s", g.refDeadline.Sub(start))
+	case g.refDeadline.Sub(start) < 2500*time.Millisecond:
+		t.Fatalf("the pending operation's share ends %s after the pass began, want about 3s", g.refDeadline.Sub(start))
 	case g.changesDeadline.After(end.Add(-6*time.Second + 50*time.Millisecond)): // the clock moves between reads
 		t.Fatalf("the backfill's read ends %s before the pass does, inside the cleanup's 6s", end.Sub(g.changesDeadline))
 	}
