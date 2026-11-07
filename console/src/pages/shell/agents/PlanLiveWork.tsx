@@ -1,3 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
+import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
+import { fetchAttemptActions } from '@/api/agentRuntimeBus'
+import { ActionLabel, ago, ATTEMPT_ACTION_STUCK_MS } from '../progress/attemptActionWords'
 import { useState } from 'react'
 import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
@@ -25,6 +29,19 @@ function duration(seconds: number | undefined) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
 }
+function LiveAttemptAction({ attempt, now }: { attempt: NonNullable<Exclude<PlanWork, ExternalWork>['attempt']>; now: number }) {
+  const query = useQuery({ queryKey: ['agent-runtime-actions-last', attempt.attempt_id],
+    queryFn: ({ signal }) => fetchAttemptActions(attempt.attempt_id, { last: 1 }, signal), refetchInterval: q => q.state.data?.unavailable ? false : AGENT_RUNTIME_POLL_MS, retry: false })
+  const action = query.data?.actions.at(-1)
+  if (query.isError) return <div className="basis-full text-xs text-muted-foreground">Last action Unknown · {query.error.message}</div>
+  if (query.data?.unavailable) return <div className="basis-full text-xs text-muted-foreground">Last action Unknown · actions are not kept on this platform</div>
+  if (query.isPending) return <div className="basis-full text-xs text-muted-foreground">Reading actions…</div>
+  const age = now - Date.parse(action ? action.at : attempt.started_at ?? '')
+  return <div className="flex basis-full min-w-0 flex-col gap-1 text-xs">
+    {action ? <div className="flex min-w-0 gap-2"><ActionLabel action={action} /><code className="min-w-0 flex-1 truncate" title={action.target}>{action.target}</code><span className="shrink-0">{ago(action.at, now)}</span></div> : <span>no actions yet</span>}
+    {age > ATTEMPT_ACTION_STUCK_MS && <span style={{ color: 'var(--color-danger)' }}>Possibly stuck · no action for {Math.floor(age / 60_000)} min</span>}
+  </div>
+}
 /** One registered piece of work now (Live and a module's Live on card): its executor, task, step, state and heartbeat. */
 export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnapshot; stale: boolean }) {
   const now = useNow()
@@ -48,6 +65,7 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
       {!external && <> · Host · {work.attempt!.host_id || 'Unknown'}{work.external_work?.length ? ` · Linked external history · ${work.external_work.length} records` : ''} · {work.attempt!.reason}</>}
     </span>
     {work.task_id && <span className="basis-full"><DeliveryStrip task={work.task_id} /></span>}
+    {!external && <LiveAttemptAction attempt={work.attempt!} now={now} />}
     {!external && <a className="inline-flex min-h-11 items-center text-sm" href={goalHref(work.mission_id, work.task_id)}>Open task</a>}
   </li>
 }

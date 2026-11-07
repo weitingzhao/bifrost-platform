@@ -1,12 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { AGENT_RUNTIME_POLL_MS, type RuntimeAttempt } from '@/api/agentRuntime'
-import { fetchAttemptActions, type AttemptAction } from '@/api/agentRuntimeBus'
-import { ago } from './ownerModel'
+import { fetchAttemptActions } from '@/api/agentRuntimeBus'
+import { ActionLabel, ago } from '../progress/attemptActionWords'
 
-export function ActionLabel({ action }: { action: AttemptAction }) {
-  const label = action.kind === 'result' ? `Exit ${action.code ?? '?'}` : ({ read: 'Read', edit: 'Edit', run: 'Run' }[action.kind] ?? action.kind)
-  return <span className="shrink-0 font-semibold" style={action.kind === 'result' && action.code !== undefined && action.code !== 0 ? { color: 'var(--color-danger)' } : undefined}>{label}</span>
-}
 /** The latest action of a live attempt; who (executor · host) unless the caller shows it already. */
 export function AttemptActionLine({ attempt, now, who = true }: { attempt: RuntimeAttempt; now: number; who?: boolean }) {
   const query = useQuery({ queryKey: ['agent-runtime-actions-last', attempt.attempt_id],

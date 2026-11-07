@@ -1,3 +1,7 @@
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { heartbeatUnconfirmed } from './needsCleanupModel'
+import { stepRows } from './stepStateModel'
+import { workTabHref } from './workViewModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
@@ -118,9 +122,42 @@ function RoundView({ plan, tab, query, waits, scope, node, failed }: { plan: Ret
   const now = useNow()
   const count = signoffCount(waits, { view: query.data, failed: failureOf(query), root: plan.root, rounds: plan.rounds, scope, now })
   return <>
+    <WorkVerdict plan={plan} query={query} />
     <WorkSummaryCard plan={plan} query={query} count={count} />
     <Tabbed plan={plan} tab={tab} query={query} count={count} node={node} failed={failed} />
   </>
+}
+
+/** The verdict uses the same snapshot, heartbeat rule and step rows as the body. */
+function WorkVerdict({ plan, query }: { plan: ReturnType<typeof usePlanAddress>; query: ReturnType<typeof usePlanSnapshot> }) {
+  const now = useNow()
+  const asks = useOwnerAsks()
+  const view = query.data
+  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
+  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
+  const rows = view ? stepRows(view, { failed: failureOf(query), now, asks, runtime }) : []
+  const unknown = !view || !!viewOldReason(view, view.root, failureOf(query), now)
+    || asks.questions.state !== 'ok' || asks.requests.state !== 'ok'
+  const stuck = view?.working.filter(w => {
+    const run = 'external_work_id' in w ? w : w.attempt
+    return !!run && heartbeatUnconfirmed(run, view, now)
+  }).length ?? 0
+  const running = (view?.working.length ?? 0) - stuck
+  const waiting = new Set([
+    ...(view?.owner_waiting.map(w => w.plan_node_id) ?? []),
+    ...rows.flatMap(r => r.cells.filter(c => c.now && 'waiting' in c.now && c.now.waiting.length > 0).map(c => c.id)),
+  ]).size
+  const total = rows.reduce((n, r) => n + r.total, 0)
+  const done = rows.reduce((n, r) => n + r.done, 0)
+  const percent = total ? Math.round(done * 100 / total) : 0
+  const lamp = unknown ? 'unknown' : stuck ? 'fail' : waiting ? 'degraded' : 'ok'
+  const live = workTabHref('live', plan.root, plan.from === 'address')
+  return <OpsVerdictStrip title="WORK" ariaLabel="Work verdict" lamp={lamp}
+    tagLabel={unknown ? 'Unknown' : stuck ? 'Possibly stuck' : waiting ? 'Waiting on you' : 'Running'}
+    tagVariant={unknown ? 'neutral' : stuck ? 'danger' : waiting ? 'warning' : 'success'}
+    summary={unknown ? 'Work status Unknown · plan view or actions could not be read.' : <>
+      {running} running · <a href={live} aria-label={`Possibly stuck · ${stuck}`}>{stuck} possibly stuck</a> · <a href={live} aria-label={`Waiting on you · ${waiting}`}>{waiting} waiting</a> · plan {percent}%
+    </>} />
 }
 
 /** Why the plan view's latest read failed: offline, or its error; null while it did not. */

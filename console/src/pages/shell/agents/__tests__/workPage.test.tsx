@@ -37,6 +37,7 @@ let client: QueryClient
 let fetcher: ReturnType<typeof vi.fn>
 let failing: RegExp | null
 /** R4 as PROD answered on 2026-11-01: fifteen steps with an external_verified done rule, so R4 is an acceptance root. */
+let verdictCase: 'stuck' | 'owner' | null
 let acceptanceR4: boolean
 /** While set, GET /progress does not answer (a cold load: the rounds are being read); its call releases them. */
 let holdProgress: (() => void) | null
@@ -61,6 +62,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   Element.prototype.scrollIntoView = vi.fn()
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+  verdictCase = null
   failing = null
   acceptanceR4 = false
   holdProgress = null
@@ -68,12 +70,19 @@ beforeEach(() => {
   fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (failing?.test(url)) return json({ error: 'unavailable', message: 'unavailable' }, 503)
+    if (url.includes('/questions?')) return json({ questions: [] })
+    if (url.includes('/approvals?')) return json({ approvals: [] })
     if (url.endsWith('/agentrt/progress') && holdProgress) {
       held ??= new Promise<void>(release => { holdProgress = release })
       await held
     }
     const view = /plan-view\?root=R(\d+)(?:&explain=1)?$/.exec(url)
-    if (view) return json({ ...planView(Number(view[1])), as_of: prod.as_of })
+    if (view) {
+      const snapshot = { ...planView(Number(view[1])), as_of: prod.as_of }
+      if (verdictCase === 'stuck') snapshot.working = [{ ...snapshot.external_work[0], state: 'Running', status: 'Unconfirmed', heartbeat_age_s: 61 }]
+      if (verdictCase === 'owner') snapshot.owner_waiting = [{ task_id: 'waiting-task', plan_node_id: 'R5:5.1-3', reason: 'Owner decision', source: 'test' }]
+      return json(snapshot)
+    }
     const tree = /\/agentrt\/plan\?root=(R\d+)$/.exec(url)
     if (tree) {
       const nodes = planView(Number(tree[1].slice(1))).nodes.map((n: Record<string, unknown>) => ({ ...n, signoffs: [] }))
@@ -296,5 +305,36 @@ describe('with an acceptance root beside the newest round (PROD 2026-11-01: R4)'
     await waitFor(() => expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4&explain=1')).toHaveLength(1))
     await waitFor(() => expect(within(signoffs).queryByText('Reading acceptance sign-offs…')).toBeNull())
     expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4&explain=1')).toHaveLength(1)
+  })
+})
+
+
+describe('Work verdict', () => {
+  it.each([
+    ['stuck', 'Possibly stuck', '1 possibly stuck', 'fail'],
+    ['owner', 'Waiting on you', '1 waiting', 'degraded'],
+    [null, 'Running', '0 waiting', 'ok'],
+  ] as const)('shows the %s verdict from the body reads', async (scenario, label, words, lamp) => {
+    verdictCase = scenario
+    client.setQueryData(['questions', 'all'], [])
+    client.setQueryData(['approvals', 'open'], [])
+    page('#work?root=R5')
+    const strip = await screen.findByRole('region', { name: 'Work verdict' })
+    await waitFor(() => expect(strip).toHaveTextContent(words))
+    expect(strip).toHaveTextContent(label)
+    expect(strip.querySelector(`.lamp-${lamp}`)).toBeInTheDocument()
+    expect(within(strip).getByRole('link', { name: /Possibly stuck ·/ })).toHaveAttribute('href', '#work?tab=live&root=R5')
+    expect(within(strip).getByRole('link', { name: /Waiting on you ·/ })).toHaveAttribute('href', '#work?tab=live&root=R5')
+    expect(strip).toHaveTextContent(/plan \d+%/)
+  })
+
+  it.each([/plan-view/, /\/questions/])('shows Unknown when %s cannot be read', async failure => {
+    failing = failure
+    page('#work')
+    const strip = await screen.findByRole('region', { name: 'Work verdict' })
+    await waitFor(() => expect(client.getQueryCache().getAll().some(q => q.state.status === 'error' && q.queryKey[0] === (failure.source === 'plan-view' ? 'agent-runtime-plan-view' : 'questions'))).toBe(true))
+    await waitFor(() => expect(strip).toHaveTextContent('Unknown'))
+    expect(strip.querySelector('.lamp-unknown')).toBeInTheDocument()
+    expect(strip).not.toHaveTextContent('0 running')
   })
 })

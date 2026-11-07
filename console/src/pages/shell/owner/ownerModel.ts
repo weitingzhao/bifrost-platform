@@ -1,3 +1,5 @@
+import { ago } from '../progress/attemptActionWords'
+export { ago } from '../progress/attemptActionWords'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import type { MissionEta, RuntimeProgress } from '@/api/agentRuntime'
 import { record, text } from '@/api/agentRuntime'
@@ -44,15 +46,7 @@ export const TONE_COLOR: Record<Tone, string> = {
   unknown: 'var(--color-lamp-gray)',
 }
 
-export function ago(at: string | number | undefined, now: number): string {
-  const ms = typeof at === 'number' ? at : Date.parse(at ?? '')
-  if (!Number.isFinite(ms)) return 'time unknown'
-  const s = Math.max(0, Math.floor((now - ms) / 1000))
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`
-  if (s < 48 * 3600) return `${Math.floor(s / 3600)} h ago`
-  return `${Math.floor(s / 86_400)} days ago`
-}
+
 
 /** Alerts only the Owner can clear (Owner 2026-10-16: the TWS login is his alone). */
 const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string }> = {

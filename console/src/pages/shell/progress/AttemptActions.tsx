@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
 import { fetchAttemptActions, type AttemptAction } from '@/api/agentRuntimeBus'
-import { ActionLabel } from '../owner/AttemptActionLine'
+import { ActionLabel } from './attemptActionWords'
 
 function ActionStream({ id }: { id: string }) {
   const cursor = useRef('')
