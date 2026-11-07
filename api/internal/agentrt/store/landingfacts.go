@@ -174,9 +174,11 @@ func landingFactsGate(ctx context.Context, tx pgx.Tx, src LandingSource, environ
 			return f, nil, err
 		}
 	}
-	inFlight := landing.Operation.Active
+	// A landed operation never holds the slot, whatever its STG phase (#40);
+	// against a granted landing only one pushing to main does (#11).
+	inFlight := landing.Operation.HoldsSlot
 	if granted {
-		inFlight = landing.Operation.HoldsSlot
+		inFlight = landing.Operation.HoldsGrantedSlot
 	}
 	for id, o := range state.Operations {
 		if id != op && o.Task != "" && inFlight(o) {

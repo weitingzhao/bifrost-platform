@@ -188,6 +188,15 @@ func (s *StgState) applyOther(e StgEvent) error {
 			s.CIObservations[b.Opened.Seq] = map[string]StgEvent{}
 		}
 		s.CIObservations[b.Opened.Seq][uid] = e
+	case "ci_unreadable":
+		if !StgCanObserveCIUnreadable(*s, r, e.At) {
+			return fail("transition", "CI unreadable needs its open CI blocking interval, unread for StgCIUnreadableAfter")
+		}
+		for _, old := range s.Records {
+			if old.Record.String("kind") == "ci_unreadable" && old.Record.Int("interval_seq") == r.Int("interval_seq") {
+				return fail("duplicate", "CI already unreadable for this interval")
+			}
+		}
 	case "unblocked":
 		id := r.String("block")
 		b := s.Blocks[id]

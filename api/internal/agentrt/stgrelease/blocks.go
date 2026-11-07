@@ -2,6 +2,7 @@ package stgrelease
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"sort"
@@ -224,7 +225,8 @@ func unblockRecorded(s store.StgState) []store.StgRecord {
 			if ev.Seq <= s.Blocks[id].Opened.Seq {
 				continue
 			}
-			for _, r := range []store.StgRecord{unblockRecord(id, "inputs_changed", ev.Seq), unblockRecord(id, "rule_changed", ev.Seq), unblockRecord(id, "external_release", ev.Record.String("evidence")), unblockRecord(id, "granted", ev.Record.String("grant"))} {
+			for _, r := range []store.StgRecord{unblockRecord(id, "inputs_changed", ev.Seq), unblockRecord(id, "rule_changed", ev.Seq), unblockRecord(id, "external_release", ev.Record.String("evidence")), unblockRecord(id, "granted", ev.Record.String("grant")),
+				unblockRecord(id, "superseded", ev.Seq), unblockRecord(id, "superseded", ev.Record.String("evidence"))} {
 				if store.StgCanUnblock(s, r) {
 					return []store.StgRecord{r}
 				}
@@ -244,7 +246,9 @@ func orderedRecords(s store.StgState) []store.StgEvent {
 func (c *Controller) readBlock(ctx context.Context, s store.StgState, block store.StgBlock) error {
 	r := block.Opened.Record
 	why := r.String("why")
-	if why == "wrong_input" || why == "diff_unlanded" || why == "non_linear" || why == "no_merge_after_landing" || why == "baseline_moved" || why == "baseline_unknown" {
+	// A ci_* block on a P that main has moved past lifts as superseded
+	// (unblockRecorded) once a newer head is recorded: acquire that proof.
+	if why == "wrong_input" || strings.HasPrefix(why, "ci_") || why == "diff_unlanded" || why == "non_linear" || why == "no_merge_after_landing" || why == "baseline_moved" || why == "baseline_unknown" {
 		if changed, err := c.readBlockHead(ctx, s, block); changed || err != nil {
 			return err
 		}
@@ -265,19 +269,54 @@ func (c *Controller) readBlock(ctx context.Context, s store.StgState, block stor
 	if why != "wrong_input" && !strings.HasPrefix(why, "ci_") || c.Sources.CI == nil {
 		return nil
 	}
-	ci, err := c.Sources.CI(ctx, r.String("P"))
-	if err != nil {
+	ci, readErr := c.Sources.CI(ctx, r.String("P"))
+	if readErr == nil {
+		accepted, err := ci.Record()
+		if err == nil {
+			proof := store.StgRecord{"v": "1", "scope": "block", "kind": "ci_observed", "block": r["block"], "interval_seq": block.Opened.Seq, "P": r["P"], "ci": accepted, "status": "Succeeded"}
+			if !store.StgCanObserveCI(s, proof, c.now()) {
+				return nil
+			}
+			return c.write(ctx, s, proof, unblockRecord(r.String("block"), "inputs_changed", s.LastSeq+1))
+		}
+		if ci.Reason == "" {
+			return nil // red, missing or running: a verdict, not an unreadable record
+		}
+		_, err = c.ciUnreadable(ctx, s, block, fmt.Errorf("%s: %w", ci.Reason, err))
 		return err
 	}
-	accepted, err := ci.Record()
-	if err != nil {
-		return nil
+	if lifted, err := c.ciUnreadable(ctx, s, block, readErr); lifted || err != nil {
+		return err
 	}
-	proof := store.StgRecord{"v": "1", "scope": "block", "kind": "ci_observed", "block": r["block"], "interval_seq": block.Opened.Seq, "P": r["P"], "ci": accepted, "status": "Succeeded"}
-	if !store.StgCanObserveCI(s, proof, c.now()) {
-		return nil
+	return readErr
+}
+
+// ciUnreadable: the CI record of a ci_* block's P cannot be read. It is
+// retried for store.StgCIUnreadableAfter from the block's opening, then the
+// block lifts with ci_unreadable, keeping the error, and the next batch
+// evaluates main's P again instead of waiting forever.
+func (c *Controller) ciUnreadable(ctx context.Context, s store.StgState, block store.StgBlock, readErr error) (bool, error) {
+	r := block.Opened.Record
+	now := c.now()
+	if !strings.HasPrefix(r.String("why"), "ci_") || now.Sub(block.Opened.At) < store.StgCIUnreadableAfter {
+		return false, nil
 	}
-	return c.write(ctx, s, proof, unblockRecord(r.String("block"), "inputs_changed", s.LastSeq+1))
+	text := strings.TrimSpace(readErr.Error())
+	if len(text) > store.StgCIErrorMax {
+		text = strings.ToValidUTF8(text[:store.StgCIErrorMax], "")
+	}
+	if text == "" {
+		text = "CI record unreadable"
+	}
+	proof := store.StgRecord{"v": "1", "scope": "block", "kind": "ci_unreadable", "block": r["block"], "interval_seq": block.Opened.Seq, "P": r["P"], "error": text, "read_at": now.Format(time.RFC3339Nano)}
+	if !store.StgCanObserveCIUnreadable(s, proof, now) {
+		return false, nil
+	}
+	if err := c.write(ctx, s, proof, unblockRecord(r.String("block"), "ci_unreadable", s.LastSeq+1)); err != nil {
+		return false, err
+	}
+	c.logNotice("STG release block lifted: the CI of P could not be read for an interval", "block", r.String("block"), "why", r.String("why"), "P", r.String("P"), "error", text)
+	return true, nil
 }
 
 // Consume existing facts only. Fetching new external runs and historic Git
