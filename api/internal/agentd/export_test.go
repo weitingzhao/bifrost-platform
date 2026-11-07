@@ -24,3 +24,6 @@ var ProcIdentity = procIdentity
 
 // PlanReply is where a plan's follow-up writes its reply (planfix.go).
 const PlanReply = planReply
+
+// BuildOf is buildOf: the build that build information and a binary make.
+var BuildOf = buildOf

@@ -404,6 +404,9 @@ type claimRequest struct {
 	// on (TD-415); an agentd from before it sends neither.
 	DiskFree *int64 `json:"disk_free_bytes,omitempty"`
 	RootFree *int64 `json:"root_free_bytes,omitempty"`
+	// The agentd build the host runs: its commit, whether the work tree had
+	// changes, and its binary's sha256; an agentd from before it sends none.
+	Build *store.AgentdBuild `json:"build,omitempty"`
 }
 
 // claim is the long poll for work: it tries until a task is leased or the
@@ -424,6 +427,12 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	case req.DiskFree != nil:
 		cr.Disk = &store.HostDisk{Host: *req.DiskFree, Root: *req.RootFree}
+	}
+	if req.Build != nil {
+		if err := req.Build.Check(); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "build is a commit of 40 hex, a sha256 of 64 hex and modified")
+			return
+		}
 	}
 	for _, t := range req.Tools {
 		if t.Executor == "" || t.Provider == "" {
@@ -459,6 +468,14 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	// poll leases nothing (store.ClaimRequest.Disk).
 	if cr.Disk != nil {
 		if _, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor); err != nil {
+			a.fail(w, err)
+			return
+		}
+	}
+	// The build it runs, likewise once a request and when it changed: the
+	// platform knows which build a host runs before and after a deploy.
+	if req.Build != nil {
+		if _, err := store.RecordHostBuild(ctx, a.DB, req.HostID, *req.Build); err != nil {
 			a.fail(w, err)
 			return
 		}

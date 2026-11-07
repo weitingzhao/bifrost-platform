@@ -31,11 +31,24 @@ type Client struct {
 	// TD-415): claims leave it out until then (unix nanoseconds), and the next
 	// one after tries it again (ClaimWith).
 	noDiskUntil atomic.Int64
+	// Build is the agentd build this host runs, sent with every claim
+	// (ClaimWith); nil sends none. noBuildUntil is as noDiskUntil, for a
+	// platform from before the build.
+	Build        *Build
+	noBuildUntil atomic.Int64
 }
 
-// DiskRetryAfter is how long claims leave the free disk out after a platform
-// refused it, before they try it again: a platform released since takes it
-// (review 497 A1).
+// Build is the build of agentd a claim reports: the commit it was built from,
+// whether its work tree had changes, and the sha256 of its binary.
+type Build struct {
+	Commit   string `json:"commit"`
+	SHA256   string `json:"sha256"`
+	Modified bool   `json:"modified"`
+}
+
+// DiskRetryAfter is how long claims leave the free disk (or the build) out
+// after a platform refused it, before they try it again: a platform released
+// since takes it (review 497 A1).
 var DiskRetryAfter = 10 * time.Minute
 
 // The platform's refusals agentd acts on (409 and its code), and a platform
@@ -230,25 +243,48 @@ func (c *Client) Claim(ctx context.Context, freeSlots int, tools []Tool) (*Claim
 	return c.ClaimWith(ctx, freeSlots, tools, nil)
 }
 
-// ClaimWith is Claim with the host's free disk, when measured (TD-415). A
-// platform from before TD-415 refuses a body with the disk (400, unknown
-// field): the claim is sent again at once without it, and the client's claims
-// leave it out for DiskRetryAfter, then try it again, so the host keeps
-// taking work while the platform and agentd are on different versions and
-// reports its disk again once the platform is released.
+// ClaimWith is Claim with the host's free disk, when measured (TD-415), and
+// the client's Build. A platform from before either refuses a body with it
+// (400, unknown field): the claim is sent again at once without it, and the
+// client's claims leave it out for DiskRetryAfter, then try it again, so the
+// host keeps taking work while the platform and agentd are on different
+// versions and reports it again once the platform is released.
 func (c *Client) ClaimWith(ctx context.Context, freeSlots int, tools []Tool, disk *Disk) (*Claimed, error) {
 	var cl Claimed
 	body := map[string]any{"free_slots": freeSlots, "tools": tools}
-	if disk != nil && time.Now().UnixNano() >= c.noDiskUntil.Load() {
+	now := time.Now().UnixNano()
+	if disk != nil && now >= c.noDiskUntil.Load() {
 		body["disk_free_bytes"], body["root_free_bytes"] = disk.Host, disk.Root
 	}
+	if c.Build != nil && now >= c.noBuildUntil.Load() {
+		body["build"] = c.Build
+	}
+	// Each optional field the platform may not know yet: the one it names,
+	// the fields that go with it, and how long claims then leave them out.
+	optional := []struct {
+		field  string
+		fields []string
+		until  *atomic.Int64
+	}{
+		{"build", []string{"build"}, &c.noBuildUntil},
+		{"disk_free_bytes", []string{"disk_free_bytes", "root_free_bytes"}, &c.noDiskUntil},
+	}
 	code, err := c.post(ctx, "/claim", body, &cl)
-	// only the refusal of the field itself (review 267 B6, as Heartbeat)
-	if err != nil && body["disk_free_bytes"] != nil && code == http.StatusBadRequest && strings.Contains(err.Error(), `unknown field "disk_free_bytes"`) {
-		c.noDiskUntil.Store(time.Now().Add(DiskRetryAfter).UnixNano())
-		delete(body, "disk_free_bytes")
-		delete(body, "root_free_bytes")
-		code, err = c.post(ctx, "/claim", body, &cl)
+	// only the refusal of the field itself (review 267 B6, as Heartbeat); a
+	// platform older than both refuses one, then the other
+	for retried := true; retried && err != nil && code == http.StatusBadRequest; {
+		retried = false
+		for _, o := range optional {
+			if body[o.field] != nil && strings.Contains(err.Error(), `unknown field "`+o.field+`"`) {
+				o.until.Store(time.Now().Add(DiskRetryAfter).UnixNano())
+				for _, f := range o.fields {
+					delete(body, f)
+				}
+				code, err = c.post(ctx, "/claim", body, &cl)
+				retried = true
+				break
+			}
+		}
 	}
 	if err != nil || code == http.StatusNoContent {
 		return nil, err
