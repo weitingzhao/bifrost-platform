@@ -31,6 +31,9 @@ const (
 	StatusWorking      = "working"
 	StatusWaitingRole  = "waiting_role"
 	StatusQueued       = "queued"
+	// A task whose change is on main (progressstop.go), whatever its state:
+	// finished, as an accepted task is, so not ranked among the open ones.
+	StatusFinished = "finished"
 )
 
 var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked,
@@ -135,6 +138,7 @@ type ProgressTask struct {
 	ComputedNotPersisted bool             `json:"computed_not_persisted"`
 	LostAttempt          *ProgressAttempt `json:"lost_attempt,omitempty"` // its latest lost attempt no later result superseded
 	Stopped              *ProgressStop    `json:"stopped,omitempty"`
+	OnMain               *ProgressOnMain  `json:"on_main,omitempty"`
 
 	class       string
 	stateReason string
@@ -457,6 +461,8 @@ type progressMission struct {
 	steps                                                []plan.Step
 	next                                                 []any
 	tasks                                                []*ProgressTask
+	// Its tasks whose change is on main: listed, finished, never open work.
+	onMain []*ProgressTask
 }
 
 func stamp(t *time.Time) string {
@@ -540,9 +546,10 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	}
 	// The unfinished tasks, with when they came into their state (the event,
 	// not updated_at, which a plan migration moves), why, and the roles of
-	// the unfinished verifications and reviews of them.
+	// the unfinished verifications and reviews of them; and the tasks whose
+	// change is on main, unfinished or cancelled, which read finished.
 	trows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, t.role, COALESCE(t.plan_node_id, ''), t.off_plan,
-	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''), `+stopColumns+`,
+	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''), `+stopColumns+`, `+landedColumns+`,
 	    ARRAY(SELECT d.depends_on_task_id FROM agentrt.task_dependency d JOIN agentrt.task o ON o.task_id = d.depends_on_task_id
 	      WHERE d.task_id = t.task_id AND o.state <> 'accepted' ORDER BY d.depends_on_task_id),
 	    COALESCE((SELECT a.computed_at IS NOT NULL AND a.persisted_at IS NULL FROM agentrt.attempt a WHERE a.task_id = t.task_id
@@ -551,8 +558,8 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	      AND c.state NOT IN ('accepted','rejected','cancelled') ORDER BY c.role)
 	  FROM agentrt.task t
 	  LEFT JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.task_id = t.task_id
-	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true`+stopHolding+`
-	  WHERE t.mission_id = ANY($1) AND t.state NOT IN ('accepted','rejected','cancelled')
+	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true`+stopHolding+landedNote+`
+	  WHERE t.mission_id = ANY($1) AND (t.state NOT IN ('accepted','rejected','cancelled') OR (t.state = 'cancelled' AND landed.commit IS NOT NULL))
 	  ORDER BY t.created_at, t.task_id`, ids)
 	if err != nil {
 		return nil, nil, err
@@ -563,18 +570,26 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		var missionID string
 		var since *time.Time
 		var stop stopScan
-		if err = trows.Scan(append(append([]any{&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
-			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason}, stop.dest()...), &t.DependsOn, &t.ComputedNotPersisted, &t.checkers)...); err != nil {
+		var landed landedScan
+		if err = trows.Scan(append(append(append([]any{&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
+			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason}, stop.dest()...), landed.dest()...), &t.DependsOn, &t.ComputedNotPersisted, &t.checkers)...); err != nil {
 			return nil, nil, err
 		}
 		m := byID[missionID]
-		t.Since, t.Stopped = stamp(since), stop.stop(func(at time.Time) string { return stamp(&at) })
-		t.Attempt, t.LostAttempt = live[t.TaskID], lost[t.TaskID]
+		t.Since = stamp(since)
 		u := usualOf(usual, t.Role, t.class)
 		if u != nil {
 			s := int64(*u / time.Second)
 			t.UsualS = &s
 		}
+		if t.OnMain = landed.onMain(); t.OnMain != nil {
+			// Nothing of it is waited on: no dependencies, checks, attempt or stop.
+			t.Status, t.Reason, t.DependsOn = StatusFinished, landed.words(), []string{}
+			m.onMain = append(m.onMain, t)
+			continue
+		}
+		t.Stopped = stop.stop(func(at time.Time) string { return stamp(&at) })
+		t.Attempt, t.LostAttempt = live[t.TaskID], lost[t.TaskID]
 		t.Status, t.Reason = TaskStatus(StatusInput{TaskState: t.State, MissionState: m.state, StateReason: t.stateReason,
 			MissionReason: m.stateReason, Attempt: t.Attempt, Stop: t.Stopped, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
 		if t.Status == StatusStopped {
@@ -621,9 +636,12 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 // be done (progresseta.go).
 func missionDoc(m *progressMission, eta map[string]any) map[string]any {
 	statuses := make([]string, 0, len(m.tasks))
-	tasks := make([]any, 0, len(m.tasks))
+	tasks := make([]any, 0, len(m.tasks)+len(m.onMain))
 	for _, t := range m.tasks {
 		statuses = append(statuses, t.Status)
+		tasks = append(tasks, t)
+	}
+	for _, t := range m.onMain {
 		tasks = append(tasks, t)
 	}
 	count := plan.CountSteps(m.steps)

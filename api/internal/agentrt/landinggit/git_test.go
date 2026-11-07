@@ -138,24 +138,99 @@ func TestReplayRecoverPushedBranchAndConditionalDelete(t *testing.T) {
 		t.Fatal("main deletable")
 	}
 }
-func TestReplayRejectsOverlap(t *testing.T) {
+
+// sameFileFixture is a result and a main drift in one file, code.go: the
+// result rewrites ours, main since the base rewrites mainLine. in is
+// pointed at them.
+func sameFileFixture(t *testing.T, ours, mainLine string) (*Git, ReplayInput, string) {
+	t.Helper()
 	g, in, src := fixture(t)
-	if e := os.WriteFile(filepath.Join(src, "display.txt"), []byte("new main copy\n"), 0600); e != nil {
-		t.Fatal(e)
+	put := func(content string) {
+		t.Helper()
+		if e := os.WriteFile(filepath.Join(src, "code.go"), []byte(content), 0600); e != nil {
+			t.Fatal(e)
+		}
+		gitTest(t, src, "add", "code.go")
 	}
-	gitTest(t, src, "add", "display.txt")
-	gitTest(t, src, "commit", "-m", "overlapping main")
-	// Fixture pushes only into the throwaway bare repository.
-	repo := filepath.Join(filepath.Dir(src), "remote.git")
-	gitTest(t, src, "push", repo, "main")
-	in.M0 = gitTest(t, src, "rev-parse", "HEAD")
-	w, e := g.Open(context.Background(), in.A)
+	code := func(first, second string) string {
+		return "package code\n\nfunc First() string {\n\treturn \"" + first + "\"\n}\n\n// filler\n// filler\n// filler\n\nfunc Second() string {\n\treturn \"" + second + "\"\n}\n"
+	}
+	gitTest(t, src, "checkout", "-q", "main")
+	put(code("one", "two"))
+	gitTest(t, src, "commit", "-m", "base with code")
+	base := gitTest(t, src, "rev-parse", "HEAD")
+	if ours == "first" {
+		put(code("one changed", "two"))
+	} else {
+		put(code("one", "two by the change"))
+	}
+	gitTest(t, src, "commit", "-m", "change\n\nAgentrt-Task: "+testTask+"\nChange-Id: I"+strings.Repeat("d", 40))
+	a := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "reset", "-q", "--hard", base)
+	if mainLine == "second" {
+		put(code("one", "two on main"))
+	} else {
+		put(code("one on main", "two"))
+	}
+	gitTest(t, src, "commit", "-m", "main drifts in code.go")
+	m0 := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", "-f", filepath.Join(filepath.Dir(src), "remote.git"), "main", a+":refs/heads/accepted-code")
+	in.A, in.Base, in.M0 = a, base, m0
+	return g, in, src
+}
+
+// A change and a main drift in the same file, different functions, merge:
+// the replay contains both (the landing CI tests the result).
+func TestReplaySameFileMerges(t *testing.T) {
+	g, in, _ := sameFileFixture(t, "first", "second")
+	ctx := context.Background()
+	w, e := g.Open(ctx, in.A)
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer w.Close()
-	if _, e = w.Replay(context.Background(), in); !errors.Is(e, ErrOverlap) {
-		t.Fatal("overlap not refused", e)
+	r, e := w.Replay(ctx, in)
+	if e != nil {
+		t.Fatal("same file, other function, refused", e)
+	}
+	if parent := gitTest(t, w.dir, "rev-parse", r+"^"); parent != in.M0 {
+		t.Fatal("R is not one commit on M0", parent)
+	}
+	got := gitTest(t, w.dir, "show", r+":code.go")
+	if !strings.Contains(got, `"one changed"`) || !strings.Contains(got, `"two on main"`) {
+		t.Fatalf("replay lost a side:\n%s", got)
+	}
+	// Recovery gives the same R.
+	again, e := g.Open(ctx, in.A)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer again.Close()
+	if r2, e := again.Replay(ctx, in); e != nil || r2 != r {
+		t.Fatal("recovery changed R", r, r2, e)
+	}
+}
+
+// The same line edited both ways is a real conflict: ErrConflict naming
+// the path, and the workspace left clean for the next replay.
+func TestReplayConflictNamesPaths(t *testing.T) {
+	g, in, _ := sameFileFixture(t, "second", "second")
+	ctx := context.Background()
+	w, e := g.Open(ctx, in.A)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer w.Close()
+	_, e = w.Replay(ctx, in)
+	var c *ConflictError
+	if !errors.Is(e, ErrConflict) || !errors.As(e, &c) {
+		t.Fatal("conflict not refused", e)
+	}
+	if c.M0 != in.M0 || len(c.Paths) != 1 || c.Paths[0] != "code.go" {
+		t.Fatalf("conflict paths %+v", c)
+	}
+	if st := gitTest(t, w.dir, "status", "--porcelain"); st != "" {
+		t.Fatalf("workspace left dirty:\n%s", st)
 	}
 }
 func TestGitEnvironmentAndCredentialScope(t *testing.T) {

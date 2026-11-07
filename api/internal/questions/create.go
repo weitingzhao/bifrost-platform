@@ -20,8 +20,8 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 // this path only there): the requester's and the store's quotas do not hold
 // it, and it leaves no mark in the hourly quotas, so the runtime's cards are
 // not held while the rule, not the Owner, answers them, and other
-// requesters keep their hourly quotas. While it is open or unread it still
-// counts in the store's capacity (20 open, 40 open or unread) like any
+// requesters keep their hourly quotas. While it is open it still
+// counts in the store's capacity (20 open) like any
 // question. Only the runtime's own session may; everything else (the key, a
 // duplicate, the size) is as Create.
 func (s *Service) CreateForRule(ctx context.Context, session, principal, role string, raw []byte) Result {
@@ -72,15 +72,15 @@ func (s *Service) create(ctx context.Context, session, principal, role string, r
 			if countHash(marks, hash) >= hourlyPerRequester {
 				return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 6 questions from this requester in the last hour", nil)}
 			}
-			t := tally(doc, session, now)
-			if t.openReq >= openPerRequester || t.protReq >= protectedPerRequester {
-				return applied{res: fail(http.StatusTooManyRequests, ackList(t.nums), nil)}
+			// Only open questions hold a new one: answers the requester has
+			// not acknowledged never do (2026-11-06, the runtime could not ask
+			// the Owner anything for eight answers it had used).
+			t := tally(doc, session)
+			if t.openReq >= openPerRequester {
+				return applied{res: fail(http.StatusTooManyRequests, openList(t.nums), nil)}
 			}
 			if t.openAll >= openGlobal {
 				return applied{res: fail(http.StatusTooManyRequests, "store full: 20 questions are open", nil)}
-			}
-			if t.protAll >= protectedGlobal {
-				return applied{res: fail(http.StatusTooManyRequests, "store full: 40 questions are open or unread", nil)}
 			}
 		}
 		id, err := s.freshID(doc)
@@ -220,55 +220,36 @@ func countHash(marks []hourlyMark, hash string) int {
 	return n
 }
 
+// counts is the open questions of the store and of one requester, with the
+// numbers of the requester's.
 type counts struct {
 	openAll int
-	protAll int
 	openReq int
-	protReq int
 	nums    []int
 }
 
-func tally(doc *document, requester string, now time.Time) counts {
+func tally(doc *document, requester string) counts {
 	var t counts
-	seen := map[int]bool{}
-	add := func(n int) {
-		if seen[n] {
-			return
-		}
-		seen[n] = true
-		t.nums = append(t.nums, n)
-	}
 	for _, q := range doc.Questions {
-		if q.Status == StatusOpen {
-			t.openAll++
-		}
-		if q.protected(now) {
-			t.protAll++
-		}
-		if q.Requester != requester {
+		if q.Status != StatusOpen {
 			continue
 		}
-		if q.Status == StatusOpen {
+		t.openAll++
+		if q.Requester == requester {
 			t.openReq++
-			add(q.Number)
-		}
-		if q.protected(now) {
-			t.protReq++
-		}
-		if q.unread() {
-			add(q.Number)
+			t.nums = append(t.nums, q.Number)
 		}
 	}
 	sort.Ints(t.nums)
 	return t
 }
 
-func ackList(nums []int) string {
+func openList(nums []int) string {
 	parts := make([]string, len(nums))
 	for i, n := range nums {
 		parts[i] = numberLabel(n)
 	}
-	return "read and ack " + strings.Join(parts, ", ") + " first"
+	return "this requester has " + itoa(len(nums)) + " open questions: " + strings.Join(parts, ", ") + "; wait for an answer or withdraw one first"
 }
 
 func recordBytes(q Question) (int, error) {

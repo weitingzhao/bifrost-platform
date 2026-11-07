@@ -164,7 +164,9 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 				return nil
 			}
 		}
-		f, err := LandingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt())
+		// A waiting operation with a usable grant yields only to a landing
+		// past its CI (landingFactsGate), not to one claimed after it.
+		f, err := landingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt(), waiting)
 		if err != nil {
 			return err
 		}
@@ -186,7 +188,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		if final.UTC().Format("2006-01-02") != day {
 			return ErrLandingDayChanged
 		}
-		g, _, err := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
+		g, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, waiting)
 		if err != nil {
 			return err
 		}
@@ -400,7 +402,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			if final.UTC().Format("2006-01-02") != day {
 				return ErrLandingDayChanged
 			}
-			latest, _, err := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
+			latest, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, true)
 			if err != nil {
 				return err
 			}

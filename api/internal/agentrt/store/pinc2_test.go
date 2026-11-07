@@ -128,6 +128,8 @@ func TestExactClaimJudgesAsAClaim(t *testing.T) {
 			_, err := w.exact(other, "other:1")
 			ok(t, err)
 		}, store.ErrNoLease, "all its 1 slots"},
+		// 2026-11-06: a mission's attempts cap nothing; the exact claim
+		// leases as the control does.
 		"budget spent": {func(t *testing.T, w *world, _ string) {
 			w.ready(t, store.Task{})
 			if c := w.claim(t, "h1", time.Hour, claude); c == nil {
@@ -142,7 +144,7 @@ func TestExactClaimJudgesAsAClaim(t *testing.T) {
 				_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 100}' WHERE mission_id = 'M-1'`)
 				return err
 			}))
-		}, store.ErrNoLease, "budget"},
+		}, nil, ""},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -90,6 +91,66 @@ func FailWorkForTest(ctx context.Context, tx pgx.Tx, taskID string) error {
 		return err
 	}
 	return failWork(ctx, tx, "controller", t, "test: checks failed with no round left")
+}
+
+// BlockSpentForTest blocks, as the budget pass did before 2026-11-06, every
+// ready task (not a gate's) of an active mission that has used its
+// budget's attempts or is past its hours, with the reason that pass wrote:
+// such blocks are still in the store, and their cards are still answered.
+// It returns how many it blocked.
+func BlockSpentForTest(ctx context.Context, db DB) (int, error) {
+	n := 0
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+		  WHERE t.state = 'ready' AND m.state = 'active' ORDER BY t.task_id`)
+		if err != nil {
+			return err
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if member, err := isGateMember(ctx, tx, id); err != nil || member {
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			t, err := readTask(ctx, tx, id, true)
+			if err != nil {
+				return err
+			}
+			s, ok, err := spendOf(ctx, tx, t)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+			var used int
+			var hours float64
+			if err = tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id WHERE t.mission_id = $1),
+			    EXTRACT(EPOCH FROM clock_timestamp() - created_at)::float8 / 3600 FROM agentrt.mission WHERE mission_id = $1`, t.mission).Scan(&used, &hours); err != nil {
+				return err
+			}
+			why := ""
+			switch {
+			case used >= s.budget.MaxAttempts:
+				why = fmt.Sprintf("mission %s has used %d of its %d attempts", t.mission, used, s.budget.MaxAttempts)
+			case hours >= float64(s.budget.MaxWallHours):
+				why = fmt.Sprintf("mission %s is past its %d hours (it started %.1f hours ago)", t.mission, s.budget.MaxWallHours, hours)
+			default:
+				continue
+			}
+			if err = moveTask(ctx, tx, "controller", t, "blocked", why+budgetBlockSuffix); err != nil {
+				return err
+			}
+			n++
+		}
+		return nil
+	})
+	return n, err
 }
 
 // LiveForTest is a live attempt as the projection reads one: its state,
@@ -211,24 +272,24 @@ func BlockedCardBodyWithCheckForTest(method, report, title, reason, words string
 
 // BlockedCardBodyFullForTest is the card of an implementation in repo, M-3,
 // blocked for failing round 2 of 2, whose last check by method failed with
-// report: its title, its block's reason, the Owner's last words, what one
-// more round adds to the budget and the recommendation's why (closing M-3).
-func BlockedCardBodyFullForTest(repo, method, report, title, reason, words, budget, why string) string {
+// report: its title, its block's reason, the Owner's last words and the
+// recommendation's why (closing M-3).
+func BlockedCardBodyFullForTest(repo, method, report, title, reason, words, why string) string {
 	check := &checkSummary{method: method, verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
 		excerpt: checkExcerptOf(method, []byte(report))}
 	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-3", role: "implement", effect: "branch"},
 		title: title, repo: repo, reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 1, check: check,
-		budget: budget, rec: recommendation{option: recClose, rule: "R1", why: why}})
+		rec: recommendation{option: recClose, rule: "R1", why: why}})
 }
 
 // BlockedCardBodyLeadForTest is BlockedCardBodyFullForTest's card whose
 // last check's quote is led by lead, which is never cut.
-func BlockedCardBodyLeadForTest(lead, budget, why string) string {
+func BlockedCardBodyLeadForTest(lead, why string) string {
 	check := &checkSummary{method: "deterministic", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
 		excerpt: checkExcerpt{lead: lead, text: "the output's end", fromEnd: true}}
 	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-3", role: "implement", effect: "branch"},
 		title: "t", repo: "bifrost-platform", reason: "r", round: 2, maxRounds: 2, failed: true, card: 1, check: check,
-		budget: budget, rec: recommendation{option: recClose, rule: "R1", why: why}})
+		rec: recommendation{option: recClose, rule: "R1", why: why}})
 }
 
 // BlockedPageForTest sets how many blocked tasks a pass reads at a time and

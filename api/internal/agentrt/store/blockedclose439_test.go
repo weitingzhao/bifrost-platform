@@ -263,7 +263,7 @@ func TestCloseFromACardWhoseTaskMovedOn(t *testing.T) {
 // longest, in characters JSON escapes (a quote or a backslash is two bytes;
 // the store does not escape HTML, so & is one): a failed command's line
 // (never cut), an output's last line, a repository, title, reason and words,
-// the longest budget sentence, a recommendation and three answers. And
+// a recommendation and three answers. And
 // whatever is never cut, a part of the quote too long for any card leaves
 // the report unquoted rather than a card the store refuses on every pass.
 func TestBlockedCardFitsWithEverything(t *testing.T) {
@@ -272,21 +272,19 @@ func TestBlockedCardFitsWithEverything(t *testing.T) {
 	report, err := json.Marshal(map[string]any{"commands": []map[string]any{{"argv": []string{"sh", "-c", bs}, "exit_code": 1,
 		"tail": strings.Repeat("\\", 100)}}})
 	ok(t, err)
-	budget := "One round needs up to 3 attempts (implementation, verification, review); mission M-3 has used 1000000 of its 1000000 attempts " +
-		"and 123456.7 of its 100000 hours, so this answer also raises its budget to 1000003 attempts and 223457 hours, recorded as yours."
 	why := strings.Repeat("w", store.RecommendWhyMax)
 	for _, words := range []string{"", bs} {
-		body := store.BlockedCardBodyFullForTest(bs, "deterministic", string(report), bs, bs, words, budget, why)
+		body := store.BlockedCardBodyFullForTest(bs, "deterministic", string(report), bs, bs, words, why)
 		if n := questions.BodyBytes(body); n > questions.BodyLimit || !strings.Contains(body, "First failed command: sh -c") {
 			t.Fatalf("%d bytes (the store takes %d):\n%s", n, questions.BodyLimit, body)
 		}
 	}
-	body := store.BlockedCardBodyLeadForTest("First failed command: "+strings.Repeat("\"", 1500)+" exited 1.\nIts output ends:", budget, why)
+	body := store.BlockedCardBodyLeadForTest("First failed command: "+strings.Repeat("\"", 1500)+" exited 1.\nIts output ends:", why)
 	if n := questions.BodyBytes(body); n > questions.BodyLimit || !strings.Contains(body, "Its report is too long to quote here") ||
 		strings.Contains(body, "First failed command") {
 		t.Fatalf("%d bytes (the store takes %d):\n%s", n, questions.BodyLimit, body)
 	}
-	for _, want := range []string{"Recommended: Close mission M-3 — " + why, budget, "Close mission M-3: every task of mission M-3"} {
+	for _, want := range []string{"Recommended: Close mission M-3 — " + why, "Close mission M-3: every task of mission M-3"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the card lacks %q", want)
 		}

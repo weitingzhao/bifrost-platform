@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,8 +27,14 @@ import (
 //
 // A check the controller cancelled because its subject was stopped
 // (stoppedchecks.go: its reason begins with stoppedSubject) does not hold its
-// mission open either: it could never have decided anything. Those two are
-// the cancels that let a mission close; a task cancelled any other way (on a
+// mission open either: it could never have decided anything. Nor does a task
+// its proposer withdrew (withdrawnTask, as the progress view reads it), one
+// cancelled or rejected after its change reached main (a 'landed' note), or
+// one cancelled while a stop held it, its own, its subject's or its
+// mission's, or that a stop holds now (PROD 2026-11-06: missions whose tasks
+// were all finished stayed active until the coordinator stopped them by
+// hand). An implementation with a 'landed' note, whatever its state, counts
+// as delivered, as an accepted one does. A task cancelled any other way (on a
 // mission closed on a card, by a plan change) holds its mission open until
 // someone decides what it means.
 //
@@ -47,15 +54,35 @@ const checkClosed = `t.state = 'cancelled' AND t.role IN ('verify','review') AND
     WHERE e.task_id = t.task_id AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) l
   WHERE starts_with(l.body_json->>'reason', '` + stoppedSubject + `'))`
 
+// landedNoteExists is the condition that task t has a note saying its change is
+// on main (prune.go records it).
+const landedNoteExists = `EXISTS (SELECT 1 FROM agentrt.event n WHERE n.task_id = t.task_id AND n.event_type = 'note' AND n.body_json ? 'landed')`
+
+// onMain is a task (t) cancelled or rejected after its change reached main.
+const onMain = `t.state IN ('cancelled','rejected') AND ` + landedNoteExists
+
+// stoppedEmpty is a cancelled task (t) that a stop control (its own, its
+// subject's or its mission's, as stopHolding reads it) held when it was
+// cancelled, or holds now.
+const stoppedEmpty = `t.state = 'cancelled' AND EXISTS (SELECT 1 FROM agentrt.control c WHERE c.control_kind = 'stop' AND ` + stopScope + `
+    AND (c.cleared_at IS NULL OR EXISTS (SELECT 1 FROM (SELECT max(x.at) AS at FROM agentrt.event x WHERE x.task_id = t.task_id
+      AND (x.event_type = 'task_cancelled' OR x.event_type = 'task_state_changed' AND x.body_json->>'to' = 'cancelled')) k
+      WHERE c.set_at <= k.at AND c.cleared_at > k.at)))`
+
 // dropped is a task (t) that no longer holds its mission open though it was
-// not accepted: the Owner dropped it, or it was a check of a stopped task.
-const dropped = `((` + ownerDropped + `) OR (` + checkClosed + `))`
+// not accepted: the Owner dropped it, it was a check of a stopped task, its
+// proposer withdrew it, its change is on main, or a stop left nothing for it.
+const dropped = `((` + ownerDropped + `) OR (` + checkClosed + `) OR (` + withdrawnTask + `) OR (` + onMain + `) OR (` + stoppedEmpty + `))`
+
+// delivered is the condition that mission m has what its goal asked for: an
+// implementation (or brief) accepted, or an implementation on main.
+const delivered = `EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id
+    AND ((t.role IN ('implement','brief') AND t.state = 'accepted') OR (t.role = 'implement' AND ` + landedNoteExists + `)))`
 
 // closable is the condition, read again under the mission's lock.
 const closable = `m.state = 'active'
   AND NOT EXISTS (SELECT 1 FROM agentrt.plan_node n WHERE n.mission_id = m.mission_id)
-  AND EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id
-    AND ((t.role IN ('implement','brief') AND t.state = 'accepted') OR ` + dropped + `))
+  AND (` + delivered + ` OR EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id AND ` + dropped + `))
   AND NOT EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.state <> 'accepted' AND NOT (` + dropped + `))`
 
 // CloseMissions is one pass: it closes every mission done as above and
@@ -85,13 +112,20 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 	for _, id := range ids {
 		did := false
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
-			var accepted, drops, checks int
-			var delivered bool
+			var accepted, drops, checks, withdrawals, landed, stops int
+			var done bool
+			// Each task is counted once, under the first reason that applies.
+			count := func(cond, before string) string {
+				return `(SELECT count(*) FROM agentrt.task t WHERE t.mission_id = m.mission_id AND (` + cond + `) AND NOT ((` + before + `)))`
+			}
 			err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.task WHERE mission_id = m.mission_id AND state = 'accepted'),
 			    (SELECT count(*) FROM agentrt.task t WHERE t.mission_id = m.mission_id AND `+ownerDropped+`),
-			    (SELECT count(*) FROM agentrt.task t WHERE t.mission_id = m.mission_id AND `+checkClosed+` AND NOT (`+ownerDropped+`)),
-			    EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = m.mission_id AND role IN ('implement','brief') AND state = 'accepted')
-			  FROM agentrt.mission m WHERE m.mission_id = $1 AND `+closable+` FOR NO KEY UPDATE OF m`, id).Scan(&accepted, &drops, &checks, &delivered)
+			    `+count(checkClosed, ownerDropped)+`,
+			    `+count(withdrawnTask, ownerDropped+`) OR (`+checkClosed)+`,
+			    `+count(onMain, ownerDropped+`) OR (`+checkClosed+`) OR (`+withdrawnTask)+`,
+			    `+count(stoppedEmpty, ownerDropped+`) OR (`+checkClosed+`) OR (`+withdrawnTask+`) OR (`+onMain)+`,
+			    `+delivered+`
+			  FROM agentrt.mission m WHERE m.mission_id = $1 AND `+closable+` FOR NO KEY UPDATE OF m`, id).Scan(&accepted, &drops, &checks, &withdrawals, &landed, &stops, &done)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
@@ -125,25 +159,43 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			if b4 {
 				return MoveMission(ctx, tx, "controller", id, to, why)
 			}
-			// Closed checks are named only when there are some, so a mission
-			// with none says what it said before.
+			// Closed checks, withdrawn tasks, tasks on main and stopped ones
+			// are named only when there are some, so a mission with none says
+			// what it said before.
 			orChecks, andChecks := "", ""
 			if checks > 0 {
 				orChecks = fmt.Sprintf(" or was a check of a stopped task, closed by the controller (%d)", checks)
 				andChecks = fmt.Sprintf(", and checks of stopped tasks were closed by the controller (%d)", checks)
 			}
+			var others []string
+			for _, o := range []struct {
+				n    int
+				text string
+			}{{withdrawals, "withdrawn by its proposer"}, {landed, "on main"}, {stops, "stopped with nothing left"}} {
+				if o.n > 0 {
+					others = append(others, fmt.Sprintf("%s (%d)", o.text, o.n))
+				}
+			}
+			more := ""
+			if len(others) > 0 {
+				more = ", " + strings.Join(others, ", ")
+			}
+			const nothing = "; nothing the goal asked for was accepted"
 			switch {
-			case drops == 0 && delivered:
-				return MoveMission(ctx, tx, "controller", id, "done", fmt.Sprintf("every task is accepted (%d)%s", accepted, orChecks))
-			case delivered:
+			case drops == 0 && done:
+				return MoveMission(ctx, tx, "controller", id, "done", fmt.Sprintf("every task is accepted (%d)%s%s", accepted, orChecks, more))
+			case done:
 				return MoveMission(ctx, tx, "controller", id, "done",
-					fmt.Sprintf("every task is accepted (%d) or was dropped by the Owner on its card (%d)%s", accepted, drops, orChecks))
-			case drops == 0: // closable: then some check was closed
+					fmt.Sprintf("every task is accepted (%d) or was dropped by the Owner on its card (%d)%s%s", accepted, drops, orChecks, more))
+			case drops == 0 && checks > 0:
 				return MoveMission(ctx, tx, "controller", id, "stopped",
-					fmt.Sprintf("its remaining tasks were checks of stopped tasks, closed by the controller (%d); nothing the goal asked for was accepted", checks))
+					fmt.Sprintf("its remaining tasks were checks of stopped tasks, closed by the controller (%d)%s%s", checks, more, nothing))
+			case drops == 0: // closable: then some task was withdrawn, on main or stopped
+				return MoveMission(ctx, tx, "controller", id, "stopped",
+					fmt.Sprintf("its remaining tasks were %s%s", strings.Join(others, ", "), nothing))
 			}
 			return MoveMission(ctx, tx, "controller", id, "stopped",
-				fmt.Sprintf("the Owner dropped its remaining tasks on their cards (%d)%s; nothing the goal asked for was accepted", drops, andChecks))
+				fmt.Sprintf("the Owner dropped its remaining tasks on their cards (%d)%s%s%s", drops, andChecks, more, nothing))
 		}); err != nil {
 			return closed, errors.Join(append(holdErrs, fmt.Errorf("mission %s: %w", id, err))...)
 		}

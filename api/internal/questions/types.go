@@ -13,18 +13,16 @@ const (
 	maxBodyBytes   = 16 * 1024
 	keepTerminal   = 300
 
-	openPerRequester      = 3
-	protectedPerRequester = 6
-	openGlobal            = 20
-	protectedGlobal       = 40
-	hourlyGlobal          = 30
-	hourlyPerRequester    = 6
-	hourlyWindow          = time.Hour
-	unreadKeep            = 7 * 24 * time.Hour
-	inboxExpiredWindow    = 24 * time.Hour
-	defaultTTLHours       = 24
-	maxTTLHours           = 168
-	maxDeliveries         = 4
+	openPerRequester   = 3
+	openGlobal         = 20
+	hourlyGlobal       = 30
+	hourlyPerRequester = 6
+	hourlyWindow       = time.Hour
+	unreadKeep         = 7 * 24 * time.Hour
+	inboxExpiredWindow = 24 * time.Hour
+	defaultTTLHours    = 24
+	maxTTLHours        = 168
+	maxDeliveries      = 4
 
 	titleLimit     = 300
 	bodyLimit      = 3000

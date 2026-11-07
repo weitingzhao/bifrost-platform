@@ -51,6 +51,17 @@ func td462PrepareBusy(t *testing.T, c *c5, root, op string) {
 	ok(t, store.AppendCIKick(ctx, c.w.rt, op, "ci_kick", 1, c.key, "TD-462: competing controller"))
 }
 
+// td462AtMain carries a prepared busy operation past its green CI to
+// main_intent: only then does it hold the slot against a granted landing's
+// final gate (PROD 2026-11-06); one still in CI does not.
+func td462AtMain(t *testing.T, c *c5, op string) {
+	t.Helper()
+	store.FreezeEventClock(c.at.Add(time.Second)) // its CI ran after its preparation at c.at
+	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(op, "ci_seen", "run", "busy-green", "status", "Succeeded", "R", commitB,
+		"created_at", c.at.Add(time.Second/2).Format(time.RFC3339Nano))))
+	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(op, "main_intent", "R", commitB, "M0", commitA)))
+}
+
 func td462CountOpens(ctl *controller.Controller, p *livePusher) *int {
 	opens := 0
 	ctl.OpenLive = func(context.Context, string, string) (controller.LiveWorkspace, error) {
@@ -69,8 +80,9 @@ func td462GrantUses(t *testing.T, c *c5, grant string) int {
 }
 
 // Serial: FreezeEventClock. Review 787 B1: X's whole active lifetime lies
-// between A's snapshots. B claims X before W gets a grant, then B's final
-// gate moves X to awaiting_grant before A scans again.
+// between A's snapshots. B claims X before W gets a grant and X reaches
+// main (an operation in CI holds no slot against W), then main refuses X
+// (non_ff) before A scans again.
 func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
 	root := td462Root(t, c)
@@ -92,19 +104,16 @@ func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 		}
 		td462PrepareBusy(t, c, root, busy)
 		grant = c.grant(t, store.ActionCoreLanding)
+		td462AtMain(t, c, busy)
 	}}
 	ok(t, a.LandingDrillPass(ctx))
 	if busy == "" || *opens != 1 || len(pA.pushes) != 0 || c.reservations(t) != 0 {
 		t.Fatal("A did not hit the unseen in-flight blocker", busy, *opens, pA.pushes)
 	}
 	store.FreezeEventClock(c.at.Add(2 * time.Second))
-	b.Drill.CI = func(_ context.Context, _, r string, _ time.Time) (landing.CIRun, error) {
-		return landing.CIRun{Run: landing.CIName(busy, 1), R: r, Status: "Succeeded", CreatedAt: c.at.Add(time.Second)}, nil
-	}
-	action, err := b.LandingDrillCI(ctx, *b.Drill, busy, store.DecisionAt())
-	ok(t, err)
-	if action.Kind != "ready" || landingState(t, c.w, landingRepoStream).Operations[busy].Phase != "awaiting_grant" {
-		t.Fatal("B did not release X at the final gate", action)
+	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(busy, "main_result", "outcome", "non_ff")))
+	if o := landingState(t, c.w, landingRepoStream).Operations[busy]; o.Active() {
+		t.Fatal("main's refusal did not release X", o.Phase)
 	}
 	store.FreezeEventClock(c.at.Add(15 * time.Second))
 	ok(t, a.LandingDrillPass(ctx))
@@ -148,6 +157,7 @@ func TestTD462NoWakeForReplacementOrQuotaPG(t *testing.T) {
 						t.Fatal("replacement claim", d)
 					}
 					td462PrepareBusy(t, c, yRoot, y)
+					td462AtMain(t, c, y)
 				}
 				c.grant(t, store.ActionCoreLanding)
 				if reason == "quota" {

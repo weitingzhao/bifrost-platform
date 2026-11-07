@@ -489,6 +489,9 @@ func SettleLandingCard(ctx context.Context, db DB, q CardQuestions, c CardRecord
 }
 
 // badLandingDisposed is why a landing_disposed body is refused, or "".
+// The Owner's disposition (owner, owner_delivered) names the card answer it
+// follows; the controller's main_delivered (a failed{in_main} root whose
+// change is on main, SettleInMain) names the main commit instead.
 func badLandingDisposed(v any) string {
 	m, ok := v.(map[string]any)
 	if !ok || m["v"] != "1" {
@@ -497,16 +500,23 @@ func badLandingDisposed(v any) string {
 	if !landingRoot.MatchString(fmt.Sprint(m["root"])) {
 		return "landing_disposed root is not a task"
 	}
-	for _, k := range []string{"op", "question_id"} {
-		if s, _ := m[k].(string); s == "" {
-			return "landing_disposed needs " + k
+	if s, _ := m["op"].(string); s == "" {
+		return "landing_disposed needs op"
+	}
+	if m["why"] == "main_delivered" {
+		if s, _ := m["main"].(string); !commitHex.MatchString(s) {
+			return "landing_disposed main_delivered names its main commit"
 		}
+		return ""
+	}
+	if s, _ := m["question_id"].(string); s == "" {
+		return "landing_disposed needs question_id"
 	}
 	if n, ok := cardNumber(m["trigger_seq"]); !ok || n < 1 {
 		return "landing_disposed needs trigger_seq"
 	}
 	if w := fmt.Sprint(m["why"]); w != "owner" && w != "owner_delivered" {
-		return "landing_disposed why is owner or owner_delivered"
+		return "landing_disposed why is owner, owner_delivered or main_delivered"
 	}
 	return ""
 }
@@ -514,7 +524,9 @@ func badLandingDisposed(v any) string {
 // checkLandingDisposedAppend: the controller records it on the repository
 // stream under its root, right after the applied card outcome it follows:
 // same question, root, operation and trigger, why as the Owner chose
-// (review 672 R-03). A disposition with no such answer is refused.
+// (review 672 R-03). A disposition with no such answer is refused. A
+// main_delivered one follows no answer: it is checked against the root's
+// own facts (checkMainDelivered).
 func checkLandingDisposedAppend(ctx context.Context, tx pgx.Tx, ev Event) error {
 	v, ok := ev.Body["landing_disposed"]
 	if !ok {
@@ -523,6 +535,9 @@ func checkLandingDisposedAppend(ctx context.Context, tx pgx.Tx, ev Event) error 
 	m, _ := v.(map[string]any)
 	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || m == nil || ev.TaskID != fmt.Sprint(m["root"]) {
 		return fmt.Errorf("landing_disposed is written by the controller on the repository stream under its root")
+	}
+	if m["why"] == "main_delivered" {
+		return checkMainDelivered(ctx, tx, ev.Stream, m)
 	}
 	var o map[string]any
 	var actor string
@@ -541,4 +556,45 @@ func checkLandingDisposedAppend(ctx context.Context, tx pgx.Tx, ev Event) error 
 		return fmt.Errorf("landing_disposed follows the Owner's applied answer for its root and operation")
 	}
 	return nil
+}
+
+// checkMainDelivered: a main_delivered disposition is for the root's latest
+// operation on the stream, ended failed{in_main} and not disposed of yet,
+// and the main commit it names is the root's landed note on its mission
+// stream.
+func checkMainDelivered(ctx context.Context, tx pgx.Tx, stream string, m map[string]any) error {
+	root, op := fmt.Sprint(m["root"]), fmt.Sprint(m["op"])
+	s, err := LandingState(ctx, tx, stream)
+	if err != nil {
+		return err
+	}
+	if o := s.Operations[op]; s.LatestOperation(root) != op || o.Phase != "failed" || o.Outcome != "in_main" {
+		return fmt.Errorf("landing_disposed main_delivered is for a root whose latest operation failed in_main")
+	}
+	if why, err := landingDisposed(ctx, tx, stream, root, op); err != nil {
+		return err
+	} else if why != "" {
+		return fmt.Errorf("landing_disposed main_delivered: %s %s is disposed of already (%s)", root, op, why)
+	}
+	main, err := rootLandedCommit(ctx, tx, root)
+	if err != nil {
+		return err
+	}
+	if main == "" || main != m["main"] {
+		return fmt.Errorf("landing_disposed main_delivered names the root's landed main commit")
+	}
+	return nil
+}
+
+// rootLandedCommit is the main commit of root's first landed note on its
+// mission stream (RecordLandings), or "" for none.
+func rootLandedCommit(ctx context.Context, tx pgx.Tx, root string) (string, error) {
+	var sha string
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT e.body_json->>'landed' FROM agentrt.event e JOIN agentrt.task t ON t.task_id = e.task_id
+	  WHERE e.task_id = $1 AND e.event_type = 'note' AND e.event_stream_id = 'mission:' || t.mission_id AND e.body_json ? 'landed'
+	  ORDER BY e.event_id LIMIT 1), '')`, root).Scan(&sha)
+	if err != nil || !commitHex.MatchString(sha) {
+		return "", err
+	}
+	return sha, nil
 }

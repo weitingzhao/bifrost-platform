@@ -112,7 +112,7 @@ func TestStoppedChecksAreClosed(t *testing.T) {
 	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 0 {
 		t.Fatalf("decided %d (%v) on a card already closed", n, err)
 	}
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 0 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 0 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 }

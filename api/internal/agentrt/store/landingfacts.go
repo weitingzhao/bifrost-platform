@@ -52,7 +52,12 @@ func (s LandingSource) grantPatchFor(repo string) func(ctx context.Context, a, m
 // the cut (capabilities, rule, step, task, mission, quota, repository stream).
 // This function opens no network and never replaces an error with Never.
 func LandingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op, snapshot string, now time.Time) (landing.Facts, error) {
-	f, deps, err := landingFactsDB(ctx, tx, src, environment, mode, taskID, op, now)
+	return landingFacts(ctx, tx, src, environment, mode, taskID, op, snapshot, now, false)
+}
+
+// landingFacts is LandingFacts; granted is landingFactsGate's.
+func landingFacts(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op, snapshot string, now time.Time, granted bool) (landing.Facts, error) {
+	f, deps, err := landingFactsGate(ctx, tx, src, environment, mode, taskID, op, now, granted)
 	if err != nil {
 		return f, err
 	}
@@ -72,6 +77,16 @@ type landingDep struct{ task, repo, commit string }
 // SnapshotHistory, DeployChanges), and the dependencies whose history the
 // external half reads. It opens no network.
 func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op string, now time.Time) (landing.Facts, []landingDep, error) {
+	return landingFactsGate(ctx, tx, src, environment, mode, taskID, op, now, false)
+}
+
+// landingFactsGate is landingFactsDB for the final gate when granted: for
+// op waiting with a usable grant (candidateGrant and grants enabled, the
+// checks of UsableLandingGrant), OtherInFlight counts only the operations
+// that hold the slot (landing.Operation.HoldsSlot), not those still in CI
+// or waiting for their card (PROD 2026-11-06). Every other read counts
+// every active operation.
+func landingFactsGate(ctx context.Context, tx pgx.Tx, src LandingSource, environment, mode, taskID, op string, now time.Time, granted bool) (landing.Facts, []landingDep, error) {
 	f := landing.Facts{Environment: environment, Mode: mode, Task: taskID}
 	var mission, step, offPlan, role, class string
 	// The standing envelope in force rides on this one read (review 694
@@ -153,8 +168,18 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 			}
 		}
 	}
+	if granted {
+		granted, err = grantedFinalGate(ctx, tx, "landing:"+f.Repo, state, op, now, f.GrantEnabled)
+		if err != nil {
+			return f, nil, err
+		}
+	}
+	inFlight := landing.Operation.Active
+	if granted {
+		inFlight = landing.Operation.HoldsSlot
+	}
 	for id, o := range state.Operations {
-		if id != op && o.Task != "" && o.Active() {
+		if id != op && o.Task != "" && inFlight(o) {
 			f.OtherInFlight++
 		}
 		if o.Task == taskID && o.BlocksClaim() {
@@ -170,7 +195,7 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 			return f, nil, err
 		}
 		for id := range mates {
-			if o := state.Operations[id]; o.Task != "" && o.Active() {
+			if o := state.Operations[id]; o.Task != "" && inFlight(o) {
 				f.OtherInFlight--
 			}
 		}
@@ -201,6 +226,22 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 		return f, nil, err
 	}
 	return f, deps, nil
+}
+
+// grantedFinalGate: op, in state, waits for its grant as the latest
+// operation of its task and has a grant usable at now, with grants enabled
+// (UsableLandingGrant's database-only checks; enabled is the facts' own
+// read of the envelope in force at now for the task's tenant and repo).
+func grantedFinalGate(ctx context.Context, tx pgx.Tx, stream string, state landing.State, op string, now time.Time, enabled bool) (bool, error) {
+	o, ok := state.Operations[op]
+	if !enabled || !ok || o.Phase != "awaiting_grant" || state.LatestOperation(o.Task) != op {
+		return false, nil
+	}
+	_, order, err := readLandingGrants(ctx, tx, stream)
+	if err != nil {
+		return false, err
+	}
+	return candidateGrant(order, op, o, now) != nil, nil
 }
 
 // landingFactsExternal is LandingFacts' external half: it reads the result,

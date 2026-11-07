@@ -47,20 +47,15 @@ func (w *world) lastMove(t *testing.T, task string) string {
 	return r
 }
 
-// TD-384, PROD M-9 (2026-10-19): the Owner gave a blocked task one more round
-// when its mission had used every attempt of its budget; the task went back
-// to ready and no claim ever took it. Now the card says the round raises the
-// budget, the answer raises it to what one round needs (three attempts more
-// than used) as the Owner's mission_amended, and a host takes the task in the
-// next claim. A mission with room for a whole round gets nothing added and the
-// card says nothing of it; one with room for part of a round gets the rest
-// (review 428: "room left" is room for a round).
+// TD-384, 2026-11-06: one more round on a blocked card needs no room in the
+// mission's budget, which caps no attempts: the card says nothing of the
+// budget, the answer amends nothing, and a host takes the task in the next
+// claim however many attempts the mission has used.
 func TestRetryOnSpentBudgetLeases(t *testing.T) {
 	t.Parallel()
-	for name, max := range map[string]int{"spent": 4, "one short of a round": 6, "room for a round": 7, "room left": 40} {
+	for name, max := range map[string]int{"spent": 4, "room left": 40} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			grows := max < 7
 			w := newKernelWorld(t)
 			w.goalMission(t, "M-3")
 			impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
@@ -76,24 +71,16 @@ func TestRetryOnSpentBudgetLeases(t *testing.T) {
 			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
 				t.Fatalf("asked %d (%v)", n, err)
 			}
-			raise := fmt.Sprintf("mission M-3 has used 4 of its %d attempts, so this answer also raises its budget to 7 attempts, recorded with this card's answer", max)
-			if body := a.cards[0].Body; strings.Contains(body, raise) != grows || strings.Contains(body, "raises its budget") != grows {
-				t.Fatalf("the card (budget grows: %v):\n%s", grows, body)
+			if body := a.cards[0].Body; strings.Contains(body, "budget") {
+				t.Fatalf("the card speaks of the budget:\n%s", body)
 			}
-			q := a.lastID()
-			a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+			a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
 			if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", impl) != "ready" {
 				t.Fatalf("one more round: decided %d (%v), task %s", n, err, w.state(t, "task", impl))
 			}
-			b, amended := w.budget(t, "M-3"), w.amended(t, "M-3")
-			if !grows {
-				if len(amended) != 0 || fmt.Sprint(b) != fmt.Sprintf("map[max_attempts:%d max_wall_hours:48]", max) {
-					t.Fatalf("with room left: amended %v, budget %v", amended, b)
-				}
-			} else if fmt.Sprint(b) != fmt.Sprintf("map[max_attempts:7 max_wall_hours:48 owner_granted_attempts:%d]", 7-max) || len(amended) != 1 ||
-				!strings.HasPrefix(amended[0], "owner "+impl+" ") || !strings.Contains(amended[0], `"max_attempts": 7`) ||
-				!strings.Contains(amended[0], "one more round on its card (question "+q+")") || strings.Contains(amended[0], "max_wall_hours") {
-				t.Fatalf("budget %v, amended %v", b, amended)
+			if b, amended := w.budget(t, "M-3"), w.amended(t, "M-3"); len(amended) != 0 ||
+				fmt.Sprint(b) != fmt.Sprintf("map[max_attempts:%d max_wall_hours:48]", max) {
+				t.Fatalf("amended %v, budget %v", amended, b)
 			}
 			if cl := w.claim(t, "h5", time.Hour, cursor); cl == nil || cl.TaskID != impl {
 				t.Fatalf("after one more round the claim took %+v; want %s", cl, impl)
@@ -127,49 +114,56 @@ hosts: [h1, h2, h3, h4]
 	w.run(t, "h1", codex, "done")
 	check, err = startVerify(ctx, w.rt, impl)
 	ok(t, err)
-	if c := w.claim(t, "h2", time.Hour, deterministic); c != nil {
-		t.Fatalf("claimed %s on a spent budget", c.TaskID)
-	}
 	return w, mission, impl, check
 }
 
-// TD-384: a ready task its mission's budget no longer lets run is blocked by
-// the controller's pass, with the reason, and gets a card naming the budget;
-// once. Its one more round raises the budget past the standing envelope the
-// mission started under: what the Owner added is his, the envelope bounds
-// what the mission started with, so the check is taken.
+// 2026-11-06: a mission that has used every attempt its budget states still
+// leases its ready task, and amends nothing.
+func TestSpentBudgetStillLeases(t *testing.T) {
+	t.Parallel()
+	w, mission, _, check := spentEnvelope(t)
+	if c := w.claim(t, "h2", time.Hour, deterministic); c == nil || c.TaskID != check {
+		t.Fatalf("on a spent budget the claim took %+v; want the check %s", c, check)
+	}
+	if b, amended := w.budget(t, mission), w.amended(t, mission); len(amended) != 0 || fmt.Sprint(b) != "map[max_attempts:1 max_wall_hours:48]" {
+		t.Fatalf("amended %v, budget %v", amended, b)
+	}
+}
+
+// TD-384: a ready task blocked for its mission's budget before 2026-11-06
+// (nothing blocks so any more) keeps its card naming the budget, which no
+// longer offers to raise it; one more round sends it back to ready without
+// a grant, and the check is taken under the envelope the mission started
+// under.
 func TestSpentBudgetBlocksReadyTask(t *testing.T) {
 	t.Parallel()
 	w, mission, impl, check := spentEnvelope(t)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 || w.state(t, "task", check) != "blocked" {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 || w.state(t, "task", check) != "blocked" {
 		t.Fatalf("blocked %d (%v), the check is %s", n, err, w.state(t, "task", check))
 	}
 	why := "mission " + mission + " has used 1 of its 1 attempts: no host may take this task until the budget grows"
 	if r := w.lastMove(t, check); r != why {
 		t.Fatalf("blocked because %q; want %q", r, why)
 	}
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("a second pass blocked %d (%v)", n, err)
-	}
 	a := &asker{}
 	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
 		t.Fatalf("asked %d (%v)", n, err)
 	}
-	for _, want := range []string{"Why: " + why, "so this answer also raises its budget to 4 attempts",
+	for _, want := range []string{"Why: " + why,
 		store.BlockedDrop + ": this check is cancelled; when it is the only check of the latest work of task " + impl + ", that task is blocked"} {
 		if !strings.Contains(a.cards[0].Body, want) {
 			t.Errorf("the card lacks %q:\n%s", want, a.cards[0].Body)
 		}
 	}
+	if strings.Contains(a.cards[0].Body, "raises its budget") {
+		t.Errorf("the card offers to raise the budget:\n%s", a.cards[0].Body)
+	}
 	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
 	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", check) != "ready" {
 		t.Fatalf("one more round: decided %d (%v), the check is %s", n, err, w.state(t, "task", check))
 	}
-	if b := w.budget(t, mission); fmt.Sprint(b) != "map[max_attempts:4 max_wall_hours:48 owner_granted_attempts:3]" {
-		t.Fatalf("budget %v", b)
-	}
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("after the grant the pass blocked %d (%v)", n, err)
+	if b, amended := w.budget(t, mission), w.amended(t, mission); len(amended) != 0 || fmt.Sprint(b) != "map[max_attempts:1 max_wall_hours:48]" {
+		t.Fatalf("amended %v, budget %v", amended, b)
 	}
 	if c := w.claim(t, "h2", time.Hour, deterministic); c == nil || c.TaskID != check {
 		t.Fatalf("after one more round the claim took %+v; want the check %s", c, check)
@@ -182,7 +176,7 @@ func TestSpentBudgetBlocksReadyTask(t *testing.T) {
 func TestDroppedCheckBlocksItsWork(t *testing.T) {
 	t.Parallel()
 	w, _, impl, check := spentEnvelope(t)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	a := &asker{}
@@ -205,42 +199,29 @@ func TestDroppedCheckBlocksItsWork(t *testing.T) {
 	}
 }
 
-// TD-384: a mission past its hours blocks its ready task the same way, and
-// one more round adds the hours a round's attempts may run; a mission with
-// time and attempts left blocks nothing.
-func TestSpentHoursBlockReadyTask(t *testing.T) {
+// 2026-11-06: a mission past its hours and one with time left both lease
+// their ready tasks.
+func TestSpentHoursStillLease(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.goalMission(t, "M-3")
 	w.goalMission(t, "M-4")
-	// A one-minute implementation: its verification and review still have an
-	// hour each (review 428 B1), so a round needs three hours.
 	late := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal", HardLimit: time.Minute})
 	fresh := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a goal"})
 	w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours',
 	  budget_json = '{"max_attempts": 9, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`,
 		`UPDATE agentrt.mission SET budget_json = '{"max_attempts": 9, "max_wall_hours": 48}' WHERE mission_id = 'M-4'`)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 || w.state(t, "task", late) != "blocked" ||
-		w.state(t, "task", fresh) != "ready" {
-		t.Fatalf("blocked %d (%v): M-3's task %s, M-4's %s", n, err, w.state(t, "task", late), w.state(t, "task", fresh))
+	got := map[string]bool{}
+	for _, h := range []string{"h1", "h2"} {
+		if c := w.claim(t, h, time.Hour, cursor); c != nil {
+			got[c.TaskID] = true
+		}
 	}
-	if r := w.lastMove(t, late); !strings.HasPrefix(r, "mission M-3 is past its 48 hours (it started 49.0 hours ago)") {
-		t.Fatalf("blocked because %q", r)
+	if !got[late] || !got[fresh] {
+		t.Fatalf("claimed %v; want M-3's %s and M-4's %s", got, late, fresh)
 	}
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || !strings.Contains(a.cards[0].Body, "raises its budget to 53 hours") {
-		t.Fatalf("asked %d (%v):\n%v", n, err, a.cards)
-	}
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	// A little over 49 hours gone and three attempts of up to an hour each: 53.
-	if b := w.budget(t, "M-3"); fmt.Sprint(b) != "map[max_attempts:9 max_wall_hours:53 owner_granted_wall_hours:5]" {
-		t.Fatalf("budget %v", b)
-	}
-	if c := w.claim(t, "h1", time.Hour, cursor); c == nil || c.TaskID != late {
-		t.Fatalf("after one more round the claim took %+v; want %s", c, late)
+	if amended := w.amended(t, "M-3"); len(amended) != 0 {
+		t.Fatalf("amended %v", amended)
 	}
 }
 
@@ -282,7 +263,7 @@ func TestBlockedSalvageCheckIsNotMadeAgain(t *testing.T) {
 	if n := w.salvageChecks(t); n != 1 {
 		t.Fatalf("checks of the salvaged result: %d", n)
 	}
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	check := w.checkOf(t, task, "blocked")
@@ -316,7 +297,7 @@ func TestDroppingAnOldCheckLeavesTheWork(t *testing.T) {
 	if n := w.salvageChecks(t); n != 1 {
 		t.Fatalf("checks of the salvaged result: %d", n)
 	}
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	old := w.checkOf(t, task, "blocked")
@@ -356,7 +337,7 @@ func TestHugeHoursAreNotSpent(t *testing.T) {
 	w.goalMission(t, "M-3")
 	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
 	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 9, "max_wall_hours": 3000000}' WHERE mission_id = 'M-3'`)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 0 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 0 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	if c := w.claim(t, "h1", time.Hour, cursor); c == nil || c.TaskID != task {
@@ -364,18 +345,18 @@ func TestHugeHoursAreNotSpent(t *testing.T) {
 	}
 }
 
-// Review 428, 430 C2: what the Owner added is the only part of a budget the
-// standing envelope does not bound. After his grant and a plan that lowers
-// the mission's attempts (his grant stays recorded), the check is taken under
-// the envelope as it was, and not once the envelope is tightened below the
-// hours the mission started with.
+// Review 428, 430 C2: the standing envelope still bounds the budget a
+// mission started with. After one more round on a task blocked for its
+// budget before (which grants nothing now), the check is taken under the
+// envelope as it was, and not once the envelope is tightened below the hours
+// the mission started with.
 func TestEnvelopeStillBoundsWhatTheMissionStartedWith(t *testing.T) {
 	t.Parallel()
 	for name, tighten := range map[string]bool{"as it was": false, "tightened": true} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			w, mission, _, check := spentEnvelope(t)
-			if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+			if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 				t.Fatalf("blocked %d (%v)", n, err)
 			}
 			a := &asker{}
@@ -386,10 +367,7 @@ func TestEnvelopeStillBoundsWhatTheMissionStartedWith(t *testing.T) {
 			if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", check) != "ready" {
 				t.Fatalf("decided %d (%v)", n, err)
 			}
-			// A plan lowers the attempts as amendMission writes it: the
-			// Owner's grant stays.
-			w.legacy(t, `UPDATE agentrt.mission SET budget_json = budget_json || '{"max_attempts": 3}' WHERE mission_id = '`+mission+`'`)
-			if b := w.budget(t, mission); fmt.Sprint(b) != "map[max_attempts:3 max_wall_hours:48 owner_granted_attempts:3]" {
+			if b := w.budget(t, mission); fmt.Sprint(b) != "map[max_attempts:1 max_wall_hours:48]" {
 				t.Fatalf("budget %v", b)
 			}
 			if tighten {
@@ -469,7 +447,7 @@ func TestDroppingTheLastCurrentCheckBlocksTheWork(t *testing.T) {
 				`{"attempt":%q,"check":%q,"commit":%q,"repo":"bifrost-platform","round":%d,"subject_task":%q,"task_spec":%q}`,
 				cl.AttemptID, c.role, commitA, c.round, impl, spec)))
 			w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`)
-			if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+			if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 				t.Fatalf("blocked %d (%v); want the work's check and the hand check", n, err)
 			}
 			a := &asker{}

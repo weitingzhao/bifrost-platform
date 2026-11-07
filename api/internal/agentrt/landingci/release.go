@@ -17,6 +17,7 @@ const PlatformRepoURL = "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifros
 type ReleaseEvidence struct {
 	Evidence
 	PipelineRef, RepoURL string
+	TestedBy             string
 	ReadAt               time.Time
 	// Undecided names the runs of P newer than the selected one that have no
 	// verdict yet (R5:5.7-2). They were passed over, never trusted.
@@ -100,6 +101,9 @@ func (e ReleaseEvidence) LastFullAgeHours() int {
 // e.g. "scope=incremental; last full CI green 51 h ago (run r, commit c), cap 48 h".
 func (e ReleaseEvidence) ScopeNote() string {
 	scope := e.Scope()
+	if e.TestedBy != "" {
+		scope += fmt.Sprintf("; tested by run %s (same tree)", e.TestedBy)
+	}
 	if scope == "" {
 		scope = "none"
 	}
@@ -116,7 +120,11 @@ func (e ReleaseEvidence) Record() (map[string]any, error) {
 	if e.Status != "Succeeded" || e.Reason != "" || !e.releaseScope(e.Results) || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
 		return nil, fmt.Errorf("release CI is not accepted evidence")
 	}
-	return map[string]any{"name": e.Run, "uid": e.UID, "created_at": e.CreatedAt.UTC().Format(time.RFC3339Nano), "platform_commit": e.PlatformCommit, "ui_commit": e.UICommit, "infra_commit": e.InfraCommit, "pipeline_ref": e.PipelineRef, "repo_url": e.RepoURL, "read_at": e.ReadAt.UTC().Format(time.RFC3339Nano)}, nil
+	record := map[string]any{"name": e.Run, "uid": e.UID, "created_at": e.CreatedAt.UTC().Format(time.RFC3339Nano), "platform_commit": e.PlatformCommit, "ui_commit": e.UICommit, "infra_commit": e.InfraCommit, "pipeline_ref": e.PipelineRef, "repo_url": e.RepoURL, "read_at": e.ReadAt.UTC().Format(time.RFC3339Nano)}
+	if e.TestedBy != "" {
+		record["tested_by"] = e.TestedBy
+	}
+	return record, nil
 }
 
 // ReadRelease implements B5 §4 without changing Read/legacy selection rules.
@@ -171,13 +179,13 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 	// is set aside the same way (Stale).
 	kept := matches[:0]
 	for _, item := range matches {
-		r := releaseResult(item, revision)
+		r := reuseResult(item, items, revision)
 		green := r.Status == "Succeeded" && r.Reason == ""
 		if green && r.Results[APIScopeResult] == APIScopeConsole {
 			out.Partial = append(out.Partial, item.GetName())
 			continue
 		}
-		if green && r.Results[APIScopeResult] == APIScopeIncremental && !out.FullFresh() {
+		if green && r.Results[APIScopeResult] == APIScopeIncremental && !out.FullFresh() && r.Results["tested-by"] == "" {
 			out.Stale = append(out.Stale, item.GetName())
 			continue
 		}
@@ -211,13 +219,20 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 		out.Undecided = append(out.Undecided, item.GetName())
 	}
 	chosen := matches[skip]
-	selected := releaseResult(chosen, revision)
+	selected := reuseResult(chosen, items, revision)
+	if selected.Reason == "" {
+		out.TestedBy = selected.Results["tested-by"]
+	}
+	if selected.Status == "Succeeded" && selected.Results["tested-by"] != "" && !out.releaseScope(selected.Results) {
+		selected.Status, selected.Reason = "Unknown", "ci_reuse"
+		out.TestedBy = ""
+	}
 	out.Evidence = selected
 	for _, item := range matches[skip+1:] {
 		if !item.GetCreationTimestamp().Time.Equal(chosen.GetCreationTimestamp().Time) {
 			break
 		}
-		other := releaseResult(item, revision)
+		other := reuseResult(item, items, revision)
 		if other.Status != selected.Status || other.Reason != selected.Reason || !reflect.DeepEqual(other.Results, selected.Results) {
 			out.Status, out.Reason = "Unknown", "ci_tie"
 		}
@@ -239,6 +254,9 @@ func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, stri
 			continue
 		}
 		r := releaseResult(item, params["revision"])
+		if _, reuse := r.Results["tested-by"]; reuse {
+			continue
+		}
 		if r.Status != "Succeeded" || r.Reason != "" || !fullScope(r.Results) {
 			continue
 		}
@@ -254,6 +272,9 @@ func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, stri
 // tasks after a cancel); a run with no Succeeded condition has not started.
 // A completion time, or more than one Succeeded condition, is never undecided.
 func undecided(item unstructured.Unstructured, revision string) bool {
+	if _, counts := namedValues(item, "status", "results"); counts["tested-by"] > 0 {
+		return false
+	}
 	if releaseResult(item, revision).Reason != "" {
 		return false
 	}

@@ -62,7 +62,7 @@ func pushedDrill(t *testing.T, w *world, task string, src store.LandingSource) (
 func TestDrillScanMainMovementOpensNextOperation(t *testing.T) {
 	w, task, src := acceptedDrill(t)
 	op, at := pushedDrill(t, w, task, src)
-	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "main_red", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))))
+	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "ci_stuck", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))))
 	remote := &branchObserved{}
 	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return at.Add(time.Minute) }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": remote}}
 	ctl.Drill = &controller.DrillSources{Facts: src, Main: func(context.Context, string) (string, error) { return strings.Repeat("c", 40), nil }, CI: func(context.Context, string, string, time.Time) (landing.CIRun, error) {

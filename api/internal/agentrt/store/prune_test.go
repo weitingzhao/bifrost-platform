@@ -117,10 +117,10 @@ func TestPrunableFollowsTheRule(t *testing.T) {
 
 	// The accepted attempt of M-3 goes seven days after its very commit is
 	// first seen on main, and only while main still holds it (review 436).
-	// Main holding another commit of the task, or not read, is no landing.
+	// Main holding only another task's commit, or not read, is no landing.
 	for name, read := range map[string]store.MainResults{
-		"another commit of the task": func(context.Context, string) (store.OnMain, bool) {
-			return store.OnMain{accepted: {commitB: commitB}}, true
+		"another task's commit": func(context.Context, string) (store.OnMain, bool) {
+			return store.OnMain{store.NewTaskID(): {commitB: commitB}}, true
 		},
 		"main not read": func(context.Context, string) (store.OnMain, bool) { return nil, false },
 	} {
@@ -274,5 +274,74 @@ func TestPruneAfterIsADay(t *testing.T) {
 	t.Parallel()
 	if store.PruneAfter != 24*time.Hour {
 		t.Fatalf("PruneAfter = %s, the Owner set a day", store.PruneAfter)
+	}
+}
+
+// PROD 2026-11-06: a change the Owner or the coordinator merged stands on
+// main while its task is still open, or was cancelled. Every implementation
+// whose change main holds gets one landed note, in whatever state, with how
+// main names it (matched_by) and the route it took (landed_via).
+func TestRecordLandingsAnyState(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	// ready again after a round sent back; verifying; cancelled; accepted.
+	ready := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.run(t, "h1", cursor, "done")
+	verifying := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.run(t, "h2", cursor, "done")
+	cancelled := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.run(t, "h3", cursor, "done")
+	accepted := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.passRound(t, accepted, "h4", "h5", "h6")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		for _, m := range []struct{ task, to string }{{ready, "verifying"}, {ready, "rework"}, {ready, "ready"},
+			{verifying, "verifying"}, {cancelled, "blocked"}, {cancelled, "cancelled"}} {
+			if err := store.MoveTaskForTest(ctx, tx, "controller", m.task, m.to); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+
+	onMain := store.OnMain{
+		ready:     {commitA: commitA}, // its own commit, as it is
+		verifying: {commitA: commitB}, // its own commit, cherry-picked
+		cancelled: {commitB: commitB}, // a commit it never pushed that names it
+		accepted:  {commitA: commitB},
+	}
+	mainResults := func(_ context.Context, repo string) (store.OnMain, bool) { return onMain, repo == "bifrost-platform" }
+	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 4 {
+		t.Fatalf("landings: %d (%v); want 4", n, err)
+	}
+	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 0 {
+		t.Fatalf("landings again: %d (%v); want none", n, err)
+	}
+	want := map[string][4]string{ // landed, landed_via, matched_by, landed_result
+		ready:     {commitA, "owner_merge", "result", commitA},
+		verifying: {commitB, "harvest", "cherry_pick", commitA},
+		cancelled: {commitB, "owner_merge", "trailer", ""},
+		accepted:  {commitB, "harvest", "cherry_pick", commitA},
+	}
+	for task, wt := range want {
+		rows, err := w.rt.Query(ctx, `SELECT body_json->>'landed', body_json->>'landed_via', body_json->>'matched_by',
+		    COALESCE(body_json->>'landed_result', ''), body_json->>'landed_repo', body_json->>'text', event_stream_id
+		  FROM agentrt.event WHERE task_id = $1 AND event_type = 'note' AND body_json ? 'landed'`, task)
+		ok(t, err)
+		notes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) ([7]string, error) {
+			var v [7]string
+			return v, r.Scan(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6])
+		})
+		ok(t, err)
+		if len(notes) != 1 {
+			t.Fatalf("task %s: %d landed notes; want one", task, len(notes))
+		}
+		got := notes[0]
+		if [4]string{got[0], got[1], got[2], got[3]} != wt || got[4] != "bifrost-platform" || got[6] != store.MissionStream("M-3") {
+			t.Errorf("task %s: %v; want %v on bifrost-platform, on M-3's stream", task, got, wt)
+		}
+		if !strings.HasSuffix(got[5], " is on main of bifrost-platform as "+wt[0][:12]+" ("+wt[1]+", matched by "+wt[2]+")") {
+			t.Errorf("task %s: text %q", task, got[5])
+		}
 	}
 }

@@ -34,7 +34,20 @@ var ciScopeKeys = []string{"api_scope", "api_packages", "api_store_run", "api_sc
 var task = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
 var attempt = regexp.MustCompile(`^a_[0-9A-HJKMNP-TV-Z]{26}$`)
 var digest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var reasons = []string{"stale", "conflict", "patch_changed", "overlap", "ci_failed", "ci_red", "floor", "limit", "denied", "bound", "declined", "rule", "main_red", "ci_stuck", "window", "main_lost"}
+var reasons = []string{"stale", "conflict", "ci_failed", "ci_red", "floor", "limit", "denied", "bound", "declined", "rule", "ci_stuck", "window", "main_lost"}
+
+// RetiredReasons are refusals the Owner deleted (2026-11-06): overlap (a
+// path changed on main and in the change now merges three-way),
+// patch_changed (the review it guarded is gone; the landing CI tests what
+// lands) and main_red (the landing CI tests main plus the change). Records
+// written before still read, so streams that hold them fold; no new record
+// may carry one (store's append check refuses it).
+var RetiredReasons = []string{"overlap", "patch_changed", "main_red"}
+
+// Retired says whether r carries a retired reason.
+func Retired(r Record) bool {
+	return slices.Contains(RetiredReasons, r.String("why"))
+}
 
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
@@ -185,7 +198,7 @@ func Parse(v any) (Record, error) {
 		case "retry":
 			valid = r.String(k) == "infra"
 		case "why":
-			valid = (version >= 4 && (r.String("kind") == "s5_failed" || r.String("kind") == "failed") && S5Code(r.String(k))) || slices.Contains(reasons, r.String(k)) || (r.String(k) == "approval_expired" && version >= 3)
+			valid = (version >= 4 && (r.String("kind") == "s5_failed" || r.String("kind") == "failed") && S5Code(r.String(k))) || slices.Contains(reasons, r.String(k)) || slices.Contains(RetiredReasons, r.String(k)) || (r.String(k) == "approval_expired" && version >= 3)
 			if r.String("kind") == "discarded" {
 				valid = slices.Contains([]string{"main_changed", "branch_collision"}, r.String(k))
 			}
@@ -685,6 +698,14 @@ func (o Operation) AtMain() bool {
 
 func (o Operation) Active() bool {
 	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
+}
+
+// HoldsSlot: the operation holds the repository's slot against a granted
+// landing's final gate. Only one past its CI does: pushing to main
+// (main_intent until it ends) or deploying. One still in CI (claimed through
+// ci_rerun), waiting for its card, parked or ended does not.
+func (o Operation) HoldsSlot() bool {
+	return o.AtMain() || slices.Contains([]string{"stg_pending", "stg_snapshot", "stg_started", "stg_result"}, o.Phase)
 }
 
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the

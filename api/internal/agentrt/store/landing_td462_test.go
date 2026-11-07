@@ -94,27 +94,11 @@ func TestTD462GrantedRetryAfterAwaitingGrantPG(t *testing.T) {
 		}
 		return c.ci, nil
 	}
+	// The other root is still in CI: it holds no slot against the granted
+	// landing's final gate (PROD 2026-11-06), which pushes on this pass.
 	ok(t, ctl.LandingDrillPass(ctx))
-	if opens != 1 || len(p.pushes) != 0 || c.reservations(t) != 0 {
-		t.Fatal("the in-flight limit was bypassed", opens, p.pushes)
-	}
-	store.FreezeEventClock(c.at.Add(time.Second))
-	ok(t, ctl.LandingDrillPass(ctx))
-	if opens != 1 {
-		t.Fatal("retried while the same operation remained in flight", opens)
-	}
-	// Its successful CI reaches the unchanged final gate and enters
-	// awaiting_grant, which is no longer Active in the store's count.
-	store.FreezeEventClock(c.at.Add(2 * time.Minute))
-	_, d, err = store.AuthorizeLandingPush(ctx, c.w.rt, c.src, op, observed(prepared))
-	ok(t, err)
-	if d.Reason != "awaiting_grant" {
-		t.Fatal("second operation did not free its slot", d)
-	}
-	store.FreezeEventClock(c.at.Add(2*time.Minute + time.Second))
-	ok(t, ctl.LandingDrillPass(ctx))
-	if len(p.pushes) != 1 || c.phase(t) != "main_result" || c.reservations(t) != 1 {
-		t.Fatal("released slot did not wake the approved operation next scan", p.pushes, c.phase(t))
+	if opens != 1 || len(p.pushes) != 1 || c.phase(t) != "main_result" || c.reservations(t) != 1 {
+		t.Fatal("the granted operation waited behind one still in CI", opens, p.pushes, c.phase(t))
 	}
 }
 

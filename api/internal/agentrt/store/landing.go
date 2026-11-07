@@ -43,6 +43,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	if err != nil {
 		return err
 	}
+	if landing.Retired(r) {
+		return fmt.Errorf("landing reason %s is retired", r.String("why"))
+	}
 
 	k := r.String("kind")
 	if strings.HasPrefix(k, "s5_") && (ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform") {

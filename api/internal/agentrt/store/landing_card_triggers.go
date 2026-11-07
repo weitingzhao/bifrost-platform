@@ -206,9 +206,10 @@ func landingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			if !active {
 				continue
 			}
-			// A red CI that sent its root back for another round is the
-			// root's own rework, not the Owner's card (precheck.go).
-			if o.Outcome == "ci_red" {
+			// A red CI or a replay conflict that sent its root back for
+			// another round is the root's own rework, not the Owner's card
+			// (precheck.go).
+			if slices.Contains(reworkedOutcomes, o.Outcome) {
 				reworked, err := landingCIReworked(ctx, tx, o.Task, op)
 				if err != nil {
 					return nil, err

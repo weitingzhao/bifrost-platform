@@ -176,7 +176,7 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 	w := newKernelWorld(t)
 	differs, agrees := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
 	pending, never := w.ledgerMission(t, "M-5"), w.ledgerMission(t, "M-6")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 4 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 4 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -382,7 +382,7 @@ func TestAssessmentUnavailable(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	notOne, failed := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -426,7 +426,7 @@ func TestAssessmentUnavailable(t *testing.T) {
 func TestAssessmentTimesOut(t *testing.T) {
 	w := newKernelWorld(t)
 	late, inTime := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -471,7 +471,7 @@ func TestAssessmentTimesOut(t *testing.T) {
 func TestALateReportIsNotTaken(t *testing.T) {
 	w := newKernelWorld(t)
 	late := w.ledgerMission(t, "M-3")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards

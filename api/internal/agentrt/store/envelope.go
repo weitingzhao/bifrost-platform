@@ -86,16 +86,15 @@ type missionBudget struct {
 
 // allows says whether a task of the mission may be leased now, and its hard
 // time limit (proposal §2, T10; review 186 A3, A4): the tenant's budget rule
-// is in force (none: nothing is dispatched) and caps the limit; the mission
-// states a budget, has attempts left and time left (missionbudget.go); and a
+// is in force (none: nothing is dispatched) and caps the limit; and a
 // mission that started inside a standing envelope still fits the envelope in
-// force, with the task's effect too. The budget the envelope bounds is the
-// one the mission started with: what the Owner added on a blocked card is
-// his own decision (TD-384), and what the platform added on its own is within
-// the budget rule's auto_grant cap.
+// force, with the task's effect too. The attempts the mission has used and
+// the hours since it started refuse nothing (missionbudget.go). The budget
+// the envelope bounds is the one the mission started with: what the Owner
+// and the platform added to it before is left out (TD-384).
 func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c candidate) (int, bool, error) {
 	s, ok, err := m.spend(ctx, tx, rc, c.mission)
-	if err != nil || !ok || s.why() != "" {
+	if err != nil || !ok {
 		return 0, false, err
 	}
 	if m.envelope != "" {

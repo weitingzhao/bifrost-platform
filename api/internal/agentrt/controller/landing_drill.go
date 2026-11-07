@@ -182,13 +182,6 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
-	mainCI := landing.CIRun{Status: "Unknown"}
-	if ci.Status == "Failed" && repo == "bifrost-platform" {
-		mainCI, err = src.CI(ctx, repo, o.M0, time.Time{})
-		if err != nil {
-			mainCI.Status = "Unknown"
-		}
-	}
 	blocked, windowErr := src.WindowBlocked(ctx, repo)
 	blocked = blocked || windowErr != nil
 	// Decided at the clock after the reads above, not the pass's start: the
@@ -217,7 +210,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 			return landing.DrillAction{Kind: "wait"}, err
 		}
 	}
-	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, MainCI: mainCI, WindowBlocked: blocked,
+	a := landing.NextDrill(s, op, landing.DrillObservation{Facts: f, Main: main, Candidate: ci, WindowBlocked: blocked,
 		PinCI: pinnable && !keyed}, at)
 	if a.Kind == "failed" && (a.Why == "bound" || a.Why == "approval_expired") {
 		return settleBound()

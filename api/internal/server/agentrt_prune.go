@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -53,8 +55,59 @@ func (s *Server) agentRuntimeMainResults() store.MainResults {
 		if err != nil {
 			return nil, err
 		}
-		return lineage.MainResults(ctx, lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, client, repo,
-			time.Now().Add(-mainHorizon), mainPages)
+		acc := lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}
+		since := time.Now().Add(-mainHorizon)
+		out, err := lineage.MainResults(ctx, acc, client, repo, since, mainPages)
+		if err != nil {
+			return nil, err
+		}
+		pushed := map[string][]string{}
+		if s.agentRuntime == nil || s.agentRuntime.late == nil {
+			return out, nil
+		}
+		err = store.InTx(ctx, s.agentRuntime.late, func(tx pgx.Tx) error {
+			rows, err := tx.Query(ctx, `SELECT t.task_id, a.pushed_commit
+				FROM agentrt.task t JOIN agentrt.attempt a ON a.task_id = t.task_id
+				WHERE t.repo = $1 AND t.role = 'implement' AND a.pushed_commit IS NOT NULL
+				AND NOT EXISTS (SELECT 1 FROM agentrt.event e WHERE e.task_id = t.task_id
+					AND e.event_type = 'note' AND e.body_json ? 'landed')
+				ORDER BY t.task_id, a.attempt_no DESC`, repo)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var task, sha string
+				if err := rows.Scan(&task, &sha); err != nil {
+					return err
+				}
+				pushed[task] = append(pushed[task], sha)
+			}
+			return rows.Err()
+		})
+		if err != nil {
+			slog.Warn("agentrt main changes: pushed attempts unavailable", "repo", repo, "err", err)
+			return out, nil
+		}
+		if len(pushed) == 0 {
+			return out, nil
+		}
+		changes, err := lineage.MainChanges(ctx, acc, client, repo, since, mainPages, pushed)
+		if err != nil {
+			slog.Warn("agentrt main changes", "repo", repo, "err", err)
+			return out, nil
+		}
+		for task, results := range changes {
+			if out[task] == nil {
+				out[task] = map[string]string{}
+			}
+			for from, main := range results {
+				if _, exists := out[task][from]; !exists {
+					out[task][from] = main
+				}
+			}
+		}
+		return out, nil
 	}, tip, mainTTL)
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -27,6 +28,26 @@ func TestLandingNoteVocabulary(t *testing.T) {
 	}
 	if checkBody("note", map[string]any{"landing": r}) == nil {
 		t.Fatal("missing human text")
+	}
+}
+
+// The retired reasons (Owner 2026-11-06) are out of the vocabulary: a
+// record written before still parses, so its stream folds, but no new
+// record may carry one.
+func TestLandingRetiredReasonVocabulary(t *testing.T) {
+	t.Parallel()
+	for _, rec := range []map[string]any{
+		{"v": 1, "op": "land:1", "kind": "failed", "why": "overlap"},
+		{"v": 1, "op": "land:1", "kind": "failed", "why": "patch_changed"},
+		{"v": 1, "op": "land:1", "kind": "parked", "why": "main_red", "retry_at": "2026-11-06T00:00:00Z"},
+	} {
+		if checkBody("note", map[string]any{"text": "Old record", "landing": rec}) != nil {
+			t.Fatal("a recorded retired reason no longer reads", rec)
+		}
+		err := checkLandingAppend(context.Background(), nil, Event{Type: "note", Body: map[string]any{"text": "New record", "landing": rec}}, time.Now())
+		if err == nil || !strings.Contains(err.Error(), "retired") {
+			t.Fatal("a retired reason appended", rec, err)
+		}
 	}
 }
 

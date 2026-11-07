@@ -204,7 +204,7 @@ func TestStoppedTaskCardAnswerMovesNothing(t *testing.T) {
 func TestStoppedTaskCardOfACheckWhoseSubjectIsStopped(t *testing.T) {
 	t.Parallel()
 	w, _, impl, check := spentEnvelope(t)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 || w.state(t, "task", check) != "blocked" {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 || w.state(t, "task", check) != "blocked" {
 		t.Fatalf("blocked %d (%v); the check is %s", n, err, w.state(t, "task", check))
 	}
 	w.stop(t, "c1", "task", impl, "hold the work")

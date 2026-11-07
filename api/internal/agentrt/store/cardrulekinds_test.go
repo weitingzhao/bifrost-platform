@@ -60,7 +60,7 @@ func TestEveryKindIsAnsweredAfterItsWait(t *testing.T) {
 	plain := w.ready(t, store.Task{}) // M-1
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, plain) }))
 	planTask := w.ready(t, store.Task{MissionID: "M-1", Role: "plan", Effect: "none", OffPlanReason: "a goal"})
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards

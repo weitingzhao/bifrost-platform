@@ -120,18 +120,19 @@ type BudgetRule struct {
 	Tenant          string
 	Mission         Budget
 	AttemptLimitSec int
-	// AutoGrant is how far the platform grows an over-budget mission's
-	// budget on its own, a round at a time, before the Owner is asked
-	// (auto_grant; AutoGrantDefault when the rule states none).
+	// AutoGrant is how far the platform grew an over-budget mission's
+	// budget on its own (auto_grant; AutoGrantDefault when the rule states
+	// none). A mission's attempts and hours cap nothing any more
+	// (2026-11-06), so the runtime reads it no longer; it is still parsed,
+	// so the rules signed with it keep their canonical doc.
 	AutoGrant Budget
 	// AutoGrantStated says the rule stated auto_grant; only then is it in
 	// the rule's doc, so a rule without it keeps its canonical doc.
 	AutoGrantStated bool
 }
 
-// AutoGrantDefault is the cap on what the platform adds to a mission's
-// budget on its own when a budget rule states no auto_grant: 10 rounds of 3
-// attempts, and a day.
+// AutoGrantDefault is the auto_grant of a budget rule that states none: 10
+// rounds of 3 attempts, and a day (unused by the runtime, see AutoGrant).
 var AutoGrantDefault = Budget{MaxAttempts: 30, MaxWallHours: 24}
 
 // Candidate is one executor and model a job may route to.

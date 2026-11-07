@@ -245,38 +245,46 @@ func TestSameKeyAfterTerminalCreatesANewQuestion(t *testing.T) {
 	}
 }
 
-func TestRequesterOpenQuotaAndUnreadList(t *testing.T) {
+func TestRequesterOpenQuotaListsOpen(t *testing.T) {
 	s := testSvc(t)
 	for i := 1; i <= 3; i++ {
 		mustCreate(t, s, "thread-a", keyN(i), map[string]any{"title": "open " + itoa(i)})
 	}
 	fourth := ask(t, s, "thread-a", keyN(4), map[string]any{"title": "open 4"})
-	if fourth.Code != http.StatusTooManyRequests || fourth.Body.(map[string]any)["error"] != "read and ack Q1, Q2, Q3 first" {
+	if fourth.Code != http.StatusTooManyRequests ||
+		fourth.Body.(map[string]any)["error"] != "this requester has 3 open questions: Q1, Q2, Q3; wait for an answer or withdraw one first" {
 		t.Fatalf("fourth = %d %v", fourth.Code, fourth.Body)
 	}
 }
 
-func TestUnreadQuotaListsNumbers(t *testing.T) {
+// 2026-11-06: answers a requester has not acknowledged never hold its next
+// question; only open ones count.
+func TestAskWithUnacknowledgedAnswers(t *testing.T) {
 	s := testSvc(t)
 	start := time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
 	s.SetClock(func() time.Time { return start })
-	var ids []string
 	for i := 1; i <= 6; i++ {
 		created := mustCreate(t, s, "thread-a", keyN(i), map[string]any{"title": "q" + itoa(i)})
-		ids = append(ids, created["id"].(string))
 		if res := answer(t, s, created["id"].(string), map[string]any{"text": "n" + itoa(i), "channel": "console"}); res.Code != http.StatusOK {
 			t.Fatal(res.Body)
 		}
 	}
 	s.SetClock(func() time.Time { return start.Add(2 * time.Hour) })
-	got := ask(t, s, "thread-a", keyN(7), map[string]any{"title": "seventh"})
-	if got.Code != http.StatusTooManyRequests || got.Body.(map[string]any)["error"] != "read and ack Q1, Q2, Q3, Q4, Q5, Q6 first" {
+	if got := ask(t, s, "thread-a", keyN(7), map[string]any{"title": "seventh"}); got.Code != http.StatusCreated {
 		t.Fatalf("seventh = %d %v", got.Code, got.Body)
 	}
-	_ = ids
+	// The open one and two more fill its open quota; the six answers still
+	// do not count.
+	mustCreate(t, s, "thread-a", keyN(8), map[string]any{"title": "eighth"})
+	mustCreate(t, s, "thread-a", keyN(9), map[string]any{"title": "ninth"})
+	got := ask(t, s, "thread-a", keyN(10), map[string]any{"title": "tenth"})
+	if got.Code != http.StatusTooManyRequests ||
+		got.Body.(map[string]any)["error"] != "this requester has 3 open questions: Q7, Q8, Q9; wait for an answer or withdraw one first" {
+		t.Fatalf("tenth = %d %v", got.Code, got.Body)
+	}
 }
 
-func TestGlobalProtectedQuota(t *testing.T) {
+func TestAskPastFortyUnacknowledgedInTheStore(t *testing.T) {
 	s := testSvc(t)
 	start := time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
 	s.SetClock(func() time.Time { return start })
@@ -300,8 +308,7 @@ func TestGlobalProtectedQuota(t *testing.T) {
 			}
 		}
 	}
-	got := ask(t, s, "req-0", keyN(n+1), map[string]any{"title": "one more"})
-	if got.Code != http.StatusTooManyRequests || got.Body.(map[string]any)["error"] != "store full: 40 questions are open or unread" {
+	if got := ask(t, s, "req-0", keyN(n+1), map[string]any{"title": "one more"}); got.Code != http.StatusCreated {
 		t.Fatalf("41st = %d %v", got.Code, got.Body)
 	}
 }

@@ -293,17 +293,29 @@ func (c *Controller) formBatch(ctx context.Context, repo string, members []landi
 	return errors.Join(append(errs, c.landingBatchBranch(ctx, c.DrillGit[repo], c.Drill.Facts, b, now, repo, w))...)
 }
 
-// replayRefusal is the failed reason of a replay that refuses the result.
+// replayRefusal is the failed reason of a replay that refuses the result:
+// only a real conflict of its three-way merge onto main.
 func replayRefusal(err error) string {
-	switch {
-	case errors.Is(err, landinggit.ErrOverlap):
-		return "overlap"
-	case errors.Is(err, landinggit.ErrConflict):
+	if errors.Is(err, landinggit.ErrConflict) {
 		return "conflict"
-	case errors.Is(err, landinggit.ErrPatchChanged):
-		return "patch_changed"
 	}
 	return ""
+}
+
+// failConflict ends op failed{conflict} and, as a red CI does, sends its
+// root back for its next round told the paths that did not merge
+// (store.RecordLandingConflict).
+func (c *Controller) failConflict(ctx context.Context, repo, op string, err error) error {
+	m0, paths := "", []string{}
+	var conflict *landinggit.ConflictError
+	if errors.As(err, &conflict) {
+		m0, paths = conflict.M0, conflict.Paths
+	}
+	reworked, err := store.RecordLandingConflict(ctx, c.DB, repo, op, landingText(c.Env)+"failed", m0, paths, c.Precheck)
+	if err == nil && reworked {
+		c.logf("landing %s: replay conflicts in %v; its root goes back for its next round", op, paths)
+	}
+	return err
 }
 
 // landingBatchBranch prepares and pushes a batch's members, all with the
@@ -369,8 +381,11 @@ func (c *Controller) landingBatchBranch(ctx context.Context, g DrillGit, source 
 			}
 			r, err := w.Replay(ctx, landinggit.ReplayInput{A: o.A, Base: f.Base, M0: on, Task: o.Task, Attempt: o.Attempt, Mission: f.Mission,
 				Reviewers: f.Reviewers, Operation: op, RuleVersion: o.RuleVersion, AcceptedAt: f.AcceptedAt, CommitterDate: b.CommitterDate, Env: c.Env})
-			if why := replayRefusal(err); why != "" {
-				return c.endBatchMember(ctx, b, s, op, why, repo)
+			if replayRefusal(err) != "" {
+				if err = c.failConflict(ctx, repo, op, err); err != nil {
+					return err
+				}
+				return c.releaseBatch(ctx, b, "stale", repo)
 			}
 			if err != nil {
 				return err
@@ -378,7 +393,7 @@ func (c *Controller) landingBatchBranch(ctx context.Context, g DrillGit, source 
 			on = r
 		}
 		if on != b.R {
-			return c.releaseBatch(ctx, b, "patch_changed", repo)
+			return c.releaseBatch(ctx, b, "stale", repo)
 		}
 	}
 	// Before the new intents and pushes: each member as of now (review 659

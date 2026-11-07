@@ -389,7 +389,14 @@ func stgBase(v any) bool {
 func stgCI(v any) bool {
 	m, ok := v.(map[string]any)
 	r := StgRecord(m)
-	if !ok || !stgKeys(m, "name uid created_at platform_commit ui_commit infra_commit pipeline_ref repo_url read_at") || r.String("pipeline_ref") != "bifrost-ci-platform" {
+	keys := "name uid created_at platform_commit ui_commit infra_commit pipeline_ref repo_url read_at"
+	if value, exists := m["tested_by"]; exists {
+		if !stgString(value) {
+			return false
+		}
+		keys += " tested_by"
+	}
+	if !ok || !stgKeys(m, keys) || r.String("pipeline_ref") != "bifrost-ci-platform" {
 		return false
 	}
 	for _, k := range []string{"name", "uid", "repo_url"} {

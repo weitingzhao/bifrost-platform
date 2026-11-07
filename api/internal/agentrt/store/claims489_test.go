@@ -68,7 +68,7 @@ func TestAnAssessmentClaimingApprovalIsAlerted(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	m := w.ledgerMission(t, "M-3")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -110,7 +110,7 @@ func TestAnEscapedClaimInAFencedAssessmentIsAlerted(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	m := w.ledgerMission(t, "M-3")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
