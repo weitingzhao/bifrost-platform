@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"path"
@@ -108,23 +109,39 @@ func orNone(repo string) string {
 	return repo
 }
 
-// checkPlannedCore checks a planned task's core label: true, false or left
-// out (null and every other type are refused), and, when true, a task of a
-// repository with core work whose text names where it changes it.
-func checkPlannedCore(at string, t PlannedTask) error {
+// fixPlannedCore is a planned task's core label as the plan is used: true,
+// false or left out as written, when it holds; with a note when it does not.
+// A value that is neither true nor false is read as true where the task can
+// be core work, so a slip never routes core work to a writer that may not
+// write it (review 426 C2), and as false elsewhere. true on a task of a
+// repository with no core work, or whose text names no file under its core
+// directories, is read as false.
+func fixPlannedCore(at string, t PlannedTask) (json.RawMessage, string) {
 	switch string(t.Core) {
-	case "", "false":
-		return nil
-	case "true":
+	case "", "false", "true":
 	default:
-		return fmt.Errorf("%s: core is true or false, or left out; not %s", at, cutBytes(string(t.Core), 40))
+		if plannedCoreHolds(t) == "" {
+			return json.RawMessage("true"), fmt.Sprintf("%s: core %s read as true", at, cutBytes(string(t.Core), 40))
+		}
+		return json.RawMessage("false"), fmt.Sprintf("%s: core %s read as false", at, cutBytes(string(t.Core), 40))
 	}
+	if string(t.Core) != "true" {
+		return t.Core, ""
+	}
+	if why := plannedCoreHolds(t); why != "" {
+		return json.RawMessage("false"), fmt.Sprintf("%s: core read as false: %s", at, why)
+	}
+	return t.Core, ""
+}
+
+// plannedCoreHolds says why a task cannot be core work, or "": a task of a
+// repository with core work whose text names where it changes it.
+func plannedCoreHolds(t PlannedTask) string {
 	if err := checkCore("implement", t.Repo); err != nil {
-		return fmt.Errorf("%s: %v", at, err)
+		return err.Error()
 	}
 	if dirs := Repos[t.Repo].Core; !coreDirNamed(t.Text, dirs) {
-		return fmt.Errorf("%s: a core task names in its text the files it changes under %s, each as a path from the "+
-			"repository's root; this one names none, so it is not core work, or its text does not say where", at, strings.Join(withSlash(dirs), ", "))
+		return "its text names no file under " + strings.Join(withSlash(dirs), ", ")
 	}
-	return nil
+	return ""
 }

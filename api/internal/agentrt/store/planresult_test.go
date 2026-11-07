@@ -305,14 +305,11 @@ func TestAcceptPlanReworks(t *testing.T) {
 		report, conclusion string
 		why                string
 	}{
-		"no block":    {"I could not plan this.", "done", "no ```json block"},
-		"failed":      {goodPlan, "failed", `ended "failed"`},
-		"other repo":  {plan(`"repo": "bifrost-platform", "text": "Say which`, `"repo": "bifrost-trade-api", "text": "Say which`), "done", "repo is one of bifrost-platform"},
-		"go run":      {plan(`["go", "-C", "api", "test", "./internal`, `["go", "-C", "api", "run", "./internal`), "done", "a check is go -C <api> test"},
-		"cycle":       {plan(`"verify": [["go"`, `"depends_on": ["t2"], "verify": [["go"`), "done", "cycle"},
-		"more budget": {plan(`"max_attempts": 6`, `"max_attempts": 40`), "done", "raises the mission's budget"},
-		"key twice":   {plan(`"mission": {`, `"Tasks": [], "mission": {`), "done", "twice in one object"},
-		"bad default": {plan(`"recommended": 1`, `"recommended": 3`), "done", "recommended"},
+		"no block":   {"I could not plan this.", "done", "no ```json block"},
+		"failed":     {goodPlan, "failed", `ended "failed"`},
+		"other repo": {plan(`"repo": "bifrost-platform", "text": "Say which`, `"repo": "bifrost-trade-api", "text": "Say which`), "done", "repo is one of bifrost-platform"},
+		"cycle":      {plan(`"verify": [["go"`, `"depends_on": ["t2"], "verify": [["go"`), "done", "cycle"},
+		"key twice":  {plan(`"mission": {`, `"Tasks": [], "mission": {`), "done", "twice in one object"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := planWorld(t)
@@ -592,16 +589,19 @@ func TestParsePlan(t *testing.T) {
 		return strings.Replace(goodPlan, `["go", "-C", "api", "test", "./internal/agentrt/agentrtapi/"]`, verify, 1)
 	}
 	label := func(s string) string { return strings.Replace(goodPlan, `"Not now"`, `"`+s+`"`, 1) }
+	// Only a plan that cannot be used is refused (the Owner, 2026-11-06).
 	for name, c := range map[string]struct{ report, why string }{
-		"two values":     {"```json\n{\"tasks\": []} {}\n```", "more than one value"},
-		"no tasks":       {"```json\n{\"tasks\": []}\n```", "1 to 8 tasks"},
-		"empty title":    {strings.Replace(goodPlan, `"title": "Document MainHead"`, `"title": " "`, 1), "title is empty"},
-		"bad ref":        {strings.Replace(goodPlan, `"ref": "t1"`, `"ref": "t 1"`, 1), "ref is 1 to"},
-		"self dep":       {strings.Replace(goodPlan, `"depends_on": ["t1"]`, `"depends_on": ["t2"]`, 1), "not another task"},
-		"duty":           {strings.Replace(goodPlan, `"owner_duty": "goal"`, `"owner_duty": "taste"`, 1), "owner_duty"},
-		"one option":     {strings.Replace(goodPlan, `["Not now", "Yes, a third task"]`, `["Not now"]`, 1), "2 to 4 options"},
-		"control":        {strings.Replace(goodPlan, `two tasks, not one`, "two tasks\\u001b, not one", 1), "control character"},
-		"no why":         {strings.Replace(goodPlan, `"why": "comments only"`, `"why": ""`, 1), "why is empty"},
+		"two values": {"```json\n{\"tasks\": []} {}\n```", "more than one value"},
+		"no tasks":   {"```json\n{\"tasks\": []}\n```", "1 to 8 tasks"},
+		"self dep":   {strings.Replace(goodPlan, `"depends_on": ["t1"]`, `"depends_on": ["t2"]`, 1), "not another task"},
+	} {
+		if _, err := store.ParsePlan([]byte(c.report), repos); err == nil || !strings.Contains(err.Error(), c.why) {
+			t.Errorf("%s: %v (want %q)", name, err, c.why)
+		}
+	}
+	// A check not in the accepted form is dropped, the task and its other
+	// check kept.
+	for name, c := range map[string]struct{ report, why string }{
 		"go run":         {check(`["go", "-C", "api", "run", "./payload.go"]`), "a check is"},
 		"go generate":    {check(`["go", "-C", "api", "generate", "./..."]`), "a check is"},
 		"exec":           {check(`["go", "-C", "api", "test", "-exec=/bin/sh", "./..."]`), "not a package path"},
@@ -612,13 +612,18 @@ func TestParsePlan(t *testing.T) {
 		"run then flag":  {check(`["go", "-C", "api", "test", "-run", "-exec", "./..."]`), "-run takes"},
 		"run no package": {check(`["go", "-C", "api", "test", "-run", "TestX"]`), "-run takes"},
 		"sh":             {check(`["sh", "-c", "true"]`), "a check is"},
-		// The question store counts a label's JSON encoding, quotes included:
-		// 54 three-byte characters are 164 bytes.
-		"label bytes": {label(strings.Repeat("字", 54)), "164 bytes encoded"},
-		"label 159":   {label(strings.Repeat("a", 159)), "161 bytes encoded"},
 	} {
-		if _, err := store.ParsePlan([]byte(c.report), repos); err == nil || !strings.Contains(err.Error(), c.why) {
-			t.Errorf("%s: %v (want %q)", name, err, c.why)
+		p, err := store.ParsePlan([]byte(c.report), repos)
+		if err != nil || len(p.Tasks[0].Verify) != 1 || p.Tasks[0].Verify[0][4] != "-run" || !hasNote(p, "tasks[0].verify[0]", c.why, "dropped") {
+			t.Errorf("%s: %v %v %q", name, err, p.Tasks, p.Notes)
+		}
+	}
+	// The question store counts a label's JSON encoding, quotes included: a
+	// label over its 160 bytes is cut to fit.
+	for name, s := range map[string]string{"label bytes": strings.Repeat("字", 54), "label 159": strings.Repeat("a", 159)} {
+		p, err := store.ParsePlan([]byte(label(s)), repos)
+		if o := p.Questions[0].Options[0]; err != nil || !strings.HasSuffix(o, "…") || len(o) > 158 || !hasNote(p, "options[0] cut to 160 bytes") {
+			t.Errorf("%s: %v %q %q", name, err, o, p.Notes)
 		}
 	}
 	for name, report := range map[string]string{
@@ -628,10 +633,22 @@ func TestParsePlan(t *testing.T) {
 		"two packages":  check(`["go", "-C", "api", "test", "./internal/a/", "./internal/b/..."]`),
 		"a run pattern": check(`["go", "-C", "api", "test", "-run", "^TestGoal(Route|Title)$", "./internal/agentrt/agentrtapi/"]`),
 	} {
-		if _, err := store.ParsePlan([]byte(report), repos); err != nil {
-			t.Errorf("%s refused: %v", name, err)
+		if p, err := store.ParsePlan([]byte(report), repos); err != nil || len(p.Notes) != 0 {
+			t.Errorf("%s: %v %q", name, err, p.Notes)
 		}
 	}
+}
+
+// hasNote says whether one of a plan's notes holds every one of parts.
+func hasNote(p store.PlanDoc, parts ...string) bool {
+	return slices.ContainsFunc(p.Notes, func(n string) bool {
+		for _, s := range parts {
+			if !strings.Contains(n, s) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 // PlanBlock says whether a report's last block reads as a plan, in

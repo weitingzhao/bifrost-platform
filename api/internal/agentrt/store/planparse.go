@@ -56,6 +56,9 @@ type PlanDoc struct {
 	// tasks[0].goal: read past, not refused, so a planner's spec that asks
 	// for more than the reader uses costs no round.
 	Ignored []string `json:"-"`
+	// Notes are the slips of form check fixed or dropped, in words a planner
+	// can act on: the plan's accepted event records them.
+	Notes []string `json:"-"`
 }
 
 // PlannedMission is what a plan says about its mission; empty keeps what the
@@ -78,6 +81,11 @@ type PlannedTask struct {
 	Verify    [][]string      `json:"verify"`
 	DependsOn []string        `json:"depends_on"`
 	Core      json.RawMessage `json:"core,omitempty"`
+
+	// Siblings are the goal's repositories the task's text names beside its
+	// checkout (../<repo>) that its repository does not have: check adds
+	// them, and the task's spec has them beside the checkout at main.
+	Siblings []string `json:"-"`
 }
 
 // IsCore says whether a checked task is core work.
@@ -104,14 +112,17 @@ type PlannedDecision struct {
 var planFence = regexp.MustCompile("(?s)```json[ \\t]*\\r?\\n(.*?)\\r?\\n[ \\t]*```")
 
 // ParsePlan reads the last fenced json block of a planner's report and checks
-// it; repos are the repositories its mission names. An error says what is
-// wrong in words a planner can act on: it goes into the next round's spec.
+// it; repos are the repositories its mission names. A slip of form comes
+// back fixed or dropped, named in Notes; an error, for a plan that cannot be
+// used, says what is wrong in words a planner can act on: it goes into the
+// next round's spec.
 func ParsePlan(report []byte, repos []string) (PlanDoc, error) {
 	d, err := planBlock(report)
 	if err != nil {
 		return d, err
 	}
-	return d, d.check(repos)
+	err = d.check(repos)
+	return d, err
 }
 
 // PlanBlock says whether a report ends in a fenced json block that reads as a
@@ -297,57 +308,86 @@ func oneOfEachKey(block []byte) error {
 	}
 }
 
-func (d PlanDoc) check(repos []string) error {
-	m := d.Mission
-	if err := texts("mission.success", m.Success, PlanMaxCriteria, planMaxField); err != nil {
-		return err
+// check makes a plan usable as it is used, or says why it cannot be: it
+// refuses only a plan the runtime cannot carry out (no task, or more than
+// PlanMaxTasks; a ref used twice; depends_on naming no other task of the
+// plan; a dependency cycle; a task in, or naming beside it, a repository the
+// goal does not cover). Every other slip of form is fixed or dropped and
+// named in d.Notes, which the plan's accepted event records so the planner
+// sees it (the Owner, 2026-11-06: a refusal names the risk it prevents).
+func (d *PlanDoc) check(repos []string) error {
+	note := d.note
+	m := &d.Mission
+	m.Success = d.fixTexts("mission.success", m.Success, PlanMaxCriteria, planMaxField)
+	m.OutOfScope = d.fixTexts("mission.out_of_scope", m.OutOfScope, PlanMaxCriteria, planMaxField)
+	if m.MaxAttempts < 0 {
+		note("mission.max_attempts %d dropped", m.MaxAttempts)
+		m.MaxAttempts = 0
 	}
-	if err := texts("mission.out_of_scope", m.OutOfScope, PlanMaxCriteria, planMaxField); err != nil {
-		return err
-	}
-	if m.MaxAttempts < 0 || m.MaxWallHours < 0 {
-		return errors.New("mission: a budget is not negative")
+	if m.MaxWallHours < 0 {
+		note("mission.max_wall_hours %d dropped", m.MaxWallHours)
+		m.MaxWallHours = 0
 	}
 	if len(d.Tasks) == 0 || len(d.Tasks) > PlanMaxTasks {
 		return fmt.Errorf("a plan has 1 to %d tasks, not %d", PlanMaxTasks, len(d.Tasks))
 	}
 	refs := map[string]bool{}
-	for i, t := range d.Tasks {
+	for i := range d.Tasks {
+		t := &d.Tasks[i]
 		at := fmt.Sprintf("tasks[%d]", i)
+		if ref := fixRef(t.Ref); ref != t.Ref || ref == "" {
+			if ref == "" {
+				ref = fmt.Sprintf("t%d", i+1)
+			}
+			note("%s: ref %q read as %q", at, cutBytes(t.Ref, 40), ref)
+			t.Ref = ref
+		}
+		for j, on := range t.DependsOn {
+			t.DependsOn[j] = fixRef(on)
+		}
 		switch {
-		case t.Ref == "" || len(t.Ref) > planMaxRef || strings.IndexFunc(t.Ref, notRefRune) >= 0:
-			return fmt.Errorf("%s: ref is 1 to %d letters, digits, - or _", at, planMaxRef)
 		case refs[t.Ref]:
 			return fmt.Errorf("%s: ref %q is used twice", at, t.Ref)
 		case !slices.Contains(repos, t.Repo):
-			return fmt.Errorf("%s: repo is one of %s, not %q", at, strings.Join(repos, ", "), t.Repo)
-		case len(t.Verify) > planMaxVerify:
-			return fmt.Errorf("%s: at most %d checks of its own", at, planMaxVerify)
+			return fmt.Errorf("%s: repo is one of %s, not %q", at, strings.Join(repos, ", "), cutBytes(t.Repo, 80))
 		}
 		refs[t.Ref] = true
-		if err := text(at+".title", t.Title, maxTaskTitle, false); err != nil {
-			return err
+		t.Text = d.fixText(at+".text", t.Text, planMaxText, true)
+		t.Title = d.fixText(at+".title", t.Title, maxTaskTitle, false)
+		if t.Title == "" {
+			first, _, _ := strings.Cut(t.Text, "\n")
+			if t.Title = cutRunes(cleanText(first, false), maxTaskTitle); t.Title == "" {
+				t.Title = t.Ref
+			}
+			note("%s: the empty title takes %q", at, t.Title)
 		}
-		if err := text(at+".text", t.Text, planMaxText, true); err != nil {
-			return err
+		if t.Text == "" {
+			t.Text = t.Title
+			note("%s: the empty text takes the title", at)
 		}
-		for j, c := range t.Verify {
-			if err := checkTest(fmt.Sprintf("%s.verify[%d]", at, j), c, Repos[t.Repo].TestDirs); err != nil {
-				return err
+		t.Verify = d.fixVerify(at, t.Verify, Repos[t.Repo].TestDirs)
+		for _, name := range outsideCheckout(t.Text, t.Repo) {
+			switch {
+			case slices.Contains(t.Siblings, name):
+			case !slices.Contains(repos, name):
+				return fmt.Errorf("%s: its text names ../%s, which is not a repository this goal covers (a task in %s has %s); "+
+					"what needs %s is no part of this plan", at, name, t.Repo, CheckoutOf(t.Repo), name)
+			case len(Repos[t.Repo].Siblings)+len(t.Siblings) >= planMaxSiblings:
+				note("%s: ../%s not added beside its checkout: a task has at most %d repositories beside it", at, name, planMaxSiblings)
+			default:
+				t.Siblings = append(t.Siblings, name)
+				note("%s: its text names ../%s, added beside its checkout at the head of main", at, name)
 			}
 		}
-		if name := outsideCheckout(t.Text, t.Repo); name != "" {
-			return fmt.Errorf("%s: its text names ../%s, which a task in %s does not have (it has %s); what needs %s is a task "+
-				"in %s, or no part of this plan", at, name, t.Repo, CheckoutOf(t.Repo), name, name)
-		}
-		if err := checkPlannedCore(at, t); err != nil {
-			return err
+		var why string
+		if t.Core, why = fixPlannedCore(at, *t); why != "" {
+			note("%s", why)
 		}
 	}
 	for i, t := range d.Tasks {
 		for _, on := range t.DependsOn {
 			if !refs[on] || on == t.Ref {
-				return fmt.Errorf("tasks[%d]: depends_on names %q, which is not another task of this plan", i, on)
+				return fmt.Errorf("tasks[%d]: depends_on names %q, which is not another task of this plan", i, cutBytes(on, 40))
 			}
 		}
 	}
@@ -355,75 +395,225 @@ func (d PlanDoc) check(repos []string) error {
 		return fmt.Errorf("the tasks' depends_on make a cycle through %s", cyc)
 	}
 	if len(d.Questions) > PlanMaxQuestions {
-		return fmt.Errorf("a plan asks the Owner at most %d questions", PlanMaxQuestions)
+		note("questions after the first %d dropped", PlanMaxQuestions)
+		d.Questions = d.Questions[:PlanMaxQuestions]
 	}
+	questions := []PlannedQuestion{}
 	for i, q := range d.Questions {
-		at := fmt.Sprintf("questions[%d]", i)
-		if err := cardText(at+".question", q.Question, cardTitleBytes, false); err != nil {
-			return err
-		}
-		if q.Body != "" {
-			if err := cardText(at+".body", q.Body, cardBodyBytes, true); err != nil {
-				return err
-			}
-		}
-		if len(q.Options) < 2 || len(q.Options) > 4 {
-			return fmt.Errorf("%s: 2 to 4 options", at)
-		}
-		for j, o := range q.Options {
-			if err := cardText(fmt.Sprintf("%s.options[%d]", at, j), o, cardLabelBytes, false); err != nil {
-				return err
-			}
-		}
-		switch {
-		case q.Recommended < 1 || q.Recommended > len(q.Options):
-			return fmt.Errorf("%s: recommended is the 1-based option the work goes on with", at)
-		case !slices.Contains([]string{"goal", "rule", "irreversible"}, q.OwnerDuty):
-			return fmt.Errorf("%s: owner_duty is goal, rule or irreversible", at)
-		}
-		if err := cardText(at+".meanwhile", q.Meanwhile, cardMeanwhileBytes, false); err != nil {
-			return err
+		if q, ok := d.fixQuestion(fmt.Sprintf("questions[%d]", i), q); ok {
+			questions = append(questions, q)
 		}
 	}
+	d.Questions = questions
 	if len(d.Decisions) > PlanMaxDecisions {
-		return fmt.Errorf("a plan records at most %d decisions", PlanMaxDecisions)
+		note("decisions after the first %d dropped", PlanMaxDecisions)
+		d.Decisions = d.Decisions[:PlanMaxDecisions]
 	}
+	decisions := []PlannedDecision{}
 	for i, c := range d.Decisions {
 		at := fmt.Sprintf("decisions[%d]", i)
-		if err := text(at+".decision", c.Decision, planMaxField, true); err != nil {
-			return err
+		if c.Decision = d.fixText(at+".decision", c.Decision, planMaxField, true); c.Decision == "" {
+			note("%s dropped: no decision", at)
+			continue
 		}
-		if err := text(at+".why", c.Why, planMaxField, true); err != nil {
-			return err
+		if c.Why = d.fixText(at+".why", c.Why, planMaxField, true); c.Why == "" {
+			c.Why = "not given"
+			note("%s: no why given", at)
 		}
-		for name, v := range map[string]string{"dropped": c.Dropped, "reverse": c.Reverse} {
-			if v != "" {
-				if err := text(at+"."+name, v, planMaxField, true); err != nil {
-					return err
-				}
-			}
+		c.Dropped = d.fixText(at+".dropped", c.Dropped, planMaxField, true)
+		c.Reverse = d.fixText(at+".reverse", c.Reverse, planMaxField, true)
+		decisions = append(decisions, c)
+	}
+	d.Decisions = decisions
+	return nil
+}
+
+// planMaxSiblings is how many repositories a task has beside its checkout,
+// as agentd takes a spec's siblings.
+const planMaxSiblings = 4
+
+func (d *PlanDoc) note(format string, a ...any) { d.Notes = append(d.Notes, fmt.Sprintf(format, a...)) }
+
+// fixQuestion makes a question a card the question store takes: each field
+// cut to fit its limit, at most 4 options, a recommended and an owner_duty
+// it knows, a meanwhile; false drops a question with no question or with
+// fewer than 2 options.
+func (d *PlanDoc) fixQuestion(at string, q PlannedQuestion) (PlannedQuestion, bool) {
+	if q.Question = d.fixCard(at+".question", q.Question, cardTitleBytes, false); q.Question == "" {
+		d.note("%s dropped: no question", at)
+		return q, false
+	}
+	q.Body = d.fixCard(at+".body", q.Body, cardBodyBytes, true)
+	options := []string{}
+	for j, o := range q.Options {
+		if o = d.fixCard(fmt.Sprintf("%s.options[%d]", at, j), o, cardLabelBytes, false); o != "" {
+			options = append(options, o)
 		}
 	}
-	return nil
+	if len(options) > 4 {
+		d.note("%s: options after the first 4 dropped", at)
+		options = options[:4]
+	}
+	if len(options) < 2 {
+		d.note("%s dropped: %d options, a question has 2 to 4", at, len(options))
+		return q, false
+	}
+	q.Options = options
+	if q.Recommended < 1 || q.Recommended > len(q.Options) {
+		d.note("%s: recommended %d read as 1", at, q.Recommended)
+		q.Recommended = 1
+	}
+	if !slices.Contains([]string{"goal", "rule", "irreversible"}, q.OwnerDuty) {
+		d.note("%s: owner_duty %q read as goal", at, cutBytes(q.OwnerDuty, 40))
+		q.OwnerDuty = "goal"
+	}
+	if q.Meanwhile = d.fixCard(at+".meanwhile", q.Meanwhile, cardMeanwhileBytes, false); q.Meanwhile == "" {
+		q.Meanwhile = cutEncoded("the work goes on with "+q.Options[q.Recommended-1], cardMeanwhileBytes)
+		d.note("%s: the empty meanwhile takes the recommended option", at)
+	}
+	return q, true
+}
+
+// fixVerify keeps the checks of a task that checkTest admits, at most
+// planMaxVerify; the others are dropped, the task kept.
+func (d *PlanDoc) fixVerify(at string, verify [][]string, dirs []string) [][]string {
+	if len(verify) > 0 && len(dirs) == 0 {
+		d.note("%s.verify dropped: this repository takes no checks of a plan's own", at)
+		return nil
+	}
+	kept := [][]string{}
+	for j, c := range verify {
+		if err := checkTest(fmt.Sprintf("%s.verify[%d]", at, j), c, dirs); err != nil {
+			d.note("%s; dropped", cutBytes(err.Error(), 200))
+			continue
+		}
+		kept = append(kept, c)
+	}
+	if len(kept) > planMaxVerify {
+		d.note("%s.verify: checks after the first %d dropped", at, planMaxVerify)
+		kept = kept[:planMaxVerify]
+	}
+	return kept
+}
+
+// fixRef is a ref with only letters, digits, - and _, at most planMaxRef.
+func fixRef(ref string) string {
+	ref = strings.Map(func(r rune) rune {
+		if notRefRune(r) {
+			return -1
+		}
+		return r
+	}, ref)
+	if len(ref) > planMaxRef {
+		ref = ref[:planMaxRef]
+	}
+	return ref
+}
+
+// fixText is s with its control characters stripped (cleanText), trimmed
+// and cut to at most max runes with "…"; each fix is noted.
+func (d *PlanDoc) fixText(at, s string, max int, lines bool) string {
+	c := cleanText(s, lines)
+	if c != strings.TrimSpace(s) {
+		d.note("%s: control characters stripped", at)
+	}
+	if utf8.RuneCountInString(c) > max {
+		d.note("%s cut to %d characters", at, max)
+		c = cutRunes(c, max)
+	}
+	return c
+}
+
+// fixCard is fixText by the question store's measure: at most maxBytes bytes
+// of its JSON encoding, quotes included.
+func (d *PlanDoc) fixCard(at, s string, maxBytes int, lines bool) string {
+	c := cleanText(s, lines)
+	if c != strings.TrimSpace(s) {
+		d.note("%s: control characters stripped", at)
+	}
+	if encodedLen(c) > maxBytes {
+		d.note("%s cut to %d bytes encoded, the question store's limit", at, maxBytes)
+		c = cutEncoded(c, maxBytes)
+	}
+	return c
+}
+
+// fixTexts keeps the first most texts of a list, each fixed as fixText
+// does, the empty ones dropped.
+func (d *PlanDoc) fixTexts(at string, list []string, most, max int) []string {
+	if len(list) > most {
+		d.note("%s after the first %d dropped", at, most)
+		list = list[:most]
+	}
+	var kept []string
+	for i, s := range list {
+		if s = d.fixText(fmt.Sprintf("%s[%d]", at, i), s, max, false); s != "" {
+			kept = append(kept, s)
+		}
+	}
+	if len(kept) < len(list) {
+		d.note("%s: %d empty dropped", at, len(list)-len(kept))
+	}
+	return kept
+}
+
+// cleanText is s trimmed, with no control character but, where lines are
+// allowed, a line break or a tab; where they are not, a line break or a tab
+// reads as a space.
+func cleanText(s string, lines bool) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case !unicode.IsControl(r):
+			return r
+		case lines && (r == '\n' || r == '\t'):
+			return r
+		case lines && r == '\r':
+			return -1
+		case r == '\n' || r == '\t' || r == '\r':
+			return ' '
+		}
+		return -1
+	}, s)
+	return strings.TrimSpace(s)
+}
+
+// cutEncoded cuts s to the most runes whose JSON encoding, with "…" when
+// cut, is at most maxBytes bytes.
+func cutEncoded(s string, maxBytes int) string {
+	if encodedLen(s) <= maxBytes {
+		return s
+	}
+	r := []rune(s)
+	lo, hi := 0, len(r) // r[:lo] with "…" fits; r[:hi] with "…" does not, or is all of s
+	for lo+1 < hi {
+		mid := (lo + hi) / 2
+		if encodedLen(string(r[:mid])+"…") <= maxBytes {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return strings.TrimRightFunc(string(r[:lo]), unicode.IsSpace) + "…"
 }
 
 // siblingPath is a path to a repository beside a checkout, as a planner that
 // read the goal's repositories side by side writes it: ../bifrost-<name>.
 var siblingPath = regexp.MustCompile(`(?:^|[^A-Za-z0-9_.-])\.\./(bifrost-[A-Za-z0-9_-]*[A-Za-z0-9])`)
 
-// outsideCheckout is the first repository a task's text names by a path
-// beside its checkout that the checkout does not have (CheckoutOf), or "".
+// outsideCheckout are the repositories a task's text names by a path beside
+// its checkout that the checkout does not have (CheckoutOf), each once.
 // It is the part of "a task works in its own checkout" a program can see; a
 // text that asks for another repository in words ("on the infra tree", T26's
 // first run) reads like any other, and the planner's spec says what a task
 // has (goal.go checkouts).
-func outsideCheckout(text, repo string) string {
+func outsideCheckout(text, repo string) []string {
+	var names []string
 	for _, m := range siblingPath.FindAllStringSubmatch(text, -1) {
-		if name := m[1]; name != repo && !inCheckout(repo, name) {
-			return name
+		if name := m[1]; name != repo && !inCheckout(repo, name) && !slices.Contains(names, name) {
+			names = append(names, name)
 		}
 	}
-	return ""
+	return names
 }
 
 var (
@@ -465,39 +655,6 @@ func notRefRune(r rune) bool {
 	return !(r == '-' || r == '_' || r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r)))
 }
 
-// text checks one string: present, at most max runes, no control character
-// but a line break or a tab where lines are allowed.
-func text(at, s string, max int, lines bool) error {
-	switch {
-	case strings.TrimSpace(s) == "":
-		return fmt.Errorf("%s is empty", at)
-	case utf8.RuneCountInString(s) > max:
-		return fmt.Errorf("%s is longer than %d characters", at, max)
-	}
-	return controls(at, s, lines)
-}
-
-// cardText checks a card's field by the question store's measure: at most
-// maxBytes bytes of its JSON encoding, quotes included.
-func cardText(at, s string, maxBytes int, lines bool) error {
-	if strings.TrimSpace(s) == "" {
-		return fmt.Errorf("%s is empty", at)
-	}
-	if n := encodedLen(s); n > maxBytes {
-		return fmt.Errorf("%s is %d bytes encoded; the question store takes at most %d", at, n, maxBytes)
-	}
-	return controls(at, s, lines)
-}
-
-func controls(at, s string, lines bool) error {
-	for _, c := range s {
-		if unicode.IsControl(c) && !(lines && (c == '\n' || c == '\t')) {
-			return fmt.Errorf("%s has a control character %U", at, c)
-		}
-	}
-	return nil
-}
-
 // encodedLen is the length of s's JSON encoding without HTML escaping, quotes
 // included, as the question store measures it.
 func encodedLen(s string) int {
@@ -508,18 +665,6 @@ func encodedLen(s string) int {
 		return len(s) + 2
 	}
 	return len(bytes.TrimSuffix(b.Bytes(), []byte("\n")))
-}
-
-func texts(at string, list []string, most, max int) error {
-	if len(list) > most {
-		return fmt.Errorf("%s holds at most %d", at, most)
-	}
-	for i, s := range list {
-		if err := text(fmt.Sprintf("%s[%d]", at, i), s, max, false); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // dependencyCycle names a task on a cycle of depends_on, or "".
