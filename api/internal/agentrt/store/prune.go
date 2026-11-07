@@ -376,25 +376,33 @@ func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult
 	})
 }
 
-// RecordLandings records, for each accepted implementation not yet seen on
-// main, whether main now holds its accepted attempt's very commit (merged as
-// a cherry-pick of it, or as it is; a reverted landing does not count; review
-// 436 A2). The first sighting is the note PruneAfter counts from. A
-// mission not to be merged is passed over; a repository whose main cannot be
-// read now is tried again next time. It returns how many it recorded.
+// RecordLandings records, for each implementation not yet seen on main and
+// whatever its state (a task still open, cancelled or rejected included: the
+// Owner or the coordinator may merge its change by hand), whether main now
+// holds its change (matchOnMain: its accepted attempt's commit, else any
+// commit it pushed, else main naming the task by a commit of its own; a
+// reverted landing does not count; review 436 A2), and the route it took
+// there: the landing stream, a harvest's cherry-pick, or the Owner's merge.
+// The first sighting is the note PruneAfter counts from. A mission not to be
+// merged is passed over; a repository whose main cannot be read now is tried
+// again next time. It returns how many it recorded.
 func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, error) {
 	if mainResults == nil {
 		return 0, nil
 	}
-	type open struct{ task, repo, commit string }
+	type open struct {
+		task, repo, accepted string
+		pushed               []string // newest first
+	}
 	var tasks []open
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT t.task_id, t.repo, a.pushed_commit FROM agentrt.task t
+		rows, err := tx.Query(ctx, `SELECT t.task_id, t.repo, COALESCE(acc.pushed_commit, ''), p.commits FROM agentrt.task t
 		  JOIN agentrt.mission m ON m.mission_id = t.mission_id
-		  JOIN LATERAL (SELECT v.attempt_id FROM agentrt.verification v WHERE v.task_id = t.task_id AND v.accepts_attempt
-		    ORDER BY v.created_at DESC LIMIT 1) v ON true
-		  JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id AND a.pushed_commit IS NOT NULL
-		  WHERE t.role = 'implement' AND t.state = 'accepted' AND t.repo IS NOT NULL AND COALESCE(m.scope_json->>'no_merge', '') = ''
+		  JOIN LATERAL (SELECT array_agg(a.pushed_commit ORDER BY a.attempt_no DESC) AS commits FROM agentrt.attempt a
+		    WHERE a.task_id = t.task_id AND a.pushed_commit IS NOT NULL) p ON p.commits IS NOT NULL
+		  LEFT JOIN LATERAL (SELECT a.pushed_commit FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id
+		    WHERE v.task_id = t.task_id AND v.accepts_attempt ORDER BY v.created_at DESC LIMIT 1) acc ON true
+		  WHERE t.role = 'implement' AND t.repo IS NOT NULL AND COALESCE(m.scope_json->>'no_merge', '') = ''
 		    AND NOT EXISTS (SELECT 1 FROM agentrt.event e WHERE e.task_id = t.task_id AND e.event_type = 'note' AND e.body_json ? 'landed')
 		  ORDER BY t.repo, t.task_id`)
 		if err != nil {
@@ -402,7 +410,7 @@ func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, e
 		}
 		tasks, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (open, error) {
 			var o open
-			return o, r.Scan(&o.task, &o.repo, &o.commit)
+			return o, r.Scan(&o.task, &o.repo, &o.accepted, &o.pushed)
 		})
 		return err
 	}); err != nil {
@@ -420,15 +428,14 @@ func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, e
 			}
 			mains[o.repo] = main
 		}
-		sha := main[o.task][o.commit]
-		if sha == "" {
+		if _, on := matchOnMain(main[o.task], o.accepted, o.pushed, false); !on {
 			continue
 		}
 		did := false
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
 			did = false
 			t, err := readTask(ctx, tx, o.task, true)
-			if err != nil || t.state != "accepted" {
+			if err != nil {
 				return err
 			}
 			var seen bool
@@ -436,10 +443,28 @@ func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, e
 			  AND body_json ? 'landed')`, o.task).Scan(&seen); err != nil || seen {
 				return err
 			}
+			s, err := LandingState(ctx, tx, "landing:"+o.repo)
+			if err != nil {
+				return err
+			}
+			landed := false
+			for _, op := range s.Operations {
+				if op.Task == o.task && op.Phase == "landed" {
+					landed = true
+					break
+				}
+			}
+			m, _ := matchOnMain(main[o.task], o.accepted, o.pushed, landed)
+			body := map[string]any{
+				"text": fmt.Sprintf("its change %s is on main of %s as %s (%s, matched by %s)", m.Key[:min(12, len(m.Key))], o.repo,
+					m.Main[:min(12, len(m.Main))], m.Via, m.MatchedBy),
+				"landed": m.Main, "landed_via": m.Via, "matched_by": m.MatchedBy, "landed_repo": o.repo}
+			if m.Result != "" {
+				body["landed_result"] = m.Result // a note's string is never empty: no pushed commit matched, no field
+			}
 			did = true
 			_, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "note", Actor: "controller", MissionID: t.mission,
-				PlanNode: t.step, TaskID: t.id, Body: map[string]any{
-					"text": fmt.Sprintf("its accepted result %s is on main of %s as %s", o.commit[:12], o.repo, sha[:12]), "landed": sha}})
+				PlanNode: t.step, TaskID: t.id, Body: body})
 			return err
 		})
 		if err != nil {

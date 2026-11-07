@@ -149,10 +149,13 @@ var bodies = map[string][]field{
 	"ci_seen":                  {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
 	"deploy_seen":              {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
 	"owner_signoff":            {{"ref", kStr, false}, {"binding_sha256", kStr, true}, {"plan_version", kInt, true}, {"acceptance_sha256", kStr, true}, {"evidence", kIDs, true}},
-	// note: landed, the commit an accepted result first stood on main as, when
-	// the controller first saw it there; pruned, an attempt branch its host
-	// deleted; prune_refused, one Gitea would not let it delete; prune_failed,
-	// one it could not reach Gitea to delete (prune.go).
+	// note: landed, the commit an implementation's change first stood on main
+	// as, when the controller first saw it there, with landed_via (its
+	// route), matched_by (how main names it), landed_result (the pushed
+	// commit matched; none for a trailer) and landed_repo (onmain.go);
+	// pruned, an attempt branch its host deleted; prune_refused, one Gitea
+	// would not let it delete; prune_failed, one it could not reach Gitea to
+	// delete (prune.go).
 	// On an item's assessment stream (assess.go, TD-391): assessment_requested,
 	// the Owner's opt-in naming the kind and id (TD-463); ask, the option
 	// keys and refs its spec gave; assessment, what the seat handed in, its
@@ -160,6 +163,7 @@ var bodies = map[string][]field{
 	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
 	// that voided the paper, which no run was handed in for.
 	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"plan_observation_pass", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
+		{"landed_via", kStr, true}, {"matched_by", kStr, true}, {"landed_result", kStr, true}, {"landed_repo", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
 		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
@@ -549,7 +553,8 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
-	"note": {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
+	"note": {"landed": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),
+		"matched_by": oneOf(MatchedResult, MatchedCherryPick, MatchedTrailer), "landed_result": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
 		"prune_round": oneOf("opened", "closed")},
 	"route_decided":   {"fingerprint": fingerprint},
 	"legacy_imported": {"digest": fingerprint},
