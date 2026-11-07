@@ -17,7 +17,7 @@ import (
 // rules say, each open batch of the environment is looked at in a
 // transaction of its own. A ready member that cannot run is cancelled with
 // why: its batch's deployment is no longer what the environment runs, the
-// batch is past its deadline, its budget is spent or cannot be read, its
+// batch is past its deadline, its tenant has no budget rule in force, its
 // standing envelope is no longer in force, every executor was withdrawn
 // from it (TD-381), or no host took it for GateUnclaimed. A member a host
 // holds is left to the lease sweep and the hard limit; once it is back at
@@ -141,7 +141,7 @@ func endBatch(ctx context.Context, db DB, env, mission string) (int, error) {
 				continue
 			default:
 				// Read again under the locks: what was read before them may
-				// have changed (a budget grown, a deployment recorded).
+				// have changed (a deployment recorded).
 				if why, err = cannotRun(ctx, tx, b, id); err != nil {
 					return err
 				}
@@ -250,14 +250,10 @@ func cannotRun(ctx context.Context, tx pgx.Tx, b gateBatch, taskID string) (stri
 	if err != nil {
 		return "", err
 	}
-	s, ok, err := m.spend(ctx, tx, ruleCache{}, b.mission)
-	switch {
-	case err != nil:
+	if _, ok, err := m.spend(ctx, tx, ruleCache{}, b.mission); err != nil {
 		return "", err
-	case !ok:
-		return "its budget cannot be read", nil
-	case s.why() != "":
-		return s.why(), nil
+	} else if !ok {
+		return "its tenant has no budget rule in force", nil
 	}
 	if b.envelope != "" {
 		env, err := inForce(ctx, tx, b.envelope)

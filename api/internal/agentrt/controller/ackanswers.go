@@ -9,11 +9,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// An answered card the runtime has not acknowledged counts against its
-// question quota (questions/create.go tally): eight such answers, long used,
-// left PROD unable to ask the Owner anything (2026-11-06, 429 "read and ack
-// Q1, ... first"). AckUsedAnswers acknowledges the answers no task waits on
-// any more; an answer stays readable after it is acknowledged.
+// An answered card the runtime had not acknowledged counted against its
+// question quota: eight such answers, long used, left PROD unable to ask the
+// Owner anything (2026-11-06, 429 "read and ack Q1, ... first"). That quota
+// is gone (questions/create.go counts open questions only); AckUsedAnswers
+// still acknowledges the answers no task waits on any more, so the inbox
+// shows what is new; an answer stays readable after it is acknowledged.
 const (
 	// AckUsedAnswersEvery is how often the facts loop runs the pass.
 	AckUsedAnswersEvery = time.Minute

@@ -185,7 +185,7 @@ func TestCreateForRuleTakesTheRuntimeCardsPastTheQuotas(t *testing.T) {
 		t.Fatalf("a runtime card through Create: %d %v", res.Code, res.Body)
 	}
 	// Past every quota (review 456 C2): thirty more, which no hourly quota,
-	// 20 open nor 40 open or unread holds, and which leave no hourly mark;
+	// nor 20 open holds, and which leave no hourly mark;
 	// as open questions they count in the store's capacity for the others.
 	doc, err := s.load()
 	if err != nil {

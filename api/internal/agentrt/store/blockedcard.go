@@ -38,9 +38,8 @@ import (
 // moves nothing: the task is still blocked, and the next pass asks again
 // with a new card (his words on it).
 //
-// One more round also makes room in the mission's budget for that round
-// when it has none, as the Owner's mission_amended (missionbudget.go,
-// TD-384); the card says so beforehand. Not doing a verification or a
+// One more round needs no room in the mission's budget: its attempts and
+// hours cap nothing (missionbudget.go). Not doing a verification or a
 // review blocks the work it checks too (with no check it can never be
 // accepted), and that task then gets a card of its own.
 //
@@ -51,8 +50,8 @@ import (
 //     added to its spec as a rework round adds it;
 //   - a task blocked at dispatch because a task it depends on was rejected or
 //     cancelled (propose.go): one more round runs it without that work;
-//   - a ready task its mission's budget lets no longer run (missionbudget.go):
-//     one more round runs it on the room it makes in the budget;
+//   - a ready task blocked before for its mission's budget (missionbudget.go;
+//     nothing blocks for it any more): one more round runs it again;
 //   - a ready task whose preparation failed three times in a row, or that no
 //     executor may take any more (withdrawn.go, preparefailed.go): one more
 //     round tries it again;
@@ -284,7 +283,7 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		if err != nil {
 			return err
 		}
-		s, g, budgeted, err := roundFor(ctx, tx, t)
+		s, budgeted, err := spendOf(ctx, tx, t)
 		if err != nil {
 			return err
 		}
@@ -294,7 +293,7 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		}
 		card := asked + 1
 		body := blockedCardBody(blockedCard{task: t, title: title, repo: d.repo, subject: d.subject, round: d.round, maxRounds: d.maxRounds,
-			reason: reason, failed: failed, check: check, words: words, card: card, budget: s.says(g), rec: r})
+			reason: reason, failed: failed, check: check, words: words, card: card, rec: r})
 		c := Card{Key: blockedCardKey(taskID, t.mission, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
 			Body: body, Options: blockedOptions(t.mission), OwnerDuty: "goal", TaskID: taskID,
 			Meanwhile: "the task stays blocked and mission " + t.mission + " stays open",
@@ -341,7 +340,6 @@ type blockedCard struct {
 	failed                       bool // blocked for failing its last round: one more round is round + 1
 	check                        *checkSummary
 	words                        string // the Owner's last "none of these" on a card of this block
-	budget                       string // what one more round adds to the mission's budget, "" for nothing (spend.says)
 	rec                          recommendation
 }
 
@@ -502,9 +500,6 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 	case blockKind(c.reason, c.failed, c.task.effect) == blockPrepare:
 		more = fmt.Sprintf("it goes back to ready as it is, and its preparation is tried %d times more before it is blocked again", failuresToStop)
 	}
-	if c.budget != "" {
-		more += ". " + strings.TrimSuffix(c.budget, ".")
-	}
 	drop := fmt.Sprintf("the task is cancelled; mission %s finishes once every other task is accepted "+
 		"(a task that depends on this one is then blocked and gets a card of its own)", c.task.mission)
 	if c.subject != "" {
@@ -633,16 +628,10 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		if err != nil {
 			return err
 		}
-		// The mission after the task (kernel.go's order): it cannot stop or
-		// end between this read and the move below (review 420 B2); held for
-		// update when one more round may write its budget (TD-384), shared
-		// otherwise.
-		lock := "FOR SHARE"
-		if outcome == OutcomeRetried {
-			lock = "FOR NO KEY UPDATE"
-		}
+		// The mission after the task (kernel.go's order), shared: it cannot
+		// stop or end between this read and the move below (review 420 B2).
 		var mstate string
-		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+lock, t.mission).Scan(&mstate); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, t.mission).Scan(&mstate); err != nil {
 			return err
 		}
 		var open bool
@@ -715,11 +704,8 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		did = true
 		switch acted {
 		case OutcomeRetried:
-			// Room in the budget for the round, before the task is ready
-			// (TD-384).
-			if err = grantRound(ctx, tx, t, c.question, by); err != nil {
-				return err
-			}
+			// The round needs no room in the mission's budget, which caps
+			// no attempts or hours (missionbudget.go).
 			lift := "" // past its withdrawals, for a task no executor could take (retry.go)
 			if blockKind(reason, failed, t.effect) == blockWithdrawn {
 				lift = liftMark

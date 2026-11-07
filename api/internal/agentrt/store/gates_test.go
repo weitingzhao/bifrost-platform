@@ -302,8 +302,8 @@ func TestGateVerdicts(t *testing.T) {
 }
 
 // A gate that cannot run ends without a card: every executor withdrawn
-// (TD-381; neither TD-395's pass nor the budget pass blocks it), the batch
-// past its deadline, its budget spent; a member a claim holds is left to the
+// (TD-381; TD-395's pass does not block it), the batch past its deadline; a
+// member a claim holds is left to the
 // next pass; the batch closes stopped with a note of what became of it.
 func TestGatesThatCannotRunEnd(t *testing.T) {
 	t.Parallel()
@@ -324,11 +324,8 @@ func TestGatesThatCannotRunEnd(t *testing.T) {
 		w.fail(t, c, "h1")
 		w.ago(t, c.TaskID, 10*time.Minute)
 	}
-	for _, pass := range []func() (int, error){func() (int, error) { return store.BlockWithdrawn(ctx, w.rt) },
-		func() (int, error) { return store.BlockOverBudget(ctx, w.rt) }} {
-		if n, err := pass(); err != nil || n != 0 {
-			t.Fatalf("a pass blocked %d gate tasks (%v)", n, err)
-		}
+	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 0 {
+		t.Fatalf("a pass blocked %d gate tasks (%v)", n, err)
 	}
 	var failedOn string
 	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.attempt WHERE state = 'failed' GROUP BY task_id HAVING count(*) = 3`).Scan(&failedOn))
@@ -369,8 +366,9 @@ func TestGatesThatCannotRunEnd(t *testing.T) {
 	}
 }
 
-// A spent budget ends the batch's waiting gates too.
-func TestGateBudgetSpentEnds(t *testing.T) {
+// 2026-11-06: a gate batch whose mission has used the attempts its budget
+// states does not end its waiting gates for it: they wait for a host.
+func TestGateBudgetSpentStillRuns(t *testing.T) {
 	t.Parallel()
 	_, spec, sum := gateOf(t, "T40", "TestGrammarIsClosed")
 	w := gateWorld(t, [][]byte{spec}, [2]string{"ARCH:a", gateRule("dev", [2]string{"T40", sum})})
@@ -380,11 +378,11 @@ func TestGateBudgetSpentEnds(t *testing.T) {
 	c := w.claim(t, "h1", store.LeaseTTL, deterministic)
 	w.fail(t, c, "h1")
 	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 6}' WHERE scope_json ? 'gate_run'`)
-	if n, err := store.EndGates(ctx, w.rt, "dev"); err != nil || n != 2 {
+	if n, err := store.EndGates(ctx, w.rt, "dev"); err != nil || n != 0 {
 		t.Fatalf("ended %d (%v)", n, err)
 	}
-	if r := w.lastStateReason(t, task); !strings.HasPrefix(r, "the gate could not run: ") || !strings.Contains(r, "attempts") {
-		t.Fatalf("%q", r)
+	if s := w.state(t, "task", task); s == "cancelled" {
+		t.Fatalf("the gate is %s (%q)", s, w.lastStateReason(t, task))
 	}
 }
 

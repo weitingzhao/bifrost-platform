@@ -7,8 +7,8 @@ package agentrttest
 // The two rules the Owner signs that dispatch needs, as rows a test inserts
 // as the runtime role: concurrency (one live attempt a host) and the dev
 // tenant's budget (missions that state none get 1000 attempts and 720 hours;
-// an attempt at most a day; auto_grant 0, so the budget pass grows no budget
-// on its own and blocks as before). Without both in force the runtime dispatches
+// an attempt at most a day; auto_grant 0, which the runtime no longer
+// reads). Without both in force the runtime dispatches
 // nothing. Each row's text and body_json agree (store's TestFixtureRule reads
 // them back).
 const (
