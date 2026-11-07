@@ -126,7 +126,10 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 		if len(landing.FormBatch(cands, now)) >= landing.BatchMax {
 			break
 		}
-		one, done := drillWorkShare(ctx, len(tasks)-i)
+		// At least drillMinShare each: an even split of the pass among 24
+		// candidates left each a few seconds, under one Git fetch, and every
+		// read failed (2026-11-06); what a read leaves goes to the next.
+		one, done := drillVisitShare(ctx, len(tasks)-i)
 		f, d, err := c.LandingDecision(one, c.Drill.Facts, task, "", "claim", now)
 		switch {
 		case err != nil:
