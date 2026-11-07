@@ -86,6 +86,10 @@ func ClaimLandingInBatch(ctx context.Context, db DB, src LandingSource, env, tas
 				_, e = failUnclaimedLocked(ctx, tx, "landing:"+facts.Repo, facts.Mission, task, why, refusalEvidence(facts), decision.Detail)
 				return e
 			}
+			if decision.Reason == "history" && facts.History.State == landing.Effective && again.claims > 0 {
+				_, e = failInMainNextLocked(ctx, tx, "landing:"+facts.Repo, facts.Mission, task, refusalEvidence(facts), again.at)
+				return e
+			}
 			return nil
 		}
 		// Claim-only priority under the repository lock: awaiting_grant is
@@ -332,5 +336,29 @@ func failUnclaimedLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, 
 		body["landing_floor"] = detail[0]
 	}
 	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: task, Body: body})
+	return err == nil, err
+}
+
+// failInMainNextLocked records that a root whose last operation awaits its
+// k+1 (discarded: its change reached main another way while it was in
+// progress) will not be claimed again because A is in main: its k+1, born
+// failed{in_main}, with the evidence failUnclaimedLocked keeps. Nothing when
+// the root does not await a k+1 or its bound is due (the bound records that).
+func failInMainNextLocked(ctx context.Context, tx pgx.Tx, stream, mission, task, evidence string, now time.Time) (bool, error) {
+	if err := lockStream(ctx, tx, stream); err != nil {
+		return false, err
+	}
+	state, err := LandingState(ctx, tx, stream)
+	if err != nil {
+		return false, err
+	}
+	if !state.AwaitsNext(task) || landing.RootBound(state, task, now, true) != "" {
+		return false, nil
+	}
+	_, n := landing.RootBudget(state, task)
+	op := fmt.Sprintf("land:%s:%d", task, n+1)
+	_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: task, Body: map[string]any{
+		"text":    "the landing loop will not claim this task: in_main (" + evidence + ")",
+		"landing": map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "in_main"}}})
 	return err == nil, err
 }
