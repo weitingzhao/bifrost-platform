@@ -1,0 +1,827 @@
+{
+ "cases": [
+  {
+   "name": "round",
+   "query": "root=R2",
+   "response": {
+    "as_of": "2026-11-07T15:06:58.868252Z",
+    "root": "R2",
+    "schema": "agentrt.plan_timeline_response/v1",
+    "steps": [
+     {
+      "cards": [],
+      "events": [
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 4,
+        "plan_node_id": "R2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "",
+        "wait_s": 0
+       }
+      ],
+      "label": "2",
+      "node_kind": "round",
+      "plan_node_id": "R2",
+      "state": "",
+      "title": "round 2"
+     },
+     {
+      "cards": [],
+      "events": [
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 5,
+        "plan_node_id": "R2:2.1",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "",
+        "wait_s": 0
+       }
+      ],
+      "label": "2.1",
+      "node_kind": "item",
+      "plan_node_id": "R2:2.1",
+      "state": "",
+      "title": "data layer"
+     },
+     {
+      "cards": [],
+      "events": [
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 6,
+        "plan_node_id": "R2:2.1-1",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "",
+        "wait_s": 0
+       }
+      ],
+      "label": "2.1-1",
+      "node_kind": "step",
+      "plan_node_id": "R2:2.1-1",
+      "state": "planned",
+      "title": "s1"
+     },
+     {
+      "cards": [
+       {
+        "kind": "landing_card",
+        "ref": "landing-cards:bifrost-platform/card:7:root_failed",
+        "plan_node_id": "R2:2.1-2",
+        "via": "landing_op",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempts": [
+         {
+          "n": 1,
+          "question_id": "q1",
+          "opened_at": "2026-11-06T14:24:58Z",
+          "closed_at": "2026-11-06T14:25:28Z",
+          "void_reason": "expired",
+          "event_id": 82
+         },
+         {
+          "n": 2,
+          "question_id": "q2",
+          "opened_at": "2026-11-06T14:25:58Z",
+          "closed_at": "2026-11-06T14:26:18Z",
+          "result": {
+           "status": "answered",
+           "option": "a",
+           "choice": "try_again",
+           "answered_by": "owner",
+           "answered_at": "2026-11-06T14:26:18Z"
+          },
+          "event_id": 88
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 29,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "exec:cursor",
+        "waited_on": "",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 36,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "host:h1",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 42,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "a_01M6V8RV8YSD7GJ58BEF90J30D",
+        "actor": "exec:deterministic",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 49,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "a_01M6V8RV8YSD7GJ58BEF90J30D",
+        "actor": "host:h2",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 52,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 56,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "a_01M6V8RV9N57A6X3AFTT6HWTTE",
+        "actor": "exec:codex",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 63,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "a_01M6V8RV9N57A6X3AFTT6HWTTE",
+        "actor": "host:h3",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 66,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "review passed",
+        "source": "agentrt.event",
+        "event_id": 67,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "landed",
+        "at": "2026-11-06T14:23:28.000000Z",
+        "reason": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
+        "source": "note.landing",
+        "event_id": 75,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "",
+        "waited_on": "landing CI",
+        "wait_s": 80
+       },
+       {
+        "kind": "on_stg",
+        "at": "2026-11-06T14:24:18.000000Z",
+        "reason": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "source": "note.landing",
+        "event_id": 80,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "",
+        "waited_on": "STG",
+        "wait_s": 50
+       },
+       {
+        "kind": "on_prod",
+        "at": "2026-11-06T14:24:28.000000Z",
+        "reason": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "source": "deploy_seen",
+        "event_id": 81,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "PROD release",
+        "wait_s": 10
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 97,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "exec:cursor",
+        "waited_on": "",
+        "wait_s": 130
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 104,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "host:h1",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 110,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "a_01M6V8RVBN61EBN343HC9YE8GH",
+        "actor": "exec:deterministic",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 117,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "a_01M6V8RVBN61EBN343HC9YE8GH",
+        "actor": "host:h2",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 120,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 124,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "a_01M6V8RVCBFJ5M7F0A1SMG3MFV",
+        "actor": "exec:codex",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 131,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "a_01M6V8RVCBFJ5M7F0A1SMG3MFV",
+        "actor": "host:h3",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 134,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "review passed",
+        "source": "agentrt.event",
+        "event_id": 135,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "landed",
+        "at": "2026-11-06T14:27:58.000000Z",
+        "reason": "7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c",
+        "source": "note.landing",
+        "event_id": 143,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "",
+        "waited_on": "landing CI",
+        "wait_s": 80
+       },
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 7,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "STG",
+        "wait_s": 2340
+       }
+      ],
+      "label": "2.1-2",
+      "node_kind": "step",
+      "plan_node_id": "R2:2.1-2",
+      "state": "planned",
+      "title": "s2"
+     },
+     {
+      "cards": [],
+      "events": [
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 8,
+        "plan_node_id": "R2:2.1-3",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "",
+        "wait_s": 0
+       }
+      ],
+      "label": "2.1-3",
+      "node_kind": "step",
+      "plan_node_id": "R2:2.1-3",
+      "state": "planned",
+      "title": "s3"
+     },
+     {
+      "cards": [],
+      "events": [
+       {
+        "kind": "created",
+        "at": "2026-11-06T14:16:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 25,
+        "plan_node_id": "R2:2.1-9",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "",
+        "wait_s": 0
+       }
+      ],
+      "label": "2.1-9",
+      "node_kind": "step",
+      "plan_node_id": "R2:2.1-9",
+      "state": "planned",
+      "title": "s9"
+     }
+    ],
+    "unbound_cards": [],
+    "warnings": []
+   }
+  },
+  {
+   "name": "one step",
+   "query": "root=R2\u0026node=R2:2.1-2",
+   "response": {
+    "as_of": "2026-11-07T15:06:58.873636Z",
+    "root": "R2",
+    "schema": "agentrt.plan_timeline_response/v1",
+    "steps": [
+     {
+      "cards": [
+       {
+        "kind": "landing_card",
+        "ref": "landing-cards:bifrost-platform/card:7:root_failed",
+        "plan_node_id": "R2:2.1-2",
+        "via": "landing_op",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempts": [
+         {
+          "n": 1,
+          "question_id": "q1",
+          "opened_at": "2026-11-06T14:24:58Z",
+          "closed_at": "2026-11-06T14:25:28Z",
+          "void_reason": "expired",
+          "event_id": 82
+         },
+         {
+          "n": 2,
+          "question_id": "q2",
+          "opened_at": "2026-11-06T14:25:58Z",
+          "closed_at": "2026-11-06T14:26:18Z",
+          "result": {
+           "status": "answered",
+           "option": "a",
+           "choice": "try_again",
+           "answered_by": "owner",
+           "answered_at": "2026-11-06T14:26:18Z"
+          },
+          "event_id": 88
+         }
+        ]
+       }
+      ],
+      "events": [
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 29,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "exec:cursor",
+        "waited_on": "",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 36,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "host:h1",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 42,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "a_01M6V8RV8YSD7GJ58BEF90J30D",
+        "actor": "exec:deterministic",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 49,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "a_01M6V8RV8YSD7GJ58BEF90J30D",
+        "actor": "host:h2",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 52,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV8NHH8DZG6W0VF2ZZDW",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 56,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "a_01M6V8RV9N57A6X3AFTT6HWTTE",
+        "actor": "exec:codex",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 63,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "a_01M6V8RV9N57A6X3AFTT6HWTTE",
+        "actor": "host:h3",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 66,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV9DD3WKNTZT9VQ3ZABB",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:22:08.000000Z",
+        "reason": "review passed",
+        "source": "agentrt.event",
+        "event_id": 67,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "landed",
+        "at": "2026-11-06T14:23:28.000000Z",
+        "reason": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
+        "source": "note.landing",
+        "event_id": 75,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RV7KRGK9BJ5CSZ2PZS0Y",
+        "attempt_id": "a_01M6V8RV82HB3A10JTAW639JHK",
+        "actor": "",
+        "waited_on": "landing CI",
+        "wait_s": 80
+       },
+       {
+        "kind": "on_stg",
+        "at": "2026-11-06T14:24:18.000000Z",
+        "reason": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "source": "note.landing",
+        "event_id": 80,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "",
+        "waited_on": "STG",
+        "wait_s": 50
+       },
+       {
+        "kind": "on_prod",
+        "at": "2026-11-06T14:24:28.000000Z",
+        "reason": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "source": "deploy_seen",
+        "event_id": 81,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "PROD release",
+        "wait_s": 10
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 97,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "exec:cursor",
+        "waited_on": "",
+        "wait_s": 130
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 104,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "host:h1",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 110,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "a_01M6V8RVBN61EBN343HC9YE8GH",
+        "actor": "exec:deterministic",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 117,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "a_01M6V8RVBN61EBN343HC9YE8GH",
+        "actor": "host:h2",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 120,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVBDTWZY5K1JFJGYRGV6",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "task_leased",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 124,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "a_01M6V8RVCBFJ5M7F0A1SMG3MFV",
+        "actor": "exec:codex",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "submitted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 131,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "a_01M6V8RVCBFJ5M7F0A1SMG3MFV",
+        "actor": "host:h3",
+        "waited_on": "executor",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "result used: pass",
+        "source": "agentrt.event",
+        "event_id": 134,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVC47K8JZGR0FHVBEP69",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "review",
+        "wait_s": 0
+       },
+       {
+        "kind": "accepted",
+        "at": "2026-11-06T14:26:38.000000Z",
+        "reason": "review passed",
+        "source": "agentrt.event",
+        "event_id": 135,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "landing CI",
+        "wait_s": 0
+       },
+       {
+        "kind": "landed",
+        "at": "2026-11-06T14:27:58.000000Z",
+        "reason": "7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c",
+        "source": "note.landing",
+        "event_id": 143,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
+        "attempt_id": "a_01M6V8RVAZD29EDCH0Z63013CX",
+        "actor": "",
+        "waited_on": "landing CI",
+        "wait_s": 80
+       },
+       {
+        "kind": "created",
+        "at": "2026-11-06T15:06:58.000000Z",
+        "reason": "",
+        "source": "agentrt.event",
+        "event_id": 7,
+        "plan_node_id": "R2:2.1-2",
+        "task_id": "",
+        "attempt_id": "",
+        "actor": "controller",
+        "waited_on": "STG",
+        "wait_s": 2340
+       }
+      ],
+      "label": "2.1-2",
+      "node_kind": "step",
+      "plan_node_id": "R2:2.1-2",
+      "state": "planned",
+      "title": "s2"
+     }
+    ],
+    "unbound_cards": [],
+    "warnings": []
+   }
+  }
+ ]
+}

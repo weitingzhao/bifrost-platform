@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
+import { DeliveryStrip } from './DeliveryStrip'
 import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
@@ -46,6 +47,7 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
       {external && <> · <time dateTime={work.heartbeat_at}>{work.heartbeat_at}</time> · {work.description.repo} · {work.description.branch}{work.backfilled && ' · Backfilled'}</>}
       {!external && <> · Host · {work.attempt!.host_id || 'Unknown'}{work.external_work?.length ? ` · Linked external history · ${work.external_work.length} records` : ''} · {work.attempt!.reason}</>}
     </span>
+    {work.task_id && <span className="basis-full"><DeliveryStrip task={work.task_id} /></span>}
     {!external && <a className="inline-flex min-h-11 items-center text-sm" href={goalHref(work.mission_id, work.task_id)}>Open task</a>}
   </li>
 }

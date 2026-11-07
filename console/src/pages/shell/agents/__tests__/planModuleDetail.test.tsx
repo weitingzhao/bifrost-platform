@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeProgress } from '@/api/agentRuntime'
+import delivery from '@/api/__fixtures__/agentrt-delivery.go.json'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import type { ApprovalItem } from '@/api/approvals'
 import { parsePlanSnapshot } from '@/api/planSnapshot'
@@ -11,6 +12,7 @@ import type { Question } from '@/api/questions'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { approvalHref, goalHref, NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 import { NowClock } from '../../progress/progressClock'
+import { clockText } from '../deliveryStripModel'
 import { PlanModuleDetail } from '../PlanModuleDetail'
 import { PlanModuleRows } from '../PlanModuleRows'
 import { WorkPlanView } from '../WorkPlanView'
@@ -460,18 +462,20 @@ describe('Work → Plan with a module address', () => {
     // The shell's lists are not in this test's cache: the detail says so and does not fetch them.
     expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Questions not read yet')
     expect(urls().length).toBeGreaterThan(0)
-    // The detail reads nothing of its own: the page's own reads are the plan view and, for the summary's sign-off
-    // count (R5:5.5-2), the rounds' GET /plan and the shell's GET /progress that lists them, and for the summary's pace
-    // line this round's GET /plan-pace (R5:5.5-13), and for its coordinator pin line GET /pin-share (R5:5.7-8).
+    // The detail reads nothing of its own but each shown task's delivery stages (GET /delivery?task=, its stage
+    // strip): the page's own reads are the plan view and, for the summary's sign-off count (R5:5.5-2), the rounds'
+    // GET /plan and the shell's GET /progress that lists them, and for the summary's pace line this round's
+    // GET /plan-pace (R5:5.5-13), and for its coordinator pin line GET /pin-share (R5:5.7-8).
+    const delivery = (u: string) => /^\/api\/v1\/agentrt\/delivery\?task=[^&]+$/.test(u)
     const pageReads = (u: string) => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || u === '/api/v1/agentrt/progress' || u === '/api/v1/agentrt/plan-pace?root=R5'
-      || u === '/api/v1/agentrt/pin-share'
+      || u === '/api/v1/agentrt/pin-share' || delivery(u)
     expect(urls().every(pageReads)).toBe(true)
     const before = urls().length
     // With the shell's lists in the cache the detail shows them, still without a request of its own.
     act(() => seedShell())
     await waitFor(() => expect(within(module).getByRole('region', { name: 'Needs you now' })).toHaveTextContent('Request #7'))
     expect(urls().every(pageReads)).toBe(true)
-    expect(urls().slice(before).every(u => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u))).toBe(true)
+    expect(urls().slice(before).every(u => u === '/api/v1/agentrt/plan-view?root=R5&explain=1' || /^\/api\/v1\/agentrt\/plan\?root=R\d+$/.test(u) || delivery(u))).toBe(true)
     expect(urls().some(u => /landing|questions|approvals|plan-view\?root=R4/.test(u))).toBe(false)
     // ‹ Work: the detail closes and the keyboard goes back to the module's own link in the rows.
     await act(async () => { window.location.hash = '#work?root=R5'; window.dispatchEvent(new Event('hashchange')) })
@@ -573,4 +577,41 @@ it('prefers progress rounds, falls back to plan rounds, and preserves old respon
   const old = { ...r5().tasks.find(t => t.task_id === T2)!, state: 'blocked' }
   expect(taskLine(old, unread).waiting).toBe('')
   expect(roundWords(old, unread)).toBe('round Unknown (runtime progress not read)')
+})
+
+it("shows each task's delivery stages on its line: a time when reached, — when not, Unknown when unreadable", async () => {
+  // GET /delivery's answers as Go writes them (agentrt-delivery.go.json), each read as one of 5.1-3's tasks.
+  const answer = (name: string, task: string) => ({ ...structuredClone(delivery.cases.find(c => c.name === name)!.response), task_id: task })
+  const onStg = answer('on PROD by deploy_seen, cycles read and empty', T3)
+  Object.assign(onStg.stages[5]!, { state: 'current', left_at: undefined }); Object.assign(onStg.stages[6]!, { state: 'not_reached', entered_at: undefined, source: 'release_cycle' })
+  let t3: () => Response = () => new Response(JSON.stringify(onStg), { status: 200 })
+  fetcher.mockImplementation(async (input: RequestInfo | URL) => {
+    const u = String(input)
+    if (u === `/api/v1/agentrt/delivery?task=${T3}`) return t3()
+    if (u === `/api/v1/agentrt/delivery?task=${T2}`) return new Response(JSON.stringify({ error: 'not_found', message: 'change not found' }), { status: 404 })
+    return new Response('{}', { status: 599 })
+  })
+  const strip = (task: string) => step('5.1-3').querySelector<HTMLElement>(`[data-delivery-strip="${task}"]`)!
+  const at = (doc: typeof onStg, name: string, field: 'entered_at' | 'left_at') => clockText(doc.stages.find(s => s.stage === name)![field]!)
+  detail()
+  await waitFor(() => expect(strip(T3)).toHaveTextContent(/^Handed in/))
+  expect(strip(T3).textContent).toBe(`Handed in ${at(onStg, 'handed_in', 'entered_at')} → On main ${at(onStg, 'on_main', 'entered_at')} → STG ${at(onStg, 'stg', 'left_at')} → PROD —`)
+  expect(strip(T3).querySelector('[data-stage="on_stg"] time')).toHaveAttribute('dateTime', onStg.stages[4]!.left_at)
+  // The earlier task handed no change in (404): nothing reached.
+  await waitFor(() => expect(strip(T2).textContent).toBe('Handed in — → On main — → STG — → PROD —'))
+
+  // PROD unreadable (no release cycles): Unknown, with why on it.
+  cleanup(); client.clear()
+  const unknown = answer('PROD unknown: the release cycles could not be read', T3)
+  t3 = () => new Response(JSON.stringify(unknown), { status: 200 })
+  detail()
+  await waitFor(() => expect(strip(T3)).toHaveTextContent(/PROD Unknown$/))
+  expect(strip(T3).querySelector('[data-stage="on_prod"]')).toHaveAttribute('title', 'no release cycles given')
+  expect(strip(T3)).toHaveTextContent(`STG ${at(unknown, 'stg', 'left_at')} → PROD Unknown`)
+
+  // The read fails: every stage Unknown, never a time from the plan view's delivery text.
+  cleanup(); client.clear()
+  t3 = () => new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 })
+  detail()
+  await waitFor(() => expect(strip(T3).textContent).toBe('Handed in Unknown → On main Unknown → STG Unknown → PROD Unknown'))
 })

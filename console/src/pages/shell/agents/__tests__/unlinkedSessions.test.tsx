@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
+import type { ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import planView from '@/api/__fixtures__/plan-view-collector.generated.json'
 import sessions from '@/api/__fixtures__/agent-threads-sessions.generated.json'
 import threads from '@/api/__fixtures__/agent-threads.generated.json'
@@ -13,7 +15,12 @@ import { compareInstant, coverageGroups, latestBySession, unlinkedSessions, type
 // (agentthreads TestAgentThreadsResponseFixture, store TestPlanViewCollectorWorkFixture, byte for byte); the plan view
 // carries the session counts as the API adds them (agentrtapi sessionCoverage: coverage.sessions).
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+/** Live's task rows read their delivery stages (DeliveryStrip); here that read never answers. */
+function withQueries(ui: ReactNode) {
+  vi.stubGlobal('fetch', () => new Promise(() => {}))
+  return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>
+}
 const data = threads as unknown as AgentThreadsResponse
 const view = () => parsePlanSnapshot({ ...planView, coverage: { ...planView.coverage, sessions } }, 'R4')
 const ok = (res: AgentThreadsResponse = data): SessionsRead => ({ state: 'ok', data: res, stale: false })
@@ -25,7 +32,7 @@ const keys = (list: HTMLElement) => within(list).getAllByRole('listitem').map(li
 
 describe('the Unlinked sessions of a P-c2 answer', () => {
   it('renders Live, Finished today and Unlinked by their stable identities', () => {
-    render(<PlanLiveWork view={view()} stale={false} sessions={ok()} />)
+    render(withQueries(<PlanLiveWork view={view()} stale={false} sessions={ok()} />))
     const now = screen.getByRole('list', { name: 'Work now' })
     expect(within(now).getAllByRole('listitem').map(li => li.textContent)).toEqual([
       expect.stringContaining('collector hook work'), expect.stringContaining('an MCP registration'), expect.stringContaining('a task with a live attempt'),
@@ -49,7 +56,7 @@ describe('the Unlinked sessions of a P-c2 answer', () => {
     expect(within(unlinked).queryByText(/0b8e2f4a|7c1d9e3b|9e5f0a1c/)).toBeNull()
   })
   it('places the section after Finished today and before the Coverage line', () => {
-    render(<PlanLiveWork view={view()} stale={false} sessions={ok()} />)
+    render(withQueries(<PlanLiveWork view={view()} stale={false} sessions={ok()} />))
     const live = screen.getByRole('region', { name: 'Live work' })
     const text = live.textContent!
     expect(text.indexOf('Finished today')).toBeLessThan(text.indexOf('Unlinked sessions'))
