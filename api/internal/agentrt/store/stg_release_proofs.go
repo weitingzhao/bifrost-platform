@@ -15,6 +15,7 @@ func StgCanObserveCI(s StgState, r StgRecord, at time.Time) bool {
 	b := s.Blocks[r.String("block")]
 	return b.IsOpen() && stgCICause(b.Opened.Record.String("why")) && s.checkCIProof(b, StgEvent{Seq: s.LastSeq + 1, At: at, Record: r}) == nil
 }
+
 // A rule observation lifts a "rule" block when the policy read enabled after
 // the block opened: for a newer rule version, or for the blocked version
 // itself, since a block can open on a transient misread (R5:5.7 B5 fix). An
@@ -184,7 +185,7 @@ func stgSameCI(a, b StgRecord) bool {
 }
 
 func stgCIIdentityEqual(a, b StgRecord) bool {
-	for _, key := range []string{"uid", "name", "created_at", "platform_commit", "ui_commit", "infra_commit", "pipeline_ref", "repo_url"} {
+	for _, key := range []string{"uid", "name", "created_at", "platform_commit", "ui_commit", "infra_commit", "pipeline_ref", "repo_url", "tested_by"} {
 		if a.String(key) != b.String(key) {
 			return false
 		}
