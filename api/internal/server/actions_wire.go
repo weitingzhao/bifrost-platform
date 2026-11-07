@@ -16,6 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/stgrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -171,6 +172,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
 	actions.RegisterExecutor("void_exam_paper", s.voidExamPaper)
 	actions.RegisterExecutor("mark_missions_no_merge", s.markMissionsNoMerge)
+	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(stgrelease.SampleCreateAction, s.stgSampleCreate)
 	actions.RegisterExecutor(stgrelease.SampleFinalizeAction, s.stgSampleFinalize)
 	for _, action := range store.GrantActions {

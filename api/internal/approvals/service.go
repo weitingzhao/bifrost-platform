@@ -609,7 +609,7 @@ func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *deci
 }
 
 // confirmRequired are actions whose approval always repeats its number.
-var confirmRequired = []string{"approve_guardrail_landing", "approve_core_landing", "approve_floor_landing"}
+var confirmRequired = []string{"approve_guardrail_landing", "approve_core_landing", "approve_floor_landing", "deploy_agentd"}
 
 func decisionCode(rec Approval) int {
 	if rec.Status == StatusApproved || rec.Status == StatusRunning {

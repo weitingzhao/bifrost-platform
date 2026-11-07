@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
@@ -19,6 +20,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	}
 	if err := stgSampleCreateCheck(action, params); err != nil {
 		return err
+	}
+	if action == agentdeploy.DeployAgentdAction {
+		return agentdDeployCreateCheck(params)
 	}
 	if action == "mark_missions_no_merge" {
 		_, err := s.noMergeRequest(params)

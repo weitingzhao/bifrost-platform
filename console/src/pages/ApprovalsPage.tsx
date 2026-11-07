@@ -7,6 +7,7 @@ import {
   approvalFailureStatus,
   approvalIdFromHash,
   clearLegacyApprovalToken,
+  confirmsNumber,
   fetchApproval,
   fetchApprovalList,
   formatTimeRemaining,
@@ -673,7 +674,7 @@ export function ApprovalsPage() {
               channel: 'console',
               approval_line: opened?.approval_line ?? '',
               params_hash: opened?.params_hash ?? '',
-              ...(isLandingAction(opened?.action) ? { confirm_number: opened?.number } : {}),
+              ...(confirmsNumber(opened?.action) ? { confirm_number: opened?.number } : {}),
             }
           : { reason: reason ?? '' },
       )), setNotice)

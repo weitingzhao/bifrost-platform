@@ -11,9 +11,10 @@ import (
 
 // requestable are the actions the platform itself may request (R5:5.7 goal
 // 3): the landing grant cards, asked for when an operation reaches
-// awaiting_grant. Every other action is requested by a person or an agent
-// through POST /approvals.
-var requestable = map[string]bool{"approve_guardrail_landing": true, "approve_core_landing": true}
+// awaiting_grant, and deploy_agentd, asked for when an execution host runs
+// another agentd build than PROD's platform commit. Every other action is
+// requested by a person or an agent through POST /approvals.
+var requestable = map[string]bool{"approve_guardrail_landing": true, "approve_core_landing": true, "deploy_agentd": true}
 
 // RequestError is a request the service refused, with its HTTP status and
 // body as POST /approvals would have answered.
@@ -47,9 +48,9 @@ func (s *Service) Request(ctx context.Context, requester, action, reason, rollba
 	return a, nil
 }
 
-// Withdraw takes back a pending landing grant request (requestable) that
-// can no longer run, off the Owner's list: its operation landed, or ended,
-// without it. It becomes expired, with reason; one already expired is left
+// Withdraw takes back a pending request the platform may make (requestable)
+// that can no longer run, off the Owner's list: a landing grant's operation
+// landed, or ended, without it. It becomes expired, with reason; one already expired is left
 // so. A request already decided otherwise, or one of any other action, is
 // refused and left as it is.
 func (s *Service) Withdraw(ref, reason string) error {
