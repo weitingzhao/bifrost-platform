@@ -128,7 +128,7 @@ func stopOnAHostOfTwo(t *testing.T, refuse bool) {
 	d.Beat, d.KillGrace = 30*time.Second, 10*time.Second
 	byTask := map[string]*agentd.Claimed{}
 	for i := 0; i < 2; i++ {
-		cl, err := d.Client.Claim(ctx, agentd.MaxSlots-i, []agentd.Tool{cursor})
+		cl, err := d.Client.Claim(ctx, agentd.DefaultSlots-i, []agentd.Tool{cursor})
 		if err != nil || cl == nil {
 			t.Fatalf("claim %d = %+v %v", i, cl, err)
 		}

@@ -118,7 +118,7 @@ func TestParseRefuses(t *testing.T) {
 		"an unknown kind":            text("visibility", "per_host: 1\n"),
 		"a tenant nobody has":        text("budget:prod", "tenant: prod\n"),
 		"a C-class action":           strings.Replace(envelope, "max_action: branch", "max_action: release", 1),
-		"four live attempts a host":  strings.Replace(concurrency, "per_host: 1", "per_host: 4", 1),
+		"past the per_host ceiling":  strings.Replace(concurrency, "per_host: 1", "per_host: 33", 1),
 		"quota before capability":    strings.Replace(routing, "[capability, quota]", "[quota, capability]", 1),
 		"a score without samples":    routing + "min_score_percent: 60\n",
 		"samples without a score":    routing + "min_samples: 8\n",
@@ -221,7 +221,7 @@ func TestBudgetAutoGrant(t *testing.T) {
 	}
 	for name, s := range map[string]string{
 		"a negative cap":   budget + "auto_grant: {max_attempts: -1, max_wall_hours: 0}\n",
-		"a cap past bound": budget + "auto_grant: {max_attempts: 1001, max_wall_hours: 0}\n",
+		"a cap past bound": budget + "auto_grant: {max_attempts: 10001, max_wall_hours: 0}\n",
 		"hours left out":   budget + "auto_grant: {max_attempts: 3}\n",
 		"an unknown field": budget + "auto_grant: {max_attempts: 3, max_wall_hours: 1, rounds: 2}\n",
 		"not a mapping":    budget + "auto_grant: 3\n",
