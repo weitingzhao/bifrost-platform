@@ -244,6 +244,7 @@ type CIOutcome struct {
 // no such run. A green whose api-scope result is not full (R5:5.7-1 runs
 // only the console's share of the Go tests for a console-only change) is
 // not counted at all: it cannot vouch for sha, nor stand as its newest run.
+// A tested-by green also needs verification before it can be counted.
 func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run string, err error) {
 	idx, err := f.CIIndex(ctx)
 	o := idx[repo+"@"+sha]
@@ -295,7 +296,7 @@ func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) 
 				o.Status = CIFailed
 			}
 		}
-		if o.Status == CISucceeded && !fullAPIScope(item) {
+		if o.Status == CISucceeded && (!fullAPIScope(item) || hasTestedBy(item)) {
 			continue
 		}
 		key := runRepo + "@" + params["revision"]
@@ -308,6 +309,20 @@ func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) 
 		}
 	}
 	return idx, nil
+}
+
+// hasTestedBy prevents a reuse run from being mistaken for an original full
+// run. Accepting one requires the P3-reuse-readers verifier, which is not yet
+// present in landingci. Until then, fail closed even for malformed results.
+func hasTestedBy(item unstructured.Unstructured) bool {
+	results, _, _ := unstructured.NestedSlice(item.Object, "status", "results")
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		if m["name"] == "tested-by" {
+			return true
+		}
+	}
+	return false
 }
 
 // fullAPIScope: the run's api-scope result is absent (it predates the result
