@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -344,13 +345,20 @@ func runStatus(item unstructured.Unstructured) string {
 }
 
 // namedValues keeps counts so duplicates can never masquerade as one result.
+// A result value is read without surrounding whitespace: a step that writes
+// "incremental\n" to its result file means incremental (2026-11-06, B5 was
+// blocked on such a run). Parameters are identity and are read as they are.
 func namedValues(item unstructured.Unstructured, fields ...string) (map[string]string, map[string]int) {
 	list, _, _ := unstructured.NestedSlice(item.Object, fields...)
 	values, counts := map[string]string{}, map[string]int{}
+	results := len(fields) > 0 && fields[len(fields)-1] == "results"
 	for _, entry := range list {
 		m, _ := entry.(map[string]any)
 		name, _ := m["name"].(string)
 		value, _ := m["value"].(string)
+		if results {
+			value = strings.TrimSpace(value)
+		}
 		counts[name]++
 		values[name] = value
 	}

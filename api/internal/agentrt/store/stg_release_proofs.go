@@ -15,6 +15,27 @@ func StgCanObserveCI(s StgState, r StgRecord, at time.Time) bool {
 	b := s.Blocks[r.String("block")]
 	return b.IsOpen() && stgCICause(b.Opened.Record.String("why")) && s.checkCIProof(b, StgEvent{Seq: s.LastSeq + 1, At: at, Record: r}) == nil
 }
+
+// StgCIUnreadableAfter is how long a ci_* block retries a CI record of its P
+// that cannot be read before it lifts with ci_unreadable, so B5 goes on to
+// evaluate a newer P instead of waiting forever (2026-11-06: B5 was blocked
+// for hours on a run whose api-scope value carried a trailing newline). The
+// same interval opens ci_missing.
+const StgCIUnreadableAfter = 30 * time.Minute
+
+// StgCIErrorMax bounds the read error kept in a ci_unreadable record.
+const StgCIErrorMax = 1000
+
+// StgCanObserveCIUnreadable: r records that the CI of a ci_* block's P still
+// could not be read StgCIUnreadableAfter after the block opened.
+func StgCanObserveCIUnreadable(s StgState, r StgRecord, at time.Time) bool {
+	b := s.Blocks[r.String("block")]
+	read := r.Time("read_at")
+	return b.IsOpen() && strings.HasPrefix(b.Opened.Record.String("why"), "ci_") && r.String("kind") == "ci_unreadable" &&
+		r.Int("interval_seq") == b.Opened.Seq && r.String("P") == b.Opened.Record.String("P") &&
+		read.Sub(b.Opened.At) >= StgCIUnreadableAfter && !read.After(at)
+}
+
 // A rule observation lifts a "rule" block when the policy read enabled after
 // the block opened: for a newer rule version, or for the blocked version
 // itself, since a block can open on a transient misread (R5:5.7 B5 fix). An
@@ -64,8 +85,12 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 	original, why := b.Opened.Record, r.String("why")
 	allowed := false
 	switch original.String("why") {
-	case "wrong_input", "ci_red", "ci_results", "ci_missing":
+	case "wrong_input":
 		allowed = why == "inputs_changed"
+	case "ci_red", "ci_results", "ci_missing":
+		// A newer CI of P, P no longer the release candidate, or P's CI
+		// unreadable for an interval (2026-11-06 B5 fix).
+		allowed = why == "inputs_changed" || why == "superseded" || why == "ci_unreadable"
 	// These and hard_floor are StgManualRunCauses; keep the two in step.
 	case "diff_unlanded", "non_linear", "no_merge_after_landing", "baseline_moved", "baseline_unknown":
 		allowed = why == "inputs_changed" || why == "external_release" || why == "evidence_changed"
@@ -103,6 +128,18 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 			return fail("input unblock needs an observed different main head")
 		}
 		return nil
+	case "superseded":
+		if !s.stgSupersedes(b, r["ref"]) {
+			return fail("superseded needs a newer recorded main head or STG release containing P")
+		}
+		return nil
+	case "ci_unreadable":
+		seq, _ := cardNumber(r["ref"])
+		proof := s.Records[seq]
+		if proof.Seq <= b.Opened.Seq || proof.Record.String("block") != original.String("block") || !StgCanObserveCIUnreadable(s, proof.Record, proof.At) {
+			return fail("ci_unreadable needs this interval's recorded unreadable CI")
+		}
+		return nil
 	case "granted":
 		g := s.Grants[r.String("ref")]
 		if g.Seq <= b.Opened.Seq || g.Record.Int("trigger_seq") != b.Opened.Seq {
@@ -121,6 +158,41 @@ func (s StgState) checkUnblock(b StgBlock, r StgRecord) error {
 	default:
 		return fail("no stored proof contract for this change")
 	}
+}
+
+// stgSupersedes: ref proves the block's P is no longer the release
+// candidate. Main is linear (non_linear blocks), and P was main's head when
+// it was selected, so a head read after the block opened that is not P
+// contains P. ref is either such a landing_main observation (its seq) or the
+// evidence of a Succeeded STG release recorded after the block opened whose
+// P is the blocked P or such a head. B5's own run of the batch a post-send
+// block names does not supersede that block.
+func (s StgState) stgSupersedes(b StgBlock, ref any) bool {
+	original := b.Opened.Record
+	p := original.String("P")
+	newerHead := func(e StgEvent) bool {
+		r := e.Record
+		return e.Seq > b.Opened.Seq && r.String("stg_evidence") == "" && r.String("v") == "2" && r.String("head") != "" &&
+			r.String("head") != p && !r.Time("read_at").Before(b.Opened.At)
+	}
+	if id, ok := ref.(string); ok {
+		ev := s.Evidence[id]
+		r := ev.Record
+		if ev.Seq <= b.Opened.Seq || r.String("kind") != "evidence" || r.String("source") == "automatic" && r.String("batch") == original.object("detail").object("sent").String("batch") {
+			return false
+		}
+		if r.String("P") == p {
+			return true
+		}
+		for _, e := range s.Records {
+			if newerHead(e) && e.Record.String("head") == r.String("P") {
+				return true
+			}
+		}
+		return false
+	}
+	seq, _ := cardNumber(ref)
+	return newerHead(s.Records[seq])
 }
 
 func stgCICause(why string) bool {

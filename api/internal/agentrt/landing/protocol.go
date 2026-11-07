@@ -687,6 +687,28 @@ func (o Operation) Active() bool {
 	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
 }
 
+// HoldsSlot: the operation counts toward its repository's landing slot
+// (max_in_flight). Only an active operation before its change is on main
+// holds it: a landed change (or a push main reported ok, not yet recorded
+// landed) never does, whatever its STG release does (blocked, waiting,
+// sent). 2026-11-06 landed changes waiting on a blocked STG kept the slot and
+// nothing else could land.
+func (o Operation) HoldsSlot() bool {
+	return o.Active() && !o.EverLanded && !(o.Phase == "main_result" && o.Outcome == "ok") && !strings.HasPrefix(o.Phase, "stg_")
+}
+
+// InFlight counts the root operations other than except that hold the
+// repository's landing slot.
+func (s State) InFlight(except string) int {
+	n := 0
+	for id, o := range s.Operations {
+		if id != except && o.Task != "" && o.HoldsSlot() {
+			n++
+		}
+	}
+	return n
+}
+
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the
 // Owner's retry), and for a root never claimed from its acceptance (TD-447 4).
 const ClaimWindow = 6 * time.Hour

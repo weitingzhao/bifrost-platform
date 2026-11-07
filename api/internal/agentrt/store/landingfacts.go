@@ -153,10 +153,9 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 			}
 		}
 	}
-	for id, o := range state.Operations {
-		if id != op && o.Task != "" && o.Active() {
-			f.OtherInFlight++
-		}
+	// A landed operation never holds the slot, whatever its STG phase.
+	f.OtherInFlight = state.InFlight(op)
+	for _, o := range state.Operations {
 		if o.Task == taskID && o.BlocksClaim() {
 			f.Terminal = true
 		}
@@ -170,7 +169,7 @@ func landingFactsDB(ctx context.Context, tx pgx.Tx, src LandingSource, environme
 			return f, nil, err
 		}
 		for id := range mates {
-			if o := state.Operations[id]; o.Task != "" && o.Active() {
+			if o := state.Operations[id]; o.Task != "" && o.HoldsSlot() {
 				f.OtherInFlight--
 			}
 		}
