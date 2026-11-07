@@ -243,3 +243,14 @@ describe('Work → Plan', () => {
     client.clear()
   })
 })
+
+it('shows the runtime countdown without inventing delivery progress when stages are unavailable', () => {
+  const { container } = render(<PlanModuleRows view={advanced()} selected="" />)
+  const module = container.querySelector('[data-module="4.1"]')! as HTMLElement
+  expect(within(module).getByText(/Progress Unknown · done 2 · left 3/)).toBeInTheDocument()
+  const bar = within(module).getByRole('progressbar')
+  expect(bar).not.toHaveAttribute('aria-valuenow')
+  expect(bar).toHaveAttribute('aria-valuetext', 'Unknown: delivery stages unavailable')
+  expect(within(module).getByRole('button', { name: 'How plan progress is counted' })).toHaveAttribute('title', expect.stringContaining('planned 10, handed in 40, verified 60, on main 70, STG 85, PROD 100'))
+  expect(within(module).getByRole('button', { name: 'How plan progress is counted' })).toHaveAttribute('title', expect.stringContaining('A stage in progress adds nothing'))
+})

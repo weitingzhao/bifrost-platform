@@ -13,6 +13,7 @@ import { HowRead, StepWhy } from './StepWhy'
 import { stepRows } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
 import { workTabHref } from './workViewModel'
+import { PLAN_PROGRESS_HELP, planCountdown } from './workSummaryModel'
 
 const legend: CellState[] = ['done', 'active', 'waiting', 'held', 'idle', 'yours', 'planned', 'stopped', 'active-unknown', 'unknown']
 const detailId = (cell: StepCell) => `module-step-${cell.id}`
@@ -95,6 +96,7 @@ function Module({ row, initial, noView, live, read }: { row: ModuleRow; initial:
     window.location.hash = row.href
   }
   const counts = stepCounts(row)
+  const countdown = planCountdown([row])
   const title = row.title || 'Untitled module'
   // The link's focus ring is drawn around the whole row (has-[…]: below); the workspace's own ring on the link is dropped.
   return <li data-module={row.label} aria-current={row.current ? 'step' : undefined} onClick={openRow}
@@ -131,6 +133,10 @@ function Module({ row, initial, noView, live, read }: { row: ModuleRow; initial:
             </button>
           })}
         </div>}
+        <div data-module-progress className="flex min-w-0 flex-col gap-1 text-xs">
+          <span>Progress Unknown · done {countdown.done} · left {countdown.left} <button type="button" aria-label="How plan progress is counted" title={PLAN_PROGRESS_HELP} className="inline-flex min-h-6 items-center rounded-full px-1 pointer-coarse:min-h-11">ⓘ</button></span>
+          <span role="progressbar" aria-label={`Delivery progress of ${row.label}`} aria-valuetext="Unknown: delivery stages unavailable" className="block h-1 w-full rounded-full [background:var(--ops-selection)] shadow-[var(--ops-inset)]" />
+        </div>
         <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-px text-xs leading-[1.45]">
           <span className="text-muted-foreground">Runtime</span>
           <span className="min-w-0"><strong data-to-go className="font-semibold">{toGoText(row)}</strong> · <span className="font-mono">{counts}</span></span>

@@ -8,7 +8,7 @@ import { stepRows } from '../stepStateModel'
 import type { SignoffWaitsRead } from '../useRuntimePlan'
 import { workTabHref, workViewOf } from '../workViewModel'
 import {
-  dependencyWaits, dependencyWords, lastReadRows, mainlineLabels, mainlineSentence, moduleClass, othersSentence, roundHeader, signoffBreakdown, signoffCount,
+  planCountdown, dependencyWaits, dependencyWords, lastReadRows, mainlineLabels, mainlineSentence, moduleClass, othersSentence, roundHeader, signoffBreakdown, signoffCount,
   signoffGaps, signoffWords, summaryLamp,
 } from '../workSummaryModel'
 import type { RoundsRead } from '../planRoundModel'
@@ -379,5 +379,16 @@ describe('the address of each view of Work', () => {
     expect(workTabHref('live', 'R4', true)).toBe('#work?tab=live&root=R4')
     expect(workTabHref('round', 'R4', true)).toBe('#work?root=R4')
     expect(workTabHref('round', 'R5', false)).toBe('#work')
+  })
+})
+
+describe('plan runtime countdown', () => {
+  it('counts all rows directly and handles an empty plan', () => {
+    expect(planCountdown([])).toEqual({ done: 0, left: 0 })
+    expect(planCountdown([row({ total: 6, done: 2 }), row({ total: 1, done: 1 })])).toEqual({ done: 3, left: 4 })
+  })
+  it('excludes dropped steps in the same way as the rows', () => {
+    const view = prodView({ 'R4:4.1-1': 'done', 'R4:4.1-2': 'dropped' })
+    expect(planCountdown(moduleRows(view))).toEqual({ done: 1, left: 53 })
   })
 })

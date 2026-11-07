@@ -393,3 +393,10 @@ export function summaryLamp({ stale, mainlineUnknown, count, rows }: { stale: bo
   if (count.scope === 'round') return { tone: 'ok', why: [`in ${round} only, no step sign-off ready, no acceptance sign-off ready, no task waiting on you, no step stopped; other rounds are read on the Sign-offs tab`] }
   return { tone: 'ok', why: [`no step sign-off ready in any round; in ${round}, no acceptance sign-off ready, no task waiting on you, no step stopped`] }
 }
+
+/** Runtime countdown only; delivery percent requires the stage model, absent from this wire contract. */
+export function planCountdown(rows: Pick<ModuleRow, 'total' | 'done'>[]): { done: number; left: number } {
+  return rows.reduce((count, row) => ({ done: count.done + row.done, left: count.left + row.total - row.done }), { done: 0, left: 0 })
+}
+
+export const PLAN_PROGRESS_HELP = 'Weights: planned 10, handed in 40, verified 60, on main 70, STG 85, PROD 100. A stage in progress adds nothing. Delivery stages are not available in this plan view, so the weighted percent and number of unknown stages are Unknown. Done and left count runtime steps; dropped steps are excluded.'

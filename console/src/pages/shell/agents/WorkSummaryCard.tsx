@@ -16,7 +16,7 @@ import { runtimeTasks } from './moduleDetailModel'
 import { useOwnerAsks } from './ownerAsksModel'
 import { stepRows } from './stepStateModel'
 import { answeredWords, progressOld, sinceWords as since } from './readAge'
-import { CLASS_MEANINGS, OTHER_ROUNDS, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
+import { CLASS_MEANINGS, OTHER_ROUNDS, PLAN_PROGRESS_HELP, planCountdown, dependencyWaits, dependencyWords, mainlineLabels, mainlineSentence, othersSentence, roundHeader, signoffBreakdown, signoffGaps, signoffWords, summaryLamp, type SignoffCount } from './workSummaryModel'
 
 const TONE_WORDS: Partial<Record<Tone, string>> = { ok: 'Nothing for you, as far as read', attention: 'Needs a look', unknown: 'Not fully known' }
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -86,6 +86,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
   }
   // Each active step by what it has now (R5:5.5-10): the summary counts the same states the rows show.
   const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, runtime, asks })
+  const countdown = planCountdown(rows)
   const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
   const mainline = mainlineSentence(view, rows)
   const others = othersSentence(rows, view.mainline.current?.plan_node_id ?? null)
@@ -103,7 +104,10 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
         {stale ? `Stale · last read ${clock(read)}` : `plan-view ${view.root} · read ${since(read, now)} ago`}</span>
     </div>
     <p data-summary-sentence className="m-0 text-lg font-[650] leading-[1.35] tracking-[-.01em] [text-wrap:pretty] @2xl:text-xl">{mainline.text}{others && ` ${others}`}</p>
-    <PlanPaceLine root={view.root} />
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+      <PlanPaceLine root={view.root} />
+      <span data-summary-progress className="text-[13px] text-muted-foreground">Progress Unknown · done {countdown.done} · left {countdown.left} <button type="button" aria-label="How plan progress is counted" title={PLAN_PROGRESS_HELP} className="inline-flex min-h-6 items-center rounded-full px-1 pointer-coarse:min-h-11">ⓘ</button></span>
+    </div>
     <PinShareLine />
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
       <span data-summary-mainline>{labels.length ? `Mainline ${labels.join(' → ')}` : 'Mainline Unknown'}</span>
