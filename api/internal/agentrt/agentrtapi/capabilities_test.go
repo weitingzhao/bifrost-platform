@@ -51,6 +51,7 @@ func legacyRows(t *testing.T, pool *pgxpool.Pool, stmts ...string) {
 // GET /capabilities (2.5 G9): the latest window of each score group, the
 // candidates, the facts not retired.
 func TestCapabilities(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	var ev int64
@@ -100,6 +101,7 @@ func TestCapabilities(t *testing.T) {
 // Each list is capped at 1000 and says when it was cut: at 1000 rows it is
 // whole, at 1001 truncated (review 350 B1).
 func TestCapabilitiesTruncated(t *testing.T) {
+	t.Parallel()
 	for _, list := range []string{"scores", "candidates", "facts"} {
 		t.Run(list, func(t *testing.T) {
 			pool, _ := world(t)

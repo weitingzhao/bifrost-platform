@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,11 +156,25 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	chiefJob(t, f.pool)
 
 	// What the routes need beside the database: a key the rules verify
-	// against, an exam set, a reader of the attempt branches.
+	// against, an exam set, a reader of the attempt branches (it reads none),
+	// the Owner's question store. The stages run at once, so each sets its
+	// own here instead of the package's anchor, examSet, agentHeads and cards.
 	key := rptest.NewKey(t)
-	anchor, examSet, agentHeads = key.Fingerprint, madeUpExams(t), map[string][]store.AgentHead{}
-	t.Cleanup(func() { anchor, examSet, agentHeads = "", nil, nil })
+	exams := madeUpExams(t)
+	var askMu sync.Mutex
+	asked := 0
 	s := server(t, f.pool, func(a *agentrtapi.API) {
+		a.Anchor, a.Exams = key.Fingerprint, exams
+		a.Head = func(context.Context, string, string) (string, error) { return pushedAt, nil }
+		a.Ask = func(context.Context, store.Card) (string, error) {
+			askMu.Lock()
+			defer askMu.Unlock()
+			asked++
+			return fmt.Sprintf("q_%d", asked), nil
+		}
+		a.AgentHeads = func(context.Context, string) ([]store.AgentHead, error) { return nil, nil }
+		a.MainResults = func(context.Context, string) (store.OnMain, bool) { return nil, false }
+		a.Now = time.Now
 		a.CheckAssessment = func(_ context.Context, kind, id string) error {
 			if (kind != store.AssessCard && kind != store.AssessApproval) || id != "463" {
 				return fmt.Errorf("%w: assessment item is missing or closed", store.ErrState)
@@ -167,7 +182,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 			return nil
 		}
 	})
-	cards, askFails = nil, false
 	ok := func(key, caller, method, path string, body any, header ...string) map[string]any {
 		t.Helper()
 		code, out := f.send(t, s, key, true, caller, method, path, body, header...)
@@ -358,7 +372,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 
 // round sends n bodies to every route from every caller (twice n to a write
 // route).
-func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute, stage string) {
+func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute) {
 	t.Helper()
 	for _, rt := range routes {
 		n := f.n
@@ -380,7 +394,7 @@ func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute, 
 				if b, ok := body.([]byte); ok {
 					doc = b
 				}
-				f.check(t, keyFor(rt, path), false, fmt.Sprintf("stage %q: %s %s as %q (%d), headers %q, body %s", stage, rt.method, path, caller, code, header, doc),
+				f.check(t, keyFor(rt, path), false, fmt.Sprintf("%s %s as %q (%d), headers %q, body %s", rt.method, path, caller, code, header, doc),
 					code, before, digest, since)
 			}
 		}

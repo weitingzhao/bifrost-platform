@@ -58,6 +58,7 @@ func taskState(t *testing.T, pool *pgxpool.Pool, id string) string {
 // 200 with what was withdrawn, the checks cancelled and by whom; a retry
 // gets the same answer.
 func TestWithdrawRouteWithdraws(t *testing.T) {
+	t.Parallel()
 	pool, ids, _ := withdrawWorld(t)
 	s := server(t, pool)
 	body := map[string]any{"idempotency_key": "w1", "task_ids": []string{ids["c"]}, "reason": "the spec was wrong"}
@@ -78,6 +79,7 @@ func TestWithdrawRouteWithdraws(t *testing.T) {
 // 400 for a request that breaks a rule of its own: no reason, no ids, an
 // unknown field.
 func TestWithdrawRouteInvalid(t *testing.T) {
+	t.Parallel()
 	pool, ids, _ := withdrawWorld(t)
 	s := server(t, pool)
 	for name, body := range map[string]map[string]any{
@@ -100,6 +102,7 @@ func TestWithdrawRouteInvalid(t *testing.T) {
 // not_yours; a task with a dependent outside the list, or one whose work
 // started, is 409 state.
 func TestWithdrawRouteRefusals(t *testing.T) {
+	t.Parallel()
 	pool, ids, own := withdrawWorld(t)
 	s := server(t, pool)
 	body := func(key string, tasks ...string) map[string]any {
@@ -152,6 +155,7 @@ func TestWithdrawRouteRefusals(t *testing.T) {
 // An anonymous call is refused, as are a viewer and a reporter, who may not
 // propose; nothing moves.
 func TestWithdrawRouteAnonymous(t *testing.T) {
+	t.Parallel()
 	pool, ids, _ := withdrawWorld(t)
 	s := server(t, pool)
 	body := map[string]any{"idempotency_key": "w1", "task_ids": []string{ids["c"]}, "reason": "why"}

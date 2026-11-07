@@ -13,6 +13,7 @@ import (
 // R5:5.5-13 slice 1: GET /plan-pace reads a round's steps left and the steps
 // done on each of its last days in the Owner's time zone, with one sentence.
 func TestPlanPaceRoute(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	var left int

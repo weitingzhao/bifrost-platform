@@ -13,6 +13,7 @@ import (
 // current one, every row in the order of the check chain, a number the
 // records cannot give null with its reason.
 func TestCheckValueRoute(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	// An answer the Owner gave on a card: a run of the Owner's cards this

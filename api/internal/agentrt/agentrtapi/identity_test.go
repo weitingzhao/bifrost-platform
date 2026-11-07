@@ -82,6 +82,7 @@ func eventOf(key string, seq int, typ string, id map[string]any, more ...map[str
 // client names it or not; a host in the body is refused. The two actor
 // prefixes (actuation's, the store's) are one.
 func TestCollectorIdentityRecorded(t *testing.T) {
+	t.Parallel()
 	if actuation.CollectorActorPrefix != store.CollectorActorPrefix {
 		t.Fatalf("actuation %q, store %q", actuation.CollectorActorPrefix, store.CollectorActorPrefix)
 	}
@@ -114,6 +115,7 @@ func TestCollectorIdentityRecorded(t *testing.T) {
 // for the same work, an event's answer and a recovery read give the same
 // time. Another registrant's answers carry it too.
 func TestCollectorRegisteredAt(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := putSpec(t, s, "collector:h1", "registered at")
@@ -158,6 +160,7 @@ func TestCollectorRegisteredAt(t *testing.T) {
 // linked event without one included, is 400 identity_required and writes
 // nothing.
 func TestForeignWork_IdentityRequired(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := putSpec(t, s, "collector:h1", "required")
@@ -216,6 +219,7 @@ func TestForeignWork_IdentityRequired(t *testing.T) {
 // identity (session B's on W_A), linked included, is 409 identity_mismatch
 // and changes nothing; the work's own identity goes on.
 func TestForeignWork_IdentityMismatch(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	a, b := ident("claude", "s-a", 1), ident("claude", "s-b", 1)
@@ -246,6 +250,7 @@ func TestForeignWork_IdentityMismatch(t *testing.T) {
 // key_conflict (TD-516), as is one under another key at the same seq; the
 // replay as sent the first time is the first answer.
 func TestForeignWork_ReplayOtherIdentity(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	a := ident("claude", "s-a", 1)
@@ -283,6 +288,7 @@ func TestForeignWork_ReplayOtherIdentity(t *testing.T) {
 // accepted, whichever of the host's sessions sent it: the positive control
 // that marks what the identity does not stop.
 func TestForeignWork_Residual(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	b := ident("claude", "s-b", 1)
@@ -299,6 +305,7 @@ func TestForeignWork_Residual(t *testing.T) {
 // with another description is 409; linked to another step, or with a task,
 // it is still the same work, with its registrant, host and identity.
 func TestBindingAtomicity(t *testing.T) {
+	t.Parallel()
 	t.Run("registered again", func(t *testing.T) {
 		pool, _ := world(t)
 		s := server(t, pool)
@@ -407,6 +414,7 @@ func TestBindingAtomicity(t *testing.T) {
 // thread with plan-node events in the root and no registration there is
 // counted, a collector with the same is not.
 func TestCoverageCountsNoCollector(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	putSpec(t, s, "collector:h1", "coverage")                                                                    // registers thread:collector@h1
@@ -434,6 +442,7 @@ func TestCoverageCountsNoCollector(t *testing.T) {
 // registered_at. A collector's note from before the identity reads as it
 // was, and its events are refused, the identity unknown.
 func TestIdentityOnlyFromCollector(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	for _, caller := range []string{"reporter", "operator", "seat:chief_of_staff"} {
@@ -530,6 +539,7 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 // registered (P-c1: the Console reads them from here), and nothing new on
 // any other registrant's row.
 func TestPlanViewCarriesCollectorIdentity(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	cw, _ := register(t, s, "collector:h1", regBody("rc", putSpec(t, s, "collector:h1", "plan view collector"), ident("cursor", "s-view", 2),
@@ -565,6 +575,7 @@ func TestPlanViewCarriesCollectorIdentity(t *testing.T) {
 // a provider that fails leaves it out and says so in the warnings; none
 // wired, the view is as before.
 func TestPlanViewSessionCoverage(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	counts := map[string]any{"linked": 2, "unlinked": 1, "refused": 0, "unsupported": 1, "unknown": 0, "scope": "Sessions heard from in the last 72 hours"}
 	for _, c := range []struct {

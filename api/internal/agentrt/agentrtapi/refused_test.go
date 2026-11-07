@@ -12,6 +12,7 @@ import (
 // host had a report refused meanwhile, and the executor is not leased the
 // task again at once (TD-381).
 func TestRefusedReportEndsTheAttempt(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}

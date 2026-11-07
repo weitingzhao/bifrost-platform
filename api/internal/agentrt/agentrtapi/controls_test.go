@@ -26,6 +26,7 @@ func mayList(out map[string]any) []string {
 
 // whoami: who the caller is, who its writes are recorded as, what it may do.
 func TestWhoami(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	for _, c := range []struct {
@@ -65,6 +66,7 @@ func nilIfEmpty(s string) any {
 // lets them go on; a drain is a control on the host; bad controls write
 // nothing.
 func TestControlsAndHosts(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	claimBody := map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}}}
@@ -195,6 +197,7 @@ func hostOf(t *testing.T, hosts map[string]any, id string) map[string]any {
 // The plan: the roots, a subtree depth first with each step's state, the
 // event it came from and its tasks, and one node in full.
 func TestPlanReads(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	code, roots := call(t, s, "viewer", "GET", "plan", nil)
@@ -262,6 +265,7 @@ func legacy(t *testing.T, pool *pgxpool.Pool, stmts ...string) {
 // nothing at all (review 177 B2: no registration either); an upload then
 // finds the same.
 func TestWhoamiTellsWhyNot(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	legacy(t, pool, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name, retired_at) VALUES ('thread:old', 'thread', 'old', now())`,
@@ -305,6 +309,7 @@ func TestWhoamiTellsWhyNot(t *testing.T) {
 // Review 176 B3: an upload of a body already stored still checks its
 // writer, and registers nothing.
 func TestDuplicateUploadChecksWriter(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	legacy(t, pool, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name, retired_at) VALUES ('thread:old', 'thread', 'old', now())`)
@@ -335,6 +340,7 @@ func TestDuplicateUploadChecksWriter(t *testing.T) {
 // attempt (only a stop tells it to stop; agentd ending the work on that
 // signal is agentd's test, TestStopAndHardLimit).
 func TestControlMatrix(t *testing.T) {
+	t.Parallel()
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
 	claimOf := func(host string) map[string]any {
 		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
@@ -406,6 +412,7 @@ func TestControlMatrix(t *testing.T) {
 // is a new stop in force; a retry with the old key is answered with the old
 // (lifted) one.
 func TestStopAgainAfterLift(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	stop := map[string]any{"idempotency_key": "stop-1", "scope": "global", "kind": "stop", "reason": "look"}
@@ -449,6 +456,7 @@ func readyTask(t *testing.T, pool *pgxpool.Pool) string {
 // seconds since W-31 3.5); a same key with another control is a conflict; a
 // lift at the same time is recorded once.
 func TestHostsAndControlEdges(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	must(t, store.RegisterHost(ctx, pool, "owner", "h2", "dev"))
@@ -503,6 +511,7 @@ func TestHostsAndControlEdges(t *testing.T) {
 // Review 176 part 2 B2: the tree is depth first across siblings, and a step
 // whose state changed shows that change as its source.
 func TestPlanTreeOrder(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	for _, n := range []store.PlanNode{
@@ -535,6 +544,7 @@ func TestPlanTreeOrder(t *testing.T) {
 // GET /progress: any role reads the projection, computed now; no token
 // reads nothing; a read that fails is 503 and nothing else (review 181 B1).
 func TestProgressRoute(t *testing.T) {
+	t.Parallel()
 	pool, task := world(t)
 	s := server(t, pool)
 	if code, _ := call(t, s, "", "GET", "progress", nil); code != http.StatusUnauthorized {

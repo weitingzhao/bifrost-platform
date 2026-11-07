@@ -88,6 +88,7 @@ func TestHeartbeatKeepsActions(t *testing.T) {
 
 // Without redis-agents the heartbeat keeps working and says no actions are kept.
 func TestHeartbeatWithoutAnActionStore(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	c := func(caller, method, path string, body any) (int, map[string]any) {
@@ -106,6 +107,7 @@ func TestHeartbeatWithoutAnActionStore(t *testing.T) {
 
 // The Owner asks the chief of staff; only the receiver reads and acknowledges it.
 func TestMessages(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	c := func(caller, method, path string, body any, h ...string) (int, map[string]any) {

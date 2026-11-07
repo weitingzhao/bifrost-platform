@@ -143,6 +143,7 @@ func TestGoalWithoutMainReader(t *testing.T) {
 
 // A long first line is cut to the title's length; the goal keeps all of it.
 func TestGoalTitleIsCut(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	long := strings.Repeat("a", 100)
@@ -201,6 +202,7 @@ func TestGoalRetryAfterMainMoved(t *testing.T) {
 // The same goal sent twice at once (review 213 B1): one mission, one task,
 // both answers name them.
 func TestGoalConcurrentDuplicates(t *testing.T) {
+	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
 	body := map[string]any{"idempotency_key": "g1", "goal": "Add a doc comment to MainHead", "repo": "bifrost-platform"}

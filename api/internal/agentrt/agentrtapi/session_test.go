@@ -12,6 +12,7 @@ import (
 // write and on GET /messages, a replay of the first token's key included,
 // and whoami says why; the first token goes on writing and reading.
 func TestSessionHeldToItsToken(t *testing.T) {
+	t.Parallel()
 	pool, existing := world(t)
 	s := server(t, pool)
 	as := func(caller, method, path string, body any) (int, map[string]any) {
