@@ -20,7 +20,7 @@ func TestSTGDoesNotAssessTheCardsItsRuleAnswers(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	ruled, owners := w.overBudget(t, "M-3", ""), w.overBudget(t, "M-4", "the walk tests the Owner's buttons")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards

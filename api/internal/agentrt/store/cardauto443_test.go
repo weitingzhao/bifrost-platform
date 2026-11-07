@@ -25,7 +25,7 @@ func (w *world) onStep(t *testing.T, s *cardStore, want string) (string, string)
 	if want == "a" {
 		w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '3 hours',
 		  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-1'`)
-		if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 			t.Fatalf("blocked %d (%v)", n, err)
 		}
 	} else {
@@ -91,7 +91,7 @@ func TestRuleAnswerThenMoveIsMoot(t *testing.T) {
 func TestRuleAnswerEndsWhenALaterVersionTakesEffect(t *testing.T) {
 	w := newKernelWorld(t)
 	w.overBudget(t, "M-3", "")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore
@@ -119,7 +119,7 @@ func TestRuleNoteWrittenByTheDecision(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.overBudget(t, "M-3", "")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore
@@ -183,7 +183,7 @@ func TestRuleNoteOnceWhenAPassFinishesFirst(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.overBudget(t, "M-3", "")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore

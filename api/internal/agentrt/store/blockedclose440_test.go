@@ -149,10 +149,8 @@ func TestBlockedCardFitsFourByteText(t *testing.T) {
 	report, err := json.Marshal(map[string]any{"commands": []map[string]any{{"argv": []string{"sh", "-c", wide}, "exit_code": 1,
 		"tail": strings.Repeat("𝄞", 100)}}})
 	ok(t, err)
-	budget := "One round needs up to 3 attempts (implementation, verification, review); mission M-3 has used 1000000 of its 1000000 attempts " +
-		"and 123456.7 of its 100000 hours, so this answer also raises its budget to 1000003 attempts and 223457 hours, recorded as yours."
 	for _, words := range []string{"", wide} {
-		body := store.BlockedCardBodyFullForTest(wide, "deterministic", string(report), wide, wide, words, budget, strings.Repeat("w", store.RecommendWhyMax))
+		body := store.BlockedCardBodyFullForTest(wide, "deterministic", string(report), wide, wide, words, strings.Repeat("w", store.RecommendWhyMax))
 		if n := questions.BodyBytes(body); n > questions.BodyLimit || !strings.Contains(body, "Close mission M-3: every task") {
 			t.Fatalf("%d bytes (the store takes %d):\n%s", n, questions.BodyLimit, body)
 		}

@@ -183,7 +183,7 @@ func TestAnswerByRule(t *testing.T) {
 	plain := w.ready(t, store.Task{}) // M-1: a card that recommends nothing
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, plain) }))
 	plan := w.ready(t, store.Task{Role: "plan", Effect: "none", OffPlanReason: "a goal"})
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 3 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 3 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore
@@ -262,7 +262,7 @@ func TestAnswerByRulePlanQuestion(t *testing.T) {
 	w.goalMission(t, "M-3")
 	plan := w.ready(t, store.Task{MissionID: "M-3", Role: "plan", Effect: "none", OffPlanReason: "a goal"})
 	blocked := w.overBudget(t, "M-4", "")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore

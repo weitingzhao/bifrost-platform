@@ -454,14 +454,11 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 // blocked and cards asked before the third option (store.WithdrawStaleCards:
 // the other cards of a mission closed on a card, so their places in the
 // question store are free for this pass), a ready task no executor may take
-// any more (store.BlockWithdrawn, TD-395) and one its mission's budget no
-// longer lets run are blocked with the reason (store.BlockOverBudget,
-// TD-384; the pass first grows the budget up to the rule's auto_grant cap,
-// and a check of a stopped task is closed before, never blocked for budget),
-// then every blocked task that needs a card and has none open gets one
-// (store.AskBlocked), the tasks blocked before this pass included. Without a
-// question store there are no cards, and nothing is blocked for want of
-// budget (no answer could release it). It returns how many cards it closed,
+// any more is blocked with the reason (store.BlockWithdrawn, TD-395), then
+// every blocked task that needs a card and has none open gets one
+// (store.AskBlocked), the tasks blocked before this pass included. A
+// mission's attempts and hours block nothing (store/missionbudget.go).
+// Without a question store there are no cards. It returns how many cards it closed,
 // withdrew and asked and how many tasks it cancelled and blocked.
 func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil || c.Sources.Ask == nil {
@@ -472,12 +469,9 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	// Before the withdrawals, so their cards are withdrawn in this pass.
 	moot, merr := store.CloseStoppedChecks(ctx, c.DB)
 	withdrawn, werr := store.WithdrawStaleCards(ctx, c.DB, c.question, c.boundedWithdraw())
-	// Withdrawn before budget: a task nobody may take is blocked for that,
-	// not given budget on a card first (R3) only to be blocked again.
 	gone, gerr := store.BlockWithdrawn(ctx, c.DB)
-	spent, serr := store.BlockOverBudget(ctx, c.DB)
 	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + late + moot + withdrawn + gone + spent + asked, errors.Join(derr, lerr, merr, werr, gerr, serr, aerr)
+	return decided + late + moot + withdrawn + gone + asked, errors.Join(derr, lerr, merr, werr, gerr, aerr)
 }
 
 // CardRuleEvery is how often the cards are answered by rule: a loop of its

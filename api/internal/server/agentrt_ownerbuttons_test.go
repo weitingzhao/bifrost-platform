@@ -238,9 +238,21 @@ func TestOwnerButtonPaths(t *testing.T) {
 
 	// Blocked cards: a, b and c, each on its own stale mission.
 	tasks := map[string]string{"a": b.staleMission("M-3"), "b": b.staleMission("M-4"), "c": b.staleMission("M-5")}
-	if n, err := store.BlockOverBudget(ctx, b.conn); err != nil || n != 3 {
-		t.Fatalf("blocked %d (%v)", n, err)
-	}
+	// Blocked for their budgets as the budget pass blocked before
+	// 2026-11-06 (nothing blocks so any more; such blocks still get cards).
+	b.tx(func(tx pgx.Tx) error {
+		for _, m := range []string{"M-3", "M-4", "M-5"} {
+			var task string
+			if err := tx.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1`, m).Scan(&task); err != nil {
+				return err
+			}
+			if err := store.MoveTask(ctx, tx, "controller", task, "blocked",
+				"mission "+m+" is past its 2 hours (it started 30.0 hours ago): no host may take this task until the budget grows"); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if n, err := store.AskBlocked(ctx, b.conn, ask); err != nil || n != 3 {
 		t.Fatalf("asked %d (%v)", n, err)
 	}

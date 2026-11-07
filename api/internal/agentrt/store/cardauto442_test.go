@@ -24,7 +24,7 @@ func (w *world) staleOnStep(t *testing.T, s *cardStore) (string, string) {
 	w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '30 hours',
 	  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-1'`,
 		`UPDATE agentrt.mission SET scope_json = scope_json || '{"needs_owner": "the walk tests his buttons"}' WHERE mission_id = 'M-2'`)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 1 {
@@ -112,7 +112,7 @@ func TestRuleTightenedMidPass(t *testing.T) {
 	w := newKernelWorld(t)
 	first := w.overBudget(t, "M-3", "")
 	second := w.overBudget(t, "M-4", "")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore
@@ -159,21 +159,23 @@ func TestRuleTightenedMidPass(t *testing.T) {
 }
 
 // Review 442 A3: what a rule's answer does is the rule's, never the Owner's:
-// one more round (and the budget it grows), not doing a task, closing a
+// one more round (which grows no budget), not doing a task, closing a
 // mission each name the rule, and the closed card says who answered.
 func TestRuleAnswerIsRecordedAsTheRules(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
+	// M-5's rounds first: a mission past its budget's hours leases its ready
+	// tasks too, so the claims of these rounds would take M-3's and M-4's.
+	w.goalMission(t, "M-5")
+	dropped := w.ready(t, store.Task{MissionID: "M-5", OffPlanReason: "a goal"})
+	w.failRound(t, dropped, "h1", "h2")
+	w.failRound(t, dropped, "h3", "h4")
 	closed := w.overBudget(t, "M-3", "")
 	w.goalMission(t, "M-4")
 	retried := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a goal"})
 	w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '3 hours',
 	  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-4'`)
-	w.goalMission(t, "M-5")
-	dropped := w.ready(t, store.Task{MissionID: "M-5", OffPlanReason: "a goal"})
-	w.failRound(t, dropped, "h1", "h2")
-	w.failRound(t, dropped, "h3", "h4")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s cardStore
@@ -216,8 +218,7 @@ func TestRuleAnswerIsRecordedAsTheRules(t *testing.T) {
 	if m := w.lastMissionMove(t, "M-3"); !strings.HasPrefix(m["reason"].(string), rule+" closed it on the card of task") {
 		t.Errorf("M-3 moved because %q", m["reason"])
 	}
-	if a := w.amended(t, "M-4"); len(a) != 1 || !strings.HasPrefix(a[0], "controller "+retried+" ") || !strings.Contains(a[0], rule+" gave task "+retried) ||
-		strings.Contains(a[0], "Owner") {
+	if a := w.amended(t, "M-4"); len(a) != 0 {
 		t.Errorf("M-4 amended %v", a)
 	}
 	var owner int

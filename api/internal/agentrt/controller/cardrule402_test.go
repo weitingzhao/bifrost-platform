@@ -76,6 +76,19 @@ func TestACardOpenedJustAfterAPassIsAnsweredWithinItsWaitAndASecond(t *testing.T
 
 // blockedCard makes mission M-2 with one task past its budget's hours, has
 // the controller block it and ask its card (as q_8), and returns the card.
+// budgetBlocked blocks M-2's ready tasks as the budget pass blocked before
+// 2026-11-06 (a mission's attempts and hours block nothing any more; such
+// blocks still get their cards).
+func budgetBlocked(tx pgx.Tx, tasks ...string) error {
+	for _, id := range tasks {
+		if err := store.MoveTask(ctx, tx, "controller", id, "blocked",
+			"mission M-2 is past its 4 hours: no host may take this task until the budget grows"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func blockedCard(t *testing.T, pool *pgxpool.Pool) store.Card {
 	t.Helper()
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
@@ -102,9 +115,12 @@ func blockedCard(t *testing.T, pool *pgxpool.Pool) store.Card {
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		// Past its budget's hours, so the pass blocks it and asks its card.
-		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 hours' WHERE mission_id = 'M-2'`)
-		return err
+		// Past its budget's hours, and blocked for it, so the pass asks its
+		// card.
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 hours' WHERE mission_id = 'M-2'`); err != nil {
+			return err
+		}
+		return budgetBlocked(tx, id)
 	}))
 	w := &world{questions: map[string]store.Question{}}
 	src := w.sources()

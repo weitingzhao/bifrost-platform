@@ -44,13 +44,15 @@ func TestBlockedCardsCloseAMission(t *testing.T) {
 			}
 			tasks = append(tasks, id)
 		}
-		// Five days old on a budget of four hours.
+		// Five days old on a budget of four hours, and blocked for it.
 		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 days' WHERE mission_id = 'M-2'`)
-		return err
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 days' WHERE mission_id = 'M-2'`); err != nil {
+			return err
+		}
+		return budgetBlocked(tx, tasks...)
 	}))
 	w := &world{questions: map[string]store.Question{}}
 	src := w.sources()
@@ -135,8 +137,10 @@ func TestAnswerByRuleInTheController(t *testing.T) {
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 days' WHERE mission_id = 'M-2'`)
-		return err
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 days' WHERE mission_id = 'M-2'`); err != nil {
+			return err
+		}
+		return budgetBlocked(tx, id)
 	}))
 	w := &world{questions: map[string]store.Question{}}
 	src := w.sources()

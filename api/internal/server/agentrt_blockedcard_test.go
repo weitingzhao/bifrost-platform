@@ -76,8 +76,13 @@ func TestBlockedCardOnTheStore(t *testing.T) {
 	}
 	legacy(`UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '30 hours 10 minutes',
 	  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-3'`)
-	if n, err := store.BlockOverBudget(ctx, conn); err != nil || n != 1 {
-		t.Fatalf("blocked %d (%v)", n, err)
+	// Blocked for its budget as the budget pass blocked before 2026-11-06
+	// (nothing blocks so any more; such blocks still get their cards).
+	if err := store.InTx(ctx, conn, func(tx pgx.Tx) error {
+		return store.MoveTask(ctx, tx, "controller", task, "blocked",
+			"mission M-3 is past its 2 hours (it started 30.2 hours ago): no host may take this task until the budget grows")
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)

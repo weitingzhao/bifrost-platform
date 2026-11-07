@@ -100,16 +100,18 @@ func TestExpiredRulesGrantNothing(t *testing.T) {
 	}
 }
 
-// A3: a mission's budget: attempts, wall time, its tenant's budget rule, and
-// the rule's hard limit on an attempt.
+// A3: a mission's budget: its tenant's budget rule and the rule's hard limit
+// on an attempt. Its attempts and wall time refuse nothing (2026-11-06): a
+// mission past both still leases its ready tasks.
 func TestMissionBudget(t *testing.T) {
 	t.Parallel()
 	for name, c := range map[string]struct {
 		setup  string
 		claims int
 	}{
-		"one attempt":            {`UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`, 1},
-		"its hours are spent":    {`UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours', budget_json = '{"max_attempts": 9, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`, 0},
+		"one attempt":            {`UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`, 2},
+		"its hours are spent":    {`UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours', budget_json = '{"max_attempts": 9, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`, 2},
+		"no attempts stated":     {`UPDATE agentrt.mission SET budget_json = '{"max_wall_hours": 48}' WHERE mission_id = 'M-1'`, 2},
 		"no budget rule":         {`UPDATE agentrt.mission SET tenant = 'business' WHERE mission_id = 'M-1'`, 0},
 		"the rule's own default": {`SELECT 1`, 2},
 	} {
@@ -139,11 +141,12 @@ func TestMissionBudget(t *testing.T) {
 	}
 }
 
-// A3: two hosts reach the last attempt a mission's budget allows at once:
-// the second waits for the first and then finds none left.
+// A3, 2026-11-06: two hosts claim at once in a mission whose budget states
+// one attempt: the second waits for the first on the mission's row, and both
+// lease, since the budget's attempts cap nothing.
 //
 // Serial: it holds the package's test hook (SetHook).
-func TestLastAttemptGoesToOneHost(t *testing.T) {
+func TestClaimsPastTheBudgetsAttemptsBothLease(t *testing.T) {
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.ready(t, store.Task{})
@@ -173,8 +176,8 @@ func TestLastAttemptGoesToOneHost(t *testing.T) {
 	ga, gb := <-a, <-b
 	ok(t, ga.err)
 	ok(t, gb.err)
-	if ga.c == nil || gb.c != nil {
-		t.Fatalf("h1 %+v, h2 %+v; want h1 alone", ga.c, gb.c)
+	if ga.c == nil || gb.c == nil || ga.c.TaskID == gb.c.TaskID {
+		t.Fatalf("h1 %+v, h2 %+v; want a task each", ga.c, gb.c)
 	}
 }
 

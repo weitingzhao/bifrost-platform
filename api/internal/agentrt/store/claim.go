@@ -392,9 +392,8 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		st.skip = "no tool of the host is on the task's route now"
 		return nil, false, err
 	}
-	// Held exclusively, so the claims of one mission count its attempts one
-	// at a time and the last one its budget allows goes to one host (review
-	// 186 A3).
+	// Held exclusively, so the claims of one mission are taken one at a time
+	// (review 186 A3).
 	var m missionBudget
 	if err = tx.QueryRow(ctx, `SELECT state, tenant, budget_json, created_at, COALESCE(envelope_rule_id, '') FROM agentrt.mission
 	  WHERE mission_id = $1 FOR NO KEY UPDATE`, c.mission).Scan(&m.state, &m.tenant, &m.budget, &m.created, &m.envelope); err != nil {
@@ -406,7 +405,7 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	}
 	limit, fits, err := m.allows(ctx, tx, rc, c)
 	if err != nil || !fits {
-		st.skip = "its mission's budget, or the standing envelope it started under, allows no more"
+		st.skip = "its tenant has no budget rule in force, or the standing envelope its mission started under allows no more"
 		return nil, false, err
 	}
 	c.limitS = limit

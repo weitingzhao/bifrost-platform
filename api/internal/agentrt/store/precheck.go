@@ -42,7 +42,7 @@ import (
 // the Owner's retry raises it (blockedcard.go): a red CI is the executor's
 // to fix, not a card the Owner has to answer to say so. What bounds it is
 // the landing's root bound (landing.ClaimWindow operations, then
-// failed{bound}) and the mission's attempt budget (missionbudget.go).
+// failed{bound}); a mission's attempt budget caps nothing (missionbudget.go).
 // Precheck verify keeps what was before: the deterministic check, then the
 // review, and a red landing CI is the Owner's card; so do a mission no
 // longer active or no_merge, a closed step, a stopped task and an operation

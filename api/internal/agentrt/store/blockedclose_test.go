@@ -288,7 +288,7 @@ func TestBlockedCardRecommends(t *testing.T) {
 		  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-3'`,
 			`UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '3 hours',
 		  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = 'M-4'`)
-		if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+		if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 			t.Fatalf("blocked %d (%v)", n, err)
 		}
 		a := &asker{}
@@ -313,7 +313,7 @@ func TestBlockedCardRecommends(t *testing.T) {
 		t.Parallel()
 		for _, quiet := range []bool{false, true} {
 			w, mission, impl, _ := spentEnvelope(t)
-			if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+			if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 				t.Fatalf("blocked %d (%v)", n, err)
 			}
 			a := &asker{}

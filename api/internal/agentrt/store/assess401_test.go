@@ -33,7 +33,7 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	answered, unread, lapsed := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4"), w.ledgerMission(t, "M-5")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 3 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 3 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -79,7 +79,7 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	m := w.ledgerMission(t, "M-3")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
@@ -144,7 +144,7 @@ func TestAnAssessmentOfAnAnsweredCardIsNotScored(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	open, early := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
 		t.Fatalf("blocked %d (%v)", n, err)
 	}
 	var s seenCards
