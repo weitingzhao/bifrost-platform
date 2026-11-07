@@ -53,6 +53,7 @@ func TestParseSpecSiblingsAndSetup(t *testing.T) {
 // a ref that is an option, an attempt's own directory in any case, and a branch
 // the remote has not are refused.
 func TestPrepareSibling(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	env := gitEnv(home)
 	creds := append(append([]string{}, env...), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader",

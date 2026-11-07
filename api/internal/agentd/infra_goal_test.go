@@ -58,6 +58,7 @@ esac
 // environment first on PATH; the check passes and the implementation goes to
 // review.
 func TestTwoRepoGoalToInfraCheck(t *testing.T) {
+	t.Parallel()
 	const infra, platform = "bifrost-trade-infra", "bifrost-platform"
 	env := gitEnvT(t.TempDir())
 	platformBare, platformBase := bareRemote(t, env)

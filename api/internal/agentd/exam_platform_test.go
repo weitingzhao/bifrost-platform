@@ -35,6 +35,7 @@ const madeUpQuestion = `{"exam": "chief_of_staff", "question": "Q3", "version": 
 // set: the paper as the platform hands it out is sat, each run handed in
 // as the platform takes it, and the paper graded into a score.
 func TestExamOnThePlatform(t *testing.T) {
+	t.Parallel()
 	db := agentrttest.Migrated(t)
 	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)

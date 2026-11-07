@@ -128,6 +128,7 @@ func sendHalf(host string, r *http.Request, body []byte) error {
 // commit, on the attempt's branch, the one the platform holds), and the task
 // can be verified.
 func TestRestartDuringTheHandOver(t *testing.T) {
+	t.Parallel()
 	report := func(r *http.Request) bool {
 		return r.Method == http.MethodPut && r.Header.Get("X-Artifact-Kind") == "report"
 	}

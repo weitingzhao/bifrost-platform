@@ -255,6 +255,7 @@ func noAnswerKept(t *testing.T, root, answer string) {
 // hands in only what it had not; once the paper is graded nothing of it is
 // kept, and no answer is ever kept.
 func TestExamGoesOnWhereItStopped(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1"), briefItem("B2"))
 	stopped, cut := context.WithCancel(context.Background())
@@ -325,6 +326,7 @@ func TestExamGoesOnWhereItStopped(t *testing.T) {
 // does not. The checkout is one commit holding the item's tree, the clone
 // gone.
 func TestExamPlanGoesBackOnce(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, base := bareRemote(t, env)
 	root := t.TempDir()
@@ -362,6 +364,7 @@ func TestExamPlanGoesBackOnce(t *testing.T) {
 // A paper whose commit carries the exam is not sat: no run starts, nothing
 // is handed in, nothing is left.
 func TestExamRefusesATreeWithTheExam(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, _ := bareRemote(t, env)
 	seed := filepath.Join(t.TempDir(), "seed")
@@ -392,6 +395,7 @@ func TestExamRefusesATreeWithTheExam(t *testing.T) {
 // out, a canary in its home or beside the papers) is sat once more, and
 // handed in as out of its workspace when it strays again.
 func TestExamOutOfWorkspace(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("O1", 1), briefItem("O2", 1), briefItem("O3", 1), briefItem("O4", 1), briefItem("O5", 1))
 	tries := map[string]int{}
@@ -432,6 +436,7 @@ func TestExamOutOfWorkspace(t *testing.T) {
 // another task's workspace withheld, and a drive letter's colon before a
 // line's end or a "<" kept apart from what the encoder writes after it.
 func TestExamMasksTheAnswer(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("M1", 1))
 	other := store.NewTaskID()
@@ -461,6 +466,7 @@ func TestExamMasksTheAnswer(t *testing.T) {
 // with its pins goes on with that paper; a run whose pins are not all there
 // does not start.
 func TestExamWithoutPins(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1"))
 	mark := filepath.Join(t.TempDir(), "started")
@@ -513,6 +519,7 @@ func TestExamWithoutPins(t *testing.T) {
 // none kept, an item the paper does not have; a run the platform took
 // before (its record lost) is recorded and not sat again.
 func TestExamRefusals(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1, 2))
 	f.issued = true
@@ -542,6 +549,7 @@ func TestExamRefusals(t *testing.T) {
 // since a seat could read it. A kept paper that lapsed is let go and a new
 // one asked for.
 func TestExamClearsWhatWasLeft(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1))
 	ex, runs := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) { return []any{resultEv("Fine.")}, "" })
@@ -630,6 +638,7 @@ func TestExamNoAnswerAndOutOfTime(t *testing.T) {
 // executor's own end with its group left is TestExamKeepsARunWhoseGroupIsLeft;
 // agentd's side is TestExamRunLeftBlocksTheDaemon.
 func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1))
 	ex, runs := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) { return []any{resultEv("Fine.")}, "" })
@@ -716,6 +725,7 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 // directories stay: nothing removes or overwrites what names that group; the
 // next sitting ends it first, then sits the run.
 func TestExamKeepsARunWhoseGroupIsLeft(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1))
 	ex, runs := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) { return []any{resultEv("Fine.")}, "" })

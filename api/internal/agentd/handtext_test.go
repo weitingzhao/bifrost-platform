@@ -18,6 +18,7 @@ import (
 // readable relative to the checkout, and the verdict line is the same. The
 // log tail, at the end and at a checkpoint, is handed in the same way.
 func TestPrepareHandsInAReportWithoutLocalPaths(t *testing.T) {
+	t.Parallel()
 	f := newFake()
 	d := fakeDaemon(t, f)
 	const tid = "t_01M5B2WKM1CYDFE4PWGE4D3D42"
@@ -180,6 +181,7 @@ func TestHandTextWithholdsWhatTheScansStillRefuse(t *testing.T) {
 // longer is cut at a line to fit, and keeps its verdict; one without a line
 // to cut at is cut where it must be.
 func TestHandTextKeepsThePlatformsLimit(t *testing.T) {
+	t.Parallel()
 	dir := WorkspaceDir("/home/bifrost-agentd/agent-work/agentd", "t_01M5B2WKM1CYDFE4PWGE4D3D42", 1)
 	a := &Attempt{Dir: dir, Out: dir + ".out"}
 	line := strings.Repeat("~/", 40) + "\n"
@@ -232,6 +234,7 @@ func TestHandTextSaysWhatItRewrote(t *testing.T) {
 // Review 405 A2: a report the note pushes over the limit, with a verdict
 // line a terminal coloured, still ends on its verdict.
 func TestHandTextKeepsAColouredVerdictWhenCut(t *testing.T) {
+	t.Parallel()
 	const tid = "t_01M5B2WKM1CYDFE4PWGE4D3D42"
 	dir := WorkspaceDir("/home/bifrost-agentd-stg/agent-work/agentd", tid, 1)
 	a := &Attempt{Claim: &Claimed{TaskID: tid, Role: "review"}, Dir: dir, Out: dir + ".out"}

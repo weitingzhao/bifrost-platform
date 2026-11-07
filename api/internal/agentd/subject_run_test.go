@@ -17,6 +17,7 @@ import (
 // implementation of effect none is told what the attempt reported, after
 // the task's spec, and that the checkout holds none of its work.
 func TestAReviewOfEffectNoneSeesTheReport(t *testing.T) {
+	t.Parallel()
 	spec := `{"text":"# Sleep 2700 s","verify":[["true"]]}`
 	pool, task, base := platformSpec(t, store.Task{Effect: "none"}, nil, "application/json", []byte(spec))
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {

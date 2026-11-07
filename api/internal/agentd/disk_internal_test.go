@@ -60,6 +60,7 @@ func TestARefusedDiskIsTriedAgainLater(t *testing.T) {
 // take, and an attempt without a repo (no patch of it is taken) leave the
 // workspace and the log, the only copies, as they are.
 func TestARestartsLastSampleDecidesTheWorkspace(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, refuse string
 		status       int
@@ -121,6 +122,7 @@ func TestARestartsLastSampleDecidesTheWorkspace(t *testing.T) {
 // up its workspace only when why it failed, and its log's tail, were taken
 // whole; a report or a log tail the platform refused leaves them as they are.
 func TestAFailureNotHandedInKeepsItsWorkspace(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, refuse string
 		taken        bool

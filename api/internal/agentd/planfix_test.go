@@ -73,6 +73,7 @@ func readOut(t *testing.T, out, name string) string {
 // A plan whose report has no block, and whose session appends one when
 // asked, hands in one report ending in the block, in the same attempt.
 func TestPlanFollowUpAppendsTheBlock(t *testing.T) {
+	t.Parallel()
 	var asked atomic.Int32
 	ex := followed(`printf '`+planNoBlock+`' > "$OUT/report.md"`,
 		`printf '%s' "$PROMPT" > "$OUT/prompt.txt"; cat > "$REPLY" <<'EOF'
@@ -95,6 +96,7 @@ func TestPlanFollowUpAppendsTheBlock(t *testing.T) {
 
 // A follow-up whose reply still has no block leaves the first report.
 func TestPlanFollowUpWithoutABlock(t *testing.T) {
+	t.Parallel()
 	var asked atomic.Int32
 	ex := followed(`printf '`+planNoBlock+`' > "$OUT/report.md"`, `echo 'Sorry, here it is: {"tasks": []}' > "$REPLY"`, &asked)
 	out, outDir, _ := planRun(t, "plan", ex, nil)
@@ -112,6 +114,7 @@ func TestPlanFollowUpWithoutABlock(t *testing.T) {
 // No follow-up for a report whose block reads, for an implementation, for a
 // failed exit, nor for an executor that cannot go on in its session.
 func TestPlanFollowUpNotAsked(t *testing.T) {
+	t.Parallel()
 	for name, c := range map[string]struct {
 		role, body  string
 		nilFollowUp bool
@@ -145,6 +148,7 @@ func TestPlanFollowUpNotAsked(t *testing.T) {
 // A stop that comes during the follow-up ends the attempt cancelled, as it
 // would the first run, and the report is the first.
 func TestPlanFollowUpStopped(t *testing.T) {
+	t.Parallel()
 	var asked atomic.Int32
 	ex := followed(`printf '`+planNoBlock+`' > "$OUT/report.md"`, `touch "$OUT/following"; exec sleep 30`, &asked)
 	done := make(chan struct{})
