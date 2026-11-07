@@ -163,10 +163,10 @@ type candidateSource func(ctx context.Context, tx pgx.Tx, after *candidate) ([]c
 func claimIn(ctx context.Context, tx pgx.Tx, r ClaimRequest, src candidateSource, o claimOpts, pinned bool) (*Claim, string, error) {
 	var state, kind string
 	var slots int
-	// A host that states no slots has the most a rule may give (2.4 slice
-	// ③): the signed per_host decides how many run.
+	// A host that states no slots has the most a rule may give, the
+	// ceiling (2.4 slice ③): the signed per_host decides how many run.
 	err := tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = $1
-	  RETURNING state, host_kind, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.MaxPerHost).Scan(&state, &kind, &slots)
+	  RETURNING state, host_kind, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.PerHostCeiling).Scan(&state, &kind, &slots)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
 	}

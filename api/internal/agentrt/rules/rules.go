@@ -65,15 +65,26 @@ const (
 	Tighten = "tighten"
 )
 
-// Bounds a rule may not pass, whatever the Owner signs.
+// Capacity defaults: what a mission, an attempt and a host get where no rule
+// tunes them (R5 phase 2 step 3b). They are not bounds: the signed rule
+// decides, up to the ceilings below.
 const (
-	MaxMissionAttempts  = 1000
-	MaxMissionWallHours = 720
-	MaxAttemptLimitS    = 86400
-	// MaxPerHost bounds concurrency: at most three live attempts a host
-	// (W-31 2.4 slice ③); how many run is the signed per_host.
-	MaxPerHost = 3
-	maxJobText = 16 << 10
+	DefaultMissionAttempts  = 1000
+	DefaultMissionWallHours = 720
+	DefaultAttemptLimitS    = 86400
+	// DefaultPerHost is three live attempts a host (W-31 2.4 slice ③); how
+	// many run is the signed per_host.
+	DefaultPerHost = 3
+)
+
+// Sanity ceilings a rule may not pass, whatever the Owner signs: far past
+// any capacity meant, they only refuse a value that is a mistake.
+const (
+	MissionAttemptsCeiling  = 10000
+	MissionWallHoursCeiling = 8760          // a year
+	AttemptLimitSCeiling    = 7 * 24 * 3600 // a week
+	PerHostCeiling          = 32
+	maxJobText              = 16 << 10
 )
 
 var (
@@ -281,7 +292,7 @@ func Parse(text []byte) (Rule, error) {
 		err = r.envelope(o, arg)
 	case KindConcurrency:
 		var n int
-		if n, err = o.integer("per_host", 0, MaxPerHost); err == nil {
+		if n, err = o.integer("per_host", 0, PerHostCeiling); err == nil {
 			r.PerHost = &n
 		}
 	case KindBudget:
@@ -321,10 +332,10 @@ func budgetOf(o *object, key string) (Budget, error) {
 		return Budget{}, err
 	}
 	var out Budget
-	if out.MaxAttempts, err = b.integer("max_attempts", 1, MaxMissionAttempts); err != nil {
+	if out.MaxAttempts, err = b.integer("max_attempts", 1, MissionAttemptsCeiling); err != nil {
 		return Budget{}, err
 	}
-	if out.MaxWallHours, err = b.integer("max_wall_hours", 1, MaxMissionWallHours); err != nil {
+	if out.MaxWallHours, err = b.integer("max_wall_hours", 1, MissionWallHoursCeiling); err != nil {
 		return Budget{}, err
 	}
 	return out, b.done()
@@ -439,7 +450,7 @@ func (r *Rule) budget(o *object, arg string) error {
 	if b.Mission, err = budgetOf(o, "mission"); err != nil {
 		return err
 	}
-	if b.AttemptLimitSec, err = o.integer("attempt_hard_limit_s", 60, MaxAttemptLimitS); err != nil {
+	if b.AttemptLimitSec, err = o.integer("attempt_hard_limit_s", 60, AttemptLimitSCeiling); err != nil {
 		return err
 	}
 	b.AutoGrant = AutoGrantDefault
@@ -450,10 +461,10 @@ func (r *Rule) budget(o *object, arg string) error {
 		if err != nil {
 			return err
 		}
-		if b.AutoGrant.MaxAttempts, err = a.integer("max_attempts", 0, MaxMissionAttempts); err != nil {
+		if b.AutoGrant.MaxAttempts, err = a.integer("max_attempts", 0, MissionAttemptsCeiling); err != nil {
 			return err
 		}
-		if b.AutoGrant.MaxWallHours, err = a.integer("max_wall_hours", 0, MaxMissionWallHours); err != nil {
+		if b.AutoGrant.MaxWallHours, err = a.integer("max_wall_hours", 0, MissionWallHoursCeiling); err != nil {
 			return err
 		}
 		if err = a.done(); err != nil {

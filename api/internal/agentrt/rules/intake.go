@@ -58,8 +58,13 @@ var intakeExceptions = []string{IntakeAnswerOnly, IntakeFaultSmall}
 // IntakeClasses are the risk classes, lowest first.
 var IntakeClasses = []string{"small", "medium", "large"}
 
-// MaxLivePerProduct bounds max_live_per_product, whatever the Owner signs.
-const MaxLivePerProduct = 20
+// DefaultLivePerProduct is a product's live issues where no rule tunes it;
+// LivePerProductCeiling is the sanity ceiling of max_live_per_product,
+// whatever the Owner signs.
+const (
+	DefaultLivePerProduct = 20
+	LivePerProductCeiling = 1000
+)
 
 // IntakeGates is an intake-gates rule's part.
 type IntakeGates struct {
@@ -112,7 +117,7 @@ func (r *Rule) intake(o *object) error {
 	if err := cls.done(); err != nil {
 		return err
 	}
-	if g.MaxLivePerProduct, err = o.integer("max_live_per_product", 0, MaxLivePerProduct); err != nil {
+	if g.MaxLivePerProduct, err = o.integer("max_live_per_product", 0, LivePerProductCeiling); err != nil {
 		return err
 	}
 	if g.Exceptions, err = o.strings("exceptions", false); err != nil {
