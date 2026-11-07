@@ -5,15 +5,43 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
 
-var ErrOverlap = errors.New("overlap")
 var ErrConflict = errors.New("conflict")
-var ErrPatchChanged = errors.New("patch_changed")
 var taskTrailer = regexp.MustCompile(`(?im)^Agentrt-Task:\s*(\S+)\s*$`)
 var changeTrailer = regexp.MustCompile(`(?im)^Change-Id:\s*(I[0-9a-f]{40})\s*$`)
+
+// ConflictError is ErrConflict with what did not merge: the paths the
+// change and main since its base both changed in the same lines, so the
+// rework round is told where to look.
+type ConflictError struct {
+	M0    string
+	Paths []string
+}
+
+func (c *ConflictError) Error() string {
+	return "conflict onto " + c.M0 + ": " + strings.Join(c.Paths, ", ")
+}
+func (c *ConflictError) Is(target error) bool { return target == ErrConflict }
+
+// conflict reads the unmerged paths of a failed cherry-pick onto m0 and
+// leaves the workspace clean at m0 for the next replay in it.
+func (w *Workspace) conflict(ctx context.Context, m0 string) error {
+	c := &ConflictError{M0: m0, Paths: []string{}}
+	if out, e := w.local(ctx, "diff", "--name-only", "-z", "--diff-filter=U"); e == nil {
+		for _, p := range strings.Split(out, "\x00") {
+			if p != "" && !slices.Contains(c.Paths, p) {
+				c.Paths = append(c.Paths, p)
+			}
+		}
+	}
+	_, _ = w.local(ctx, "cherry-pick", "--abort")
+	_, _ = w.local(ctx, "reset", "--hard", "-q", m0)
+	return c
+}
 
 // ReplayInput's metadata comes from the accepted verification and claimed
 // operation. On recovery it must be identical, including CommitterDate.
@@ -47,49 +75,14 @@ func (w *Workspace) Replay(ctx context.Context, in ReplayInput) (string, error) 
 	if len(tasks) != 1 || tasks[0][1] != in.Task || len(changes) != 1 {
 		return "", errors.New("result lineage does not match accepted task")
 	}
-	changed, e := w.local(ctx, "diff", "--name-only", "-z", "--no-renames", in.Base, in.A, "--")
-	if e != nil {
-		return "", e
-	}
-	drift, e := w.local(ctx, "diff", "--name-only", "-z", "--no-renames", in.Base, in.M0, "--")
-	if e != nil {
-		return "", e
-	}
-	paths := map[string]bool{}
-	for _, p := range strings.Split(changed, "\x00") {
-		if p != "" {
-			paths[p] = true
-		}
-	}
-	for _, p := range strings.Split(drift, "\x00") {
-		if paths[p] {
-			return "", ErrOverlap
-		}
-	}
+	// A path changed both on main since the base and in the change is no
+	// refusal: the cherry-pick is a three-way merge of the change onto M0,
+	// and the landing CI tests what it gives. Only a real conflict refuses.
 	if _, e = w.local(ctx, "checkout", "--detach", in.M0); e != nil {
 		return "", e
 	}
 	if _, e = w.local(ctx, "cherry-pick", "--no-commit", in.A); e != nil {
-		return "", ErrConflict
-	}
-	original, e := w.local(ctx, "diff", "--no-ext-diff", "--no-textconv", "--binary", in.Base, in.A, "--")
-	if e != nil {
-		return "", e
-	}
-	replay, e := w.local(ctx, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary", in.M0, "--")
-	if e != nil {
-		return "", e
-	}
-	a, e := w.git.run(ctx, w.dir, false, []byte(original), nil, "patch-id", "--stable")
-	if e != nil {
-		return "", e
-	}
-	b, e := w.git.run(ctx, w.dir, false, []byte(replay), nil, "patch-id", "--stable")
-	if e != nil {
-		return "", e
-	}
-	if len(strings.Fields(a)) == 0 || len(strings.Fields(b)) == 0 || strings.Fields(a)[0] != strings.Fields(b)[0] {
-		return "", ErrPatchChanged
+		return "", w.conflict(ctx, in.M0)
 	}
 	author, e := w.local(ctx, "show", "-s", "--format=%an%x00%ae%x00%aI", in.A)
 	if e != nil {

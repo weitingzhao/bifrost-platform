@@ -107,6 +107,38 @@ func TestLandingCIReworkCheckedAttemptGoesBack(t *testing.T) {
 	}
 }
 
+// Serial: FreezeEventClock. A replay that does not merge onto main ends
+// its operation failed{conflict} and sends the root back as a red CI does:
+// the failed landing_ci check's evidence names M0 and the conflicting
+// paths. No root_failed card.
+func TestLandingConflictReworkNamesThePaths(t *testing.T) {
+	w, root, op, at := checkedRed(t, 0)
+	m0 := strings.Repeat("e", 40)
+	reworked, err := store.RecordLandingConflict(ctx, w.rt, "bifrost-platform", op, "test: failed", m0, []string{"api/a.go", "api/b.go"}, store.PrecheckCI)
+	ok(t, err)
+	if !reworked || w.state(t, "task", root) != "ready" {
+		t.Fatalf("reworked %v, state %s", reworked, w.state(t, "task", root))
+	}
+	if p, why := phaseOf(t, w, op); p != "failed" || why != "conflict" {
+		t.Fatal("operation", p, why)
+	}
+	var evidence string
+	ok(t, w.rt.QueryRow(ctx, `SELECT convert_from(b.body, 'UTF8') FROM agentrt.verification v
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = v.evidence_artifact_id
+	  WHERE v.task_id = $1 AND v.method = $2 AND v.verdict = 'fail'`, root, store.MethodLandingCI).Scan(&evidence))
+	for _, want := range []string{op, m0, "conflict_paths", "api/a.go", "api/b.go"} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("the evidence does not name %q: %s", want, evidence)
+		}
+	}
+	if why := reworkReason(t, w, root); !strings.Contains(why, "the replay of "+op+" onto main conflicted in round 1") {
+		t.Fatal("why", why)
+	}
+	if choices := rootFailed(t, w, root, at); choices != nil {
+		t.Fatal("a root_failed card for a rework:", choices)
+	}
+}
+
 // Serial: FreezeEventClock. A task in its last round goes back too, its
 // max_rounds raised by one, and the move says so. No root_failed card.
 func TestLandingCIReworkLastRoundRaisesTheBound(t *testing.T) {

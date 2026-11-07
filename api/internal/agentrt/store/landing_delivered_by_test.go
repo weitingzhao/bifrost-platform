@@ -74,7 +74,7 @@ func dbAccepted(t *testing.T, w *world, c *dbClock, step, repo string) string {
 }
 
 // dbOp runs root's first operation on the platform stream, claimed with
-// result a, to end: "overlap" (failed{overlap}), "declined" (then the
+// result a, to end: "conflict" (failed{conflict}), "declined" (then the
 // Owner's "Do not merge": failed{declined}), "intent" (branch_intent),
 // "pushed" (branch_pushed), "landed" (main_result{ok}, landed) or
 // "reverted" (landed, then reverted).
@@ -88,8 +88,8 @@ func dbOp(t *testing.T, w *world, c *dbClock, root, a, end string) string {
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, kind, kv...)))
 	}
 	put("claimed", "task", root, "attempt", landingAttempt, "A", a, "rule_version", 1)
-	if end == "overlap" || end == "declined" {
-		put("failed", "why", "overlap")
+	if end == "conflict" || end == "declined" {
+		put("failed", "why", "conflict")
 		if end == "declined" {
 			put("failed", "why", "declined")
 		}
@@ -150,7 +150,7 @@ func TestDeliveredByAppendChecks(t *testing.T) {
 	curOp := dbOp(t, w, c, cur, dbNewA, "landed")
 	pendingOp := dbOp(t, w, c, pending, dbThirdA, "pushed")
 	revertedOp := dbOp(t, w, c, reverted, dbThirdA, "reverted")
-	overlapOp := dbOp(t, w, c, overlap, dbThirdA, "overlap")
+	overlapOp := dbOp(t, w, c, overlap, dbThirdA, "conflict")
 	elsewhereOp := dbOp(t, w, c, elsewhere, dbThirdA, "landed")
 	// An infra task's operation on the platform stream: only the repository
 	// check tells it apart.
@@ -237,7 +237,7 @@ func TestStepLandedReadsDeliveredBy(t *testing.T) {
 		}
 	}
 	// Today's shape (5.5-2/3/4): two tasks on one step, the old one stacked
-	// on an earlier slice failed overlap and the Owner declined it; the new
+	// on an earlier slice failed conflict and the Owner declined it; the new
 	// one, the same change on the new main, landed.
 	old := dbAccepted(t, w, c, s2, "bifrost-platform")
 	cur := dbAccepted(t, w, c, s2, "bifrost-platform")

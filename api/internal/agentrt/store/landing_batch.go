@@ -419,7 +419,7 @@ func RecordBatchRed(ctx context.Context, db DB, repo, batch string, failure land
 			if p.reviews() || s.LatestOperation(o.Task) != op || o.Terminal() {
 				continue
 			}
-			went, err := reworkRedLanding(ctx, tx, o, op, failure)
+			went, err := reworkRedLanding(ctx, tx, o, op, ciRed(op, failure))
 			if err != nil {
 				return err
 			}

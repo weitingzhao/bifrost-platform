@@ -21,7 +21,7 @@ func TestC5PinnedCIComesFirst(t *testing.T) {
 	at := epoch.Add(time.Hour)
 	for _, status := range []string{"Succeeded", "Failed"} {
 		ci := CIRun{R: o.R, Run: "ci-platform-webhook", Status: status, CreatedAt: o.PreparedAt.Add(time.Second)}
-		obs := DrillObservation{Facts: f, Main: o.M0, Candidate: ci, MainCI: CIRun{Status: "Succeeded"}, PinCI: true}
+		obs := DrillObservation{Facts: f, Main: o.M0, Candidate: ci, PinCI: true}
 		if d := NextDrill(s, "land:1", obs, at); d.Kind != "ci_kick" {
 			t.Errorf("webhook %s, not kicked: %+v", status, d)
 		}
