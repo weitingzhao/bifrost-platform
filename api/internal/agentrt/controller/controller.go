@@ -537,10 +537,14 @@ func (c *Controller) Landings(ctx context.Context) (int, error) {
 	})
 }
 
-// Close is one pass of closing the missions whose goal is done: every task
-// accepted or dropped by the Owner on its card, an implementation among the
-// accepted, no plan step bound (store.CloseMissions). It returns how many it
-// closed.
+// Close is one pass of closing the missions whose tasks are all finished
+// (store.CloseMissions): no plan step bound, and every task accepted, dropped
+// by the Owner on its card, a check of a stopped task, withdrawn by its
+// proposer, cancelled or rejected with its change on main, or cancelled while
+// a stop held it (or one holds it now). Such a mission closes done when an
+// implementation (or brief) is accepted or an implementation is on main,
+// stopped otherwise; the landing hold may still keep it active. It returns
+// how many it closed.
 func (c *Controller) Close(ctx context.Context) (int, error) {
 	closed, err := store.CloseMissions(ctx, c.DB)
 	return len(closed), err
