@@ -54,12 +54,12 @@ const checkClosed = `t.state = 'cancelled' AND t.role IN ('verify','review') AND
     WHERE e.task_id = t.task_id AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) l
   WHERE starts_with(l.body_json->>'reason', '` + stoppedSubject + `'))`
 
-// landedNote is the condition that task t has a note saying its change is
+// landedNoteExists is the condition that task t has a note saying its change is
 // on main (prune.go records it).
-const landedNote = `EXISTS (SELECT 1 FROM agentrt.event n WHERE n.task_id = t.task_id AND n.event_type = 'note' AND n.body_json ? 'landed')`
+const landedNoteExists = `EXISTS (SELECT 1 FROM agentrt.event n WHERE n.task_id = t.task_id AND n.event_type = 'note' AND n.body_json ? 'landed')`
 
 // onMain is a task (t) cancelled or rejected after its change reached main.
-const onMain = `t.state IN ('cancelled','rejected') AND ` + landedNote
+const onMain = `t.state IN ('cancelled','rejected') AND ` + landedNoteExists
 
 // stoppedEmpty is a cancelled task (t) that a stop control (its own, its
 // subject's or its mission's, as stopHolding reads it) held when it was
@@ -77,7 +77,7 @@ const dropped = `((` + ownerDropped + `) OR (` + checkClosed + `) OR (` + withdr
 // delivered is the condition that mission m has what its goal asked for: an
 // implementation (or brief) accepted, or an implementation on main.
 const delivered = `EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id
-    AND ((t.role IN ('implement','brief') AND t.state = 'accepted') OR (t.role = 'implement' AND ` + landedNote + `)))`
+    AND ((t.role IN ('implement','brief') AND t.state = 'accepted') OR (t.role = 'implement' AND ` + landedNoteExists + `)))`
 
 // closable is the condition, read again under the mission's lock.
 const closable = `m.state = 'active'
