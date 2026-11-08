@@ -504,6 +504,15 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "supersede_agent_tasks", Tier: TierD,
+		Description: "Cancel explicitly listed obsolete tasks in PROD after Owner approval. Each entry pins task_id, version, replacement_task_id and commit. The replacement must be an accepted implementation in the same mission/repository with recorded delivery at that commit. The Owner confirms semantic replacement; this does not mark the original patch accepted or landed. Refuses running work, open checks or unfinished dependents. All entries commit atomically, preserving history and stop controls; repeated execution of the same approval is idempotent. No CI or deployment is started.",
+		Params: []Param{
+			{Name: "env", Type: "string", Required: true, In: "body"},
+			{Name: "entries", Type: "array", Required: true, In: "body"},
+			{Name: "reason", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "agentrt_rule_approve", Tier: TierD,
 		Description: "Approve a capacity change of an agent runtime rule: the proposed next version (rule_proposed) takes effect without the Owner's signature, recorded with this approval (rule_approved). Tier D: only the Owner approves on the Console. " +
 			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod); rule_id, rule_version and text_artifact_id name the draft exactly as rule_proposed recorded it. " +

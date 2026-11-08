@@ -674,7 +674,7 @@ export function ApprovalsPage() {
               channel: 'console',
               approval_line: opened?.approval_line ?? '',
               params_hash: opened?.params_hash ?? '',
-              ...(confirmsNumber(opened?.action) ? { confirm_number: opened?.number } : {}),
+              ...((confirmsNumber(opened?.action) || opened?.action === 'supersede_agent_tasks') ? { confirm_number: opened?.number } : {}),
             }
           : { reason: reason ?? '' },
       )), setNotice)

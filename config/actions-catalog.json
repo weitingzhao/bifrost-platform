@@ -41,6 +41,7 @@
     "start_pipeline_run",
     "stg_release_sample_create",
     "stg_release_sample_finalize",
+    "supersede_agent_tasks",
     "sweep_failed_backups",
     "sync_kubeconfig",
     "sync_mirrors",

@@ -293,3 +293,28 @@ func TestRefreshRevisionIsAPlainRefName(t *testing.T) {
 		t.Fatalf("refresh with an injected revision: %+v %v (cluster asked: %v)", resp, err, asked)
 	}
 }
+
+func TestAgentdPackageReaderIsSeparate(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv(giteaReaderDirEnv, writeReader(t, map[string]string{"username": "repository-reader", "password": "repository-fixture"}))
+	t.Setenv("AGENTD_PACKAGE_READER_DIR", "")
+	if _, _, err := AgentdPackageReaderFromEnv(ctx); err == nil {
+		t.Fatal("missing package reader fell back to repository credentials")
+	}
+	dir := writeReader(t, map[string]string{"username": "package-reader", "password": "package-fixture"})
+	t.Setenv("AGENTD_PACKAGE_READER_DIR", dir)
+	user, pass, err := AgentdPackageReaderFromEnv(ctx)
+	if err != nil || user != "package-reader" || pass != "package-fixture" {
+		t.Fatal("dedicated package credentials not used")
+	}
+	if err := os.Remove(filepath.Join(dir, "password")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := AgentdPackageReaderFromEnv(ctx); err == nil {
+		t.Fatal("missing package token accepted")
+	}
+	user, _, err = GiteaReaderFromEnv(ctx)
+	if err != nil || user != "repository-reader" {
+		t.Fatal("repository reader changed")
+	}
+}

@@ -213,6 +213,12 @@ func LandingStructuralViolation(repo string, changes []LandingChange) (string, b
 			if c.ChangeKind() == "T" {
 				return "type_changed", true
 			}
+			// Existing executable scripts may change content without changing
+			// their path or permissions. New executables still require a separate route.
+			if c.ChangeKind() == "M" && c.OldPath == c.NewPath &&
+				strings.HasPrefix(c.NewPath, "scripts/") && c.OldMode == "100755" && c.NewMode == "100755" {
+				continue
+			}
 			for _, side := range [][2]string{{c.OldPath, c.OldMode}, {c.NewPath, c.NewMode}} {
 				if side[0] != "" && side[1] != "100644" {
 					return "mode", true

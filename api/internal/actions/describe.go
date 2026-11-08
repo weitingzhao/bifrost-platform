@@ -75,6 +75,7 @@ var notifySafeKeys = map[string][]string{
 	"approve_core_landing":        {"env", "repo", "op", "R", "stg_release"},
 	"approve_floor_landing":       {"env", "repo", "op", "R"},
 	"deploy_agentd":               {"env", "host", "commit", "sha256"},
+	"supersede_agent_tasks":       {"env"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -83,6 +84,9 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 	d := Description{KeyParams: keyParams(a, params)}
 	p := func(k string) string { return str(params[k]) }
 	switch a.ID {
+	case "supersede_agent_tasks":
+		d.Env = p("env")
+		d.Summary = "Cancel obsolete tasks using the listed delivered replacements"
 	case "start_pipeline_run":
 		d.Env = "cicd"
 		if ProdPipeline(p("name")) {

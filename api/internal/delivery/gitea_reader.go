@@ -36,6 +36,10 @@ func giteaReaderFromEnv(context.Context) (string, string, error) {
 	if dir == "" {
 		return "", "", errNoGiteaReader
 	}
+	return readReaderDirectory(dir)
+}
+
+func readReaderDirectory(dir string) (string, string, error) {
 	user, err := readReaderFile(dir, "username")
 	if err != nil {
 		return "", "", err
@@ -107,3 +111,13 @@ func GiteaReaderFromEnv(ctx context.Context) (string, string, error) { return gi
 // GiteaBaseURL is the Gitea API base the platform reads (GITEA_BASE, else
 // the in-cluster service).
 func GiteaBaseURL() string { return giteaBaseURL() }
+
+// AgentdPackageReaderFromEnv reads only the dedicated package-read mount.
+// Missing credentials never fall back to the repository reader or publisher.
+func AgentdPackageReaderFromEnv(context.Context) (string, string, error) {
+	dir := strings.TrimSpace(os.Getenv("AGENTD_PACKAGE_READER_DIR"))
+	if dir == "" {
+		return "", "", errors.New("AGENTD_PACKAGE_READER_DIR is not set")
+	}
+	return readReaderDirectory(dir)
+}

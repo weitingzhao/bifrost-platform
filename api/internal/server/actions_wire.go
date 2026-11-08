@@ -174,6 +174,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("mark_missions_no_merge", s.markMissionsNoMerge)
 	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
+	actions.RegisterExecutor(supersedeAction, s.supersedeTasks)
 	actions.RegisterExecutor(stgrelease.SampleCreateAction, s.stgSampleCreate)
 	actions.RegisterExecutor(stgrelease.SampleFinalizeAction, s.stgSampleFinalize)
 	actions.RegisterExecutor(store.RecoverBatchPushAction, s.pushRecoveryExecutor)

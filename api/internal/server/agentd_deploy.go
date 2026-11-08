@@ -23,7 +23,7 @@ import (
 // AGENTD_DEPLOY_TARGETS and the published build through the Gitea agentd
 // package (AGENTD_PACKAGE_SHA256_URL, {commit} in it; by default the generic
 // package agentd of the bifrost org, file agentd.sha256), read with the
-// platform's read-only Gitea account. PROD's controller proposes the cards.
+// dedicated package-read account. PROD's controller proposes the cards.
 
 const agentdPackageURLEnv = "AGENTD_PACKAGE_SHA256_URL"
 
@@ -32,7 +32,7 @@ func agentdPackage() agentdeploy.Package {
 	if u == "" {
 		u = delivery.GiteaBaseURL() + "/api/packages/bifrost/generic/agentd/{commit}/agentd.sha256"
 	}
-	return agentdeploy.Package{URL: u, Auth: delivery.GiteaReaderFromEnv}
+	return agentdeploy.Package{URL: u, Auth: delivery.AgentdPackageReaderFromEnv}
 }
 
 // agentdHosts is agentdeploy.HostControl over the runtime's store.

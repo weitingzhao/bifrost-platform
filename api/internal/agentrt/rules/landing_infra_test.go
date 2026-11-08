@@ -166,6 +166,41 @@ func TestInfraSecretManifest(t *testing.T) {
 }
 
 // T16 is an inner parser test: Git cannot create dot/traversal endpoints.
+func TestInfraExistingExecutableScripts(t *testing.T) {
+	t.Parallel()
+	base := LandingChange{Kind: "M", OldPath: "scripts/agent-host/agentd-update", NewPath: "scripts/agent-host/agentd-update", OldMode: "100755", NewMode: "100755", Added: 1, Deleted: 1}
+	cases := []struct {
+		name    string
+		edit    func(*LandingChange)
+		allowed bool
+	}{
+		{"existing script content", func(*LandingChange) {}, true},
+		{"existing installer", func(c *LandingChange) {
+			c.OldPath = "scripts/k3s/apply-cicd-platform-pipeline.sh"
+			c.NewPath = c.OldPath
+		}, true},
+		{"new executable", func(c *LandingChange) { c.Kind = "A"; c.OldPath = ""; c.OldMode = "" }, false},
+		{"add execute permission", func(c *LandingChange) { c.OldMode = "100644" }, false},
+		{"remove execute permission", func(c *LandingChange) { c.NewMode = "100644" }, false},
+		{"rename executable", func(c *LandingChange) { c.Kind = "R"; c.NewPath = "scripts/other.sh" }, false},
+		{"outside scripts", func(c *LandingChange) { c.OldPath = "config/executable"; c.NewPath = c.OldPath }, false},
+		{"symlink", func(c *LandingChange) { c.Kind = "T"; c.NewMode = "120000" }, false},
+		{"submodule", func(c *LandingChange) { c.Kind = "T"; c.NewMode = "160000" }, false},
+		{"binary", func(c *LandingChange) { c.Binary = true }, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := base
+			tc.edit(&c)
+			why, bad := LandingStructuralViolation("bifrost-trade-infra", []LandingChange{c})
+			if bad == tc.allowed {
+				t.Fatalf("allowed=%v: refusal=%q", tc.allowed, why)
+			}
+		})
+	}
+}
+
 func TestInfraPathParser(t *testing.T) {
 	t.Parallel()
 	good := LandingChange{NewPath: "agent-config/work/multi-agent/REPORT-a.md", NewMode: "100644", Added: 1}
