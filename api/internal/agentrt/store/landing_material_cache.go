@@ -119,8 +119,15 @@ func (c *GrantMaterialCache) read(ctx context.Context, key materialKey, work fun
 }
 
 func cloneGrantGit(x grantExt) grantExt {
+	var mates map[string]grantMateExt
+	if x.mates != nil {
+		mates = make(map[string]grantMateExt, len(x.mates))
+		for op, mate := range x.mates {
+			mates[op] = grantMateExt{single: mate.single, changes: slices.Clone(mate.changes)}
+		}
+	}
 	return grantExt{single: x.single, changes: slices.Clone(x.changes), patch: x.patch,
-		floor: landing.FloorTree{OnM0: x.floor.OnM0, Files: slices.Clone(x.floor.Files)}}
+		floor: landing.FloorTree{OnM0: x.floor.OnM0, Files: slices.Clone(x.floor.Files)}, mates: mates}
 }
 
 func (c *GrantMaterialCache) finish(key materialKey, f *materialFlight) {
@@ -143,6 +150,12 @@ func (c *GrantMaterialCache) finish(key materialKey, f *materialFlight) {
 	size := len(x.patch.Shown) + len(x.patch.SHA256)
 	for _, ch := range x.changes {
 		size += 128 + len(ch.OldPath) + len(ch.NewPath) + len(ch.AddedText) + len(ch.Kind) + len(ch.OldMode) + len(ch.NewMode)
+	}
+	for op, mate := range x.mates {
+		size += 128 + len(op)
+		for _, ch := range mate.changes {
+			size += 128 + len(ch.OldPath) + len(ch.NewPath) + len(ch.AddedText) + len(ch.Kind) + len(ch.OldMode) + len(ch.NewMode)
+		}
 	}
 	for _, f := range x.floor.Files {
 		size += 128 + len(f.Path)

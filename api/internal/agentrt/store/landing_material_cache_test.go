@@ -16,6 +16,48 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
+func TestMaterialCachePreservesBatchMemberEvidence(t *testing.T) {
+	t.Parallel()
+	cache := &GrantMaterialCache{}
+	key := materialKey{Op: "batch-lead"}
+	work := func(context.Context) (grantExt, error) {
+		return grantExt{single: true, mates: map[string]grantMateExt{
+			"mate": {single: true, changes: []rules.LandingChange{{NewPath: "api/member.go", NewMode: "100644", Added: 1}}},
+		}}, nil
+	}
+	first, err := cache.read(context.Background(), key, work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.mates["mate"].single {
+		t.Fatal("cache lost the batch member's verified result")
+	}
+	first.mates["mate"].changes[0].NewPath = "mutated"
+	delete(first.mates, "mate")
+	next, err := cache.read(context.Background(), key, func(context.Context) (grantExt, error) {
+		return grantExt{}, errors.New("cache unexpectedly reread Git")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !next.mates["mate"].single || next.mates["mate"].changes[0].NewPath != "api/member.go" {
+		t.Fatal("a reader altered cached batch evidence")
+	}
+}
+
+func TestMaterialCacheCountsBatchMemberBytes(t *testing.T) {
+	t.Parallel()
+	cache := &GrantMaterialCache{}
+	_, err := cache.read(context.Background(), materialKey{Op: "large-batch"}, func(context.Context) (grantExt, error) {
+		return grantExt{mates: map[string]grantMateExt{
+			"mate": {single: true, changes: []rules.LandingChange{{AddedText: strings.Repeat("x", materialMaxBytes+1)}}},
+		}}, nil
+	})
+	if !errors.Is(err, ErrMaterialTooLarge) {
+		t.Fatalf("batch evidence escaped cache byte limit: %v", err)
+	}
+}
+
 func cacheFixture() (grantDB, GrantSources) {
 	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
 	now := DecisionAt()
