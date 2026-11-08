@@ -1,10 +1,37 @@
 package rules
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestInfraConfiguredFileLimit(t *testing.T) {
+	t.Parallel()
+	const repo = "bifrost-trade-infra"
+	for _, tc := range []struct {
+		limit, count int
+		oversized    bool
+	}{{100, 10, false}, {100, 100, false}, {100, 101, true}, {5, 5, false}, {5, 6, true}} {
+		t.Run(fmt.Sprintf("limit%d/files%d", tc.limit, tc.count), func(t *testing.T) {
+			l := &Landing{Repos: []LandingRepo{{Repo: repo, Allow: InfraLandingAllow,
+				Limits: &LandingRepoLimits{MaxFiles: tc.limit, MaxChangedLines: 1500, MaxInFlight: 1}}},
+				Limits: LandingLimits{MaxFiles: 15, MaxChangedLines: 300}}
+			changes := make([]LandingChange, tc.count)
+			for i := range changes {
+				changes[i] = LandingChange{NewPath: fmt.Sprintf("k8s/test-%d.yaml", i), NewMode: "100644", Added: 1}
+			}
+			soft := LandingSoftRefusals(l, repo, changes)
+			if slices.Contains(soft, LandingSize) != tc.oversized {
+				t.Fatalf("configured limit not respected: %v", soft)
+			}
+			if !slices.Contains(soft, LandingFloorGrant) || LandingFloorGrantable(l, repo, changes, soft) == tc.oversized {
+				t.Fatalf("floor approval boundary changed: %v", soft)
+			}
+		})
+	}
+}
 
 func TestInfraHardClosure(t *testing.T) {
 	t.Parallel()

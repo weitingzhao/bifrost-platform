@@ -47,14 +47,14 @@ func TestReview704InfraSoftLayerPrecedesDependencies(t *testing.T) {
 	}
 }
 
-func TestReview704InfraCeilingBeyondSignedLimits(t *testing.T) {
+func TestReview704InfraConfiguredFilesAndLineCeiling(t *testing.T) {
 	for _, which := range []string{"files", "lines", "tight-files", "tight-lines"} {
 		t.Run(which, func(t *testing.T) {
 			f := infraFacts()
-			f.Rule.Landing.Repos[0].Limits = &rules.LandingRepoLimits{MaxFiles: 10, MaxChangedLines: 3000, MaxInFlight: 1}
+			f.Rule.Landing.Repos[0].Limits = &rules.LandingRepoLimits{MaxFiles: 100, MaxChangedLines: 3000, MaxInFlight: 1}
 			if which == "files" || which == "tight-files" {
 				f.Changes = nil
-				for n := 0; n < 5; n++ {
+				for n := 0; n < 100; n++ {
 					f.Changes = append(f.Changes, rules.LandingChange{NewPath: fmt.Sprintf("agent-config/work/multi-agent/REPORT-%d.md", n), NewMode: "100644", Added: 1})
 				}
 			} else {
@@ -77,7 +77,7 @@ func TestReview704InfraCeilingBeyondSignedLimits(t *testing.T) {
 				f.Changes[0].Added++
 			}
 			if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Reason != "floor" || !reflect.DeepEqual(d.Detail["soft"], []string{"size"}) {
-				t.Fatalf("immutable infra ceiling lost: %+v", d)
+				t.Fatalf("configured file limit or line ceiling lost: %+v", d)
 			}
 		})
 	}
