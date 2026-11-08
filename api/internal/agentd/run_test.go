@@ -390,6 +390,7 @@ func TestRecover(t *testing.T) {
 // and the workspace's patch, numbered, confirmed by the platform; a patch
 // over 1 MiB is recorded as too large, not kept.
 func TestRunTakesCheckpoints(t *testing.T) {
+	t.Parallel()
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	head := func(_ context.Context, _, ref string) (string, error) {
@@ -398,13 +399,53 @@ func TestRunTakesCheckpoints(t *testing.T) {
 		return strings.TrimSpace(first), err
 	}
 	pool, _, base := platformWith(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head)
-	d := daemon(t, base, script(`echo 'package x' > x.go; echo working; sleep 1; head -c 2097152 /dev/urandom > big.bin; sleep 1; rm big.bin; printf '# done\n' > "$OUT/report.md"`), bare, env)
+	d := daemon(t, base, script(`echo 'package x' > x.go; echo working; while [ ! -f "$OUT/patch-seen" ]; do sleep 0.02; done; head -c 2097152 /dev/urandom > big.bin; while [ ! -f "$OUT/large-seen" ]; do sleep 0.02; done; rm big.bin; printf '# done\n' > "$OUT/report.md"`), bare, env)
 	d.CheckpointEvery = 300 * time.Millisecond
 	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
 	if err != nil || cl == nil {
 		t.Fatalf("claim = %+v %v", cl, err)
 	}
-	out, err := d.Run(ctx, cl)
+	// Advance the executor only after the database confirms each sample.
+	// The deadline bounds a broken test; it is not a sampling window.
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	observed := make(chan error, 1)
+	outDir := agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo) + ".out"
+	go func() {
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				observed <- runCtx.Err()
+				return
+			case <-tick.C:
+			}
+			var samples, patches, large int
+			err := pool.QueryRow(runCtx, `SELECT
+			  (SELECT count(*) FROM agentrt.event WHERE event_type='attempt_checkpointed' AND attempt_id=$1),
+			  (SELECT count(*) FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+			   WHERE a.artifact_kind='checkpoint_patch' AND position('x.go' in convert_from(b.body,'UTF8'))>0),
+			  (SELECT count(*) FROM agentrt.event WHERE event_type='attempt_checkpointed' AND attempt_id=$1
+			   AND (body_json->>'too_large')::boolean)`, cl.AttemptID).Scan(&samples, &patches, &large)
+			if err == nil && patches > 0 {
+				err = os.WriteFile(filepath.Join(outDir, "patch-seen"), nil, 0o600)
+			}
+			if err == nil && large > 0 && samples >= 3 {
+				err = os.WriteFile(filepath.Join(outDir, "large-seen"), nil, 0o600)
+				observed <- err
+				return
+			}
+			if err != nil {
+				observed <- err
+				cancel()
+				return
+			}
+		}
+	}()
+	out, err := d.Run(runCtx, cl)
+	cancel()
+	must(t, <-observed)
 	if err != nil || !out.Submitted {
 		t.Fatalf("run = %+v %v", out, err)
 	}

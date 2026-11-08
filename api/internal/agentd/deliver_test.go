@@ -149,6 +149,7 @@ func TestHandOverWaitsForThePlatform(t *testing.T) {
 // the next takeover, not retried in a loop that holds up the host (review
 // 164 A8).
 func TestHandOverLosesItsLease(t *testing.T) {
+	t.Parallel()
 	_, _, base := platform(t)
 	proxied, f := faultProxy(t, base)
 	d := daemon(t, proxied, script(`printf '# done\n' > "$OUT/report.md"`), "", nil)
@@ -157,7 +158,8 @@ func TestHandOverLosesItsLease(t *testing.T) {
 		t.Fatalf("claim = %+v %v", cl, err)
 	}
 	f.set("computed", http.StatusConflict)
-	runCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// The injected computed response ends the run; this is only a hang guard.
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := d.Run(runCtx, cl)
 	m, _ := d.Registry.Load()
