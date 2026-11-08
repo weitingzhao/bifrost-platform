@@ -1,9 +1,10 @@
+import { waitWords } from './waitWords'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import { records, text, type RuntimeProgress, type RuntimeRecord, type RuntimeTask } from '@/api/agentRuntime'
 import { isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
 import { isLandingAction } from '@/api/landingGrant'
-import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
+import type { ExplainRead, PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { optionLabel, questionNumberLabel, type Question } from '@/api/questions'
 import { approvalHref, goalHref, questionHref } from '@/lib/shell/consoleRoutes'
 import { groupOpenApprovals } from '../needs-you/needsYouGroups'
@@ -294,18 +295,14 @@ const roleUnknown = (runtime: RuntimeTasks) => runtime.read ? "Role Unknown (not
 const onMainWords = (o: { commit: string; via: string }) => `Finished · on main as ${o.commit.slice(0, 12)} (${o.via})`
 
 /** A task of the step's own work, with its role (or why it is Unknown). */
-export function taskLine(task: ModuleTask, runtime: RuntimeTasks): TaskLine {
-  const w = task.waiting
-  const waiting = !w ? '' : w.on === 'checks' ? `Waits on checks: ${(w.checks ?? []).map(c => `${c.role} ${shortTask(c.task_id)} ${c.state}`).join(', ')}`
-    : w.on === 'landing' ? `Waits on landing: ${w.reason ?? ''}`
-    : w.on === 'owner' ? `Waits on the Owner: question ${w.question_id ?? ''}`
-    : w.on === 'stop' ? `Stopped: ${w.reason ?? ''}` : `Waits: ${w.reason ?? ''}`
+export function taskLine(task: ModuleTask, runtime: RuntimeTasks, explain?: ExplainRead, now = Date.now()): TaskLine {
+  const wait = waitWords(task, explain, now)
   const a = task.attempt
   const role = taskRole(task, runtime)
   const landing = task.landing ? `landing ${task.landing.phase} · ${task.landing.outcome}` : ''
   return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.on_main ? onMainWords(task.on_main) : task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
     attempt: a ? `attempt ${a.attempt_no} · ${a.executor}${a.status ? ` · ${a.status}` : ''}` : '', href: goalHref(task.mission_id, task.task_id),
-    waiting, waitingHref: w?.on === 'owner' && w.question_id ? questionHref(w.question_id) : '',
+    waiting: wait.text, waitingHref: wait.href,
     detail: [task.delivery, landing].filter(Boolean).join(' · ') }
 }
 /** The step's own work, newest first: every task that is not a check (one whose role is Unknown is kept, and says so). */
@@ -357,8 +354,8 @@ export function reviewWords(scope: ModuleScope, view: PlanSnapshot, step: string
 
 export type NowStep = { cell: StepCell; tasks: TaskLine[] }
 /** The steps the controller has active, each with what it has now (in progress, held, nothing running, yours or Unknown) on its cell. */
-export function nowSteps(scope: ModuleScope, runtime: RuntimeTasks): NowStep[] {
-  return scope.row.cells.filter(c => c.step === 'active').map(cell => ({ cell, tasks: workTasks(scope, cell.id, runtime).map(t => taskLine(t, runtime)) }))
+export function nowSteps(scope: ModuleScope, runtime: RuntimeTasks, explain?: ExplainRead, now = Date.now()): NowStep[] {
+  return scope.row.cells.filter(c => c.step === 'active').map(cell => ({ cell, tasks: workTasks(scope, cell.id, runtime).map(t => taskLine(t, runtime, explain, now)) }))
 }
 /** The first step not started, in plan order: plan order only, not a commitment. */
 export function nextInPlanOrder(scope: ModuleScope): StepCell | undefined {

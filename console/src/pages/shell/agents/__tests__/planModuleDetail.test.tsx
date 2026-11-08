@@ -560,12 +560,12 @@ it('shows plan-view rounds and waiting reasons in the step task rows', () => {
     { on: 'stop', reason: 'Owner paused work' },
     undefined,
   ]
-  view.tasks = waits.map((waiting, i) => ({ ...base, task_id: `waiting-${i}`, title: `Waiting work ${i}`, state: i === 4 ? 'accepted' : 'blocked', round_no: 2, max_rounds: 3, waiting }))
+  view.tasks = waits.map((waiting, i) => ({ ...base, on_main: undefined, task_id: `waiting-${i}`, title: `Waiting work ${i}`, state: i === 4 ? 'accepted' : 'blocked', round_no: 2, max_rounds: 3, waiting }))
   detail(view, base.plan_node_id)
   const rows = within(region('Steps of 5.1'))
   expect(rows.getAllByText(/round 2 of 3/)).toHaveLength(4)
-  for (const text of ['Waits on checks: verify t_…ABC123 ready', 'Waits on landing: grant pending', 'Waits on the Owner: question q-owner', 'Stopped: Owner paused work']) expect(rows.getByText(text)).toBeInTheDocument()
-  expect(rows.getByRole('link', { name: 'Waits on the Owner: question q-owner' })).toHaveAttribute('href', questionHref('q-owner'))
+  for (const text of ['Waits on checks: verify t_…ABC123 ready · since Unknown', 'Waits on landing: grant pending · since Unknown', 'Waits on the Owner · question q-owner · since Unknown', 'Stopped by Unknown: Owner paused work · since Unknown']) expect(rows.getByText(text)).toBeInTheDocument()
+  expect(rows.getByRole('link', { name: 'Waits on the Owner · question q-owner · since Unknown' })).toHaveAttribute('href', questionHref('q-owner'))
 })
 
 it('prefers progress rounds, falls back to plan rounds, and preserves old responses', () => {

@@ -155,3 +155,21 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
     expect(moduleClass(r)).toBe('waiting')
   })
 })
+
+it('the step task line uses the recorded wait and its age', async () => {
+  const { taskLine, runtimeTasks } = await import('../moduleDetailModel')
+  const view = view514(raw => onStep(raw, id('W'), 'blocked', { waiting: { on: 'blocked', reason: 'Needs repair', since: AT } }))
+  const task = view.tasks.find(t => t.task_id === id('W'))!
+  const line = taskLine(task, runtimeTasks({ state: 'unread' }), undefined, NOW)
+  expect(line.waiting).toContain('Needs repair · since ')
+  expect(line.waiting).toContain(' · 0 min')
+})
+
+it('Live lists waiting tasks without an attempt using the shared words', async () => {
+  const { render, screen } = await import('@testing-library/react')
+  const { PlanLiveWork } = await import('../PlanLiveWork')
+  const view = view514(raw => onStep(raw, id('W'), 'blocked', { waiting: { on: 'blocked', reason: 'Needs repair' } }))
+  const rendered = render(<PlanLiveWork view={view} stale={false} />)
+  expect(screen.getByRole('list', { name: 'Waiting' }).textContent).toContain('Needs repair · since Unknown')
+  rendered.unmount()
+})

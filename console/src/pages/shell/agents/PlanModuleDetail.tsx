@@ -112,7 +112,7 @@ function Dot({ state }: { state: CellState }) {
  * step in progress, and the step an address names, open into a card: the rest of its own work (for a step in
  * progress, this is what runs now), its done rule in words, external work and the records its rule names.
  */
-function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshot; runtime: RuntimeTasks; selected: boolean; last: boolean
+function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshotRead; runtime: RuntimeTasks; selected: boolean; last: boolean
   now: number; stale: boolean }) {
   // While work on it runs, the live state stays on top and what is left to finish sits at the bottom, folded (R7).
   const running = cell.now?.kind === 'running'
@@ -122,7 +122,7 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
   const named = new Set(running ? [] : cell.why?.tasks ?? [])
   const all = workTasks(scope, cell.id, runtime)
   const checks = stepTasks(scope, cell.id).length - all.length
-  const latest = all[0] && !named.has(all[0].task_id) ? taskLine(all[0], runtime) : null
+  const latest = all[0] && !named.has(all[0].task_id) ? taskLine(all[0], runtime, view.explain, now) : null
   const earlier = all.slice(1).filter(t => !named.has(t.task_id))
   // Every step the controller has active opens, whatever it has now (in progress, nothing running, yours or Unknown).
   const active = cell.step === 'active'
@@ -138,7 +138,7 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
         {latest && <DeliveryStrip task={latest.id} />}</dd></dl>}
     {open && earlier.length > 0 && <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs text-muted-foreground">Earlier own work</span>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime)} /><DeliveryStrip task={t.task_id} /></li>)}</ul>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime, view.explain, now)} /><DeliveryStrip task={t.task_id} /></li>)}</ul>
     </div>}
     {active && all.length === 0 && <span className="text-muted-foreground">No work task on this step yet (checks are under Review)</span>}
   </>
@@ -195,9 +195,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** The head card (v3.6 item header): which module and where on the mainline, its title, steps to go, now, next and ETA. */
-function Head({ view, item, row, scope, runtime, reads, stale, now, heading }: { view: PlanSnapshot; item: PlanNode; row: ModuleRow; scope: ModuleScope; runtime: RuntimeTasks
+function Head({ view, item, row, scope, runtime, reads, stale, now, heading }: { view: PlanSnapshotRead; item: PlanNode; row: ModuleRow; scope: ModuleScope; runtime: RuntimeTasks
   reads: ShellReads; stale: boolean; now: number; heading: RefObject<HTMLHeadingElement | null> }) {
-  const current = nowSteps(scope, runtime)
+  const current = nowSteps(scope, runtime, view.explain, now)
   const next = nextInPlanOrder(scope)
   const of = mainlineOf(view, item)
   return <section aria-label={`Summary of ${item.label}`} className={`${panel} gap-2.5 px-4`}>

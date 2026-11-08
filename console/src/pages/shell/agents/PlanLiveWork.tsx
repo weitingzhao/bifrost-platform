@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
 import { fetchAttemptActions } from '@/api/agentRuntimeBus'
 import { ActionLabel, ago, ATTEMPT_ACTION_STUCK_MS } from '../progress/attemptActionWords'
+import { waitWords, type WaitWords } from './waitWords'
 import { useState } from 'react'
-import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
+import type { ExternalWork, PlanSnapshotRead as PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
 import { DeliveryStrip } from './DeliveryStrip'
@@ -12,6 +13,10 @@ import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
 import { workSectionHref } from './workViewModel'
 import { coverageGroups, shortSession, unlinkedSessions, type SessionsRead } from './unlinkedSessionsModel'
+
+function WaitLine({ wait }: { wait: WaitWords }) {
+  return <span className="basis-full text-xs text-muted-foreground">{wait.href ? <a href={wait.href}>{wait.text}</a> : wait.text}</span>
+}
 
 /** How many submitted runs show before "Show n more". */
 const SUBMITTED_SHOWN = 8
@@ -48,6 +53,8 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
   const drift = Math.max(0, (now - Date.parse(view.as_of)) / 1000)
   const external = 'external_work_id' in work
   const run = external ? work : work.attempt!
+  const task = external ? undefined : view.tasks.find(t => t.task_id === work.task_id)
+  const wait = task ? waitWords(task, view.explain, now) : undefined
   const heartbeatAge = run.heartbeat_age_s + drift
   const unconfirmed = stale || heartbeatUnconfirmed(run, view, now)
   const node = view.nodes.find(n => n.plan_node_id === work.plan_node_id)
@@ -66,6 +73,7 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
     </span>
     {work.task_id && <span className="basis-full"><DeliveryStrip task={work.task_id} /></span>}
     {!external && <LiveAttemptAction attempt={work.attempt!} now={now} />}
+    {wait?.text && <WaitLine wait={wait} />}
     {!external && <a className="inline-flex min-h-11 items-center text-sm" href={goalHref(work.mission_id, work.task_id)}>Open task</a>}
   </li>
 }
@@ -117,6 +125,8 @@ export function UnlinkedSessions({ read }: { read: SessionsRead }) {
  * as a whole (running attempts, hosts, open goals, release runs) is on Activity.
  */
 export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; stale: boolean; sessions?: SessionsRead }) {
+  const now = useNow()
+  const waiting = view.tasks.filter(t => waitWords(t, view.explain, now).text && !view.working.some(w => !('external_work_id' in w) && w.task_id === t.task_id))
   const [all, setAll] = useState(false)
   const submitted = view.external_work.filter(w => w.state === 'Submitted').sort((a, b) => endedAt(b).localeCompare(endedAt(a)))
   const shown = all ? submitted : submitted.slice(0, SUBMITTED_SHOWN)
@@ -130,6 +140,13 @@ export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; st
     <p className="m-0 text-xs text-muted-foreground">Runtime attempts and registered external work in {roundLabel(view.root)} · Unconfirmed after 60s without a heartbeat.</p>
     {view.working.length === 0 && <p className="m-0 text-sm">{stale ? 'Current activity is Unknown. Last read contained no active work.' : 'No active work in this snapshot.'}</p>}
     {view.working.length > 0 && <ul aria-label="Work now" className="m-0 flex list-none flex-col gap-2 p-0">{view.working.map(work => <WorkRow key={'external_work_id' in work ? work.external_work_id : work.task_id} work={work} view={view} stale={stale} />)}</ul>}
+    {waiting.length > 0 && <div className="flex flex-col gap-2">
+      <h4 className={`m-0 ${caps}`}>Waiting</h4>
+      <ul aria-label="Waiting" className="m-0 flex list-none flex-col gap-2 p-0">{waiting.map(task => <li key={task.task_id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
+        <a href={goalHref(task.mission_id, task.task_id)}>{task.title || task.task_id}</a>
+        <WaitLine wait={waitWords(task, view.explain, now)} />
+      </li>)}</ul>
+    </div>}
     <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5">
       <h3 className={`m-0 ${caps}`}>Recently submitted · {shown.length} of {submitted.length}</h3>
       {submitted.length > 0 && <span className="text-xs text-muted-foreground">verification {[...verification].map(([v, n]) => `${v} on ${n === submitted.length ? 'all' : n}`).join(' · ')}</span>}
