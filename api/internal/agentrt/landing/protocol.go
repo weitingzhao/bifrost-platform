@@ -342,7 +342,12 @@ func (s *State) Apply(e Entry) error {
 	if k == "retry" {
 		root, after := r.String("root"), r.String("after_op")
 		o, exists := s.Operations[after]
-		if !exists || op != after || o.Task != root || s.LatestOperation(root) != after || o.Phase != "failed" || o.Retried || !slices.Contains(RetryableReasons, o.Outcome) {
+		// Conflict retries are emitted only when the controller accepts a repaired
+		// attempt. Keep Owner retry choices unchanged for unrepaired conflicts.
+		reworkedConflict := o.Outcome == "conflict" && r.String("by") == "controller" &&
+			strings.HasPrefix(r.String("reason"), "rework: attempt ") &&
+			strings.HasSuffix(r.String("reason"), " accepted after the replay conflict")
+		if !exists || op != after || o.Task != root || s.LatestOperation(root) != after || o.Phase != "failed" || o.Retried || (!slices.Contains(RetryableReasons, o.Outcome) && !reworkedConflict) {
 			return fmt.Errorf("retry requires latest retryable failure")
 		}
 		o.Retried = true

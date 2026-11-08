@@ -11,8 +11,11 @@ import (
 	"time"
 )
 
+// Serial: FreezeEventClock
 func TestRecoverBatchPushKeepsGreenCIAndOriginalGrant(t *testing.T) { runRecoveryTest(t, false) }
-func TestRecoverBatchPushAfterBoundKeepsGreenCI(t *testing.T)       { runRecoveryTest(t, true) }
+
+// Serial: FreezeEventClock
+func TestRecoverBatchPushAfterBoundKeepsGreenCI(t *testing.T) { runRecoveryTest(t, true) }
 func runRecoveryTest(t *testing.T, bound bool) {
 	c := coresBatch(t, 10, 10)
 	c.coresWaiting(t)
@@ -101,6 +104,7 @@ func runRecoveryTest(t *testing.T, bound bool) {
 	}
 }
 
+// Serial: FreezeEventClock
 func TestRecoveryRecordCannotBeInjected(t *testing.T) {
 	c := coresBatch(t, 10, 10)
 	err := store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
