@@ -9,6 +9,19 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
+// floorFileKindModeAllowed mirrors the infra structural check for existing
+// executable scripts. Both material and the final Git check use the same rule.
+func floorFileKindModeAllowed(repo string, f landing.FloorFile) bool {
+	if f.Kind != "A" && f.Kind != "M" {
+		return false
+	}
+	if f.Mode == "100644" {
+		return true
+	}
+	return repo == "bifrost-trade-infra" && f.Kind == "M" &&
+		strings.HasPrefix(f.Path, "scripts/") && f.OldMode == "100755" && f.Mode == "100755"
+}
+
 // floorPathsOf are a floor grant's pinned files from Git's M0..R in repo,
 // and whether that tree can be granted at all: R one commit on M0, every
 // file added or modified, floor-grantable in repo, and no Secret manifest
@@ -18,7 +31,7 @@ func floorPathsOf(repo string, t landing.FloorTree) ([]GrantFloorPath, bool) {
 	ok := t.OnM0 && len(t.Files) > 0
 	for _, f := range t.Files {
 		entry := rules.FloorEntry(repo, f.Path)
-		if entry == "" || f.Secret || f.Kind != "A" && f.Kind != "M" || f.Mode != "100644" || !grantHex64.MatchString(f.SHA256) {
+		if entry == "" || f.Secret || !floorFileKindModeAllowed(repo, f) || !grantHex64.MatchString(f.SHA256) {
 			ok = false
 			continue
 		}

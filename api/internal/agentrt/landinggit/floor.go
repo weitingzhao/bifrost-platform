@@ -74,7 +74,7 @@ func floorRaw(raw string, blob func(string) ([]byte, error)) ([]landing.FloorFil
 		if len(meta) != 5 || !strings.HasPrefix(meta[0], ":") || fields[i+1] == "" {
 			return nil, errors.New("malformed raw diff")
 		}
-		f := landing.FloorFile{Path: fields[i+1], Kind: meta[4][:1], Mode: meta[1]}
+		f := landing.FloorFile{Path: fields[i+1], Kind: meta[4][:1], OldMode: strings.TrimPrefix(meta[0], ":"), Mode: meta[1]}
 		if f.Kind == "D" {
 			f.Mode = ""
 		} else {

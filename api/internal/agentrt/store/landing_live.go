@@ -546,7 +546,7 @@ func floorTreeStale(repo string, pinned []GrantFloorPath, tree landing.FloorTree
 			return "never-grantable: " + f.Path
 		case !ok:
 			return "extra file: " + f.Path
-		case f.Kind != "A" && f.Kind != "M" || f.Mode != "100644":
+		case !floorFileKindModeAllowed(repo, f):
 			return "change kind or mode: " + f.Path
 		case rules.FloorEntry(repo, f.Path) != p.Entry:
 			return "entry changed: " + f.Path
