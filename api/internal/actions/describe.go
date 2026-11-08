@@ -71,6 +71,7 @@ var notifySafeKeys = map[string][]string{
 	"stg_release_sample_create":   {"env", "revision", "ui_revision", "infra_revision"},
 	"stg_release_sample_finalize": {"env", "run", "uid"},
 	"approve_guardrail_landing":   {"env", "repo", "op", "R", "stg_release"},
+	"recover_batch_landing_push":  {"env", "repo", "op", "R", "M0", "grant_id", "ci_run"},
 	"approve_core_landing":        {"env", "repo", "op", "R", "stg_release"},
 	"approve_floor_landing":       {"env", "repo", "op", "R"},
 	"deploy_agentd":               {"env", "host", "commit", "sha256"},

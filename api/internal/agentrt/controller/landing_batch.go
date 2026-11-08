@@ -663,7 +663,16 @@ func (c *Controller) landBatch(ctx context.Context, src DrillSources, b store.La
 			deadline = a.Deadline
 		}
 	}
-	out := w.PushMain(context.WithoutCancel(ctx), b.R, b.M0, deadline)
+	var out landinggit.PushOutcome
+	if len(b.Members) == 1 {
+		out = w.PushMain(context.WithoutCancel(ctx), b.R, b.M0, deadline)
+	} else if batchWriter, ok := w.(interface {
+		PushBatchMain(context.Context, string, string, time.Time, int) landinggit.PushOutcome
+	}); ok {
+		out = batchWriter.PushBatchMain(context.WithoutCancel(ctx), b.R, b.M0, deadline, len(b.Members))
+	} else {
+		out = landinggit.PushNotSent
+	}
 	outcome := string(out)
 	if out == landinggit.PushNotSent {
 		outcome = string(landinggit.PushUnknown)

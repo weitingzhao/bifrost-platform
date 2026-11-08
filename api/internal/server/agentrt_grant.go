@@ -217,6 +217,12 @@ func (s *Server) landingGrantExecutor(action string) actions.Executor {
 // operation has at most one open request at a time (§5.4, review 694 R-02),
 // whichever of the two actions it is.
 func landingGrantOpenKey(action string, params map[string]any) string {
+	if action == store.RecoverBatchPushAction {
+		if op, ok := params["op"].(string); ok && op != "" {
+			return "landing-push-recovery:" + op
+		}
+		return ""
+	}
 	if !slices.Contains(store.GrantActions, action) {
 		return ""
 	}

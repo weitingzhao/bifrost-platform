@@ -176,6 +176,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	actions.RegisterExecutor(stgrelease.SampleCreateAction, s.stgSampleCreate)
 	actions.RegisterExecutor(stgrelease.SampleFinalizeAction, s.stgSampleFinalize)
+	actions.RegisterExecutor(store.RecoverBatchPushAction, s.pushRecoveryExecutor)
 	for _, action := range store.GrantActions {
 		actions.RegisterExecutor(action, s.landingGrantExecutor(action))
 	}

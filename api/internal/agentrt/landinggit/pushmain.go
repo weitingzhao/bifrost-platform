@@ -47,6 +47,19 @@ const pushOutputLimit = 64 << 10
 // reapDelay before it, so the group's kill and the pipes' drain fit inside.
 // A call with less than that left starts nothing.
 func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Time) PushOutcome {
+	return w.pushMain(ctx, r, m0, deadline, 1)
+}
+
+// PushBatchMain accepts exactly the authorized number of linear replay commits.
+// Single-task pushes retain their stricter one-parent check through PushMain.
+func (w *Workspace) PushBatchMain(ctx context.Context, r, m0 string, deadline time.Time, members int) PushOutcome {
+	if members < 2 {
+		return PushNotSent
+	}
+	return w.pushMain(ctx, r, m0, deadline, members)
+}
+
+func (w *Workspace) pushMain(ctx context.Context, r, m0 string, deadline time.Time, members int) PushOutcome {
 	giveUp := deadline.Add(-reapDelay)
 	if deadline.IsZero() || !time.Now().Before(giveUp) {
 		return PushNotSent // past the intent's deadline: never start (review 660 B-01)
@@ -56,14 +69,24 @@ func (w *Workspace) PushMain(ctx context.Context, r, m0 string, deadline time.Ti
 	}
 	ctx, cancel := context.WithDeadline(ctx, giveUp)
 	defer cancel()
-	// R must be the replay on M0 with M0 its only parent (review 661 B-01):
-	// then a main that moved past M0 can never fast-forward to R. Anything
-	// else is refused before any network.
-	if line, err := w.local(ctx, "rev-list", "--parents", "-n", "1", r); err != nil {
-		return PushNotSent
-	} else if f := strings.Fields(line); len(f) != 2 || f[0] != r || f[1] != m0 {
+	// Walk exactly the authorized linear replay chain. Every commit must
+	// have one parent and the chain must end at M0, never an older ancestor.
+	current := r
+	for i := 0; i < members; i++ {
+		if current == m0 {
+			return PushNotSent
+		}
+		line, err := w.local(ctx, "rev-list", "--parents", "-n", "1", current)
+		f := strings.Fields(line)
+		if err != nil || len(f) != 2 || f[0] != current {
+			return PushNotSent
+		}
+		current = f[1]
+	}
+	if current != m0 {
 		return PushNotSent
 	}
+
 	h, err := w.git.header()
 	if err != nil || ctx.Err() != nil {
 		return PushNotSent

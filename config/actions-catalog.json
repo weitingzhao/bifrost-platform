@@ -27,6 +27,7 @@
     "owner_run_command",
     "plan_manifest",
     "poweroff_compute_node",
+    "recover_batch_landing_push",
     "release_freeze",
     "release_policy_install",
     "release_unfreeze",

@@ -48,6 +48,9 @@ func checkLandingAppend(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) 
 	}
 
 	k := r.String("kind")
+	if k == "push_recovered" && (ev.Actor != "controller" || ev.Stream != landingRepoStream || ctx.Value(pushRecoveryKey{}) != r.String("approval_id")) {
+		return invalid("push recovery requires its approved store execution")
+	}
 	if strings.HasPrefix(k, "s5_") && (ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform") {
 		return fmt.Errorf("S5 records require the platform controller stream")
 	}

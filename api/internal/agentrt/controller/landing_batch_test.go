@@ -102,6 +102,12 @@ func (p batchPusher) PushMain(_ context.Context, r, m0 string, _ time.Time) land
 	p.r.pushes = append(p.r.pushes, r+"<-"+m0)
 	return landinggit.PushOK
 }
+func (p batchPusher) PushBatchMain(ctx context.Context, r, m0 string, deadline time.Time, members int) landinggit.PushOutcome {
+	if members < 2 {
+		return landinggit.PushNotSent
+	}
+	return p.PushMain(ctx, r, m0, deadline)
+}
 func (p batchPusher) Close() error { return nil }
 
 func batchRule(at time.Time) string {

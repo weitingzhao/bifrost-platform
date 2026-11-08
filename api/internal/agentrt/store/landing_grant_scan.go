@@ -72,6 +72,15 @@ func scanLandingStream(ctx context.Context, tx pgx.Tx, stream string) (landingSc
 			}
 			entries = append(entries, landing.Entry{At: at, Record: rec})
 		}
+		if grantsHere && rec.String("kind") == "push_recovered" && rec.String("resume") == "awaiting_grant" {
+			g := byID[rec.String("grant_id")]
+			if g == nil || g.Op != rec.String("op") || g.ConsumedSeq == 0 {
+				return fail(invalid("recovery grant binding"))
+			}
+			g.recoveryPeriods = append(g.recoveryPeriods, g.period())
+			g.ConsumedSeq, g.ConsumedAt, g.ConsumedOp = 0, time.Time{}, ""
+			g.granted = at
+		}
 		if !grantsHere {
 			continue
 		}

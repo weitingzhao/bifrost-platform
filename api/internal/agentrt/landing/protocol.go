@@ -57,6 +57,7 @@ var fields = map[string]string{
 	"prepared": "R M0 committer_date dry_run", "branch_intent": "ref R", "branch_pushed": "ref R",
 	"ci_kick": "try", "ci_seen": "run status R created_at", "ci_rerun": "try",
 	"awaiting_grant": "soft files lines material",
+	"push_recovered": "R M0 grant_id approval_id resume",
 	"main_intent":    "R M0", "main_result": "outcome", "landed": "R", "reverted": "R by",
 	"parked": "why retry_at", "unparked": "", "failed": "why", "reserved": "root",
 	"discarded": "why", "rehearsed": "R", "retry": "root after_op reason by",
@@ -513,6 +514,11 @@ func (s *State) Apply(e Entry) error {
 		if (old.Phase != "branch_pushed" && old.Phase != "awaiting_grant") || old.DryRun || old.CI.String("status") != "Succeeded" || r.String("R") != old.R || r.String("M0") != old.M0 {
 			return bad()
 		}
+	case "push_recovered":
+		if old.DryRun || old.EverLanded || !((old.Phase == "main_result" && old.Outcome == "unknown") || (old.Phase == "failed" && old.Outcome == "bound")) || r.String("R") != old.R || r.String("M0") != old.M0 || !slices.Contains([]string{"awaiting_grant", "branch_pushed"}, r.String("resume")) || r.String("approval_id") == "" || r.String("grant_id") == "" {
+			return bad()
+		}
+		n.Outcome = ""
 	case "main_result":
 		if old.Phase != "main_intent" && !(old.Phase == "main_result" && old.Outcome == "unknown" && r.String("outcome") == "non_ff") {
 			return bad()
@@ -670,6 +676,9 @@ func (s *State) Apply(e Entry) error {
 		n.WaitEndedAt = e.At
 	}
 	n.Phase = k
+	if k == "push_recovered" {
+		n.Phase = r.String("resume")
+	}
 	s.Operations[op] = n
 	return nil
 }

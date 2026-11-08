@@ -468,6 +468,7 @@ func badGrantRecord(name string, v any) string {
 
 // grantView is one grant as the stream has it now.
 type grantView struct {
+	recoveryPeriods []landing.Interval
 	LandingGrant
 	Seq                    int64
 	At                     time.Time
@@ -505,6 +506,7 @@ func (g *grantView) period() landing.Interval {
 func grantPeriods(order []*grantView) map[string][]landing.Interval {
 	out := map[string][]landing.Interval{}
 	for _, g := range order {
+		out[g.Op] = append(out[g.Op], g.recoveryPeriods...)
 		out[g.Op] = append(out[g.Op], g.period())
 	}
 	return out

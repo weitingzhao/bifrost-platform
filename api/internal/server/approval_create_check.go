@@ -31,6 +31,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 		_, err := s.noMergeRequest(params)
 		return err
 	}
+	if action == store.RecoverBatchPushAction {
+		return s.pushRecoveryCreateCheck(ctx, params)
+	}
 	if slices.Contains(store.GrantActions, action) {
 		return s.landingGrantCreateCheck(ctx, action, params)
 	}

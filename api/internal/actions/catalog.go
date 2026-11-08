@@ -470,6 +470,11 @@ var catalog = []Action{
 		Params: landingGrantParams,
 	},
 	{
+		ID: "recover_batch_landing_push", Tier: TierD,
+		Description: "Recover an unsent approved batch once, preserving its exact candidate, original green CI, grant expiry and STG choice. PROD Console only. Refuses changed main, newer operations, revoked/expired grants and active push fences. The workers rerun the normal final authorization gate; this action never pushes or starts CI.",
+		Params:      []Param{{Name: "env", Type: "string", Required: true}, {Name: "repo", Type: "string", Required: true}, {Name: "op", Type: "string", Required: true}, {Name: "R", Type: "string", Required: true}, {Name: "M0", Type: "string", Required: true}, {Name: "grant_id", Type: "string", Required: true}, {Name: "ci_run", Type: "string", Required: true}},
+	},
+	{
 		ID: "approve_core_landing", Tier: TierD,
 		Description: "Permission path change: grant one waiting landing operation whose commit changes a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) the push to main by the lander identity; later approvals are handled by the new code. Other former core paths land on a green landing CI. " +
 			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
