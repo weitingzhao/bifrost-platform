@@ -100,16 +100,22 @@ func TestSupersedeAcceptedTaskRequiresUndeliveredResult(t *testing.T) {
 
 // Serial: FreezeEventClock
 func TestSupersedeAcceptedTaskWaitsForLandingToEnd(t *testing.T) {
-	w, roots, ops, _ := batchWorld(t, 2, true)
-	w.landedNote(t, "M-3", roots[1], commitB, "")
-	var version int
-	ok(t, w.rt.QueryRow(ctx, `SELECT version FROM agentrt.task WHERE task_id=$1`, roots[0]).Scan(&version))
-	req := store.SupersedeRequest{Env: "prod", Reason: "replace an unlanded task", Entries: []store.SupersedeEntry{{Task: roots[0], Version: version, Replacement: roots[1], Commit: commitB}}}
-	if err := store.SupersedeTasks(ctx, w.rt, req, "appr_0123456789abcdef"); err == nil {
-		t.Fatal("cancelled a task with an active landing")
+	for _, terminal := range []string{"failed", "discarded"} {
+		w, roots, ops, _ := batchWorld(t, 2, true)
+		w.landedNote(t, "M-3", roots[1], commitB, "")
+		var version int
+		ok(t, w.rt.QueryRow(ctx, `SELECT version FROM agentrt.task WHERE task_id=$1`, roots[0]).Scan(&version))
+		req := store.SupersedeRequest{Env: "prod", Reason: "replace an unlanded task", Entries: []store.SupersedeEntry{{Task: roots[0], Version: version, Replacement: roots[1], Commit: commitB}}}
+		if err := store.SupersedeTasks(ctx, w.rt, req, "appr_0123456789abcdef"); err == nil {
+			t.Fatal("cancelled a task with an active landing")
+		}
+		reason := "ci_red"
+		if terminal == "discarded" {
+			reason = "main_changed"
+		}
+		ok(t, appendLanding(w, "landing:bifrost-platform", map[string]any{"v": landing.Version, "kind": terminal, "op": ops[0], "why": reason}))
+		ok(t, store.SupersedeTasks(ctx, w.rt, req, "appr_0123456789abcdef"))
 	}
-	ok(t, appendLanding(w, "landing:bifrost-platform", map[string]any{"v": landing.Version, "kind": "failed", "op": ops[0], "why": "ci_red"}))
-	ok(t, store.SupersedeTasks(ctx, w.rt, req, "appr_0123456789abcdef"))
 }
 
 func TestSupersedeTasksRefusesOpenChecks(t *testing.T) {

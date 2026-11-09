@@ -47,6 +47,27 @@ describe('GET /delivery, closed', () => {
 })
 
 describe("a task's stages", () => {
+  it('uses current release evidence and keeps unsettled workloads Unknown', () => {
+    const current = byName('on PROD by current release and live workloads')
+    const unsettled = byName('PROD unknown: current workloads unsettled')
+    expect(taskStages(current.task_id, ok(current)).at(-1)).toEqual({stage: 'on_prod', state: 'reached', at: stageOf(current, 'on_prod').entered_at})
+    expect(taskStages(unsettled.task_id, ok(unsettled)).at(-1)).toMatchObject({stage: 'on_prod', state: 'unknown'})
+  })
+
+  it('accepts verified STG coverage without losing the separate PROD arrival', async () => {
+    const covered = clone(prodSeen)
+    stageOf(covered, 'stg').source = 'stg_coverage'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(covered), { status: 200 })))
+    const read = await fetchTaskDelivery(covered.task_id)
+    expect(read.state).toBe('ok')
+    expect(taskStages(covered.task_id, read).slice(4)).toEqual([
+      { stage: 'on_stg', state: 'reached', at: stageOf(covered, 'stg').left_at },
+      { stage: 'on_prod', state: 'reached', at: stageOf(covered, 'on_prod').entered_at },
+    ])
+    stageOf(covered, 'stg').source = 'unverified_coverage'
+    expect(() => parseDelivery(covered)).toThrow(/stages\[4\].source$/)
+  })
+
   it('reads STG and PROD from their own facts, each with its time', () => {
     const task = prodSeen.task_id
     expect(taskStages(task, ok(prodSeen), timeline)).toEqual([

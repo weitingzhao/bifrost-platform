@@ -111,3 +111,23 @@ func TestDeliveryRoute(t *testing.T) {
 		t.Fatalf("failing cycles %d %v", code, out)
 	}
 }
+
+func TestDeliveryRouteCurrentEvidenceIsServerSupplied(t *testing.T) {
+	pool, _ := world(t)
+	called := false
+	s := server(t, pool, func(a *agentrtapi.API) {
+		a.ProductionDelivery = func(context.Context) store.DeliveryProduction {
+			called = true
+			return store.DeliveryProduction{Reason: "unsettled"}
+		}
+	})
+	code, _ := call(t, s, "viewer", "GET", "delivery?commit=fedcba9876543&production=done", nil)
+	if code != http.StatusNotFound || !called {
+		t.Fatalf("trusted reader not called: status=%d called=%v", code, called)
+	}
+	called = false
+	code, _ = call(t, s, "", "GET", "delivery?commit=fedcba9876543", nil)
+	if code != http.StatusUnauthorized || called {
+		t.Fatal("anonymous request reached release reader")
+	}
+}

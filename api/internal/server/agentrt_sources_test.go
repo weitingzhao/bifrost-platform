@@ -487,3 +487,85 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 		t.Fatalf("a plan change's duplicate: %v", err)
 	}
 }
+
+type productionEvidenceFake struct {
+	fakeCurrent
+	pods    []string
+	podErr  error
+	changed bool
+	calls   int
+}
+
+func (f *productionEvidenceFake) Current(ctx context.Context, lane, env string) (releases.Record, error) {
+	f.calls++
+	r, err := f.fakeCurrent.Current(ctx, lane, env)
+	if f.changed && f.calls > 2 {
+		r.Run += "-new"
+	}
+	return r, err
+}
+func (f *productionEvidenceFake) PodDigests(_ context.Context, _, _, container string) ([]string, error) {
+	if f.podErr != nil || f.pods != nil {
+		return f.pods, f.podErr
+	}
+	return []string{f.fakeCurrent["stg"].Images[container]}, nil
+}
+func TestProductionDeliveryEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*productionEvidenceFake)
+	}{
+		{"valid promotion without PROD image results", nil},
+		{"missing record", func(f *productionEvidenceFake) { delete(f.fakeCurrent, "prod") }},
+		{"wrong version", func(f *productionEvidenceFake) {
+			r := f.fakeCurrent["stg"]
+			r.Revision = sha2
+			r.Repos = map[string]releases.RepoBuild{agentrtDeployRepo: {SHA: sha2}}
+			f.fakeCurrent["stg"] = r
+		}},
+		{"missing digest", func(f *productionEvidenceFake) { delete(f.fakeCurrent["stg"].Images, "platform-console") }},
+		{"empty pods", func(f *productionEvidenceFake) { f.pods = []string{} }},
+		{"drift", func(f *productionEvidenceFake) { f.pods = []string{digestOther} }},
+		{"unsettled", func(f *productionEvidenceFake) { f.podErr = releases.ErrUnsettled }},
+		{"concurrent release", func(f *productionEvidenceFake) { f.changed = true }},
+		{"later STG rebuild", func(f *productionEvidenceFake) {
+			r := f.fakeCurrent["stg"]
+			r.CompletedAt = r.CompletedAt.Add(time.Hour)
+			f.fakeCurrent["stg"] = r
+		}},
+		{"wrong pipeline", func(f *productionEvidenceFake) {
+			r := f.fakeCurrent["prod"]
+			r.Pipeline = "ci-platform"
+			f.fakeCurrent["prod"] = r
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			at := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
+			f := &productionEvidenceFake{fakeCurrent: fakeCurrent{}}
+			for i, env := range []string{"stg", "prod"} {
+				r := platformRec("release-"+env, sha1)
+				r.Env = env
+				r.Revision = sha1
+				r.Pipeline = "bifrost-deliver-platform"
+				if env == "prod" {
+					r.Pipeline += "-prod"
+					r.Images = nil
+				}
+				r.StartedAt = at.Add(time.Duration(i) * 10 * time.Minute)
+				r.CompletedAt = r.StartedAt.Add(time.Minute)
+				f.fakeCurrent[env] = r
+			}
+			if tc.change != nil {
+				tc.change(f)
+			}
+			got := productionDeliveryEvidence(context.Background(), f)
+			if tc.change == nil {
+				if got.Reason != "" || got.Commit != sha1 || !got.CompletedAt.Equal(f.fakeCurrent["prod"].CompletedAt) {
+					t.Fatalf("unexpected evidence: %+v", got)
+				}
+			} else if got.Reason == "" || got.Commit != "" {
+				t.Fatalf("incomplete evidence accepted: %+v", got)
+			}
+		})
+	}
+}

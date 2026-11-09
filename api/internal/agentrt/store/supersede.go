@@ -121,7 +121,7 @@ func SupersedeTasks(ctx context.Context, db DB, r SupersedeRequest, approval str
 					return err
 				}
 				for _, op := range state.Operations {
-					if op.Task == e.Task && op.Phase != "failed" {
+					if op.Task == e.Task && op.Phase != "failed" && op.Phase != "discarded" {
 						return fmt.Errorf("%w: %s has a live or delivered landing", ErrState, e.Task)
 					}
 				}

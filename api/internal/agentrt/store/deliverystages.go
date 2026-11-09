@@ -90,6 +90,15 @@ type DeliveryDeploySeen struct {
 	At     time.Time `json:"at"`
 }
 
+// DeliveryProduction is a current release record validated against matching
+// STG build digests and settled PROD pods. Reason means the read is unknown.
+// It is a read result, not a fabricated deploy_seen event or release gate.
+type DeliveryProduction struct {
+	Commit                 string
+	StartedAt, CompletedAt time.Time
+	Reason                 string
+}
+
 // DeliveryInput is everything FoldDelivery reads.
 type DeliveryInput struct {
 	Attempt DeliveryAttempt
@@ -107,6 +116,7 @@ type DeliveryInput struct {
 	Coverage   *DeliveryRevision
 	Cycles     []ReleaseCycle
 	DeploySeen []DeliveryDeploySeen
+	Production *DeliveryProduction
 }
 
 // deliveryFacts is what the landing entries say.
@@ -291,6 +301,27 @@ func FoldDelivery(in DeliveryInput) []DeliveryStage {
 		unknown[6] = unknown[5]
 	case in.Cycles == nil && in.DeploySeen == nil:
 		unknown[6] = "no release cycles or PROD deploy events given"
+	}
+
+	if observed := in.Production; observed != nil {
+		why := observed.Reason
+		if why == "" && (observed.StartedAt.IsZero() || observed.CompletedAt.IsZero() || observed.CompletedAt.Before(observed.StartedAt)) {
+			why = "current PROD release evidence has incomplete times"
+		}
+		if why == "" && !slices.Contains(carriers, observed.Commit) {
+			why = "current PROD revision is not verified as carrying this change"
+		}
+		if why != "" {
+			*p = DeliveryStage{Stage: p.Stage, Source: "release_record"}
+			*q = DeliveryStage{Stage: q.Stage, Source: "release_record"}
+			unknown[5], unknown[6] = why, why
+			reached[5], reached[6] = false, false
+		} else {
+			unknown[5], unknown[6] = "", ""
+			p.EnteredAt, p.LeftAt, p.Source, p.Reason = observed.StartedAt, observed.CompletedAt, "release_record", ""
+			q.EnteredAt, q.Source = observed.CompletedAt, "release_record"
+			reached[5], reached[6] = true, true
+		}
 	}
 
 	// left_at falls back to the next present stage's entered_at: a stage

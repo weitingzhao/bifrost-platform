@@ -23,6 +23,8 @@ import (
 // lowercase hex prefix) or Task.
 type DeliveryQuery struct {
 	Commit, Task string
+	// Production is supplied by the server's trusted release reader, never URL input.
+	Production *DeliveryProduction
 }
 
 var deliveryCommitPrefix = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
@@ -109,6 +111,9 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 	warnings := []string{}
 	landedResult := ""
 	in := DeliveryInput{Attempt: DeliveryAttempt{TaskID: c.Task, AttemptID: c.Attempt}}
+	if c.Repo == "bifrost-platform" {
+		in.Production = q.Production
+	}
 	var planNode string
 	if c.Task != "" {
 		if err = tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id, '') FROM agentrt.task WHERE task_id = $1`, c.Task).Scan(&planNode); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -186,7 +191,7 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 		}
 	}
 	stages := FoldDelivery(in)
-	if in.Cycles == nil {
+	if in.Cycles == nil && in.Production == nil {
 		for i := range stages {
 			if s := &stages[i]; s.Stage == StageProdRelease || s.Stage == StageOnProd {
 				s.State, s.Reason, s.WaitsOn = StageUnknown, "no release cycles given", ""

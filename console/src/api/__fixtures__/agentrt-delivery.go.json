@@ -264,6 +264,143 @@
     "task_id": "t_01M6V8RVAQR3R8ZEH3FQ04ZF6T",
     "warnings": []
    }
+  },
+  {
+   "name": "on PROD by current release and live workloads",
+   "query": "task=t_01M6ZJEHE5PQY8PPZFSBMZA09T",
+   "response": {
+    "as_of": "2026-11-09T07:13:04.747511Z",
+    "attempt_id": "a_01M6ZJEHEVQ4TVQYEE9GAYBZ4A",
+    "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
+    "operation": "land:t_01M6ZJEHE5PQY8PPZFSBMZA09T:1",
+    "plan_node_id": "R2:2.1-2",
+    "repo": "bifrost-platform",
+    "schema": "agentrt.delivery_response/v1",
+    "stages": [
+     {
+      "stage": "handed_in",
+      "state": "done",
+      "entered_at": "2026-11-09T01:13:04.49667-06:00",
+      "left_at": "2026-11-08T00:28:23-06:00",
+      "actor": "exec:cursor",
+      "actor_role": "executor",
+      "source": "attempt"
+     },
+     {
+      "stage": "landing_ci",
+      "state": "done",
+      "entered_at": "2026-11-08T00:28:23-06:00",
+      "left_at": "2026-11-08T00:29:03-06:00",
+      "source": "landing"
+     },
+     {
+      "stage": "owner_wait",
+      "state": "not_reached",
+      "reason": "no grant needed"
+     },
+     {
+      "stage": "on_main",
+      "state": "done",
+      "entered_at": "2026-11-08T00:29:33-06:00",
+      "left_at": "2026-11-08T00:29:43-06:00",
+      "actor": "controller",
+      "actor_role": "pusher",
+      "source": "landing"
+     },
+     {
+      "stage": "stg",
+      "state": "done",
+      "entered_at": "2026-11-08T00:29:43-06:00",
+      "left_at": "2026-11-08T00:30:23-06:00",
+      "source": "landing"
+     },
+     {
+      "stage": "prod_release",
+      "state": "done",
+      "entered_at": "2026-11-08T06:28:33Z",
+      "left_at": "2026-11-08T06:29:33Z",
+      "source": "release_record"
+     },
+     {
+      "stage": "on_prod",
+      "state": "done",
+      "entered_at": "2026-11-08T06:29:33Z",
+      "source": "release_record"
+     }
+    ],
+    "task_id": "t_01M6ZJEHE5PQY8PPZFSBMZA09T",
+    "warnings": [
+     "the release cycles were not read; the PROD stages are unknown"
+    ]
+   }
+  },
+  {
+   "name": "PROD unknown: current workloads unsettled",
+   "query": "task=t_01M6ZJEHE5PQY8PPZFSBMZA09T",
+   "response": {
+    "as_of": "2026-11-09T07:13:04.751642Z",
+    "attempt_id": "a_01M6ZJEHEVQ4TVQYEE9GAYBZ4A",
+    "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
+    "operation": "land:t_01M6ZJEHE5PQY8PPZFSBMZA09T:1",
+    "plan_node_id": "R2:2.1-2",
+    "repo": "bifrost-platform",
+    "schema": "agentrt.delivery_response/v1",
+    "stages": [
+     {
+      "stage": "handed_in",
+      "state": "done",
+      "entered_at": "2026-11-09T01:13:04.49667-06:00",
+      "left_at": "2026-11-08T00:28:23-06:00",
+      "actor": "exec:cursor",
+      "actor_role": "executor",
+      "source": "attempt"
+     },
+     {
+      "stage": "landing_ci",
+      "state": "done",
+      "entered_at": "2026-11-08T00:28:23-06:00",
+      "left_at": "2026-11-08T00:29:03-06:00",
+      "source": "landing"
+     },
+     {
+      "stage": "owner_wait",
+      "state": "not_reached",
+      "reason": "no grant needed"
+     },
+     {
+      "stage": "on_main",
+      "state": "done",
+      "entered_at": "2026-11-08T00:29:33-06:00",
+      "left_at": "2026-11-08T00:29:43-06:00",
+      "actor": "controller",
+      "actor_role": "pusher",
+      "source": "landing"
+     },
+     {
+      "stage": "stg",
+      "state": "done",
+      "entered_at": "2026-11-08T00:29:43-06:00",
+      "left_at": "2026-11-08T00:30:23-06:00",
+      "source": "landing"
+     },
+     {
+      "stage": "prod_release",
+      "state": "unknown",
+      "reason": "PROD workloads are unavailable or unsettled",
+      "source": "release_record"
+     },
+     {
+      "stage": "on_prod",
+      "state": "unknown",
+      "reason": "PROD workloads are unavailable or unsettled",
+      "source": "release_record"
+     }
+    ],
+    "task_id": "t_01M6ZJEHE5PQY8PPZFSBMZA09T",
+    "warnings": [
+     "the release cycles were not read; the PROD stages are unknown"
+    ]
+   }
   }
  ]
 }

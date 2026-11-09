@@ -95,6 +95,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 	}
 	s.agentRuntime = rt
+	if s.releases != nil && s.releases.Service() != nil {
+		rt.api.ProductionDelivery = func(ctx context.Context) store.DeliveryProduction {
+			return productionDeliveryEvidence(ctx, s.releases.Service())
+		}
+	}
 	if s.delivery != nil {
 		rt.api.ConfigurationBoundaries = s.delivery.ConfigurationBoundaries
 	}

@@ -288,3 +288,26 @@ func TestDeliveryUsesExactSTGCoverageThroughPROD(t *testing.T) {
 		t.Fatal("coverage provenance lost")
 	}
 }
+
+func TestFoldDeliveryCurrentProductionEvidence(t *testing.T) {
+	in := deliveryFull()
+	in.Cycles = nil
+	in.DeploySeen = nil
+	in.Production = &DeliveryProduction{Commit: deliveryP1, StartedAt: deliveryAt(100), CompletedAt: deliveryAt(110)}
+	st := FoldDelivery(in)
+	if st[5].State != "done" || st[6].State != "done" || st[6].Source != "release_record" || !st[6].EnteredAt.Equal(deliveryAt(110)) {
+		t.Fatalf("current evidence not used: %+v", st)
+	}
+	for _, observed := range []DeliveryProduction{
+		{Reason: "unsettled"},
+		{Commit: deliveryP2, StartedAt: deliveryAt(100), CompletedAt: deliveryAt(110)},
+		{Commit: deliveryP1},
+	} {
+		in = deliveryFull() // old success must not mask a current unknown
+		in.Production = &observed
+		st = FoldDelivery(in)
+		if st[5].State != "unknown" || st[6].State != "unknown" || !st[6].EnteredAt.IsZero() {
+			t.Fatalf("unsafe current evidence: %+v", st)
+		}
+	}
+}

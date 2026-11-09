@@ -25,7 +25,7 @@ export const DELIVERY_ORDER = ['handed_in', 'landing_ci', 'owner_wait', 'on_main
 const stage = object({
   stage: one(...DELIVERY_ORDER), state: one('done', 'current', 'not_reached', 'unknown'),
   entered_at: optional(timestamp), left_at: optional(timestamp), actor: optional(str), actor_role: optional(one('executor', 'approver', 'pusher', 'releaser')),
-  waits_on: optional(str), reason: optional(str), source: optional(one('attempt', 'landing', 'grant', 'release_cycle', 'deploy_seen')),
+  waits_on: optional(str), reason: optional(str), source: optional(one('attempt', 'landing', 'grant', 'release_cycle', 'deploy_seen', 'stg_coverage', 'release_record')),
 })
 const delivery = object({
   schema: one('agentrt.delivery_response/v1'), commit: str, task_id: str, attempt_id: str, plan_node_id: str, repo: str, operation: str,

@@ -100,6 +100,10 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 	if a.ReleaseCycles != nil {
 		cycles, cyclesErr = a.ReleaseCycles(r.Context())
 	}
+	if a.ProductionDelivery != nil {
+		observed := a.ProductionDelivery(r.Context())
+		q.Production = &observed
+	}
 	out, err := store.ReadDelivery(r.Context(), a.DB, q, cycles, cyclesErr)
 	if err != nil {
 		switch {

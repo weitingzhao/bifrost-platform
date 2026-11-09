@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"reflect"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -255,4 +257,56 @@ func within[T any](ctx context.Context, reads *boundedReads, read func() (T, boo
 	case <-ctx.Done():
 		return zero, false, ctx.Err()
 	}
+}
+
+// productionDeliveryEvidence joins existing release records with live settled
+// workloads. It writes no legacy cycle or synthetic deployment event.
+func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) store.DeliveryProduction {
+	unknown := func(reason string) store.DeliveryProduction { return store.DeliveryProduction{Reason: reason} }
+	prod, err := rel.Current(ctx, agentrtDeployLane, "prod")
+	if err != nil {
+		return unknown("current PROD release is unavailable or unsettled")
+	}
+	stg, err := rel.Current(ctx, agentrtDeployLane, "stg")
+	if err != nil {
+		return unknown("matching STG release is unavailable or unsettled")
+	}
+	sha := prod.Repos[agentrtDeployRepo].SHA
+	for env, rec := range map[string]releases.Record{"prod": prod, "stg": stg} {
+		pipeline := "bifrost-deliver-platform"
+		if env == "prod" {
+			pipeline += "-prod"
+		}
+		if rec.Run == "" || rec.Lane != agentrtDeployLane || rec.Env != env || !rec.Deploys || rec.Pipeline != pipeline ||
+			!regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(rec.Repos[agentrtDeployRepo].SHA) || rec.Revision != rec.Repos[agentrtDeployRepo].SHA ||
+			rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() || rec.CompletedAt.Before(rec.StartedAt) {
+			return unknown("release identity or completion evidence is incomplete")
+		}
+	}
+	if stg.Repos[agentrtDeployRepo].SHA != sha || stg.CompletedAt.After(prod.StartedAt) {
+		return unknown("current STG evidence does not match the promoted PROD revision")
+	}
+	for _, w := range agentrtWorkloads {
+		expected := stg.Images[w.image]
+		if !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(expected) {
+			return unknown("matching STG image digest is missing")
+		}
+		digests, err := rel.PodDigests(ctx, "bifrost-platform-prod", w.deployment, w.container)
+		if err != nil || len(digests) == 0 {
+			return unknown("PROD workloads are unavailable or unsettled")
+		}
+		for _, digest := range digests {
+			if digest != expected {
+				return unknown("PROD workload digest differs from the matching STG release")
+			}
+		}
+	}
+	// Refuse a read spanning a concurrent release, including same-commit rebuilds.
+	for env, before := range map[string]releases.Record{"prod": prod, "stg": stg} {
+		after, err := rel.Current(ctx, agentrtDeployLane, env)
+		if err != nil || !reflect.DeepEqual(before, after) {
+			return unknown("release evidence changed while checking PROD workloads")
+		}
+	}
+	return store.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
 }

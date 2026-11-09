@@ -167,6 +167,18 @@ func TestConsoleDeliveryFixtures(t *testing.T) {
 		ok(t, err)
 		delivery.Cases = append(delivery.Cases, consoleFixtureCase{Name: d.name, Query: "task=" + d.task, Response: encode(out)})
 	}
+
+	for _, item := range []struct {
+		name     string
+		evidence store.DeliveryProduction
+	}{
+		{"on PROD by current release and live workloads", store.DeliveryProduction{Commit: consoleFixtureStgP, StartedAt: deployed.Add(-2 * time.Minute), CompletedAt: deployed.Add(-time.Minute)}},
+		{"PROD unknown: current workloads unsettled", store.DeliveryProduction{Reason: "PROD workloads are unavailable or unsettled"}},
+	} {
+		out, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Task: prod, Production: &item.evidence}, nil, nil)
+		ok(t, err)
+		delivery.Cases = append(delivery.Cases, consoleFixtureCase{Name: item.name, Query: "task=" + prod, Response: encode(out)})
+	}
 	var timeline consoleFixture
 	for _, q := range []struct{ name, node string }{{"round", ""}, {"one step", s2}} {
 		out, err := store.ReadRoundTimeline(ctx, w.rt, root, q.node)
