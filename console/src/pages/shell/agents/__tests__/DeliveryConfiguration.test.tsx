@@ -14,6 +14,16 @@ const preview = { boundary_id: 'ci.platform.go_timeout', requested_value: '30m',
 const response = (body: unknown) => new Response(JSON.stringify(body))
 function renderPage() { const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); render(<QueryClientProvider client={client}><DeliveryConfiguration canSubmit /></QueryClientProvider>) }
 
+it('explains unchanged values without sending a preview or a goal', async () => {
+  vi.mocked(authedFetch).mockResolvedValue(response(view))
+  renderPage()
+  fireEvent.click(await screen.findByRole('button', { name: 'Propose change' }))
+  expect(screen.getByRole('button', { name: 'Preview configuration change' })).toBeDisabled()
+  expect(screen.getByText(/Enter a different value/)).toBeInTheDocument()
+  expect(authedFetch).toHaveBeenCalledTimes(1)
+  expect(submitRuntimeGoal).not.toHaveBeenCalled()
+})
+
 it('shows drift without writing and rechecks the source before creating one normal goal', async () => {
   vi.mocked(authedFetch).mockImplementation(async (_prefix, url) => response(String(url).includes('key=') ? { ...view, preview } : view))
   vi.mocked(submitRuntimeGoal).mockResolvedValue({ mission_id: 'M-999', mission_state: 'proposed', waiting: '', task_id: 't', repo: 'bifrost-trade-infra', repos: ['bifrost-trade-infra'], base_commit: 'base1', spec_artifact_id: 'a' })

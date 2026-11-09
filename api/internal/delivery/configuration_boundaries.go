@@ -33,6 +33,7 @@ var configurationBoundaries = []configBoundary{
 }
 
 var goTimeout = regexp.MustCompile(`-timeout=([0-9]+(?:\.[0-9]+)?[a-z]+)`)
+var sharedGoTimeout = regexp.MustCompile(`(?m)^\s*export BIFROST_GO_TEST_TIMEOUT=([^\s]+)\s*$`)
 
 // configNode accepts only a registry selector. Array members are selected by
 // name, not their incidental position; a missing or duplicated member refuses.
@@ -84,6 +85,20 @@ func (b configBoundary) read(text []byte) (string, error) {
 	}
 	if !b.scriptTimeout {
 		return n.Value, nil
+	}
+	shared := sharedGoTimeout.FindAllStringSubmatch(n.Value, -1)
+	if len(shared) > 0 {
+		if len(shared) != 1 || strings.Count(n.Value, "-timeout=") != strings.Count(n.Value, `-timeout="${BIFROST_GO_TEST_TIMEOUT}"`) {
+			return "", fmt.Errorf("Go test timeout sources conflict")
+		}
+		value := shared[0][1]
+		if err := b.validate(value, nil); err != nil {
+			return "", err
+		}
+		return value, nil
+	}
+	if strings.Contains(n.Value, "scripts/ci/test_api_scoped.sh") {
+		return "", fmt.Errorf("scoped tests have no shared timeout; literal fallback values do not establish the effective timeout")
 	}
 	matches := goTimeout.FindAllStringSubmatch(n.Value, -1)
 	if len(matches) == 0 {

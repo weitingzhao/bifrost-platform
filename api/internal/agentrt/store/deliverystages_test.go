@@ -261,3 +261,30 @@ func TestFoldDeliveryCyclesMissingIsUnknown(t *testing.T) {
 		t.Errorf("on_main = %+v", st[3])
 	}
 }
+
+func TestDeliveryUsesExactSTGCoverageThroughPROD(t *testing.T) {
+	t.Parallel()
+	in := deliveryFull()
+	in.Entries = in.Entries[:9] // landed, without legacy STG records
+	member := StgMemberKey{Root: "task", Op: "operation", R: deliveryP0}
+	state := StgState{
+		Covers:   map[StgCoverKey]StgEvent{{Evidence: "run", Member: member}: {Seq: 3, At: deliveryAt(90)}},
+		Evidence: map[string]StgEvent{"run": {Seq: 2, At: deliveryAt(81), Record: StgRecord{"P": deliveryP1}}},
+	}
+	if deliveryCoverage(state, StgMemberKey{Root: "other", Op: member.Op, R: member.R}) != nil {
+		t.Fatal("another task inherited coverage")
+	}
+	if deliveryCoverage(state, StgMemberKey{Root: member.Root, Op: member.Op, R: deliveryP2}) != nil {
+		t.Fatal("another result inherited coverage")
+	}
+	in.Coverage = deliveryCoverage(state, member)
+	stages := FoldDelivery(in)
+	for _, stage := range stages {
+		if stage.State != StageDone {
+			t.Fatalf("%s: %s", stage.Stage, stage.State)
+		}
+	}
+	if stages[4].Source != "stg_coverage" {
+		t.Fatal("coverage provenance lost")
+	}
+}

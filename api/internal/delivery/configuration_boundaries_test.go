@@ -58,6 +58,23 @@ func TestConfigurationBoundarySelectors(t *testing.T) {
 	}
 }
 
+func TestConfigurationSharedTimeoutAndLegacyMismatch(t *testing.T) {
+	b := configurationBoundaries[0]
+	legacy := strings.Replace(boundaryTask, "go test ./b -timeout=900s", "bash scripts/ci/test_api_scoped.sh base head", 1)
+	if _, err := b.read([]byte(legacy)); err == nil {
+		t.Fatal("literal fallback must not represent a separately configured scoped path")
+	}
+	shared := strings.Replace(boundaryTask, "      go test ./a", "      export BIFROST_GO_TEST_TIMEOUT=1800s\n      go test ./a", 1)
+	shared = strings.ReplaceAll(shared, "-timeout=900s", `-timeout="${BIFROST_GO_TEST_TIMEOUT}"`)
+	if value, err := b.read([]byte(shared)); err != nil || value != "1800s" {
+		t.Fatal(value, err)
+	}
+	conflict := strings.Replace(shared, `-timeout="${BIFROST_GO_TEST_TIMEOUT}"`, "-timeout=900s", 1)
+	if _, err := b.read([]byte(conflict)); err == nil {
+		t.Fatal("a fallback using another timeout must fail the shared-value read")
+	}
+}
+
 func TestConfigurationReadAndPreviewNeverWrite(t *testing.T) {
 	gitea := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {

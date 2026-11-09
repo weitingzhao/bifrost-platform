@@ -102,7 +102,9 @@ type DeliveryInput struct {
 	Pusher string
 	// Verified, Cycles and DeploySeen: nil when the source was not read; an
 	// empty non-nil slice when it was read and holds nothing.
-	Verified   []DeliveryRevision
+	Verified []DeliveryRevision
+	// Coverage is a validated STG covers record for this exact landed result.
+	Coverage   *DeliveryRevision
 	Cycles     []ReleaseCycle
 	DeploySeen []DeliveryDeploySeen
 }
@@ -177,6 +179,9 @@ func deliveryFactsOf(entries []landing.Entry) deliveryFacts {
 // FoldDelivery gives the seven stages of in's change, in order.
 func FoldDelivery(in DeliveryInput) []DeliveryStage {
 	f := deliveryFactsOf(in.Entries)
+	if in.Coverage != nil && f.stgVerified.IsZero() {
+		f.stgVerified, f.carried = in.Coverage.At, in.Coverage.P
+	}
 	st := make([]DeliveryStage, len(DeliveryStageOrder))
 	for i, name := range DeliveryStageOrder {
 		st[i] = DeliveryStage{Stage: name}
@@ -222,6 +227,9 @@ func FoldDelivery(in DeliveryInput) []DeliveryStage {
 
 	s := &st[4]
 	s.EnteredAt, s.LeftAt, s.WaitsOn, s.Source = f.stgPending, f.stgVerified, "STG verification", "landing"
+	if in.Coverage != nil && s.EnteredAt.IsZero() {
+		s.EnteredAt, s.Source = in.Coverage.At, "stg_coverage"
+	}
 	reached[4] = !f.stgVerified.IsZero()
 	// on_main ends when STG takes the change up.
 	reached[3] = !f.landed.IsZero() && (!f.stgPending.IsZero() || reached[4])

@@ -58,3 +58,14 @@ it('blocks submission from a non-PROD seat', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Preview and validate' })).toBeDisabled())
   expect(ruleRequest).not.toHaveBeenCalled()
 })
+
+it('separates boundary categories without creating changes', async () => {
+  setup()
+  await screen.findByRole('region', { name: 'Runtime rules' })
+  expect(screen.queryByRole('region', { name: 'Resource observations' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Resources & quota' }))
+  expect(screen.getByRole('region', { name: 'Resource observations' })).toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Runtime rules' })).not.toBeInTheDocument()
+  expect(ruleRequest).not.toHaveBeenCalled()
+  expect(createApprovalRequest).not.toHaveBeenCalled()
+})

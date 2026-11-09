@@ -49,6 +49,13 @@ func manualRunsNeeded(s store.StgState) (bool, time.Time) {
 		return true, time.Time{}
 	}
 	at := store.StgDeployedAt(s, base.String("evidence"))
+	// A recovery delivery can succeed while preparation is stuck before a
+	// blocker is recorded. Observe it without starting another delivery.
+	for _, b := range s.Batches {
+		if b.Phase == "OPEN" && b.Selected.Seq > 0 && b.Selected.Record.String("P") != base.String("P") {
+			return true, at
+		}
+	}
 	for _, b := range s.Blocks {
 		if b.IsOpen() && slices.Contains(store.StgManualRunCauses, b.Opened.Record.String("why")) {
 			return true, at

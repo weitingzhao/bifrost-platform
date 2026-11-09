@@ -107,6 +107,7 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 	}
 
 	warnings := []string{}
+	landedResult := ""
 	in := DeliveryInput{Attempt: DeliveryAttempt{TaskID: c.Task, AttemptID: c.Attempt}}
 	var planNode string
 	if c.Task != "" {
@@ -135,6 +136,11 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 			return nil, err
 		}
 		in.Entries = deliveryEntries(scan.entries, c.Op)
+		for _, e := range in.Entries {
+			if e.Record.String("op") == c.Op && e.Record.String("kind") == "landed" {
+				landedResult = e.Record.String("R")
+			}
+		}
 		ev, found, err := LandingGrantEvidence(ctx, tx, c.Repo, c.Op)
 		if err != nil {
 			return nil, err
@@ -165,6 +171,7 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 		warnings = append(warnings, "the STG release stream could not be read: "+err.Error())
 	} else {
 		in.Verified = deliveryVerified(s)
+		in.Coverage = deliveryCoverage(s, StgMemberKey{Root: c.Task, Op: c.Op, R: landedResult})
 	}
 
 	switch {
@@ -323,6 +330,11 @@ func deliveryVerified(s StgState) []DeliveryRevision {
 		seq int64
 	}
 	var all []verified
+	for id, e := range s.Evidence {
+		if p, at := e.Record.String("P"), StgDeployedAt(s, id); e.Record.String("source") == "external" && p != "" && !at.IsZero() {
+			all = append(all, verified{DeliveryRevision{P: p, At: at}, e.Seq})
+		}
+	}
 	for _, b := range s.Batches {
 		for _, t := range b.Tries {
 			if t != nil && t.Verify.Seq > 0 && t.Verify.Record.String("outcome") == "verified" && t.Verify.Record.String("P") != "" {
@@ -344,6 +356,29 @@ func deliveryVerified(s StgState) []DeliveryRevision {
 	out := make([]DeliveryRevision, 0, len(all))
 	for _, v := range all {
 		out = append(out, v.DeliveryRevision)
+	}
+	return out
+}
+
+// Only the fold's validated covers relation establishes that this exact
+// task/result was delivered; a matching current revision alone does not.
+func deliveryCoverage(s StgState, member StgMemberKey) *DeliveryRevision {
+	var out *DeliveryRevision
+	for key, cover := range s.Covers {
+		if key.Member != member {
+			continue
+		}
+		e := s.Evidence[key.Evidence]
+		if e.Seq == 0 || e.Record.String("P") == "" {
+			continue
+		}
+		at := StgDeployedAt(s, key.Evidence)
+		if at.IsZero() {
+			at = cover.At
+		}
+		if out == nil || at.Before(out.At) {
+			out = &DeliveryRevision{P: e.Record.String("P"), At: at}
+		}
 	}
 	return out
 }

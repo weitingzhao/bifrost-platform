@@ -9,6 +9,7 @@ done
 cd "$root/api"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+test_timeout=${BIFROST_GO_TEST_TIMEOUT:-1800s}
 scope=full
 packages=
 store_run=
@@ -29,7 +30,7 @@ if [[ -n ${API_SCOPE_RESULT:-} ]]; then printf '%s' "$scope" > "$API_SCOPE_RESUL
 printf 'scope=%s\npackages=%s\nstore_run=%s\nguard_packages=%s\nguard_run=%s\nwhy=%s\n' "$scope" "$packages" "$store_run" "$guard_packages" "$guard_run" "$why"
 status=0
 run_tests() {
-  go test -json -count=1 -timeout=1500s "$@" > "$tmp/part" 2>&1 || status=1
+  go test -json -count=1 -timeout="$test_timeout" "$@" > "$tmp/part" 2>&1 || status=1
   cat "$tmp/part"
   cat "$tmp/part" >> "$tmp/events"
 }
@@ -98,7 +99,7 @@ PY
     retry_status=0
     : > "$tmp/retry"
     while read -r pkg pattern; do
-      go test -json -count=1 -timeout=1500s "$pkg" -run "$pattern" >> "$tmp/retry" 2>&1 || retry_status=1
+      go test -json -count=1 -timeout="$test_timeout" "$pkg" -run "$pattern" >> "$tmp/retry" 2>&1 || retry_status=1
     done <<< "$retry_plan"
     cat "$tmp/retry"
     if (( retry_status == 0 )); then

@@ -462,6 +462,21 @@ func TestConfirmNumberForTierD(t *testing.T) {
 	}
 }
 
+func TestCapacityApprovalRequiresNumberBeforeExecution(t *testing.T) {
+	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
+	rec := Approval{Action: "agentrt_rule_approve", Tier: "D", Number: 395}
+	if got := svc.checkConfirm(rec, "console", nil); got == nil || got.Status != http.StatusBadRequest {
+		t.Fatal("missing number must fail before approval execution", got)
+	}
+	wrong := 394
+	if got := svc.checkConfirm(rec, "console", &wrong); got == nil || got.Status != http.StatusConflict {
+		t.Fatal("wrong number accepted", got)
+	}
+	if got := svc.checkConfirm(rec, "console", &rec.Number); got != nil {
+		t.Fatal("correct number refused", got)
+	}
+}
+
 // Owner 2026-10-10 (ADR §5): tier D is approved on Console only. A chat
 // approval is refused and leaves the request pending; phone and console are
 // unchanged, and chat still approves below tier D.

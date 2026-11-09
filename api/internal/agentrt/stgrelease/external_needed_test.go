@@ -69,6 +69,36 @@ func TestExternalNotNeededReadsNoRuns(t *testing.T) {
 	}
 }
 
+// An OPEN batch may fail before recording a blocker (for example when its
+// historical Git baseline cannot be read). A successful normal delivery must
+// still be discovered; observing it must not send another deployment.
+func TestExternalOpenBatchDiscoversSuccessfulRecovery(t *testing.T) {
+	t.Parallel()
+	c, l, r, _ := controlFixture(t, "Succeeded")
+	l.entries = l.entries[:4] // baseline, opened, p_selected, ci_accepted
+	x := manualRuns(t, c, l, r)
+	l.clock.Step(time.Minute)
+	if needed, _ := manualRunsNeeded(l.state(t)); !needed {
+		t.Fatal("open batch must observe newer manual delivery without a blocker")
+	}
+	externalPass(t, c)
+	s := l.state(t)
+	if x.observations != 1 || s.Evidence["cluster/cicd/after-uid"].Seq == 0 {
+		t.Fatal("successful recovery was not recorded")
+	}
+	if base, ok := store.StgTrustedBaseline(s); !ok || base.String("P") != sha("a") {
+		t.Fatal("new deployed baseline not adopted", base)
+	}
+	if needed, _ := manualRunsNeeded(s); needed {
+		t.Fatal("same selected revision must not keep scanning after observation")
+	}
+	before := s.LastSeq
+	externalPass(t, c)
+	if x.lists != 1 || x.observations != 1 || l.state(t).LastSeq != before || s.Batches[leaseBatch].Try != 0 {
+		t.Fatal("repeated observation or deployment started")
+	}
+}
+
 // A baseline_moved block waits on a manual run: one created after the
 // baseline is archived and becomes the trusted baseline; one created before
 // it is never observed.

@@ -10,12 +10,21 @@ import { BoundaryTaskCheck } from './BoundaryTaskCheck'
 const field = 'w-full rounded border border-[var(--table-rule)] bg-transparent p-2 text-sm'
 const button = 'min-h-11 rounded border border-[var(--table-rule)] px-3 text-sm disabled:opacity-50'
 const cell = 'border-b border-[var(--table-rule)] p-2 text-left align-top text-sm'
+const sections = [['rules', 'Rules & allowances'], ['configuration', 'CI configuration'], ['resources', 'Resources & quota'], ['task', 'Task checks'], ['limits', 'Code limits']] as const
+type Section = typeof sections[number][0]
+const ruleLabel = (id: string) => {
+  if (id.startsWith('job:')) return `Role · ${id.slice(4).replaceAll('_', ' ')}`
+  const labels: Record<string, string> = { concurrency: 'Capacity · concurrent work', 'capability-facts': 'Permissions · executor capabilities', 'intake-gates': 'Intake · acceptance gates', 'plan-standing': 'Planning · standing authority', tuning: 'Runtime · scheduling and retries' }
+  const families: Record<string, string> = { budget: 'Budget & quota', landing: 'Delivery · change allowances', routing: 'Assignment · executor routing', 'standing-envelope': 'Permissions · standing authority' }
+  return labels[id] ?? families[id.split(':')[0]] ?? id
+}
 const textOf = (value: unknown) => JSON.stringify(value, null, 2)
 
 /** Rules remain on the server. This page never treats a local edit or a pending card as an effective policy. */
 export function DeliveryBoundaries() {
   const query = useQuery({ queryKey: ['delivery-boundaries'], queryFn: ({ signal }) => readBoundaries(signal), refetchInterval: 30_000 })
   const seat = useQuery({ queryKey: ['delivery-boundaries-seat'], queryFn: fetchSelfHealth })
+  const [section, setSection] = useState<Section>('rules')
   const [selected, select] = useState<string | null>(null)
   const data = query.data
   const rule = data?.rules.find(row => row.rule_id === selected)
@@ -25,35 +34,40 @@ export function DeliveryBoundaries() {
     <div className="flex flex-wrap items-center gap-3"><button className={button} onClick={() => void query.refetch()} disabled={query.isFetching}>Refresh effective rules</button>
       <span className="text-sm text-muted-foreground">{data ? `Database snapshot: ${data.as_of}` : 'No snapshot yet'}</span></div>
     {query.error && <p role="alert">{query.error.message}</p>}
+    <nav aria-label="Boundary categories" className="flex flex-wrap gap-2 border-b border-[var(--table-rule)] pb-3">
+      {sections.map(([id, label]) => <button key={id} className={`${button} ${section === id ? 'bg-secondary font-semibold' : ''}`} aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}
+    </nav>
     {data && <>
-      <section className="panel-elevated p-3" aria-label="Coverage">
+      <details className="panel-elevated p-3" aria-label="Coverage"><summary className="cursor-pointer font-medium">Sources, coverage & unknowns</summary>
         <h3>Coverage and unknowns</h3><ul>{data.unknown.map(note => <li key={note}>{note}</li>)}</ul>
         <p>Configured disk floor: {data.disk_floor_bytes.toLocaleString()} bytes. Source: API runtime configuration, falling back to store.DefaultDiskFloor. Deployment configuration change required; no rule editor exists for this value.</p>
-      </section>
-      <section className="panel-elevated p-3" aria-label="Runtime rules">
-        <h3>Rules</h3><p>Changes create a new version. Preview identifies the existing authorization path. A pending request has no effect.</p>
-        <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Rule', 'Effective version', 'Latest version', 'Status', 'Action'].map(label => <th key={label} className={cell}>{label}</th>)}</tr></thead>
-          <tbody>{data.rules.map(row => <tr key={row.rule_id}><th className={cell}>{row.rule_id}</th><td className={cell}>{String(row.in_force?.rule_version ?? 'None')}</td><td className={cell}>{String(row.latest?.rule_version ?? 'None')}</td><td className={cell}>{row.status}<br />{String(row.in_force?.expires_at ?? '')}</td><td className={cell}><button className={button} disabled={query.isError || !row.draft} onClick={() => select(row.rule_id)}>Inspect / edit</button></td></tr>)}</tbody></table></div>
-      </section>
+      </details>
+      {section === 'rules' && <>
       {rule && <RuleEditor key={`${rule.rule_id}:${rule.latest?.rule_version ?? 0}`} rule={rule} unavailable={query.isError || seat.isError || seat.data?.viewer_env !== 'prod'} refresh={() => query.refetch()} />}
+      <section className="panel-elevated p-3" aria-label="Runtime rules">
+        <h3 className="text-base font-semibold">Rules & allowances</h3><p>Changes create a new version. Preview identifies the existing authorization path. A pending request has no effect.</p>
+        <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Rule', 'Effective version', 'Latest version', 'Status', 'Action'].map(label => <th key={label} className={cell}>{label}</th>)}</tr></thead>
+          <tbody>{data.rules.map(row => <tr key={row.rule_id}><th className={cell}>{ruleLabel(row.rule_id)}<span className="block font-mono text-xs font-normal text-muted-foreground">{row.rule_id}</span></th><td className={cell}>{String(row.in_force?.rule_version ?? 'None')}</td><td className={cell}>{String(row.latest?.rule_version ?? 'None')}</td><td className={cell}>{row.status}<br />{String(row.in_force?.expires_at ?? '')}</td><td className={cell}><button className={button} disabled={query.isError || !row.draft} onClick={() => select(row.rule_id)}>Inspect / edit</button></td></tr>)}</tbody></table></div>
+      </section>
       <section className="panel-elevated p-3" aria-label="Effective tuning"><h3>Effective runtime tuning</h3>
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Setting', 'Effective', 'Default', 'Allowed range', 'Source / consumer'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.tuning.map(value => <tr key={value.key}><th className={cell}>{value.key}</th><td className={cell}>{value.value} {value.unit}</td><td className={cell}>{value.default}</td><td className={cell}>{value.min}–{value.max}</td><td className={cell}>{value.source}<br />{value.consumer}</td></tr>)}</tbody></table></div>
         <button className={button} onClick={() => select('tuning')} disabled={query.isError}>Edit tuning rule</button>
       </section>
       <section className="panel-elevated p-3" aria-label="Landing limits"><h3>Effective landing size policy</h3><p>Repository overrides and the checker’s code clamp are included. A scoped grant may authorize a soft refusal.</p><ObservationTable rows={data.landing} columns={['repo', 'rule_id', 'rule_version', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight', 'max_landings_per_day', 'max_batch']} /></section>
-      <BoundaryTaskCheck />
-      <section className="panel-elevated p-3" aria-label="Code limits"><h3>Limits not yet controlled by rules</h3><p>These values come from this API binary. A separately deployed workers version has not been verified by this snapshot. Editing another rule cannot override them.</p>
+      </>}
+      {section === 'task' && <BoundaryTaskCheck />}
+      {section === 'limits' && <section className="panel-elevated p-3" aria-label="Code limits"><h3>Limits not yet controlled by rules</h3><p>These values come from this API binary. A separately deployed workers version has not been verified by this snapshot. Editing another rule cannot override them.</p>
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Boundary', 'Value', 'Source', 'How it changes'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.code_limits.map(limit => <tr key={limit.boundary_id}><th className={cell}>{limit.boundary_id}</th><td className={cell}>{limit.value} {limit.unit}</td><td className={cell}>{limit.source}</td><td className={cell}>{limit.adjustment}</td></tr>)}</tbody></table></div>
-      </section>
-      <section className="panel-elevated p-3" aria-label="Resource observations"><h3>Resource observations</h3><p>Measurements retain their original timestamps. Missing measurements are unknown.</p>
+      </section>}
+      {section === 'resources' && <section className="panel-elevated p-3" aria-label="Resource observations"><h3>Resource observations</h3><p>Measurements retain their original timestamps. Missing measurements are unknown.</p>
         <ObservationTable rows={data.hosts} columns={['host_id', 'host_kind', 'state', 'live_attempts', 'projected_slot_limit', 'signal_state', 'last_poll_at']} />
         <p className="text-xs">The projected slot limit is the platform grant calculation, not the host process’s actual free slots. External coordination hosts do not use the ordinary claim loop.</p>
         <ObservationTable rows={data.pools} columns={['vendor_pool_id', 'used_fraction', 'measured_at', 'resets_at', 'cooling', 'cooldown_until']} />
         <p className="text-xs">Quota fractions are the last reported measurements, not live usage. The runtime applies freshness and cooldown checks when selecting work.</p>
         <details><summary>Hosts and runtime status</summary><pre className="overflow-auto text-xs">{textOf(data.hosts)}</pre></details>
         <details><summary>Vendor quota and measurement times</summary><pre className="overflow-auto text-xs">{textOf(data.pools)}</pre></details>
-      </section>
-      <DeliveryConfiguration canSubmit={!query.isError && !seat.isError && seat.data?.viewer_env === 'prod'} />
+      </section>}
+      {section === 'configuration' && <DeliveryConfiguration canSubmit={!query.isError && !seat.isError && seat.data?.viewer_env === 'prod'} />}
     </>}
   </>
 }
