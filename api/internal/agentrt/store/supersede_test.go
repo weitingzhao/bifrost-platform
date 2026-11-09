@@ -1,7 +1,11 @@
 package store_test
 
 import (
+	"fmt"
+	"github.com/jackc/pgx/v5"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -136,5 +140,86 @@ func TestSupersedeTasksRefusesOpenChecks(t *testing.T) {
 	}
 	if w.state(t, "task", old) != "ready" {
 		t.Fatal("changed the task")
+	}
+}
+
+// Cancellation must close the goal only with the approved replacement proof.
+func TestSupersedeMissionClosure(t *testing.T) {
+	for _, name := range []string{"approved", "ordinary", "missing_proof", "wrong_commit", "wrong_actor", "missing_approval"} {
+		t.Run(name, func(t *testing.T) {
+			w := newKernelWorld(t)
+			w.goalMission(t, "M-3")
+			goal := store.Task{MissionID: "M-3", OffPlanReason: "a goal"}
+			old, replacement := w.ready(t, goal), w.ready(t, goal)
+			w.accept(t, replacement)
+			if name != "missing_proof" {
+				w.landedNote(t, "M-3", replacement, commitB, "")
+			}
+			const approval = "appr_0123456789abcdef"
+			if name == "approved" {
+				var version int
+				ok(t, w.rt.QueryRow(ctx, `SELECT version FROM agentrt.task WHERE task_id=$1`, old).Scan(&version))
+				ok(t, store.SupersedeTasks(ctx, w.rt, store.SupersedeRequest{Env: "prod", Reason: "replacement delivered", Entries: []store.SupersedeEntry{{Task: old, Version: version, Replacement: replacement, Commit: commitB}}}, approval))
+			} else {
+				commit, actor, card := commitB, "owner", approval
+				if name == "wrong_commit" {
+					commit = commitA
+				}
+				if name == "wrong_actor" {
+					actor = "controller"
+				}
+				if name == "missing_approval" {
+					card = ""
+				}
+				reason := fmt.Sprintf("superseded by %s at %s; approval %s: replacement delivered", replacement, commit, card)
+				if name == "ordinary" {
+					reason = "superseded"
+				}
+				ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, actor, old, "cancelled", reason) }))
+			}
+			_, err := store.CloseMissions(ctx, w.rt)
+			ok(t, err)
+			want := "active"
+			if name == "approved" {
+				want = "done"
+			}
+			if got := w.state(t, "mission", "M-3"); got != want {
+				t.Fatalf("mission = %s, want %s", got, want)
+			}
+			notes, err := store.LandedOnMain(ctx, w.rt, []string{old})
+			ok(t, err)
+			if len(notes) != 0 {
+				t.Fatal("obsolete task falsely marked delivered")
+			}
+		})
+	}
+}
+
+// Serial: FreezeEventClock. Reproduce the live M-358 closure path.
+func TestSupersedeMissionClosesAfterFreshLandingEvidence(t *testing.T) {
+	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := liveWorld(t, "none", at)
+	replacement := liveRoot(t, w, "land:replacement:1", at, "main_intent", newLandingRecord("land:replacement:1", "main_result", "outcome", "ok"))
+	old := liveRoot(t, w, "land:obsolete:1", at, "branch_pushed", newLandingRecord("land:obsolete:1", "failed", "why", "declined"))
+	effectiveRead(t, w, at.Add(-10*time.Minute))
+	w.landedNote(t, "M-3", replacement, commitB, "")
+	var version int
+	ok(t, w.rt.QueryRow(ctx, `SELECT version FROM agentrt.task WHERE task_id=$1`, old).Scan(&version))
+	ok(t, store.SupersedeTasks(ctx, w.rt, store.SupersedeRequest{Env: "prod", Reason: "replacement delivered", Entries: []store.SupersedeEntry{{Task: old, Version: version, Replacement: replacement, Commit: commitB}}}, "appr_0123456789abcdef"))
+	if got := closePass(t, w, at); got != "active" {
+		t.Fatal("closed without fresh evidence", got)
+	}
+	var rounds int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id='mission:M-3' AND body_json ? 'landing_close_round'`).Scan(&rounds))
+	if rounds != 1 {
+		t.Fatalf("closing rounds=%d, want 1", rounds)
+	}
+	effectiveRead(t, w, at.Add(time.Minute))
+	if got := closePass(t, w, at.Add(2*time.Minute)); got != "done" {
+		t.Fatal("not closed", got)
+	}
+	if why := w.closeReason(t, "M-3"); !strings.Contains(why, "1 root(s) delivered, 1 disposed") {
+		t.Fatal(why)
 	}
 }

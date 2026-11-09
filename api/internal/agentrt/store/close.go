@@ -69,10 +69,21 @@ const stoppedEmpty = `t.state = 'cancelled' AND EXISTS (SELECT 1 FROM agentrt.co
       AND (x.event_type = 'task_cancelled' OR x.event_type = 'task_state_changed' AND x.body_json->>'to' = 'cancelled')) k
       WHERE c.set_at <= k.at AND c.cleared_at > k.at)))`
 
+// supersededTask recognizes the existing Owner-approved cancellation format.
+// Recheck the replacement instead of treating arbitrary cancellation as delivery.
+const supersededTask = `t.state = 'cancelled' AND EXISTS (SELECT 1 FROM ` + lastCancelEvent + `
+  JOIN agentrt.task replacement ON replacement.task_id = split_part(e.body_json->>'reason', ' ', 3)
+  WHERE e.actor_id = 'owner' AND e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'cancelled'
+    AND e.body_json->>'reason' ~ '^superseded by t_[A-Z0-9]+ at [a-f0-9]{40}; approval appr_[a-f0-9]{16}: '
+    AND replacement.mission_id = t.mission_id AND replacement.repo IS NOT DISTINCT FROM t.repo
+    AND replacement.role = 'implement' AND replacement.state = 'accepted'
+    AND EXISTS (SELECT 1 FROM agentrt.event proof WHERE proof.task_id = replacement.task_id
+      AND proof.event_type = 'note' AND proof.body_json->>'landed' = rtrim(split_part(e.body_json->>'reason', ' ', 5), ';')))`
+
 // dropped is a task (t) that no longer holds its mission open though it was
 // not accepted: the Owner dropped it, it was a check of a stopped task, its
 // proposer withdrew it, its change is on main, or a stop left nothing for it.
-const dropped = `((` + ownerDropped + `) OR (` + checkClosed + `) OR (` + withdrawnTask + `) OR (` + onMain + `) OR (` + stoppedEmpty + `))`
+const dropped = `((` + ownerDropped + `) OR (` + checkClosed + `) OR (` + withdrawnTask + `) OR (` + onMain + `) OR (` + stoppedEmpty + `) OR (` + supersededTask + `))`
 
 // delivered is the condition that mission m has what its goal asked for: an
 // implementation (or brief) accepted, or an implementation on main.
