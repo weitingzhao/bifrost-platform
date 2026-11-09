@@ -21,7 +21,8 @@ describe('shared wait words', () => {
   })
 
   it.each(['landing_pending', 'landing_main_unsettled'])('links a matching %s grant and includes the CI run', state => {
-    const task = { ...base, waiting: { on: 'landing' as const, reason: 'pending' }, landing: { stream: '', operation: 'op', phase: 'checking', outcome: '', reason: '', attempt: '', result: '', main_commit: '', run: '123', observed_at: AT, basis: '' } }
+    // The API records a landing wait only on an accepted task (store/planviewwaits.go).
+    const task = { ...base, state: 'accepted', waiting: { on: 'landing' as const, reason: 'pending' }, landing: { stream: '', operation: 'op', phase: 'checking', outcome: '', reason: '', attempt: '', result: '', main_commit: '', run: '123', observed_at: AT, basis: '' } }
     const blocker = { atom: 'step_landed', state, task_id: task.task_id, op: 'op', phase: 'checking', last_record_at: AT, grant: { approval_id: 'appr_1', number: 1, last_status: 'approved', recorded_at: AT }, cards: [] }
     const explain = parsePlanExplain({ status: 'ok', read_at: AT, steps: { step: { node_version: 1, kind: 'explained', rule: 'false', blockers: [blocker] } } })
     const words = waitWords(task, explain, now)
@@ -33,11 +34,17 @@ describe('shared wait words', () => {
 
 it('uses existing dependency, slot and executor fields without changing the API', () => {
   expect(waitWords({ ...base, waiting: { on: 'dependencies', reason: '', depends_on: [{ task_id: 't_123456', title: 'Prepare inputs', state: 'running' }] } }, undefined, now).text).toContain('Prepare inputs (t_…123456, running)')
-  expect(waitWords({ ...base, waiting: { on: 'landing', reason: '', slot_holder: { operation: 'op', task_id: 't_123456', title: 'Current batch', phase: 'main_intent' } } }, undefined, now).text).toContain('held by Current batch (main_intent)')
+  expect(waitWords({ ...base, state: 'accepted', waiting: { on: 'landing', reason: '', slot_holder: { operation: 'op', task_id: 't_123456', title: 'Current batch', phase: 'main_intent' } } }, undefined, now).text).toContain('held by Current batch (main_intent)')
   expect(waitWords({ ...base, waiting: { on: 'host', reason: '', executor: { pool: 'pool-a', executor: 'codex', host_id: 'host-a' } } }, undefined, now).text).toContain('pool-a · codex · host-a')
 })
 it('does not show stale waiting data on finished tasks', () => {
   const waiting = { on: 'owner' as const, reason: 'old wait' }
   for (const state of ['accepted', 'rejected', 'cancelled']) expect(waitWords({ ...base, state, waiting }).text).toBe('')
   expect(waitWords({ ...base, waiting, on_main: { commit: 'a'.repeat(40), via: 'landing' } }).text).toBe('')
+})
+it('shows the landing wait of an accepted task, the only state the API records it on', () => {
+  const landing = { on: 'landing' as const, reason: 'waits for the landing slot' }
+  expect(waitWords({ ...base, state: 'accepted', waiting: landing }, undefined, now).text).toContain('Waits on landing')
+  for (const state of ['rejected', 'cancelled']) expect(waitWords({ ...base, state, waiting: landing }).text).toBe('')
+  expect(waitWords({ ...base, state: 'accepted', waiting: landing, on_main: { commit: 'a'.repeat(40), via: 'landing' } }).text).toBe('')
 })

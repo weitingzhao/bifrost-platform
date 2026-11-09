@@ -8,7 +8,10 @@ export type WaitWords = { text: string; since: string; age: number | undefined; 
 /** The same recorded wait in Live and on a step. Time is displayed in the reader's local timezone. */
 export function waitWords(task: Task, explain: ExplainRead | undefined = undefined, now = Date.now()): WaitWords {
   const w = task.waiting
-  if (!w || task.on_main || ['accepted', 'rejected', 'cancelled'].includes(task.state)) return { text: '', since: '', age: undefined, href: '', tone: 'info' }
+  // A finished task has no wait, except an accepted one on its landing: the API records
+  // that wait only for accepted tasks (store/planviewwaits.go landingWait).
+  const finished = ['accepted', 'rejected', 'cancelled'].includes(task.state) && !(task.state === 'accepted' && w?.on === 'landing')
+  if (!w || task.on_main || finished) return { text: '', since: '', age: undefined, href: '', tone: 'info' }
   const age = w.since ? Math.max(0, Math.floor((now - Date.parse(w.since)) / 60_000)) : undefined
   const since = w.since ? `since ${new Date(w.since).toTimeString().slice(0, 5)} · ${age} min` : 'since Unknown'
   let href = ''
