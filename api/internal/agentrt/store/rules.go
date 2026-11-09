@@ -176,11 +176,26 @@ func CheckRule(ctx context.Context, db DB, id string, text []byte) (map[string]a
 		}
 		out = map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction, "body": r.Doc(),
 			"tightens": why == nil, "needs_signature": why != nil}
+		out["proposed_landing_effects"] = landingBoundaryRows(r)
 		if why != nil {
 			out["why_not_tighter"] = why.Error()
 		}
 		if prev != nil {
 			out["previous_version"] = prev.Version
+		}
+		changes, capacityErr := approvable(prev, r)
+		out["capacity_approvable"] = capacityErr == nil
+		if capacityErr == nil {
+			out["capacity_changes"] = changes
+		} else {
+			out["why_not_capacity"] = capacityErr.Error()
+		}
+		// The browser presents this result; it never classifies authority.
+		out["apply_via"] = "signature"
+		if why == nil && r.Direction == rules.Tighten {
+			out["apply_via"] = "tighten"
+		} else if capacityErr == nil {
+			out["apply_via"] = "capacity_approval"
 		}
 		return nil
 	})

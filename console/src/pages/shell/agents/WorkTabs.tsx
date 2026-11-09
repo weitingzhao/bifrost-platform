@@ -27,5 +27,6 @@ export function WorkTabs({ plan, tab, count, view, stale }: { plan: PlanAddress;
       {tabs.map(([id, label]) => <a key={id} href={workTabHref(id, plan.root, named)} data-work-tab={id} aria-current={tab === id ? 'page' : undefined} className={tab === id ? on : off}>{label}</a>)}
     </nav>
     <PlanRoundNote plan={plan} />
+    <a href="#work?section=delivery-boundaries" className={off}>Delivery boundaries</a>
   </div>
 }

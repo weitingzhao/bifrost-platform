@@ -13,7 +13,7 @@ func TestInfraConfiguredFileLimit(t *testing.T) {
 	for _, tc := range []struct {
 		limit, count int
 		oversized    bool
-	}{{100, 10, false}, {100, 100, false}, {100, 101, true}, {5, 5, false}, {5, 6, true}} {
+	}{{100, 10, false}, {100, 99, false}, {100, 100, false}, {100, 101, true}, {5, 5, false}, {5, 6, true}} {
 		t.Run(fmt.Sprintf("limit%d/files%d", tc.limit, tc.count), func(t *testing.T) {
 			l := &Landing{Repos: []LandingRepo{{Repo: repo, Allow: InfraLandingAllow,
 				Limits: &LandingRepoLimits{MaxFiles: tc.limit, MaxChangedLines: 1500, MaxInFlight: 1}}},
@@ -30,6 +30,17 @@ func TestInfraConfiguredFileLimit(t *testing.T) {
 				t.Fatalf("floor approval boundary changed: %v", soft)
 			}
 		})
+	}
+}
+
+func TestInfraDisplayedClampMatchesEnforcement(t *testing.T) {
+	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: InfraLandingAllow}}, Limits: LandingLimits{MaxFiles: 100, MaxChangedLines: 3000}}
+	for _, lines := range []int{1499, 1500, 1501} {
+		changes := []LandingChange{{NewPath: "k8s/example.yaml", NewMode: "100644", Added: lines}}
+		refused := slices.Contains(LandingSoftRefusals(l, "bifrost-trade-infra", changes), LandingSize)
+		if refused != (lines > l.CheckedLimits("bifrost-trade-infra").MaxChangedLines) {
+			t.Fatalf("displayed clamp disagrees at %d lines", lines)
+		}
 	}
 }
 

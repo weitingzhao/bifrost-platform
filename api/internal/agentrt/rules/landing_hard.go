@@ -268,6 +268,8 @@ var landingHardConsole = [...]string{
 	"console/src/api/serverContact.ts",
 	"console/src/api/cluster.ts",
 	"console/src/api/landingGrant.ts",
+	"console/src/api/deliveryBoundaries.ts",
+	"console/src/pages/shell/agents/DeliveryBoundaries.tsx",
 	"console/src/pages/landing-grant/",
 	"console/src/pages/shell/progress/LandingAuthorization.tsx",
 	"console/src/lib/shell/consoleRoutes.ts",

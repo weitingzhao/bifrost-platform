@@ -34,6 +34,7 @@ import (
 // database configured: every route answers 503, so the code can be deployed
 // before the database is wired.
 type API struct {
+	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
 	// Explain caches the explanation of steps in progress (plan-view
 	// explain=1); nil makes one over DB on first use.
 	Explain     *store.ExplainCache

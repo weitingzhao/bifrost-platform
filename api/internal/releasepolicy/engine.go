@@ -268,6 +268,10 @@ const (
 	compareFileCap = 100
 )
 
+// ComparisonFileCap exposes the same completeness threshold the release gate
+// consumes. At or above this count automatic authorization is refused.
+func ComparisonFileCap() int { return compareFileCap }
+
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // Decide reports whether this call may run without a manual approval. Any

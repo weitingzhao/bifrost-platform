@@ -151,7 +151,7 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 			return DrillAction{Kind: "ci_kick"}
 		}
 	case "Running":
-		if !now.Before(ci.CreatedAt.Add(30 * time.Minute)) {
+		if !now.Before(ci.CreatedAt.Add(ciRunningParkAfter)) {
 			return DrillAction{Kind: "parked", Why: "ci_stuck"}
 		}
 	case "Succeeded":
@@ -220,7 +220,14 @@ func RootBudget(s State, task string) (first time.Time, n int) {
 const (
 	missingCIWait         = 10 * time.Minute
 	platformMissingCIWait = 30 * time.Second
+	ciRunningParkAfter    = 30 * time.Minute
 )
+
+// WaitBoundaries exposes this binary's actual controller thresholds. It does
+// not claim that a separately deployed workers binary has the same version.
+func WaitBoundaries() map[string]time.Duration {
+	return map[string]time.Duration{"infra_missing_ci": missingCIWait, "platform_missing_ci": platformMissingCIWait, "ci_running_park": ciRunningParkAfter, "root_execution": ClaimWindow, "approval_wait": WaitWindow}
+}
 
 // CIName is stable and DNS-safe even when op contains colons or slashes.
 func CIName(op string, attempt int) string {

@@ -95,6 +95,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 	}
 	s.agentRuntime = rt
+	if s.delivery != nil {
+		rt.api.ConfigurationBoundaries = s.delivery.ConfigurationBoundaries
+	}
 	rt.api.Grants = s.landingGrantSources
 	rt.api.CheckAssessment = s.checkAssessment
 	if s.approvals != nil {

@@ -90,10 +90,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		return []LandingRefusal{LandingRulePaths}
 	}
 	failed := map[LandingRefusal]bool{}
-	limits := l.EffectiveLimits(repo)
-	if repo == "bifrost-trade-infra" {
-		limits.MaxChangedLines = min(limits.MaxChangedLines, 1500)
-	}
+	limits := l.CheckedLimits(repo)
 	if len(changes) == 0 || len(changes) > limits.MaxFiles {
 		failed[LandingSize] = true
 	}

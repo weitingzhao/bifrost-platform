@@ -27,6 +27,16 @@ type LandingRepo struct {
 }
 type LandingRepoLimits struct{ MaxFiles, MaxChangedLines, MaxInFlight int }
 
+// CheckedLimits is the size policy consumed by the landing checker and its
+// Console projection. Repository overrides alone are not the final limit.
+func (l *Landing) CheckedLimits(repo string) LandingLimits {
+	v := l.EffectiveLimits(repo)
+	if repo == "bifrost-trade-infra" {
+		v.MaxChangedLines = min(v.MaxChangedLines, 1500)
+	}
+	return v
+}
+
 func (l *Landing) EffectiveLimits(repo string) LandingLimits {
 	v := l.Limits
 	if r, ok := l.Repo(repo); ok && r.Limits != nil {
