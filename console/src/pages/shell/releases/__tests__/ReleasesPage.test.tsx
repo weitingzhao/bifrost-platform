@@ -66,6 +66,7 @@ function policyStatus(partial: Record<string, unknown> = {}) {
 
 let policyResponse: () => Response = () => json(policyStatus())
 let gitopsFails = false
+let wavesResponse: () => Response = () => json([])
 
 function installFetch() {
   vi.stubGlobal(
@@ -73,6 +74,7 @@ function installFetch() {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
+      if (url.endsWith('/api/v1/agentrt/waves')) return wavesResponse()
       if (url.endsWith('/api/v1/release-policy')) return policyResponse()
       if (url.includes('/api/v1/releases/running-images')) {
         return json({
@@ -272,6 +274,7 @@ describe('ReleasesPage', () => {
     installStorage()
     policyResponse = () => json(policyStatus())
     gitopsFails = false
+    wavesResponse = () => json([])
     installFetch()
   })
 
@@ -279,6 +282,37 @@ describe('ReleasesPage', () => {
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
     window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     vi.unstubAllGlobals()
+  })
+
+  it('shows only open waves, including their number, plan root, short base and id, without an operator token', async () => {
+    wavesResponse = () => json([
+      { id: 'wave-open', n: 3, plan_root: 'M-368', base: SHA, state: 'open' },
+      { id: 'wave-closed', n: 2, plan_root: 'M-367', base: 'eeeeeeee99999999', state: 'closed' },
+    ])
+    render(wrapper(<ReleasesPage />))
+
+    expect(await screen.findByText('Wave 3 · M-368 · abcd1234 · wave-open')).toBeTruthy()
+    expect(screen.queryByText(/wave-closed|M-367|eeeeeeee/)).toBeNull()
+    expect(screen.queryByText('No open wave')).toBeNull()
+    const request = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/api/v1/agentrt/waves'))
+    expect(request).toBeTruthy()
+    expect(request?.[1]?.method ?? 'GET').toBe('GET')
+  })
+
+  it.each([{ waves: [] }, { waves: [{ id: 'wave-closed', n: 2, plan_root: 'M-367', base: SHA, state: 'closed' }] }])('shows no open wave when none are open ($waves)', async ({ waves }) => {
+    wavesResponse = () => json(waves)
+    render(wrapper(<ReleasesPage />))
+
+    expect(await screen.findByText('No open wave')).toBeTruthy()
+    expect(screen.queryByText('Waves could not be read.')).toBeNull()
+  })
+
+  it('shows a failed waves read instead of an empty list', async () => {
+    wavesResponse = () => json({ error: 'unavailable' }, 503)
+    render(wrapper(<ReleasesPage />))
+
+    expect(await screen.findByText('Waves could not be read.')).toBeTruthy()
+    expect(screen.queryByText('No open wave')).toBeNull()
   })
 
   it('shows versions, attention runs, smoke, records, and only a PROD rollback request', async () => {
