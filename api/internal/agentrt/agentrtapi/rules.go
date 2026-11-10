@@ -144,15 +144,10 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	main := ""
-	if a.MainHead != nil {
-		for _, x := range st.Roots {
-			if x.Waiting != nil && x.Waiting.Phase == "awaiting_grant" {
-				main, _ = a.MainHead(r.Context(), "bifrost-platform")
-				break
-			}
-		}
-	}
+	a.writeMissionLanding(w, r, id, st)
+}
+
+func (a *API) writeMissionLanding(w http.ResponseWriter, r *http.Request, id string, st store.MissionLandingStatus) {
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
 		root := map[string]any{"repo": x.Repo, "grant_supported": landing.LandingRepos[x.Repo].GrantSupported, "root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
@@ -167,7 +162,9 @@ func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
 			root["approval_id"] = x.ApprovalID
 		}
 		if x.Waiting != nil {
-			x.Waiting.ObserveMain(main)
+			// Preserve the unknown-main view if the live read is unavailable.
+			x.Waiting.ObserveMain("")
+			a.observeLandingWait(r, x.Waiting)
 			root["authorization_wait"] = x.Waiting
 		}
 		if !x.HeldUntil.IsZero() {
