@@ -89,6 +89,7 @@ type StgState struct {
 	Evidence           map[string]StgEvent
 	DeploymentChecks   map[string]StgEvent
 	Covers             map[StgCoverKey]StgEvent
+	LandingBatches     []LandingBatch
 	Legacy             landing.State
 	Validity           map[StgValidityKey]StgEvent
 	Records            map[int64]StgEvent
@@ -126,6 +127,13 @@ func StgFold(entries []StgEntry) (StgState, error) {
 			if _, err = s.apply(StgEvent{e.Seq, e.At, r}); err != nil {
 				return StgState{}, err
 			}
+		} else if raw, ok := e.Event.Body["landing_batch"]; ok {
+			if why := badLandingBatch(raw); why != "" {
+				return StgState{}, stgError("invalid", "landing_batch", why)
+			}
+			b := landingBatchOf(raw.(map[string]any))
+			b.Seq = e.Seq
+			s.LandingBatches = append(s.LandingBatches, b)
 		} else if raw, ok := e.Event.Body["landing"]; ok {
 			r, err := landing.Parse(raw)
 			if err != nil {

@@ -257,10 +257,10 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 	for i, c := range obs.Commits {
 		op := landinggit.LandedOperation(c.Message)
 		o, ok := s.Legacy.Operations[op]
-		if op == "" || !ok || !o.EverLanded || o.R != c.SHA || o.DryRun || !landinggit.HasTaskTrailer(c.Message, o.Task) {
+		if op == "" || !ok || !o.EverLanded || !stgCommitMatchesLanding(s, obs.Commits, i) || o.DryRun || !landinggit.HasTaskTrailer(c.Message, o.Task) {
 			return refuse("diff_unlanded")
 		}
-		m := StgMemberKey{Root: o.Task, Op: op, R: c.SHA}
+		m := StgMemberKey{Root: o.Task, Op: op, R: o.R}
 		binding, exists := facts.Bindings[o.Task]
 		if !exists || binding.Repo != "bifrost-platform" {
 			return refuse("binding_changed")
@@ -281,7 +281,7 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 		a := facts.Authority[op]
 		if a.UsedGrant {
 			g := a.Grant
-			if !a.HasGrant || !g.STGRelease || g.Purpose != "landing_main" || g.GrantID == "" || g.ApprovalID == "" || g.IntentSeq < 1 || g.R != c.SHA || g.Task != o.Task || g.Attempt != o.Attempt || g.A != o.A || g.M0 != o.M0 {
+			if !a.HasGrant || !g.STGRelease || g.Purpose != "landing_main" || g.GrantID == "" || g.ApprovalID == "" || g.IntentSeq < 1 || g.R != o.R || g.Task != o.Task || g.Attempt != o.Attempt || g.A != o.A || g.M0 != o.M0 {
 				return refuse("rule")
 			}
 		} else if a.RuleVersion < 1 || facts.Rules[binding.Tenant].Landing.CheckChanges("bifrost-platform", c.Changes) != nil {
