@@ -59,7 +59,7 @@ func (r *stgGateReadRows) Next() bool {
 func (*stgGateReadRows) Close()     {}
 func (*stgGateReadRows) Err() error { return nil }
 func (r *stgGateReadRows) Scan(dest ...any) error {
-	return grantIdentityAssign(dest, r.op, r.gate, false)
+	return grantIdentityAssign(dest, r.op, r.gate, false, "")
 }
 
 func TestStgGateReadStoredRuleAuthority(t *testing.T) {

@@ -269,18 +269,21 @@ func stgReadGateFacts(ctx context.Context, tx pgx.Tx, s StgState, bindings map[s
 			f.Rules[b.Tenant] = &r.Rule
 		}
 	}
-	rows, err := tx.Query(ctx, `SELECT body_json->'landing'->>'op',body_json->'landing_gate',body_json ? 'landing_grant_use' FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent' ORDER BY seq`, StgReleaseStream)
+	rows, err := tx.Query(ctx, `SELECT body_json->'landing'->>'op',body_json->'landing_gate',body_json ? 'landing_grant_use',COALESCE(body_json->'landing_batch_grant'->>'grant_id','') FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent' ORDER BY seq`, StgReleaseStream)
 	if err != nil {
 		return f, err
 	}
 	for rows.Next() {
-		var op string
+		var op, batchGrant string
 		var raw []byte
 		var used bool
-		if err = rows.Scan(&op, &raw, &used); err != nil {
+		if err = rows.Scan(&op, &raw, &used, &batchGrant); err != nil {
 			break
 		}
 		a := stgLandingAuthority{UsedGrant: used}
+		if !used {
+			a.BatchGrant = batchGrant
+		}
 		if len(raw) > 0 {
 			var v any
 			v, err = canon.Parse(raw)
@@ -326,6 +329,27 @@ func stgReadGateFacts(ctx context.Context, tx pgx.Tx, s StgState, bindings map[s
 				}
 				a.Grant, a.HasGrant = stgRevertedGrant(s, op, order)
 			}
+		}
+		f.Authority[op] = a
+	}
+	// A batch member other than its lead rests on the lead's grant
+	// (landing_batch_grant): attach that grant, as the lead consumed it, and
+	// the batch it names; batchCovers checks the member against it.
+	var grants map[string]*grantView
+	for op, a := range f.Authority {
+		if a.UsedGrant || a.BatchGrant == "" {
+			continue
+		}
+		if _, needed := bindings[s.Legacy.Operations[op].Task]; !needed {
+			continue
+		}
+		if grants == nil {
+			if grants, _, err = readLandingGrants(ctx, tx, StgReleaseStream); err != nil {
+				return f, err
+			}
+		}
+		if g := grants[a.BatchGrant]; g != nil && g.Batch != nil && g.ConsumedSeq > 0 && g.ConsumedOp == g.Op {
+			a.Grant, a.HasGrant, a.BatchMembers = grantEvidenceOf(g), true, slices.Clone(g.Batch.Members)
 		}
 		f.Authority[op] = a
 	}

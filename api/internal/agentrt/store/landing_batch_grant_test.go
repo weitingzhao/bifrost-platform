@@ -190,6 +190,29 @@ func TestBatchCoresOneGrantAuthorizesTheBatch(t *testing.T) {
 	}
 }
 
+// Serial: FreezeEventClock. The STG gate reads the batch as the landing
+// gate wrote it: the lead used the grant, the other member rests on it, and
+// the member carries that grant and the batch it names (M-374, 2026-11-10:
+// without it B5 refused the batch as "rule").
+func TestBatchCoresSTGGateReadsTheMemberGrant(t *testing.T) {
+	c := coresBatch(t, 1, 400)
+	c.coresWaiting(t)
+	g := c.coresGrant(t, c.coresMaterial(t))
+	if _, d := c.coresGate(t); !d.Allowed {
+		t.Fatal("gate", d)
+	}
+	used, batch, id, has, members, err := store.StgGateAuthorityForTest(ctx, c.w.rt, c.ops[0], c.roots, c.at)
+	ok(t, err)
+	if !used || batch != "" {
+		t.Fatal("lead", used, batch)
+	}
+	used, batch, id, has, members, err = store.StgGateAuthorityForTest(ctx, c.w.rt, c.ops[1], c.roots, c.at)
+	ok(t, err)
+	if used || batch != g.GrantID || !has || id != g.GrantID || !slices.Equal(members, c.ops) {
+		t.Fatal("member", used, batch, has, id, members)
+	}
+}
+
 // Serial: FreezeEventClock. A grant that does not waive one of a member's
 // soft checks authorizes nothing: the member is refused awaiting_grant,
 // naming it, nothing of the batch is written, and the grant stays usable.

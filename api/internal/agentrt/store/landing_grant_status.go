@@ -49,13 +49,19 @@ func LandingGrantEvidence(ctx context.Context, q pgx.Tx, repo, op string) (Grant
 		if g.Op != op || g.ConsumedSeq == 0 || g.ConsumedOp != op || g.R != o.R {
 			continue
 		}
-		approved, _ := grantTime(g.ApprovedAt)
-		return GrantEvidence{GrantID: g.GrantID, ApprovalID: g.ApprovalID, Purpose: g.Purpose, STGRelease: g.STGRelease,
-			Task: g.Task, Attempt: g.Attempt, A: g.A, R: g.R, M0: g.M0, CandidateDigest: g.CandidateDigest,
-			MaterialDigest: g.MaterialDigest, Waives: slices.Clone(g.Waives), ApprovedAt: approved, IntentSeq: g.ConsumedSeq,
-			Action: g.Action, ApprovalNumber: g.ApprovalNumber, ExpiresAt: g.exp, ConsumedAt: g.ConsumedAt}, true, nil
+		return grantEvidenceOf(g), true, nil
 	}
 	return GrantEvidence{}, false, nil
+}
+
+// grantEvidenceOf is a consumed grant as evidence: the grant of the
+// operation that consumed it (its lead's, for a batch member).
+func grantEvidenceOf(g *grantView) GrantEvidence {
+	approved, _ := grantTime(g.ApprovedAt)
+	return GrantEvidence{GrantID: g.GrantID, ApprovalID: g.ApprovalID, Purpose: g.Purpose, STGRelease: g.STGRelease,
+		Task: g.Task, Attempt: g.Attempt, A: g.A, R: g.R, M0: g.M0, CandidateDigest: g.CandidateDigest,
+		MaterialDigest: g.MaterialDigest, Waives: slices.Clone(g.Waives), ApprovedAt: approved, IntentSeq: g.ConsumedSeq,
+		Action: g.Action, ApprovalNumber: g.ApprovalNumber, ExpiresAt: g.exp, ConsumedAt: g.ConsumedAt}
 }
 
 // LandingGrantStatus is one grant as the status API shows it (C-6 reads it).

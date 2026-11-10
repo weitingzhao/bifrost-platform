@@ -431,3 +431,28 @@ func RefusalAppendForTest(ev Event) error   { return checkLandingRefusalAppend(e
 func SeenCopiesForTest(ctx context.Context, tx pgx.Tx, kind, key string, refs []string) ([]SeenCopy, error) {
 	return seenCopies(ctx, tx, kind, key, refs, nil)
 }
+
+// StgGateAuthorityForTest is the STG gate's landing authority for op as it
+// reads the landing stream, each of roots bound to bifrost-platform in
+// tenant dev: whether op used a grant itself, the batch grant it rests on,
+// the grant attached and whether it is, and the batch that grant names.
+func StgGateAuthorityForTest(ctx context.Context, db DB, op string, roots []string, at time.Time) (used bool, batchGrant, grantID string, has bool, members []string, err error) {
+	err = InTx(ctx, db, func(tx pgx.Tx) error {
+		s, err := StgReleaseState(ctx, tx)
+		if err != nil {
+			return err
+		}
+		bindings := map[string]stgBinding{}
+		for _, r := range roots {
+			bindings[r] = stgBinding{Root: r, Tenant: "dev", Repo: "bifrost-platform"}
+		}
+		f, err := stgReadGateFacts(ctx, tx, s, bindings, at)
+		if err != nil {
+			return err
+		}
+		a := f.Authority[op]
+		used, batchGrant, grantID, has, members = a.UsedGrant, a.BatchGrant, a.Grant.GrantID, a.HasGrant, a.BatchMembers
+		return nil
+	})
+	return
+}

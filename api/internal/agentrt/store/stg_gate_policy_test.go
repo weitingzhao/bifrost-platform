@@ -221,6 +221,66 @@ func TestStgGateGrantAndReversal(t *testing.T) {
 	}
 }
 
+// A batch of two core changes landed on one card (2026-11-10, M-374 w2+w3:
+// B5 refused it as "rule" every 90 seconds): the lead used the grant, the
+// other member's main_intent rests on it (landing_batch_grant). STG releases
+// both, and the member's batch grant must be that grant, consumed for STG,
+// naming the member after the lead, on its M0 and R.
+func TestStgGateBatchGrantCoversMembers(t *testing.T) {
+	t.Parallel()
+	setup := func() (*stgPolicyFixture, string, string) {
+		x := stgPolicy(t)
+		lead, member := "land:one:1", "land:two:1"
+		change := []rules.LandingChange{{OldPath: "api/internal/agentrt/store/change.go", NewPath: "api/internal/agentrt/store/change.go", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "x"}}
+		x.o.Commits = []landing.ReleaseCommit{
+			{SHA: stgSHA("a"), Parents: []string{stgSHA("e")}, Message: "Lead\n\nAgentrt-Task: " + stgTestRoot + "\nLanded-By: agentrt-prod/" + lead + "\n", Changes: change},
+			{SHA: stgSHA("b"), Parents: []string{stgSHA("a")}, Message: "Member\n\nAgentrt-Task: " + stgTestRoot2 + "\nLanded-By: agentrt-prod/" + member + "\n", Changes: change},
+		}
+		x.s.Legacy.Operations[member] = landing.Operation{Task: stgTestRoot2, R: stgSHA("b"), M0: stgSHA("e"), A: stgSHA("2"), Attempt: "a2", EverLanded: true}
+		x.s.LandingBatches = []LandingBatch{{Batch: landing.BatchID(lead), Lead: lead, Members: []string{lead, member}, M0: stgSHA("e"), R: stgSHA("b")}}
+		x.f.Bindings[stgTestRoot2] = stgBinding{Root: stgTestRoot2, Tenant: "dev", Repo: "bifrost-platform", Mission: "M-2"}
+		o := x.s.Legacy.Operations[lead]
+		g := GrantEvidence{GrantID: "g1", ApprovalID: "approval-1", Purpose: "landing_main", STGRelease: true, IntentSeq: 12, Task: o.Task, Attempt: o.Attempt, A: o.A, R: o.R, M0: o.M0}
+		x.f.Authority[lead] = stgLandingAuthority{UsedGrant: true, HasGrant: true, Grant: g}
+		x.f.Authority[member] = stgLandingAuthority{BatchGrant: "g1", HasGrant: true, Grant: g, BatchMembers: []string{lead, member}}
+		b := x.s.Batches[stgTestBatch]
+		m1 := StgMemberKey{Root: stgTestRoot, Op: lead, R: stgSHA("b")}
+		m2 := StgMemberKey{Root: stgTestRoot2, Op: member, R: stgSHA("b")}
+		b.Members[m2] = 1
+		x.s.Members[m2] = StgMemberState{Batch: stgTestBatch, Gen: 1}
+		b.Tries[1].Snapshot.Record["set"] = stgMemberValues([]StgMemberKey{m1, m2})
+		return x, lead, member
+	}
+	x, _, _ := setup()
+	if d := x.decide(false); !d.Allowed || len(d.Set) != 2 {
+		t.Fatal("a batch on one card releases both members", d)
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(a *stgLandingAuthority, lead, member string)
+	}{
+		{"no batch grant", func(a *stgLandingAuthority, _, _ string) { *a = stgLandingAuthority{} }},
+		{"grant not attached", func(a *stgLandingAuthority, _, _ string) { a.HasGrant = false }},
+		{"another grant", func(a *stgLandingAuthority, _, _ string) { a.BatchGrant = "g2" }},
+		{"not for STG", func(a *stgLandingAuthority, _, _ string) { a.Grant.STGRelease = false }},
+		{"another purpose", func(a *stgLandingAuthority, _, _ string) { a.Grant.Purpose = "other" }},
+		{"another R", func(a *stgLandingAuthority, _, _ string) { a.Grant.R = stgSHA("f") }},
+		{"another M0", func(a *stgLandingAuthority, _, _ string) { a.Grant.M0 = stgSHA("f") }},
+		{"not in the batch", func(a *stgLandingAuthority, lead, _ string) { a.BatchMembers = []string{lead, "land:three:1"} }},
+		{"named as the lead", func(a *stgLandingAuthority, lead, member string) { a.BatchMembers = []string{member, lead} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			x, lead, member := setup()
+			a := x.f.Authority[member]
+			tc.change(&a, lead, member)
+			x.f.Authority[member] = a
+			if d := x.decide(false); d.Allowed || d.Why != "rule" {
+				t.Fatalf("got %+v want rule", d)
+			}
+		})
+	}
+}
+
 func TestStgGateResendOwnsThirdDebitAndNoneStopsIt(t *testing.T) {
 	t.Parallel()
 	x := stgPolicy(t)

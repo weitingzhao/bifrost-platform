@@ -94,7 +94,25 @@ type stgLandingAuthority struct {
 	UsedGrant   bool
 	Grant       GrantEvidence
 	HasGrant    bool
+	// BatchGrant is the grant a batch member other than its lead rests on
+	// (its main_intent's landing_batch_grant); Grant is then that grant, as
+	// the lead consumed it, and BatchMembers the batch it names, lead first.
+	BatchGrant   string
+	BatchMembers []string
 }
+
+// batchCovers: op, a member other than the lead of a batch that landed on
+// one card (R5:5.7 batch of cores; every AW wave), rests on the lead's
+// grant: the grant its main_intent names, consumed by the lead, for STG,
+// naming op after the lead, on op's own M0 and R. The lead's commit is in
+// the same range (stgCommitMatchesLanding takes the whole stack) and passes
+// its own grant check there.
+func (a stgLandingAuthority) batchCovers(op string, o landing.Operation) bool {
+	g := a.Grant
+	return a.HasGrant && g.GrantID == a.BatchGrant && g.STGRelease && g.Purpose == "landing_main" && g.ApprovalID != "" && g.IntentSeq >= 1 &&
+		len(a.BatchMembers) >= 2 && slices.Contains(a.BatchMembers[1:], op) && g.R == o.R && g.M0 == o.M0
+}
+
 type stgGateFacts struct {
 	Bindings    map[string]stgBinding
 	Rules       map[string]*rules.Rule
@@ -282,6 +300,10 @@ func stgEvaluateGate(s StgState, batch string, obs StgGateObservation, facts stg
 		if a.UsedGrant {
 			g := a.Grant
 			if !a.HasGrant || !g.STGRelease || g.Purpose != "landing_main" || g.GrantID == "" || g.ApprovalID == "" || g.IntentSeq < 1 || g.R != o.R || g.Task != o.Task || g.Attempt != o.Attempt || g.A != o.A || g.M0 != o.M0 {
+				return refuse("rule")
+			}
+		} else if a.BatchGrant != "" {
+			if !a.batchCovers(op, o) {
 				return refuse("rule")
 			}
 		} else if a.RuleVersion < 1 || facts.Rules[binding.Tenant].Landing.CheckChanges("bifrost-platform", c.Changes) != nil {
