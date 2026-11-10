@@ -76,8 +76,8 @@ func readLandingWaitStatusIn(ctx context.Context, tx pgx.Tx, state landing.State
 	w := &LandingWaitStatus{Repo: strings.TrimPrefix(stream, "landing:"), Phase: o.Phase, Since: o.AwaitingAt, Soft: slices.Clone(o.Soft), Files: o.Files, Lines: o.Lines,
 		Snapshot: o.Material, R: o.R, M0: o.M0, ExecutionSeconds: int64(clock.Execution / time.Second), WaitingSeconds: int64(clock.Waiting / time.Second), Operations: clock.Operations}
 	rows, err := tx.Query(ctx, `SELECT body_json->'landing_grant_request' FROM agentrt.event
-	  WHERE event_stream_id='landing:bifrost-platform' AND body_json->'landing_grant_request'->>'op'=$1
-	  ORDER BY seq DESC`, op)
+	  WHERE event_stream_id=$2 AND body_json->'landing_grant_request'->>'op'=$1
+	  ORDER BY seq DESC`, op, stream)
 	if err != nil {
 		return nil, err
 	}

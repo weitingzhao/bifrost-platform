@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -69,7 +71,7 @@ func checkLandingRequestAppend(ctx context.Context, tx pgx.Tx, ev Event, at time
 		return fmt.Errorf("%s", why)
 	}
 	m := v.(map[string]any)
-	if ev.Type != "note" || ev.Actor != "controller" || ev.Stream != "landing:bifrost-platform" {
+	if ev.Type != "note" || ev.Actor != "controller" || !landing.RepoStream(ev.Stream) || !landing.GrantSupported(strings.TrimPrefix(ev.Stream, "landing:")) {
 		return invalid("landing request requires controller repository stream")
 	}
 	seen, _ := time.Parse(time.RFC3339Nano, m["seen_at"].(string))
@@ -117,14 +119,21 @@ func checkLandingRequestAppend(ctx context.Context, tx pgx.Tx, ev Event, at time
 func landingRequestRecorded(ctx context.Context, db DB, r LandingGrantRequest) (bool, error) {
 	var same, mismatch bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		repo, err := grantRepoOf(ctx, tx, r.Op)
+		if err != nil {
+			if errors.Is(err, ErrInvalid) {
+				return invalid("unknown landing operation")
+			}
+			return err
+		}
 		return tx.QueryRow(ctx, `SELECT
 		  coalesce(bool_or(jsonb_typeof(g->'status')='string' AND g->>'status'=$2), false),
 		  coalesce(bool_or(jsonb_typeof(g->'op') IS DISTINCT FROM 'string' OR g->>'op' IS DISTINCT FROM $3
 		    OR jsonb_typeof(g->'params_hash') IS DISTINCT FROM 'string' OR g->>'params_hash' IS DISTINCT FROM $4
 		    OR jsonb_typeof(g->'approval_number') IS DISTINCT FROM 'number' OR g->>'approval_number' IS DISTINCT FROM $5), false)
 		FROM (SELECT body_json->'landing_grant_request' AS g FROM agentrt.event
-		  WHERE event_stream_id='landing:bifrost-platform' AND body_json->'landing_grant_request'->>'approval_id'=$1) seen`,
-			r.ApprovalID, r.Status, r.Op, r.ParamsHash, strconv.FormatInt(r.ApprovalNumber, 10)).Scan(&same, &mismatch)
+		  WHERE event_stream_id=$6 AND body_json->'landing_grant_request'->>'approval_id'=$1) seen`,
+			r.ApprovalID, r.Status, r.Op, r.ParamsHash, strconv.FormatInt(r.ApprovalNumber, 10), grantStream(repo)).Scan(&same, &mismatch)
 	})
 	return same && !mismatch, err
 }
@@ -144,9 +153,17 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 	if err != nil || recorded {
 		return false, err
 	}
-	var root string
+	var root, stream string
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		s, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		repo, err := grantRepoOf(ctx, tx, r.Op)
+		if err != nil {
+			if errors.Is(err, ErrInvalid) {
+				return invalid("unknown landing operation")
+			}
+			return err
+		}
+		stream = grantStream(repo)
+		s, err := LandingState(ctx, tx, stream)
 		if err != nil {
 			return err
 		}
@@ -162,13 +179,13 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 	wrote := false
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		wrote = false
-		mission, err := lockWaitingRoot(ctx, tx, root)
+		mission, err := lockWaitingRootIn(ctx, tx, root, stream)
 		if err != nil {
 			return err
 		}
 		var existing map[string]any
-		rows, err := tx.Query(ctx, `SELECT body_json->'landing_grant_request' FROM agentrt.event WHERE event_stream_id='landing:bifrost-platform'
-		  AND body_json->'landing_grant_request'->>'approval_id'=$1`, r.ApprovalID)
+		rows, err := tx.Query(ctx, `SELECT body_json->'landing_grant_request' FROM agentrt.event WHERE event_stream_id=$2
+		  AND body_json->'landing_grant_request'->>'approval_id'=$1`, r.ApprovalID, stream)
 		if err != nil {
 			return err
 		}
@@ -192,7 +209,7 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 		if duplicate {
 			return nil
 		}
-		s, err := LandingState(ctx, tx, "landing:bifrost-platform")
+		s, err := LandingState(ctx, tx, stream)
 		if err != nil {
 			return err
 		}
@@ -201,7 +218,7 @@ func RecordLandingGrantRequest(ctx context.Context, db DB, r LandingGrantRequest
 		if r.Status == "rejected" && s.LatestOperation(root) == r.Op && o.Phase == "awaiting_grant" {
 			body["landing"] = map[string]any{"v": landing.Version, "kind": "failed", "op": r.Op, "why": "declined"}
 		}
-		_, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", MissionID: mission, TaskID: root, Body: body})
+		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: mission, TaskID: root, Body: body})
 		wrote = err == nil
 		return err
 	})

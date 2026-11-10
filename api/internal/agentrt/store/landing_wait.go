@@ -57,6 +57,10 @@ func appendAwaitingGrant(ctx context.Context, tx pgx.Tx, f landing.Facts, op str
 // service is called while these locks are held. The task lock fixes its
 // mission/plan binding; a rebind cannot change what the following read sees.
 func lockWaitingRoot(ctx context.Context, tx pgx.Tx, root string) (string, error) {
+	return lockWaitingRootIn(ctx, tx, root, landingRepoStream)
+}
+
+func lockWaitingRootIn(ctx context.Context, tx pgx.Tx, root, stream string) (string, error) {
 	var mission string
 	if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1 FOR SHARE`, root).Scan(&mission); err != nil {
 		return "", err
@@ -64,7 +68,7 @@ func lockWaitingRoot(ctx context.Context, tx pgx.Tx, root string) (string, error
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id=$1 FOR SHARE`, mission); err != nil {
 		return "", err
 	}
-	return mission, lockStream(ctx, tx, "landing:bifrost-platform")
+	return mission, lockStream(ctx, tx, stream)
 }
 
 // SettleWaitingLandingStale is independent of live, rules and Git. Pauses are

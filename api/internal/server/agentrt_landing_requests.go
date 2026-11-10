@@ -22,7 +22,9 @@ func (s *Server) wireLandingRequests(c *controller.Controller) {
 		seen := store.DecisionAt()
 		var out []store.LandingGrantRequest
 		for _, a := range list {
-			if a.Drill || a.Tier != "D" || (a.Action != "approve_guardrail_landing" && a.Action != "approve_core_landing") || a.Params["env"] != "prod" || a.Params["repo"] != "bifrost-platform" {
+			repo, _ := a.Params["repo"].(string)
+			env, _ := a.Params["env"].(string)
+			if !observeLandingRequest(a.Action, repo, env, a.Tier, a.Drill) {
 				continue
 			}
 			op, _ := a.Params["op"].(string)
@@ -46,4 +48,12 @@ func (s *Server) wireLandingRequests(c *controller.Controller) {
 	c.Reconcile.SettleGrant = func(_ context.Context, id, reason string) error {
 		return s.approvals.Withdraw(id, reason)
 	}
+}
+
+// observeLandingRequest preserves platform's guardrail/core observations and
+// includes infra floor approvals, which are recorded on infra's own stream.
+func observeLandingRequest(action, repo, env, tier string, drill bool) bool {
+	return !drill && tier == "D" && env == "prod" && store.GrantActionSupported(action, repo) &&
+		(repo == "bifrost-platform" && action != store.ActionFloorLanding ||
+			repo == "bifrost-trade-infra" && action == store.ActionFloorLanding)
 }
