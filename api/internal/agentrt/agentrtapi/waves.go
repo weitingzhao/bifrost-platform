@@ -2,6 +2,7 @@ package agentrtapi
 
 import (
 	"net/http"
+	"sort"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -74,5 +75,6 @@ func (a *API) listWaves(w http.ResponseWriter, r *http.Request) {
 		}
 		out = filtered
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].N > out[j].N })
 	writeJSON(w, http.StatusOK, out)
 }

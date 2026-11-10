@@ -28,7 +28,7 @@ func TestWaveRoutes(t *testing.T) {
 			t.Fatalf("repo: %d %v", code, out)
 		}
 	}
-	for _, action := range []string{"close", "abandon"} {
+	for _, action := range []string{"close", "abandon", "close", "abandon"} {
 		code, out := call(t, s, "admin", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "root"})
 		if code != 200 || out["base"] != commitA || out["state"] != "open" {
 			t.Fatalf("open: %d %v", code, out)
@@ -52,8 +52,13 @@ func TestWaveRoutes(t *testing.T) {
 	defer resp.Body.Close()
 	var fold []store.Wave
 	must(t, json.NewDecoder(resp.Body).Decode(&fold))
-	if resp.StatusCode != 200 || len(fold) != 2 || fold[0].State != "closed" || fold[1].State != "abandoned" {
+	if resp.StatusCode != 200 || len(fold) != 4 || fold[0].State != "abandoned" || fold[1].State != "closed" || fold[2].State != "abandoned" || fold[3].State != "closed" {
 		t.Fatalf("list: %d %+v", resp.StatusCode, fold)
+	}
+	for i := 1; i < len(fold); i++ {
+		if fold[i-1].N <= fold[i].N {
+			t.Fatalf("list order: %+v", fold)
+		}
 	}
 	for _, state := range []string{"closed", "open", "abandoned"} {
 		t.Run("list state "+state, func(t *testing.T) {
@@ -75,6 +80,9 @@ func TestWaveRoutes(t *testing.T) {
 				t.Fatalf("list state %s: %d %+v", state, resp.StatusCode, filtered)
 			}
 			for i := range want {
+				if i > 0 && filtered[i-1].N <= filtered[i].N {
+					t.Fatalf("list state %s order: %+v", state, filtered)
+				}
 				if filtered[i] != want[i] {
 					t.Fatalf("list state %s: got %+v, want %+v", state, filtered, want)
 				}
