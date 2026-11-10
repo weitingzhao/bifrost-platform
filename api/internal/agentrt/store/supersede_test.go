@@ -145,6 +145,7 @@ func TestSupersedeTasksRefusesOpenChecks(t *testing.T) {
 
 // Cancellation must close the goal only with the approved replacement proof.
 func TestSupersedeMissionClosure(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"approved", "ordinary", "missing_proof", "wrong_commit", "wrong_actor", "missing_approval"} {
 		t.Run(name, func(t *testing.T) {
 			w := newKernelWorld(t)

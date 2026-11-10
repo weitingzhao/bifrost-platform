@@ -209,6 +209,9 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if err := checkLandingReplacedAppend(ctx, tx, ev); err != nil {
 		return Appended{}, err
 	}
+	if err := checkWaveAppend(ctx, tx, ev); err != nil {
+		return Appended{}, err
+	}
 	if err := checkLandingBatchAppend(ctx, tx, ev); err != nil {
 		return Appended{}, err
 	}

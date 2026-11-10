@@ -290,6 +290,7 @@ func TestDeliveryUsesExactSTGCoverageThroughPROD(t *testing.T) {
 }
 
 func TestFoldDeliveryCurrentProductionEvidence(t *testing.T) {
+	t.Parallel()
 	in := deliveryFull()
 	in.Cycles = nil
 	in.DeploySeen = nil

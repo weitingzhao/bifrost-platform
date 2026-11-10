@@ -75,7 +75,7 @@ var bodies = map[string][]field{
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"question_id", kID, true}, {"answer", kStr, true}},
 	"mission_amended":         {{"reason", kStr, false}, {"success", kAny, true}, {"out_of_scope", kAny, true}, {"max_attempts", kInt, true}, {"max_wall_hours", kInt, true}, {"no_merge", kStr, true}, {"approval_id", kStr, true}, {"archive_manifest_sha256", kStr, true}, {"env", kStr, true}, {"expected_version", kInt, true}, {"version", kInt, true}},
 	"decision_recorded":       {{"decision", kStr, false}, {"why", kStr, false}, {"dropped", kStr, true}, {"reverse", kStr, true}},
-	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
+	"task_proposed":           {{"wave", kStr, true}, {"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"failed", kBool, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
 	"route_decided":           {{"job", kStr, false}, {"candidates", kAny, false}, {"excluded", kAny, false}, {"inputs", kAny, false}, {"fingerprint", kStr, false}},
@@ -255,6 +255,7 @@ var bodies = map[string][]field{
 		// landing_batch / landing_batch_red: a batch of operations landed
 		// on one landing CI, and how a red one ended (landing_batch.go,
 		// R5:5.7 goal 2).
+		{"wave_opened", kAny, true}, {"wave_appended", kAny, true}, {"wave_append_refused", kAny, true}, {"wave_closed", kAny, true}, {"wave_landing", kAny, true}, {"wave_red", kAny, true}, {"wave_landed", kAny, true}, {"wave_abandoned", kAny, true}, {"wave_tally", kAny, true},
 		{"landing_batch", kAny, true}, {"landing_batch_red", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
@@ -686,6 +687,11 @@ func badValue(eventType, name string, v any) string {
 	}
 	if eventType == "note" && name == "landing_replaced" {
 		return badLandingReplaced(v)
+	}
+	if eventType == "note" {
+		if _, ok := waveFields[name]; ok {
+			return badWave(name, v)
+		}
 	}
 	if eventType == "note" && name == "landing_batch" {
 		return badLandingBatch(v)
