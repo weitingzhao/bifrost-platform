@@ -107,17 +107,7 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 		if err != nil || !ok {
 			return store.Question{}, false
 		}
-		var option, text, by string
-		var at time.Time
-		if q.Answer != nil {
-			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
-		}
-		f, ok := questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
-		f.Options, f.ExpiresAt, f.Recommended = len(q.Options), q.ExpiresAt, q.Recommended
-		if q.Answer != nil {
-			f.Channel = q.Answer.Channel
-		}
-		return f, ok
+		return questionFact(q)
 	}
 }
 
@@ -456,4 +446,17 @@ func (rt *questionRuntime) checkAssessmentCard(ctx context.Context, id string) e
 		return fmt.Errorf("%w: assessments are available for runtime decision cards only", store.ErrState)
 	}
 	return nil
+}
+
+func questionFact(q questions.Question) (store.Question, bool) {
+	return questioncards.Fact(q)
+}
+
+// questionAnswerFact supplies the same source records to the shared adapter.
+func questionAnswerFact(id, status string, answered bool, option, text, by string, at time.Time) (store.Question, bool) {
+	q := questions.Question{ID: id, Status: status, Requester: questions.RuntimeSession}
+	if answered {
+		q.Answer = &questions.Answer{Option: option, Text: text, By: by, At: at}
+	}
+	return questionFact(q)
 }

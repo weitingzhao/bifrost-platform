@@ -81,7 +81,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	w.artifact(t, "task_spec", string(gateBody))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
-			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted}}); aerr != nil {
+			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {
 			return aerr
 		}
 		return store.SignOff(ctx, tx, "owner", s1, "TD-1")

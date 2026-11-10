@@ -94,19 +94,42 @@ func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc string, r read)
 
 // SeeApproval reads an approval's status and records a change
 // (approval_seen).
-func SeeApproval(ctx context.Context, db DB, number int64, status func(context.Context) (string, bool)) (bool, error) {
+type ApprovalFact struct {
+	Number                                    int64
+	Status, Action, Tier, Env, Repo, Task, Op string
+	CreatedAt, DecidedAt                      time.Time
+	Expired                                   bool
+}
+
+func approvalSeenBody(a ApprovalFact) map[string]any {
+	body := map[string]any{"approval": a.Number, "status": a.Status, "action": a.Action, "tier": a.Tier, "created_at": a.CreatedAt.UTC().Format(time.RFC3339), "expired": a.Expired}
+	for k, v := range map[string]string{"env": a.Env, "repo": a.Repo, "task": a.Task, "op": a.Op} {
+		if v != "" {
+			body[k] = v
+		}
+	}
+	if !a.DecidedAt.IsZero() {
+		body["decided_at"] = a.DecidedAt.UTC().Format(time.RFC3339)
+	}
+	return body
+}
+
+func SeeApproval(ctx context.Context, db DB, number int64, fact func(context.Context) (ApprovalFact, bool)) (bool, error) {
 	return seen(ctx, db, "approval_seen", map[string]any{"approval": number}, func(ctx context.Context) (map[string]any, bool, error) {
-		s, ok := status(ctx)
-		return map[string]any{"approval": number, "status": s}, ok, nil
+		a, ok := fact(ctx)
+		a.Number = number
+		return approvalSeenBody(a), ok, nil
 	})
 }
 
 // Question is a question as read from its store. An answered one carries the
 // option, who answered and when, and the text when there is one.
 type Question struct {
-	ID, Status, Option, Text, AnsweredBy, AnsweredAt string
-	Options                                          int    // how many options the card offers; 0 when the reader does not say
-	Channel                                          string // how it was answered: the console, or a rule (questions.RuleChannel)
+	Number                                                            int
+	OwnerDuty, TaskID, CreatedAt, WithdrawnAt, WithdrawnBy, ExpiredAt string
+	ID, Status, Option, Text, AnsweredBy, AnsweredAt                  string
+	Options                                                           int    // how many options the card offers; 0 when the reader does not say
+	Channel                                                           string // how it was answered: the console, or a rule (questions.RuleChannel)
 	// OwnerAnswer is set only by the trusted question-store adapter after
 	// the Console's admin authorization, never inferred from AnsweredBy.
 	OwnerAnswer bool
@@ -143,8 +166,11 @@ func questionSeenBody(id string, q Question) (map[string]any, bool, error) {
 		return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
 	}
 	body := map[string]any{"question": id, "status": q.Status}
+	if q.Number > 0 {
+		body["number"] = q.Number
+	}
 	for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt,
-		"recommended": q.Recommended} {
+		"recommended": q.Recommended, "created_at": q.CreatedAt, "owner_duty": q.OwnerDuty, "task": q.TaskID, "channel": q.Channel, "withdrawn_at": q.WithdrawnAt, "withdrawn_by": q.WithdrawnBy, "expired_at": q.ExpiredAt} {
 		if v != "" {
 			body[k] = v
 		}

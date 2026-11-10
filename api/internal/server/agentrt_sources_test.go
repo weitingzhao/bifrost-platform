@@ -32,17 +32,17 @@ func question(_ context.Context, id string) (store.Question, bool) {
 	at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.FixedZone("CDT", -5*3600))
 	switch id {
 	case "q_open":
-		return questionFact(id, "open", false, "", "", "", time.Time{})
+		return questionAnswerFact(id, "open", false, "", "", "", time.Time{})
 	case "q_done":
-		return questionFact(id, "answered", true, "a", "go", "owner", at)
+		return questionAnswerFact(id, "answered", true, "a", "go", "owner", at)
 	case "q_textual":
-		return questionFact(id, "answered", true, "", "just text", "owner", at)
+		return questionAnswerFact(id, "answered", true, "", "just text", "owner", at)
 	case "q_empty":
-		return questionFact(id, "answered", true, "", "", "owner", at)
+		return questionAnswerFact(id, "answered", true, "", "", "owner", at)
 	case "q_nobody":
-		return questionFact(id, "answered", true, "a", "", "", at)
+		return questionAnswerFact(id, "answered", true, "a", "", "", at)
 	case "q_untimed":
-		return questionFact(id, "answered", true, "a", "", "owner", time.Time{})
+		return questionAnswerFact(id, "answered", true, "a", "", "owner", time.Time{})
 	}
 	return store.Question{}, false
 }
@@ -116,12 +116,12 @@ func TestAgentRuntimeSources(t *testing.T) {
 	)
 	ctx := context.Background()
 
-	if s, ok := src.Approval(ctx, 7); !ok || s != "executed" {
-		t.Errorf("approval 7 = %q %v", s, ok)
+	if s, ok := src.Approval(ctx, 7); !ok || s.Status != "executed" {
+		t.Errorf("approval 7 = %v %v", s, ok)
 	}
 	for _, n := range []int64{8, 9, 13} { // no status, missing, store unreadable
 		if s, ok := src.Approval(ctx, n); ok {
-			t.Errorf("approval %d = %q, read", n, s)
+			t.Errorf("approval %d = %v, read", n, s)
 		}
 	}
 
@@ -327,7 +327,7 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 		t.Helper()
 		body, _ := json.Marshal(map[string]any{"idempotency_key": key, "title": "Which way?", "urgency": "Before tonight",
 			"meanwhile": "The line waits", "options": []any{map[string]any{"label": "Ship"}, map[string]any{"label": "Wait"}}, "allow_text": allowText})
-		if res := rt.svc.Create(ctx, "thread-a", "reporter", "reporter", body); res.Code >= 300 {
+		if res := rt.svc.Create(ctx, agentRuntimeRequester, "reporter", "reporter", body); res.Code >= 300 {
 			t.Fatalf("create = %d %v", res.Code, res.Body)
 		}
 	}
@@ -567,5 +567,51 @@ func TestProductionDeliveryEvidence(t *testing.T) {
 				t.Fatalf("incomplete evidence accepted: %+v", got)
 			}
 		})
+	}
+}
+
+func TestExternalApprovalFact(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC)
+	a := approvals.Approval{Number: 12, Status: approvals.StatusExpired, Action: "deploy", Tier: "T2", CreatedAt: at,
+		Params: map[string]any{"repo": "bifrost-platform", "task_id": "invalid", "task": "t_01M59KGZ56VX9YCCCN9KCR9264", "op": "release:deploy", "reason": "private"}}
+	f, ok := approvalFact(a)
+	if !ok || !f.Expired || f.Repo != "bifrost-platform" || f.Task != a.Params["task"] || f.Op != "release:deploy" {
+		t.Fatalf("fact = %+v, %v", f, ok)
+	}
+	if _, found := f.Body()["reason"]; found {
+		t.Fatal("copied private params")
+	}
+	a.Params = map[string]any{"repo": "bad/repo", "task": "t_invalid", "op": "two words"}
+	f, ok = approvalFact(a)
+	if !ok || f.Repo != "" || f.Task != "" || f.Op != "" {
+		t.Fatalf("invalid shapes retained: %+v", f)
+	}
+	a.Number = 0
+	if _, ok := approvalFact(a); ok {
+		t.Fatal("accepted missing number")
+	}
+	a.Number, a.Status = 12, ""
+	if _, ok := approvalFact(a); ok {
+		t.Fatal("accepted missing status")
+	}
+}
+
+func TestExternalQuestionDropsOtherSessionText(t *testing.T) {
+	t.Parallel()
+	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	ctx := context.Background()
+	raw, _ := json.Marshal(map[string]any{"idempotency_key": "abcdef0123456789", "title": "Which way?", "urgency": "Before tonight",
+		"meanwhile": "The line waits", "options": []any{map[string]any{"label": "Ship"}, map[string]any{"label": "Wait"}}, "allow_text": true})
+	if res := rt.svc.Create(ctx, "other-session", "reporter", "reporter", raw); res.Code >= 300 {
+		t.Fatalf("create = %d %v", res.Code, res.Body)
+	}
+	raw, _ = json.Marshal(map[string]any{"text": "private answer", "channel": "console"})
+	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", "1", raw); res.Code >= 300 {
+		t.Fatalf("answer = %d %v", res.Code, res.Body)
+	}
+	q, ok := rt.agentRuntimeQuestion()(ctx, "1")
+	if !ok || q.Text != "" || q.Option != "none" || q.Number != 1 || q.CreatedAt == "" || q.Channel != "console" {
+		t.Fatalf("fact = %+v, %v", q, ok)
 	}
 }

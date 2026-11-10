@@ -51,8 +51,10 @@ func (w *world) stepState(t *testing.T, id string) string {
 }
 
 // Readers of outside records that always return the given value.
-func approvalIs(status string) func(context.Context) (string, bool) {
-	return func(context.Context) (string, bool) { return status, true }
+func approvalIs(status string) func(context.Context) (store.ApprovalFact, bool) {
+	return func(context.Context) (store.ApprovalFact, bool) {
+		return store.ApprovalFact{Status: status, Action: "test", Tier: "test"}, true
+	}
 }
 
 func questionIs(q store.Question) func(context.Context) (store.Question, bool) {

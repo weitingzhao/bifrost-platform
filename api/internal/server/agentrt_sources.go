@@ -58,19 +58,19 @@ type (
 // seen, and gates_passed on the deployment is unknown.
 func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci ciIndexer, rel currentDeployment) controller.Sources {
 	src := controller.Sources{
-		Approval: func(context.Context, int64) (string, bool) { return "", false },
+		Approval: func(context.Context, int64) (store.ApprovalFact, bool) { return store.ApprovalFact{}, false },
 		Question: func(context.Context, string) (store.Question, bool) { return store.Question{}, false },
 		CI:       func(context.Context, string, string) (string, string, bool) { return "", "", false },
 		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
 	}
 	if ap != nil {
 		reads := newBoundedReads(2)
-		src.Approval = func(ctx context.Context, number int64) (string, bool) {
+		src.Approval = func(ctx context.Context, number int64) (store.ApprovalFact, bool) {
 			a, ok, err := within(ctx, reads, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
 			if err != nil || !ok || a.Status == "" {
-				return "", false
+				return store.ApprovalFact{}, false
 			}
-			return a.Status, true
+			return approvalFact(a)
 		}
 	}
 	if question != nil {
@@ -157,26 +157,6 @@ func (s *ciSnapshot) get(ctx context.Context, key string) (delivery.CIOutcome, e
 			return delivery.CIOutcome{}, err
 		}
 	}
-}
-
-// questionFact is a question as the runtime records it. An answer given as
-// text only is recorded with the option "none", the question store's own
-// word for it ("none" needs text), the text kept. An answer without who or
-// when is not read: question_seen refuses a partial answer (review 151 B2),
-// so it stays unseen rather than refused on every pass.
-func questionFact(id, status string, answered bool, option, text, by string, at time.Time) (store.Question, bool) {
-	f := store.Question{ID: id, Status: status}
-	if !answered {
-		return f, true
-	}
-	if option == "" && text != "" {
-		option = "none"
-	}
-	if option == "" || by == "" || at.IsZero() {
-		return store.Question{}, false
-	}
-	f.Option, f.Text, f.AnsweredBy, f.AnsweredAt = option, text, by, at.UTC().Format(time.RFC3339)
-	return f, true
 }
 
 // deployedFrom is what the record says the environment runs: its
@@ -309,4 +289,26 @@ func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) stor
 		}
 	}
 	return store.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
+}
+
+var approvalRepo = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)
+var approvalTask = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
+var approvalOp = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,80}$`)
+
+func approvalFact(a approvals.Approval) (store.ApprovalFact, bool) {
+	if a.Number == 0 || a.Status == "" {
+		return store.ApprovalFact{}, false
+	}
+	get := func(key string, re *regexp.Regexp) string {
+		v, _ := a.Params[key].(string)
+		if re.MatchString(v) {
+			return v
+		}
+		return ""
+	}
+	task := get("task_id", approvalTask)
+	if task == "" {
+		task = get("task", approvalTask)
+	}
+	return store.ApprovalFact{Number: int64(a.Number), Status: a.Status, Action: a.Action, Tier: a.Tier, Env: a.Env, Repo: get("repo", approvalRepo), Task: task, Op: get("op", approvalOp), CreatedAt: a.CreatedAt, DecidedAt: a.DecidedAt, Expired: a.Status == approvals.StatusExpired}, true
 }

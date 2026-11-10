@@ -303,10 +303,10 @@ func TestOutsideReadsUnderTheLock(t *testing.T) {
 	t.Cleanup(func() { released.Do(func() { close(release) }) })
 	slow := make(chan error, 1)
 	go func() {
-		_, seeErr := store.SeeApproval(ctx, pool, 16, func(context.Context) (string, bool) {
+		_, seeErr := store.SeeApproval(ctx, pool, 16, func(context.Context) (store.ApprovalFact, bool) {
 			close(inside)
 			<-release
-			return "pending", true
+			return store.ApprovalFact{Status: "pending", Action: "test", Tier: "test"}, true
 		})
 		slow <- seeErr
 	}()

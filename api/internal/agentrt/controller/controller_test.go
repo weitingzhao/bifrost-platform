@@ -109,12 +109,12 @@ func (w *world) read() {
 
 func (w *world) sources() controller.Sources {
 	return controller.Sources{
-		Approval: func(_ context.Context, n int64) (string, bool) {
+		Approval: func(_ context.Context, n int64) (store.ApprovalFact, bool) {
 			w.read()
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			s, ok := w.approvals[n]
-			return s, ok
+			return store.ApprovalFact{Number: n, Status: s, Action: "test", Tier: "test"}, ok
 		},
 		Question: func(_ context.Context, id string) (store.Question, bool) {
 			w.read()
@@ -286,9 +286,9 @@ func TestSlowSourceIsCutOff(t *testing.T) {
 	pool := setup(t)
 	setRule(t, pool, "R2:1-1", `{"approval_executed":16}`, [2]string{"approval", "16"})
 	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
-		Approval: func(ctx context.Context, _ int64) (string, bool) {
+		Approval: func(ctx context.Context, _ int64) (store.ApprovalFact, bool) {
 			<-ctx.Done()
-			return "", false
+			return store.ApprovalFact{}, false
 		},
 	}}
 	start := time.Now()

@@ -426,3 +426,8 @@ func FloorTreeStaleForTest(repo string, pinned []GrantFloorPath, tree landing.Fl
 // checkLandingRefusalAppend: a landing_refusal body and its event.
 func BadLandingRefusalForTest(v any) string { return badLandingRefusal(v) }
 func RefusalAppendForTest(ev Event) error   { return checkLandingRefusalAppend(ev) }
+
+// SeenCopiesForTest reads the same copies the step timeline uses.
+func SeenCopiesForTest(ctx context.Context, tx pgx.Tx, kind, key string, refs []string) ([]SeenCopy, error) {
+	return seenCopies(ctx, tx, kind, key, refs, nil)
+}

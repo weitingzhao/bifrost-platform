@@ -24,32 +24,8 @@ func New(svc *questions.Service) store.CardQuestions {
 	if svc == nil {
 		return store.CardQuestions{}
 	}
-	toFact := func(q questions.Question) store.Question {
-		var option, text, by string
-		var at time.Time
-		if q.Answer != nil {
-			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
-		}
-		f := store.Question{ID: q.ID, Status: q.Status}
-		if q.Status == questions.StatusAnswered {
-			if option == "" && text != "" {
-				option = "none"
-			}
-			if option == "" || by == "" || at.IsZero() {
-				return store.Question{}
-			}
-			f.Option, f.Text, f.AnsweredBy, f.AnsweredAt = option, text, by, at.UTC().Format(time.RFC3339)
-		}
-		f.Options, f.ExpiresAt, f.Recommended = len(q.Options), q.ExpiresAt, q.Recommended
-		if q.Answer != nil {
-			f.Channel = q.Answer.Channel
-			// Service.Answer and the answer route require the admin role;
-			// rule answers have their own channel. Preserve the login name.
-			f.OwnerAnswer = q.Requester == questions.RuntimeSession && q.Status == questions.StatusAnswered &&
-				q.Answer.Channel == "console" && q.Answer.By != "" && !q.Answer.Approval
-		}
-		return f
-	}
+	toFact := func(q questions.Question) store.Question { f, _ := Fact(q); return f }
+
 	get := func(ctx context.Context, id string) (questions.Question, bool, error) {
 		res := svc.Get(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", id)
 		switch res.Code {
@@ -204,4 +180,48 @@ func Unacked(svc *questions.Service) func(ctx context.Context) ([]store.Answered
 		}
 		return out, nil
 	}
+}
+
+// Fact converts a trusted question without copying non-runtime free text.
+func Fact(q questions.Question) (store.Question, bool) {
+	var option, text, by string
+	var at time.Time
+	if q.Answer != nil {
+		option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
+	}
+	f := store.Question{ID: q.ID, Status: q.Status}
+	if q.Status == questions.StatusAnswered {
+		if option == "" && text != "" {
+			option = "none"
+		}
+		if option == "" || by == "" || at.IsZero() {
+			return store.Question{}, false
+		}
+		f.Option, f.Text, f.AnsweredBy, f.AnsweredAt = option, text, by, at.UTC().Format(time.RFC3339)
+	}
+	f.Options, f.ExpiresAt, f.Recommended = len(q.Options), q.ExpiresAt, q.Recommended
+	if q.Answer != nil {
+		f.Channel = q.Answer.Channel
+		// Service.Answer and the answer route require the admin role;
+		// rule answers have their own channel. Preserve the login name.
+		f.OwnerAnswer = q.Requester == questions.RuntimeSession && q.Status == questions.StatusAnswered &&
+			q.Answer.Channel == "console" && q.Answer.By != "" && !q.Answer.Approval
+	}
+	f.Number, f.OwnerDuty, f.TaskID = q.Number, q.OwnerDuty, q.TaskID
+	if !q.CreatedAt.IsZero() {
+		f.CreatedAt = q.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if q.Withdrawal != nil {
+		f.WithdrawnBy = q.Withdrawal.Principal
+		if !q.Withdrawal.At.IsZero() {
+			f.WithdrawnAt = q.Withdrawal.At.UTC().Format(time.RFC3339)
+		}
+	}
+	if q.Status == questions.StatusExpired && !q.ExpiresAt.IsZero() {
+		f.ExpiredAt = q.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if q.Requester != questions.RuntimeSession {
+		f.Text = ""
+	}
+	return f, true
 }

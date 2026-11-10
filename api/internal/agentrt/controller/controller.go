@@ -28,7 +28,7 @@ import (
 // ReadTimeout (review 152 B2).
 type Sources struct {
 	Plan     store.PlanSources
-	Approval func(ctx context.Context, number int64) (status string, ok bool)
+	Approval func(ctx context.Context, number int64) (store.ApprovalFact, bool)
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
@@ -269,9 +269,9 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (string, bool) {
+		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (store.ApprovalFact, bool) {
 			type r struct {
-				s  string
+				s  store.ApprovalFact
 				ok bool
 			}
 			x := bounded(c, ctx, func(ctx context.Context) r { s, ok := c.Sources.Approval(ctx, n); return r{s, ok} })
