@@ -55,6 +55,35 @@ func TestWaveRoutes(t *testing.T) {
 	if resp.StatusCode != 200 || len(fold) != 2 || fold[0].State != "closed" || fold[1].State != "abandoned" {
 		t.Fatalf("list: %d %+v", resp.StatusCode, fold)
 	}
+	for _, state := range []string{"closed", "open", "abandoned"} {
+		t.Run("list state "+state, func(t *testing.T) {
+			req, err := http.NewRequest("GET", s.URL+"/api/v1/agentrt/waves?repo=bifrost-platform&state="+state, nil)
+			must(t, err)
+			req.Header.Set("Authorization", "Bearer "+tokens["admin"])
+			resp, err := s.Client().Do(req)
+			must(t, err)
+			defer resp.Body.Close()
+			var filtered []store.Wave
+			must(t, json.NewDecoder(resp.Body).Decode(&filtered))
+			want := []store.Wave{}
+			for _, wave := range fold {
+				if wave.State == state {
+					want = append(want, wave)
+				}
+			}
+			if resp.StatusCode != 200 || filtered == nil || len(filtered) != len(want) {
+				t.Fatalf("list state %s: %d %+v", state, resp.StatusCode, filtered)
+			}
+			for i := range want {
+				if filtered[i] != want[i] {
+					t.Fatalf("list state %s: got %+v, want %+v", state, filtered, want)
+				}
+			}
+		})
+	}
+	if code, out := call(t, s, "admin", "GET", "waves?state=x", nil); code != 400 || out["error"] != "bad_request" || out["message"] != "state is open, closed or abandoned" {
+		t.Fatalf("list state invalid: %d %v", code, out)
+	}
 	if code, out := call(t, s, "admin", "GET", "waves?repo=other", nil); code != 400 {
 		t.Fatalf("list repo: %d %v", code, out)
 	}

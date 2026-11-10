@@ -55,10 +55,24 @@ func (a *API) listWaves(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "only bifrost-platform takes waves for now")
 		return
 	}
+	state := r.URL.Query().Get("state")
+	if state != "" && state != "open" && state != "closed" && state != "abandoned" {
+		writeError(w, http.StatusBadRequest, "bad_request", "state is open, closed or abandoned")
+		return
+	}
 	out, err := store.Waves(r.Context(), a.DB, repo)
 	if err != nil {
 		a.fail(w, err)
 		return
+	}
+	if state != "" {
+		filtered := []store.Wave{}
+		for _, wave := range out {
+			if wave.State == state {
+				filtered = append(filtered, wave)
+			}
+		}
+		out = filtered
 	}
 	writeJSON(w, http.StatusOK, out)
 }
