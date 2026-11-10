@@ -233,6 +233,40 @@ func TestReplayConflictNamesPaths(t *testing.T) {
 		t.Fatalf("workspace left dirty:\n%s", st)
 	}
 }
+
+// Main already has the change (another commit landed the same content):
+// the replay has nothing to commit and is refused like a conflict, with
+// InMain set and the workspace left clean, never an error that would drop
+// the whole batch on every pass (2026-11-10, ZQAMT8 after eedb6300).
+func TestReplayAlreadyInMainIsRefused(t *testing.T) {
+	g, in, src := sameFileFixture(t, "first", "second")
+	// Rewrite main so that it already carries the change's content.
+	gitTest(t, src, "checkout", "-q", "main")
+	gitTest(t, src, "reset", "-q", "--hard", in.Base)
+	gitTest(t, src, "cherry-pick", "--no-commit", in.A)
+	gitTest(t, src, "commit", "-m", "the same change, landed by another commit")
+	m0 := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", "-f", filepath.Join(filepath.Dir(src), "remote.git"), "main")
+	in.M0 = m0
+	ctx := context.Background()
+	w, e := g.Open(ctx, in.A)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer w.Close()
+	_, e = w.Replay(ctx, in)
+	var c *ConflictError
+	if !errors.Is(e, ErrConflict) || !errors.As(e, &c) || !c.InMain || c.M0 != m0 || len(c.Paths) != 0 {
+		t.Fatalf("already-in-main replay not refused as such: %v %+v", e, c)
+	}
+	if st := gitTest(t, w.dir, "status", "--porcelain"); st != "" {
+		t.Fatalf("workspace left dirty:\n%s", st)
+	}
+	if head := gitTest(t, w.dir, "rev-parse", "HEAD"); head != m0 {
+		t.Fatalf("workspace not back at M0: %s", head)
+	}
+}
+
 func TestGitEnvironmentAndCredentialScope(t *testing.T) {
 	g, in, _ := fixture(t)
 	t.Setenv("GIT_CONFIG_COUNT", "1")

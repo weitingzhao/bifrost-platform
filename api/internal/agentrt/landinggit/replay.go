@@ -20,9 +20,17 @@ var changeTrailer = regexp.MustCompile(`(?im)^Change-Id:\s*(I[0-9a-f]{40})\s*$`)
 type ConflictError struct {
 	M0    string
 	Paths []string
+	// InMain: the change merges onto M0 with nothing left to commit, because
+	// main already has it (landed by another commit, such as a hand-merged
+	// batch). Refused like a conflict so the root leaves the landing queue
+	// instead of failing the whole batch on an empty commit (2026-11-10).
+	InMain bool
 }
 
 func (c *ConflictError) Error() string {
+	if c.InMain {
+		return "nothing to replay onto " + c.M0 + ": main already has the change"
+	}
 	return "conflict onto " + c.M0 + ": " + strings.Join(c.Paths, ", ")
 }
 func (c *ConflictError) Is(target error) bool { return target == ErrConflict }
@@ -83,6 +91,13 @@ func (w *Workspace) Replay(ctx context.Context, in ReplayInput) (string, error) 
 	}
 	if _, e = w.local(ctx, "cherry-pick", "--no-commit", in.A); e != nil {
 		return "", w.conflict(ctx, in.M0)
+	}
+	// Nothing staged: main already has the change. An empty commit would
+	// fail and drop the whole batch on every pass; refuse it instead.
+	if _, e = w.local(ctx, "diff", "--cached", "--quiet"); e == nil {
+		_, _ = w.local(ctx, "cherry-pick", "--abort")
+		_, _ = w.local(ctx, "reset", "--hard", "-q", in.M0)
+		return "", &ConflictError{M0: in.M0, Paths: []string{}, InMain: true}
 	}
 	author, e := w.local(ctx, "show", "-s", "--format=%an%x00%ae%x00%aI", in.A)
 	if e != nil {
