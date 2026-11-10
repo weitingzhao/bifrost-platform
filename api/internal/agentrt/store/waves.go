@@ -141,37 +141,19 @@ func EndWave(ctx context.Context, db DB, w Writer, id string, abandon bool) erro
 			return invalid("wave %s is not open", id)
 		}
 		if !abandon {
-			rows, err := tx.Query(ctx, `SELECT DISTINCT t.task_id FROM agentrt.task t JOIN agentrt.event e ON e.task_id=t.task_id AND e.event_type='task_proposed' WHERE e.body_json->>'wave'=$1 AND t.state='accepted' ORDER BY t.task_id`, id)
+			members, err := waveMembers(ctx, tx, id)
 			if err != nil {
 				return err
 			}
 			pending := []string{}
-			for rows.Next() {
-				var task string
-				if err := rows.Scan(&task); err != nil {
-					rows.Close()
-					return err
+			for _, m := range members {
+				if m.ready {
+					continue
 				}
-				pending = append(pending, task)
+				pending = append(pending, m.task)
 			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				return err
-			}
-			unappended := []string{}
-			for _, task := range pending {
-				landed, err := rootLandedCommit(ctx, tx, task)
-				if err != nil {
-					return err
-				}
-				if landed == "" {
-					unappended = append(unappended, task)
-				}
-			}
-			pending = unappended
 			if len(pending) > 0 {
-				return invalid("wave %s has members not yet appended: %v", id, pending)
+				return invalid("wave %s has members not yet accepted: %v", id, pending)
 			}
 		}
 		kind := "wave_closed"
@@ -209,4 +191,96 @@ func checkTaskWave(ctx context.Context, tx pgx.Tx, t TaskProposal) error {
 		}
 	}
 	return invalid("wave %s is not open", t.Wave)
+}
+
+// waveMember is one task proposed into a wave, as the hold reads it.
+type waveMember struct {
+	task, wave string
+	// ready: accepted, rejected, cancelled or already landed; a wave closes
+	// and lands only when every member is.
+	ready bool
+	// landed: its change is on main already.
+	landed bool
+}
+
+// waveMembers lists the tasks proposed into wave id (id "" lists every
+// wave's), in task order.
+func waveMembers(ctx context.Context, tx pgx.Tx, id string) ([]waveMember, error) {
+	rows, err := tx.Query(ctx, `SELECT DISTINCT t.task_id, e.body_json->>'wave', t.state FROM agentrt.task t
+	  JOIN agentrt.event e ON e.task_id=t.task_id AND e.event_type='task_proposed'
+	  WHERE COALESCE(e.body_json->>'wave','') <> '' AND ($1 = '' OR e.body_json->>'wave' = $1)
+	  ORDER BY t.task_id`, id)
+	if err != nil {
+		return nil, err
+	}
+	type row struct{ task, wave, state string }
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.task, &r.wave, &r.state); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		all = append(all, r)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]waveMember, 0, len(all))
+	for _, r := range all {
+		landed, err := rootLandedCommit(ctx, tx, r.task)
+		if err != nil {
+			return nil, err
+		}
+		m := waveMember{task: r.task, wave: r.wave, landed: landed != ""}
+		m.ready = m.landed || r.state == "accepted" || r.state == "rejected" || r.state == "cancelled"
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// WaveHeld is the set of tasks of repo a wave keeps out of the landing
+// queue (AW, option 1 of 2026-11-10: hold and release). A member of an open
+// or abandoned wave is held: it lands only with its wave, and an abandoned
+// wave lands nothing. A member of a closed wave is held until every member
+// of that wave is ready (accepted, rejected, cancelled or landed): then the
+// members not yet landed are released together, so the batch landing takes
+// them in one batch (one landing CI, one grant, one push). A member sent
+// back for rework by a red batch holds its wave again until it is accepted.
+func WaveHeld(ctx context.Context, tx pgx.Tx, repo string) (map[string]bool, error) {
+	waves, err := wavesTx(ctx, tx, repo)
+	if err != nil {
+		return nil, err
+	}
+	state := map[string]string{}
+	for _, w := range waves {
+		state[w.ID] = w.State
+	}
+	members, err := waveMembers(ctx, tx, "")
+	if err != nil {
+		return nil, err
+	}
+	ready := map[string]bool{}
+	for _, m := range members {
+		if _, ok := state[m.wave]; !ok {
+			continue // another repository's wave
+		}
+		if _, seen := ready[m.wave]; !seen {
+			ready[m.wave] = true
+		}
+		ready[m.wave] = ready[m.wave] && m.ready
+	}
+	held := map[string]bool{}
+	for _, m := range members {
+		st, ok := state[m.wave]
+		if !ok || m.landed {
+			continue
+		}
+		if st != "closed" || !ready[m.wave] {
+			held[m.task] = true
+		}
+	}
+	return held, nil
 }

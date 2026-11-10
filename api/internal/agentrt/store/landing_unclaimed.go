@@ -25,6 +25,7 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 	var state landing.State
 	type root struct{ task string }
 	var due []root
+	var held map[string]bool
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
 		if state, err = LandingState(ctx, tx, stream); err != nil || state.EnabledAt.IsZero() {
@@ -39,17 +40,31 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		var all []root
 		for rows.Next() {
 			var r root
 			if err = rows.Scan(&r.task); err != nil {
+				rows.Close()
 				return err
 			}
+			all = append(all, r)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		// A root its wave holds back has not been waiting on the queue:
+		// its window starts when the wave releases it (WaveHeld).
+		if held, err = WaveHeld(ctx, tx, repo); err != nil {
+			return err
+		}
+		for _, r := range all {
 			if state.LatestOperation(r.task) == "" {
 				due = append(due, r)
 			}
 		}
-		return rows.Err()
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -78,6 +93,8 @@ func SettleUnclaimed(ctx context.Context, db DB, repo string, now time.Time) ([]
 				return nil // rebound out of the handoff since the list (CUT §7.7 item 5)
 			case missionState == "done" || missionState == "stopped" || missionState == "expired":
 				why = "stale"
+			case held[r.task]:
+				return nil // its wave holds it: no queue window runs yet
 			case accepted != nil && !now.Before(accepted.Add(landing.ClaimWindow)):
 				why = "bound"
 			default:

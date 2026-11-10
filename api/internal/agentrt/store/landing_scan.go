@@ -38,15 +38,32 @@ func LandingCandidates(ctx context.Context, db DB, enabledAt time.Time, repos ..
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		var all []string
 		for rows.Next() {
 			var task string
 			if err = rows.Scan(&task); err != nil {
+				rows.Close()
 				return err
 			}
-			tasks = append(tasks, task)
+			all = append(all, task)
 		}
-		return rows.Err()
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		// A wave keeps its members out until it releases them together
+		// (WaveHeld).
+		held, err := WaveHeld(ctx, tx, repo)
+		if err != nil {
+			return err
+		}
+		for _, task := range all {
+			if !held[task] {
+				tasks = append(tasks, task)
+			}
+		}
+		return nil
 	})
 	return tasks, err
 }

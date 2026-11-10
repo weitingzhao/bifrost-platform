@@ -237,6 +237,12 @@ external_hosts:
 // check), whose result changes path.
 func (r *batchRig) accepted(t *testing.T, path string) string {
 	t.Helper()
+	return r.acceptedIn(t, path, "")
+}
+
+// acceptedIn is accepted for a task proposed into wave (none when empty).
+func (r *batchRig) acceptedIn(t *testing.T, path, wave string) string {
+	t.Helper()
 	var spec, evidence string
 	must(t, store.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		var err error
@@ -248,7 +254,7 @@ func (r *batchRig) accepted(t *testing.T, path string) string {
 	}))
 	out, err := store.ProposeTasks(ctx, r.pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "batch "+path, "M-3", []store.TaskProposal{
 		{Ref: "a", OffPlanReason: "batch landing", Role: "implement", Class: "go", Title: path, SpecArtifact: spec, Effect: "branch",
-			Repo: "bifrost-platform", BaseCommit: strings.Repeat("b", 40)}})
+			Repo: "bifrost-platform", BaseCommit: strings.Repeat("b", 40), Wave: wave}})
 	must(t, err)
 	task := out["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
 	sum := sha1.Sum([]byte(task))

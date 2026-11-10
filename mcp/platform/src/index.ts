@@ -659,7 +659,7 @@ reg(
         needs: z.array(z.string()).optional(),
         depends_on: z.array(z.string()).optional(),
         hard_limit_s: z.number().int().min(0).max(86400).optional(),
-        wave: z.string().optional().describe('The open wave (open_wave) the task belongs to: dispatched on its head, landed with it'),
+        wave: z.string().optional().describe('The open wave (open_wave) the task belongs to: held when accepted, landed with its wave'),
       }),
     ),
     idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
@@ -765,7 +765,7 @@ reg(
 
 reg(
   'close_wave',
-  `Close a wave so it lands once (action close), or abandon it so nothing of it lands (action abandon). Close is refused while a task of the wave is not accepted. ${WAVE_NOTE}`,
+  `Close a wave so its members land together once (action close), or abandon it so nothing of it lands (action abandon). Close is refused while a member is not yet accepted. ${WAVE_NOTE}`,
   {
     id: z.string(),
     action: z.enum(['close', 'abandon']),

@@ -122,7 +122,8 @@ func TestWaveRoutes(t *testing.T) {
 		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.task SET state='accepted' WHERE task_id=$1`, taskID)
+		// Not yet accepted: the close is refused (hold and release, 2026-11-10).
+		_, err = tx.Exec(ctx, `UPDATE agentrt.task SET state='running' WHERE task_id=$1`, taskID)
 		return err
 	}))
 	if code, out := call(t, s, "admin", "POST", "waves/"+wave.ID+"/close", nil); code != 422 || !strings.Contains(fmt.Sprint(out["message"]), taskID) {

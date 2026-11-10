@@ -496,7 +496,7 @@ export async function requestStop(
 }
 
 export const WAVE_NOTE =
-  'A wave is one repository\'s batch (M-368): tasks proposed with its id (propose_tasks, wave) are dispatched on the wave branch head and appended to it when accepted; close_wave lands the whole wave once (one landing CI, one card, one push to main, one STG and one PROD release); abandon ends it without landing. Only bifrost-platform takes waves for now.'
+  'A wave is one repository\'s batch (M-368): tasks proposed with its id (propose_tasks, wave) start from main as usual and, once accepted, are held out of landing; close_wave releases them together and the batch landing lands them once (one landing CI, one card, one push to main, one STG and one PROD release). A red wave sends the blamed member back and holds the others until it is accepted again. Tasks of one wave cannot build on each other\'s unlanded work: put dependent work in the next wave. abandon ends it without landing. Only bifrost-platform takes waves for now.'
 
 /** Open a wave of a repository on its main head. */
 export async function openWave(
