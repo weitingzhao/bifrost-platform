@@ -242,7 +242,7 @@ func pinnedSource(taskID, pin string) candidateSource {
 // pinnedDoc is the answer of an exact claim, as its key keeps it.
 func (cl *Claim) pinnedDoc() map[string]any {
 	doc := map[string]any{"task_id": cl.TaskID, "attempt_id": cl.AttemptID, "attempt_no": cl.AttemptNo, "mission_id": cl.MissionID,
-		"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID,
+		"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID, "title": cl.Title,
 		"pushed_ref": cl.PushedRef, "effect_class": cl.Effect, "lease_epoch": cl.Epoch,
 		"lease_expires_at": cl.LeaseExpiresAt.UTC().Format(time.RFC3339Nano), "hard_limit_s": int(cl.HardLimit / time.Second),
 		"tool": map[string]any{"executor": cl.Tool.Executor, "provider": cl.Tool.Provider, "model": cl.Tool.Model}}

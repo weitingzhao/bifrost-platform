@@ -427,6 +427,8 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 // it within the batch; DependsOn holds refs of the batch or ids of tasks of
 // the same mission.
 type TaskProposal struct {
+	Wave                             string
+	Urgent                           bool
 	Ref                              string
 	PlanNode, OffPlanReason, Subject string
 	Role, Class, Title, SpecArtifact string
@@ -511,10 +513,17 @@ func missingCheckout(repo, base string) string {
 func batchRequest(missionID string, tasks []TaskProposal) map[string]any {
 	list := make([]any, 0, len(tasks))
 	for _, t := range tasks {
-		list = append(list, map[string]any{"ref": t.Ref, "plan_node_id": t.PlanNode, "off_plan_reason": t.OffPlanReason,
+		item := map[string]any{"ref": t.Ref, "plan_node_id": t.PlanNode, "off_plan_reason": t.OffPlanReason,
 			"subject_task_id": t.Subject, "role": t.Role, "task_class": t.Class, "title": t.Title,
 			"spec_artifact_id": t.SpecArtifact, "effect_class": t.Effect, "repo": t.Repo, "base_commit": t.BaseCommit,
-			"core": t.Core, "needs": nonNil(t.Needs), "depends_on": nonNil(t.DependsOn), "hard_limit_s": int64(t.HardLimit / time.Second)})
+			"core": t.Core, "needs": nonNil(t.Needs), "depends_on": nonNil(t.DependsOn), "hard_limit_s": int64(t.HardLimit / time.Second)}
+		if t.Wave != "" {
+			item["wave"] = t.Wave
+		}
+		if t.Urgent {
+			item["urgent"] = true
+		}
+		list = append(list, item)
 	}
 	return map[string]any{"mission_id": missionID, "tasks": list}
 }
@@ -623,6 +632,11 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 // proposeBatchTx is the write of a batch; p, when not nil, pins some of its
 // tasks (pin.go), each checked before any task is written.
 func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, tasks []TaskProposal, p *pinning) (map[string]any, error) {
+	for _, t := range tasks {
+		if err := checkTaskWave(ctx, tx, t); err != nil {
+			return nil, err
+		}
+	}
 	if err := lockBatch(ctx, tx, tasks); err != nil {
 		return nil, err
 	}
@@ -675,7 +689,7 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 		task := Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
 			OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
 			SpecArtifact: specID, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
-			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}
+			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token, Wave: t.Wave, Urgent: t.Urgent}
 		if pinned {
 			task.pin, task.viaSession, task.providers, task.pinReason = p.pins[t.Ref], p.viaSession, p.providers[t.Ref], p.reasons[t.Ref]
 		}

@@ -46,16 +46,28 @@ func BatchID(lead string) string { return "batch:" + lead }
 // waits: its one grant covers every member's soft checks (the lead's
 // material is the batch's, store/landing_batch_grant.go). A batch of one
 // is today's single landing.
-func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
+// With wave set, cands are the complete wave in append order. The wave
+// consumes one landing slot; any ineligible member refuses the whole wave.
+// BatchMax remains a bound on the number of operations in the record.
+func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidate {
+	if wave && len(cands) > BatchMax {
+		return nil
+	}
 	var out []BatchCandidate
 	grant := -1
 	limit := BatchMax
 	for _, c := range cands {
 		f := c.Facts
 		if f.Repo != "bifrost-platform" || f.Operation.S5.Required || S5AutomaticRoute(f) {
+			if wave {
+				return nil
+			}
 			continue
 		}
 		if len(out) > 0 && f.Tenant != out[0].Facts.Tenant {
+			if wave {
+				return nil
+			}
 			continue
 		}
 		if f.Rule != nil && f.Rule.Landing != nil {
@@ -64,11 +76,18 @@ func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
 				limit = min(limit, m)
 			}
 		}
-		if len(out) >= limit {
+		if wave {
+			if limit < 1 {
+				return nil
+			}
+		} else if len(out) >= limit {
 			break
 		}
 		reason, soft := PolicyChecks(f, now)
 		if reason != "" || len(soft) > 0 && !MayAwaitGrant(f, soft) {
+			if wave {
+				return nil
+			}
 			continue
 		}
 		if len(soft) > 0 && grant < 0 {
@@ -76,7 +95,7 @@ func FormBatch(cands []BatchCandidate, now time.Time) []BatchCandidate {
 		}
 		out = append(out, c)
 	}
-	if grant > 0 {
+	if grant > 0 && !wave {
 		lead := out[grant]
 		out = append([]BatchCandidate{lead}, slices.Delete(out, grant, grant+1)...)
 	}

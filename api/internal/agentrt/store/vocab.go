@@ -35,6 +35,7 @@ type field struct {
 // constraint has it (migrations 0009, 0013); TestEventTypesAreTheDatabases holds
 // the two together. bodies below covers only the types the store writes.
 var eventTypes = map[string]bool{
+	"wave_opened": true, "wave_closed": true, "wave_abandoned": true,
 	"plan_node_created": true, "plan_node_retitled": true, "plan_node_state_changed": true,
 	"plan_change_proposed": true, "plan_change_decided": true, "plan_changed": true, "mission_proposed": true,
 	"mission_state_changed": true, "mission_amended": true, "task_proposed": true, "task_state_changed": true,
@@ -64,6 +65,9 @@ func IsEventType(t string) bool { return eventTypes[t] }
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
+	"wave_opened":             {{"id", kStr, false}, {"repo", kStr, false}, {"plan_root", kStr, false}, {"n", kInt, false}, {"base", kStr, false}},
+	"wave_closed":             {{"id", kStr, false}},
+	"wave_abandoned":          {{"id", kStr, false}},
 	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},
 	"plan_node_retitled":      {{"title", kStr, false}, {"label", kStr, true}},
@@ -75,11 +79,11 @@ var bodies = map[string][]field{
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"question_id", kID, true}, {"answer", kStr, true}},
 	"mission_amended":         {{"reason", kStr, false}, {"success", kAny, true}, {"out_of_scope", kAny, true}, {"max_attempts", kInt, true}, {"max_wall_hours", kInt, true}, {"no_merge", kStr, true}, {"approval_id", kStr, true}, {"archive_manifest_sha256", kStr, true}, {"env", kStr, true}, {"expected_version", kInt, true}, {"version", kInt, true}},
 	"decision_recorded":       {{"decision", kStr, false}, {"why", kStr, false}, {"dropped", kStr, true}, {"reverse", kStr, true}},
-	"task_proposed":           {{"wave", kStr, true}, {"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
+	"task_proposed":           {{"wave", kStr, true}, {"urgent", kBool, true}, {"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"failed", kBool, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
 	"route_decided":           {{"job", kStr, false}, {"candidates", kAny, false}, {"excluded", kAny, false}, {"inputs", kAny, false}, {"fingerprint", kStr, false}},
-	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}, {"model", kStr, true}, {"model_provider", kStr, true}, {"choice", kAny, true}},
+	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}, {"model", kStr, true}, {"model_provider", kStr, true}, {"choice", kAny, true}, {"base_commit", kStr, true}},
 	"attempt_started":         {{"model", kStr, true}, {"model_provider", kStr, true}},
 	"attempt_checkpointed":    {{"checkpoint_seq", kInt, false}, {"artifacts", kIDs, true}, {"too_large", kBool, true}},
 	"attempt_stale":           {{"lease_expires_at", kStr, false}},

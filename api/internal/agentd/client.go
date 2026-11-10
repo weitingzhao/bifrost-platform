@@ -83,6 +83,7 @@ type Tool struct {
 
 // Claimed is a leased attempt.
 type Claimed struct {
+	Title          string    `json:"title,omitempty"`
 	TaskID         string    `json:"task_id"`
 	AttemptID      string    `json:"attempt_id"`
 	AttemptNo      int       `json:"attempt_no"`

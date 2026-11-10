@@ -281,6 +281,13 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if err = ensureWriter(ctx, tx, seat, false); err != nil {
 			return err
 		}
+		// Take the wave lock before writing artifact streams, as a pinned
+		// proposal holds it while producing its spec too.
+		for _, pt := range p.Tasks {
+			if err = checkTaskWave(ctx, tx, TaskProposal{Ref: pt.Ref, Wave: pt.Wave, Urgent: pt.Urgent, Repo: pt.Repo, Effect: "branch"}); err != nil {
+				return refuse(err.Error())
+			}
+		}
 		tasks := make([]TaskProposal, 0, len(p.Tasks))
 		for _, pt := range p.Tasks {
 			verify := slices.Clone(Repos[pt.Repo].Verify)
@@ -310,7 +317,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			if node == "" {
 				offPlan = "planned by task " + taskID
 			}
-			tasks = append(tasks, TaskProposal{Ref: pt.Ref, PlanNode: node, OffPlanReason: offPlan, Role: "implement",
+			tasks = append(tasks, TaskProposal{Wave: pt.Wave, Urgent: pt.Urgent, Ref: pt.Ref, PlanNode: node, OffPlanReason: offPlan, Role: "implement",
 				Class: "goal", Title: pt.Title, SpecArtifact: id, Effect: "branch", Repo: pt.Repo, BaseCommit: baseOf(pt.Repo),
 				Core: pt.IsCore(), DependsOn: pt.DependsOn})
 		}

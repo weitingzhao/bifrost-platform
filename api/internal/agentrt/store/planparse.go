@@ -74,6 +74,8 @@ type PlannedMission struct {
 // (core.go): true or false, false when left out; kept as written so that a
 // null or another type is refused, not read as false.
 type PlannedTask struct {
+	Wave      string          `json:"wave,omitempty"`
+	Urgent    bool            `json:"urgent,omitempty"`
 	Ref       string          `json:"ref"`
 	Title     string          `json:"title"`
 	Repo      string          `json:"repo"`

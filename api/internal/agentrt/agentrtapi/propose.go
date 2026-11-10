@@ -111,6 +111,8 @@ func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 }
 
 type taskBody struct {
+	Wave           string   `json:"wave"`
+	Urgent         bool     `json:"urgent"`
 	Ref            string   `json:"ref"`
 	PlanNodeID     string   `json:"plan_node_id"`
 	OffPlanReason  string   `json:"off_plan_reason"`
@@ -167,7 +169,7 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("task %s: hard_limit_s is from 0 to %d", t.Ref, int(store.MaxHardLimit/time.Second)))
 			return
 		}
-		task := store.PinnedTask{TaskProposal: store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
+		task := store.PinnedTask{TaskProposal: store.TaskProposal{Wave: t.Wave, Urgent: t.Urgent, Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
 			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers,

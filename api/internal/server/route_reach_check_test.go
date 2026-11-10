@@ -69,6 +69,13 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/delivery":      {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5:5.7-8 slice 1: the coordinator pins' share, read-only, every reader.
 	"GET /api/v1/agentrt/pin-share": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// M-368 waves: the list for every reader; opening and closing behind
+	// the same proposers' gate as POST missions (operator, admin and the
+	// trade satellite reach it there too).
+	"GET /api/v1/agentrt/waves":               {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"POST /api/v1/agentrt/waves":              {"operator", "admin", "trade-satellite"},
+	"POST /api/v1/agentrt/waves/{id}/close":   {"operator", "admin", "trade-satellite"},
+	"POST /api/v1/agentrt/waves/{id}/abandon": {"operator", "admin", "trade-satellite"},
 	// R5:5.7: the check value table, read-only, every reader.
 	"GET /api/v1/agentrt/check-value": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// The leak value projection, read-only, every reader, as /progress is.

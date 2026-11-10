@@ -53,18 +53,32 @@ func (r *batchRig) pinnedGrants() store.GrantSources {
 // core action, its material the batch's), and after that one approval R is
 // pushed to main once and both members land.
 func TestBatchCoresOneCardOnePush(t *testing.T) {
+	testBatchCoresOneCardOnePush(t, 2)
+}
+
+func testBatchCoresOneCardOnePush(t *testing.T, members int) {
+	t.Helper()
 	r := newBatchRig(t, true)
 	gsrc := r.pinnedGrants()
-	roots := []string{r.accepted(t, "api/internal/agentrt/store/cores_a.go"), r.accepted(t, "api/internal/agentrt/store/cores_b.go")}
+	var roots []string
+	for i := range members {
+		roots = append(roots, r.accepted(t, fmt.Sprintf("api/internal/agentrt/store/cores_%d.go", i)))
+	}
 	b := r.formed(t, roots)
-	if len(b.Members) != 2 || b.Lead != r.state(t).LatestOperation(roots[0]) {
-		t.Fatalf("not one batch of both cores: %+v", b)
+	if len(b.Members) != members || b.Lead != r.state(t).LatestOperation(roots[0]) {
+		t.Fatalf("not one batch of all cores: %+v", b)
 	}
 	r.clock(time.Minute)
 	r.status = "Succeeded"
 	r.pass(t)
-	if ops := r.latest(t, roots); ops[0].Phase != "awaiting_grant" || ops[1].Phase != "branch_pushed" {
-		t.Fatal("phases", ops[0].Phase, ops[1].Phase)
+	for i, op := range r.latest(t, roots) {
+		want := "branch_pushed"
+		if i == 0 {
+			want = "awaiting_grant"
+		}
+		if op.Phase != want {
+			t.Fatalf("member %d phase = %s, want %s", i, op.Phase, want)
+		}
 	}
 	var asks []coresAsk
 	var requests []store.LandingGrantRequest
@@ -101,6 +115,16 @@ func TestBatchCoresOneCardOnePush(t *testing.T) {
 	for i, o := range r.latest(t, roots) {
 		if o.Phase != "main_result" || o.Outcome != "ok" {
 			t.Fatal("member", i, o.Phase, o.Outcome)
+		}
+	}
+	r.clock(time.Minute)
+	_, err = store.ReconcileMain(ctx, r.pool, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
+		return store.MainEvidence{Head: b.R, HasR: true, Validity: "effective"}, nil
+	})
+	must(t, err)
+	for i, op := range r.latest(t, roots) {
+		if op.Phase != "landed" {
+			t.Fatalf("member %d phase = %s, want landed", i, op.Phase)
 		}
 	}
 	r.pass(t)

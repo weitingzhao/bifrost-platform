@@ -280,6 +280,8 @@ func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause
 // Task is a task to propose. Core and Needs decide who may take it (v5
 // §5.1.2 「分流顺序」); Repo and BaseCommit are where agentd starts from.
 type Task struct {
+	Wave                                                                                      string
+	Urgent                                                                                    bool
 	ID, MissionID, PlanNode, OffPlanReason, Subject, Role, Class, Title, SpecArtifact, Effect string
 	Repo, BaseCommit                                                                          string
 	Core                                                                                      bool
@@ -300,6 +302,12 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 		t.ID = NewTaskID()
 	}
 	body := map[string]any{"title": t.Title, "role": t.Role}
+	if t.Wave != "" {
+		body["wave"] = t.Wave
+	}
+	if t.Urgent {
+		body["urgent"] = true
+	}
 	if t.OffPlanReason != "" {
 		body["off_plan_reason"] = t.OffPlanReason
 	}
@@ -416,7 +424,7 @@ func LeaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, exec
 // leaseAttemptWith also records the model and provider the attempt is for
 // (independence is checked against them) and, for a claim, why its tool was
 // the one picked (pick.go).
-func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration, choice map[string]any) (string, int64, error) {
+func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration, choice map[string]any, baseCommit ...string) (string, int64, error) {
 	// The task before the event's stream (review 149 B1).
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID); err != nil {
 		return "", 0, err
@@ -438,6 +446,11 @@ func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID s
 	}
 	if choice != nil {
 		body["choice"] = choice
+	}
+	// Optional string fields must be omitted when absent: empty strings fail
+	// event validation, including for tasks without a repository base.
+	if len(baseCommit) > 0 && baseCommit[0] != "" {
+		body["base_commit"] = baseCommit[0]
 	}
 	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "attempt_leased", Actor: actor,
 		TaskID: taskID, AttemptID: id, Body: body}); err != nil {

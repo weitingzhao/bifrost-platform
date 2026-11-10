@@ -315,7 +315,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	// ends the wait as it would end a launch (review 277 A3): a restart, or a
 	// standing group, leaves the entry for Recover to end.
 	waiting := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
-		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching",
+		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Title: cl.Title, Workdir: a.Dir, Base: base, Phase: "launching",
 		Executor: cl.Tool.Executor, Group: GroupCleared}
 	if err = d.Registry.Put(waiting); err != nil {
 		return Outcome{}, err
@@ -451,7 +451,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		safego.Go("agentd-actions", func() { t.collect(tctx) })
 	}
 	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
-		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching",
+		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Title: cl.Title, Workdir: a.Dir, Base: base, Phase: "launching",
 		Executor: cl.Tool.Executor}
 	// A lost lease or a stop that came while the workspace was prepared, or
 	// while the start was reported, is acted on before the executor is

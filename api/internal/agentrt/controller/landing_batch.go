@@ -146,7 +146,7 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 	var errs []error
 	var cands []landing.BatchCandidate
 	for i, task := range tasks {
-		if len(landing.FormBatch(cands, now)) >= landing.BatchMax {
+		if len(landing.FormBatch(cands, now, false)) >= landing.BatchMax {
 			break
 		}
 		f, d, err := reads[i].f, reads[i].d, reads[i].err
@@ -165,7 +165,7 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 			errs = append(errs, err)
 		}
 	}
-	members := landing.FormBatch(cands, now)
+	members := landing.FormBatch(cands, now, false)
 	if len(members) >= 2 {
 		return true, errors.Join(append(errs, c.formBatch(ctx, repo, members, after, s, now))...)
 	}

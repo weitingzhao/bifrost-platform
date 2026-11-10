@@ -429,7 +429,7 @@ func (d *Daemon) prepare(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 		if work == "" {
 			work = "unassigned"
 		}
-		commit, err := ws.Commit(ctx, fmt.Sprintf("agentrt: %s attempt %d", e.TaskID, e.AttemptNo), Lineage{Task: e.TaskID, ChangeID: cid, Work: work})
+		commit, err := ws.Commit(ctx, handInMessage(e, r.reportBody), Lineage{Task: e.TaskID, ChangeID: cid, Work: work})
 		if err != nil {
 			return err
 		}
@@ -774,4 +774,25 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 		err = d.end(ctx, e, "daemon_restart")
 	}
 	return err
+}
+
+// handInMessage keeps the subject readable and the attempt in the body.
+func handInMessage(e *Entry, report []byte) string {
+	title := strings.Join(strings.Fields(e.Title), " ")
+	if title == "" {
+		title = e.TaskID
+	} // claims from older servers
+	subject := []rune(title)
+	if len(subject) > 72 {
+		subject = subject[:72]
+	}
+	body := fmt.Sprintf("Attempt %d", e.AttemptNo)
+	for _, line := range strings.Split(string(report), "\n") {
+		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
+		if line != "" {
+			body += "\n\n" + line
+			break
+		}
+	}
+	return string(subject) + "\n\n" + body
 }

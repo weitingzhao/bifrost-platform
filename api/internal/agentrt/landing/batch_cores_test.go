@@ -28,15 +28,15 @@ func TestBatchCoresFormOneBatch(t *testing.T) {
 	t.Parallel()
 	now := epoch.Add(time.Hour)
 	two := []BatchCandidate{batchCand(0), coreCand(t, 1, now), coreCand(t, 2, now)}
-	if got := batchTasks(FormBatch(two, now)); !slices.Equal(got, []string{two[1].Task, two[0].Task, two[2].Task}) {
+	if got := batchTasks(FormBatch(two, now, false)); !slices.Equal(got, []string{two[1].Task, two[0].Task, two[2].Task}) {
 		t.Fatal("two core roots", got)
 	}
 	three := []BatchCandidate{coreCand(t, 0, now), coreCand(t, 1, now), batchCand(2), coreCand(t, 3, now)}
-	if got := batchTasks(FormBatch(three, now)); !slices.Equal(got, batchTasks(three)) {
+	if got := batchTasks(FormBatch(three, now, false)); !slices.Equal(got, batchTasks(three)) {
 		t.Fatal("three core roots", got)
 	}
 	only := []BatchCandidate{coreCand(t, 0, now), coreCand(t, 1, now), coreCand(t, 2, now)}
-	if got := batchTasks(FormBatch(only, now)); !slices.Equal(got, batchTasks(only)) {
+	if got := batchTasks(FormBatch(only, now, false)); !slices.Equal(got, batchTasks(only)) {
 		t.Fatal("a batch of cores alone", got)
 	}
 }
@@ -59,10 +59,10 @@ func TestBatchCoresRefusedRootClaimedAlone(t *testing.T) {
 		t.Fatal("fixture: not refused on policy")
 	}
 	cands := []BatchCandidate{coreCand(t, 0, now), off, coreCand(t, 2, now), floor, batchCand(4)}
-	if got := batchTasks(FormBatch(cands, now)); !slices.Equal(got, []string{cands[0].Task, cands[2].Task, cands[4].Task}) {
+	if got := batchTasks(FormBatch(cands, now, false)); !slices.Equal(got, []string{cands[0].Task, cands[2].Task, cands[4].Task}) {
 		t.Fatal("a refused root in a batch", got)
 	}
-	if got := FormBatch([]BatchCandidate{off}, now); len(got) != 0 {
+	if got := FormBatch([]BatchCandidate{off}, now, false); len(got) != 0 {
 		t.Fatal("a refused root formed a batch", batchTasks(got))
 	}
 }

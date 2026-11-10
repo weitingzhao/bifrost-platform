@@ -64,6 +64,7 @@ func (l *HostLock) Release() error { return l.f.Close() }
 // identified by the group id and the leader's start time (a group id can be
 // reused), and how far its result has gone (v5 §5.2 本地登记、检查点、收尾).
 type Entry struct {
+	Title     string `json:"title,omitempty"`
 	AttemptID string `json:"attempt_id"`
 	TaskID    string `json:"task_id"`
 	AttemptNo int    `json:"attempt_no"`

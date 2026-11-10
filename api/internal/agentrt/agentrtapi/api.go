@@ -187,6 +187,10 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
+		r.With(propose, cfg).Post("/waves", a.openWave)
+		r.With(propose, cfg).Post("/waves/{id}/close", a.endWave(false))
+		r.With(propose, cfg).Post("/waves/{id}/abandon", a.endWave(true))
+		r.With(read, cfg).Get("/waves", a.listWaves)
 		r.With(propose, cfg).Post("/missions", a.proposeMission)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)
 		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
@@ -570,7 +574,7 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		if cl != nil {
 			body := map[string]any{
 				"task_id": cl.TaskID, "attempt_id": cl.AttemptID, "attempt_no": cl.AttemptNo, "mission_id": cl.MissionID,
-				"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID,
+				"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID, "title": cl.Title,
 				"pushed_ref": cl.PushedRef, "effect_class": cl.Effect, "lease_epoch": cl.Epoch,
 				"lease_expires_at": cl.LeaseExpiresAt, "hard_limit_s": int(cl.HardLimit / time.Second),
 				"tool": tool{Executor: cl.Tool.Executor, Provider: cl.Tool.Provider, Model: cl.Tool.Model},

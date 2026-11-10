@@ -51,6 +51,7 @@ var routeExpect = map[string]string{
 	"POST missions": expectWrites, "POST missions/{id}/tasks": expectWrites, "POST goals": expectWrites, "POST tasks/withdraw": expectWrites,
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
 	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites, "POST hosts/{id}/drain": expectWrites,
+	"POST waves": expectWrites, "POST waves/{id}/close": expectWrites, "POST waves/{id}/abandon": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
 	"POST plan/{id}/signoff": expectWrites,
 	"POST external-work":     expectWrites, "POST external-work/{id}/events": expectWrites,
@@ -323,6 +324,11 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST landing/grants/{grant_id}/revoke", "admin", "POST", "landing/grants/"+grant+"/revoke", nil)
 	ok("POST landing/refresh", "agentd:coordinator-mbp", "POST", "landing/refresh", map[string]any{"task": pinned, "op": op})
 	ok("POST hosts/{id}/drain", "operator", "POST", "hosts/h2/drain", map[string]any{"idempotency_key": "v5", "reason": "maintenance"})
+	// A wave of bifrost-platform opened on main's head and abandoned (M-368).
+	wave := ok("POST waves", "operator", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "R2"})
+	ok("POST waves/{id}/abandon", "operator", "POST", "waves/"+fmt.Sprint(wave["id"])+"/abandon", nil)
+	closing := ok("POST waves", "operator", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "R2"})
+	ok("POST waves/{id}/close", "operator", "POST", "waves/"+fmt.Sprint(closing["id"])+"/close", nil)
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "add_node", "parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}})
 

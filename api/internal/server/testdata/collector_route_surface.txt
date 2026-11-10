@@ -102,6 +102,10 @@ deny	POST /api/v1/agentrt/rules/{rule_id}/tighten
 deny	GET /api/v1/agentrt/tasks
 deny	POST /api/v1/agentrt/tasks/withdraw
 deny	GET /api/v1/agentrt/tasks/{id}
+deny	GET /api/v1/agentrt/waves
+deny	POST /api/v1/agentrt/waves
+deny	POST /api/v1/agentrt/waves/{id}/abandon
+deny	POST /api/v1/agentrt/waves/{id}/close
 allow	GET /api/v1/agentrt/whoami
 deny	GET /api/v1/approvals
 deny	POST /api/v1/approvals

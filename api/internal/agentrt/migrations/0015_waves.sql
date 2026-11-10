@@ -1,0 +1,27 @@
+-- Coordinator wave lifecycle events.
+ALTER TABLE agentrt.event DROP CONSTRAINT event_type_closed;
+ALTER TABLE agentrt.event ADD CONSTRAINT event_type_closed CHECK (event_type IN (
+  'plan_node_created','plan_node_retitled','plan_node_state_changed','plan_change_proposed','plan_change_decided','plan_changed',
+  'mission_proposed','mission_state_changed','mission_amended',
+  'task_proposed','task_state_changed','task_dependency_added','task_cancelled','route_decided',
+  'attempt_leased','attempt_started','attempt_progress','attempt_checkpointed','attempt_stale','attempt_renewed',
+  'attempt_computed','attempt_persisted','attempt_submitted','attempt_lost','attempt_ended','attempt_salvaged',
+  'attempt_cancelled',
+  'artifact_put','verification_recorded',
+  'owner_wait_opened','owner_wait_closed','approval_seen','question_seen','ci_seen','pipeline_seen','deploy_seen','owner_signoff',
+  'actor_registered','host_registered','host_state_changed','host_retired',
+  'control_set','control_cleared',
+  'rule_proposed','rule_signed','rule_tightened','rule_expired','rule_approved',
+  'capability_scored','candidate_status_changed','budget_charged','pool_cooldown_set','pool_measured',
+  'message_posted','message_acked','policy_alert',
+  'decision_recorded',
+  'issue_submitted','issue_added','issue_brief_drafted','issue_asked','issue_answered','issue_classified',
+  'issue_design_put','issue_reviewed','issue_owner_decided','issue_priority_set','issue_taken','issue_replied',
+  'issue_state_changed','issue_merged','intake_client_set','intake_acked',
+  'debt_filed','debt_edited','debt_text_added','debt_evidence_added','debt_evidence_checked','debt_state_changed',
+  'debt_flow_set','debt_edge_added','debt_edge_ended','debt_ref_added','debt_ref_ended','debt_work_linked','debt_work_ended',
+  'debt_part_set','debt_part_landed','debt_acceptance_set','debt_acceptance_reviewed','debt_acceptance_ran',
+  'debt_signed_off','debt_auto_closed','debt_reopened','debt_signoff_rejected','debt_merged','debt_floor_raised',
+  'debt_decision_set','ratchet_registered','ratchet_changed','gap_accepted','gap_reopened',
+  'host_slots_set','wave_opened','wave_closed','wave_abandoned',
+  'note','wait_limit_passed','legacy_imported'));

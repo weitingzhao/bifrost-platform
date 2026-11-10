@@ -86,6 +86,11 @@ func init() {
 		"POST /api/v1/agentrt/plan/imports",
 		"POST /api/v1/agentrt/plan/{id}/notes",
 	)
+	exempt("agent runtime waves (M-368): opening, closing or abandoning a repository's wave records wave events the store writes in one transaction, with the proposers' gate the mission and plan proposals have; a wave starts no work and lands nothing by itself (its landing is the existing landing path with its own CI, grant and card); not a cluster write",
+		"POST /api/v1/agentrt/waves",
+		"POST /api/v1/agentrt/waves/{id}/close",
+		"POST /api/v1/agentrt/waves/{id}/abandon",
+	)
 	exempt("agent runtime external work (W-31 PV1): registration and observations are runtime records the store writes with their events in one transaction; they grant no execution authority and cannot verify or complete work; not a cluster write",
 		"POST /api/v1/agentrt/external-work",
 		"POST /api/v1/agentrt/external-work/{id}/events",

@@ -37,7 +37,7 @@ func TestBatchFormation(t *testing.T) {
 	}
 	// No max_batch: all ten, past the old fixed 8 (2026-11-06 Owner: the
 	// batch size is the rule's, not the code's).
-	if got := FormBatch(cands, now); !slices.Equal(batchTasks(got), batchTasks(cands)) {
+	if got := FormBatch(cands, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
 		t.Fatal("not every root in order", batchTasks(got))
 	}
 	capped := slices.Clone(cands)
@@ -48,7 +48,7 @@ func TestBatchFormation(t *testing.T) {
 		l.Limits.MaxBatch, r.Landing, f.Rule = 3, &l, &r
 		capped[i].Facts = f
 	}
-	if got := FormBatch(capped, now); !slices.Equal(batchTasks(got), batchTasks(cands[:3])) {
+	if got := FormBatch(capped, now, false); !slices.Equal(batchTasks(got), batchTasks(cands[:3])) {
 		t.Fatal("not the rule's max_batch first in order", batchTasks(got))
 	}
 	// The day's quota: five a day, two reserved already, leaves three.
@@ -60,14 +60,14 @@ func TestBatchFormation(t *testing.T) {
 		l.Limits.MaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 5, &l, &r, 2
 		quota[i].Facts = f
 	}
-	if got := FormBatch(quota, now); len(got) != 3 {
+	if got := FormBatch(quota, now, false); len(got) != 3 {
 		t.Fatal("past the day's quota", batchTasks(got))
 	}
 	// S5 and another repository stay out; the others keep their order.
 	mixed := slices.Clone(cands[:5])
 	mixed[1].Facts.Operation.S5.Required = true
 	mixed[3].Facts.Repo = "bifrost-trade-infra"
-	if got := batchTasks(FormBatch(mixed, now)); !slices.Equal(got, []string{mixed[0].Task, mixed[2].Task, mixed[4].Task}) {
+	if got := batchTasks(FormBatch(mixed, now, false)); !slices.Equal(got, []string{mixed[0].Task, mixed[2].Task, mixed[4].Task}) {
 		t.Fatal("S5 or infra in a batch", got)
 	}
 	// Two roots that may wait for a grant (a core path, grants enabled): the
@@ -83,16 +83,16 @@ func TestBatchFormation(t *testing.T) {
 		}
 		granted[i].Facts = f
 	}
-	if got := batchTasks(FormBatch(granted, now)); !slices.Equal(got, []string{granted[2].Task, granted[0].Task, granted[1].Task, granted[3].Task}) {
+	if got := batchTasks(FormBatch(granted, now, false)); !slices.Equal(got, []string{granted[2].Task, granted[0].Task, granted[1].Task, granted[3].Task}) {
 		t.Fatal("the first grant root does not lead", got)
 	}
 	// Another tenant waits; one candidate is a batch of one.
 	other := slices.Clone(cands[:3])
 	other[1].Facts.Tenant = "other"
-	if got := batchTasks(FormBatch(other, now)); !slices.Equal(got, []string{other[0].Task, other[2].Task}) {
+	if got := batchTasks(FormBatch(other, now, false)); !slices.Equal(got, []string{other[0].Task, other[2].Task}) {
 		t.Fatal("tenants mixed", got)
 	}
-	if got := FormBatch(cands[:1], now); len(got) != 1 {
+	if got := FormBatch(cands[:1], now, false); len(got) != 1 {
 		t.Fatal("one candidate", len(got))
 	}
 }
@@ -178,5 +178,51 @@ github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store/sub.Read(...)
 	}
 	if got := BlameRed(CIFailure{ReadError: "forbidden"}, members); len(got) != 0 {
 		t.Fatal("blamed with no TaskRuns", got)
+	}
+}
+
+func TestWaveBatchFormation(t *testing.T) {
+	t.Parallel()
+	now := epoch.Add(time.Hour)
+	members := []BatchCandidate{batchCand(1), batchCand(2), batchCand(3)}
+	for i := range members {
+		members[i].Facts.Rule.Landing.Limits.MaxBatch = 1
+		members[i].Facts.Rule.Landing.Limits.MaxLandingsPerDay = 3
+		members[i].Facts.ReservedToday = 2
+	}
+	// A later member may need a grant, but append order still determines
+	// the lead: its existing batch material covers every member.
+	f := &members[2].Facts
+	f.GrantEnabled = true
+	f.Changes = slices.Clone(f.Changes)
+	f.Changes[0].OldPath = "api/internal/agentrt/store/example.go"
+	f.Changes[0].NewPath = f.Changes[0].OldPath
+	if reason, soft := PolicyChecks(*f, now); reason != "" || len(soft) == 0 || !MayAwaitGrant(*f, soft) {
+		t.Fatal("fixture must allow waiting for a grant", reason, soft)
+	}
+	if got := FormBatch(members, now, true); !slices.Equal(batchTasks(got), batchTasks(members)) {
+		t.Fatal("wave must consume one slot and retain append order", batchTasks(got))
+	}
+	for _, tc := range []struct {
+		name   string
+		refuse func(*Facts)
+	}{
+		{"quota", func(f *Facts) { f.ReservedToday = 3 }},
+		{"tenant", func(f *Facts) { f.Tenant = "other" }},
+		{"repo", func(f *Facts) { f.Repo = "bifrost-trade-infra" }},
+		{"s5", func(f *Facts) { f.Operation.S5.Required = true }},
+		{"policy", func(f *Facts) { f.GrantEnabled = false; f.Changes = members[2].Facts.Changes }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cands := slices.Clone(members)
+			tc.refuse(&cands[1].Facts)
+			if got := FormBatch(cands, now, true); len(got) != 0 {
+				t.Fatal("refused member must refuse entire wave", batchTasks(got))
+			}
+		})
+	}
+	tooMany := make([]BatchCandidate, BatchMax+1)
+	if got := FormBatch(tooMany, now, true); len(got) != 0 {
+		t.Fatal("wave exceeds record member bound")
 	}
 }
