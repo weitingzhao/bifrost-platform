@@ -25,7 +25,8 @@ import (
 // this table, so the spec carries nothing an older agentd would refuse.
 // HandIn are the fast commands an executor runs before it hands in, from the
 // repository root: what its sandbox, which cannot open local sockets, can run
-// in a minute or two; Verify still runs in full on the commit (HandInChecks).
+// in a minute or two; Verify runs rule tests and changed packages' full tests
+// with their databases on the commit, plus Console checks (HandInChecks).
 type Repo struct {
 	Verify   [][]string
 	HandIn   [][]string
@@ -49,13 +50,12 @@ type Sibling struct {
 // directories (the <dir> of go -C <dir> test) where a plan may add its own
 // checks, which checkTest in planparse.go enforces. Setup, Siblings, Core and
 // TestDB are as Repo says. The defaults are what runs in a fresh agentd
-// checkout, not the full test suite, which needs services the workspace lacks
-// and would fail for reasons unrelated to the change: a plan proves its own
+// checkout with agentd's test databases; a plan also proves its own
 // change with targeted go test [-run <pattern>] ./<package> checks in TestDirs.
 //
 // The platform's checks are CI's (ci-platform): the API module built and
-// vetted (the full Go suite needs databases agentd's workspace has not), and
-// the Console linted, tested and built. The Console's @bifrost/ui is
+// vetted, the module's rule tests and changed Go packages tested with agentd's
+// databases, and the Console linted, tested and built. The Console's @bifrost/ui is
 // file:../../bifrost-ui, so bifrost-ui's main sits beside the checkout, as CI
 // clones it by default, and both are installed before the executor starts.
 // The API module's dependencies are downloaded first, into the attempt's
@@ -84,6 +84,8 @@ var Repos = map[string]Repo{
 		Verify: [][]string{
 			{"go", "-C", "api", "build", "./..."},
 			{"go", "-C", "api", "vet", "./..."},
+			{"go", "-C", "api", "run", "./cmd/agentrt-check", "rules"},
+			{"go", "-C", "api", "run", "./cmd/agentrt-check", "changed"},
 			{"npm", "--prefix", "console", "run", "lint"},
 			{"npm", "--prefix", "console", "test"},
 			{"npm", "--prefix", "console", "run", "build"},
@@ -143,7 +145,7 @@ func RepoNames() []string {
 
 // SpecTimeoutS is how long an implementation task's check may run, all of
 // its commands.
-const SpecTimeoutS = 900
+const SpecTimeoutS = 1500
 
 // noTestDB is what a plan's own check runs under before an executor hands
 // it in: no test database, so the tests that need one skip. agentd's
@@ -195,8 +197,8 @@ func ImplementSpec(title, text string, repo Repo, verify, handIn [][]string) ([]
 		installed(setup.String()) +
 		"- Before you hand in, run from the repository root:\n\n" + cmds.String() + "\n" +
 		"  These are quick checks. Tests that need a database skip here; that is expected.\n" +
-		"  The platform runs the repository's full checks on your commit (the spec's verify: the Console's tests\n" +
-		"  and build and the package tests, with their databases); a failing one sends the work back.\n" +
+		"  The platform runs the repository's full checks on your commit (the spec's verify): the module's rule tests\n" +
+		"  and the full tests of the Go packages you changed, with their databases, and the Console's checks; a failing one sends the work back.\n" +
 		"- If the task is unclear or too big for one change, do the part you can and say in your report what is left and why.\n" +
 		"- Your report says what you changed, what you ran and how it ended, and what you could not do.\n"
 	list := make([]any, 0, len(verify))

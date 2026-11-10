@@ -359,3 +359,33 @@ func TestImplementSpecHandInInfra(t *testing.T) {
 		t.Fatalf("spec = %s", body)
 	}
 }
+
+func TestPlatformCheckRepoCommands(t *testing.T) {
+	t.Parallel()
+	r := store.Repos["bifrost-platform"]
+	want := [][]string{
+		{"go", "-C", "api", "build", "./..."},
+		{"go", "-C", "api", "vet", "./..."},
+		{"go", "-C", "api", "run", "./cmd/agentrt-check", "rules"},
+		{"go", "-C", "api", "run", "./cmd/agentrt-check", "changed"},
+		{"npm", "--prefix", "console", "run", "lint"},
+		{"npm", "--prefix", "console", "test"},
+		{"npm", "--prefix", "console", "run", "build"},
+	}
+	if !slices.EqualFunc(r.Verify, want, slices.Equal) {
+		t.Fatalf("verify=%q", r.Verify)
+	}
+	hand := [][]string{want[0], want[1], want[4]}
+	if !slices.EqualFunc(r.HandIn, hand, slices.Equal) || !slices.EqualFunc(store.HandInChecks(r, nil), hand, slices.Equal) {
+		t.Fatalf("hand-in=%q", r.HandIn)
+	}
+	body, err := store.ImplementSpec("t", "x", r, r.Verify, hand)
+	ok(t, err)
+	var spec struct {
+		Timeout int `json:"timeout_s"`
+	}
+	ok(t, json.Unmarshal(body, &spec))
+	if spec.Timeout != 1500 {
+		t.Fatalf("timeout=%d", spec.Timeout)
+	}
+}

@@ -561,6 +561,8 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 	want := [][]string{
 		{"go", "-C", "api", "build", "./..."},
 		{"go", "-C", "api", "vet", "./..."},
+		{"go", "-C", "api", "run", "./cmd/agentrt-check", "rules"},
+		{"go", "-C", "api", "run", "./cmd/agentrt-check", "changed"},
 		{"npm", "--prefix", "console", "run", "lint"},
 		{"npm", "--prefix", "console", "test"},
 		{"npm", "--prefix", "console", "run", "build"},
