@@ -1,6 +1,8 @@
 package agentrtapi
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // In-process HTTP: no listening socket is needed. This tests authentication
@@ -58,5 +61,43 @@ func TestC4LandingRoutesAuthenticateBeforeConfiguration(t *testing.T) {
 				t.Fatal(w.Body.String())
 			}
 		})
+	}
+}
+
+func TestLandingWaitObservesItsRepositoryMain(t *testing.T) {
+	t.Parallel()
+	head := strings.Repeat("a", 40)
+	for _, repo := range []string{"bifrost-platform", "bifrost-trade-infra"} {
+		for _, tc := range []struct {
+			name, phase, main, shown string
+			err                      error
+			known, changed, todo     bool
+		}{
+			{name: "matching", phase: "awaiting_grant", main: head, shown: "awaiting_owner", known: true, todo: true},
+			{name: "changed", phase: "awaiting_grant", main: strings.Repeat("b", 40), shown: "request_stale", known: true, changed: true},
+			{name: "empty", phase: "awaiting_grant", shown: "request_main_unknown"},
+			{name: "error", phase: "awaiting_grant", main: head, err: errors.New("unavailable"), shown: "request_main_unknown"},
+			{name: "finished", phase: "discarded", main: head, shown: "discarded"},
+		} {
+			t.Run(repo+"/"+tc.name, func(t *testing.T) {
+				status := &store.LandingWaitStatus{Repo: repo, Phase: tc.phase, M0: head, ApprovalStatus: "pending", Shown: tc.shown}
+				calls := 0
+				a := &API{MainHead: func(_ context.Context, got string) (string, error) {
+					calls++
+					if got != repo {
+						t.Fatalf("read main for %q, want %q", got, repo)
+					}
+					return tc.main, tc.err
+				}}
+				a.observeLandingWait(httptest.NewRequest(http.MethodGet, "/", nil), status)
+				wantCalls := 1
+				if tc.phase != "awaiting_grant" {
+					wantCalls = 0
+				}
+				if calls != wantCalls || status.Shown != tc.shown || status.MainKnown != tc.known || status.MainChanged != tc.changed || status.OwnerTodo != tc.todo {
+					t.Fatalf("calls=%d status=%+v", calls, status)
+				}
+			})
+		}
 	}
 }

@@ -44,12 +44,16 @@ func (a *API) getLandingWait(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no authorization wait for this operation")
 		return
 	}
+	a.observeLandingWait(r, status)
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (a *API) observeLandingWait(r *http.Request, status *store.LandingWaitStatus) {
 	if a.MainHead != nil && status.Phase == "awaiting_grant" {
-		if head, err := a.MainHead(r.Context(), "bifrost-platform"); err == nil {
+		if head, err := a.MainHead(r.Context(), status.Repo); err == nil {
 			status.ObserveMain(head)
 		}
 	}
-	writeJSON(w, http.StatusOK, status)
 }
 
 // getLandingMaterial is a landing grant's material (C-5, §5.6 item 3): what

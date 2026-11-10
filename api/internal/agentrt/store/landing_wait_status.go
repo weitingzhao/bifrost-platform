@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,8 @@ import (
 // a pending request whose M0 a fresh main read still confirms. An approved or
 // running approval alone never displays "authorized" (only a grant can).
 type LandingWaitStatus struct {
+	// Repo identifies the operation’s repository for live main observations.
+	Repo             string    `json:"-"`
 	Phase            string    `json:"phase"`
 	Shown            string    `json:"shown"`
 	Since            time.Time `json:"since"`
@@ -70,7 +73,7 @@ func readLandingWaitStatusIn(ctx context.Context, tx pgx.Tx, state landing.State
 		return nil, nil
 	}
 	clock := landing.RootTiming(state, o.Task, at)
-	w := &LandingWaitStatus{Phase: o.Phase, Since: o.AwaitingAt, Soft: slices.Clone(o.Soft), Files: o.Files, Lines: o.Lines,
+	w := &LandingWaitStatus{Repo: strings.TrimPrefix(stream, "landing:"), Phase: o.Phase, Since: o.AwaitingAt, Soft: slices.Clone(o.Soft), Files: o.Files, Lines: o.Lines,
 		Snapshot: o.Material, R: o.R, M0: o.M0, ExecutionSeconds: int64(clock.Execution / time.Second), WaitingSeconds: int64(clock.Waiting / time.Second), Operations: clock.Operations}
 	rows, err := tx.Query(ctx, `SELECT body_json->'landing_grant_request' FROM agentrt.event
 	  WHERE event_stream_id='landing:bifrost-platform' AND body_json->'landing_grant_request'->>'op'=$1

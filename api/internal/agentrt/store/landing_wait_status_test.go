@@ -79,3 +79,21 @@ func TestC4RequestSchemaIsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestLandingWaitStatusRetainsRepository(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
+	state, err := landing.Fold(reviewWaitEntries(t, at.Add(-time.Hour), at))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, repo := range []string{"bifrost-platform", "bifrost-trade-infra"} {
+		w, err := readLandingWaitStatusIn(context.Background(), waitReviewTx{}, state, grantStream(repo), "land:t_00000000000000000000000001:1", at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w == nil || w.Repo != repo {
+			t.Fatalf("repo %s: %+v", repo, w)
+		}
+	}
+}
