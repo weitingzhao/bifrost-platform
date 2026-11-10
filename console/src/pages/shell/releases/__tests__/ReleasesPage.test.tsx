@@ -74,7 +74,7 @@ function installFetch() {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url.endsWith('/api/v1/agentrt/waves')) return wavesResponse()
+      if (url.endsWith('/api/v1/agentrt/waves?state=open')) return wavesResponse()
       if (url.endsWith('/api/v1/release-policy')) return policyResponse()
       if (url.includes('/api/v1/releases/running-images')) {
         return json({
@@ -284,23 +284,21 @@ describe('ReleasesPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows only open waves, including their number, plan root, short base and id, without an operator token', async () => {
+  it('requests open waves and shows their number, plan root, short base and id without an operator token', async () => {
     wavesResponse = () => json([
       { id: 'wave-open', n: 3, plan_root: 'M-368', base: SHA, state: 'open' },
-      { id: 'wave-closed', n: 2, plan_root: 'M-367', base: 'eeeeeeee99999999', state: 'closed' },
     ])
     render(wrapper(<ReleasesPage />))
 
     expect(await screen.findByText('Wave 3 · M-368 · abcd1234 · wave-open')).toBeTruthy()
-    expect(screen.queryByText(/wave-closed|M-367|eeeeeeee/)).toBeNull()
     expect(screen.queryByText('No open wave')).toBeNull()
-    const request = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/api/v1/agentrt/waves'))
+    const request = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/api/v1/agentrt/waves?state=open'))
     expect(request).toBeTruthy()
     expect(request?.[1]?.method ?? 'GET').toBe('GET')
   })
 
-  it.each([{ waves: [] }, { waves: [{ id: 'wave-closed', n: 2, plan_root: 'M-367', base: SHA, state: 'closed' }] }])('shows no open wave when none are open ($waves)', async ({ waves }) => {
-    wavesResponse = () => json(waves)
+  it('shows no open wave when the answer is empty', async () => {
+    wavesResponse = () => json([])
     render(wrapper(<ReleasesPage />))
 
     expect(await screen.findByText('No open wave')).toBeTruthy()

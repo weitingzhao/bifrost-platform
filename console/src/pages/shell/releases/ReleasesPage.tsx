@@ -103,15 +103,15 @@ export function ReleasesPage() {
     refetchInterval: 30_000,
   })
   const waves = useQuery({
-    queryKey: ['agentrt', 'waves'],
+    queryKey: ['agentrt', 'waves', 'open'],
     queryFn: limited(async signal => {
-      const data = await get<Wave[]>('waves', '/api/v1/agentrt/waves', signal, true)
+      const data = await get<Wave[]>('waves', '/api/v1/agentrt/waves?state=open', signal, true)
       if (!Array.isArray(data)) throw new Error('waves: expected a list')
       return data
     }),
     refetchInterval: 30_000,
   })
-  const openWaves = (waves.data ?? []).filter(wave => wave.state === 'open')
+  const openWaves = waves.data ?? []
   const hasToken = operatorToken() !== ''
   const releaseWindow = useQuery({
     queryKey: ['delivery', 'release-window'],
