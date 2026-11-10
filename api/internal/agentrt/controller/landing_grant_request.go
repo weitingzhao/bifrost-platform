@@ -78,15 +78,18 @@ func waitingForGrant(s landing.State) []grantWaiting {
 }
 
 // grantAsked: the approvals already stand for the operation. One pending,
-// approved or executing (or unknown) is its open request; any other for the
-// same R is the Owner's answer or its outcome, which the answer path and
-// the grant itself take on from there.
+// approved or executing (or unknown) is its open request. Expired requests,
+// including unanswered withdrawals, allow another ask. Other statuses for
+// the same R are the Owner's answer or its outcome, which the answer path
+// and the grant itself take on from there.
 func grantAsked(requests []store.LandingGrantRequest, w grantWaiting) bool {
 	for _, r := range requests {
 		if r.Op != w.Op {
 			continue
 		}
 		switch r.Status {
+		case "expired":
+			continue
 		case "pending", "approved", "running", "unknown":
 			return true
 		}

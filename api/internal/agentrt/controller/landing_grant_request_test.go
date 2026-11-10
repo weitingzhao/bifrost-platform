@@ -132,7 +132,7 @@ func TestGrantRequestAwaitingGrantAsksOnce(t *testing.T) {
 }
 
 func TestGrantRequestExistingApprovalAsksNothing(t *testing.T) {
-	for _, status := range []string{"pending", "approved", "running", "rejected", "expired"} {
+	for _, status := range []string{"pending", "approved", "running", "unknown", "rejected", "executed", "failed"} {
 		w := newGrantRequestWorld(t)
 		w.approvals = []store.LandingGrantRequest{{Op: grantTestOp, R: grantTestR, ApprovalID: "approval_9", ApprovalNumber: 9, Status: status}}
 		w.pass(t)
@@ -153,6 +153,30 @@ func TestGrantRequestExistingApprovalAsksNothing(t *testing.T) {
 	w.pass(t)
 	if len(w.asks) != 0 {
 		t.Fatalf("pending for another R: asked %d", len(w.asks))
+	}
+}
+
+func TestGrantRequestExpiredAsksAgain(t *testing.T) {
+	// The approval service also represents an unanswered withdrawal as expired.
+	for _, name := range []string{"expired", "withdrawn without an answer"} {
+		t.Run(name, func(t *testing.T) {
+			w := newGrantRequestWorld(t)
+			w.approvals = []store.LandingGrantRequest{{Op: grantTestOp, R: grantTestR, ApprovalID: "approval_9", ApprovalNumber: 9, Status: "expired"}}
+			w.c.Reconcile.SettleGrant = func(_ context.Context, id, reason string) error {
+				t.Fatalf("withdrew approval %s while operation still waits: %s", id, reason)
+				return nil
+			}
+			w.pass(t)
+			if len(w.asks) != 1 {
+				t.Fatalf("asked %d, want 1", len(w.asks))
+			}
+			// The next pass sees the replacement pending and must neither ask
+			// again nor withdraw it through SettledLandingGrantRequests.
+			w.pass(t)
+			if len(w.asks) != 1 {
+				t.Fatalf("second pass asked again (%d)", len(w.asks))
+			}
+		})
 	}
 }
 
