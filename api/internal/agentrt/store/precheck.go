@@ -59,18 +59,31 @@ const (
 	// PrecheckVerify is the check before R5:5.7-9: the deterministic check,
 	// then a review.
 	PrecheckVerify Precheck = "verify"
+	// PrecheckCheck runs the deterministic check on every submission, also
+	// where the landing runs a CI, and its pass accepts the attempt: no
+	// review. The repository's full checks (with their test databases) then
+	// catch a broken change before it joins a landing batch, where it would
+	// turn the batch red for every member (Owner 2026-11-10: a platform task
+	// accepted on submission broke a four-task batch for six landing CIs).
+	// What AGENTRT_PRECHECK unset gives (ParsePrecheck).
+	PrecheckCheck Precheck = "check"
 )
 
-// ParsePrecheck reads AGENTRT_PRECHECK: unset is ci.
+// ParsePrecheck reads AGENTRT_PRECHECK: unset is check.
 func ParsePrecheck(s string) (Precheck, error) {
 	switch p := Precheck(strings.TrimSpace(s)); p {
-	case "", PrecheckCI:
-		return PrecheckCI, nil
-	case PrecheckVerify:
+	case "", PrecheckCheck:
+		return PrecheckCheck, nil
+	case PrecheckCI, PrecheckVerify:
 		return p, nil
 	}
-	return PrecheckCI, fmt.Errorf("AGENTRT_PRECHECK is ci or verify, not %q", s)
+	return PrecheckCheck, fmt.Errorf("AGENTRT_PRECHECK is check, ci or verify, not %q", s)
 }
+
+// acceptsOnSubmission says whether a submission whose landing runs a CI is
+// accepted at once, the landing CI being its check: precheck ci (and the
+// zero value, as the controller's and the tests' default).
+func (p Precheck) acceptsOnSubmission() bool { return p == PrecheckCI || p == "" }
 
 // reviews says whether a passing deterministic check is followed by a
 // review (precheck verify) rather than accepting the attempt.

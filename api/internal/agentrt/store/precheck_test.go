@@ -300,12 +300,12 @@ func TestPrecheckCINoLandingCIIsChecked(t *testing.T) {
 
 func TestParsePrecheck(t *testing.T) {
 	t.Parallel()
-	for in, want := range map[string]store.Precheck{"": store.PrecheckCI, "ci": store.PrecheckCI, " verify ": store.PrecheckVerify} {
+	for in, want := range map[string]store.Precheck{"": store.PrecheckCheck, "check": store.PrecheckCheck, "ci": store.PrecheckCI, " verify ": store.PrecheckVerify} {
 		if got, err := store.ParsePrecheck(in); err != nil || got != want {
 			t.Errorf("%q: %q %v", in, got, err)
 		}
 	}
-	if got, err := store.ParsePrecheck("review"); err == nil || got != store.PrecheckCI {
+	if got, err := store.ParsePrecheck("review"); err == nil || got != store.PrecheckCheck {
 		t.Errorf("review: %q %v", got, err)
 	}
 }
@@ -346,5 +346,40 @@ func TestPrecheckCIRedFromTheDrill(t *testing.T) {
 	}
 	if choices := rootFailed(t, w, root, at); choices != nil {
 		t.Fatal("a root_failed card for a rework:", choices)
+	}
+}
+
+// Serial: FreezeEventClock. Precheck check (the production default since
+// 2026-11-10): a platform attempt whose landing runs a CI is not accepted
+// on submission; the deterministic check runs, and its pass accepts it with
+// no review. Its landing is then prepared as before.
+func TestPrecheckCheckChecksBeforeTheLanding(t *testing.T) {
+	w, root, at := ciRoot(t)
+	if c := w.run(t, "h1", cursor, "done"); c.TaskID != root {
+		t.Fatal("claimed", c.TaskID)
+	}
+	opts := store.ConcludeOptions{Precheck: store.PrecheckCheck}
+	v, accepted, err := store.StartVerificationWith(ctx, w.rt, root, opts)
+	ok(t, err)
+	if v == "" || accepted || w.state(t, "task", root) != "verifying" {
+		t.Fatalf("submission: check %q, accepted %v, state %s", v, accepted, w.state(t, "task", root))
+	}
+	w.run(t, "h2", deterministic, "done")
+	did, err := store.ConcludeWith(ctx, w.rt, v, opts)
+	ok(t, err)
+	if did != "accepted" || w.state(t, "task", root) != "accepted" {
+		t.Fatalf("the pass did %q", did)
+	}
+	if checks := checksOf(t, w, root); !slices.Equal(checks, []string{"verify"}) {
+		t.Fatalf("checks %v", checks)
+	}
+	if got := verificationsOf(t, w, root); !slices.Equal(got, []string{"deterministic/pass/accepts"}) {
+		t.Fatalf("verifications %v", got)
+	}
+	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
+	ok(t, err)
+	if !d.Allowed || op == "" {
+		t.Fatal("the landing is not prepared:", d)
 	}
 }

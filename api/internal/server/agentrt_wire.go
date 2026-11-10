@@ -240,10 +240,11 @@ func agentRuntimeController(env string, db store.DB, src controller.Sources) *co
 }
 
 // precheckFromEnv is how the controller checks a submitted implementation
-// (store/precheck.go), read once at start from AGENTRT_PRECHECK: ci (the
-// default: the landing CI where the landing runs one, else the
+// (store/precheck.go), read once at start from AGENTRT_PRECHECK: check (the
+// default since 2026-11-10: the deterministic check on every submission, its
+// pass accepts), ci (the landing CI where the landing runs one, else the
 // deterministic check, never a review) or verify (the deterministic check,
-// then a review). Any other value is logged and ci is used.
+// then a review). Any other value is logged and check is used.
 func precheckFromEnv() store.Precheck {
 	p, err := store.ParsePrecheck(os.Getenv("AGENTRT_PRECHECK"))
 	if err != nil {

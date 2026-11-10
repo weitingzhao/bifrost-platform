@@ -198,7 +198,7 @@ func StartVerificationWith(ctx context.Context, db DB, taskID string, opts Concl
 		if err != nil {
 			return err
 		}
-		if !opts.Precheck.reviews() {
+		if opts.Precheck.acceptsOnSubmission() {
 			pipeline, err := landingCIOf(ctx, tx, t.id, commit)
 			if err != nil {
 				return err
@@ -247,7 +247,8 @@ type ConcludeOptions struct {
 	// FailFirstVerify honours TestNeedFailFirstVerify (STG only).
 	FailFirstVerify bool
 	// Precheck is how an implementation is checked (precheck.go); the zero
-	// value is PrecheckCI.
+	// value acts as PrecheckCI (production reads AGENTRT_PRECHECK, check
+	// when unset).
 	Precheck Precheck
 }
 
