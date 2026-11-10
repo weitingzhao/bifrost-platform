@@ -37,6 +37,9 @@ import {
   proposeTasks,
   putArtifact,
   requestStop,
+  openWave,
+  endWave,
+  listWaves,
   whoami,
   sendMessage,
   waitForMessages,
@@ -367,6 +370,35 @@ describe('agent runtime writes', () => {
     }
   })
 
+  it('open_wave, close_wave and list_waves call the wave routes; writes refuse without a session or with writes off', async () => {
+    const { d, calls } = deps()
+    await openWave({ repo: 'bifrost-platform', plan_root: 'R6' }, d)
+    await endWave({ id: 'wave:bifrost-platform:3', action: 'close' }, d)
+    await endWave({ id: 'w3', action: 'abandon' }, d)
+    const listed = await listWaves({ repo: 'bifrost-platform' }, d)
+    await listWaves({}, d)
+    assert.deepEqual(calls, [
+      { kind: 'send', path: '/api/v1/agentrt/waves', body: { repo: 'bifrost-platform', plan_root: 'R6' } },
+      { kind: 'send', path: '/api/v1/agentrt/waves/wave:bifrost-platform:3/close', body: {} },
+      { kind: 'send', path: '/api/v1/agentrt/waves/w3/abandon', body: {} },
+      { kind: 'get', path: '/api/v1/agentrt/waves?repo=bifrost-platform' },
+      { kind: 'get', path: '/api/v1/agentrt/waves' },
+    ])
+    assert.equal((listed as { note: string }).note, RUNTIME_DATA_NOTE)
+    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+      const gated = deps(over)
+      assert.ok('error' in (await openWave({ repo: 'bifrost-platform', plan_root: 'R6' }, gated.d) as object))
+      assert.ok('error' in (await endWave({ id: 'w3', action: 'close' }, gated.d) as object))
+      assert.equal(gated.calls.length, 0)
+    }
+  })
+
+  it('propose_tasks passes a task\'s wave through', async () => {
+    const { d, calls } = deps()
+    await proposeTasks({ mission_id: 'M-1', idempotency_key: 'k-wave', tasks: [{ ...task, wave: 'w3' }] }, d)
+    assert.equal(((calls[0].body as { tasks: Array<{ wave?: string }> }).tasks[0]).wave, 'w3')
+  })
+
   it('request_stop sends the control with the caller\'s key, and none without one', async () => {
     const { d, calls } = deps()
     const missing = await requestStop({ scope: 'global', kind: 'pause', reason: 'look first', idempotency_key: '' }, d)
@@ -463,7 +495,7 @@ describe('agent runtime tools are served', () => {
     assert.match(index, /registerPlanImportTools\(reg\)/)
     const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'agentrt_withdraw_tasks', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'agentrt_withdraw_tasks', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions', 'open_wave', 'close_wave', 'list_waves']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

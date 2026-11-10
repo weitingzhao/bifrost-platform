@@ -34,6 +34,10 @@ import {
   putArtifact,
   requestStop,
   whoami,
+  WAVE_NOTE,
+  openWave,
+  endWave,
+  listWaves,
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
@@ -655,6 +659,7 @@ reg(
         needs: z.array(z.string()).optional(),
         depends_on: z.array(z.string()).optional(),
         hard_limit_s: z.number().int().min(0).max(86400).optional(),
+        wave: z.string().optional().describe('The open wave (open_wave) the task belongs to: dispatched on its head, landed with it'),
       }),
     ),
     idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
@@ -746,6 +751,35 @@ reg(
     idempotency_key: z.string().min(1).describe('One key per stop; see the description'),
   },
   async (input) => jsonResult(await requestStop(input)),
+)
+
+reg(
+  'open_wave',
+  `Open a wave of a repository on its main head; it answers the wave (id, n, base). Propose its tasks with propose_tasks and wave set to the id. ${WAVE_NOTE}`,
+  {
+    repo: z.string().describe('bifrost-platform'),
+    plan_root: z.string().describe('The plan root the wave serves, e.g. R6'),
+  },
+  async (input) => jsonResult(await openWave(input)),
+)
+
+reg(
+  'close_wave',
+  `Close a wave so it lands once (action close), or abandon it so nothing of it lands (action abandon). Close is refused while a task of the wave is not accepted. ${WAVE_NOTE}`,
+  {
+    id: z.string(),
+    action: z.enum(['close', 'abandon']),
+  },
+  async (input) => jsonResult(await endWave(input)),
+)
+
+reg(
+  'list_waves',
+  `The waves (id, repo, plan_root, n, base, state), of one repository or all. ${WAVE_NOTE}`,
+  {
+    repo: z.string().optional(),
+  },
+  async (input) => jsonResult(await listWaves(input)),
 )
 
 } // end platform tools (non-prometheus focus)

@@ -106,6 +106,7 @@ export interface ProposedTask {
   needs?: string[]
   depends_on?: string[]
   hard_limit_s?: number
+  wave?: string
 }
 
 export const PROPOSAL_KEY_RULE =
@@ -492,6 +493,34 @@ export async function requestStop(
   if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: STOP_KEY_RULE }
   const request = { scope: input.scope, scope_ref: input.scope_ref ?? '', kind: input.kind, reason: input.reason }
   return d.send('POST', `${BASE}/controls`, { ...request, idempotency_key: input.idempotency_key })
+}
+
+export const WAVE_NOTE =
+  'A wave is one repository\'s batch (M-368): tasks proposed with its id (propose_tasks, wave) are dispatched on the wave branch head and appended to it when accepted; close_wave lands the whole wave once (one landing CI, one card, one push to main, one STG and one PROD release); abandon ends it without landing. Only bifrost-platform takes waves for now.'
+
+/** Open a wave of a repository on its main head. */
+export async function openWave(
+  input: { repo: string; plan_root: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  return d.send('POST', `${BASE}/waves`, { repo: input.repo, plan_root: input.plan_root })
+}
+
+/** Close a wave (it lands once) or abandon it (nothing lands). */
+export async function endWave(
+  input: { id: string; action: 'close' | 'abandon' },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  return d.send('POST', `${BASE}/waves/${id(input.id)}/${input.action === 'abandon' ? 'abandon' : 'close'}`, {})
+}
+
+/** The waves, of one repository or all. */
+export async function listWaves(input: { repo?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  return note(await d.get(`${BASE}/waves${input.repo ? `?repo=${id(input.repo)}` : ''}`))
 }
 
 export const MESSAGE_DATA_NOTE =
