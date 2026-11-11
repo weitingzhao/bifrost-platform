@@ -255,7 +255,7 @@ func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, stri
 			continue
 		}
 		r := releaseResult(item, params["revision"])
-		if _, reuse := r.Results["tested-by"]; reuse {
+		if ClaimsReuse(item) {
 			continue
 		}
 		if r.Status != "Succeeded" || r.Reason != "" || !fullScope(r.Results) {
@@ -273,7 +273,7 @@ func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, stri
 // tasks after a cancel); a run with no Succeeded condition has not started.
 // A completion time, or more than one Succeeded condition, is never undecided.
 func undecided(item unstructured.Unstructured, revision string) bool {
-	if _, counts := namedValues(item, "status", "results"); counts["tested-by"] > 0 {
+	if ClaimsReuse(item) {
 		return false
 	}
 	if releaseResult(item, revision).Reason != "" {
@@ -297,10 +297,12 @@ func undecided(item unstructured.Unstructured, revision string) bool {
 
 // emptyResultAllowed are the results a green run may leave empty: no failed
 // tests, a full run's empty package list and store pattern, and a scope with
-// nothing to explain (infra test-api, countdown 20). Every other result must
-// be named once and non-empty.
+// nothing to explain (infra test-api, countdown 20), and the tested-by of a
+// run that reused nothing (TD-533; ClaimsReuse). Every other result must be
+// named once and non-empty.
 var emptyResultAllowed = map[string]bool{
 	FailedTestsResult: true, APIPackagesResult: true, APIStoreRunResult: true, APIScopeWhyResult: true,
+	"tested-by": true,
 }
 
 func releaseResult(item unstructured.Unstructured, revision string) Evidence {

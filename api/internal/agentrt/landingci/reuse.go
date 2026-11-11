@@ -8,8 +8,7 @@ import (
 // ValidReuse verifies a tested-by run against the listed bifrost-ci-platform
 // runs. Callers apply their own scope policy.
 func ValidReuse(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) bool {
-	_, counts := namedValues(item, "status", "results")
-	if counts["tested-by"] == 0 {
+	if !ClaimsReuse(item) {
 		return false
 	}
 	out := reuseResult(item, items, revision)
@@ -30,7 +29,7 @@ func ValidReuse(item unstructured.Unstructured, items []unstructured.Unstructure
 func reuseResult(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) Evidence {
 	out := releaseResult(item, revision)
 	values, counts := namedValues(item, "status", "results")
-	if counts["tested-by"] == 0 {
+	if !ClaimsReuse(item) {
 		return out
 	}
 	fail := func() Evidence {
@@ -54,8 +53,7 @@ func reuseResult(item unstructured.Unstructured, items []unstructured.Unstructur
 	}
 	params, _ := namedValues(*original, "spec", "params")
 	r := releaseResult(*original, params["revision"])
-	_, originalCounts := namedValues(*original, "status", "results")
-	if originalCounts["tested-by"] != 0 || r.Status != "Succeeded" || r.Reason != "" || r.CreatedAt.IsZero() || !r.CreatedAt.Before(out.CreatedAt) {
+	if ClaimsReuse(*original) || r.Status != "Succeeded" || r.Reason != "" || r.CreatedAt.IsZero() || !r.CreatedAt.Before(out.CreatedAt) {
 		return fail()
 	}
 	for _, name := range []string{"platform-tree", "ui-commit", "infra-commit", APIScopeResult, APIPackagesResult, APIStoreRunResult, APIScopeWhyResult} {
@@ -71,7 +69,7 @@ func reuseResult(item unstructured.Unstructured, items []unstructured.Unstructur
 // landingReuse additionally binds an incremental original to the landing base.
 func landingReuse(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) Evidence {
 	out := reuseResult(item, items, revision)
-	if _, named := out.Results["tested-by"]; !named || out.Reason != "" {
+	if !ClaimsReuse(item) || out.Reason != "" {
 		return out
 	}
 	e := ReleaseEvidence{ReadAt: time.Now().UTC()}

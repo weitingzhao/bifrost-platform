@@ -25,7 +25,7 @@ func reuseValue(t *testing.T, o *unstructured.Unstructured, name, value string) 
 }
 
 func TestReuseReaders(t *testing.T) {
-	for _, tc := range []string{"full", "incremental", "missing", "red", "tree", "ui", "infra", "chain", "later", "console", "copied scope", "invalid tree"} {
+	for _, tc := range []string{"full", "incremental", "missing", "red", "tree", "ui", "infra", "chain", "empty original", "later", "console", "copied scope", "invalid tree"} {
 		t.Run(tc, func(t *testing.T) {
 			at := time.Now().UTC().Add(-time.Hour)
 			original := releaseCI(t, "original", at)
@@ -64,6 +64,10 @@ func TestReuseReaders(t *testing.T) {
 				reuseValue(t, original, "infra-commit", factSHA1)
 			case "chain":
 				reuseValue(t, original, "tested-by", "another")
+			case "empty original":
+				// TD-533: a run that reused nothing writes an empty tested-by;
+				// it is an original like any other.
+				reuseValue(t, original, "tested-by", "")
 			case "later":
 				original.SetCreationTimestamp(reuse.GetCreationTimestamp())
 			case "console":
@@ -103,7 +107,7 @@ func TestReuseReaders(t *testing.T) {
 				}
 				return
 			}
-			accepted := tc == "full" || tc == "incremental"
+			accepted := tc == "full" || tc == "incremental" || tc == "empty original"
 			wantRecords := 0
 			if accepted {
 				wantRecords = 1
@@ -203,5 +207,43 @@ func TestReuseDoesNotRefreshFull(t *testing.T) {
 	got, err = c.ReadRelease(context.Background(), factSHA1)
 	if err != nil || got.Status != "Succeeded" || got.Reason != "" {
 		t.Fatal(got, err)
+	}
+}
+
+// TD-533: the reuse step writes an empty tested-by when it reused nothing. Only
+// a tested-by naming a run claims a reuse; a repeated one still does (and the
+// reuse checks refuse it as malformed).
+func TestClaimsReuseNeedsANamedRun(t *testing.T) {
+	at := time.Now().UTC().Add(-time.Hour)
+	for _, tc := range []struct {
+		name   string
+		values []string
+		want   bool
+	}{
+		{"absent", nil, false},
+		{"empty", []string{""}, false},
+		{"blank", []string{"  "}, false},
+		{"named", []string{"original"}, true},
+		{"repeated", []string{"", ""}, true},
+	} {
+		o := releaseCI(t, "run", at)
+		entries, _, _ := unstructured.NestedSlice(o.Object, "status", "results")
+		for _, v := range tc.values {
+			entries = append(entries, map[string]any{"name": "tested-by", "value": v})
+		}
+		setField(t, o, entries, "status", "results")
+		if got := ClaimsReuse(*o); got != tc.want {
+			t.Errorf("%s: ClaimsReuse %v, want %v", tc.name, got, tc.want)
+		}
+		if tc.want {
+			continue
+		}
+		items := []unstructured.Unstructured{*o}
+		if ValidReuse(*o, items, factSHA1) {
+			t.Errorf("%s: an ordinary run passed as a reuse", tc.name)
+		}
+		if got, want := reuseResult(*o, items, factSHA1), releaseResult(*o, factSHA1); got.Status != want.Status || got.Reason != want.Reason {
+			t.Errorf("%s: reuse result %s/%s, want the run's own %s/%s", tc.name, got.Status, got.Reason, want.Status, want.Reason)
+		}
 	}
 }

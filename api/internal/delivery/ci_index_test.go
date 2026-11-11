@@ -155,7 +155,15 @@ const (
 
 func TestCIRunUnverifiedReuseDoesNotCount(t *testing.T) {
 	at := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
-	for _, value := range []any{"missing-original", "", nil} {
+	// TD-533: an empty tested-by is a run that reused nothing, an ordinary
+	// green run; a missing original or a non-string value is an unverified reuse.
+	empty := withAPIScope(ciRunAt("fresh", factSHA1, "True", at.Add(time.Hour)), "full")
+	fresh := empty.Object["status"].(map[string]any)["results"].([]any)
+	empty.Object["status"].(map[string]any)["results"] = append(fresh, map[string]any{"name": "tested-by", "value": ""})
+	if status, run, err := ciFacts(t, empty).CIRun(context.Background(), "repo-p", factSHA1); err != nil || status != CISucceeded || run != "fresh" {
+		t.Errorf("tested-by empty: got %q %q %v; want an ordinary green run", status, run, err)
+	}
+	for _, value := range []any{"missing-original", nil} {
 		for _, olderRed := range []bool{false, true} {
 			reuse := withAPIScope(ciRunAt("reuse", factSHA1, "True", at.Add(time.Hour)), "full")
 			results := reuse.Object["status"].(map[string]any)["results"].([]any)

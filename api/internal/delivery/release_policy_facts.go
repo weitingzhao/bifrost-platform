@@ -327,16 +327,11 @@ func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) 
 	return idx, nil
 }
 
-// hasTestedBy also detects malformed reuse results that need verification.
+// hasTestedBy: the run claims a reuse (landingci.ClaimsReuse), a malformed
+// one included, so it needs verification; an empty tested-by is an ordinary
+// run (TD-533).
 func hasTestedBy(item unstructured.Unstructured) bool {
-	results, _, _ := unstructured.NestedSlice(item.Object, "status", "results")
-	for _, r := range results {
-		m, _ := r.(map[string]any)
-		if m["name"] == "tested-by" {
-			return true
-		}
-	}
-	return false
+	return landingci.ClaimsReuse(item)
 }
 
 // fullAPIScope: the run's api-scope result is absent (it predates the result

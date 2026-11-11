@@ -150,7 +150,7 @@ func (c *Client) Read(ctx context.Context, key Key, after time.Time) (out Eviden
 	out.Results, _ = namedValues(item, "status", "results")
 	out.InfraCommit = out.Results["infra-commit"]
 	if key.Repo == "bifrost-platform" && latest.Status == "Unknown" {
-		if _, counts := namedValues(item, "status", "results"); counts["tested-by"] > 0 {
+		if ClaimsReuse(item) {
 			out.Reason = "ci_reuse"
 		}
 	}
@@ -292,8 +292,7 @@ func (c *Client) latest(ctx context.Context, pipeline, revision string, after ti
 		run.PlatformCommit, run.UICommit, run.InfraCommit = landingCIResults(item)
 		if pipeline == landing.LandingRepos["bifrost-platform"].CIPipeline {
 			run.Scope = scopeResults(item)
-			_, counts := namedValues(item, "status", "results")
-			if counts["tested-by"] > 0 {
+			if ClaimsReuse(item) {
 				checked := landingReuse(item, all, revision)
 				run.Tree, run.TestedBy, run.TestedUID = reuseProvenance(checked.Results, all)
 				if checked.Reason != "" {
@@ -365,6 +364,27 @@ func runStatus(item unstructured.Unstructured) string {
 		return "Unknown"
 	}
 	return status
+}
+
+// ClaimsReuse: the run reports itself a reuse, a tested-by result naming a
+// run. The reuse step writes an empty tested-by when it reused nothing (TD-533:
+// a Pipeline result naming a result its task did not write fails the run), so
+// one empty string is an ordinary run. A repeated tested-by, or one whose value
+// is not a string, still claims a reuse, which the reuse checks refuse.
+func ClaimsReuse(item unstructured.Unstructured) bool {
+	list, _, _ := unstructured.NestedSlice(item.Object, "status", "results")
+	n, named := 0, false
+	for _, entry := range list {
+		m, _ := entry.(map[string]any)
+		if name, _ := m["name"].(string); name != "tested-by" {
+			continue
+		}
+		n++
+		if s, isString := m["value"].(string); !isString || strings.TrimSpace(s) != "" {
+			named = true
+		}
+	}
+	return n > 1 || named
 }
 
 // namedValues keeps counts so duplicates can never masquerade as one result.
