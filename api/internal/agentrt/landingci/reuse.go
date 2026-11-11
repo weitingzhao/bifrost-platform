@@ -24,7 +24,7 @@ func ValidReuse(item unstructured.Unstructured, items []unstructured.Unstructure
 // copied from that original. The original must be listed, have no tested-by,
 // pass releaseResult for its own revision, be green, have the same tree and
 // sibling commits, and have been created strictly before the reuse.
-// Its scope decides acceptance: full, incremental only while FullFresh, or
+// Its scope decides acceptance: full, incremental, or
 // console as Partial. Invalid reuse is Unknown/ci_reuse. Runs without
 // platform-tree retain the legacy behavior.
 func reuseResult(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) Evidence {
@@ -76,7 +76,7 @@ func landingReuse(item unstructured.Unstructured, items []unstructured.Unstructu
 	}
 	e := ReleaseEvidence{ReadAt: time.Now().UTC()}
 	e.LastFullRun, e.LastFullCommit, e.LastFullAt = lastFull(items, e.ReadAt)
-	if !e.releaseScope(out.Results) {
+	if !(fullScope(out.Results) || out.Results[APIScopeResult] == APIScopeIncremental && e.FullFresh()) {
 		out.Status, out.Reason = "Unknown", "ci_reuse"
 		return out
 	}

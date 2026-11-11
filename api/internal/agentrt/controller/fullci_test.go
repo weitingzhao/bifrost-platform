@@ -203,7 +203,8 @@ func TestFullCIRedProposesOneGoalListingTheLandings(t *testing.T) {
 	}
 	var noted int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'controller' AND event_type = 'note'
-	  AND body_json->'full_ci'->>'run' = 'ci-full-111111111111-20261106' AND body_json->'full_ci' ? 'mission'`).Scan(&noted))
+	  AND body_json->'full_ci'->>'run' = 'ci-full-111111111111-20261106' AND body_json->'full_ci' ? 'mission'
+	  AND body_json->'full_ci'->>'alert' = 'true' AND body_json->'full_ci'->>'deviation' = 'content_reuse'`).Scan(&noted))
 	if noted != 1 {
 		t.Fatal("the note the Console shows:", noted)
 	}

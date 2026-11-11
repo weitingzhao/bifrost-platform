@@ -32,6 +32,10 @@ type FullCI struct {
 
 func (f FullCI) body() map[string]any {
 	b := map[string]any{}
+	if f.Run != "" {
+		b["alert"] = true
+		b["deviation"] = "content_reuse"
+	}
 	if len(f.Started) > 0 {
 		started := make([]any, len(f.Started))
 		for i, s := range f.Started {

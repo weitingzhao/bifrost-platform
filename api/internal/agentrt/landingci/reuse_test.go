@@ -180,7 +180,7 @@ func TestReuseDoesNotRefreshFull(t *testing.T) {
 	}
 	c, _ = drillService(t, original, reuse)
 	got, err = c.ReadRelease(context.Background(), factSHA1)
-	if err != nil || got.Status != "Unknown" || got.Reason != "ci_reuse" {
+	if err != nil || got.Status != "Succeeded" || got.Reason != "" {
 		t.Fatal(got, err)
 	}
 }

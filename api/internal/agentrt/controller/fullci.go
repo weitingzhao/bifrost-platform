@@ -243,6 +243,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 	if err != nil {
 		return false, err
 	}
+	c.logf("agentrt-full-ci: ALERT content reuse deviation: run %s of %s is red; B5 eligibility is unchanged", r.Name, r.Revision)
 	note := store.FullCI{Run: r.Name, Commit: r.Revision, FailedKey: key}
 	if openMission != "" {
 		note.OpenMission, note.OpenRun = openMission, openRun

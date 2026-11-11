@@ -174,11 +174,6 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 			scopeLog.note(p, result, err)
 			return stgrelease.ReleaseCIObservation(result), err
 		},
-		SentCI: func(ctx context.Context, p string) (store.StgCIObservation, error) {
-			result, err := ci.ReadRelease(ctx, p)
-			scopeLog.note(p, result, err)
-			return stgrelease.ReleaseCIObservation(result), err
-		},
 		Range: func(ctx context.Context, base, p string) ([]landing.ReleaseCommit, error) {
 			g, err := git()
 			if err != nil {

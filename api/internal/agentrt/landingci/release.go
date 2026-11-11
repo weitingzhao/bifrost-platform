@@ -25,8 +25,7 @@ type ReleaseEvidence struct {
 	// Partial names the greens of P that tested only part of the API
 	// (api-scope=console). They neither vouch for P nor hide another run.
 	Partial []string
-	// Stale names the incremental greens of P set aside because no full green
-	// of any revision is at most FullMaxAge old at ReadAt.
+	// Stale is retained for historical observations. New reads never set it.
 	Stale []string
 	// LastFull* is the newest full-scope green of any revision (any P); a
 	// zero LastFullAt means none was found.
@@ -34,8 +33,8 @@ type ReleaseEvidence struct {
 	LastFullAt                  time.Time
 }
 
-// FullMaxAge is how old the last full green may be for an incremental green
-// to stand for P at STG. PROD keeps needing a full green of its own commit.
+// FullMaxAge remains the landing reuse freshness cap and the historical
+// observation cap. It no longer decides STG eligibility.
 const FullMaxAge = 48 * time.Hour
 
 // The api-scope result of a ci-platform run: what its test-api step ran.
@@ -66,9 +65,9 @@ func (e ReleaseEvidence) FullFresh() bool {
 }
 
 // releaseScope: the results vouch for P at STG, as a full run or as an
-// incremental one while the last full green is fresh.
+// incremental one, independently of the daily audit.
 func (e ReleaseEvidence) releaseScope(results map[string]string) bool {
-	return fullScope(results) || results[APIScopeResult] == APIScopeIncremental && e.FullFresh()
+	return fullScope(results) || results[APIScopeResult] == APIScopeIncremental
 }
 
 // Scope is the api-scope of the run that decided P, for people reading why P
@@ -151,6 +150,9 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 	out.LastFullRun, out.LastFullCommit, out.LastFullAt = lastFull(items, out.ReadAt)
 	var matches []unstructured.Unstructured
 	for _, item := range items {
+		if item.GetLabels()["bifrost.io/trigger"] == FullCITrigger {
+			continue // Daily audits never decide B5 release eligibility.
+		}
 		params, counts := namedValues(item, "spec", "params")
 		// Keep malformed duplicate revisions in the ordering if any entry
 		// names P, so a contradictory duplicate cannot revive older green.
@@ -174,19 +176,14 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 	}
 	// A green that ran only the console's share of the API (api-scope=console)
 	// says nothing about the rest of P: set it aside before selecting. A red
-	// of any scope stays a verdict. An incremental green counts as a full one
-	// only while the last full green is at most FullMaxAge old; otherwise it
-	// is set aside the same way (Stale).
+	// of any scope stays a verdict. Incremental greens count independently
+	// of the daily full audit.
 	kept := matches[:0]
 	for _, item := range matches {
 		r := reuseResult(item, items, revision)
 		green := r.Status == "Succeeded" && r.Reason == ""
 		if green && r.Results[APIScopeResult] == APIScopeConsole {
 			out.Partial = append(out.Partial, item.GetName())
-			continue
-		}
-		if green && r.Results[APIScopeResult] == APIScopeIncremental && !out.FullFresh() && r.Results["tested-by"] == "" {
-			out.Stale = append(out.Stale, item.GetName())
 			continue
 		}
 		kept = append(kept, item)

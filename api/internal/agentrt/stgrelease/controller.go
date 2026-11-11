@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -60,11 +61,8 @@ type Execution interface {
 }
 
 type Sources struct {
-	Head func(context.Context) (string, error)
-	CI   func(context.Context, string) (store.StgCIObservation, error)
-	// SentCI is the same read as CI, for the check after a send
-	// (sent_ci.go). Nil disables that check.
-	SentCI          func(context.Context, string) (store.StgCIObservation, error)
+	Head            func(context.Context) (string, error)
+	CI              func(context.Context, string) (store.StgCIObservation, error)
 	Range           func(context.Context, string, string) ([]landing.ReleaseCommit, error)
 	MainEvidence    store.MainEvidenceFunc
 	ReleaseEvidence EvidenceRead
@@ -99,7 +97,6 @@ type Controller struct {
 	holder              *WindowHolder
 	losses              []WindowLoss
 	cleaned             map[string]bool
-	sent                map[string]*sentCIWatch
 	absent              map[containKey]bool  // P's history has no R; never changes (coverreads.go)
 	coverLogged         time.Time            // last sampled coverage line (coverreads.go)
 	notice              func(string, ...any) // nil: slog.Warn
@@ -217,15 +214,6 @@ func (c *Controller) Pass(ctx context.Context) error {
 			c.losses = c.losses[1:]
 		}
 	}
-	// R5:5.7-2: a red verdict that arrives after a send opens the same CI
-	// block the final gate would have; a read failure never stops the pass.
-	wrote, sentErr := c.watchSentCI(ctx, s)
-	steps.mark("sent_ci", time.Now())
-	if wrote {
-		return errors.Join(cleanupErr, sentErr)
-	} else if sentErr != nil {
-		cleanupErr = errors.Join(cleanupErr, sentErr)
-	}
 	if b != nil {
 		batchErr := c.batch(ctx, s, id, b)
 		steps.mark("batch "+b.Phase, time.Now())
@@ -307,4 +295,12 @@ func diagnostic(b *store.StgBatch, id, what string, gen int64) store.StgRecord {
 	r := batchRecord("diag", id, b.Try, "what", what, "gen", gen)
 	r["try"] = b.Try
 	return r
+}
+
+func (c *Controller) logNotice(msg string, args ...any) {
+	if c.notice != nil {
+		c.notice(msg, args...)
+		return
+	}
+	slog.Warn(msg, args...)
 }

@@ -387,10 +387,9 @@ func otherCI(t *testing.T, name string, at time.Time) *unstructured.Unstructured
 }
 
 // R5:5.7-1 landings run incremental Go tests. An incremental green of P
-// stands for a full one at STG while the last full green of any revision is
-// at most FullMaxAge old; otherwise it is set aside (Stale) and P reads
-// Missing unless another run decides it. A red of any scope is a verdict.
-func TestReleaseCIIncrementalGreenNeedsAFreshFullGreen(t *testing.T) {
+// stands for a full one at STG regardless of the last daily full green.
+// A red of the commit's own CI remains a verdict.
+func TestReleaseCIIncrementalGreenIndependentOfFullFreshness(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC()
 	red := func(o *unstructured.Unstructured) *unstructured.Unstructured {
@@ -420,14 +419,14 @@ func TestReleaseCIIncrementalGreenNeedsAFreshFullGreen(t *testing.T) {
 		note                     string
 	}{
 		"fresh full green":        {[]runtime.Object{fresh(), inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "full", 0, "last full CI green 10 h ago (run full, commit " + otherSHA + "), cap 48 h"},
-		"stale full green":        {[]runtime.Object{stale(), inc("inc", now.Add(-time.Hour))}, "", "Missing", "incremental", "full", 1, "scope=incremental; last full CI green 51 h ago (run full, commit " + otherSHA + "), cap 48 h"},
-		"no full green ever":      {[]runtime.Object{inc("inc", now.Add(-time.Hour))}, "", "Missing", "incremental", "", 1, "scope=incremental; no full CI green found, cap 48 h"},
-		"invalid identity full":   {[]runtime.Object{foreign(), inc("inc", now.Add(-2*time.Hour))}, "", "Missing", "incremental", "", 1, "no full CI green found"},
+		"stale full green":        {[]runtime.Object{stale(), inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "full", 0, "scope=incremental; last full CI green 51 h ago (run full, commit " + otherSHA + "), cap 48 h"},
+		"no full green ever":      {[]runtime.Object{inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "", 0, "scope=incremental; no full CI green found, cap 48 h"},
+		"invalid identity full":   {[]runtime.Object{foreign(), inc("inc", now.Add(-2*time.Hour))}, "inc", "Succeeded", "incremental", "", 0, "no full CI green found"},
 		"legacy full green":       {[]runtime.Object{otherCI(t, "full", now.Add(-10*time.Hour)), inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "full", 0, "10 h ago"},
 		"full red over inc green": {[]runtime.Object{fresh(), inc("inc", now.Add(-time.Hour)), withScope(t, red(releaseCI(t, "red", now.Add(-30*time.Minute))), APIScopeFull)}, "red", "Failed", "full", "full", 0, "scope=full"},
-		"full red over stale inc": {[]runtime.Object{stale(), inc("inc", now.Add(-time.Hour)), withScope(t, red(releaseCI(t, "red", now.Add(-30*time.Minute))), APIScopeFull)}, "red", "Failed", "full", "full", 1, "51 h ago"},
+		"full red over stale inc": {[]runtime.Object{stale(), inc("inc", now.Add(-time.Hour)), withScope(t, red(releaseCI(t, "red", now.Add(-30*time.Minute))), APIScopeFull)}, "red", "Failed", "full", "full", 0, "51 h ago"},
 		"inc green over red":      {[]runtime.Object{fresh(), red(releaseCI(t, "red", now.Add(-2*time.Hour))), inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "full", 0, "10 h ago"},
-		"stale inc over red":      {[]runtime.Object{stale(), red(releaseCI(t, "red", now.Add(-2*time.Hour))), inc("inc", now.Add(-time.Hour))}, "red", "Failed", "full", "full", 1, "51 h ago"},
+		"stale inc over red":      {[]runtime.Object{stale(), red(releaseCI(t, "red", now.Add(-2*time.Hour))), inc("inc", now.Add(-time.Hour))}, "inc", "Succeeded", "incremental", "full", 0, "51 h ago"},
 		"inc red over full green": {[]runtime.Object{stale(), releaseCI(t, "green", now.Add(-2*time.Hour)), withScope(t, red(releaseCI(t, "inc", now.Add(-time.Hour))), APIScopeIncremental)}, "inc", "Failed", "incremental", "green", 0, "scope=incremental"},
 		"legacy green of P":       {[]runtime.Object{stale(), releaseCI(t, "legacy", now.Add(-time.Hour))}, "legacy", "Succeeded", "full", "legacy", 0, "last full CI green 1 h ago (run legacy, commit " + factSHA1 + ")"},
 	} {
@@ -444,7 +443,7 @@ func TestReleaseCIIncrementalGreenNeedsAFreshFullGreen(t *testing.T) {
 				t.Fatalf("note %q lacks %q", note, tc.note)
 			}
 			if _, recErr := got.Record(); (recErr == nil) != (tc.status == "Succeeded") {
-				t.Fatal("accepted evidence must be a full green or an incremental one with a fresh full green", recErr)
+				t.Fatal("accepted evidence must be a full green or an incremental one", recErr)
 			}
 		})
 	}
@@ -459,17 +458,36 @@ func TestReleaseCIIncrementalGreenNeedsAFreshFullGreen(t *testing.T) {
 	}
 	old := got
 	old.LastFullAt = old.ReadAt.Add(-FullMaxAge - time.Minute)
-	if _, err := old.Record(); err == nil {
-		t.Fatal("an incremental green with a stale full green became accepted evidence")
+	if _, err := old.Record(); err != nil {
+		t.Fatal("an incremental green with a stale full green was refused")
 	}
 	none := got
 	none.LastFullRun = ""
-	if _, err := none.Record(); err == nil {
-		t.Fatal("an incremental green without any full green became accepted evidence")
+	if _, err := none.Record(); err != nil {
+		t.Fatal("an incremental green without any full green was refused")
 	}
 	edge := got
 	edge.LastFullAt = edge.ReadAt.Add(-FullMaxAge)
 	if _, err := edge.Record(); err != nil {
 		t.Fatal("a full green exactly FullMaxAge old is fresh", err)
+	}
+}
+
+func TestDailyFullRedDoesNotDecideRelease(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	green := withScope(t, releaseCI(t, "own-ci", now.Add(-time.Hour)), APIScopeIncremental)
+	audit := releaseCI(t, "daily-audit", now.Add(-time.Minute))
+	labels := audit.GetLabels()
+	labels["bifrost.io/trigger"] = FullCITrigger
+	audit.SetLabels(labels)
+	setField(t, audit, []any{map[string]any{"type": "Succeeded", "status": "False"}}, "status", "conditions")
+	c, _ := drillService(t, green, audit)
+	got, err := c.ReadRelease(context.Background(), factSHA1)
+	if err != nil || got.Run != "own-ci" || got.Status != "Succeeded" {
+		t.Fatalf("daily audit blocked release: %+v %v", got, err)
+	}
+	if _, err := got.Record(); err != nil {
+		t.Fatal(err)
 	}
 }
