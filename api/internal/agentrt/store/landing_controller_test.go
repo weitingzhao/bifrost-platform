@@ -63,7 +63,8 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 	if duplicate != "" || decision.Allowed {
 		t.Fatal("duplicate active claim", duplicate, decision)
 	}
-	// Persist an intentional CI retry, then crash after the external create.
+	// A pushed landing branch (a red landing CI is no longer rerun as it is,
+	// R6:6.2-1, so there is no retry intent to recover here).
 	clock := time.Now().Add(time.Minute)
 	restore = store.FreezeEventClock(clock)
 	put := func(kind string, kv ...any) {
@@ -75,41 +76,6 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 	put("branch_intent", "ref", ref, "R", commitB)
 	put("branch_pushed", "ref", ref, "R", commitB)
 	restore()
-	names := []string{}
-	created := map[string]bool{}
-	drill := controller.DrillSources{Facts: src,
-		Main:          func(context.Context, string) (string, error) { return commitA, nil },
-		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
-		CI: func(_ context.Context, _ string, revision string, _ time.Time) (landing.CIRun, error) {
-			status := "Failed"
-			if revision == commitA {
-				status = "Succeeded"
-			}
-			return landing.CIRun{R: revision, Run: "ci-old", Status: status, CreatedAt: clock.Add(time.Second)}, nil
-		},
-		EnsureCI: func(_ context.Context, _ string, name, revision, _ string) error {
-			names = append(names, name)
-			if created[name] {
-				return nil
-			}
-			created[name] = true
-			return errors.New("crash after create")
-		},
-	}
-	restore = store.FreezeEventClock(clock.Add(time.Minute))
-	action, crash := ctl.LandingDrillCI(ctx, drill, op, clock.Add(time.Minute))
-	restore()
-	if crash == nil || action.Kind != "ci_rerun" {
-		t.Fatal("retry intent not persisted before create", action, crash)
-	}
-	restarted := controller.Controller{DB: w.rt, Env: "stg"}
-	restore = store.FreezeEventClock(clock.Add(2 * time.Minute))
-	action, err = restarted.LandingDrillCI(ctx, drill, op, clock.Add(2*time.Minute))
-	restore()
-	ok(t, err)
-	if action.Kind != "wait" || len(created) != 1 || len(names) != 2 || names[0] != names[1] {
-		t.Fatal("crash duplicated CI or consumed old failure", action, names)
-	}
 	beforeReads := reads
 	// Persist a tightening. The next controller call must read its actual body,
 	// rather than using the claim-time version/facts.

@@ -87,4 +87,4 @@ why=changed packages, test dependents, and guards; testdata: github.com/weitingz
 
 ## Retrying a failed test once
 
-When the run fails, every failed top-level test is run once more on its own (`go test -count=1 <package> -run '^(names)$'`). The run passes only if each of them passes the second time and no package failed without a failing test (a build error, a panic or a timeout stays red). The log keeps both runs and says `flaky: every failed test passed on its retry`; the failed-tests result then names none. This keeps a timing test of a package the change never touched from sending a good change back to its executor.
+A failing test fails the step. Failed tests are reported from the original run and are not retried.

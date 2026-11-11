@@ -12,64 +12,48 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Serial: FreezeEventClock. Real PG records the intent at microsecond precision;
-// the real Kubernetes metadata codec serializes creationTimestamp to seconds.
+// Serial: FreezeEventClock. The name is kept from when a red landing CI was
+// rerun once and the rerun's recovery was tested here. Since R6:6.2-1 a red
+// landing CI is not rerun as it is: the operation ends as ci_red, creates no
+// run, and a restarted controller creates none either.
 func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
 	w, task, src := acceptedDrill(t)
 	op, prepared := pushedDrill(t, w, task, src)
 	intent := prepared.Add(time.Minute).Truncate(time.Second).Add(100 * time.Millisecond)
 	restore := store.FreezeEventClock(intent)
 	defer restore()
-	created := false
-	var actualCreation, observedCreation time.Time
+	creates := 0
 	drill := controller.DrillSources{
 		Facts:         src,
 		Main:          func(context.Context, string) (string, error) { return commitA, nil },
 		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
 		CI: func(_ context.Context, _ string, revision string, _ time.Time) (landing.CIRun, error) {
-			status, name, at := "Failed", "old-failed", prepared.Add(time.Second)
+			status := "Failed"
 			if revision == commitA {
 				status = "Succeeded"
 			}
-			if revision == commitB && created {
-				status, name, at = "Succeeded", landing.CIName(op, 2), observedCreation
-			}
-			return landing.CIRun{Run: name, R: revision, Status: status, CreatedAt: at}, nil
+			return landing.CIRun{Run: "old-failed", R: revision, Status: status, CreatedAt: prepared.Add(time.Second)}, nil
 		},
-		EnsureCI: func(_ context.Context, _ string, name, revision, _ string) error {
-			if !created {
-				if name != landing.CIName(op, 2) || revision != commitB {
-					t.Fatal("wrong create identity")
-				}
-				actualCreation = intent.Add(100 * time.Millisecond)
-				obj := &unstructured.Unstructured{Object: map[string]any{}}
-				obj.SetCreationTimestamp(metav1.NewTime(actualCreation))
-				observedCreation = obj.GetCreationTimestamp().Time
-				created = true
-			}
+		EnsureCI: func(context.Context, string, string, string, string) error {
+			creates++
 			return nil
 		},
 	}
 	c := controller.Controller{DB: w.rt, Env: "stg"}
 	action, err := c.LandingDrillCI(ctx, drill, op, intent)
 	ok(t, err)
-	if action.Kind != "ci_rerun" || !created {
-		t.Fatal(action, created)
+	if action.Kind != "failed" || action.Why != "ci_red" || creates != 0 {
+		t.Fatal(action, creates)
 	}
-	state := landingState(t, w, landingRepoStream)
-	t.Logf("intent=%s actual creation=%s observed creation=%s", state.Operations[op].RerunAt.Format(time.RFC3339Nano), actualCreation.Format(time.RFC3339Nano), observedCreation.Format(time.RFC3339Nano))
 	later := intent.Add(time.Minute)
 	store.FreezeEventClock(later)
 	c = controller.Controller{DB: w.rt, Env: "stg"} // restart
-	action, err = c.LandingDrillCI(ctx, drill, op, later)
+	_, err = c.LandingDrillCI(ctx, drill, op, later)
 	ok(t, err)
-	state = landingState(t, w, landingRepoStream)
-	if state.Operations[op].Phase != "rehearsed" {
-		t.Fatalf("new exact-name successful rerun created after intent remains %s; action=%+v", state.Operations[op].Phase, action)
+	if state := landingState(t, w, landingRepoStream); state.Operations[op].Phase != "failed" || creates != 0 {
+		t.Fatalf("a red landing CI after a restart: %s, %d creates", state.Operations[op].Phase, creates)
 	}
 }
 

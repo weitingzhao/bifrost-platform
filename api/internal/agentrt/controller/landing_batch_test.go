@@ -418,16 +418,17 @@ func TestBatchThreeRootsOneCIOnePush(t *testing.T) {
 	}
 }
 
-// red takes a formed batch's CI red: the kick's run fails, its rerun
-// fails, and the lead ends the batch; the same pass claims what is free.
+// red takes a formed batch's CI red: the kick's run fails and the lead
+// ends the batch without rerunning it as it is; the next pass claims what
+// is free.
 func (r *batchRig) red(t *testing.T, b store.LandingBatch, log string) {
 	t.Helper()
 	r.failure = log
 	r.status = "Failed"
 	r.clock(time.Minute)
 	r.pass(t)
-	if !slices.Contains(r.ensured, landing.CIName(b.Lead, 2)) {
-		t.Fatal("no rerun", r.ensured)
+	if slices.Contains(r.ensured, landing.CIName(b.Lead, 2)) {
+		t.Fatal("a red run was rerun as it is", r.ensured)
 	}
 	r.clock(time.Minute)
 	r.pass(t)

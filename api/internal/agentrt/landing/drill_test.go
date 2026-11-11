@@ -39,46 +39,37 @@ func TestDrillMainMovementPrecedesOldMainRed(t *testing.T) {
 }
 
 // The landing CI tests main plus the change, so its own result decides
-// (Owner 2026-11-06): a Failed run is rerun once, then the operation ends
-// failed{ci_red} and frees the slot. Main's CI is no input at all: whether
-// it Succeeded, Failed or never ran, the judgement is the same. Nothing is
-// parked main_red, and nothing waits on another run.
+// (Owner 2026-11-10): its first Failed result ends the operation.
 func TestDrillFailedLandingCIEndsWhateverMainSays(t *testing.T) {
-	for _, from := range []string{"branch_pushed", "parked main_red"} {
-		s := drillState(t)
-		if from != "branch_pushed" {
-			s = oldMainRedPark(t)
-		}
-		obs := observation()
-		obs.Candidate.Status = "Failed"
-		at := epoch.Add(10 * time.Minute)
-		a := NextDrill(s, "land:1", obs, at)
-		if from != "branch_pushed" {
-			if a.Kind != "unparked" {
-				t.Fatal(from, "an old main_red park is not resumed", a)
-			}
-			if err := s.Apply(Entry{At: at, Record: record("unparked")}); err != nil {
-				t.Fatal(err)
-			}
-			a = NextDrill(s, "land:1", obs, at)
-		}
-		if a.Kind != "ci_rerun" {
-			t.Fatal(from, "a red landing CI is not rerun", a)
-		}
-		if err := s.Apply(Entry{At: at, Record: record("ci_rerun", "try", 2)}); err != nil {
-			t.Fatal(err)
-		}
-		obs.Candidate = CIRun{Run: CIName("land:1", 2), R: R, Status: "Failed", CreatedAt: at.Add(time.Second)}
-		for _, later := range []time.Duration{time.Minute, time.Hour} {
-			if a = NextDrill(s, "land:1", obs, at.Add(later)); a.Kind != "failed" || a.Why != "ci_red" {
-				t.Fatal(from, "a red rerun does not end the operation", later, a)
+	t.Parallel()
+	for _, parked := range []bool{false, true} {
+		for _, pinned := range []bool{false, true} {
+			for _, kicked := range []bool{false, true} {
+				s := drillState(t)
+				if parked {
+					s = oldMainRedPark(t)
+				}
+				o := s.Operations["land:1"]
+				o.Kicked = kicked
+				s.Operations["land:1"] = o
+				obs := observation()
+				obs.Candidate.Status = "Failed"
+				obs.PinCI = pinned
+				if a := NextDrill(s, "land:1", obs, epoch.Add(10*time.Minute)); a.Kind != "failed" || a.Why != "ci_red" {
+					t.Fatal(parked, pinned, kicked, a)
+				}
+				if err := s.Apply(Entry{At: epoch.Add(10 * time.Minute), Record: record("failed", "why", "ci_red")}); err != nil {
+					t.Fatal(err)
+				}
+				if o := s.Operations["land:1"]; o.Phase != "failed" || o.Rerun || !o.RerunAt.IsZero() {
+					t.Fatal("first red must end without a rerun", o)
+				}
 			}
 		}
 	}
 }
 
-// A Succeeded landing CI goes ready on a red main, and resumes a park an
-// old red main left.
+// A green landing CI resumes an old main_red park.
 func TestDrillGreenLandingCIOnRedMainGoesReady(t *testing.T) {
 	if a := NextDrill(drillState(t), "land:1", observation(), epoch.Add(10*time.Minute)); a.Kind != "ready" {
 		t.Fatal("a green landing CI does not go ready", a)
@@ -106,7 +97,7 @@ func TestDrillLatestCIFailureCannotRelease(t *testing.T) {
 		t.Fatal(obs.Candidate)
 	}
 	a := NextDrill(s, "land:1", obs, epoch.Add(5*time.Minute))
-	if a.Kind != "ci_rerun" {
+	if a.Kind != "failed" {
 		t.Fatal("old green admitted", a)
 	}
 	o := s.Operations["land:1"]
@@ -128,7 +119,7 @@ func TestDrillCIStatesAndWindowBudget(t *testing.T) {
 			expected = "ci_kick"
 		}
 		if status == "Failed" {
-			expected = "ci_rerun" // never a wait on main's CI
+			expected = "failed" // never a wait on main's CI
 		}
 		if status == "Succeeded" {
 			expected = "ready"

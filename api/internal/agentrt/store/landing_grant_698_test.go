@@ -75,7 +75,8 @@ func liveController(w *world) controller.Controller {
 // any kick: the operation that needs a grant still gets its pinned run
 // first (ci_kick with its key), and is not taken to the gate on the
 // webhook's run. Its webhook red with main green, the kick already used by
-// v1: the pinned run rides on the rerun, the first key accepted there.
+// v1: the red run ends the operation as ci_red; nothing is rerun as it is
+// (R6:6.2-1).
 // (On 082125dd: ready, awaiting_grant with no key; and "fixed at the first
 // kick".)
 func TestC5B01PinnedRunComesFirst(t *testing.T) {
@@ -105,7 +106,7 @@ func TestC5B01PinnedRunComesFirst(t *testing.T) {
 		ok(t, err)
 		key, err := store.LandingCIKey(ctx, w.rt, op)
 		ok(t, err)
-		if a.Kind != "ci_rerun" || len(calls.pinned) != 1 || !strings.HasSuffix(calls.pinned[0], "-2") || key == nil {
+		if a.Kind != "failed" || a.Why != "ci_red" || len(calls.pinned) != 0 || len(calls.legacy) != 0 {
 			t.Fatalf("%+v calls %+v key %v", a, calls, key)
 		}
 	})

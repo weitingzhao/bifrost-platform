@@ -75,8 +75,7 @@ type DrillObservation struct {
 	WindowBlocked bool
 	// PinCI: the operation needs a grant to reach main and its CI is not
 	// pinned yet (C-5, review 698 B-01). Its pinned run is then the next
-	// step whatever any other run of R says: a kick, or a rerun when the
-	// kick was already used.
+	// step unless CI has failed: kick once, then wait for pinned evidence.
 	PinCI bool
 }
 type DrillAction struct{ Kind, Why string }
@@ -119,14 +118,6 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 	if o.Phase == "parked" && o.Why == "rule" {
 		return DrillAction{Kind: "unparked"}
 	}
-	if obs.PinCI && o.Phase == "branch_pushed" {
-		switch {
-		case !o.Kicked:
-			return DrillAction{Kind: "ci_kick"}
-		case !o.Rerun:
-			return DrillAction{Kind: "ci_rerun"}
-		}
-	}
 	ci := obs.Candidate
 	if ci.Status == "Unknown" || ci.CreatedAt.After(now) {
 		return DrillAction{Kind: "wait"}
@@ -135,6 +126,12 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		ci = CIRun{Status: "Missing"}
 	}
 	if !rerunObserved(op, o, ci.Run, ci.CreatedAt) {
+		return DrillAction{Kind: "wait"}
+	}
+	if obs.PinCI && o.Phase == "branch_pushed" && ci.Status != "Failed" {
+		if !o.Kicked {
+			return DrillAction{Kind: "ci_kick"}
+		}
 		return DrillAction{Kind: "wait"}
 	}
 	switch ci.Status {
@@ -163,21 +160,6 @@ func NextDrill(s State, op string, obs DrillObservation, now time.Time) DrillAct
 		}
 		return DrillAction{Kind: "ready"}
 	case "Failed":
-		// Infra has one CI identity per preparation and never consumes push
-		// CI as a main baseline. A failed landing run ends this operation.
-		if obs.Facts.Repo == "bifrost-trade-infra" {
-			return DrillAction{Kind: "failed", Why: "ci_red"}
-		}
-		// The landing CI tests main plus the change: its own result
-		// decides, whatever main's CI says or whether it ran (Owner
-		// 2026-11-06). One rerun, then the operation ends and frees the
-		// repository's slot; it never waits on another run's result.
-		if o.Phase == "parked" {
-			return DrillAction{Kind: "unparked"}
-		}
-		if !o.Rerun {
-			return DrillAction{Kind: "ci_rerun"}
-		}
 		return DrillAction{Kind: "failed", Why: "ci_red"}
 	}
 	return DrillAction{Kind: "wait"}
