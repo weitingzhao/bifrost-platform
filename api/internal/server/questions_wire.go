@@ -460,3 +460,37 @@ func questionAnswerFact(id, status string, answered bool, option, text, by strin
 	}
 	return questionFact(q)
 }
+
+// agentRuntimeQuestionObservations lists retained cards without sweeping.
+func (rt *questionRuntime) agentRuntimeQuestionObservations() func(context.Context) ([]store.Question, error) {
+	if rt == nil || rt.svc == nil || rt.reads == nil {
+		return nil
+	}
+	return func(ctx context.Context) ([]store.Question, error) {
+		items, ok, err := within(ctx, rt.reads, func() ([]questions.Question, bool, error) {
+			items, err := rt.svc.Observations()
+			return items, true, err
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("question observations unavailable")
+		}
+		now := time.Now()
+		var out []store.Question
+		for _, q := range items {
+			if f, ok := questionObservation(q, now); ok {
+				out = append(out, f)
+			}
+		}
+		return out, nil
+	}
+}
+
+func questionObservation(q questions.Question, now time.Time) (store.Question, bool) {
+	if q.Status == questions.StatusOpen && !q.ExpiresAt.IsZero() && !now.Before(q.ExpiresAt) {
+		return store.Question{}, false
+	}
+	return questioncards.Fact(q)
+}

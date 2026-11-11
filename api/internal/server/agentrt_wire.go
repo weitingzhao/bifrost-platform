@@ -514,6 +514,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 		rel = s.releases.Service()
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
+	s.wireExternalRecords(&src)
 	src.Ack = s.questionRuntime.agentRuntimeAck()
 	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()

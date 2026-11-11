@@ -27,9 +27,12 @@ import (
 // record's lock, so it must return when its context ends: each read gets
 // ReadTimeout (review 152 B2).
 type Sources struct {
-	Plan     store.PlanSources
-	Approval func(ctx context.Context, number int64) (store.ApprovalFact, bool)
-	Question func(ctx context.Context, id string) (q store.Question, ok bool)
+	Approvals    func(context.Context) ([]store.ApprovalFact, error)
+	Questions    func(context.Context) ([]store.Question, error)
+	PipelineRuns func(context.Context) ([]store.PipelineRun, error)
+	Plan         store.PlanSources
+	Approval     func(ctx context.Context, number int64) (store.ApprovalFact, bool)
+	Question     func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
@@ -689,6 +692,19 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		}
 	}
 	var wg sync.WaitGroup
+	c.startExternalRecords(ctx, &wg)
+	if c.Sources.Approvals != nil || c.Sources.Questions != nil {
+		c.every(ctx, &wg, "agentrt-external-records", time.Minute, func() error {
+			_, err := c.ExternalRecords(ctx)
+			return err
+		})
+	}
+	if c.Sources.PipelineRuns != nil {
+		c.every(ctx, &wg, "agentrt-pipeline-records", 5*time.Minute, func() error {
+			_, err := c.PipelineRecords(ctx)
+			return err
+		})
+	}
 	// PROD records its live mode before its first claim (CUT §11.8 v3 item
 	// 1); without it the live loop does not start.
 	if c.Env == "prod" && c.landingRuns() {
