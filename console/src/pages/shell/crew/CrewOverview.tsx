@@ -1,3 +1,4 @@
+import { DeliveryLadderReadings } from '../agents/DeliveryMeasurement'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { plainTitle } from '@/api/agentRuntimePlan'
@@ -39,6 +40,7 @@ export function CrewOverview({ now }: { now: number }) {
       </section>
     </div>
     <OpsSection title="Capability ladder" description={`Evidence baseline · ${DEVELOPMENT_REVIEW}. Overlapping capabilities, not a maturity percentage.`} bodyPadding="default">
+      <DeliveryLadderReadings />
       <ol className="m-0 grid list-none gap-3 p-0 @3xl:grid-cols-3 @5xl:grid-cols-5">{CAPABILITY_LADDER.map((level, i) => <li key={level.title} className={card}>
         <span className="text-xs text-muted-foreground">Level {i + 1} · {level.proof}</span><h4 className="my-2 text-base font-semibold">{level.title}</h4>
         <p className="text-sm">{level.benefit}</p><p className="text-xs text-muted-foreground"><strong>Needs evidence:</strong> {level.gap}</p>

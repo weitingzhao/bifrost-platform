@@ -1,3 +1,4 @@
+import { DeliveryMeasurement } from './DeliveryMeasurement'
 import { useRef } from 'react'
 import { archCounts, type ArchTick, type RuntimeArchTable } from '@/api/agentRuntimePlan'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -33,6 +34,7 @@ export function CapabilityEvidence() {
     {arch.from === 'error' && <p role="alert">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} openedAt={openedAt.current} />.</p>}
     {arch.from === 'absent' && <p>{ARCH_NOT_IMPORTED}</p>}
     {arch.from === 'runtime' && <Architecture table={arch.table} />}
+    <DeliveryMeasurement />
     <a href="#work?section=plan">Execution plan and step evidence</a>
   </OpsSection>
 }

@@ -9,6 +9,7 @@ import { CrewOverview } from '../CrewOverview'
 import { DEVELOPMENT_REVIEW, developmentRead, R4_HREF } from '../developmentModel'
 import { useRuntimePlan } from '../../agents/useRuntimePlan'
 
+vi.mock('@/api/deliveryReadings', async original => ({ ...await original<object>(), fetchDeliveryReadings: vi.fn(async (metric: string) => metric === 'lead_time_s' ? [{ metric_id: metric, label: 'baseline:pre-group-0', unit: 'seconds', value: 9720, conclusive: false }] : []) }))
 vi.mock('@/api/agentRuntime', async original => ({ ...await original<object>(), fetchRuntimeProgress: vi.fn() }))
 vi.mock('@/api/agentRuntimePlan', async original => ({ ...await original<object>(), fetchRuntimePlan: vi.fn(), fetchImportRequest: vi.fn() }))
 const NOW = Date.now()
@@ -45,6 +46,7 @@ describe('Crew development evidence', () => {
     expect(screen.getByRole('link', { name: /Inspect Round 4 steps/ })).toHaveAttribute('href', R4_HREF)
     expect(screen.queryByText(/55 planned|100%|maturity: /i)).not.toBeInTheDocument()
     expect(screen.getByText(/ROI improvement is not yet established/)).toBeInTheDocument()
+    expect(await screen.findByText(/Start to PROD: 2.7 h · baseline:pre-group-0 · not conclusive/)).toBeInTheDocument()
   })
   it('refreshes the shared runtime data without promoting a capability when all steps are done', async () => {
     show()
