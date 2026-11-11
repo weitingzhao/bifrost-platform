@@ -444,3 +444,23 @@ func TestStgRevertedGrantRetainsOnlyConsumedProvenance(t *testing.T) {
 		}
 	}
 }
+
+// TD-536 (PROD 2026-11-11, c455fc97): a change the landing gate pushed on the
+// rule's authority (landing.PolicyChecks finds nothing) is released to STG,
+// even on a platform path that rules.CheckChanges calls floor.
+func TestStgGateReleasesWhatTheRuleLanded(t *testing.T) {
+	t.Parallel()
+	x := stgPolicy(t)
+	changes := []rules.LandingChange{{OldPath: "api/internal/agentrt/controller/landing_scan.go", NewPath: "api/internal/agentrt/controller/landing_scan.go", OldMode: "100644", NewMode: "100644", Added: 52, Deleted: 2}}
+	x.f.Rules["dev"].Landing.Repos[0].Allow = []string{"api/**"}
+	x.o.Commits[0].Changes = changes
+	if reason, soft := landing.PolicyChecks(landing.Facts{Repo: "bifrost-platform", Tenant: "dev", Rule: x.f.Rules["dev"], Changes: changes}, x.at); reason != "" || len(soft) > 0 {
+		t.Fatalf("precondition: the landing gate refuses it: %q %v", reason, soft)
+	}
+	if err := x.f.Rules["dev"].Landing.CheckChanges("bifrost-platform", changes); err == nil {
+		t.Fatal("precondition: CheckChanges no longer calls this path floor, so this test no longer shows TD-536")
+	}
+	if d := x.decide(false); !d.Allowed {
+		t.Fatalf("B5 refused a change the rule landed with no card: %+v", d)
+	}
+}
