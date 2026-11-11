@@ -185,6 +185,7 @@ func deterministicExecutor(self string, env []string) Executor {
 		spec := a.Spec
 		if a.Subject != nil {
 			spec = *a.Subject
+			spec.Repo = a.Spec.Repo
 		}
 		// The verify runs in a process of its own, which reads no
 		// AGENTD_* setting: a spec without a timeout carries this host's.
@@ -616,7 +617,8 @@ func RunVerify(args []string) int {
 		return 2
 	}
 	limit := time.Duration(spec.TimeoutS) * time.Second
-	v, err := walledVerify(context.Background(), os.Environ(), spec.Verify, writes, limit)
+	commands := scopedVerification(context.Background(), spec)
+	v, err := walledVerify(context.Background(), os.Environ(), commands, writes, limit)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
