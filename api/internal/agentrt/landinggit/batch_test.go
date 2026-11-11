@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 const testTask2 = "t_01ARZ3NDEKTSV4RRFFQ69G5FAW"
@@ -95,5 +97,38 @@ func TestBatchStackReplayAndPatch(t *testing.T) {
 	// R not on M0 at all is refused.
 	if _, e := g.CandidatePatch(ctx, in.A, r1, in.A); e == nil {
 		t.Fatal("a commit not on M0 read as a batch")
+	}
+}
+
+// A batch lands its members as a stack whose top is every member's R. A
+// member other than the last reads Effective by its own commit below R; one
+// whose commit is above the R asked about does not (2026-11-10: M-374 w2 and
+// M-377 v1 read unknown, the reconciler carded them, B5 waited on them).
+func TestMainEvidenceOfABatchMember(t *testing.T) {
+	g, in, src := fixture(t)
+	ctx := context.Background()
+	repo := filepath.Join(filepath.Dir(src), "remote.git")
+	gitTest(t, src, "checkout", "-q", in.Base)
+	if e := os.WriteFile(filepath.Join(src, "second.txt"), []byte("second\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	gitTest(t, src, "add", "second.txt")
+	gitTest(t, src, "commit", "-m", "second\n\nAgentrt-Task: "+testTask2+"\nChange-Id: I"+strings.Repeat("b", 40))
+	second := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, second+":refs/heads/second")
+	gitTest(t, src, "checkout", "-q", "main")
+	gitTest(t, src, "cherry-pick", "-x", in.A)
+	lead := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "cherry-pick", "-x", second)
+	top := gitTest(t, src, "rev-parse", "HEAD")
+	gitTest(t, src, "push", repo, "main")
+	if _, has, hist, err := g.MainEvidence(ctx, top, testTask, in.A); err != nil || !has || hist.State != landing.Effective || hist.Commit != lead {
+		t.Fatalf("the lead below R: has=%v %+v %v", has, hist, err)
+	}
+	if _, has, hist, err := g.MainEvidence(ctx, top, testTask2, second); err != nil || !has || hist.State != landing.Effective || hist.Commit != top {
+		t.Fatalf("the last member at R: has=%v %+v %v", has, hist, err)
+	}
+	if _, has, hist, err := g.MainEvidence(ctx, lead, testTask2, second); err != nil || !has || hist.State != landing.Unknown {
+		t.Fatalf("a member above the R asked about: has=%v %+v %v", has, hist, err)
 	}
 }

@@ -115,6 +115,15 @@ func (er *EvidenceReader) ReleaseEvidence(ctx context.Context, p, r, task, a str
 // read is one pair. An empty snapshot reads main's head as fetched when the
 // reader opened (MainEvidence); otherwise snapshot is fetched first, on
 // every read, and read in place of main.
+// ancestor says whether commit is r or below it in r's history.
+func (er *EvidenceReader) ancestor(ctx context.Context, commit, r string) bool {
+	if !fullSHA.MatchString(commit) || !fullSHA.MatchString(r) {
+		return false
+	}
+	_, err := er.g.run(ctx, er.dir, false, nil, nil, "merge-base", "--is-ancestor", commit, r)
+	return err == nil
+}
+
 func (er *EvidenceReader) read(ctx context.Context, snapshot, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
 	hist = landing.MainHistory{State: landing.Unknown}
 	g, dir := er.g, er.dir
@@ -147,7 +156,13 @@ func (er *EvidenceReader) read(ctx context.Context, snapshot, r, task, a string)
 			return head, hasR, hist, nil
 		}
 		w := &Workspace{git: g, dir: dir}
-		if h, e := w.History(ctx, task, a, head); e == nil && h.Commit == r && (h.State == landing.Effective || h.State == landing.Reverted) {
+		// The result's commit is R, or, for a member of a landing batch
+		// other than its last, its own replayed commit on the stack below
+		// R: the batch records every member's R as the stack's top (2026-11-10,
+		// M-374 w2 and M-377 v1 read unknown, landed-unverified cards, and
+		// B5 waited on them). The provenance History requires is unchanged.
+		if h, e := w.History(ctx, task, a, head); e == nil && (h.State == landing.Effective || h.State == landing.Reverted) &&
+			(h.Commit == r || er.ancestor(ctx, h.Commit, r)) {
 			hist = h
 		}
 	}
