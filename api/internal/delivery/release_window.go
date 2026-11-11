@@ -18,24 +18,23 @@ import (
 const releaseWindowConfigMap = "bifrost-release-window"
 const releaseWindowDataKey = "window.json"
 
-// Pipelines that refuse to start unless the window is already open for their repo.
-var guardedPipelineRepos = map[string]map[string]bool{
-	"bifrost-deliver-research":       {"bifrost-research": true},
-	"bifrost-build-research-dagster": {"bifrost-research": true},
-	"bifrost-build-market-data":      {"bifrost-platform-plugin-market-data": true},
-	"bifrost-build-flex-query":       {"bifrost-platform-plugin-flex-query": true},
-	"bifrost-build-ib-gateway":       {"bifrost-platform-plugin": true},
+// One release-window table supplies repository coverage and the pipelines
+// requiring a pre-existing window for session-owned starts.
+type windowPipeline struct {
+	repos    map[string]bool
+	required bool
 }
 
-var tradePipelineRepos = map[string]map[string]bool{
-	"bifrost-deliver-stg": setOf(
-		"bifrost-trade-core", "bifrost-trade-api", "bifrost-trade-worker",
-		"bifrost-trade-frontend", "bifrost-trade-infra"),
-	"bifrost-deliver-prod": setOf(
-		"bifrost-trade-core", "bifrost-trade-api", "bifrost-trade-worker",
-		"bifrost-trade-frontend", "bifrost-trade-infra"),
-	"bifrost-deliver-platform":      {"bifrost-platform": true, "bifrost-ui": true},
-	"bifrost-deliver-platform-prod": {"bifrost-platform": true, "bifrost-ui": true},
+var windowPipelines = map[string]windowPipeline{
+	"bifrost-deliver-research":       {setOf("bifrost-research"), true},
+	"bifrost-build-research-dagster": {setOf("bifrost-research"), true},
+	"bifrost-build-market-data":      {setOf("bifrost-platform-plugin-market-data"), true},
+	"bifrost-build-flex-query":       {setOf("bifrost-platform-plugin-flex-query"), true},
+	"bifrost-build-ib-gateway":       {setOf("bifrost-platform-plugin"), true},
+	"bifrost-deliver-stg":            {setOf("bifrost-trade-core", "bifrost-trade-api", "bifrost-trade-worker", "bifrost-trade-frontend", "bifrost-trade-infra"), false},
+	"bifrost-deliver-prod":           {setOf("bifrost-trade-core", "bifrost-trade-api", "bifrost-trade-worker", "bifrost-trade-frontend", "bifrost-trade-infra"), false},
+	"bifrost-deliver-platform":       {setOf("bifrost-platform", "bifrost-ui"), false},
+	"bifrost-deliver-platform-prod":  {setOf("bifrost-platform", "bifrost-ui"), false},
 }
 
 // Revisions that must be a full git SHA (TD-95, TD-122).
@@ -90,19 +89,11 @@ func requiresFullSHA(pipeline string) bool {
 	return shaRevisionPipelines[pipeline]
 }
 
-func mustHoldWindow(pipeline string) bool {
-	_, ok := guardedPipelineRepos[pipeline]
-	return ok
-}
+func mustHoldWindow(pipeline string) bool { return windowPipelines[pipeline].required }
 
 func requiredRepos(pipeline string) (map[string]bool, bool) {
-	if repos, ok := guardedPipelineRepos[pipeline]; ok {
-		return repos, true
-	}
-	if repos, ok := tradePipelineRepos[pipeline]; ok {
-		return repos, true
-	}
-	return nil, false
+	p, ok := windowPipelines[pipeline]
+	return p.repos, ok
 }
 
 func sortedKeys(set map[string]bool) string {
@@ -152,12 +143,15 @@ func decideReleaseWindow(found bool, window map[string]any, pipeline, callerWho 
 		}
 		return ""
 	}
+	// Every refusal carries the same actionable holder details.
+	detail := fmt.Sprintf(" (held since=%v expires=%v)", window["started_at"], window["expires_at"])
 	whatStr, _ := window["what"].(string)
 	holder, _ := window["who"].(string)
 	if holder == "" {
 		holder = "unknown"
 	}
 	what := parseWhat(whatStr)
+	whatStr += detail
 	repos, known := requiredRepos(pipeline)
 	if !known {
 		return fmt.Sprintf(

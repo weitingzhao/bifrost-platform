@@ -256,9 +256,13 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		resp.Message = fmt.Sprintf("revision %q must be a 40-character lowercase git SHA", rev)
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
-	if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
-		resp.Message = msg
-		return resp, empty, fmt.Errorf("%s", msg)
+	_, approvedAttempt := actions.CreateAttemptFrom(ctx)
+	runOwnsWindow := approvedAttempt && strings.HasPrefix(pipelineName, "bifrost-deliver-")
+	if !runOwnsWindow {
+		if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
+			resp.Message = msg
+			return resp, empty, fmt.Errorf("%s", msg)
+		}
 	}
 
 	// Keep the original pre-build gate and single top-level revision for all
@@ -356,7 +360,24 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, gerr
 	}
 
+	var lease *runWindow
+	if runOwnsWindow {
+		lease, err = s.takeRunWindow(ctx, pipelineName, runName)
+		if err != nil {
+			resp.Message = err.Error()
+			return resp, empty, err
+		}
+	}
 	created, err := res.Create(ctx, obj, metav1.CreateOptions{})
+	if lease != nil {
+		if err == nil || actions.IsUncertain(actions.ClassifyCreate(err)) || apierrors.IsAlreadyExists(err) {
+			lease.follow(res, runName, err == nil)
+		} else {
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			_ = lease.update(releaseCtx, true)
+			cancel()
+		}
+	}
 	if apierrors.IsAlreadyExists(err) {
 		uerr := actions.ObjectExists(ctx, ns, runName)
 		resp.Message = uerr.Error()

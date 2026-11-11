@@ -17,6 +17,7 @@ import (
 
 const (
 	windowTTLDefault = 5
+	windowLifetime   = windowTTLDefault * time.Minute
 	windowTTLMax     = 60
 )
 
@@ -27,12 +28,14 @@ var (
 
 // WindowHeld is returned when another who already holds a live window.
 type WindowHeld struct {
-	Who  string
-	What string
+	Who       string
+	What      string
+	StartedAt string
+	ExpiresAt string
 }
 
 func (e *WindowHeld) Error() string {
-	return fmt.Sprintf("release window held by %s (what=%s)", e.Who, e.What)
+	return fmt.Sprintf("release window held by %s (what=%s held since=%s expires=%s)", e.Who, e.What, e.StartedAt, e.ExpiresAt)
 }
 
 // WindowNotHolder is returned when a non-holder tries to release the window.
@@ -162,7 +165,7 @@ func writeReleaseWindowOnce(ctx context.Context, cs kubernetes.Interface, ns str
 	}
 	if current.live(now) {
 		if current.Who != in.Who {
-			return windowRecord{}, &WindowHeld{Who: current.Who, What: current.What}
+			return windowRecord{}, &WindowHeld{Who: current.Who, What: current.What, StartedAt: current.StartedAt, ExpiresAt: current.ExpiresAt}
 		}
 		next.StartedAt = current.StartedAt
 		if next.StartedAt == "" {

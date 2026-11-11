@@ -8,6 +8,9 @@ export default defineConfig({
     alias: [{ find: '@', replacement: path.resolve(__dirname, './src') }],
   },
   test: {
+    // Bound jsdom concurrency so loaded CI workers do not time out healthy tests.
+    maxWorkers: 2,
+    testTimeout: 15_000,
     environment: 'jsdom',
     globals: true,
     css: false,

@@ -69,11 +69,12 @@ func (a *STGReleaseAdapter) TakeSTGWindow(ctx context.Context, old STGWindow, wh
 		return STGWindow{}, fmt.Errorf("invalid STG window identity or generation")
 	}
 	if old.Live(a.now()) && (!recover || old.Who != who || old.What != "bifrost-platform" || old.Env != "stg" || old.Generation < 1) {
-		return STGWindow{}, &WindowHeld{Who: old.Who, What: old.What}
+		previous, _ := parseWindowCM(old.cm)
+		return STGWindow{}, &WindowHeld{Who: old.Who, What: old.What, StartedAt: previous.StartedAt, ExpiresAt: old.Expires.Format(time.RFC3339)}
 	}
 	now := a.now()
 	r := windowRecord{Who: who, What: "bifrost-platform", Env: "stg", StartedAt: now.Format(time.RFC3339),
-		ExpiresAt: now.Add(5 * time.Minute).Format(time.RFC3339), Reason: stgWindowGenerationPrefix + strconv.FormatInt(generation, 10)}
+		ExpiresAt: now.Add(windowLifetime).Format(time.RFC3339), Reason: stgWindowGenerationPrefix + strconv.FormatInt(generation, 10)}
 	if old.Live(now) {
 		previous, _ := parseWindowCM(old.cm)
 		r.StartedAt = previous.StartedAt
@@ -86,7 +87,7 @@ func (a *STGReleaseAdapter) RenewSTGWindow(ctx context.Context, held STGWindow) 
 		return STGWindow{}, &WindowChanged{}
 	}
 	r, _ := parseWindowCM(held.cm)
-	r.ExpiresAt = a.now().Add(5 * time.Minute).Format(time.RFC3339)
+	r.ExpiresAt = a.now().Add(windowLifetime).Format(time.RFC3339)
 	return a.writeSTGWindow(ctx, held, r)
 }
 
