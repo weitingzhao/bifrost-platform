@@ -62,7 +62,16 @@ func TestInfraPipelineRunsMatchDeclarations(t *testing.T) {
 						want["base"], want["platformRevision"], want["generation"], want["purpose"] = "", "", "", "push"
 					}
 					assertJSONEqual(t, got, want)
-					if len(params) != len(declaredPipelineParams(pipe)) {
+					// landing-allow-json is the landing path's (landingci) to send;
+					// a run started here leaves it to its empty default, as the
+					// push trigger does (TestCIRunTriggerEquivalence).
+					declared := 0
+					for name := range declaredPipelineParams(pipe) {
+						if name != "landing-allow-json" {
+							declared++
+						}
+					}
+					if len(params) != declared {
 						t.Fatal("run must send every declared parameter exactly once", params)
 					}
 					ws, _, _ := unstructured.NestedSlice(run.Object, "spec", "workspaces")

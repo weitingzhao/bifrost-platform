@@ -18,7 +18,15 @@ func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string
 		if err != nil {
 			return nil, rev, err
 		}
-		return ciRunSpec(pipelineName, commit, repo), commit, nil
+		spec := ciRunSpec(pipelineName, commit, repo)
+		// The platform CI's reuse step lists PipelineRuns under its own
+		// read-only ServiceAccount, as the push trigger names it (infra
+		// trigger-trade-ci.yaml). Named only once the installed Pipeline
+		// declares the step: Tekton rejects taskRunSpecs naming absent tasks.
+		if pipelineName == "bifrost-ci-platform" && pipelineDeclaresTask(pipe, "reuse") {
+			spec["taskRunSpecs"] = []map[string]any{{"pipelineTaskName": "reuse", "serviceAccountName": "tekton-platform-ci-reuse"}}
+		}
+		return spec, commit, nil
 	}
 	spec := map[string]any{
 		"pipelineRef": map[string]any{

@@ -1520,19 +1520,24 @@ func platformTaskRunSpecs(pipelineName string, pipe *unstructured.Unstructured) 
 		{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
 		{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 	}
-	declared := map[string]bool{}
-	tasks, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "tasks")
-	for _, raw := range tasks {
-		if task, ok := raw.(map[string]any); ok {
-			if name, ok := task["name"].(string); ok {
-				declared[name] = true
-			}
-		}
-	}
 	for _, name := range platformDeclaredDeliverTasks[pipelineName] {
-		if declared[name] {
+		if pipelineDeclaresTask(pipe, name) {
 			overrides = append(overrides, map[string]any{"pipelineTaskName": name, "serviceAccountName": "tekton-deliver"})
 		}
 	}
 	return overrides
+}
+
+// pipelineDeclaresTask: the installed Pipeline has a task of that name.
+func pipelineDeclaresTask(pipe *unstructured.Unstructured, name string) bool {
+	if pipe == nil {
+		return false
+	}
+	tasks, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "tasks")
+	for _, raw := range tasks {
+		if task, ok := raw.(map[string]any); ok && task["name"] == name {
+			return true
+		}
+	}
+	return false
 }
