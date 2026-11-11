@@ -252,8 +252,12 @@ func TestStgGateBatchGrantCoversMembers(t *testing.T) {
 		return x, lead, member
 	}
 	x, _, _ := setup()
-	if d := x.decide(false); !d.Allowed || len(d.Set) != 2 {
+	d := x.decide(false)
+	if !d.Allowed || len(d.Set) != 2 {
 		t.Fatal("a batch on one card releases both members", d)
+	}
+	if got := StgRangeMembers(x.s, x.o.Commits); !stgSameKeys(got, d.Set) {
+		t.Fatalf("snapshot members %+v, gate members %+v", got, d.Set)
 	}
 	for _, tc := range []struct {
 		name   string

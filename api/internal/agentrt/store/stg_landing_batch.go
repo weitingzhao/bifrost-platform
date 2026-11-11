@@ -5,6 +5,27 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 )
 
+// StgRangeMembers is the members the commits base..P carry, in commit order:
+// each commit a landed operation proves (its own R, or a member's replayed
+// commit inside the complete recorded stack of a landing batch), keyed by
+// the R the landing recorded, the batch's R for every member, as the final
+// gate keys them (2026-11-10: keyed by the commit's own SHA, a batch put
+// only its last member in the snapshot and the gate handed every batch
+// back as set_changed). A commit no landed operation proves is left out
+// here; the final gate refuses it.
+func StgRangeMembers(s StgState, commits []landing.ReleaseCommit) []StgMemberKey {
+	var out []StgMemberKey
+	for i, c := range commits {
+		op := landinggit.LandedOperation(c.Message)
+		o := s.Legacy.Operations[op]
+		if op == "" || !o.EverLanded || !stgCommitMatchesLanding(s, commits, i) {
+			continue
+		}
+		out = append(out, StgMemberKey{Root: o.Task, Op: op, R: o.R})
+	}
+	return out
+}
+
 // A batch's operation records name its final R, while Git retains one
 // replayed commit per member. Only the complete recorded stack proves those
 // intermediate commits; a matching trailer alone is insufficient.

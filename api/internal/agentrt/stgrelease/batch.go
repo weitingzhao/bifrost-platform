@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"k8s.io/apimachinery/pkg/types"
@@ -196,13 +195,7 @@ func (c *Controller) prepare(ctx context.Context, s store.StgState, id string, b
 	due := c.now()
 	// Derive the proposed debit set. B5-c rederives it under binding/rule locks
 	// and authorizes every commit, including disposed originals and reversals.
-	for _, commit := range commits {
-		op := landinggit.LandedOperation(commit.Message)
-		o := s.Legacy.Operations[op]
-		if !o.EverLanded || o.R != commit.SHA {
-			continue
-		}
-		m := store.StgMemberKey{Root: o.Task, Op: op, R: commit.SHA}
+	for _, m := range store.StgRangeMembers(s, commits) {
 		old := s.Members[m]
 		if old.To == "delivered" || old.To == "covered" || old.To == "disposed" || cover(s, m) != "" {
 			continue
