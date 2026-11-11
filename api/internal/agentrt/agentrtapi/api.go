@@ -241,6 +241,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 		r.With(read, cfg).Get("/pools", a.listPools)
 		r.With(read, cfg).Get("/capabilities", a.capabilities)
+		r.With(read, cfg).Get("/metrics/readings", a.metricReadings)
+		r.With(read, cfg).Get("/metrics/compare", a.metricCompare)
 		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
 		// Business issues (W-31 BI-1 slice 2): the crew's routes, for the
 		// issue readers only, and the seven an intake token opens.
