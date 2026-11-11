@@ -153,6 +153,13 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 	// The claims keep their half even when every visit gets drillMinShare:
 	// 2026-11-07 four visits split all of a 90s budget and the claims got
 	// nothing, pass after pass.
+	// TD-528 (PROD 2026-11-11, #442): a batch lead's visit authorizes and
+	// pushes the whole batch, while its followers' visits only follow it; with
+	// an even split a 7-member lead got 1/7 of the visits and every grant try
+	// ran out. A lead's share is split over the visits still due less its own
+	// followers still due after it. The order and the loop are unchanged.
+	followers, err := c.drillLeadFollowers(ctx, repo, pending, state)
+	errs = append(errs, err)
 	visits, cancelVisits := context.WithTimeout(ctx, drillVisitBudget(ctx))
 	offset, crowded := 0, drillCrowded(ctx, len(pending))
 	if crowded {
@@ -164,10 +171,11 @@ func (c *Controller) landingDrillRepoPass(ctx context.Context, repo string) (res
 		}
 		id := pending[(offset+k)%len(pending)]
 		o := state.Operations[id]
-		one, done := drillWorkShare(visits, len(pending)-k)
+		due := drillDivisor(pending, offset, k, followers[id])
+		one, done := drillWorkShare(visits, due)
 		if crowded {
 			done()
-			one, done = drillVisitShare(visits, len(pending)-k)
+			one, done = drillVisitShare(visits, due)
 		}
 		start := time.Now()
 		errs = append(errs, c.resumeLandingDrill(one, id, o, now, repo, &window))
@@ -254,6 +262,50 @@ func (c *Controller) appendDrill(ctx context.Context, op, kind string, fields ma
 		_, err := store.Append(ctx, tx, store.Event{Stream: "landing:" + repo, Type: "note", Actor: "controller", Body: map[string]any{"text": "STG drill: " + kind, "landing": fields}})
 		return err
 	})
+}
+
+// drillLeadFollowers maps each batch lead among pending to its other members
+// (TD-528). A lone operation costs no read (landingBatchFor); a lookup that
+// fails leaves that operation an ordinary visit and is returned.
+func (c *Controller) drillLeadFollowers(ctx context.Context, repo string, pending []string, state landing.State) (map[string]map[string]bool, error) {
+	out := map[string]map[string]bool{}
+	seen := map[string]bool{}
+	var errs []error
+	for _, id := range pending {
+		if seen[id] {
+			continue
+		}
+		b, in, err := c.landingBatchFor(ctx, repo, id, state)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if !in {
+			continue
+		}
+		members := map[string]bool{}
+		for _, m := range b.Members {
+			seen[m] = true
+			if m != b.Lead {
+				members[m] = true
+			}
+		}
+		out[b.Lead] = members
+	}
+	return out, errors.Join(errs...)
+}
+
+// drillDivisor is how many visits the k-th visit's share is split over: the
+// visits still due, less (for a batch lead) its followers still due after it in
+// this pass (TD-528). Followers visited before the lead count as visits done.
+func drillDivisor(pending []string, offset, k int, followers map[string]bool) int {
+	n := len(pending) - k
+	for j := k + 1; j < len(pending); j++ {
+		if followers[pending[(offset+j)%len(pending)]] {
+			n--
+		}
+	}
+	return max(1, n)
 }
 
 // drillMinShare is the least a visit of a pending operation gets: a fresh

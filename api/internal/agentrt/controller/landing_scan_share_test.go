@@ -48,3 +48,42 @@ func TestDrillVisitsShareFairly(t *testing.T) {
 		t.Fatal("no operations start at 0")
 	}
 }
+
+// TD-528 (PROD 2026-11-11, #442): a batch lead's share is split over the visits
+// still due less its own followers still due after it; nothing else changes.
+func TestDrillDivisorGivesALeadItsFollowersShare(t *testing.T) {
+	t.Parallel()
+	set := func(ids ...string) map[string]bool {
+		m := map[string]bool{}
+		for _, id := range ids {
+			m[id] = true
+		}
+		return m
+	}
+	seven := []string{"a", "b", "c", "d", "e", "f", "g"}
+	for _, tc := range []struct {
+		name      string
+		pending   []string
+		offset, k int
+		followers map[string]bool
+		want      int
+	}{
+		{"lone batch of 7, lead first", seven, 0, 0, set("b", "c", "d", "e", "f", "g"), 1},
+		{"lone batch of 7, lead last", seven, 0, 6, set("a", "b", "c", "d", "e", "f"), 1},
+		{"lead in the middle: followers before it are visits done", seven, 0, 3, set("a", "b", "e", "f"), 2},
+		{"batch of 3 among 4 lone operations", seven, 0, 0, set("c", "e"), 5},
+		{"no batch: an even split as before", seven, 0, 2, nil, 5},
+		{"rotation: the followers after the lead in this pass's order", seven, 5, 0, set("g", "a"), 5},
+	} {
+		if got := drillDivisor(tc.pending, tc.offset, tc.k, tc.followers); got != tc.want {
+			t.Errorf("%s: divisor %d, want %d", tc.name, got, tc.want)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 195*time.Second)
+	defer cancel()
+	one, done := drillWorkShare(ctx, drillDivisor(seven, 0, 0, set("b", "c", "d", "e", "f", "g")))
+	defer done()
+	if deadline, _ := one.Deadline(); time.Until(deadline) < 190*time.Second {
+		t.Fatalf("a lone batch's lead got %v of 195s", time.Until(deadline))
+	}
+}
