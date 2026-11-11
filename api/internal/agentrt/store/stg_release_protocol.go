@@ -239,14 +239,16 @@ func ParseStgRelease(v any) (StgRecord, error) {
 	}
 	if k == "opened" {
 		pending := r.object("first_pending_at")
-		ms := r.members("members")
-		if len(pending) != len(ms) {
-			return fail("first_pending_at must name exactly the members")
-		}
-		for _, m := range ms {
+		rs := map[string]bool{}
+		for _, m := range r.members("members") {
+			rs[m.R] = true
 			if !stgTime(pending[m.R]) {
 				return fail("missing first_pending_at for R")
 			}
+		}
+		// Keyed by R: members of one landing batch share their R and its time.
+		if len(pending) != len(rs) {
+			return fail("first_pending_at must name exactly the members' R")
 		}
 	}
 	if (k == "granted" || k == "withheld" && r.String("why") == "owner") && r.String("grant") != r.String("question_id") {
@@ -356,7 +358,10 @@ func stgMembers(v any, gen, empty bool) bool {
 	if !ok || !empty && len(a) == 0 {
 		return false
 	}
-	seen := map[string]bool{}
+	// A member is its operation: a landing batch records the batch's R for
+	// every member (landinggit), so several members of one batch share R and
+	// each is told apart by its root and op (StgMemberKey).
+	seen := map[StgMemberKey]bool{}
 	fields := "root op R"
 	if gen {
 		fields += " gen"
@@ -364,10 +369,11 @@ func stgMembers(v any, gen, empty bool) bool {
 	for _, v := range a {
 		m, ok := v.(map[string]any)
 		r := StgRecord(m)
-		if !ok || !stgKeys(m, fields) || !landingRoot.MatchString(r.String("root")) || !stgIDRE.MatchString(r.String("op")) || !landingSHA.MatchString(r.String("R")) || seen[r.String("R")] || gen && !stgInteger(m["gen"], 1) {
+		key := stgMember(m)
+		if !ok || !stgKeys(m, fields) || !landingRoot.MatchString(r.String("root")) || !stgIDRE.MatchString(r.String("op")) || !landingSHA.MatchString(r.String("R")) || seen[key] || gen && !stgInteger(m["gen"], 1) {
 			return false
 		}
-		seen[r.String("R")] = true
+		seen[key] = true
 	}
 	return true
 }

@@ -414,9 +414,15 @@ func (s *StgState) apply(e StgEvent) (int64, error) {
 		if err := s.checkStart(b, e); err != nil {
 			return 0, err
 		}
+		spent := map[StgBudgetKey]bool{}
 		for _, m := range t.Snapshot.Record.members("set") {
 			gen := b.Members[m.StgMemberKey]
-			s.Budget[StgBudgetKey{m.R, gen}]++
+			k := StgBudgetKey{m.R, gen}
+			if spent[k] {
+				continue
+			}
+			spent[k] = true
+			s.Budget[k]++
 			d := s.Debits[m.R]
 			s.Debits[m.R] = StgDebit{Batch: id, Try: b.Try, Total: d.Total + 1}
 		}
@@ -577,12 +583,18 @@ func (s *StgState) endTry(batch string, try int64, at time.Time) {
 }
 func (s StgState) expectedSpend(b *StgBatch) ([]any, error) {
 	spend := []any{}
+	spent := map[StgBudgetKey]bool{}
 	for _, m := range b.Tries[b.Try].Snapshot.Record.members("set") {
 		gen := b.Members[m.StgMemberKey]
 		if !s.available(m.StgMemberKey, gen) || s.Members[m.StgMemberKey].To != "" || s.covered(m.StgMemberKey) {
 			return nil, stgError("budget", "started", "set member is unavailable")
 		}
-		spend = append(spend, map[string]any{"R": m.R, "gen": gen, "n": s.Budget[StgBudgetKey{m.R, gen}] + 1})
+		// One try of an R spends that R's budget once, however many members
+		// of its landing batch share it.
+		if k := (StgBudgetKey{m.R, gen}); !spent[k] {
+			spent[k] = true
+			spend = append(spend, map[string]any{"R": m.R, "gen": gen, "n": s.Budget[k] + 1})
+		}
 	}
 	return spend, nil
 }
