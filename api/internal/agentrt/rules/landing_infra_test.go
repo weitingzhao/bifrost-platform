@@ -23,10 +23,10 @@ func TestInfraConfiguredFileLimit(t *testing.T) {
 				changes[i] = LandingChange{NewPath: fmt.Sprintf("k8s/test-%d.yaml", i), NewMode: "100644", Added: 1}
 			}
 			soft := LandingSoftRefusals(l, repo, changes)
-			if slices.Contains(soft, LandingSize) != tc.oversized {
+			if slices.Contains(soft, LandingRefusal("size")) {
 				t.Fatalf("configured limit not respected: %v", soft)
 			}
-			if !slices.Contains(soft, LandingFloorGrant) || LandingFloorGrantable(l, repo, changes, soft) == tc.oversized {
+			if !slices.Contains(soft, LandingFloorGrant) || !LandingFloorGrantable(l, repo, changes, soft) {
 				t.Fatalf("floor approval boundary changed: %v", soft)
 			}
 		})
@@ -37,8 +37,8 @@ func TestInfraDisplayedClampMatchesEnforcement(t *testing.T) {
 	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: InfraLandingAllow}}, Limits: LandingLimits{MaxFiles: 100, MaxChangedLines: 3000}}
 	for _, lines := range []int{1499, 1500, 1501} {
 		changes := []LandingChange{{NewPath: "k8s/example.yaml", NewMode: "100644", Added: lines}}
-		refused := slices.Contains(LandingSoftRefusals(l, "bifrost-trade-infra", changes), LandingSize)
-		if refused != (lines > l.CheckedLimits("bifrost-trade-infra").MaxChangedLines) {
+		refused := slices.Contains(LandingSoftRefusals(l, "bifrost-trade-infra", changes), LandingRefusal("size"))
+		if refused || l.CheckedLimits("bifrost-trade-infra").MaxChangedLines != 0 {
 			t.Fatalf("displayed clamp disagrees at %d lines", lines)
 		}
 	}
@@ -101,7 +101,7 @@ func TestInfraSoftFloorGrant(t *testing.T) {
 	big := k8s
 	big.Added = 1501
 	soft = LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{big})
-	if !slices.Contains(soft, LandingSize) || LandingFloorGrantable(l, "bifrost-trade-infra", []LandingChange{big}, soft) {
+	if slices.Contains(soft, LandingRefusal("size")) || !LandingFloorGrantable(l, "bifrost-trade-infra", []LandingChange{big}, soft) {
 		t.Fatal("size waived", soft)
 	}
 	other := LandingChange{NewPath: "notes/x.md", NewMode: "100644", Added: 1}
@@ -170,7 +170,7 @@ func TestPlatformSoftFloorGrant(t *testing.T) {
 	}
 	big := slices.Clone(changes)
 	big[0].Added = 301
-	if soft = LandingSoftRefusals(l, repo, big); !slices.Contains(soft, LandingSize) || LandingFloorGrantable(l, repo, big, soft) {
+	if soft = LandingSoftRefusals(l, repo, big); slices.Contains(soft, LandingRefusal("size")) || !LandingFloorGrantable(l, repo, big, soft) {
 		t.Fatal("size waived", soft)
 	}
 	l.Repos[0].Deny = []string{"scripts/ci/**"}

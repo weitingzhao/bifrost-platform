@@ -112,8 +112,7 @@ func TestS66ClosedRepoLimitsSchema(t *testing.T) {
 	for _, bad := range []string{
 		strings.Replace(base, "max_files: 5", "max_files: -1", 1),
 		strings.Replace(base, "max_files: 5", "max_files: '5'", 1),
-		strings.Replace(base, "max_files: 5, ", "", 1),
-		strings.Replace(base, "max_in_flight: 1", "max_in_flight: 2", 1),
+		strings.Replace(base, "max_in_flight: 1", "max_in_flight: 9", 1),
 		strings.Replace(base, "max_in_flight: 1", "max_in_flight: 1, max_landings_per_day: 9", 1),
 		strings.Replace(base, "repo: bifrost-trade-infra", "repo: unknown", 1),
 		strings.Replace(base, "repo: bifrost-trade-infra", "repo: bifrost-platform", 1),

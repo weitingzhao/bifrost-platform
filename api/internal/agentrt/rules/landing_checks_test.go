@@ -2,7 +2,6 @@ package rules
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -73,8 +72,6 @@ func TestLandingSoftRefusalsIndependentCategories(t *testing.T) {
 		{"allow", LandingRulePaths, func(l *Landing, c *LandingChange) { l.Repos[0].Allow = nil }},
 		{"deny", LandingRulePaths, func(l *Landing, c *LandingChange) { l.Repos[0].Deny = []string{"**"} }},
 		{"presentation", LandingPresentation, func(l *Landing, c *LandingChange) { c.AddedText = "fetch('/api')" }},
-		{"files", LandingSize, func(l *Landing, c *LandingChange) { l.Limits.MaxFiles = 0 }},
-		{"lines", LandingSize, func(l *Landing, c *LandingChange) { l.Limits.MaxChangedLines = 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -106,10 +103,10 @@ func TestLandingSoftSetRecomputedAndCovered(t *testing.T) {
 	if !LandingWaivesCover(approved, approved) {
 		t.Fatal("control")
 	}
-	l.Limits.MaxChangedLines = 1
+	l.Repos[0].Allow = nil
 	now := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c})
 	if LandingWaivesCover(now, approved) {
-		t.Fatal("new size failure waived")
+		t.Fatal("new path failure waived")
 	}
 	if !LandingWaivesCover(nil, approved) {
 		t.Fatal("relaxed rule rejected")
@@ -121,11 +118,11 @@ func TestLandingSoftSetRecomputedAndCovered(t *testing.T) {
 	l.Repos[0].Allow = nil
 	c.AddedText = "fetch('/x')" // Outside allow: paths, not presentation.
 	got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c})
-	if !reflect.DeepEqual(got, []LandingRefusal{LandingCore, LandingRulePaths, LandingSize}) {
+	if !reflect.DeepEqual(got, []LandingRefusal{LandingCore, LandingRulePaths}) {
 		t.Fatal(got)
 	}
 	c.Added, c.Deleted = int(^uint(0)>>1), int(^uint(0)>>1)
-	if !strings.Contains(string(LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c})[2]), "size") {
+	if !reflect.DeepEqual(LandingSoftRefusals(l, "bifrost-platform", []LandingChange{c}), got) {
 		t.Fatal("overflow")
 	}
 }

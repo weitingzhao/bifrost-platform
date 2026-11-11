@@ -15,7 +15,7 @@ import (
 // Owner's approval of an agentrt_rule_approve card on the PROD Console
 // instead of his signature (store.ApproveRule). The capacity fields are
 // concurrency's per_host and slots block, all of budget:<tenant>,
-// landing:<tenant>'s limits and repo limits except the in-flight ones,
+// landing:<tenant>'s limits and repo limits,
 // intake-gates' max_live_per_product and routing's quota_stop_percent.
 // Everything else stays signed.
 
@@ -43,13 +43,12 @@ func capacityField(kind string) func(path string) bool {
 	case KindLanding:
 		return func(p string) bool {
 			switch p {
-			case "limits.max_files", "limits.max_changed_lines", "limits.max_landings_per_day":
+			case "limits.max_files", "limits.max_changed_lines", "limits.max_landings_per_day", "limits.max_in_flight_per_repo":
 				return true
 			}
-			// A repo's own limits, but never max_in_flight: one landing at a
-			// time per repository is not capacity.
+			// Repository capacities.
 			return strings.HasPrefix(p, "repos[") &&
-				(strings.HasSuffix(p, "].limits.max_files") || strings.HasSuffix(p, "].limits.max_changed_lines"))
+				(strings.HasSuffix(p, "].limits.max_files") || strings.HasSuffix(p, "].limits.max_changed_lines") || strings.HasSuffix(p, "].limits.max_in_flight"))
 		}
 	case KindIntake:
 		return func(p string) bool { return p == "max_live_per_product" }
@@ -198,6 +197,9 @@ func CapacityOnly(prev, next Rule) error {
 		if !ok {
 			// slots and other blocks are bounded by their parser.
 			continue
+		}
+		if next.Kind == KindLanding && (c.Field == "limits.max_in_flight_per_repo" || strings.HasSuffix(c.Field, "].limits.max_in_flight")) && (n < 1 || n > LandingInFlightCeiling) {
+			return fmt.Errorf("%s must be between 1 and %d", c.Field, LandingInFlightCeiling)
 		}
 		if n < 0 {
 			return fmt.Errorf("%s is %d, below zero", c.Field, n)

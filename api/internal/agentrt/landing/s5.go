@@ -154,7 +154,7 @@ func MayPrepareS5(f Facts, q PreparationRequirements, now time.Time) PrepareDeci
 }
 
 // S5AutomaticRoute selects the no-grant lane. A change already requiring
-// the original D lane for core/size/path/ordinary display failures keeps that
+// the original D lane for core/path/ordinary display failures keeps that
 // lane's preparation and pinned CI. A persisted S5 operation never silently
 // downgrades, including after a checker failure or a rule tightening.
 func S5AutomaticRoute(f Facts) bool {

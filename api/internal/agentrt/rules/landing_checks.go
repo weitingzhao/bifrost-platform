@@ -15,7 +15,6 @@ const (
 	LandingFloorSoft    LandingRefusal = "floor_soft"
 	LandingRulePaths    LandingRefusal = "rule_paths"
 	LandingPresentation LandingRefusal = "presentation"
-	LandingSize         LandingRefusal = "size"
 	LandingCore         LandingRefusal = "core"
 	// LandingFloorGrant: a floor-grantable path (FloorEntry: infra's k8s/**,
 	// scripts/**, ...; platform's floor paths neither hard nor open). Only
@@ -24,7 +23,7 @@ const (
 )
 
 // landingCategories is every refusal category, in report order.
-var landingCategories = []LandingRefusal{LandingCore, LandingFloorSoft, LandingFloorGrant, LandingRulePaths, LandingPresentation, LandingSize}
+var landingCategories = []LandingRefusal{LandingCore, LandingFloorSoft, LandingFloorGrant, LandingRulePaths, LandingPresentation}
 
 // Paths returns the existing endpoints of the trusted diff. Additions have
 // only a new endpoint; deletions only an old one; rename/copy check both.
@@ -78,10 +77,10 @@ func LandingAbsoluteViolation(repo string, changes []LandingChange) (string, boo
 
 // LandingSoftRefusals is the single predicate used at request and consumption
 // time. §12 extends its four policy categories with core. Core paths do not
-// also count as floor_soft, but can independently fail paths, size or display.
+// also count as floor_soft, but can independently fail paths or display.
 // Floor-grantable paths (FloorEntry) count as floor_grant, not floor_soft.
 // An open path (LandingOpen) adds no core, floor_soft or presentation refusal
-// and needs no allow match; deny still refuses it and it still counts in size.
+// and needs no allow match; deny still refuses it.
 // Structural/absolute checks and rule validity must precede this function.
 // A missing repo fails closed; it is never an empty (waiver-free) set.
 func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []LandingRefusal {
@@ -90,13 +89,6 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		return []LandingRefusal{LandingRulePaths}
 	}
 	failed := map[LandingRefusal]bool{}
-	limits := l.CheckedLimits(repo)
-	if len(changes) == 0 || len(changes) > limits.MaxFiles {
-		failed[LandingSize] = true
-	}
-	// Subtract instead of adding untrusted int counts: no overflow can make
-	// an oversized change pass, even when two counts each fit into an int.
-	remaining := limits.MaxChangedLines
 	for _, c := range changes {
 		for _, p := range c.Paths() {
 			open := LandingOpen(repo, p)
@@ -131,13 +123,6 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		if repo != "bifrost-trade-infra" && allowed && !LandingPresentationOnly(r.Allow, []LandingChange{shown}) {
 			failed[LandingPresentation] = true
 		}
-		for _, n := range []int{c.Added, c.Deleted} {
-			if n < 0 || n > remaining {
-				failed[LandingSize] = true
-			} else {
-				remaining -= n
-			}
-		}
 	}
 	var out []LandingRefusal
 	for _, category := range landingCategories {
@@ -146,7 +131,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 		}
 	}
 	// Infra: a path refusal outside the floor-grantable paths is final on
-	// its own; size stays beside floor_grant so it is never waived.
+	// its own.
 	if repo == "bifrost-trade-infra" && slices.Contains(out, LandingRulePaths) && !slices.Contains(out, LandingFloorGrant) {
 		return []LandingRefusal{LandingRulePaths}
 	}
@@ -190,8 +175,6 @@ func legacyCheckChanges(l *Landing, repo string, changes []LandingChange) error 
 	}
 	for _, refusal := range LandingSoftRefusals(l, repo, changes) {
 		switch refusal {
-		case LandingSize:
-			return fmt.Errorf("limit")
 		case LandingPresentation:
 			return fmt.Errorf("not presentation-only")
 		default:

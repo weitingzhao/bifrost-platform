@@ -75,7 +75,7 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 }
 
 // Open paths (checks version 3) need neither core approval nor an allow
-// match. Deny and size still apply, and a permission path in the same
+// match. Deny still applies, and a permission path in the same
 // change still asks for core.
 func TestLandingOpenRefusals(t *testing.T) {
 	t.Parallel()
@@ -107,7 +107,7 @@ func TestLandingOpenRefusals(t *testing.T) {
 			l.Repos[0].Deny = nil
 			big := change(p)
 			big.Added = 400
-			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{big}); !slices.Equal(got, []LandingRefusal{LandingSize}) {
+			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{big}); len(got) != 0 {
 				t.Fatal("size", got)
 			}
 			got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{change(p), change("api/internal/agentrt/landing/x.go")})

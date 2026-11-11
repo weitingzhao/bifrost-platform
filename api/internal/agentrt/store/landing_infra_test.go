@@ -116,14 +116,6 @@ func TestS6InfraClaimLayersPG(t *testing.T) {
 		{"T10", "soft", func() []rules.LandingChange {
 			return []rules.LandingChange{{NewPath: "agent-config/work/multi-agent/PLAN-x.md", NewMode: "100644", Added: 20}}
 		}},
-		{"T11", "soft", func() []rules.LandingChange {
-			var out []rules.LandingChange
-			for i := 0; i < 6; i++ {
-				out = append(out, rules.LandingChange{NewPath: fmt.Sprintf("agent-config/work/multi-agent/REPORT-%d.md", i), NewMode: "100644", Added: 1})
-			}
-			return out
-		}},
-		{"T12", "soft", func() []rules.LandingChange { c := infraChange(); c.Added = 1501; return []rules.LandingChange{c} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, negative := range []bool{false, true} {

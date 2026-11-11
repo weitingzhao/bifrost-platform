@@ -59,10 +59,7 @@ func openLaneApprovals(t *testing.T, c *c5) int {
 }
 
 // Serial: FreezeEventClock. An open-only change with green CI lands with no
-// approval. Within the rule's limits it never waits; one past them waits for
-// approve_guardrail_landing (MayAwaitGrant's open lane) instead of being
-// refused, and when the Owner signs a rule it fits, the recheck lands it on
-// that rule (landing_rule_clear, checks_version 3), still with no approval.
+// approval, regardless of the legacy size values.
 func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
 	t.Run("within limits", func(t *testing.T) {
 		c := c5Prepared(t, openLaneSource(1, openLanePath), false, true, openLaneAccept(t))
@@ -75,33 +72,14 @@ func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
 			t.Fatal("main_intent", clear, use)
 		}
 	})
-	t.Run("past limits, then a rule it fits", func(t *testing.T) {
-		c := c5Prepared(t, openLaneSource(400, openLanePath), false, true, openLaneAccept(t))
-		store.FreezeEventClock(c.at.Add(-20 * time.Minute))
-		if _, d := c.gate(t); d.Reason != "awaiting_grant" {
-			t.Fatal("oversized open change not waiting", d)
-		}
-		if o := landingState(t, c.w, landingRepoStream).Operations[c.op]; !slices.Equal(o.Soft, []string{"size"}) {
-			t.Fatal(o.Soft)
-		}
+	t.Run("large change", func(t *testing.T) {
+		c := c5Prepared(t, openLaneSource(10000, openLanePath), false, true, openLaneAccept(t))
 		store.FreezeEventClock(c.at)
-		m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
-		ok(t, err)
-		if m.Action != store.ActionGuardrailLanding || len(m.Candidate.HardCorePaths) != 0 {
-			t.Fatalf("material: %+v", m)
-		}
-		roomier := strings.Replace(c5RuleBody, "max_changed_lines: 300", "max_changed_lines: 1000", 1)
-		ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, roomier))))
-		_, d, err := store.RecheckWaitingLanding(ctx, c.w.rt, c.src, c.op, c.observe())
-		ok(t, err)
-		if !d.Allowed || c.phase(t) != "main_intent" || c.reservations(t) != 1 {
+		if _, d := c.gate(t); !d.Allowed || c.phase(t) != "main_intent" || openLaneApprovals(t, c) != 0 {
 			t.Fatal(d, c.phase(t))
 		}
-		clear, checks, use := openLaneIntent(t, c)
-		if !clear || checks != 3 || use || openLaneApprovals(t, c) != 0 {
-			t.Fatal("main_intent", clear, checks, use)
-		}
 	})
+
 }
 
 // Serial: FreezeEventClock. An open change whose CI is red does not land:

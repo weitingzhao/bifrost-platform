@@ -28,18 +28,14 @@ func link704(t *testing.T, w *world, root, dep string) {
 // Serial: signing anchor and event clock. All cases enter the actual claim
 // transaction; an accepted dependency has not yet taken effect on main.
 func TestReview704PendingDependencyDoesNotHideFloorPG(t *testing.T) {
-	for _, which := range []string{"path", "size"} {
+	for _, which := range []string{"path"} {
 		for _, bad := range []bool{false, true} {
 			for _, effective := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/bad=%t/effective=%t", which, bad, effective), func(t *testing.T) {
 					change := infraChange()
 					if bad {
-						if which == "path" {
-							change.OldPath = "agent-config/work/multi-agent/PLAN-x.md"
-							change.NewPath = change.OldPath
-						} else {
-							change.Added = 1501
-						}
+						change.OldPath = "agent-config/work/multi-agent/PLAN-x.md"
+						change.NewPath = change.OldPath
 					}
 					w, root, src := infraWorld(t, []rules.LandingChange{change})
 					dep := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "pending main", Repo: infraRepo, BaseCommit: commitB})
@@ -70,10 +66,7 @@ func TestReview704PendingDependencyDoesNotHideFloorPG(t *testing.T) {
 						}
 						return
 					}
-					soft := "size"
-					if which == "path" {
-						soft = "rule_paths"
-					}
+					soft := "rule_paths"
 					if d.Reason != "floor" || !reflect.DeepEqual(d.Detail["soft"], []string{soft}) || d.Detail["grant_supported"] != false {
 						t.Fatal("masked floor", d)
 					}

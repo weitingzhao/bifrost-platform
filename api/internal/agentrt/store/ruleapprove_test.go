@@ -3,7 +3,9 @@ package store_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -87,5 +89,27 @@ func TestApproveRule(t *testing.T) {
 	if _, err := w.rt.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
 	    VALUES ('concurrency', 9, '{}', '', 'loosen', now(), now() + interval '1 day')`); err == nil {
 		t.Fatal("a loosening with neither a signature nor an approval was stored")
+	}
+}
+
+// Serial: the landing clock and signing anchor are global.
+func TestLandingInFlightCapacityApprovalAndClaimPG(t *testing.T) {
+	w, now := s66World(t, true, 5)
+	body := strings.Replace(infraRuleBody, "max_in_flight: 1", "max_in_flight: 2", 1)
+	body = strings.Replace(body, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2", 1)
+	previous := inForce(t, w, "landing:dev", now)
+	next := ruleText("landing:dev", previous.Version+1, rules.Loosen, previous.Effective.Format(time.RFC3339), previous.Expires.Format(time.RFC3339), body)
+	proposal, err := store.ProposeRule(ctx, w.rt, wr("thread:s1"), "landing-capacity", "landing:dev", []byte(next), "more landing capacity")
+	ok(t, err)
+	approval := store.RuleApproval{RuleID: "landing:dev", Version: previous.Version + 1, TextArtifactID: proposal["text_artifact_id"].(string), ID: ruleApproval}
+	_, err = store.ApproveRule(ctx, w.rt, store.Writer{Actor: "owner"}, approval)
+	ok(t, err)
+	for i := 0; i < 2; i++ {
+		root := s66Root(t, w, "M-3", infraRepo)
+		op, d, err := store.ClaimLanding(ctx, w.rt, s66Source(), "prod", root, now)
+		ok(t, err)
+		if op == "" || !d.Allowed {
+			t.Fatal(i, op, d)
+		}
 	}
 }

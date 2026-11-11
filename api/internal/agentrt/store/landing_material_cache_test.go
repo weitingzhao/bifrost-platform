@@ -72,7 +72,7 @@ func cacheFixture() (grantDB, GrantSources) {
 	src := GrantSources{Cache: &GrantMaterialCache{}, Main: func(context.Context) (string, error) { return a, nil }}
 	src.Facts = LandingSource{
 		Result: func(context.Context, string, string, string, string, string) (bool, []rules.LandingChange, error) {
-			return true, []rules.LandingChange{{Kind: "M", OldPath: "console/src/pages/View.tsx", NewPath: "console/src/pages/View.tsx", OldMode: "100644", NewMode: "100644", Added: 2}}, nil
+			return true, []rules.LandingChange{{Kind: "M", OldPath: "console/src/pages/View.tsx", NewPath: "console/src/pages/View.tsx", OldMode: "100644", NewMode: "100644", Added: 2, AddedText: "fetch('/api')"}}, nil
 		},
 		History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 			return landing.MainHistory{}, nil

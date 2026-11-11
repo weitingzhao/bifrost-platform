@@ -3,6 +3,7 @@ package landing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"testing"
 	"time"
@@ -168,9 +169,8 @@ func TestLandingRuleLimitsAtEachGate(t *testing.T) {
 	}
 }
 
-// An open change (rules.LandingOpen) that fails size waits for the Owner's
-// approve_guardrail_landing where grants are enabled; a deny match on it, a
-// change with no open path, or grants not enabled are refused as rule.
+// Open and allowed changes proceed regardless of size or grant enablement.
+// A deny match is still refused as rule.
 func TestLandingOpenLaneMayAwaitGrant(t *testing.T) {
 	// Open and outside the floor: a refusal of it is rule, never floor.
 	const open = "console/vitest.config.ts"
@@ -181,10 +181,10 @@ func TestLandingOpenLaneMayAwaitGrant(t *testing.T) {
 		enabled    bool
 		want       string
 	}{
-		{"open oversized", open, nil, true, "awaiting_grant"},
-		{"grants not enabled", open, nil, false, "rule"},
+		{"open oversized", open, nil, true, "allowed"},
+		{"grants not enabled", open, nil, false, "allowed"},
 		{"open under deny", open, []string{open}, true, "rule"},
-		{"no open path", "console/src/components/A.tsx", nil, true, "rule"},
+		{"no open path", "console/src/components/A.tsx", nil, true, "allowed"},
 	} {
 		f := eligibleFacts()
 		f.GrantEnabled = tc.enabled
@@ -192,8 +192,8 @@ func TestLandingOpenLaneMayAwaitGrant(t *testing.T) {
 		f.Rule.Landing.Repos[0].Deny = tc.deny
 		claim, push := EligibleToClaim(f, now), EligibleToPush(f, now)
 		switch tc.want {
-		case "awaiting_grant":
-			if !claim.Allowed || push.Allowed || push.Reason != "awaiting_grant" {
+		case "allowed":
+			if !claim.Allowed || !push.Allowed {
 				t.Fatal(tc.name, claim, push)
 			}
 		default:
@@ -207,5 +207,36 @@ func TestLandingOpenLaneMayAwaitGrant(t *testing.T) {
 	f.Changes[0].OldPath, f.Changes[0].NewPath = open, open
 	if !EligibleToClaim(f, now).Allowed || !EligibleToPush(f, now).Allowed {
 		t.Fatal("open change within limits")
+	}
+}
+
+func TestLargeLandingAndInFlightCapacity(t *testing.T) {
+	t.Parallel()
+	f := eligibleFacts()
+	f.Changes = nil
+	for i := 0; i < 200; i++ {
+		c := eligibleFacts().Changes[0]
+		c.OldPath = fmt.Sprintf("console/src/components/Large%d.tsx", i)
+		c.NewPath = c.OldPath
+		c.Added, c.Deleted = 50, 0
+		f.Changes = append(f.Changes, c)
+	}
+	if soft := rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes); len(soft) != 0 {
+		t.Fatal(soft)
+	}
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
+		t.Fatal(d)
+	}
+	f.OtherInFlight = 1
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Allowed {
+		t.Fatal("default capacity exceeded", d)
+	}
+	f.Rule.Landing.Limits.MaxInFlightPerRepo = 2
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
+		t.Fatal("second claim", d)
+	}
+	f.OtherInFlight = 2
+	if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Allowed {
+		t.Fatal("capacity exceeded", d)
 	}
 }

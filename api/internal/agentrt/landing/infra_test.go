@@ -53,15 +53,6 @@ func TestInfraEligibilityLayers(t *testing.T) {
 			f.Changes[0].OldPath = "agent-config/work/multi-agent/PLAN-x.md"
 			f.Changes[0].NewPath = f.Changes[0].OldPath
 		}},
-		{"T11 six files", "soft", "size", func(f *Facts) {
-			for i := 1; i < 6; i++ {
-				c := f.Changes[0]
-				c.OldPath = fmt.Sprintf("agent-config/work/multi-agent/REPORT-%d.md", i)
-				c.NewPath = c.OldPath
-				f.Changes = append(f.Changes, c)
-			}
-		}},
-		{"T12 1501 lines", "soft", "size", func(f *Facts) { f.Changes[0].Added = 1501 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -88,14 +79,14 @@ func TestInfraEligibilityLayers(t *testing.T) {
 		for i := 0; i < n; i++ {
 			f.Changes = append(f.Changes, rules.LandingChange{NewPath: fmt.Sprintf("agent-config/work/multi-agent/REPORT-%d.md", i), NewMode: "100644", Added: 1})
 		}
-		if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed != (n == 5) {
+		if !EligibleToClaim(f, epoch.Add(time.Hour)).Allowed {
 			t.Fatal("file boundary", n)
 		}
 	}
 	for _, n := range []int{1500, 1501} {
 		f := infraFacts()
 		f.Changes[0].Added = n
-		if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed != (n == 1500) {
+		if !EligibleToClaim(f, epoch.Add(time.Hour)).Allowed {
 			t.Fatal("line boundary", n)
 		}
 	}
@@ -111,7 +102,7 @@ func TestInfraGrantBranchAndEntry(t *testing.T) {
 		t.Fatal("platform grant control", d)
 	}
 	f = infraFacts()
-	f.Changes[0].Added = 1501
+	f.Changes[0].OldPath, f.Changes[0].NewPath = "agent-config/work/multi-agent/PLAN-x.md", "agent-config/work/multi-agent/PLAN-x.md"
 	if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Reason != "floor" {
 		t.Fatal("T13", d)
 	}
@@ -193,15 +184,6 @@ func TestInfraFloorGrantableWaits(t *testing.T) {
 		name string
 		edit func(*Facts)
 	}{
-		{"size beside floor_grant", func(f *Facts) {
-			f.Changes[0].OldPath, f.Changes[0].NewPath, f.Changes[0].Added = manifest, manifest, 1501
-		}},
-		{"six files", func(f *Facts) {
-			f.Changes = nil
-			for i := 0; i < 6; i++ {
-				f.Changes = append(f.Changes, rules.LandingChange{NewPath: fmt.Sprintf("k8s/x/%d.yaml", i), NewMode: "100644", Added: 1})
-			}
-		}},
 		{"rule_paths outside the floor", func(f *Facts) {
 			f.Changes = []rules.LandingChange{{NewPath: manifest, NewMode: "100644", Added: 1}, {NewPath: "notes/x.md", NewMode: "100644", Added: 1}}
 		}},
@@ -221,7 +203,7 @@ func TestInfraFloorGrantableWaits(t *testing.T) {
 }
 
 // Platform floor paths neither core nor open (testscope, scripts/ci) wait
-// for approve_floor_landing; core keeps the core rule, and deny, size, an
+// for approve_floor_landing; core keeps the core rule, and deny, an
 // open path and a hard_absolute path are not floor-grantable.
 func TestPlatformFloorGrantableWaits(t *testing.T) {
 	t.Parallel()
@@ -278,7 +260,6 @@ func TestPlatformFloorGrantableWaits(t *testing.T) {
 	}
 	for name, edit := range map[string]func(*Facts){
 		"deny": func(f *Facts) { f.Rule.Landing.Repos[0].Deny = []string{"scripts/ci/**"} },
-		"size": func(f *Facts) { f.Changes[0].Added = 301 },
 	} {
 		f := platformFacts()
 		edit(&f)

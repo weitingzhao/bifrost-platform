@@ -32,7 +32,7 @@ const (
 	ActionCoreLanding = "approve_core_landing"
 	// ActionFloorLanding waives floor_grant (and rule_paths) for exactly the
 	// floor-grantable files it pins (rules.FloorEntry), each at its blob
-	// sha256 at R; never-grantable paths, core and size stay refused. It is
+	// sha256 at R; never-grantable paths and core stay refused. It is
 	// infra's only grant; on platform it also names the pinned CI run.
 	ActionFloorLanding = "approve_floor_landing"
 	// LandingGrantPurpose is the only purpose of this version.
@@ -275,7 +275,7 @@ func validCategories(set []string, empty bool) bool {
 	if len(set) == 0 {
 		return empty
 	}
-	known := []string{string(rules.LandingCore), string(rules.LandingFloorGrant), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths), string(rules.LandingSize)}
+	known := []string{string(rules.LandingCore), string(rules.LandingFloorGrant), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths)}
 	last := ""
 	for _, s := range set {
 		if s <= last || !slices.Contains(known, s) {

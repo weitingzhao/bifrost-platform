@@ -58,7 +58,7 @@ func TestBatchCoresGrantNamesTheBatch(t *testing.T) {
 	for name, covered := range map[string]bool{
 		"no cover":         none.covers(mate, o, f, soft, now),
 		"the lead":         c.covers(lead, o, f, soft, now),
-		"not waived":       c.covers(mate, o, f, append(soft, rules.LandingSize), now),
+		"not waived":       c.covers(mate, o, f, append(soft, rules.LandingPresentation), now),
 		"another R":        c.covers(mate, other, f, soft, now),
 		"grants off":       c.covers(mate, o, off, soft, now),
 		"expired":          c.covers(mate, o, f, soft, now.Add(time.Hour)),

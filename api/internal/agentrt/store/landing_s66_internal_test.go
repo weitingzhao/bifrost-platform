@@ -72,7 +72,7 @@ func TestS66B4SortsStreamsAndLeavesUnsignedInfraEmpty(t *testing.T) {
 
 func TestS66InfraCardExplainsSoftScope(t *testing.T) {
 	t.Parallel()
-	tr := CardTrigger{Kind: CardFloor, Op: "land:task:1", Choices: []string{"do_not_merge", "wait"}, Floor: map[string]any{"soft": []string{"size"}, "grant_supported": false}}
+	tr := CardTrigger{Kind: CardFloor, Op: "land:task:1", Choices: []string{"do_not_merge", "wait"}, Floor: map[string]any{"soft": []string{"rule_paths"}, "grant_supported": false}}
 	soft := LandingCardRequest("bifrost-trade-infra", tr, "Cannot land")
 	if body := soft["body"].(string); !strings.Contains(body, "Split the change") || !strings.Contains(body, "Owner push it manually") || strings.Contains(body, "no landing rule can allow") {
 		t.Fatal(body)

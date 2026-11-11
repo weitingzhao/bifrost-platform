@@ -31,6 +31,7 @@ it('opens without writes, exposes unknowns, and invalidates preview on an edit',
   fireEvent.click(await screen.findByRole('button', { name: 'Inspect / edit' }))
   expect(ruleRequest).not.toHaveBeenCalled()
   expect(createApprovalRequest).not.toHaveBeenCalled()
+  expect(screen.getByText('Size limits are not in effect. Repository capacity overrides are included.')).toBeInTheDocument()
   expect(screen.getByText('Current disk reading is unknown.')).toBeInTheDocument()
   vi.mocked(ruleRequest).mockResolvedValue({ rule_id: 'concurrency', rule_version: 2, previous_version: 1, apply_via: 'capacity_approval', body: draft })
   fireEvent.click(screen.getByRole('button', { name: 'Preview and validate' }))

@@ -9,26 +9,19 @@ import (
 )
 
 func TestReview704InfraSoftLayerPrecedesDependencies(t *testing.T) {
-	for _, which := range []string{"path", "size"} {
+	for _, which := range []string{"path"} {
 		t.Run(which, func(t *testing.T) {
 			f := infraFacts()
 			if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
 				t.Fatal("successful control", d)
 			}
-			if which == "path" {
-				f.Changes[0].OldPath = "agent-config/work/multi-agent/PLAN-x.md"
-				f.Changes[0].NewPath = f.Changes[0].OldPath
-			} else {
-				f.Changes[0].Added = 1501
-			}
+			f.Changes[0].OldPath = "agent-config/work/multi-agent/PLAN-x.md"
+			f.Changes[0].NewPath = f.Changes[0].OldPath
 			if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Reason != "floor" {
 				t.Fatal("control", d)
 			}
 			f.DependenciesEffective = false
-			want := "size"
-			if which == "path" {
-				want = "rule_paths"
-			}
+			want := "rule_paths"
 			if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Reason != "floor" || !reflect.DeepEqual(d.Detail["soft"], []string{want}) || d.Detail["grant_supported"] != false {
 				t.Fatalf("L4/L5 rejection was masked: %+v", d)
 			}
@@ -76,7 +69,7 @@ func TestReview704InfraConfiguredFilesAndLineCeiling(t *testing.T) {
 			} else {
 				f.Changes[0].Added++
 			}
-			if d := EligibleToClaim(f, epoch.Add(time.Hour)); d.Reason != "floor" || !reflect.DeepEqual(d.Detail["soft"], []string{"size"}) {
+			if d := EligibleToClaim(f, epoch.Add(time.Hour)); !d.Allowed {
 				t.Fatalf("configured file limit or line ceiling lost: %+v", d)
 			}
 		})

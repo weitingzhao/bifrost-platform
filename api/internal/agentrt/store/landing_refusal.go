@@ -105,7 +105,7 @@ func validLandingFloor(repo string, v any) bool {
 	}
 	last := ""
 	for _, s := range items {
-		if s <= last || !slices.Contains([]string{"floor_grant", "rule_paths", "size"}, s) {
+		if s <= last || !slices.Contains([]string{"floor_grant", "rule_paths"}, s) {
 			return false
 		}
 		last = s

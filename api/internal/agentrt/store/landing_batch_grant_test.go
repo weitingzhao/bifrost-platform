@@ -30,8 +30,9 @@ type cores struct {
 	gsrc       store.GrantSources
 	ci         landing.CIRun
 
-	mu    sync.Mutex
-	lines map[string]int // root -> lines its result adds
+	mu           sync.Mutex
+	lines        map[string]int  // root -> lines its result adds
+	presentation map[string]bool // root -> an additional display check failure
 }
 
 // coresBatch is n roots each changing its own core path, root i adding
@@ -39,7 +40,7 @@ type cores struct {
 func coresBatch(t *testing.T, lines ...int) *cores {
 	t.Helper()
 	w, roots, at := batchRoots(t, len(lines))
-	c := &cores{w: w, roots: roots, at: at, lines: map[string]int{}}
+	c := &cores{w: w, roots: roots, at: at, lines: map[string]int{}, presentation: map[string]bool{}}
 	for i, root := range roots {
 		c.lines[root] = lines[i]
 	}
@@ -50,7 +51,11 @@ func coresBatch(t *testing.T, lines ...int) *cores {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			path := fmt.Sprintf("api/internal/agentrt/store/cores_%s.go", strings.ToLower(task[len(task)-6:]))
-			return true, []rules.LandingChange{{OldPath: path, NewPath: path, OldMode: "100644", NewMode: "100644", Added: c.lines[task], Deleted: 1, AddedText: "x"}}, nil
+			changes := []rules.LandingChange{{OldPath: path, NewPath: path, OldMode: "100644", NewMode: "100644", Added: c.lines[task], Deleted: 1, AddedText: "x"}}
+			if c.presentation[task] {
+				changes = append(changes, rules.LandingChange{NewPath: "console/src/components/Batch.tsx", NewMode: "100644", Added: 1, AddedText: "fetch('/api')"})
+			}
+			return true, changes, nil
 		},
 		History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 			return landing.MainHistory{State: landing.Never}, nil
@@ -86,10 +91,10 @@ func coresBatch(t *testing.T, lines ...int) *cores {
 	return c
 }
 
-func (c *cores) coresSetLines(root string, n int) {
+func (c *cores) coresSetPresentation(root string, fail bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.lines[root] = n
+	c.presentation[root] = fail
 }
 
 func (c *cores) coresGate(t *testing.T) ([]store.Authorization, landing.Decision) {
@@ -155,16 +160,16 @@ func (c *cores) coresIntents(t *testing.T) []string {
 	return out
 }
 
-// Serial: FreezeEventClock. Two core roots, the second's change also too
-// large: the lead's material waives the union of their soft checks, each
+// Serial: FreezeEventClock. Two core roots, the second's change large:
+// the lead's material waives their soft checks without a size category, each
 // member's shown, and takes approve_core_landing; the one grant on it names
 // the batch, and at the gate authorizes both members, the lead consuming it
 // and the other's main_intent naming it.
 func TestBatchCoresOneGrantAuthorizesTheBatch(t *testing.T) {
-	c := coresBatch(t, 1, 400)
+	c := coresBatch(t, 1, 10000)
 	c.coresWaiting(t)
 	m := c.coresMaterial(t)
-	union := []string{"core", "rule_paths", "size"}
+	union := []string{"core", "rule_paths"}
 	if len(m.Problems) != 0 || m.Action != store.ActionCoreLanding || !slices.Equal(m.SoftAtRequest, union) || m.Batch == nil {
 		t.Fatalf("material: %v %s %v %+v", m.Problems, m.Action, m.SoftAtRequest, m.Batch)
 	}
@@ -225,8 +230,8 @@ func TestBatchCoresGateRefusesAMemberTheGrantDoesNotWaive(t *testing.T) {
 		t.Fatalf("material: %v %v", m.SoftAtRequest, m.Problems)
 	}
 	c.coresGrant(t, m)
-	c.coresSetLines(c.roots[1], 400)
-	if again := c.coresMaterial(t); again.MaterialDigest == m.MaterialDigest || !slices.Contains(again.SoftAtRequest, "size") {
+	c.coresSetPresentation(c.roots[1], true)
+	if again := c.coresMaterial(t); again.MaterialDigest == m.MaterialDigest || !slices.Contains(again.SoftAtRequest, "presentation") {
 		t.Fatal("the member's new check is the same card", again.SoftAtRequest)
 	}
 	auths, d := c.coresGate(t)
@@ -240,7 +245,7 @@ func TestBatchCoresGateRefusesAMemberTheGrantDoesNotWaive(t *testing.T) {
 		t.Fatal("the grant was spent on a refusal", err)
 	}
 	// Back to what the grant waives: the batch lands on it.
-	c.coresSetLines(c.roots[1], 1)
+	c.coresSetPresentation(c.roots[1], false)
 	if _, d := c.coresGate(t); !d.Allowed {
 		t.Fatalf("gate: %+v", d)
 	}

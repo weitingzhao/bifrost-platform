@@ -426,16 +426,26 @@ func TestC5GrantStopsWhenTheEntryGoes(t *testing.T) {
 }
 
 // Serial: FreezeEventClock. T23 and review 694 R-05: a rule signed after the
-// grant makes size fail anew: grant_insufficient, nothing reserved or
+// grant makes presentation fail anew: grant_insufficient, nothing reserved or
 // pushed, the operation waiting. The grant is spent on the record
 // (landing_grant_refused): the status shows grant_refused with the reason,
 // not "authorized", and W runs again from the refusal. A new request under
 // the new rule is granted and pushes.
-func TestC5T23TighterRuleNeedsANewGrant(t *testing.T) {
+func TestC5T23NewRuleCheckNeedsANewGrant(t *testing.T) {
 	c := c5Wait(t, c5Core, false, true)
+	original := c.src.Result
+	c.src.Result = func(ctx context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
+		single, changes, err := original(ctx, repo, task, attempt, base, commit)
+		for i := range changes {
+			changes[i].AddedText = "fetch('/api')"
+		}
+		return single, changes, err
+	}
+	c.gsrc.Facts = c.src
+
 	c.grant(t, store.ActionCoreLanding)
-	tighter := strings.Replace(c5RuleBody, "max_changed_lines: 300", "max_changed_lines: 1", 1)
-	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, tighter))))
+	tighter := strings.Replace(c5RuleBody, `allow: ["console/src/components/**/*.tsx"]`, `allow: ["console/src/components/**/*.tsx", "api/**"]`, 1)
+	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, tighter))))
 	_, d := c.gate(t)
 	if d.Allowed || d.Reason != "grant_insufficient" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
 		t.Fatalf("%+v %s %d", d, c.phase(t), c.reservations(t))
@@ -454,8 +464,8 @@ func TestC5T23TighterRuleNeedsANewGrant(t *testing.T) {
 		t.Fatal("a refused grant is still usable", g, err)
 	}
 	g := c.grant(t, store.ActionCoreLanding)
-	if !slices.Contains(g.Waives, "size") {
-		t.Fatal("the new grant does not waive size", g.Waives)
+	if !slices.Contains(g.Waives, "presentation") {
+		t.Fatal("the new grant does not waive presentation", g.Waives)
 	}
 	if _, d = c.gate(t); !d.Allowed {
 		t.Fatalf("the new grant: %+v", d)

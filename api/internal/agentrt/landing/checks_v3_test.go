@@ -63,7 +63,6 @@ func TestLandingV1CompatibilityAcrossClaimAndPush(t *testing.T) {
 		{"floor", "floor", func(f *Facts) { f.Changes[0].NewPath = "api/internal/research/x.go" }},
 		{"rule paths", "rule", func(f *Facts) { f.Changes[0].NewPath = "README.md" }},
 		{"presentation", "rule", func(f *Facts) { f.Changes[0].AddedText = "fetch('/x')" }},
-		{"size", "rule", func(f *Facts) { f.Changes[0].Added = 301 }},
 		{"quota", "limit", func(f *Facts) { f.ReservedToday = 5 }},
 		{"in flight", "limit", func(f *Facts) { f.OtherInFlight = 1 }},
 		{"missing rule", "rule", func(f *Facts) { f.Rule = nil }},

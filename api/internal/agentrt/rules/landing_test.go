@@ -46,7 +46,7 @@ func TestLandingRuleClosedAndCanonical(t *testing.T) {
 	if string(b) != string(b2) {
 		t.Fatal("unstable canonical body")
 	}
-	for _, text := range []string{landingYAML + "extra: true\n", strings.Replace(landingYAML, "deny: []", "deny: []\n    extra: true", 1), strings.Replace(landingYAML, "max_files: 10", "max_files: -1", 1), strings.Replace(landingYAML, "max_files: 10", "max_files: '10'", 1), strings.Replace(landingYAML, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2", 1), strings.Replace(landingYAML, "tenant: dev", "tenant: business", 1), strings.Replace(landingYAML, "repo: bifrost-platform", "repo: bifrost-trade-infra", 1), strings.Replace(landingYAML, "deny: []", "deny: [../api/**]", 1), strings.Replace(landingYAML, "deny: []", "deny: [a**b]", 1)} {
+	for _, text := range []string{landingYAML + "extra: true\n", strings.Replace(landingYAML, "deny: []", "deny: []\n    extra: true", 1), strings.Replace(landingYAML, "max_files: 10", "max_files: -1", 1), strings.Replace(landingYAML, "max_files: 10", "max_files: '10'", 1), strings.Replace(landingYAML, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 9", 1), strings.Replace(landingYAML, "tenant: dev", "tenant: business", 1), strings.Replace(landingYAML, "repo: bifrost-platform", "repo: bifrost-trade-infra", 1), strings.Replace(landingYAML, "deny: []", "deny: [../api/**]", 1), strings.Replace(landingYAML, "deny: []", "deny: [a**b]", 1)} {
 		if _, e := Parse([]byte(text)); e == nil {
 			t.Errorf("accepted bad rule %s", text)
 		}
@@ -122,7 +122,6 @@ func TestLandingDiffPathsAndPresentation(t *testing.T) {
 		"binary": func(c *LandingChange) { c.Binary = true }, "mode only": func(c *LandingChange) { c.NewMode = "100755"; c.Added = 0; c.Deleted = 0 },
 		"traversal": func(c *LandingChange) { c.NewPath = "console/src/components/../../../api/a" }, "case": func(c *LandingChange) { c.NewPath = "Console/src/components/Button.tsx" },
 		"delete disallowed": func(c *LandingChange) { c.OldPath = "README.md"; c.NewPath = ""; c.NewMode = "" },
-		"line sum":          func(c *LandingChange) { c.Added = 150; c.Deleted = 151 },
 	}
 	for _, text := range []string{"import {x} from '../api/x'", "import {x} from 'api/x'", "import {x} from '@/lib/x'", "import {\n x\n} from '../../hooks/x'", "fetch('/x')", "fetch ('/x')", "new XMLHttpRequest()", "useQuery()", "useMutation()", "window.location.href"} {
 		text := text
@@ -148,5 +147,30 @@ func TestLandingDiffPathsAndPresentation(t *testing.T) {
 	l.Repos[0].Deny = []string{"console/src/components/**"}
 	if l.CheckChanges("bifrost-platform", []LandingChange{simpleChange()}) == nil {
 		t.Fatal("deny ignored")
+	}
+}
+
+func TestLandingRetiredSizeAndCapacity(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{strings.Replace(strings.Replace(landingYAML, "rule_version: 1", "rule_version: 10", 1), "direction: initial", "direction: loosen", 1), strings.ReplaceAll(strings.ReplaceAll(landingYAML, "  max_files: 10\n", ""), "  max_changed_lines: 300\n", "")} {
+		r, err := Parse([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if limits := r.Landing.CheckedLimits("bifrost-platform"); limits.MaxFiles != 0 || limits.MaxChangedLines != 0 {
+			t.Fatal(limits)
+		}
+	}
+	for _, field := range []string{"max_in_flight_per_repo", "max_in_flight"} {
+		base := landingYAML
+		if field == "max_in_flight" {
+			base = strings.Replace(base, "limits:\n", infraRuleSection+"limits:\n", 1)
+		}
+		for _, n := range []string{"0", "1", "2", "8", "9"} {
+			_, err := Parse([]byte(strings.Replace(base, field+": 1", field+": "+n, 1)))
+			if (err == nil) != (n != "0" && n != "9") {
+				t.Fatalf("%s=%s: %v", field, n, err)
+			}
+		}
 	}
 }

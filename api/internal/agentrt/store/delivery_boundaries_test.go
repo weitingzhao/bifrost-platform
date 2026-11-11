@@ -90,7 +90,7 @@ limits: {max_files: 100, max_changed_lines: 3000, max_landings_per_day: 100, max
 	preview, err = store.CheckRule(ctx, w.rt, "landing:dev", []byte(landing))
 	ok(t, err)
 	effects := preview["proposed_landing_effects"].([]map[string]any)
-	if len(effects) != 1 || effects[0]["configured_changed_lines"] != 3000 || effects[0]["max_changed_lines"] != 1500 || effects[0]["code_clamped"] != true {
+	if len(effects) != 1 || effects[0]["configured_changed_lines"] != 3000 || effects[0]["max_changed_lines"] != 0 || effects[0]["code_clamped"] != false {
 		t.Fatalf("preview hid downstream clamp: %v", effects)
 	}
 }

@@ -216,7 +216,7 @@ type s66GateResult struct {
 // silently search platform alone.
 func TestS66InfraCardAndMissionProjectionPG(t *testing.T) {
 	bad := infraChange()
-	bad.Added = 1501
+	bad.OldPath, bad.NewPath = "agent-config/work/multi-agent/PLAN-x.md", "agent-config/work/multi-agent/PLAN-x.md"
 	w, root, src := infraWorld(t, []rules.LandingChange{bad})
 	at := time.Now().UTC().Truncate(time.Second)
 	t.Cleanup(store.FreezeEventClock(at))

@@ -36,7 +36,7 @@ func validSoft(v any) bool {
 	last := ""
 	for _, x := range a {
 		s, ok := x.(string)
-		if !ok || s <= last || !slices.Contains([]string{"core", "floor_grant", "floor_soft", "presentation", "rule_paths", "size"}, s) {
+		if !ok || s <= last || !slices.Contains([]string{"core", "floor_grant", "floor_soft", "presentation", "rule_paths"}, s) {
 			return false
 		}
 		last = s

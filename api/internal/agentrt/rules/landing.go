@@ -27,13 +27,14 @@ type LandingRepo struct {
 }
 type LandingRepoLimits struct{ MaxFiles, MaxChangedLines, MaxInFlight int }
 
-// CheckedLimits is the size policy consumed by the landing checker and its
-// Console projection. Repository overrides alone are not the final limit.
+// LandingInFlightCeiling bounds repository landing capacity.
+const LandingInFlightCeiling = 8
+
+// CheckedLimits reports effective capacities. Legacy size fields remain in the
+// signed document but have no effect.
 func (l *Landing) CheckedLimits(repo string) LandingLimits {
 	v := l.EffectiveLimits(repo)
-	if repo == "bifrost-trade-infra" {
-		v.MaxChangedLines = min(v.MaxChangedLines, 1500)
-	}
+	v.MaxFiles, v.MaxChangedLines = 0, 0
 	return v
 }
 
@@ -107,9 +108,15 @@ func (r *Rule) landing(o *object, arg string) error {
 			for key, dst := range map[string]*int{"max_files": &repo.Limits.MaxFiles, "max_changed_lines": &repo.Limits.MaxChangedLines, "max_in_flight": &repo.Limits.MaxInFlight} {
 				upper := 1 << 30
 				if key == "max_in_flight" {
-					upper = 1
+					upper = LandingInFlightCeiling
 				}
-				if *dst, err = lim.integer(key, 0, upper); err != nil {
+				lower := 0
+				if key == "max_in_flight" {
+					lower = 1
+				} else if _, present := lim.fields[key]; !present {
+					continue
+				}
+				if *dst, err = lim.integer(key, lower, upper); err != nil {
 					return err
 				}
 			}
@@ -132,9 +139,17 @@ func (r *Rule) landing(o *object, arg string) error {
 	for key, dst := range map[string]*int{"max_files": &l.Limits.MaxFiles, "max_changed_lines": &l.Limits.MaxChangedLines, "max_landings_per_day": &l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": &l.Limits.MaxInFlightPerRepo} {
 		max := 1 << 30
 		if key == "max_in_flight_per_repo" {
-			max = 1
+			max = LandingInFlightCeiling
 		}
-		if *dst, err = lim.integer(key, 0, max); err != nil {
+		lower := 0
+		if key == "max_in_flight_per_repo" {
+			lower = 1
+		} else if key == "max_files" || key == "max_changed_lines" {
+			if _, present := lim.fields[key]; !present {
+				continue
+			}
+		}
+		if *dst, err = lim.integer(key, lower, max); err != nil {
 			return err
 		}
 	}
@@ -286,7 +301,7 @@ var presentationImport = regexp.MustCompile(`(?s)\bimport\b[^;]*?\bfrom\s*["'](?
 var presentationEffect = regexp.MustCompile(`\bfetch\s*\(|XMLHttpRequest|useQuery|useMutation|window\s*\.\s*location`)
 
 // LandingPresentationOnly implements CUT §2.3's three display checks without
-// I/O. It is deliberately separate from the immutable floor and size limits.
+// I/O. It is deliberately separate from the immutable floor.
 // Both sides of a rename and the old path of a deletion are changed paths.
 func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
 	if len(changes) == 0 {

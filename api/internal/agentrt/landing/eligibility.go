@@ -77,7 +77,7 @@ func planOK(f Facts) bool {
 	return !f.GoalTask || f.ProducingPlan == "" || slices.Contains(f.UsedPlans, f.ProducingPlan)
 }
 
-// ruleValid deliberately does not check paths, presentation or size. Missing
+// ruleValid deliberately does not check paths or presentation. Missing
 // or expired rules can never be rescued by a grant or an older signed version.
 func ruleValid(f Facts, now time.Time) bool {
 	r := f.Rule
@@ -164,8 +164,7 @@ func eligibleToClaim(f Facts, now time.Time, preparation bool) Decision {
 	}
 	// Infra's L4/L5 failures are final even while a dependency is pending,
 	// except a change of floor-grantable paths alone, which waits for the
-	// Owner's approve_floor_landing where grants are enabled (size is never
-	// waived). Platform retains its existing dependency/grant ordering.
+	// Owner's approve_floor_landing where grants are enabled. Platform retains its existing dependency/grant ordering.
 	if f.Repo == "bifrost-trade-infra" && len(soft) > 0 && !MayAwaitGrant(f, soft) {
 		return Decision{Reason: "floor", Detail: floorDetail(f)}
 	}
@@ -228,7 +227,7 @@ func landingOf(f Facts) *rules.Landing {
 }
 
 // touchesOpen: some endpoint of f's change is an open path (rules.LandingOpen).
-// Such a change fails only size or the checks of its other paths, which
+// Such a change can fail the checks of its other paths, which
 // approve_guardrail_landing waives; a deny match (rule_paths) stays refused.
 func touchesOpen(f Facts) bool {
 	for _, c := range f.Changes {

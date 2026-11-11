@@ -53,7 +53,7 @@ export function DeliveryBoundaries() {
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Setting', 'Effective', 'Default', 'Allowed range', 'Source / consumer'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.tuning.map(value => <tr key={value.key}><th className={cell}>{value.key}</th><td className={cell}>{value.value} {value.unit}</td><td className={cell}>{value.default}</td><td className={cell}>{value.min}–{value.max}</td><td className={cell}>{value.source}<br />{value.consumer}</td></tr>)}</tbody></table></div>
         <button className={button} onClick={() => select('tuning')} disabled={query.isError}>Edit tuning rule</button>
       </section>
-      <section className="panel-elevated p-3" aria-label="Landing limits"><h3>Effective landing size policy</h3><p>Repository overrides and the checker’s code clamp are included. A scoped grant may authorize a soft refusal.</p><ObservationTable rows={data.landing} columns={['repo', 'rule_id', 'rule_version', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight', 'max_landings_per_day', 'max_batch']} /></section>
+      <section className="panel-elevated p-3" aria-label="Landing limits"><h3>Landing capacity</h3><p>Size limits are not in effect. Repository capacity overrides are included.</p><ObservationTable rows={data.landing} columns={['repo', 'rule_id', 'rule_version', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight', 'max_landings_per_day', 'max_batch']} /></section>
       </>}
       {section === 'task' && <BoundaryTaskCheck />}
       {section === 'limits' && <section className="panel-elevated p-3" aria-label="Code limits"><h3>Limits not yet controlled by rules</h3><p>These values come from this API binary. A separately deployed workers version has not been verified by this snapshot. Editing another rule cannot override them.</p>
@@ -123,7 +123,7 @@ function RuleEditor({ rule, unavailable, refresh }: { rule: BoundaryRule; unavai
     {preview && <div className="flex flex-col gap-3 pt-3">
       <p>Server decision: <strong>{preview.apply_via}</strong>. Version {preview.previous_version ?? 'none'} → {preview.rule_version}.</p>
       {preview.capacity_changes && <pre className="overflow-auto text-xs">{textOf(preview.capacity_changes)}</pre>}
-      {!!preview.proposed_landing_effects?.length && <div><h4>Resulting limits, including code clamps</h4><ObservationTable rows={preview.proposed_landing_effects} columns={['repo', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight']} /></div>}
+      {!!preview.proposed_landing_effects?.length && <div><h4>Resulting capacities; size limits are not in effect</h4><ObservationTable rows={preview.proposed_landing_effects} columns={['repo', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight']} /></div>}
       <details><summary>Validated next policy (compare with effective policy above)</summary><pre className="overflow-auto text-xs">{textOf(preview.body)}</pre></details>
       {preview.apply_via === 'capacity_approval' && <label>Reason<input className={field} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>}
       {preview.apply_via === 'signature' && <><p>{preview.why_not_capacity} Sign the exact draft using the existing Owner signing key and namespace bifrost-agentrt-rule. The private key never enters this page.</p>
