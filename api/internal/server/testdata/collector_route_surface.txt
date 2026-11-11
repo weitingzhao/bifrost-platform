@@ -76,6 +76,8 @@ deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack
 deny	GET /api/v1/agentrt/messages/thread
+deny	GET /api/v1/agentrt/metrics/compare
+deny	GET /api/v1/agentrt/metrics/readings
 deny	POST /api/v1/agentrt/missions
 deny	GET /api/v1/agentrt/missions/{id}
 deny	POST /api/v1/agentrt/missions/{id}/tasks

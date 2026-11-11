@@ -63,6 +63,10 @@ var intendedRouteAdditions = map[string][]string{
 	// R5:5.5-13 / 5.5-17 slice 1: a round's pace and its hours with no
 	// registered work, for every reader, as plan-view is (read-only).
 	"GET /api/v1/agentrt/plan-pace": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// R6:6.1-2 (AM-2 / AM-4): the delivery readings and their comparison
+	// with a baseline, for every reader, as plan-pace is (read-only).
+	"GET /api/v1/agentrt/metrics/readings": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"GET /api/v1/agentrt/metrics/compare":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5 phase 2 step 6: the plan's step timeline and the delivery stages,
 	// read-only, for every reader, as plan-view is.
 	"GET /api/v1/agentrt/plan-timeline": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
