@@ -41,16 +41,13 @@ func TestS65InfraPreparedWiring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TD-537: no allow list parameter; the admission policy would refuse it.
 	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
-	found := false
 	for _, p := range params {
 		param := p.(map[string]any)
 		if param["name"] == "landing-allow-json" {
-			found = param["value"] == `["agent-config/work/multi-agent/REPORT-*.md"]`
+			t.Fatalf("the infra landing CI names the allow list, which admission refuses: %v", params)
 		}
-	}
-	if !found {
-		t.Fatalf("signed infra allow missing: %v", params)
 	}
 	run.SetUID("selected-uid")
 	run.SetCreationTimestamp(metav1.NewTime(o.PreparedAt.Add(time.Minute)))
@@ -120,13 +117,13 @@ func (d *infraAllowDB) QueryRow(ctx context.Context, q string, args ...any) pgx.
 	return d.startup704DB.QueryRow(ctx, q, args...)
 }
 
-func TestInfraLandingAllowWithoutRule(t *testing.T) {
+func TestInfraLandingAllowNotWired(t *testing.T) {
 	t.Parallel()
-	c := &controller.Controller{DB: &infraAllowDB{}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
+	// TD-537: the allow list is not passed until its transport passes admission.
+	c := &controller.Controller{DB: &infraAllowDB{startup704DB: startup704DB{signed: true}}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
 	ci := &landingci.Client{}
 	(&Server{}).wireInfraLandingCI(c, ci)
-	allow, err := ci.InfraLandingAllow(context.Background())
-	if err != nil || allow != nil {
-		t.Fatalf("allow=%v err=%v", allow, err)
+	if ci.InfraLandingAllow != nil {
+		t.Fatal("the infra allow list is wired to the landing CI")
 	}
 }

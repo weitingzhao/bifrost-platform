@@ -6,7 +6,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Called only after wireLandingDrill has checked the signed repo rule.
@@ -15,17 +14,12 @@ func (s *Server) wireInfraLandingCI(c *controller.Controller, ci *landingci.Clie
 	if c.DrillGit["bifrost-trade-infra"] == nil {
 		return
 	}
-	ci.InfraLandingAllow = func(ctx context.Context) ([]string, error) {
-		r, err := store.RuleInForce(ctx, c.DB, "landing:dev")
-		if err != nil || r == nil || r.Landing == nil {
-			return nil, err
-		}
-		repo, ok := r.Landing.Repo("bifrost-trade-infra")
-		if !ok {
-			return nil, nil
-		}
-		return append([]string{}, repo.Allow...), nil
-	}
+	// The signed rule's infra allow list is not passed to the infra landing CI
+	// (ci.InfraLandingAllow stays nil): the PipelineRun admission policy takes
+	// only plain-character parameters of at most 256 (TD-435, TD-436), and a
+	// JSON list of globs is neither, so every infra landing CI was refused
+	// (2026-11-11). Infra's doc_policy reads its own copy of the rule today;
+	// how the signed list reaches it is TD-537.
 	heads := s.agentRuntimeMains()
 	if heads == nil {
 		return
