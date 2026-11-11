@@ -15,6 +15,13 @@ func TestEventFieldValues(t *testing.T) {
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
 	covered := map[string]bool{}
 	for _, c := range append([]struct{ event, field, good, bad string }{
+		{"pipeline_seen", "tree", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bad value"},
+		{"pipeline_seen", "tested_by", "ci-original", "bad value"},
+		{"ci_reused", "repo", "bifrost-platform", "bad value"},
+		{"ci_reused", "revision", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bad value"},
+		{"ci_reused", "tree", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bad value"},
+		{"ci_reused", "reused_run", "ci-original", "bad value"},
+		{"ci_reused", "reused_uid", "original-uid", "bad value"},
 		{"metrics_computed", "source", "computed", "manual"},
 		{"metrics_computed", "label", "baseline:before", "before"},
 		{"metrics_computed", "artifact_id", sha, "bad"},
@@ -314,7 +321,7 @@ func TestMetricBodiesRejectInvalid(t *testing.T) {
 			t.Errorf("accepted definitions %#v", defs)
 		}
 	}
-	for _, typ := range []string{"ci_reused", "ci_red_classified"} {
+	for _, typ := range []string{"ci_red_classified"} {
 		if err := checkBody(typ, map[string]any{}); err == nil {
 			t.Errorf("%s has a body before wave M-b", typ)
 		}

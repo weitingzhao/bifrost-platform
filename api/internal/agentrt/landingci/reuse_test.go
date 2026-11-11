@@ -82,17 +82,35 @@ func TestReuseReaders(t *testing.T) {
 				listed = append(listed, o)
 			}
 			c, _ := drillService(t, listed...)
+			recorded := 0
+			c.ReuseAccepted = func(_ context.Context, revision, tree, run, uid string) error {
+				recorded++
+				if revision != factSHA1 || tree != factSHA1 || run != "original" || uid != string(original.GetUID()) {
+					t.Fatalf("reuse body: %s %s %s %s", revision, tree, run, uid)
+				}
+				return nil
+			}
 			got, err := c.ReadRelease(context.Background(), factSHA1)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if tc == "console" {
+				if recorded != 0 {
+					t.Fatal("partial reuse recorded")
+				}
 				if len(got.Partial) != 1 {
 					t.Fatal(got)
 				}
 				return
 			}
 			accepted := tc == "full" || tc == "incremental"
+			wantRecords := 0
+			if accepted {
+				wantRecords = 1
+			}
+			if recorded != wantRecords {
+				t.Fatalf("recorded %d, want %d", recorded, wantRecords)
+			}
 			if accepted {
 				if got.Status != "Succeeded" || got.TestedBy != "original" || !strings.Contains(got.ScopeNote(), "tested by run original (same tree)") {
 					t.Fatal(got)
@@ -112,6 +130,9 @@ func TestReuseReaders(t *testing.T) {
 			pinned, err := c.Read(context.Background(), key, time.Time{})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if recorded != 3*wantRecords {
+				t.Fatalf("reader records %d, want %d", recorded, 3*wantRecords)
 			}
 			if accepted {
 				if legacy.Status != "Succeeded" || pinned.Status != "Succeeded" {

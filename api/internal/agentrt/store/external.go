@@ -13,14 +13,14 @@ import (
 
 // PipelineRun is a completed external pipeline run.
 type PipelineRun struct {
-	Run, UID, Pipeline, Kind, Result, Repo, Revision, Reason string
-	CreatedAt, StartedAt, CompletedAt                        time.Time
+	Run, UID, Pipeline, Kind, Result, Repo, Revision, Reason, Tree, TestedBy string
+	CreatedAt, StartedAt, CompletedAt                                        time.Time
 }
 
 func pipelineSeenBody(p PipelineRun) map[string]any {
 	b := map[string]any{"run": p.Run, "uid": p.UID, "pipeline": p.Pipeline, "kind": p.Kind, "result": p.Result,
 		"created_at": p.CreatedAt.UTC().Format(time.RFC3339), "started_at": p.StartedAt.UTC().Format(time.RFC3339), "completed_at": p.CompletedAt.UTC().Format(time.RFC3339)}
-	for k, v := range map[string]string{"repo": p.Repo, "revision": p.Revision, "reason": p.Reason} {
+	for k, v := range map[string]string{"repo": p.Repo, "revision": p.Revision, "reason": p.Reason, "tree": p.Tree, "tested_by": p.TestedBy} {
 		if v != "" {
 			b[k] = v
 		}
@@ -147,4 +147,11 @@ func (p PipelineRun) Body() map[string]any { return pipelineSeenBody(p) }
 func (q Question) Body() (map[string]any, error) {
 	b, _, err := questionSeenBody(q.ID, q)
 	return b, err
+}
+
+// RecordCIReuse records an accepted reuse once across readers and retries.
+// reused_run and reused_uid identify the original green run.
+func RecordCIReuse(ctx context.Context, db DB, repo, revision, tree, run, uid string) (bool, error) {
+	body := map[string]any{"repo": repo, "revision": revision, "tree": tree, "reused_run": run, "reused_uid": uid}
+	return seen(ctx, db, "ci_reused", body, func(context.Context) (map[string]any, bool, error) { return body, true, nil })
 }

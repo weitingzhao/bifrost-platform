@@ -159,7 +159,8 @@ var bodies = map[string][]field{
 	"rule_approved":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"approval_id", kID, false}, {"text_artifact_id", kID, false}, {"changes", kAny, false}},
 	"rule_proposed":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
 	"candidate_status_changed": {{"job_candidate_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}, {"rule_id", kID, false}, {"rule_version", kInt, false}},
-	"pipeline_seen":            {{"run", kStr, false}, {"uid", kStr, false}, {"pipeline", kStr, false}, {"kind", kStr, false}, {"created_at", kStr, false}, {"started_at", kStr, false}, {"completed_at", kStr, false}, {"result", kStr, false}, {"repo", kStr, true}, {"revision", kStr, true}, {"reason", kStr, true}},
+	"ci_reused":                {{"repo", kStr, false}, {"revision", kStr, false}, {"tree", kStr, false}, {"reused_run", kStr, false}, {"reused_uid", kStr, false}},
+	"pipeline_seen":            {{"run", kStr, false}, {"uid", kStr, false}, {"pipeline", kStr, false}, {"kind", kStr, false}, {"created_at", kStr, false}, {"started_at", kStr, false}, {"completed_at", kStr, false}, {"result", kStr, false}, {"repo", kStr, true}, {"revision", kStr, true}, {"reason", kStr, true}, {"tree", kStr, true}, {"tested_by", kStr, true}},
 	"approval_seen":            {{"approval", kInt, false}, {"status", kStr, false}, {"action", kStr, false}, {"tier", kStr, false}, {"created_at", kStr, false}, {"expired", kBool, false}, {"env", kStr, true}, {"repo", kStr, true}, {"task", kStr, true}, {"op", kStr, true}, {"decided_at", kStr, true}},
 	"question_seen":            {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}, {"recommended", kStr, true}, {"number", kInt, true}, {"created_at", kStr, true}, {"owner_duty", kStr, true}, {"task", kStr, true}, {"channel", kStr, true}, {"withdrawn_at", kStr, true}, {"withdrawn_by", kStr, true}, {"expired_at", kStr, true}},
 	"ci_seen":                  {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
@@ -595,7 +596,8 @@ var fieldValues = map[string]map[string]value{
 	"rule_approved":            {"approval_id": approvalRef, "text_artifact_id": artifactID},
 	"candidate_status_changed": {"from": oneOf(candidateStatus...), "to": oneOf(candidateStatus...)},
 	"approval_seen":            {"created_at": instant, "decided_at": instant},
-	"pipeline_seen":            {"created_at": instant, "started_at": instant, "completed_at": instant, "kind": oneOf("ci", "delivery", "other"), "result": oneOf("Succeeded", "Failed"), "reason": shaped("a reason", regexp.MustCompile(`^[A-Za-z]{1,64}$`))},
+	"ci_reused":                {"repo": ciRepo, "revision": commit, "tree": commit, "reused_run": ciRunName, "reused_uid": ciUID},
+	"pipeline_seen":            {"tree": commit, "tested_by": ciRunName, "created_at": instant, "started_at": instant, "completed_at": instant, "kind": oneOf("ci", "delivery", "other"), "result": oneOf("Succeeded", "Failed"), "reason": shaped("a reason", regexp.MustCompile(`^[A-Za-z]{1,64}$`))},
 	"question_seen":            {"answered_at": instant, "created_at": instant, "withdrawn_at": instant, "expired_at": instant},
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
@@ -763,3 +765,7 @@ func badValue(eventType, name string, v any) string {
 
 var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
 var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+var ciRepo = shaped("a repository name", regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`))
+var ciRunName = shaped("a PipelineRun name", regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`))
+var ciUID = shaped("a run UID", regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`))

@@ -234,6 +234,10 @@ func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvide
 			out.Status, out.Reason = "Unknown", "ci_tie"
 		}
 	}
+	out.Tree, out.CIRun.TestedBy, out.TestedUID = reuseProvenance(out.Results, items)
+	if err := c.recordReuse(ctx, out.CIRun); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 

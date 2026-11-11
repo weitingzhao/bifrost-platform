@@ -129,5 +129,16 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 			}
 		}
 	}
+	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
+	for _, value := range results {
+		r, _ := value.(map[string]any)
+		v, _ := r["value"].(string)
+		switch r["name"] {
+		case "platform-tree":
+			f.Tree = v
+		case "tested-by":
+			f.TestedBy = v
+		}
+	}
 	return f, true
 }

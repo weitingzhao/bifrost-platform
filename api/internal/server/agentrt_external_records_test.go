@@ -49,6 +49,17 @@ func TestPipelineRunFact(t *testing.T) {
 			if !ok || f.Result != result || f.Kind != tc.kind || f.Repo != tc.wantRepo || f.Revision != commitForExternalRecord || !f.StartedAt.Equal(at) || f.Reason != "" {
 				t.Fatalf("fact: %+v %v", f, ok)
 			}
+			if _, exists := f.Body()["tree"]; exists {
+				t.Fatal("legacy tree present")
+			}
+			if _, exists := f.Body()["tested_by"]; exists {
+				t.Fatal("legacy tested_by present")
+			}
+			_ = unstructured.SetNestedSlice(run.Object, []any{map[string]any{"name": "platform-tree", "value": commitForExternalRecord}, map[string]any{"name": "tested-by", "value": "ci-original"}}, "status", "results")
+			withResults, yes := pipelineRunFact(run)
+			if !yes || withResults.Body()["tree"] != commitForExternalRecord || withResults.Body()["tested_by"] != "ci-original" {
+				t.Fatalf("results: %+v", withResults)
+			}
 			raw, _ := json.Marshal(f.Body())
 			if strings.Contains(string(raw), "private") {
 				t.Fatal("private payload retained")

@@ -12,7 +12,9 @@ import (
 // newer Failed/Running/Unknown run (CUT §2.5.5 and §2.10).
 type CIRun struct {
 	Run, R, Status string
-	CreatedAt      time.Time
+	// Accepted same-tree reuse provenance; empty for ordinary runs.
+	Tree, TestedBy, TestedUID string
+	CreatedAt                 time.Time
 	// UID and the run's results (CUT §11.7 item 3): what a STG snapshot
 	// pins P and U from, read from the same run. Empty when the run has
 	// not written them (yet).

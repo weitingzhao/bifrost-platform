@@ -127,6 +127,10 @@ func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, po
 		}
 	}
 	ci := s.landingCIClient()
+	ci.ReuseAccepted = func(ctx context.Context, revision, tree, run, uid string) error {
+		_, err := store.RecordCIReuse(ctx, c.DB, "bifrost-platform", revision, tree, run, uid)
+		return err
+	}
 	scopeLog := &ciScopeLog{}
 	// Construct the existing read-only identity lazily. none never even reads
 	// credential paths, and no candidate code or Git push enters this loop.

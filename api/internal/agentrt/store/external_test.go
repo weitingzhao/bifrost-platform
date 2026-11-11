@@ -121,3 +121,20 @@ func TestExternalFactsBackfill(t *testing.T) {
 		t.Fatalf("second pass: %d", n)
 	}
 }
+
+func TestAcceptedCIReuseRecordedOnce(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	for i := 0; i < 3; i++ {
+		recorded, err := store.RecordCIReuse(ctx, w.rt, "bifrost-platform", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "ci-original", "original-uid")
+		ok(t, err)
+		if recorded != (i == 0) {
+			t.Fatalf("pass %d recorded %v", i, recorded)
+		}
+	}
+	var count int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type='ci_reused'`).Scan(&count))
+	if count != 1 {
+		t.Fatalf("reuses: %d", count)
+	}
+}

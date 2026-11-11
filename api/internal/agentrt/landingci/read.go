@@ -25,9 +25,11 @@ var landingCIName = regexp.MustCompile(`^landing-ci-[0-9a-f]{24}-[12]$`)
 
 // Client's factories are lazy; construction reads neither credentials nor K8s.
 type Client struct {
-	Namespace string
-	Dynamic   func() (dynamic.Interface, error)
-	ConfigMap func(context.Context, string) (map[string]string, bool, error)
+	// ReuseAccepted persists accepted same-tree evidence; nil for read-only clients.
+	ReuseAccepted func(context.Context, string, string, string, string) error
+	Namespace     string
+	Dynamic       func() (dynamic.Interface, error)
+	ConfigMap     func(context.Context, string) (map[string]string, bool, error)
 	// Logs reads the end of a container's log in a pod of Namespace, for
 	// a red run's failure (Failure); nil, the failure is told by its
 	// messages alone.
@@ -170,6 +172,9 @@ func (c *Client) Read(ctx context.Context, key Key, after time.Time) (out Eviden
 	case "ci_result_mismatch":
 		out.Status = "Failed"
 	}
+	if err := c.recordReuse(ctx, out.CIRun); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 
@@ -245,6 +250,9 @@ func (c *Client) LandingCI(ctx context.Context, revision string, after time.Time
 		}
 		return false, false
 	})
+	if err == nil {
+		err = c.recordReuse(ctx, run)
+	}
 	return run, err
 }
 
@@ -285,6 +293,7 @@ func (c *Client) latest(ctx context.Context, pipeline, revision string, after ti
 			_, counts := namedValues(item, "status", "results")
 			if counts["tested-by"] > 0 {
 				checked := landingReuse(item, all, revision)
+				run.Tree, run.TestedBy, run.TestedUID = reuseProvenance(checked.Results, all)
 				if checked.Reason != "" {
 					run.Status = "Unknown"
 				}
@@ -420,4 +429,24 @@ func cutScope(s string) string {
 		n--
 	}
 	return s[:n]
+}
+
+func reuseProvenance(results map[string]string, items []unstructured.Unstructured) (string, string, string) {
+	name := results["tested-by"]
+	if name == "" {
+		return "", "", ""
+	}
+	for _, item := range items {
+		if item.GetName() == name {
+			return results["platform-tree"], name, string(item.GetUID())
+		}
+	}
+	return "", "", ""
+}
+
+func (c *Client) recordReuse(ctx context.Context, run landing.CIRun) error {
+	if c.ReuseAccepted == nil || run.Status != "Succeeded" || run.TestedBy == "" {
+		return nil
+	}
+	return c.ReuseAccepted(ctx, run.R, run.Tree, run.TestedBy, run.TestedUID)
 }

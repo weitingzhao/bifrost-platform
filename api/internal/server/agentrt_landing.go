@@ -130,6 +130,10 @@ func (s *Server) wireLandingDrill(c *controller.Controller) {
 		return
 	}
 	ci := s.landingCIClient()
+	ci.ReuseAccepted = func(ctx context.Context, revision, tree, run, uid string) error {
+		_, err := store.RecordCIReuse(ctx, c.DB, "bifrost-platform", revision, tree, run, uid)
+		return err
+	}
 	c.DrillGit = map[string]controller.DrillGit{}
 	for _, repo := range requested {
 		if g := readers[repo]; g != nil {
