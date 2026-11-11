@@ -40,6 +40,8 @@ type Client struct {
 	// BaseParam has a platform landing CI name its base M0 as base=M0
 	// (EnsureLandingCI, Ensure; AGENTRT_LANDING_CI_BASE_PARAM).
 	BaseParam bool
+	// InfraLandingAllow reads the in-force signed rule; nil patterns mean no rule.
+	InfraLandingAllow func(context.Context) ([]string, error)
 }
 
 func (c *Client) namespace() string {

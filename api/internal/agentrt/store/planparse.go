@@ -453,7 +453,7 @@ func (d *PlanDoc) fixQuestion(at string, q PlannedQuestion) (PlannedQuestion, bo
 		}
 	}
 	if len(options) > 4 {
-		d.note("%s: options after the first 4 dropped", at)
+		d.note("%s: %d options after the first 4 dropped", at, len(options)-4)
 		options = options[:4]
 	}
 	if len(options) < 2 {

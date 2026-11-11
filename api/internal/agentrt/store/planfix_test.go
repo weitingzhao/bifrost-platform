@@ -78,11 +78,11 @@ func TestPlanFixesSlipsAndRefusesOnlyTheUnusable(t *testing.T) {
 			}, "tasks[0]: its text names ../bifrost-trade-infra, added beside its checkout at the head of main"},
 		"more questions than 3": {plan(`"questions": [`, `"questions": [`+list(question, 3)+`, `),
 			func(p store.PlanDoc) bool { return len(p.Questions) == 3 && p.Questions[0].Question == "Q?" }, "questions after the first 3 dropped"},
-		"more options than 4": {plan(`["Not now", "Yes, a third task"]`, `["Not now", "Yes, a third task", "c", "d", "e"]`),
+		"more options than 4": {plan(`["Not now", "Yes, a third task"]`, `["Not now", "Yes, a third task", "c", "d", "e", "f"]`),
 			func(p store.PlanDoc) bool {
 				return slices.Equal(p.Questions[0].Options, []string{"Not now", "Yes, a third task", "c", "d"})
 			},
-			"questions[0]: options after the first 4 dropped"},
+			"questions[0]: 2 options after the first 4 dropped"},
 		"one option": {plan(`["Not now", "Yes, a third task"]`, `["Not now"]`),
 			func(p store.PlanDoc) bool { return len(p.Questions) == 0 }, "questions[0] dropped: 1 options, a question has 2 to 4"},
 		"no question": {plan(`"question": "Document the Console too?"`, `"question": ""`),

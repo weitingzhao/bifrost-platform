@@ -124,7 +124,6 @@ func (r *Rule) landing(o *object, arg string) error {
 				return err
 			}
 		}
-		slices.Sort(repo.Allow)
 		slices.Sort(repo.Deny)
 		l.Repos = append(l.Repos, repo)
 		return p.done()
@@ -167,7 +166,7 @@ func (r *Rule) landing(o *object, arg string) error {
 func (l *Landing) doc() map[string]any {
 	repos := []any{}
 	for _, r := range l.Repos {
-		row := map[string]any{"repo": r.Repo, "allow": anyList(r.Allow), "deny": anyList(r.Deny), "stg_release": r.STGRelease}
+		row := map[string]any{"repo": r.Repo, "allow": anyList(sortedLandingAllow(r.Allow)), "deny": anyList(r.Deny), "stg_release": r.STGRelease}
 		if r.Limits != nil {
 			row["limits"] = map[string]any{"max_files": r.Limits.MaxFiles, "max_changed_lines": r.Limits.MaxChangedLines, "max_in_flight": r.Limits.MaxInFlight}
 		}
@@ -348,4 +347,11 @@ func FloorViolation(repo string, changes []LandingChange) (string, bool) {
 
 func (l *Landing) CheckChanges(repo string, changes []LandingChange) error {
 	return legacyCheckChanges(l, repo, changes)
+}
+
+// Keep the signed canonical form stable while retaining the stated pattern order.
+func sortedLandingAllow(allow []string) []string {
+	out := slices.Clone(allow)
+	slices.Sort(out)
+	return out
 }

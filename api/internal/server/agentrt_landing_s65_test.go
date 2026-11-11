@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
@@ -27,7 +29,7 @@ func TestS65InfraPreparedWiring(t *testing.T) {
 	fake := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "PipelineRunList"})
 	ci := &landingci.Client{Dynamic: func() (dynamic.Interface, error) { return fake, nil }}
 	s := &Server{delivery: delivery.NewHandlerForTest(&delivery.Service{}, nil)}
-	c := &controller.Controller{Drill: &controller.DrillSources{}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
+	c := &controller.Controller{DB: &infraAllowDB{startup704DB: startup704DB{signed: true}}, Drill: &controller.DrillSources{}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
 	s.wireInfraLandingCI(c, ci)
 	o := landing.Operation{R: strings.Repeat("a", 40), M0: strings.Repeat("b", 40), PlatformRevision: strings.Repeat("c", 40), Generation: 2, PreparedAt: time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)}
 	ctx := context.Background()
@@ -38,6 +40,17 @@ func TestS65InfraPreparedWiring(t *testing.T) {
 	run, err := fake.Resource(gvr).Namespace("cicd").Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
+	found := false
+	for _, p := range params {
+		param := p.(map[string]any)
+		if param["name"] == "landing-allow-json" {
+			found = param["value"] == `["agent-config/work/multi-agent/REPORT-*.md"]`
+		}
+	}
+	if !found {
+		t.Fatalf("signed infra allow missing: %v", params)
 	}
 	run.SetUID("selected-uid")
 	run.SetCreationTimestamp(metav1.NewTime(o.PreparedAt.Add(time.Minute)))
@@ -89,5 +102,31 @@ func TestS65UnsignedInfraHasNoCISources(t *testing.T) {
 		if (c.Drill.InfraCI != nil) != signed || (c.Drill.EnsureInfraCI != nil) != signed || (c.Drill.InfraPlatformHead != nil) != signed {
 			t.Fatal("unsigned infra sources constructed", signed)
 		}
+	}
+}
+
+// Supply the database clock as well as the stored signed rule fixture.
+type infraAllowDB struct{ startup704DB }
+
+func (d *infraAllowDB) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) { return d, nil }
+
+func (d *infraAllowDB) QueryRow(ctx context.Context, q string, args ...any) pgx.Row {
+	if strings.Contains(q, "clock_timestamp()") {
+		return startup704Row(func(dest ...any) error {
+			*dest[0].(*time.Time) = time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+			return nil
+		})
+	}
+	return d.startup704DB.QueryRow(ctx, q, args...)
+}
+
+func TestInfraLandingAllowWithoutRule(t *testing.T) {
+	t.Parallel()
+	c := &controller.Controller{DB: &infraAllowDB{}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
+	ci := &landingci.Client{}
+	(&Server{}).wireInfraLandingCI(c, ci)
+	allow, err := ci.InfraLandingAllow(context.Background())
+	if err != nil || allow != nil {
+		t.Fatalf("allow=%v err=%v", allow, err)
 	}
 }

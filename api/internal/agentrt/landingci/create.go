@@ -2,6 +2,7 @@ package landingci
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -34,6 +35,19 @@ func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
 			return fmt.Errorf("invalid landing CI identity")
 		}
 		params = infraParams(key)
+		if c.InfraLandingAllow != nil {
+			allow, err := c.InfraLandingAllow(ctx)
+			if err != nil {
+				return err
+			}
+			if allow != nil {
+				encoded, err := json.Marshal(allow)
+				if err != nil {
+					return err
+				}
+				params["landing-allow-json"] = string(encoded)
+			}
+		}
 	}
 	return c.ensure(ctx, name, key.Repo, repo.Pipeline, key.Revision, params)
 }
