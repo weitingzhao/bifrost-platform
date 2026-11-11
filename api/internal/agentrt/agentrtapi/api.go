@@ -779,6 +779,9 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if action == "persist" || action == "salvage" {
+			a.recordHandinRefusal(ctx, "", id, err)
+		}
 		a.fail(w, err)
 		return
 	}

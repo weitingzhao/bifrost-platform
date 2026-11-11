@@ -43,7 +43,7 @@ var (
 // PinnedClaimRequest is POST /agentrt/claim/pinned: the host, the task it
 // names, the key a retry repeats, its free slots and disk, and the token it
 // came with (its host's registration names it). It names no tools: the
-// envelope's entry says which executor and provider run a pinned task.
+// envelope's entry supplies the permitted executors and providers.
 type PinnedClaimRequest struct {
 	HostID, TaskID, Key, Token string
 	FreeSlots                  int
@@ -83,7 +83,10 @@ func claimPinned(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Dura
 				return cr, err
 			}
 			pin = p
-			cr.Tools = []Tool{{Executor: h.Executor, Provider: h.Provider}}
+			cr.Tools = nil
+			for _, x := range h.Tools() {
+				cr.Tools = append(cr.Tools, Tool{Executor: x.Executor, Provider: x.Provider})
+			}
 			return cr, nil
 		}
 		cr := ClaimRequest{HostID: r.HostID, FreeSlots: r.FreeSlots, Disk: r.Disk, DiskFloor: r.DiskFloor}

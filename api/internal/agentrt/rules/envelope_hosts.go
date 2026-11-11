@@ -28,6 +28,18 @@ const PinCoordinator = "external:coordinator"
 type ExternalHost struct {
 	Host, Pin, Proposer, Executor, Provider string
 	Repos, Roles                            []string
+	Executors                               []ExternalExecutor
+}
+
+// ExternalExecutor names an executor and its provider on an external host.
+type ExternalExecutor struct{ Executor, Provider string }
+
+// Tools returns the permitted executor/provider pairs, including legacy entries.
+func (h ExternalHost) Tools() []ExternalExecutor {
+	if len(h.Executors) > 0 {
+		return h.Executors
+	}
+	return []ExternalExecutor{{h.Executor, h.Provider}}
 }
 
 // The shapes of an entry's names: a host id, a seat, an executor actor
@@ -65,14 +77,69 @@ func (e *Envelope) externalHosts(o *object) error {
 			{"host", &h.Host, externalHostID, "a host id"},
 			{"pin", &h.Pin, nil, ""},
 			{"proposer", &h.Proposer, seatName, "a seat (seat:<name>)"},
-			{"executor", &h.Executor, executorName, "an executor (exec:<tool>)"},
-			{"provider", &h.Provider, providerName, "a model provider"},
 		} {
 			if *f.at, err = m.str(f.key, false); err != nil {
 				return err
 			}
 			if f.re != nil && !f.re.MatchString(*f.at) {
 				return fmt.Errorf("%s.%s is %q, not %s", where, f.key, *f.at, f.what)
+			}
+		}
+		if _, multi := m.fields["executors"]; multi {
+			if _, ok := m.fields["executor"]; ok {
+				return fmt.Errorf("%s mixes executor and executors", where)
+			}
+			if _, ok := m.fields["provider"]; ok {
+				return fmt.Errorf("%s mixes provider and executors", where)
+			}
+			seen := map[string]bool{}
+			err = m.list("executors", false, func(n *yaml.Node, at string) error {
+				x, err := mapping(n, at)
+				if err != nil {
+					return err
+				}
+				var tool ExternalExecutor
+				if tool.Executor, err = x.str("executor", false); err != nil {
+					return err
+				}
+				if tool.Provider, err = x.str("provider", false); err != nil {
+					return err
+				}
+				if !executorName.MatchString(tool.Executor) || !providerName.MatchString(tool.Provider) {
+					return fmt.Errorf("%s: invalid executor or provider", at)
+				}
+				key := tool.Executor + "/" + tool.Provider
+				if seen[key] {
+					return fmt.Errorf("%s: executor/provider listed twice", at)
+				}
+				seen[key] = true
+				if err = x.done(); err != nil {
+					return err
+				}
+				h.Executors = append(h.Executors, tool)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if len(h.Executors) == 0 {
+				return fmt.Errorf("%s.executors lists at least one executor", where)
+			}
+			slices.SortFunc(h.Executors, func(a, b ExternalExecutor) int {
+				return strings.Compare(a.Executor+"/"+a.Provider, b.Executor+"/"+b.Provider)
+			})
+		} else {
+			if h.Executor, err = m.str("executor", false); err != nil {
+				return err
+			}
+			if !executorName.MatchString(h.Executor) {
+				return fmt.Errorf("%s.executor is not an executor", where)
+			}
+			if h.Provider, err = m.str("provider", false); err != nil {
+				return err
+			}
+			if !providerName.MatchString(h.Provider) {
+				return fmt.Errorf("%s.provider is not a model provider", where)
 			}
 		}
 		if h.Pin != PinCoordinator {
@@ -139,8 +206,18 @@ func (e *Envelope) externalHostsDoc() []any {
 	}
 	out := make([]any, 0, len(e.ExternalHosts))
 	for _, h := range e.ExternalHosts {
-		out = append(out, map[string]any{"host": h.Host, "pin": h.Pin, "proposer": h.Proposer, "executor": h.Executor,
-			"provider": h.Provider, "repos": anyList(h.Repos), "roles": anyList(h.Roles)})
+		doc := map[string]any{"host": h.Host, "pin": h.Pin, "proposer": h.Proposer, "executor": h.Executor,
+			"provider": h.Provider, "repos": anyList(h.Repos), "roles": anyList(h.Roles)}
+		if len(h.Executors) > 0 {
+			delete(doc, "executor")
+			delete(doc, "provider")
+			tools := []any{}
+			for _, x := range h.Executors {
+				tools = append(tools, map[string]any{"executor": x.Executor, "provider": x.Provider})
+			}
+			doc["executors"] = tools
+		}
+		out = append(out, doc)
 	}
 	return out
 }
@@ -155,8 +232,13 @@ func externalHostsTighten(p, n []ExternalHost) error {
 			return fmt.Errorf("external host %s is new", h.Host)
 		}
 		q := p[i]
-		if h.Pin != q.Pin || h.Proposer != q.Proposer || h.Executor != q.Executor || h.Provider != q.Provider {
+		if h.Pin != q.Pin || h.Proposer != q.Proposer {
 			return errors.New("external host " + h.Host + " changes its pin, proposer, executor or provider")
+		}
+		for _, tool := range h.Tools() {
+			if !slices.Contains(q.Tools(), tool) {
+				return fmt.Errorf("external host %s adds executor/provider %s/%s", h.Host, tool.Executor, tool.Provider)
+			}
 		}
 		if err := subset(h.Repos, q.Repos, "external host "+h.Host+" repos"); err != nil {
 			return err

@@ -99,3 +99,21 @@ func TestExternalHostsTighten(t *testing.T) {
 		}
 	}
 }
+
+func TestExternalHostSeveralExecutors(t *testing.T) {
+	t.Parallel()
+	multi := strings.Replace(withHosts, "    executor: exec:claude\n    provider: anthropic", "    executors:\n      - {executor: exec:claude, provider: anthropic}\n      - {executor: exec:codex, provider: openai}", 1)
+	h, _ := parse(t, multi).Envelope.Pinned(rules.PinCoordinator)
+	if len(h.Tools()) != 2 {
+		t.Fatalf("tools: %+v", h.Tools())
+	}
+	next := strings.Replace(multi, "rule_version: 1\ndirection: initial", "rule_version: 2\ndirection: tighten", 1)
+	if err := rules.Tightens(parse(t, withHosts), parse(t, next)); err == nil {
+		t.Fatal("adding an executor tightens")
+	}
+	prev := parse(t, multi)
+	legacyNext := strings.Replace(withHosts, "rule_version: 1\ndirection: initial", "rule_version: 2\ndirection: tighten", 1)
+	if err := rules.Tightens(prev, parse(t, legacyNext)); err != nil {
+		t.Fatal(err)
+	}
+}

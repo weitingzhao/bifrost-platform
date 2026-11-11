@@ -139,7 +139,7 @@ func TestPinOverHTTP(t *testing.T) {
 		out["error"] != "pin_not_permitted" {
 		t.Fatalf("an operator with the coordinator's session: %d %v", code, out)
 	}
-	if t1, e1 := counts(); t1 != t0 || e1 != e0 {
+	if t1, e1 := counts(); t1 != t0 || e1 != e0+1 {
 		t.Fatalf("the refusal left %d tasks and %d events", t1-t0, e1-e0)
 	}
 
@@ -168,7 +168,7 @@ func TestPinOverHTTP(t *testing.T) {
 		out["error"] != "pin_not_permitted" || !strings.Contains(out["message"].(string), "names no external host") {
 		t.Fatalf("with external_hosts dropped: %d %v", code, out)
 	}
-	if t1, e1 := counts(); t1 != t0 || e1 != e0 {
+	if t1, e1 := counts(); t1 != t0 || e1 != e0+1 {
 		t.Fatalf("the refusal left %d tasks and %d events", t1-t0, e1-e0)
 	}
 }
@@ -287,6 +287,11 @@ func TestExactClaimOverHTTP(t *testing.T) {
 	if code, out := act("persist", persist); code != http.StatusUnprocessableEntity || out["error"] != "core_mismatch" { // T16
 		t.Fatalf("core work in a task that is not core: %d %v", code, out)
 	}
+	var refused int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'handin-refusals' AND (body_json->>'text')::jsonb->>'task' = $1 AND (body_json->>'text')::jsonb->>'reason' = 'core_mismatch'`, task).Scan(&refused))
+	if refused != 1 {
+		t.Fatalf("core refusal events: %d", refused)
+	}
 	facts.Paths = []string{"api/internal/research/x.go"}
 	if code, out := act("persist", persist); code != http.StatusOK {
 		t.Fatalf("persist: %d %v", code, out)
@@ -364,4 +369,53 @@ func landingWait(t *testing.T, pool *pgxpool.Pool, task string, claim map[string
 	put("ci_seen", "run", "ci-platform-1", "status", "Succeeded", "R", pushedAt, "created_at", time.Now().UTC().Format(time.RFC3339Nano))
 	put("awaiting_grant", "soft", []any{"floor_soft"}, "files", 1, "lines", 2, "material", "sha256:"+strings.Repeat("ab", 32))
 	return op
+}
+
+func TestHandinExecutorAndProviderRefusals(t *testing.T) {
+	t.Parallel()
+	pool := pinWorld(t)
+	hosts := strings.Replace(pinHosts, "    executor: exec:claude\n    provider: anthropic", "    executors:\n      - {executor: exec:claude, provider: anthropic}\n      - {executor: exec:codex, provider: openai}", 1)
+	putEnvelope(t, pool, 2, rules.Loosen, hosts)
+	s := server(t, pool)
+	for _, tc := range []struct{ executor, provider, reason string }{
+		{"exec:codex", "openai", ""}, {"exec:claude", "anthropic", ""},
+		{"exec:cursor", "openai", "pin_not_permitted"},
+		{"exec:codex", "cursor-mix", "mixed_source_not_supported"},
+		{"exec:codex", "", "mixed_source_not_supported"},
+	} {
+		providers := []string{}
+		if tc.provider != "" {
+			providers = append(providers, tc.provider)
+		}
+		ref := tc.executor + tc.provider
+		// References are local to each batch.
+		body := map[string]any{"idempotency_key": ref, "tasks": []any{map[string]any{
+			"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a",
+			"effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA,
+			"executor_pin": rules.PinCoordinator, "executor": tc.executor, "providers": providers,
+		}}}
+		var before, after int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id='handin-refusals'`).Scan(&before))
+		code, out := call(t, s, "seat:coordinator", "POST", "missions/M-1/tasks", body)
+		if tc.reason == "" {
+			if code != http.StatusOK {
+				t.Fatalf("%s: %d %v", ref, code, out)
+			}
+			continue
+		}
+		if code != http.StatusUnprocessableEntity || out["error"] != tc.reason {
+			t.Fatalf("%s: %d %v", ref, code, out)
+		}
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id='handin-refusals'`).Scan(&after))
+		if after != before+1 {
+			t.Fatalf("events: %d -> %d", before, after)
+		}
+		var bodyJSON []byte
+		must(t, pool.QueryRow(ctx, `SELECT (body_json->>'text')::jsonb FROM agentrt.event WHERE event_stream_id='handin-refusals' ORDER BY event_id DESC LIMIT 1`).Scan(&bodyJSON))
+		var event map[string]any
+		must(t, json.Unmarshal(bodyJSON, &event))
+		if len(event) != 2 || event["task"] != "a" || event["reason"] != tc.reason {
+			t.Fatalf("event: %s", bodyJSON)
+		}
+	}
 }

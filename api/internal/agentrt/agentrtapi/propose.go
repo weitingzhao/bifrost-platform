@@ -132,8 +132,9 @@ type taskBody struct {
 	// the proposer seat a signed standing envelope names may set it.
 	ExecutorPin string `json:"executor_pin"`
 	// Providers declares whose work a pinned task's commit holds (§2.8):
-	// only the entry's provider, alone, is taken.
+	// every declared provider must appear in the host's entry.
 	Providers []string `json:"providers"`
+	Executor  string   `json:"executor"`
 	// PinReason says why an implement task is pinned to the coordinator
 	// (store/pinreason.go): required under AGENTRT_PIN_REASON=refuse.
 	PinReason string `json:"pin_reason"`
@@ -172,7 +173,7 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 		task := store.PinnedTask{TaskProposal: store.TaskProposal{Wave: t.Wave, Urgent: t.Urgent, Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
-			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers,
+			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers, Executor: t.Executor,
 			PinReason: t.PinReason}
 		missing, err := store.CheckPinReason(task, a.pinReason())
 		if err != nil {
@@ -196,6 +197,7 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 		out, err = store.ProposeTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), plain)
 	}
 	if err != nil {
+		a.recordHandinRefusal(r.Context(), store.HandinRefusalTask(err, tasks), "", err)
 		a.fail(w, err)
 		return
 	}

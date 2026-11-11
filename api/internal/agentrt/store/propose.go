@@ -662,7 +662,7 @@ func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 	if p != nil {
 		for _, t := range tasks {
 			if pin := p.pins[t.Ref]; pin != "" {
-				if err := checkPin(ctx, tx, w, missionID, t, pin, p.providers[t.Ref]); err != nil {
+				if err := checkPin(ctx, tx, w, missionID, t, pin, p.providers[t.Ref], p.executors[t.Ref]); err != nil {
 					return nil, err
 				}
 			}

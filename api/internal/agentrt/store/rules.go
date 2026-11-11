@@ -529,21 +529,23 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 // registers it).
 func knownExternalHosts(ctx context.Context, tx pgx.Tx, hosts []rules.ExternalHost) error {
 	for _, h := range hosts {
-		var other, seat, executor bool
-		if err := tx.QueryRow(ctx, `SELECT
+		for _, tool := range h.Tools() {
+			var other, seat, executor bool
+			if err := tx.QueryRow(ctx, `SELECT
 		    EXISTS (SELECT 1 FROM agentrt.host WHERE host_id = $1 AND host_kind <> $4),
 		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $2 AND actor_kind = 'seat' AND retired_at IS NULL),
 		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $3 AND actor_kind = 'executor')`,
-			h.Host, h.Proposer, h.Executor, HostExternal).Scan(&other, &seat, &executor); err != nil {
-			return err
-		}
-		switch {
-		case other:
-			return invalid("external host %s is registered as a host of another kind", h.Host)
-		case !seat:
-			return invalid("external host %s: its proposer %s is not a registered seat", h.Host, h.Proposer)
-		case !executor:
-			return invalid("external host %s: its executor %s is not registered", h.Host, h.Executor)
+				h.Host, h.Proposer, tool.Executor, HostExternal).Scan(&other, &seat, &executor); err != nil {
+				return err
+			}
+			switch {
+			case other:
+				return invalid("external host %s is registered as a host of another kind", h.Host)
+			case !seat:
+				return invalid("external host %s: its proposer %s is not a registered seat", h.Host, h.Proposer)
+			case !executor:
+				return invalid("external host %s: its executor %s is not registered", h.Host, tool.Executor)
+			}
 		}
 	}
 	return nil

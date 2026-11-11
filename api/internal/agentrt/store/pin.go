@@ -44,10 +44,12 @@ type PinnedTask struct {
 	TaskProposal
 	ExecutorPin string
 	// Providers are the model providers whose work the commit holds, as
-	// the proposer declares them (§2.8, F4 A): a pinned task takes only the
-	// provider its entry names, alone. Its spec is the platform's
+	// the proposer declares them (§2.8, F4 A): every provider must be
+	// permitted by the host entry. Its spec is the platform's
 	// (ImplementSpec), whatever SpecArtifact says.
 	Providers []string
+	// Executor is optional for legacy callers; when given, the host must permit it.
+	Executor string
 	// PinReason is why an implement task is pinned to the coordinator
 	// (pinreason.go), recorded in its task_proposed body; "" for none.
 	PinReason string
@@ -65,6 +67,7 @@ const generatedSpec = "generated"
 // pinning is what a pinned batch adds to its tasks: each one's pin, by ref,
 // and the session header it came with.
 type pinning struct {
+	executors  map[string]string
 	pins       map[string]string
 	providers  map[string][]string
 	reasons    map[string]string
@@ -78,6 +81,7 @@ type pinning struct {
 // whole batch (ErrPinNotPermitted); a retry with the key is answered again
 // only to the writer who may pin (§2.6).
 func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, viaSession string, tasks []PinnedTask) (map[string]any, error) {
+	executors := map[string]string{}
 	props := make([]TaskProposal, 0, len(tasks))
 	pins, providers, reasons := map[string]string{}, map[string][]string{}, map[string]string{}
 	for _, t := range tasks {
@@ -87,6 +91,7 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 			return nil, err
 		}
 		if t.ExecutorPin != "" {
+			executors[t.Ref] = t.Executor
 			pins[t.Ref], providers[t.Ref], reasons[t.Ref] = t.ExecutorPin, slices.Clone(t.Providers), t.PinReason
 			if t.SpecArtifact == "" {
 				t.SpecArtifact = generatedSpec
@@ -108,7 +113,7 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 	}
 	for ref, pin := range pins {
 		if !slices.Contains(ExecutorPins, pin) {
-			return nil, pinRefused("task %s: executor_pin %q is none of %v", ref, pin, ExecutorPins)
+			return nil, &handinRefusal{task: ref, err: pinRefused("task %s: executor_pin %q is none of %v", ref, pin, ExecutorPins)}
 		}
 	}
 	req := batchRequest(missionID, props)
@@ -123,8 +128,13 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 			}
 		}
 	}
+	for i, t := range tasks {
+		if t.ExecutorPin != "" && t.Executor != "" {
+			req["tasks"].([]any)[i].(map[string]any)["executor"] = t.Executor
+		}
+	}
 	req["via_session"] = viaSession
-	p := &pinning{pins: pins, providers: providers, reasons: reasons, viaSession: viaSession}
+	p := &pinning{executors: executors, pins: pins, providers: providers, reasons: reasons, viaSession: viaSession}
 	for try := 1; ; try++ {
 		out, err := idempotentHeld(ctx, db, w, "missions/"+missionID+"/tasks", key, req,
 			func(pgx.Tx) error { return pinWriter(w) },
@@ -177,7 +187,12 @@ func pinWriter(w Writer) error {
 // the writer already ensured: the writer may pin, and the envelope in force
 // for the mission's tenant, signed, has the pin's entry, whose proposer is
 // the writer and which lists the task's repository and role.
-func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t TaskProposal, pin string, providers []string) error {
+func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t TaskProposal, pin string, providers []string, executor string) (err error) {
+	defer func() {
+		if err != nil {
+			err = &handinRefusal{task: t.Ref, err: err}
+		}
+	}()
 	if err := pinWriter(w); err != nil {
 		return err
 	}
@@ -213,11 +228,22 @@ func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t Task
 	case len(Repos[t.Repo].Verify) == 0:
 		return pinRefused("task %s: repository %q has no checks the platform knows, so no spec of its own", t.Ref, t.Repo)
 	case len(providers) == 0:
-		return fmt.Errorf("%w: task %s declares no providers; a pinned task declares [%s]", ErrMixedSource, t.Ref, h.Provider)
+		if len(h.Executors) == 0 {
+			return fmt.Errorf("%w: task %s declares no providers; a pinned task declares [%s]", ErrMixedSource, t.Ref, h.Provider)
+		}
+		return fmt.Errorf("%w: task %s declares no providers; a pinned task declares a permitted provider", ErrMixedSource, t.Ref)
+	}
+	if executor != "" && !slices.ContainsFunc(h.Tools(), func(x rules.ExternalExecutor) bool { return x.Executor == executor }) {
+		return pinRefused("task %s: executor %s is not permitted", t.Ref, executor)
 	}
 	for _, pv := range providers {
-		if pv != h.Provider {
-			return fmt.Errorf("%w: task %s declares provider %q; a pinned task holds %s's work alone, or goes by hand", ErrMixedSource, t.Ref, pv, h.Provider)
+		if !slices.ContainsFunc(h.Tools(), func(x rules.ExternalExecutor) bool {
+			return x.Provider == pv
+		}) {
+			if len(h.Executors) == 0 {
+				return fmt.Errorf("%w: task %s declares provider %q; a pinned task holds %s's work alone, or goes by hand", ErrMixedSource, t.Ref, pv, h.Provider)
+			}
+			return fmt.Errorf("%w: task %s declares provider %q; a pinned task holds only work from its permitted providers", ErrMixedSource, t.Ref, pv)
 		}
 	}
 	return nil
