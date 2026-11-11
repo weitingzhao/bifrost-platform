@@ -1,0 +1,100 @@
+- id: lead_time_s
+  version: 1
+  title: Task start to commit running on PROD
+  unit: seconds
+  extractor: task_lead_time
+  params: {"start": "first_attempt_started", "end": "commit_running_on_prod", "also": ["mean", "p90"]}
+  headline: p50
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: owner_wait_share
+  version: 1
+  title: Share of lead time waiting on Owner cards
+  unit: ratio
+  extractor: owner_wait_share
+  params: {"denominator": "lead_time_s", "wait": "owner_cards"}
+  headline: ratio
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: approval_cards
+  version: 1
+  title: Approval cards opened
+  unit: count
+  extractor: cards_opened
+  params: {"kind": "approval"}
+  headline: count
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: question_cards
+  version: 1
+  title: Question cards opened
+  unit: count
+  extractor: cards_opened
+  params: {"kind": "question"}
+  headline: count
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: ci_runs_per_commit
+  version: 1
+  title: CI runs per commit reaching main, including reuses
+  unit: count
+  extractor: ci_runs_per_commit
+  params: {"commits": "reached_main", "include_reuses": true}
+  headline: mean
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: release_window_occupancy
+  version: 1
+  title: Seconds the release window was held
+  unit: seconds
+  extractor: release_window_occupancy
+  params: {}
+  headline: mean
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: macro_doing_s
+  version: 1
+  title: Wave or plan node time doing work
+  unit: seconds
+  extractor: macro_wall_time
+  params: {"state": "doing", "scopes": ["wave", "plan_node"]}
+  headline: mean
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: macro_owner_wait_s
+  version: 1
+  title: Wave or plan node time waiting on Owner
+  unit: seconds
+  extractor: macro_wall_time
+  params: {"state": "owner_wait", "scopes": ["wave", "plan_node"]}
+  headline: mean
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: macro_idle_s
+  version: 1
+  title: Wave or plan node time idle
+  unit: seconds
+  extractor: macro_wall_time
+  params: {"state": "idle", "scopes": ["wave", "plan_node"]}
+  headline: mean
+  min_samples: 1
+  window_kinds: [hour, day, week, span]
+  settle_s: 300
+- id: throughput_tasks
+  version: 1
+  title: Tasks accepted per day
+  unit: count
+  extractor: tasks_accepted
+  params: {}
+  headline: count
+  min_samples: 1
+  window_kinds: [day]
+  settle_s: 300

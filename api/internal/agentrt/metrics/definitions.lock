@@ -1,0 +1,32 @@
+{
+  "approval_cards": {
+    "1": "1cdda30a2b975d6e7a6cbf451a2cea3ef724cde6c7c5d2e57cf43d6114b68f56"
+  },
+  "ci_runs_per_commit": {
+    "1": "dd318ac034438458d51f17cc2b2d712651cfb3eb6985590dc0f0303b83900d7a"
+  },
+  "lead_time_s": {
+    "1": "1e5d1190093878c437b874f099b74c41d13415d4a43c9a541a5138ff0894af9f"
+  },
+  "macro_doing_s": {
+    "1": "d45ac2e44e93e21724a2d270a1c56e8e4bc509e2d1aeda6c3e2c01d4c36c2a09"
+  },
+  "macro_idle_s": {
+    "1": "16b45a61ddbc82f2c1faace11160291286037045da4ec178a7aeb5b381e299d0"
+  },
+  "macro_owner_wait_s": {
+    "1": "a8d07351d7978a9acc43cd396de500e01d8d17be7e4f7acbd5926beb7371ad5d"
+  },
+  "owner_wait_share": {
+    "1": "749a86dc164c0721c02f00d3413cd21dfb85e39f45fe2019a173045c8767be9e"
+  },
+  "question_cards": {
+    "1": "b75ebb6fbdf673b57fc5a034ea94bfb15365ea8286127d4fb5f5cc1de3e1ecd8"
+  },
+  "release_window_occupancy": {
+    "1": "b3150613923a36f06549a900670e5139583b6b45af825e9953856ba93413e1c6"
+  },
+  "throughput_tasks": {
+    "1": "e9d4de1662278870047a4af40285565406928a617bcd16e11c854c5845ca08c1"
+  }
+}
