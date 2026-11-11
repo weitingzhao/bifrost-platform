@@ -89,12 +89,12 @@
   window_kinds: [hour, day, week, span]
   settle_s: 300
 - id: throughput_tasks
-  version: 1
+  version: 2
   title: Tasks accepted per day
   unit: count
   extractor: tasks_accepted
   params: {}
   headline: count
   min_samples: 1
-  window_kinds: [day]
+  window_kinds: [day, span]
   settle_s: 300
