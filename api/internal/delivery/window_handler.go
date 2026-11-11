@@ -13,7 +13,7 @@ func (h *Handler) HandleGetReleaseWindow(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	rec, open, err := getReleaseWindow(r.Context(), cs, h.svc.PipelinesNamespace(), time.Now().UTC())
+	rec, open, err := getReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), time.Now().UTC())
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -42,7 +42,7 @@ func (h *Handler) HandlePutReleaseWindow(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	rec, err := putReleaseWindow(r.Context(), cs, h.svc.PipelinesNamespace(), windowInput{
+	rec, err := putReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), windowInput{
 		What: body.What, Who: body.Who, Reason: body.Reason, Env: body.Env, TTLMinutes: body.TTLMinutes,
 	}, time.Now().UTC())
 	if err != nil {
@@ -82,7 +82,7 @@ func (h *Handler) HandleDeleteReleaseWindow(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	err = deleteReleaseWindow(r.Context(), cs, h.svc.PipelinesNamespace(), body.Who, force, time.Now().UTC())
+	err = deleteReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), body.Who, force, time.Now().UTC())
 	if err != nil {
 		if _, ok := err.(*WindowChanged); ok {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})

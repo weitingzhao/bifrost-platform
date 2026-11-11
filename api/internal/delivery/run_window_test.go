@@ -16,7 +16,9 @@ import (
 
 func TestRunWindowLifecycle(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	var events []WindowEvent
+	recorder := WindowRecorder(func(_ context.Context, e WindowEvent) { events = append(events, e) })
+	ctx := windowContext(context.Background(), recorder)
 	cs := fake.NewSimpleClientset()
 	now := time.Now().UTC()
 	first, err := putReleaseWindow(ctx, cs, "cicd", windowInput{Who: "prod-run", What: "bifrost-platform"}, now)
@@ -27,9 +29,12 @@ func TestRunWindowLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &runWindow{cs: cs, ns: "cicd", who: "prod-run", version: cm.ResourceVersion}
+	w := &runWindow{cs: cs, ns: "cicd", who: "prod-run", version: cm.ResourceVersion, recorder: recorder}
 	if err := w.update(ctx, false); err != nil {
 		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("run renewal emitted an event: %+v", events)
 	}
 	held, live, err := getReleaseWindow(ctx, cs, "cicd", now)
 	if err != nil || !live || held.StartedAt != first.StartedAt {
@@ -43,6 +48,9 @@ func TestRunWindowLifecycle(t *testing.T) {
 	}
 	if err := w.update(ctx, true); err != nil {
 		t.Fatal(err)
+	}
+	if len(events) != 3 || events[2].Action != "released" || events[2].Who != first.Who || events[2].StartedAt != first.StartedAt {
+		t.Fatalf("run events: %+v", events)
 	}
 	if _, live, err := getReleaseWindow(ctx, cs, "cicd", time.Now().UTC()); err != nil || live {
 		t.Fatalf("release: %v %v", live, err)

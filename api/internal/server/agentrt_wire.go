@@ -125,6 +125,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	late := &lateDB{}
 	rt.api.DB, rt.api.Back, rt.late = late, late.Back, late
 	s.wireThreadInbox(late)
+	if s.delivery != nil {
+		s.delivery.BindWindowRecorder(s.recordWindowEvent)
+	}
 	rdb, prefix, rerr := agentrtRedisFromEnv()
 	switch {
 	case rerr != nil:
@@ -156,6 +159,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// they did already recorded: the API's readers count a host's silence
 		// from no earlier (review 528 A1b).
 		late.open(pool, time.Now())
+		s.followWindowExpiry(ctx)
 		// The seats the token table names that the platform registers
 		// itself (store.EnsureSeats): the coordinator's proposer seat.
 		if seats, err := store.EnsureSeats(ctx, pool, s.auth.Seats()); err != nil {

@@ -213,7 +213,7 @@ func (s *Service) releaseWindowMessage(ctx context.Context, pipeline, callerWho 
 		}
 		return ""
 	}
-	rec, found, err := getReleaseWindow(ctx, cs, s.PipelinesNamespace(), time.Now().UTC())
+	rec, found, err := getReleaseWindow(windowContext(ctx, s.windowRecorder), cs, s.PipelinesNamespace(), time.Now().UTC())
 	if err != nil {
 		if mustHoldWindow(pipeline) {
 			return fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)
@@ -224,5 +224,10 @@ func (s *Service) releaseWindowMessage(ctx context.Context, pipeline, callerWho 
 	if found {
 		window = rec.asMap()
 	}
-	return decideReleaseWindow(found, window, pipeline, callerWho)
+	message := decideReleaseWindow(found, window, pipeline, callerWho)
+	if message != "" {
+		repos, _ := requiredRepos(pipeline)
+		recordWindow(windowContext(ctx, s.windowRecorder), s.PipelinesNamespace(), "refused", windowRecord{Who: strings.TrimSpace(callerWho), What: sortedKeys(repos), Env: rec.Env, Reason: "pipeline_window", StartedAt: time.Now().UTC().Format(time.RFC3339)}, "", rec.Who)
+	}
+	return message
 }

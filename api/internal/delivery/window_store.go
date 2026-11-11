@@ -63,6 +63,7 @@ type windowRecord struct {
 	StartedAt string `json:"started_at"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+	EndedAt   string `json:"ended_at,omitempty"`
 }
 
 type windowInput struct {
@@ -165,6 +166,7 @@ func writeReleaseWindowOnce(ctx context.Context, cs kubernetes.Interface, ns str
 	}
 	if current.live(now) {
 		if current.Who != in.Who {
+			recordWindow(ctx, ns, "refused", next, "", current.Who)
 			return windowRecord{}, &WindowHeld{Who: current.Who, What: current.What, StartedAt: current.StartedAt, ExpiresAt: current.ExpiresAt}
 		}
 		next.StartedAt = current.StartedAt
@@ -181,6 +183,12 @@ func writeReleaseWindowOnce(ctx context.Context, cs kubernetes.Interface, ns str
 			ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: ns},
 			Data:       map[string]string{releaseWindowDataKey: string(body)},
 		}, metav1.CreateOptions{})
+		if err == nil {
+			recordWindowExpiry(ctx, ns, current, now)
+			if !current.live(now) {
+				recordWindow(ctx, ns, "held", next, "", "")
+			}
+		}
 		return next, err
 	}
 	if cm.Data == nil {
@@ -188,6 +196,12 @@ func writeReleaseWindowOnce(ctx context.Context, cs kubernetes.Interface, ns str
 	}
 	cm.Data[releaseWindowDataKey] = string(body)
 	_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
+	if err == nil {
+		recordWindowExpiry(ctx, ns, current, now)
+		if !current.live(now) {
+			recordWindow(ctx, ns, "held", next, "", "")
+		}
+	}
 	return next, err
 }
 
@@ -208,6 +222,7 @@ func getReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns string, n
 		return windowRecord{}, false, errWindowUnreadable
 	}
 	if !rec.live(now) {
+		recordWindowExpiry(ctx, ns, rec, now)
 		return windowRecord{}, false, nil
 	}
 	return rec, true, nil
@@ -223,6 +238,11 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	}
 	rec, ok := parseWindowCM(cm)
 	if ok && rec.live(now) && !force && rec.Who != strings.TrimSpace(who) {
+		attempt := rec
+		attempt.Who = strings.TrimSpace(who)
+		attempt.StartedAt = now.UTC().Format(time.RFC3339)
+		attempt.Reason = "not_holder"
+		recordWindow(ctx, ns, "refused", attempt, "", rec.Who)
 		return &WindowNotHolder{Who: rec.Who}
 	}
 	// Released by ending it now, on the version read (CUT §2.6, S3): an
@@ -231,7 +251,9 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	if !ok {
 		rec = windowRecord{Who: strings.TrimSpace(who), Reason: "cleared"}
 	}
+	previous := rec
 	rec.ExpiresAt = now.UTC().Format(time.RFC3339)
+	rec.EndedAt = rec.ExpiresAt
 	body, err := json.Marshal(rec)
 	if err != nil {
 		return err
@@ -246,6 +268,13 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 	}
 	if apierrors.IsNotFound(err) {
 		return nil
+	}
+	if err == nil {
+		if previous.live(now) {
+			recordWindow(ctx, ns, "released", previous, rec.ExpiresAt, "")
+		} else {
+			recordWindowExpiry(ctx, ns, previous, now)
+		}
 	}
 	return err
 }

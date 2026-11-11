@@ -34,11 +34,12 @@ var (
 // controller, credentials, database, window renewal or retry loop. Factories
 // must return clients for the workers' identity; tests inject fake clusters.
 type STGReleaseAdapter struct {
-	Core    func() (kubernetes.Interface, error)
-	Dynamic func() (dynamic.Interface, error)
-	HTTP    *http.Client
-	Now     func() time.Time
-	Archive RunEvidenceArchive
+	Core           func() (kubernetes.Interface, error)
+	Dynamic        func() (dynamic.Interface, error)
+	HTTP           *http.Client
+	Now            func() time.Time
+	Archive        RunEvidenceArchive
+	WindowRecorder WindowRecorder
 }
 
 func (a *STGReleaseAdapter) now() time.Time {

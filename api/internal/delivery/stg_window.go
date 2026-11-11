@@ -58,6 +58,8 @@ func (a *STGReleaseAdapter) ReadSTGWindow(ctx context.Context) (STGWindow, error
 	if err != nil {
 		return STGWindow{}, err
 	}
+	r, _ := parseWindowCM(cm)
+	recordWindowExpiry(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, r, a.now())
 	return decodeSTGWindow(cm)
 }
 
@@ -70,6 +72,7 @@ func (a *STGReleaseAdapter) TakeSTGWindow(ctx context.Context, old STGWindow, wh
 	}
 	if old.Live(a.now()) && (!recover || old.Who != who || old.What != "bifrost-platform" || old.Env != "stg" || old.Generation < 1) {
 		previous, _ := parseWindowCM(old.cm)
+		recordWindow(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, "refused", windowRecord{Who: who, What: "bifrost-platform", Env: "stg", Reason: "held", StartedAt: a.now().Format(time.RFC3339)}, "", old.Who)
 		return STGWindow{}, &WindowHeld{Who: old.Who, What: old.What, StartedAt: previous.StartedAt, ExpiresAt: old.Expires.Format(time.RFC3339)}
 	}
 	now := a.now()
@@ -79,7 +82,13 @@ func (a *STGReleaseAdapter) TakeSTGWindow(ctx context.Context, old STGWindow, wh
 		previous, _ := parseWindowCM(old.cm)
 		r.StartedAt = previous.StartedAt
 	}
-	return a.writeSTGWindow(ctx, old, r)
+	next, err := a.writeSTGWindow(ctx, old, r)
+	if err == nil && !old.Live(now) {
+		previous, _ := parseWindowCM(old.cm)
+		recordWindowExpiry(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, previous, now)
+		recordWindow(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, "held", r, "", "")
+	}
+	return next, err
 }
 
 func (a *STGReleaseAdapter) RenewSTGWindow(ctx context.Context, held STGWindow) (STGWindow, error) {
@@ -98,8 +107,17 @@ func (a *STGReleaseAdapter) EndSTGWindow(ctx context.Context, held STGWindow) er
 		return &WindowChanged{}
 	}
 	r, _ := parseWindowCM(held.cm)
+	previous := r
 	r.ExpiresAt = a.now().Format(time.RFC3339)
+	r.EndedAt = r.ExpiresAt
 	_, err := a.writeSTGWindow(ctx, held, r)
+	if err == nil {
+		if previous.live(a.now()) {
+			recordWindow(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, "released", previous, r.ExpiresAt, "")
+		} else {
+			recordWindowExpiry(windowContext(ctx, a.WindowRecorder), STGReleaseNamespace, previous, a.now())
+		}
+	}
 	return err
 }
 

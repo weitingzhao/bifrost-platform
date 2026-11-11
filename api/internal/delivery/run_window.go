@@ -16,9 +16,10 @@ import (
 // A run lease uses the exact ConfigMap version it acquired. A forced takeover
 // fences renewal and release; neither operation retries against a newer owner.
 type runWindow struct {
-	cs      kubernetes.Interface
-	ns, who string
-	version string
+	cs       kubernetes.Interface
+	ns, who  string
+	version  string
+	recorder WindowRecorder
 }
 
 func (s *Service) takeRunWindow(ctx context.Context, pipeline, run string) (*runWindow, error) {
@@ -32,7 +33,7 @@ func (s *Service) takeRunWindow(ctx context.Context, pipeline, run string) (*run
 	if len(who) > 128 {
 		who = who[:128]
 	}
-	_, err = putReleaseWindow(ctx, cs, ns, windowInput{Who: who, What: sortedKeys(repos), Reason: "PipelineRun/" + run}, time.Now().UTC())
+	_, err = putReleaseWindow(windowContext(ctx, s.windowRecorder), cs, ns, windowInput{Who: who, What: sortedKeys(repos), Reason: "PipelineRun/" + run}, time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func (s *Service) takeRunWindow(ctx context.Context, pipeline, run string) (*run
 	if !ok || r.Who != who {
 		return nil, &WindowChanged{}
 	}
-	return &runWindow{cs: cs, ns: ns, who: who, version: cm.ResourceVersion}, nil
+	return &runWindow{cs: cs, ns: ns, who: who, version: cm.ResourceVersion, recorder: s.windowRecorder}, nil
 }
 
 func (w *runWindow) update(ctx context.Context, end bool) error {
@@ -61,6 +62,10 @@ func (w *runWindow) update(ctx context.Context, end bool) error {
 	if !end {
 		expires = expires.Add(windowLifetime)
 	}
+	previous := r
+	if end {
+		r.EndedAt = expires.Format(time.RFC3339)
+	}
 	r.ExpiresAt = expires.Format(time.RFC3339)
 	body, err := json.Marshal(r)
 	if err != nil {
@@ -70,6 +75,9 @@ func (w *runWindow) update(ctx context.Context, end bool) error {
 	cm, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
 	if err == nil {
 		w.version = cm.ResourceVersion
+		if end {
+			recordWindow(windowContext(ctx, w.recorder), w.ns, "released", previous, r.ExpiresAt, "")
+		}
 	}
 	return err
 }

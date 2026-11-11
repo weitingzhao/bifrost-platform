@@ -107,7 +107,7 @@ func (s *Server) startSTGRelease(ctx context.Context, c *controller.Controller) 
 }
 func (s *Server) newSTGRelease(ctx context.Context, c *controller.Controller, policy func() stgrelease.WindowPolicy) *stgrelease.Controller {
 	ledger := stgrelease.PostgresLedger{DB: c.DB, Tenant: "dev"}
-	adapter := &delivery.STGReleaseAdapter{HTTP: &http.Client{Timeout: 10 * time.Second}, Archive: ledger,
+	adapter := &delivery.STGReleaseAdapter{HTTP: &http.Client{Timeout: 10 * time.Second}, Archive: ledger, WindowRecorder: s.recordWindowEvent,
 		Core: func() (kubernetes.Interface, error) {
 			client, _, err := s.cluster.Service().KubernetesClient()
 			return client, err

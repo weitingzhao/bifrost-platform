@@ -30,7 +30,7 @@ func (s *Server) stgSampler() (*stgrelease.Sampler, error) {
 		return nil, errors.New("no cluster connection for the STG sample")
 	}
 	ledger := stgrelease.PostgresSampleLedger{DB: rt.api.DB, Tenant: stgrelease.SampleTenant}
-	adapter := &delivery.STGReleaseAdapter{Archive: ledger,
+	adapter := &delivery.STGReleaseAdapter{Archive: ledger, WindowRecorder: s.recordWindowEvent,
 		Core: func() (kubernetes.Interface, error) {
 			client, _, err := s.cluster.Service().KubernetesClient()
 			return client, err

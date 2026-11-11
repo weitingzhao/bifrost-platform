@@ -56,6 +56,7 @@ func sanitizeLabelValue(v string) string {
 }
 
 type Service struct {
+	windowRecorder WindowRecorder
 	entry          *config.ClusterEntry
 	cluster        *cluster.Service
 	dynamicFactory func() (dynamic.Interface, error)

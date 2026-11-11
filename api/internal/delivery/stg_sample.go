@@ -78,7 +78,7 @@ func (a *STGReleaseAdapter) HoldSampleWindow(ctx context.Context, who, reason st
 	if err != nil {
 		return time.Time{}, err
 	}
-	rec, err := putReleaseWindow(ctx, cs, STGReleaseNamespace, windowInput{What: "bifrost-platform", Who: who, Env: "stg", Reason: reason, TTLMinutes: STGSampleWindowMinutes}, a.now())
+	rec, err := putReleaseWindow(windowContext(ctx, a.WindowRecorder), cs, STGReleaseNamespace, windowInput{What: "bifrost-platform", Who: who, Env: "stg", Reason: reason, TTLMinutes: STGSampleWindowMinutes}, a.now())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -101,11 +101,11 @@ func (a *STGReleaseAdapter) EndSampleWindow(ctx context.Context, who, reason str
 		return false, err
 	}
 	now := a.now()
-	rec, live, err := getReleaseWindow(ctx, cs, STGReleaseNamespace, now)
+	rec, live, err := getReleaseWindow(windowContext(ctx, a.WindowRecorder), cs, STGReleaseNamespace, now)
 	if err != nil || !live || rec.Who != who || reason != "" && rec.Reason != reason {
 		return false, err
 	}
-	if err = deleteReleaseWindow(ctx, cs, STGReleaseNamespace, who, false, now); err != nil {
+	if err = deleteReleaseWindow(windowContext(ctx, a.WindowRecorder), cs, STGReleaseNamespace, who, false, now); err != nil {
 		return false, err
 	}
 	return true, nil
