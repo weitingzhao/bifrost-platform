@@ -54,7 +54,8 @@ var eventTypes = map[string]bool{
 	"issue_answered": true, "issue_classified": true, "issue_design_put": true, "issue_reviewed": true,
 	"issue_owner_decided": true, "issue_priority_set": true, "issue_taken": true, "issue_replied": true,
 	"issue_state_changed": true, "issue_merged": true, "intake_client_set": true, "intake_acked": true,
-	"host_slots_set": true,
+	"host_slots_set":   true,
+	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
@@ -65,6 +66,10 @@ func IsEventType(t string) bool { return eventTypes[t] }
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
+	// Delivery measurement records (0016); CI fact bodies arrive in wave M-b.
+	"metrics_computed": {{"source", kStr, false}, {"rows", kInt, false}, {"definitions", kAny, false}, {"windows", kAny, true}, {"label", kStr, true}, {"artifact_id", kID, true}, {"xmin", kInt, true}},
+	"metric_label_set": {{"label", kStr, false}, {"window_start", kStr, false}, {"window_end", kStr, false}, {"reason", kStr, false}, {"by", kStr, true}},
+
 	"wave_opened":             {{"id", kStr, false}, {"repo", kStr, false}, {"plan_root", kStr, false}, {"n", kInt, false}, {"base", kStr, false}},
 	"wave_closed":             {{"id", kStr, false}},
 	"wave_abandoned":          {{"id", kStr, false}},
@@ -340,6 +345,21 @@ var bodies = map[string][]field{
 }
 
 func checkBody(eventType string, body map[string]any) error {
+	if eventType == "metrics_computed" {
+		var defs []MetricDefinition
+		if err := strictViewValue(body["definitions"], &defs); err != nil {
+			return invalid("metrics_computed definitions: %v", err)
+		}
+		if defs == nil {
+			return invalid("metrics_computed definitions must be an array")
+		}
+		for _, d := range defs {
+			if !metricIDRE.MatchString(d.ID) || d.Version < 1 || hex64(d.SHA256) != "" {
+				return invalid("invalid metric definition")
+			}
+		}
+	}
+
 	if err := checkDebtMove(eventType, body); err != nil {
 		return err
 	}
@@ -533,6 +553,8 @@ var (
 
 // fieldValues are the checked fields, by event type and field.
 var fieldValues = map[string]map[string]value{
+	"metrics_computed":        {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
+	"metric_label_set":        {"label": metricLabel, "window_start": instant, "window_end": instant},
 	"plan_node_created":       {"node_kind": oneOf("round", "item", "step", "arch_root", "arch_row")},
 	"plan_node_state_changed": {"from": oneOf(statesOf(stepMoves)...), "to": oneOf(statesOf(stepMoves)...)},
 	"plan_change_decided":     {"decision": oneOf("applied", "refused", "failed", "withdrawn", "expired")},
@@ -738,3 +760,6 @@ func badValue(eventType, name string, v any) string {
 	}
 	return ""
 }
+
+var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
+var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)

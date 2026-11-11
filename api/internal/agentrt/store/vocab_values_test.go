@@ -15,6 +15,12 @@ func TestEventFieldValues(t *testing.T) {
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
 	covered := map[string]bool{}
 	for _, c := range append([]struct{ event, field, good, bad string }{
+		{"metrics_computed", "source", "computed", "manual"},
+		{"metrics_computed", "label", "baseline:before", "before"},
+		{"metrics_computed", "artifact_id", sha, "bad"},
+		{"metric_label_set", "label", "group:after", "after"},
+		{"metric_label_set", "window_start", "2026-01-01T00:00:00Z", "yesterday"},
+		{"metric_label_set", "window_end", "2026-01-02T00:00:00Z", "tomorrow"},
 		{"plan_node_created", "node_kind", "step", "leaf"},
 		{"plan_node_state_changed", "to", "dropped", "deleted"},
 		{"plan_node_state_changed", "from", "planned", "draft"},
@@ -298,5 +304,22 @@ func TestEventIntegersOnly(t *testing.T) {
 	}
 	if err := checkBody("attempt_checkpointed", map[string]any{"checkpoint_seq": 2.0}); err == nil || !strings.Contains(err.Error(), "wrong kind") {
 		t.Fatalf("a whole float: %v", err)
+	}
+}
+
+func TestMetricBodiesRejectInvalid(t *testing.T) {
+	t.Parallel()
+	for _, defs := range []any{nil, "definitions", []any{map[string]any{"id": "Bad", "version": 1, "sha256": strings.Repeat("a", 64)}}, []any{map[string]any{"id": "lead_time", "version": 0, "sha256": strings.Repeat("a", 64)}}, []any{map[string]any{"id": "lead_time", "version": 1, "sha256": "bad"}}} {
+		if err := checkBody("metrics_computed", map[string]any{"source": "computed", "rows": 0, "definitions": defs}); err == nil {
+			t.Errorf("accepted definitions %#v", defs)
+		}
+	}
+	for _, typ := range []string{"ci_reused", "ci_red_classified"} {
+		if err := checkBody(typ, map[string]any{}); err == nil {
+			t.Errorf("%s has a body before wave M-b", typ)
+		}
+	}
+	if err := checkBody("metrics_computed", map[string]any{"source": "imported", "rows": 0, "definitions": []any{map[string]any{"id": "lead_time", "version": 1, "sha256": strings.Repeat("a", 64)}}}); err != nil {
+		t.Fatal(err)
 	}
 }
