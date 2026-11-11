@@ -269,3 +269,19 @@ func TestC4PreparationEligibilityAndFinalPolicy(t *testing.T) {
 		t.Fatal(reason)
 	}
 }
+
+// PROD 2026-11-11 10:35 (88b25c2): the size gate was removed, but awaiting_grant
+// records written before it name "size", and the stream is folded whole; they
+// stay readable, or every fold of the stream fails.
+func TestWaitingSoftKeepsRecordedSize(t *testing.T) {
+	t.Parallel()
+	r := waitRecord()
+	r["soft"] = []string{"core", "rule_paths", "size"}
+	if _, err := Parse(r); err != nil {
+		t.Fatalf("a recorded soft set with size no longer reads: %v", err)
+	}
+	s := mustFold(t, phaseRecords("green", false))
+	if err := s.Apply(Entry{At: epoch.Add(time.Hour), Record: r}); err != nil {
+		t.Fatalf("the stream no longer folds over a recorded size: %v", err)
+	}
+}

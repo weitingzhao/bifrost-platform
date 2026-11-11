@@ -105,7 +105,8 @@ func validLandingFloor(repo string, v any) bool {
 	}
 	last := ""
 	for _, s := range items {
-		if s <= last || !slices.Contains([]string{"floor_grant", "rule_paths"}, s) {
+		// "size": refusals recorded before the size gate was removed (readable history).
+		if s <= last || !slices.Contains([]string{"floor_grant", "rule_paths", "size"}, s) {
 			return false
 		}
 		last = s

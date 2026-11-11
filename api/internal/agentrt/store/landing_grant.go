@@ -275,7 +275,9 @@ func validCategories(set []string, empty bool) bool {
 	if len(set) == 0 {
 		return empty
 	}
-	known := []string{string(rules.LandingCore), string(rules.LandingFloorGrant), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths)}
+	// "size": grants recorded before the size gate was removed name it; they
+	// stay readable (see landing.validSoft). No check produces it now.
+	known := []string{string(rules.LandingCore), string(rules.LandingFloorGrant), string(rules.LandingFloorSoft), string(rules.LandingPresentation), string(rules.LandingRulePaths), "size"}
 	last := ""
 	for _, s := range set {
 		if s <= last || !slices.Contains(known, s) {

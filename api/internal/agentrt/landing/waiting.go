@@ -28,6 +28,10 @@ func recordVersion(r Record) int {
 	return 0
 }
 
+// validSoft reads a recorded soft set. "size" is no longer produced (the size
+// gate was removed, M-b 2026-11-11), but records written before carry it and
+// the stream is folded whole: it stays readable, or every fold of the stream
+// fails ("invalid landing soft", PROD 2026-11-11 10:35).
 func validSoft(v any) bool {
 	a, ok := v.([]any)
 	if !ok || len(a) == 0 {
@@ -36,7 +40,7 @@ func validSoft(v any) bool {
 	last := ""
 	for _, x := range a {
 		s, ok := x.(string)
-		if !ok || s <= last || !slices.Contains([]string{"core", "floor_grant", "floor_soft", "presentation", "rule_paths"}, s) {
+		if !ok || s <= last || !slices.Contains([]string{"core", "floor_grant", "floor_soft", "presentation", "rule_paths", "size"}, s) {
 			return false
 		}
 		last = s
