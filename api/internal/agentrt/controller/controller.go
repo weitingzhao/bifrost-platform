@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/metriccompute"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -407,6 +408,9 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 	// 2.4 slice ②).
 	if _, err := store.ComputeScores(ctx, c.DB); err != nil {
 		errs = append(errs, fmt.Errorf("scores: %w", err))
+	}
+	if _, err := metriccompute.Compute(ctx, c.DB, time.Now()); err != nil {
+		errs = append(errs, fmt.Errorf("metrics: %w", err))
 	}
 	// Salvaged results of lost attempts get a check of their own (T34 case 8).
 	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
