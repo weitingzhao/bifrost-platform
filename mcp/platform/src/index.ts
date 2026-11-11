@@ -775,9 +775,10 @@ reg(
 
 reg(
   'list_waves',
-  `The waves (id, repo, plan_root, n, base, state), of one repository or all. ${WAVE_NOTE}`,
+  `The waves (id, repo, plan_root, n, base, state), of one repository or all, optionally filtered by state (open, closed, abandoned). ${WAVE_NOTE}`,
   {
     repo: z.string().optional(),
+    state: z.enum(['open', 'closed', 'abandoned']).optional(),
   },
   async (input) => jsonResult(await listWaves(input)),
 )

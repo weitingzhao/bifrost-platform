@@ -376,12 +376,18 @@ describe('agent runtime writes', () => {
     await endWave({ id: 'wave:bifrost-platform:3', action: 'close' }, d)
     await endWave({ id: 'w3', action: 'abandon' }, d)
     const listed = await listWaves({ repo: 'bifrost-platform' }, d)
+    await listWaves({ state: 'open' }, d)
+    await listWaves({ repo: 'bifrost-platform', state: 'closed' }, d)
+    await listWaves({ state: 'abandoned' }, d)
     await listWaves({}, d)
     assert.deepEqual(calls, [
       { kind: 'send', path: '/api/v1/agentrt/waves', body: { repo: 'bifrost-platform', plan_root: 'R6' } },
       { kind: 'send', path: '/api/v1/agentrt/waves/wave:bifrost-platform:3/close', body: {} },
       { kind: 'send', path: '/api/v1/agentrt/waves/w3/abandon', body: {} },
       { kind: 'get', path: '/api/v1/agentrt/waves?repo=bifrost-platform' },
+      { kind: 'get', path: '/api/v1/agentrt/waves?state=open' },
+      { kind: 'get', path: '/api/v1/agentrt/waves?repo=bifrost-platform&state=closed' },
+      { kind: 'get', path: '/api/v1/agentrt/waves?state=abandoned' },
       { kind: 'get', path: '/api/v1/agentrt/waves' },
     ])
     assert.equal((listed as { note: string }).note, RUNTIME_DATA_NOTE)

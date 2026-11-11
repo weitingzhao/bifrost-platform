@@ -519,8 +519,11 @@ export async function endWave(
 }
 
 /** The waves, of one repository or all. */
-export async function listWaves(input: { repo?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
-  return note(await d.get(`${BASE}/waves${input.repo ? `?repo=${id(input.repo)}` : ''}`))
+export async function listWaves(input: { repo?: string; state?: 'open' | 'closed' | 'abandoned' }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  const query: string[] = []
+  if (input.repo) query.push(`repo=${id(input.repo)}`)
+  if (input.state) query.push(`state=${id(input.state)}`)
+  return note(await d.get(`${BASE}/waves${query.length ? `?${query.join('&')}` : ''}`))
 }
 
 export const MESSAGE_DATA_NOTE =
