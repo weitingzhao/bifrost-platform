@@ -570,6 +570,51 @@ func TestProductionDeliveryEvidence(t *testing.T) {
 	}
 }
 
+// STG ahead of the newest PROD record: the settled PROD workloads tell a PROD
+// that waits for the STG build (NotCommit names it) from one that already
+// runs it while its release record is not written yet. Either way the
+// evidence stays unknown, and nothing is said when a workload cannot be read.
+func TestProductionDeliveryEvidenceWhenSTGIsAhead(t *testing.T) {
+	at := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		change    func(*productionEvidenceFake)
+		notCommit string
+		reason    string
+	}{
+		{"PROD runs another build", func(f *productionEvidenceFake) { f.pods = []string{digestOther} }, sha2, "does not match the promoted PROD revision"},
+		{"PROD runs the STG build already", nil, "", "no PROD release record names it yet"},
+		{"a rollout in progress", func(f *productionEvidenceFake) { f.pods = []string{digestA, digestOther} }, sha2, "does not match"},
+		{"workloads unsettled", func(f *productionEvidenceFake) { f.podErr = releases.ErrUnsettled }, "", "does not match"},
+		{"no pods", func(f *productionEvidenceFake) { f.pods = []string{} }, "", "does not match"},
+		{"STG record without a digest", func(f *productionEvidenceFake) { delete(f.fakeCurrent["stg"].Images, "platform-console") }, "", "does not match"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &productionEvidenceFake{fakeCurrent: fakeCurrent{}}
+			for env, sha := range map[string]string{"prod": sha1, "stg": sha2} {
+				r := platformRec("release-"+env, sha)
+				r.Env, r.Revision, r.Pipeline = env, sha, "bifrost-deliver-platform"
+				r.StartedAt = at
+				if env == "prod" {
+					r.Pipeline += "-prod"
+					r.Images = nil
+				} else {
+					r.StartedAt = at.Add(time.Hour)
+				}
+				r.CompletedAt = r.StartedAt.Add(time.Minute)
+				f.fakeCurrent[env] = r
+			}
+			if tc.change != nil {
+				tc.change(f)
+			}
+			got := productionDeliveryEvidence(context.Background(), f)
+			if got.Commit != "" || got.NotCommit != tc.notCommit || !strings.Contains(got.Reason, tc.reason) {
+				t.Fatalf("evidence %+v; want unknown naming %q with NotCommit %q", got, tc.reason, tc.notCommit)
+			}
+		})
+	}
+}
+
 func TestExternalApprovalFact(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC)

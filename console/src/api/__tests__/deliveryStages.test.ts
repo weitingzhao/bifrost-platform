@@ -149,6 +149,16 @@ describe("an external work's commit", () => {
     expect(commitStages({ state: 'unknown', reason: 'Delivery: HTTP 503' })[1]).toEqual({ stage: 'ci', state: 'unknown', reason: 'Delivery: HTTP 503' })
   })
 
+  it('keeps PROD waiting only when what PROD runs was read; else Unknown with why', () => {
+    const waits = byName('external work: on STG, PROD does not run it yet')
+    const unknown = byName('external work: on STG, what PROD runs is unknown')
+    expect(commitStages(ok(waits)).slice(3).map(s => [s.stage, s.state])).toEqual([['on_stg', 'reached'], ['on_prod', 'not_reached']])
+    expect(stageOf(waits, 'prod_release')).toMatchObject({ state: 'current', waits_on: 'PROD release' })
+    expect(commitStages(ok(unknown)).at(-1)).toEqual({ stage: 'on_prod', state: 'unknown', reason: stageOf(unknown, 'on_prod').reason })
+    expect(stageOf(unknown, 'prod_release')).toMatchObject({ state: 'unknown', reason: expect.stringMatching(/^what PROD runs now is unknown: /) })
+    expect([waits, unknown].map(doc => deliverySettled(ok(doc)))).toEqual([false, false])
+  })
+
   it('is read by its commit; 404 is none', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify(onProd), { status: 200 }))
     vi.stubGlobal('fetch', fetcher)

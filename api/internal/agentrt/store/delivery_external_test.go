@@ -161,13 +161,52 @@ func TestFoldExternalDelivery(t *testing.T) {
 		if s := st[store.StageOnProd]; s.State != store.StageDone || !s.EnteredAt.Equal(prod.CompletedAt) || s.Source != "release_record" {
 			t.Errorf("on PROD %+v", s)
 		}
-		// Unsettled, or of another commit, it says nothing of this one.
-		for _, p := range []store.DeliveryProduction{{Reason: "PROD workloads are unavailable or unsettled"}, {Commit: externalOther, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}} {
-			d.Production = &p
-			st = externalStages(t, store.FoldExternalDelivery(d))
+	})
+
+	// STG delivered the commit and no PROD run of it is recorded yet (a run is
+	// recorded minutes after it ends). Waiting is said only when what PROD
+	// runs was read; otherwise the PROD stages are unknown with why.
+	t.Run("no PROD run recorded: waiting only when what PROD runs was read", func(t *testing.T) {
+		d := in(ci, stg)
+		waits := func(name string, p *store.DeliveryProduction) {
+			t.Helper()
+			d.Production = p
+			st := externalStages(t, store.FoldExternalDelivery(d))
 			if s := st[store.StageProdRelease]; s.State != store.StageCurrent || s.WaitsOn != "PROD release" {
-				t.Errorf("PROD release %+v under %+v", s, p)
+				t.Errorf("%s: PROD release %+v", name, s)
 			}
+			if s := st[store.StageOnProd]; s.State != store.StageNotReached {
+				t.Errorf("%s: on PROD %+v", name, s)
+			}
+		}
+		unknown := func(name string, p *store.DeliveryProduction, why string) {
+			t.Helper()
+			d.Production = p
+			st := externalStages(t, store.FoldExternalDelivery(d))
+			for _, stage := range []string{store.StageProdRelease, store.StageOnProd} {
+				if s := st[stage]; s.State != store.StageUnknown || !strings.Contains(s.Reason, why) || s.WaitsOn != "" {
+					t.Errorf("%s: %s %+v; want unknown naming %q", name, stage, s, why)
+				}
+			}
+		}
+		waits("the current release is another commit", &store.DeliveryProduction{Commit: externalOther, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt})
+		waits("the workloads do not run this commit's build", &store.DeliveryProduction{Reason: "current STG evidence does not match the promoted PROD revision", NotCommit: externalCommit})
+		unknown("the current release was not read", nil, "was not read")
+		unknown("the workloads could not be read", &store.DeliveryProduction{Reason: "PROD workloads are unavailable or unsettled"}, "PROD workloads are unavailable or unsettled")
+		unknown("the workloads already run the STG build", &store.DeliveryProduction{Reason: "PROD workloads run the newest STG build, and no PROD release record names it yet"}, "no PROD release record names it yet")
+		unknown("the workloads do not run another commit's build", &store.DeliveryProduction{Reason: "current STG evidence does not match the promoted PROD revision", NotCommit: externalOther}, "does not match")
+
+		// Before STG delivered it, PROD is simply not reached; a failed PROD run is its own fact.
+		d = in(ci)
+		d.Production = &store.DeliveryProduction{Reason: "PROD workloads are unavailable or unsettled"}
+		if s := externalStages(t, store.FoldExternalDelivery(d))[store.StageProdRelease]; s.State != store.StageNotReached {
+			t.Errorf("before STG: PROD release %+v", s)
+		}
+		failed := prod
+		failed.Result = "Failed"
+		d = in(ci, stg, failed)
+		if s := externalStages(t, store.FoldExternalDelivery(d))[store.StageProdRelease]; s.State != store.StageCurrent || !strings.Contains(s.Reason, "PROD delivery failed") {
+			t.Errorf("failed PROD run: PROD release %+v", s)
 		}
 	})
 }
@@ -242,8 +281,14 @@ func TestReadExternalDelivery(t *testing.T) {
 	if s := st[store.StageSTG]; s.State != store.StageDone || !s.LeftAt.Equal(stgEnd.CompletedAt) {
 		t.Errorf("STG %+v; want the run as last recorded", s)
 	}
-	if s := st[store.StageProdRelease]; s.State != store.StageCurrent {
+	// The current PROD release was not read (no reader passed): unknown, not waiting.
+	if s := st[store.StageProdRelease]; s.State != store.StageUnknown || !strings.Contains(s.Reason, "was not read") {
 		t.Errorf("PROD release %+v", s)
+	}
+	doc, err = read(externalCommit, &store.DeliveryProduction{Reason: "current STG evidence does not match the promoted PROD revision", NotCommit: externalCommit})
+	ok(t, err)
+	if s := externalStages(t, doc["stages"].([]store.DeliveryStage))[store.StageProdRelease]; s.State != store.StageCurrent {
+		t.Errorf("PROD release %+v; want waiting: the workloads do not run this build", s)
 	}
 
 	// The current PROD release is passed through for the platform's own repository.

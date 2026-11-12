@@ -5,8 +5,8 @@ import { clockText } from './deliveryStripModel'
 /** One task's delivery is read again at most once a minute, however many cards and rows show it. */
 const DELIVERY_POLL_MS = 60_000
 
-/** The four stages the strip shows, in order; planned and verified are told elsewhere on the card (state, Review). */
 type Shown = [StageReading['stage'], string][]
+/** The four stages the strip shows, in order; planned and verified are told elsewhere on the card (state, Review). */
 const SHOWN: Shown = [['handed_in', 'Handed in'], ['on_main', 'On main'], ['on_stg', 'STG'], ['on_prod', 'PROD']]
 /** A commit's strip also shows when its CI went green: the evidence an external work's hand-in rests on. */
 const COMMIT_SHOWN: Shown = [['handed_in', 'Handed in'], ['ci', 'CI'], ['on_main', 'On main'], ['on_stg', 'STG'], ['on_prod', 'PROD']]
@@ -49,7 +49,6 @@ export function DeliveryStrip({ task }: { task: string }) {
   if (q.isError) return <StageStrip task={task} read={{ state: 'unknown', reason: q.error.message }} />
   return <span data-delivery-strip={task} className="block text-xs text-muted-foreground">Delivery · reading…</span>
 }
-
 
 /**
  * The stage strip of a commit an external work handed in: GET /delivery?commit=, one read per commit shared by every

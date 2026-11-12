@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { useNow } from '../progress/progressClock'
+import { WorkDeliveryStrips } from './DeliveryStrip'
 import { StepBadge } from './StepText'
 import { liveLine, liveNow, liveSpoken, NOW_SHOWN, type LiveNow, type LiveStep } from './liveStepModel'
 import type { RuntimeTasks } from './moduleDetailModel'
@@ -50,7 +51,7 @@ function StepDetail({ cell, close, read }: { cell: StepCell; close: () => void; 
     </div>
     {cell.external.length > 0 && <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-muted-foreground">External work on this step</span>
-      <ul className="m-0 list-none space-y-1 p-0">{cell.external.map((line, i) => <li key={i}>{line}</li>)}</ul>
+      <ul className="m-0 list-none space-y-1 p-0">{cell.external.map((line, i) => <li key={i}>{line}<WorkDeliveryStrips commits={cell.externalCommits[i]} /></li>)}</ul>
     </div>}
     <ul aria-label={`Records of step ${cell.label}`} className="m-0 flex min-w-0 list-none flex-wrap gap-x-4 gap-y-1 p-0">
       {cell.links.map(link => <li key={`${link.kind}-${link.href}`} className="flex min-w-0 flex-col">

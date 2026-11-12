@@ -130,6 +130,21 @@ func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
 	unknown[2] = "the merge into main happens in Gitea; the platform does not record who waited for it"
 	unknown[3] = "the platform does not record when a commit reaches main"
 
+	// STG delivered the commit and no PROD run of it is recorded (a run is
+	// recorded minutes after it ends): what PROD runs now tells waiting from
+	// unknown. Waiting is said only when that was read: the current release
+	// is another commit, or the workloads do not run this commit's build.
+	if p := in.Production; in.Runs != nil && in.Repo == externalDeliveryRepo && reached[4] && prod == (externalRuns{}) {
+		switch {
+		case p == nil:
+			unknown[5] = "the current PROD release was not read"
+		case p.Reason == "", p.NotCommit == in.Commit:
+		default:
+			unknown[5] = "what PROD runs now is unknown: " + p.Reason
+		}
+		unknown[6] = unknown[5]
+	}
+
 	// The current PROD release, validated against live workloads, names this
 	// commit: on PROD even when its run is not recorded yet.
 	if p := in.Production; p != nil && !reached[6] && p.Reason == "" && p.Commit == in.Commit &&

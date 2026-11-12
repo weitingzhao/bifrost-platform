@@ -6,7 +6,7 @@ import type { PlanNode, PlanSnapshot, PlanSnapshotRead } from '@/api/planSnapsho
 import { fetchQuestionList } from '@/api/questions'
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
-import { DeliveryStrip } from './DeliveryStrip'
+import { DeliveryStrip, WorkDeliveryStrips } from './DeliveryStrip'
 import { WorkRow } from './PlanLiveWork'
 import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
@@ -174,7 +174,7 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
       {open && <StepSignoffHere node={cell.id} label={cell.label} state={cell.step ?? ''} rule={view.nodes.find(n => n.plan_node_id === cell.id)?.done_rule_json} now={now} viewStale={stale} />}
       {open && cell.external.length > 0 && <div className="flex min-w-0 flex-col gap-0.5 text-[13px]">
         <span className="text-xs text-muted-foreground">External work on this step</span>
-        <ul className="m-0 list-none space-y-0.5 p-0">{cell.external.map((line, i) => <li key={i}>{line}</li>)}</ul>
+        <ul className="m-0 list-none space-y-0.5 p-0">{cell.external.map((line, i) => <li key={i}>{line}<WorkDeliveryStrips commits={cell.externalCommits[i]} /></li>)}</ul>
       </div>}
       {open && records.length > 0 && <ul aria-label={`Records of step ${cell.label}`} className="m-0 flex min-w-0 list-none flex-wrap gap-1.5 p-0">
         {records.map(link => <li key={`${link.kind}-${link.href}`}><a href={link.href} data-step-link={link.kind}

@@ -263,7 +263,21 @@ func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) stor
 			return unknown("release identity or completion evidence is incomplete")
 		}
 	}
-	if stg.Repos[agentrtDeployRepo].SHA != sha || stg.CompletedAt.After(prod.StartedAt) {
+	if stgSHA := stg.Repos[agentrtDeployRepo].SHA; stgSHA != sha {
+		// STG is ahead of the newest PROD record. The settled PROD workloads
+		// say whether its build already runs there (a PROD release whose
+		// record is not written yet) or does not (PROD waits for it).
+		out := unknown("current STG evidence does not match the promoted PROD revision")
+		switch runs, read := prodRunsBuild(ctx, rel, stg); {
+		case !read:
+		case runs:
+			out.Reason = "PROD workloads run the newest STG build, and no PROD release record names it yet"
+		default:
+			out.NotCommit = stgSHA
+		}
+		return out
+	}
+	if stg.CompletedAt.After(prod.StartedAt) {
 		return unknown("current STG evidence does not match the promoted PROD revision")
 	}
 	for _, w := range agentrtWorkloads {
@@ -289,6 +303,29 @@ func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) stor
 		}
 	}
 	return store.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
+}
+
+// prodRunsBuild reports whether every settled PROD workload runs the image
+// the STG release rec built for it. read is false when a digest of rec or a
+// workload cannot be read: then nothing is said either way.
+func prodRunsBuild(ctx context.Context, rel currentDeployment, rec releases.Record) (runs, read bool) {
+	runs = true
+	for _, w := range agentrtWorkloads {
+		expected := rec.Images[w.image]
+		if !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(expected) {
+			return false, false
+		}
+		digests, err := rel.PodDigests(ctx, "bifrost-platform-prod", w.deployment, w.container)
+		if err != nil || len(digests) == 0 {
+			return false, false
+		}
+		for _, digest := range digests {
+			if digest != expected {
+				runs = false
+			}
+		}
+	}
+	return runs, true
 }
 
 var approvalRepo = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)

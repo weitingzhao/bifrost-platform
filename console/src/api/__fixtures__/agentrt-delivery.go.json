@@ -2,12 +2,12 @@
  "cases": [
   {
    "name": "on PROD by deploy_seen, cycles read and empty",
-   "query": "task=t_01M78MQYET8YA8QQGG85RR5PTZ",
+   "query": "task=t_01M78SF9BVMS28ABFP3X2RAQ1F",
    "response": {
-    "as_of": "2026-11-12T19:46:19.869036Z",
-    "attempt_id": "a_01M78MQYF5V8RH4ASGXM256EFG",
+    "as_of": "2026-11-12T21:08:58.999189Z",
+    "attempt_id": "a_01M78SF9C7S83W0REHG05HSS5J",
     "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
-    "operation": "land:t_01M78MQYET8YA8QQGG85RR5PTZ:1",
+    "operation": "land:t_01M78SF9BVMS28ABFP3X2RAQ1F:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -15,8 +15,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.760854-06:00",
-      "left_at": "2026-11-11T13:01:39-06:00",
+      "entered_at": "2026-11-12T15:08:58.898535-06:00",
+      "left_at": "2026-11-11T14:24:18-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -24,8 +24,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:01:39-06:00",
-      "left_at": "2026-11-11T13:02:19-06:00",
+      "entered_at": "2026-11-11T14:24:18-06:00",
+      "left_at": "2026-11-11T14:24:58-06:00",
       "source": "landing"
      },
      {
@@ -36,8 +36,8 @@
      {
       "stage": "on_main",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:49-06:00",
-      "left_at": "2026-11-11T13:02:59-06:00",
+      "entered_at": "2026-11-11T14:25:28-06:00",
+      "left_at": "2026-11-11T14:25:38-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "source": "landing"
@@ -45,35 +45,35 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:59-06:00",
-      "left_at": "2026-11-11T13:03:39-06:00",
+      "entered_at": "2026-11-11T14:25:38-06:00",
+      "left_at": "2026-11-11T14:26:18-06:00",
       "source": "landing"
      },
      {
       "stage": "prod_release",
       "state": "done",
-      "left_at": "2026-11-11T13:03:49-06:00",
+      "left_at": "2026-11-11T14:26:28-06:00",
       "source": "release_cycle"
      },
      {
       "stage": "on_prod",
       "state": "done",
-      "entered_at": "2026-11-11T13:03:49-06:00",
+      "entered_at": "2026-11-11T14:26:28-06:00",
       "source": "deploy_seen"
      }
     ],
-    "task_id": "t_01M78MQYET8YA8QQGG85RR5PTZ",
+    "task_id": "t_01M78SF9BVMS28ABFP3X2RAQ1F",
     "warnings": []
    }
   },
   {
    "name": "on PROD by the release cycle's gate",
-   "query": "task=t_01M78MQYET8YA8QQGG85RR5PTZ",
+   "query": "task=t_01M78SF9BVMS28ABFP3X2RAQ1F",
    "response": {
-    "as_of": "2026-11-12T19:46:19.872344Z",
-    "attempt_id": "a_01M78MQYF5V8RH4ASGXM256EFG",
+    "as_of": "2026-11-12T21:08:59.001561Z",
+    "attempt_id": "a_01M78SF9C7S83W0REHG05HSS5J",
     "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
-    "operation": "land:t_01M78MQYET8YA8QQGG85RR5PTZ:1",
+    "operation": "land:t_01M78SF9BVMS28ABFP3X2RAQ1F:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -81,8 +81,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.760854-06:00",
-      "left_at": "2026-11-11T13:01:39-06:00",
+      "entered_at": "2026-11-12T15:08:58.898535-06:00",
+      "left_at": "2026-11-11T14:24:18-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -90,8 +90,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:01:39-06:00",
-      "left_at": "2026-11-11T13:02:19-06:00",
+      "entered_at": "2026-11-11T14:24:18-06:00",
+      "left_at": "2026-11-11T14:24:58-06:00",
       "source": "landing"
      },
      {
@@ -102,8 +102,8 @@
      {
       "stage": "on_main",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:49-06:00",
-      "left_at": "2026-11-11T13:02:59-06:00",
+      "entered_at": "2026-11-11T14:25:28-06:00",
+      "left_at": "2026-11-11T14:25:38-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "source": "landing"
@@ -111,15 +111,15 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:59-06:00",
-      "left_at": "2026-11-11T13:03:39-06:00",
+      "entered_at": "2026-11-11T14:25:38-06:00",
+      "left_at": "2026-11-11T14:26:18-06:00",
       "source": "landing"
      },
      {
       "stage": "prod_release",
       "state": "done",
-      "entered_at": "2026-11-11T19:01:49Z",
-      "left_at": "2026-11-11T19:02:49Z",
+      "entered_at": "2026-11-11T20:24:28Z",
+      "left_at": "2026-11-11T20:25:28Z",
       "actor": "releaser",
       "actor_role": "releaser",
       "source": "release_cycle"
@@ -127,22 +127,22 @@
      {
       "stage": "on_prod",
       "state": "done",
-      "entered_at": "2026-11-11T19:04:19Z",
+      "entered_at": "2026-11-11T20:26:58Z",
       "source": "release_cycle"
      }
     ],
-    "task_id": "t_01M78MQYET8YA8QQGG85RR5PTZ",
+    "task_id": "t_01M78SF9BVMS28ABFP3X2RAQ1F",
     "warnings": []
    }
   },
   {
    "name": "PROD unknown: the release cycles could not be read",
-   "query": "task=t_01M78MQYET8YA8QQGG85RR5PTZ",
+   "query": "task=t_01M78SF9BVMS28ABFP3X2RAQ1F",
    "response": {
-    "as_of": "2026-11-12T19:46:19.874571Z",
-    "attempt_id": "a_01M78MQYF5V8RH4ASGXM256EFG",
+    "as_of": "2026-11-12T21:08:59.003986Z",
+    "attempt_id": "a_01M78SF9C7S83W0REHG05HSS5J",
     "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
-    "operation": "land:t_01M78MQYET8YA8QQGG85RR5PTZ:1",
+    "operation": "land:t_01M78SF9BVMS28ABFP3X2RAQ1F:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -150,8 +150,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.760854-06:00",
-      "left_at": "2026-11-11T13:01:39-06:00",
+      "entered_at": "2026-11-12T15:08:58.898535-06:00",
+      "left_at": "2026-11-11T14:24:18-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -159,8 +159,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:01:39-06:00",
-      "left_at": "2026-11-11T13:02:19-06:00",
+      "entered_at": "2026-11-11T14:24:18-06:00",
+      "left_at": "2026-11-11T14:24:58-06:00",
       "source": "landing"
      },
      {
@@ -171,8 +171,8 @@
      {
       "stage": "on_main",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:49-06:00",
-      "left_at": "2026-11-11T13:02:59-06:00",
+      "entered_at": "2026-11-11T14:25:28-06:00",
+      "left_at": "2026-11-11T14:25:38-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "source": "landing"
@@ -180,8 +180,8 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:59-06:00",
-      "left_at": "2026-11-11T13:03:39-06:00",
+      "entered_at": "2026-11-11T14:25:38-06:00",
+      "left_at": "2026-11-11T14:26:18-06:00",
       "source": "landing"
      },
      {
@@ -197,7 +197,7 @@
       "source": "release_cycle"
      }
     ],
-    "task_id": "t_01M78MQYET8YA8QQGG85RR5PTZ",
+    "task_id": "t_01M78SF9BVMS28ABFP3X2RAQ1F",
     "warnings": [
      "the release cycles could not be read: gitea: unreachable; the PROD stages are unknown"
     ]
@@ -205,12 +205,12 @@
   },
   {
    "name": "on main, waiting for STG",
-   "query": "task=t_01M78MQYH912M9RKQZFF6GYE1D",
+   "query": "task=t_01M78SF9EA9HGQMNJBFMXDHV8Y",
    "response": {
-    "as_of": "2026-11-12T19:46:19.876667Z",
-    "attempt_id": "a_01M78MQYHE7B30HG1E3XXC3NF3",
+    "as_of": "2026-11-12T21:08:59.006072Z",
+    "attempt_id": "a_01M78SF9EFSSWDGB7STPZ2EPTS",
     "commit": "7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c",
-    "operation": "land:t_01M78MQYH912M9RKQZFF6GYE1D:1",
+    "operation": "land:t_01M78SF9EA9HGQMNJBFMXDHV8Y:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -218,8 +218,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.829135-06:00",
-      "left_at": "2026-11-11T13:06:09-06:00",
+      "entered_at": "2026-11-12T15:08:58.964903-06:00",
+      "left_at": "2026-11-11T14:28:48-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -227,8 +227,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:06:09-06:00",
-      "left_at": "2026-11-11T13:06:49-06:00",
+      "entered_at": "2026-11-11T14:28:48-06:00",
+      "left_at": "2026-11-11T14:29:28-06:00",
       "source": "landing"
      },
      {
@@ -239,7 +239,7 @@
      {
       "stage": "on_main",
       "state": "current",
-      "entered_at": "2026-11-11T13:07:19-06:00",
+      "entered_at": "2026-11-11T14:29:58-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "waits_on": "STG release",
@@ -261,18 +261,18 @@
       "source": "release_cycle"
      }
     ],
-    "task_id": "t_01M78MQYH912M9RKQZFF6GYE1D",
+    "task_id": "t_01M78SF9EA9HGQMNJBFMXDHV8Y",
     "warnings": []
    }
   },
   {
    "name": "on PROD by current release and live workloads",
-   "query": "task=t_01M78MQYET8YA8QQGG85RR5PTZ",
+   "query": "task=t_01M78SF9BVMS28ABFP3X2RAQ1F",
    "response": {
-    "as_of": "2026-11-12T19:46:19.879225Z",
-    "attempt_id": "a_01M78MQYF5V8RH4ASGXM256EFG",
+    "as_of": "2026-11-12T21:08:59.008072Z",
+    "attempt_id": "a_01M78SF9C7S83W0REHG05HSS5J",
     "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
-    "operation": "land:t_01M78MQYET8YA8QQGG85RR5PTZ:1",
+    "operation": "land:t_01M78SF9BVMS28ABFP3X2RAQ1F:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -280,8 +280,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.760854-06:00",
-      "left_at": "2026-11-11T13:01:39-06:00",
+      "entered_at": "2026-11-12T15:08:58.898535-06:00",
+      "left_at": "2026-11-11T14:24:18-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -289,8 +289,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:01:39-06:00",
-      "left_at": "2026-11-11T13:02:19-06:00",
+      "entered_at": "2026-11-11T14:24:18-06:00",
+      "left_at": "2026-11-11T14:24:58-06:00",
       "source": "landing"
      },
      {
@@ -301,8 +301,8 @@
      {
       "stage": "on_main",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:49-06:00",
-      "left_at": "2026-11-11T13:02:59-06:00",
+      "entered_at": "2026-11-11T14:25:28-06:00",
+      "left_at": "2026-11-11T14:25:38-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "source": "landing"
@@ -310,25 +310,25 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:59-06:00",
-      "left_at": "2026-11-11T13:03:39-06:00",
+      "entered_at": "2026-11-11T14:25:38-06:00",
+      "left_at": "2026-11-11T14:26:18-06:00",
       "source": "landing"
      },
      {
       "stage": "prod_release",
       "state": "done",
-      "entered_at": "2026-11-11T19:01:49Z",
-      "left_at": "2026-11-11T19:02:49Z",
+      "entered_at": "2026-11-11T20:24:28Z",
+      "left_at": "2026-11-11T20:25:28Z",
       "source": "release_record"
      },
      {
       "stage": "on_prod",
       "state": "done",
-      "entered_at": "2026-11-11T19:02:49Z",
+      "entered_at": "2026-11-11T20:25:28Z",
       "source": "release_record"
      }
     ],
-    "task_id": "t_01M78MQYET8YA8QQGG85RR5PTZ",
+    "task_id": "t_01M78SF9BVMS28ABFP3X2RAQ1F",
     "warnings": [
      "the release cycles were not read; the PROD stages are unknown"
     ]
@@ -336,12 +336,12 @@
   },
   {
    "name": "PROD unknown: current workloads unsettled",
-   "query": "task=t_01M78MQYET8YA8QQGG85RR5PTZ",
+   "query": "task=t_01M78SF9BVMS28ABFP3X2RAQ1F",
    "response": {
-    "as_of": "2026-11-12T19:46:19.881489Z",
-    "attempt_id": "a_01M78MQYF5V8RH4ASGXM256EFG",
+    "as_of": "2026-11-12T21:08:59.010339Z",
+    "attempt_id": "a_01M78SF9C7S83W0REHG05HSS5J",
     "commit": "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f",
-    "operation": "land:t_01M78MQYET8YA8QQGG85RR5PTZ:1",
+    "operation": "land:t_01M78SF9BVMS28ABFP3X2RAQ1F:1",
     "plan_node_id": "R2:2.1-2",
     "repo": "bifrost-platform",
     "schema": "agentrt.delivery_response/v1",
@@ -349,8 +349,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-12T13:46:19.760854-06:00",
-      "left_at": "2026-11-11T13:01:39-06:00",
+      "entered_at": "2026-11-12T15:08:58.898535-06:00",
+      "left_at": "2026-11-11T14:24:18-06:00",
       "actor": "exec:cursor",
       "actor_role": "executor",
       "source": "attempt"
@@ -358,8 +358,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T13:01:39-06:00",
-      "left_at": "2026-11-11T13:02:19-06:00",
+      "entered_at": "2026-11-11T14:24:18-06:00",
+      "left_at": "2026-11-11T14:24:58-06:00",
       "source": "landing"
      },
      {
@@ -370,8 +370,8 @@
      {
       "stage": "on_main",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:49-06:00",
-      "left_at": "2026-11-11T13:02:59-06:00",
+      "entered_at": "2026-11-11T14:25:28-06:00",
+      "left_at": "2026-11-11T14:25:38-06:00",
       "actor": "controller",
       "actor_role": "pusher",
       "source": "landing"
@@ -379,8 +379,8 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T13:02:59-06:00",
-      "left_at": "2026-11-11T13:03:39-06:00",
+      "entered_at": "2026-11-11T14:25:38-06:00",
+      "left_at": "2026-11-11T14:26:18-06:00",
       "source": "landing"
      },
      {
@@ -396,7 +396,7 @@
       "source": "release_record"
      }
     ],
-    "task_id": "t_01M78MQYET8YA8QQGG85RR5PTZ",
+    "task_id": "t_01M78SF9BVMS28ABFP3X2RAQ1F",
     "warnings": [
      "the release cycles were not read; the PROD stages are unknown"
     ]
@@ -406,7 +406,7 @@
    "name": "external work: CI green, waiting for STG",
    "query": "commit=9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
    "response": {
-    "as_of": "2026-11-12T19:46:19.892378Z",
+    "as_of": "2026-11-12T21:08:59.018719Z",
     "attempt_id": "",
     "commit": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
     "external_work_id": "ew_ea0c50e97622a72035cbc2918e74530eb83a29385efa53ec28a5e8e09a9686e6",
@@ -418,8 +418,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:27:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:49:58Z",
       "actor": "thread:giant",
       "actor_role": "executor",
       "source": "pipeline_seen"
@@ -427,8 +427,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:34:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:56:58Z",
       "source": "pipeline_seen"
      },
      {
@@ -466,7 +466,7 @@
    "name": "external work: STG delivery failed",
    "query": "commit=9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
    "response": {
-    "as_of": "2026-11-12T19:46:19.894089Z",
+    "as_of": "2026-11-12T21:08:59.019912Z",
     "attempt_id": "",
     "commit": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
     "external_work_id": "ew_ea0c50e97622a72035cbc2918e74530eb83a29385efa53ec28a5e8e09a9686e6",
@@ -478,8 +478,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:27:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:49:58Z",
       "actor": "thread:giant",
       "actor_role": "executor",
       "source": "pipeline_seen"
@@ -487,8 +487,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:34:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:56:58Z",
       "source": "pipeline_seen"
      },
      {
@@ -504,7 +504,7 @@
      {
       "stage": "stg",
       "state": "current",
-      "entered_at": "2026-11-11T18:37:19Z",
+      "entered_at": "2026-11-11T19:59:58Z",
       "waits_on": "STG release",
       "reason": "STG delivery failed: bifrost-deliver-platform-0",
       "source": "pipeline_seen"
@@ -525,10 +525,10 @@
    }
   },
   {
-   "name": "external work: on PROD by its recorded runs",
+   "name": "external work: on STG, PROD does not run it yet",
    "query": "commit=9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
    "response": {
-    "as_of": "2026-11-12T19:46:19.895949Z",
+    "as_of": "2026-11-12T21:08:59.021252Z",
     "attempt_id": "",
     "commit": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
     "external_work_id": "ew_ea0c50e97622a72035cbc2918e74530eb83a29385efa53ec28a5e8e09a9686e6",
@@ -540,8 +540,8 @@
      {
       "stage": "handed_in",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:27:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:49:58Z",
       "actor": "thread:giant",
       "actor_role": "executor",
       "source": "pipeline_seen"
@@ -549,8 +549,8 @@
      {
       "stage": "landing_ci",
       "state": "done",
-      "entered_at": "2026-11-11T18:27:19Z",
-      "left_at": "2026-11-11T18:34:19Z",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:56:58Z",
       "source": "pipeline_seen"
      },
      {
@@ -566,21 +566,147 @@
      {
       "stage": "stg",
       "state": "done",
-      "entered_at": "2026-11-11T18:37:19Z",
-      "left_at": "2026-11-11T18:47:19Z",
+      "entered_at": "2026-11-11T19:59:58Z",
+      "left_at": "2026-11-11T20:09:58Z",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "prod_release",
+      "state": "current",
+      "waits_on": "PROD release",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "on_prod",
+      "state": "not_reached"
+     }
+    ],
+    "task_id": "",
+    "warnings": [
+     "stages are matched by this exact commit; a later revision that carries it is not recognised"
+    ]
+   }
+  },
+  {
+   "name": "external work: on STG, what PROD runs is unknown",
+   "query": "commit=9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
+   "response": {
+    "as_of": "2026-11-12T21:08:59.021935Z",
+    "attempt_id": "",
+    "commit": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
+    "external_work_id": "ew_ea0c50e97622a72035cbc2918e74530eb83a29385efa53ec28a5e8e09a9686e6",
+    "operation": "",
+    "plan_node_id": "R2:2.1-2",
+    "repo": "bifrost-platform",
+    "schema": "agentrt.delivery_response/v1",
+    "stages": [
+     {
+      "stage": "handed_in",
+      "state": "done",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:49:58Z",
+      "actor": "thread:giant",
+      "actor_role": "executor",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "landing_ci",
+      "state": "done",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:56:58Z",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "owner_wait",
+      "state": "unknown",
+      "reason": "the merge into main happens in Gitea; the platform does not record who waited for it"
+     },
+     {
+      "stage": "on_main",
+      "state": "unknown",
+      "reason": "the platform does not record when a commit reaches main"
+     },
+     {
+      "stage": "stg",
+      "state": "done",
+      "entered_at": "2026-11-11T19:59:58Z",
+      "left_at": "2026-11-11T20:09:58Z",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "prod_release",
+      "state": "unknown",
+      "reason": "what PROD runs now is unknown: PROD workloads run the newest STG build, and no PROD release record names it yet"
+     },
+     {
+      "stage": "on_prod",
+      "state": "unknown",
+      "reason": "what PROD runs now is unknown: PROD workloads run the newest STG build, and no PROD release record names it yet"
+     }
+    ],
+    "task_id": "",
+    "warnings": [
+     "stages are matched by this exact commit; a later revision that carries it is not recognised"
+    ]
+   }
+  },
+  {
+   "name": "external work: on PROD by its recorded runs",
+   "query": "commit=9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
+   "response": {
+    "as_of": "2026-11-12T21:08:59.022934Z",
+    "attempt_id": "",
+    "commit": "9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d9d",
+    "external_work_id": "ew_ea0c50e97622a72035cbc2918e74530eb83a29385efa53ec28a5e8e09a9686e6",
+    "operation": "",
+    "plan_node_id": "R2:2.1-2",
+    "repo": "bifrost-platform",
+    "schema": "agentrt.delivery_response/v1",
+    "stages": [
+     {
+      "stage": "handed_in",
+      "state": "done",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:49:58Z",
+      "actor": "thread:giant",
+      "actor_role": "executor",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "landing_ci",
+      "state": "done",
+      "entered_at": "2026-11-11T19:49:58Z",
+      "left_at": "2026-11-11T19:56:58Z",
+      "source": "pipeline_seen"
+     },
+     {
+      "stage": "owner_wait",
+      "state": "unknown",
+      "reason": "the merge into main happens in Gitea; the platform does not record who waited for it"
+     },
+     {
+      "stage": "on_main",
+      "state": "unknown",
+      "reason": "the platform does not record when a commit reaches main"
+     },
+     {
+      "stage": "stg",
+      "state": "done",
+      "entered_at": "2026-11-11T19:59:58Z",
+      "left_at": "2026-11-11T20:09:58Z",
       "source": "pipeline_seen"
      },
      {
       "stage": "prod_release",
       "state": "done",
-      "entered_at": "2026-11-11T18:57:19Z",
-      "left_at": "2026-11-11T18:58:19Z",
+      "entered_at": "2026-11-11T20:19:58Z",
+      "left_at": "2026-11-11T20:20:58Z",
       "source": "pipeline_seen"
      },
      {
       "stage": "on_prod",
       "state": "done",
-      "entered_at": "2026-11-11T18:58:19Z",
+      "entered_at": "2026-11-11T20:20:58Z",
       "source": "pipeline_seen"
      }
     ],

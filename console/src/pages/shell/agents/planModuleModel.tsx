@@ -112,6 +112,15 @@ export type StepCell = {
   links: StepLink[]
   /** External work registered on this step, one line each (no page of its own to link to). */
   external: string[]
+  /** The commits each of those works recorded when it was submitted, in the order of external; none while it recorded none. */
+  externalCommits: string[][]
+}
+/** A step's external work as its card tells it: a line each, and beside it the commits whose delivery the card shows. */
+function externalLines(works: PlanSnapshot['external_work']): Pick<StepCell, 'external' | 'externalCommits'> {
+  return {
+    external: works.map(w => `${w.description.task} · ${w.description.executor} · ${w.status}${w.verification ? ` · ${w.verification}` : ''}`),
+    externalCommits: works.map(w => w.commit_shas ?? []),
+  }
 }
 export type ModuleWait = { label: string; href: string; status: string; reason: string }
 export type ModuleRow = {
@@ -328,7 +337,7 @@ export function moduleRows(view: PlanSnapshot, judge?: StepJudge): ModuleRow[] {
       return [{ id: step.plan_node_id, label: step.label, title: plainTitle(step.title), state: shownState(step.state, now), owner: step.owner_step, effect: step.effect_step,
         step: step.state, now, noRule: isEmptyRule(step.done_rule_json), since: stateSince(view, step),
         rule: ruleWords(step.done_rule_json, taskTitle), links: stepLinks(view, step),
-        external: view.external_work.filter(w => w.plan_node_id === step.plan_node_id).map(w => `${w.description.task} · ${w.description.executor} · ${w.status}${w.verification ? ` · ${w.verification}` : ''}`) }]
+        ...externalLines(view.external_work.filter(w => w.plan_node_id === step.plan_node_id)) }]
     })
     const key = item.view?.plan_node_id ?? item.plan_node_id
     const seen = new Set<string>()

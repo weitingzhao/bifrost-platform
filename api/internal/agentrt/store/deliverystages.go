@@ -97,6 +97,10 @@ type DeliveryProduction struct {
 	Commit                 string
 	StartedAt, CompletedAt time.Time
 	Reason                 string
+	// NotCommit, set only beside a Reason: the commit of the newest STG
+	// release, when the settled PROD workloads were read and run another
+	// build. PROD does not run that commit yet.
+	NotCommit string
 }
 
 // DeliveryInput is everything FoldDelivery reads.

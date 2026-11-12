@@ -185,18 +185,21 @@ func TestConsoleDeliveryFixtures(t *testing.T) {
 	externalSubmitted(t, w, "thread:giant", s2, "console-fixture", externalCommit)
 	started := c.at.Add(-40 * time.Minute)
 	recordRuns(t, w, externalRun("ci-platform-a", "bifrost-ci-platform", "Succeeded", started, 7*time.Minute))
-	external := func(name string) {
+	external := func(name string, production *store.DeliveryProduction) {
 		t.Helper()
-		out, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit}, nil, nil)
+		out, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit, Production: production}, nil, nil)
 		ok(t, err)
 		delivery.Cases = append(delivery.Cases, consoleFixtureCase{Name: name, Query: "commit=" + externalCommit, Response: encode(out)})
 	}
-	external("external work: CI green, waiting for STG")
+	external("external work: CI green, waiting for STG", nil)
 	recordRuns(t, w, externalRun("bifrost-deliver-platform-0", "bifrost-deliver-platform", "Failed", started.Add(10*time.Minute), time.Minute))
-	external("external work: STG delivery failed")
-	recordRuns(t, w, externalRun("bifrost-deliver-platform-1", "bifrost-deliver-platform", "Succeeded", started.Add(15*time.Minute), 5*time.Minute),
-		externalRun("bifrost-deliver-platform-prod-1", "bifrost-deliver-platform-prod", "Succeeded", started.Add(30*time.Minute), time.Minute))
-	external("external work: on PROD by its recorded runs")
+	external("external work: STG delivery failed", nil)
+	recordRuns(t, w, externalRun("bifrost-deliver-platform-1", "bifrost-deliver-platform", "Succeeded", started.Add(15*time.Minute), 5*time.Minute))
+	stale := "current STG evidence does not match the promoted PROD revision"
+	external("external work: on STG, PROD does not run it yet", &store.DeliveryProduction{Reason: stale, NotCommit: externalCommit})
+	external("external work: on STG, what PROD runs is unknown", &store.DeliveryProduction{Reason: "PROD workloads run the newest STG build, and no PROD release record names it yet"})
+	recordRuns(t, w, externalRun("bifrost-deliver-platform-prod-1", "bifrost-deliver-platform-prod", "Succeeded", started.Add(30*time.Minute), time.Minute))
+	external("external work: on PROD by its recorded runs", nil)
 
 	var timeline consoleFixture
 	for _, q := range []struct{ name, node string }{{"round", ""}, {"one step", s2}} {
