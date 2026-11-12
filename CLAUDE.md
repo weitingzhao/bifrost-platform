@@ -92,6 +92,6 @@ bifrost-platform (本 repo)
 bifrost-trade-infra
   → 业务 Compose / Nginx / Goal 文档
 
-bifrost-trade-{api,worker,socket,frontend,...}
+bifrost-trade-{api,worker,frontend,...}
   → 被治理的 workload
 ```

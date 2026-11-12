@@ -156,7 +156,7 @@ export const TRADE_EXECUTION_FREEZE = {
   status: 'BLOCKED' as const,
   spineDecision: 'D10',
   authority:
-    'config/ops-context.yaml decisions D10 · agentProtocolCatalog.ts · .cursor/rules/trade-execution-freeze.mdc',
+    'config/ops-context.yaml decisions D10 · agentProtocolCatalog.ts · workspace CLAUDE.md §3',
   rationale:
     'Rocket (Ops Platform) and satellite (Trade stack) must stabilize before live trading. Research, analysis, and execution design are not complete — trading is the last capability to enable.',
   ownerUnlock:
