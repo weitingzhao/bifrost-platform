@@ -16,8 +16,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// A goal names its repositories sorted, at least one, at most GoalMaxRepos,
-// each known, none twice.
+// A goal names its repositories sorted, at least one, each known, none
+// twice. (The bound of 5 went in cleanup wave 1, 2026-11-11.)
 func TestCheckGoalRepos(t *testing.T) {
 	t.Parallel()
 	if got, err := store.CheckGoalRepos([]string{infra, "bifrost-platform"}); err != nil || !slices.Equal(got, []string{"bifrost-platform", infra}) {
@@ -27,11 +27,10 @@ func TestCheckGoalRepos(t *testing.T) {
 		repos []string
 		why   string
 	}{
-		"none":     {nil, "may name bifrost-platform, bifrost-trade-infra, not none"},
-		"empty":    {[]string{}, "not none"},
-		"unknown":  {[]string{"bifrost-platform", "bifrost-trade-api"}, `not "bifrost-trade-api"`},
-		"twice":    {[]string{infra, "bifrost-platform", infra}, "names bifrost-trade-infra twice"},
-		"too many": {[]string{"a", "b", "c", "d", "e", "f"}, "at most 5 repositories, not 6"},
+		"none":    {nil, "may name bifrost-platform, bifrost-trade-infra, not none"},
+		"empty":   {[]string{}, "not none"},
+		"unknown": {[]string{"bifrost-platform", "bifrost-trade-api"}, `not "bifrost-trade-api"`},
+		"twice":   {[]string{infra, "bifrost-platform", infra}, "names bifrost-trade-infra twice"},
 	} {
 		if _, err := store.CheckGoalRepos(c.repos); !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), c.why) {
 			t.Errorf("%s: %v (want %q)", name, err, c.why)

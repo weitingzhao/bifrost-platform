@@ -22,10 +22,9 @@ import (
 // field fits the question store's own limits before the first card is made
 // (review 216 B2).
 
-// Bounds of a plan.
+// Bounds of a plan. The number of tasks and of questions has no bound since
+// cleanup wave 1 (2026-11-11).
 const (
-	PlanMaxTasks     = 8
-	PlanMaxQuestions = 3
 	PlanMaxDecisions = 10
 	PlanMaxCriteria  = 10
 	planMaxVerify    = 5    // checks a plan adds to a task
@@ -311,8 +310,7 @@ func oneOfEachKey(block []byte) error {
 }
 
 // check makes a plan usable as it is used, or says why it cannot be: it
-// refuses only a plan the runtime cannot carry out (no task, or more than
-// PlanMaxTasks; a ref used twice; depends_on naming no other task of the
+// refuses only a plan the runtime cannot carry out (no task; a ref used twice; depends_on naming no other task of the
 // plan; a dependency cycle; a task in, or naming beside it, a repository the
 // goal does not cover). Every other slip of form is fixed or dropped and
 // named in d.Notes, which the plan's accepted event records so the planner
@@ -330,8 +328,8 @@ func (d *PlanDoc) check(repos []string) error {
 		note("mission.max_wall_hours %d dropped", m.MaxWallHours)
 		m.MaxWallHours = 0
 	}
-	if len(d.Tasks) == 0 || len(d.Tasks) > PlanMaxTasks {
-		return fmt.Errorf("a plan has 1 to %d tasks, not %d", PlanMaxTasks, len(d.Tasks))
+	if len(d.Tasks) == 0 {
+		return fmt.Errorf("a plan has at least 1 task, not 0")
 	}
 	refs := map[string]bool{}
 	for i := range d.Tasks {
@@ -374,8 +372,6 @@ func (d *PlanDoc) check(repos []string) error {
 			case !slices.Contains(repos, name):
 				return fmt.Errorf("%s: its text names ../%s, which is not a repository this goal covers (a task in %s has %s); "+
 					"what needs %s is no part of this plan", at, name, t.Repo, CheckoutOf(t.Repo), name)
-			case len(Repos[t.Repo].Siblings)+len(t.Siblings) >= planMaxSiblings:
-				note("%s: ../%s not added beside its checkout: a task has at most %d repositories beside it", at, name, planMaxSiblings)
 			default:
 				t.Siblings = append(t.Siblings, name)
 				note("%s: its text names ../%s, added beside its checkout at the head of main", at, name)
@@ -395,10 +391,6 @@ func (d *PlanDoc) check(repos []string) error {
 	}
 	if cyc := dependencyCycle(d.Tasks); cyc != "" {
 		return fmt.Errorf("the tasks' depends_on make a cycle through %s", cyc)
-	}
-	if len(d.Questions) > PlanMaxQuestions {
-		note("questions after the first %d dropped", PlanMaxQuestions)
-		d.Questions = d.Questions[:PlanMaxQuestions]
 	}
 	questions := []PlannedQuestion{}
 	for i, q := range d.Questions {
@@ -429,10 +421,6 @@ func (d *PlanDoc) check(repos []string) error {
 	d.Decisions = decisions
 	return nil
 }
-
-// planMaxSiblings is how many repositories a task has beside its checkout,
-// as agentd takes a spec's siblings.
-const planMaxSiblings = 4
 
 func (d *PlanDoc) note(format string, a ...any) { d.Notes = append(d.Notes, fmt.Sprintf(format, a...)) }
 

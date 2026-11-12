@@ -592,7 +592,7 @@ func TestParsePlan(t *testing.T) {
 	// Only a plan that cannot be used is refused (the Owner, 2026-11-06).
 	for name, c := range map[string]struct{ report, why string }{
 		"two values": {"```json\n{\"tasks\": []} {}\n```", "more than one value"},
-		"no tasks":   {"```json\n{\"tasks\": []}\n```", "1 to 8 tasks"},
+		"no tasks":   {"```json\n{\"tasks\": []}\n```", "at least 1 task"},
 		"self dep":   {strings.Replace(goodPlan, `"depends_on": ["t1"]`, `"depends_on": ["t2"]`, 1), "not another task"},
 	} {
 		if _, err := store.ParsePlan([]byte(c.report), repos); err == nil || !strings.Contains(err.Error(), c.why) {

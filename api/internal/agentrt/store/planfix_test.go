@@ -76,8 +76,9 @@ func TestPlanFixesSlipsAndRefusesOnlyTheUnusable(t *testing.T) {
 			func(p store.PlanDoc) bool {
 				return slices.Equal(p.Tasks[0].Siblings, []string{infra}) && len(p.Tasks[1].Siblings) == 0
 			}, "tasks[0]: its text names ../bifrost-trade-infra, added beside its checkout at the head of main"},
+		// Cleanup wave 1 (2026-11-11): no bound of 3 questions.
 		"more questions than 3": {plan(`"questions": [`, `"questions": [`+list(question, 3)+`, `),
-			func(p store.PlanDoc) bool { return len(p.Questions) == 3 && p.Questions[0].Question == "Q?" }, "questions after the first 3 dropped"},
+			func(p store.PlanDoc) bool { return len(p.Questions) == 4 && p.Questions[0].Question == "Q?" }, ""},
 		"more options than 4": {plan(`["Not now", "Yes, a third task"]`, `["Not now", "Yes, a third task", "c", "d", "e", "f"]`),
 			func(p store.PlanDoc) bool {
 				return slices.Equal(p.Questions[0].Options, []string{"Not now", "Yes, a third task", "c", "d"})
@@ -133,8 +134,9 @@ func TestPlanFixesSlipsAndRefusesOnlyTheUnusable(t *testing.T) {
 		}
 		return "```json\n{\"tasks\": [" + strings.Join(all, ", ") + "]}\n```\n"
 	}
-	if p, err := store.ParsePlan([]byte(tasks(store.PlanMaxTasks)), both); err != nil || len(p.Tasks) != store.PlanMaxTasks || len(p.Notes) != 0 {
-		t.Errorf("%d tasks: %v %q", store.PlanMaxTasks, err, p.Notes)
+	// Cleanup wave 1 (2026-11-11): no bound of 8 tasks.
+	if p, err := store.ParsePlan([]byte(tasks(20)), both); err != nil || len(p.Tasks) != 20 || len(p.Notes) != 0 {
+		t.Errorf("20 tasks: %v %q", err, p.Notes)
 	}
 	for name, c := range map[string]struct {
 		report, why string
@@ -142,8 +144,7 @@ func TestPlanFixesSlipsAndRefusesOnlyTheUnusable(t *testing.T) {
 	}{
 		"the JSON does not read":  {"```json\n{\"tasks\": [}\n```\n", "the plan does not read", both},
 		"no json block":           {"I could not plan this.", "no ```json block", both},
-		"no tasks":                {"```json\n{\"tasks\": []}\n```\n", "a plan has 1 to 8 tasks, not 0", both},
-		"tasks over the maximum":  {tasks(store.PlanMaxTasks + 1), "a plan has 1 to 8 tasks, not 9", both},
+		"no tasks":                {"```json\n{\"tasks\": []}\n```\n", "a plan has at least 1 task, not 0", both},
 		"a ref used twice":        {plan(`"ref": "t2"`, `"ref": "t1"`), `tasks[1]: ref "t1" is used twice`, both},
 		"a ref used twice, fixed": {plan(`"ref": "t2"`, `"ref": "t 1"`), `tasks[1]: ref "t1" is used twice`, both},
 		"depends_on naming none":  {plan(`"depends_on": ["t1"]`, `"depends_on": ["t9"]`), `tasks[1]: depends_on names "t9", which is not another task`, both},

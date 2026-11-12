@@ -57,9 +57,6 @@ type PlanChange struct {
 	ExpectedVersion *int   `json:"expected_version,omitempty"`
 }
 
-// MaxChanges is the most changes one proposal holds.
-const MaxChanges = 20
-
 var stepKinds = []string{"agent", "review", "owner", "approval", "release", "ci", "gate", "manual"}
 
 func checkChanges(root, reason string, changes []PlanChange) error {
@@ -68,8 +65,8 @@ func checkChanges(root, reason string, changes []PlanChange) error {
 		return invalid("a plan change names its root")
 	case reason == "":
 		return invalid("a plan change says why")
-	case len(changes) == 0 || len(changes) > MaxChanges:
-		return invalid("a proposal holds 1 to %d changes", MaxChanges)
+	case len(changes) == 0:
+		return invalid("a proposal holds at least 1 change")
 	}
 	for i, c := range changes {
 		var bad string

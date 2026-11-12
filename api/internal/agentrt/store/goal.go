@@ -49,19 +49,12 @@ const GoalSuccess = "the goal's plan is accepted and every task it splits into i
 // PlanOffPlanReason is why a goal's tasks are off the plan tree.
 const PlanOffPlanReason = "a goal from the Console, planned by the chief of staff's seat; the runtime has no plan tree yet"
 
-// GoalMaxRepos is how many repositories one goal may name: its planning task
-// has the first checked out and the others beside it, and agentd places at
-// most four siblings.
-const GoalMaxRepos = 5
-
-// CheckGoalRepos is repos as a goal names them, sorted: at least one, at most
-// GoalMaxRepos, each a repository the runtime knows (Repos), none twice.
+// CheckGoalRepos is repos as a goal names them, sorted: at least one, each a
+// repository the runtime knows (Repos), none twice. Its planning task has the
+// first checked out and the others beside it.
 func CheckGoalRepos(repos []string) ([]string, error) {
 	if len(repos) == 0 {
 		return nil, invalid("a goal may name %s, not none", strings.Join(RepoNames(), ", "))
-	}
-	if len(repos) > GoalMaxRepos {
-		return nil, invalid("a goal names at most %d repositories, not %d", GoalMaxRepos, len(repos))
 	}
 	out := slices.Clone(repos)
 	slices.Sort(out)
@@ -238,7 +231,7 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"## What the runtime knows now\n\n" + snapshot + "\n" +
 		"## How to plan\n\n" +
 		"- Each task is one change an implementer can make and hand in on its own: say what to change and why, where (files,\n" +
-		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
+		"  functions), and how to tell it is done. Keep tasks small. Order them with depends_on.\n" +
 		scope +
 		checkouts(repos) +
 		coreRule(repos) +
@@ -257,11 +250,10 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"                    \"meanwhile\": \"what goes on until he answers\", \"owner_duty\": \"goal\"}],\n" +
 		"     \"decisions\": [{\"decision\": \"...\", \"why\": \"...\", \"dropped\": \"...\", \"reverse\": \"...\"}]}\n\n" +
 		"success: 1 to " + fmt.Sprint(PlanMaxCriteria) + " criteria. out_of_scope: up to " + fmt.Sprint(PlanMaxCriteria) + ". max_attempts and max_wall_hours\n" +
-		"are optional and may only lower this mission's budget. tasks: 1 to " + fmt.Sprint(PlanMaxTasks) + "; ref is short and unique;\n" +
-		"verify holds only the checks you add (maybe none); core is true or false (left out: false). questions: up to " +
-		fmt.Sprint(PlanMaxQuestions) + "; recommended is the\n" +
+		"are optional and may only lower this mission's budget. tasks: at least 1; ref is short and unique;\n" +
+		"verify holds only the checks you add (maybe none); core is true or false (left out: false). questions: recommended is the\n" +
 		"1-based option; owner_duty is goal, rule or irreversible. decisions: up to " + fmt.Sprint(PlanMaxDecisions) + ". The controller\n" +
-		"checks the block: a slip of form (a long title, an extra question, a check not in the form above) is fixed or dropped\n" +
+		"checks the block: a slip of form (a long title, a check not in the form above) is fixed or dropped\n" +
 		"and noted; one that does not read blocks this task and the Owner sees why.\n"
 	spec := map[string]any{"text": text}
 	if len(repos) > 1 {
