@@ -336,6 +336,8 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(extSpec), extSpec, "X-Artifact-Kind", "other")
 	ext := ok("POST external-work", "operator", "POST", "external-work", map[string]any{"idempotency_key": "ext", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "fuzz-run", "artifact_id": artifactID(extSpec)})
 	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-start", "seq": 1, "type": "started"})
+	// Without a seq the server gives the next one; a heartbeat may name the commits pushed so far.
+	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-pushed", "type": "heartbeat", "commit_shas": []string{commitA}})
 
 	// The architecture table: imported through its card, then a note on a row.
 	text, err := os.ReadFile(fixtureLedger)
@@ -640,7 +642,15 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 	case rt.pattern == "external-work":
 		return map[string]any{"idempotency_key": key, "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": key, "artifact_id": "sha256:bad"}
 	case rt.pattern == "external-work/{id}/events":
-		return map[string]any{"idempotency_key": key, "seq": 1, "type": f.pick([]string{"started", "heartbeat", "verified"})}
+		// Half name their seq, half leave it to the server; a heartbeat names a commit.
+		e := map[string]any{"idempotency_key": key, "type": f.pick([]string{"started", "heartbeat", "verified"})}
+		if key < "k2" {
+			e["seq"] = 1
+		}
+		if e["type"] == "heartbeat" {
+			e["commit_shas"] = []string{commitA}
+		}
+		return e
 	case rt.pattern == "plan/{id}/notes":
 		return map[string]any{"idempotency_key": key, "text": "fuzz"}
 	case rt.pattern == "plan/{id}/signoff":

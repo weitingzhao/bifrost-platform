@@ -44,6 +44,12 @@ type ExternalRegistration struct {
 	Epoch   int64  `json:"epoch,omitempty"`
 	Sidebar string `json:"sidebar,omitempty"`
 }
+
+// ExternalEvent is one event of an external work. Seq is its place in the
+// work, from 1: left out (or 0), the server gives it the next one and the
+// answer's seq says which. Commits are the commits a heartbeat or the
+// submitted event names: the work's note keeps every one named so far, in
+// the order first named.
 type ExternalEvent struct {
 	Key              string   `json:"idempotency_key"`
 	Seq              int64    `json:"seq"`
@@ -440,6 +446,42 @@ func sameIdentityAsWork(ctx context.Context, db DB, w Writer, id string, in Exte
 	})
 }
 
+// maxExternalCommits is the most commits one event names, and the most a
+// work's note keeps.
+const maxExternalCommits = 100
+
+// externalEventDigest is an event's request and its digest: the event as
+// posted, without its idempotency key.
+func externalEventDigest(in ExternalEvent) (map[string]any, string, error) {
+	req, err := jsonObject(in)
+	if err != nil {
+		return nil, "", err
+	}
+	delete(req, "idempotency_key")
+	sum, err := canon.Sum(req)
+	return req, "sha256:" + sum, err
+}
+
+// addExternalCommits is have and then every commit of add it does not hold
+// yet: what a work named so far, in the order first named.
+func addExternalCommits(have, add []string) ([]string, error) {
+	out := slices.Clone(have)
+	for _, c := range add {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	if len(out) > maxExternalCommits {
+		return nil, invalid("too many commits")
+	}
+	return out, nil
+}
+
+// PostExternalEvent appends one event to an external work. An event that
+// names its seq is the next one (the work's last seq + 1), or the replay of
+// one already recorded under that seq. An event that leaves seq out gets the
+// next one under the stream's lock, so two of them posted at once get two
+// seqs in turn; its replay is by its idempotency key alone.
 func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in ExternalEvent) (map[string]any, error) {
 	collector, err := collectorWriter(w)
 	if err != nil {
@@ -448,7 +490,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 	if err := checkIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
 		return nil, err
 	}
-	if in.Key == "" || in.Seq < 1 || !slices.Contains([]string{"started", "heartbeat", "submitted", "cancelled", "linked"}, in.Type) {
+	if in.Key == "" || in.Seq < 0 || !slices.Contains([]string{"started", "heartbeat", "submitted", "cancelled", "linked"}, in.Type) {
 		return nil, invalid("invalid external event type, key or seq")
 	}
 	if err := checkObserved(in.ObservedAt); err != nil {
@@ -460,15 +502,18 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 	if in.Type == "linked" && (in.Root == "" || in.Node == "") {
 		return nil, invalid("linked requires root and node")
 	}
-	if in.Type != "submitted" && (in.ReportPathDigest != "" || in.ReportDigest != "" || len(in.Commits) > 0 || in.ExitCode != nil) {
+	if in.Type != "submitted" && (in.ReportPathDigest != "" || in.ReportDigest != "" || in.ExitCode != nil) {
 		return nil, invalid("only submitted carries results")
+	}
+	if len(in.Commits) > 0 && in.Type != "submitted" && in.Type != "heartbeat" {
+		return nil, invalid("only heartbeat and submitted carry commits")
 	}
 	for _, s := range []string{in.ReportPathDigest, in.ReportDigest} {
 		if s != "" && !digestPattern.MatchString(s) {
 			return nil, invalid("invalid report digest")
 		}
 	}
-	if len(in.Commits) > 100 {
+	if len(in.Commits) > maxExternalCommits {
 		return nil, invalid("too many commits")
 	}
 	for _, s := range in.Commits {
@@ -476,10 +521,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 			return nil, invalid("invalid commit SHA")
 		}
 	}
-	req, _ := jsonObject(in)
-	delete(req, "idempotency_key")
-	sum, err := canon.Sum(req)
-	sum = "sha256:" + sum
+	req, sum, err := externalEventDigest(in)
 	if err != nil {
 		return nil, err
 	}
@@ -544,10 +586,22 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 				return nil, ErrIdentityMismatch
 			}
 		}
-		if in.Seq <= n.Seq {
+		// No seq named: the next one, read under the stream's lock. The note
+		// records the event as if it had named that seq, so a later replay
+		// naming it is answered like any other.
+		seq, sum := in.Seq, sum
+		if seq == 0 {
+			seq = n.Seq + 1
+			next := in
+			next.Seq = seq
+			if _, sum, err = externalEventDigest(next); err != nil {
+				return nil, err
+			}
+		}
+		if seq <= n.Seq {
 			var old []byte
 			var event int64
-			err = tx.QueryRow(ctx, `SELECT body_json->'external_work',event_id FROM agentrt.event WHERE event_stream_id=$1 AND (body_json->'external_work'->>'seq')::bigint=$2`, "external-work:"+id, in.Seq).Scan(&old, &event)
+			err = tx.QueryRow(ctx, `SELECT body_json->'external_work',event_id FROM agentrt.event WHERE event_stream_id=$1 AND (body_json->'external_work'->>'seq')::bigint=$2`, "external-work:"+id, seq).Scan(&old, &event)
 			if err != nil {
 				return nil, ErrConflict
 			}
@@ -560,14 +614,14 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 			}
 			return externalReply(previous, event), nil
 		}
-		if in.Seq != n.Seq+1 {
+		if seq != n.Seq+1 {
 			return nil, fmt.Errorf("%w: expected seq %d", ErrConflict, n.Seq+1)
 		}
 		if (n.State == "Submitted" || n.State == "Cancelled") && in.Type != "linked" {
 			return nil, ErrState
 		}
 		now := timeText(eventClock())
-		n.Seq, n.Type, n.RequestDigest, n.ObservedAt = in.Seq, in.Type, sum, in.ObservedAt
+		n.Seq, n.Type, n.RequestDigest, n.ObservedAt = seq, in.Type, sum, in.ObservedAt
 		switch in.Type {
 		case "started":
 			if n.State != "Registered" {
@@ -579,12 +633,18 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 				return nil, ErrState
 			}
 			n.HeartbeatAt = now
+			if n.Commits, err = addExternalCommits(n.Commits, in.Commits); err != nil {
+				return nil, err
+			}
 		case "submitted":
 			if n.State != "Running" {
 				return nil, ErrState
 			}
 			n.State, n.EndedAt = "Submitted", now
-			n.ReportPathDigest, n.ReportDigest, n.Commits, n.ExitCode = in.ReportPathDigest, in.ReportDigest, in.Commits, in.ExitCode
+			n.ReportPathDigest, n.ReportDigest, n.ExitCode = in.ReportPathDigest, in.ReportDigest, in.ExitCode
+			if n.Commits, err = addExternalCommits(n.Commits, in.Commits); err != nil {
+				return nil, err
+			}
 		case "cancelled":
 			n.State, n.EndedAt = "Cancelled", now
 		case "linked":

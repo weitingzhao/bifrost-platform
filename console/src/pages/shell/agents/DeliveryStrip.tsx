@@ -63,7 +63,7 @@ export function CommitDeliveryStrip({ commit }: { commit: string }) {
   return <span data-delivery-strip={commit} className="block text-xs text-muted-foreground">Delivery · reading…</span>
 }
 
-/** The strips of an external work's commits (its submitted event's commit_shas): the first few, the rest counted. */
+/** The strips of an external work's commits (the commit_shas its heartbeats and its submitted event named): the first few, the rest counted. */
 export function WorkDeliveryStrips({ commits }: { commits: string[] | undefined }) {
   if (!commits?.length) return null
   return <>

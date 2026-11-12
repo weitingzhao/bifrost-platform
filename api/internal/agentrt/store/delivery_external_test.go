@@ -59,7 +59,7 @@ func TestFoldExternalDelivery(t *testing.T) {
 		if runs == nil {
 			runs = []store.PipelineRun{}
 		}
-		return store.ExternalDelivery{Work: "ew_1", Registrant: "thread:giant", Repo: "bifrost-platform", Commit: externalCommit, SubmittedAt: submitted, Runs: runs}
+		return store.ExternalDelivery{Work: "ew_1", Registrant: "thread:giant", Repo: "bifrost-platform", Commit: externalCommit, NamedAt: submitted, Runs: runs}
 	}
 
 	t.Run("all the way to PROD", func(t *testing.T) {
@@ -312,5 +312,99 @@ func TestReadExternalDelivery(t *testing.T) {
 	}
 	if doc, err = read(externalCommit[:16], nil); err != nil || doc["commit"] != externalCommit {
 		t.Fatalf("longer prefix: %v %v", doc["commit"], err)
+	}
+}
+
+// A work that named its commit on a heartbeat has its strip while it runs:
+// GET /delivery?commit= answers from the earliest event carrying the commit,
+// with no submitted event. Every commit any event of the work named is found,
+// each from when it was first named; the step is the work's as bound now.
+// Serial: FreezeEventClock
+func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
+	w := newKernelWorld(t)
+	at := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
+	clock := func(d time.Duration) { t.Cleanup(store.FreezeEventClock(at.Add(d))) }
+	read := func(commit string) map[string]any {
+		t.Helper()
+		doc, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit}, nil, nil)
+		ok(t, err)
+		return doc
+	}
+	handedIn := func(doc map[string]any) store.DeliveryStage {
+		t.Helper()
+		return externalStages(t, doc["stages"].([]store.DeliveryStage))[store.StageHandedIn]
+	}
+	who := wr("thread:giant")
+	clock(0)
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early", Artifact: externalSpec(t, w)})
+	ok(t, err)
+	id := out["external_work_id"].(string)
+	post := func(e store.ExternalEvent) {
+		t.Helper()
+		_, err := store.PostExternalEvent(ctx, w.rt, who, id, e)
+		ok(t, err)
+	}
+	post(store.ExternalEvent{Key: "start", Type: "started"})
+	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit}, nil, nil)
+	is(t, err, pgx.ErrNoRows)
+
+	// started + heartbeat{commit_shas}: the strip is there, handed in at the heartbeat.
+	clock(10 * time.Minute)
+	post(store.ExternalEvent{Key: "pushed", Type: "heartbeat", Commits: []string{externalCommit}})
+	doc := read(externalCommit[:8])
+	if doc["commit"] != externalCommit || doc["external_work_id"] != id || doc["plan_node_id"] != s1 || doc["repo"] != "platform" {
+		t.Fatalf("response %+v", doc)
+	}
+	st := externalStages(t, doc["stages"].([]store.DeliveryStage))
+	if s := st[store.StageHandedIn]; s.State != store.StageDone || !s.EnteredAt.Equal(at.Add(10*time.Minute)) || s.Source != "external_work" || s.Actor != "thread:giant" {
+		t.Errorf("handed in %+v; want the heartbeat naming the commit", s)
+	}
+	if s := st[store.StageLandingCI]; s.State != store.StageUnknown || !strings.Contains(s.Reason, "no completed CI run") {
+		t.Errorf("CI %+v", s)
+	}
+	// Its recorded runs tell the stages as they do after a submitted event.
+	ci := externalRun("ci-platform-a", "bifrost-ci-platform", "Succeeded", at.Add(12*time.Minute), 7*time.Minute)
+	recordRuns(t, w, ci)
+	st = externalStages(t, read(externalCommit)["stages"].([]store.DeliveryStage))
+	if s := st[store.StageHandedIn]; !s.EnteredAt.Equal(at.Add(10*time.Minute)) || !s.LeftAt.Equal(ci.StartedAt) {
+		t.Errorf("handed in %+v", s)
+	}
+	if s := st[store.StageLandingCI]; s.State != store.StageDone || !s.LeftAt.Equal(ci.CompletedAt) {
+		t.Errorf("CI %+v", s)
+	}
+
+	// Later heartbeats that carry the commit along, a new link, a second
+	// commit and the submitted event: the first commit keeps its first time,
+	// and the answer names the step the work is bound to now.
+	clock(20 * time.Minute)
+	post(store.ExternalEvent{Key: "alive", Type: "heartbeat"})
+	post(store.ExternalEvent{Key: "moved", Type: "linked", Root: root, Node: s2})
+	clock(30 * time.Minute)
+	post(store.ExternalEvent{Key: "pushed-again", Type: "heartbeat", Commits: []string{externalOther}})
+	clock(40 * time.Minute)
+	third := strings.Repeat("e", 40)
+	post(store.ExternalEvent{Key: "end", Type: "submitted", Commits: []string{third, externalCommit}})
+	for commit, named := range map[string]time.Duration{externalOther: 30 * time.Minute, third: 40 * time.Minute} {
+		doc = read(commit)
+		if s := handedIn(doc); doc["external_work_id"] != id || doc["plan_node_id"] != s2 || !s.EnteredAt.Equal(at.Add(named)) || s.Source != "external_work" {
+			t.Errorf("%s: work %v step %v handed in %+v; want named at +%s", commit[:8], doc["external_work_id"], doc["plan_node_id"], s, named)
+		}
+	}
+	doc = read(externalCommit)
+	if s := handedIn(doc); doc["external_work_id"] != id || doc["plan_node_id"] != s2 || !s.EnteredAt.Equal(at.Add(10*time.Minute)) {
+		t.Errorf("first commit after submitted: step %v handed in %+v", doc["plan_node_id"], s)
+	}
+
+	// Another work naming the first commit later changes nothing; one prefix
+	// over two of this work's commits is refused naming both.
+	clock(50 * time.Minute)
+	externalSubmitted(t, w, "thread:other", s1, "early-again", externalCommit)
+	if doc = read(externalCommit[:16]); doc["external_work_id"] != id {
+		t.Fatalf("same commit named later by another work: %v", doc["external_work_id"])
+	}
+	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit[:12]}, nil, nil)
+	is(t, err, store.ErrInvalid)
+	if !strings.Contains(err.Error(), externalOther) {
+		t.Fatalf("ambiguous prefix does not name both: %v", err)
 	}
 }

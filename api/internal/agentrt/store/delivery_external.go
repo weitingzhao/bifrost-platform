@@ -10,8 +10,9 @@ import (
 )
 
 // External delivery: the delivery stages of a commit that no landing
-// operation or attempt names and an external work handed in (its submitted
-// event's commit_shas). The stages are the same seven. What the runtime
+// operation or attempt names and an external work named (the commit_shas of
+// a heartbeat or of its submitted event; a work's commits are every one any
+// of its events named). The stages are the same seven. What the runtime
 // records of such a commit is the pipeline runs naming it as their revision
 // (pipeline_seen) and the current PROD release; the merge into main happens
 // in Gitea and is not recorded, so owner_wait and on_main are unknown, with
@@ -31,8 +32,9 @@ type ExternalDelivery struct {
 	// Work is the external work, Registrant who registered it, Repo the
 	// repository its description names.
 	Work, Registrant, Repo, Commit string
-	// SubmittedAt is when the submitted event naming Commit was recorded.
-	SubmittedAt time.Time
+	// NamedAt is when the work's earliest event naming Commit was recorded:
+	// a heartbeat, or the submitted event.
+	NamedAt time.Time
 	// Runs are the recorded pipeline runs: nil when they were not read, an
 	// empty non-nil slice when they were read and hold none.
 	Runs       []PipelineRun
@@ -70,7 +72,7 @@ func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
 	reached := make([]bool, len(st))
 	unknown := make([]string, len(st))
 
-	first, firstSource := in.SubmittedAt, "external_work"
+	first, firstSource := in.NamedAt, "external_work"
 	var ci, stg, prod externalRuns
 	for _, r := range in.Runs {
 		if r.Revision != in.Commit {
@@ -90,7 +92,7 @@ func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
 	}
 
 	// handed_in: the commit first reached the platform, as a run of it or as
-	// the work's submitted event, whichever is earlier.
+	// the work's first event naming it, whichever is earlier.
 	h := &st[0]
 	h.EnteredAt, h.Actor, h.ActorRole, h.Source = first, in.Registrant, "executor", firstSource
 	reached[0] = true
@@ -184,23 +186,28 @@ func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
 	return st
 }
 
-// externalDeliveryMatch is one submitted external work naming a commit.
+// externalDeliveryMatch is one external work naming a commit: the note of
+// its earliest event that carries the commit, and when that was recorded.
 type externalDeliveryMatch struct {
 	note   externalNote
 	commit string
 	at     time.Time
 }
 
-// externalDeliveryCommit finds the external work whose submitted event names
-// a commit starting with prefix: the earliest such event. Two different
-// commits under one prefix are ErrInvalid naming both; none is pgx.ErrNoRows.
+// externalDeliveryCommit finds the external work naming a commit starting
+// with prefix: the earliest event of any work that carries it, a heartbeat
+// or the submitted event (a work's note keeps every commit named so far, so
+// each work counts once per commit, at its first event carrying it). Two
+// different commits under one prefix are ErrInvalid naming both; none is
+// pgx.ErrNoRows.
 func externalDeliveryCommit(ctx context.Context, tx pgx.Tx, prefix string) (externalDeliveryMatch, error) {
-	rows, err := tx.Query(ctx, `SELECT e.body_json->'external_work', s.sha, e.at FROM agentrt.event e
+	rows, err := tx.Query(ctx, `SELECT body, sha, at FROM (SELECT DISTINCT ON (e.event_stream_id, s.sha)
+	  e.event_id, e.body_json->'external_work' AS body, s.sha, e.at FROM agentrt.event e
 	  CROSS JOIN LATERAL jsonb_array_elements_text(e.body_json->'external_work'->'commit_shas') AS s(sha)
 	  WHERE e.event_stream_id LIKE 'external-work:%' AND e.event_type = 'note'
-	  AND e.body_json->'external_work'->>'type' = 'submitted'
 	  AND jsonb_typeof(e.body_json->'external_work'->'commit_shas') = 'array'
-	  AND left(s.sha, length($1)) = $1 ORDER BY e.event_id, s.sha LIMIT 50`, prefix)
+	  AND left(s.sha, length($1)) = $1 ORDER BY e.event_stream_id, s.sha, e.seq) x
+	  ORDER BY event_id, sha LIMIT 50`, prefix)
 	if err != nil {
 		return externalDeliveryMatch{}, err
 	}
@@ -266,13 +273,18 @@ func externalDeliveryRuns(ctx context.Context, tx pgx.Tx, commit string) ([]Pipe
 
 // readExternalDelivery is ReadDelivery's answer for a commit only an external
 // work names: the same response, with the work in external_work_id and no
-// attempt or operation. pgx.ErrNoRows: no external work names it either.
+// attempt or operation. The step and task are the work's as it is bound now
+// (its latest note): a heartbeat may name the commit before the work is
+// linked. pgx.ErrNoRows: no external work names it either.
 func readExternalDelivery(ctx context.Context, tx pgx.Tx, q DeliveryQuery, now time.Time) (map[string]any, error) {
 	m, err := externalDeliveryCommit(ctx, tx, q.Commit)
 	if err != nil {
 		return nil, err
 	}
-	in := ExternalDelivery{Work: m.note.ID, Registrant: m.note.Actor, Commit: m.commit, SubmittedAt: m.at}
+	in := ExternalDelivery{Work: m.note.ID, Registrant: m.note.Actor, Commit: m.commit, NamedAt: m.at}
+	if m.note, _, _, err = readExternal(ctx, tx, m.note.ID); err != nil {
+		return nil, err
+	}
 	warnings := []string{"stages are matched by this exact commit; a later revision that carries it is not recognised"}
 	if d, err := externalDescription(ctx, tx, m.note.Artifact); err != nil {
 		if ctx.Err() != nil {

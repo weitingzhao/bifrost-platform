@@ -49,6 +49,45 @@ func TestExternalWorkRoutesAndPlanView(t *testing.T) {
 	if code, out = call(t, s, "viewer", "GET", "external-work/"+id, nil); code != 200 || out["seq"] != float64(1) {
 		t.Fatalf("resume %d %v", code, out)
 	}
+
+	// An event without seq gets the next one, said in the answer; a heartbeat
+	// may name commits, and GET /delivery answers for one before submitted.
+	events := "external-work/" + id + "/events"
+	commit := "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e"
+	if code, _ = call(t, s, "viewer", "GET", "delivery?commit="+commit, nil); code != 404 {
+		t.Fatalf("a commit no one names %d", code)
+	}
+	for _, bad := range []map[string]any{
+		{"idempotency_key": "bad-sha", "type": "heartbeat", "commit_shas": []string{"4E4E4E4"}},
+		{"idempotency_key": "bad-seq", "seq": -1, "type": "heartbeat"},
+		{"idempotency_key": "bad-kind", "type": "linked", "root": "R2", "plan_node_id": "R2:1-1", "commit_shas": []string{commit}},
+	} {
+		if code, out = call(t, s, "operator", "POST", events, bad, session, "external"); code != 422 || out["error"] != "invalid" {
+			t.Fatalf("%v: %d %v", bad["idempotency_key"], code, out)
+		}
+	}
+	pushed := map[string]any{"idempotency_key": "pushed", "type": "heartbeat", "commit_shas": []string{commit}}
+	code, out = call(t, s, "operator", "POST", events, pushed, session, "external")
+	if code != 200 || out["seq"] != float64(2) || out["state"] != "Running" {
+		t.Fatalf("heartbeat without seq %d %v", code, out)
+	}
+	if code, again := call(t, s, "operator", "POST", events, pushed, session, "external"); code != 200 || again["seq"] != float64(2) || again["event_id"] != out["event_id"] {
+		t.Fatalf("its replay %d %v; first %v", code, again, out)
+	}
+	if code, out = call(t, s, "viewer", "GET", "delivery?commit="+commit[:10], nil); code != 200 || out["commit"] != commit || out["external_work_id"] != id || out["plan_node_id"] != "R2:1-1" {
+		t.Fatalf("delivery of a running work's commit %d %v", code, out)
+	}
+	if code, out = call(t, s, "operator", "POST", events, map[string]any{"idempotency_key": "end", "seq": 0, "type": "submitted"}, session, "external"); code != 200 || out["seq"] != float64(3) || out["state"] != "Submitted" {
+		t.Fatalf("submitted with seq 0 %d %v", code, out)
+	}
+	code, out = call(t, s, "viewer", "GET", "plan-view?root=R2", nil)
+	works, _ := out["external_work"].([]any)
+	if code != 200 || len(works) != 1 {
+		t.Fatalf("snapshot %d %v", code, out["external_work"])
+	}
+	if shas, _ := works[0].(map[string]any)["commit_shas"].([]any); len(shas) != 1 || shas[0] != commit {
+		t.Fatalf("the work's commits in the plan view: %v", works[0])
+	}
 }
 
 // R5:5.5-19 §5, §8: the explanation is opt-in. Without explain=1 the
