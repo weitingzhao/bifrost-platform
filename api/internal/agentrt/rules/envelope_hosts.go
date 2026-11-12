@@ -14,8 +14,9 @@ import (
 // bifrost-trade-infra agent-config/work/multi-agent/
 // DESIGN-coordinator-landing-v3-2026-10-29.md §2.1, §2.2). An entry names a
 // host outside the cluster's (the coordinator's Mac), the pin a task carries
-// to be leased there and only there, the seat whose proposals alone may set
-// that pin, the executor and model provider that run it, and the
+// to be leased there and only there, the seat that proposes for it (recorded;
+// since cleanup wave 1 any seat may set the pin, store/pin.go), the executor
+// and model provider that run it, and the
 // repositories and roles a pinned task may have. It holds only in a version
 // of the envelope the Owner signed (store/pin.go); dropping it tightens, so
 // it needs no signature and stops new pins at once.

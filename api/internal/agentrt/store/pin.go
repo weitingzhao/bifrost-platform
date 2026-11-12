@@ -17,13 +17,13 @@ import (
 // (claim.go reads no pinned task for an ordinary host; the database holds
 // both ways, 0010). Who may set a pin is decided here, in the write's
 // transaction, after the writer is checked (ensureWriter): only a proposal
-// over the tasks route, by the proposer seat that the external_hosts entry
-// of the pin names in a signed standing envelope in force for the mission's
-// tenant, writing with that seat's own token, never relayed, of an
-// implementation with a branch effect, no subject, in a repository and role
-// the entry lists. The X-Bifrost-Session header the proposal came with is
-// recorded as via_session and grants nothing: the threads of the one
-// proposer are one trust domain (§2.3). Plans, imports, the controller's
+// over the tasks route, by a seat writing with its own token, never relayed,
+// when a signed standing envelope in force for the mission's tenant has an
+// external_hosts entry for the pin, of an implementation with a branch
+// effect, no subject, in a repository and role the entry lists. The entry's
+// proposer is read and kept but no longer has to be the writer (cleanup wave
+// 1, 2026-11-11). The X-Bifrost-Session header the proposal came with is
+// recorded as via_session and grants nothing (§2.3). Plans, imports, the controller's
 // checks and gates, goals, briefs and relayed writes build TaskProposal and
 // Task, which have no pin to set: only PinnedTask has.
 
@@ -146,8 +146,8 @@ func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, vi
 				// 686 R-01): every rule write takes it exclusively, after its
 				// writer, as here, so the envelope checkPin reads stays the one
 				// in force until this commits. A tightening that drops the
-				// entry, or a version naming another proposer, commits before
-				// this reads it or after this commits, never in between.
+				// entry commits before this reads it or after this commits,
+				// never in between.
 				if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 					return nil, err
 				}
@@ -176,7 +176,7 @@ func pinWriter(w Writer) error {
 	case w.Relayed:
 		return pinRefused("a write relayed for %s sets no pin", w.Actor)
 	case kindOf(w.Actor) != "seat":
-		return pinRefused("%s is not a seat: only the proposer seat a signed standing envelope names sets a pin", w.Actor)
+		return pinRefused("%s is not a seat: only a seat sets a pin", w.Actor)
 	case w.Token != w.Actor:
 		return pinRefused("%s writes with the token %q, not its own", w.Actor, w.Token)
 	}
@@ -185,8 +185,8 @@ func pinWriter(w Writer) error {
 
 // checkPin checks one pinned task of a batch in the write's transaction,
 // the writer already ensured: the writer may pin, and the envelope in force
-// for the mission's tenant, signed, has the pin's entry, whose proposer is
-// the writer and which lists the task's repository and role.
+// for the mission's tenant, signed, has the pin's entry, which lists the
+// task's repository and role.
 func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t TaskProposal, pin string, providers []string, executor string) (err error) {
 	defer func() {
 		if err != nil {
@@ -219,8 +219,6 @@ func checkPin(ctx context.Context, tx pgx.Tx, w Writer, missionID string, t Task
 	switch {
 	case !ok:
 		return pinRefused("task %s: %s v%d names no external host for pin %s", t.Ref, env.ID, env.Version, pin)
-	case h.Proposer != w.Actor:
-		return pinRefused("task %s: pin %s is set only by %s, not %s", t.Ref, pin, h.Proposer, w.Actor)
 	case !slices.Contains(h.Roles, t.Role):
 		return pinRefused("task %s: %s v%d lets pin %s have roles %v, not %s", t.Ref, env.ID, env.Version, pin, h.Roles, t.Role)
 	case !slices.Contains(h.Repos, t.Repo):

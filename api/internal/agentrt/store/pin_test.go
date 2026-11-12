@@ -101,8 +101,9 @@ func (w *world) readyPinned(t *testing.T, key string) string {
 // T3 and the rest of §2.2 at the store, each refusal only one change from the
 // proposal that succeeds, which comes last: a refused batch leaves no task
 // and no event, and a retry with the key is answered only to the writer
-// who may pin.
-func TestPinOnlyByTheEnvelopesProposer(t *testing.T) {
+// who may pin. Since cleanup wave 1 (2026-11-11) a seat other than the
+// entry's proposer may pin too (TestPinByAnotherSeat).
+func TestPinOnlyBySeats(t *testing.T) {
 	t.Parallel()
 	w := pinWorld(t)
 	tasks := func() int { return w.count(t, `SELECT count(*) FROM agentrt.task`) }
@@ -120,7 +121,6 @@ func TestPinOnlyByTheEnvelopesProposer(t *testing.T) {
 	}{
 		"relayed (T3)":                   {store.Writer{Actor: coordinatorSeat, Token: coordinatorSeat, Relayed: true}, pinned(nil)},
 		"another token as the seat":      {store.Writer{Actor: coordinatorSeat, Token: "operator"}, pinned(nil)},
-		"another seat":                   {store.Writer{Actor: store.Seat, Token: store.Seat}, pinned(nil)},
 		"a thread":                       {store.Writer{Actor: "thread:local_s1", Token: "operator"}, pinned(nil)},
 		"a repository the entry has not": {coordinator, pinned(func(p *store.PinnedTask) { p.Repo = "bifrost-trade-infra" })},
 		"another role":                   {coordinator, pinned(func(p *store.PinnedTask) { p.Role = "other" })},
@@ -441,4 +441,20 @@ func TestEnvelopeEntryNamesWhatIsThere(t *testing.T) {
 		}
 	}
 	ok(t, firstErr(s.sign(w, text)))
+}
+
+// Cleanup wave 1 (2026-11-11): the entry's proposer no longer has to be the
+// writer; another seat, with its own token, pins under the same signed entry.
+func TestPinByAnotherSeat(t *testing.T) {
+	t.Parallel()
+	w := pinWorld(t)
+	out, err := store.ProposePinnedTasks(ctx, w.rt, store.Writer{Actor: store.Seat, Token: store.Seat}, "k-seat", "M-1", "",
+		[]store.PinnedTask{w.pinnedTask("a", rules.PinCoordinator)})
+	ok(t, err)
+	if n := len(out["tasks"].([]any)); n != 1 {
+		t.Fatalf("%d tasks, want 1: %v", n, out)
+	}
+	if n := w.count(t, `SELECT count(*) FROM agentrt.task WHERE executor_pin IS NOT NULL`); n != 1 {
+		t.Fatalf("%d pinned tasks, want 1", n)
+	}
 }

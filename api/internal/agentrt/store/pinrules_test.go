@@ -11,7 +11,7 @@ import (
 )
 
 // Review 686 R-01: a pinned proposal and a rule write that takes the pin
-// away (the entry dropped, or a version naming another proposer) are
+// away (the entry dropped) are
 // serialized on the rules' lock: the proposal holds it shared from before it
 // reads the envelope to its commit, a rule write exclusively. Whichever takes
 // it first commits first, and the other sees what it did: a pin proposed
