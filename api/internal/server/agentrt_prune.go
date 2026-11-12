@@ -139,6 +139,7 @@ func cachedMainResults(read func(context.Context, string) (store.OnMain, error),
 		if err != nil {
 			return nil, false
 		}
+		results = results.WithHead(head)
 		mu.Lock()
 		cache[repo] = entry{time.Now(), head, results}
 		mu.Unlock()

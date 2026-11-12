@@ -81,7 +81,22 @@ type AgentHead struct{ Repo, Ref, Commit string }
 // OnMain is what a repository's main holds of the runtime's work: task → a
 // result commit (an attempt's own commit) → the main commit it stands on main
 // as (lineage.MainResults). A landing reverted on main is not in it.
+// The empty task key is reserved for the optional head (WithHead and Head).
 type OnMain map[string]map[string]string
+
+// WithHead returns a copy carrying the head read in this pass. The empty task
+// key is reserved for this metadata; runtime task IDs are never empty.
+func (m OnMain) WithHead(head string) OnMain {
+	out := make(OnMain, len(m)+1)
+	for task, results := range m {
+		out[task] = results
+	}
+	out[""] = map[string]string{"head": head}
+	return out
+}
+
+// Head is empty when this reading did not read main's head.
+func (m OnMain) Head() string { return m[""]["head"] }
 
 // MainResults reads a repository's main as OnMain; ok false when it cannot be
 // read now.
@@ -459,6 +474,11 @@ func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, e
 				"text": fmt.Sprintf("its change %s is on main of %s as %s (%s, matched by %s)", m.Key[:min(12, len(m.Key))], o.repo,
 					m.Main[:min(12, len(m.Main))], m.Via, m.MatchedBy),
 				"landed": m.Main, "landed_via": m.Via, "matched_by": m.MatchedBy, "landed_repo": o.repo}
+			// Only a release of this exact tip is linked; commits from an earlier
+			// unreleased push need parent recording to link them to a later tip.
+			if head := main.Head(); head != "" {
+				body["landed_tip"] = head
+			}
 			if m.Result != "" {
 				body["landed_result"] = m.Result // a note's string is never empty: no pushed commit matched, no field
 			}

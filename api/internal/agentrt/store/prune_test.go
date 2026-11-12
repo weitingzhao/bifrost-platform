@@ -152,8 +152,12 @@ func TestPrunableFollowsTheRule(t *testing.T) {
 		t.Fatalf("landings again: %d (%v)", n, err)
 	}
 	var via string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'landed_via' FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
-	  AND body_json ? 'landed'`, accepted).Scan(&via))
+	var hasTip bool
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'landed_via', body_json ? 'landed_tip' FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
+	  AND body_json ? 'landed'`, accepted).Scan(&via, &hasTip))
+	if hasTip {
+		t.Fatal("landing without a head read recorded landed_tip")
+	}
 	if via != store.LandedViaHarvest {
 		t.Fatalf("the landing came %q", via)
 	}
@@ -315,7 +319,7 @@ func TestRecordLandingsAnyState(t *testing.T) {
 		verifying: {commitA: commitB}, // its own commit, cherry-picked
 		cancelled: {commitB: commitB}, // a commit it never pushed that names it
 		accepted:  {commitA: commitB},
-	}
+	}.WithHead(commitC)
 	mainResults := func(_ context.Context, repo string) (store.OnMain, bool) { return onMain, repo == "bifrost-platform" }
 	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 4 {
 		t.Fatalf("landings: %d (%v); want 4", n, err)
@@ -331,19 +335,19 @@ func TestRecordLandingsAnyState(t *testing.T) {
 	}
 	for task, wt := range want {
 		rows, err := w.rt.Query(ctx, `SELECT body_json->>'landed', body_json->>'landed_via', body_json->>'matched_by',
-		    COALESCE(body_json->>'landed_result', ''), body_json->>'landed_repo', body_json->>'text', event_stream_id
+		    COALESCE(body_json->>'landed_result', ''), body_json->>'landed_repo', body_json->>'text', event_stream_id, body_json->>'landed_tip'
 		  FROM agentrt.event WHERE task_id = $1 AND event_type = 'note' AND body_json ? 'landed'`, task)
 		ok(t, err)
-		notes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) ([7]string, error) {
-			var v [7]string
-			return v, r.Scan(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6])
+		notes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) ([8]string, error) {
+			var v [8]string
+			return v, r.Scan(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7])
 		})
 		ok(t, err)
 		if len(notes) != 1 {
 			t.Fatalf("task %s: %d landed notes; want one", task, len(notes))
 		}
 		got := notes[0]
-		if [4]string{got[0], got[1], got[2], got[3]} != wt || got[4] != "bifrost-platform" || got[6] != store.MissionStream("M-3") {
+		if [4]string{got[0], got[1], got[2], got[3]} != wt || got[4] != "bifrost-platform" || got[7] != commitC || got[6] != store.MissionStream("M-3") {
 			t.Errorf("task %s: %v; want %v on bifrost-platform, on M-3's stream", task, got, wt)
 		}
 		if !strings.HasSuffix(got[5], " is on main of bifrost-platform as "+wt[0][:12]+" ("+wt[1]+", matched by "+wt[2]+")") {

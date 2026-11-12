@@ -169,7 +169,7 @@ var bodies = map[string][]field{
 	// note: landed, the commit an implementation's change first stood on main
 	// as, when the controller first saw it there, with landed_via (its
 	// route), matched_by (how main names it), landed_result (the pushed
-	// commit matched; none for a trailer) and landed_repo (onmain.go);
+	// commit matched; none for a trailer), landed_repo and landed_tip (main's head);
 	// pruned, an attempt branch its host deleted; prune_refused, one Gitea
 	// would not let it delete; prune_failed, one it could not reach Gitea to
 	// delete (prune.go).
@@ -180,7 +180,7 @@ var bodies = map[string][]field{
 	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
 	// that voided the paper, which no run was handed in for.
 	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"plan_observation_pass", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
-		{"landed_via", kStr, true}, {"matched_by", kStr, true}, {"landed_result", kStr, true}, {"landed_repo", kStr, true},
+		{"landed_via", kStr, true}, {"matched_by", kStr, true}, {"landed_result", kStr, true}, {"landed_repo", kStr, true}, {"landed_tip", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
 		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
@@ -602,7 +602,7 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
-	"note": {"landed": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),
+	"note": {"landed": commit, "landed_tip": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),
 		"matched_by": oneOf(MatchedResult, MatchedCherryPick, MatchedTrailer), "landed_result": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
 		"prune_round": oneOf("opened", "closed")},
 	"route_decided":   {"fingerprint": fingerprint},

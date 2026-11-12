@@ -22,7 +22,10 @@ func TestPipelineRunFact(t *testing.T) {
 		start                                             bool
 	}{
 		{"landing-ci-1", "bifrost-ci-platform", "True", "platform", "https://example/ignored.git", "platform", "ci", true},
-		{"delivery-1", "bifrost-deliver-platform", "False", "", "https://example/platform.git", "platform", "delivery", false},
+		{"delivery-1", "bifrost-deliver-platform", "False", "", "https://example/platform.git", "bifrost-platform", "delivery", false},
+		{"delivery-prod", "bifrost-deliver-platform-prod", "True", "", "", "bifrost-platform", "delivery", true},
+		{"delivery-labelled", "bifrost-deliver-platform-prod", "True", "custom", "", "custom", "delivery", true},
+		{"delivery-other", "bifrost-deliver-other", "True", "", "https://example/platform.git", "", "delivery", true},
 		{"other-1", "other", "True", "", "", "", "other", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

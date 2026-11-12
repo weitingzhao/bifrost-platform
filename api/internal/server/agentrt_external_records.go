@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -113,6 +112,12 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		f.StartedAt = f.CreatedAt
 	}
 	f.Repo = run.GetLabels()["bifrost.io/repo"]
+	if f.Repo == "" {
+		f.Repo = map[string]string{
+			"bifrost-deliver-platform":      "bifrost-platform",
+			"bifrost-deliver-platform-prod": "bifrost-platform",
+		}[f.Pipeline]
+	}
 	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
 	for _, value := range params {
 		p, ok := value.(map[string]any)
@@ -123,10 +128,6 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		switch p["name"] {
 		case "revision":
 			f.Revision = v
-		case "repo-url":
-			if f.Repo == "" && v != "" {
-				f.Repo = strings.TrimSuffix(path.Base(strings.TrimRight(v, "/")), ".git")
-			}
 		}
 	}
 	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")

@@ -62,12 +62,12 @@ func TestCachedMainResultsFollowsMainsHead(t *testing.T) {
 		return head, nil
 	}, time.Hour)
 	for i := 0; i < 3; i++ {
-		if got, ok := read(context.Background(), "bifrost-platform"); !ok || got["t_x"][headSHA] != otherSHA || reads != 1 {
+		if got, ok := read(context.Background(), "bifrost-platform"); !ok || got["t_x"][headSHA] != otherSHA || got.Head() != head || reads != 1 {
 			t.Fatalf("read %d: %v %v, %d reads", i, got, ok, reads)
 		}
 	}
 	head = otherSHA // a revert pushed
-	if _, ok := read(context.Background(), "bifrost-platform"); !ok || reads != 2 {
+	if got, ok := read(context.Background(), "bifrost-platform"); !ok || got.Head() != head || reads != 2 {
 		t.Fatalf("after main moved: ok %v, %d reads; want main read again", ok, reads)
 	}
 	headFails = true

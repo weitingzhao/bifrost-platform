@@ -107,6 +107,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"ci_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "42bb2c9"},
 		{"deploy_seen", "env", "prod", "production"},
 		{"deploy_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "main"},
+		{"note", "landed_tip", "2333e00753f91c74c8b2f4d693a803f8e89e7892", "2333e00"},
 		{"note", "landed", "2333e00753f91c74c8b2f4d693a803f8e89e7892", "2333e00"},
 		{"note", "landed_via", "owner_merge", "merged"},
 		{"note", "matched_by", "trailer", "subject"},
