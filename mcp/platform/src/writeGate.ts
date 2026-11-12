@@ -1,44 +1,33 @@
 import { matchWrite, ownerDecision, splitPath } from './actionTiers.js'
 
-export const WRITES_OFF_HINT =
-  'MCP_WRITES=off sends no writes. Leave MCP_WRITES unset to call the original route. Set MCP_WRITES=on to ask POST /api/v1/approvals first.'
-
 export const UNMAPPED_WRITE_HINT =
-  'This route has no action mapping. The call was not sent, and no unknown action id was posted to the approvals API. Map the tool to a catalog action id before calling it with MCP_WRITES=on.'
+  'This route has no action mapping. The call was not sent, and no unknown action id was posted to the approvals API. Map the tool to a catalog action id before calling it.'
 
 export const OWNER_WAIT_NOTE = 'waiting for the Owner to approve'
 
-/** Resolve is the Owner's close. Every write mode refuses it and sends nothing. */
+/** Resolve is the Owner's close. It is refused and nothing is sent. */
 export const RESOLVE_REFUSAL_ERROR = 'an agent cannot close a request'
 
 export const RESOLVE_REFUSAL_HINT =
   "The resolve route is the Owner's close of an unknown result. No request was sent."
 
-/** Answering a question is the Owner's, same class as resolve: refused in every mode. */
+/** Answering a question is the Owner's, same class as resolve: refused. */
 export const ANSWER_REFUSAL_ERROR = 'an agent cannot answer a question'
 
 export const ANSWER_REFUSAL_HINT =
   'The answer route is the Owner\'s. Call wait_for_answer. No request was sent.'
 
-/** Explicit on is the only mode that creates approvals. Unset stays on the pre-merge direct path. */
-export type WritesMode = 'legacy' | 'on' | 'off'
-
-export function writesMode(env: NodeJS.ProcessEnv = process.env): WritesMode {
-  if (!Object.prototype.hasOwnProperty.call(env, 'MCP_WRITES') || env.MCP_WRITES == null) return 'legacy'
-  const value = env.MCP_WRITES.trim().toLowerCase()
-  if (value === '') return 'legacy'
-  if (value === 'on' || value === '1' || value === 'true' || value === 'yes') return 'on'
-  return 'off'
-}
-
-/** Approval tools (request_action) run only when MCP_WRITES is explicitly on. */
-export function writesEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return writesMode(env) === 'on'
-}
+/*
+ * There is one write mode (cleanup wave 1, 2026-11-11: the MCP_WRITES switch
+ * is gone; MCP_WRITES in the environment is ignored). A mapped write asks
+ * POST /api/v1/approvals first, as MCP_WRITES=on did. The API enforces the
+ * tiers on its own: every catalogued direct route answers a tier C or D call
+ * that carries no approval with 403 "approval required" (server guard), and
+ * approvals are created only on PROD.
+ */
 
 export type WritePlan =
   | { kind: 'direct' }
-  | { kind: 'blocked'; body: { error: 'writes not cut over'; action?: string; hint: string } }
   | { kind: 'unmapped'; body: { error: 'unmapped write'; method: string; path: string; hint: string } }
   | {
       kind: 'refused'
@@ -72,11 +61,10 @@ function isApprovalPath(method: string, pathname: string): boolean {
 }
 
 /**
- * legacy (unset): call the original route, no approval.
- * off: send nothing.
- * on: a mapped write consults the API; an unmapped write is refused locally.
+ * resolve and answer are refused; approval and question writes go direct; a
+ * mapped write consults the API; an unmapped write is refused locally.
  */
-export function planWrite(method: string, path: string, body: unknown, mode: WritesMode): WritePlan {
+export function planWrite(method: string, path: string, body: unknown): WritePlan {
   const found = matchWrite(method, path)
   const { pathname, query } = splitPath(path)
   if (ownerDecision(method, pathname) === 'resolve') {
@@ -98,17 +86,6 @@ export function planWrite(method: string, path: string, body: unknown, mode: Wri
         method,
         path: pathname,
         hint: ANSWER_REFUSAL_HINT,
-      },
-    }
-  }
-  if (mode === 'legacy') return { kind: 'direct' }
-  if (mode === 'off') {
-    return {
-      kind: 'blocked',
-      body: {
-        error: 'writes not cut over',
-        ...(found ? { action: found.spec.action } : {}),
-        hint: WRITES_OFF_HINT,
       },
     }
   }

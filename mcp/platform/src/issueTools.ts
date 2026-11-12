@@ -8,7 +8,7 @@ import { PROPOSE_MISSION_INPUT, RUNTIME_DATA_NOTE, defaultRuntimeDeps, isRFC3339
 // as this thread (thread:<X-Bifrost-Session>), or as the Owner for his admin
 // token. Like the runtime's other tools they are runtime state, not cluster
 // actions: they do not go through the approvals write gate, and they refuse
-// when the session id fell back or MCP_WRITES=off.
+// when the session id fell back.
 
 const BASE = '/api/v1/agentrt/issues'
 
@@ -19,12 +19,10 @@ export const ISSUE_DATA_NOTE =
 export const ISSUE_KEY_RULE =
   'idempotency_key names this one write: reuse it only to retry the same request; a new write needs a new key. expected_version is the issue version you read: a write on another answers 409 with the issue as it is now.'
 
-const WRITES_OFF = 'MCP_WRITES=off sends no agent runtime writes. Leave MCP_WRITES unset, or set it to on. No request was sent.'
 const NO_SESSION = 'No session id is set. Refusing to write, because the platform records the write as this thread. No request was sent.'
 
 function refuse(d: RuntimeDeps): { error: string; hint: string } | undefined {
   if (d.fellBack()) return { error: 'no session id', hint: NO_SESSION }
-  if (d.mode() === 'off') return { error: 'writes not cut over', hint: WRITES_OFF }
   return undefined
 }
 

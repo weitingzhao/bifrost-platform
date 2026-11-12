@@ -13,8 +13,6 @@ import {
   RESOLVE_REFUSAL_ERROR,
   RESOLVE_REFUSAL_HINT,
   planWrite,
-  writesEnabled,
-  writesMode,
 } from './writeGate.js'
 import { platformDelete, platformPost, platformPut, resetClientCacheForTests } from './platformClient.js'
 
@@ -22,42 +20,31 @@ const catalogIds = JSON.parse(
   readFileSync(new URL('../../../config/actions-catalog.json', import.meta.url), 'utf8'),
 ) as { actions: string[] }
 
-describe('write mode', () => {
-  it('unset is legacy, off sends nothing, on is explicit', () => {
-    assert.equal(writesMode({}), 'legacy')
-    assert.equal(writesMode({ MCP_WRITES: '' }), 'legacy')
-    assert.equal(writesMode({ MCP_WRITES: 'off' }), 'off')
-    assert.equal(writesMode({ MCP_WRITES: 'on' }), 'on')
-    assert.equal(writesEnabled({}), false)
-    assert.equal(writesEnabled({ MCP_WRITES: 'on' }), true)
-
-    const legacy = planWrite('POST', '/api/v1/gitops/apps/demo/sync', {}, 'legacy')
-    assert.equal(legacy.kind, 'direct')
-
-    const blocked = planWrite('POST', '/api/v1/gitops/apps/demo/sync', {}, 'off')
-    assert.equal(blocked.kind, 'blocked')
-    if (blocked.kind !== 'blocked') return
-    assert.equal(blocked.body.error, 'writes not cut over')
-    assert.equal(blocked.body.action, 'gitops_sync_app')
+describe('write plan', () => {
+  // Cleanup wave 1 (2026-11-11): one write mode, the old MCP_WRITES=on.
+  it('a mapped write consults the approvals API', () => {
+    const plan = planWrite('POST', '/api/v1/gitops/apps/demo/sync', {})
+    assert.equal(plan.kind, 'consult')
+    if (plan.kind === 'consult') assert.equal(plan.action, 'gitops_sync_app')
   })
 
   it('maps the four catalog routes that had no mapping', () => {
-    const sweep = planWrite('POST', '/api/v1/cluster/postgres/backups/sweep-failed', {}, 'on')
+    const sweep = planWrite('POST', '/api/v1/cluster/postgres/backups/sweep-failed', {})
     assert.equal(sweep.kind, 'consult')
     if (sweep.kind === 'consult') assert.equal(sweep.action, 'sweep_failed_backups')
 
-    const sync = planWrite('POST', '/api/v1/cluster/sync-kubeconfig', {}, 'on')
+    const sync = planWrite('POST', '/api/v1/cluster/sync-kubeconfig', {})
     assert.equal(sync.kind, 'consult')
     if (sync.kind === 'consult') assert.equal(sync.action, 'sync_kubeconfig')
 
-    const schedule = planWrite('PUT', '/api/v1/cluster/data-clone/schedule', { enabled: false }, 'on')
+    const schedule = planWrite('PUT', '/api/v1/cluster/data-clone/schedule', { enabled: false })
     assert.equal(schedule.kind, 'consult')
     if (schedule.kind === 'consult') {
       assert.equal(schedule.action, 'update_data_clone_schedule')
       assert.deepEqual(schedule.params, { enabled: false })
     }
 
-    const deleted = planWrite('DELETE', '/api/v1/plugins/market-data/api/contracts/ES', undefined, 'on')
+    const deleted = planWrite('DELETE', '/api/v1/plugins/market-data/api/contracts/ES', undefined)
     assert.equal(deleted.kind, 'consult')
     if (deleted.kind === 'consult') {
       assert.equal(deleted.action, 'market_data_delete')
@@ -65,29 +52,19 @@ describe('write mode', () => {
     }
   })
 
-  it('approve and reject stay direct; resolve is refused in every mode', () => {
+  it('approve and reject stay direct; resolve is refused', () => {
     for (const path of ['/api/v1/approvals/appr_x/approve', '/api/v1/approvals/appr_x/reject']) {
-      for (const mode of ['legacy', 'on'] as const) {
-        const plan = planWrite('POST', path, { channel: 'chat' }, mode)
-        assert.equal(plan.kind, 'direct', `${mode} ${path}`)
-      }
-      const off = planWrite('POST', path, { channel: 'chat' }, 'off')
-      assert.equal(off.kind, 'blocked', path)
+      const plan = planWrite('POST', path, { channel: 'chat' })
+      assert.equal(plan.kind, 'direct', path)
       assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test(path)), false)
     }
-    for (const mode of ['legacy', 'on', 'off'] as const) {
-      const plan = planWrite('POST', '/api/v1/approvals/appr_x/resolve?x=1', { outcome: 'not_run', note: 'checked' }, mode)
-      // The whole plan is the refusal, the same in every mode: nothing in it
-      // forwards the write, as 'direct' did before 10-10 (TD-412).
-      assert.deepEqual(
-        plan,
-        {
-          kind: 'refused',
-          body: { error: RESOLVE_REFUSAL_ERROR, method: 'POST', path: '/api/v1/approvals/appr_x/resolve', hint: RESOLVE_REFUSAL_HINT },
-        },
-        mode,
-      )
-    }
+    const plan = planWrite('POST', '/api/v1/approvals/appr_x/resolve?x=1', { outcome: 'not_run', note: 'checked' })
+    // The whole plan is the refusal: nothing in it forwards the write, as
+    // 'direct' did before 10-10 (TD-412).
+    assert.deepEqual(plan, {
+      kind: 'refused',
+      body: { error: RESOLVE_REFUSAL_ERROR, method: 'POST', path: '/api/v1/approvals/appr_x/resolve', hint: RESOLVE_REFUSAL_HINT },
+    })
     assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test('/api/v1/approvals/appr_x/resolve')), false)
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/approve'), 'approve')
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/reject'), 'reject')
@@ -95,8 +72,8 @@ describe('write mode', () => {
     assert.equal(ownerDecision('GET', '/api/v1/approvals/appr_x/resolve'), undefined)
   })
 
-  it('refuses an unmapped write when on and does not invent unlisted_write', () => {
-    const plan = planWrite('POST', '/api/v1/cluster/namespaces/ensure-bifrost', {}, 'on')
+  it('refuses an unmapped write and does not invent unlisted_write', () => {
+    const plan = planWrite('POST', '/api/v1/cluster/namespaces/ensure-bifrost', {})
     assert.equal(plan.kind, 'unmapped')
     if (plan.kind !== 'unmapped') return
     assert.equal(plan.body.error, 'unmapped write')
@@ -132,7 +109,7 @@ describe('platformClient write gate', () => {
     process.env.PLATFORM_API_URL = 'http://192.168.10.100:30876'
     process.env.PLATFORM_OPERATOR_TOKEN = 'test-operator-not-a-real-token'
     delete process.env.PLATFORM_TOKEN_ENV_KEY
-    process.env.MCP_WRITES = 'on'
+    delete process.env.MCP_WRITES
     process.env.CLAUDE_CODE_HOST_SESSION_ID = 'local_test_session'
     resetClientCacheForTests()
     calls = []
@@ -167,16 +144,23 @@ describe('platformClient write gate', () => {
     resetClientCacheForTests()
   })
 
-  it('unset calls the original route and does not ask for an approval', async () => {
-    delete process.env.MCP_WRITES
-    const result = (await platformPost('/api/v1/gitops/apps/demo/sync')) as { status: string }
-    assert.equal(result.status, 'executed')
-    assert.equal(calls.length, 1)
-    assert.ok(calls[0].url.endsWith('/api/v1/gitops/apps/demo/sync'))
-    assert.equal(calls[0].url.includes('/approvals'), false)
+  // Cleanup wave 1 (2026-11-11): MCP_WRITES is ignored. Unset, off or on, a
+  // mapped write asks the approvals API first, and an approval it creates
+  // stops the call.
+  it('asks for an approval first whatever MCP_WRITES says', async () => {
+    for (const value of [undefined, 'off', 'on']) {
+      calls.length = 0
+      if (value === undefined) delete process.env.MCP_WRITES
+      else process.env.MCP_WRITES = value
+      const created = (await platformPost('/api/v1/gitops/apps/demo/sync')) as { id: string; note: string }
+      assert.equal(created.id, 'apr-test', String(value))
+      assert.equal(created.note, OWNER_WAIT_NOTE)
+      assert.equal(calls.length, 1, String(value))
+      assert.ok(calls[0].url.endsWith('/api/v1/approvals'))
+    }
   })
 
-  it('on plus call-directly calls the original route', async () => {
+  it('call-directly calls the original route', async () => {
     approvalStatus = 400
     approvalBody = { error: 'call directly', action: 'start_pipeline_run', tier: 'B' }
     const result = (await platformPost('/api/v1/delivery/pipelines/bifrost-deliver-platform/runs', {
@@ -191,7 +175,7 @@ describe('platformClient write gate', () => {
     assert.equal(calls[1].method, 'POST')
   })
 
-  it('on plus 201 returns the approval id and never calls the original route', async () => {
+  it('201 returns the approval id and never calls the original route', async () => {
     const created = (await platformPost('/api/v1/gitops/apps/demo/sync')) as {
       id: string
       note: string
@@ -215,7 +199,7 @@ describe('platformClient write gate', () => {
     assert.equal(calls[0].url.includes('/data-clone/schedule'), false)
   })
 
-  it('on plus 403 returns the refusal and does not call the original route', async () => {
+  it('403 returns the refusal and does not call the original route', async () => {
     approvalStatus = 403
     approvalBody = { error: 'forbidden', action: 'scale_deployment', tier: 'X' }
     const refused = (await platformPost('/api/v1/cluster/workloads/scale', {
@@ -231,7 +215,7 @@ describe('platformClient write gate', () => {
     assert.equal(calls[0].url.includes('/scale'), false)
   })
 
-  it('an unmapped write is refused when on and does not call fetch', async () => {
+  it('an unmapped write is refused and does not call fetch', async () => {
     const refused = (await platformPost('/api/v1/checklist/signals', { signals: [] })) as {
       error: string
       hint: string
@@ -241,51 +225,25 @@ describe('platformClient write gate', () => {
     assert.equal(calls.length, 0)
   })
 
-  it('refuses resolve in every mode and does not call fetch', async () => {
+  it('refuses resolve and does not call fetch', async () => {
     const path = '/api/v1/approvals/appr_x/resolve'
-    for (const mode of ['legacy', 'on', 'off'] as const) {
-      calls.length = 0
-      if (mode === 'legacy') delete process.env.MCP_WRITES
-      else process.env.MCP_WRITES = mode
-      const refused = (await platformPost(path, { outcome: 'not_run', note: 'checked' })) as {
-        error: string
-        hint: string
-      }
-      assert.equal(refused.error, RESOLVE_REFUSAL_ERROR)
-      assert.equal(refused.hint, RESOLVE_REFUSAL_HINT)
-      assert.equal(calls.length, 0, mode)
-    }
-  })
-
-  it('approve and reject still follow the write mode', async () => {
-    for (const path of ['/api/v1/approvals/appr_x/approve', '/api/v1/approvals/appr_x/reject']) {
-      for (const mode of ['legacy', 'on'] as const) {
-        calls.length = 0
-        if (mode === 'legacy') delete process.env.MCP_WRITES
-        else process.env.MCP_WRITES = mode
-        const sent = (await platformPost(path, { channel: 'chat' })) as { status: string }
-        assert.equal(sent.status, 'executed', `${mode} ${path}`)
-        assert.equal(calls.length, 1, `${mode} ${path}`)
-        assert.ok(calls[0].url.endsWith(path), calls[0].url)
-      }
-    }
-    calls.length = 0
-    process.env.MCP_WRITES = 'off'
-    const blocked = (await platformPost('/api/v1/approvals/appr_x/approve', { channel: 'chat' })) as {
+    const refused = (await platformPost(path, { outcome: 'not_run', note: 'checked' })) as {
       error: string
+      hint: string
     }
-    assert.equal(blocked.error, 'writes not cut over')
+    assert.equal(refused.error, RESOLVE_REFUSAL_ERROR)
+    assert.equal(refused.hint, RESOLVE_REFUSAL_HINT)
     assert.equal(calls.length, 0)
   })
 
-  it('does not call fetch while writes are off', async () => {
-    process.env.MCP_WRITES = 'off'
-    const blocked = (await platformPost('/api/v1/delivery/pipelines/bifrost-deliver-platform-prod/runs', {
-      revision: 'abc',
-    })) as { error: string; action: string }
-    assert.equal(blocked.error, 'writes not cut over')
-    assert.equal(blocked.action, 'start_pipeline_run')
-    assert.equal(calls.length, 0)
+  it('approve and reject go to their route', async () => {
+    for (const path of ['/api/v1/approvals/appr_x/approve', '/api/v1/approvals/appr_x/reject']) {
+      calls.length = 0
+      const sent = (await platformPost(path, { channel: 'chat' })) as { status: string }
+      assert.equal(sent.status, 'executed', path)
+      assert.equal(calls.length, 1, path)
+      assert.ok(calls[0].url.endsWith(path), calls[0].url)
+    }
   })
 
   it('delete follows call-directly back to the original route', async () => {

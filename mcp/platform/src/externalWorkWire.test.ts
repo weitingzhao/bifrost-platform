@@ -20,7 +20,7 @@ test('external work tools reject unknown fields before HTTP forwarding', { timeo
     command: process.execPath, args: ['--import', 'tsx', 'src/index.ts'],
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: { PLATFORM_API_URL: `http://127.0.0.1:${address.port}`, PLATFORM_TOKEN_ENV_KEY: 'PLATFORM_OPERATOR_TOKEN',
-      PLATFORM_OPERATOR_TOKEN: 'test-only', CLAUDE_CODE_HOST_SESSION_ID: 'wire-test', MCP_WRITES: 'on', MCP_BRIDGE_FOCUS: '' },
+      PLATFORM_OPERATOR_TOKEN: 'test-only', CLAUDE_CODE_HOST_SESSION_ID: 'wire-test', MCP_BRIDGE_FOCUS: '' },
     stderr: 'pipe',
   })
   const client = new Client({ name: 'external-work-wire-test', version: '1' })

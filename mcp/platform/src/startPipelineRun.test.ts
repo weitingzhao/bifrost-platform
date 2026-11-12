@@ -16,7 +16,6 @@ describe('start_pipeline_run who', () => {
       'POST',
       '/api/v1/delivery/pipelines/bifrost-deliver-platform/runs',
       { revision: 'main', who: 'ada@host' },
-      'on',
     )
     assert.equal(plan.kind, 'consult')
     if (plan.kind !== 'consult') return

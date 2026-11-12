@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { withApproveHint } from './approveHint.js'
 import { defaultMcpTokenFilePath, readMcpTokenFile, resolveTokenFrom } from './tokenResolve.js'
 import { bifrostSessionId } from './sessionId.js'
-import { OWNER_WAIT_NOTE, planWrite, writesMode } from './writeGate.js'
+import { OWNER_WAIT_NOTE, planWrite } from './writeGate.js'
 
 function apiBase(): string {
   return process.env.PLATFORM_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8780'
@@ -122,8 +122,8 @@ async function consultApproval(action: string, params: Record<string, unknown>):
 }
 
 async function sendWrite(method: 'POST' | 'DELETE' | 'PUT', path: string, body?: unknown): Promise<unknown> {
-  const plan = planWrite(method, path, body, writesMode())
-  if (plan.kind === 'blocked' || plan.kind === 'unmapped' || plan.kind === 'refused') return plan.body
+  const plan = planWrite(method, path, body)
+  if (plan.kind === 'unmapped' || plan.kind === 'refused') return plan.body
   if (plan.kind === 'consult') {
     const answer = await consultApproval(plan.action, plan.params)
     if (answer.kind === 'stop') return answer.body

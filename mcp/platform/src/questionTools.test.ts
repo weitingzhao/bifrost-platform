@@ -112,7 +112,6 @@ function deps(over: Partial<QuestionDeps> = {}): QuestionDeps & { calls: Array<{
     },
     session: () => 'thread-a',
     fellBack: () => false,
-    mode: () => 'legacy',
     now: () => 0,
     sleep: async () => {},
     ...over,
@@ -160,8 +159,8 @@ describe('question tools', () => {
     assert.equal(APPROVE_TOOL_NAMES.length, 3)
   })
 
-  it('refuses the three write tools when writes are off and when the session fell back', async () => {
-    for (const over of [{ mode: () => 'off' as const }, { fellBack: () => true }]) {
+  it('refuses the three write tools when the session fell back', async () => {
+    for (const over of [{ fellBack: () => true }]) {
       const d = deps(over)
       assert.equal(((await askOwner(ask, d)) as { error: string }).error.length > 0, true)
       assert.equal(((await ackAnswer('Q12', d)) as { error: string }).error.length > 0, true)
@@ -243,19 +242,17 @@ describe('question tools', () => {
 
 describe('answer route write gate', () => {
   const path = '/api/v1/questions/q_0123456789abcdef/answer'
-  for (const mode of ['legacy', 'on', 'off'] as const) {
-    it(`refuses ${mode}`, () => {
-      const plan = planWrite('POST', path, { option: 'a' }, mode)
-      assert.equal(plan.kind, 'refused')
-      if (plan.kind !== 'refused') return
-      assert.equal(plan.body.error, ANSWER_REFUSAL_ERROR)
-      assert.equal(plan.body.hint.includes('wait_for_answer'), true)
-    })
-  }
+  it('refuses the answer route', () => {
+    const plan = planWrite('POST', path, { option: 'a' })
+    assert.equal(plan.kind, 'refused')
+    if (plan.kind !== 'refused') return
+    assert.equal(plan.body.error, ANSWER_REFUSAL_ERROR)
+    assert.equal(plan.body.hint.includes('wait_for_answer'), true)
+  })
 
-  it('other question writes are direct when writes are on', () => {
+  it('other question writes are direct', () => {
     for (const path of ['/api/v1/questions', '/api/v1/questions/Q12/withdraw', '/api/v1/questions/Q12/ack']) {
-      assert.equal(planWrite('POST', path, {}, 'on').kind, 'direct')
+      assert.equal(planWrite('POST', path, {}).kind, 'direct')
     }
   })
 })

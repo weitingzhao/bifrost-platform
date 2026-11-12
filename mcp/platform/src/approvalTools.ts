@@ -1,7 +1,6 @@
 import { withApproveHint } from './approveHint.js'
 import { platformGet, platformSend } from './platformClient.js'
 import { pollRequest } from './pollRequest.js'
-import { WRITES_OFF_HINT, writesEnabled } from './writeGate.js'
 
 export interface RequestActionInput {
   action: string
@@ -21,15 +20,8 @@ export function approvalRef(id: string): string {
   return id.trim().replace(/^#/, '')
 }
 
-/** POST /api/v1/approvals. Blocked until MCP_WRITES=on so this does not hit PROD early. */
+/** POST /api/v1/approvals. */
 export async function requestAction(input: RequestActionInput): Promise<unknown> {
-  if (!writesEnabled()) {
-    return {
-      error: 'writes not cut over',
-      action: input.action,
-      hint: WRITES_OFF_HINT,
-    }
-  }
   const created = await platformSend('POST', '/api/v1/approvals', {
     action: input.action,
     params: input.params ?? {},

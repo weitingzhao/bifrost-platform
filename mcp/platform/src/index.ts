@@ -530,7 +530,7 @@ reg(
 
 reg(
   'request_action',
-  'Create an approval request and return its id and number (#n). Does not run the action. Requires MCP_WRITES=on.',
+  'Create an approval request and return its id and number (#n). Does not run the action.',
   {
     action: z.string().describe('Action id from the approvals catalog'),
     params: z.record(z.string(), z.unknown()).optional().describe('Parameters signed into the approval'),

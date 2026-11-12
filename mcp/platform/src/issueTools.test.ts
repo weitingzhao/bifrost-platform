@@ -16,12 +16,11 @@ import {
   relayUserResponse,
 } from './issueTools.js'
 import type { RuntimeDeps } from './runtimeTools.js'
-import type { WritesMode } from './writeGate.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
 
 type Call = { kind: 'get' | 'send'; path: string; body?: unknown }
 
-function deps(over: { fellBack?: boolean; mode?: WritesMode } = {}): { d: RuntimeDeps; calls: Call[] } {
+function deps(over: { fellBack?: boolean } = {}): { d: RuntimeDeps; calls: Call[] } {
   const calls: Call[] = []
   const d: RuntimeDeps = {
     get: async (path) => {
@@ -36,7 +35,6 @@ function deps(over: { fellBack?: boolean; mode?: WritesMode } = {}): { d: Runtim
     upload: async () => ({}),
     session: () => 'local_s1',
     fellBack: () => over.fellBack ?? false,
-    mode: () => over.mode ?? 'on',
   }
   return { d, calls }
 }
@@ -69,8 +67,8 @@ describe('the crew issue tools (W-31 BI-1 slice 2)', () => {
     assert.equal(Object.keys(ISSUE_WRITES).length, 12)
   })
 
-  it('refuses every write without a session or with writes off, sending nothing', async () => {
-    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+  it('refuses every write without a session, sending nothing', async () => {
+    for (const over of [{ fellBack: true }]) {
       const { d, calls } = deps(over)
       const outs = [
         await fileIssue({ idempotency_key: 'k' }, d),

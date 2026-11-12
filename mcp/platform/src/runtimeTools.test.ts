@@ -11,7 +11,6 @@ import {
   PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
   RUNTIME_SESSION_REFUSAL,
-  RUNTIME_WRITES_OFF,
   STOP_KEY_RULE,
   WITHDRAW_KEY_RULE,
   WITHDRAW_TASKS_INPUT,
@@ -50,11 +49,10 @@ import {
 } from './runtimeTools.js'
 import { platformSend, resetClientCacheForTests } from './platformClient.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
-import type { WritesMode } from './writeGate.js'
 
 type Call = { kind: string; path: string; body?: unknown; contentType?: string; headers?: Record<string, string> }
 
-function deps(over: { fellBack?: boolean; mode?: WritesMode; session?: string } = {}): { d: RuntimeDeps; calls: Call[] } {
+function deps(over: { fellBack?: boolean; session?: string } = {}): { d: RuntimeDeps; calls: Call[] } {
   const calls: Call[] = []
   const d: RuntimeDeps = {
     get: async (path) => {
@@ -75,7 +73,6 @@ function deps(over: { fellBack?: boolean; mode?: WritesMode; session?: string } 
     },
     session: () => over.session ?? 'local_s1',
     fellBack: () => over.fellBack ?? false,
-    mode: () => over.mode ?? 'on',
   }
   return { d, calls }
 }
@@ -189,7 +186,7 @@ describe('agent runtime writes', () => {
       { kind: 'send', path: '/api/v1/agentrt/plan/ARCH:state-db/notes', body: { idempotency_key: 'n-1', text: 'both environments' } },
       { kind: 'send', path: '/api/v1/agentrt/plan/ARCH:a%2Fb/notes', body: { idempotency_key: 'n-2', text: 'x' } },
     ])
-    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+    for (const over of [{ fellBack: true }]) {
       const { d: d2, calls: c2 } = deps(over)
       const out = (await postPlanNote({ plan_node_id: 'ARCH:state-db', text: 'x', idempotency_key: 'n-3' }, d2)) as { error?: string }
       assert.ok(out.error)
@@ -252,9 +249,9 @@ describe('agent runtime writes', () => {
       await proposePlanImport({ request_file: join(dir, 'recorder-td-336.json'), reason: 'retire the recorder', idempotency_key: 'i-3' }, d, files)
       assert.equal(calls[1].path, '/api/v1/agentrt/plan/imports')
       assert.deepEqual(calls[1].body, { idempotency_key: 'i-3', reason: 'retire the recorder', request: recorder })
-      const off = deps({ mode: 'off' })
+      const off = deps({ fellBack: true })
       await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'r', idempotency_key: 'i-2' }, off.d, files)
-      assert.equal(off.calls.length, 0, 'writes off sends nothing')
+      assert.equal(off.calls.length, 0, 'no session sends nothing')
     } finally {
       if (saved === undefined) delete process.env.AGENTRT_PLAN_IMPORT_DIR
       else process.env.AGENTRT_PLAN_IMPORT_DIR = saved
@@ -391,7 +388,7 @@ describe('agent runtime writes', () => {
       { kind: 'get', path: '/api/v1/agentrt/waves' },
     ])
     assert.equal((listed as { note: string }).note, RUNTIME_DATA_NOTE)
-    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+    for (const over of [{ fellBack: true }]) {
       const gated = deps(over)
       assert.ok('error' in (await openWave({ repo: 'bifrost-platform', plan_root: 'R6' }, gated.d) as object))
       assert.ok('error' in (await endWave({ id: 'w3', action: 'close' }, gated.d) as object))
@@ -419,7 +416,6 @@ describe('agent runtime writes', () => {
 
   for (const [name, over, hint] of [
     ['a fallen-back session', { fellBack: true }, RUNTIME_SESSION_REFUSAL],
-    ['MCP_WRITES=off', { mode: 'off' as WritesMode }, RUNTIME_WRITES_OFF],
   ] as const) {
     it(`sends no write under ${name}`, async () => {
       const { d, calls } = deps(over)
@@ -512,11 +508,11 @@ describe('agent runtime tools are served', () => {
 })
 
 describe('messages and actions (W-31 2.3)', () => {
-  it('send_message posts as this thread and refuses without a session or with writes off', async () => {
+  it('send_message posts as this thread and refuses without a session', async () => {
     const { d, calls } = deps()
     await sendMessage({ to: 'seat:chief_of_staff', kind: 'ask', body: 'how is it going?' }, d)
     assert.deepEqual(calls, [{ kind: 'send', path: '/api/v1/agentrt/messages', body: { to: 'seat:chief_of_staff', kind: 'ask', body: 'how is it going?' } }])
-    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+    for (const over of [{ fellBack: true }]) {
       const { d: d2, calls: c2 } = deps(over)
       const out = (await sendMessage({ to: 'owner', kind: 'note', body: 'x' }, d2)) as { error?: string }
       assert.ok(out.error)
@@ -563,7 +559,7 @@ describe('messages and actions (W-31 2.3)', () => {
       { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?after=1760-0' },
       { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?last=1' },
     ])
-    const { d: off, calls: none } = deps({ mode: 'off' })
+    const { d: off, calls: none } = deps({ fellBack: true })
     assert.ok(((await ackMessages({ message_ids: ['m_1'] }, off)) as { error?: string }).error)
     assert.equal(none.length, 0)
   })
@@ -592,8 +588,8 @@ describe('plan view and external work', () => {
     assert.equal(calls[2].path, '/api/v1/agentrt/external-work/ew_1/events')
     assert.deepEqual(calls[2].body, { idempotency_key: 'hb', seq: 2, type: 'heartbeat' })
   })
-  it('refuses writes when disabled or no real session exists', async () => {
-    for (const over of [{ mode: 'off' as const }, { fellBack: true }]) {
+  it('refuses writes when no real session exists', async () => {
+    for (const over of [{ fellBack: true }]) {
       const { d, calls } = deps(over)
       await registerExternalWork({ idempotency_key: 'k', root: 'R4', plan_node_id: 'n', source_run_key: 'r', artifact_id: 'x' }, d)
       await recordExternalWorkEvent({ external_work_id: 'x', idempotency_key: 'k', seq: 1, type: 'started' }, d)
