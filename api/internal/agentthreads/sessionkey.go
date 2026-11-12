@@ -145,7 +145,7 @@ func olderEpoch(t Thread, b Beat) bool {
 // earliest first sighting. nil: no other row holds the key.
 func (st *State) heldKey(skip, host, vendor, session string, epoch int) *heldKeyState {
 	var held Thread
-	var first time.Time
+	var first, earliestRow time.Time
 	found := false
 	for k, o := range st.Threads {
 		os, oe := sessionKey(o.Thread, o.Session, o.Epoch)
@@ -158,14 +158,19 @@ func (st *State) heldKey(skip, host, vendor, session string, epoch int) *heldKey
 		if !o.FirstSeenAt.IsZero() && (first.IsZero() || o.FirstSeenAt.Before(first)) {
 			first = o.FirstSeenAt
 		}
+		if earliestRow.IsZero() || o.At.Before(earliestRow) {
+			earliestRow = o.At
+		}
 		found = true
 	}
 	if !found {
 		return nil
 	}
-	if !first.IsZero() {
-		held.FirstSeenAt = first
+	if first.IsZero() {
+		// Rows stored before FirstSeenAt existed still record their row time.
+		first = earliestRow
 	}
+	held.FirstSeenAt = first
 	return &heldKeyState{FirstSeenAt: held.FirstSeenAt, Compactions: held.Compactions, ClientBind: held.ClientBind, MetaAt: metaTime(held)}
 }
 

@@ -7,6 +7,30 @@ import (
 	"time"
 )
 
+func TestHeldKeyFirstSeenFromOldRows(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		first time.Time
+		want  time.Time
+	}{
+		{name: "all old rows", want: t0},
+		{name: "explicit first sighting", first: t0.Add(time.Minute), want: t0.Add(time.Minute)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st := State{Threads: map[string]Thread{
+				Key("claude", "s"):   {Thread: "s", Host: "h1", Vendor: "claude", Session: "s", Epoch: 1, At: t0, FirstSeenAt: tc.first},
+				Key("claude", "s:1"): {Thread: "s:1", Host: "h1", Vendor: "claude", Session: "s", Epoch: 1, At: t0.Add(2 * time.Minute)},
+			}}
+			got := st.heldKey("", "h1", "claude", "s", 1)
+			if got == nil || !got.FirstSeenAt.Equal(tc.want) {
+				t.Fatalf("held key = %+v, want first seen %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // P-c2 landing review rounds 1 and 2: a session key's state (its first
 // sighting, the precompacts counted for it, the client's last diagnosis) is
 // one copy that every row of the key carries. A session recovered under
