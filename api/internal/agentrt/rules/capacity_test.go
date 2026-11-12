@@ -59,9 +59,13 @@ func TestCapacityOnly(t *testing.T) {
 		"landing repo limit up":       {capacityLanding, loosened(t, capacityLanding, "max_files: 8", "max_files: 12"), true},
 		"landing global in flight up": {capacityLanding, loosened(t, capacityLanding, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2"), true},
 		"landing repo in flight up":   {capacityLanding, loosened(t, capacityLanding, "max_in_flight: 1}", "max_in_flight: 2}"), true},
-		"landing allow grows":         {capacityLanding, loosened(t, capacityLanding, `["console/src/pages/**/*.tsx"]`, `["console/src/pages/**/*.tsx", "api/**"]`), false},
-		"an envelope's budget":        {envelope, loosened(t, envelope, "max_attempts: 40", "max_attempts: 80"), false},
-		"a job":                       {job, loosened(t, job, "status: probation", "status: active"), false},
+		// max_batch is legacy (cleanup wave 1): no longer a signed field.
+		"landing states max_batch":  {capacityLanding, loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), true},
+		"landing changes max_batch": {loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), strings.Replace(loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 2000\n"), "rule_version: 2", "rule_version: 3", 1), true},
+		"landing drops max_batch":   {loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), strings.Replace(loosened(t, capacityLanding, "", ""), "rule_version: 2", "rule_version: 3", 1), true},
+		"landing allow grows":       {capacityLanding, loosened(t, capacityLanding, `["console/src/pages/**/*.tsx"]`, `["console/src/pages/**/*.tsx", "api/**"]`), false},
+		"an envelope's budget":      {envelope, loosened(t, envelope, "max_attempts: 40", "max_attempts: 80"), false},
+		"a job":                     {job, loosened(t, job, "status: probation", "status: active"), false},
 	} {
 		err := rules.CapacityOnly(parse(t, c.prev), parse(t, c.next))
 		if (err == nil) != c.card {

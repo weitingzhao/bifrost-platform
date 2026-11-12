@@ -15,7 +15,7 @@ import (
 // Owner's approval of an agentrt_rule_approve card on the PROD Console
 // instead of his signature (store.ApproveRule). The capacity fields are
 // concurrency's per_host and slots block, all of budget:<tenant>,
-// landing:<tenant>'s limits and repo limits,
+// landing:<tenant>'s limits (legacy max_batch included) and repo limits,
 // intake-gates' max_live_per_product and routing's quota_stop_percent.
 // Everything else stays signed.
 
@@ -43,7 +43,10 @@ func capacityField(kind string) func(path string) bool {
 	case KindLanding:
 		return func(p string) bool {
 			switch p {
-			case "limits.max_files", "limits.max_changed_lines", "limits.max_landings_per_day", "limits.max_in_flight_per_repo":
+			case "limits.max_files", "limits.max_changed_lines", "limits.max_landings_per_day", "limits.max_in_flight_per_repo",
+				// Legacy, bounds nothing: stating, changing or dropping it
+				// needs no signature (cleanup wave 1).
+				"limits.max_batch":
 				return true
 			}
 			// Repository capacities.
