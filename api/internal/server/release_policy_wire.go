@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -164,6 +165,107 @@ func (s *Server) checkTierBRelease(w http.ResponseWriter, r *http.Request, id st
 		s.audit.Record(r, "release_policy.check", id+" "+name, result, decisionDetail(r, d))
 	}
 	return false
+}
+
+// policyCheck is the answer of GET /delivery/pipelines/{name}/policy-check.
+type policyCheck struct {
+	Action        string            `json:"action"`
+	Pipeline      string            `json:"pipeline"`
+	Tier          actions.Tier      `json:"tier"`
+	NeedsApproval bool              `json:"needs_approval"`
+	Covered       bool              `json:"covered"`
+	PolicyID      string            `json:"policy_id,omitempty"`
+	Reasons       []string          `json:"reasons"`
+	Clauses       []string          `json:"clauses"`
+	SHAs          map[string]string `json:"shas"`
+	AdditiveDDL   []string          `json:"additive_ddl,omitempty"`
+	Outcome       string            `json:"outcome"`
+}
+
+// handleReleasePolicyCheck judges one start_pipeline_run request against the
+// signed policy and answers what the direct route would decide, with every
+// reason. It starts nothing, creates no approval and writes no audit record.
+// The query carries what the run request's body would: revision, tag, who,
+// and params as a JSON object. The parameters go through the action's own
+// Extract and the decision through the calls guard makes (Decide for a tier
+// that needs approval, Evaluate for tier B), so the answer is the direct
+// route's answer for the same request at this moment; the window, the newest
+// records and CI can all change before the real call.
+func (s *Server) handleReleasePolicyCheck(w http.ResponseWriter, r *http.Request) {
+	const id = "start_pipeline_run"
+	if s.releasePolicy == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "release policy not wired"})
+		return
+	}
+	act, ok := actions.ByID(id)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": id + " is not in the action catalog"})
+		return
+	}
+	q := r.URL.Query()
+	body := map[string]any{}
+	for _, key := range []string{"revision", "tag", "who"} {
+		if v := strings.TrimSpace(q.Get(key)); v != "" {
+			body[key] = v
+		}
+	}
+	if raw := strings.TrimSpace(q.Get("params")); raw != "" {
+		var inner map[string]string
+		if err := json.Unmarshal([]byte(raw), &inner); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "params must be a JSON object of strings"})
+			return
+		}
+		body["params"] = inner
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	params, err := act.Extract(r, raw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if missing := act.Missing(params); missing != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing " + missing})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), tierBPolicyTimeout)
+	defer cancel()
+	tier := act.TierOf(ctx, params)
+	name := strings.TrimSpace(fmt.Sprint(params["name"]))
+	var d releasepolicy.Decision
+	if tier.NeedsApproval() {
+		d = s.releasePolicy.Decide(ctx, id, tier, params)
+	} else {
+		d = s.releasePolicy.Evaluate(ctx, id, params)
+	}
+	out := policyCheck{
+		Action: id, Pipeline: name, Tier: tier, NeedsApproval: tier.NeedsApproval(), Covered: d.Auto,
+		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL,
+	}
+	if out.Reasons == nil {
+		out.Reasons = []string{}
+	}
+	if out.Clauses == nil {
+		out.Clauses = []string{}
+	}
+	if out.SHAs == nil {
+		out.SHAs = map[string]string{}
+	}
+	switch {
+	case tier.NeedsApproval() && d.Auto:
+		out.Outcome = "the direct call would start the run: the signed policy covers it"
+	case tier.NeedsApproval():
+		out.Outcome = "the direct call would answer 403 approval required with these reasons and create nothing; the run then needs an approval request"
+	default:
+		out.Outcome = "tier " + string(tier) + " runs without an approval either way; covered says what the policy would have decided"
+		if frozen, reason := s.releasePolicy.FreezeSet(ctx); frozen && releasePipeline(name) {
+			out.Outcome = "the direct call would be refused: releases are frozen (" + reason + ")"
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) auditRecorder() releasepolicy.Audit {

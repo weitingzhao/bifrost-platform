@@ -168,6 +168,7 @@ deny	GET /api/v1/delivery/compare
 deny	GET /api/v1/delivery/dev/smoke
 deny	POST /api/v1/delivery/mirrors/sync
 deny	GET /api/v1/delivery/pipelines
+deny	GET /api/v1/delivery/pipelines/{name}/policy-check
 deny	GET /api/v1/delivery/pipelines/{name}/preflight
 deny	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 deny	GET /api/v1/delivery/pipelines/{name}/runs

@@ -44,6 +44,10 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/ops/facts/system": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// Wave 2b (2026-11-12): a trial of the release policy on one run request,
+	// for the readers the release window's own GET has (read-only: it starts
+	// nothing, creates no approval, writes no audit record).
+	"GET /api/v1/delivery/pipelines/{name}/policy-check": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

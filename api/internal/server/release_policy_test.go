@@ -258,3 +258,98 @@ func TestFreezeAndInstallRoutes(t *testing.T) {
 		}
 	}
 }
+
+// check asks the trial route what the direct route would decide for the same
+// request (revision main, who agent@mac, as direct sends).
+func (h *policyHarness) check(t *testing.T, pipeline, query string) (int, policyCheck, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/delivery/pipelines/"+pipeline+"/policy-check?"+query, nil)
+	req.Header.Set(approvals.SessionHeader, "sess-rp")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("name", pipeline)
+	req = req.WithContext(withRoute(req, rctx))
+	rec := httptest.NewRecorder()
+	h.srv.handleReleasePolicyCheck(rec, req)
+	var out policyCheck
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec.Code, out, rec.Body.String()
+}
+
+const checkQuery = "revision=main&who=agent%40mac"
+
+// The trial answers what guard would, with every reason, and leaves nothing
+// behind: no run, no approval, no audit record.
+func TestPolicyCheckAnswersAsTheDirectRouteAndChangesNothing(t *testing.T) {
+	h := newPolicyHarness(t)
+	code, out, raw := h.check(t, policyPipeline, checkQuery)
+	if code != http.StatusOK || !out.Covered || !out.NeedsApproval || out.Tier != "C" || out.PolicyID != "rp-20261008-1100" ||
+		out.Pipeline != policyPipeline || out.SHAs["repo-app"] != rptest.SHA("new") || len(out.Reasons) != 0 ||
+		!strings.Contains(strings.Join(out.Clauses, ","), "allow:"+policyPipeline) || !strings.Contains(out.Outcome, "would start the run") {
+		t.Fatalf("covered check = %d %s", code, raw)
+	}
+	if !strings.Contains(raw, `"reasons":[]`) {
+		t.Fatalf("an empty reason list must be [], not null: %s", raw)
+	}
+
+	// Each way the policy can refuse: the trial's reasons are the ones the
+	// direct route puts in its 403.
+	refusals := map[string]func(h *policyHarness){
+		"path hit":  func(h *policyHarness) { h.facts.Files["repo-app"] = []string{"migrations/0002_add.sql"} },
+		"no window": func(h *policyHarness) { h.facts.Window = "no release window is open" },
+		"frozen": func(h *policyHarness) {
+			h.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:00:00Z"})
+		},
+	}
+	for name, mutate := range refusals {
+		t.Run(name, func(t *testing.T) {
+			h := newPolicyHarness(t)
+			mutate(h)
+			code, out, raw := h.check(t, policyPipeline, checkQuery)
+			if code != http.StatusOK || out.Covered || len(out.Reasons) == 0 || !strings.Contains(out.Outcome, "403 approval required") {
+				t.Fatalf("check = %d %s", code, raw)
+			}
+			var direct struct {
+				Reasons []string `json:"release_policy"`
+			}
+			rec := h.direct(t, runsPath)
+			_ = json.Unmarshal(rec.Body.Bytes(), &direct)
+			if rec.Code != http.StatusForbidden || strings.Join(direct.Reasons, "|") != strings.Join(out.Reasons, "|") {
+				t.Fatalf("direct said %v, the trial said %v", direct.Reasons, out.Reasons)
+			}
+		})
+	}
+
+	if h.hits != 0 || len(h.srv.approvals.Pending()) != 0 {
+		t.Fatalf("the trial started a run or created an approval: hits=%d pending=%d", h.hits, len(h.srv.approvals.Pending()))
+	}
+	if a := h.auditText(t); strings.Contains(a, "release_policy") {
+		t.Fatalf("the trial wrote an audit record:\n%s", a)
+	}
+}
+
+func TestPolicyCheckTierBAndBadRequests(t *testing.T) {
+	h := newPolicyHarness(t)
+	code, out, raw := h.check(t, stgPipeline, checkQuery)
+	if code != http.StatusOK || out.NeedsApproval || out.Tier != "B" || !out.Covered || !strings.Contains(out.Outcome, "runs without an approval") {
+		t.Fatalf("tier B check = %d %s", code, raw)
+	}
+	h.facts.Window = "no release window is open"
+	if _, out, raw = h.check(t, stgPipeline, checkQuery); out.Covered || !strings.Contains(strings.Join(out.Reasons, " "), "release window") {
+		t.Fatalf("tier B without a window = %s", raw)
+	}
+	h.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:00:00Z", "who": "agent", "reason": "incident"})
+	if _, out, raw = h.check(t, stgPipeline, checkQuery); !strings.Contains(out.Outcome, "releases are frozen") {
+		t.Fatalf("frozen tier B = %s", raw)
+	}
+	if code, _, raw = h.check(t, policyPipeline, "params=not-json"); code != http.StatusBadRequest {
+		t.Fatalf("bad params = %d %s", code, raw)
+	}
+	// The params object reaches the engine as the run request's would.
+	if code, _, raw = h.check(t, policyPipeline, checkQuery+"&params=%7B%22uiRevision%22%3A%22"+rptest.SHA("ui")+"%22%7D"); code != http.StatusOK {
+		t.Fatalf("params object = %d %s", code, raw)
+	}
+	h.srv.releasePolicy = nil
+	if code, _, _ = h.check(t, policyPipeline, checkQuery); code != http.StatusServiceUnavailable {
+		t.Fatalf("unwired = %d", code)
+	}
+}
