@@ -3,6 +3,7 @@ package releases
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,10 +13,12 @@ import (
 // RepoBuild is the commit one repo was built from.
 type RepoBuild struct {
 	SHA string `json:"sha"`
-	// Source: "result" (the clone task's commit result), "pinned" (the run's
-	// inline spec pinned that clone to a full SHA) or "param" (the clone's own
-	// revision parameter is a full SHA; for a TaskRun without one, the run's
-	// revision parameter, which every clone of such a pipelineRef run used).
+	// Source: "result" (the clone task's commit result, or a source gate's
+	// result for a repo a promoting run does not clone: sourceResults),
+	// "pinned" (the run's inline spec pinned that clone to a full SHA) or
+	// "param" (the clone's own revision parameter is a full SHA; for a TaskRun
+	// without one, the run's revision parameter, which every clone of such a
+	// pipelineRef run used).
 	Source string `json:"source"`
 }
 
@@ -38,8 +41,9 @@ type Record struct {
 	// builds report no digest records none.
 	Images map[string]string `json:"images,omitempty"`
 	// Missing lists clone tasks whose commit could not be read (runs older
-	// than the commit result, cloned at a moving ref), and build tasks that
-	// declare a digest result but gave no digest ("build-x (digest)").
+	// than the commit result, cloned at a moving ref), build tasks that
+	// declare a digest result but gave no digest ("build-x (digest)"), and a
+	// source gate that ran without the commit it owes ("check-source (ui-commit)").
 	Missing    []string  `json:"missing,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
 }
@@ -58,9 +62,52 @@ const (
 	// record means; a record of another version is built again once while
 	// its run still exists. v2: images. v3: a build that owes a digest is
 	// missing (review 170 B1), so a v2 record marked complete without its
-	// digests is built again.
-	recordVersion = "v3"
+	// digests is built again. v4: a promoting run's source gate names the
+	// repos it ships without cloning (sourceResults), so a v3 record of the
+	// platform's PROD run gains its bifrost-ui commit.
+	recordVersion = "v4"
 )
+
+// sourceResults: pipeline -> pipeline task -> result name -> repo. A run that
+// promotes what another run built clones only the repo it deploys from; the
+// other sources it ships are checked against that build by its source gate,
+// which gives each one's commit as a result. Without them the record names
+// one repo, and the release policy, which pins every repo a PROD release
+// ships to what the STG release shipped, could not pin the rest (2026-11-12:
+// bifrost-ui was missing from every PROD record of the platform).
+var sourceResults = map[string]map[string]map[string]string{
+	"bifrost-deliver-platform-prod": {"check-source": {"ui-commit": "bifrost-ui"}},
+}
+
+// gateSources reads the commits a source gate TaskRun gives for the repos
+// sourceResults names: repo -> sha, and the results it owes but did not give
+// as a full commit id, sorted. ok is false for any other TaskRun.
+func gateSources(pipeline string, tr *unstructured.Unstructured) (repos map[string]string, missing []string, ok bool) {
+	task := tr.GetLabels()["tekton.dev/pipelineTask"]
+	want := sourceResults[pipeline][task]
+	if len(want) == 0 {
+		return nil, nil, false
+	}
+	given := map[string]string{}
+	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		name, _ := m["name"].(string)
+		if v, isStr := m["value"].(string); isStr && fullSHA.MatchString(strings.TrimSpace(v)) {
+			given[name] = strings.TrimSpace(v)
+		}
+	}
+	repos = map[string]string{}
+	for result, repo := range want {
+		if sha := given[result]; sha != "" {
+			repos[repo] = sha
+		} else {
+			missing = append(missing, task+" ("+result+")")
+		}
+	}
+	sort.Strings(missing)
+	return repos, missing, true
+}
 
 var (
 	fullSHA   = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -220,6 +267,16 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 				// (review 167 B1). A build that declares none owes none.
 				rec.Missing = append(rec.Missing, taskRuns[i].GetLabels()["tekton.dev/pipelineTask"]+" (digest)")
 			}
+			continue
+		}
+		if repos, missing, ok := gateSources(rec.Pipeline, &taskRuns[i]); ok {
+			for repo, sha := range repos {
+				// A clone of the same repo, where there is one, is the better witness.
+				if _, cloned := rec.Repos[repo]; !cloned {
+					rec.Repos[repo] = RepoBuild{SHA: sha, Source: "result"}
+				}
+			}
+			rec.Missing = append(rec.Missing, missing...)
 			continue
 		}
 		task, repo, sha, rev, hasRev, ok := cloneOf(&taskRuns[i])

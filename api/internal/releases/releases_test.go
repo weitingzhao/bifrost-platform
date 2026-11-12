@@ -382,3 +382,97 @@ func TestCompleteV2RecordGainsItsDigests(t *testing.T) {
 		t.Fatalf("a current record was built again: %+v", r)
 	}
 }
+
+// gateTaskRun is a source gate TaskRun as the platform's PROD pipeline runs
+// it (check-source of bifrost-deliver-platform-prod-c95d86dbbb9e2019-1,
+// 2026-11-12): revision params, no url, and its findings as results.
+func gateTaskRun(run, task string, results map[string]string) *unstructured.Unstructured {
+	var rs []any
+	for _, name := range []string{"api-digest", "commit", "console-digest", "ui-commit"} {
+		if v, ok := results[name]; ok {
+			rs = append(rs, map[string]any{"name": name, "type": "string", "value": v})
+		}
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "TaskRun",
+		"metadata": map[string]any{"name": run + "-" + task, "namespace": "cicd", "labels": map[string]any{
+			"tekton.dev/pipelineRun": run, "tekton.dev/pipelineTask": task}},
+		"spec": map[string]any{"params": []any{
+			map[string]any{"name": "revision", "value": shaA},
+			map[string]any{"name": "uiRevision", "value": shaB},
+		}},
+		"status": map[string]any{"results": rs},
+	}}
+}
+
+// The platform's PROD run promotes what STG built and clones only the
+// platform repo; bifrost-ui's commit is its source gate's ui-commit result.
+// Without it the release policy cannot pin bifrost-ui (2026-11-12).
+func TestPromotingRunRecordsItsSourceGateCommits(t *testing.T) {
+	done := time.Date(2026, 11, 12, 21, 41, 54, 0, time.UTC)
+	const prod = "bifrost-deliver-platform-prod"
+	run := pipelineRun(prod+"-1", prod, true, done, nil, nil)
+	clone := cloneTaskRun(prod+"-1", "clone-platform", "bifrost-platform", shaA)
+	gate := gateTaskRun(prod+"-1", "check-source", map[string]string{
+		"api-digest": "sha256:" + strings.Repeat("a", 64), "commit": shaA, "ui-commit": shaB + "\n"})
+
+	rec := buildRecord(run, Rule{Lane: "platform", Env: "prod", Deploys: true}, []unstructured.Unstructured{*gate, *clone}, done)
+	if len(rec.Repos) != 2 || rec.Repos["bifrost-platform"] != (RepoBuild{SHA: shaA, Source: "result"}) ||
+		rec.Repos["bifrost-ui"] != (RepoBuild{SHA: shaB, Source: "result"}) || len(rec.Missing) != 0 {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	// A gate that ran without the commit it owes, or with something that is
+	// not a commit id, leaves the record incomplete; it names no repo.
+	for name, results := range map[string]map[string]string{
+		"absent":    {"commit": shaA},
+		"malformed": {"commit": shaA, "ui-commit": "main"},
+	} {
+		rec = buildRecord(run, Rule{Lane: "platform", Env: "prod"}, []unstructured.Unstructured{*clone, *gateTaskRun(prod+"-1", "check-source", results)}, done)
+		if _, has := rec.Repos["bifrost-ui"]; has || strings.Join(rec.Missing, ",") != "check-source (ui-commit)" {
+			t.Fatalf("%s: record = %+v", name, rec)
+		}
+	}
+
+	// The same task name in a pipeline the table does not list means nothing.
+	other := pipelineRun("deliver-stg-12", "deliver-stg", true, done, nil, nil)
+	rec = buildRecord(other, Rule{Lane: "app", Env: "stg"}, []unstructured.Unstructured{
+		*cloneTaskRun("deliver-stg-12", "clone-core", "core", shaA),
+		*gateTaskRun("deliver-stg-12", "check-source", map[string]string{"ui-commit": shaB})}, done)
+	if len(rec.Repos) != 1 || len(rec.Missing) != 0 {
+		t.Fatalf("other pipeline: record = %+v", rec)
+	}
+}
+
+// A v3 record of the platform's PROD run, complete as v3 understood it, is
+// built again once while its run exists and gains bifrost-ui.
+func TestCompleteV3RecordGainsItsSourceGateCommit(t *testing.T) {
+	done := time.Date(2026, 11, 12, 21, 41, 54, 0, time.UTC)
+	const prod = "bifrost-deliver-platform-prod"
+	run := pipelineRun(prod+"-1", prod, true, done, nil, nil)
+	core := k8sfake.NewSimpleClientset()
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList",
+	}, run, cloneTaskRun(prod+"-1", "clone-platform", "bifrost-platform", shaA),
+		gateTaskRun(prod+"-1", "check-source", map[string]string{"commit": shaA, "ui-commit": shaB}))
+	s := NewService(writeRules(t, "namespace: cicd\nrules:\n  - match: { pipeline: "+prod+" }\n    lane: platform\n    env: prod\n    deploys: true\n"),
+		func() (kubernetes.Interface, dynamic.Interface, error) { return core, dyn, nil })
+	old, _ := encode(Record{Run: prod + "-1", Pipeline: prod, Lane: "platform", Env: "prod", Deploys: true,
+		Repos: map[string]RepoBuild{"bifrost-platform": {SHA: shaA, Source: "result"}}})
+	if _, err := core.CoreV1().ConfigMaps("cicd").Create(context.Background(), &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: recordName(prod + "-1"), Labels: map[string]string{labelRecord: "v3", labelComplete: "true"}},
+		Data:       map[string]string{dataKey: old},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 1 {
+		t.Fatalf("tick = %+v", r)
+	}
+	recs, err := s.List(context.Background())
+	if err != nil || len(recs) != 1 || recs[0].Repos["bifrost-ui"].SHA != shaB || recs[0].Repos["bifrost-platform"].SHA != shaA {
+		t.Fatalf("records = %+v %v", recs, err)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 0 {
+		t.Fatalf("a current record was built again: %+v", r)
+	}
+}
