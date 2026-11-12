@@ -39,6 +39,15 @@ drift-scan-all:
 test-api:
 	cd api && go test ./...
 
+# Local PostgreSQL + Redis configured as CI's sidecars (scripts/test-db.sh):
+#   make test-db && eval "$$(scripts/test-db.sh env)" && make test-api
+.PHONY: test-db test-db-stop
+test-db:
+	./scripts/test-db.sh start
+
+test-db-stop:
+	./scripts/test-db.sh stop
+
 .PHONY: test-api-scoped
 test-api-scoped:
 	./scripts/ci/test_api_scoped.sh "$(BASE)" "$(HEAD)"

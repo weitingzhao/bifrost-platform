@@ -80,6 +80,7 @@ make start        # ./scripts/run_platform.py — frees ports, api + console
 make dev-api      # Go API only
 make dev-console  # Vite console only
 make test         # go test + console type-check
+make test-db && eval "$(scripts/test-db.sh env)"   # 本机测试库（同 CI sidecar）；不设 AGENTRT_TEST_PG 时数据库测试全部 skip
 ```
 
 ## 依赖关系
