@@ -212,6 +212,11 @@ type PipelineTaskRunView struct {
 	Name         string `json:"name"`
 	Status       string `json:"status"`
 	Reason       string `json:"reason,omitempty"`
+	// StartTime and CompletionTime are the TaskRun's own (RFC 3339), empty
+	// until it has them: a reader that waits for a run reports how long each
+	// task took without reading the cluster itself.
+	StartTime      string `json:"start_time,omitempty"`
+	CompletionTime string `json:"completion_time,omitempty"`
 }
 
 type PipelineRunStepsResponse struct {

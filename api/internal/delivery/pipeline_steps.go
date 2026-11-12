@@ -293,11 +293,15 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 				}
 			}
 		}
+		started, _, _ := unstructured.NestedString(item.Object, "status", "startTime")
+		completed, _, _ := unstructured.NestedString(item.Object, "status", "completionTime")
 		tasks = append(tasks, PipelineTaskRunView{
-			PipelineTask: pt,
-			Name:         item.GetName(),
-			Status:       st,
-			Reason:       reason,
+			PipelineTask:   pt,
+			Name:           item.GetName(),
+			Status:         st,
+			Reason:         reason,
+			StartTime:      started,
+			CompletionTime: completed,
 		})
 	}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
