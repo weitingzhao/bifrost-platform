@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import wire from '@/api/__fixtures__/agentrt-delivery.go.json'
 import timelineWire from '@/api/__fixtures__/agentrt-plan-timeline.go.json'
-import { fetchTaskDelivery, parseDelivery, taskStages, type DeliveryRead } from '@/api/deliveryStages'
+import { commitStages, deliverySettled, fetchCommitDelivery, fetchTaskDelivery, parseDelivery, taskStages, type DeliveryRead } from '@/api/deliveryStages'
 import { parsePlanTimeline } from '@/api/planTimeline'
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
@@ -108,5 +108,53 @@ describe("a task's stages", () => {
     expect(await fetchTaskDelivery(prodSeen.task_id)).toEqual({ state: 'none' })
     fetcher.mockImplementation(async () => new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 }))
     await expect(fetchTaskDelivery(prodSeen.task_id)).rejects.toThrow(/Delivery: unavailable/)
+  })
+})
+
+// A commit only an external work names (the main lane): GET /delivery?commit= answers from the pipeline runs the
+// platform recorded of that commit. The merge into main is not recorded, so On main is Unknown with Go's reason.
+describe("an external work's commit", () => {
+  const waiting = byName('external work: CI green, waiting for STG')
+  const failed = byName('external work: STG delivery failed')
+  const onProd = byName('external work: on PROD by its recorded runs')
+
+  it('names its external work and no task, attempt or operation', () => {
+    for (const doc of [waiting, failed, onProd]) {
+      expect(doc).toMatchObject({ external_work_id: expect.stringMatching(/^ew_[0-9a-f]{64}$/), attempt_id: '', operation: '' })
+      expect(parseDelivery(doc).warnings.join(' ')).toContain('exact commit')
+    }
+    expect(prodSeen).not.toHaveProperty('external_work_id')
+  })
+
+  it('reads each stage from its own fact, with its time, and what is not recorded as Unknown and why', () => {
+    expect(commitStages(ok(onProd))).toEqual([
+      { stage: 'handed_in', state: 'reached', at: stageOf(onProd, 'handed_in').entered_at },
+      { stage: 'ci', state: 'reached', at: stageOf(onProd, 'landing_ci').left_at },
+      { stage: 'on_main', state: 'unknown', reason: stageOf(onProd, 'on_main').reason },
+      { stage: 'on_stg', state: 'reached', at: stageOf(onProd, 'stg').left_at },
+      { stage: 'on_prod', state: 'reached', at: stageOf(onProd, 'on_prod').entered_at },
+    ])
+    expect(stageOf(onProd, 'on_main').reason).toMatch(/does not record/)
+    expect(stageOf(onProd, 'owner_wait')).toMatchObject({ state: 'unknown', reason: expect.stringMatching(/Gitea/) })
+    expect(commitStages(ok(waiting)).map(s => [s.stage, s.state])).toEqual([
+      ['handed_in', 'reached'], ['ci', 'reached'], ['on_main', 'unknown'], ['on_stg', 'not_reached'], ['on_prod', 'not_reached']])
+  })
+
+  it('says why a stage stopped, and is settled only once on PROD', () => {
+    expect(commitStages(ok(failed))[3]).toEqual({ stage: 'on_stg', state: 'not_reached', reason: 'STG delivery failed: bifrost-deliver-platform-0' })
+    expect([onProd, waiting, failed].map(doc => deliverySettled(ok(doc)))).toEqual([true, false, false])
+    expect([deliverySettled(undefined), deliverySettled({ state: 'none' }), deliverySettled({ state: 'unknown', reason: 'x' })]).toEqual([false, false, false])
+    // A commit nothing names, and an answer that could not be read.
+    expect(commitStages({ state: 'none' }).map(s => s.state)).toEqual(Array(5).fill('not_reached'))
+    expect(commitStages({ state: 'unknown', reason: 'Delivery: HTTP 503' })[1]).toEqual({ stage: 'ci', state: 'unknown', reason: 'Delivery: HTTP 503' })
+  })
+
+  it('is read by its commit; 404 is none', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(onProd), { status: 200 }))
+    vi.stubGlobal('fetch', fetcher)
+    expect(await fetchCommitDelivery(onProd.commit)).toEqual({ state: 'ok', data: onProd })
+    expect(String((fetcher.mock.calls[0] as unknown[])[0])).toBe(`/api/v1/agentrt/delivery?commit=${onProd.commit}`)
+    fetcher.mockImplementation(async () => new Response(JSON.stringify({ error: 'not_found', message: 'change not found' }), { status: 404 }))
+    expect(await fetchCommitDelivery(onProd.commit)).toEqual({ state: 'none' })
   })
 })

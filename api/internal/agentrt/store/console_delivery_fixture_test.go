@@ -23,7 +23,8 @@ import (
 // to the answers in the two fixtures below. The handlers write what
 // ReadDelivery and ReadRoundTimeline return as it is (writeJSON), so these
 // answers are those reads on the migrated database, for a round where one
-// task went to PROD and another reached main only:
+// task went to PROD, another reached main only, and an external work handed
+// in a commit of its own:
 //
 //	CONSOLE_DELIVERY_WRITE=1 go test ./internal/agentrt/store/ -run TestConsoleDeliveryFixtures
 //
@@ -179,6 +180,24 @@ func TestConsoleDeliveryFixtures(t *testing.T) {
 		ok(t, err)
 		delivery.Cases = append(delivery.Cases, consoleFixtureCase{Name: item.name, Query: "task=" + prod, Response: encode(out)})
 	}
+	// A commit only an external work names (the main lane): its recorded
+	// pipeline runs tell the stages, and the merge into main is unknown.
+	externalSubmitted(t, w, "thread:giant", s2, "console-fixture", externalCommit)
+	started := c.at.Add(-40 * time.Minute)
+	recordRuns(t, w, externalRun("ci-platform-a", "bifrost-ci-platform", "Succeeded", started, 7*time.Minute))
+	external := func(name string) {
+		t.Helper()
+		out, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit}, nil, nil)
+		ok(t, err)
+		delivery.Cases = append(delivery.Cases, consoleFixtureCase{Name: name, Query: "commit=" + externalCommit, Response: encode(out)})
+	}
+	external("external work: CI green, waiting for STG")
+	recordRuns(t, w, externalRun("bifrost-deliver-platform-0", "bifrost-deliver-platform", "Failed", started.Add(10*time.Minute), time.Minute))
+	external("external work: STG delivery failed")
+	recordRuns(t, w, externalRun("bifrost-deliver-platform-1", "bifrost-deliver-platform", "Succeeded", started.Add(15*time.Minute), 5*time.Minute),
+		externalRun("bifrost-deliver-platform-prod-1", "bifrost-deliver-platform-prod", "Succeeded", started.Add(30*time.Minute), time.Minute))
+	external("external work: on PROD by its recorded runs")
+
 	var timeline consoleFixture
 	for _, q := range []struct{ name, node string }{{"round", ""}, {"one step", s2}} {
 		out, err := store.ReadRoundTimeline(ctx, w.rt, root, q.node)

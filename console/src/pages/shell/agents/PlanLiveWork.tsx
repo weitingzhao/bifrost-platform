@@ -7,7 +7,7 @@ import { useState } from 'react'
 import type { ExternalWork, PlanSnapshotRead as PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
-import { DeliveryStrip } from './DeliveryStrip'
+import { DeliveryStrip, WorkDeliveryStrips } from './DeliveryStrip'
 import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
@@ -72,6 +72,7 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
       {!external && <> · Host · {work.attempt!.host_id || 'Unknown'}{work.external_work?.length ? ` · Linked external history · ${work.external_work.length} records` : ''} · {work.attempt!.reason}</>}
     </span>
     {work.task_id && <span className="basis-full"><DeliveryStrip task={work.task_id} /></span>}
+    {external && work.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={work.commit_shas} /></span> : null}
     {!external && <LiveAttemptAction attempt={work.attempt!} now={now} />}
     {wait?.text && <WaitLine wait={wait} />}
     {!external && <a className="inline-flex min-h-11 items-center text-sm" href={goalHref(work.mission_id, work.task_id)}>Open task</a>}
@@ -81,6 +82,7 @@ export function ExternalRecord({ work }: { work: ExternalWork }) {
   return <li className="[overflow-wrap:anywhere]">{work.description.task} · {work.description.executor} · {work.status}{work.backfilled && ' · Backfilled'}{work.verification && ` · ${work.verification}`}
     {work.report_digest && <span className="block">Report · {work.report_digest}</span>}
     {work.commit_shas?.map(sha => <span className="block" key={sha}>Commit · {sha}</span>)}
+    <WorkDeliveryStrips commits={work.commit_shas} />
   </li>
 }
 const endedAt = (w: ExternalWork) => w.ended_at ?? w.heartbeat_at
@@ -157,6 +159,7 @@ export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; st
         return <li key={w.external_work_id} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3 py-2 shadow-[var(--ops-inset)] [overflow-wrap:anywhere]">
           <span className="min-w-0 flex-[1_1_15rem] text-sm leading-[1.45]">{w.description.task}</span>
           <span className={`${mono} whitespace-nowrap`} title={`${w.source_run_key} · ended ${endedAt(w)}`}>{node?.label ?? w.plan_node_id} · {duration(w.elapsed_s)} · {w.verification ?? 'Unknown'}</span>
+          {w.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={w.commit_shas} /></span> : null}
         </li>
       })}</ul>}
     {submitted.length > SUBMITTED_SHOWN && !all && <button type="button" onClick={() => setAll(true)}

@@ -2,8 +2,8 @@ import { authedFetch, parseError } from './client'
 import type { PlanTimeline } from './planTimeline'
 
 /**
- * GET /api/v1/agentrt/delivery (store/delivery_read.go, store/deliverystages.go): one change's seven delivery stages,
- * each with when it was entered and left. Closed like planSnapshotSchema.ts: a key Go does not write, a stage or state
+ * GET /api/v1/agentrt/delivery (store/delivery_read.go, store/deliverystages.go, store/delivery_external.go): one change's
+ * seven delivery stages, each with when it was entered and left; external_work_id only on a commit an external work handed in. Closed like planSnapshotSchema.ts: a key Go does not write, a stage or state
  * it does not name, or the stages out of Go's order refuse the whole answer. Optional means omitted by Go.
  */
 type Parser<T> = (value: unknown, path: string) => T
@@ -25,10 +25,10 @@ export const DELIVERY_ORDER = ['handed_in', 'landing_ci', 'owner_wait', 'on_main
 const stage = object({
   stage: one(...DELIVERY_ORDER), state: one('done', 'current', 'not_reached', 'unknown'),
   entered_at: optional(timestamp), left_at: optional(timestamp), actor: optional(str), actor_role: optional(one('executor', 'approver', 'pusher', 'releaser')),
-  waits_on: optional(str), reason: optional(str), source: optional(one('attempt', 'landing', 'grant', 'release_cycle', 'deploy_seen', 'stg_coverage', 'release_record')),
+  waits_on: optional(str), reason: optional(str), source: optional(one('attempt', 'landing', 'grant', 'release_cycle', 'deploy_seen', 'stg_coverage', 'release_record', 'external_work', 'pipeline_seen')),
 })
 const delivery = object({
-  schema: one('agentrt.delivery_response/v1'), commit: str, task_id: str, attempt_id: str, plan_node_id: str, repo: str, operation: str,
+  schema: one('agentrt.delivery_response/v1'), commit: str, task_id: str, attempt_id: str, plan_node_id: str, repo: str, operation: str, external_work_id: optional(str),
   stages: array(stage), warnings: array(str), as_of: timestamp,
 })
 export type Delivery = ReturnType<typeof delivery>
@@ -40,13 +40,13 @@ export function parseDelivery(value: unknown): Delivery {
   return out
 }
 
-/** The delivery of a task as read: its answer, none (404: the task handed no change in), or Unknown and why. */
+/** The delivery of a task or commit as read: its answer, none (404: no change handed in), or Unknown and why. */
 export type DeliveryRead = { state: 'ok'; data: Delivery } | { state: 'none' } | { state: 'unknown'; reason: string }
 
 class NoChange extends Error {}
-export async function fetchTaskDelivery(task: string, signal?: AbortSignal): Promise<DeliveryRead> {
+async function fetchDelivery(query: { task: string } | { commit: string }, signal?: AbortSignal): Promise<DeliveryRead> {
   try {
-    const response = await authedFetch('Delivery', `/api/v1/agentrt/delivery?${new URLSearchParams({ task })}`, { signal },
+    const response = await authedFetch('Delivery', `/api/v1/agentrt/delivery?${new URLSearchParams(query)}`, { signal },
       async (prefix, r, token) => r.status === 404 ? new NoChange() : parseError(prefix, r, token))
     return { state: 'ok', data: parseDelivery(await response.json()) }
   } catch (error) {
@@ -54,6 +54,9 @@ export async function fetchTaskDelivery(task: string, signal?: AbortSignal): Pro
     throw error
   }
 }
+export const fetchTaskDelivery = (task: string, signal?: AbortSignal) => fetchDelivery({ task }, signal)
+/** The delivery of the change a commit names: a landing operation or attempt, else the external work that handed it in. */
+export const fetchCommitDelivery = (commit: string, signal?: AbortSignal) => fetchDelivery({ commit }, signal)
 
 /**
  * A task's way from the plan to PROD, the stages t1 takes: each reached at a time, not reached, or Unknown and why.
@@ -64,7 +67,7 @@ export async function fetchTaskDelivery(task: string, signal?: AbortSignal): Pro
  */
 export const TASK_STAGES = ['planned', 'handed_in', 'verified', 'on_main', 'on_stg', 'on_prod'] as const
 export type TaskStage = typeof TASK_STAGES[number]
-export type StageReading = { stage: TaskStage } & ({ state: 'reached'; at: string } | { state: 'not_reached' } | { state: 'unknown'; reason: string })
+export type StageReading = { stage: TaskStage | 'ci' } & ({ state: 'reached'; at: string } | { state: 'not_reached'; reason?: string } | { state: 'unknown'; reason: string })
 
 function fromTimeline(task: string, timeline: PlanTimeline | undefined, stage: 'planned' | 'verified'): StageReading {
   if (!timeline) return { stage, state: 'unknown', reason: 'plan timeline not read' }
@@ -75,25 +78,40 @@ function fromTimeline(task: string, timeline: PlanTimeline | undefined, stage: '
   return stage === 'planned' ? { stage, state: 'unknown', reason: "the step's created event is not on the timeline" } : { stage, state: 'not_reached' }
 }
 
-// Which delivery stage says each of the four, and which of its times is when it was reached.
-const FROM_DELIVERY: Record<'handed_in' | 'on_main' | 'on_stg' | 'on_prod', { stage: DeliveryStage['stage']; at: 'entered_at' | 'left_at' }> = {
-  handed_in: { stage: 'handed_in', at: 'entered_at' }, on_main: { stage: 'on_main', at: 'entered_at' },
+// Which delivery stage says each of the five, and which of its times is when it was reached (ci: when it went green).
+const FROM_DELIVERY: Record<'handed_in' | 'ci' | 'on_main' | 'on_stg' | 'on_prod', { stage: DeliveryStage['stage']; at: 'entered_at' | 'left_at' }> = {
+  handed_in: { stage: 'handed_in', at: 'entered_at' }, ci: { stage: 'landing_ci', at: 'left_at' }, on_main: { stage: 'on_main', at: 'entered_at' },
   on_stg: { stage: 'stg', at: 'left_at' }, on_prod: { stage: 'on_prod', at: 'entered_at' },
 }
-function fromDelivery(task: string, read: DeliveryRead, stage: keyof typeof FROM_DELIVERY): StageReading {
+/** One stage of an answer; task, when given, is the task the answer must be of. */
+function fromDelivery(read: DeliveryRead, stage: keyof typeof FROM_DELIVERY, task?: string): StageReading {
   if (read.state === 'none') return { stage, state: 'not_reached' }
   if (read.state === 'unknown') return { stage, state: 'unknown', reason: read.reason }
-  if (read.data.task_id !== task) return { stage, state: 'unknown', reason: `the delivery answer is of task ${read.data.task_id || 'Unknown'}` }
+  if (task !== undefined && read.data.task_id !== task) return { stage, state: 'unknown', reason: `the delivery answer is of task ${read.data.task_id || 'Unknown'}` }
   const from = FROM_DELIVERY[stage]
   const s = read.data.stages.find(x => x.stage === from.stage)!
   if (s.state === 'unknown') return { stage, state: 'unknown', reason: s.reason || 'Unknown' }
   const at = s[from.at]
   // The answer names the change, so it was handed in, waiting on its landing claim or past it.
   const reached = s.state === 'done' || at !== undefined || (stage === 'handed_in' && s.state === 'current')
-  if (!reached) return { stage, state: 'not_reached' }
+  // A stage stopped where it is (a failed run) says why.
+  if (!reached) return s.reason ? { stage, state: 'not_reached', reason: s.reason } : { stage, state: 'not_reached' }
   return at === undefined ? { stage, state: 'unknown', reason: `${from.stage} is ${s.state} with no ${from.at}` } : { stage, state: 'reached', at }
 }
 
 export function taskStages(task: string, read: DeliveryRead, timeline?: PlanTimeline): StageReading[] {
-  return TASK_STAGES.map(stage => stage === 'planned' || stage === 'verified' ? fromTimeline(task, timeline, stage) : fromDelivery(task, read, stage))
+  return TASK_STAGES.map(stage => stage === 'planned' || stage === 'verified' ? fromTimeline(task, timeline, stage) : fromDelivery(read, stage, task))
+}
+
+/**
+ * A commit's way to PROD as the delivery answer alone tells it (an external work's commit has no plan timeline of its
+ * own): handed in, CI green, on main, on STG, on PROD. What the platform does not record is Unknown with Go's reason.
+ */
+export const COMMIT_STAGES = ['handed_in', 'ci', 'on_main', 'on_stg', 'on_prod'] as const
+export function commitStages(read: DeliveryRead): StageReading[] {
+  return COMMIT_STAGES.map(stage => fromDelivery(read, stage))
+}
+/** True once the answer says the commit is on PROD: nothing later changes it, so it need not be read again. */
+export function deliverySettled(read: DeliveryRead | undefined): boolean {
+  return read?.state === 'ok' && read.data.stages.at(-1)?.state === 'done'
 }

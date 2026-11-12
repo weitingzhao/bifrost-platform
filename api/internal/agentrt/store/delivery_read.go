@@ -17,7 +17,9 @@ import (
 // or by task. The change is resolved, its landing operation, grant, push,
 // STG verifications and PROD deploys are read in one read-only snapshot, and
 // FoldDelivery orders them. The release cycles live outside the runtime
-// database: the caller reads them and passes what it got.
+// database: the caller reads them and passes what it got. A commit that no
+// landing operation or attempt names, and an external work handed in, is
+// answered from its recorded pipeline runs (delivery_external.go).
 
 // DeliveryQuery names a change: exactly one of Commit (a 7 to 40 character
 // lowercase hex prefix) or Task.
@@ -101,7 +103,16 @@ func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery, cycles []ReleaseC
 		if err != nil {
 			return nil, err
 		}
-		if c, err = resolveDeliveryCommit(q.Commit, candidates); err != nil {
+		c, err = resolveDeliveryCommit(q.Commit, candidates)
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No landing operation or attempt names it: an external work may.
+			out, err := readExternalDelivery(ctx, tx, q, now)
+			if err != nil {
+				return nil, err
+			}
+			return out, tx.Commit(ctx)
+		}
+		if err != nil {
 			return nil, err
 		}
 	} else if c, err = deliveryTaskCandidate(ctx, tx, q.Task); err != nil {
