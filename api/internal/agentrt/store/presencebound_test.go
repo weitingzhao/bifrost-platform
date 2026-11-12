@@ -74,6 +74,7 @@ func (w *world) explain(t *testing.T, q string, args ...any) (planNode, string) 
 // and as many buffers with eleven times the notes.
 func TestPresenceReadsAreBounded(t *testing.T) {
 	t.Parallel()
+	slowTest(t)
 	w := presenceWorld(t, "h1", "h2")
 	w.poll(t, "h1", claude, codex)
 	presenceAt(t, w, time.Time{})

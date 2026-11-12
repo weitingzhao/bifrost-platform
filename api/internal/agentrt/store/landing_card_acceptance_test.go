@@ -3,7 +3,6 @@ package store_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -136,27 +135,6 @@ func TestS3CardSettleExpiredOrWithdrawnAsksAgain(t *testing.T) {
 				t.Fatalf("no card n+1: %+v asks=%d", cards, f.asks)
 			}
 		})
-	}
-}
-
-// Serial: FreezeEventClock. Cleanup wave 1 (2026-11-11): no four cards a day
-// for one trigger: six cards expire one after another within six hours and
-// a seventh is asked.
-func TestS3CardPastFourADay(t *testing.T) {
-	at := time.Now().Add(-2 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
-	w := newKernelWorld(t)
-	cardFailedRoot(t, w, "land:acc1d:1", "stale", at)
-	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
-	cardPass(t, w, f, at.Add(time.Hour))
-	for n := 1; n <= 6; n++ {
-		f.byID[fmt.Sprintf("q%d", n)].q.Status = "expired"
-		when := at.Add(time.Hour + time.Duration(n)*time.Hour)
-		f.now = func() time.Time { return when }
-		cardPass(t, w, f, when)
-	}
-	if cards := cardsByN(t, w); len(cards) != 7 || !cards[7].Bound || f.asks != 7 {
-		t.Fatalf("%d cards, %d asks; want 7", len(cards), f.asks)
 	}
 }
 

@@ -351,6 +351,7 @@ func TestReworkClosedStepComesBack(t *testing.T) {
 // Serial: FreezeEventClock. §6.2 through the real trigger: a set too large
 // for even task ids prepares no card.
 func TestReworkTooManySiblingsPrepareNoCard(t *testing.T) {
+	slowTest(t)
 	w, c := dbWorld(t)
 	rootTask := dbAccepted(t, w, c, s2, "bifrost-platform")
 	rootOp := dbOp(t, w, c, rootTask, dbOldA, "declined")

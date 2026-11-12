@@ -81,7 +81,8 @@ func TestClaimSeesAControlThatLandsMidway(t *testing.T) {
 
 // A3: Start and Submit move the task, so they lock it before reading the
 // clock; a wait for the task row that crosses the deadline is refused and
-// leaves no event, no state change and no idempotency key.
+// leaves no event, no state change and no idempotency key. The submit is
+// prepared while the start waits, so the two waits overlap (CI-16).
 func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -100,17 +101,11 @@ func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 	// lock it waits on whatever the tests beside this one do (review 322 A1).
 	w.ready(t, store.Task{})
 	c := w.claim(t, "h1", -store.Grace+6*time.Second, codex)
-	deadline := c.LeaseExpiresAt.Add(store.Grace)
-	holder := hold(c.TaskID)
-	done := make(chan error, 1)
-	go func() { done <- store.Start(ctx, pool, fence(c, "h1"), "", "") }()
-	w.waitFor(t, taskLock, deadline)
-	time.Sleep(time.Until(deadline) + time.Second)
-	ok(t, holder.Commit(ctx))
-	is(t, <-done, store.ErrFenced)
-	if w.state(t, "attempt", c.AttemptID) != "leased" || w.events(t, "attempt_started", c.AttemptID) != 0 {
-		t.Fatal("a refused start changed the attempt")
-	}
+	startDeadline := c.LeaseExpiresAt.Add(store.Grace)
+	startHolder := hold(c.TaskID)
+	started := make(chan error, 1)
+	go func() { started <- store.Start(ctx, pool, fence(c, "h1"), "", "") }()
+	w.waitFor(t, taskLock, startDeadline)
 
 	w.ready(t, store.Task{Effect: "none"})
 	s := w.claim(t, "h2", -store.Grace+10*time.Second, codex)
@@ -121,16 +116,26 @@ func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 	ok(t, err)
 	_, err = store.Persist(ctx, w.rt, f, store.Result{Report: w.artifact(t, "report", "# none\n")}, nil)
 	ok(t, err)
-	deadline = s.LeaseExpiresAt.Add(store.Grace)
-	holder = hold(s.TaskID)
+	submitDeadline := s.LeaseExpiresAt.Add(store.Grace)
+	submitHolder := hold(s.TaskID)
+	submitted := make(chan error, 1)
 	go func() {
 		_, err := store.Submit(ctx, pool, f)
-		done <- err
+		submitted <- err
 	}()
-	w.waitFor(t, taskLock, deadline)
-	time.Sleep(time.Until(deadline) + time.Second)
-	ok(t, holder.Commit(ctx))
-	is(t, <-done, store.ErrFenced)
+	// The start still waits (its holder commits below), so two waits.
+	w.waitForN(t, taskLock, 2, submitDeadline)
+
+	time.Sleep(time.Until(startDeadline) + time.Second)
+	ok(t, startHolder.Commit(ctx))
+	is(t, <-started, store.ErrFenced)
+	if w.state(t, "attempt", c.AttemptID) != "leased" || w.events(t, "attempt_started", c.AttemptID) != 0 {
+		t.Fatal("a refused start changed the attempt")
+	}
+
+	time.Sleep(time.Until(submitDeadline) + time.Second)
+	ok(t, submitHolder.Commit(ctx))
+	is(t, <-submitted, store.ErrFenced)
 	var keys int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.idempotency_key WHERE idempotency_key_id = $1`,
 		"host:h2|submit|"+s.AttemptID).Scan(&keys))

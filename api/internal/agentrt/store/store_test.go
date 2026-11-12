@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +116,16 @@ func newWorld(t *testing.T) *world {
 		return err
 	}))
 	return w
+}
+
+// slowTest skips a test of more than ten seconds unless BIFROST_SLOW_TESTS=1,
+// which the daily full CI run sets (CI-16): it runs once a day, not on every
+// change. A parallel test calls it after t.Parallel().
+func slowTest(t *testing.T) {
+	t.Helper()
+	if os.Getenv("BIFROST_SLOW_TESTS") != "1" {
+		t.Skip("slow: runs in the daily full CI run (BIFROST_SLOW_TESTS=1)")
+	}
 }
 
 func (w *world) task(t *testing.T, mission, step, subject, role string) (string, error) {

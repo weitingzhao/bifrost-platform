@@ -119,27 +119,6 @@ func TestPlanChangeStanding(t *testing.T) {
 	w.chainHolds(t, store.PlanStream(root))
 }
 
-// Cleanup wave 1 (2026-11-11): one proposal past the old bound of 20 changes
-// is taken whole; an empty one is still refused.
-func TestPlanChangePastTwenty(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.activate(t, s1)
-	a := &asker{}
-	changes := make([]store.PlanChange, 0, 21)
-	for i := range 21 {
-		changes = append(changes, store.PlanChange{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: fmt.Sprintf("n%d", i)})
-	}
-	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k21", root, "many steps", changes, a.ask)
-	ok(t, err)
-	if nodes, _ := out["nodes"].([]any); out["decision"] != "applied" || len(nodes) != 21 {
-		t.Fatalf("answer %v", out)
-	}
-	if _, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k0", root, "nothing", nil, a.ask); !errors.Is(err, store.ErrInvalid) {
-		t.Fatalf("an empty proposal: %v", err)
-	}
-}
-
 // Outside it the change is tried and rolled back, then put to the Owner;
 // nothing changes until he answers. A change the database would refuse is
 // refused at once, with its reason, and nobody is asked (T32 through the

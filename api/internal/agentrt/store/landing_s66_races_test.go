@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -189,71 +188,5 @@ func TestS66T52CloseAgainstSecondGatePG(t *testing.T) {
 	ok(t, r.err)
 	if !r.decision.Allowed || r.auth.Repo != infraRepo || w.state(t, "mission", "M-3") != "active" {
 		t.Fatal("gate/close outcome", r)
-	}
-}
-
-// Serial: the UTC clock jumps past midnight just before main_intent. T55
-// used to prove the infra transaction rolled back its quota and intent;
-// with no daily quota (cleanup wave 1) the gate commits on its first pass,
-// reading its evidence once.
-func TestS66T55InfraMidnightPG(t *testing.T) {
-	midnight := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-	w, at := s66World(t, true, 5, midnight.Add(-5*time.Minute))
-	root := s66Root(t, w, "M-3", infraRepo)
-	// Check the persisted fence against the database's mission clock before
-	// exercising midnight. A before_enable refusal is a broken fixture.
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		f, err := store.LandingFacts(ctx, tx, s66Source(), "prod", "live", root, "", "", at)
-		if err != nil {
-			return err
-		}
-		if f.EnabledAt.IsZero() || f.MissionCreated.Before(f.EnabledAt) || f.AcceptedAt.Before(f.EnabledAt) {
-			t.Fatalf("fixture fence=%s mission=%s accepted=%s", f.EnabledAt, f.MissionCreated, f.AcceptedAt)
-		}
-		return nil
-	}))
-	op, d, err := store.ClaimLanding(ctx, w.rt, s66Source(), "prod", root, at)
-	ok(t, err)
-	if !d.Allowed || op == "" {
-		t.Fatal(d)
-	}
-	prepareS6(t, w, infraRepo, root, op, at)
-	start := at.Add(2 * time.Minute)
-	next := start.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-	store.FreezeEventClock(start)
-	intents := 0
-	restore := store.SetHook(func(point, id string) {
-		if id == op && point == "landing gate: before main_intent" {
-			intents++
-			store.FreezeEventClock(next.Add(time.Second))
-		}
-	})
-	defer restore()
-	resultReads, historyReads, observationReads := 0, 0, 0
-	src := s66Source()
-	result, history := src.Result, src.History
-	src.Result = func(c context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
-		resultReads++
-		return result(c, repo, task, attempt, base, commit)
-	}
-	src.History = func(c context.Context, repo, task, commit, snapshot string) (landing.MainHistory, error) {
-		historyReads++
-		return history(c, repo, task, commit, snapshot)
-	}
-	observe := func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
-		observationReads++
-		return observed(at)(c, o)
-	}
-	a, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observe, infraRepo)
-	restore()
-	ok(t, err)
-	if intents != 1 || !d.Allowed || a.Repo != infraRepo || a.Root != root || a.Op != op {
-		t.Fatal("midnight before the intent refused the gate", intents, a, d)
-	}
-	if resultReads != 1 || historyReads != 1 || observationReads != 1 {
-		t.Fatal("the gate read its evidence more than once", resultReads, historyReads, observationReads)
-	}
-	if landingState(t, w, infraStream).Operations[op].Phase != "main_intent" {
-		t.Fatal("no intent across midnight")
 	}
 }

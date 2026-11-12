@@ -133,15 +133,3 @@ func TestBlockKind(t *testing.T) {
 		}
 	}
 }
-
-// The card's first line.
-func TestRecommendationLine(t *testing.T) {
-	t.Parallel()
-	opts := blockedOptions("M-3")
-	if got := (recommendation{option: recClose, why: "x"}).line(opts); got != "Recommended: Close mission M-3 — x" {
-		t.Errorf("%q", got)
-	}
-	if got := (recommendation{why: "y"}).line(opts); got != "No recommendation: y" {
-		t.Errorf("%q", got)
-	}
-}

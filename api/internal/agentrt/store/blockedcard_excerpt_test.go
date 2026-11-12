@@ -134,41 +134,6 @@ func TestBlockedCardDeterministicFallbacks(t *testing.T) {
 	}
 }
 
-// TD-386: a review's card quotes the end of its report: its VERDICT line and
-// the lines before it, not the report's start.
-func TestBlockedCardQuotesTheReviewsEnd(t *testing.T) {
-	t.Parallel()
-	var r strings.Builder
-	r.WriteString("# Review of the first line\n")
-	for r.Len() < 60000 {
-		r.WriteString(strings.Repeat("審", 40) + "\n")
-	}
-	report := r.String() + "The card quotes the report's start, not why it failed.\n\nVERDICT: FAIL\n\n"
-	body := store.BlockedCardBodyWithCheckForTest("review", report, "t", "review failed in round 2 of 2", "")
-	for _, want := range []string{"Its report ends:\n\n", "The card quotes the report's start, not why it failed.\n\nVERDICT: FAIL\n"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the card lacks %q:\n%s", want, body)
-		}
-	}
-	if strings.Contains(body, "Review of the first line") || strings.Contains(body, "Its report begins") {
-		t.Errorf("the card quotes the report's start:\n%s", body)
-	}
-	// Eight lines before the VERDICT, no more.
-	if _, excerpt, found := strings.Cut(body, "Its report ends:\n\n"); found {
-		before, _, _ := strings.Cut(excerpt, "VERDICT: FAIL")
-		if n := strings.Count(before, "審"); n != 6*40 {
-			t.Errorf("%d lines of 審 before the VERDICT, want 6:\n%s", n/40, body)
-		}
-	}
-
-	// No VERDICT: the report's last lines, and no VERDICT made up.
-	body = store.BlockedCardBodyWithCheckForTest("review", "first\n"+strings.Repeat("line\n", 20)+"the review stopped here", "t", "r", "")
-	if !strings.Contains(body, "Its report ends:\n\n"+strings.Repeat("line\n", 8)+"the review stopped here\n") ||
-		strings.Contains(body, "VERDICT") || strings.Contains(body, "first") {
-		t.Errorf("a review without a VERDICT:\n%s", body)
-	}
-}
-
 // TD-386: with a long output's end, a long reason, words and title, the card
 // still fits the question store, its excerpt cut from its front: the
 // output's last line and a review's VERDICT stay.

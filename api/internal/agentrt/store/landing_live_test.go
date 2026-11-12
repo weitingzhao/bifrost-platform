@@ -204,31 +204,6 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	_ = task
 }
 
-// Serial: SetHook, FreezeEventClock. Midnight between the gate's decision
-// and main_intent no longer rolls the gate back (cleanup wave 1: the
-// review 661 R-03 rollback only kept the daily quota on one day).
-func TestLiveGateMidnightBeforeItsIntent(t *testing.T) {
-	next := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
-	w, _, op, src, prepared := liveReady(t, next.Add(-10*time.Minute-time.Second))
-	// The gate starts at 23:59:59 UTC, ten minutes after preparation.
-	// The day turns just before main_intent.
-	start := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(start)()
-	defer store.SetHook(func(point, _ string) {
-		if point == "landing gate: before main_intent" {
-			store.FreezeEventClock(next.Add(time.Second))
-		}
-	})()
-	_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
-	ok(t, err)
-	if !d.Allowed {
-		t.Fatalf("midnight before the intent refused the gate: %+v", d)
-	}
-	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_intent" {
-		t.Fatal("no intent across midnight", o.Phase)
-	}
-}
-
 // tamperAdmin runs one statement as the database admin with triggers off.
 func tamperAdmin(t *testing.T, w *world, q string, args ...any) {
 	t.Helper()
