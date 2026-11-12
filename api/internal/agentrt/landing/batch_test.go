@@ -23,45 +23,31 @@ func batchTasks(cs []BatchCandidate) []string {
 }
 
 // R5:5.7 goal 2: a batch is the platform's waiting roots in candidate
-// order, at most the rule's max_batch (none set: no cap) and what the day's
-// quota leaves; never an S5 root
-// or another repository's; the first root that may wait for a grant leads.
+// order, never an S5 root or another repository's; the first root that may
+// wait for a grant leads. Neither the rule's max_batch nor the day's quota
+// bounds a batch any more (cleanup wave 1, 2026-11-11).
 func TestBatchFormation(t *testing.T) {
 	t.Parallel()
 	now := epoch.Add(time.Hour)
 	var cands []BatchCandidate
 	for i := range 10 {
-		c := batchCand(i)
-		c.Facts.Rule.Landing.Limits.MaxLandingsPerDay = 20
-		cands = append(cands, c)
+		cands = append(cands, batchCand(i))
 	}
-	// No max_batch: all ten, past the old fixed 8 (2026-11-06 Owner: the
-	// batch size is the rule's, not the code's).
 	if got := FormBatch(cands, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
 		t.Fatal("not every root in order", batchTasks(got))
 	}
-	capped := slices.Clone(cands)
-	for i := range capped {
-		f := capped[i].Facts
+	// A legacy max_batch and a spent day's quota on the facts: still every
+	// root, in order.
+	legacy := slices.Clone(cands)
+	for i := range legacy {
+		f := legacy[i].Facts
 		r := *f.Rule
 		l := *r.Landing
-		l.Limits.MaxBatch, r.Landing, f.Rule = 3, &l, &r
-		capped[i].Facts = f
+		l.Limits.MaxBatch, l.Limits.MaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 3, 5, &l, &r, 7
+		legacy[i].Facts = f
 	}
-	if got := FormBatch(capped, now, false); !slices.Equal(batchTasks(got), batchTasks(cands[:3])) {
-		t.Fatal("not the rule's max_batch first in order", batchTasks(got))
-	}
-	// The day's quota: five a day, two reserved already, leaves three.
-	quota := slices.Clone(cands[:6])
-	for i := range quota {
-		f := quota[i].Facts
-		r := *f.Rule
-		l := *r.Landing
-		l.Limits.MaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 5, &l, &r, 2
-		quota[i].Facts = f
-	}
-	if got := FormBatch(quota, now, false); len(got) != 3 {
-		t.Fatal("past the day's quota", batchTasks(got))
+	if got := FormBatch(legacy, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
+		t.Fatal("max_batch or the day's quota still bounds a batch", batchTasks(got))
 	}
 	// S5 and another repository stay out; the others keep their order.
 	mixed := slices.Clone(cands[:5])
@@ -186,9 +172,10 @@ func TestWaveBatchFormation(t *testing.T) {
 	now := epoch.Add(time.Hour)
 	members := []BatchCandidate{batchCand(1), batchCand(2), batchCand(3)}
 	for i := range members {
+		// Legacy limits on the facts bound nothing (cleanup wave 1).
 		members[i].Facts.Rule.Landing.Limits.MaxBatch = 1
 		members[i].Facts.Rule.Landing.Limits.MaxLandingsPerDay = 3
-		members[i].Facts.ReservedToday = 2
+		members[i].Facts.ReservedToday = 3
 	}
 	// A later member may need a grant, but append order still determines
 	// the lead: its existing batch material covers every member.
@@ -201,13 +188,12 @@ func TestWaveBatchFormation(t *testing.T) {
 		t.Fatal("fixture must allow waiting for a grant", reason, soft)
 	}
 	if got := FormBatch(members, now, true); !slices.Equal(batchTasks(got), batchTasks(members)) {
-		t.Fatal("wave must consume one slot and retain append order", batchTasks(got))
+		t.Fatal("wave must retain append order", batchTasks(got))
 	}
 	for _, tc := range []struct {
 		name   string
 		refuse func(*Facts)
 	}{
-		{"quota", func(f *Facts) { f.ReservedToday = 3 }},
 		{"tenant", func(f *Facts) { f.Tenant = "other" }},
 		{"repo", func(f *Facts) { f.Repo = "bifrost-trade-infra" }},
 		{"s5", func(f *Facts) { f.Operation.S5.Required = true }},

@@ -19,8 +19,7 @@ import (
 // nothing maps the batch is split in half and tested again. No protocol kind
 // is new: the batch itself is a controller note beside the protocol.
 
-// BatchMax is the most members a batch has (Owner 2026-11-06: 1000); the
-// rule's limits.max_batch may set fewer, and the day's quota left bounds it.
+// BatchMax is the most members a batch has (Owner 2026-11-06: 1000).
 const BatchMax = 1000
 
 // BatchCandidate is a root that may join a batch, with the facts its claim
@@ -34,8 +33,7 @@ type BatchCandidate struct {
 func BatchID(lead string) string { return "batch:" + lead }
 
 // FormBatch picks a batch's members from cands, in their order: at most
-// the rule's limits.max_batch when set, and no more than the day's quota
-// leaves (at most BatchMax); bifrost-platform
+// BatchMax; bifrost-platform
 // roots of one tenant only (every other repository keeps the one-operation
 // path); no root that S5 must check (S5 keeps its own path, alone); and no
 // root its claim refuses on policy (a floor or rule refusal, or soft checks
@@ -46,8 +44,8 @@ func BatchID(lead string) string { return "batch:" + lead }
 // waits: its one grant covers every member's soft checks (the lead's
 // material is the batch's, store/landing_batch_grant.go). A batch of one
 // is today's single landing.
-// With wave set, cands are the complete wave in append order. The wave
-// consumes one landing slot; any ineligible member refuses the whole wave.
+// With wave set, cands are the complete wave in append order; any
+// ineligible member refuses the whole wave.
 // BatchMax remains a bound on the number of operations in the record.
 func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidate {
 	if wave && len(cands) > BatchMax {
@@ -55,7 +53,6 @@ func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidat
 	}
 	var out []BatchCandidate
 	grant := -1
-	limit := BatchMax
 	for _, c := range cands {
 		f := c.Facts
 		if f.Repo != "bifrost-platform" || f.Operation.S5.Required || S5AutomaticRoute(f) {
@@ -70,17 +67,7 @@ func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidat
 			}
 			continue
 		}
-		if f.Rule != nil && f.Rule.Landing != nil {
-			limit = min(limit, f.Rule.Landing.Limits.MaxLandingsPerDay-f.ReservedToday)
-			if m := f.Rule.Landing.Limits.MaxBatch; m > 0 {
-				limit = min(limit, m)
-			}
-		}
-		if wave {
-			if limit < 1 {
-				return nil
-			}
-		} else if len(out) >= limit {
+		if !wave && len(out) >= BatchMax {
 			break
 		}
 		reason, soft := PolicyChecks(f, now)
