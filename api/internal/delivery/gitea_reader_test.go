@@ -113,8 +113,11 @@ func newFakeGitea(t *testing.T) *fakeGitea {
 			_, _ = w.Write([]byte(`[]`))
 		case strings.Contains(r.URL.Path, "/git/commits/"):
 			_, _ = w.Write([]byte(`{"sha":"` + factSHA1 + `"}`))
-		case strings.Contains(r.URL.Path, "/compare/"):
-			_, _ = w.Write([]byte(`{"files":[{"filename":"a.go"}]}`))
+		case strings.HasSuffix(r.URL.Path, "/commits"):
+			commitRanges{
+				factSHA1 + "|main": {{sha: factSHA1, files: []string{"a.go"}}},
+				"main|" + factSHA1: nil,
+			}.serve(w, r)
 		case r.Method == http.MethodGet && strings.Count(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/"), "/") == 1:
 			_, _ = w.Write([]byte(`{"mirror":false}`))
 		default:

@@ -56,8 +56,11 @@ func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 			_, _ = w.Write([]byte(`{"name":"v1.0.0","commit":{"sha":"` + factSHA2 + `"}}`))
 		case "/api/v1/repos/bifrost/repo-app/git/commits/" + factSHA1:
 			_, _ = w.Write([]byte(`{"sha":"` + factSHA1 + `"}`))
-		case "/api/v1/repos/bifrost/repo-app/compare/" + factSHA2 + "..." + factSHA1:
-			_, _ = w.Write([]byte(`{"files":[{"filename":"src/b.py"},{"filename":"docs/a.md"}]}`))
+		case "/api/v1/repos/bifrost/repo-app/commits":
+			commitRanges{
+				factSHA1 + "|" + factSHA2: {{sha: factSHA1, files: []string{"src/b.py", "docs/a.md"}}},
+				factSHA2 + "|" + factSHA1: nil,
+			}.serve(w, r)
 		case "/api/v1/repos/bifrost/repo-broken/branches/main":
 			w.WriteHeader(http.StatusInternalServerError)
 		case "/api/v1/repos/bifrost/repo-ops/raw/db-steps.d/a step.md":
@@ -126,7 +129,7 @@ func TestPolicyFactsGitea(t *testing.T) {
 		t.Fatalf("ChangedFiles = %v %v", files, err)
 	}
 	if _, err := f.ChangedFiles(ctx, "repo-app", factSHA3, factSHA1); err == nil {
-		t.Fatal("a failed compare gave no error")
+		t.Fatal("an unreadable range gave no error")
 	}
 }
 

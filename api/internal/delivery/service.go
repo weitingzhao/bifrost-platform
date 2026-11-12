@@ -1435,7 +1435,8 @@ func (s *Service) fetchGiteaBranches(ctx context.Context, repo, user, pass strin
 	return branches, nil
 }
 
-// Compare returns changed file paths between two refs via Gitea compare API (read-only).
+// Compare returns the paths the commits between two refs touched (read-only;
+// release_policy_diff.go says how, and why it is not Gitea's compare API).
 func (s *Service) Compare(ctx context.Context, repo, from, to string) CompareResponse {
 	now := time.Now().UTC()
 	out := CompareResponse{
@@ -1466,7 +1467,7 @@ func (s *Service) Compare(ctx context.Context, repo, from, to string) CompareRes
 		return out
 	}
 
-	files, fetchErr := s.fetchGiteaCompareFiles(ctx, repo, from, to, user, pass)
+	files, fetchErr := s.changedFilesBetween(ctx, repo, from, to, user, pass)
 	if fetchErr != nil {
 		out.Detail = fetchErr.Error()
 		return out
@@ -1475,54 +1476,6 @@ func (s *Service) Compare(ctx context.Context, repo, from, to string) CompareRes
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d files", len(files))
 	return out
-}
-
-func (s *Service) fetchGiteaCompareFiles(ctx context.Context, repo, from, to, user, pass string) ([]string, error) {
-	// Gitea: GET /api/v1/repos/{owner}/{repo}/compare/{base}...{head}
-	url := fmt.Sprintf(
-		"%s/api/v1/repos/%s/%s/compare/%s...%s",
-		giteaBaseURL(),
-		giteaOrg,
-		repo,
-		from,
-		to,
-	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if user != "" && pass != "" {
-		req.SetBasicAuth(user, pass)
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
-	if err != nil {
-		return nil, err
-	}
-	var raw struct {
-		Files []struct {
-			Filename string `json:"filename"`
-		} `json:"files"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("json: %w", err)
-	}
-	files := make([]string, 0, len(raw.Files))
-	for _, f := range raw.Files {
-		if name := strings.TrimSpace(f.Filename); name != "" {
-			files = append(files, name)
-		}
-	}
-	sort.Strings(files)
-	return files, nil
 }
 
 // platformDeclaredDeliverTasks are the platform pipelines' tasks that run as

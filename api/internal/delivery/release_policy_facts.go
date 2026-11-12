@@ -205,13 +205,14 @@ func (f PolicyFacts) CommitExists(ctx context.Context, repo, sha string) (bool, 
 	return f.giteaGet(ctx, url.PathEscape(repo)+"/git/commits/"+url.PathEscape(sha), &c)
 }
 
-// ChangedFiles lists the paths that differ between two commits.
+// ChangedFiles lists the paths touched by the commits to has and from lacks
+// (release_policy_diff.go). It fails when from is not an ancestor of to.
 func (f PolicyFacts) ChangedFiles(ctx context.Context, repo, from, to string) ([]string, error) {
 	acc, err := f.s.GiteaAccess(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return f.s.fetchGiteaCompareFiles(ctx, repo, from, to, acc.User, acc.Pass)
+	return f.s.changedFilesBetween(ctx, repo, from, to, acc.User, acc.Pass)
 }
 
 // Succeeded reports whether a ci-* run for repo at sha succeeded. The match
