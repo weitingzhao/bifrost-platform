@@ -1,9 +1,6 @@
 package rules
 
-import (
-	"fmt"
-	"slices"
-)
+import "slices"
 
 // LandingChecksVersion identifies the coordinator v3 checks, including §12.
 // It is audit evidence, not a substitute for recomputing the refusal set.
@@ -163,23 +160,3 @@ func GrantSupported(repo string) bool { return LandingRepositories[repo].GrantSu
 
 // FloorGrantSupported: repo's floor-grantable paths take approve_floor_landing.
 func FloorGrantSupported(repo string) bool { return LandingRepositories[repo].FloorGrantSupported }
-
-// legacyCheckChanges preserves the pre-grant gate's closed behavior. Grant
-// callers use the layers directly; no signed rule alone authorizes a waiver.
-func legacyCheckChanges(l *Landing, repo string, changes []LandingChange) error {
-	if _, ok := l.Repo(repo); !ok {
-		return fmt.Errorf("rule")
-	}
-	if why, bad := FloorViolation(repo, changes); bad {
-		return fmt.Errorf("%s", why)
-	}
-	for _, refusal := range LandingSoftRefusals(l, repo, changes) {
-		switch refusal {
-		case LandingPresentation:
-			return fmt.Errorf("not presentation-only")
-		default:
-			return fmt.Errorf("rule: %s", refusal)
-		}
-	}
-	return nil
-}

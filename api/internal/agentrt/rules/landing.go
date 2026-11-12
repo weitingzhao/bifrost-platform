@@ -354,10 +354,6 @@ func FloorViolation(repo string, changes []LandingChange) (string, bool) {
 	return "", false
 }
 
-func (l *Landing) CheckChanges(repo string, changes []LandingChange) error {
-	return legacyCheckChanges(l, repo, changes)
-}
-
 // Keep the signed canonical form stable while retaining the stated pattern order.
 func sortedLandingAllow(allow []string) []string {
 	out := slices.Clone(allow)

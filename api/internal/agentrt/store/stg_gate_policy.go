@@ -124,10 +124,10 @@ type stgGateFacts struct {
 
 // stgRuleAuthorizes is the landing gate's own test of a change it pushed on the
 // rule's authority (landing.PolicyChecks: no floor and no soft refusal), so B5
-// releases to STG what the landing put on main without a card. TD-536: B5 used
-// rules.CheckChanges, which also refuses the platform's floor paths; c455fc97
-// (controller/landing_scan.go) landed with no card and B5 refused it as "rule"
-// every 90 seconds (2026-11-11).
+// releases to STG what the landing put on main without a card. TD-536: B5 once
+// used a separate check that also refused the platform's floor paths;
+// c455fc97 (controller/landing_scan.go) landed with no card and B5 refused it
+// as "rule" every 90 seconds (2026-11-11).
 func stgRuleAuthorizes(r *rules.Rule, tenant string, changes []rules.LandingChange, at time.Time) bool {
 	reason, soft := landing.PolicyChecks(landing.Facts{Repo: "bifrost-platform", Tenant: tenant, Rule: r, Changes: changes}, at)
 	return reason == "" && len(soft) == 0

@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,8 +46,13 @@ func TestS5V3RuleParseTightenAndLegacyFloor(t *testing.T) {
 			t.Fatal("hard candidate", p)
 		}
 		c := LandingChange{Kind: "M", OldPath: p, NewPath: p, OldMode: "100644", NewMode: "100644", Added: 1}
-		if err := r.Landing.CheckChanges("bifrost-platform", []LandingChange{c}); err == nil {
-			t.Fatal("legacy floor waived", p)
+		// Outside the S5 lane the path keeps its floor refusal; only the
+		// enrolled modification's S5 refusal set drops it.
+		if soft := LandingSoftRefusals(r.Landing, "bifrost-platform", []LandingChange{c}); !slices.Contains(soft, LandingFloorGrant) {
+			t.Fatal("legacy floor waived", p, soft)
+		}
+		if soft := S5Refusals(r.Landing, "bifrost-platform", []LandingChange{c}); len(soft) > 0 {
+			t.Fatal("S5 lane keeps the floor", p, soft)
 		}
 		body = strings.ReplaceAll(body, "      - "+p+"\n", "")
 	}

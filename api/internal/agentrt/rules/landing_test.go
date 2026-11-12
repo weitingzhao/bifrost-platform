@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -95,15 +96,37 @@ func TestLandingTightening(t *testing.T) {
 func simpleChange() LandingChange {
 	return LandingChange{OldPath: "console/src/components/Button.tsx", NewPath: "console/src/components/Button.tsx", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "<span>Ready</span>"}
 }
+
+// landingPolicyRefuses is the landing gate's policy (landing.PolicyChecks
+// after rule validity): the structural, absolute, content and change-kind
+// layers, then the soft refusal set. A change it does not refuse lands on
+// the signed rule's authority, with no card.
+func landingPolicyRefuses(l *Landing, repo string, changes []LandingChange) bool {
+	for _, layer := range []func(string, []LandingChange) (string, bool){LandingStructuralViolation, LandingAbsoluteViolation, LandingContentViolation, LandingChangeKindViolation} {
+		if _, bad := layer(repo, changes); bad {
+			return true
+		}
+	}
+	return len(LandingSoftRefusals(l, repo, changes)) > 0
+}
+
+// A signed allow of everything waives no floor: each path still has a
+// refusal only the Owner's grant removes (absolute, core or floor_grant),
+// never rule_paths alone.
 func TestLandingFloorCannotBeSignedAway(t *testing.T) {
 	l := landingRule(t).Landing
 	l.Repos[0].Allow = []string{"**"}
-	for _, p := range []string{"api/internal/actions/tier.go", "api/internal/server/x.go", "api/anything.txt", "go.mod", "nested/package.json", "x/.env.local", "console/vite.config.ts", "console/tsconfig.app.json", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/x.ts", "console/src/lib/x.ts", "console/src/hooks/x.ts", "console/src/pwa/x.ts", "mcp/a", "agent/a", "scripts/a", "config/a", "Makefile", ".husky/a"} {
+	for _, p := range []string{"api/internal/actions/tier.go", "api/internal/server/x.go", "api/anything.txt", "go.mod", "nested/package.json", "x/.env.local", "console/vite.config.ts", "console/tsconfig.app.tsbuildinfo", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/x.ts", "console/src/lib/x.ts", "console/src/hooks/x.ts", "console/src/pwa/x.ts", "mcp/a", "agent/a", "scripts/a", "config/a", "Makefile", ".husky/a"} {
 		c := simpleChange()
 		c.NewPath = p
 		c.OldPath = p
-		if e := l.CheckChanges("bifrost-platform", []LandingChange{c}); e == nil || !strings.Contains(e.Error(), "floor") {
-			t.Errorf("floor allowed %s: %v", p, e)
+		changes := []LandingChange{c}
+		if _, bad := LandingAbsoluteViolation("bifrost-platform", changes); bad {
+			continue
+		}
+		soft := LandingSoftRefusals(l, "bifrost-platform", changes)
+		if !slices.Contains(soft, LandingCore) && !slices.Contains(soft, LandingFloorGrant) {
+			t.Errorf("floor allowed %s: %v", p, soft)
 		}
 	}
 }
@@ -113,8 +136,8 @@ func TestLandingDiffPathsAndPresentation(t *testing.T) {
 		c := simpleChange()
 		c.OldPath = p
 		c.NewPath = p
-		if e := l.CheckChanges("bifrost-platform", []LandingChange{c}); e != nil {
-			t.Fatal(p, e)
+		if landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
+			t.Fatal(p)
 		}
 	}
 	cases := map[string]func(*LandingChange){
@@ -132,7 +155,7 @@ func TestLandingDiffPathsAndPresentation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c := simpleChange()
 			mut(&c)
-			if l.CheckChanges("bifrost-platform", []LandingChange{c}) == nil {
+			if !landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
 				t.Fatal("accepted unsafe diff")
 			}
 		})
@@ -142,11 +165,11 @@ func TestLandingDiffPathsAndPresentation(t *testing.T) {
 	c.NewMode = ""
 	c.Added = 0
 	c.AddedText = ""
-	if e := l.CheckChanges("bifrost-platform", []LandingChange{c}); e != nil {
-		t.Fatal("allowed deletion", e)
+	if landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
+		t.Fatal("allowed deletion refused")
 	}
 	l.Repos[0].Deny = []string{"console/src/components/**"}
-	if l.CheckChanges("bifrost-platform", []LandingChange{simpleChange()}) == nil {
+	if !landingPolicyRefuses(l, "bifrost-platform", []LandingChange{simpleChange()}) {
 		t.Fatal("deny ignored")
 	}
 }

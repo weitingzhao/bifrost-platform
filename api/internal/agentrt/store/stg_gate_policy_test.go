@@ -445,22 +445,39 @@ func TestStgRevertedGrantRetainsOnlyConsumedProvenance(t *testing.T) {
 	}
 }
 
-// TD-536 (PROD 2026-11-11, c455fc97): a change the landing gate pushed on the
-// rule's authority (landing.PolicyChecks finds nothing) is released to STG,
-// even on a platform path that rules.CheckChanges calls floor.
+// TD-536 (PROD 2026-11-11, c455fc97): whatever the landing gate pushes on
+// the signed rule's authority (landing.PolicyChecks finds nothing, so no
+// card) B5 releases to STG; a change that needs the Owner's grant it does
+// not release on the rule alone.
 func TestStgGateReleasesWhatTheRuleLanded(t *testing.T) {
 	t.Parallel()
-	x := stgPolicy(t)
-	changes := []rules.LandingChange{{OldPath: "api/internal/agentrt/controller/landing_scan.go", NewPath: "api/internal/agentrt/controller/landing_scan.go", OldMode: "100644", NewMode: "100644", Added: 52, Deleted: 2}}
-	x.f.Rules["dev"].Landing.Repos[0].Allow = []string{"api/**"}
-	x.o.Commits[0].Changes = changes
-	if reason, soft := landing.PolicyChecks(landing.Facts{Repo: "bifrost-platform", Tenant: "dev", Rule: x.f.Rules["dev"], Changes: changes}, x.at); reason != "" || len(soft) > 0 {
-		t.Fatalf("precondition: the landing gate refuses it: %q %v", reason, soft)
+	modify := func(p string) rules.LandingChange {
+		return rules.LandingChange{OldPath: p, NewPath: p, OldMode: "100644", NewMode: "100644", Added: 2, Deleted: 1, AddedText: "<p>Ready</p>"}
 	}
-	if err := x.f.Rules["dev"].Landing.CheckChanges("bifrost-platform", changes); err == nil {
-		t.Fatal("precondition: CheckChanges no longer calls this path floor, so this test no longer shows TD-536")
-	}
-	if d := x.decide(false); !d.Allowed {
-		t.Fatalf("B5 refused a change the rule landed with no card: %+v", d)
+	for name, tc := range map[string]struct {
+		allow   []string
+		changes []rules.LandingChange
+		landed  bool
+	}{
+		"open runtime loop (c455fc97)": {[]string{"api/**"}, []rules.LandingChange{modify("api/internal/agentrt/controller/landing_scan.go")}, true},
+		"open path outside allow":      {nil, []rules.LandingChange{modify("api/internal/cluster/x.go")}, true},
+		"allowed component":            {[]string{"console/src/components/**/*.tsx"}, []rules.LandingChange{modify("console/src/components/A.tsx")}, true},
+		"allowed deletion":             {[]string{"console/src/components/**/*.tsx"}, []rules.LandingChange{{OldPath: "console/src/components/A.tsx", OldMode: "100644", Deleted: 3}}, true},
+		"floor-grantable needs a card": {[]string{"console/src/api/**"}, []rules.LandingChange{modify("console/src/api/x.ts")}, false},
+		"core needs a card":            {[]string{"api/**"}, []rules.LandingChange{modify("api/internal/server/x.go")}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			x := stgPolicy(t)
+			x.f.Rules["dev"].Landing.Repos[0].Allow = tc.allow
+			x.o.Commits[0].Changes = tc.changes
+			reason, soft := landing.PolicyChecks(landing.Facts{Repo: "bifrost-platform", Tenant: "dev", Rule: x.f.Rules["dev"], Changes: tc.changes}, x.at)
+			if landed := reason == "" && len(soft) == 0; landed != tc.landed {
+				t.Fatalf("precondition: the landing gate says landed=%v: %q %v", landed, reason, soft)
+			}
+			if d := x.decide(false); d.Allowed != tc.landed {
+				t.Fatalf("B5 and the landing gate disagree (landed=%v): %+v", tc.landed, d)
+			}
+		})
 	}
 }
