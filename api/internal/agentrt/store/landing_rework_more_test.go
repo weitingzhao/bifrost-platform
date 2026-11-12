@@ -259,13 +259,13 @@ func TestReworkSetComesBack(t *testing.T) {
 
 	moveToStep(t, r.w, r.cc, dbStep)
 	r.rwPass(t)
-	cardPass(t, r.w, f, r.now.Add(CardCooldownPlus))
+	cardPass(t, r.w, f, r.now.Add(laterPass))
 	if f.asks != 2 {
 		t.Fatalf("the smaller set was not asked: %d asks", f.asks)
 	}
 	moveToStep(t, r.w, r.cc, s2)
 	r.rwPass(t)
-	cardPass(t, r.w, f, r.now.Add(2*CardCooldownPlus))
+	cardPass(t, r.w, f, r.now.Add(2*laterPass))
 	if f.asks != 2 || rwNotes(t, r.w, "landing_rework_seen") != 2 {
 		t.Fatalf("the first set again: %d asks, %d records; want 2, 2", f.asks, rwNotes(t, r.w, "landing_rework_seen"))
 	}

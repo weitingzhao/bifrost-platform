@@ -208,7 +208,7 @@ func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
 		t.Fatalf("still owed wrote %d replaced records", n)
 	}
 	r.rwLanded(t, "still owed", plan.False)
-	cardPass(t, r.w, f, r.now.Add(CardCooldownPlus))
+	cardPass(t, r.w, f, r.now.Add(laterPass))
 	if f.asks != 1 {
 		t.Fatalf("the same set asked again: %d asks", f.asks)
 	}
@@ -228,7 +228,7 @@ func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
 	if n := rwNotes(t, r.w, "landing_rework_seen"); n != 2 {
 		t.Fatalf("%d rework records after the set changed, want 2", n)
 	}
-	cardPass(t, r.w, f, r.now.Add(CardCooldownPlus))
+	cardPass(t, r.w, f, r.now.Add(laterPass))
 	if f.asks != 2 {
 		t.Fatalf("the new set was not asked: %d asks", f.asks)
 	}
@@ -242,8 +242,8 @@ func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
 	if strings.Contains(body, r.cc) || !strings.Contains(body, r.b) || !strings.Contains(body, r.d) {
 		t.Fatalf("the new card names the old set: %s", body)
 	}
-	f.answer(next.QuestionID, letterOf(t, next, "count_replaced"), r.now.Add(CardCooldownPlus+time.Minute))
-	cardPass(t, r.w, f, r.now.Add(CardCooldownPlus+2*time.Minute))
+	f.answer(next.QuestionID, letterOf(t, next, "count_replaced"), r.now.Add(laterPass+time.Minute))
+	cardPass(t, r.w, f, r.now.Add(laterPass+2*time.Minute))
 	r.rwLanded(t, "counted delivered by the two still on the step", plan.True)
 
 	// One of the two named moves off as well: the excuse no longer holds.
@@ -251,8 +251,9 @@ func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
 	r.rwLanded(t, "a named sibling moved off the step", plan.False)
 }
 
-// CardCooldownPlus is past the engine's cooldown between two cards.
-const CardCooldownPlus = store.CardCooldown + time.Minute
+// laterPass is a pass well after the one before (it was the engine's
+// six-hour cooldown between two cards and a minute, until cleanup wave 1).
+const laterPass = 6*time.Hour + time.Minute
 
 // Serial: FreezeEventClock. One sibling the same change, one different: the
 // same one writes landing_delivered_by, the root is excused that way, and

@@ -42,11 +42,12 @@ type CardQuestions struct {
 	Ack func(ctx context.Context, id string) (found bool, err error)
 }
 
-// Card limits (CUT §11.6 v2 item 4, v3 item 6).
+// Card properties (CUT §11.6 v2 item 4, v3 item 6): a card's TTL, how long
+// the Owner's "decide later" / "remind me" holds it, and how long an ask is
+// recovered. The six-hour cooldown and the four cards a day went in cleanup
+// wave 1 (2026-11-11).
 const (
 	CardTTLHours      = 72
-	CardCooldown      = 6 * time.Hour
-	CardDailyLimit    = 4
 	CardHoldFor       = 24 * time.Hour
 	CardRecoverWindow = 7 * 24 * time.Hour
 	cardTemplate      = 1
@@ -198,8 +199,7 @@ func cardOutcomes(ctx context.Context, tx pgx.Tx, repo string, ids []string) (ma
 
 // PrepareLandingCards writes a prepared card for each trigger that applies
 // and may have one now (CUT §11.6 v3 items 1, 6): no card of the trigger
-// still to settle; not acknowledged; not held past now; six hours since its
-// last card was made and at most four made in 24 hours. Under the card
+// still to settle; not acknowledged; not held past now. Under the card
 // stream's lock. It returns the cards it prepared.
 func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time) ([]string, error) {
 	var prepared []string
@@ -297,11 +297,8 @@ func PrepareLandingCards(ctx context.Context, db DB, repo string, now time.Time)
 // cardDue says whether a trigger with these cards may have a new one now
 // (review 670 R-02): no card still waiting for a decision (one handled and
 // waiting only for its Ack does not count); not acknowledged or applied;
-// the next ask is the latest of the last real creation + 6 hours and the
-// latest card's held reminder; at most four made in 24 hours.
+// not before the latest card's held reminder.
 func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) bool {
-	made := 0
-	var last, remind time.Time
 	var latest CardRecord
 	for _, c := range mine {
 		o, handled := outcomes[c.QuestionID]
@@ -314,28 +311,11 @@ func cardDue(mine []CardRecord, outcomes map[string]cardOutcome, now time.Time) 
 		if c.N > latest.N {
 			latest = c
 		}
-		created := c.CreatedAt
-		if created.IsZero() {
-			created = c.BoundAt
-		}
-		if created.IsZero() {
-			continue
-		}
-		if created.After(last) {
-			last = created
-		}
-		if now.Sub(created) < 24*time.Hour {
-			made++
-		}
 	}
 	if o, ok := outcomes[latest.QuestionID]; ok && o.outcome == "held" {
-		remind = o.remindAt
+		return !now.Before(o.remindAt)
 	}
-	next := remind
-	if !last.IsZero() && last.Add(CardCooldown).After(next) {
-		next = last.Add(CardCooldown)
-	}
-	return made < CardDailyLimit && !now.Before(next)
+	return true
 }
 
 // cardRank orders decision kinds before notices.

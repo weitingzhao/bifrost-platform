@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -107,8 +108,8 @@ func quotaSource(f *fakeCards, full *bool, refused *int) store.CardQuestions {
 
 // Serial: FreezeEventClock. Row «bound, not handled»: the store says the
 // question expired, or was withdrawn, unanswered: the card is closed for that
-// reason; the trigger still applies, so after its cooldown (six hours from
-// the card's creation) card n+1 is prepared and asked.
+// reason; the trigger still applies, so card n+1 is prepared and asked in
+// the same pass (the six-hour cooldown went in cleanup wave 1, 2026-11-11).
 func TestS3CardSettleExpiredOrWithdrawnAsksAgain(t *testing.T) {
 	at := time.Now().Add(-2 * 24 * time.Hour).UTC().Truncate(time.Second)
 	defer store.FreezeEventClock(at)()
@@ -122,24 +123,40 @@ func TestS3CardSettleExpiredOrWithdrawnAsksAgain(t *testing.T) {
 				t.Fatalf("not bound: %+v", c)
 			}
 			f.byID["q1"].q.Status = status
+			f.now = func() time.Time { return at.Add(2 * time.Hour) }
 			cardPass(t, w, f, at.Add(2*time.Hour))
 			cards := cardsByN(t, w)
 			if c := cards[1]; !c.Closed || c.ClosedWhy != status || c.Acked {
 				t.Fatalf("card 1 not closed %s: %+v", status, c)
 			}
-			if len(cards) != 1 || f.asks != 1 {
-				t.Fatalf("a card inside the cooldown: %d cards, %d asks", len(cards), f.asks)
-			}
 			if repoNotes(t, w, "landing_answer")+repoNotes(t, w, "landing_card_outcome") != 0 {
 				t.Fatal("an unanswered card was handled")
 			}
-			f.now = func() time.Time { return at.Add(8 * time.Hour) }
-			cardPass(t, w, f, at.Add(8*time.Hour))
-			cards = cardsByN(t, w)
 			if c := cards[2]; len(cards) != 2 || !c.Bound || c.QuestionID != "q2" || c.Key == cards[1].Key || f.asks != 2 {
 				t.Fatalf("no card n+1: %+v asks=%d", cards, f.asks)
 			}
 		})
+	}
+}
+
+// Serial: FreezeEventClock. Cleanup wave 1 (2026-11-11): no four cards a day
+// for one trigger: six cards expire one after another within six hours and
+// a seventh is asked.
+func TestS3CardPastFourADay(t *testing.T) {
+	at := time.Now().Add(-2 * 24 * time.Hour).UTC().Truncate(time.Second)
+	defer store.FreezeEventClock(at)()
+	w := newKernelWorld(t)
+	cardFailedRoot(t, w, "land:acc1d:1", "stale", at)
+	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
+	cardPass(t, w, f, at.Add(time.Hour))
+	for n := 1; n <= 6; n++ {
+		f.byID[fmt.Sprintf("q%d", n)].q.Status = "expired"
+		when := at.Add(time.Hour + time.Duration(n)*time.Hour)
+		f.now = func() time.Time { return when }
+		cardPass(t, w, f, when)
+	}
+	if cards := cardsByN(t, w); len(cards) != 7 || !cards[7].Bound || f.asks != 7 {
+		t.Fatalf("%d cards, %d asks; want 7", len(cards), f.asks)
 	}
 }
 
@@ -423,46 +440,6 @@ func TestS3CardPassFullStoreStopsNewCardsForOnePass(t *testing.T) {
 		if !c.Bound || c.Ended() {
 			t.Fatalf("%+v", c)
 		}
-	}
-}
-
-// Serial: FreezeEventClock. The cooldown counts from the card's real
-// creation in the store, not its preparation: prepared at T0, created at
-// T0+5h, expired at T0+6h; at T0+7h (six hours after the preparation) no new
-// card; at T0+11h (six after the creation) card 2.
-func TestS3CardPassCooldownFromRealCreation(t *testing.T) {
-	at := time.Now().Add(-2 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
-	w := newKernelWorld(t)
-	cardFailedRoot(t, w, "land:acc7a:1", "stale", at)
-	t0 := at.Add(time.Hour)
-	store.FreezeEventClock(t0)
-	prepared, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", t0)
-	ok(t, err)
-	if len(prepared) != 1 {
-		t.Fatal(prepared)
-	}
-	f := newFakeCards(func() time.Time { return t0.Add(5 * time.Hour) })
-	cc := newCardCtl(w, f.source())
-	ok(t, cc.cardsPassAt(t0.Add(5*time.Hour)))
-	c := cardsByN(t, w)[1]
-	if !c.Bound || !c.CreatedAt.Equal(t0.Add(5*time.Hour)) || !c.PreparedAt.Equal(t0) {
-		t.Fatalf("card 1: %+v", c)
-	}
-	f.byID["q1"].q.Status = "expired"
-	ok(t, cc.cardsPassAt(t0.Add(6*time.Hour)))
-	if c := cardsByN(t, w)[1]; !c.Closed || c.ClosedWhy != "expired" {
-		t.Fatalf("%+v", c)
-	}
-	ok(t, cc.cardsPassAt(t0.Add(7*time.Hour)))
-	ok(t, cc.cardsPassAt(t0.Add(11*time.Hour-time.Minute)))
-	if n := len(cardsNow(t, w)); n != 1 || f.asks != 1 {
-		t.Fatalf("a card inside the cooldown from its creation: %d cards, %d asks", n, f.asks)
-	}
-	f.now = func() time.Time { return t0.Add(11 * time.Hour) }
-	ok(t, cc.cardsPassAt(t0.Add(11*time.Hour)))
-	if c := cardsByN(t, w)[2]; !c.Bound || f.asks != 2 {
-		t.Fatalf("no card after the cooldown: %+v asks=%d", c, f.asks)
 	}
 }
 
