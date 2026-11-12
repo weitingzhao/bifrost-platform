@@ -275,24 +275,9 @@ func landingMatches(patterns []string, p string) bool {
 	return false
 }
 
-// LandingFloor is immutable policy, independent of the signed allow list.
-func LandingFloor(repo, p string) bool {
-	if repo == "bifrost-trade-infra" {
-		return !landingPath(p) || infraHard(p)
-	}
-	if repo != "bifrost-platform" || !landingPath(p) {
-		return true
-	}
-	b := path.Base(p)
-	if strings.HasPrefix(b, ".env") || slices.Contains([]string{"go.mod", "go.sum", "package.json", "package-lock.json"}, b) {
-		return true
-	}
-	return landingMatches(PlatformLandingFloor, p)
-}
-
-// PlatformLandingFloor are platform's floor globs (LandingFloor). A floor
-// path that is neither hard nor open is floor-grantable with the glob it
-// matches as its entry (FloorEntry).
+// PlatformLandingFloor are platform's floor globs. A path matching one that
+// is neither hard nor open is floor-grantable with the glob it matches as
+// its entry (FloorEntry); hard and open paths are judged by their own tables.
 var PlatformLandingFloor = []string{"api/**", "console/vite.config.*", "console/tsconfig*", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/**", "console/src/lib/**", "console/src/hooks/**", "console/src/pwa/**", "mcp/**", "agent/**", "scripts/**", "config/**", "Makefile", ".husky/**"}
 
 // Change comes from a trusted diff reader, not an executor's report. Modes
@@ -329,29 +314,6 @@ func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
 		}
 	}
 	return true
-}
-
-// FloorViolation is the pre-grant compatibility gate. New consumers check
-// StructuralViolation and LandingAbsoluteViolation first, then the refusal
-// set. Keeping the old floor here prevents unwired v1 callers granting access.
-func FloorViolation(repo string, changes []LandingChange) (string, bool) {
-	if why, bad := LandingStructuralViolation(repo, changes); bad {
-		return why, true
-	}
-	if why, bad := LandingAbsoluteViolation(repo, changes); bad {
-		return "floor: " + why, true
-	}
-	if why, bad := LandingChangeKindViolation(repo, changes); bad {
-		return "change_kind: " + why, true
-	}
-	for _, c := range changes {
-		for _, p := range c.Paths() {
-			if LandingFloor(repo, p) {
-				return "floor: " + p, true
-			}
-		}
-	}
-	return "", false
 }
 
 // Keep the signed canonical form stable while retaining the stated pattern order.

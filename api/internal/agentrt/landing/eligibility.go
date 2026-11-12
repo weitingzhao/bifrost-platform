@@ -175,7 +175,9 @@ func eligibleToClaim(f Facts, now time.Time, preparation bool) Decision {
 		soft = rules.S5Refusals(f.Rule.Landing, f.Repo, f.Changes)
 	}
 	if len(soft) > 0 && (preparation || !MayAwaitGrant(f, soft)) {
-		if _, floor := rules.FloorViolation(f.Repo, f.Changes); floor {
+		// A refusal no signed rule can remove (core, floor_grant) ends the
+		// root; one the rule alone gives (rule_paths, presentation) pauses it.
+		if slices.ContainsFunc(soft, floorRefusal) {
 			return refuse("floor")
 		}
 		return refuse("rule")
@@ -216,6 +218,12 @@ func MayAwaitGrant(f Facts, soft []rules.LandingRefusal) bool {
 	return rules.LandingFloorGrantable(landingOf(f), f.Repo, f.Changes, soft) ||
 		rules.GrantSupported(f.Repo) && (f.ExecutorPin != "" || slices.Contains(soft, rules.LandingCore) ||
 			touchesOpen(f) && !slices.Contains(soft, rules.LandingRulePaths))
+}
+
+// floorRefusal: r is a soft refusal only the Owner's grant removes, never a
+// signed rule (floor_soft is no longer produced but recorded sets name it).
+func floorRefusal(r rules.LandingRefusal) bool {
+	return r == rules.LandingCore || r == rules.LandingFloorGrant || r == rules.LandingFloorSoft
 }
 
 // landingOf is f's signed landing rule, nil without one.

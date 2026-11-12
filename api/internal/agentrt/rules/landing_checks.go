@@ -73,9 +73,12 @@ func LandingAbsoluteViolation(repo string, changes []LandingChange) (string, boo
 }
 
 // LandingSoftRefusals is the single predicate used at request and consumption
-// time. §12 extends its four policy categories with core. Core paths do not
-// also count as floor_soft, but can independently fail paths or display.
-// Floor-grantable paths (FloorEntry) count as floor_grant, not floor_soft.
+// time. §12 extends its four policy categories with core. Core paths can
+// independently fail paths or display. Floor-grantable paths (FloorEntry)
+// count as floor_grant. floor_soft is no longer produced: every floor path
+// that is neither hard nor open is floor-grantable, and infra's floor paths
+// are all hard (TestLandingSoftRefusalsNeverFloorSoft); grants and recorded
+// refusals may still name it.
 // An open path (LandingOpen) adds no core, floor_soft or presentation refusal
 // and needs no allow match; deny still refuses it.
 // Structural/absolute checks and rule validity must precede this function.
@@ -95,8 +98,6 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 				failed[LandingFloorGrant] = true
 			} else if LandingHardCore(repo, p) {
 				failed[LandingCore] = true
-			} else if !open && LandingFloor(repo, p) && !LandingHard(repo, p) {
-				failed[LandingFloorSoft] = true
 			}
 			if !open && !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) || repo == "bifrost-trade-infra" && !landingMatches(InfraLandingAllow, p) {
 				failed[LandingRulePaths] = true

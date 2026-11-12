@@ -45,7 +45,7 @@ func FloorEntry(repo, p string) string {
 	case "bifrost-trade-infra":
 		return infraFloorEntry(p)
 	case "bifrost-platform":
-		if !LandingFloor(repo, p) || LandingHard(repo, p) || LandingOpen(repo, p) {
+		if LandingHard(repo, p) || LandingOpen(repo, p) {
 			return ""
 		}
 		for _, entry := range PlatformLandingFloor {

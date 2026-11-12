@@ -60,7 +60,7 @@ func TestInfraHardClosure(t *testing.T) {
 		"x/TICKET-a.md": "**/TICKET-*", "x/REQUEST-a.md": "**/REQUEST-*", "x/RULE-a.md": "**/RULE-*",
 		"Makefile": "Makefile", "config/x": "config/**", "docker-compose.prod.yml": "docker-compose*.yml", "mkdocs.yml": "mkdocs.yml", "requirements-dev.txt": "requirements*.txt",
 	} {
-		if LandingHardAbsolute("bifrost-trade-infra", p) || !LandingHard("bifrost-trade-infra", p) || LandingHardCore("bifrost-trade-infra", p) || !LandingFloor("bifrost-trade-infra", p) {
+		if LandingHardAbsolute("bifrost-trade-infra", p) || !LandingHard("bifrost-trade-infra", p) || LandingHardCore("bifrost-trade-infra", p) {
 			t.Errorf("floor-grantable path misclassified: %s", p)
 		}
 		if got := InfraFloorEntry(p); got != entry {
