@@ -15,6 +15,7 @@ export default defineConfig({
     globals: true,
     css: false,
     // The real clock is moved ten years ahead for every test file (TD-318).
-    setupFiles: ['./src/test/clockShift.ts'],
+    // webStorage: jsdom's storages on a local Node newer than CI's (.nvmrc).
+    setupFiles: ['./src/test/webStorage.ts', './src/test/clockShift.ts'],
   },
 })
