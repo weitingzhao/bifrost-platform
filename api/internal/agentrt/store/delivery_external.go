@@ -133,7 +133,7 @@ func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
 	unknown[3] = "the platform does not record when a commit reaches main"
 
 	// STG delivered the commit and no PROD run of it is recorded (a run is
-	// recorded minutes after it ends): what PROD runs now tells waiting from
+	// recorded at the workers' next pass after it ends, within a minute): what PROD runs now tells waiting from
 	// unknown. Waiting is said only when that was read: the current release
 	// is another commit, or the workloads do not run this commit's build.
 	if p := in.Production; in.Runs != nil && in.Repo == externalDeliveryRepo && reached[4] && prod == (externalRuns{}) {

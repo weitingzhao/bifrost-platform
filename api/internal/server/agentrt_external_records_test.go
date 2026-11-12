@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -128,4 +130,45 @@ func TestExternalRecordApprovalObservationNeverReopensExpired(t *testing.T) {
 	if _, ok := approvalObservation(a, time.Now()); ok {
 		t.Fatal("expired pending card recorded")
 	}
+}
+
+func TestPipelineRecordsDurationFromEnv(t *testing.T) {
+	for _, name := range []string{pipelineRecordsEveryEnv, pipelineRecordsFullEveryEnv} {
+		for value, want := range map[string]time.Duration{
+			"":      0, // the controller's default
+			"15s":   15 * time.Second,
+			" 1m ":  time.Minute,
+			"5s":    5 * time.Second,
+			"4s":    0, // under the floor: the default holds
+			"-1m":   0,
+			"30":    0, // not a duration
+			"often": 0,
+		} {
+			t.Setenv(name, value)
+			if got := pipelineRecordsDuration(name); got != want {
+				t.Errorf("%s=%q: %s, want %s", name, value, got, want)
+			}
+		}
+	}
+	if controller.DefaultPipelineEvery < pipelineRecordsEveryMin || controller.DefaultPipelineFullEvery < controller.DefaultPipelineEvery {
+		t.Fatalf("defaults: every %s, full every %s, floor %s", controller.DefaultPipelineEvery, controller.DefaultPipelineFullEvery, pipelineRecordsEveryMin)
+	}
+}
+
+// The controller is given the intervals and, when the release recorder
+// exists, its Kick as what a newly recorded run starts.
+func TestWirePipelineRecords(t *testing.T) {
+	t.Setenv(pipelineRecordsEveryEnv, "20s")
+	t.Setenv(pipelineRecordsFullEveryEnv, "10m")
+	c := &controller.Controller{}
+	(&Server{}).wirePipelineRecords(c)
+	if c.PipelineEvery != 20*time.Second || c.PipelineFullEvery != 10*time.Minute || c.PipelineRecorded != nil {
+		t.Fatalf("without a recorder: every %s, full every %s, hook set %v", c.PipelineEvery, c.PipelineFullEvery, c.PipelineRecorded != nil)
+	}
+	s := &Server{releases: releases.NewHandler(releases.NewService(t.TempDir(), nil))}
+	s.wirePipelineRecords(c)
+	if c.PipelineRecorded == nil {
+		t.Fatal("the release recorder is not kicked by a recorded run")
+	}
+	c.PipelineRecorded() // no recorder loop runs here: it must return
 }

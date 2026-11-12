@@ -28,6 +28,11 @@ func pipelineSeenBody(p PipelineRun) map[string]any {
 	return b
 }
 
+// CheckExternal says whether RecordExternal would refuse fact as one of kind:
+// nil when it would not. A caller that remembers what it recorded asks first,
+// so a refused fact does not hide which of the others were recorded.
+func CheckExternal(kind string, fact map[string]any) error { return checkBody(kind, fact) }
+
 // RecordExternal records changed external facts, continuing after invalid facts.
 // The initial batch read avoids taking locks for facts that have not changed;
 // each changed fact is checked again under its advisory lock.

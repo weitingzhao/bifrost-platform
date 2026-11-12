@@ -182,6 +182,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		if env == "prod" {
 			c.LandingCards = s.questionRuntime.landingCardQuestions()
 		}
+		s.wirePipelineRecords(c)
 		s.wireLandingDrill(c)
 		s.wireFullCI(c)
 		s.wireAgentdDeploy(c)

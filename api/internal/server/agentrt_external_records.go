@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -53,6 +55,44 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			}
 			return out, nil
 		}
+	}
+}
+
+// pipelineRecordsEveryEnv sets how often the workers list the retained
+// pipeline runs for the ones that completed, and pipelineRecordsFullEveryEnv
+// how often such a pass compares every listed run with the database whatever
+// it remembers: Go durations (30s, 5m), not under pipelineRecordsEveryMin.
+// Unset, the controller's defaults hold (controller.DefaultPipelineEvery,
+// controller.DefaultPipelineFullEvery).
+const (
+	pipelineRecordsEveryEnv     = "AGENTRT_PIPELINE_RECORDS_EVERY"
+	pipelineRecordsFullEveryEnv = "AGENTRT_PIPELINE_RECORDS_FULL_EVERY"
+	pipelineRecordsEveryMin     = 5 * time.Second
+)
+
+// pipelineRecordsDuration reads one of them; zero is the controller's default.
+func pipelineRecordsDuration(name string) time.Duration {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < pipelineRecordsEveryMin {
+		slog.Error("agentrt: "+name+" is not a duration of at least "+pipelineRecordsEveryMin.String()+"; the default holds", "value", v)
+		return 0
+	}
+	return d
+}
+
+// wirePipelineRecords sets how often the controller records completed runs
+// and has a newly recorded run start a pass of the release recorder, so the
+// run's release record is written then and not at the recorder's own next
+// interval.
+func (s *Server) wirePipelineRecords(c *controller.Controller) {
+	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
+	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
+	if s.releases != nil && s.releases.Service() != nil {
+		c.PipelineRecorded = s.releases.Service().Kick
 	}
 }
 

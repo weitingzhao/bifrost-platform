@@ -157,6 +157,19 @@ type Controller struct {
 	// AgentdDeploy proposes deploy_agentd cards (agentddeploy.go); nil
 	// proposes none.
 	AgentdDeploy *AgentdDeploy
+	// PipelineEvery is how often the retained pipeline runs are listed for
+	// the ones that completed (PipelineRecords); zero means
+	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares
+	// every listed run with the database whatever it remembers; zero means
+	// DefaultPipelineFullEvery. PipelineRecorded, when set, is called after
+	// a pass recorded a completed run: the server has the release recorder
+	// write that run's record then instead of at its own next pass.
+	PipelineEvery     time.Duration
+	PipelineFullEvery time.Duration
+	PipelineRecorded  func()
+	// pipelines remembers the completed runs this process knows are
+	// recorded (external_records.go); memory only.
+	pipelines pipelineMemo
 }
 
 // PlanObserveEvery is how often the plan completion atoms' sources are read
@@ -702,7 +715,11 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		})
 	}
 	if c.Sources.PipelineRuns != nil {
-		c.every(ctx, &wg, "agentrt-pipeline-records", 5*time.Minute, func() error {
+		pipelines := c.PipelineEvery
+		if pipelines <= 0 {
+			pipelines = DefaultPipelineEvery
+		}
+		c.every(ctx, &wg, "agentrt-pipeline-records", pipelines, func() error {
 			_, err := c.PipelineRecords(ctx)
 			return err
 		})

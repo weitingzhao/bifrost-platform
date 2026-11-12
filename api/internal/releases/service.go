@@ -48,6 +48,10 @@ type Service struct {
 	clients   Clients
 	now       func() time.Time
 
+	// kick asks the recorder loop for a pass now (Kick); one waiting ask is
+	// enough, so it holds one.
+	kick chan struct{}
+
 	mu   sync.Mutex
 	last *TickResult
 }
@@ -61,7 +65,7 @@ func NewService(configDir string, clients Clients) *Service {
 		rules.Namespace = "cicd"
 	}
 	return &Service{rules: rules, rulesPath: path, configDir: configDir, rulesErr: err, clients: clients,
-		now: func() time.Time { return time.Now().UTC() }}
+		now: func() time.Time { return time.Now().UTC() }, kick: make(chan struct{}, 1)}
 }
 
 // Enabled: there are rules to record by.
@@ -81,8 +85,19 @@ func RecorderWanted() bool {
 	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 }
 
-// Start runs Tick now and then every interval until ctx ends (workers role only:
-// records are idempotent by name, but one writer keeps the pass cheap).
+// Kick asks the recorder for a pass now instead of at its next interval: the
+// caller saw a run complete. It never blocks; asks made while one waits are
+// one pass. Without a started recorder it does nothing.
+func (s *Service) Kick() {
+	select {
+	case s.kick <- struct{}{}:
+	default:
+	}
+}
+
+// Start runs Tick now, then every interval and at every Kick, until ctx ends
+// (workers role only: records are idempotent by name, but one writer keeps the
+// pass cheap).
 func (s *Service) Start(ctx context.Context, interval time.Duration) {
 	if !s.Enabled() {
 		slog.Info("release recorder off: no rules", "path", s.rulesPath)
@@ -116,6 +131,8 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
+				safego.Do("releases.recorder.tick", tick)
+			case <-s.kick:
 				safego.Do("releases.recorder.tick", tick)
 			}
 		}
