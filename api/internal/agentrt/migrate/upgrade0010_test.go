@@ -187,10 +187,12 @@ func upgrade0010(t *testing.T, conn *pgx.Conn, files []migrate.File) {
 }
 
 // T50: 0009 production structure + existing dev/vm/tasks/live/terminal
-// attempts -> 0010; run actual 5a8edd55 code on this same upgraded database.
-func TestUpgradeTo0010KeepsDataAndSupportsLegacyRuntime(t *testing.T) {
+// attempts -> 0010 keeps every old row, and today's runtime works on the
+// upgraded database. The half that compiled the API at 5a8edd55 and ran it on
+// this database is gone (CI-11): every environment is past 0016, so no
+// runtime of that age meets a 0010 database again.
+func TestUpgradeTo0010KeepsData(t *testing.T) {
 	t.Parallel()
-	probe := buildLegacy0010(t) // compile even when the DB part must skip
 	db, conn, files := database0009(t)
 	before := data0010(t, conn)
 	upgrade0010(t, conn, files)
@@ -205,6 +207,5 @@ func TestUpgradeTo0010KeepsDataAndSupportsLegacyRuntime(t *testing.T) {
 	if again, err := migrate.RunFiles(context.Background(), conn, "dev", files); err != nil || len(again) != 0 {
 		t.Fatalf("repeat migration: %v %v", again, err)
 	}
-	runLegacy0010(t, probe, db.Runtime)
 	checkRuntime0010(t, db)
 }
