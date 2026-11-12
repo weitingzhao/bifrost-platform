@@ -66,6 +66,8 @@ func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 				return
 			}
 			_, _ = w.Write([]byte("---\nid: a\n---\n"))
+		case "/api/v1/repos/bifrost/repo-ops/raw/db-steps.d/big.sql":
+			_, _ = w.Write([]byte(strings.Repeat("-- padding\n", 200_000)))
 		case "/api/v1/repos/bifrost/repo-ops/contents/db-steps.d":
 			_, _ = w.Write([]byte(`[{"name":"a step.md","type":"file"},{"name":"old","type":"dir"}]`))
 		default:
@@ -188,6 +190,11 @@ func TestPolicyFactsReadFilesAndWriteConfigMaps(t *testing.T) {
 	}
 	if _, found, err = f.FileAt(ctx, "repo-ops", factSHA1, "db-steps.d/a step.md"); err != nil || found {
 		t.Fatalf("FileAt at a ref without the file = %v %v", found, err)
+	}
+	// Cleanup wave 1 (2026-11-11): a file past the old 1 MiB bound is read whole.
+	var big string
+	if big, found, err = f.FileAt(ctx, "repo-ops", "main", "db-steps.d/big.sql"); err != nil || !found || len(big) != 2_200_000 {
+		t.Fatalf("FileAt of a 2.2 MB file = %d bytes %v %v", len(big), found, err)
 	}
 	names, err := f.ListDir(ctx, "repo-ops", "main", "db-steps.d")
 	if err != nil || strings.Join(names, ",") != "a step.md" {

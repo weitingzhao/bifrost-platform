@@ -120,22 +120,17 @@ func (f PolicyFacts) giteaGet(ctx context.Context, path string, out any) (bool, 
 	return true, nil
 }
 
-// maxPolicyFileBytes bounds one raw file read; a larger DDL file is refused.
-const maxPolicyFileBytes = 1 << 20
-
-// FileAt reads a file's text at ref through the raw endpoint.
+// FileAt reads a file's text at ref through the raw endpoint, whole: the
+// 1 MiB bound on it went in cleanup wave 1 (2026-11-11).
 func (f PolicyFacts) FileAt(ctx context.Context, repo, ref, path string) (string, bool, error) {
 	resp, found, err := f.giteaRequest(ctx, url.PathEscape(repo)+"/raw/"+escapePath(path)+"?ref="+url.QueryEscape(ref))
 	if err != nil || !found {
 		return "", false, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxPolicyFileBytes+1))
+	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", false, err
-	}
-	if len(raw) > maxPolicyFileBytes {
-		return "", false, fmt.Errorf("%s is larger than %d bytes", path, maxPolicyFileBytes)
 	}
 	return string(raw), true, nil
 }
