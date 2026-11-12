@@ -63,8 +63,23 @@ func load(ctx context.Context, dir string, env []string) ([]pkg, error) {
 		if e != nil {
 			return nil, e
 		}
+		if p.Dir, e = resolve(p.Dir); e != nil {
+			return nil, e
+		}
 		ps = append(ps, p)
 	}
+}
+
+// resolve returns the absolute path with symbolic links evaluated. go list
+// reports directories from the kernel's working directory, which has every
+// link resolved (on macOS /var is a link to /private/var), so paths are
+// compared only after both sides have been resolved.
+func resolve(path string) (string, error) {
+	abs, e := filepath.Abs(path)
+	if e != nil {
+		return "", e
+	}
+	return filepath.EvalSymlinks(abs)
 }
 
 type node struct {
@@ -298,7 +313,7 @@ func Run(ctx context.Context, dir, mode string, env []string, out io.Writer) int
 		defer fmt.Fprintln(out, NoDatabase)
 	}
 	fail := func(e error) int { fmt.Fprintln(out, "platformcheck:", e); return 1 }
-	abs, e := filepath.Abs(dir)
+	abs, e := resolve(dir)
 	if e != nil {
 		return fail(e)
 	}

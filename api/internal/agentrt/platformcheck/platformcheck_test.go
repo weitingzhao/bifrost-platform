@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -58,7 +57,7 @@ func strconvQuote(s string) string { return "\"" + s + "\"" }
 
 func TestModuleRules(t *testing.T) {
 	t.Parallel()
-	dir, e := filepath.Abs("../../..")
+	dir, e := resolve("../../..")
 	if e != nil {
 		t.Fatal(e)
 	}

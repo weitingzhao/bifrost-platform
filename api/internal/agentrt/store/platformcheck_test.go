@@ -14,7 +14,10 @@ import (
 
 func platformFixture(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
+	return platformFixtureAt(t, t.TempDir())
+}
+func platformFixtureAt(t *testing.T, root string) string {
+	t.Helper()
 	err := os.CopyFS(filepath.Join(root, "api"), os.DirFS("../platformcheck/testdata/fixture"))
 	if err != nil {
 		t.Fatal(err)
@@ -93,5 +96,28 @@ func TestPlatformCheckMissingParent(t *testing.T) {
 	root := platformFixture(t)
 	if code, out := platformRun(t, root, "changed", ""); code == 0 || !strings.Contains(out, "HEAD^") {
 		t.Fatalf("parent=%d\n%s", code, out)
+	}
+}
+
+// TestPlatformCheckSymlinkedRoot runs the check from a path that reaches the
+// repository through a symbolic link, as t.TempDir does on macOS where /var
+// links to /private/var. go list reports resolved directories, so the changed
+// package is found only when both sides are resolved before comparison.
+func TestPlatformCheckSymlinkedRoot(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if e := os.Mkdir(real, 0700); e != nil {
+		t.Fatal(e)
+	}
+	link := filepath.Join(base, "link")
+	if e := os.Symlink(real, link); e != nil {
+		t.Fatal(e)
+	}
+	root := platformFixtureAt(t, link)
+	platformWrite(t, root, "api/b/b.go", "package b\nconst Value = 2\n")
+	platformCommit(t, root)
+	if code, out := platformRun(t, root, "changed", ""); code != 0 || !strings.Contains(out, "changed: fixture/b") || strings.Contains(out, "fixture/a") {
+		t.Fatalf("symlinked=%d\n%s", code, out)
 	}
 }
