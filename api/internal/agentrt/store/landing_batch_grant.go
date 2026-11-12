@@ -155,15 +155,15 @@ func grantBatchKeys(v any) []string {
 }
 
 // badGrantBatch is why a grant's batch is refused, or "": exactly its two
-// keys, the batch the grant's operation leads, and two members or more (at
-// most BatchMax), the lead first, each an operation once.
+// keys, the batch the grant's operation leads, and two members or more, the
+// lead first, each an operation once.
 func badGrantBatch(v any, g LandingGrant) string {
 	m, _ := v.(map[string]any)
 	if err := closedDecode(m["batch"], &LandingGrantBatch{}, "batch", "members"); err != nil {
 		return err.Error()
 	}
 	b := g.Batch
-	if b.Batch != landing.BatchID(g.Op) || len(b.Members) < 2 || len(b.Members) > landing.BatchMax || b.Members[0] != g.Op {
+	if b.Batch != landing.BatchID(g.Op) || len(b.Members) < 2 || b.Members[0] != g.Op {
 		return "the batch its operation leads, two members or more, the lead first"
 	}
 	for i, op := range b.Members {

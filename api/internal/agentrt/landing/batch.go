@@ -19,9 +19,6 @@ import (
 // nothing maps the batch is split in half and tested again. No protocol kind
 // is new: the batch itself is a controller note beside the protocol.
 
-// BatchMax is the most members a batch has (Owner 2026-11-06: 1000).
-const BatchMax = 1000
-
 // BatchCandidate is a root that may join a batch, with the facts its claim
 // would be judged on (read with no operation yet).
 type BatchCandidate struct {
@@ -32,8 +29,8 @@ type BatchCandidate struct {
 // BatchID names the batch led by lead.
 func BatchID(lead string) string { return "batch:" + lead }
 
-// FormBatch picks a batch's members from cands, in their order: at most
-// BatchMax; bifrost-platform
+// FormBatch picks a batch's members from cands, in their order, with no cap
+// on their number (cleanup wave 1, 2026-11-11): bifrost-platform
 // roots of one tenant only (every other repository keeps the one-operation
 // path); no root that S5 must check (S5 keeps its own path, alone); and no
 // root its claim refuses on policy (a floor or rule refusal, or soft checks
@@ -46,11 +43,7 @@ func BatchID(lead string) string { return "batch:" + lead }
 // is today's single landing.
 // With wave set, cands are the complete wave in append order; any
 // ineligible member refuses the whole wave.
-// BatchMax remains a bound on the number of operations in the record.
 func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidate {
-	if wave && len(cands) > BatchMax {
-		return nil
-	}
 	var out []BatchCandidate
 	grant := -1
 	for _, c := range cands {
@@ -66,9 +59,6 @@ func FormBatch(cands []BatchCandidate, now time.Time, wave bool) []BatchCandidat
 				return nil
 			}
 			continue
-		}
-		if !wave && len(out) >= BatchMax {
-			break
 		}
 		reason, soft := PolicyChecks(f, now)
 		if reason != "" || len(soft) > 0 && !MayAwaitGrant(f, soft) {

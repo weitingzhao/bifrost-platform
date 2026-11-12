@@ -207,8 +207,20 @@ func TestWaveBatchFormation(t *testing.T) {
 			}
 		})
 	}
-	tooMany := make([]BatchCandidate, BatchMax+1)
-	if got := FormBatch(tooMany, now, true); len(got) != 0 {
-		t.Fatal("wave exceeds record member bound")
+}
+
+// The batch member cap is gone (cleanup wave 1): a batch or a wave past the
+// old 1000 still forms whole, in order.
+func TestBatchPastOldMemberCap(t *testing.T) {
+	t.Parallel()
+	now := epoch.Add(time.Hour)
+	cands := make([]BatchCandidate, 1001)
+	for i := range cands {
+		cands[i] = batchCand(i)
+	}
+	for _, wave := range []bool{false, true} {
+		if got := FormBatch(cands, now, wave); !slices.Equal(batchTasks(got), batchTasks(cands)) {
+			t.Fatal("past 1000 members, wave", wave, len(got))
+		}
 	}
 }

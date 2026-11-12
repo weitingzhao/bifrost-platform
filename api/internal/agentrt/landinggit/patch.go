@@ -6,9 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 // CandidatePatch is the Git half of a landing grant's material (coordinator
@@ -50,9 +49,9 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 		"+refs/heads/main:refs/remotes/origin/main", a, r); err != nil {
 		return out, err
 	}
-	// R is one commit on M0, or a batch's stack of at most BatchMax single
-	// commits on M0 whose first is the lead's (landing.BatchMax): the patch
-	// shown is exactly what main receives, M0..R.
+	// R is one commit on M0, or a batch's stack of single commits on M0
+	// whose first is the lead's: the patch shown is exactly what main
+	// receives, M0..R.
 	first, err := stackOn(ctx, g, dir, m0, r)
 	if err != nil {
 		return out, err
@@ -85,11 +84,20 @@ func (g *Git) CandidatePatch(ctx context.Context, a, m0, r string) (CandidatePat
 }
 
 // stackOn is the first commit of R on M0: R itself when R is one commit on
-// M0, else the bottom of a stack of at most landing.BatchMax commits, each of
-// one parent, from M0 up to R (a batch, landing/batch.go).
+// M0, else the bottom of a stack of commits, each of one parent, from M0 up
+// to R (a batch, landing/batch.go). The walk takes at most as many steps as
+// M0..R has commits.
 func stackOn(ctx context.Context, g *Git, dir, m0, r string) (string, error) {
+	count, err := g.run(ctx, dir, false, nil, nil, "rev-list", "--count", m0+".."+r)
+	if err != nil {
+		return "", err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(count))
+	if err != nil {
+		return "", err
+	}
 	at := r
-	for range landing.BatchMax {
+	for range n {
 		parents, err := g.run(ctx, dir, false, nil, nil, "rev-list", "--parents", "-n", "1", at)
 		if err != nil {
 			return "", err

@@ -118,8 +118,8 @@ func badLandingBatch(v any) string {
 	list, isList := stringList(m["members"])
 	_, after := m["after"].(string)
 	switch {
-	case !isList || len(list) < 2 || len(list) > landing.BatchMax:
-		return fmt.Sprintf("landing_batch members are 2 to %d operations", landing.BatchMax)
+	case !isList || len(list) < 2:
+		return "landing_batch members are 2 operations or more"
 	case slices.Contains(list, "") || len(slices.Compact(slices.Sorted(slices.Values(list)))) != len(list):
 		return "landing_batch members are operations, each once"
 	case b.Lead != list[0] || b.Batch != landing.BatchID(b.Lead):

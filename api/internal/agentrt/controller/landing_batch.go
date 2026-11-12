@@ -146,9 +146,6 @@ func (c *Controller) claimBatch(ctx context.Context, repo string, tasks []string
 	var errs []error
 	var cands []landing.BatchCandidate
 	for i, task := range tasks {
-		if len(landing.FormBatch(cands, now, false)) >= landing.BatchMax {
-			break
-		}
 		f, d, err := reads[i].f, reads[i].d, reads[i].err
 		switch {
 		case err != nil:
