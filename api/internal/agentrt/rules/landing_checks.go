@@ -99,7 +99,7 @@ func LandingSoftRefusals(l *Landing, repo string, changes []LandingChange) []Lan
 			} else if LandingHardCore(repo, p) {
 				failed[LandingCore] = true
 			}
-			if !open && !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) || repo == "bifrost-trade-infra" && !landingMatches(InfraLandingAllow, p) {
+			if !open && !landingMatches(r.Allow, p) || landingMatches(r.Deny, p) {
 				failed[LandingRulePaths] = true
 			}
 		}

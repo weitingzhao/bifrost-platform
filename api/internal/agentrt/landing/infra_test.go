@@ -12,11 +12,22 @@ import (
 
 const infraDoc = "agent-config/work/multi-agent/REPORT-a.md"
 
+// infraAllow is the signed infra rule's allow as PROD states it; the
+// platform holds no copy of its own (cleanup wave 2).
+var infraAllow = []string{
+	"agent-config/work/multi-agent/CUT-*.md",
+	"agent-config/work/multi-agent/DESIGN-*.md",
+	"agent-config/work/multi-agent/REPORT-*.md",
+	"agent-config/work/multi-agent/REVIEW-*.md",
+	"agent-config/work/multi-agent/LESSONS-*.md",
+	"agent-config/work/multi-agent/reviews/*.md",
+}
+
 func infraFacts() Facts {
 	f := eligibleFacts()
 	f.Repo = "bifrost-trade-infra"
 	f.GrantEnabled, f.ExecutorPin = true, "external-host"
-	f.Rule.Landing.Repos = []rules.LandingRepo{{Repo: f.Repo, Allow: rules.InfraLandingAllow, STGRelease: "none", Limits: &rules.LandingRepoLimits{MaxFiles: 5, MaxChangedLines: 1500, MaxInFlight: 1}}}
+	f.Rule.Landing.Repos = []rules.LandingRepo{{Repo: f.Repo, Allow: infraAllow, STGRelease: "none", Limits: &rules.LandingRepoLimits{MaxFiles: 5, MaxChangedLines: 1500, MaxInFlight: 1}}}
 	f.Changes = []rules.LandingChange{{OldPath: infraDoc, NewPath: infraDoc, OldMode: "100644", NewMode: "100644", Added: 20}}
 	return f
 }

@@ -41,7 +41,8 @@ func TestS65InfraPreparedWiring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TD-537: no allow list parameter; the admission policy would refuse it.
+	// TD-537: no allow list parameter (removed from bifrost-ci-infra); the
+	// admission policy would refuse it.
 	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
 	for _, p := range params {
 		param := p.(map[string]any)
@@ -115,15 +116,4 @@ func (d *infraAllowDB) QueryRow(ctx context.Context, q string, args ...any) pgx.
 		})
 	}
 	return d.startup704DB.QueryRow(ctx, q, args...)
-}
-
-func TestInfraLandingAllowNotWired(t *testing.T) {
-	t.Parallel()
-	// TD-537: the allow list is not passed until its transport passes admission.
-	c := &controller.Controller{DB: &infraAllowDB{startup704DB: startup704DB{signed: true}}, DrillGit: map[string]controller.DrillGit{"bifrost-trade-infra": &landinggit.Git{}}}
-	ci := &landingci.Client{}
-	(&Server{}).wireInfraLandingCI(c, ci)
-	if ci.InfraLandingAllow != nil {
-		t.Fatal("the infra allow list is wired to the landing CI")
-	}
 }

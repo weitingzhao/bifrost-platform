@@ -9,9 +9,6 @@ metadata:
     bifrost.io/run-arch: amd64
 spec:
   params:
-  - name: landing-allow-json
-    type: string
-    default: ''
   - name: revision
     type: string
   - name: base
@@ -71,8 +68,6 @@ spec:
     taskRef:
       name: bifrost-ci-infra-check
     params:
-    - name: landing-allow-json
-      value: $(params.landing-allow-json)
     - name: revision
       value: $(params.revision)
     - name: base

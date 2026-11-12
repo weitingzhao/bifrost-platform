@@ -6,15 +6,6 @@ import (
 	"strings"
 )
 
-var InfraLandingAllow = []string{
-	"agent-config/work/multi-agent/CUT-*.md",
-	"agent-config/work/multi-agent/DESIGN-*.md",
-	"agent-config/work/multi-agent/REPORT-*.md",
-	"agent-config/work/multi-agent/REVIEW-*.md",
-	"agent-config/work/multi-agent/LESSONS-*.md",
-	"agent-config/work/multi-agent/reviews/*.md",
-}
-
 // infraNever are the infra paths no grant ever reaches: credentials, the
 // forge's own automation and the agents' instructions. They stay absolute.
 var infraNever = []string{

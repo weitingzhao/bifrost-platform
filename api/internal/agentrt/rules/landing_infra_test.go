@@ -7,6 +7,17 @@ import (
 	"testing"
 )
 
+// infraAllowFixture is a signed infra rule's allow as the PROD rule states
+// it: the platform holds no copy of its own (cleanup wave 2).
+var infraAllowFixture = []string{
+	"agent-config/work/multi-agent/CUT-*.md",
+	"agent-config/work/multi-agent/DESIGN-*.md",
+	"agent-config/work/multi-agent/REPORT-*.md",
+	"agent-config/work/multi-agent/REVIEW-*.md",
+	"agent-config/work/multi-agent/LESSONS-*.md",
+	"agent-config/work/multi-agent/reviews/*.md",
+}
+
 func TestInfraConfiguredFileLimit(t *testing.T) {
 	t.Parallel()
 	const repo = "bifrost-trade-infra"
@@ -15,7 +26,7 @@ func TestInfraConfiguredFileLimit(t *testing.T) {
 		oversized    bool
 	}{{100, 10, false}, {100, 99, false}, {100, 100, false}, {100, 101, true}, {5, 5, false}, {5, 6, true}} {
 		t.Run(fmt.Sprintf("limit%d/files%d", tc.limit, tc.count), func(t *testing.T) {
-			l := &Landing{Repos: []LandingRepo{{Repo: repo, Allow: InfraLandingAllow,
+			l := &Landing{Repos: []LandingRepo{{Repo: repo, Allow: infraAllowFixture,
 				Limits: &LandingRepoLimits{MaxFiles: tc.limit, MaxChangedLines: 1500, MaxInFlight: 1}}},
 				Limits: LandingLimits{MaxFiles: 15, MaxChangedLines: 300}}
 			changes := make([]LandingChange, tc.count)
@@ -34,7 +45,7 @@ func TestInfraConfiguredFileLimit(t *testing.T) {
 }
 
 func TestInfraDisplayedClampMatchesEnforcement(t *testing.T) {
-	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: InfraLandingAllow}}, Limits: LandingLimits{MaxFiles: 100, MaxChangedLines: 3000}}
+	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: infraAllowFixture}}, Limits: LandingLimits{MaxFiles: 100, MaxChangedLines: 3000}}
 	for _, lines := range []int{1499, 1500, 1501} {
 		changes := []LandingChange{{NewPath: "k8s/example.yaml", NewMode: "100644", Added: lines}}
 		refused := slices.Contains(LandingSoftRefusals(l, "bifrost-trade-infra", changes), LandingRefusal("size"))
@@ -91,7 +102,7 @@ func TestInfraHardClosure(t *testing.T) {
 
 func TestInfraSoftFloorGrant(t *testing.T) {
 	t.Parallel()
-	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: InfraLandingAllow, Limits: &LandingRepoLimits{MaxFiles: 5, MaxChangedLines: 1500, MaxInFlight: 1}}},
+	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: infraAllowFixture, Limits: &LandingRepoLimits{MaxFiles: 5, MaxChangedLines: 1500, MaxInFlight: 1}}},
 		Limits: LandingLimits{MaxFiles: 10, MaxChangedLines: 300}}
 	k8s := LandingChange{OldPath: "k8s/a.yaml", NewPath: "k8s/a.yaml", OldMode: "100644", NewMode: "100644", Added: 3}
 	soft := LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{k8s})
@@ -306,5 +317,21 @@ func TestS6T72EffectiveRepoLimits(t *testing.T) {
 	}
 	if _, err := Parse([]byte(strings.Replace(text, "repo: bifrost-trade-infra", "repo: bifrost-research", 1))); err == nil {
 		t.Fatal("unknown repo")
+	}
+}
+
+// The signed rule alone states infra's allow: a path it allows outside the
+// multi-agent documents lands with no refusal, and one it does not allow is
+// refused as rule_paths. Loosening infra's allow is the Owner's signature.
+func TestInfraAllowIsTheSignedRule(t *testing.T) {
+	t.Parallel()
+	doc := LandingChange{NewPath: "docs/guide.md", NewMode: "100644", Added: 3}
+	l := &Landing{Repos: []LandingRepo{{Repo: "bifrost-trade-infra", Allow: append(slices.Clone(infraAllowFixture), "docs/**")}}}
+	if soft := LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{doc}); len(soft) > 0 {
+		t.Fatal("a signed allow is narrowed by a platform copy:", soft)
+	}
+	l.Repos[0].Allow = infraAllowFixture
+	if soft := LandingSoftRefusals(l, "bifrost-trade-infra", []LandingChange{doc}); !slices.Equal(soft, []LandingRefusal{LandingRulePaths}) {
+		t.Fatal("outside the signed allow:", soft)
 	}
 }
