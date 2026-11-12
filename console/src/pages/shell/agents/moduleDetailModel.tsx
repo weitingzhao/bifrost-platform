@@ -449,7 +449,7 @@ export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map
           row('Evidence', `${byId.get(str(observation.step))?.label ?? ''} · ${str(observation.binding)} reads ${str(observation.value) || 'Unknown'}`)
         } else if (isRecord(b.landing) && scope.taskNode.has(task)) {
           const t = scope.tasks.find(x => x.task_id === task)
-          row('Landing', `${str(b.text) || 'Landing'} · ${t?.title || task}`, t ? goalHref(t.mission_id, t.task_id) : '')
+          row('Landing', `${str(b.text).replaceAll('<nil>', 'not recorded') || 'Landing'} · ${t?.title || task}`, t ? goalHref(t.mission_id, t.task_id) : '')
         }
         break
       }

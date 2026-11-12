@@ -62,6 +62,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('module detail model', () => {
+  it.each([
+    ['Main reconciled: landed <nil>', 'Main reconciled: landed not recorded'],
+    ['Main reconciled: failed <nil>', 'Main reconciled: failed not recorded'],
+    ['Main reconciled: landed success', 'Main reconciled: landed success'],
+  ])('displays landing note %s as %s without changing the event', (text, displayed) => {
+    const raw = r5Raw()
+    const event = raw.recent_changes.find(e => e.event_id === 9101)!
+    event.body_json.text = text
+    const view = parsePlanSnapshot(raw, 'R5')
+    const scopes = moduleScopes(view)
+    const { rows } = planActivity(view, scopes.get('R5:5.1')!, scopes, new Map())
+    expect(rows.find(row => row.key === 'plan-9101')?.text).toBe(`${displayed} · Module detail model`)
+    expect(view.recent_changes.find(e => e.event_id === 9101)?.body_json.text).toBe(text)
+  })
+
   it('opens the module an address names, by item or by one of its steps, and nothing for the round', () => {
     const view = r5()
     expect(moduleOf(view, 'R5:5.1')).toMatchObject({ item: { plan_node_id: 'R5:5.1' }, step: '' })
