@@ -468,6 +468,26 @@ func TestDispatchRechecksMission(t *testing.T) {
 	}
 }
 
+// Cleanup wave 1 (2026-11-11): a proposal past the old 50-task bound is
+// taken whole; an empty one is still refused.
+func TestProposalPastFiftyTasks(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	batch := make([]store.TaskProposal, 0, 60)
+	for i := range 60 {
+		batch = append(batch, proposal(fmt.Sprintf("p%d", i), w.impl))
+	}
+	out, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "sixty", "M-1", batch)
+	ok(t, err)
+	if n := len(taskIDs(out)); n != 60 {
+		t.Fatalf("%d tasks taken, want 60", n)
+	}
+	if _, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "none", "M-1", nil); err == nil {
+		t.Fatal("an empty proposal was taken")
+	}
+}
+
 // Review 175 A3: tasks that wait never keep later ones from being looked
 // at: with more waiting tasks than a page, a later task with nothing to wait
 // for is ready after one pass.

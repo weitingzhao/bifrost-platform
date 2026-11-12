@@ -102,7 +102,6 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 		value        float64
 		unit, source string
 	}{
-		{"proposal.tasks", MaxBatch, "tasks", "store.MaxBatch"},
 		{"proposal.attempt_hard_limit", MaxHardLimit.Seconds(), "seconds", "store.MaxHardLimit"},
 		{"proposal.default_mission_days", DefaultMissionDays, "days", "store.DefaultMissionDays (explicit proposal deadline overrides this default)"},
 		{"host.signal_freshness", SignalsFresh.Seconds(), "seconds", "store.SignalsFresh"},

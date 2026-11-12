@@ -446,7 +446,8 @@ var proposableRoles = []string{"plan", "implement", "brief", "other"}
 // mission's max_action.
 var effectRank = map[string]int{"none": 0, "branch": 1, "external": 2}
 
-// MaxBatch is the most tasks one proposal holds.
+// MaxBatch is the most tasks one withdrawal or one superseding names. A
+// proposal has no such bound since cleanup wave 1 (2026-11-11).
 const MaxBatch = 50
 
 // MaxHardLimit is the longest an attempt may be given (zero means the
@@ -454,8 +455,8 @@ const MaxBatch = 50
 const MaxHardLimit = 24 * time.Hour
 
 func checkBatch(tasks []TaskProposal) error {
-	if len(tasks) == 0 || len(tasks) > MaxBatch {
-		return invalid("a proposal holds 1 to %d tasks", MaxBatch)
+	if len(tasks) == 0 {
+		return invalid("a proposal holds at least 1 task")
 	}
 	refs := map[string]bool{}
 	for i, t := range tasks {
