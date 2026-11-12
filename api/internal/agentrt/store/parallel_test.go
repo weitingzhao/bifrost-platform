@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 )
 
 // minParallel is how many tests of the package run at once when the command
@@ -53,6 +55,7 @@ func TestMain(m *testing.M) {
 		}
 		parallelAsked.want = fmt.Sprint(n)
 	}
+	agentrttest.Warm(seededTemplate, seedTemplate)
 	os.Exit(m.Run())
 }
 

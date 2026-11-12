@@ -17,12 +17,10 @@ import (
 
 func conclusionDB(t *testing.T) (*agentrttest.DB, store.DB, store.Writer) {
 	t.Helper()
-	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	ok(t, err)
+	db := seededDB(t)
 	pool := db.Pool(t, db.Runtime)
 	w := store.Writer{Actor: "thread:local_conclusion", Token: "fixture"}
-	_, _, err = store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
+	_, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
 	ok(t, err)
 	return db, pool, w
 }

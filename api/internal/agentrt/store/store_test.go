@@ -53,15 +53,34 @@ const (
 	s3   = "R2:2.1-3"
 )
 
+// seededDB is a migrated database the seed has run on: a copy of a template
+// seeded once per test process (CI-14), not a seed per test.
+func seededDB(t *testing.T) *agentrttest.DB {
+	t.Helper()
+	return agentrttest.MigratedWith(t, seededTemplate, seedTemplate)
+}
+
+// seededTemplate names the template seedTemplate prepares. TestMain makes it
+// before any test runs, so the seed's events carry the wall clock whatever
+// event clock the first test to want a world has frozen.
+const seededTemplate = "seeded"
+
+func seedTemplate(ctx context.Context, owner *pgx.Conn) error {
+	seeded, err := store.Seed(ctx, owner)
+	if err == nil && !seeded {
+		err = errors.New("seed did nothing on an empty database")
+	}
+	return err
+}
+
+// The missions, plan and artifacts below stay per test: a mission's deadline
+// and creation time, and the events' times, are read against the test's own
+// clock, which many tests freeze before they make their world.
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	db := agentrttest.Migrated(t)
-	seeded, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	ok(t, err)
-	if !seeded {
-		t.Fatal("seed did nothing on an empty database")
-	}
+	db := seededDB(t)
 	w := &world{db: db, rt: db.Connect(t, db.Runtime)}
+	var err error
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {

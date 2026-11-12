@@ -125,18 +125,63 @@ func asyncCommit(name string) string {
 // 120 s running the migrations in every one, 2026-10-18).
 func Migrated(t testing.TB) *DB {
 	t.Helper()
+	return MigratedWith(t, "", nil)
+}
+
+// Prepare writes, as the owner, what every test of a package would otherwise
+// write first into its own copy (store.Seed, say).
+type Prepare func(ctx context.Context, owner *pgx.Conn) error
+
+// MigratedWith is Migrated from a template this process migrated and then
+// prepared once, one template per key (CI-14: the store package's 1,300
+// tests each ran the seed in their own copy). What prepare writes must not
+// depend on when a test runs: the template is made by the process's first
+// test that asks for key, and every later one copies it as it was then.
+// The empty key with a nil prepare is Migrated's template.
+func MigratedWith(t testing.TB, key string, prepare Prepare) *DB {
+	t.Helper()
 	b := base(t)
-	tmplOnce.Do(func() { tmplName, tmplErr = makeTemplate(b) })
-	if tmplErr != nil {
-		t.Fatalf("migrated template: %v", tmplErr)
+	tm := template(key)
+	tm.once.Do(func() { tm.name, tm.err = makeTemplate(b, prepare) })
+	if tm.err != nil {
+		t.Fatalf("migrated template %q: %v", key, tm.err)
 	}
-	return newFrom(t, tmplName)
+	return newFrom(t, tm.name)
+}
+
+// Warm makes key's template now, outside any test, when AGENTRT_TEST_PG
+// names a server: a package whose prepare must not run under a test's state
+// (an event clock a test froze, say) calls it from TestMain. Without a server
+// it does nothing, and an error waits for the first MigratedWith of key.
+func Warm(key string, prepare Prepare) {
+	b := os.Getenv("AGENTRT_TEST_PG")
+	if b == "" {
+		return
+	}
+	tm := template(key)
+	tm.once.Do(func() { tm.name, tm.err = makeTemplate(b, prepare) })
+}
+
+type tmpl struct {
+	once sync.Once
+	name string
+	err  error
+}
+
+func template(key string) *tmpl {
+	tmplMu.Lock()
+	defer tmplMu.Unlock()
+	tm := tmpls[key]
+	if tm == nil {
+		tm = &tmpl{}
+		tmpls[key] = tm
+	}
+	return tm
 }
 
 var (
-	tmplOnce sync.Once
-	tmplName string
-	tmplErr  error
+	tmplMu sync.Mutex
+	tmpls  = map[string]*tmpl{}
 )
 
 // templatePrefix names the migrated databases tests copy; one older than
@@ -146,10 +191,11 @@ const (
 	templateStale  = 6 * time.Hour
 )
 
-// makeTemplate creates and migrates the database this process copies. It is
-// left when the process ends (a package's tests have no end hook here) and
-// dropped by a later one once stale.
-func makeTemplate(b string) (string, error) {
+// makeTemplate creates, migrates and prepares (when prepare is not nil) a
+// database this process copies. It is left when the process ends (a
+// package's tests have no end hook here) and dropped by a later one once
+// stale.
+func makeTemplate(b string, prepare Prepare) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	admin, err := pgx.Connect(ctx, b+" dbname=postgres")
@@ -189,10 +235,17 @@ func makeTemplate(b string) (string, error) {
 		return "", err
 	}
 	_, err = migrate.Run(ctx, owner, "dev")
+	if err != nil {
+		_ = owner.Close(ctx)
+		return "", fmt.Errorf("migrate: %w", err)
+	}
+	if prepare != nil {
+		err = prepare(ctx, owner)
+	}
 	// No connection may stay on a template while it is copied.
 	_ = owner.Close(ctx)
 	if err != nil {
-		return "", fmt.Errorf("migrate: %w", err)
+		return "", fmt.Errorf("prepare: %w", err)
 	}
 	return name, nil
 }

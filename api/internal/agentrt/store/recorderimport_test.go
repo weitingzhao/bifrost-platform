@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -39,9 +38,7 @@ func recorderLog(t *testing.T, work string, events ...map[string]any) recorderim
 
 func recorderDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	ok(t, err)
+	db := seededDB(t)
 	return db.Pool(t, db.Runtime)
 }
 

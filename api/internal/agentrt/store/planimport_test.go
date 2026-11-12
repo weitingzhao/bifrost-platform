@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -25,9 +24,7 @@ import (
 
 func importDB(t *testing.T) (*pgxpool.Pool, planimport.Request) {
 	t.Helper()
-	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	ok(t, err)
+	db := seededDB(t)
 	text, err := os.ReadFile("../planimport/testdata/ledger.md")
 	ok(t, err)
 	req, err := planimport.ParseLedger(string(text), 2, planimport.LedgerOptions{File: "WORK.md"})
@@ -237,9 +234,7 @@ func TestPlanImportRollbackOnCommitFailure(t *testing.T) {
 // request does, the cut mark among it (review 312 B1).
 func TestPlanImportStepEvidenceIsTheRequests(t *testing.T) {
 	t.Parallel()
-	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	ok(t, err)
+	db := seededDB(t)
 	pool := db.Pool(t, db.Runtime)
 	text := "### W-31\n    - **第 2 轮逐项（核对于 2026-10-19 01:20）**\n      - 2.0 First\n        - [x] A｜复核 100–120，10-14 01:09\n" +
 		"        - [x] B｜`abcdef1` #41\n"
