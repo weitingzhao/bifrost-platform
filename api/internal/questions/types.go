@@ -13,11 +13,7 @@ const (
 	maxBodyBytes   = 16 * 1024
 	keepTerminal   = 300
 
-	openPerRequester   = 3
 	openGlobal         = 20
-	hourlyGlobal       = 30
-	hourlyPerRequester = 6
-	hourlyWindow       = time.Hour
 	unreadKeep         = 7 * 24 * time.Hour
 	inboxExpiredWindow = 24 * time.Hour
 	defaultTTLHours    = 24

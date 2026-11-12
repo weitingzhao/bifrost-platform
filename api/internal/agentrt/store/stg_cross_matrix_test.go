@@ -331,7 +331,7 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 	svc := questions.New(filepath.Join(t.TempDir(), "questions"), nil)
 	svc.SetClock(store.DecisionAt)
 	source := questioncards.New(svc)
-	// Fill the real requester's open quota, then remove those test questions.
+	// Fill the real store's open capacity, then remove those test questions.
 	fillers := b5hFillQuota(t, svc)
 	ctl := &controller.Controller{DB: x.w.rt, Env: "prod", Now: store.DecisionAt, LandingCards: source}
 	if err := ctl.LandingCardsPass(ctx); !errors.Is(err, store.ErrCardQuota) {

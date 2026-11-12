@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
@@ -17,13 +15,11 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 
 // CreateForRule creates a card the agent runtime asks that a card-auto-answer
 // rule in force answers within seconds (TD-393, STG only: the server takes
-// this path only there): the requester's and the store's quotas do not hold
-// it, and it leaves no mark in the hourly quotas, so the runtime's cards are
-// not held while the rule, not the Owner, answers them, and other
-// requesters keep their hourly quotas. While it is open it still
-// counts in the store's capacity (20 open) like any
-// question. Only the runtime's own session may; everything else (the key, a
-// duplicate, the size) is as Create.
+// this path only there): the store's capacity does not hold it, so the
+// runtime's cards are not held while the rule, not the Owner, answers them.
+// While it is open it still counts in the store's capacity (20 open) for
+// every other question. Only the runtime's own session may; everything else
+// (the key, a duplicate, the size) is as Create.
 func (s *Service) CreateForRule(ctx context.Context, session, principal, role string, raw []byte) Result {
 	if session != RuntimeSession {
 		return fail(http.StatusForbidden, "only the agent runtime asks past the quotas, for cards its rule answers", nil)
@@ -63,25 +59,11 @@ func (s *Service) create(ctx context.Context, session, principal, role string, r
 			}
 			return applied{res: fail(http.StatusConflict, "already answered: "+numberLabel(dup.Number), nil)}
 		}
-		marks := recentHourly(doc.Hourly, now)
-		hash := requesterHash(session)
-		if !byRule {
-			if len(marks) >= hourlyGlobal {
-				return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 30 questions created in the last hour", nil)}
-			}
-			if countHash(marks, hash) >= hourlyPerRequester {
-				return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 6 questions from this requester in the last hour", nil)}
-			}
-			// Only open questions hold a new one: answers the requester has
-			// not acknowledged never do (2026-11-06, the runtime could not ask
-			// the Owner anything for eight answers it had used).
-			t := tally(doc, session)
-			if t.openReq >= openPerRequester {
-				return applied{res: fail(http.StatusTooManyRequests, openList(t.nums), nil)}
-			}
-			if t.openAll >= openGlobal {
-				return applied{res: fail(http.StatusTooManyRequests, "store full: 20 questions are open", nil)}
-			}
+		// The store's capacity is the only count that holds a new question:
+		// the hourly and per-requester quotas were removed in cleanup wave 1
+		// (2026-11-11). Answers nobody acknowledged never count.
+		if !byRule && openCount(doc) >= openGlobal {
+			return applied{res: fail(http.StatusTooManyRequests, "store full: 20 questions are open", nil)}
 		}
 		id, err := s.freshID(doc)
 		if err != nil {
@@ -118,10 +100,6 @@ func (s *Service) create(ctx context.Context, session, principal, role string, r
 			return applied{res: fail(http.StatusBadRequest, "question exceeds 16384 bytes", nil)}
 		}
 		doc.Questions = append(doc.Questions, q)
-		doc.Hourly = marks
-		if !byRule {
-			doc.Hourly = append(marks, hourlyMark{At: now, RequesterHash: hash})
-		}
 		cp := q.clone()
 		return applied{
 			res:     Result{Code: http.StatusCreated, Body: createBody(q, false)},
@@ -199,57 +177,15 @@ func protectedDuplicate(doc *document, requester, work, fp string, now time.Time
 	return Question{}, "", false
 }
 
-func recentHourly(marks []hourlyMark, now time.Time) []hourlyMark {
-	cut := now.Add(-hourlyWindow)
-	out := make([]hourlyMark, 0, len(marks))
-	for _, h := range marks {
-		if !h.At.Before(cut) {
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
-func countHash(marks []hourlyMark, hash string) int {
+// openCount is the open questions of the store.
+func openCount(doc *document) int {
 	n := 0
-	for _, h := range marks {
-		if h.RequesterHash == hash {
+	for _, q := range doc.Questions {
+		if q.Status == StatusOpen {
 			n++
 		}
 	}
 	return n
-}
-
-// counts is the open questions of the store and of one requester, with the
-// numbers of the requester's.
-type counts struct {
-	openAll int
-	openReq int
-	nums    []int
-}
-
-func tally(doc *document, requester string) counts {
-	var t counts
-	for _, q := range doc.Questions {
-		if q.Status != StatusOpen {
-			continue
-		}
-		t.openAll++
-		if q.Requester == requester {
-			t.openReq++
-			t.nums = append(t.nums, q.Number)
-		}
-	}
-	sort.Ints(t.nums)
-	return t
-}
-
-func openList(nums []int) string {
-	parts := make([]string, len(nums))
-	for i, n := range nums {
-		parts[i] = numberLabel(n)
-	}
-	return "this requester has " + itoa(len(nums)) + " open questions: " + strings.Join(parts, ", ") + "; wait for an answer or withdraw one first"
 }
 
 func recordBytes(q Question) (int, error) {

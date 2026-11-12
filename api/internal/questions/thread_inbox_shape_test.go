@@ -20,7 +20,6 @@ func baselineBusinessWrite(t *testing.T) *Service {
 	if err := s.store.update(func(doc *document) error {
 		doc.LastNumber = 10
 		doc.asOf = now
-		doc.Hourly = []hourlyMark{{At: now, RequesterHash: "business-hash"}}
 		for i, channel := range []string{"console", "rule"} {
 			doc.Questions = append(doc.Questions, Question{ID: "q_" + strings.Repeat(string(rune('a'+i)), 16), Number: i + 1,
 				Status: StatusAnswered, Requester: "review", RequesterThread: "local_golden", CreatedAt: now, ExpiresAt: now.Add(time.Hour),

@@ -156,8 +156,7 @@ func TestAnswerAsRuleSaysWhyItTakesAnother(t *testing.T) {
 }
 
 // TD-393: the runtime's cards that STG's rule answers are taken past the
-// quotas, ten in a row, and leave the quotas of other requesters and of the
-// runtime's own other cards as they were; nobody else may ask so.
+// store's capacity; nobody else may ask so.
 func TestCreateForRuleTakesTheRuntimeCardsPastTheQuotas(t *testing.T) {
 	s := testSvc(t)
 	ctx := context.Background()
@@ -172,35 +171,20 @@ func TestCreateForRuleTakesTheRuntimeCardsPastTheQuotas(t *testing.T) {
 	if res := s.CreateForRule(ctx, "thread-a", "reporter", "reporter", raw); res.Code != http.StatusForbidden {
 		t.Fatalf("a thread asked past the quotas: %d %v", res.Code, res.Body)
 	}
-	// Another requester's quota is untouched: the rule's cards left no
-	// hourly marks.
 	for i := range 3 {
 		if res := ask(t, s, "thread-b", fmt.Sprintf("k-thread-b-%02d-padding", i), map[string]any{"title": fmt.Sprintf("B %d", i)}); res.Code != http.StatusCreated {
 			t.Fatalf("thread-b's question %d: %d %v", i, res.Code, res.Body)
 		}
 	}
-	// The runtime's own card through Create is held as before: ten of its
-	// questions are open.
-	if res := ask(t, s, RuntimeSession, "k-runtime-plain-padding", nil); res.Code != http.StatusTooManyRequests {
-		t.Fatalf("a runtime card through Create: %d %v", res.Code, res.Body)
-	}
-	// Past every quota (review 456 C2): thirty more, which no hourly quota,
-	// nor 20 open holds, and which leave no hourly mark;
-	// as open questions they count in the store's capacity for the others.
-	doc, err := s.load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	marks := len(doc.Hourly)
+	// Past the store's capacity (review 456 C2): thirty more, which 20 open
+	// does not hold; as open questions they count in the store's capacity
+	// for the others.
 	for i := 10; i < 40; i++ {
 		raw := mustJSON(t, map[string]any{"idempotency_key": fmt.Sprintf("k-rule-card-%02d-padding", i), "title": fmt.Sprintf("Card %d", i),
 			"urgency": "u", "meanwhile": "m"})
 		if res := s.CreateForRule(ctx, RuntimeSession, RuntimeSession, "operator", raw); res.Code != http.StatusCreated {
 			t.Fatalf("card %d: %d %v", i, res.Code, res.Body)
 		}
-	}
-	if doc, err = s.load(); err != nil || len(doc.Hourly) != marks {
-		t.Fatalf("hourly marks %d, %d before (%v)", len(doc.Hourly), marks, err)
 	}
 	if res := ask(t, s, "thread-c", "k-thread-c-padding", nil); res.Code != http.StatusTooManyRequests ||
 		!strings.Contains(fmt.Sprint(res.Body), "store full") {

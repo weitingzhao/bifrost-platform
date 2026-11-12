@@ -420,10 +420,6 @@ func sha256hex(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func requesterHash(s string) string {
-	return sha256hex([]byte(s))
-}
-
 func cleanedString(raw json.RawMessage, keepNewlines bool) (string, bool, error) {
 	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return "", false, nil

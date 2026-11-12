@@ -1,6 +1,0 @@
-{
-  "body": {
-    "error": "this requester has 3 open questions: Q1, Q2, Q3; wait for an answer or withdraw one first"
-  },
-  "status": 429
-}

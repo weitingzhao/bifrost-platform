@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 		{Family: "stg", Kind: store.CardSTGIneligible, Seq: 14, At: at, Block: "2123456789abcdef", Choices: []string{"ack", "remind_later"}},
 	}
 	for i, tr := range cases {
-		// A store of its own per card: the runtime may ask six an hour.
+		// A store of its own per card.
 		rt := newQuestionRuntime(filepath.Join(t.TempDir(), "store.json"), nil)
 		q := rt.landingCardQuestions()
 		key := "landingcardkey" + string(rune('a'+i)) + "0123456789abcdef0123456789abcdef"
@@ -71,13 +72,13 @@ func TestLandingCardRequestsFitTheQuestionStore(t *testing.T) {
 	}
 	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "store.json"), nil)
 	q := rt.landingCardQuestions()
-	for i := 0; i < 3; i++ { // three open cards for the runtime at a time
-		if _, _, err := q.AskRaw(ctx, "landingcardquota"+string(rune('a'+i))+"0123456789abcdef0123456789abcdef", store.LandingCardRequest("bifrost-platform", cases[i], "Landing: a title")); err != nil {
+	for i := 0; i < 20; i++ { // the store holds 20 open questions
+		if _, _, err := q.AskRaw(ctx, fmt.Sprintf("landingcardquota%02d0123456789abcdef0123456789abcdef", i), store.LandingCardRequest("bifrost-platform", cases[i%len(cases)], fmt.Sprintf("Landing: title %d", i))); err != nil {
 			t.Fatal(i, err)
 		}
 	}
-	if _, _, err := q.AskRaw(ctx, "landingcardquotag0123456789abcdef0123456789abcdef", store.LandingCardRequest("bifrost-platform", cases[3], "Landing: a title")); !errors.Is(err, store.ErrCardQuota) {
-		t.Fatal("a fourth open card:", err)
+	if _, _, err := q.AskRaw(ctx, "landingcardquotazz0123456789abcdef0123456789abcdef", store.LandingCardRequest("bifrost-platform", cases[3], "Landing: one more")); !errors.Is(err, store.ErrCardQuota) {
+		t.Fatal("a 21st open card:", err)
 	}
 	if _, ok, err := q.Lookup(ctx, "q-none"); ok || err != nil {
 		t.Fatal("a missing question", ok, err)

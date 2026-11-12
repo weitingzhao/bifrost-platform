@@ -111,11 +111,11 @@ func contractShapes(t *testing.T) map[string]any {
 	noSession := call(t, h, http.MethodPost, "/api/v1/questions", createBodyJSON(t, "0123456789abcdef"), "reporter-test-token", "")
 	tooBig := call(t, h, http.MethodPost, "/api/v1/questions", `{"title":"`+repeat('a', maxBodyBytes)+`"}`, "reporter-test-token", "thread-a")
 
-	quota := testSvc(t)
-	for i := 1; i <= 3; i++ {
-		mustCreate(t, quota, "thread-a", keyN(i), map[string]any{"title": "open " + itoa(i)})
+	full := testSvc(t)
+	for i := 1; i <= openGlobal; i++ {
+		mustCreate(t, full, "thread-"+itoa(i), keyN(i), map[string]any{"title": "open " + itoa(i)})
 	}
-	fourth := ask(t, quota, "thread-a", keyN(4), map[string]any{"title": "open 4"})
+	storeFull := ask(t, full, "thread-a", keyN(openGlobal+1), map[string]any{"title": "one more"})
 
 	return map[string]any{
 		"create-request.json":                req,
@@ -142,7 +142,7 @@ func contractShapes(t *testing.T) map[string]any {
 		"error-duplicate.json":               envelope(dup.Code, dup.Body),
 		"error-already-answered-unread.json": envelope(unreadDup.Code, unreadDup.Body),
 		"error-body-too-large.json":          envelope(tooBig.Code, decodeBody(t, tooBig.Body.Bytes())),
-		"error-quota-requester.json":         envelope(fourth.Code, fourth.Body),
+		"error-store-full.json":              envelope(storeFull.Code, storeFull.Body),
 	}
 }
 

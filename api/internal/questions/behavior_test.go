@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -245,15 +246,12 @@ func TestSameKeyAfterTerminalCreatesANewQuestion(t *testing.T) {
 	}
 }
 
-func TestRequesterOpenQuotaListsOpen(t *testing.T) {
+// Cleanup wave 1 (2026-11-11): the per-requester open quota (3) is gone; a
+// requester holds as many open questions as the store has room for.
+func TestRequesterPastThreeOpen(t *testing.T) {
 	s := testSvc(t)
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 5; i++ {
 		mustCreate(t, s, "thread-a", keyN(i), map[string]any{"title": "open " + itoa(i)})
-	}
-	fourth := ask(t, s, "thread-a", keyN(4), map[string]any{"title": "open 4"})
-	if fourth.Code != http.StatusTooManyRequests ||
-		fourth.Body.(map[string]any)["error"] != "this requester has 3 open questions: Q1, Q2, Q3; wait for an answer or withdraw one first" {
-		t.Fatalf("fourth = %d %v", fourth.Code, fourth.Body)
 	}
 }
 
@@ -272,15 +270,6 @@ func TestAskWithUnacknowledgedAnswers(t *testing.T) {
 	s.SetClock(func() time.Time { return start.Add(2 * time.Hour) })
 	if got := ask(t, s, "thread-a", keyN(7), map[string]any{"title": "seventh"}); got.Code != http.StatusCreated {
 		t.Fatalf("seventh = %d %v", got.Code, got.Body)
-	}
-	// The open one and two more fill its open quota; the six answers still
-	// do not count.
-	mustCreate(t, s, "thread-a", keyN(8), map[string]any{"title": "eighth"})
-	mustCreate(t, s, "thread-a", keyN(9), map[string]any{"title": "ninth"})
-	got := ask(t, s, "thread-a", keyN(10), map[string]any{"title": "tenth"})
-	if got.Code != http.StatusTooManyRequests ||
-		got.Body.(map[string]any)["error"] != "this requester has 3 open questions: Q7, Q8, Q9; wait for an answer or withdraw one first" {
-		t.Fatalf("tenth = %d %v", got.Code, got.Body)
 	}
 }
 
@@ -313,41 +302,41 @@ func TestAskPastFortyUnacknowledgedInTheStore(t *testing.T) {
 	}
 }
 
-func TestHourlyQuotaSurvivesPrune(t *testing.T) {
+// Cleanup wave 1 (2026-11-11): the hourly quotas (6 per requester, 30 in
+// all) are gone. A store written before carries their marks under "hourly";
+// it still reads, the marks hold nothing, and the next write drops them.
+func TestStoreWithOldHourlyMarksReadsAndHoldsNothing(t *testing.T) {
 	s := testSvc(t)
-	s.store.keepOverride = true
-	s.store.keep = 0
-	n := 0
-	withdrawn := func(session string) {
-		t.Helper()
-		n++
-		created := mustCreate(t, s, session, keyN(n), map[string]any{"title": "h" + itoa(n)})
-		res := s.Withdraw(context.Background(), session, "reporter", "reporter", created["id"].(string), mustJSON(t, map[string]any{"reason": "done"}))
-		if res.Code != http.StatusOK {
-			t.Fatalf("withdraw = %v", res.Body)
+	start := time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
+	s.SetClock(func() time.Time { return start })
+	marks := make([]string, 40)
+	for i := range marks {
+		marks[i] = `{"at":"2026-10-11T05:59:00Z","requester_hash":"` + repeat('a', 64) + `"}`
+	}
+	old := `{"last_number":3,"questions":[],"hourly":[` + strings.Join(marks, ",") + `]}`
+	if err := os.WriteFile(s.store.path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.load(); err != nil {
+		t.Fatalf("old store: %v", err)
+	}
+	// Past the old 6-per-requester and 30-in-all hourly bounds, every one
+	// answered so the store's capacity of 20 open stays out of it.
+	for i := 1; i <= 35; i++ {
+		created := mustCreate(t, s, "hour-0", keyN(i), map[string]any{"title": "h" + itoa(i)})
+		if res := answer(t, s, created["id"].(string), map[string]any{"text": "a", "channel": "console"}); res.Code != http.StatusOK {
+			t.Fatalf("answer %d = %v", i, res.Body)
 		}
 	}
-	for j := 0; j < 6; j++ {
-		withdrawn("hour-0")
+	raw, err := os.ReadFile(s.store.path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(loadDoc(t, s).Questions) != 0 {
-		t.Fatal("pruned questions were still stored")
+	if strings.Contains(string(raw), `"hourly"`) {
+		t.Fatal("the old hourly marks were written back")
 	}
-	got := ask(t, s, "hour-0", keyN(n+1), map[string]any{"title": "still"})
-	if got.Code != http.StatusTooManyRequests || got.Body.(map[string]any)["error"] != "hourly quota: 6 questions from this requester in the last hour" {
-		t.Fatalf("seventh from the same requester = %d %v", got.Code, got.Body)
-	}
-	for r := 1; r < 5; r++ {
-		for j := 0; j < 6; j++ {
-			withdrawn("hour-" + itoa(r))
-		}
-	}
-	if len(loadDoc(t, s).Questions) != 0 {
-		t.Fatal("records came back after the quota window filled")
-	}
-	got = ask(t, s, "hour-new", keyN(n+2), map[string]any{"title": "global"})
-	if got.Code != http.StatusTooManyRequests || got.Body.(map[string]any)["error"] != "hourly quota: 30 questions created in the last hour" {
-		t.Fatalf("31st = %d %v", got.Code, got.Body)
+	if doc := loadDoc(t, s); doc.LastNumber != 38 {
+		t.Fatalf("last number = %d, want 38", doc.LastNumber)
 	}
 }
 

@@ -44,9 +44,11 @@ func TestB5HQuestionQuotaFixtureAndRenamedAdmin(t *testing.T) {
 	t.Setenv("OPS_VIEWER_ENV", "prod")
 	svc := questions.New(filepath.Join(t.TempDir(), "questions"), nil)
 	svc.SetClock(func() time.Time { return time.Date(2026, 10, 29, 16, 0, 0, 0, time.UTC) })
+	// The store's capacity (20 open) is the only bound since cleanup wave 1
+	// removed the per-requester quota of 3.
 	ids := b5hFillQuota(t, svc)
-	if len(ids) != 3 {
-		t.Fatal("expected requester open quota", len(ids))
+	if len(ids) != 20 {
+		t.Fatal("expected the store's open capacity", len(ids))
 	}
 	b5hReleaseQuota(t, svc, ids)
 	res := svc.Create(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", []byte(`{"title":"Actual budget question","urgency":"now","meanwhile":"Wait for the budget answer","options":[{"label":"Grant"},{"label":"Withhold"}],"idempotency_key":"b5h-actual-budget-card"}`))

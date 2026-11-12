@@ -1,0 +1,6 @@
+{
+  "body": {
+    "error": "store full: 20 questions are open"
+  },
+  "status": 429
+}

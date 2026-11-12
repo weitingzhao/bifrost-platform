@@ -111,7 +111,8 @@ func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 // TD-393 (the coordinating thread 2026-10-20: STG's runtime held by the
 // question store's 429 while no card was open for the rule to answer): on
 // STG the runtime asks ten cards its rule answers in a row; a card no rule
-// answers, and any card on PROD, is held by the quotas as before.
+// answers, and any card on PROD, is held by the store's capacity (20 open;
+// the per-requester quota of 3 went in cleanup wave 1, 2026-11-11).
 func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 	ctx := context.Background()
 	card := func(i int, byRule bool) store.Card {
@@ -128,7 +129,7 @@ func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 	}
 	held := func(rt *questionRuntime, byRule bool) int {
 		t.Helper()
-		for i := range 10 {
+		for i := range 25 {
 			if _, err := rt.agentRuntimeAsk()(ctx, card(100+i, byRule)); err != nil {
 				if !strings.Contains(err.Error(), "429") {
 					t.Fatalf("card %d: %v", i, err)
@@ -136,14 +137,14 @@ func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 				return i
 			}
 		}
-		return 10
+		return 25
 	}
-	if n := held(newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil), true); n != 3 {
-		t.Fatalf("PROD (no lift) took %d cards before the quota; want 3", n)
+	if n := held(newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil), true); n != 20 {
+		t.Fatalf("PROD (no lift) took %d cards before the store was full; want 20", n)
 	}
 	lifted := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
 	lifted.takeCardsByRule(true)
-	if n := held(lifted, false); n != 3 {
-		t.Fatalf("STG took %d cards no rule answers before the quota; want 3", n)
+	if n := held(lifted, false); n != 20 {
+		t.Fatalf("STG took %d cards no rule answers before the store was full; want 20", n)
 	}
 }

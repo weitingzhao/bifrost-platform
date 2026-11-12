@@ -16,16 +16,14 @@ import (
 
 // document is the statefile value at key "questions".
 // asOf is the clock for this mutate. It is not stored.
+//
+// A store written before cleanup wave 1 (2026-11-11) also carries "hourly":
+// the marks of the removed hourly quotas. parse ignores it and the next write
+// drops it.
 type document struct {
-	LastNumber int          `json:"last_number,omitempty"`
-	Questions  []Question   `json:"questions"`
-	Hourly     []hourlyMark `json:"hourly,omitempty"`
-	asOf       time.Time    `json:"-"`
-}
-
-type hourlyMark struct {
-	At            time.Time `json:"at"`
-	RequesterHash string    `json:"requester_hash"`
+	LastNumber int        `json:"last_number,omitempty"`
+	Questions  []Question `json:"questions"`
+	asOf       time.Time  `json:"-"`
 }
 
 type store struct {
