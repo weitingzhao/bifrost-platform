@@ -9,6 +9,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"os"
 	"strings"
 	"testing"
 )
@@ -58,7 +59,14 @@ func TestLandingMainReaderIsWiredApartFromTheSwitch(t *testing.T) {
 	} {
 		t.Run(tc.env+"/"+tc.drill+tc.live, func(t *testing.T) {
 			t.Setenv("AGENTRT_LANDING_DRILL", tc.drill)
+			// live "on" names platform in the one live switch; anything
+			// else leaves it unset (the retired AGENTRT_LANDING_LIVE is set
+			// to the same value and must enable nothing).
 			t.Setenv("AGENTRT_LANDING_LIVE", tc.live)
+			t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "bifrost-platform")
+			if tc.live != "on" {
+				_ = os.Unsetenv("AGENTRT_LANDING_LIVE_REPOS")
+			}
 			u, p := "/not-read/username", "/not-read/password"
 			if !tc.creds {
 				u, p = "relative", "relative"
@@ -117,11 +125,17 @@ func completeCardQuestions() store.CardQuestions {
 func TestLandingLiveOffSaysWhy(t *testing.T) {
 	s := &Server{}
 	c := &controller.Controller{Env: "prod"}
-	t.Setenv("AGENTRT_LANDING_LIVE", "")
-	if got := s.landingLiveOff(c); got != "AGENTRT_LANDING_LIVE is not on" {
+	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "")
+	_ = os.Unsetenv("AGENTRT_LANDING_LIVE_REPOS")
+	t.Setenv("AGENTRT_LANDING_LIVE", "on") // the retired switch enables nothing
+	if got := s.landingLiveOff(c); got != "AGENTRT_LANDING_LIVE_REPOS is not set" {
 		t.Fatal(got)
 	}
-	t.Setenv("AGENTRT_LANDING_LIVE", "on")
+	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "")
+	if got := s.landingLiveOff(c); got != "AGENTRT_LANDING_LIVE_REPOS has no enabled repositories" {
+		t.Fatal(got)
+	}
+	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "bifrost-platform")
 	if got := s.landingLiveOff(c); got != "the landing cards cannot reach the question store" {
 		t.Fatal(got)
 	}

@@ -77,7 +77,7 @@ type Controller struct {
 	LiveRepos       []string
 	otherDrillWaits map[string]*drillBackoff
 	// Live runs the landing loop on PROD (S3, CUT §11.5): set only by the
-	// wiring, with AGENTRT_LANDING_LIVE=on and the lander identity as
+	// wiring, with AGENTRT_LANDING_LIVE_REPOS and the lander identity as
 	// DrillGit. Without it PROD claims nothing and pushes nothing.
 	Live bool
 	// OpenLive opens the workspace the live landing pushes main from; nil

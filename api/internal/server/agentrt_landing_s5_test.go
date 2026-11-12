@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -29,9 +28,7 @@ func s5ServerKey() landing.S5CIKey {
 // legacy CI callbacks. With the shipped UNBUILT trust root every S5 callback
 // refuses before touching Kubernetes.
 func TestLandingS5WiredAndUnbuiltRefuses(t *testing.T) {
-	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "")
-	_ = os.Unsetenv("AGENTRT_LANDING_LIVE_REPOS")
-	t.Setenv("AGENTRT_LANDING_LIVE", "on")
+	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "bifrost-platform")
 	t.Setenv("AGENTRT_LANDER_USERNAME_FILE", "/not-read/username")
 	t.Setenv("AGENTRT_LANDER_PASSWORD_FILE", "/not-read/password")
 	s := &Server{cluster: cluster.NewHandler(&config.Config{}, nil)}

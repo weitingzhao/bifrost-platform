@@ -25,8 +25,9 @@ import (
 // in STG and PROD whatever the landing switches say (review 663 B-02):
 // turning the switch off stops new claims and pushes, never the recovery of
 // what was already pushed. A writing loop needs an explicit opt-in:
-// AGENTRT_LANDING_DRILL=on on STG (the drill), or AGENTRT_LANDING_LIVE=on
-// on PROD with the lander identity (S3), and the delivery adapters.
+// AGENTRT_LANDING_DRILL=on on STG (the drill), or the repositories named in
+// AGENTRT_LANDING_LIVE_REPOS on PROD with the lander identity (S3), and the
+// delivery adapters.
 // Constructing adapters does not read credentials or contact services.
 func (s *Server) wireLandingDrill(c *controller.Controller) {
 	c.Reconcile = &controller.LandingReconcile{Repos: []string{"bifrost-platform"}}
@@ -306,7 +307,7 @@ func (s *Server) landingLiveOff(c *controller.Controller) string {
 		if _, set := os.LookupEnv("AGENTRT_LANDING_LIVE_REPOS"); set {
 			return "AGENTRT_LANDING_LIVE_REPOS has no enabled repositories"
 		}
-		return "AGENTRT_LANDING_LIVE is not on"
+		return "AGENTRT_LANDING_LIVE_REPOS is not set"
 	case !controller.LandingCardsComplete(c.LandingCards):
 		return "the landing cards cannot reach the question store"
 	case s.cluster == nil:

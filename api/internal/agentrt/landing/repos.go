@@ -18,14 +18,12 @@ func RepoStream(stream string) bool {
 	return ok && RepoSupported(repo)
 }
 
-// LiveRepos respects presence, including an explicitly empty new setting.
-// The legacy switch opts in only platform and only when the new one is absent.
+// LiveRepos is AGENTRT_LANDING_LIVE_REPOS, the only live switch: the
+// registered repositories it names, none when it is absent or empty. The
+// former AGENTRT_LANDING_LIVE=on fallback is gone (cleanup wave 2).
 func LiveRepos(lookup func(string) (string, bool)) []string {
 	value, set := lookup("AGENTRT_LANDING_LIVE_REPOS")
 	if !set {
-		if old, _ := lookup("AGENTRT_LANDING_LIVE"); old == "on" {
-			return []string{"bifrost-platform"}
-		}
 		return nil
 	}
 	wanted := map[string]bool{}

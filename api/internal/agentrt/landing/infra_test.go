@@ -124,7 +124,8 @@ func TestLiveReposNewSettingIsAuthoritative(t *testing.T) {
 		values map[string]string
 		want   []string
 	}{
-		{map[string]string{"AGENTRT_LANDING_LIVE": "on"}, []string{"bifrost-platform"}},
+		{map[string]string{}, nil},
+		{map[string]string{"AGENTRT_LANDING_LIVE": "on"}, nil},
 		{map[string]string{"AGENTRT_LANDING_LIVE": "on", "AGENTRT_LANDING_LIVE_REPOS": ""}, nil},
 		{map[string]string{"AGENTRT_LANDING_LIVE_REPOS": "bifrost-platform"}, []string{"bifrost-platform"}},
 		{map[string]string{"AGENTRT_LANDING_LIVE_REPOS": "bifrost-trade-infra,bifrost-platform,bifrost-research"}, []string{"bifrost-platform", "bifrost-trade-infra"}},

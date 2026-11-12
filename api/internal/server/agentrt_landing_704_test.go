@@ -133,9 +133,7 @@ func TestReview704UnsignedWiringAndRecovery(t *testing.T) {
 	}
 }
 func TestReview704LegacyDiscoveryCost(t *testing.T) {
-	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "")
-	_ = os.Unsetenv("AGENTRT_LANDING_LIVE_REPOS")
-	t.Setenv("AGENTRT_LANDING_LIVE", "on")
+	t.Setenv("AGENTRT_LANDING_LIVE_REPOS", "bifrost-platform")
 	t.Setenv("AGENTRT_LANDER_USERNAME_FILE", "/not-read/username")
 	t.Setenv("AGENTRT_LANDER_PASSWORD_FILE", "/not-read/password")
 	s := &Server{cluster: cluster.NewHandler(&config.Config{}, nil)}

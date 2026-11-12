@@ -194,9 +194,9 @@ none 的兼容语义是**整个 B5 冻结**：不继续自动取证、归档、�
 
 ### 需要保留自动观察时：另行批准的 workers 配置变更
 
-当前没有热 live-off API。`AGENTRT_LANDING_LIVE_REPOS` 只在 workers 启动时读取：变量存在时（包括显式空字符串）优先于旧 `AGENTRT_LANDING_LIVE`；只有新变量不存在时，旧值 `on` 才启用 platform。共享 `c.Live` 由启动接线设置，保留另一个 live 仓库可能仍为 true，因此仅移除 platform 或仅把旧变量设为 off 都不足以证明 B5 已停。
+当前没有热 live-off API。`AGENTRT_LANDING_LIVE_REPOS` 只在 workers 启动时读取，是唯一的 live 开关（不存在或为空都表示没有 live 仓库；旧 `AGENTRT_LANDING_LIVE` 已不再读取）。共享 `c.Live` 由启动接线设置，保留另一个 live 仓库可能仍为 true，因此仅移除 platform 不足以证明 B5 已停。
 
-若 Owner 明确选择「保留非 none 规则、只停新发送并继续观察」，须另外批准 **PROD workers 配置及滚动更新**：将生效的 `AGENTRT_LANDING_LIVE_REPOS` 显式设为空，并把旧变量设 off 以消除回退歧义。统筹先准备 infra 的实际配置提交和差异，Owner 批准该提交及 PROD 影响后才按发布窗口用 `push-main.sh` 推送；PROD Argo 自动同步，不能等推送后再补批准。需要人工同步或重启时，在 PROD 用 `request_action` 为相应 C 级动作建单（附 `reason`、`rollback`、`work_id=W-31`），由 Owner 在 PROD Console 批准，按 `get_request` / `wait_for_request` 核对执行结果：
+若 Owner 明确选择「保留非 none 规则、只停新发送并继续观察」，须另外批准 **PROD workers 配置及滚动更新**：将生效的 `AGENTRT_LANDING_LIVE_REPOS` 显式设为空。统筹先准备 infra 的实际配置提交和差异，Owner 批准该提交及 PROD 影响后才按发布窗口用 `push-main.sh` 推送；PROD Argo 自动同步，不能等推送后再补批准。需要人工同步或重启时，在 PROD 用 `request_action` 为相应 C 级动作建单（附 `reason`、`rollback`、`work_id=W-31`），由 Owner 在 PROD Console 批准，按 `get_request` / `wait_for_request` 核对执行结果：
 
 | action | params |
 |---|---|
