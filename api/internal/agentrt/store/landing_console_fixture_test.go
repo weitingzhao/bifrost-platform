@@ -27,7 +27,7 @@ func TestC6ConsoleFixture(t *testing.T) {
 	m := LandingGrantMaterial{Candidate: c, SoftAtRequest: []string{"core", "files"}, WaitingSoft: []string{"core", "files"}, Rule: GrantRule{ID: "landing:dev", Version: 1, SHA256: strings.Repeat("9", 64)}, ChecksVersion: 1,
 		Action: ActionCoreLanding, Title: "Trusted core change", FirstLine: "Approving lets the lander push this commit to main. It changes approval, identity or landing-gate code; later approvals are handled by the new code.",
 		Phase: "awaiting_grant", Latest: true, Pinned: true, GrantEnabled: true, Patch: "diff --git a/x b/x\n-old\n+new\n+line\n", CompareURL: GiteaWebBase + "/bifrost/bifrost-platform/compare/" + m0 + "..." + r,
-		GiteaNotice: "Gitea's own page is not rendered by this platform's code", QuotaReserved: 2, QuotaMax: 5, QuotaNote: "today's count as of this read; the push checks it again", STGNotice: "Approving also authorizes this commit to go to STG with the B5 batch.", Grants: []LandingGrantStatus{}, Problems: []string{}, ComputedAt: at}
+		GiteaNotice: "Gitea's own page is not rendered by this platform's code", QuotaReserved: 2, QuotaNote: "today's count as of this read; the push checks it again", STGNotice: "Approving also authorizes this commit to go to STG with the B5 batch.", Grants: []LandingGrantStatus{}, Problems: []string{}, ComputedAt: at}
 	m.PatchSize = len(m.Patch)
 	digests := func(m *LandingGrantMaterial) {
 		var err error

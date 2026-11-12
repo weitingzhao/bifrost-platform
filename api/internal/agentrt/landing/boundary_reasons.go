@@ -21,7 +21,7 @@ var boundaryReasons = map[string]string{
 	"floor":               "A structural, protected-path or content boundary prevents this landing route; inspect the gate detail.",
 	"dependencies":        "Required dependencies are not established as effective on main.",
 	"rule":                "The current landing rule or its path or presentation checks do not permit this route.",
-	"limit":               "The daily reservation or repository in-flight limit is reached; compare current counts with the effective rule.",
+	"limit":               "The repository in-flight limit is reached; compare the current count with the effective rule.",
 	"already_on_main":     "The candidate is already effective on main and requires reconciliation, not another delivery.",
 	"S5_EVIDENCE_MISSING": "This path requires the registered S5 evidence before push authorization.",
 	"awaiting_grant":      "The candidate has soft refusals that require a valid, scoped grant.",

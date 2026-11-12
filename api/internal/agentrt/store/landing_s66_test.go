@@ -252,10 +252,11 @@ func TestS66InfraCardAndMissionProjectionPG(t *testing.T) {
 
 // Serial: signing, clock, hooks and the local Git fixture. T50: both
 // repositories individually pass the gate and push their own bare remote;
-// concurrently, the shared last slot admits only the first intent. These
-// are real transactions on two connections, with PostgreSQL proving the
-// second waits on the quota lock. No production remote is used.
-func TestS66T50SharedQuotaDualRemotePG(t *testing.T) {
+// concurrently, both land although the rule states a legacy daily quota of
+// one (cleanup wave 1: the quota bounds nothing). These are real
+// transactions on two connections, with PostgreSQL proving the second waits
+// on the quota lock. No production remote is used.
+func TestS66T50DualRemotePG(t *testing.T) {
 	for _, repos := range [][]string{{platformRepo}, {infraRepo}, landing.LandingRepoNames()} {
 		t.Run(strings.Join(repos, "+"), func(t *testing.T) {
 			w, at := s66World(t, true, 1)
@@ -319,10 +320,7 @@ func TestS66T50SharedQuotaDualRemotePG(t *testing.T) {
 				r := results[repo]
 				ok(t, r.err)
 				if !r.decision.Allowed {
-					if len(repos) != 2 || repo != infraRepo || r.decision.Reason != "limit" || r.auth.Op != "" {
-						t.Fatal("unexpected refusal", repo, r)
-					}
-					continue
+					t.Fatal("unexpected refusal", repo, r)
 				}
 				g, err := landinggit.LanderFromEnv("prod", repo)
 				ok(t, err)
@@ -338,28 +336,20 @@ func TestS66T50SharedQuotaDualRemotePG(t *testing.T) {
 				ok(t, err)
 			}
 			q := landingState(t, w, "landing-quota:dev:"+at.Add(2*time.Minute).Format("2006-01-02"))
-			if len(q.Reservations) != 1 {
-				t.Fatal("quota is not shared", q.Reservations)
+			if len(q.Reservations) != len(repos) {
+				t.Fatal("the legacy quota of one held a landing back", q.Reservations)
 			}
-			winner := repos[0]
 			for _, repo := range landing.LandingRepoNames() {
-				want := git.bases[repo]
-				if repo == winner {
-					want = results[repo].auth.R
+				want, wantPush := git.bases[repo], 0
+				if slices.Contains(repos, repo) {
+					want, wantPush = results[repo].auth.R, 1
 				}
 				if head := git.run(git.remotes[repo], "rev-parse", "main"); head != want {
 					t.Fatal("wrong remote changed", repo, head, want)
 				}
-				wantPush := 0
-				if repo == winner {
-					wantPush = 1
-				}
 				if pushes[repo] != wantPush {
 					t.Fatal("push count", repo, pushes)
 				}
-			}
-			if len(repos) == 2 && landingState(t, w, infraStream).Operations[ops[infraRepo]].Phase != "branch_pushed" {
-				t.Fatal("loser wrote intent")
 			}
 		})
 	}

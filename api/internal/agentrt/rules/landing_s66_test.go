@@ -32,7 +32,7 @@ func TestS66LegacySignedBodyGolden(t *testing.T) {
 	if fmt.Sprintf("%x", sha256.Sum256(raw)) != "ddeacc2a9235816d1c1be1f3cf10ff0612902cda09a842034865e7363a3ee145" {
 		t.Fatal("signed fixture changed")
 	}
-	if len(r.Landing.Repos) != 1 || r.Landing.Repos[0].Limits != nil || r.Landing.EffectiveLimits("bifrost-platform") != (LandingLimits{10, 300, 5, 1, 0}) {
+	if len(r.Landing.Repos) != 1 || r.Landing.Repos[0].Limits != nil || r.Landing.EffectiveLimits("bifrost-platform") != (LandingLimits{MaxFiles: 10, MaxChangedLines: 300, LegacyMaxLandingsPerDay: 5, MaxInFlightPerRepo: 1, legacyQuotaStated: true}) {
 		t.Fatal("legacy rule expanded", r.Landing)
 	}
 	if _, ok := r.Landing.Repo("bifrost-trade-infra"); ok {
@@ -64,8 +64,9 @@ func TestS66EffectiveTighteningAcrossRepos(t *testing.T) {
 		{"lines up", func(l *Landing) { l.Repos[1].Limits.MaxChangedLines++ }, false},
 		{"flight down", func(l *Landing) { l.Repos[1].Limits.MaxInFlight = 0 }, true},
 		{"remove override expands files", func(l *Landing) { l.Repos[1].Limits = nil }, false},
-		{"quota down", func(l *Landing) { l.Limits.MaxLandingsPerDay-- }, true},
-		{"quota up", func(l *Landing) { l.Limits.MaxLandingsPerDay++ }, false},
+		{"quota down", func(l *Landing) { l.Limits.LegacyMaxLandingsPerDay-- }, true},
+		// The daily quota is legacy (cleanup wave 1): raising it loosens nothing.
+		{"quota up", func(l *Landing) { l.Limits.LegacyMaxLandingsPerDay++ }, true},
 		{"allow shrinks", func(l *Landing) { l.Repos[1].Allow = nil }, true},
 		{"allow expands", func(l *Landing) { l.Repos[1].Allow = append(l.Repos[1].Allow, "**") }, false},
 		{"deny added", func(l *Landing) { l.Repos[1].Deny = []string{"agent-config/work/multi-agent/REPORT-private.md"} }, true},

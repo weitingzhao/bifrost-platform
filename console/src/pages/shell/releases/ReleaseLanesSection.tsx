@@ -9,7 +9,7 @@ import { NO_VIEWER_TOKEN, RELEASE_RECORD_LIMIT, approvalHref, formatBuiltFrom, f
 
 /** GET /api/v1/agentrt/rules/landing:dev (agentrtapi getRule): `in_force` is rules.Rule.Doc of the landing rule. */
 export type LandingRuleRead = { in_force?: { rule_version?: number; repos?: { repo: string; limits?: { max_in_flight?: number } }[]
-  limits?: { max_landings_per_day?: number; max_in_flight_per_repo?: number } } | null }
+  limits?: { max_in_flight_per_repo?: number } } | null }
 
 /** One read: `data` once answered, `error` once failed, neither while it is read. */
 export type LaneRead<T> = { data?: T; error: string | null }
@@ -206,7 +206,6 @@ function LaneRuns({ row, p }: { row: Lane; p: ReleaseLanesProps }) {
 export function ReleaseLanesSection(p: ReleaseLanesProps) {
   const w = p.window
   const rule = p.rule.data?.in_force
-  const ruleText = !p.hasToken ? NO_VIEWER_TOKEN : p.rule.error ?? (p.rule.data == null ? 'landing rule not read' : rule == null ? 'no landing rule in force' : `rule landing:dev v${rule.rule_version ?? '?'}`)
   const meta = 'm-0 px-3 pb-1 text-xs text-muted-foreground [overflow-wrap:anywhere]'
   return <OpsSection id="release-lanes" title="Release lanes" bodyPadding="none" overflow="visible"
     description="Each release line: landing, the last successful STG and PROD delivery (what runs now is not confirmed), and the one release window every repository shares.">
@@ -217,10 +216,6 @@ export function ReleaseLanesSection(p: ReleaseLanesProps) {
         {w.detail !== '' && <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{w.detail}</span>}
         {w.state === 'held' && <strong>Blocks landings and releases in every repository until it is released or expires.</strong>}
       </div>
-      <p data-testid="release-lanes-quota" className={meta}>
-        Landings today: <strong className="text-foreground">Not measured</strong>
-        {` — no read endpoint for landing-quota:dev:${new Date(p.now).toISOString().slice(0, 10)}; limit ${rule?.limits?.max_landings_per_day ?? 'unknown'} per UTC day, shared by every repository (${ruleText}).`}
-      </p>
       <p className={`${meta} pb-2`}>
         Landings in flight: <strong className="text-foreground">Unknown</strong>{` — ${IN_FLIGHT_GAP} Default limit ${rule?.limits?.max_in_flight_per_repo ?? 'unknown'} per repository; a repository's own limit shows on its line.`}
       </p>

@@ -118,7 +118,7 @@ func TestLandingS5UnbuiltKeepsLegacyLanes(t *testing.T) {
 			Changes: []rules.LandingChange{ch}, DeployChanges: []rules.LandingChange{ch},
 			Rule: &rules.Rule{Header: rules.Header{ID: "landing:dev", Version: 3, Effective: epoch.Add(-12 * time.Hour), Expires: epoch.Add(30 * 24 * time.Hour)}, Kind: rules.KindLanding,
 				Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: allow, STGRelease: "bifrost-deliver-platform"}},
-					Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}}}}
+					Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxInFlightPerRepo: 1}}}}
 	}
 	s5 := rules.S5Paths()[0]
 	css := "console/src/styles/app.css"

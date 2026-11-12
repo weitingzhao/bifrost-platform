@@ -65,7 +65,8 @@ func TestLandingTightening(t *testing.T) {
 		{"limits down", func(r *Rule) { r.Landing.Limits = LandingLimits{} }, true},
 		{"files up", func(r *Rule) { r.Landing.Limits.MaxFiles++ }, false},
 		{"lines up", func(r *Rule) { r.Landing.Limits.MaxChangedLines++ }, false},
-		{"quota up", func(r *Rule) { r.Landing.Limits.MaxLandingsPerDay++ }, false},
+		// The daily quota is legacy (cleanup wave 1): raising it loosens nothing.
+		{"quota up", func(r *Rule) { r.Landing.Limits.LegacyMaxLandingsPerDay++ }, true},
 		{"flight up", func(r *Rule) { r.Landing.Limits.MaxInFlightPerRepo++ }, false},
 		{"stg off", func(r *Rule) { r.Landing.Repos[0].STGRelease = "none" }, true},
 		{"expiry shorter", func(r *Rule) { r.Expires = r.Expires.Add(-time.Hour) }, true},

@@ -536,10 +536,6 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 				return err
 			}))
 		},
-		"quota": func(t *testing.T, c *c5) {
-			fuller := strings.Replace(c5RuleBody, "max_landings_per_day: 5", "max_landings_per_day: 0", 1)
-			ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, fuller))))
-		},
 		"repo out of the rule": func(t *testing.T, c *c5) {
 			none := "tenant: dev\nrepos: []\nlimits: {max_files: 10, max_changed_lines: 300, max_landings_per_day: 5, max_in_flight_per_repo: 1}\n"
 			ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, none))))
@@ -557,7 +553,7 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 			store.FreezeEventClock(c.at.Add(2 * time.Minute))
 		},
 	}
-	want := map[string]string{"stopped": "stopped", "quota": "limit", "mission": "stale", "rule expired": "rule", "repo out of the rule": "rule", "rule missing": "rule"}
+	want := map[string]string{"stopped": "stopped", "mission": "stale", "rule expired": "rule", "repo out of the rule": "rule", "rule missing": "rule"}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)

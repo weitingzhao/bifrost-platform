@@ -33,23 +33,12 @@ func (w s65Workspace) PushMain(ctx context.Context, r, m0 string, until time.Tim
 // the successful control's claim/preparation/controller/gate entry points.
 // PostgreSQL now(), not the wall clock, determines every assertion's UTC day.
 func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
-	for _, mode := range []string{"green", "quota rollover", "no status", "failed", "wrong result", "push", "inline", "red at final gate"} {
+	for _, mode := range []string{"green", "no status", "failed", "wrong result", "push", "inline", "red at final gate"} {
 		t.Run(mode, func(t *testing.T) {
-			limit := 5
-			if mode == "quota rollover" {
-				limit = 1
-			}
-			w, _ := s66World(t, true, limit)
+			w, _ := s66World(t, true, 5)
 			var databaseNow time.Time
 			ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&databaseNow))
 			at := databaseNow.UTC().Truncate(time.Second).Add(time.Minute)
-			if mode == "quota rollover" {
-				midnight := at.Truncate(24 * time.Hour).Add(24 * time.Hour)
-				if midnight.Add(-20 * time.Minute).Before(at) {
-					midnight = midnight.Add(24 * time.Hour)
-				}
-				at = midnight.Add(-20 * time.Minute)
-			}
 			store.FreezeEventClock(at)
 			git := localGit704(t)
 			gits := git.adapters()
@@ -117,33 +106,11 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 				t.Fatal("restart repinned sibling")
 			}
 			kickAt := at.Add(11 * time.Minute)
-			if mode == "quota rollover" {
-				kickAt = s65QuotaRecovery751(t, w, &restarted, sources, op, prepared, at, fake, gvr)
-			}
 			store.FreezeEventClock(kickAt)
 			action, err := restarted.LandingDrillCI(ctx, sources, op, at, infraRepo)
 			ok(t, err)
 			if action.Kind != "ci_kick" {
 				t.Fatal("missing CI did not kick", action)
-			}
-			if mode == "quota rollover" {
-				for range 3 {
-					resume := controller.Controller{DB: w.rt, Env: "prod", Live: true, LiveRepos: []string{infraRepo}}
-					action, err := resume.LandingDrillCI(ctx, sources, op, at, infraRepo)
-					ok(t, err)
-					if action.Kind != "wait" {
-						t.Fatal("repeated recovery kicked again", action)
-					}
-				}
-				runs, err := fake.Resource(gvr).Namespace("cicd").List(ctx, metav1.ListOptions{})
-				ok(t, err)
-				var kicks int
-				ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1
-                  AND body_json->'landing'->>'op'=$2 AND body_json->'landing'->>'kind'='ci_kick'`, infraStream, op).Scan(&kicks))
-				if len(runs.Items) != 1 || kicks != 1 {
-					t.Fatal("recovery duplicated CI or intent", len(runs.Items), kicks)
-				}
-				s65SamePreparation751(t, prepared, landingState(t, w, infraStream).Operations[op])
 			}
 			name := landing.InfraCIName(prepared.R, prepared.M0, prepared.PlatformRevision, 1)
 			run, err := fake.Resource(gvr).Namespace("cicd").Get(ctx, name, metav1.GetOptions{})
@@ -192,10 +159,8 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 			case "inline":
 				ok(t, unstructured.SetNestedMap(later.Object, map[string]any{}, "spec", "pipelineSpec"))
 			}
-			if mode != "quota rollover" {
-				_, err = fake.Resource(gvr).Namespace("cicd").Create(ctx, later, metav1.CreateOptions{})
-				ok(t, err)
-			}
+			_, err = fake.Resource(gvr).Namespace("cicd").Create(ctx, later, metav1.CreateOptions{})
+			ok(t, err)
 			ciReads = 0
 			final := kickAt.Add(time.Minute)
 			store.FreezeEventClock(final)
@@ -203,15 +168,11 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 			ok(t, err)
 			state := landingState(t, w, infraStream).Operations[op]
 			quota := landingState(t, w, "landing-quota:dev:"+final.Format("2006-01-02"))
-			if mode == "green" || mode == "quota rollover" {
+			if mode == "green" {
 				if action.Kind != "ready" || state.Phase != "main_result" || pushes != 1 || quota.Reservations[root] != op || ciReads != 2 {
 					t.Fatal("green control", action, state.Phase, pushes, quota, ciReads)
 				}
-				wantUID := "s65-later-uid"
-				if mode == "quota rollover" {
-					wantUID = "s65-ci-uid"
-				}
-				if state.CI.String("uid") != wantUID || !reflect.DeepEqual(state.CI["results"], stringsToAny65(results)) {
+				if state.CI.String("uid") != "s65-later-uid" || !reflect.DeepEqual(state.CI["results"], stringsToAny65(results)) {
 					t.Fatal("CI evidence lost", state.CI)
 				}
 				if git.run(git.remotes[infraRepo], "rev-parse", "main") != prepared.R {

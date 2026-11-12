@@ -43,7 +43,7 @@ func TestBatchFormation(t *testing.T) {
 		f := legacy[i].Facts
 		r := *f.Rule
 		l := *r.Landing
-		l.Limits.LegacyMaxBatch, l.Limits.MaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 3, 5, &l, &r, 7
+		l.Limits.LegacyMaxBatch, l.Limits.LegacyMaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 3, 5, &l, &r, 7
 		legacy[i].Facts = f
 	}
 	if got := FormBatch(legacy, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
@@ -174,7 +174,7 @@ func TestWaveBatchFormation(t *testing.T) {
 	for i := range members {
 		// Legacy limits on the facts bound nothing (cleanup wave 1).
 		members[i].Facts.Rule.Landing.Limits.LegacyMaxBatch = 1
-		members[i].Facts.Rule.Landing.Limits.MaxLandingsPerDay = 3
+		members[i].Facts.Rule.Landing.Limits.LegacyMaxLandingsPerDay = 3
 		members[i].Facts.ReservedToday = 3
 	}
 	// A later member may need a grant, but append order still determines

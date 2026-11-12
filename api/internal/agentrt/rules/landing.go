@@ -48,10 +48,16 @@ func (l *Landing) EffectiveLimits(repo string) LandingLimits {
 	return v
 }
 
-// LegacyMaxBatch is limits.max_batch as a signed rule states it (0 when left
-// out). It bounds nothing (cleanup wave 1, 2026-11-11): it is read and kept
-// only so a rule signed with it still has its canonical body.
-type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo, LegacyMaxBatch int }
+// LegacyMaxBatch and LegacyMaxLandingsPerDay are limits.max_batch and
+// limits.max_landings_per_day as a signed rule states them (0 when left
+// out). They bound nothing (cleanup wave 1, 2026-11-11): they are read and
+// kept only so a rule signed with them still has its canonical body.
+type LandingLimits struct {
+	MaxFiles, MaxChangedLines, LegacyMaxLandingsPerDay, MaxInFlightPerRepo, LegacyMaxBatch int
+	// legacyQuotaStated: the text states max_landings_per_day, so the
+	// canonical body keeps it (a rule without it never gains it).
+	legacyQuotaStated bool
+}
 
 func (r *Rule) landing(o *object, arg string) error {
 	l := &Landing{}
@@ -136,7 +142,7 @@ func (r *Rule) landing(o *object, arg string) error {
 	if err != nil {
 		return err
 	}
-	for key, dst := range map[string]*int{"max_files": &l.Limits.MaxFiles, "max_changed_lines": &l.Limits.MaxChangedLines, "max_landings_per_day": &l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": &l.Limits.MaxInFlightPerRepo} {
+	for key, dst := range map[string]*int{"max_files": &l.Limits.MaxFiles, "max_changed_lines": &l.Limits.MaxChangedLines, "max_landings_per_day": &l.Limits.LegacyMaxLandingsPerDay, "max_in_flight_per_repo": &l.Limits.MaxInFlightPerRepo} {
 		max := 1 << 30
 		if key == "max_in_flight_per_repo" {
 			max = LandingInFlightCeiling
@@ -144,10 +150,12 @@ func (r *Rule) landing(o *object, arg string) error {
 		lower := 0
 		if key == "max_in_flight_per_repo" {
 			lower = 1
-		} else if key == "max_files" || key == "max_changed_lines" {
-			if _, present := lim.fields[key]; !present {
-				continue
-			}
+		} else if _, present := lim.fields[key]; !present {
+			// Size fields and the legacy daily quota may be left out.
+			continue
+		}
+		if key == "max_landings_per_day" {
+			l.Limits.legacyQuotaStated = true
 		}
 		if *dst, err = lim.integer(key, lower, max); err != nil {
 			return err
@@ -174,7 +182,10 @@ func (l *Landing) doc() map[string]any {
 		}
 		repos = append(repos, row)
 	}
-	limits := map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_landings_per_day": l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}
+	limits := map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}
+	if l.Limits.legacyQuotaStated {
+		limits["max_landings_per_day"] = l.Limits.LegacyMaxLandingsPerDay
+	}
 	if l.Limits.LegacyMaxBatch > 0 {
 		limits["max_batch"] = l.Limits.LegacyMaxBatch
 	}
@@ -212,10 +223,6 @@ func landingTightens(p, n *Landing) error {
 		if r.STGRelease != old.STGRelease && r.STGRelease != "none" {
 			return fmt.Errorf("stg_release expands")
 		}
-	}
-	a, b := p.Limits, n.Limits
-	if b.MaxLandingsPerDay > a.MaxLandingsPerDay {
-		return fmt.Errorf("landing limit goes up")
 	}
 	return nil
 }

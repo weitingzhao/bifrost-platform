@@ -124,7 +124,7 @@ func TestS5EvidenceAndFinalBinding(t *testing.T) {
 			}
 		})
 	}
-	for name, mutate := range map[string]func(*Facts){"expired": func(f *Facts) { f.Rule.Expires = epoch }, "tightened": func(f *Facts) { f.Rule.Landing.Repos[0].Allow = []string{"console/src/components/**/*.tsx"} }, "review": func(f *Facts) { f.S5Review.Verdict = "fail" }, "policy": func(f *Facts) { f.S5Policy.TestsDigest = strings.Repeat("e", 64) }, "main": func(f *Facts) { f.Operation.M0 = U }, "quota": func(f *Facts) { f.ReservedToday = 5 }} {
+	for name, mutate := range map[string]func(*Facts){"expired": func(f *Facts) { f.Rule.Expires = epoch }, "tightened": func(f *Facts) { f.Rule.Landing.Repos[0].Allow = []string{"console/src/components/**/*.tsx"} }, "review": func(f *Facts) { f.S5Review.Verdict = "fail" }, "policy": func(f *Facts) { f.S5Policy.TestsDigest = strings.Repeat("e", 64) }, "main": func(f *Facts) { f.Operation.M0 = U }} {
 		t.Run("final "+name, func(t *testing.T) {
 			f, c := s5Ready(t)
 			v, why := VerifyS5Evidence(c, f, f.S5Policy, f.S5Review)

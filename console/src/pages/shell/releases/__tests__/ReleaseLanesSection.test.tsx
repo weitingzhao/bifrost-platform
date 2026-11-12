@@ -64,7 +64,8 @@ describe('ReleaseLanesSection', () => {
     expect(lane('flex-query').textContent).toContain('last image build flex-query abcd123 · time unknown')
     expect(lane('ib-gateway').textContent).toContain('ib-gateway unread')
     expect(screen.getByTestId('release-lanes-window').textContent).toContain('Release window free')
-    expect(screen.getByTestId('release-lanes-quota').textContent).toContain('Not measured — no read endpoint for landing-quota:dev:2026-11-01; limit 12 per UTC day')
+    // The daily landing quota is gone (cleanup wave 1): no quota line.
+    expect(screen.queryByTestId('release-lanes-quota')).toBeNull()
   })
 
   it('shows the later of the newest release record and the newest successful run, STG and PROD alike (review: record A, newer run B)', () => {
@@ -142,8 +143,6 @@ describe('ReleaseLanesSection', () => {
       .toContain('LandingUnknownlanding:dev v7 allows platform (at most 2 in flight), trade-infra (at most 1 in flight); live state and landings in flight not read')
     expect(show('research', {})).toContain('LandingNot allowed by landing:dev v7')
     expect(show('platform', { rule: { data: { in_force: null }, error: null } })).toContain('LandingNo landing rule in force')
-    render(<ReleaseLanesSection {...props({ rule: { data: { in_force: null }, error: null } })} />)
-    expect(screen.getByTestId('release-lanes-quota').textContent).toContain('(no landing rule in force)')
   })
 
   it('5: names the commits and image digests a release record is missing', () => {
@@ -171,7 +170,6 @@ describe('ReleaseLanesSection', () => {
     expect(lane('research').textContent).toContain('running-images: running images: HTTP 500')
     expect(lane('research').textContent).toContain('landing rule: HTTP 503')
     expect(screen.getByTestId('release-lanes-window').textContent).toContain('Unknown')
-    expect(screen.getByTestId('release-lanes-quota').textContent).toContain('limit unknown')
   })
 
   it('without records, runs or a token says none was found and why landing is unknown', () => {

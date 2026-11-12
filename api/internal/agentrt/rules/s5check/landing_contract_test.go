@@ -100,7 +100,7 @@ func contractCase(t *testing.T, edits map[string]string, displayText string) (la
 		Changes: changes, DeployChanges: changes,
 		Rule: &rules.Rule{Header: rules.Header{ID: "landing:dev", Version: 3, Effective: epoch.Add(-12 * time.Hour), Expires: epoch.Add(30 * 24 * time.Hour)}, Kind: rules.KindLanding,
 			Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: append([]string{"console/src/components/**/*.tsx"}, rules.S5Paths()...), STGRelease: "bifrost-deliver-platform"}},
-				Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}}}}
+				Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxInFlightPerRepo: 1}}}}
 	d := strings.Repeat("c", 64)
 	f.S5Policy = landing.S5Policy{ProfileDigest: profile, CheckerImageDigest: k0.CheckerImageDigest, ToolchainDigest: toolchain, CallersDigest: d, TypesDigest: d, TestsDigest: d, UISHA: ids["ui"]}
 	stable := strings.Repeat("9", 40)

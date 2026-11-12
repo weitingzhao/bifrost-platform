@@ -41,7 +41,7 @@ export type LandingMaterial = {
   candidate: LandingCandidate; candidate_digest: string; material_digest: string; soft_at_request: string[]; waiting_soft: string[]
   rule: { id: string; version: number; sha256: string }; checks_version: number; action: LandingAction; title: string; first_line?: string
   phase: string; latest: boolean; pinned: boolean; grant_enabled: boolean; patch?: string; patch_truncated: boolean; patch_size: number
-  compare_url: string; gitea_notice: string; quota_reserved_today: number; quota_max_per_day: number; quota_note: string; stg_notice?: string
+  compare_url: string; gitea_notice: string; quota_reserved_today: number; quota_note: string; stg_notice?: string
   grants: LandingGrant[]; problems: string[]; computed_at: string
   /** Present when the operation leads a batch: the patch is the batch's whole change M0..R. */
   batch?: LandingBatch
@@ -102,7 +102,7 @@ export function parseLandingMaterial(v: unknown): LandingMaterialResponse | null
   if (!candidate(m.candidate) || !fields(m, 'candidate_digest material_digest title phase compare_url gitea_notice quota_note', string)
     || !fields(m, 'soft_at_request waiting_soft problems', strings) || !isLandingAction(m.action)
     || !fields(m, 'latest pinned grant_enabled patch_truncated', bool)
-    || !fields(m, 'checks_version patch_size quota_reserved_today quota_max_per_day', count)
+    || !fields(m, 'checks_version patch_size quota_reserved_today', count)
     || !optional(m, 'floor_paths', floorPaths) || !optional(m, 'batch', batch)
     || !optional(m, 'patch first_line stg_notice', string) || !time(m.computed_at) || !list(m.grants, grant)
     || !object(m.rule) || !fields(m.rule, 'id sha256', string) || !count(m.rule.version)) return null

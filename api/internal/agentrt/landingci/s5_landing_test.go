@@ -36,7 +36,7 @@ func s5LandingFacts(t *testing.T) (landing.Facts, S5CIKey) {
 		Changes: []rules.LandingChange{change}, DeployChanges: []rules.LandingChange{change},
 		Rule: &rules.Rule{Header: rules.Header{ID: "landing:dev", Version: k0.RuleVersion, Effective: epoch.Add(-12 * time.Hour), Expires: epoch.Add(30 * 24 * time.Hour)}, Kind: rules.KindLanding,
 			Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: []string{s5LandingPath}, STGRelease: "bifrost-deliver-platform"}},
-				Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}}}}
+				Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxInFlightPerRepo: 1}}}}
 	p, err := s5TestContract(t).policy()
 	if err != nil {
 		t.Fatal(err)

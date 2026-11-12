@@ -14,7 +14,7 @@ func grantRetryFacts(at time.Time) landing.Facts {
 	return landing.Facts{Repo: "bifrost-platform", Rule: &rules.Rule{
 		Header: rules.Header{Effective: at.Add(-time.Hour), Expires: at.Add(time.Hour)},
 		Landing: &rules.Landing{Repos: []rules.LandingRepo{{Repo: "bifrost-platform"}},
-			Limits: rules.LandingLimits{MaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}},
+			Limits: rules.LandingLimits{LegacyMaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}},
 	}}
 }
 
@@ -48,7 +48,9 @@ func TestGrantedLandingRetryCurrentCapacity(t *testing.T) {
 				}
 				return grantCapacityAvailable(f, at), nil
 			})
-			if err != nil || ready != (name == "released between scans") {
+			// The daily quota is gone (cleanup wave 1): a spent one no
+			// longer holds a granted landing back.
+			if err != nil || ready != (name == "released between scans" || name == "quota exhausted") {
 				t.Fatal("incorrect capacity wakeup", ready, err)
 			}
 			if ready && g.due("op/grant", at.Add(30*time.Second)) {

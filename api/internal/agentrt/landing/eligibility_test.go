@@ -20,7 +20,7 @@ const attempt1 = "a_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 func eligibleFacts() Facts {
 	c := rules.LandingChange{OldPath: "console/src/components/A.tsx", NewPath: "console/src/components/A.tsx", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "<p>Ready</p>"}
-	return Facts{Environment: "prod", Mode: "live", Tenant: "dev", Repo: "bifrost-platform", Task: task1, Attempt: attempt1, A: A, Base: M0, MissionState: "active", StepState: "active", TaskState: "accepted", SingleCommit: true, DependenciesEffective: true, AcceptedAt: epoch.Add(time.Minute), MissionCreated: epoch, EnabledAt: epoch, History: MainHistory{State: Never}, Changes: []rules.LandingChange{c}, DeployChanges: []rules.LandingChange{c}, Rule: &rules.Rule{Header: rules.Header{ID: "landing:dev", Version: 1, Effective: epoch.Add(-12 * time.Hour), Expires: epoch.Add(30 * 24 * time.Hour)}, Kind: rules.KindLanding, Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: []string{"console/src/components/**/*.tsx"}, STGRelease: "bifrost-deliver-platform"}}, Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxLandingsPerDay: 5, MaxInFlightPerRepo: 1}}}}
+	return Facts{Environment: "prod", Mode: "live", Tenant: "dev", Repo: "bifrost-platform", Task: task1, Attempt: attempt1, A: A, Base: M0, MissionState: "active", StepState: "active", TaskState: "accepted", SingleCommit: true, DependenciesEffective: true, AcceptedAt: epoch.Add(time.Minute), MissionCreated: epoch, EnabledAt: epoch, History: MainHistory{State: Never}, Changes: []rules.LandingChange{c}, DeployChanges: []rules.LandingChange{c}, Rule: &rules.Rule{Header: rules.Header{ID: "landing:dev", Version: 1, Effective: epoch.Add(-12 * time.Hour), Expires: epoch.Add(30 * 24 * time.Hour)}, Kind: rules.KindLanding, Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: []string{"console/src/components/**/*.tsx"}, STGRelease: "bifrost-deliver-platform"}}, Limits: rules.LandingLimits{MaxFiles: 10, MaxChangedLines: 300, MaxInFlightPerRepo: 1}}}}
 }
 func TestLandingStageSeparation(t *testing.T) {
 	f := eligibleFacts()
@@ -156,16 +156,17 @@ func TestLandingBoundsIncludeWindowWait(t *testing.T) {
 }
 
 func TestLandingRuleLimitsAtEachGate(t *testing.T) {
-	for _, which := range []string{"quota", "in flight"} {
-		f := eligibleFacts()
-		if which == "quota" {
-			f.ReservedToday = 5
-		} else {
-			f.OtherInFlight = 1
-		}
-		if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed || EligibleToPush(f, epoch.Add(time.Hour)).Allowed {
-			t.Fatal("limit ignored", which)
-		}
+	f := eligibleFacts()
+	f.OtherInFlight = 1
+	if EligibleToClaim(f, epoch.Add(time.Hour)).Allowed || EligibleToPush(f, epoch.Add(time.Hour)).Allowed {
+		t.Fatal("in-flight limit ignored")
+	}
+	// The daily quota is gone (cleanup wave 1): a legacy max_landings_per_day
+	// and any number reserved today hold neither gate back.
+	f = eligibleFacts()
+	f.Rule.Landing.Limits.LegacyMaxLandingsPerDay, f.ReservedToday = 5, 50
+	if !EligibleToClaim(f, epoch.Add(time.Hour)).Allowed || !EligibleToPush(f, epoch.Add(time.Hour)).Allowed {
+		t.Fatal("the daily quota still refuses")
 	}
 }
 

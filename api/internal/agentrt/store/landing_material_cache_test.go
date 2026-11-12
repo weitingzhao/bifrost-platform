@@ -68,7 +68,7 @@ func cacheFixture() (grantDB, GrantSources) {
 		review: GrantReview{Task: "review"}, ciKey: &GrantCIKey{Repo: "bifrost-platform", Revision: b, Base: a}}
 	d.facts.Rule = &rules.Rule{Header: rules.Header{ID: d.rule.ID, Version: 1, Effective: now.Add(-time.Hour), Expires: now.Add(time.Hour)}, Kind: rules.KindLanding,
 		Landing: &rules.Landing{Tenant: "dev", Repos: []rules.LandingRepo{{Repo: "bifrost-platform", Allow: []string{"**"}}},
-			Limits: rules.LandingLimits{MaxFiles: 1, MaxChangedLines: 1, MaxLandingsPerDay: 10}}}
+			Limits: rules.LandingLimits{MaxFiles: 1, MaxChangedLines: 1, LegacyMaxLandingsPerDay: 10}}}
 	src := GrantSources{Cache: &GrantMaterialCache{}, Main: func(context.Context) (string, error) { return a, nil }}
 	src.Facts = LandingSource{
 		Result: func(context.Context, string, string, string, string, string) (bool, []rules.LandingChange, error) {

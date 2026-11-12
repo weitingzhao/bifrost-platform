@@ -180,7 +180,7 @@ func eligibleToClaim(f Facts, now time.Time, preparation bool) Decision {
 		}
 		return refuse("rule")
 	}
-	if f.ReservedToday >= f.Rule.Landing.Limits.MaxLandingsPerDay || f.OtherInFlight >= f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo {
+	if f.OtherInFlight >= f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo {
 		return refuse("limit")
 	}
 	return Decision{Allowed: true}

@@ -128,9 +128,10 @@ func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 }
 
 // Serial: FreezeEventClock. Review 787 B1: the snapshot sees X, but the
-// gate is refused by Y or by quota. X's disappearance must not wake W.
-func TestTD462NoWakeForReplacementOrQuotaPG(t *testing.T) {
-	for _, reason := range []string{"replacement", "quota"} {
+// gate is refused by Y. X's disappearance must not wake W. (The daily quota
+// case is gone with the quota, cleanup wave 1.)
+func TestTD462NoWakeForReplacementPG(t *testing.T) {
+	for _, reason := range []string{"replacement"} {
 		t.Run(reason, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
 			xRoot, yRoot := td462Root(t, c), td462Root(t, c)
@@ -160,15 +161,6 @@ func TestTD462NoWakeForReplacementOrQuotaPG(t *testing.T) {
 					td462AtMain(t, c, y)
 				}
 				c.grant(t, store.ActionCoreLanding)
-				if reason == "quota" {
-					// Reserve while X is live and prepared, then fail it: its
-					// slot is freed, but the day's one-landing quota stays used.
-					c4Prepare(t, c.w, xRoot, x, c.at, true)
-					body := strings.Replace(c5RuleBody, "max_landings_per_day: 5", "max_landings_per_day: 1", 1)
-					ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, body))))
-					ok(t, appendLanding(c.w, "landing-quota:dev:"+c.at.Format("2006-01-02"), newLandingRecord(x, "reserved", "root", xRoot)))
-					ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(x, "failed", "why", "stale")))
-				}
 			}}
 			ok(t, ctl.LandingDrillPass(ctx))
 			if *opens != 1 || len(p.pushes) != 0 {

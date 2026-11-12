@@ -244,7 +244,6 @@ type LandingGrantMaterial struct {
 	CompareURL      string               `json:"compare_url"`
 	GiteaNotice     string               `json:"gitea_notice"`
 	QuotaReserved   int                  `json:"quota_reserved_today"`
-	QuotaMax        int                  `json:"quota_max_per_day"`
 	QuotaNote       string               `json:"quota_note"`
 	STGNotice       string               `json:"stg_notice,omitempty"`
 	Grants          []LandingGrantStatus `json:"grants"`
@@ -538,9 +537,6 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 		problem("ci_not_pinned") // its CI was not pinned to sibling commits: no grant rests on it
 	case grantCIProblem(d.op, d.ciKey, x.ci, now):
 		problem("ci_not_green")
-	}
-	if f.Rule != nil && f.Rule.Landing != nil {
-		m.QuotaMax = f.Rule.Landing.Limits.MaxLandingsPerDay
 	}
 	m.QuotaReserved = f.ReservedToday
 	m.QuotaNote = "today's count as of this read; the push checks it again"

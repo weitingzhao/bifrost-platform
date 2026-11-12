@@ -58,8 +58,7 @@ func grantCapacityAvailable(f landing.Facts, at time.Time) bool {
 	if _, ok := f.Rule.Landing.Repo(f.Repo); !ok {
 		return false
 	}
-	return f.ReservedToday < f.Rule.Landing.Limits.MaxLandingsPerDay &&
-		f.OtherInFlight < f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo
+	return f.OtherInFlight < f.Rule.Landing.EffectiveLimits(f.Repo).MaxInFlightPerRepo
 }
 
 // grantSlotHolders counts the operations of s other than op that hold the
