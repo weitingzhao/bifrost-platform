@@ -38,7 +38,6 @@ func TestParseSpecSiblingsAndSetup(t *testing.T) {
 		"no ref":                       `{"text":"t","siblings":[{"repo":"ui"}]}`,
 		"the same repo twice":          `{"text":"t","siblings":[{"repo":"ui","ref":"main"},{"repo":"ui","ref":"dev"}]}`,
 		"a field it lacks":             `{"text":"t","siblings":[{"repo":"ui","ref":"main","path":"/"}]}`,
-		"more than four":               `{"text":"t","siblings":[{"repo":"a","ref":"m"},{"repo":"b","ref":"m"},{"repo":"c","ref":"m"},{"repo":"d","ref":"m"},{"repo":"e","ref":"m"}]}`,
 	} {
 		if _, err := ParseSpec([]byte(body)); err == nil {
 			t.Errorf("%s: accepted %s", name, body)

@@ -27,6 +27,11 @@ func TestParseSpec(t *testing.T) {
 	if err != nil || s.Check != "verify" || s.SubjectSpec == "" || s.Commit == "" || s.Round != 1 {
 		t.Fatalf("check spec = %+v %v", s, err)
 	}
+	// Cleanup wave 1 (2026-11-11): no bound of 4 siblings.
+	s, err = ParseSpec([]byte(`{"text":"x","siblings":[{"repo":"a","ref":"main"},{"repo":"b","ref":"main"},{"repo":"c","ref":"main"},{"repo":"d","ref":"main"},{"repo":"e","ref":"main"},{"repo":"f","ref":"main"}]}`))
+	if err != nil || len(s.Siblings) != 6 {
+		t.Fatalf("six siblings = %+v %v", s.Siblings, err)
+	}
 	for _, bad := range []string{
 		`{"text":"x","verify":[[]]}`,
 		`{"text":"x","verify":[[""]]}`,

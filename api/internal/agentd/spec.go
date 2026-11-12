@@ -112,9 +112,6 @@ func ParseSpec(body []byte) (TaskSpec, error) {
 	if s.TimeoutS < 0 {
 		return TaskSpec{}, errors.New("agentd: task spec: timeout_s is negative")
 	}
-	if len(s.Siblings) > maxSiblings {
-		return TaskSpec{}, fmt.Errorf("agentd: task spec: at most %d siblings", maxSiblings)
-	}
 	seen := map[string]bool{}
 	for i, sib := range s.Siblings {
 		if err := sib.check(); err != nil {
@@ -135,8 +132,6 @@ type Sibling struct {
 	Repo string `json:"repo"`
 	Ref  string `json:"ref"`
 }
-
-const maxSiblings = 4
 
 var (
 	// siblingRepo is a directory name next to the attempts, never an
