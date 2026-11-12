@@ -19,7 +19,7 @@ import {
   searchArtifacts,
   getMission,
   getPlan,
-  getPlanView, registerExternalWork, recordExternalWorkEvent,
+  getPlanView, registerExternalWork, recordExternalWorkEvent, COMMIT_SHA,
   getTask,
   listTasks,
   proposeMission,
@@ -587,6 +587,60 @@ describe('plan view and external work', () => {
     assert.deepEqual(calls[1].body, registration)
     assert.equal(calls[2].path, '/api/v1/agentrt/external-work/ew_1/events')
     assert.deepEqual(calls[2].body, { idempotency_key: 'hb', seq: 2, type: 'heartbeat' })
+  })
+  it('an event without seq sends none, and without a key gets one it reports', async () => {
+    const { d, calls } = deps()
+    const sha = '0123456789abcdef0123456789abcdef01234567'
+    // seq left out: the body has no seq field at all, so the platform assigns the next.
+    const kept = await recordExternalWorkEvent({ external_work_id: 'ew_1', idempotency_key: 'hb-7', type: 'heartbeat', commit_shas: [sha] }, d)
+    assert.deepEqual(calls[0].body, { idempotency_key: 'hb-7', type: 'heartbeat', commit_shas: [sha] })
+    assert.equal('seq' in (calls[0].body as object), false)
+    // The caller's own key: the answer is the platform's, nothing added.
+    assert.deepEqual(kept, { sent: true })
+
+    // No key: one is generated, sent, and returned so a retry can reuse it.
+    const made = (await recordExternalWorkEvent({ external_work_id: 'ew_1', type: 'heartbeat' }, d, () => 'generated-key')) as Record<string, unknown>
+    assert.deepEqual(calls[1].body, { idempotency_key: 'generated-key', type: 'heartbeat' })
+    assert.deepEqual(made, { sent: true, idempotency_key: 'generated-key' })
+
+    // The default generator is a fresh UUID each call.
+    await recordExternalWorkEvent({ external_work_id: 'ew_1', type: 'heartbeat' }, d)
+    await recordExternalWorkEvent({ external_work_id: 'ew_1', idempotency_key: '', type: 'heartbeat' }, d)
+    const keys = [calls[2], calls[3]].map((c) => (c.body as { idempotency_key: string }).idempotency_key)
+    for (const key of keys) assert.match(key, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.notEqual(keys[0], keys[1])
+
+    // An explicit seq and key go out exactly as before.
+    await recordExternalWorkEvent({ external_work_id: 'ew_1', idempotency_key: 'sub', seq: 9, type: 'submitted', commit_shas: [sha], exit_code: 0 }, d)
+    assert.deepEqual(calls[4].body, { idempotency_key: 'sub', seq: 9, type: 'submitted', commit_shas: [sha], exit_code: 0 })
+  })
+  it('names a commit by its full lowercase SHA', () => {
+    assert.equal(COMMIT_SHA.test('0123456789abcdef0123456789abcdef01234567'), true)
+    assert.equal(COMMIT_SHA.test('a'.repeat(64)), true)
+    for (const bad of ['0123456', 'A'.repeat(40), 'g'.repeat(40), 'a'.repeat(41), 'main']) assert.equal(COMMIT_SHA.test(bad), false, bad)
+  })
+  it('the served schema makes seq and the key optional and describes the registration artifact', () => {
+    const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+    const event = index.slice(index.indexOf("server.registerTool('record_external_work_event'"))
+    assert.match(event, /idempotency_key: z\.string\(\)\.min\(1\)\.optional\(\)/)
+    assert.match(event, /seq: z\.number\(\)\.int\(\)\.min\(1\)\.optional\(\)/)
+    assert.match(event, /commit_shas: z\.array\(z\.string\(\)\.regex\(COMMIT_SHA/)
+    // The example in register_external_work's description is one the
+    // platform's parser takes (store.parseExternalDescription): the nine
+    // fields and no other, v 1, the kind, non-empty texts, two estimates.
+    const registration = index.slice(index.indexOf("server.registerTool('register_external_work'"), index.indexOf("server.registerTool('record_external_work_event'"))
+    const example = registration.match(/\{"v": 1,[^}]*\}/)
+    assert.ok(example, 'register_external_work describes its artifact with an example')
+    const doc = JSON.parse(example[0]) as Record<string, unknown>
+    assert.deepEqual(Object.keys(doc).sort(), ['acceptance_refs', 'branch', 'estimate_minutes', 'executor', 'kind', 'provider', 'repo', 'task', 'v'])
+    assert.equal(doc.v, 1)
+    assert.equal(doc.kind, 'agentrt.external_work/v1')
+    for (const key of ['task', 'executor', 'provider', 'repo', 'branch']) assert.ok(typeof doc[key] === 'string' && (doc[key] as string).trim() !== '', key)
+    const refs = doc.acceptance_refs as string[]
+    assert.ok(Array.isArray(refs) && refs.length > 0 && refs.every((r) => typeof r === 'string' && r.trim() !== ''))
+    const estimate = doc.estimate_minutes as number[]
+    assert.ok(Array.isArray(estimate) && estimate.length === 2 && Number.isInteger(estimate[0]) && Number.isInteger(estimate[1]))
+    assert.ok(estimate[0] >= 0 && estimate[1] >= estimate[0])
   })
   it('refuses writes when no real session exists', async () => {
     for (const over of [{ fellBack: true }]) {

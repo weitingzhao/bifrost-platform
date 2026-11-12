@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -597,7 +597,11 @@ export interface ExternalRegistration {
   mission_id?: string; task_id?: string; observed_at?: string
 }
 export interface ExternalWorkEvent {
-  idempotency_key: string; seq: number; type: 'started' | 'heartbeat' | 'submitted' | 'cancelled' | 'linked'
+  /** Left out, one is generated for this call and returned as idempotency_key. */
+  idempotency_key?: string
+  /** Left out, no seq is sent and the platform assigns the next one. */
+  seq?: number
+  type: 'started' | 'heartbeat' | 'submitted' | 'cancelled' | 'linked'
   observed_at?: string; root?: string; plan_node_id?: string; mission_id?: string; task_id?: string
   report_path_digest?: string; report_digest?: string; commit_shas?: string[]; exit_code?: number
 }
@@ -607,10 +611,27 @@ export async function registerExternalWork(input: ExternalRegistration, d: Runti
   if (!input.idempotency_key) return { error: 'idempotency_key is required' }
   return d.send('POST', `${BASE}/external-work`, input)
 }
-export async function recordExternalWorkEvent(input: ExternalWorkEvent & { external_work_id: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+/** A commit an external work event names: 40 lowercase hex, or 64 for a SHA-256 repository (store shaPattern). */
+export const COMMIT_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/
+
+/**
+ * Append one observation. An explicit seq and key go out as given. Without
+ * seq the body carries none, and the platform assigns the next. Without a
+ * key one is generated: the answer then carries it as idempotency_key, since
+ * a retry is the same event only under the same key.
+ */
+export async function recordExternalWorkEvent(
+  input: ExternalWorkEvent & { external_work_id: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+  newKey: () => string = randomUUID,
+): Promise<unknown> {
   const refused = refuseWrite(d)
   if (refused) return refused
-  if (!input.idempotency_key) return { error: 'idempotency_key is required' }
-  const { external_work_id, ...body } = input
-  return d.send('POST', `${BASE}/external-work/${id(external_work_id)}/events`, body)
+  const { external_work_id, idempotency_key, seq, ...rest } = input
+  const generated = idempotency_key == null || idempotency_key === ''
+  const key = generated ? newKey() : idempotency_key
+  const body = { idempotency_key: key, ...(seq != null ? { seq } : {}), ...rest }
+  const answer = await d.send('POST', `${BASE}/external-work/${id(external_work_id)}/events`, body)
+  if (!generated || answer == null || typeof answer !== 'object' || Array.isArray(answer)) return answer
+  return { ...(answer as Record<string, unknown>), idempotency_key: key }
 }

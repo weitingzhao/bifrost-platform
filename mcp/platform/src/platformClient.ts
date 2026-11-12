@@ -70,15 +70,28 @@ function sendsJsonBody(method: string): boolean {
   return method === 'POST' || method === 'PATCH' || method === 'PUT'
 }
 
-async function rawSend(method: string, path: string, body?: unknown): Promise<unknown> {
+interface RawReply {
+  ok: boolean
+  status: number
+  text: string
+}
+
+async function rawFetch(method: string, path: string, body?: unknown): Promise<RawReply> {
   const withBody = sendsJsonBody(method)
   const headers = requestHeaders(withBody)
   const init: RequestInit = { method, headers }
   if (withBody) init.body = body == null ? '{}' : JSON.stringify(body)
   const r = await fetch(`${apiBase()}${path}`, init)
-  const text = await r.text()
-  if (!r.ok) throw new Error(`${method} ${path}: HTTP ${r.status} ${text}`)
-  return text === '' ? {} : (JSON.parse(text) as unknown)
+  return { ok: r.ok, status: r.status, text: await r.text() }
+}
+
+function bodyOrThrow(method: string, path: string, r: RawReply): unknown {
+  if (!r.ok) throw new Error(`${method} ${path}: HTTP ${r.status} ${r.text}`)
+  return r.text === '' ? {} : (JSON.parse(r.text) as unknown)
+}
+
+async function rawSend(method: string, path: string, body?: unknown): Promise<unknown> {
+  return bodyOrThrow(method, path, await rawFetch(method, path, body))
 }
 
 type ApprovalAnswer = { kind: 'direct' } | { kind: 'stop'; body: unknown }
@@ -121,9 +134,57 @@ async function consultApproval(action: string, params: Record<string, unknown>):
   return { kind: 'stop', body: { ...parsed, error, action, status: r.status } }
 }
 
+/**
+ * Actions the server guard judges on their own route, so the approvals
+ * consult is skipped for them. The consult would create an approval request
+ * in the caller's name (reason "mcp:<action>") whenever the signed release
+ * policy does not cover a tier C run, without saying why. The direct route
+ * lets tier B through, starts a tier C run the policy covers, and otherwise
+ * answers 403 "approval required" with the policy's reasons and creates
+ * nothing.
+ */
+const SERVER_JUDGED_ACTIONS: ReadonlySet<string> = new Set(['start_pipeline_run'])
+
+export const APPROVAL_REQUIRED_ERROR = 'approval required'
+
+export const NO_REQUEST_CREATED_NOTE =
+  'No approval request was created. Fix what the reasons name and call again, or create the request yourself with request_action in your own words. Release the window first: the platform takes the window itself for an approved run.'
+
+/** The guard's 403 "approval required" as a result; any other body is not one. */
+function approvalRequired(text: string, action: string): Record<string, unknown> | undefined {
+  let parsed: Record<string, unknown>
+  try {
+    parsed = asObject(JSON.parse(text) as unknown)
+  } catch {
+    return undefined
+  }
+  if (parsed.error !== APPROVAL_REQUIRED_ERROR) return undefined
+  // release_policy is the server's list of reasons, passed on as it came;
+  // a body without one gets none invented.
+  return {
+    started: false,
+    ...parsed,
+    action: typeof parsed.action === 'string' && parsed.action !== '' ? parsed.action : action,
+    note: NO_REQUEST_CREATED_NOTE,
+  }
+}
+
+/** Call the route itself and let the server guard decide. Nothing is posted to /api/v1/approvals. */
+async function sendServerJudged(method: string, path: string, body: unknown, action: string): Promise<unknown> {
+  const reply = await rawFetch(method, path, body)
+  if (reply.status === 403) {
+    const refusal = approvalRequired(reply.text, action)
+    if (refusal) return refusal
+  }
+  return bodyOrThrow(method, path, reply)
+}
+
 async function sendWrite(method: 'POST' | 'DELETE' | 'PUT', path: string, body?: unknown): Promise<unknown> {
   const plan = planWrite(method, path, body)
   if (plan.kind === 'unmapped' || plan.kind === 'refused') return plan.body
+  if (plan.kind === 'consult' && SERVER_JUDGED_ACTIONS.has(plan.action)) {
+    return sendServerJudged(method, path, body, plan.action)
+  }
   if (plan.kind === 'consult') {
     const answer = await consultApproval(plan.action, plan.params)
     if (answer.kind === 'stop') return answer.body

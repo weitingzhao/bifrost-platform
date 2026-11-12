@@ -160,18 +160,22 @@ describe('platformClient write gate', () => {
     }
   })
 
+  // start_pipeline_run no longer consults (startPipelineRun.test.ts): the
+  // tier B example here is a rollout restart.
   it('call-directly calls the original route', async () => {
     approvalStatus = 400
-    approvalBody = { error: 'call directly', action: 'start_pipeline_run', tier: 'B' }
-    const result = (await platformPost('/api/v1/delivery/pipelines/bifrost-deliver-platform/runs', {
-      revision: 'abc',
+    approvalBody = { error: 'call directly', action: 'rollout_restart_deployment', tier: 'B' }
+    const result = (await platformPost('/api/v1/cluster/workloads/rollout-restart', {
+      namespace: 'bifrost-stg',
+      kind: 'Deployment',
+      name: 'api',
     })) as { status: string }
     assert.equal(result.status, 'executed')
     assert.equal(calls.length, 2)
     assert.ok(calls[0].url.endsWith('/api/v1/approvals'))
-    assert.equal((calls[0].body as { action: string }).action, 'start_pipeline_run')
-    assert.equal((calls[0].body as { params: { name: string } }).params.name, 'bifrost-deliver-platform')
-    assert.ok(calls[1].url.endsWith('/api/v1/delivery/pipelines/bifrost-deliver-platform/runs'))
+    assert.equal((calls[0].body as { action: string }).action, 'rollout_restart_deployment')
+    assert.equal((calls[0].body as { params: { name: string } }).params.name, 'api')
+    assert.ok(calls[1].url.endsWith('/api/v1/cluster/workloads/rollout-restart'))
     assert.equal(calls[1].method, 'POST')
   })
 

@@ -24,6 +24,12 @@ export const ANSWER_REFUSAL_HINT =
  * tiers on its own: every catalogued direct route answers a tier C or D call
  * that carries no approval with 403 "approval required" (server guard), and
  * approvals are created only on PROD.
+ *
+ * The plan for start_pipeline_run is still consult (the mapping and its
+ * params are what the catalog ratchet checks), but platformClient does not
+ * act on it by consulting: it calls the route and returns the guard's
+ * refusal, so no request is created in the caller's name
+ * (SERVER_JUDGED_ACTIONS in platformClient.ts).
  */
 
 export type WritePlan =

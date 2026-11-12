@@ -14,6 +14,16 @@ import { registerApproveBridge } from './registerApprove.js'
 import { registerLocalBridge } from './registerLocal.js'
 import { focusAllowList } from './focusBridges.js'
 import {
+  RUN_POLL_DEFAULT_SECONDS,
+  RUN_POLL_MIN_SECONDS,
+  RUN_WAIT_DEFAULT_SECONDS,
+  RUN_WAIT_MAX_SECONDS,
+  checkReleasePolicy,
+  getDelivery,
+  waitForPipelineRun,
+} from './deliveryTools.js'
+import { AUDIT_MAX_LIMIT, REQUESTS_DEFAULT_LIMIT, REQUESTS_MAX_LIMIT, filterAudit } from './readFilters.js'
+import {
   PROPOSAL_KEY_RULE,
   PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
@@ -26,6 +36,8 @@ import {
   getMission,
   getPlan,
   getPlanView, registerExternalWork, recordExternalWorkEvent,
+  COMMIT_SHA,
+  isRFC3339,
   getTask,
   listTasks,
   proposeMission,
@@ -114,8 +126,17 @@ reg('get_auth_capabilities', 'Bearer token role and capabilities', {}, async () 
   jsonResult(await platformGet('/api/v1/auth/capabilities')),
 )
 
-reg('get_audit_log', 'Recent actuation audit records', {}, async () =>
-  jsonResult(await platformGet('/api/v1/audit')),
+reg(
+  'get_audit_log',
+  `Actuation audit records, newest first: {records: [{id, at, actor, role, action, target, status, detail}]}. The platform keeps the newest ${AUDIT_MAX_LIMIT}. With no argument every kept record is returned. The filters are applied by this tool, not by the server (records must pass all that are given), and the answer then also carries matched (records that passed) and returned.`,
+  {
+    action_prefix: z.string().optional().describe('Only actions starting with this, e.g. release_policy.'),
+    since: z.string().refine(isRFC3339, 'an RFC 3339 date and time, as 2026-11-12T09:00:00-06:00').optional().describe('Only records at or after this time (RFC 3339)'),
+    since_minutes: z.number().int().min(1).max(43200).optional().describe('Only records of the last n minutes. With since too, the later of the two bounds holds'),
+    target_contains: z.string().optional().describe('Only records whose target contains this text, ignoring case'),
+    limit: z.number().int().min(1).max(AUDIT_MAX_LIMIT).optional().describe(`At most this many, newest first (max ${AUDIT_MAX_LIMIT}). Omitted: all that matched`),
+  },
+  async (filter) => jsonResult(filterAudit(await platformGet('/api/v1/audit'), filter, Date.now())),
 )
 
 reg('get_cluster_summary', 'Cluster summary probe', {}, async () =>
@@ -249,7 +270,7 @@ reg(
 
 reg(
   'start_pipeline_run',
-  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version. Pass who (same value as release.sh hold prints) when a release window is open — the server refuses without it. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s. For bifrost-build-research-dagster, pass the same semver: the `-dagster` suffix is appended for you, because both research image lines share one repository and a bare tag would build the Dagster image over the one research-api runs.',
+  'Start Tekton PipelineRun (operator) and return {ok, action, target, message, run}. The call goes to the run route itself and never creates an approval request. A tier C (PROD) run starts only when the signed release policy covers this exact request; otherwise nothing starts and the answer is {started: false, error: "approval required", action, release_policy: [the policy\'s reasons], note} (ask first with check_release_policy). Pass revision (Gitea tag) to pin deploy version. Pass who (same value as release.sh hold prints) when a release window is open — the server refuses without it. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s. For bifrost-build-research-dagster, pass the same semver: the `-dagster` suffix is appended for you, because both research image lines share one repository and a bare tag would build the Dagster image over the one research-api runs.',
   {
     name: z.string(),
     revision: z.string().optional(),
@@ -266,6 +287,42 @@ reg(
         ...(params != null && Object.keys(params).length > 0 ? { params } : {}),
       }),
     ),
+)
+
+reg(
+  'check_release_policy',
+  'Judge this exact run request against the signed release policy, once, without starting anything: no run is started and no approval request is created. Returns {action, pipeline, tier, needs_approval, covered, policy_id, reasons, clauses, shas, outcome}: covered says whether start_pipeline_run with the same arguments would start, and reasons lists every reason when it would not. Pass the same name, revision, tag, who and params you would pass to start_pipeline_run.',
+  {
+    name: z.string().describe('Pipeline name, e.g. bifrost-deliver-platform-prod'),
+    revision: z.string().optional(),
+    tag: z.string().optional(),
+    who: z.string().optional().describe('The release window holder, as for start_pipeline_run'),
+    params: z.record(z.string(), z.string()).optional().describe('Pipeline params, as for start_pipeline_run'),
+  },
+  async (input) => jsonResult(await checkReleasePolicy(input)),
+)
+
+reg(
+  'wait_for_pipeline_run',
+  `Wait for a Tekton PipelineRun to finish, polling the delivery read routes, and return {found, run, pipeline, revision, status, reason, finished, timed_out, started_at, completed_at, duration_seconds, tasks: [{name, status, reason, duration_seconds}], phases, waited_seconds}. status is Succeeded, Failed, Running, Pending or NotFound; reason is Tekton's (Cancelled, PipelineRunTimeout, …). Name the run, or pipeline and revision: then the newest run of that pipeline whose revision param equals the commit is the one waited for. A run that does not exist yet is waited for until the timeout (found: false). Read-only: it starts and cancels nothing. A task's duration_seconds is null while the steps route reports no task times.`,
+  {
+    run: z.string().optional().describe('PipelineRun name, e.g. bifrost-deliver-platform-1762950000'),
+    pipeline: z.string().optional().describe('Pipeline name. Required with revision; with run it only saves a lookup'),
+    revision: z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA').optional().describe('With pipeline: the commit the run was started for'),
+    timeout_seconds: z.number().int().min(1).max(RUN_WAIT_MAX_SECONDS).optional().describe(`Default ${RUN_WAIT_DEFAULT_SECONDS}, max ${RUN_WAIT_MAX_SECONDS}`),
+    poll_seconds: z.number().int().min(RUN_POLL_MIN_SECONDS).max(60).optional().describe(`Default ${RUN_POLL_DEFAULT_SECONDS}, min ${RUN_POLL_MIN_SECONDS}`),
+  },
+  async (input) => jsonResult(await waitForPipelineRun(input)),
+)
+
+reg(
+  'get_delivery',
+  'Read the delivery progress strip of one change (handed in → CI → on main → STG → PROD). Name exactly one of commit or task. Returns the server body: {schema, commit, task_id, attempt_id, plan_node_id, repo, operation, stages: [{stage, state, entered_at, left_at, actor, actor_role, waits_on, reason, source}], warnings, as_of}; warnings say which stages could not be read. Read-only.',
+  {
+    commit: z.string().optional().describe('Commit SHA, or a prefix of 7 or more lowercase hex characters'),
+    task: z.string().optional().describe('Agent runtime task id (t_…)'),
+  },
+  async (input) => jsonResult(await getDelivery(input)),
 )
 
 reg(
@@ -553,9 +610,13 @@ reg(
 
 reg(
   'list_requests',
-  'List approval requests. status is pending (default), open (pending, approved, running, unknown) or all.',
-  { status: z.enum(['pending', 'open', 'all']).optional() },
-  async ({ status }) => jsonResult(await listRequests(status ?? 'pending')),
+  `List approval requests: {approvals: [...]}, newest created first. status is pending (default), open (pending, approved, running, unknown) or all, and is applied by the server. action and limit are filtered by this tool: with either, only requests of that action are kept, at most limit of them (default ${REQUESTS_DEFAULT_LIMIT}, max ${REQUESTS_MAX_LIMIT}), and the answer also carries matched (requests that passed) and returned. With neither, the whole list is returned.`,
+  {
+    status: z.enum(['pending', 'open', 'all']).optional(),
+    action: z.string().optional().describe('Exact action id, e.g. start_pipeline_run'),
+    limit: z.number().int().min(1).max(REQUESTS_MAX_LIMIT).optional().describe(`Newest first; default ${REQUESTS_DEFAULT_LIMIT} when action is given, max ${REQUESTS_MAX_LIMIT}`),
+  },
+  async ({ status, action, limit }) => jsonResult(await listRequests(status ?? 'pending', { action, limit })),
 )
 
 reg(
@@ -590,7 +651,7 @@ reg('get_plan_view', `One read-only plan snapshot, including external work fresh
 // recreate a stripping object and silently discard misspelled bindings.
 if (!allow || allow.has('register_external_work')) {
   server.registerTool('register_external_work', {
-    description: 'Register external work before starting it. The other artifact is agentrt.external_work/v1. Registration grants no execution or completion authority.',
+    description: 'Register external work before starting it. Registration grants no execution or completion authority. artifact_id names the work\'s description, uploaded first with put_artifact (kind "other", media_type "application/json"). The description is one JSON object with exactly these nine fields, all required, no others: {"v": 1, "kind": "agentrt.external_work/v1", "task": "Add release-policy tools to the MCP server", "executor": "claude-code", "provider": "anthropic", "repo": "bifrost-platform", "branch": "w2b/mcp", "acceptance_refs": ["mcp/platform type-check and tests pass"], "estimate_minutes": [30, 90]}. Every text is non-empty and at most 2000 bytes; acceptance_refs has at least one entry; estimate_minutes is two integers [low, high] with 0 <= low <= high. Returns {external_work_id, event_id, seq, state, plan_url, registered_at}.',
     inputSchema: z.object({
       idempotency_key: z.string().min(1), root: z.string(), plan_node_id: z.string(), source_run_key: z.string(), artifact_id: z.string(),
       mission_id: z.string().optional(), task_id: z.string().optional(), observed_at: z.string().optional(),
@@ -599,12 +660,12 @@ if (!allow || allow.has('register_external_work')) {
 }
 if (!allow || allow.has('record_external_work_event')) {
   server.registerTool('record_external_work_event', {
-    description: 'Append an external work observation with monotonic seq. Submitted is not verified or done. Retry the same event with the same key.',
+    description: 'Append an external work observation and return {external_work_id, event_id, seq, state, plan_url}. Submitted is not verified or done. seq is optional: leave it out and the platform assigns the next one; given, it must be the work\'s last seq + 1. idempotency_key is optional: leave it out and one is generated and returned as idempotency_key; to retry an event, send it again with the same key. commit_shas (full lowercase SHAs) may be named on heartbeat and submitted events; the report digests and exit_code on submitted only.',
     inputSchema: z.object({
-      external_work_id: z.string(), idempotency_key: z.string().min(1), seq: z.number().int().min(1),
+      external_work_id: z.string(), idempotency_key: z.string().min(1).optional(), seq: z.number().int().min(1).optional(),
       type: z.enum(['started', 'heartbeat', 'submitted', 'cancelled', 'linked']), observed_at: z.string().optional(),
       root: z.string().optional(), plan_node_id: z.string().optional(), mission_id: z.string().optional(), task_id: z.string().optional(),
-      report_path_digest: z.string().optional(), report_digest: z.string().optional(), commit_shas: z.array(z.string()).optional(), exit_code: z.number().int().optional(),
+      report_path_digest: z.string().optional(), report_digest: z.string().optional(), commit_shas: z.array(z.string().regex(COMMIT_SHA, 'a full lowercase git SHA')).max(100).optional(), exit_code: z.number().int().optional(),
     }).strict(),
   }, async (input) => jsonResult(await recordExternalWorkEvent(input)))
 }

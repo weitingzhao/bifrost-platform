@@ -1,6 +1,7 @@
 import { withApproveHint } from './approveHint.js'
 import { platformGet, platformSend } from './platformClient.js'
 import { pollRequest } from './pollRequest.js'
+import { filterRequests, type RequestFilter } from './readFilters.js'
 
 export interface RequestActionInput {
   action: string
@@ -40,8 +41,12 @@ export async function getRequest(id: string): Promise<unknown> {
 
 export type ListStatus = 'pending' | 'open' | 'all'
 
-export async function listRequests(status: ListStatus = 'pending'): Promise<unknown> {
-  return platformGet(`/api/v1/approvals?status=${encodeURIComponent(status)}`)
+/**
+ * status goes to the server. action and limit are applied here: the route
+ * reads no such query (readFilters.ts). Without them the body is the server's.
+ */
+export async function listRequests(status: ListStatus = 'pending', filter: RequestFilter = {}): Promise<unknown> {
+  return filterRequests(await platformGet(`/api/v1/approvals?status=${encodeURIComponent(status)}`), filter)
 }
 
 export async function waitForRequest(id: string, timeoutSeconds = 120): Promise<unknown> {
