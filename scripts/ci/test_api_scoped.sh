@@ -30,7 +30,7 @@ if [[ -n ${API_SCOPE_RESULT:-} ]]; then printf '%s' "$scope" > "$API_SCOPE_RESUL
 printf 'scope=%s\npackages=%s\nstore_run=%s\nguard_packages=%s\nguard_run=%s\nwhy=%s\n' "$scope" "$packages" "$store_run" "$guard_packages" "$guard_run" "$why"
 status=0
 run_tests() {
-  go test -json -count=1 -timeout="$test_timeout" "$@" > "$tmp/part" 2>&1 || status=1
+  go test -json -timeout="$test_timeout" "$@" > "$tmp/part" 2>&1 || status=1
   cat "$tmp/part"
   cat "$tmp/part" >> "$tmp/events"
 }

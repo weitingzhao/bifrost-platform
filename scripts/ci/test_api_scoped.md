@@ -4,7 +4,7 @@ Run from the repository root with `make test-api-scoped BASE=<base> HEAD=<head>`
 
 The selector accepts `go -C api run ./cmd/testscope -module . BASE HEAD`, or `-stdin` with tab-separated `git diff --name-status -M` lines. Unknown history, graph, parse, or selection errors choose the full suite. Guards include the tests in every test file with a filepath walk, including fixture walks, plus explicit guard tests. Packages selected only as guards appear in `guard_packages`; `guard_run` is the sorted union of their test names in one anchored regex. A walking helper file without tests keeps its package whole. Both lines are empty for full scope. Store references are syntactic and conservatively include identifier matches; an empty selection or missing removed store file runs all store tests.
 
-The script takes `GOCACHE` and `GOMODCACHE` from the environment. Every `go test` invocation uses `-count=1`, so saving these caches between CI runs is safe: compiled code and modules are reused, while database test results are never replayed.
+The script takes `GOCACHE` and `GOMODCACHE` from the environment, and `go test` runs without `-count=1`, so a saved `GOCACHE` also replays test results: a package whose code, test files, the files its tests open and the environment variables they read are unchanged (Go does not see what a subprocess the test starts reads) is not run again. That holds for the database tests too: each test creates its own database from the migrations and depends on no state left on the server, so a result is the same on any server of the same version. The PostgreSQL version is part of `AGENTRT_TEST_PG` (CI's task sets it), so a new server version changes that variable and every database test runs again.
 
 ## Last five commits
 
