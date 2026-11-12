@@ -48,9 +48,10 @@ func (l *Landing) EffectiveLimits(repo string) LandingLimits {
 	return v
 }
 
-// MaxBatch is the most members a landing batch has; 0 (the field left out)
-// sets no cap of its own, only the day's quota left bounds a batch.
-type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo, MaxBatch int }
+// LegacyMaxBatch is limits.max_batch as a signed rule states it (0 when left
+// out). It bounds nothing (cleanup wave 1, 2026-11-11): it is read and kept
+// only so a rule signed with it still has its canonical body.
+type LandingLimits struct{ MaxFiles, MaxChangedLines, MaxLandingsPerDay, MaxInFlightPerRepo, LegacyMaxBatch int }
 
 func (r *Rule) landing(o *object, arg string) error {
 	l := &Landing{}
@@ -152,8 +153,9 @@ func (r *Rule) landing(o *object, arg string) error {
 			return err
 		}
 	}
+	// Legacy: accepted for rules signed with it, no effect.
 	if _, ok := lim.fields["max_batch"]; ok {
-		if l.Limits.MaxBatch, err = lim.integer("max_batch", 1, 1<<30); err != nil {
+		if l.Limits.LegacyMaxBatch, err = lim.integer("max_batch", 1, 1<<30); err != nil {
 			return err
 		}
 	}
@@ -173,8 +175,8 @@ func (l *Landing) doc() map[string]any {
 		repos = append(repos, row)
 	}
 	limits := map[string]any{"max_files": l.Limits.MaxFiles, "max_changed_lines": l.Limits.MaxChangedLines, "max_landings_per_day": l.Limits.MaxLandingsPerDay, "max_in_flight_per_repo": l.Limits.MaxInFlightPerRepo}
-	if l.Limits.MaxBatch > 0 {
-		limits["max_batch"] = l.Limits.MaxBatch
+	if l.Limits.LegacyMaxBatch > 0 {
+		limits["max_batch"] = l.Limits.LegacyMaxBatch
 	}
 	return map[string]any{"tenant": l.Tenant, "repos": repos, "limits": limits}
 }

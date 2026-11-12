@@ -192,7 +192,7 @@ func landingBoundaryRows(rule rules.Rule) []map[string]any {
 		limits := rule.Landing.CheckedLimits(repo.Repo)
 		rows = append(rows, map[string]any{"rule_id": rule.ID, "rule_version": rule.Version, "repo": repo.Repo,
 			"max_files": limits.MaxFiles, "max_changed_lines": limits.MaxChangedLines, "configured_changed_lines": configured.MaxChangedLines, "code_clamped": false,
-			"max_in_flight": limits.MaxInFlightPerRepo, "max_landings_per_day": limits.MaxLandingsPerDay, "max_batch": limits.MaxBatch,
+			"max_in_flight": limits.MaxInFlightPerRepo, "max_landings_per_day": limits.MaxLandingsPerDay,
 			"source": "rules.Landing.CheckedLimits", "note": "Size limits are not in effect. This is not a task authorization."})
 	}
 	return rows
