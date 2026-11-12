@@ -20,7 +20,7 @@ func grantRetryFacts(at time.Time) landing.Facts {
 
 func TestGrantedLandingRetryCurrentCapacity(t *testing.T) {
 	at := time.Now()
-	for _, name := range []string{"released between scans", "replacement still active", "quota exhausted", "both full", "repo limit zero", "expired rule", "missing rule", "removed repo"} {
+	for _, name := range []string{"released between scans", "replacement still active", "repo limit zero", "expired rule", "missing rule", "removed repo"} {
 		t.Run(name, func(t *testing.T) {
 			var g grantTries
 			g.due("op/grant", at)
@@ -29,10 +29,6 @@ func TestGrantedLandingRetryCurrentCapacity(t *testing.T) {
 			switch name {
 			case "replacement still active":
 				f.OtherInFlight = 1
-			case "quota exhausted":
-				f.ReservedToday = 5
-			case "both full":
-				f.OtherInFlight, f.ReservedToday = 1, 5
 			case "repo limit zero":
 				f.Rule.Landing.Repos[0].Limits = &rules.LandingRepoLimits{MaxInFlight: 0}
 			case "expired rule":
@@ -48,9 +44,7 @@ func TestGrantedLandingRetryCurrentCapacity(t *testing.T) {
 				}
 				return grantCapacityAvailable(f, at), nil
 			})
-			// The daily quota is gone (cleanup wave 1): a spent one no
-			// longer holds a granted landing back.
-			if err != nil || ready != (name == "released between scans" || name == "quota exhausted") {
+			if err != nil || ready != (name == "released between scans") {
 				t.Fatal("incorrect capacity wakeup", ready, err)
 			}
 			if ready && g.due("op/grant", at.Add(30*time.Second)) {

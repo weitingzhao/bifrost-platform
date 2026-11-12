@@ -203,7 +203,8 @@ var bodies = map[string][]field{
 		{"check_value", kAny, true},
 		// landing_gate: on a main_intent, what the live second gate decided
 		// on (landing_live.go, review 662 N-02): the rule version, the
-		// decision time, the quota day and the CI run.
+		// decision time and the CI run (quota_day on gates written before
+		// cleanup wave 1).
 		{"landing_gate", kAny, true},
 		{"landing_grant_request", kAny, true},
 		// landing_grant / landing_grant_revoked / landing_grant_use: a D-tier

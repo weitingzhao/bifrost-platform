@@ -202,14 +202,6 @@ func landingFactsGate(ctx context.Context, tx pgx.Tx, src LandingSource, environ
 			}
 		}
 	}
-	quota, err := LandingState(ctx, tx, "landing-quota:"+f.Tenant+":"+now.UTC().Format("2006-01-02"))
-	if err != nil {
-		return f, nil, err
-	}
-	f.ReservedToday = len(quota.Reservations)
-	if _, reserved := quota.Reservations[taskID]; reserved {
-		f.ReservedToday--
-	}
 	if src.Result == nil || src.History == nil {
 		return f, nil, fmt.Errorf("landing source unavailable")
 	}

@@ -50,9 +50,6 @@ func TestLiveGateRefusesLateChanges(t *testing.T) {
 			if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase == "main_intent" {
 				t.Fatal("an intent after", c.name)
 			}
-			if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
-				t.Fatal("reserved after", c.name, q.Reservations)
-			}
 		})
 	}
 }

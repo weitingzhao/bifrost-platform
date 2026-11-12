@@ -210,11 +210,6 @@ func (c *c5) phase(t *testing.T) string {
 	return p
 }
 
-func (c *c5) reservations(t *testing.T) int {
-	t.Helper()
-	return len(landingState(t, c.w, "landing-quota:dev:"+c.at.Format("2006-01-02")).Reservations)
-}
-
 func refusedWith(t *testing.T, err error, code string) {
 	t.Helper()
 	if err == nil || !strings.Contains(err.Error(), code) {
@@ -255,8 +250,8 @@ func TestC5GrantWrittenAndConsumed(t *testing.T) {
 	var use string
 	ok(t, c.w.rt.QueryRow(ctx, `SELECT body_json->'landing_grant_use'->>'grant_id' FROM agentrt.event WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent'`,
 		landingRepoStream).Scan(&use))
-	if use != g.GrantID || c.phase(t) != "main_intent" || c.reservations(t) != 1 {
-		t.Fatal("consumption", use, c.phase(t), c.reservations(t))
+	if use != g.GrantID || c.phase(t) != "main_intent" {
+		t.Fatal("consumption", use, c.phase(t))
 	}
 	usable, err = store.HasUsableLandingGrant(ctx, c.w.rt, c.op)
 	ok(t, err)
@@ -413,7 +408,7 @@ func TestC5GrantStopsWhenTheEntryGoes(t *testing.T) {
 	c.grant(t, store.ActionCoreLanding)
 	enableGrants(t, c.w, c.signer, 2, false)
 	// Without the entry the change is floor again (R-03), grant or not.
-	if _, d := c.gate(t); d.Allowed || d.Reason != "floor" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
+	if _, d := c.gate(t); d.Allowed || d.Reason != "floor" || c.phase(t) != "awaiting_grant" {
 		t.Fatalf("consumed without the entry: %+v", d)
 	}
 	if g, err := store.UsableLandingGrant(ctx, c.w.rt, c.op); err != nil || g != "" {
@@ -447,8 +442,8 @@ func TestC5T23NewRuleCheckNeedsANewGrant(t *testing.T) {
 	tighter := strings.Replace(c5RuleBody, `allow: ["console/src/components/**/*.tsx"]`, `allow: ["console/src/components/**/*.tsx", "api/**"]`, 1)
 	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, tighter))))
 	_, d := c.gate(t)
-	if d.Allowed || d.Reason != "grant_insufficient" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
-		t.Fatalf("%+v %s %d", d, c.phase(t), c.reservations(t))
+	if d.Allowed || d.Reason != "grant_insufficient" || c.phase(t) != "awaiting_grant" {
+		t.Fatalf("%+v %s", d, c.phase(t))
 	}
 	st, err := store.ReadLandingWait(ctx, c.w.rt, c.op)
 	ok(t, err)

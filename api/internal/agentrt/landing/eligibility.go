@@ -47,7 +47,7 @@ type Facts struct {
 	// UsedPlans: every plan task of the mission accepted as used ("plan
 	// used:"), in no order. A newer plan does not stale an older one's tasks.
 	UsedPlans                                                        []string
-	ReservedToday, OtherInFlight                                     int
+	OtherInFlight                                                    int
 	MissionVersion, StepVersion                                      int
 	GoalTask, NoMerge, SingleCommit, DependenciesEffective, Terminal bool
 	AcceptedAt, MissionCreated, EnabledAt                            time.Time

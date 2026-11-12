@@ -80,10 +80,6 @@ func TestReview704PendingDependencyDoesNotHideFloorPG(t *testing.T) {
 					if writes != 0 {
 						t.Fatal("floor produced work", writes)
 					}
-					quota := landingState(t, w, "landing-quota:dev:"+time.Now().UTC().Format("2006-01-02"))
-					if len(quota.Reservations) != 0 {
-						t.Fatal("floor reserved quota")
-					}
 				})
 			}
 		}

@@ -131,10 +131,6 @@ func TestDrillFinalGateAndRehearsalDatabase(t *testing.T) {
 			if o.Phase != "rehearsed" || o.EverLanded || o.Active() || o.BlocksClaim() || o.Reservable(task) {
 				t.Fatal(o)
 			}
-			quota := landingState(t, w, "landing-quota:dev:"+now.UTC().Format("2006-01-02"))
-			if len(quota.Reservations) != 0 {
-				t.Fatal("drill spent quota")
-			}
 			prod := controller.Controller{DB: w.rt, Env: "prod"}
 			_, d, e := prod.LandingDecision(ctx, src, task, "", "claim", now)
 			ok(t, e)

@@ -13,7 +13,7 @@ import (
 )
 
 // S3 B1 / B6 (CUT §2.5 steps 6–7, §11.4): the live second gate writes
-// reserved and main_intent only when every check passes; the push result is
+// main_intent only when every check passes; the push result is
 // recorded under the stream lock; a denied push stops the repository.
 
 // liveReady is a live operation of goalDrill's root at branch_pushed, R on
@@ -51,9 +51,9 @@ func observed(prepared time.Time) func(context.Context, landing.Operation) (stor
 	}
 }
 
-// Serial: FreezeEventClock. Every check passes: reserved on the day's quota
-// stream and main_intent on the repository stream, an Authorization with
-// the intent's absolute deadline.
+// Serial: FreezeEventClock. Every check passes: main_intent on the
+// repository stream, an Authorization with the intent's absolute deadline;
+// no daily quota reservation and no quota_day any more (cleanup wave 1).
 func TestLiveGateAuthorizesOnce(t *testing.T) {
 	w, task, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
@@ -66,17 +66,17 @@ func TestLiveGateAuthorizesOnce(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_intent" {
 		t.Fatal(o.Phase)
 	}
-	q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02"))
-	if q.Reservations[task] != op {
-		t.Fatal("no reservation", q.Reservations)
+	if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
+		t.Fatal("a daily quota reservation written", q.Reservations)
 	}
 	// What the authorization rests on is on the intent (review 662 N-02).
 	var version int
-	var decided, day, run, created string
-	ok(t, w.rt.QueryRow(ctx, `SELECT (g->>'rule_version')::int, g->>'decided_at', g->>'quota_day', g->>'ci_run', g->>'ci_created_at'
-	  FROM (SELECT body_json->'landing_gate' AS g FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'main_intent') x`, landingRepoStream).Scan(&version, &decided, &day, &run, &created))
-	if version != auth.RuleVersion || decided != at.UTC().Format(time.RFC3339Nano) || day != auth.QuotaDay || run != "green" || created != prepared.Add(time.Minute).UTC().Format(time.RFC3339Nano) {
-		t.Fatal("landing_gate", version, decided, day, run, created)
+	var decided, run, created string
+	var hasDay bool
+	ok(t, w.rt.QueryRow(ctx, `SELECT (g->>'rule_version')::int, g->>'decided_at', g ? 'quota_day', g->>'ci_run', g->>'ci_created_at'
+	  FROM (SELECT body_json->'landing_gate' AS g FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'main_intent') x`, landingRepoStream).Scan(&version, &decided, &hasDay, &run, &created))
+	if version != auth.RuleVersion || decided != at.UTC().Format(time.RFC3339Nano) || hasDay || run != "green" || created != prepared.Add(time.Minute).UTC().Format(time.RFC3339Nano) || auth.Root != task {
+		t.Fatal("landing_gate", version, decided, hasDay, run, created)
 	}
 	// A second gate on the same operation authorizes nothing more.
 	_, d, err = store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
@@ -106,7 +106,7 @@ func TestLiveGateRefusesWithoutWriting(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			w, task, op, src, prepared := liveReady(t)
+			w, _, op, src, prepared := liveReady(t)
 			at := prepared.Add(10 * time.Minute)
 			defer store.FreezeEventClock(at)()
 			_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, func(context.Context, landing.Operation) (store.LiveObservation, error) {
@@ -119,16 +119,13 @@ func TestLiveGateRefusesWithoutWriting(t *testing.T) {
 			if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
 				t.Fatal("written on a refusal", o.Phase)
 			}
-			if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
-				t.Fatal("reserved on a refusal", q.Reservations, task)
-			}
 		})
 	}
 }
 
 // Serial: FreezeEventClock. A version that takes effect during the gate's
-// reads refuses it (CUT §9.7); the UTC day turning during them rolls the
-// whole gate back (review 660 R-03).
+// reads refuses it (CUT §9.7); the UTC day turning during them no longer
+// rolls the gate back (cleanup wave 1: no daily quota to settle).
 func TestLiveGateDecidesAfterItsReads(t *testing.T) {
 	w, _, op, src, prepared := liveReady(t)
 	start := prepared.Add(10 * time.Minute)
@@ -151,15 +148,16 @@ func TestLiveGateDecidesAfterItsReads(t *testing.T) {
 	// not the six-hour bound, changes during the read.
 	start2 := prepared2.Add(10 * time.Minute)
 	store.FreezeEventClock(start2)
-	_, _, err = store.AuthorizeLandingPush(ctx, w2.rt, src2, op2, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
+	_, d, err = store.AuthorizeLandingPush(ctx, w2.rt, src2, op2, func(c context.Context, o landing.Operation) (store.LiveObservation, error) {
 		store.FreezeEventClock(midnight.Add(time.Second))
-		return store.LiveObservation{Main: commitA, CI: landing.CIRun{R: commitB, Status: "Succeeded", CreatedAt: prepared2.Add(time.Minute)}}, nil
+		return store.LiveObservation{Main: commitA, CI: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: prepared2.Add(time.Minute)}}, nil
 	})
-	if !errors.Is(err, store.ErrLandingDayChanged) {
-		t.Fatal("the day turned during the gate", err)
+	ok(t, err)
+	if !d.Allowed {
+		t.Fatalf("the day turning during the gate refused it: %+v", d)
 	}
-	if o := landingState(t, w2, landingRepoStream).Operations[op2]; o.Phase != "branch_pushed" {
-		t.Fatal("written across midnight", o.Phase)
+	if o := landingState(t, w2, landingRepoStream).Operations[op2]; o.Phase != "main_intent" {
+		t.Fatal("no intent across midnight", o.Phase)
 	}
 }
 
@@ -206,30 +204,28 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	_ = task
 }
 
-// Serial: SetHook, FreezeEventClock. Midnight between the reservation and
-// main_intent: the whole gate rolls back, no reservation on the old day and
-// no intent (review 661 R-03).
-func TestLiveGateMidnightBetweenItsRecords(t *testing.T) {
+// Serial: SetHook, FreezeEventClock. Midnight between the gate's decision
+// and main_intent no longer rolls the gate back (cleanup wave 1: the
+// review 661 R-03 rollback only kept the daily quota on one day).
+func TestLiveGateMidnightBeforeItsIntent(t *testing.T) {
 	next := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
-	w, task, op, src, prepared := liveReady(t, next.Add(-10*time.Minute-time.Second))
+	w, _, op, src, prepared := liveReady(t, next.Add(-10*time.Minute-time.Second))
 	// The gate starts at 23:59:59 UTC, ten minutes after preparation.
-	// The day turns between the reservation and main_intent.
+	// The day turns just before main_intent.
 	start := prepared.Add(10 * time.Minute)
 	defer store.FreezeEventClock(start)()
 	defer store.SetHook(func(point, _ string) {
-		if point == "landing gate: reserved" {
+		if point == "landing gate: before main_intent" {
 			store.FreezeEventClock(next.Add(time.Second))
 		}
 	})()
-	_, _, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
-	if !errors.Is(err, store.ErrLandingDayChanged) {
-		t.Fatal("midnight between the gate's records", err)
+	_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
+	ok(t, err)
+	if !d.Allowed {
+		t.Fatalf("midnight before the intent refused the gate: %+v", d)
 	}
-	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
-		t.Fatal("an intent across midnight", o.Phase)
-	}
-	if q := landingState(t, w, "landing-quota:dev:"+start.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
-		t.Fatal("a reservation kept from a rolled-back gate", q.Reservations, task)
+	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_intent" {
+		t.Fatal("no intent across midnight", o.Phase)
 	}
 }
 
@@ -249,7 +245,7 @@ func tamperAdmin(t *testing.T, w *world, q string, args ...any) {
 
 // Serial: SetHook, FreezeEventClock. A plan change that rebinds the task to
 // another mission after the gate's first read and before its task lock
-// rolls the gate back: no reservation, no intent (review 662 B-01).
+// rolls the gate back: no intent (review 662 B-01).
 func TestLiveGateRefusesARebindDuringIt(t *testing.T) {
 	w, task, op, src, prepared := liveReady(t)
 	w.goalMission(t, "M-4")
@@ -267,9 +263,6 @@ func TestLiveGateRefusesARebindDuringIt(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
 		t.Fatal("an intent after a rebind", o.Phase)
 	}
-	if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
-		t.Fatal("a reservation after a rebind", q.Reservations)
-	}
 }
 
 // Serial: FreezeEventClock. The root's six hours run out during the gate's
@@ -278,11 +271,9 @@ func TestLiveGateRefusesARebindDuringIt(t *testing.T) {
 func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 	for _, during := range []bool{true, false} {
 		t.Run(map[bool]string{true: "during the reads", false: "before them"}[during], func(t *testing.T) {
-			// The read ends at 23:59:59 on the same UTC day. A wall-clock
-			// prepared time in [23:57, 23:59) used to cross midnight here,
-			// triggering ErrLandingDayChanged before the bound decision.
+			// The read ends at 23:59:59 on the same UTC day.
 			preparedAt := time.Date(2026, 10, 28, 23, 56, 59, 0, time.UTC)
-			w, task, op, src, prepared := liveReady(t, preparedAt)
+			w, _, op, src, prepared := liveReady(t, preparedAt)
 			// The root was claimed six hours less two minutes before prepared.
 			first := prepared.Add(-landing.ClaimWindow + 2*time.Minute)
 			tamperAdmin(t, w, `UPDATE agentrt.event SET at = $2 WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'claimed' AND body_json->'landing'->>'op' = $3`, landingRepoStream, first, op)
@@ -302,18 +293,16 @@ func TestLiveGateRefusesARootPastItsWindow(t *testing.T) {
 			if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
 				t.Fatal("written past the window", o.Phase)
 			}
-			if q := landingState(t, w, "landing-quota:dev:"+prepared.Add(3*time.Minute).UTC().Format("2006-01-02")); len(q.Reservations) != 0 {
-				t.Fatal("reserved past the window", q.Reservations, task)
-			}
 		})
 	}
 }
 
 // Serial: FreezeEventClock. TD-456's old wall-clock case, reproduced without
 // waiting for midnight: a read crosses both the UTC day and the root bound.
-// The day-change error wins; the bound-only test above stays on one day.
-func TestLiveGateDayChangePrecedesRootWindow(t *testing.T) {
-	w, task, op, src, prepared := liveReady(t, time.Date(2026, 10, 28, 23, 58, 0, 0, time.UTC))
+// With no daily quota (cleanup wave 1) the day change decides nothing: the
+// root bound refuses, as on one day.
+func TestLiveGateRootWindowAcrossMidnight(t *testing.T) {
+	w, _, op, src, prepared := liveReady(t, time.Date(2026, 10, 28, 23, 58, 0, 0, time.UTC))
 	first := prepared.Add(-landing.ClaimWindow + 2*time.Minute)
 	tamperAdmin(t, w, `UPDATE agentrt.event SET at=$2 WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='claimed' AND body_json->'landing'->>'op'=$3`, landingRepoStream, first, op)
 	start, finish := prepared.Add(time.Minute), prepared.Add(3*time.Minute)
@@ -324,16 +313,11 @@ func TestLiveGateDayChangePrecedesRootWindow(t *testing.T) {
 		store.FreezeEventClock(finish)
 		return observed(prepared)(c, o)
 	})
-	if !read || !errors.Is(err, store.ErrLandingDayChanged) || d.Allowed {
+	if !read || err != nil || d.Allowed || d.Reason != "bound" {
 		t.Fatalf("crossed both boundaries: read=%t decision=%+v err=%v", read, d, err)
 	}
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "branch_pushed" {
-		t.Fatal("written across midnight", o.Phase)
-	}
-	for _, at := range []time.Time{start, finish} {
-		if q := landingState(t, w, "landing-quota:dev:"+at.Format("2006-01-02")); len(q.Reservations) != 0 {
-			t.Fatal("reserved across midnight", q.Reservations, task)
-		}
+		t.Fatal("written past the root window", o.Phase)
 	}
 }
 
@@ -343,7 +327,7 @@ func TestLandingGateRecordIsChecked(t *testing.T) {
 	t.Parallel()
 	gate := func(kv ...any) map[string]any {
 		m := map[string]any{"v": store.LandingGateVersion, "op": "land:g:1", "rule_version": 1, "decided_at": "2026-10-28T15:00:00Z",
-			"quota_day": "2026-10-28", "ci_run": "ci-1", "ci_created_at": "2026-10-28T14:59:00Z"}
+			"ci_run": "ci-1", "ci_created_at": "2026-10-28T14:59:00Z"}
 		for i := 0; i+1 < len(kv); i += 2 {
 			m[kv[i].(string)] = kv[i+1]
 		}
@@ -354,6 +338,11 @@ func TestLandingGateRecordIsChecked(t *testing.T) {
 	}
 	if why := store.BadLandingGate(gate("rule_version", float64(2))); why != "" {
 		t.Fatal("a decoded record refused:", why)
+	}
+	// History: gates written before cleanup wave 1 carry the legacy
+	// quota_day; they still read (stg_gate.go reads stored gates with this).
+	if why := store.BadLandingGate(gate("quota_day", "2026-10-28", "rule_version", float64(3))); why != "" {
+		t.Fatal("a legacy record with quota_day refused:", why)
 	}
 	for name, g := range map[string]map[string]any{
 		"version":      gate("v", "2"),
@@ -389,19 +378,17 @@ func TestLandingGateRecordIsChecked(t *testing.T) {
 }
 
 // Serial: FreezeEventClock. Review 664 N-01: landing_gate must agree with
-// its intent's day and the operation's recorded CI success, not only with
-// itself.
+// its intent's time and the operation's recorded CI success, not only with
+// itself. A legacy gate with its quota_day still appends.
 func TestLandingGateAgreesWithItsIntent(t *testing.T) {
 	w, task, op, _, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
 	defer store.FreezeEventClock(at)()
 	created := prepared.Add(time.Minute).UTC().Format(time.RFC3339Nano)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "run", "ci-real", "status", "Succeeded", "R", commitB, "created_at", created)))
-	ok(t, appendLanding(w, "landing-quota:dev:"+at.UTC().Format("2006-01-02"), newLandingRecord(op, "reserved", "root", task)))
-	day := at.UTC().Format("2006-01-02")
 	gate := func(kv ...any) map[string]any {
 		m := map[string]any{"v": store.LandingGateVersion, "op": op, "rule_version": 1, "decided_at": at.UTC().Format(time.RFC3339Nano),
-			"quota_day": day, "ci_run": "ci-real", "ci_created_at": created}
+			"ci_run": "ci-real", "ci_created_at": created}
 		for i := 0; i+1 < len(kv); i += 2 {
 			m[kv[i].(string)] = kv[i+1]
 		}
@@ -414,9 +401,7 @@ func TestLandingGateAgreesWithItsIntent(t *testing.T) {
 			return err
 		})
 	}
-	prev := at.Add(-24 * time.Hour).UTC()
 	for name, g := range map[string]map[string]any{
-		"another day":      gate("decided_at", prev.Format(time.RFC3339Nano), "quota_day", prev.Format("2006-01-02"), "ci_created_at", prepared.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano)),
 		"after the intent": gate("decided_at", at.Add(time.Second).UTC().Format(time.RFC3339Nano)),
 		"another run":      gate("ci_run", "ci-not-the-success"),
 		"another time":     gate("ci_created_at", prepared.Add(2*time.Minute).UTC().Format(time.RFC3339Nano)),
@@ -426,7 +411,7 @@ func TestLandingGateAgreesWithItsIntent(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	ok(t, intent(gate()))
+	ok(t, intent(gate("quota_day", at.UTC().Format("2006-01-02"))))
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "main_intent" {
 		t.Fatal(o.Phase)
 	}

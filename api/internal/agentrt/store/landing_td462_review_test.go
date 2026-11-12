@@ -107,7 +107,7 @@ func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 		td462AtMain(t, c, busy)
 	}}
 	ok(t, a.LandingDrillPass(ctx))
-	if busy == "" || *opens != 1 || len(pA.pushes) != 0 || c.reservations(t) != 0 {
+	if busy == "" || *opens != 1 || len(pA.pushes) != 0 {
 		t.Fatal("A did not hit the unseen in-flight blocker", busy, *opens, pA.pushes)
 	}
 	store.FreezeEventClock(c.at.Add(2 * time.Second))
@@ -117,7 +117,7 @@ func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 	}
 	store.FreezeEventClock(c.at.Add(15 * time.Second))
 	ok(t, a.LandingDrillPass(ctx))
-	if *opens < 2 || len(pA.pushes) != 1 || len(pB.pushes) != 0 || c.phase(t) != "main_result" || c.reservations(t) != 1 || td462GrantUses(t, c, grant.GrantID) != 1 {
+	if *opens < 2 || len(pA.pushes) != 1 || len(pB.pushes) != 0 || c.phase(t) != "main_result" || td462GrantUses(t, c, grant.GrantID) != 1 {
 		t.Fatal("A did not push W exactly once on the next scan", *opens, pA.pushes, pB.pushes)
 	}
 	store.FreezeEventClock(c.at.Add(30 * time.Second))
@@ -241,7 +241,7 @@ func TestTD462WindowProbeAndFinalGatePG(t *testing.T) {
 			if race == "open" {
 				want = 1
 			}
-			if *opens != 2 || len(p.pushes) != want || c.reservations(t) != want || td462GrantUses(t, c, grant.GrantID) != want {
+			if *opens != 2 || len(p.pushes) != want || td462GrantUses(t, c, grant.GrantID) != want {
 				t.Fatal("probe bypassed final gate or failed to wake", race, *opens, p.pushes)
 			}
 		})

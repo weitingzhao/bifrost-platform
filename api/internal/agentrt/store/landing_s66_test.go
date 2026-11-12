@@ -253,9 +253,9 @@ func TestS66InfraCardAndMissionProjectionPG(t *testing.T) {
 // Serial: signing, clock, hooks and the local Git fixture. T50: both
 // repositories individually pass the gate and push their own bare remote;
 // concurrently, both land although the rule states a legacy daily quota of
-// one (cleanup wave 1: the quota bounds nothing). These are real
-// transactions on two connections, with PostgreSQL proving the second waits
-// on the quota lock. No production remote is used.
+// one (cleanup wave 1: the quota bounds nothing, and no tenant-wide quota
+// lock serializes the two gates). These are real transactions on two
+// connections. No production remote is used.
 func TestS66T50DualRemotePG(t *testing.T) {
 	for _, repos := range [][]string{{platformRepo}, {infraRepo}, landing.LandingRepoNames()} {
 		t.Run(strings.Join(repos, "+"), func(t *testing.T) {
@@ -309,11 +309,15 @@ func TestS66T50DualRemotePG(t *testing.T) {
 					t.Fatal("first gate timeout")
 				}
 				safego.Go("s66.quota.second", func() { b <- gate(dbB, infraRepo) })
-				// The first transaction has not committed; a repository-local
-				// quota would allow the second to finish and this assertion fails.
-				w.waitFor(t, "agentrt.event_stream", time.Now().Add(10*time.Second))
+				// The first transaction has not committed; the second
+				// repository's gate no longer waits for it.
+				select {
+				case results[infraRepo] = <-b:
+				case <-time.After(30 * time.Second):
+					t.Fatal("the second repository's gate waited on the first")
+				}
 				unblock()
-				results[platformRepo], results[infraRepo] = <-a, <-b
+				results[platformRepo] = <-a
 			}
 			pushes := map[string]int{}
 			for _, repo := range repos {
@@ -334,10 +338,6 @@ func TestS66T50DualRemotePG(t *testing.T) {
 				}
 				_, err = store.RecordPushResult(ctx, w.rt, r.auth, "ok", "agentrt-lander")
 				ok(t, err)
-			}
-			q := landingState(t, w, "landing-quota:dev:"+at.Add(2*time.Minute).Format("2006-01-02"))
-			if len(q.Reservations) != len(repos) {
-				t.Fatal("the legacy quota of one held a landing back", q.Reservations)
 			}
 			for _, repo := range landing.LandingRepoNames() {
 				want, wantPush := git.bases[repo], 0

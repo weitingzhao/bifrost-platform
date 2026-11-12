@@ -167,10 +167,9 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 			action, err = restarted.LandingDrillCI(ctx, sources, op, at, infraRepo)
 			ok(t, err)
 			state := landingState(t, w, infraStream).Operations[op]
-			quota := landingState(t, w, "landing-quota:dev:"+final.Format("2006-01-02"))
 			if mode == "green" {
-				if action.Kind != "ready" || state.Phase != "main_result" || pushes != 1 || quota.Reservations[root] != op || ciReads != 2 {
-					t.Fatal("green control", action, state.Phase, pushes, quota, ciReads)
+				if action.Kind != "ready" || state.Phase != "main_result" || pushes != 1 || ciReads != 2 {
+					t.Fatal("green control", action, state.Phase, pushes, ciReads)
 				}
 				if state.CI.String("uid") != "s65-later-uid" || !reflect.DeepEqual(state.CI["results"], stringsToAny65(results)) {
 					t.Fatal("CI evidence lost", state.CI)
@@ -179,8 +178,8 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 					t.Fatal("main did not land")
 				}
 			} else {
-				if pushes != 0 || len(quota.Reservations) != 0 || state.Phase == "main_intent" || state.Phase == "main_result" {
-					t.Fatal("bad CI authorized push", mode, action, state.Phase, pushes, quota)
+				if pushes != 0 || state.Phase == "main_intent" || state.Phase == "main_result" {
+					t.Fatal("bad CI authorized push", mode, action, state.Phase, pushes)
 				}
 				if mode == "failed" || mode == "wrong result" {
 					if action.Kind != "failed" || action.Why != "ci_red" {

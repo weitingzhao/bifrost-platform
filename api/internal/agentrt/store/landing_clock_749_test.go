@@ -60,8 +60,7 @@ func TestReview749OpenLandingTimelinePG(t *testing.T) {
 	if fence.IsZero() || fence.After(databaseNow) || missionCreated.Before(fence) || taskCreated.Before(fence) || accepted.Before(fence) || !x.at.After(taskCreated) {
 		t.Fatalf("fixture ordering: fence=%s database_now=%s mission=%s task=%s accepted=%s gate=%s", fence, databaseNow, missionCreated, taskCreated, accepted, x.at)
 	}
-	q := landingState(t, x.w, "landing-quota:dev:"+x.at.UTC().Format("2006-01-02"))
-	if q.Reservations[x.root] != x.op || x.read(t).Batches[b5Batch].Phase != "OPEN" {
-		t.Fatal("landing did not reserve quota and admit the STG batch", q.Reservations)
+	if x.read(t).Batches[b5Batch].Phase != "OPEN" {
+		t.Fatal("landing did not admit the STG batch")
 	}
 }

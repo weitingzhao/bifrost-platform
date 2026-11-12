@@ -101,7 +101,7 @@ func TestC5B01StrictCIThroughTheReader(t *testing.T) {
 		bad := greenGrantRun(t, c)
 		variants["missing siblings"](t, bad)
 		strictCI(c, bad)
-		if _, d := c.gate(t); d.Allowed || c.reservations(t) != 0 || c.phase(t) != "awaiting_grant" {
+		if _, d := c.gate(t); d.Allowed || c.phase(t) != "awaiting_grant" {
 			t.Fatalf("pushed on loose CI: %+v", d)
 		}
 		strictCI(c, greenGrantRun(t, c))
@@ -221,8 +221,8 @@ func TestC5R06RuleClearsAWaitingOperation(t *testing.T) {
 	var clear, use bool
 	ok(t, c.w.rt.QueryRow(ctx, `SELECT body_json ? 'landing_rule_clear', body_json ? 'landing_grant_use' FROM agentrt.event
 	  WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent'`, landingRepoStream).Scan(&clear, &use))
-	if !clear || use || c.reservations(t) != 1 {
-		t.Fatal("main_intent", clear, use, c.reservations(t))
+	if !clear || use {
+		t.Fatal("main_intent", clear, use)
 	}
 }
 

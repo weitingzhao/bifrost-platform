@@ -97,18 +97,17 @@ func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
 				restore()
 				ok(t, err)
 				phase := landingState(t, w, landingRepoStream).Operations[op].Phase
-				quota := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02"))
 				if !reject {
-					if !d.Allowed || phase != "main_intent" || len(quota.Reservations) != 1 {
-						t.Fatal("control", d, phase, quota)
+					if !d.Allowed || phase != "main_intent" {
+						t.Fatal("control", d, phase)
 					}
 				} else {
 					// Grants are not enabled in this world: a core change is
 					// floor at the final gate too (review 694 R-03); with
 					// them it waits (TestC4*, TestC5*).
 					wantReason, wantPhase := "floor", "branch_pushed"
-					if d.Allowed || d.Reason != wantReason || phase != wantPhase || len(quota.Reservations) != 0 {
-						t.Fatal(d, phase, quota)
+					if d.Allowed || d.Reason != wantReason || phase != wantPhase {
+						t.Fatal(d, phase)
 					}
 				}
 			}

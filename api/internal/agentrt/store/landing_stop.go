@@ -88,11 +88,3 @@ func authRepo(auth Authorization) []string {
 	}
 	return []string{auth.Repo}
 }
-
-func landingReservationBody(repo, op, root string) map[string]any {
-	b := map[string]any{"text": "Landing quota reserved", "landing": map[string]any{"v": landing.Version, "kind": "reserved", "op": op, "root": root}}
-	if repo != "bifrost-platform" {
-		b["landing_repo"] = repo
-	}
-	return b
-}

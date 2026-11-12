@@ -88,10 +88,6 @@ func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
 	if o.Active() || o.Terminal() || !slices.Contains(o.Soft, "core") {
 		t.Fatal(o)
 	}
-	quota := landingState(t, w, "landing-quota:dev:"+at.Format("2006-01-02"))
-	if len(quota.Reservations) != 0 {
-		t.Fatal(quota)
-	}
 	var before int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1`, landingRepoStream).Scan(&before))
 	for i := 0; i < 3; i++ {

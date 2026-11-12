@@ -58,6 +58,6 @@ func ReadBoundaryPrecheck(ctx context.Context, db DB, sources GrantSources, task
 		out["explanation"], out["reason_registered"] = "", true
 	}
 	out["candidate"], out["base"], out["detail"] = f.A, f.Base, d.Detail
-	out["other_in_flight"], out["reserved_today"] = f.OtherInFlight, f.ReservedToday
+	out["other_in_flight"] = f.OtherInFlight
 	return out, nil
 }

@@ -65,7 +65,7 @@ func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
 		c := c5Prepared(t, openLaneSource(1, openLanePath), false, true, openLaneAccept(t))
 		store.FreezeEventClock(c.at)
 		auth, d := c.gate(t)
-		if !d.Allowed || auth.R != commitB || c.phase(t) != "main_intent" || c.reservations(t) != 1 {
+		if !d.Allowed || auth.R != commitB || c.phase(t) != "main_intent" {
 			t.Fatal(d, auth, c.phase(t))
 		}
 		if clear, _, use := openLaneIntent(t, c); clear || use || openLaneApprovals(t, c) != 0 {
@@ -89,7 +89,7 @@ func TestOpenLaneRedCIDoesNotLand(t *testing.T) {
 	c.ci.Status = "Failed"
 	store.FreezeEventClock(c.at)
 	auth, d := c.gate(t)
-	if d.Allowed || d.Reason != "ci" || auth.Op != "" || c.phase(t) != "branch_pushed" || c.reservations(t) != 0 {
+	if d.Allowed || d.Reason != "ci" || auth.Op != "" || c.phase(t) != "branch_pushed" {
 		t.Fatal(d, auth, c.phase(t))
 	}
 }
@@ -185,7 +185,7 @@ func TestOpenLaneV2CoreWaitClearsAndSettlesItsApproval(t *testing.T) {
 	store.FreezeEventClock(c.at)
 	_, d, err := store.RecheckWaitingLanding(ctx, c.w.rt, c.src, c.op, c.observe())
 	ok(t, err)
-	if !d.Allowed || c.phase(t) != "main_intent" || c.reservations(t) != 1 {
+	if !d.Allowed || c.phase(t) != "main_intent" {
 		t.Fatal(d, c.phase(t))
 	}
 	clear, checks, use := openLaneIntent(t, c)

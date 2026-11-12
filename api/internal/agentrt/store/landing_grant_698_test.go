@@ -187,7 +187,7 @@ func TestC5R02NewerRunEndsTheGrant(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
 			c.grant(t, store.ActionCoreLanding)
 			c.ci.Run, c.ci.UID, c.ci.Status, c.ci.CreatedAt = "newer", "uid-newer", status, c.ci.CreatedAt.Add(time.Minute)
-			if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" || c.reservations(t) != 0 {
+			if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" {
 				t.Fatalf("%+v", d)
 			}
 			st, err := store.ReadLandingWait(ctx, c.w.rt, c.op)

@@ -243,8 +243,6 @@ type LandingGrantMaterial struct {
 	PatchSize       int                  `json:"patch_size"`
 	CompareURL      string               `json:"compare_url"`
 	GiteaNotice     string               `json:"gitea_notice"`
-	QuotaReserved   int                  `json:"quota_reserved_today"`
-	QuotaNote       string               `json:"quota_note"`
 	STGNotice       string               `json:"stg_notice,omitempty"`
 	Grants          []LandingGrantStatus `json:"grants"`
 	Problems        []string             `json:"problems"`
@@ -538,8 +536,6 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 	case grantCIProblem(d.op, d.ciKey, x.ci, now):
 		problem("ci_not_green")
 	}
-	m.QuotaReserved = f.ReservedToday
-	m.QuotaNote = "today's count as of this read; the push checks it again"
 	m.CompareURL = fmt.Sprintf("%s/bifrost/%s/compare/%s...%s", GiteaWebBase, f.Repo, d.op.M0, d.op.R)
 	m.GiteaNotice = "Gitea's own page is not rendered by this platform's code"
 	m.Title = "Soft guardrail change"

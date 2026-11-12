@@ -261,7 +261,7 @@ func TestC5T35ExpiryAtTheDecision(t *testing.T) {
 	}
 	_, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, slow)
 	ok(t, err)
-	if d.Allowed || d.Reason != "grant_expired" || c.phase(t) != "awaiting_grant" || c.reservations(t) != 0 {
+	if d.Allowed || d.Reason != "grant_expired" || c.phase(t) != "awaiting_grant" {
 		t.Fatalf("%+v", d)
 	}
 }
@@ -501,7 +501,7 @@ func TestC5GrantStaleOnOtherEvidence(t *testing.T) {
 	c.grant(t, store.ActionCoreLanding)
 	ci := c.ci
 	c.ci.Run, c.ci.UID, c.ci.CreatedAt = "green-again", "uid-again", ci.CreatedAt.Add(time.Minute)
-	if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" || c.reservations(t) != 0 || c.phase(t) != "awaiting_grant" {
+	if _, d := c.gate(t); d.Allowed || d.Reason != "grant_stale" || c.phase(t) != "awaiting_grant" {
 		t.Fatalf("another CI run: %+v", d)
 	}
 	if st, _ := store.ReadLandingWait(ctx, c.w.rt, c.op); st.Shown != "grant_refused" || st.GrantRefused != "grant_stale" {
@@ -515,7 +515,7 @@ func TestC5GrantStaleOnOtherEvidence(t *testing.T) {
 	d := c5Wait(t, c5Core, false, true)
 	d.grant(t, store.ActionCoreLanding)
 	d.patch.SHA256 = strings.Repeat("8", 64)
-	if _, dec := d.gate(t); dec.Allowed || dec.Reason != "grant_stale" || d.reservations(t) != 0 {
+	if _, dec := d.gate(t); dec.Allowed || dec.Reason != "grant_stale" {
 		t.Fatalf("another patch: %+v", dec)
 	}
 }

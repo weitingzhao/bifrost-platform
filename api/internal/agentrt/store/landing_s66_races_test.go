@@ -192,10 +192,11 @@ func TestS66T52CloseAgainstSecondGatePG(t *testing.T) {
 	}
 }
 
-// Serial: the UTC clock jumps between reserved and main_intent. T55 retains
-// the existing platform coverage and proves the infra transaction also
-// rolls back its quota and intent, then can rejudge on the new day.
-func TestS66T55InfraMidnightRollbackPG(t *testing.T) {
+// Serial: the UTC clock jumps past midnight just before main_intent. T55
+// used to prove the infra transaction rolled back its quota and intent;
+// with no daily quota (cleanup wave 1) the gate commits on its first pass,
+// reading its evidence once.
+func TestS66T55InfraMidnightPG(t *testing.T) {
 	midnight := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 	w, at := s66World(t, true, 5, midnight.Add(-5*time.Minute))
 	root := s66Root(t, w, "M-3", infraRepo)
@@ -220,17 +221,11 @@ func TestS66T55InfraMidnightRollbackPG(t *testing.T) {
 	start := at.Add(2 * time.Minute)
 	next := start.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 	store.FreezeEventClock(start)
-	reserved, intents := 0, 0
+	intents := 0
 	restore := store.SetHook(func(point, id string) {
-		if id != op {
-			return
-		}
-		if point == "landing gate: reserved" {
-			reserved++
-			store.FreezeEventClock(next.Add(time.Second))
-		}
-		if point == "landing gate: before main_intent" {
+		if id == op && point == "landing gate: before main_intent" {
 			intents++
+			store.FreezeEventClock(next.Add(time.Second))
 		}
 	})
 	defer restore()
@@ -251,43 +246,14 @@ func TestS66T55InfraMidnightRollbackPG(t *testing.T) {
 	}
 	a, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observe, infraRepo)
 	restore()
-	if !errors.Is(err, store.ErrLandingDayChanged) || reserved != 1 || intents != 1 || a != (store.Authorization{}) || d.Allowed {
-		t.Fatal("did not roll back between records", reserved, intents, a, d, err)
-	}
-	if landingState(t, w, infraStream).Operations[op].Phase != "branch_pushed" {
-		t.Fatal("intent survived rollback")
-	}
-	oldQuota := "landing-quota:dev:" + start.Format("2006-01-02")
-	newQuota := "landing-quota:dev:" + next.Format("2006-01-02")
-	for _, stream := range []string{oldQuota, newQuota} {
-		if len(landingState(t, w, stream).Reservations) != 0 {
-			t.Fatal("reservation survived rollback", stream)
-		}
-	}
-	var records int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE body_json->'landing'->>'op'=$1
-      AND body_json->'landing'->>'kind' IN ('ci_seen','reserved','main_intent')`, op).Scan(&records))
-	if records != 0 {
-		t.Fatal("gate records survived rollback", records)
+	ok(t, err)
+	if intents != 1 || !d.Allowed || a.Repo != infraRepo || a.Root != root || a.Op != op {
+		t.Fatal("midnight before the intent refused the gate", intents, a, d)
 	}
 	if resultReads != 1 || historyReads != 1 || observationReads != 1 {
-		t.Fatal("first gate skipped evidence", resultReads, historyReads, observationReads)
+		t.Fatal("the gate read its evidence more than once", resultReads, historyReads, observationReads)
 	}
-	// Retry the entire gate on the new day; its root is still within six hours.
-	store.FreezeEventClock(next.Add(time.Second))
-	a, d, err = store.AuthorizeLandingPush(ctx, w.rt, src, op, observe, infraRepo)
-	ok(t, err)
-	if !d.Allowed || a.QuotaDay != next.Format("2006-01-02") || a.Repo != infraRepo || a.Root != root || a.Op != op {
-		t.Fatal("stable-day control", a, d)
-	}
-	if resultReads != 2 || historyReads != 2 || observationReads != 2 {
-		t.Fatal("new-day gate did not reread evidence", resultReads, historyReads, observationReads)
-	}
-	if len(landingState(t, w, oldQuota).Reservations) != 0 {
-		t.Fatal("retry charged the old day")
-	}
-	q := landingState(t, w, newQuota)
-	if len(q.Reservations) != 1 || q.Reservations[root] != op || landingState(t, w, infraStream).Operations[op].Phase != "main_intent" {
-		t.Fatal("retry did not commit one new-day reservation and intent", q.Reservations)
+	if landingState(t, w, infraStream).Operations[op].Phase != "main_intent" {
+		t.Fatal("no intent across midnight")
 	}
 }

@@ -35,28 +35,21 @@ type Authorization struct {
 	IntentAt              time.Time
 	Deadline              time.Time
 	RuleVersion           int
-	QuotaDay              string
 }
-
-// ErrLandingDayChanged: the UTC day turned between the gate's locks and its
-// decision; the transaction rolls back whole and the next pass takes the
-// new day's quota lock first (review 660 R-03).
-var ErrLandingDayChanged = errors.New("landing gate: the UTC day changed during the gate")
 
 // AuthorizeLandingPush runs the live second gate for op in one transaction,
 // in the global lock order: capability (shared), the tenant's landing rule
-// (shared), the plan step, the task, the mission (FOR SHARE), the day's
-// quota stream, the repository stream. Under them it reads the facts (Git
+// (shared), the plan step, the task, the mission (FOR SHARE), the
+// repository stream. Under them it reads the facts (Git
 // included) and observes main, CI and the window, then takes the decision
 // time (CUT §9.7) and selects the rule again at it. It writes no intent unless
 // every check passes: the repository is not stopped (B6), the operation is a
 // live branch_pushed with R on M0, EligibleToPush, main is still M0, the
 // window is free, and R's latest CI, created after prepared, succeeded. Then
 // it records ci_seen when necessary. A core/pinned soft failure writes
-// awaiting_grant with no quota reservation. Otherwise it writes reserved on
-// the day's quota stream (once per root) and main_intent carrying
-// landing_gate (the rule version, the decision time, the quota day and that
-// CI: what the authorization rests on, review 662 N-02); and returns the
+// awaiting_grant. Otherwise it writes main_intent carrying landing_gate (the
+// rule version, the decision time and that CI: what the authorization rests
+// on, review 662 N-02); and returns the
 // Authorization, whose deadline counts from the intent's own time. A refusal is a Decision and no
 // error; the caller parks or fails the operation on its next pass.
 func AuthorizeLandingPush(ctx context.Context, db DB, src LandingSource, op string, observe func(context.Context, landing.Operation) (LiveObservation, error), repos ...string) (Authorization, landing.Decision, error) {
@@ -112,7 +105,6 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			return err
 		}
 		hook("landing gate: binding read", op)
-		day := DecisionAt().UTC().Format("2006-01-02")
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 			return err
 		}
@@ -120,10 +112,6 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			return err
 		}
 		if err = lockLandingBinding(ctx, tx, o.Task, tenant, step, mission); err != nil {
-			return err
-		}
-		quota := "landing-quota:" + tenant + ":" + day
-		if err = lockStream(ctx, tx, quota); err != nil {
 			return err
 		}
 		if err = lockStream(ctx, tx, stream); err != nil {
@@ -185,9 +173,6 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		// The reads above took as long as they took: decide now, on the
 		// rule in force now (CUT §9.7, review 656 B-B1).
 		final := DecisionAt()
-		if final.UTC().Format("2006-01-02") != day {
-			return ErrLandingDayChanged
-		}
 		g, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, waiting)
 		if err != nil {
 			return err
@@ -225,9 +210,6 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			// CI reads may cross rule expiry/effectivity. Re-read DB and trusted
 			// deployment material at the clock after CI, still under all locks.
 			final = DecisionAt()
-			if final.UTC().Format("2006-01-02") != day {
-				return ErrLandingDayChanged
-			}
 			latest, _, e := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
 			if e != nil {
 				return e
@@ -407,9 +389,6 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			// force then, as the S5 route does after its CI reads. A grant
 			// that expired during the reads authorizes nothing.
 			final = DecisionAt()
-			if final.UTC().Format("2006-01-02") != day {
-				return ErrLandingDayChanged
-			}
 			latest, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, true)
 			if err != nil {
 				return err
@@ -466,35 +445,11 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			decision = landing.Decision{Reason: "awaiting_grant"}
 			return appendAwaitingGrant(ctx, tx, g, op, obs.CI, soft)
 		}
-		q, err := LandingState(ctx, tx, quota)
-		if err != nil {
-			return err
-		}
-		// Each record the gate writes is dated on the quota day it locked:
-		// one that lands past midnight rolls the whole gate back (review 661
-		// R-03), never a partial write on the wrong day.
-		onDay := func(a Appended) error {
-			if a.At.UTC().Format("2006-01-02") != day {
-				return ErrLandingDayChanged
-			}
-			return nil
-		}
-		if _, reserved := q.Reservations[o.Task]; !reserved {
-			r, err := Append(ctx, tx, Event{Stream: quota, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission,
-				Body: landingReservationBody(repo, op, o.Task)})
-			if err == nil {
-				err = onDay(r)
-			}
-			if err != nil {
-				return err
-			}
-		}
-		hook("landing gate: reserved", op)
 		body := map[string]any{"text": fmt.Sprintf("Landing main_intent; second gate rule version %d", g.Rule.Version),
 			"landing": map[string]any{"v": landing.Version, "kind": "main_intent", "op": op, "R": o.R, "M0": o.M0},
 			"landing_gate": map[string]any{"v": LandingGateVersion, "op": op, "rule_version": g.Rule.Version,
-				"decided_at": final.UTC().Format(time.RFC3339Nano), "quota_day": day,
-				"ci_run": obs.CI.Run, "ci_created_at": obs.CI.CreatedAt.UTC().Format(time.RFC3339Nano)}}
+				"decided_at": final.UTC().Format(time.RFC3339Nano), "ci_run": obs.CI.Run,
+				"ci_created_at": obs.CI.CreatedAt.UTC().Format(time.RFC3339Nano)}}
 		if use != nil {
 			// Consumption is this event: no separate consumed record (§5.5).
 			body["landing_grant_use"] = use
@@ -509,14 +464,11 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		}
 		hook("landing gate: before main_intent", op)
 		a, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", TaskID: o.Task, MissionID: mission, Body: body})
-		if err == nil {
-			err = onDay(a)
-		}
 		if err != nil {
 			return err
 		}
 		auth = Authorization{Repo: repo, Op: op, Root: o.Task, R: o.R, M0: o.M0, IntentSeq: a.Seq, IntentAt: a.At,
-			Deadline: a.At.Add(PushTimeout), RuleVersion: g.Rule.Version, QuotaDay: day}
+			Deadline: a.At.Add(PushTimeout), RuleVersion: g.Rule.Version}
 		decision = landing.Decision{Allowed: true}
 		return nil
 	}()
@@ -575,7 +527,7 @@ func badLandingGate(v any) string {
 	if m["v"] != LandingGateVersion {
 		return "landing_gate version is not 1"
 	}
-	for _, k := range []string{"op", "decided_at", "quota_day", "ci_run", "ci_created_at"} {
+	for _, k := range []string{"op", "decided_at", "ci_run", "ci_created_at"} {
 		if s, _ := m[k].(string); s == "" {
 			return "landing_gate needs " + k
 		}
@@ -585,14 +537,12 @@ func badLandingGate(v any) string {
 			return "landing_gate " + k + " is not a time"
 		}
 	}
-	if _, err := time.Parse("2006-01-02", m["quota_day"].(string)); err != nil {
-		return "landing_gate quota_day is not a day"
-	}
-	// The grounds agree (review 663 N-02): decided on its quota day, on a
-	// CI created no later than the decision.
+	// The grounds agree (review 663 N-02): decided on a CI created no later
+	// than the decision. quota_day is legacy (cleanup wave 1): gates written
+	// before carry it, new ones do not; when present it is the decision's day.
 	decided, _ := time.Parse(time.RFC3339Nano, m["decided_at"].(string))
 	created, _ := time.Parse(time.RFC3339Nano, m["ci_created_at"].(string))
-	if decided.UTC().Format("2006-01-02") != m["quota_day"] {
+	if day, present := m["quota_day"]; present && day != decided.UTC().Format("2006-01-02") {
 		return "landing_gate quota_day is not the decision's day"
 	}
 	if created.After(decided) {
@@ -665,8 +615,8 @@ func AuthorizationCurrent(ctx context.Context, db DB, auth Authorization) (bool,
 }
 
 // checkLandingGateGrounds checks landing_gate against the record it rides
-// on and the operation (review 664 N-01): the decision is on the intent's
-// own UTC day and no later than it, and the CI it names is the success the
+// on and the operation (review 664 N-01): the decision is no later than the
+// intent, and the CI it names is the success the
 // operation has on record (the stream as it is before this intent, under
 // the append's stream lock).
 func checkLandingGateGrounds(ctx context.Context, tx pgx.Tx, ev Event, at time.Time) error {
@@ -682,11 +632,6 @@ func checkLandingGateGrounds(ctx context.Context, tx pgx.Tx, ev Event, at time.T
 	decided, err := time.Parse(time.RFC3339Nano, fmt.Sprint(m["decided_at"]))
 	if err != nil {
 		return fmt.Errorf("landing_gate decided_at is not a time")
-	}
-	if m["quota_day"] != at.UTC().Format("2006-01-02") {
-		// The day turned between the gate's decision and its intent: the
-		// gate rolls back as ErrLandingDayChanged (review 661 R-03).
-		return fmt.Errorf("landing_gate is not on its intent's day: %w", ErrLandingDayChanged)
 	}
 	if decided.After(at) {
 		return fmt.Errorf("landing_gate decided after its intent")

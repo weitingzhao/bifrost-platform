@@ -45,8 +45,10 @@ func (t *stmtTx) Exec(ctx context.Context, q string, a ...any) (pgconn.CommandTa
 }
 
 // ordinaryCIStatements is what one CI step of an ordinary kicked operation
-// whose CI runs cost before C-5 (b99f7daf), measured with this very test.
-const ordinaryCIStatements = 20
+// whose CI runs cost before C-5 (b99f7daf), measured with this very test
+// (20), less the two daily quota stream reads (one per facts read) removed in
+// cleanup wave 1.
+const ordinaryCIStatements = 18
 
 // Serial: FreezeEventClock. R-05: an ordinary operation's CI step (kicked,
 // its run still going) costs the round trips it did before C-5: no read of

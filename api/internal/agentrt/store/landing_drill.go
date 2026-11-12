@@ -151,7 +151,7 @@ type drillBinding struct {
 
 // bindDrillClaim takes capability and rule shared locks, then the plan
 // step, task, mission and repository stream, matching the final gate's
-// order without its quota reservation lock. The task
+// order. The task
 // lock keeps it in this mission (a step rebind waits); the mission lock
 // orders this claim against a close: the close decides first and the facts
 // read the mission done, or this claim commits first and CloseMissions sees

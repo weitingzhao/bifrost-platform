@@ -53,7 +53,7 @@ func TestLiveLandingPushesMainOnce(t *testing.T) {
 		phase   string
 	}{{landinggit.PushOK, "main_result"}, {landinggit.PushDenied, "main_result"}, {landinggit.PushUnknown, "main_result"}} {
 		t.Run(string(c.outcome), func(t *testing.T) {
-			w, task, op, src, prepared := liveReady(t)
+			w, _, op, src, prepared := liveReady(t)
 			at := prepared.Add(10 * time.Minute)
 			defer store.FreezeEventClock(at)()
 			p := &livePusher{outcome: c.outcome}
@@ -72,9 +72,6 @@ func TestLiveLandingPushesMainOnce(t *testing.T) {
 			}
 			if o.Phase != c.phase || o.Outcome != string(c.outcome) || !p.deadln.Equal(at.Add(store.PushTimeout)) {
 				t.Fatalf("%s %s deadline %v", o.Phase, o.Outcome, p.deadln)
-			}
-			if q := landingState(t, w, "landing-quota:dev:"+at.UTC().Format("2006-01-02")); q.Reservations[task] != op {
-				t.Fatal("no reservation", q.Reservations)
 			}
 			if _, err = ctl.LandingDrillCI(ctx, liveSources(src, prepared), op, at); err == nil || len(p.pushes) != 1 {
 				t.Fatal("a second pass pushed again", err, p.pushes)

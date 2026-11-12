@@ -18,11 +18,10 @@ var errBatchRefused = errors.New("landing batch gate: a member is refused")
 // AuthorizeBatchPush is the final gate of a batch (landing_batch.go): ops
 // are its members in order, the lead first. In one transaction it takes
 // every member's locks in the global order (capability, each tenant's rule,
-// each member's step, task and mission, each tenant's quota stream, the
-// repository stream), then judges every member with the gate's per-operation
-// judgment (authorizeLandingPushTx) and appends each member's reserved and
-// main_intent, the lead's with its grant use when it awaited one, and a
-// member's whose soft checks the lead's grant waives with that grant
+// each member's step, task and mission, the repository stream), then judges
+// every member with the gate's per-operation judgment (authorizeLandingPushTx)
+// and appends each member's main_intent, the lead's with its grant use when
+// it awaited one, and a member's whose soft checks the lead's grant waives with that grant
 // (landing_batch_grant.go: the lead's material is the batch's). One
 // Authorization per member, all for the same R and M0: the caller pushes R
 // once. Any member refused, the decision is its refusal (Detail names the
@@ -80,7 +79,6 @@ func authorizeBatchPush(ctx context.Context, db DB, src LandingSource, ops []str
 		}
 		slices.Sort(tenants)
 		tenants = slices.Compact(tenants)
-		day := DecisionAt().UTC().Format("2006-01-02")
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 			return err
 		}
@@ -92,11 +90,6 @@ func authorizeBatchPush(ctx context.Context, db DB, src LandingSource, ops []str
 		slices.SortFunc(binds, func(a, b binding) int { return strings.Compare(a.task, b.task) })
 		for _, b := range binds {
 			if err = lockLandingBinding(ctx, tx, b.task, b.tenant, b.step, b.mission); err != nil {
-				return err
-			}
-		}
-		for _, tenant := range tenants {
-			if err = lockStream(ctx, tx, "landing-quota:"+tenant+":"+day); err != nil {
 				return err
 			}
 		}

@@ -162,9 +162,9 @@ func TestLandingRuleLimitsAtEachGate(t *testing.T) {
 		t.Fatal("in-flight limit ignored")
 	}
 	// The daily quota is gone (cleanup wave 1): a legacy max_landings_per_day
-	// and any number reserved today hold neither gate back.
+	// of zero holds neither gate back.
 	f = eligibleFacts()
-	f.Rule.Landing.Limits.LegacyMaxLandingsPerDay, f.ReservedToday = 5, 50
+	f.Rule.Landing.Limits.LegacyMaxLandingsPerDay = 0
 	if !EligibleToClaim(f, epoch.Add(time.Hour)).Allowed || !EligibleToPush(f, epoch.Add(time.Hour)).Allowed {
 		t.Fatal("the daily quota still refuses")
 	}

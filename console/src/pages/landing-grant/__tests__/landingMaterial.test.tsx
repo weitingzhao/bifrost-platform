@@ -19,7 +19,7 @@ describe('C-6 authorization material', () => {
     expect(screen.getByRole('heading', { name: 'Trust-core change' })).toBeTruthy()
     const text = document.body.textContent!
     for (const value of [wire.core.material.candidate_digest, wire.core.material.material_digest, wire.core.material.candidate.patch_sha256,
-      wire.core.material.candidate.review.artifact, wire.core.material.candidate.ci.uid, 'Snapshot only; the quota at push time governs.', '24 hours', 'B5 batch']) expect(text).toContain(value)
+      wire.core.material.candidate.review.artifact, wire.core.material.candidate.ci.uid, '24 hours', 'B5 batch']) expect(text).toContain(value)
     expect(screen.getByRole('table').textContent).toContain('100644')
     expect(screen.getByText("Gitea's own page is not rendered by this platform's code.").tagName).toBe('STRONG')
     expect(screen.getByRole('link', { name: /Compare M0/ }).getAttribute('href')).toBe(wire.core.material.compare_url)

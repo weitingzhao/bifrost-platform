@@ -31,8 +31,9 @@ func (s *statements) Exec(ctx context.Context, q string, args ...any) (pgconn.Co
 
 // landingFactsStatements is what the gates' common reader costs on an
 // ordinary prepared operation before C-5 (b99f7daf, the integration
-// branch just before it): measured there with this very test.
-const landingFactsStatements = 7
+// branch just before it): measured there with this very test (7), less the
+// daily quota stream read removed in cleanup wave 1.
+const landingFactsStatements = 6
 
 // Serial: FreezeEventClock. Review 694 R-03/R-04: with no grant anywhere
 // and grants not enabled, the gates' common reader makes exactly the

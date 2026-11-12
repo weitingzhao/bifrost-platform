@@ -40,7 +40,7 @@ func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
 	blocked := true
 	ctl.Drill.WindowBlocked = func(context.Context, string) (bool, error) { return blocked, nil }
 	ok(t, ctl.LandingDrillPass(ctx))
-	if len(p.pushes) != 0 || c.reservations(t) != 0 || landingState(t, c.w, landingRepoStream).LatestOperation(root) != "" {
+	if len(p.pushes) != 0 || landingState(t, c.w, landingRepoStream).LatestOperation(root) != "" {
 		t.Fatal("new root claimed or quota consumed while an authorized operation waited")
 	}
 	// Window opens without any landing-stream transition: the next scan
@@ -48,7 +48,7 @@ func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
 	blocked = false
 	store.FreezeEventClock(c.at.Add(time.Second))
 	ok(t, ctl.LandingDrillPass(ctx))
-	if len(p.pushes) != 1 || c.phase(t) != "main_result" || c.reservations(t) != 1 {
+	if len(p.pushes) != 1 || c.phase(t) != "main_result" {
 		t.Fatal("authorized operation did not push next scan", p.pushes, c.phase(t))
 	}
 	if landingState(t, c.w, landingRepoStream).LatestOperation(root) != "" {
@@ -97,7 +97,7 @@ func TestTD462GrantedRetryAfterAwaitingGrantPG(t *testing.T) {
 	// The other root is still in CI: it holds no slot against the granted
 	// landing's final gate (PROD 2026-11-06), which pushes on this pass.
 	ok(t, ctl.LandingDrillPass(ctx))
-	if opens != 1 || len(p.pushes) != 1 || c.phase(t) != "main_result" || c.reservations(t) != 1 {
+	if opens != 1 || len(p.pushes) != 1 || c.phase(t) != "main_result" {
 		t.Fatal("the granted operation waited behind one still in CI", opens, p.pushes, c.phase(t))
 	}
 }

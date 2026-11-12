@@ -283,13 +283,11 @@ func batchObserved(prepared time.Time) func(context.Context, landing.Operation) 
 }
 
 // Serial: FreezeEventClock. The batch gate is all or nothing: a member not
-// ready refuses the batch, naming it, and nothing is written, no intent and
-// no quota; once every member is ready, every member's reserved and
-// main_intent on one R and M0, each resting on the one green run; the
+// ready refuses the batch, naming it, and nothing is written, no intent;
+// once every member is ready, every member's main_intent on one R and M0, each resting on the one green run; the
 // reconciler lands each, as any operation.
 func TestBatchGateAllOrNothing(t *testing.T) {
 	w, roots, ops, at := batchWorld(t, 3, false)
-	quota := "landing-quota:dev:" + at.UTC().Format("2006-01-02")
 	store.FreezeEventClock(at.Add(-10 * time.Minute))
 	auths, d, err := store.AuthorizeBatchPush(ctx, w.rt, c4Source(precheckPath), ops, batchObserved(at.Add(-29*time.Minute)))
 	ok(t, err)
@@ -301,9 +299,6 @@ func TestBatchGateAllOrNothing(t *testing.T) {
 			t.Fatal("an intent on a refusal", op)
 		}
 	}
-	if q := landingState(t, w, quota); len(q.Reservations) != 0 {
-		t.Fatal("reserved on a refusal", q.Reservations)
-	}
 	if auths, d, err := store.AuthorizeBatchPush(ctx, w.rt, c4Source(precheckPath), ops[1:], batchObserved(at.Add(-29*time.Minute))); err != nil || d.Allowed || auths != nil {
 		t.Fatal("authorized operations that are not a batch", d, err)
 	}
@@ -314,9 +309,8 @@ func TestBatchGateAllOrNothing(t *testing.T) {
 	if !d.Allowed || len(auths) != 3 {
 		t.Fatalf("not authorized: %+v", d)
 	}
-	q := landingState(t, w, quota)
 	for i, a := range auths {
-		if a.Op != ops[i] || a.R != commitB || a.M0 != commitA || a.Root != roots[i] || q.Reservations[roots[i]] != ops[i] {
+		if a.Op != ops[i] || a.R != commitB || a.M0 != commitA || a.Root != roots[i] {
 			t.Fatalf("authorization %d: %+v", i, a)
 		}
 		if p, _ := phaseOf(t, w, ops[i]); p != "main_intent" {

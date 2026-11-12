@@ -4,7 +4,7 @@ import { authedFetch } from '@/api/client'
 import { fetchTaskDelivery } from '@/api/deliveryStages'
 import { fetchReleaseWindow } from '@/api/delivery'
 
-type Reading = { task_id: string; repo: string; as_of: string; state: string; boundary_id: string; reason: string; explanation?: string; source: string; note: string; rule_id?: string; rule_version?: number; candidate?: string; base?: string; other_in_flight?: number; reserved_today?: number }
+type Reading = { task_id: string; repo: string; as_of: string; state: string; boundary_id: string; reason: string; explanation?: string; source: string; note: string; rule_id?: string; rule_version?: number; candidate?: string; base?: string; other_in_flight?: number }
 const cell = 'border-b border-[var(--table-rule)] p-2 text-left text-sm'
 
 export function BoundaryTaskCheck() {

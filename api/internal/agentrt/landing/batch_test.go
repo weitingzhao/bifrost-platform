@@ -36,14 +36,14 @@ func TestBatchFormation(t *testing.T) {
 	if got := FormBatch(cands, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
 		t.Fatal("not every root in order", batchTasks(got))
 	}
-	// A legacy max_batch and a spent day's quota on the facts: still every
-	// root, in order.
+	// A legacy max_batch and daily quota on the rule: still every root, in
+	// order.
 	legacy := slices.Clone(cands)
 	for i := range legacy {
 		f := legacy[i].Facts
 		r := *f.Rule
 		l := *r.Landing
-		l.Limits.LegacyMaxBatch, l.Limits.LegacyMaxLandingsPerDay, r.Landing, f.Rule, f.ReservedToday = 3, 5, &l, &r, 7
+		l.Limits.LegacyMaxBatch, l.Limits.LegacyMaxLandingsPerDay, r.Landing, f.Rule = 3, 5, &l, &r
 		legacy[i].Facts = f
 	}
 	if got := FormBatch(legacy, now, false); !slices.Equal(batchTasks(got), batchTasks(cands)) {
@@ -175,7 +175,6 @@ func TestWaveBatchFormation(t *testing.T) {
 		// Legacy limits on the facts bound nothing (cleanup wave 1).
 		members[i].Facts.Rule.Landing.Limits.LegacyMaxBatch = 1
 		members[i].Facts.Rule.Landing.Limits.LegacyMaxLandingsPerDay = 3
-		members[i].Facts.ReservedToday = 3
 	}
 	// A later member may need a grant, but append order still determines
 	// the lead: its existing batch material covers every member.

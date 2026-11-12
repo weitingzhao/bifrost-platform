@@ -15,7 +15,6 @@ export function MaterialEvidence({ data }: { data: LandingMaterialResponse }) {
       {c.stg_release && <p>{STG_LANDING_NOTICE}</p>}
       <p>Main still M0? <strong>{data.main_known ? data.main_is_M0 ? 'Yes' : 'No — refresh required' : 'Unknown'}</strong> · Read at {m.computed_at}</p>
       <p>Main: <code>{data.main || 'Unavailable'}</code></p>
-      <p>Quota today: {m.quota_reserved_today} reserved. Snapshot only; the quota at push time governs.</p>
       <p>Validity: 24 hours from the actual approval time; the grant below records its expiry.</p>
       <p>Phase: {m.phase} · Latest operation: {String(m.latest)} · Pinned: {String(m.pinned)} · Grants enabled: {String(m.grant_enabled)}</p>
       {m.problems.length > 0 && <p role="alert">Request cannot be made now: {m.problems.join(', ')}</p>}

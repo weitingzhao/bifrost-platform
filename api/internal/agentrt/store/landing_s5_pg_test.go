@@ -69,10 +69,9 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 			}
 			assertNoMain := func() {
 				t.Helper()
-				q := landingState(t, w, "landing-quota:dev:"+now.Format("2006-01-02"))
 				o := landingState(t, w, landingRepoStream).Operations[op]
-				if len(q.Reservations) != 0 || o.AtMain() || o.EverLanded {
-					t.Fatal("charged before proof", q, o)
+				if o.AtMain() || o.EverLanded {
+					t.Fatal("charged before proof", o)
 				}
 			}
 			assertNoMain()

@@ -326,7 +326,7 @@ func TestMaterialCacheRefreshesLiveEvidence(t *testing.T) {
 		t.Fatal("invalid grant control", first.Grants)
 	}
 	d.grants[0].RevokedAt = DecisionAt()
-	d.latest, d.enabled, d.facts.ReservedToday = false, false, 3
+	d.latest, d.enabled = false, false
 	d.op.Phase = "landed"
 	d.acceptance = []GrantAcceptance{{VerificationID: "changed", Result: "fail"}}
 	d.review.Artifact = "new-review"
@@ -341,7 +341,7 @@ func TestMaterialCacheRefreshesLiveEvidence(t *testing.T) {
 	if gitReads != 2 || ciReads != 2 {
 		t.Fatalf("Git reads=%d CI reads=%d", gitReads, ciReads)
 	}
-	if second.Latest || second.GrantEnabled || second.Phase != "landed" || second.QuotaReserved != 3 || second.MaterialDigest == first.MaterialDigest || second.Candidate.Review.Artifact != "new-review" {
+	if second.Latest || second.GrantEnabled || second.Phase != "landed" || second.MaterialDigest == first.MaterialDigest || second.Candidate.Review.Artifact != "new-review" {
 		t.Fatalf("live facts cached: %+v", second)
 	}
 	if !slices.Contains(second.Problems, "ci_not_green") {
