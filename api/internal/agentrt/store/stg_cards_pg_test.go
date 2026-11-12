@@ -229,7 +229,9 @@ func TestStgCardsPGNoneDoesNotAskOrWrite(t *testing.T) {
 	}
 }
 
-// Serial: controller quota pause shares the PG-backed durable preparation.
+// Serial: a full question store keeps the PG-backed durable preparation;
+// each pass asks it once more (the 30-minute pause went in cleanup wave 1,
+// 2026-11-11) and never duplicates the trigger.
 func TestStgCardsPGQuotaRetainsTriggerAndPreparation(t *testing.T) {
 	x, trigger := b5gFixture(t, "exhausted")
 	f := newFakeCards(store.DecisionAt)
@@ -254,10 +256,12 @@ func TestStgCardsPGQuotaRetainsTriggerAndPreparation(t *testing.T) {
 		t.Fatal(asked, calls)
 	}
 	for range 3 {
-		ok(t, ctl.LandingCardsPass(ctx))
+		if err := ctl.LandingCardsPass(ctx); !errors.Is(err, store.ErrCardQuota) {
+			t.Fatal(err)
+		}
 	}
-	if calls != 1 || len(cardsNow(t, x.w)) != 1 {
-		t.Fatal("quota was hammered or trigger duplicated")
+	if calls != 4 || len(cardsNow(t, x.w)) != 1 {
+		t.Fatal("not asked once a pass, or trigger duplicated", calls)
 	}
 	// A restarted controller recovers the same prep/key once quota clears.
 	allowed = true

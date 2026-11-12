@@ -37,14 +37,11 @@ type CardTrigger struct {
 	Rework *ReworkView
 }
 
-// ParkedLongAfter is how long a park (other than ci_stuck and rule) lasts
-// before its card.
-const ParkedLongAfter = 2 * time.Hour
-
 // LandingCardTriggers lists the triggers that apply now on repo's landing
 // stream, at most one kind per event: root_failed (not declined, main_lost or
 // floor, nor a red CI that sent its root back for another round), floor, ok_missing, late_landing, repo_stopped, ci_stuck and
-// parked_long (not ci_stuck or rule; two hours into the park). A failed root
+// parked_long (not ci_stuck or rule; from the park on, with no delay since
+// cleanup wave 1, 2026-11-11). A failed root
 // whose mission is no longer active, or no_merge, has no card.
 func LandingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.Time) ([]CardTrigger, error) {
 	s, err := LandingState(ctx, tx, "landing:"+repo)
@@ -236,7 +233,7 @@ func landingCardTriggers(ctx context.Context, tx pgx.Tx, repo string, now time.T
 			switch {
 			case why == "ci_stuck":
 				out = append(out, CardTrigger{Kind: CardCIStuck, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: why, Choices: []string{"ack", "remind_later"}})
-			case why != "rule" && !now.Before(e.at.Add(ParkedLongAfter)):
+			case why != "rule":
 				out = append(out, CardTrigger{Kind: CardParkedLong, Seq: e.seq, At: e.at, Root: o.Task, Op: op, Why: why, Choices: []string{"ack", "remind_later"}})
 			}
 		}

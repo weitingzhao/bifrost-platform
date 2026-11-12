@@ -17,10 +17,6 @@ const LandingCardsEvery = 15 * time.Second
 // landingCardCall bounds one call to the question store.
 const landingCardCall = 20 * time.Second
 
-// landingCardQuotaPause is how long asking pauses after the question store's
-// quota is full.
-const landingCardQuotaPause = 30 * time.Minute
-
 // landingCardRepos are the repositories whose landing cards are carried:
 // every repository landing supports (S6 added bifrost-trade-infra), live or
 // not, so a stop or a failure in any of them reaches the Owner and a card
@@ -51,10 +47,11 @@ func (c *Controller) LandingCardsPass(ctx context.Context) error {
 	}
 	now := c.clock()
 	var errs []error
-	// A full quota, or no way to ask, pauses new cards only; an existing
-	// card is still taken up by its key (review 670 R-03, 672 R-04). The
-	// pause is shared by every repository: one question store.
-	mayCreate := q.AskRaw != nil && !now.Before(c.cardAsksPausedUntil())
+	// No way to ask stops new cards only; an existing card is still taken
+	// up by its key (review 670 R-03, 672 R-04). A full question store
+	// stops new cards for the rest of this pass only: the timed pause after
+	// it went in cleanup wave 1 (2026-11-11).
+	mayCreate := q.AskRaw != nil
 	for _, repo := range landingCardRepos() {
 		if err := c.landingCardsRepoPass(ctx, q, repo, now, &mayCreate); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", repo, err))
@@ -88,11 +85,9 @@ func (c *Controller) landingCardsRepoPass(ctx context.Context, q store.CardQuest
 		defer cancel()
 		if _, err := store.AskLandingCard(one, c.DB, q, repo, prep, now, *mayCreate); err != nil {
 			if errors.Is(err, store.ErrCardQuota) {
-				// Shared with every card the runtime asks: pause, do not
-				// hammer it every pass; the rest of this pass still looks
-				// its cards up. Memory only: a restart tries once.
+				// The rest of this pass still looks its cards up; the next
+				// pass asks again.
 				*mayCreate = false
-				c.pauseCardAsks(now.Add(landingCardQuotaPause))
 			}
 			errs = append(errs, fmt.Errorf("card %s: %w", prep, err))
 		}
@@ -111,16 +106,4 @@ func (c *Controller) landingCardsRepoPass(ctx context.Context, q store.CardQuest
 		askOne(prep)
 	}
 	return errors.Join(errs...)
-}
-
-func (c *Controller) cardAsksPausedUntil() time.Time {
-	c.cardMu.Lock()
-	defer c.cardMu.Unlock()
-	return c.cardPause
-}
-
-func (c *Controller) pauseCardAsks(until time.Time) {
-	c.cardMu.Lock()
-	defer c.cardMu.Unlock()
-	c.cardPause = until
 }

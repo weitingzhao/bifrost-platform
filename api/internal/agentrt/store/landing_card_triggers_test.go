@@ -88,6 +88,9 @@ func TestLandingCardTriggers(t *testing.T) {
 		"land:missing:1":  {store.CardOkMissing, "confirm_main_lost"},
 		"land:late:1":     {store.CardLateLanding, "ack"},
 		"repo":            {store.CardRepoStopped, "repo_resume"},
+		// Cleanup wave 1 (2026-11-11): a park (not rule) is parked_long
+		// from its start, not two hours into it.
+		"land:window:1": {store.CardParkedLong, "ack"},
 	}
 	for key, k := range want {
 		if tr, ok := got[key]; !ok || tr.Kind != k[0] || tr.Choices[0] != k[1] || tr.Seq < 1 {
@@ -97,7 +100,7 @@ func TestLandingCardTriggers(t *testing.T) {
 	if tr := got["land:"+inMain+":1"]; tr.Kind != store.CardInMain {
 		t.Errorf("a root already in main asks to be counted, not to try again: %+v", tr)
 	}
-	for _, none := range []string{"land:declined:1", "land:window:1", "land:rule:1"} {
+	for _, none := range []string{"land:declined:1", "land:rule:1"} {
 		if tr, ok := got[none]; ok {
 			t.Errorf("%s: an unwanted card %+v", none, tr)
 		}
@@ -105,11 +108,11 @@ func TestLandingCardTriggers(t *testing.T) {
 	if got["repo"].StopGeneration != 1 {
 		t.Fatal(got["repo"])
 	}
-	// Two hours into a park (not rule): parked_long. A closed mission's failed
-	// root and a resumed stop have none; a new stop has its own generation.
+	// Later, the park is still parked_long. A closed mission's failed root
+	// and a resumed stop have none; a new stop has its own generation.
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "stopped", "test") }))
 	controllerNote(t, w, missing, map[string]any{"text": "resume", "landing_resume": map[string]any{"repo": "bifrost-platform", "generation": 1}})
-	got = triggersAt(t, w, at.Add(10*time.Minute+store.ParkedLongAfter))
+	got = triggersAt(t, w, at.Add(2*time.Hour+10*time.Minute))
 	if tr, ok := got["land:window:1"]; !ok || tr.Kind != store.CardParkedLong {
 		t.Errorf("parked two hours: %+v", tr)
 	}

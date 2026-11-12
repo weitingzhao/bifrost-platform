@@ -15,8 +15,8 @@ import (
 
 // S3 acceptance of the landing cards (CUT §11.6 v3 items 2, 6, 9; §11.10):
 // the settle table row by row (SettleLandingCard), and the pass's wiring
-// (controller.LandingCardsPass): the quota pause, the cooldown from the real
-// creation, a hold of a day, and a question store without LookupKey.
+// (controller.LandingCardsPass): a full store stops new cards for one pass,
+// a hold of a day, and a question store without LookupKey.
 
 // cardEventCount counts the events on a stream.
 func cardEventCount(t *testing.T, w *world, stream string) int {
@@ -366,11 +366,11 @@ func TestS3CardSettleOldAckAfterNewCard(t *testing.T) {
 // ---- B. LandingCardsPass (CUT §11.6 v3 items 6, 9; §11.10) ----
 
 // Serial: FreezeEventClock. The first card asked this pass meets a full
-// quota: the card after it, whose question the store already has, is still
-// taken up by its key and bound; nothing new is asked or prepared this pass,
-// nor within 30 minutes (the quota itself free again); after 30 minutes
-// asking resumes.
-func TestS3CardPassQuotaPausesNewCards(t *testing.T) {
+// store: the card after it, whose question the store already has, is still
+// taken up by its key and bound; nothing new is asked or prepared this pass.
+// The next pass, the store free again, asks at once: the 30-minute pause
+// went in cleanup wave 1 (2026-11-11).
+func TestS3CardPassFullStoreStopsNewCardsForOnePass(t *testing.T) {
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
 	defer store.FreezeEventClock(at)()
 	w := newKernelWorld(t)
@@ -413,18 +413,11 @@ func TestS3CardPassQuotaPausesNewCards(t *testing.T) {
 	}
 
 	full = false
-	ok(t, cc.cardsPassAt(t0.Add(10*time.Minute)))
-	ok(t, cc.cardsPassAt(t0.Add(29*time.Minute)))
+	f.now = func() time.Time { return t0.Add(time.Minute) }
+	ok(t, cc.cardsPassAt(t0.Add(time.Minute)))
 	cards = cardsNow(t, w)
-	if len(cards) != 2 || refused != 1 || f.asks != 1 || cards[first].Bound {
-		t.Fatalf("asked within the pause: %d cards, %d refused, %d asks", len(cards), refused, f.asks)
-	}
-
-	f.now = func() time.Time { return t0.Add(31 * time.Minute) }
-	ok(t, cc.cardsPassAt(t0.Add(31*time.Minute)))
-	cards = cardsNow(t, w)
-	if len(cards) != 3 || f.asks != 3 {
-		t.Fatalf("not resumed after the pause: %d cards, %d asks", len(cards), f.asks)
+	if len(cards) != 3 || refused != 1 || f.asks != 3 {
+		t.Fatalf("not asked on the next pass: %d cards, %d refused, %d asks", len(cards), refused, f.asks)
 	}
 	for _, c := range cards {
 		if !c.Bound || c.Ended() {

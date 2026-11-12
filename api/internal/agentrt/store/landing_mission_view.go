@@ -33,11 +33,11 @@ type LandingRootStatus struct {
 	// being known (unconfirmed, lost): the Owner may have answered a card
 	// the runtime could not read back (review 670 R-07). "" for none.
 	CardAlert string
-	// A parked root (review 672 R-07): since its park, its retry, the
-	// status-only trigger it shows (ci_stuck, parked_long) and when a park
-	// becomes parked_long. Zero / "" otherwise.
-	ParkedSince, RetryAt, RemindAt time.Time
-	Shown                          string
+	// A parked root (review 672 R-07): since its park, its retry and the
+	// status-only trigger it shows (ci_stuck, parked_long; a park is
+	// parked_long from its start). Zero / "" otherwise.
+	ParkedSince, RetryAt time.Time
+	Shown                string
 	// The Owner's answer holds the root (review 675 R-07): wait or remind
 	// later on its latest answered card, until HeldUntil, on HeldQuestion.
 	HeldUntil    time.Time
@@ -141,9 +141,6 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 					}
 					if retry != nil {
 						rs.RetryAt, _ = time.Parse(time.RFC3339Nano, *retry)
-					}
-					if why := strings.TrimPrefix(r.Reason, "parked:"); why != "ci_stuck" && why != "rule" && !rs.ParkedSince.IsZero() {
-						rs.RemindAt = rs.ParkedSince.Add(ParkedLongAfter)
 					}
 					for _, tr := range triggers {
 						if tr.Op == r.Op && slices.Contains(statusOnlyKinds, tr.Kind) {

@@ -244,7 +244,7 @@ func TestB4LateRevertAfterADisposition(t *testing.T) {
 
 // Serial: FreezeEventClock. R-05, R-07: a park changes reason in one
 // transaction, and only from the park observed; the status shows the park,
-// its since and when it would be told.
+// its since and, from its start (cleanup wave 1), that it is told.
 func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
 	defer store.FreezeEventClock(at)()
@@ -254,7 +254,7 @@ func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
 	ok(t, err)
 	r := status.Roots[0]
-	if r.Reason != "parked:window" || r.ParkedSince.IsZero() || !r.RemindAt.Equal(r.ParkedSince.Add(store.ParkedLongAfter)) || r.Shown != "" {
+	if r.Reason != "parked:window" || r.ParkedSince.IsZero() || r.Shown != store.CardParkedLong {
 		t.Fatalf("park status: %+v", r)
 	}
 	seen := landingState(t, w, landingRepoStream).Operations["land:r672h:1"].LastAt
@@ -269,7 +269,7 @@ func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 	}
 	status, err = store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
 	ok(t, err)
-	if r := status.Roots[0]; r.Reason != "parked:ci_stuck" || r.Shown != store.CardCIStuck || !r.RemindAt.IsZero() || !r.ParkedSince.Equal(at.Add(time.Minute)) {
+	if r := status.Roots[0]; r.Reason != "parked:ci_stuck" || r.Shown != store.CardCIStuck || !r.ParkedSince.Equal(at.Add(time.Minute)) {
 		t.Fatalf("re-park status: %+v", r)
 	}
 }

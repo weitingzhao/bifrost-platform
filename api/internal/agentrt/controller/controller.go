@@ -86,8 +86,6 @@ type Controller struct {
 	// LandingCards is the landing cards' reach into the question store
 	// (landing_cards.go); zero carries no landing cards.
 	LandingCards store.CardQuestions
-	cardMu       sync.Mutex
-	cardPause    time.Time // asking landing cards pauses until then (quota)
 	// tuning is the tuning rule the last pass read (tuning.go).
 	tuning atomic.Pointer[rules.Tuning]
 	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil

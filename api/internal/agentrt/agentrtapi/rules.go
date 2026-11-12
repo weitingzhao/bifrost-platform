@@ -178,9 +178,6 @@ func (a *API) writeMissionLanding(w http.ResponseWriter, r *http.Request, id str
 			if !x.RetryAt.IsZero() {
 				parked["retry_at"] = x.RetryAt
 			}
-			if !x.RemindAt.IsZero() {
-				parked["remind_at"] = x.RemindAt
-			}
 			root["parked"] = parked
 		}
 		roots = append(roots, root)
