@@ -178,38 +178,45 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		}
 	}
 	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
-	inputs := map[string]*store.RepoAt{}
+	inputs, own := map[string]*store.RepoAt{}, map[string]*store.RepoAt{}
 	for _, value := range results {
 		r, _ := value.(map[string]any)
 		v, _ := r["value"].(string)
 		name, _ := r["name"].(string)
 		switch name {
 		case "platform-tree":
-			f.Tree = v
+			// The tree of the run's own repository: bifrost-ci-infra reports
+			// the platform checkout it used under the same name.
+			if f.Pipeline != "bifrost-ci-infra" {
+				f.Tree = v
+			}
 		case "tested-by":
 			f.TestedBy = v
 		case "api-scope":
 			f.Scope = v
 		}
 		// What a CI run tested, for the evidence ledger: <short>-commit and
-		// <short>-tree name a repository it used (ciResultRepos), source-* the
-		// repository of the run itself.
+		// <short>-tree name a repository it used (ciResultRepos), repo-* the
+		// repository of the run itself, which wins when both name it.
 		short, field, _ := strings.Cut(name, "-")
-		repo := ciResultRepos[short]
-		if short == "source" {
-			repo = f.Repo
+		repo, into := ciResultRepos[short], inputs
+		if short == "repo" {
+			repo, into = f.Repo, own
 		}
 		if f.Kind != "ci" || repo == "" || !commitID.MatchString(v) || (field != "commit" && field != "tree") {
 			continue
 		}
-		if inputs[repo] == nil {
-			inputs[repo] = &store.RepoAt{Repo: repo}
+		if into[repo] == nil {
+			into[repo] = &store.RepoAt{Repo: repo}
 		}
 		if field == "commit" {
-			inputs[repo].Commit = v
+			into[repo].Commit = v
 		} else {
-			inputs[repo].Tree = v
+			into[repo].Tree = v
 		}
+	}
+	for repo, in := range own {
+		inputs[repo] = in
 	}
 	for _, in := range inputs {
 		f.Inputs = append(f.Inputs, *in)
