@@ -261,7 +261,9 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	_, approvedAttempt := actions.CreateAttemptFrom(ctx)
 	runOwnsWindow := approvedAttempt && strings.HasPrefix(pipelineName, "bifrost-deliver-")
-	if entry, known := windowPipelines[pipelineName]; !runOwnsWindow && known && !entry.required && strings.HasPrefix(pipelineName, "bifrost-deliver-") {
+	// Approval authorizes the action, not replacement of its requester's
+	// session window. Optional-window deliveries use the same path either way.
+	if entry, known := windowPipelines[pipelineName]; known && !entry.required && strings.HasPrefix(pipelineName, "bifrost-deliver-") {
 		cs, _, err := s.cluster.KubernetesClient()
 		if err != nil {
 			resp.Message = fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)

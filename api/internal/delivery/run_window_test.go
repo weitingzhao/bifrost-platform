@@ -156,3 +156,29 @@ func TestRunWindowObserverRenewsAndEnds(t *testing.T) {
 		t.Fatalf("not released: %v %v", live, err)
 	}
 }
+
+// #514: approval preserves the original request's who; it must not try to
+// replace that requester's still-live session window with the run name.
+func TestApprovedRequesterWindow514(t *testing.T) {
+	ctx := context.Background()
+	const name = "bifrost-deliver-prod"
+	pipe := baselinePipelines(t)[name].DeepCopy()
+	pipe.SetNamespace("cicd")
+	s, dyn, _ := contractService(t, pipe, "unknown")
+	cs := fake.NewSimpleClientset(readyAmd64Node())
+	s.SetClientsetForTest(cs)
+	before, err := putReleaseWindow(ctx, cs, "cicd", windowInput{Who: "biz-align", What: "bifrost-trade-core"}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = actions.WithCreateAttempt(ctx, "approval-514", 1)
+	resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "biz-align", nil)
+	if err != nil || !resp.OK {
+		t.Fatalf("approved requester: %+v %v", resp, err)
+	}
+	createdContractRun(t, dyn)
+	after, live, err := getReleaseWindow(ctx, cs, "cicd", time.Now().UTC())
+	if err != nil || !live || after != before {
+		t.Fatalf("session window changed: %+v %v", after, err)
+	}
+}
