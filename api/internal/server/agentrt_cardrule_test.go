@@ -103,6 +103,12 @@ func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 		!c.SkipCardsTheRuleAnswers || !c.FailFirstVerify {
 		t.Fatalf("STG's controller: %+v", c)
 	}
+	// The Owner 2026-11-13: no scheduled briefs or nudges anywhere.
+	for _, env := range []string{"prod", "dev", "stg", ""} {
+		if agentRuntimeController(env, nil, full).Briefs {
+			t.Errorf("%q: the controller leaves scheduled briefs and nudges", env)
+		}
+	}
 	if controller.CardRuleEvery != time.Second {
 		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)
 	}

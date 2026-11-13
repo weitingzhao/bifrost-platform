@@ -239,9 +239,13 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 // names the kind either, review 442 C1), and leaving unassessed the cards
 // that rule answers (TD-401's second half: the Owner 2026-10-20 20:0x
 // 「PROD 不变」). PROD and DEV assess every card, whatever rule is in force.
+//
+// No environment leaves the chief of staff scheduled briefs or nudges (the
+// Owner 2026-11-13: 「每天早晚定时的那个 briefing 的卡点提醒也都不要了」); Briefs
+// stays false until the brief code is removed with the old dispatch lane.
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
 	stg := env == "stg"
-	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg, Precheck: precheckFromEnv(),
+	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), FailFirstVerify: stg, Precheck: precheckFromEnv(),
 		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, PageOwner: diskPage, WatchPresence: true, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}, Infof: func(format string, args ...any) {
