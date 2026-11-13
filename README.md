@@ -70,4 +70,4 @@ See Ops Console → **Architecture → Vision / Blueprint** (includes AI Native 
 
 ## Landing a change on main
 
-`main` takes a change only through a pull request. Branch from the latest `main`, push the commit to `refs/heads/ready/<name>`, and the cluster does the rest: the CI gate runs the whole suite, and `bifrost-land-platform` merges the same commit once that run is green. A branch behind `main` is refused: rebase and push again.
+`main` takes a change only through a pull request. Branch from the latest `main`, push the commit to `refs/heads/ready/<name>`, and the cluster does the rest: the CI gate runs the whole suite, and `bifrost-land` (the one landing pipeline for every repository, `bifrost-trade-infra/k8s/cicd/tekton/pipeline-land.yaml`) merges the same commit once that run is green. A branch behind `main` is rebased by Gitea and its new commit goes through the same steps on its own; only a conflict needs you. Every commit needs a `Change-Id` trailer (a fresh worktree runs no hook: add it by hand), and a change to `config/ops-context.yaml` does not land this way. Wait on the result with `wait_for_pipeline_run`, pipeline `bifrost-land`, by commit.
