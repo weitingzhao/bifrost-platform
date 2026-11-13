@@ -202,7 +202,6 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
-	actions.RegisterExecutor("void_exam_paper", s.voidExamPaper)
 	actions.RegisterExecutor("mark_missions_no_merge", s.markMissionsNoMerge)
 	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)

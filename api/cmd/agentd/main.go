@@ -29,7 +29,7 @@
 // The first argument "launch" makes it the launcher of one executor, and
 // "verify" the deterministic executor; neither is for people. "bench" runs
 // the benchmark question set with one executor instead of the daemon
-// (bench.go), and "exam" sits a job's qualifying exam (exam.go).
+// (bench.go).
 package main
 
 import (
@@ -73,8 +73,6 @@ func main() {
 			os.Exit(agentd.RunConfineProbe(os.Args[2:]))
 		case "bench":
 			os.Exit(runBench(os.Args[2:]))
-		case "exam":
-			os.Exit(runExam(os.Args[2:]))
 		default:
 			// Never the daemon by mistake: an older unit or script naming a
 			// subcommand this build does not have must not start claiming

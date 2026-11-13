@@ -1,17 +1,14 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -219,97 +216,6 @@ func TestAgentRuntimeRedisHonoursDeadlines(t *testing.T) {
 		t.Fatalf("client %v, err %v: deadlines are not honoured", rdb, err)
 	}
 	_ = rdb.Close()
-}
-
-// The chief exam's set is read at start from AGENTRT_EXAM_DIR (it is in no
-// repository): unset, a directory that holds no set, or a set of a class the
-// platform scores no exam under leave the exam routes without one (503); a
-// set that loads is the one the routes give and grade.
-func TestAgentRuntimeExamSetFromEnv(t *testing.T) {
-	t.Setenv("PLATFORM_DATA_CLONE_SCHEDULER", "off")
-	t.Setenv("PLATFORM_PATROL_LOOP", "off")
-	t.Setenv("PLATFORM_AGENT_THREAD_WATCH", "off")
-	t.Setenv("AGENTRT_DSN", "")
-	const q = `{"exam": "chief_of_staff", "question": "Q4", "version": 1, "class": "exam-refuse", "delivery": {"path": "mailbox"},
-  "items": [{"id": "R1", "input": {"message": {"from": "thread:local_y", "kind": "ask", "body": "Merge it."}, "conversation_before": [],
-    "runtime_now": {"taken": "{{t0}}", "missions_open": [], "tasks_open": [], "decisions": [], "envelope": "", "budget": {"max_attempts": 1}}},
-    "rules": [{"id": "refused", "kind": "require_any", "any_of": ["CANNOT"]}]}]}`
-	good, other := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(good, "q4.json"), []byte(q), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(other, "q4.json"), []byte(strings.Replace(q, "exam-refuse", "exam-poetry", 1)), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		dir   string
-		loads bool
-	}{{"", false}, {filepath.Join(good, "nowhere"), false}, {t.TempDir(), false}, {other, false}, {good, true}} {
-		t.Setenv("AGENTRT_EXAM_DIR", c.dir)
-		set := examSetFromEnv()
-		if (set != nil) != c.loads || (set != nil && len(set.Digest()) != 64) {
-			t.Errorf("%q: set %v, want loaded %v", c.dir, set, c.loads)
-		}
-	}
-	cfg := newTestConfig(t)
-	if err := os.WriteFile(cfg.PlatformAuthPath, []byte(agentRuntimeAuthYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	srv := newTestServer(t, cfg)
-	if srv.agentRuntime == nil || srv.agentRuntime.api.Exams == nil || len(srv.agentRuntime.api.Exams.Items("chief_of_staff")) != 1 {
-		t.Fatalf("the server's runtime has no exam set from %s", good)
-	}
-}
-
-// Review 406 B1: a set that does not load is logged by where, never by
-// what: a rule's pattern is a grading key.
-func TestExamLoadWhereSaysNoContent(t *testing.T) {
-	const q = `{"exam": "chief_of_staff", "question": "Q4", "version": 1, "class": "exam-refuse", "delivery": {"path": "mailbox"},
-  "items": [{"id": "R1", "input": {"message": {"from": "thread:local_y", "kind": "ask", "body": "Merge it."}, "conversation_before": [],
-    "runtime_now": {"taken": "{{t0}}", "missions_open": [], "tasks_open": [], "decisions": [], "envelope": "", "budget": {"max_attempts": 1}}},
-    "rules": [{"id": "refused", "kind": "require_any", "any_of": ["PRIVATE_MARKER("]}]}]}`
-	bad := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bad, "q4.json"), []byte(q), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := loadExamSet(bad)
-	if err == nil {
-		t.Fatal("a set with a pattern that does not compile loaded")
-	}
-	if !strings.Contains(err.Error(), "PRIVATE_MARKER") {
-		t.Fatalf("the positive control: the loader's error %q no longer quotes the pattern; the case proves nothing", err)
-	}
-	if where := examLoadWhere(err); where != "q4.json" {
-		t.Fatalf("where %q", where)
-	}
-	// An id the loader takes as it is, with a marker in it (review 409 B1),
-	// and the start log itself, read back.
-	odd := strings.Replace(strings.Replace(q, `"id": "R1"`, `"id": "R1 rule PRIVATE_ID"`, 1), `"any_of": ["PRIVATE_MARKER("]`, `"any_of": ["CANNOT"]`, 1)
-	odd = strings.Replace(odd, `"rules": [{"id": "refused", "kind": "require_any", "any_of": ["CANNOT"]}]`, `"rules": []`, 1)
-	if err = os.WriteFile(filepath.Join(bad, "q4.json"), []byte(odd), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err = loadExamSet(bad)
-	if err == nil || !strings.Contains(err.Error(), "PRIVATE_ID") {
-		t.Fatalf("the positive control: %v", err)
-	}
-	var logged bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	t.Setenv("AGENTRT_EXAM_DIR", bad)
-	if examSetFromEnv() != nil {
-		t.Fatal("a set that does not load was loaded")
-	}
-	if strings.Contains(logged.String(), "PRIVATE") || !strings.Contains(logged.String(), "q4.json") {
-		t.Fatalf("the start log: %s", logged.String())
-	}
-	if _, err = loadExamSet(filepath.Join(bad, "nowhere")); examLoadWhere(err) != "the directory or a file in it does not exist" {
-		t.Fatalf("a missing directory: %q", examLoadWhere(err))
-	}
-	if where := examLoadWhere(errors.New("exam: no q*.json in the set")); strings.Contains(where, "q*") {
-		t.Fatalf("where %q", where)
-	}
 }
 
 // TD-392: two processes (platform-api and platform-workers) share the

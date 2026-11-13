@@ -143,9 +143,6 @@ var (
 // actionStore, when set, is the API's action store (bus_test.go).
 var actionStore *actions.Store
 
-// examSet, when set, is the API's exam set (exams_test.go).
-var examSet store.ExamSet
-
 // agentHeads, when set, are the attempt branches the API reads, by
 // repository, a nil list for a repository it cannot read; pruneNow, when
 // set, is the cleanup's clock (prune_test.go).
@@ -232,7 +229,7 @@ intake_tokens:
 			defer recordMu.Unlock()
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
-		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
+		}, Anchor: anchor, Actions: actionStore}
 	if agentHeads != nil {
 		heads := agentHeads
 		api.AgentHeads = func(ctx context.Context, repo string) ([]store.AgentHead, error) {

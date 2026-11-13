@@ -71,9 +71,6 @@ type API struct {
 	// Actions keeps attempts' actions in redis-agents (W-31 2.3); nil keeps
 	// none: a heartbeat's actions are refused in its answer, the read 503.
 	Actions *actions.Store
-	// Exams is the chief exam's question set (W-31 2.4 ④, exams.go), loaded
-	// once at start; nil answers the exam routes 503.
-	Exams store.ExamSet
 	// AgentHeads reads the attempt branches agentd may be given to delete
 	// (TD-383, prune.go); nil gives none. MainResults reads what a
 	// repository's main holds of the runtime's results; nil keeps the
@@ -182,8 +179,6 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(agentd, cfg).Post("/benchmark", a.recordBenchmark)
 		r.With(agentd, cfg).Get("/prunes", a.prunes)
 		r.With(agentd, cfg).Post("/prunes", a.reportPrunes)
-		r.With(agentd, cfg).Get("/exams/{job}", a.issueExam)
-		r.With(agentd, cfg).Post("/exams", a.recordExam)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
@@ -321,7 +316,7 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
-	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrOtherHost), errors.Is(err, store.ErrNotOwnRecord):
+	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrNotOwnRecord):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())

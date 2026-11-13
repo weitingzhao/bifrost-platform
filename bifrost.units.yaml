@@ -60,7 +60,6 @@ modules:
       api/internal/agentrt/agentrtapi: ["."]
       api/internal/agentrt/canon: ["."]
       api/internal/agentrt/debtimport: ["."]
-      api/internal/agentrt/exam: ["."]
       api/internal/agentrt/gaterun: ["."]
       api/internal/agentrt/infracheck: ["."]
       api/internal/agentrt/landing: ["."]

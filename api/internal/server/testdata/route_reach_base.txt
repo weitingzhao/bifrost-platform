@@ -956,7 +956,6 @@ agentd:h1	GET /api/v1/agentrt/attempts/{id}/actions
 agentd:h1	GET /api/v1/agentrt/capabilities
 agentd:h1	GET /api/v1/agentrt/controls
 agentd:h1	GET /api/v1/agentrt/events
-agentd:h1	GET /api/v1/agentrt/exams/{job}
 agentd:h1	GET /api/v1/agentrt/hosts
 agentd:h1	GET /api/v1/agentrt/messages
 agentd:h1	GET /api/v1/agentrt/messages/thread
@@ -1061,7 +1060,6 @@ agentd:h1	POST /api/v1/agentrt/attempts/{id}/{action}
 agentd:h1	POST /api/v1/agentrt/benchmark
 agentd:h1	POST /api/v1/agentrt/claim
 agentd:h1	POST /api/v1/agentrt/controls
-agentd:h1	POST /api/v1/agentrt/exams
 agentd:h1	POST /api/v1/agentrt/prunes
 agentd:h1	POST /api/v1/agentrt/rules/{rule_id}/check
 agentd:h1	POST /api/v1/agentrt/rules/{rule_id}/tighten

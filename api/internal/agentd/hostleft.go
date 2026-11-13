@@ -172,7 +172,7 @@ func benchRecordsLeft(root string) []string {
 // they hold the host lock, run nothing while one is left; the registry is
 // only read.
 func LeftOnHost(root string, grace time.Duration) error {
-	errs := errors.Join(ExamRunsLeft(root, grace), BenchRunsLeft(root, grace))
+	errs := BenchRunsLeft(root, grace)
 	reg, err := OpenRegistry(RegistryPath(root))
 	if err != nil {
 		return errors.Join(errs, err)

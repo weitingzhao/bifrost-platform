@@ -66,7 +66,6 @@ var notifySafeKeys = map[string][]string{
 	"create_job_from_cronjob":     {"namespace", "cronjob"},
 	"delete_finished_jobs":        {"namespace", "names", "label_selector"},
 	"run_probe_pod":               {"namespace", "image", "timeout_seconds", "env_from"},
-	"void_exam_paper":             {"environment", "run_id"},
 	"agentrt_rule_approve":        {"env", "rule_id", "rule_version"},
 	"mark_missions_no_merge":      {"env", "archive_manifest_sha256"},
 	"stg_release_sample_create":   {"env", "revision", "ui_revision", "infra_revision"},
@@ -149,12 +148,6 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = p("env"), "Archive and release the B5 sample "+p("run")
 	case "agentrt_rule_approve":
 		d.Env, d.Summary = p("env"), describeRuleApprove(ctx, params)
-	case "void_exam_paper":
-		run := p("run_id")
-		if len(run) > 12 {
-			run = run[:12]
-		}
-		d.Env, d.Summary = p("environment"), "Void the unanswered exam paper "+run
 	case "trigger_cnpg_backup":
 		d.Env, d.Summary = "data", "On-demand CNPG backup"
 	case "repair_cnpg_wal_store":

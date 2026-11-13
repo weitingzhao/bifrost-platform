@@ -23,7 +23,6 @@ func TestReview686TrustTransportClassification(t *testing.T) {
 		{"api/internal/workactions/new.go", []LandingRefusal{"core"}},
 		{"api/internal/cluster/client.go", nil}, {"api/internal/placement/new.go", nil}, {"api/internal/probe/new.go", nil},
 		{"api/internal/delivery/new.go", nil}, {"api/internal/lineage/new.go", nil}, {"api/internal/releases/new.go", nil},
-		{"api/internal/agentrt/exam/new.go", nil},
 	} {
 		t.Run(c.path, func(t *testing.T) {
 			l, ch := landingRule(t).Landing, simpleChange()
@@ -62,7 +61,6 @@ func TestReview686ClosureExistingTrustEdges(t *testing.T) {
 		{"internal/server", "internal/delivery"},
 		{"internal/server", "internal/lineage"},
 		{"internal/server", "internal/releases"},
-		{"internal/server", "internal/agentrt/exam"},
 		{"internal/server", "internal/workactions"},
 	} {
 		t.Run(edge.from+"->"+edge.to, func(t *testing.T) {

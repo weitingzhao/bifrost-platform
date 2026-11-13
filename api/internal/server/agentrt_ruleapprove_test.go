@@ -27,7 +27,7 @@ func TestRuleApproveOpenKey(t *testing.T) {
 	if c := approvalOpenKey(RuleApproveAction, map[string]any{"rule_id": "budget:dev"}); c == a {
 		t.Fatal("two rules share a key")
 	}
-	if k := approvalOpenKey("void_exam_paper", map[string]any{"rule_id": "concurrency"}); k != "" {
+	if k := approvalOpenKey("mark_missions_no_merge", map[string]any{"rule_id": "concurrency"}); k != "" {
 		t.Fatalf("another action has key %q", k)
 	}
 	if k := approvalOpenKey("approve_core_landing", map[string]any{"op": "op-1"}); k != "landing-grant:op-1" {

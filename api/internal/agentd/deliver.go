@@ -602,9 +602,6 @@ func (d *Daemon) Blocked() (string, error) {
 			return id, nil
 		}
 	}
-	if left := examRecordsLeft(d.Root); len(left) > 0 {
-		return "the exam run recorded in " + left[0], nil
-	}
 	if left := benchRecordsLeft(d.Root); len(left) > 0 {
 		return "the bench run recorded in " + left[0], nil
 	}
@@ -660,9 +657,6 @@ func (d *Daemon) Recover(ctx context.Context) error {
 	// What an exam sitting or a bench run cut short left running is ended as
 	// well, before anything is sent; one not known gone blocks the host
 	// (Blocked; review 417 A1, 487 A2).
-	if why := ExamRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
-		d.logf("%v; this host takes no new work until then", why)
-	}
 	if why := BenchRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
 		d.logf("%v; this host takes no new work until then", why)
 	}

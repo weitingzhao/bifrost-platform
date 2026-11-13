@@ -52,7 +52,6 @@
     "unifi_client_fixed_ip",
     "unifi_firewall_apply",
     "update_data_clone_schedule",
-    "void_exam_paper",
     "wake_compute_node"
   ],
   "descriptions": {

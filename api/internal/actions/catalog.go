@@ -502,17 +502,6 @@ var catalog = []Action{
 		Params: landingGrantParams,
 	},
 	{
-		ID: "void_exam_paper", Tier: TierD,
-		Description: "Void a qualifying-exam paper no run was handed in for, so its executor can be handed a new paper (TD-407). Tier D: the Owner approves it on the Console. " +
-			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (environment: prod) until the cross-environment execution channel exists; run_id is the paper's sha256, reason one line. " +
-			"A paper with any answer, a graded one and a lapsed one are refused; the void is recorded with this approval's id, and nothing is graded or scored.",
-		Params: []Param{
-			{Name: "environment", Type: "string", Required: true, In: "body"},
-			{Name: "run_id", Type: "string", Required: true, In: "body"},
-			{Name: "reason", Type: "string", Required: true, In: "body"},
-		},
-	},
-	{
 		ID: "supersede_agent_tasks", Tier: TierD,
 		Description: "Cancel explicitly listed obsolete tasks in PROD after Owner approval. Each entry pins task_id, version, replacement_task_id and commit. The replacement must be an accepted implementation in the same mission/repository with recorded delivery at that commit. The Owner confirms semantic replacement; this does not mark the original patch accepted or landed. Refuses running work, open checks or unfinished dependents. All entries commit atomically, preserving history and stop controls; repeated execution of the same approval is idempotent. No CI or deployment is started.",
 		Params: []Param{

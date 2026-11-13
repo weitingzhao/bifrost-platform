@@ -113,9 +113,6 @@ func init() {
 	exempt("agent runtime benchmark runs (W-31 2.4 slice ⑤): an agentd token hands in, for the host it is bound to, the outcome of the question set it ran with one executor; the store records it with its event in one transaction, and at most it changes which candidates routing's competence step lets through; not a cluster write",
 		"POST /api/v1/agentrt/benchmark",
 	)
-	exempt("agent runtime chief exam (W-31 2.4 ④, the exam's cut §6 甲): an agentd token hands in, for the host it is bound to, the answers to a paper the platform issued it (GET /api/v1/agentrt/exams/{job}, which records the paper); the store records them with their events in one transaction and grades the run once it is whole; at most it adds capability scores of source exam, which routing does not read; not a cluster write",
-		"POST /api/v1/agentrt/exams",
-	)
 	exempt("agent runtime branch cleanup (TD-383, the Owner's 「分支 B 用 agentd」): an agentd token reports, for the host it is bound to, what it did with the attempt branches it was given (GET /api/v1/agentrt/prunes); the deletion itself is agentd's, with its own Gitea identity, on branches Gitea lets it delete; the store records each outcome as a note in one transaction; not a cluster write",
 		"POST /api/v1/agentrt/prunes",
 	)

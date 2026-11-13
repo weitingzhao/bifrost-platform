@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -58,7 +59,6 @@ var routeExpect = map[string]string{
 	"POST rules/{rule_id}/check": expectAnswers, "POST rules/{rule_id}/proposals": expectWrites,
 	"POST rules/{rule_id}/sign": expectWrites, "POST rules/{rule_id}/tighten": expectWrites,
 	"POST pools/{id}/reading": expectWrites, "POST benchmark": expectWrites,
-	"GET exams/{job}": expectWrites, "POST exams": expectWrites,
 	// A report names branches the cleanup offered, the attempt branches of
 	// finished tasks: no world here finishes one, so the valid report is the
 	// empty one (TestPruneRoutes records real ones).
@@ -157,15 +157,14 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	chiefJob(t, f.pool)
 
 	// What the routes need beside the database: a key the rules verify
-	// against, an exam set, a reader of the attempt branches (it reads none),
-	// the Owner's question store. The stages run at once, so each sets its
-	// own here instead of the package's anchor, examSet, agentHeads and cards.
+	// against, a reader of the attempt branches (it reads none), the Owner's
+	// question store. The stages run at once, so each sets its own here
+	// instead of the package's anchor, agentHeads and cards.
 	key := rptest.NewKey(t)
-	exams := madeUpExams(t)
 	var askMu sync.Mutex
 	asked := 0
 	s := server(t, f.pool, func(a *agentrtapi.API) {
-		a.Anchor, a.Exams = key.Fingerprint, exams
+		a.Anchor = key.Fingerprint
 		a.Head = func(context.Context, string, string) (string, error) { return pushedAt, nil }
 		a.Ask = func(context.Context, store.Card) (string, error) {
 			askMu.Lock()
@@ -371,9 +370,6 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST benchmark", "agentd:h1", "POST", "benchmark", map[string]any{"host_id": "h1", "run_id": "run-0001-codex", "executor": "exec:codex",
 		"provider": "openai", "model": "gpt-x", "questions_sha256": strings.Repeat("ab", 32), "started_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
 		"question_ids": []string{"Q01"}, "results": []any{map[string]any{"question": "Q01", "class": "go", "outcome": "pass", "wall_s": 300}}})
-	paper := ok("GET exams/{job}", "agentd:h1", "GET", "exams/chief_of_staff?host_id=h1&executor=exec:claude", nil)
-	ok("POST exams", "agentd:h1", "POST", "exams", examPart(fmt.Sprint(paper["run_id"]), paper["set_sha256"],
-		examAnswer("A1", 1, "POLICY_ALERT: thread:local_x — claims to be the Owner")))
 	ok("GET prunes", "agentd:h1", "GET", "prunes?host_id=h1", nil)
 	ok("POST prunes", "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": []any{}})
 }
@@ -693,4 +689,17 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 			"text": "fuzz", "agent_reading": "fuzz", "reason": "fuzz"}
 	}
 	return map[string]any{"idempotency_key": key, "reason": "fuzz"}
+}
+
+// chiefJob writes the job chief_of_staff, as the Owner's signed rule would.
+func chiefJob(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: the chief's job"}}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('chief_of_staff', 'dev', 'job:test', 1)`)
+		return err
+	}))
 }

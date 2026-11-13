@@ -32,8 +32,6 @@ deny	GET /api/v1/agentrt/controls
 deny	POST /api/v1/agentrt/controls
 deny	DELETE /api/v1/agentrt/controls/{id}
 deny	GET /api/v1/agentrt/events
-deny	POST /api/v1/agentrt/exams
-deny	GET /api/v1/agentrt/exams/{job}
 allow	POST /api/v1/agentrt/external-work
 allow	GET /api/v1/agentrt/external-work/{id}
 allow	POST /api/v1/agentrt/external-work/{id}/events
