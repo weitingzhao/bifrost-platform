@@ -242,7 +242,11 @@ func TestBuildPlan(t *testing.T) {
 		{"a doc", func(f, _ map[string]string) { f["docs/readme.md"] = "bye" }, "api/e test|repo check"},
 		{"the pinned task template", func(_, u map[string]string) { u["tasks/run-db.yaml"] = "db-2" }, "api vet|api/a test|api/e test|api/onlytests test|console build|console test"},
 		{"another file of the pinned repository", func(_, u map[string]string) { u["lib/x.ts"] = "x2" }, "api/e test|console build|console test"},
-		{"a package's test file", func(f, _ map[string]string) { f["api/a/x_test.go"] += "// x\n" }, "api/a test|api/e test|repo check"},
+		// vet runs go vet ./..., which reads test files too. 2026-11-13, independent
+		// review of the unit dispatch, item 1: the vet key held the packages' non-test
+		// files alone, so a change to a test file kept the old vet verdict, green or
+		// red; this case expected exactly that omission.
+		{"a package's test file", func(f, _ map[string]string) { f["api/a/x_test.go"] += "// x\n" }, "api vet|api/a test|api/e test|repo check"},
 		// The node tasks' own scripts are one line: what they run is unit-node.
 		{"the script every node task runs", func(f, _ map[string]string) { f["scripts/ci/unit-node"] = "node-2" }, "api/e test|console build|console test|repo check"},
 		{"a script no task of this plan runs", func(f, _ map[string]string) { f["scripts/ci/other"] = "other" }, "api/e test|repo check"},

@@ -187,15 +187,20 @@ func buildPlan(repo, commit string, t *Tree, src Source, doc []byte, own bool) (
 		}
 		for _, task := range sortedKeys(mod.Tasks) {
 			if mod.Tasks[task].Per == "module" {
-				libs := []string{}
+				// The module's task (vet) reads every package whole: its
+				// own files (lib, with what it imports) and its test files.
+				libs, tests := []string{}, []string{}
 				for _, ip := range gm.sorted() {
 					libs = append(libs, ip+"="+gm.Packages[ip].Lib)
+					if pkg := gm.Packages[ip]; len(pkg.TestFiles) > 0 {
+						tests = append(tests, ip+"="+Hash(pkg.TestFiles))
+					}
 				}
 				needs, err := refs(mod.Needs, mod.Tasks[task].Needs)
 				if err != nil {
 					return nil, err
 				}
-				if err = add(mod, root, task, 0, map[string]any{"libs": libs, "go_mod": gm.GoMod, "go_sum": gm.GoSum, "needs": needs}); err != nil {
+				if err = add(mod, root, task, 0, map[string]any{"libs": libs, "tests": tests, "go_mod": gm.GoMod, "go_sum": gm.GoSum, "needs": needs}); err != nil {
 					return nil, err
 				}
 				continue
