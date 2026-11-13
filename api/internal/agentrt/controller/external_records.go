@@ -215,6 +215,21 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 		inputs[i].Tree = tree
 	}
 	p.Inputs = inputs
+	if p.Result == "Failed" && p.Reason == "Failed" && c.Sources.RunFailure != nil {
+		type result struct {
+			tasks, tests []string
+			class        string
+			err          error
+		}
+		r := bounded(c, ctx, func(ctx context.Context) result {
+			tasks, tests, class, err := c.Sources.RunFailure(ctx, p.Run)
+			return result{tasks, tests, class, err}
+		})
+		if r.err != nil {
+			return store.EvidenceRow{}, false, r.err
+		}
+		p.FailedTasks, p.FailedTests, p.FailClass = r.tasks, r.tests, r.class
+	}
 	return store.RunEvidence(p)
 }
 

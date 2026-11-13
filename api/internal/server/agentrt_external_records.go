@@ -53,6 +53,14 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 	}
 	if s.delivery != nil {
 		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
+		src.RunFailure = func(ctx context.Context, run string) ([]string, []string, string, error) {
+			failed, err := s.delivery.RunFailedTasks(ctx, run)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			tasks, tests, class := runFailure(failed)
+			return tasks, tests, class, nil
+		}
 		src.PipelineRuns = func(ctx context.Context) ([]store.PipelineRun, error) {
 			items, err := s.delivery.PipelineRunObservations(ctx)
 			if err != nil {
@@ -333,4 +341,31 @@ func gitTreeID(entries []commitTreeEntry) (string, error) {
 	_, _ = fmt.Fprintf(h, "tree %d\x00", body.Len())
 	h.Write(body.Bytes())
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// runFailure is what a run's failed tasks say it failed on: their names, the
+// tests they name, and the class: test with a test named; build when a task
+// that names its failed tests failed and named none; "" when no failed task
+// names tests at all (the console's, a check) or none is kept.
+func runFailure(failed []delivery.FailedTask) (tasks, tests []string, class string) {
+	names := false
+	seen := map[string]bool{}
+	for _, f := range failed {
+		tasks = append(tasks, f.Task)
+		names = names || f.NamesTests
+		for _, t := range f.Tests {
+			if !seen[t] {
+				seen[t] = true
+				tests = append(tests, t)
+			}
+		}
+	}
+	sort.Strings(tests)
+	switch {
+	case len(tests) > 0:
+		class = store.FailClassTest
+	case names:
+		class = store.FailClassBuild
+	}
+	return tasks, tests, class
 }

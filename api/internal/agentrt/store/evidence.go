@@ -137,18 +137,32 @@ func RunEvidence(p PipelineRun) (EvidenceRow, bool, error) {
 	}
 	// An in-toto Statement v1 with the test-result predicate, so a row can be
 	// signed or exported as it is.
+	predicate := map[string]any{
+		"result":        map[string]string{EvidencePassed: "PASSED", EvidenceFailed: "FAILED"}[result],
+		"configuration": []any{map[string]any{"name": p.Pipeline, "uri": "tekton://cicd/pipelines/" + p.Pipeline}},
+		"url":           "tekton://cicd/pipelineruns/" + p.Run,
+		"scope":         scope,
+		"run_uid":       p.UID,
+		"completed_at":  p.CompletedAt.UTC().Format(time.RFC3339),
+	}
+	if result == EvidenceFailed {
+		// What it failed on, when the run's tasks said (the statement is not
+		// in the key: the same inputs with or without it are the same key).
+		if len(p.FailedTests) > 0 {
+			predicate["failedTests"] = evidenceNames(p.FailedTests, maxFailedTests)
+		}
+		if len(p.FailedTasks) > 0 {
+			predicate["failed_tasks"] = evidenceNames(p.FailedTasks, maxFailedTests)
+		}
+		if p.FailClass == FailClassTest || p.FailClass == FailClassBuild {
+			predicate["fail_class"] = p.FailClass
+		}
+	}
 	statement := map[string]any{
 		"_type":         "https://in-toto.io/Statement/v1",
 		"subject":       subject,
 		"predicateType": "https://in-toto.io/attestation/test-result/v0.1",
-		"predicate": map[string]any{
-			"result":        map[string]string{EvidencePassed: "PASSED", EvidenceFailed: "FAILED"}[result],
-			"configuration": []any{map[string]any{"name": p.Pipeline, "uri": "tekton://cicd/pipelines/" + p.Pipeline}},
-			"url":           "tekton://cicd/pipelineruns/" + p.Run,
-			"scope":         scope,
-			"run_uid":       p.UID,
-			"completed_at":  p.CompletedAt.UTC().Format(time.RFC3339),
-		},
+		"predicate":     predicate,
 	}
 	e := EvidenceRow{Repo: p.Repo, Unit: EvidenceUnitRepo, Task: p.Pipeline, InputKey: key, Result: result, Scope: scope,
 		CommitSHA: own.Commit, RunName: p.Run, RunUID: p.UID, audit: p.Audit && result == EvidenceFailed}
@@ -295,4 +309,23 @@ func EvidenceByCommit(ctx context.Context, db DB, repo, commit string, limit int
 func EvidenceByTree(ctx context.Context, db DB, repo, tree string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND unit = $2 AND inputs->>'tree' = $3 ORDER BY evidence_id DESC LIMIT $4`, repo, EvidenceUnitRepo, tree, limit)
+}
+
+// The classes of a failed run (PipelineRun.FailClass).
+const (
+	FailClassTest  = "test"
+	FailClassBuild = "build"
+	// maxFailedTests bounds the names one row keeps.
+	maxFailedTests = 200
+)
+
+func evidenceNames(in []string, limit int) []any {
+	out := make([]any, 0, len(in))
+	for _, s := range in {
+		if len(out) == limit {
+			break
+		}
+		out = append(out, s)
+	}
+	return out
 }

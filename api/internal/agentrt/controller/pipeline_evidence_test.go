@@ -175,3 +175,74 @@ func TestPipelineRecordsFullCIFailureInvalidatesAPass(t *testing.T) {
 		}
 	}
 }
+
+// A failed CI run's row says what it failed on, as its tasks said: the tests
+// and the class in the statement, outside the key; a passed run and a run
+// read without that source say nothing of it; a read that fails holds the row
+// back until a later full pass.
+func TestPipelineRecordsFailedRunSaysWhatFailed(t *testing.T) {
+	t.Parallel()
+	pool := setup(t)
+	red := ciRun("ci-platform-red", sha("d"), sha("9"))
+	red.Result, red.Reason = "Failed", "Failed"
+	build := ciRun("ci-platform-build", sha("b"), sha("8"))
+	build.Result, build.Reason = "Failed", "Failed"
+	away := errors.New("the cluster is away")
+	fail := true
+	asked := map[string]int{}
+	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
+		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) {
+			return []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, build}, nil
+		},
+		CommitTree: func(context.Context, string, string) (string, error) { return sha("e"), nil },
+		RunFailure: func(_ context.Context, run string) ([]string, []string, string, error) {
+			asked[run]++
+			switch {
+			case fail:
+				return nil, nil, "", away
+			case run == "ci-platform-red":
+				return []string{"test-api"}, []string{"pkg/a.TestOne", "pkg/b.TestTwo"}, store.FailClassTest, nil
+			}
+			return []string{"test-api"}, nil, store.FailClassBuild, nil
+		}}}
+	if _, err := c.PipelineRecords(ctx); !errors.Is(err, away) {
+		t.Fatalf("first pass: %v", err)
+	}
+	fail = false
+	if _, err := c.PipelineRecords(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if asked["ci-platform-green"] != 0 {
+		t.Fatal("a passed run was asked what it failed on")
+	}
+	got := map[string]string{}
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT run_name, COALESCE(statement->'predicate'->>'fail_class','') || ' ' ||
+		  COALESCE(statement->'predicate'->'failedTests','[]')::text || ' ' || COALESCE(statement->'predicate'->'failed_tasks','[]')::text FROM agentrt.evidence`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var run, v string
+			if err = rows.Scan(&run, &v); err != nil {
+				return err
+			}
+			got[run] = v
+		}
+		return rows.Err()
+	}))
+	want := map[string]string{
+		"ci-platform-green": ` [] []`,
+		"ci-platform-red":   `test ["pkg/a.TestOne", "pkg/b.TestTwo"] ["test-api"]`,
+		"ci-platform-build": `build [] ["test-api"]`,
+	}
+	for run, v := range want {
+		if got[run] != v {
+			t.Errorf("%s: %q, want %q", run, got[run], v)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("rows: %v", got)
+	}
+}

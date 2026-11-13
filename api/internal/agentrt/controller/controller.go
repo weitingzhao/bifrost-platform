@@ -35,6 +35,10 @@ type Sources struct {
 	// run that reports a commit it used without its tree (evidence.go);
 	// nil: such a run gives no evidence.
 	CommitTree func(ctx context.Context, repo, commit string) (string, error)
+	// RunFailure reads what a failed CI run failed on from its tasks: the
+	// tasks, the tests they name and the class (store.PipelineRun's fields),
+	// for its evidence row; nil: the row says only that it failed.
+	RunFailure func(ctx context.Context, run string) (tasks, tests []string, class string, err error)
 	Plan       store.PlanSources
 	Approval   func(ctx context.Context, number int64) (store.ApprovalFact, bool)
 	Question   func(ctx context.Context, id string) (q store.Question, ok bool)

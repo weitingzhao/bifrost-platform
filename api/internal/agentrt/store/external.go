@@ -23,6 +23,13 @@ type PipelineRun struct {
 	// Audit: the run is the daily full CI (it reuses nothing), whose failure
 	// contradicts a pass the ledger has for the same inputs.
 	Audit bool
+	// What a failed CI run failed on, read from its tasks for the evidence
+	// row: the tasks that failed, the tests they name (failed-tests), and
+	// the class: "test" with a test named, "build" when a task that names
+	// its failed tests failed and named none (it did not get to a verdict
+	// of a test: it did not compile, or the test program died), "" else.
+	FailedTasks, FailedTests []string
+	FailClass                string
 }
 
 func pipelineSeenBody(p PipelineRun) map[string]any {
