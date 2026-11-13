@@ -1,0 +1,42 @@
+# What the platform releases by itself when main moves. Built into the binary
+# (headrelease.go embeds it).
+# One row is one deliverable: the commits it is made of, who says they are
+# green, the pipeline that delivers them and where to. The loop takes each
+# enabled row in turn; adding a deliverable is adding a row here.
+#
+# The unit released is the newest head of main, not one line's commit:
+# 2026-11-13, three STG deliveries in fourteen minutes failed because each
+# line released its own commit while main moved under it, and a commit waited
+# thirteen minutes for a release window two other lines held (ci-feedback 1-3).
+#
+#   commits[].repo         a repository of the Gitea org
+#   commits[].param        the pipeline parameter that takes its commit
+#   commits[].tested_with  empty: the commit is this repository's main head,
+#                          and its CI must be green in the evidence ledger.
+#                          A repository name: take the commit that repository's
+#                          CI ran beside (the row of evidence names it); it is
+#                          not judged by itself.
+# A deliverable made of several heads (a row with several commits and no
+# tested_with) is released when every one of them is green, as one set.
+#
+# Nothing here is released to PROD: that stays with the release policy. A
+# PROD row cannot be enabled; it is listed so that "is my commit released"
+# (GET /api/v1/delivery/released) answers for PROD as well.
+# The parameter named revision is the pipeline's own revision.
+# Rows for the Trade repositories stay disabled (Owner 2026-11-13).
+deliverables:
+  - name: platform-stg
+    enabled: true
+    environment: stg
+    pipeline: bifrost-deliver-platform
+    commits:
+      - { repo: bifrost-platform, param: revision }
+      - { repo: bifrost-ui, param: uiRevision, tested_with: bifrost-platform }
+      - { repo: bifrost-trade-infra, param: infraRevision, tested_with: bifrost-platform }
+  - name: platform-prod
+    enabled: false
+    environment: prod
+    pipeline: bifrost-deliver-platform-prod
+    commits:
+      - { repo: bifrost-platform, param: revision }
+      - { repo: bifrost-ui, param: uiRevision, tested_with: bifrost-platform }

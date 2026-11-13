@@ -42,6 +42,9 @@ type Sources struct {
 	// UnitRuns records the unit tasks that finished and settles what they
 	// add up to (server: receiveUnits); nil: this platform runs no units.
 	UnitRuns func(ctx context.Context) error
+	// HeadRelease takes each deliverable the platform releases by itself
+	// one step (server/head_release.go); nil when that is switched off.
+	HeadRelease func(ctx context.Context) error
 	Plan     store.PlanSources
 	Approval func(ctx context.Context, number int64) (store.ApprovalFact, bool)
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
@@ -741,6 +744,11 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			every = DefaultPipelineEvery
 		}
 		c.every(ctx, &wg, "agentrt-unit-runs", every, func() error { return c.Sources.UnitRuns(ctx) })
+	}
+	if c.Sources.HeadRelease != nil {
+		// Thirty seconds: the slow poll of Owner 2026-11-13 ("state is read
+		// from the source; events are only hints"). No event hints it yet.
+		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
 	// PROD records its live mode before its first claim (CUT §11.8 v3 item
 	// 1); without it the live loop does not start.

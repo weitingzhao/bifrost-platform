@@ -522,6 +522,9 @@ func (s *Server) Router() http.Handler {
 		// A trial of the release policy on one run request: read-only, but its
 		// reasons name the window holder and the records, so viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/pipelines/{name}/policy-check", s.handleReleasePolicyCheck)
+		// "Is my commit released": what each environment runs and whether it
+		// has the commit (head_release.go). Read-only; viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/released", s.handleReleased)
 		// "Is this commit green", from the evidence ledger: read-only; it names
 		// repositories, commits and CI runs, so viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/commit", s.handleEvidenceCommit)

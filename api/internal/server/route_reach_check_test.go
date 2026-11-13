@@ -57,6 +57,8 @@ var intendedRouteAdditions = map[string][]string{
 	// scripts and by in-cluster gates that hold no platform credential: open
 	// like /releases (a repository, a commit, a run name; read-only).
 	"GET /api/v1/evidence/ci": {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
+	// Head release (2026-11-13): "is my commit released" (read-only).
+	"GET /api/v1/delivery/released": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Stage 2 block 2-B: CI's plan of one commit (read-only).
 	"GET /api/v1/units/plan":      {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence": {"operator", "admin", "trade-satellite"},
