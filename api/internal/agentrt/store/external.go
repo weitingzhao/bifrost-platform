@@ -11,10 +11,15 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
-// PipelineRun is a completed external pipeline run.
+// PipelineRun is a completed external pipeline run. Scope and Inputs are what
+// a CI run says it tested (the repositories it used, each at a commit, with
+// the tree when the run reports it; Scope "" when it does not say): they are
+// read for the evidence ledger (evidence.go) and are not pipeline_seen fields.
 type PipelineRun struct {
 	Run, UID, Pipeline, Kind, Result, Repo, Revision, Reason, Tree, TestedBy string
 	CreatedAt, StartedAt, CompletedAt                                        time.Time
+	Scope                                                                    string
+	Inputs                                                                   []RepoAt
 }
 
 func pipelineSeenBody(p PipelineRun) map[string]any {

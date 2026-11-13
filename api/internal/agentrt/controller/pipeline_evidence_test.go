@@ -1,0 +1,136 @@
+package controller_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+)
+
+func sha(c string) string { return strings.Repeat(c, 40) }
+
+// ciRun is a completed bifrost-ci-platform run as the cluster reports one:
+// its own commit and tree, and the commits of the two repositories beside it.
+func ciRun(name, commit, tree string) store.PipelineRun {
+	p := completedRun(name)
+	p.Pipeline, p.Kind, p.Revision, p.Tree, p.Reason = "bifrost-ci-platform", "ci", commit, tree, "Succeeded"
+	p.Inputs = []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree},
+		{Repo: "bifrost-trade-infra", Commit: sha("1")}, {Repo: "bifrost-ui", Commit: sha("2")}}
+	return p
+}
+
+type evidenceRow struct{ run, key, result, scope, commit string }
+
+func evidenceRows(t *testing.T, db store.DB) []evidenceRow {
+	t.Helper()
+	var out []evidenceRow
+	must(t, store.InTx(ctx, db, func(tx pgx.Tx) error {
+		out = nil
+		rows, err := tx.Query(ctx, `SELECT run_name, input_key, result, scope, commit_sha FROM agentrt.evidence ORDER BY evidence_id`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r evidenceRow
+			if err = rows.Scan(&r.run, &r.key, &r.result, &r.scope, &r.commit); err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	}))
+	return out
+}
+
+// A completed CI run gives one row of evidence, keyed by the trees it tested
+// (read for the commits it reports without one); the same content under
+// another commit has the same key; a run seen again writes nothing; a reused,
+// a cancelled and a non-CI run are no evidence; a failed run is failed
+// evidence; an incremental run says so.
+func TestPipelineRecordsWritesEvidence(t *testing.T) {
+	t.Parallel()
+	pool := setup(t)
+	trees := map[string]string{"bifrost-trade-infra@" + sha("1"): sha("e"), "bifrost-ui@" + sha("2"): sha("f")}
+	reads := 0
+	green := ciRun("ci-platform-green", sha("a"), sha("c"))
+	same := ciRun("ci-platform-same-tree", sha("b"), sha("c"))
+	same.Scope = "incremental"
+	red := ciRun("ci-platform-red", sha("d"), sha("9"))
+	red.Result, red.Reason = "Failed", "Failed"
+	reused := ciRun("ci-platform-reused", sha("a"), sha("c"))
+	reused.TestedBy = "ci-platform-green"
+	cancelled := ciRun("ci-platform-cancelled", sha("a"), sha("c"))
+	cancelled.Result, cancelled.Reason = "Failed", "Cancelled"
+	runs := []store.PipelineRun{green, same, red, reused, cancelled, completedRun("deliver-1")}
+	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
+		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil },
+		CommitTree: func(_ context.Context, repo, commit string) (string, error) {
+			reads++
+			return trees[repo+"@"+commit], nil
+		}}}
+	for pass := 0; pass < 3; pass++ { // every pass is a full one: each run is compared again
+		if _, err := c.PipelineRecords(ctx); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+	}
+	_, key, err := store.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("c"),
+		[]store.RepoAt{{Repo: "bifrost-ui", Tree: sha("f")}, {Repo: "bifrost-trade-infra", Tree: sha("e")}})
+	must(t, err)
+	_, redKey, err := store.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("9"),
+		[]store.RepoAt{{Repo: "bifrost-trade-infra", Tree: sha("e")}, {Repo: "bifrost-ui", Tree: sha("f")}})
+	must(t, err)
+	want := map[string]evidenceRow{
+		"ci-platform-green":     {"ci-platform-green", key, "passed", "full", sha("a")},
+		"ci-platform-same-tree": {"ci-platform-same-tree", key, "passed", "incremental", sha("b")},
+		"ci-platform-red":       {"ci-platform-red", redKey, "failed", "full", sha("d")},
+	}
+	got := evidenceRows(t, pool)
+	if len(got) != len(want) {
+		t.Fatalf("rows: %+v", got)
+	}
+	for _, r := range got {
+		if want[r.run] != r {
+			t.Errorf("row %+v, want %+v", r, want[r.run])
+		}
+	}
+	if key == redKey || reads != 2 {
+		t.Fatalf("keys equal %v; %d tree reads, want 2 (one a commit)", key == redKey, reads)
+	}
+}
+
+// A tree that cannot be read holds back the evidence and not the record: the
+// run is recorded as before, and its evidence is written on a later full pass.
+func TestPipelineRecordsEvidenceWaitsForATree(t *testing.T) {
+	t.Parallel()
+	pool := setup(t)
+	away := errors.New("gitea is away")
+	fail := true
+	c := controller.Controller{DB: pool, PipelineFullEvery: time.Hour, Sources: controller.Sources{
+		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) {
+			return []store.PipelineRun{ciRun("ci-platform-1", sha("a"), sha("c"))}, nil
+		},
+		CommitTree: func(context.Context, string, string) (string, error) {
+			if fail {
+				return "", away
+			}
+			return sha("e"), nil
+		}}}
+	n, err := c.PipelineRecords(ctx)
+	if n != 1 || !errors.Is(err, away) || pipelineSeenCount(t, pool, "ci-platform-1") != 1 || len(evidenceRows(t, pool)) != 0 {
+		t.Fatalf("first pass: %d %v", n, err)
+	}
+	fail = false
+	if n, err = c.PipelineRecords(ctx); n != 0 || err != nil || len(evidenceRows(t, pool)) != 0 {
+		t.Fatalf("a pass that compared nothing wrote evidence: %d %v", n, err)
+	}
+	c.PipelineFullEvery = time.Nanosecond
+	if n, err = c.PipelineRecords(ctx); n != 0 || err != nil || len(evidenceRows(t, pool)) != 1 {
+		t.Fatalf("full pass: %d %v, rows %+v", n, err, evidenceRows(t, pool))
+	}
+}
