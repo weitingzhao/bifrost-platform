@@ -261,6 +261,21 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	_, approvedAttempt := actions.CreateAttemptFrom(ctx)
 	runOwnsWindow := approvedAttempt && strings.HasPrefix(pipelineName, "bifrost-deliver-")
+	if entry, known := windowPipelines[pipelineName]; !runOwnsWindow && known && !entry.required && strings.HasPrefix(pipelineName, "bifrost-deliver-") {
+		cs, _, err := s.cluster.KubernetesClient()
+		if err != nil {
+			resp.Message = fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)
+			return resp, empty, fmt.Errorf("%s", resp.Message)
+		}
+		_, live, err := getReleaseWindow(windowContext(ctx, s.windowRecorder), cs, ns, now)
+		if err != nil {
+			resp.Message = fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)
+			return resp, empty, fmt.Errorf("%s", resp.Message)
+		}
+		// A session-held window stays with its holder. Acquisition below still
+		// arbitrates starts that both observed an absent or expired window.
+		runOwnsWindow = !live
+	}
 	if !runOwnsWindow {
 		if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
 			resp.Message = msg
