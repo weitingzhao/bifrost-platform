@@ -18,15 +18,18 @@ import (
 //
 // For each commit: old is CIIndex's status and run; verdict is the ledger's
 // answer now (commitEvidence: the commit's tree with the main trees beside
-// it now); as_tested says whether the ledger has a full pass recorded for
-// the commit itself, with the inputs its run had. The class names how the
-// two differ:
+// it now); gate is what the gate reads for the commit (ledgerCI) and
+// as_tested says that it is Succeeded: the ledger holds a full pass of the
+// commit's CI, with the inputs its run had, that nothing invalidated. The
+// class names how the two differ:
 //
 //	agree             both green, or neither
-//	beside_moved      old green, the ledger has the full pass, but a
+//	beside_moved      old green and the gate takes the commit, but a
 //	                  repository beside it moved since: its key changed
-//	not_in_ledger     old green and the ledger has no full pass for the
-//	                  commit: the ledger missed an input. This must be zero.
+//	ledger_red        old green and the gate reads Failed: a later full run
+//	                  failed on the same inputs. The ledger is the stricter.
+//	not_in_ledger     old green and the gate has no verdict for the commit:
+//	                  the ledger missed an input. This must be zero.
 //	ledger_only       the ledger is green and old is not: the same content
 //	                  passed under another commit, or old looks at another run
 type evidenceComparison struct {
@@ -36,8 +39,11 @@ type evidenceComparison struct {
 	OldRun   string `json:"old_run"`
 	Verdict  string `json:"verdict"`
 	AsTested bool   `json:"as_tested"`
-	Class    string `json:"class"`
-	Note     string `json:"note,omitempty"`
+	// Gate is what the gate reads for the commit (ledgerCI): Succeeded,
+	// Failed or "".
+	Gate  string `json:"gate"`
+	Class string `json:"class"`
+	Note  string `json:"note,omitempty"`
 }
 
 type evidenceCompareAnswer struct {
@@ -74,6 +80,7 @@ func compareEvidence(ctx context.Context, db store.DB, index map[string]delivery
 		}
 		return r.value, r.err
 	}
+	gateRead := ledgerCI(func() store.DB { return db }, cachedTree)
 	keys := make([]string, 0, len(index))
 	for k := range index {
 		keys = append(keys, k)
@@ -95,17 +102,24 @@ func compareEvidence(ctx context.Context, db store.DB, index map[string]delivery
 			continue
 		}
 		c.Verdict = answer.Verdict
-		for _, row := range answer.CommitRows {
-			if row.Result == store.EvidencePassed && row.Scope == store.EvidenceScopeFull {
-				c.AsTested = true
-			}
+		// What the gate reads for the commit decides the class, not whether
+		// some row of it once passed: a pass the full CI invalidated is not
+		// one the gate takes, and neither is a unit task's row.
+		gate, _, err := gateRead(ctx, repo, commit)
+		if err != nil {
+			c.Note = err.Error()
+			out.Skipped = append(out.Skipped, c)
+			continue
 		}
+		c.Gate, c.AsTested = gate, gate == delivery.CISucceeded
 		oldGreen, newGreen := o.Status == delivery.CISucceeded, answer.Verdict == store.EvidenceGreen
 		switch {
 		case oldGreen == newGreen:
 			c.Class = "agree"
 		case oldGreen && c.AsTested:
 			c.Class = "beside_moved"
+		case oldGreen && gate == delivery.CIFailed:
+			c.Class = "ledger_red"
 		case oldGreen:
 			c.Class = "not_in_ledger"
 			if len(answer.CommitRows) == 0 {

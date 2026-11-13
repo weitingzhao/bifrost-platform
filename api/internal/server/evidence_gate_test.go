@@ -174,3 +174,63 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 		ask("the whole CI passed and sixty unit rows followed", h("e"), delivery.CISucceeded, "ci-e")
 	}
 }
+
+// Three ways the ledger's own bookkeeping turned a true verdict (review
+// 2026-11-13: B1, B2, A2). Each is one commit with one key.
+func TestLedgerCIBookkeeping(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	pool := db.Pool(t, db.Runtime)
+	h := func(c string) string { return strings.Repeat(c, 40) }
+	run := func(name, commit, tree, result string, audit bool, at time.Time) store.EvidenceRow {
+		t.Helper()
+		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
+			Scope: "full", Audit: audit, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
+		e, is, err := store.RunEvidence(p)
+		if err != nil || !is {
+			t.Fatalf("run %s: %v", name, err)
+		}
+		return e
+	}
+	write := func(rows ...store.EvidenceRow) {
+		t.Helper()
+		if _, err := store.RecordEvidence(ctx, pool, rows); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := ledgerCI(func() store.DB { return pool }, nil)
+	ask := func(when, commit, status string) {
+		t.Helper()
+		if got, run, err := read(ctx, "bifrost-platform", commit); err != nil || got != status {
+			t.Errorf("%s: %q (%s) %v, want %q", when, got, run, err, status)
+		}
+	}
+	t1 := time.Date(2026, 11, 13, 1, 0, 0, 0, time.UTC)
+	t2, t3 := t1.Add(time.Hour), t1.Add(2*time.Hour)
+
+	// B1: the daily full CI failed, a later full run passed, and the failed
+	// run is seen again (a restart forgets what was recorded). The pass holds.
+	f := run("b1-audit", h("1"), h("a"), "Failed", true, t1)
+	write(f)
+	write(run("b1-pass", h("1"), h("a"), "Succeeded", false, t2))
+	ask("B1, before the failure is seen again", h("1"), delivery.CISucceeded)
+	write(f)
+	ask("B1, the old failure seen again", h("1"), delivery.CISucceeded)
+
+	// B2: a full pass, then fifty ordinary failures of the same commit. An
+	// ordinary failure does not invalidate a full pass, however many follow.
+	write(run("b2-pass", h("2"), h("b"), "Succeeded", false, t1))
+	for i := 0; i < 50; i++ {
+		write(run(fmt.Sprintf("b2-red-%d", i), h("2"), h("b"), "Failed", false, t2))
+	}
+	ask("B2, a full pass under fifty failures", h("2"), delivery.CISucceeded)
+
+	// A2: a full pass at t1 and the daily full CI's failure at t3, both seen
+	// for the first time in one batch, the failure listed first. The later
+	// failure invalidates the pass whatever the order of the batch.
+	write(run("a2-audit", h("3"), h("c"), "Failed", true, t3), run("a2-pass", h("3"), h("c"), "Succeeded", false, t1))
+	ask("A2, the failure listed before the pass it follows", h("3"), delivery.CIFailed)
+	write(run("a2b-pass", h("4"), h("d"), "Succeeded", false, t1), run("a2b-audit", h("4"), h("d"), "Failed", true, t3))
+	ask("A2, the same in order", h("4"), delivery.CIFailed)
+}

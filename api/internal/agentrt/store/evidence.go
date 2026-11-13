@@ -15,9 +15,13 @@ import (
 
 // The evidence ledger (migration 0017, CI design v4 §3.3): one row says one
 // task ran on one unit with the inputs its key names, and passed or failed.
-// In this wave a repository is one unit and the task is its CI pipeline. The
-// platform writes a row when it sees a CI run complete; nothing decides by
-// the ledger yet.
+// Two kinds of row: a CI pipeline's run, with the whole repository as the
+// unit and the pipeline as the task (RunEvidence), and a unit task's
+// (UnitEvidenceRow, unit_run.go), whose key document has a version. The
+// platform writes the first when it sees a CI run complete and the second
+// when a unit's parts settle. The release policy and the in-cluster gates
+// read "did this commit's CI pass" from the first kind alone (server:
+// ledgerCI), on STG and PROD since 2026-11-13.
 
 // EvidenceUnitRepo is the unit of a whole repository.
 const EvidenceUnitRepo = "repo"
@@ -56,6 +60,10 @@ type EvidenceRow struct {
 	// audit: a failed row of the daily full CI. RecordEvidence writes an
 	// invalidated row beside it when the ledger is green for its key.
 	audit bool
+	// completedAt is when the run ended; RecordEvidence writes a batch in
+	// this order, so that a run seen with the one it followed is written
+	// after it (zero: the row keeps its place).
+	completedAt time.Time
 }
 
 var gitObject = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -165,7 +173,7 @@ func RunEvidence(p PipelineRun) (EvidenceRow, bool, error) {
 		"predicate":     predicate,
 	}
 	e := EvidenceRow{Repo: p.Repo, Unit: EvidenceUnitRepo, Task: p.Pipeline, InputKey: key, Result: result, Scope: scope,
-		CommitSHA: own.Commit, RunName: p.Run, RunUID: p.UID, audit: p.Audit && result == EvidenceFailed}
+		CommitSHA: own.Commit, RunName: p.Run, RunUID: p.UID, audit: p.Audit && result == EvidenceFailed, completedAt: p.CompletedAt}
 	if e.Inputs, err = canon.Encode(inputs); err != nil {
 		return EvidenceRow{}, false, err
 	}
@@ -183,11 +191,33 @@ func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error)
 	}
 	n := 0
 	var errs []error
+	// In the order the runs ended, whatever order they were listed in: the
+	// ledger is read by the order of its rows, and a full run's failure
+	// invalidates the pass before it (review 2026-11-13, A2: a batch of a
+	// pass and the later failure, the failure first, left the commit green).
+	rows = append([]EvidenceRow(nil), rows...)
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i].completedAt, rows[j].completedAt
+		return !a.IsZero() && !b.IsZero() && a.Before(b)
+	})
 	// One transaction a row: a row the table refuses does not hold back the others.
 	for _, e := range rows {
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
 			const insert = `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
 			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`
+			// The row itself first: a run already in the ledger writes nothing
+			// more. (Review 2026-11-13, B1: the invalidation was written
+			// before this, so a failure seen again after a later pass, as a
+			// restart sees it, invalidated that pass.)
+			tag, err := tx.Exec(ctx, insert,
+				e.Repo, e.Unit, e.Task, e.InputKey, e.Result, e.Scope, string(e.Inputs), string(e.Statement), e.CommitSHA, e.RunName, e.RunUID)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() != 1 {
+				return nil
+			}
+			n++
 			if e.audit {
 				// The daily full run failed on inputs the ledger holds a full
 				// pass for: the pass is invalidated (until a later full pass).
@@ -215,12 +245,7 @@ func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error)
 					}
 				}
 			}
-			tag, err := tx.Exec(ctx, insert,
-				e.Repo, e.Unit, e.Task, e.InputKey, e.Result, e.Scope, string(e.Inputs), string(e.Statement), e.CommitSHA, e.RunName, e.RunUID)
-			if err == nil && tag.RowsAffected() == 1 {
-				n++
-			}
-			return err
+			return nil
 		})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("evidence of run %s: %w", e.RunName, err))
@@ -305,11 +330,19 @@ func EvidenceTasks(ctx context.Context, db DB, repo, unit string) ([]EvidenceRow
 // asked of every row, one unit task's pass answered for the whole commit).
 const ciRunRows = `unit = '` + EvidenceUnitRepo + `' AND NOT (inputs ? 'v')`
 
-// EvidenceCIByCommit is the newest rows the CI pipelines' runs recorded for a
-// commit, newest first: what says whether the commit's CI passed.
+// fullPassesFirst orders the full passes ahead of the other rows (each group
+// newest first after it): a read of the newest rows of a commit must not lose
+// its full pass under the rows that followed it, since an ordinary failure
+// does not invalidate one (review 2026-11-13, B2: fifty failures after a
+// full pass read as Failed).
+const fullPassesFirst = `(result = 'passed' AND scope = 'full') DESC`
+
+// EvidenceCIByCommit is the rows the CI pipelines' runs recorded for a
+// commit, its full passes first and newest first within each: what says
+// whether the commit's CI passed.
 func EvidenceCIByCommit(ctx context.Context, db DB, repo, commit string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
-	  WHERE repo = $1 AND commit_sha = $2 AND `+ciRunRows+` ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
+	  WHERE repo = $1 AND commit_sha = $2 AND `+ciRunRows+` ORDER BY `+fullPassesFirst+`, evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
 
 // EvidenceByKey is the rows of one key, oldest first.
@@ -330,7 +363,7 @@ func EvidenceByCommit(ctx context.Context, db DB, repo, commit string, limit int
 // newest first.
 func EvidenceByTree(ctx context.Context, db DB, repo, tree string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
-	  WHERE repo = $1 AND `+ciRunRows+` AND inputs->>'tree' = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, tree, limit)
+	  WHERE repo = $1 AND `+ciRunRows+` AND inputs->>'tree' = $2 ORDER BY `+fullPassesFirst+`, evidence_id DESC LIMIT $3`, repo, tree, limit)
 }
 
 // The classes of a failed run (PipelineRun.FailClass).
