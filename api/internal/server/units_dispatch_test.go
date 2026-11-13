@@ -168,6 +168,19 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 	if recorded, evidence, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || evidence != 0 {
 		t.Fatalf("the same runs seen again wrote %d %d: %v", recorded, evidence, err)
 	}
+	// While the commit's newest run is young the pass advances it (that is
+	// how runs put off for want of room get started); once it is old, no more.
+	calls := 0
+	counting := func(ctx context.Context, repo, commit, tier string) error {
+		calls++
+		return advance(ctx, repo, commit, tier)
+	}
+	if _, _, err = recv.receiveUnits(ctx, pool, trees, cl, counting, time.Now()); err != nil || calls != 1 || len(cl.runs) != 2 {
+		t.Fatalf("a young commit: advanced %d times, %d runs, %v", calls, len(cl.runs), err)
+	}
+	if _, _, err = recv.receiveUnits(ctx, pool, trees, cl, counting, time.Now().Add(unitContinueWindow+time.Minute)); err != nil || calls != 1 {
+		t.Fatalf("an old commit was advanced: %d calls, %v", calls, err)
+	}
 	// A receiver that starts anew (a restart) sees the same runs and writes nothing.
 	if recorded, evidence, err = (&unitReceiver{}).receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || evidence != 0 {
 		t.Fatalf("after a restart the same runs wrote %d %d: %v", recorded, evidence, err)

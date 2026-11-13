@@ -42,9 +42,12 @@ const (
 
 	unitMaxRunningDefault = 12
 	unitGiteaBaseDefault  = "http://gitea.cicd.svc.cluster.local:3000/bifrost"
-	// unitAdvanceWindow: a plan whose runs are older is not advanced again
-	// by the receiving pass (a lost part of it stays lost).
-	unitAdvanceWindow = 2 * time.Hour
+	// unitContinueWindow: the receiving pass takes a commit a step further
+	// while its newest unit run is younger than this, so the runs put off
+	// for want of room start as room comes, and the one retry of a lost run
+	// starts. A commit that has started nothing for this long is done or
+	// stuck, and is left until someone asks again.
+	unitContinueWindow = 20 * time.Minute
 )
 
 type unitDispatchConfig struct {
@@ -215,8 +218,12 @@ type unitReceiver struct {
 }
 
 // receiveUnits records the finished unit TaskRuns and writes the evidence of
-// the tasks they settle. advance, when set, is called for each commit that
-// still has runs to start (a part lost once, or runs put off).
+// the tasks they settle. advance, when set, is called for each commit whose
+// newest unit run is younger than unitContinueWindow: advancing is harmless
+// when nothing is left to start, and it is how runs put off for want of room
+// and the retry of a lost run get started without anyone asking again. (A
+// commit all of whose runs were put off has no run to be seen by, and waits
+// for the next request: the route's answer says how many were put off.)
 func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unitCluster, advance func(ctx context.Context, repo, commit, tier string) error, now time.Time) (recorded, evidence int, err error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -268,9 +275,19 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	again := map[string]string{}
+	type commitSeen struct {
+		latest time.Time
+		tier   string
+	}
+	commits := map[string]commitSeen{}
 	for _, key := range keys {
 		g := groups[key]
+		if parts := strings.Split(key, "\x00"); len(parts) == 5 {
+			ck := parts[0] + "\x00" + parts[4]
+			if seen := commits[ck]; g.latest.After(seen.latest) {
+				commits[ck] = commitSeen{latest: g.latest, tier: g.tier}
+			}
+		}
 		if u.settled[key] {
 			continue
 		}
@@ -286,9 +303,6 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		s := unitexec.Settle(finished)
 		head := s.Head
 		if s.Verdict == "" || s.Verdict == store.UnitRunPassed && pending {
-			if len(s.Retry) > 0 && !pending && now.Sub(g.latest) < unitAdvanceWindow && len(finished) > 0 {
-				again[finished[0].Repo+"\x00"+finished[0].CommitSHA] = g.tier
-			}
 			continue
 		}
 		plan, perr := buildUnitPlan(ctx, trees, head.Repo, head.CommitSHA)
@@ -334,9 +348,12 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		u.settled[key] = true
 	}
 	if advance != nil {
-		for key, tier := range again {
+		for key, seen := range commits {
+			if now.Sub(seen.latest) >= unitContinueWindow {
+				continue
+			}
 			repo, commit, _ := strings.Cut(key, "\x00")
-			if aerr := advance(ctx, repo, commit, tier); aerr != nil {
+			if aerr := advance(ctx, repo, commit, seen.tier); aerr != nil {
 				errs = append(errs, aerr.Error())
 			}
 		}
