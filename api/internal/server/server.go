@@ -62,12 +62,16 @@ import (
 )
 
 type Server struct {
-	cfg             *config.Config
-	prober          *probe.Prober
-	cluster         *cluster.Handler
-	gitops          *gitops.Handler
-	mcp             *mcp.Handler
-	delivery        *delivery.Handler
+	cfg      *config.Config
+	prober   *probe.Prober
+	cluster  *cluster.Handler
+	gitops   *gitops.Handler
+	mcp      *mcp.Handler
+	delivery *delivery.Handler
+	// unitTrees reads commits' trees from Gitea for the unit plan
+	// (units_plan.go), keeping the blobs it read.
+	unitTrees       *giteaTrees
+	unitTreesOnce   sync.Once
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler
 	checklist       *checklist.Handler
@@ -523,6 +527,9 @@ func (s *Server) Router() http.Handler {
 		// The ledger's "did CI pass" for one commit, for the release scripts
 		// and the in-cluster gates: no token, as /releases beside it.
 		r.Get("/evidence/ci", s.handleEvidenceCI)
+		// CI's plan of one commit: its units, their keys, the ledger's word on
+		// each. Read-only; viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/plan", s.handleUnitPlan)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

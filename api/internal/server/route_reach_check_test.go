@@ -57,6 +57,8 @@ var intendedRouteAdditions = map[string][]string{
 	// scripts and by in-cluster gates that hold no platform credential: open
 	// like /releases (a repository, a commit, a run name; read-only).
 	"GET /api/v1/evidence/ci": {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
+	// Stage 2 block 2-B: CI's plan of one commit (read-only).
+	"GET /api/v1/units/plan": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

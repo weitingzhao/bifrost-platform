@@ -1,0 +1,122 @@
+# What CI tests in this repository, and with what (CI design v4 §3.2, landing
+# stage 2). The platform reads this file from a commit's tree and computes the
+# plan: one unit a Go package with tests, one for the console, one for the
+# repository's own checks; each task of a unit has a key, the hash of exactly
+# what it reads. Same key, same result: it is not run again.
+#
+#   go run ./api/cmd/unitplan -repo . -commit HEAD -pin bifrost-ui=../bifrost-ui -pin bifrost-trade-infra=../bifrost-trade-infra
+#
+# prints the plan of a commit from local clones.
+version: 1
+
+# The other repositories this one is tested with, each at a commit. A key
+# takes the tree of what is used at that commit, not the commit: moving a pin
+# changes only the keys of what reads something that changed. advance: manual
+# means whoever needs a newer one changes this line (and, for infra, the copy
+# of its pipelines in api/internal/delivery/testdata in the same commit).
+pins:
+  bifrost-ui: {commit: c83f40b40e65e52f8592ec6b73c5f6987c116e93, advance: manual}
+  bifrost-trade-infra: {commit: 7361ee69a5b250999a43b7c6bded374a57e4b007, advance: manual}
+
+modules:
+  - name: api
+    kind: go
+    root: api
+    # The image the Go tasks of bifrost-ci-platform ran in on 2026-11-13.
+    image: docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437
+    template: bifrost-unit-run-db
+    db-roles: agentrt_owner_dev+platform_agentrt_dev+platform_agentrt_stg+agent_reader
+    # The task template the units run in is an input of every one of them: its
+    # definition carries the database and Redis images.
+    needs: ["bifrost-trade-infra:k8s/cicd/tekton/task-unit-run-db.yaml"]
+    tasks:
+      vet: {per: module}
+      test: {per: package}
+    shards:
+      api/internal/agentrt/store: 8
+    # What a package's tests read that its imports do not show. "." is the
+    # whole repository and every pin: the package is tested again whenever
+    # anything changes, and still only once for the same content. Every
+    # package here has a test that walks up from its directory, walks a
+    # directory, runs a command or opens a file by a computed path (searched
+    # 2026-11-13: 58 of 96 packages with tests; it includes the 38 the experiments found reading
+    # outside). Naming exactly what each reads, in place of ".", is what makes
+    # it run less often; a package missing from this list that does read
+    # outside is the dangerous mistake.
+    inputs:
+      api/cmd/agentd: ["."]
+      api/cmd/agentrt-plan-import: ["."]
+      api/cmd/debtimport: ["."]
+      api/cmd/infracheck: ["."]
+      api/cmd/platform-api: ["."]
+      api/cmd/s5check: ["."]
+      api/cmd/stg-release-probe: ["."]
+      api/internal/actions: ["."]
+      api/internal/actuation: ["."]
+      api/internal/actuationpolicy: ["."]
+      api/internal/agentd: ["."]
+      api/internal/agentgovernance: ["."]
+      api/internal/agentprogress: ["."]
+      api/internal/agentrt/agentrtapi: ["."]
+      api/internal/agentrt/canon: ["."]
+      api/internal/agentrt/debtimport: ["."]
+      api/internal/agentrt/exam: ["."]
+      api/internal/agentrt/gaterun: ["."]
+      api/internal/agentrt/infracheck: ["."]
+      api/internal/agentrt/landing: ["."]
+      api/internal/agentrt/landingci: ["."]
+      api/internal/agentrt/landinggit: ["."]
+      api/internal/agentrt/metrics: ["."]
+      api/internal/agentrt/planimport: ["."]
+      api/internal/agentrt/planview: ["."]
+      api/internal/agentrt/platformcheck: ["."]
+      api/internal/agentrt/recorderimport: ["."]
+      api/internal/agentrt/rules: ["."]
+      api/internal/agentrt/rules/s5check: ["."]
+      api/internal/agentrt/stgrelease: ["."]
+      api/internal/agentrt/store: ["."]
+      api/internal/agentthreads: ["."]
+      api/internal/approvals: ["."]
+      api/internal/checklist: ["."]
+      api/internal/cluster: ["."]
+      api/internal/config: ["."]
+      api/internal/delivery: ["."]
+      api/internal/devsession: ["."]
+      api/internal/hostops: ["."]
+      api/internal/localpath: ["."]
+      api/internal/maintainer: ["."]
+      api/internal/modtidy: ["."]
+      api/internal/network: ["."]
+      api/internal/notice: ["."]
+      api/internal/opscontext: ["."]
+      api/internal/opsfacts: ["."]
+      api/internal/patrol: ["."]
+      api/internal/probe: ["."]
+      api/internal/questions: ["."]
+      api/internal/releasefreeze: ["."]
+      api/internal/releasepolicy: ["."]
+      api/internal/safego: ["."]
+      api/internal/selfhealth: ["."]
+      api/internal/server: ["."]
+      api/internal/statefile: ["."]
+      api/internal/storedurability: ["."]
+      api/internal/testscope: ["."]
+      api/internal/tradevocab: ["."]
+
+  - name: console
+    kind: node
+    root: console
+    needs: ["bifrost-ui:.", "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"]
+    image: docker.io/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+    template: bifrost-unit-run
+    tasks:
+      typecheck: {}
+      lint: {}
+      test: {shards: 4}
+      build: {}
+
+  - name: repo
+    root: .
+    template: bifrost-unit-run
+    tasks:
+      check: {needs: ["bifrost-trade-infra:agent-config/scripts/code-health", "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"]}

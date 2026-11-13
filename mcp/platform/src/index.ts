@@ -500,6 +500,20 @@ reg(
 )
 
 reg(
+  'get_unit_plan',
+  'CI\'s plan of one commit, computed from its tree and its bifrost.units.yaml (read-only; nothing is started). Returns {repo, commit, tree, pins: [{repo, commit, tree}], units: [{unit, task, module, input_key, shards, verdict}], to_run, counts}. A unit is a Go package with tests, the console, or the repository; input_key is the hash of exactly what the task reads; verdict is what the evidence ledger says of that key (green, red, none); to_run counts the tasks that are not green. Pass inputs: true to get the document each key is the hash of. The first plan after a platform restart reads every Go file once and can take a minute.',
+  {
+    repo: z.string().describe('Repository name, e.g. bifrost-platform'),
+    commit: z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA'),
+    inputs: z.boolean().optional().describe('Include each task\'s key document'),
+  },
+  async ({ repo, commit, inputs }) =>
+    jsonResult(
+      await platformGet(`/api/v1/units/plan?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}${inputs ? '&inputs=1' : ''}`),
+    ),
+)
+
+reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},

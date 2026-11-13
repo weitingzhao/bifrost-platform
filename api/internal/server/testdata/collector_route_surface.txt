@@ -264,6 +264,7 @@ deny	GET /api/v1/telemetry/targets
 deny	GET /api/v1/topology
 deny	GET /api/v1/trade-agent/catalog
 deny	GET /api/v1/trade-agent/domains
+deny	GET /api/v1/units/plan
 deny	GET /api/v1/watchlist/union
 outside	GET /health
 outside	GET /metrics
