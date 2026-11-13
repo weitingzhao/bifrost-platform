@@ -196,11 +196,11 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 			f.Scope = v
 		}
 		// What a CI run tested, for the evidence ledger: <short>-commit and
-		// <short>-tree name a repository it used (ciResultRepos), repo-* the
-		// repository of the run itself, which wins when both name it.
+		// <short>-tree name a repository it used (ciResultRepos), source-* (or
+		// repo-*) the repository of the run itself, which wins when both name it.
 		short, field, _ := strings.Cut(name, "-")
 		repo, into := ciResultRepos[short], inputs
-		if short == "repo" {
+		if short == "source" || short == "repo" {
 			repo, into = f.Repo, own
 		}
 		if f.Kind != "ci" || repo == "" || !commitID.MatchString(v) || (field != "commit" && field != "tree") {

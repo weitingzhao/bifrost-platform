@@ -214,6 +214,11 @@ func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {
 	if !reflect.DeepEqual(f.Inputs, want) || f.Scope != "" {
 		t.Fatalf("python run: %+v scope %q", f.Inputs, f.Scope)
 	}
+	f = run("bifrost-ci-python", "bifrost-research", map[string]string{"source-commit": a, "source-tree": b, "infra-commit": c, "infra-tree": d})
+	want = []store.RepoAt{{Repo: "bifrost-research", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
+	if !reflect.DeepEqual(f.Inputs, want) {
+		t.Fatalf("research run: %+v", f.Inputs)
+	}
 	// An infra run reports the platform checkout it used as platform-tree:
 	// an input, and not the tree of the run's repository.
 	f = run("bifrost-ci-infra", "bifrost-trade-infra", map[string]string{"infra-commit": a, "infra-tree": b, "platform-commit": c, "platform-tree": d})
