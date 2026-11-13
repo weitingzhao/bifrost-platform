@@ -13,7 +13,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
-// deliverStgPhaseDefs — user-facing stages for bifrost-deliver-stg (Console Operate step bar).
+// Phase tables group a pipeline's tasks into user-facing stages. Every task
+// named here must be one the pipeline runs (bifrost-trade-infra
+// k8s/cicd/tekton/pipeline-*.yaml): a name the pipeline lacks never gets a
+// TaskRun, so its phase reads running or pending on a run that has finished.
+// A pipeline without a table gets no phases.
+
+// deliverStgPhaseDefs — bifrost-deliver-stg.
 var deliverStgPhaseDefs = []struct {
 	ID    string
 	Label string
@@ -22,13 +28,13 @@ var deliverStgPhaseDefs = []struct {
 	{
 		ID:    "clone",
 		Label: "Clone",
-		Tasks: []string{"clone-core", "clone-worker", "clone-socket", "clone-api", "clone-frontend", "clone-ui", "clone-infra"},
+		Tasks: []string{"clone-core", "clone-worker", "clone-api", "clone-frontend", "clone-ui", "clone-infra"},
 	},
 	{ID: "prepare", Label: "Prepare", Tasks: []string{"prepare"}},
 	{
 		ID:    "build",
 		Label: "Build",
-		Tasks: []string{"stage-api-dockerfile", "build-all-apis", "stage-frontend-dockerfile", "build-frontend", "build-worker-socket"},
+		Tasks: []string{"stage-api-dockerfile", "build-all-apis", "stage-frontend-dockerfile", "build-frontend", "build-worker"},
 	},
 	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout"}},
 	{ID: "verify", Label: "Verify", Tasks: []string{"verify-stg"}},
@@ -51,7 +57,8 @@ var deliverPlatformPhaseDefs = []struct {
 	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 }
 
-// deliverPlatformProdPhaseDefs — bifrost-deliver-platform-prod (preflight STG before prod deploy).
+// deliverPlatformProdPhaseDefs — bifrost-deliver-platform-prod. It builds
+// nothing: it promotes the images STG built (TD-335).
 var deliverPlatformProdPhaseDefs = []struct {
 	ID    string
 	Label string
@@ -59,14 +66,11 @@ var deliverPlatformProdPhaseDefs = []struct {
 }{
 	{ID: "preflight", Label: "Preflight", Tasks: []string{"preflight-stg"}},
 	{ID: "mirror", Label: "Mirror", Tasks: []string{"mirror-sync"}},
-	{ID: "clone", Label: "Clone", Tasks: []string{"clone-platform", "clone-ui"}},
-	{
-		ID:    "build",
-		Label: "Build",
-		Tasks: []string{"stage-api-dockerfile", "stage-console-dockerfile", "build-platform-api", "build-platform-console"},
-	},
-	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout"}},
+	{ID: "clone", Label: "Clone", Tasks: []string{"check-source", "clone-platform"}},
+	{ID: "schema", Label: "Schema", Tasks: []string{"agentrt-schema"}},
+	{ID: "promote", Label: "Promote", Tasks: []string{"promote-images"}},
 	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
+	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout"}},
 }
 
 var deliverResearchPhaseDefs = []struct {
@@ -85,6 +89,8 @@ var deliverResearchPhaseDefs = []struct {
 
 func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string) []PipelinePhaseView {
 	switch pipelineName {
+	case "bifrost-deliver-stg":
+		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
 	case "bifrost-deliver-platform":
 		return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
 	case "bifrost-deliver-platform-prod":
@@ -92,7 +98,7 @@ func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]strin
 	case "bifrost-deliver-research":
 		return aggregateDeliverPhases(deliverResearchPhaseDefs, taskStatus)
 	default:
-		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
+		return []PipelinePhaseView{}
 	}
 }
 
@@ -223,14 +229,15 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	if ns == "" {
 		ns = s.PipelinesNamespace()
 	}
-	pipelineName := "bifrost-deliver-stg"
+	// The pipeline is the one the run names; until the run is read there is
+	// none, and so no phases.
+	pipelineName := ""
 	out := PipelineRunStepsResponse{
 		ClusterID:    s.clusterID(),
 		Namespace:    ns,
 		RunName:      runName,
-		Pipeline:     pipelineName,
 		Reachability: probe.ReachFail,
-		Phases:       aggregateDeliverStgPhases(map[string]string{}),
+		Phases:       []PipelinePhaseView{},
 		GeneratedAt:  now,
 	}
 
@@ -248,12 +255,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		}
 		skippedTasks = pipelineRunSkippedTasks(run)
 	}
-	switch pipelineName {
-	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod", "bifrost-deliver-research":
-		out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
-	default:
-		out.Phases = aggregateDeliverStgPhases(map[string]string{})
-	}
+	out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
 
 	list, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", runName),

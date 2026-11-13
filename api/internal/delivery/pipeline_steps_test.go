@@ -34,21 +34,21 @@ func TestAggregatePhaseStatus(t *testing.T) {
 }
 
 func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
+	// The nine tasks of run bifrost-deliver-platform-prod-a58af341e037a522-1.
 	taskStatus := map[string]string{
-		"preflight-stg":            "succeeded",
-		"mirror-sync":              "succeeded",
-		"clone-platform":           "succeeded",
-		"clone-ui":                 "succeeded",
-		"stage-api-dockerfile":     "succeeded",
-		"stage-console-dockerfile": "succeeded",
-		"build-platform-api":       "succeeded",
-		"build-platform-console":   "succeeded",
-		"rollout":                  "succeeded",
-		"gitops-sync":              "succeeded",
+		"freeze-check":   "succeeded",
+		"preflight-stg":  "succeeded",
+		"mirror-sync":    "succeeded",
+		"check-source":   "succeeded",
+		"clone-platform": "succeeded",
+		"agentrt-schema": "succeeded",
+		"promote-images": "succeeded",
+		"gitops-sync":    "succeeded",
+		"rollout":        "succeeded",
 	}
 	phases := aggregateDeliverPlatformProdPhases(taskStatus)
-	if len(phases) != 6 {
-		t.Fatalf("expected 6 phases, got %d", len(phases))
+	if len(phases) != 7 {
+		t.Fatalf("expected 7 phases, got %d", len(phases))
 	}
 	for _, p := range phases {
 		if p.Status != "succeeded" {
@@ -64,10 +64,10 @@ func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
 }
 
 func TestAggregatePhasesForPipelinePlatformProdNotStg(t *testing.T) {
-	taskStatus := map[string]string{"clone-platform": "succeeded", "clone-ui": "pending"}
+	taskStatus := map[string]string{"check-source": "succeeded", "clone-platform": "pending"}
 	phases := aggregatePhasesForPipeline("bifrost-deliver-platform-prod", taskStatus)
-	if len(phases) != 6 {
-		t.Fatalf("expected 6 platform-prod phases, got %d", len(phases))
+	if len(phases) != 7 {
+		t.Fatalf("expected 7 platform-prod phases, got %d", len(phases))
 	}
 	if phases[0].ID != "preflight" {
 		t.Fatalf("first phase should be preflight, got %s", phases[0].ID)
@@ -77,7 +77,7 @@ func TestAggregatePhasesForPipelinePlatformProdNotStg(t *testing.T) {
 	}
 	// Trade STG defs would include Prepare — must not appear.
 	for _, p := range phases {
-		if p.ID == "prepare" || p.ID == "verify" {
+		if p.ID == "prepare" || p.ID == "verify" || p.ID == "build" {
 			t.Fatalf("unexpected trade-stg phase %s in platform-prod", p.ID)
 		}
 	}
@@ -85,7 +85,7 @@ func TestAggregatePhasesForPipelinePlatformProdNotStg(t *testing.T) {
 
 func TestAggregateDeliverStgPhasesBuildRunning(t *testing.T) {
 	taskStatus := map[string]string{
-		"clone-core": "succeeded", "clone-worker": "succeeded", "clone-socket": "succeeded",
+		"clone-core": "succeeded", "clone-worker": "succeeded",
 		"clone-api": "succeeded", "clone-frontend": "succeeded", "clone-ui": "succeeded", "clone-infra": "succeeded",
 		"prepare":        "succeeded",
 		"build-all-apis": "running",
@@ -181,5 +181,50 @@ func TestPipelineRunSkippedTasks(t *testing.T) {
 	}
 	if pipelineRunSkippedTasks(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
 		t.Fatalf("no status must yield nil")
+	}
+}
+
+// pipelineTasks is what each pipeline with a phase table runs, read from
+// `kubectl -n cicd get pipeline <name>` on 2026-11-12 (the same lists as
+// bifrost-trade-infra k8s/cicd/tekton/pipeline-*.yaml on main). The
+// definitions live in another repository, so this copy is what the tables
+// are held to; update both when a pipeline's tasks change.
+var pipelineTasks = map[string][]string{
+	"bifrost-deliver-stg": {"freeze-check", "mirror-sync", "clone-core", "clone-worker", "clone-api", "clone-frontend", "clone-ui", "clone-infra",
+		"prepare", "stage-api-dockerfile", "build-all-apis", "stage-frontend-dockerfile", "build-frontend", "build-worker", "rollout", "verify-stg", "gitops-sync"},
+	"bifrost-deliver-platform": {"freeze-check", "mirror-sync", "clone-infra", "clone-platform", "clone-ui", "stage-api-dockerfile", "stage-console-dockerfile",
+		"build-platform-api", "build-platform-console", "agentrt-migrate", "promote-images", "gitops-sync", "rollout", "agentd-package"},
+	"bifrost-deliver-platform-prod": {"freeze-check", "preflight-stg", "mirror-sync", "check-source", "clone-platform", "agentrt-schema", "promote-images", "gitops-sync", "rollout"},
+	"bifrost-deliver-research": {"freeze-check", "release-window", "validate-revision", "mirror-sync", "clone-research", "clone-infra", "lint-test",
+		"build-research", "pin-check", "gitops-sync", "rollout-research", "verify-research"},
+}
+
+// A run whose every task succeeded has every phase succeeded. A table that
+// names a task the pipeline does not run fails here: that phase would never
+// leave running or pending.
+func TestPhaseTablesMatchWhatThePipelinesRun(t *testing.T) {
+	for pipeline, tasks := range pipelineTasks {
+		done := map[string]string{}
+		for _, task := range tasks {
+			done[task] = "succeeded"
+		}
+		phases := aggregatePhasesForPipeline(pipeline, done)
+		if len(phases) == 0 {
+			t.Errorf("%s has no phase table", pipeline)
+		}
+		for _, p := range phases {
+			if p.Status != "succeeded" {
+				t.Errorf("%s: phase %s is %s (%s) on a run whose tasks all succeeded", pipeline, p.ID, p.Status, p.Detail)
+			}
+		}
+	}
+}
+
+func TestPipelineWithoutAPhaseTableGetsNoPhases(t *testing.T) {
+	for _, pipeline := range []string{"bifrost-ci-platform", "bifrost-deliver-prod", "bifrost-build-market-data", ""} {
+		phases := aggregatePhasesForPipeline(pipeline, map[string]string{"clone-core": "succeeded"})
+		if phases == nil || len(phases) != 0 {
+			t.Errorf("%q: phases = %#v, want an empty list", pipeline, phases)
+		}
 	}
 }
