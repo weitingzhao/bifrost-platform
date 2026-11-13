@@ -33,6 +33,9 @@ const (
 	EvidenceFailed      = "failed"
 	EvidenceInvalidated = "invalidated"
 	EvidenceScopeFull   = "full"
+	// EvidenceScopeUnknown marks a run whose scope result was there and
+	// said no scope; such a run gives no evidence.
+	EvidenceScopeUnknown = "unknown"
 )
 
 // RepoAt is a repository at a commit, with that commit's git tree.
@@ -131,6 +134,13 @@ func RunEvidence(p PipelineRun) (EvidenceRow, bool, error) {
 		return EvidenceRow{}, false, nil
 	}
 	scope := p.Scope
+	switch scope {
+	case "", EvidenceScopeFull, "incremental", "console":
+	default:
+		// The run reported a scope that is none: it is evidence of nothing
+		// (review 2026-11-13, G1: it must not default to full).
+		return EvidenceRow{}, false, nil
+	}
 	if scope == "" {
 		scope = EvidenceScopeFull
 	}

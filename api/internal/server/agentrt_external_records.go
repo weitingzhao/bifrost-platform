@@ -193,6 +193,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 	}
 	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
 	inputs, own := map[string]*store.RepoAt{}, map[string]*store.RepoAt{}
+	scopeSeen := false
 	for _, value := range results {
 		r, _ := value.(map[string]any)
 		v, _ := r["value"].(string)
@@ -207,7 +208,16 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		case "tested-by":
 			f.TestedBy = v
 		case "api-scope":
-			f.Scope = v
+			// A pipeline that has no such result tests everything (the
+			// scope stays ""). One that has it must say a scope: an empty
+			// value, a value that is not a string, or the result named
+			// twice is not "everything" but a run nothing can be said of.
+			if _, isString := r["value"].(string); !isString || v == "" || scopeSeen {
+				f.Scope = store.EvidenceScopeUnknown
+			} else {
+				f.Scope = v
+			}
+			scopeSeen = true
 		}
 		// What a CI run tested, for the evidence ledger: <short>-commit and
 		// <short>-tree name a repository it used (ciResultRepos), source-* (or

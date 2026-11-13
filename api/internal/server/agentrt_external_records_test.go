@@ -323,3 +323,45 @@ func TestRunFailure(t *testing.T) {
 		}
 	}
 }
+
+// A run that has the api-scope result and says nothing valid in it is not a
+// full run. 2026-11-13, independent review of the A1 fix, G1: the value was
+// read as "" and an empty scope means full (a pipeline with no such result
+// tests everything), so a platform run whose scope came out empty would have
+// been recorded as a full pass of the whole repository. No such run was in
+// the cluster that day (137 succeeded platform runs, all with a valid scope).
+func TestAPipelineRunWithABadScopeIsNotAFullRun(t *testing.T) {
+	t.Parallel()
+	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	fact := func(results ...any) store.PipelineRun {
+		u := unstructured.Unstructured{Object: map[string]any{
+			"spec":   map[string]any{"pipelineRef": map[string]any{"name": "bifrost-ci-platform"}},
+			"status": map[string]any{"completionTime": "2026-11-13T00:00:00Z", "conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}}, "results": results},
+		}}
+		u.SetName("r")
+		u.SetUID("uid-r")
+		u.SetLabels(map[string]string{"bifrost.io/repo": "bifrost-platform"})
+		f, ok := pipelineRunFact(u)
+		if !ok {
+			t.Fatal("not a fact")
+		}
+		return f
+	}
+	own := []any{map[string]any{"name": "platform-commit", "value": a}, map[string]any{"name": "platform-tree", "value": b}}
+	for name, tc := range map[string]struct {
+		scope    []any
+		evidence bool
+	}{
+		"no such result (a pipeline without scopes)": {nil, true},
+		"full":                     {[]any{map[string]any{"name": "api-scope", "value": "full"}}, true},
+		"an empty value":           {[]any{map[string]any{"name": "api-scope", "value": ""}}, false},
+		"a value that is no scope": {[]any{map[string]any{"name": "api-scope", "value": "everything"}}, false},
+		"not a string":             {[]any{map[string]any{"name": "api-scope", "value": []any{"full"}}}, false},
+		"named twice":              {[]any{map[string]any{"name": "api-scope", "value": "full"}, map[string]any{"name": "api-scope", "value": "console"}}, false},
+	} {
+		_, is, err := store.RunEvidence(fact(append(append([]any{}, own...), tc.scope...)...))
+		if err != nil || is != tc.evidence {
+			t.Errorf("%s: evidence %v, %v; want %v", name, is, err, tc.evidence)
+		}
+	}
+}
