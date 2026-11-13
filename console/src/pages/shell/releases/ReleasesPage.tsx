@@ -1,6 +1,7 @@
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow } from '@bifrost/ui'
 import { fetchApprovalList } from '@/api/approvals'
+import type { AuditResponse } from '@/api/auditTypes'
 import { authedFetch, operatorToken, pathSegment } from '@/api/client'
 import type { DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, GitOpsAppsResponse, ReleaseWindowResponse, StgSmokeResponse } from '@/api/deliveryTypes'
 import type { ReleaseListResponse, RunningImagesResponse } from '@/api/releases'
@@ -13,6 +14,7 @@ import { ReleaseHistorySection } from '@/pages/shell/releases/ReleaseHistorySect
 import { ReleaseInProgressSection } from '@/pages/shell/releases/ReleaseInProgressSection'
 import { ReleaseLanesSection, type LandingRuleRead } from '@/pages/shell/releases/ReleaseLanesSection'
 import { ReleaseNeedsYouSection } from '@/pages/shell/releases/ReleaseNeedsYouSection'
+import { ReleasePolicyDecisionsSection } from '@/pages/shell/releases/ReleasePolicyDecisionsSection'
 import {
   RELEASE_RECORD_LIMIT,
   RELEASE_ROLLBACK_ACTION,
@@ -110,6 +112,12 @@ export function ReleasesPage() {
       return data
     }),
     refetchInterval: 30_000,
+  })
+  // The whole audit list (the platform keeps the newest 500): the route takes no filter. Once a minute is enough for decisions made per release.
+  const audit = useQuery({
+    queryKey: ['audit', 'records', 'releases'],
+    queryFn: limited(signal => get<AuditResponse>('audit', '/api/v1/audit', signal)),
+    refetchInterval: 60_000,
   })
   const openWaves = waves.data ?? []
   const hasToken = operatorToken() !== ''
@@ -218,6 +226,12 @@ export function ReleasesPage() {
         error={errorText(approvals.error)}
         pending={pending}
         now={now}
+      />
+
+      <ReleasePolicyDecisionsSection
+        records={Array.isArray(audit.data?.records) ? audit.data.records : undefined}
+        isLoading={audit.isLoading}
+        error={errorText(audit.error) ?? (audit.data != null && !Array.isArray(audit.data.records) ? 'audit: no records list in the answer' : null)}
       />
 
       <ReleaseInProgressSection window={windowView} runs={inProgress} runsLoading={runsLoading} errors={runErrors} />

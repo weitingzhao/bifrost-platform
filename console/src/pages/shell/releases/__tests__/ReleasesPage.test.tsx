@@ -67,6 +67,7 @@ function policyStatus(partial: Record<string, unknown> = {}) {
 let policyResponse: () => Response = () => json(policyStatus())
 let gitopsFails = false
 let wavesResponse: () => Response = () => json([])
+let auditResponse: () => Response = () => json({ records: [] })
 
 function installFetch() {
   vi.stubGlobal(
@@ -76,6 +77,7 @@ function installFetch() {
       const method = init?.method ?? 'GET'
       if (url.endsWith('/api/v1/agentrt/waves?state=open')) return wavesResponse()
       if (url.endsWith('/api/v1/release-policy')) return policyResponse()
+      if (url.endsWith('/api/v1/audit')) return auditResponse()
       if (url.includes('/api/v1/releases/running-images')) {
         return json({
           cells: [
@@ -275,6 +277,7 @@ describe('ReleasesPage', () => {
     policyResponse = () => json(policyStatus())
     gitopsFails = false
     wavesResponse = () => json([])
+    auditResponse = () => json({ records: [] })
     installFetch()
   })
 
@@ -450,6 +453,36 @@ describe('ReleasesPage', () => {
     expect(await screen.findByText(/^Argo CD applications could not be read: .+; whether one can be rolled back is not known\.$/, undefined, { timeout: 4000 })).toBeTruthy()
     expect(screen.queryByText('No PROD Argo CD application to roll back.')).toBeNull()
     expect(screen.queryByRole('button', { name: /rollback/i })).toBeNull()
+  })
+
+  it('shows what the release policy last decided, read from the audit log', async () => {
+    auditResponse = () => json({
+      records: [
+        {
+          id: '2',
+          at: '2026-11-13T00:58:58Z',
+          actor: 'operator',
+          role: 'operator',
+          action: 'release_policy.check',
+          target: 'start_pipeline_run bifrost-deliver-platform',
+          status: 'not covered',
+          detail: `policy_id=rp-20261112-2104 requester=local_1 sha=bifrost-platform=${SHA} clauses=signature reasons=bifrost-platform 9f739bcf6775..f7bc5bfa4eb6 hits no_trust_anchor_change: api/internal/releasepolicy/engine.go`,
+        },
+        { id: '1', at: '2026-11-12T00:00:00Z', actor: 'operator', role: 'operator', action: 'gitops_sync_app', target: 'bifrost-stg', status: 'ok', detail: '' },
+      ],
+    })
+    render(wrapper(<ReleasesPage />))
+    const summary = await screen.findByTestId('release-policy-decisions-summary')
+    expect(summary.textContent).toContain('0 of the last 1 decision covered')
+    expect(summary.textContent).toContain('No run started on the policy alone in these records')
+    expect(screen.getByText('bifrost-platform 9f739bcf6775..f7bc5bfa4eb6 hits no_trust_anchor_change: api/internal/releasepolicy/engine.go')).toBeTruthy()
+  })
+
+  it('says the policy decisions are not known when the audit cannot be read', async () => {
+    auditResponse = () => json({ error: 'down' }, 503)
+    render(wrapper(<ReleasesPage />))
+    expect(await screen.findByText('Audit records could not be read: audit: HTTP 503. What the policy decided is not known.')).toBeTruthy()
+    expect(screen.queryByTestId('release-policy-decisions-summary')).toBeNull()
   })
 
   it('says Unknown when the release policy cannot be read', async () => {
