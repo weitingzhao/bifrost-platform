@@ -280,6 +280,9 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		tier   string
 	}
 	commits := map[string]commitSeen{}
+	// plans: a commit's plan is computed once a pass, whatever the number of
+	// its tasks that settle in it (nil: it could not be computed this pass).
+	plans := map[string]*unitplan.Plan{}
 	for _, key := range keys {
 		g := groups[key]
 		if parts := strings.Split(key, "\x00"); len(parts) == 5 {
@@ -305,9 +308,29 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		if s.Verdict == "" || s.Verdict == store.UnitRunPassed && pending {
 			continue
 		}
-		plan, perr := buildUnitPlan(ctx, trees, head.Repo, head.CommitSHA)
-		if perr != nil {
-			errs = append(errs, fmt.Sprintf("plan of %s %s: %v", head.Repo, head.CommitSHA, perr))
+		// A task the ledger already has a verdict on needs nothing more: the
+		// row was written by an earlier pass or another process. Asked first,
+		// because the plan of a commit is the dear part (after a restart
+		// every retained run is unsettled; PROD 2026-11-13: one plan a task
+		// made a pass take minutes, and nothing was started meanwhile).
+		if before, lerr := store.EvidenceByKey(ctx, db, head.Repo, head.Unit, head.Task, head.InputKey); lerr != nil {
+			errs = append(errs, lerr.Error())
+			continue
+		} else if store.EvidenceVerdict(before) != store.EvidenceNone {
+			u.settled[key] = true
+			continue
+		}
+		planKey := head.Repo + "\x00" + head.CommitSHA
+		plan, seen := plans[planKey]
+		if !seen {
+			built, perr := buildUnitPlan(ctx, trees, head.Repo, head.CommitSHA)
+			if perr != nil {
+				errs = append(errs, fmt.Sprintf("plan of %s %s: %v", head.Repo, head.CommitSHA, perr))
+				built = nil
+			}
+			plans[planKey], plan = built, built
+		}
+		if plan == nil {
 			continue
 		}
 		var task *unitplan.PlannedTask

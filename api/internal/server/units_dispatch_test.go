@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
 // fakeUnitCluster keeps what was created, as the cluster would return it.
@@ -182,8 +183,15 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		t.Fatalf("an old commit was advanced: %d calls, %v", calls, err)
 	}
 	// A receiver that starts anew (a restart) sees the same runs and writes nothing.
-	if recorded, evidence, err = (&unitReceiver{}).receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || evidence != 0 {
-		t.Fatalf("after a restart the same runs wrote %d %d: %v", recorded, evidence, err)
+	// It computes no plan for them either: the ledger already has their verdict
+	// (PROD 2026-11-13: a plan a task after each restart made a pass take minutes).
+	planReads := 0
+	countingTrees := func(ctx context.Context, repo, commit string) (*unitplan.Tree, error) {
+		planReads++
+		return trees(ctx, repo, commit)
+	}
+	if recorded, evidence, err = (&unitReceiver{}).receiveUnits(ctx, pool, countingTrees, cl, nil, time.Now()); err != nil || recorded != 0 || evidence != 0 || planReads != 0 {
+		t.Fatalf("after a restart the same runs wrote %d %d and read %d trees: %v", recorded, evidence, planReads, err)
 	}
 	last, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", commit, "branch")
 	if err != nil || last.ToRun != 1 || len(last.Created) != 0 || len(cl.runs) != 2 {
