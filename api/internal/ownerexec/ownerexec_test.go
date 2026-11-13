@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -567,5 +568,46 @@ func TestHTTPPlatformSendsTheBearerAndReadsRefusals(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "tok") && !strings.Contains("not claimable", "tok") {
 		t.Fatalf("the error text holds the bearer: %v", err)
+	}
+}
+
+// The PROD shape: the runner hands the command to the shell container and
+// scrubs what comes back. The shell is never sent the bearer or the code.
+func TestRemoteRunSendsOnlyTheCommandAndScrubsTheAnswer(t *testing.T) {
+	var seen []byte
+	shell := ShellHandler(func(string, ...any) {})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen, _ = io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(seen))
+		shell.ServeHTTP(w, r)
+	}))
+	defer ts.Close()
+	run := RemoteRun(ts.URL + "/")
+	out := run(context.Background(), `echo "leak=bearer-CANARY-7f3a9c21d4"; exit 4`, time.Minute, testBearer, "123456")
+	if out.ExitCode == nil || *out.ExitCode != 4 {
+		t.Fatalf("exit: %+v", out)
+	}
+	if strings.Contains(out.OutputTail, testBearer) || !strings.Contains(out.OutputTail, "[removed]") {
+		t.Fatalf("the answer was not scrubbed: %q", out.OutputTail)
+	}
+	if !bytes.Contains(seen, []byte("exit 4")) {
+		t.Fatalf("positive control: the command is not in what the shell received: %s", seen)
+	}
+	if bytes.Contains(seen, []byte("123456")) || bytes.Contains(seen, []byte(`"`+testBearer+`"`)) {
+		t.Fatalf("the shell was sent a secret: %s", seen)
+	}
+
+	ts.Close()
+	out = run(context.Background(), "echo hi", time.Second, testBearer)
+	if out.ExitCode != nil || !strings.Contains(out.Err, "unknown") {
+		t.Fatalf("a dead shell must read as unknown, not as a result: %+v", out)
+	}
+}
+
+func TestShellRefusesAnEmptyCommand(t *testing.T) {
+	rec := httptest.NewRecorder()
+	ShellHandler(func(string, ...any) {}).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, ShellRunPath, strings.NewReader(`{"command":" ","timeout_seconds":5}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d", rec.Code)
 	}
 }

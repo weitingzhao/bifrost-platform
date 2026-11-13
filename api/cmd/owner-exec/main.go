@@ -15,6 +15,12 @@
 //	                         refused when a cluster identity or a seed is mounted
 //	OWNER_EXEC_TIMEOUT       longest a command may run (default 30m)
 //	OWNER_EXEC_EGRESS_PROBE  host:port the NetworkPolicy must block; reachable = refuse to run
+//	OWNER_EXEC_SHELL_URL     send commands to the shell container at this URL instead of
+//	                         running them here (PROD: http://127.0.0.1:8788)
+//
+// `owner-exec shell` is the other container of the PROD Pod: it runs the
+// commands, with the Pod's cluster identity, and holds no seed
+// (OWNER_EXEC_SHELL_LISTEN, default 127.0.0.1:8788).
 package main
 
 import (
@@ -42,6 +48,12 @@ func env(key, fallback string) string {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "shell" {
+		addr := env("OWNER_EXEC_SHELL_LISTEN", "127.0.0.1:8788")
+		log.Printf("owner-exec shell %s listening on %s", version, addr)
+		shell := &http.Server{Addr: addr, Handler: ownerexec.ShellHandler(log.Printf), ReadHeaderTimeout: 10 * time.Second}
+		log.Fatal(shell.ListenAndServe())
+	}
 	started := time.Now()
 	seed, err := ownerexec.LoadSeed(ownerexec.SeedConfig{
 		SeedFile:  env("OWNER_EXEC_SEED_FILE", "/etc/owner-exec/seed"),
@@ -64,6 +76,9 @@ func main() {
 		ExecutorID: "owner-exec:" + host,
 		Timeout:    timeout,
 		Logf:       log.Printf,
+	}
+	if shell := env("OWNER_EXEC_SHELL_URL", ""); shell != "" {
+		srv.Run = ownerexec.RemoteRun(shell)
 	}
 	if probe := env("OWNER_EXEC_EGRESS_PROBE", ""); probe != "" {
 		safego.Go("ownerexec.egress-probe", func() {
