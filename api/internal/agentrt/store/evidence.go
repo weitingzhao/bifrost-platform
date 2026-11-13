@@ -183,3 +183,78 @@ func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error)
 	}
 	return n, errors.Join(errs...)
 }
+
+// Evidence verdicts: what the rows of one key say.
+const (
+	EvidenceGreen = "green" // a passed row of scope full that no later row invalidated
+	EvidenceRed   = "red"   // not green, and a failed row
+	EvidenceNone  = "none"  // neither: nothing ran on these inputs, or only part of the unit was tested
+)
+
+// EvidenceVerdict reads the rows of one key, oldest first.
+func EvidenceVerdict(rows []EvidenceRow) string {
+	green, red := false, false
+	for _, r := range rows {
+		switch {
+		case r.Result == EvidencePassed && r.Scope == EvidenceScopeFull:
+			green = true
+		case r.Result == EvidenceInvalidated:
+			green = false
+		case r.Result == EvidenceFailed:
+			red = true
+		}
+	}
+	switch {
+	case green:
+		return EvidenceGreen
+	case red:
+		return EvidenceRed
+	}
+	return EvidenceNone
+}
+
+const evidenceColumns = `evidence_id, repo, unit, task, input_key, result, scope, inputs::text, statement::text, commit_sha, run_name, run_uid, recorded_at`
+
+func evidenceQuery(ctx context.Context, db DB, sql string, args ...any) ([]EvidenceRow, error) {
+	out := []EvidenceRow{}
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		out = out[:0]
+		rows, err := tx.Query(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e EvidenceRow
+			var inputs, statement string
+			if err = rows.Scan(&e.ID, &e.Repo, &e.Unit, &e.Task, &e.InputKey, &e.Result, &e.Scope, &inputs, &statement, &e.CommitSHA, &e.RunName, &e.RunUID, &e.RecordedAt); err != nil {
+				return err
+			}
+			e.Inputs, e.Statement = json.RawMessage(inputs), json.RawMessage(statement)
+			out = append(out, e)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// EvidenceTasks is the newest row of each task the ledger has for a unit of
+// a repository: which tasks give evidence for it, and what each used beside
+// the repository the last time it ran.
+func EvidenceTasks(ctx context.Context, db DB, repo, unit string) ([]EvidenceRow, error) {
+	return evidenceQuery(ctx, db, `SELECT DISTINCT ON (task) `+evidenceColumns+` FROM agentrt.evidence
+	  WHERE repo = $1 AND unit = $2 ORDER BY task, evidence_id DESC`, repo, unit)
+}
+
+// EvidenceByKey is the rows of one key, oldest first.
+func EvidenceByKey(ctx context.Context, db DB, repo, unit, task, key string) ([]EvidenceRow, error) {
+	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
+	  WHERE repo = $1 AND unit = $2 AND task = $3 AND input_key = $4 ORDER BY evidence_id`, repo, unit, task, key)
+}
+
+// EvidenceByCommit is the newest rows recorded for a commit of a repository,
+// whatever their key, newest first.
+func EvidenceByCommit(ctx context.Context, db DB, repo, commit string, limit int) ([]EvidenceRow, error) {
+	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
+	  WHERE repo = $1 AND commit_sha = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
+}

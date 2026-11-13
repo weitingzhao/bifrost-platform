@@ -482,6 +482,17 @@ reg(
 )
 
 reg(
+  'get_commit_evidence',
+  'Is this commit green? Read from the evidence ledger (read-only; nothing is started). Returns {repo, commit, tree, unit, verdict, reason, tasks: [{task, verdict, input_key, inputs, beside: [{repo, commit, tree}], rows}], commit_rows}. verdict is green (every CI task has a full pass on these exact inputs: the commit\'s git tree and the tree of the main head of each repository used beside it), red (a task failed on them and none passed in full since) or none (nothing ran on these inputs, or only part was tested: start a CI run, do not read it as red). The key is content, not the commit, so another commit with the same tree has the same answer. commit_rows is what was recorded for this commit itself, whatever the inputs were then.',
+  {
+    repo: z.string().describe('Repository name, e.g. bifrost-platform'),
+    commit: z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA'),
+  },
+  async ({ repo, commit }) =>
+    jsonResult(await platformGet(`/api/v1/evidence/commit?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}`)),
+)
+
+reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},
