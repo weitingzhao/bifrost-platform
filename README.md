@@ -67,3 +67,7 @@ config/    environments.yaml + ops-context.yaml (spine) + topology.yaml
 | [bifrost-trade-api](../bifrost-trade-api) | Business APIs (probed read-only) |
 
 See Ops Console → **Architecture → Vision / Blueprint** (includes AI Native Platform goals). All governance lives in `console/src/lib/architecture/` catalogs.
+
+## Landing a change on main
+
+`main` takes a change only through a pull request. Branch from the latest `main`, push the commit to `refs/heads/ready/<name>`, and the cluster does the rest: the CI gate runs the whole suite, and `bifrost-land-platform` merges the same commit once that run is green. A branch behind `main` is refused: rebase and push again.
