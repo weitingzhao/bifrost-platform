@@ -50,7 +50,6 @@ modules:
       api/cmd/infracheck: ["."]
       api/cmd/platform-api: ["."]
       api/cmd/s5check: ["."]
-      api/cmd/stg-release-probe: ["."]
       api/internal/actions: ["."]
       api/internal/actuation: ["."]
       api/internal/actuationpolicy: ["."]

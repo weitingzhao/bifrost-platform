@@ -222,7 +222,6 @@ var landingStoreOpen = map[string]string{
 // Deny and size still apply. Like assemblyEdges, each entry names its reason.
 var landingOpen = map[string]string{
 	"api/internal/agentrt/questioncards/":  "adapts the question service to landing and STG cards; the answers stay the question service's",
-	"api/internal/agentrt/stgpreflight/":   "composes B5 readers and non-persisted probes; not wired into workers",
 	"api/internal/agentrt/controller/":     "runs the runtime's loops through the store's permission code",
 	"api/internal/agentrt/relay/":          "Redis change signals; PostgreSQL stays the record",
 	"api/internal/agentrt/agentrttest/":    "test database harness",
@@ -242,7 +241,6 @@ var landingOpen = map[string]string{
 	"api/cmd/agentrt-gate/":                "command around gaterun",
 	"api/cmd/agentrt-plan-import/":         "command around planimport",
 	"api/cmd/debtimport/":                  "command around debtimport; reads files and git history only",
-	"api/cmd/stg-release-probe/":           "checks B5 prerequisites without persisting cluster objects",
 	"api/Makefile":                         "developer targets; no credentialed pipeline runs it (the root Makefile, which deploy_mac_mini.sh runs, stays permission)",
 	"console/vitest.config.ts":             "test runner configuration",
 	"console/tsconfig*.json":               "TypeScript compiler configuration",
