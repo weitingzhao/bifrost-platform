@@ -81,6 +81,20 @@ func TestLedgerCI(t *testing.T) {
 	ask(h("d"), delivery.CIFailed, "ci-full-audit")
 	ask(h("e"), delivery.CIFailed, "ci-full-audit") // and so for the same tree under another commit
 
+	// The push to main also counts a pass of part of the repository, unless
+	// a newer run failed.
+	record("ci-console", h("3"), h("4"), "Succeeded", "console", false)
+	anyScope := ledgerCIScoped(func() store.DB { return pool }, nil, true)
+	for _, tc := range []struct{ commit, status, run string }{{h("3"), delivery.CISucceeded, "ci-console"}, {h("a"), delivery.CISucceeded, "ci-full"}, {h("d"), delivery.CIFailed, "ci-full-audit"}} {
+		if status, run, err := anyScope(ctx, "bifrost-platform", tc.commit); err != nil || status != tc.status || run != tc.run {
+			t.Fatalf("any scope, commit %s: %q %q %v", tc.commit[:1], status, run, err)
+		}
+	}
+	ask(h("3"), "", "")
+	record("ci-console-red", h("3"), h("4"), "Failed", "", false)
+	if status, run, _ := anyScope(ctx, "bifrost-platform", h("3")); status != delivery.CIFailed || run != "ci-console-red" {
+		t.Fatalf("a pass of part before a failure still counts: %q %q", status, run)
+	}
 	if _, _, err := ledgerCI(func() store.DB { return nil }, nil)(ctx, "bifrost-platform", h("a")); err == nil {
 		t.Fatal("no database, and an answer")
 	}

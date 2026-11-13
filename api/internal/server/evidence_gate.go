@@ -55,10 +55,21 @@ func evidenceGateOn(env string) bool {
 // run that reused another's result). tree reads a commit's tree; nil, or a
 // tree that cannot be read, leaves the commit's own answer.
 func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
+	return ledgerCIScoped(db, tree, false)
+}
+
+// ledgerCIScoped is ledgerCI; with anyScope a pass of part of the repository
+// (an incremental or a console run) counts as well when no full run failed
+// after it, as the push to main reads CI (ci_gate.py without --require-full).
+func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
 	verdict := func(ctx context.Context, d store.DB, rows []store.EvidenceRow) (string, string, error) {
-		failed := ""
+		failed, part := "", ""
 		for _, row := range rows { // newest first
 			switch {
+			case row.Result == store.EvidencePassed && row.Scope != store.EvidenceScopeFull:
+				if part == "" && failed == "" {
+					part = row.RunName
+				}
 			case row.Result == store.EvidencePassed && row.Scope == store.EvidenceScopeFull:
 				same, err := store.EvidenceByKey(ctx, d, row.Repo, row.Unit, row.Task, row.InputKey)
 				if err != nil {
@@ -70,6 +81,11 @@ func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (st
 			case row.Result == store.EvidenceFailed && failed == "":
 				failed = row.RunName
 			}
+		}
+		// A full run decides (above, and a full failure here); a pass of part
+		// counts only with anyScope, and not once a newer run failed.
+		if anyScope && part != "" {
+			return delivery.CISucceeded, part, nil
 		}
 		if failed != "" {
 			return delivery.CIFailed, failed, nil
@@ -118,4 +134,39 @@ func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
 	s.delivery.SetCIReader(reader)
 	slog.Info("evidence gate: CI is read from the evidence ledger", "env", env)
 	return reader
+}
+
+// GET /api/v1/evidence/ci?repo=…&commit=…[&scope=any] is ledgerCI's answer
+// for one commit: {repo, commit, scope, status, run}, status Succeeded,
+// Failed or "" (no verdict the ledger knows). scope=any also counts a pass
+// of part of the repository. It answers from the ledger whatever this
+// platform's own switch says: the callers are the release scripts and the
+// in-cluster gates (ci_gate.py), which have their own. It needs no token, as
+// /releases and /health need none: those gates run in Pods that hold no
+// platform credential, and the answer names only a repository, a commit and
+// a CI run, all of which the public mirrors and /releases already show.
+func (s *Server) handleEvidenceCI(w http.ResponseWriter, r *http.Request) {
+	repo, commit := strings.TrimSpace(r.URL.Query().Get("repo")), strings.TrimSpace(r.URL.Query().Get("commit"))
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	if scope == "" {
+		scope = "full"
+	}
+	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) || (scope != "full" && scope != "any") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name, commit a 40-character lowercase SHA, scope full or any"})
+		return
+	}
+	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	read := ledgerCIScoped(func() store.DB { return s.agentRuntime.api.DB },
+		giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), scope == "any")
+	status, run, err := read(ctx, repo, commit)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"repo": repo, "commit": commit, "scope": scope, "status": status, "run": run})
 }
