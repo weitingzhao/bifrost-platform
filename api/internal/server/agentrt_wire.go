@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"io"
 	"log/slog"
 	"net/http"
@@ -181,26 +180,13 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
-		if env == "prod" {
-			c.LandingCards = s.questionRuntime.landingCardQuestions()
-		}
+		// The old landing lane is retired (the Owner 2026-11-13): its loops
+		// (drill, live claims, cards, grant requests, reconcile, the reading
+		// of main for landed results) are not wired any more. Changes reach
+		// main through ready/ and the bifrost-land pipeline.
 		s.wirePipelineRecords(c)
-		s.wireLandingDrill(c)
 		s.wireFullCI(c)
 		s.wireAgentdDeploy(c)
-		if env == "prod" {
-			q := c.LandingCards
-			repos := map[string]bool{}
-			for _, repo := range landing.LandingRepoNames() {
-				repos[repo] = c.Live && c.DrillGit[repo] != nil
-			}
-			h := map[string]any{"repos": repos, "live": c.Live, "cards": map[string]bool{"ask": q.AskRaw != nil, "lookup_key": q.LookupKey != nil,
-				"lookup": q.Lookup != nil, "withdraw": q.Withdraw != nil, "ack": q.Ack != nil}}
-			if !c.Live {
-				h["live_off"] = s.landingLiveOff(c)
-			}
-			s.landingHealth.Store(h)
-		}
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})
@@ -483,7 +469,6 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
 	src.Cards = s.questionRuntime.agentRuntimeCards()
 	src.RuleAnswer = s.questionRuntime.agentRuntimeRuleAnswer()
-	src.MainResults = s.agentRuntimeMainResults()
 	src.Plan = s.agentRuntimePlanSources(src.Deployed)
 	src.Assessable = s.agentRuntimeAssessable()
 	src.CheckAssessment = s.checkAssessment
