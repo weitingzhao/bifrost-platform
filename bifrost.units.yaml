@@ -121,6 +121,10 @@ modules:
 
   - name: repo
     root: .
+    # The alpine the pipeline's check-spine and code-health tasks ran in on
+    # 2026-11-13 (the digest the cluster had pulled); scripts/ci/unit-check
+    # adds bash and git to it with apk, as those tasks did.
+    image: docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     template: bifrost-unit-run
     tasks:
       check: {needs: ["bifrost-trade-infra:agent-config/scripts/code-health", "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"]}

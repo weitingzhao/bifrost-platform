@@ -1,0 +1,86 @@
+#!/bin/sh
+# unit-check: the repository's own checks, as CI runs the unit "repo"
+# (landing stage 2 §4.0). It runs in the repository's root, with the
+# repositories it is tested with checked out beside it, and needs nothing of
+# the cluster: set UNIT_RESULT_DIR and run it by hand for the same result.
+#
+# The checks, each named in failed-tests when it fails:
+#   spine-catalog   scripts/ci/check_spine_catalog.sh, when the repository has one
+#   code-health     the ratchet of bifrost-trade-infra (agent-config/scripts/
+#                   code-health/scan.sh) for this repository, when infra is
+#                   beside it
+#
+# Results, one file each (UNIT_RESULT_DIR, default /unit/result):
+#   failed-tests  the checks that failed, comma separated
+#   fail-class    test when a check failed; empty when all passed, and empty
+#                 when the checks could not be run at all (their tools could
+#                 not be installed): that is not a verdict on the repository
+#   tests         "<checks> <sha256 of their names> <ran> <skipped>"
+# The exit code is 0 only when every check passed.
+#
+# The checks are bash scripts that ask git which files are source. An image
+# without bash, git, grep or sed gets them from apk when it has apk (the
+# alpine the pipeline's checks ran in); any other image has to bring them.
+set -u
+result="${UNIT_RESULT_DIR:-/unit/result}"
+mkdir -p "$result" || exit 2
+: > "$result/failed-tests"
+: > "$result/fail-class"
+: > "$result/tests"
+
+missing=""
+for tool in bash git grep sed; do command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"; done
+if [ -n "$missing" ]; then
+  if command -v apk >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    apk add --no-cache bash git grep sed >/dev/null 2>&1 || { echo "unit-check: could not install$missing"; exit 1; }
+  else
+    echo "unit-check: the image has no$missing"
+    exit 1
+  fi
+fi
+# The checkout was made by another step's user.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
+
+here="$(pwd)"
+repo="$(basename "$here")"
+root="$(dirname "$here")"
+names="" failed="" ran=0 skipped=0
+check() { # name, then the command
+  name="$1"; shift
+  names="$names$name
+"
+  echo "==> unit-check: $name"
+  if "$@"; then ran=$(( ran + 1 )); else ran=$(( ran + 1 )); failed="${failed:+$failed,}$name"; fi
+}
+skip() {
+  names="$names$1
+"
+  skipped=$(( skipped + 1 ))
+  echo "==> unit-check: $1 skipped: $2"
+}
+
+if [ -f scripts/ci/check_spine_catalog.sh ]; then
+  check spine-catalog bash scripts/ci/check_spine_catalog.sh
+else
+  skip spine-catalog "the repository has no scripts/ci/check_spine_catalog.sh"
+fi
+scan="$root/bifrost-trade-infra/agent-config/scripts/code-health/scan.sh"
+if [ -f "$scan" ]; then
+  check code-health bash "$scan" --root "$root" --repo "$repo"
+else
+  skip code-health "bifrost-trade-infra is not beside this repository"
+fi
+
+total=$(( ran + skipped ))
+hash="$(printf '%s' "$names" | sha256sum 2>/dev/null | cut -d' ' -f1)"
+[ -n "$hash" ] || hash="$(printf '%s' "$names" | shasum -a 256 | cut -d' ' -f1)"
+printf '%s %s %s %s' "$total" "$hash" "$ran" "$skipped" > "$result/tests"
+printf '%s' "$failed" > "$result/failed-tests"
+if [ -n "$failed" ]; then
+  printf test > "$result/fail-class"
+  echo "unit-check: failed: $failed"
+  exit 1
+fi
+echo "unit-check: $ran checks passed, $skipped skipped"
+exit 0
