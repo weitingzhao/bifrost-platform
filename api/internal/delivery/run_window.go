@@ -3,7 +3,11 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"strings"
 	"time"
+
+	authv1 "k8s.io/api/authorization/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -106,7 +110,7 @@ func (w *runWindow) observe(ctx context.Context, res dynamic.ResourceInterface, 
 
 func (w *runWindow) follow(res dynamic.ResourceInterface, name string, created bool) {
 	safego.Go("delivery-run-window", func() {
-		ticker := time.NewTicker(windowLifetime / 5)
+		ticker := time.NewTicker(20 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -127,4 +131,95 @@ func (w *runWindow) follow(res dynamic.ResourceInterface, name string, created b
 			}
 		}
 	})
+}
+
+// StartRunWindowRecovery is called once by the API process after recorder wiring.
+// Actual Kubernetes permissions, not the UI's viewer environment, select the writer.
+func (h *Handler) StartRunWindowRecovery() {
+	safego.Go("delivery-run-window-recovery", func() {
+		// An old pod can win the first CAS just before it exits. Retry recovery
+		// from a fresh snapshot on errors; never rebase an existing follower's CAS.
+		for {
+			if err := h.recoverRunWindowOnce(); err == nil {
+				return
+			} else {
+				slog.Warn("release window recovery failed; retrying with TTL fallback", "err", err)
+			}
+			time.Sleep(20 * time.Second)
+		}
+	})
+}
+
+func (h *Handler) recoverRunWindowOnce() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s := h.svc
+	cs, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return err
+	}
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return err
+	}
+	res := dyn.Resource(pipelineRunGVR).Namespace(s.PipelinesNamespace())
+	w, name, err := recoverRunWindow(ctx, cs, res, s.PipelinesNamespace(), s.windowRecorder)
+	if err != nil {
+		return err
+	}
+	if w == nil {
+		slog.Info("release window recovery: no run to follow", "reason", name)
+		return nil
+	}
+	slog.Info("release window recovery: following run", "run", name)
+	w.follow(res, name, true)
+	return nil
+}
+
+func recoverRunWindow(ctx context.Context, cs kubernetes.Interface, res dynamic.ResourceInterface, ns string, recorder WindowRecorder) (*runWindow, string, error) {
+	review, err := cs.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authv1.ResourceAttributes{
+			Namespace: ns, Resource: "configmaps", Name: releaseWindowConfigMap, Verb: "update",
+		}},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return nil, "", err
+	}
+	if !review.Status.Allowed || review.Status.Denied || review.Status.EvaluationError != "" {
+		return nil, "identity cannot update release window", nil
+	}
+	cm, err := cs.CoreV1().ConfigMaps(ns).Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, "no window", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	r, ok := parseWindowCM(cm)
+	if !ok || r.EndedAt != "" || !r.live(time.Now().UTC()) {
+		return nil, "no live window", nil
+	}
+	name := strings.TrimPrefix(r.Reason, "PipelineRun/")
+	if r.Reason != "PipelineRun/"+name || name == "" || r.Who != name {
+		return nil, "session-owned window", nil
+	}
+	// Recovery cannot prove an ambiguous create ever succeeded. A missing run
+	// leaves the TTL intact, just like follow(created=false); never renew it.
+	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, "run missing; TTL remains", nil
+		}
+		return nil, "", err
+	}
+	w := &runWindow{cs: cs, ns: ns, who: r.Who, version: cm.ResourceVersion, recorder: recorder}
+	// Immediate observation also releases a terminal run at startup. Its CAS
+	// fences competing recoveries/old pods: only one version can advance.
+	ended, err := w.observe(ctx, res, name)
+	if err != nil {
+		return nil, "", err
+	}
+	if ended {
+		return nil, "released completed run " + name, nil
+	}
+	return w, name, nil
 }
