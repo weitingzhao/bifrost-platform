@@ -102,6 +102,8 @@ modules:
       api/internal/storedurability: ["."]
       api/internal/testscope: ["."]
       api/internal/unitscript: ["."]
+      # Reads only its own testdata (four real TaskRuns) and the test database.
+      api/internal/unitexec: ["api/internal/unitexec/testdata"]
       api/internal/tradevocab: ["."]
 
   - name: console

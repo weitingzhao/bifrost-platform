@@ -1,0 +1,658 @@
+{
+ "items": [
+  {
+   "metadata": {
+    "annotations": {
+     "pipeline.tekton.dev/release": "fcba522"
+    },
+    "creationTimestamp": "2026-11-13T15:37:52Z",
+    "labels": {
+     "app.kubernetes.io/managed-by": "tekton-pipelines",
+     "bifrost.io/ci-tier": "branch",
+     "bifrost.io/needs-db": "false",
+     "bifrost.io/probe": "unit-shape",
+     "bifrost.io/purpose": "ci-unit",
+     "bifrost.io/workload": "ci",
+     "tekton.dev/memberOf": "tasks",
+     "tekton.dev/pipeline": "unit-shape-probe-1",
+     "tekton.dev/pipelineRun": "unit-shape-probe-1",
+     "tekton.dev/pipelineRunUID": "fecf2df0-3911-495d-99a0-77c9e836bf2d",
+     "tekton.dev/pipelineTask": "bad-image",
+     "tekton.dev/task": "bifrost-unit-run"
+    },
+    "name": "unit-shape-probe-1-bad-image",
+    "namespace": "cicd",
+    "uid": "791a474a-e162-4319-bb4c-35835116fc23"
+   },
+   "spec": {
+    "params": [
+     {
+      "name": "repo-url",
+      "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "image",
+      "value": "docker.io/library/golang:1.25-bookworm-no-such-tag-unit-shape-probe"
+     },
+     {
+      "name": "workdir",
+      "value": "bifrost-platform/api/internal/unitplan"
+     },
+     {
+      "name": "command",
+      "value": "../../../scripts/ci/unit-go-test"
+     },
+     {
+      "name": "unit",
+      "value": "api/internal/unitplan"
+     },
+     {
+      "name": "task",
+      "value": "test"
+     }
+    ],
+    "podTemplate": {
+     "nodeSelector": {
+      "kubernetes.io/arch": "amd64"
+     },
+     "tolerations": [
+      {
+       "effect": "NoSchedule",
+       "key": "node-role.kubernetes.io/control-plane",
+       "operator": "Exists"
+      }
+     ]
+    },
+    "serviceAccountName": "default",
+    "taskRef": {
+     "kind": "Task",
+     "name": "bifrost-unit-run"
+    },
+    "timeout": "4m0s"
+   },
+   "status": {
+    "completionTime": "2026-11-13T15:38:08Z",
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-13T15:38:08Z",
+      "message": "the step \"run\" in TaskRun \"unit-shape-probe-1-bad-image\" failed to pull the image \"\". The pod errored with the message: \"Back-off pulling image \"docker.io/library/golang:1.25-bookworm-no-such-tag-unit-shape-probe\": ErrImagePull: rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/golang:1.25-bookworm-no-such-tag-unit-shape-probe\": failed to resolve reference \"docker.io/library/golang:1.25-bookworm-no-such-tag-unit-shape-probe\": docker.io/library/golang:1.25-bookworm-no-such-tag-unit-shape-probe: not found.\"",
+      "reason": "TaskRunImagePullFailed",
+      "status": "False",
+      "type": "Succeeded"
+     }
+    ],
+    "podName": "unit-shape-probe-1-bad-image-pod",
+    "startTime": "2026-11-13T15:37:52Z",
+    "steps": [
+     {
+      "container": "step-fetch",
+      "imageID": "docker.io/alpine/git@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592",
+      "name": "fetch",
+      "provenance": {},
+      "terminated": {
+       "exitCode": 1,
+       "finishedAt": "2026-11-13T15:38:08Z",
+       "message": "Step fetch terminated as pod unit-shape-probe-1-bad-image-pod is terminated",
+       "reason": "TaskRunImagePullFailed",
+       "startedAt": "2026-11-13T15:37:54Z"
+      },
+      "terminationReason": "TaskRunImagePullFailed"
+     },
+     {
+      "container": "step-run",
+      "name": "run",
+      "provenance": {},
+      "terminated": {
+       "exitCode": 1,
+       "finishedAt": "2026-11-13T15:38:08Z",
+       "message": "Step run terminated as pod unit-shape-probe-1-bad-image-pod is terminated",
+       "reason": "TaskRunImagePullFailed",
+       "startedAt": "2026-11-13T15:37:52Z"
+      },
+      "terminationReason": "TaskRunImagePullFailed"
+     }
+    ]
+   }
+  },
+  {
+   "metadata": {
+    "annotations": {
+     "pipeline.tekton.dev/release": "fcba522"
+    },
+    "creationTimestamp": "2026-11-13T15:37:52Z",
+    "labels": {
+     "app.kubernetes.io/managed-by": "tekton-pipelines",
+     "bifrost.io/ci-tier": "branch",
+     "bifrost.io/needs-db": "false",
+     "bifrost.io/probe": "unit-shape",
+     "bifrost.io/purpose": "ci-unit",
+     "bifrost.io/workload": "ci",
+     "tekton.dev/memberOf": "tasks",
+     "tekton.dev/pipeline": "unit-shape-probe-1",
+     "tekton.dev/pipelineRun": "unit-shape-probe-1",
+     "tekton.dev/pipelineRunUID": "fecf2df0-3911-495d-99a0-77c9e836bf2d",
+     "tekton.dev/pipelineTask": "build-red",
+     "tekton.dev/task": "bifrost-unit-run"
+    },
+    "name": "unit-shape-probe-1-build-red",
+    "namespace": "cicd",
+    "uid": "c0588adf-f59b-4d09-bc44-6a8f9618ed2e"
+   },
+   "spec": {
+    "params": [
+     {
+      "name": "repo-url",
+      "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "image",
+      "value": "docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437"
+     },
+     {
+      "name": "workdir",
+      "value": "bifrost-platform/api/internal/unitplan"
+     },
+     {
+      "name": "command",
+      "value": "printf 'package unitplan\\nfunc probeBuildRed() { return 1 }\\n' > zz_probe_build_red.go && ../../../scripts/ci/unit-go-test\n"
+     },
+     {
+      "name": "unit",
+      "value": "api/internal/unitplan"
+     },
+     {
+      "name": "task",
+      "value": "test"
+     }
+    ],
+    "podTemplate": {
+     "nodeSelector": {
+      "kubernetes.io/arch": "amd64"
+     },
+     "tolerations": [
+      {
+       "effect": "NoSchedule",
+       "key": "node-role.kubernetes.io/control-plane",
+       "operator": "Exists"
+      }
+     ]
+    },
+    "serviceAccountName": "default",
+    "taskRef": {
+     "kind": "Task",
+     "name": "bifrost-unit-run"
+    },
+    "timeout": "15m0s"
+   },
+   "status": {
+    "artifacts": {},
+    "completionTime": "2026-11-13T15:37:59Z",
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-13T15:37:59Z",
+      "message": "\"step-run\" exited with code 1: Error",
+      "reason": "Failed",
+      "status": "False",
+      "type": "Succeeded"
+     }
+    ],
+    "podName": "unit-shape-probe-1-build-red-pod",
+    "results": [
+     {
+      "name": "clones",
+      "type": "string",
+      "value": "bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\n"
+     },
+     {
+      "name": "commit",
+      "type": "string",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "tree",
+      "type": "string",
+      "value": "3759f56a2d4437cd97797ced6763d2200b225c95"
+     },
+     {
+      "name": "duration-seconds",
+      "type": "string",
+      "value": "0"
+     },
+     {
+      "name": "exit-code",
+      "type": "string",
+      "value": "1"
+     },
+     {
+      "name": "fail-class",
+      "type": "string",
+      "value": "build"
+     },
+     {
+      "name": "failed-tests",
+      "type": "string",
+      "value": ""
+     },
+     {
+      "name": "tests",
+      "type": "string",
+      "value": ""
+     }
+    ],
+    "startTime": "2026-11-13T15:37:52Z",
+    "steps": [
+     {
+      "container": "step-fetch",
+      "imageID": "docker.io/alpine/git@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592",
+      "name": "fetch",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://d607d5496258eebf41b12c2e315a8f19e4675b977aca8ff8e1eaf5d3b8a3c09d",
+       "exitCode": 0,
+       "finishedAt": "2026-11-13T15:37:59Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:37:56Z"
+      },
+      "terminationReason": "Completed"
+     },
+     {
+      "container": "step-run",
+      "imageID": "docker.io/library/golang@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437",
+      "name": "run",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://6bc7f1921cffcd80d9870a7aec80ce6898cca7c1f1c60604d490dfebb339f32e",
+       "exitCode": 1,
+       "finishedAt": "2026-11-13T15:37:59Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"duration-seconds\",\"value\":\"0\",\"type\":1},{\"key\":\"exit-code\",\"value\":\"1\",\"type\":1},{\"key\":\"fail-class\",\"value\":\"build\",\"type\":1},{\"key\":\"failed-tests\",\"value\":\"\",\"type\":1},{\"key\":\"tests\",\"value\":\"\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Error",
+       "startedAt": "2026-11-13T15:37:59Z"
+      },
+      "terminationReason": "Error"
+     }
+    ]
+   }
+  },
+  {
+   "metadata": {
+    "annotations": {
+     "pipeline.tekton.dev/release": "fcba522"
+    },
+    "creationTimestamp": "2026-11-13T15:37:52Z",
+    "labels": {
+     "app.kubernetes.io/managed-by": "tekton-pipelines",
+     "bifrost.io/ci-tier": "branch",
+     "bifrost.io/needs-db": "true",
+     "bifrost.io/probe": "unit-shape",
+     "bifrost.io/purpose": "ci-unit",
+     "bifrost.io/workload": "ci",
+     "tekton.dev/memberOf": "tasks",
+     "tekton.dev/pipeline": "unit-shape-probe-1",
+     "tekton.dev/pipelineRun": "unit-shape-probe-1",
+     "tekton.dev/pipelineRunUID": "fecf2df0-3911-495d-99a0-77c9e836bf2d",
+     "tekton.dev/pipelineTask": "pass",
+     "tekton.dev/task": "bifrost-unit-run-db"
+    },
+    "name": "unit-shape-probe-1-pass",
+    "namespace": "cicd",
+    "uid": "1fee7176-52dd-45c2-aaea-b4dd9059c978"
+   },
+   "spec": {
+    "params": [
+     {
+      "name": "repo-url",
+      "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "extra-clones",
+      "value": "bifrost-ui@c83f40b40e65e52f8592ec6b73c5f6987c116e93+bifrost-trade-infra@7361ee69a5b250999a43b7c6bded374a57e4b007"
+     },
+     {
+      "name": "image",
+      "value": "docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437"
+     },
+     {
+      "name": "workdir",
+      "value": "bifrost-platform/api/internal/agentrt/store"
+     },
+     {
+      "name": "command",
+      "value": "../../../../scripts/ci/unit-go-test"
+     },
+     {
+      "name": "shard-index",
+      "value": "0"
+     },
+     {
+      "name": "shard-total",
+      "value": "8"
+     },
+     {
+      "name": "unit",
+      "value": "api/internal/agentrt/store"
+     },
+     {
+      "name": "task",
+      "value": "test"
+     },
+     {
+      "name": "db-roles",
+      "value": "agentrt_owner_dev+platform_agentrt_dev+platform_agentrt_stg+agent_reader"
+     }
+    ],
+    "podTemplate": {
+     "nodeSelector": {
+      "kubernetes.io/arch": "amd64"
+     },
+     "tolerations": [
+      {
+       "effect": "NoSchedule",
+       "key": "node-role.kubernetes.io/control-plane",
+       "operator": "Exists"
+      }
+     ]
+    },
+    "serviceAccountName": "default",
+    "taskRef": {
+     "kind": "Task",
+     "name": "bifrost-unit-run-db"
+    },
+    "timeout": "25m0s"
+   },
+   "status": {
+    "artifacts": {},
+    "completionTime": "2026-11-13T15:38:40Z",
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-13T15:38:40Z",
+      "message": "All Steps have completed executing",
+      "reason": "Succeeded",
+      "status": "True",
+      "type": "Succeeded"
+     }
+    ],
+    "podName": "unit-shape-probe-1-pass-pod",
+    "results": [
+     {
+      "name": "clones",
+      "type": "string",
+      "value": "bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\nbifrost-ui c83f40b40e65e52f8592ec6b73c5f6987c116e93 c6b1e24ea050585db898fc8780731ce50a32f10f\nbifrost-trade-infra 7361ee69a5b250999a43b7c6bded374a57e4b007 3170a20069d14ce9b3e70eb66371411ccbb04854\n"
+     },
+     {
+      "name": "commit",
+      "type": "string",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "tree",
+      "type": "string",
+      "value": "3759f56a2d4437cd97797ced6763d2200b225c95"
+     },
+     {
+      "name": "duration-seconds",
+      "type": "string",
+      "value": "39"
+     },
+     {
+      "name": "exit-code",
+      "type": "string",
+      "value": "0"
+     },
+     {
+      "name": "fail-class",
+      "type": "string",
+      "value": ""
+     },
+     {
+      "name": "failed-tests",
+      "type": "string",
+      "value": ""
+     },
+     {
+      "name": "tests",
+      "type": "string",
+      "value": "169 85fce0a767fd5e4358fd355bde60344641a73beece76214f6547520bf34558b1 169 0"
+     }
+    ],
+    "sidecars": [
+     {
+      "container": "sidecar-postgres",
+      "imageID": "ghcr.io/tektoncd/pipeline/nop-8eac7c133edad5df719dc37b36b62482@sha256:b83fbfa4e59808477d83ad2022f58e1aeff2605c438d37b83fef3b7b3706cb7d",
+      "name": "postgres",
+      "terminated": {
+       "containerID": "containerd://a2b3d539c97a81b167b10be5b9e1e71ed855fdde88e650863844145ef618a0e2",
+       "exitCode": 137,
+       "finishedAt": "2026-11-13T15:39:11Z",
+       "message": "Sidecar container successfully stopped by nop image",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:37:55Z"
+      }
+     },
+     {
+      "container": "sidecar-redis",
+      "imageID": "ghcr.io/tektoncd/pipeline/nop-8eac7c133edad5df719dc37b36b62482@sha256:b83fbfa4e59808477d83ad2022f58e1aeff2605c438d37b83fef3b7b3706cb7d",
+      "name": "redis",
+      "terminated": {
+       "containerID": "containerd://f975e2d72e43e7d87d43c10a309fec2b055361084080e5e5be6fe351ae97fb88",
+       "exitCode": 0,
+       "finishedAt": "2026-11-13T15:39:11Z",
+       "message": "Sidecar container successfully stopped by nop image",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:37:55Z"
+      }
+     }
+    ],
+    "startTime": "2026-11-13T15:37:52Z",
+    "steps": [
+     {
+      "container": "step-fetch",
+      "imageID": "docker.io/alpine/git@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592",
+      "name": "fetch",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://f93886882f5dcbb0772ae7c83517c666ed8cf7de1bbd66a812ba3b47cf62bcbf",
+       "exitCode": 0,
+       "finishedAt": "2026-11-13T15:38:00Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\nbifrost-ui c83f40b40e65e52f8592ec6b73c5f6987c116e93 c6b1e24ea050585db898fc8780731ce50a32f10f\\nbifrost-trade-infra 7361ee69a5b250999a43b7c6bded374a57e4b007 3170a20069d14ce9b3e70eb66371411ccbb04854\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:37:57Z"
+      },
+      "terminationReason": "Completed"
+     },
+     {
+      "container": "step-run",
+      "imageID": "docker.io/library/golang@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437",
+      "name": "run",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://afb7572fe92dcfe8ff4c92cfa728638b29320d5d379980749e0c25172676c581",
+       "exitCode": 0,
+       "finishedAt": "2026-11-13T15:38:39Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\nbifrost-ui c83f40b40e65e52f8592ec6b73c5f6987c116e93 c6b1e24ea050585db898fc8780731ce50a32f10f\\nbifrost-trade-infra 7361ee69a5b250999a43b7c6bded374a57e4b007 3170a20069d14ce9b3e70eb66371411ccbb04854\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"duration-seconds\",\"value\":\"39\",\"type\":1},{\"key\":\"exit-code\",\"value\":\"0\",\"type\":1},{\"key\":\"fail-class\",\"value\":\"\",\"type\":1},{\"key\":\"failed-tests\",\"value\":\"\",\"type\":1},{\"key\":\"tests\",\"value\":\"169 85fce0a767fd5e4358fd355bde60344641a73beece76214f6547520bf34558b1 169 0\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:38:00Z"
+      },
+      "terminationReason": "Completed"
+     }
+    ]
+   }
+  },
+  {
+   "metadata": {
+    "annotations": {
+     "pipeline.tekton.dev/release": "fcba522"
+    },
+    "creationTimestamp": "2026-11-13T15:37:52Z",
+    "labels": {
+     "app.kubernetes.io/managed-by": "tekton-pipelines",
+     "bifrost.io/ci-tier": "branch",
+     "bifrost.io/needs-db": "false",
+     "bifrost.io/probe": "unit-shape",
+     "bifrost.io/purpose": "ci-unit",
+     "bifrost.io/workload": "ci",
+     "tekton.dev/memberOf": "tasks",
+     "tekton.dev/pipeline": "unit-shape-probe-1",
+     "tekton.dev/pipelineRun": "unit-shape-probe-1",
+     "tekton.dev/pipelineRunUID": "fecf2df0-3911-495d-99a0-77c9e836bf2d",
+     "tekton.dev/pipelineTask": "test-red",
+     "tekton.dev/task": "bifrost-unit-run"
+    },
+    "name": "unit-shape-probe-1-test-red",
+    "namespace": "cicd",
+    "uid": "3eba401d-546c-48ab-8f1c-96dbd769b907"
+   },
+   "spec": {
+    "params": [
+     {
+      "name": "repo-url",
+      "value": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
+     },
+     {
+      "name": "revision",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "image",
+      "value": "docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437"
+     },
+     {
+      "name": "workdir",
+      "value": "bifrost-platform/api/internal/unitplan"
+     },
+     {
+      "name": "command",
+      "value": "printf 'package unitplan\\nimport \"testing\"\\nfunc TestProbeRed(t *testing.T) { t.Fatal(\"probe: red on purpose\") }\\n' > zz_probe_red_test.go && ../../../scripts/ci/unit-go-test\n"
+     },
+     {
+      "name": "unit",
+      "value": "api/internal/unitplan"
+     },
+     {
+      "name": "task",
+      "value": "test"
+     }
+    ],
+    "podTemplate": {
+     "nodeSelector": {
+      "kubernetes.io/arch": "amd64"
+     },
+     "tolerations": [
+      {
+       "effect": "NoSchedule",
+       "key": "node-role.kubernetes.io/control-plane",
+       "operator": "Exists"
+      }
+     ]
+    },
+    "serviceAccountName": "default",
+    "taskRef": {
+     "kind": "Task",
+     "name": "bifrost-unit-run"
+    },
+    "timeout": "15m0s"
+   },
+   "status": {
+    "artifacts": {},
+    "completionTime": "2026-11-13T15:38:00Z",
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-13T15:38:00Z",
+      "message": "\"step-run\" exited with code 1: Error",
+      "reason": "Failed",
+      "status": "False",
+      "type": "Succeeded"
+     }
+    ],
+    "podName": "unit-shape-probe-1-test-red-pod",
+    "results": [
+     {
+      "name": "clones",
+      "type": "string",
+      "value": "bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\n"
+     },
+     {
+      "name": "commit",
+      "type": "string",
+      "value": "9e3b11168949bc110db7106bdb03cd099f927142"
+     },
+     {
+      "name": "tree",
+      "type": "string",
+      "value": "3759f56a2d4437cd97797ced6763d2200b225c95"
+     },
+     {
+      "name": "duration-seconds",
+      "type": "string",
+      "value": "2"
+     },
+     {
+      "name": "exit-code",
+      "type": "string",
+      "value": "1"
+     },
+     {
+      "name": "fail-class",
+      "type": "string",
+      "value": "test"
+     },
+     {
+      "name": "failed-tests",
+      "type": "string",
+      "value": "github.com/weitingzhao/bifrost-platform/api/internal/unitplan.TestProbeRed"
+     },
+     {
+      "name": "tests",
+      "type": "string",
+      "value": "5 59f7b9a674c37002813c22d06fc9ce980f144436d75e30a110b986edd66ca7af 5 0"
+     }
+    ],
+    "startTime": "2026-11-13T15:37:52Z",
+    "steps": [
+     {
+      "container": "step-fetch",
+      "imageID": "docker.io/alpine/git@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592",
+      "name": "fetch",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://d05fec5673a4eaecff76567b4a55db9df39af91464ba5e4467a782862244c157",
+       "exitCode": 0,
+       "finishedAt": "2026-11-13T15:37:58Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Completed",
+       "startedAt": "2026-11-13T15:37:56Z"
+      },
+      "terminationReason": "Completed"
+     },
+     {
+      "container": "step-run",
+      "imageID": "docker.io/library/golang@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437",
+      "name": "run",
+      "provenance": {},
+      "terminated": {
+       "containerID": "containerd://33007bfde256bd33095936fc57938f38f57f00d5eeada31798326db475ae59fe",
+       "exitCode": 1,
+       "finishedAt": "2026-11-13T15:38:00Z",
+       "message": "[{\"key\":\"clones\",\"value\":\"bifrost-platform 9e3b11168949bc110db7106bdb03cd099f927142 3759f56a2d4437cd97797ced6763d2200b225c95\\n\",\"type\":1},{\"key\":\"commit\",\"value\":\"9e3b11168949bc110db7106bdb03cd099f927142\",\"type\":1},{\"key\":\"duration-seconds\",\"value\":\"2\",\"type\":1},{\"key\":\"exit-code\",\"value\":\"1\",\"type\":1},{\"key\":\"fail-class\",\"value\":\"test\",\"type\":1},{\"key\":\"failed-tests\",\"value\":\"github.com/weitingzhao/bifrost-platform/api/internal/unitplan.TestProbeRed\",\"type\":1},{\"key\":\"tests\",\"value\":\"5 59f7b9a674c37002813c22d06fc9ce980f144436d75e30a110b986edd66ca7af 5 0\",\"type\":1},{\"key\":\"tree\",\"value\":\"3759f56a2d4437cd97797ced6763d2200b225c95\",\"type\":1}]",
+       "reason": "Error",
+       "startedAt": "2026-11-13T15:37:58Z"
+      },
+      "terminationReason": "Error"
+     }
+    ]
+   }
+  }
+ ]
+}
