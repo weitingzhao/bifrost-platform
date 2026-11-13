@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -122,12 +123,16 @@ func (c *Controller) compareOneDeliveredBy(ctx context.Context, g ChangeReader, 
 	return nil
 }
 
+// Match the store's landingSHA contract without opening a transaction.
+var reworkOldA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
 // reworkSeenPass records landing_rework_seen for each declined root whose
 // listed pairs (its step's landed siblings now) are all settled not the same
 // change, none waiting, failed or same (R5:5.5-18, DESIGN §5). The store
 // looks the set up first and writes only when the facts still match; a
 // stale snapshot or a failed write is tried on a later pass. A set found or
-// written is not looked up again by this process.
+// written, or whose old A is not a full commit, is not looked up again by
+// this process while the set remains listed.
 func (c *Controller) reworkSeenPass(ctx context.Context, repo string, pairs []store.DeliveredByPair, keys []string, now time.Time) error {
 	type group struct {
 		root, op, oldA string
@@ -163,6 +168,11 @@ func (c *Controller) reworkSeenPass(ctx context.Context, repo string, pairs []st
 		}
 		done := repo + "/" + gr.root + "/" + gr.op + "/" + store.ReworkSetKey(gr.sibs)
 		if c.deliveredBy.recordedSet(done) || now.Before(c.deliveredBy.closedUntil(done)) {
+			continue
+		}
+		if !reworkOldA.MatchString(gr.oldA) {
+			c.deliveredBy.record(done)
+			c.logf("landing_rework_seen %s in %s: skipped: old_a %q is not a full commit; not tried again for this set", gr.root, repo, gr.oldA)
 			continue
 		}
 		_, status, err := store.RecordReworkSeen(ctx, c.DB, repo, gr.root, gr.op, gr.oldA, gr.sibs)
@@ -247,7 +257,7 @@ func (m *deliveredByMemo) recordedSet(key string) bool {
 	return m.recorded[key]
 }
 
-// record remembers a rework set found or written.
+// record remembers a rework set found, written, or permanently skipped.
 func (m *deliveredByMemo) record(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
