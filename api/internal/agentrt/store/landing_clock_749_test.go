@@ -36,33 +36,3 @@ func TestReview749RootWindowCounterexample(t *testing.T) {
 		})
 	}
 }
-
-// On a3651f81 this fails at
-// "original landing prerequisite" once database now reaches 2026-10-28
-// 17:49 UTC. Keep the SQL timestamps real: freezing event time does not
-// freeze mission/task created_at, including for the later reversal root.
-func TestReview749OpenLandingTimelinePG(t *testing.T) {
-	t.Parallel()
-	ctx := ownClock(t)
-	x, _ := reviewOpenPG(t)
-	s := landingState(t, x.w, landingRepoStream)
-	o := s.Operations[x.op]
-	if o.Phase != "landed" || !o.EverLanded || o.ClaimedAt.IsZero() || !o.PreparedAt.After(o.ClaimedAt) || !x.at.After(o.PreparedAt) {
-		t.Fatalf("landing timeline: operation=%+v gate=%s", o, x.at)
-	}
-	if why := landing.RootBound(s, x.root, x.at, false); why != "" {
-		t.Fatalf("fresh database-clock root exhausted at gate: %s (claim=%s prepared=%s gate=%s)", why, o.ClaimedAt, o.PreparedAt, x.at)
-	}
-	var missionCreated, taskCreated, accepted, databaseNow time.Time
-	ok(t, x.w.rt.QueryRow(ctx, `SELECT m.created_at, t.created_at,
-      (SELECT max(at) FROM agentrt.event WHERE task_id=t.task_id AND event_type='task_state_changed' AND body_json->>'to'='accepted'), now()
-      FROM agentrt.task t JOIN agentrt.mission m USING (mission_id) WHERE t.task_id=$1`, x.root).
-		Scan(&missionCreated, &taskCreated, &accepted, &databaseNow))
-	fence := s.Fence()
-	if fence.IsZero() || fence.After(databaseNow) || missionCreated.Before(fence) || taskCreated.Before(fence) || accepted.Before(fence) || !x.at.After(taskCreated) {
-		t.Fatalf("fixture ordering: fence=%s database_now=%s mission=%s task=%s accepted=%s gate=%s", fence, databaseNow, missionCreated, taskCreated, accepted, x.at)
-	}
-	if x.read(t).Batches[b5Batch].Phase != "OPEN" {
-		t.Fatal("landing did not admit the STG batch")
-	}
-}

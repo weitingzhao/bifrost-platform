@@ -203,7 +203,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
-		waitSTG := s.startSTGRelease(ctx, c)
 		relayDone := make(chan struct{})
 		if rdb == nil {
 			close(relayDone)
@@ -217,7 +216,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 		<-ctx.Done()
 		wait()
-		waitSTG()
 		<-relayDone
 		pool.Close()
 		if rdb != nil {

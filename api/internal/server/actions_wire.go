@@ -18,7 +18,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/stgrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -206,8 +205,6 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	actions.RegisterExecutor(supersedeAction, s.supersedeTasks)
-	actions.RegisterExecutor(stgrelease.SampleCreateAction, s.stgSampleCreate)
-	actions.RegisterExecutor(stgrelease.SampleFinalizeAction, s.stgSampleFinalize)
 	actions.RegisterExecutor(store.RecoverBatchPushAction, s.pushRecoveryExecutor)
 	for _, action := range store.GrantActions {
 		actions.RegisterExecutor(action, s.landingGrantExecutor(action))

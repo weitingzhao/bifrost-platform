@@ -72,7 +72,6 @@ modules:
       api/internal/agentrt/recorderimport: ["."]
       api/internal/agentrt/rules: ["."]
       api/internal/agentrt/rules/s5check: ["."]
-      api/internal/agentrt/stgrelease: ["."]
       api/internal/agentrt/store: ["."]
       api/internal/agentthreads: ["."]
       api/internal/approvals: ["."]

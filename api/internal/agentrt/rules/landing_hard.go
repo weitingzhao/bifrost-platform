@@ -222,7 +222,6 @@ var landingStoreOpen = map[string]string{
 // Deny and size still apply. Like assemblyEdges, each entry names its reason.
 var landingOpen = map[string]string{
 	"api/internal/agentrt/questioncards/":  "adapts the question service to landing and STG cards; the answers stay the question service's",
-	"api/internal/agentrt/stgrelease/":     "B5's opt-in STG release controller; the signed rule and switch it reads are permission",
 	"api/internal/agentrt/stgpreflight/":   "composes B5 readers and non-persisted probes; not wired into workers",
 	"api/internal/agentrt/controller/":     "runs the runtime's loops through the store's permission code",
 	"api/internal/agentrt/relay/":          "Redis change signals; PostgreSQL stays the record",

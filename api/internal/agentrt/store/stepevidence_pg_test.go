@@ -152,46 +152,6 @@ func TestStepLandedFollowsTheLandingFold(t *testing.T) {
 	}
 }
 
-// Serial: t.Setenv (the local Git fixture).
-// step_stg_settled on the B5 production paths: unknown while the batch that
-// admitted the step's landed operation runs, true once it settled the
-// member delivered, and the step moves.
-func TestStepSTGSettledFollowsB5(t *testing.T) {
-	ctx := ownClock(t)
-	x := b5hFixture(t)
-	w := x.w
-	moveToStep(t, w, x.root, s2)
-	w.rule(t, s2, `{"step_stg_settled":{}}`)
-	d := &deployments{}
-	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.True || ev.STG != plan.Unknown {
-		t.Fatalf("landed, batch open: %+v", ev)
-	}
-	if moved := w.evaluate(t, s2, d); moved != "" || w.stepState(t, s2) != "planned" {
-		t.Fatalf("an open batch moved the step: %q", moved)
-	}
-	ok(t, x.c.Pass(ctx))
-	x.runs.work = b5hWork("d", "f")
-	x.terminal(t, "Succeeded")
-	ok(t, x.c.Pass(ctx))
-	ok(t, x.c.Pass(ctx))
-	x.until(t, b5hClosed)
-	x.assertDelivered(t, 1)
-	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.True || ev.STG != plan.True {
-		t.Fatalf("delivered, batch settled: %+v", ev)
-	}
-	if moved := w.evaluate(t, s2, d); moved != "done" {
-		t.Fatalf("settled work did not move the step: %q", moved)
-	}
-	// Another accepted implementation on the step, in bifrost-trade-infra,
-	// with no landing at all: the landed and settled platform work does not
-	// mask it (review 630).
-	other := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, Repo: infraRepo, BaseCommit: commitB})
-	w.passRound(t, other, "h1", "h2", "h3")
-	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.False || ev.STG != plan.False {
-		t.Fatalf("an accepted implementation never landed was masked: %+v", ev)
-	}
-}
-
 // The plan-standing grant takes the aggregate atoms as a step's first rule
 // when they do not hold yet; one that holds already, or names a manual atom
 // or a CI run beside them, is the Owner's.

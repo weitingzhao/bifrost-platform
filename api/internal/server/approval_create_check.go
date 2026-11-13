@@ -12,9 +12,6 @@ import (
 // whose signed commits Gitea does not have is refused then, not after the
 // Owner approved it (TD-420, approval #80).
 func (s *Server) approvalCreateCheck(ctx context.Context, action string, params map[string]any) error {
-	if err := stgSampleCreateCheck(action, params); err != nil {
-		return err
-	}
 	if action == agentdeploy.DeployAgentdAction {
 		return agentdDeployCreateCheck(params)
 	}
