@@ -32,6 +32,12 @@ spec:
     value: $(tasks.clone.results.base-commit)
   - name: platform-commit
     value: $(tasks.clone.results.platform-commit)
+  # Trees of the two checkouts: the inputs a later run with the same trees
+  # does not need to test again (CI root design, wave 1).
+  - name: infra-tree
+    value: $(tasks.clone.results.tree)
+  - name: platform-tree
+    value: $(tasks.clone.results.platform-tree)
   - name: tools-from
     value: $(tasks.check.results.tools-from)
   - name: doc-policy
