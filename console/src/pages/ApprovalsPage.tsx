@@ -1,4 +1,5 @@
 import { ApprovalReviewButton } from '@/pages/ApprovalReviewButton'
+import { OwnerExecRun, ownerExecCandidate } from '@/pages/OwnerExecRun'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
@@ -273,6 +274,7 @@ function ApprovalCard({
   onApprove,
   onReject,
   onClose,
+  onRefresh,
 }: {
   item: ApprovalItem
   blocked: string | null
@@ -288,6 +290,7 @@ function ApprovalCard({
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
   onClose: (id: string, outcome: ResolveOutcome, note: string) => void
+  onRefresh: () => void
 }) {
   const [reason, setReason] = useState('')
   const landing = isLandingAction(item.action)
@@ -438,6 +441,10 @@ function ApprovalCard({
           </p>
         ) : null}
       </article>
+      {/* The cluster runner, when one answers: a one-time code approves and runs. The buttons below stay as they were. */}
+      {ownerExecCandidate(item) ? (
+        <OwnerExecRun item={item} blocked={blocked ?? (staleBuild ? blockedReason ?? null : null)} onStarted={onRefresh} />
+      ) : null}
       {pending ? (
         <div className="ops-decision-actions flex w-full min-w-0 flex-col gap-2">
           <p className="ops-decision-context">{env || 'Environment not specified'} · {title}</p>
@@ -774,6 +781,7 @@ export function ApprovalsPage() {
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}
               onClose={(requestId, outcome, note) => void closeUnknown(requestId, outcome, note)}
+              onRefresh={() => void qc.invalidateQueries({ queryKey: ['approvals'] })}
             />
           ) : null}
         </section>

@@ -24,6 +24,9 @@ var landingHardGo = [...]string{
 	"api/internal/actuationpolicy/",
 	"api/internal/releasepolicy/",
 	"api/internal/workactions/",
+	// The runner that executes an owner_run_command on a one-time code.
+	"api/internal/ownerexec/",
+	"api/cmd/owner-exec/",
 	// Assembly, routes and identity configuration.
 	"api/internal/server/",
 	"api/internal/agentrt/agentrtapi/",
@@ -282,6 +285,8 @@ var landingHardConsole = [...]string{
 	"console/src/lib/signInError.ts",
 	"console/src/pages/ApprovalsPage.tsx",
 	"console/src/pages/ApprovalReviewButton.tsx",
+	"console/src/pages/OwnerExecRun.tsx",
+	"console/src/api/ownerExec.ts",
 	"console/src/pages/approvalDecision.ts",
 	"console/src/pages/approvalSiblings.ts",
 	"console/src/pages/approvalWaitingNotice.ts",

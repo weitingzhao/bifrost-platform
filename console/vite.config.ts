@@ -31,6 +31,8 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '..'), uiRoot],
     },
     proxy: {
+      // Local owner-exec, when one is running (OWNER_EXEC_TARGET=http://127.0.0.1:8787). Listed first: it is the longer prefix.
+      ...(process.env.OWNER_EXEC_TARGET ? { '/api/owner-exec': { target: process.env.OWNER_EXEC_TARGET, changeOrigin: true } } : {}),
       '/api': {
         target: apiTarget,
         changeOrigin: true,
