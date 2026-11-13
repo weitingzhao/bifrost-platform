@@ -62,7 +62,7 @@ config/    environments.yaml + ops-context.yaml (spine) + topology.yaml
 
 | Repo | Role |
 |------|------|
-| [bifrost-trade-infra](../bifrost-trade-infra) | Business Compose, Goal docs |
+| [bifrost-trade-infra](../bifrost-trade-infra) | Kubernetes manifests, the Tekton pipelines (CI, delivery, landing), release scripts, agent governance |
 | [bifrost-trade-frontend](../bifrost-trade-frontend) | Trade monitoring SPA |
 | [bifrost-trade-api](../bifrost-trade-api) | Business APIs (probed read-only) |
 
