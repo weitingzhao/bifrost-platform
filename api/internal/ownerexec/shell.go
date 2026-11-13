@@ -94,9 +94,10 @@ func RemoteRun(base string) func(ctx context.Context, command string, timeout ti
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&out); err != nil || (out.ExitCode == nil && out.Err == "") {
 			return Outcome{Err: shellUnreadable, Duration: time.Since(started)}
 		}
+		tail := outputTail(out.OutputTail, secrets...)
 		return Outcome{
 			ExitCode: out.ExitCode, Duration: time.Duration(out.DurationMS) * time.Millisecond,
-			OutputSHA: out.OutputSHA, OutputTail: outputTail(out.OutputTail, secrets...), Err: Scrub(out.Err, secrets...),
+			OutputSHA: outputSHA(tail), OutputTail: tail, Err: Scrub(out.Err, secrets...),
 		}
 	}
 }

@@ -235,7 +235,7 @@ func (s *Server) execute(id, lease, command, bearer, code string, every time.Dur
 	// Wait pending: returning successfully would silently discard evidence.
 	delay := 2 * time.Second
 	for {
-		if err := s.Platform.Result(ctx, bearer, id, res); err == nil {
+		if err := s.Platform.Result(ctx, bearer, id, res); resultDelivered(err) {
 			break
 		}
 		s.Logf("run %s: result delivery pending; retrying in %s", id, delay)
@@ -328,4 +328,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// Only this conflict acknowledges a result whose first reply may have been lost.
+func resultDelivered(err error) bool {
+	var status *StatusError
+	return err == nil || (errors.As(err, &status) && status.Status == http.StatusConflict && status.Body["error"] == "result already accepted")
 }

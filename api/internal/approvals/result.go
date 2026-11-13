@@ -1,6 +1,7 @@
 package approvals
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -131,8 +132,14 @@ func (s *Service) result(ref string, in resultInput) decided {
 			e.DurationMS = now.Sub(e.StartedAt).Milliseconds()
 		}
 		e.ExitCode = in.ExitCode
-		e.OutputSHA256 = sum
 		e.OutputTail = tail(Redact(in.OutputTail), maxTail)
+		// Hash exactly the redacted tail stored at acceptance (the omission marker
+		// on overflow), never a caller-supplied digest of raw output. Later retention
+		// may clear the tail without changing this digest.
+		e.OutputSHA256 = ""
+		if sum != "" { // Preserve the optional field when the caller supplied no digest.
+			e.OutputSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(e.OutputTail)))
+		}
 		e.Error = oneLine(Redact(in.Error))
 		e.LeaseExpiresAt = time.Time{}
 		e.LateResult = late

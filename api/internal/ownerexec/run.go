@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"hash"
 	"os"
 	"os/exec"
 	"strings"
@@ -25,17 +24,18 @@ const (
 
 // Outcome is what one command run produced.
 type Outcome struct {
-	ExitCode   *int
-	Duration   time.Duration
+	ExitCode *int
+	Duration time.Duration
+	// OutputSHA hashes the final redacted OutputTail, including the omission marker.
+	// It is empty for the shell intermediate response, which is not yet redacted.
 	OutputSHA  string
 	OutputTail string
 	Err        string
 }
 
-// tailWriter hashes everything and retains bounded, complete output.
+// tailWriter retains bounded, complete output.
 type tailWriter struct {
 	mu       sync.Mutex
-	sum      hash.Hash
 	tail     []byte
 	overflow bool
 }
@@ -43,7 +43,6 @@ type tailWriter struct {
 func (w *tailWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.sum.Write(p)
 	if !w.overflow {
 		if len(p) > tailKeep-len(w.tail) {
 			w.overflow = true
@@ -80,13 +79,12 @@ func runCommand(ctx context.Context, command string, timeout time.Duration, clip
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 5 * time.Second
-	out := &tailWriter{sum: sha256.New()}
+	out := &tailWriter{}
 	cmd.Stdout, cmd.Stderr = out, out
 
 	runErr := cmd.Run()
 	res := Outcome{Duration: time.Since(started)}
 	out.mu.Lock()
-	res.OutputSHA = hex.EncodeToString(out.sum.Sum(nil))
 	tail := string(out.tail)
 	if out.overflow {
 		tail = "[output omitted: redaction buffer limit exceeded]"
@@ -94,6 +92,7 @@ func runCommand(ctx context.Context, command string, timeout time.Duration, clip
 	out.mu.Unlock()
 	if clip {
 		tail = outputTail(tail, secrets...)
+		res.OutputSHA = outputSHA(tail)
 	}
 	res.OutputTail = tail
 
@@ -149,4 +148,9 @@ func outputTail(s string, secrets ...string) string {
 		s = s[len(s)-tailSend:]
 	}
 	return strings.ToValidUTF8(s, "?")
+}
+
+func outputSHA(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

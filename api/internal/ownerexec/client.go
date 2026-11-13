@@ -38,11 +38,12 @@ type Claim struct {
 
 // Result is POST /approvals/{id}/result.
 type Result struct {
-	LeaseID      string `json:"lease_id"`
-	Started      *bool  `json:"started,omitempty"`
-	Refusal      string `json:"refusal,omitempty"`
-	ExitCode     *int   `json:"exit_code,omitempty"`
-	DurationMS   int64  `json:"duration_ms"`
+	LeaseID    string `json:"lease_id"`
+	Started    *bool  `json:"started,omitempty"`
+	Refusal    string `json:"refusal,omitempty"`
+	ExitCode   *int   `json:"exit_code,omitempty"`
+	DurationMS int64  `json:"duration_ms"`
+	// OutputSHA256 is SHA-256 of the final redacted OutputTail, not raw command output.
 	OutputSHA256 string `json:"output_sha256,omitempty"`
 	OutputTail   string `json:"output_tail,omitempty"`
 	Error        string `json:"error,omitempty"`

@@ -2,7 +2,9 @@ package approvals
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -127,5 +129,34 @@ func assertNoSecret(t *testing.T, where, text string, secrets ...string) {
 		if strings.Contains(text, secret) {
 			t.Fatalf("%s still contains %q", where, secret)
 		}
+	}
+}
+
+// Source: codex/reports/review-f2-fix.md C1 and "原提交尚缺哪些测试".
+func TestReviewC1StoredHashMatchesFinalTailAndAudit(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.json")
+	svc := New(filepath.Join(dir, "approvals"), actuation.NewAuditLog(auditPath))
+	h := chi.NewRouter()
+	h.Post("/approvals/{id}/result", svc.HandleResult)
+	rec, lease := claimed(t, svc)
+	rawOutput := "token=CANARYVALUE" + strings.Repeat(" ", 2037)
+	rawSHA := fmt.Sprintf("%x", sha256.Sum256([]byte(rawOutput)))
+	body, _ := json.Marshal(resultInput{LeaseID: lease, ExitCode: intPtr(0), OutputTail: rawOutput, OutputSHA256: rawSHA})
+	res := postApproval(h, "/approvals/"+rec.ID+"/result", string(body))
+	if res.Code != http.StatusOK {
+		t.Fatalf("result: %d %s", res.Code, res.Body.String())
+	}
+	got, _ := svc.find(rec.ID)
+	want := fmt.Sprintf("%x", sha256.Sum256([]byte(got.Execution.OutputTail)))
+	if got.Execution.OutputSHA256 != want || want == rawSHA {
+		t.Fatal("stored hash describes raw output")
+	}
+	raw, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), want) || strings.Contains(string(raw), rawSHA) {
+		t.Fatal("audit hash differs from stored tail")
 	}
 }
