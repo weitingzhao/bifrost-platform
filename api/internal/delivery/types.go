@@ -219,6 +219,11 @@ type PipelineTaskRunView struct {
 	CompletionTime string `json:"completion_time,omitempty"`
 }
 
+type PipelineRunResult struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type PipelineRunStepsResponse struct {
 	ClusterID    string                `json:"cluster_id"`
 	Namespace    string                `json:"namespace"`
@@ -228,5 +233,6 @@ type PipelineRunStepsResponse struct {
 	Detail       string                `json:"detail"`
 	Phases       []PipelinePhaseView   `json:"phases"`
 	Tasks        []PipelineTaskRunView `json:"tasks,omitempty"`
+	Results      []PipelineRunResult   `json:"results"`
 	GeneratedAt  time.Time             `json:"generated_at"`
 }

@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -238,6 +239,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		RunName:      runName,
 		Reachability: probe.ReachFail,
 		Phases:       []PipelinePhaseView{},
+		Results:      []PipelineRunResult{},
 		GeneratedAt:  now,
 	}
 
@@ -251,8 +253,13 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	if run, getErr := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, runName, metav1.GetOptions{}); getErr == nil {
 		if ref, ok, _ := unstructured.NestedString(run.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 			pipelineName = ref
-			out.Pipeline = pipelineName
+		} else {
+			// Inline pipelineSpec runs have no pipelineRef; Tekton identifies
+			// their pipeline with this label. Readers use it to list the run.
+			pipelineName = run.GetLabels()["tekton.dev/pipeline"]
 		}
+		out.Pipeline = pipelineName
+		out.Results = pipelineRunResults(run)
 		skippedTasks = pipelineRunSkippedTasks(run)
 	}
 	out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
@@ -312,5 +319,29 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	out.Tasks = tasks
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))
+	return out
+}
+
+// pipelineRunResults keeps string values verbatim and encodes typed Tekton
+// results as JSON text. An absent result list is always an empty JSON array.
+func pipelineRunResults(run *unstructured.Unstructured) []PipelineRunResult {
+	items, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
+	out := make([]PipelineRunResult, 0, len(items))
+	for _, item := range items {
+		result, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := result["name"].(string)
+		value, ok := result["value"].(string)
+		if !ok {
+			raw, err := json.Marshal(result["value"])
+			if err != nil {
+				continue
+			}
+			value = string(raw)
+		}
+		out = append(out, PipelineRunResult{Name: name, Value: value})
+	}
 	return out
 }
