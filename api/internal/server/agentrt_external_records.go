@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	gitsha1 "crypto/sha1" // #nosec G505 -- git object ids are sha1
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -234,7 +237,10 @@ var ciResultRepos = map[string]string{
 }
 
 // giteaCommitTree reads the git tree of a commit of <org>/<repo> from Gitea,
-// with the delivery service's read-only credential.
+// with the delivery service's read-only credential. Gitea names no tree id
+// for a commit (the tree sha of its commit and trees answers is the commit's
+// own id, seen on STG 2026-11-13), so the id is computed as git does, from
+// the entries of the commit's root tree.
 func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error), client *http.Client) func(context.Context, string, string) (string, error) {
 	c := *client
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -246,34 +252,83 @@ func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error),
 		if err != nil {
 			return "", fmt.Errorf("gitea access: %w", err)
 		}
-		u := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/git/commits/" + commit +
-			"?stat=false&verification=false&files=false"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		base := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/git/trees/" + commit
+		var entries []commitTreeEntry
+		for page := 1; ; page++ {
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s?per_page=1000&page=%d", base, page), nil)
+			if reqErr != nil {
+				return "", reqErr
+			}
+			if acc.User != "" || acc.Pass != "" {
+				req.SetBasicAuth(acc.User, acc.Pass)
+			}
+			var doc struct {
+				Total *int              `json:"total_count"`
+				Tree  []commitTreeEntry `json:"tree"`
+			}
+			err = func() error {
+				resp, doErr := c.Do(req)
+				if doErr != nil {
+					return doErr
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("HTTP %d", resp.StatusCode)
+				}
+				return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&doc)
+			}()
+			if err != nil || doc.Total == nil {
+				return "", fmt.Errorf("gitea: %s/%s tree of %s: %v", acc.Org, repo, commit, err)
+			}
+			entries = append(entries, doc.Tree...)
+			if len(entries) == *doc.Total {
+				break
+			}
+			if len(doc.Tree) == 0 || len(entries) > *doc.Total || page >= 100 {
+				return "", fmt.Errorf("gitea: %s/%s tree of %s: %d entries read of %d", acc.Org, repo, commit, len(entries), *doc.Total)
+			}
+		}
+		tree, err := gitTreeID(entries)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("gitea: %s/%s tree of %s: %w", acc.Org, repo, commit, err)
 		}
-		if acc.User != "" || acc.Pass != "" {
-			req.SetBasicAuth(acc.User, acc.Pass)
-		}
-		resp, err := c.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("gitea: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("gitea: %s/%s commit %s: HTTP %d", acc.Org, repo, commit, resp.StatusCode)
-		}
-		var doc struct {
-			SHA    string `json:"sha"`
-			Commit struct {
-				Tree struct {
-					SHA string `json:"sha"`
-				} `json:"tree"`
-			} `json:"commit"`
-		}
-		if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&doc); err != nil || doc.SHA != commit || !commitID.MatchString(doc.Commit.Tree.SHA) {
-			return "", fmt.Errorf("gitea: %s/%s commit %s: no tree in the answer (%v)", acc.Org, repo, commit, err)
-		}
-		return doc.Commit.Tree.SHA, nil
+		return tree, nil
 	}
+}
+
+// gitTreeID is the id git gives a tree with these entries (one directory,
+// not its subtrees): the sha1 of "tree <size>\0" and, for each entry in git's
+// order (by name, a directory as if its name ended in "/"), "<mode> <name>\0"
+// and the 20 bytes of its id.
+func gitTreeID(entries []commitTreeEntry) (string, error) {
+	type entry struct {
+		key, mode, name string
+		id              []byte
+	}
+	list := make([]entry, 0, len(entries))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		id, err := hex.DecodeString(e.SHA)
+		mode := strings.TrimLeft(e.Mode, "0")
+		ok := map[string]bool{"blob 100644": true, "blob 100755": true, "blob 120000": true, "tree 40000": true, "commit 160000": true}[e.Type+" "+mode]
+		if err != nil || len(id) != 20 || !ok || e.Path == "" || strings.ContainsAny(e.Path, "/\x00") || seen[e.Path] {
+			return "", fmt.Errorf("invalid tree entry %q", e.Path)
+		}
+		seen[e.Path] = true
+		key := e.Path
+		if e.Type == "tree" {
+			key += "/"
+		}
+		list = append(list, entry{key, mode, e.Path, id})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].key < list[j].key })
+	var body bytes.Buffer
+	for _, e := range list {
+		body.WriteString(e.mode + " " + e.name + "\x00")
+		body.Write(e.id)
+	}
+	h := gitsha1.New() // #nosec G401 -- git's object id, not a security hash
+	_, _ = fmt.Fprintf(h, "tree %d\x00", body.Len())
+	h.Write(body.Bytes())
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

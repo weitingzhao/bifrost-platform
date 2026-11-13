@@ -84,3 +84,42 @@ func TestUpgrade0017AddsAppendOnlyEvidence(t *testing.T) {
 		}
 	}
 }
+
+// 0018: the same run under another key is another row; the same row again is
+// not; rows written before it are kept.
+func TestUpgrade0018ARunMayHaveARowPerKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := agentrttest.New(t)
+	conn := db.Connect(t, db.Owner)
+	files, err := migrate.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:17]); err != nil {
+		t.Fatal(err)
+	}
+	const insert = `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
+	  VALUES ('bifrost-platform','repo','bifrost-ci-platform',$1,'passed','full','{}','{}',$2,'ci-platform-1','uid-1')`
+	wrong, right, commit := strings.Repeat("a", 64), strings.Repeat("c", 64), strings.Repeat("b", 40)
+	if _, err = conn.Exec(ctx, insert, wrong, commit); err != nil {
+		t.Fatal(err)
+	}
+	if applied, err := migrate.RunFiles(ctx, conn, "dev", files[:18]); err != nil || len(applied) != 1 || applied[0] != 18 {
+		t.Fatalf("applied %v: %v", applied, err)
+	}
+	const onConflict = ` ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`
+	for i, tc := range []struct {
+		key  string
+		want int64
+	}{{right, 1}, {right, 0}, {wrong, 0}} {
+		tag, err := conn.Exec(ctx, insert+onConflict, tc.key, commit)
+		if err != nil || tag.RowsAffected() != tc.want {
+			t.Fatalf("insert %d: %d rows, %v", i, tag.RowsAffected(), err)
+		}
+	}
+	var n int
+	if err = conn.QueryRow(ctx, `SELECT count(*) FROM agentrt.evidence`).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("%d rows, %v", n, err)
+	}
+}

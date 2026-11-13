@@ -231,27 +231,68 @@ func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {
 	}
 }
 
+// The root tree of bifrost-platform at 057dcc1e, as git ls-tree lists it: git
+// names that tree 315f7a37… (git rev-parse 057dcc1e^{tree}).
+const platformRootTree = `100644 blob 6bae55cb70329356f1aa93f09d8753c071b60cbd .env.example
+100644 blob d5437c3acef29b614da4d96b59866a4d20093f19 .gitignore
+040000 tree c0c1a0224fd1a700d0c5beec0aee5553e16a6e4a .husky
+100644 blob 209e3ef4b6247ce746048d5711befda46206d235 .nvmrc
+100644 blob 7d6b23401bd55395714a07dec6f4b5d8dfa48229 CLAUDE.md
+100644 blob 261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64 LICENSE
+100644 blob 72a1faabbb0f4a798b3f1830a146ca04dd9c9dbb Makefile
+100644 blob a2531e382b6ec351091b809be384a3cb65cf354c PROGRESS-daily-ops-checklist-step2.md
+100644 blob 355d7793dff6abfcbec4cc9197757a503b4cb0e9 PROGRESS-data-unification.md
+100644 blob 1c63a6d21e028be11375fb37ecf30de405f78e01 PROGRESS-observability-hub.md
+100644 blob 0dfb152fda39073d44c5365eb7d88062d02f4202 README.md
+040000 tree 9ac478b2514964af20a0df1447b43ef082cdde83 agent
+040000 tree 6e64bdf6c400c312376a12bdf7e2faa228400b86 api
+040000 tree 2bce4888a21211bc9258f6a495eeba40a1293c92 config
+040000 tree 9a161b48f1fef5691cc07533e9eb4f9167f153b9 console
+040000 tree e3fc092e5d01bd8419bb3cbb089fedbffbe35fde mcp
+040000 tree 71dbfa3003be3cf0fc2e4e167d5b353cc317a50a scripts
+040000 tree 0ea7461831c51028ca3e8fb082af962dc73d8a8a site`
+
+// The tree of a commit is computed from the entries of its root tree, read a
+// page at a time and in any order; Gitea's own "sha" of the answer is the
+// commit's id and is not used.
 func TestGiteaCommitTree(t *testing.T) {
 	t.Parallel()
-	commit, tree := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	commit := "057dcc1ea9584ad95c3bf390434e146e15529c18"
+	var all []map[string]string
+	for _, line := range strings.Split(platformRootTree, "\n") {
+		f := strings.Fields(line)
+		all = append([]map[string]string{{"mode": f[0], "type": f[1], "sha": f[2], "path": f[3]}}, all...) // reversed
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if user, pass, _ := r.BasicAuth(); user != "u" || pass != "p" || r.URL.Path != "/api/v1/repos/bifrost/bifrost-ui/git/commits/"+commit {
+		if user, pass, _ := r.BasicAuth(); user != "u" || pass != "p" || r.URL.Path != "/api/v1/repos/bifrost/bifrost-platform/git/trees/"+commit {
 			http.Error(w, "no", http.StatusNotFound)
 			return
 		}
-		_, _ = w.Write([]byte(`{"sha":"` + commit + `","commit":{"tree":{"sha":"` + tree + `"}}}`))
+		page := all[:10]
+		if r.URL.Query().Get("page") == "2" {
+			page = all[10:]
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"sha": commit, "total_count": len(all), "tree": page})
 	}))
 	defer srv.Close()
 	read := giteaCommitTree(func(context.Context) (delivery.GiteaAccess, error) {
 		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost", User: "u", Pass: "p"}, nil
 	}, srv.Client())
-	if got, err := read(context.Background(), "bifrost-ui", commit); err != nil || got != tree {
+	if got, err := read(context.Background(), "bifrost-platform", commit); err != nil || got != "315f7a3790d88e322e3ea855ebaa743b4b976876" {
 		t.Fatalf("tree %q %v", got, err)
 	}
-	if _, err := read(context.Background(), "bifrost-platform", commit); err == nil {
+	if _, err := read(context.Background(), "bifrost-ui", commit); err == nil {
 		t.Fatal("a commit Gitea does not have gave a tree")
 	}
-	if _, err := read(context.Background(), "bifrost-ui", "main"); err == nil {
+	if _, err := read(context.Background(), "bifrost-platform", "main"); err == nil {
 		t.Fatal("a branch name was read as a commit")
 	}
+	// git's order: a directory sorts as its name and "/" ("a.b" before "a/").
+	got, err := gitTreeID([]commitTreeEntry{{Path: "a", Mode: "040000", Type: "tree", SHA: strings.Repeat("1", 40)}, {Path: "a.b", Mode: "100644", Type: "blob", SHA: strings.Repeat("2", 40)}})
+	if err != nil || got != treeOfAAndAB {
+		t.Fatalf("order: %q %v", got, err)
+	}
 }
+
+// git mktree's id for a directory "a" and a file "a.b" with those ids.
+const treeOfAAndAB = "f9a24078951ed457ecc90ac99b0abf5ecacb0f61"

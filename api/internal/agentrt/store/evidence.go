@@ -158,8 +158,8 @@ func RunEvidence(p PipelineRun) (EvidenceRow, bool, error) {
 	return e, true, nil
 }
 
-// RecordEvidence appends rows and returns how many were new: a run has at
-// most one row per result, so a row the ledger already has is left as it is.
+// RecordEvidence appends rows and returns how many were new: a row the ledger
+// already has (the same run, unit, task, key and result) is left as it is.
 func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error) {
 	if len(rows) == 0 {
 		return 0, nil
@@ -170,7 +170,7 @@ func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error)
 	for _, e := range rows {
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
 			tag, err := tx.Exec(ctx, `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
-			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, result) DO NOTHING`,
+			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`,
 				e.Repo, e.Unit, e.Task, e.InputKey, e.Result, e.Scope, string(e.Inputs), string(e.Statement), e.CommitSHA, e.RunName, e.RunUID)
 			if err == nil && tag.RowsAffected() == 1 {
 				n++
