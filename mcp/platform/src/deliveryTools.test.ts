@@ -90,7 +90,7 @@ describe('wait_for_pipeline_run wiring', () => {
     const paths: string[] = []
     const get = async (path: string) => {
       paths.push(path)
-      if (path.endsWith('/steps')) return { pipeline: 'bifrost-ci-platform', phases: [], tasks: [] }
+      if (path.endsWith('/steps')) return { pipeline: 'bifrost-ci-platform', phases: [], tasks: [], results: [{ name: 'ui-commit', value: SHA }] }
       return { reachability: 'ok', runs: [run] }
     }
     const got = (await waitForPipelineRun({ run: ' ', pipeline: 'bifrost-ci-platform', revision: SHA, timeout_seconds: 5 }, get)) as {
@@ -98,7 +98,9 @@ describe('wait_for_pipeline_run wiring', () => {
       status: string
       duration_seconds: number
       waited_seconds: number
+      results: Record<string, string>
     }
+    assert.deepEqual(got.results, { 'ui-commit': SHA })
     assert.equal(got.run, run.name)
     assert.equal(got.status, 'Succeeded')
     assert.equal(got.duration_seconds, 540)

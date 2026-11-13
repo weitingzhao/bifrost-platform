@@ -133,6 +133,43 @@ describe('wait_for_pipeline_run poll loop', () => {
     assert.equal(w.paths.filter((p) => p === runsPath(PIPE)).length, 3)
   })
 
+  it('returns pipeline results on success, failure and a running timeout', async () => {
+    for (const end of [succeeded, failed, running]) {
+      const w = world({
+        [runsPath(PIPE)]: [runsBody(PIPE, [end])],
+        [stepsPath(end.name)]: [{
+          ...stepsBody(end.name, PIPE),
+          results: [{ name: 'ui-commit', value: SHA }, { name: 'infra-commit', value: OTHER }, { name: 'empty', value: '' }],
+        }],
+      })
+      const got = await wait(w, { run: end.name, pipeline: PIPE, timeoutMs: 1000 })
+      assert.deepEqual(got.results, { 'ui-commit': SHA, 'infra-commit': OTHER, empty: '' })
+      assert.equal(got.timed_out, end === running)
+    }
+  })
+
+  it('returns empty results for old servers, empty arrays and unreadable steps', async () => {
+    for (const steps of [stepsBody(running.name, PIPE), { results: [] }, { results: null }, new Error('fetch failed')]) {
+      const w = world({
+        [runsPath(PIPE)]: [runsBody(PIPE, [succeeded])],
+        [stepsPath(running.name)]: [steps],
+      })
+      const got = await wait(w, { run: running.name, pipeline: PIPE })
+      assert.deepEqual(got.results, {})
+      if (steps instanceof Error) assert.equal(got.last_error, 'fetch failed')
+    }
+  })
+
+  it('keeps result names as own keys and ignores malformed entries', async () => {
+    const w = world({
+      [runsPath(PIPE)]: [runsBody(PIPE, [succeeded])],
+      [stepsPath(running.name)]: [{ results: [null, {}, { name: '', value: 'x' }, { name: 'bad', value: 3 }, { name: '__proto__', value: SHA }] }],
+    })
+    const got = await wait(w, { run: running.name, pipeline: PIPE })
+    assert.deepEqual(got.results, JSON.parse(`{"__proto__":"${SHA}"}`))
+    assert.equal(Object.getPrototypeOf(got.results), Object.prototype)
+  })
+
   it('returns Failed with the Tekton reason', async () => {
     const cancelled: Run = { ...failed, reason: 'Cancelled' }
     for (const [end, reason] of [[failed, 'Failed'], [cancelled, 'Cancelled']] as const) {
@@ -201,6 +238,7 @@ describe('wait_for_pipeline_run poll loop', () => {
     assert.equal(got.timed_out, true)
     assert.equal(got.note, RUN_NOT_SEEN_NOTE)
     assert.deepEqual(got.tasks, [])
+    assert.deepEqual(got.results, {})
     assert.equal(got.waited_seconds, 30)
   })
 

@@ -2,7 +2,7 @@
  * Wait for one Tekton PipelineRun to finish, reading only the delivery GET
  * routes:
  *   GET /api/v1/delivery/pipelines/{name}/runs   the runs of one pipeline
- *   GET /api/v1/delivery/runs/{id}/steps         a run's pipeline, phases and tasks
+ *   GET /api/v1/delivery/runs/{id}/steps         a run's pipeline, phases, tasks and results
  * There is no route that reads one run by name, so a run named without its
  * pipeline is found through the steps route (it answers the pipeline of a run
  * that exists) and then in that pipeline's list.
@@ -54,6 +54,7 @@ export interface PipelineRunWaitResult {
   duration_seconds: number | null
   tasks: PipelineTaskResult[]
   phases: unknown[]
+  results: Record<string, string>
   waited_seconds: number
   note?: string
   last_error?: string
@@ -156,6 +157,17 @@ export function taskResults(steps: unknown): PipelineTaskResult[] {
       duration_seconds: reported ?? secondsBetween(text(o.start_time), text(o.completion_time)),
     }
   })
+}
+
+/** Pipeline-level named results; older servers omit the array. */
+function pipelineResults(steps: unknown): Record<string, string> {
+  const results = asObject(steps).results
+  if (!Array.isArray(results)) return {}
+  return Object.fromEntries(results.flatMap((item) => {
+    const o = asObject(item)
+    return typeof o.name === 'string' && o.name !== '' && typeof o.value === 'string'
+      ? [[o.name, o.value]] : []
+  }))
 }
 
 /** Whether any task of the steps answer carries a time: today none does. */
@@ -278,6 +290,7 @@ export async function pollPipelineRun(opts: PipelineRunWaitOptions): Promise<Pip
       duration_seconds: null,
       tasks: [],
       phases: [],
+      results: {},
       waited_seconds: waited,
       note: RUN_NOT_SEEN_NOTE,
       ...(lastError !== undefined ? { last_error: lastError } : {}),
@@ -285,9 +298,11 @@ export async function pollPipelineRun(opts: PipelineRunWaitOptions): Promise<Pip
   }
   let tasks: PipelineTaskResult[] = []
   let phases: unknown[] = []
+  let results: Record<string, string> = {}
   let taskTimes = true
   try {
     const steps = await opts.get(stepsPath(seen.name))
+    results = pipelineResults(steps)
     tasks = taskResults(steps)
     taskTimes = reportsTaskTimes(steps)
     const got = asObject(steps).phases
@@ -311,6 +326,7 @@ export async function pollPipelineRun(opts: PipelineRunWaitOptions): Promise<Pip
     duration_seconds: secondsBetween(seen.start_time, seen.completion_time),
     tasks,
     phases,
+    results,
     waited_seconds: waited,
     ...(tasks.length > 0 && !taskTimes ? { note: TASK_DURATION_NOTE } : {}),
     ...(lastError !== undefined ? { last_error: lastError } : {}),
