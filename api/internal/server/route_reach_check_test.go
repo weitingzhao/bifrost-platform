@@ -269,7 +269,9 @@ func TestPublicIntrospectionTellsAnIntakeTokenNothingMore(t *testing.T) {
 	// No other handler reads a token: only the auth service authenticates
 	// (Require, RequireAny, RequireIssueReader and the capabilities route),
 	// and the relay of the operator plane, served by another binary, reads
-	// its own. A handler on a public route gets the anonymous principal
+	// its own. owner-exec, also another binary, reads the bearer of the page
+	// that calls it only to pass it to this API, which is what authenticates
+	// it. A handler on a public route gets the anonymous principal
 	// whatever token comes with the request.
 	readers := map[string]bool{}
 	pattern := regexp.MustCompile(`\.Authenticate\(|Header\.Get\("Authorization"\)`)
@@ -290,7 +292,7 @@ func TestPublicIntrospectionTellsAnIntakeTokenNothingMore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"../actuation/auth.go": true, "../alertrelay/relay.go": true}
+	want := map[string]bool{"../actuation/auth.go": true, "../alertrelay/relay.go": true, "../ownerexec/server.go": true}
 	for p := range readers {
 		if !want[p] {
 			t.Errorf("%s reads a token in a handler: list the public route it serves in publicIntrospection", p)
