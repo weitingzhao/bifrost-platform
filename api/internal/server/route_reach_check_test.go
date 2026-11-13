@@ -51,6 +51,8 @@ var intendedRouteAdditions = map[string][]string{
 	// CI landing wave 1 block D (2026-11-12): "is this commit green", read
 	// from the evidence ledger, for the same readers (read-only).
 	"GET /api/v1/evidence/commit": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// Block F: the ledger beside the release policy's CI reading (read-only).
+	"GET /api/v1/evidence/compare": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

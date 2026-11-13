@@ -189,6 +189,7 @@ deny	POST /api/v1/dev-sessions/{name}/control
 deny	GET /api/v1/dev-sessions/{name}/logs
 deny	GET /api/v1/environments
 deny	GET /api/v1/evidence/commit
+deny	GET /api/v1/evidence/compare
 deny	GET /api/v1/gitops/apps
 deny	POST /api/v1/gitops/apps/{name}/rollback
 deny	POST /api/v1/gitops/apps/{name}/sync

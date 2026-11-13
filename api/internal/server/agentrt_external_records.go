@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -162,6 +163,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		f.StartedAt = f.CreatedAt
 	}
 	f.Repo = run.GetLabels()["bifrost.io/repo"]
+	f.Audit = run.GetLabels()["bifrost.io/trigger"] == landingci.FullCITrigger
 	if f.Repo == "" {
 		f.Repo = map[string]string{
 			"bifrost-deliver-platform":      "bifrost-platform",

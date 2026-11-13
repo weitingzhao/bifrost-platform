@@ -134,3 +134,44 @@ func TestPipelineRecordsEvidenceWaitsForATree(t *testing.T) {
 		t.Fatalf("full pass: %d %v, rows %+v", n, err, evidenceRows(t, pool))
 	}
 }
+
+// The daily full CI failing on inputs the ledger holds a full pass for
+// invalidates that pass; an ordinary failed run on the same inputs does not,
+// and neither does the full CI failing on inputs with no pass.
+func TestPipelineRecordsFullCIFailureInvalidatesAPass(t *testing.T) {
+	t.Parallel()
+	pool := setup(t)
+	tree := func(context.Context, string, string) (string, error) { return sha("e"), nil }
+	fail := func(name, commit, treeID string, audit bool) store.PipelineRun {
+		p := ciRun(name, commit, treeID)
+		p.Result, p.Reason, p.Audit = "Failed", "Failed", audit
+		return p
+	}
+	runs := []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c"))}
+	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
+		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil }, CommitTree: tree}}
+	results := func() string {
+		t.Helper()
+		if _, err := c.PipelineRecords(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range evidenceRows(t, pool) {
+			out = append(out, r.run+":"+r.result)
+		}
+		return strings.Join(out, " ")
+	}
+	if got := results(); got != "ci-platform-green:passed" {
+		t.Fatal(got)
+	}
+	runs = append(runs, fail("ci-platform-flake", sha("a"), sha("c"), false), fail("ci-platform-full-other", sha("d"), sha("9"), true))
+	if got := results(); strings.Contains(got, "invalidated") {
+		t.Fatalf("invalidated without the full CI contradicting a pass: %s", got)
+	}
+	runs = append(runs, fail("ci-platform-full-1", sha("a"), sha("c"), true))
+	for pass := 0; pass < 2; pass++ { // seen again: nothing more
+		if got := results(); strings.Count(got, "ci-platform-full-1:invalidated") != 1 || strings.Count(got, "ci-platform-full-1:failed") != 1 || strings.Count(got, "invalidated") != 1 {
+			t.Fatalf("pass %d: %s", pass, got)
+		}
+	}
+}

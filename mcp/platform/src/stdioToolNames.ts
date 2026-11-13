@@ -49,6 +49,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_commit_lineage',
   'get_checklist_signals',
   'get_commit_evidence',
+  'compare_commit_evidence',
   'get_code_health',
   'get_telemetry_overview',
   'get_telemetry_alerts',

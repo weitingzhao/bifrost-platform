@@ -53,6 +53,9 @@ type EvidenceRow struct {
 	RunName    string          `json:"run_name"`
 	RunUID     string          `json:"run_uid"`
 	RecordedAt time.Time       `json:"recorded_at"`
+	// audit: a failed row of the daily full CI. RecordEvidence writes an
+	// invalidated row beside it when the ledger is green for its key.
+	audit bool
 }
 
 var gitObject = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -148,7 +151,7 @@ func RunEvidence(p PipelineRun) (EvidenceRow, bool, error) {
 		},
 	}
 	e := EvidenceRow{Repo: p.Repo, Unit: EvidenceUnitRepo, Task: p.Pipeline, InputKey: key, Result: result, Scope: scope,
-		CommitSHA: own.Commit, RunName: p.Run, RunUID: p.UID}
+		CommitSHA: own.Commit, RunName: p.Run, RunUID: p.UID, audit: p.Audit && result == EvidenceFailed}
 	if e.Inputs, err = canon.Encode(inputs); err != nil {
 		return EvidenceRow{}, false, err
 	}
@@ -169,8 +172,36 @@ func RecordEvidence(ctx context.Context, db DB, rows []EvidenceRow) (int, error)
 	// One transaction a row: a row the table refuses does not hold back the others.
 	for _, e := range rows {
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
-			tag, err := tx.Exec(ctx, `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
-			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`,
+			const insert = `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
+			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`
+			if e.audit {
+				// The daily full run failed on inputs the ledger holds a full
+				// pass for: the pass is invalidated (until a later full pass).
+				var before []EvidenceRow
+				rows, err := tx.Query(ctx, `SELECT result, scope FROM agentrt.evidence
+				  WHERE repo = $1 AND unit = $2 AND task = $3 AND input_key = $4 ORDER BY evidence_id`, e.Repo, e.Unit, e.Task, e.InputKey)
+				if err != nil {
+					return err
+				}
+				for rows.Next() {
+					var r EvidenceRow
+					if err = rows.Scan(&r.Result, &r.Scope); err != nil {
+						rows.Close()
+						return err
+					}
+					before = append(before, r)
+				}
+				rows.Close()
+				if err = rows.Err(); err != nil {
+					return err
+				}
+				if EvidenceVerdict(before) == EvidenceGreen {
+					if _, err = tx.Exec(ctx, insert, e.Repo, e.Unit, e.Task, e.InputKey, EvidenceInvalidated, e.Scope, string(e.Inputs), string(e.Statement), e.CommitSHA, e.RunName, e.RunUID); err != nil {
+						return err
+					}
+				}
+			}
+			tag, err := tx.Exec(ctx, insert,
 				e.Repo, e.Unit, e.Task, e.InputKey, e.Result, e.Scope, string(e.Inputs), string(e.Statement), e.CommitSHA, e.RunName, e.RunUID)
 			if err == nil && tag.RowsAffected() == 1 {
 				n++

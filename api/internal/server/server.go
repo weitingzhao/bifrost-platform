@@ -517,6 +517,9 @@ func (s *Server) Router() http.Handler {
 		// "Is this commit green", from the evidence ledger: read-only; it names
 		// repositories, commits and CI runs, so viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/commit", s.handleEvidenceCommit)
+		// The ledger's answers beside the release policy's CI reading, for
+		// every commit that reading knows: read-only, viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/compare", s.handleEvidenceCompare)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

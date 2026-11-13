@@ -493,6 +493,13 @@ reg(
 )
 
 reg(
+  'compare_commit_evidence',
+  'Put the evidence ledger beside the release policy\'s CI reading for every commit that reading has a verdict for (read-only; nothing is started or written). Returns {at, counts, commits: [{repo, commit, old, old_run, verdict, as_tested, class, note}], skipped}. old is the policy\'s reading (Succeeded / Failed / Unknown), verdict the ledger\'s answer now (green / red / none), as_tested whether the ledger has a full pass recorded for the commit itself. class: agree; beside_moved (old green, the full pass is in the ledger, a repository beside it moved since); not_in_ledger (old green, no full pass in the ledger: a missed input, must be zero); ledger_only (ledger green, old not).',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/evidence/compare')),
+)
+
+reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},

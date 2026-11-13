@@ -20,6 +20,9 @@ type PipelineRun struct {
 	CreatedAt, StartedAt, CompletedAt                                        time.Time
 	Scope                                                                    string
 	Inputs                                                                   []RepoAt
+	// Audit: the run is the daily full CI (it reuses nothing), whose failure
+	// contradicts a pass the ledger has for the same inputs.
+	Audit bool
 }
 
 func pipelineSeenBody(p PipelineRun) map[string]any {
