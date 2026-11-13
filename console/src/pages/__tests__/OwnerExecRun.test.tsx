@@ -110,6 +110,25 @@ describe('approve and run with a one-time code', () => {
     expect(field).toBeEnabled()
   })
 
+  it.each([
+    ['HTML', () => new Response('<html>fallback</html>', { status: 200 })],
+    ['empty', () => new Response(null, { status: 204 })],
+    ['missing fields', () => new Response('{}', { status: 202 })],
+    ['wrong id', () => new Response(JSON.stringify({ status: 'running', id: 'another-card' }), { status: 202 })],
+    ['wrong state', () => new Response(JSON.stringify({ status: 'failed', id: 'fixture-run' }), { status: 202 })],
+    ['wrong HTTP status', () => new Response(JSON.stringify({ status: 'running', id: 'fixture-run' }), { status: 200 })],
+  ])('does not claim Started for an invalid acknowledgement: %s', async (_name, response) => {
+    runResponse = response
+    const started = vi.fn()
+    render(<OwnerExecRun item={card()} blocked={null} onStarted={started} />)
+    fireEvent.change(await codeField(), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and run' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be confirmed')
+    expect(started).not.toHaveBeenCalled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(runCalls()).toHaveLength(1)
+  })
+
   it('does not send while decisions are blocked', async () => {
     render(<OwnerExecRun item={card()} blocked="Sign in as admin to decide." onStarted={() => {}} />)
     fireEvent.change(await codeField(), { target: { value: '123456' } })

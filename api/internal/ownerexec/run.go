@@ -12,12 +12,14 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 const (
-	// tailKeep is how much of the output end is kept in memory. platform-api
-	// stores the last 2048 bytes after its own redaction.
-	tailKeep = 8 << 10
+	// Retain complete output up to this bound. If exceeded, omit output
+	// rather than redact a fragment whose secret marker may have been lost.
+	tailKeep = 1 << 20
 	tailSend = 2048
 )
 
@@ -30,20 +32,25 @@ type Outcome struct {
 	Err        string
 }
 
-// tailWriter hashes everything written and keeps only the end.
+// tailWriter hashes everything and retains bounded, complete output.
 type tailWriter struct {
-	mu   sync.Mutex
-	sum  hash.Hash
-	tail []byte
+	mu       sync.Mutex
+	sum      hash.Hash
+	tail     []byte
+	overflow bool
 }
 
 func (w *tailWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.sum.Write(p)
-	w.tail = append(w.tail, p...)
-	if len(w.tail) > tailKeep {
-		w.tail = append([]byte(nil), w.tail[len(w.tail)-tailKeep:]...)
+	if !w.overflow {
+		if len(p) > tailKeep-len(w.tail) {
+			w.overflow = true
+			w.tail = nil
+		} else {
+			w.tail = append(w.tail, p...)
+		}
 	}
 	return len(p), nil
 }
@@ -52,6 +59,12 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 // gets a short fixed environment: none of the runner's own variables, and
 // nothing from the request that started it.
 func RunCommand(ctx context.Context, command string, timeout time.Duration, secrets ...string) Outcome {
+	return runCommand(ctx, command, timeout, true, secrets...)
+}
+
+// The shell must return complete output: exact request secrets are only known
+// to the runner. Neither hop may clip before that last redaction pass.
+func runCommand(ctx context.Context, command string, timeout time.Duration, clip bool, secrets ...string) Outcome {
 	started := time.Now()
 	dir, err := os.MkdirTemp("", "owner-exec-")
 	if err != nil {
@@ -75,12 +88,14 @@ func RunCommand(ctx context.Context, command string, timeout time.Duration, secr
 	out.mu.Lock()
 	res.OutputSHA = hex.EncodeToString(out.sum.Sum(nil))
 	tail := string(out.tail)
-	out.mu.Unlock()
-	tail = Scrub(tail, secrets...)
-	if len(tail) > tailSend {
-		tail = tail[len(tail)-tailSend:]
+	if out.overflow {
+		tail = "[output omitted: redaction buffer limit exceeded]"
 	}
-	res.OutputTail = strings.ToValidUTF8(tail, "?")
+	out.mu.Unlock()
+	if clip {
+		tail = outputTail(tail, secrets...)
+	}
+	res.OutputTail = tail
 
 	var exitErr *exec.ExitError
 	switch {
@@ -125,4 +140,13 @@ func Scrub(s string, secrets ...string) string {
 		}
 	}
 	return s
+}
+
+// Exact values first, then generic shapes, then the only output clipping.
+func outputTail(s string, secrets ...string) string {
+	s = notice.Redact(Scrub(s, secrets...))
+	if len(s) > tailSend {
+		s = s[len(s)-tailSend:]
+	}
+	return strings.ToValidUTF8(s, "?")
 }

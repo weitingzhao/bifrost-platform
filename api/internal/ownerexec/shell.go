@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -28,6 +27,9 @@ import (
 // it does not already have, and the runner still asks every caller for an
 // admin bearer and a code.
 const ShellRunPath = "/run"
+
+const shellUnanswered = "the shell container did not answer; whether the command ran is unknown"
+const shellUnreadable = "the shell container's answer could not be read; whether the command ran is unknown"
 
 type shellRequest struct {
 	Command        string `json:"command"`
@@ -53,7 +55,7 @@ func ShellHandler(logf func(format string, args ...any)) http.Handler {
 		}
 		// Not the request's context: a runner that goes away must not leave a
 		// half-run command; it runs to its own timeout and the card goes unknown.
-		out := RunCommand(context.Background(), req.Command, time.Duration(req.TimeoutSeconds)*time.Second)
+		out := runCommand(context.Background(), req.Command, time.Duration(req.TimeoutSeconds)*time.Second, false)
 		logf("shell: ran a command in %s", out.Duration.Round(time.Millisecond))
 		writeJSON(w, http.StatusOK, shellResponse{
 			ExitCode: out.ExitCode, DurationMS: out.Duration.Milliseconds(),
@@ -82,19 +84,19 @@ func RemoteRun(base string) func(ctx context.Context, command string, timeout ti
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
 		if err != nil {
-			return Outcome{Err: "the shell container did not answer; whether the command ran is unknown", Duration: time.Since(started)}
+			return Outcome{Err: shellUnanswered, Duration: time.Since(started)}
 		}
 		defer func() { _ = resp.Body.Close() }()
 		var out shellResponse
 		if resp.StatusCode != http.StatusOK {
-			return Outcome{Err: fmt.Sprintf("the shell container refused the command (%d)", resp.StatusCode), Duration: time.Since(started)}
+			return Outcome{Err: shellUnreadable, Duration: time.Since(started)}
 		}
-		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
-			return Outcome{Err: "the shell container's answer could not be read; whether the command ran is unknown", Duration: time.Since(started)}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&out); err != nil || (out.ExitCode == nil && out.Err == "") {
+			return Outcome{Err: shellUnreadable, Duration: time.Since(started)}
 		}
 		return Outcome{
 			ExitCode: out.ExitCode, Duration: time.Duration(out.DurationMS) * time.Millisecond,
-			OutputSHA: out.OutputSHA, OutputTail: Scrub(out.OutputTail, secrets...), Err: Scrub(out.Err, secrets...),
+			OutputSHA: out.OutputSHA, OutputTail: outputTail(out.OutputTail, secrets...), Err: Scrub(out.Err, secrets...),
 		}
 	}
 }

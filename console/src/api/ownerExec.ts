@@ -49,7 +49,15 @@ export async function postOwnerExecRun(token: string, body: OwnerExecRunBody): P
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
   const r = await serverFetch(RUN_PATH, { method: 'POST', headers, body: JSON.stringify(body) })
-  if (r.ok) return
+  if (r.ok) {
+    let acknowledgement: unknown
+    try { acknowledgement = await r.json() } catch { /* handled as unconfirmed below */ }
+    if (r.status === 202 && typeof acknowledgement === 'object' && acknowledgement !== null) {
+      const confirmed = acknowledgement as { status?: unknown; id?: unknown }
+      if (confirmed.status === 'running' && confirmed.id === body.id) return
+    }
+    throw new OwnerExecError('Command start could not be confirmed. Check the card before trying again.', r.status)
+  }
   let message = `The runner refused (${r.status}).`
   try {
     const parsed: unknown = await r.json()

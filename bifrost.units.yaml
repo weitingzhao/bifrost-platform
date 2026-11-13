@@ -90,6 +90,7 @@ modules:
       api/internal/notice: ["."]
       api/internal/opscontext: ["."]
       api/internal/opsfacts: ["."]
+      api/internal/ownerexec: ["."]
       api/internal/patrol: ["."]
       api/internal/probe: ["."]
       api/internal/questions: ["."]

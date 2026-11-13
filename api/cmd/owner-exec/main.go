@@ -105,6 +105,8 @@ func main() {
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("listen: %v", err)
 	}
-	// A command in flight posts its result before the process leaves.
+	// Wait for known results to be acknowledged (delivery failures keep this
+	// pending). A lost shell reply instead stops renewal so the card goes
+	// unknown. Forced Pod termination can interrupt this in-memory drain.
 	srv.Wait()
 }

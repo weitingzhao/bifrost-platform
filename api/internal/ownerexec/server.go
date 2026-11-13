@@ -211,9 +211,16 @@ func (s *Server) execute(id, lease, command, bearer, code string, every time.Dur
 	if run == nil {
 		run = RunCommand
 	}
+	defer func() { close(stop); <-done }()
 	out := run(ctx, command, s.Timeout, bearer, code)
-	close(stop)
-	<-done
+
+	// No definitive result exists after a lost shell reply. Stop renewing and
+	// let the existing approval lease transition to unknown; never requeue
+	// or report a failure that could invite repeating an executed command.
+	if out.Err == shellUnanswered || out.Err == shellUnreadable {
+		s.Logf("run %s: shell outcome unknown; lease will expire", id)
+		return
+	}
 
 	res := Result{
 		LeaseID:      lease,
@@ -223,25 +230,29 @@ func (s *Server) execute(id, lease, command, bearer, code string, every time.Dur
 		OutputTail:   out.OutputTail,
 		Error:        out.Err,
 	}
-	var err error
-	for attempt := 0; attempt < 5; attempt++ {
-		if err = s.Platform.Result(ctx, bearer, id, res); err == nil {
+	// Keep the known result and the lease alive until delivery succeeds.
+	// Retry only the result, never the command. Permanent refusals also keep
+	// Wait pending: returning successfully would silently discard evidence.
+	delay := 2 * time.Second
+	for {
+		if err := s.Platform.Result(ctx, bearer, id, res); err == nil {
 			break
 		}
-		var se *StatusError
-		if errors.As(err, &se) && se.Status < 500 {
-			break
+		s.Logf("run %s: result delivery pending; retrying in %s", id, delay)
+		time.Sleep(delay)
+		if delay < 30*time.Second {
+			delay += 2 * time.Second
 		}
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
 	}
-	if err != nil {
-		s.Logf("run %s: finished but the result was not stored: %v", id, err)
-		return
-	}
+
 	s.Logf("run %s: finished in %s", id, out.Duration.Round(time.Millisecond))
 }
 
-// Wait blocks until every started command has posted its result.
+// Wait waits for execution and acknowledged result delivery. Failed delivery
+// is retained in memory and retried, including during graceful shutdown.
+// Forced process termination can still lose pending results. Unknown shell outcomes stop
+// renewal instead of posting a definitive result, leaving lease expiry to
+// mark the card unknown.
 func (s *Server) Wait() { s.wg.Wait() }
 
 // cardRefusal says why a card cannot run, or "".
