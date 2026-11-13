@@ -36,7 +36,7 @@ func b5fWorld(t *testing.T, mode string) (*world, time.Time) {
 	_, err = store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.ObserveLandingEnabled(ctx, tx, "prod", "dev", "bifrost-platform", store.DecisionAt())
+		_, err := store.ObserveLandingEnabled(ctx, tx, "prod", "dev", "bifrost-platform", store.DecisionAt(ctx))
 		return err
 	}))
 	store.FreezeEventClock(at)
@@ -150,7 +150,7 @@ func TestStgB4PGPartialEvidenceKeepsRoundAndNewProofChangesIt(t *testing.T) {
 	// Two contradictory deployment observations at the same database-based
 	// time leave the current baseline unknown, while historical covers stand.
 	store.FreezeEventClock(at.Add(time.Minute))
-	x := b5Snapshot(t, w, root1, "land:"+root1+":1", store.DecisionAt())
+	x := b5Snapshot(t, w, root1, "land:"+root1+":1", store.DecisionAt(ctx))
 	b5fEvidence(t, w, at.Add(time.Minute), id)
 	for _, root := range []string{root1, root2} {
 		b5fCover(t, w, store.StgMemberKey{Root: root, Op: "land:" + root + ":1", R: commitB}, id, at.Add(2*time.Minute))
@@ -204,7 +204,7 @@ func TestStgCoveragePGCASAndNoneFence(t *testing.T) {
 			results := make(chan result, 2)
 			for _, db := range []store.DB{w.rt, second} {
 				safego.Go("test-stg-cover-cas", func() {
-					did, err := store.CommitStgCoverage(ctx, db, "dev", s.LastSeq, id, store.StgMemberKey{Root: root, Op: "land:" + root + ":1", R: commitB}, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: store.DecisionAt()})
+					did, err := store.CommitStgCoverage(ctx, db, "dev", s.LastSeq, id, store.StgMemberKey{Root: root, Op: "land:" + root + ":1", R: commitB}, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: store.DecisionAt(ctx)})
 					results <- result{did, err}
 				})
 			}
@@ -245,7 +245,7 @@ func TestStgB4PGInMainNeedsOwnerAndRecordedHCoverage(t *testing.T) {
 			if st := closePass(t, w, at.Add(2*time.Minute)); st != "active" {
 				t.Fatal("release without Owner closed in_main", st)
 			}
-			f := newFakeCards(func() time.Time { return store.DecisionAt() })
+			f := newFakeCards(func() time.Time { return store.DecisionAt(ctx) })
 			cardPass(t, w, f, at.Add(3*time.Minute))
 			var card store.CardRecord
 			for _, c := range cardsNow(t, w) {
@@ -281,7 +281,7 @@ func TestStgB4PGInMainNeedsOwnerAndRecordedHCoverage(t *testing.T) {
 				t.Fatal("used A instead of recorded H", candidates)
 			}
 			store.FreezeEventClock(at.Add(7 * time.Minute))
-			did, err := store.CommitStgCoverage(ctx, w.rt, "dev", s.LastSeq, "cluster/cicd/manual", candidates[0], store.MainEvidence{Head: commitB, HasR: true, Validity: "unknown", ReadAt: store.DecisionAt()})
+			did, err := store.CommitStgCoverage(ctx, w.rt, "dev", s.LastSeq, "cluster/cicd/manual", candidates[0], store.MainEvidence{Head: commitB, HasR: true, Validity: "unknown", ReadAt: store.DecisionAt(ctx)})
 			ok(t, err)
 			if !did {
 				t.Fatal("H containment did not cover")
@@ -303,7 +303,7 @@ func TestStgB4PGLegacyOwnerAndWithheldCoexist(t *testing.T) {
 			op := "land:" + root + ":1"
 			if oldOwner {
 				readOne(t, w, op, at.Add(time.Minute), "unknown")
-				f := newFakeCards(func() time.Time { return store.DecisionAt() })
+				f := newFakeCards(func() time.Time { return store.DecisionAt(ctx) })
 				cardPass(t, w, f, at.Add(3*time.Hour))
 				var question, answer string
 				for _, c := range cardsNow(t, w) {
@@ -322,7 +322,7 @@ func TestStgB4PGLegacyOwnerAndWithheldCoexist(t *testing.T) {
 				cardPass(t, w, f, at.Add(3*time.Hour+2*time.Minute))
 			}
 			store.FreezeEventClock(at.Add(4 * time.Hour))
-			x := b5Snapshot(t, w, root, op, store.DecisionAt())
+			x := b5Snapshot(t, w, root, op, store.DecisionAt(ctx))
 			x.obs.Commits[0].Changes[0].OldPath = ".github/workflows/ci.yaml"
 			x.obs.Commits[0].Changes[0].NewPath = ".github/workflows/ci.yaml"
 			b5fRefuse(t, x, "hard_floor")

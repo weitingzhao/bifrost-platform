@@ -11,7 +11,7 @@ import (
 // B5 and its cards share the supervisor's landing:dev rule. An expired
 // non-none rule still permits notices/settlement, never a release itself.
 func stgCardPolicy(ctx context.Context, tx pgx.Tx) (bool, error) {
-	r, err := effectiveRule(ctx, tx, "landing:dev", DecisionAt(), true)
+	r, err := effectiveRule(ctx, tx, "landing:dev", DecisionAt(ctx), true)
 	if err != nil || r == nil || r.Landing == nil {
 		return false, err
 	}

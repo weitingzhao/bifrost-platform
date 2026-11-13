@@ -154,7 +154,7 @@ func CloseMissions(ctx context.Context, db DB) ([]string, error) {
 			// below, as before.
 			b4, held, to, why, err := landingCloseB4(ctx, sp, folds, id)
 			if err == nil && !b4 {
-				held, err = landingHolds(ctx, sp, folds, id, eventClock())
+				held, err = landingHolds(ctx, sp, folds, id, eventNow(ctx))
 			}
 			if err != nil {
 				holdErrs = append(holdErrs, fmt.Errorf("mission %s: landing: %w", id, err))

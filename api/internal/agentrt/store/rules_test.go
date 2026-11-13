@@ -42,6 +42,7 @@ type signer struct {
 }
 
 func (s signer) sign(w *world, text string) (map[string]any, error) {
+	ctx := ctxOf(s.t)
 	return store.SignRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, idOf(text), []byte(text),
 		s.key.Sign(s.t, []byte(text), rules.Namespace), s.key.Fingerprint)
 }

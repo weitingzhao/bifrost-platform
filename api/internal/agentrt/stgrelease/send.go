@@ -60,7 +60,7 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 	}
 	in := input(p.Batch, p.Try, p.IntentSeq, p.Inputs)
 	check := func(ctx context.Context) error {
-		current, err := store.StgPermitCurrent(ctx, s.DB, p, s.Gate.Generation(), store.DecisionAt())
+		current, err := store.StgPermitCurrent(ctx, s.DB, p, s.Gate.Generation(), store.DecisionAt(ctx))
 		if err != nil {
 			return err
 		}
@@ -77,7 +77,7 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 			}
 		}
 		// The read itself can stall across the deadline or a lease takeover.
-		if !current || !store.DecisionAt().Before(p.Deadline) || s.Gate.Generation() != p.Generation {
+		if !current || !store.DecisionAt(ctx).Before(p.Deadline) || s.Gate.Generation() != p.Generation {
 			return errors.New("STG send permit expired")
 		}
 		return nil
@@ -102,10 +102,10 @@ func (s Sender) send(ctx context.Context, p store.StgSendPermit) error {
 		return err
 	}
 	if err = delivery.MatchNamedDeliverRun(obj, in, true); err != nil {
-		_, e := s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "collision", ReadAt: store.DecisionAt()})
+		_, e := s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "collision", ReadAt: store.DecisionAt(ctx)})
 		return e
 	}
-	_, err = s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: string(obj.GetUID()), ReadAt: store.DecisionAt()})
+	_, err = s.recordRecovery(ctx, p.Batch, p.Try, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: string(obj.GetUID()), ReadAt: store.DecisionAt(ctx)})
 	return err
 }
 
@@ -117,7 +117,7 @@ func (s Sender) observe(ctx context.Context, intent, permit, bound int64, in del
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	obj, err := s.Runs.ReadNamedDeliverRun(ctx, in)
-	obs.ReadAt = store.DecisionAt()
+	obs.ReadAt = store.DecisionAt(ctx)
 	switch {
 	case apierrors.IsNotFound(err):
 		obs.Kind = "not_found"

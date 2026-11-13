@@ -49,13 +49,13 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	passReal704(t, w, root, a)
 	gits := f.adapters()
 	src := controller.MultiRepoGitFacts(gits)
-	op, decision, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, store.DecisionAt())
+	op, decision, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, store.DecisionAt(ctx))
 	ok(t, err)
 	if !decision.Allowed {
 		t.Fatal("landing claim", decision)
 	}
 	lc := &controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: gits, Drill: &controller.DrillSources{Facts: src}}
-	ok(t, lc.LandingDrillBranch(ctx, gits[platformRepo], op, store.DecisionAt()))
+	ok(t, lc.LandingDrillBranch(ctx, gits[platformRepo], op, store.DecisionAt(ctx)))
 	prepared := landingState(t, w, landingRepoStream).Operations[op].PreparedAt
 	store.FreezeEventClock(prepared.Add(2 * time.Minute))
 	_, err = lc.LandingDrillCI(ctx, controller.DrillSources{Facts: src,
@@ -64,7 +64,7 @@ func b5hFixture(t *testing.T) *b5hWorld {
 		CI: func(_ context.Context, _ string, r string, _ time.Time) (landing.CIRun, error) {
 			return landing.CIRun{Run: "landing-green", R: r, Status: "Succeeded", CreatedAt: prepared.Add(time.Minute)}, nil
 		},
-	}, op, store.DecisionAt())
+	}, op, store.DecisionAt(ctx))
 	ok(t, err)
 	g := gits[platformRepo].(*landinggit.Git)
 	p := f.run(f.remotes[platformRepo], "rev-parse", "main")
@@ -81,7 +81,7 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	commits, err := workspace.ReleaseRange(ctx, base, p)
 	ok(t, err)
 	ok(t, workspace.Close())
-	x := &b5hWorld{w: w, git: f, root: root, op: op, p: p, base: base, commits: commits, clock: clocktesting.NewFakeClock(store.DecisionAt())}
+	x := &b5hWorld{w: w, git: f, root: root, op: op, p: p, base: base, commits: commits, clock: clocktesting.NewFakeClock(store.DecisionAt(ctx))}
 	rule, err := store.StgControlRule(ctx, w.rt, "dev")
 	ok(t, err)
 	x.policy.Store(&stgrelease.WindowPolicy{Environment: "prod", Live: true, Rule: rule})
@@ -166,8 +166,8 @@ func (x *b5hWorld) restart(t *testing.T) {
 func (x *b5hWorld) advance(t *testing.T, d time.Duration) {
 	t.Helper()
 	ok(t, x.c.Close())
-	store.FreezeEventClock(store.DecisionAt().Add(d))
-	x.clock.SetTime(store.DecisionAt())
+	store.FreezeEventClock(store.DecisionAt(ctx).Add(d))
+	x.clock.SetTime(store.DecisionAt(ctx))
 }
 func (x *b5hWorld) until(t *testing.T, want func(store.StgState) bool) {
 	t.Helper()

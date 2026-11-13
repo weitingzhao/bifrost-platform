@@ -32,14 +32,15 @@ func briefData(t *testing.T, spec string) map[string]any {
 // before it to its own, with what waited, since when, its limit and whom it
 // calls, and says so in its instructions; a wait recorded before that is the
 // brief before's, not this one's.
-// Serial: FreezeEventClock (it freezes the package's event clock).
 func TestAScheduledBriefReadsTheWaitsThatPassed(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	// A ready task no host takes, its wait recorded 31 minutes on, every
 	// event of it written at the time given.
 	passed := func(at time.Time) string {
 		t.Helper()
-		thaw := store.FreezeEventClock(at)
+		thaw := freezeClock(t, at)
 		defer thaw()
 		id := w.ready(t, store.Task{})
 		if n, err := store.WaitLimits(ctx, w.rt, at.Add(31*time.Minute)); err != nil || n != 1 {

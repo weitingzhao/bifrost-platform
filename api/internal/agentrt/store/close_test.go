@@ -26,6 +26,7 @@ func (w *world) accept(t *testing.T, id string) {
 // goalMission is an active mission bound to no plan step, as a goal makes.
 func (w *world) goalMission(t *testing.T, id string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: id, Title: "goal", Goal: "a goal",
 			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {

@@ -432,7 +432,7 @@ func landingCloseB4(ctx context.Context, tx pgx.Tx, folds landingFolds, mission 
 	}
 	// A mode first recorded after the lock-set read belongs to the next
 	// pass. Never classify a newly live stream that this pass did not lock.
-	at := DecisionAt()
+	at := DecisionAt(ctx)
 	round, err := readCloseRound(ctx, tx, mission)
 	if err != nil {
 		return false, false, "", "", err

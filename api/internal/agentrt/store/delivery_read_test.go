@@ -67,16 +67,17 @@ func TestResolveDeliveryCommit(t *testing.T) {
 
 // One read of a change's delivery stages, by commit or by task, against the
 // migrated database.
-// Serial: FreezeEventClock
 func TestReadDelivery(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
 	clock := at
-	t.Cleanup(store.FreezeEventClock(clock))
+	t.Cleanup(freezeClock(t, clock))
 	put := func(body map[string]any) {
 		t.Helper()
 		clock = clock.Add(time.Minute)
-		restore := store.FreezeEventClock(clock)
+		restore := freezeClock(t, clock)
 		defer restore()
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", Body: body})
@@ -96,7 +97,7 @@ func TestReadDelivery(t *testing.T) {
 	green := clock
 	func() {
 		clock = clock.Add(time.Minute)
-		restore := store.FreezeEventClock(clock)
+		restore := freezeClock(t, clock)
 		defer restore()
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err := store.Append(ctx, tx, store.Event{Stream: "landing-quota:dev:" + at.Format("2006-01-02"), Type: "note", Actor: "controller",

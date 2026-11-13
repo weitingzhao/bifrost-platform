@@ -23,7 +23,7 @@ func grantedLandingWaiting(ctx context.Context, tx pgx.Tx, repo string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	now := DecisionAt()
+	now := DecisionAt(ctx)
 	for id, o := range s.Operations {
 		if o.Phase != "awaiting_grant" || s.LatestOperation(o.Task) != id {
 			continue

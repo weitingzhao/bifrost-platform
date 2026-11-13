@@ -102,8 +102,9 @@ func TestAssessmentRequiresOwnerRequest(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestAssessmentKeepsLegacyResultsAndBoundsQueueWait(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	item := store.AssessItem{Kind: store.AssessApproval, ID: "464"}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -116,7 +117,7 @@ func TestAssessmentKeepsLegacyResultsAndBoundsQueueWait(t *testing.T) {
 		t.Fatalf("legacy was requeued: %v %v", fresh, err)
 	}
 	item.ID = "465"
-	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - time.Minute))
+	unfreeze := freezeClock(t, time.Now().Add(-store.AssessTimeout-time.Minute))
 	requestAssessment(t, w.rt, item)
 	unfreeze()
 	_, err := store.EndAssessments(ctx, w.rt)

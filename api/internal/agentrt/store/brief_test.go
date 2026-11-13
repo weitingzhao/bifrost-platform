@@ -28,6 +28,7 @@ func mailWorld(t *testing.T, body string) (*world, string) {
 // takeAndReady takes the message into a brief and readies the brief.
 func takeAndReady(t *testing.T, w *world, message string) (task, mission string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	task, err := store.TakeMail(ctx, w.rt, message)
 	ok(t, err)
 	if task == "" {
@@ -131,6 +132,7 @@ func TestMailToTheChief(t *testing.T) {
 // specText is a task's spec text.
 func specText(t *testing.T, w *world, task string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var raw []byte
 	ok(t, w.rt.QueryRow(ctx, `SELECT b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
 	  WHERE t.task_id = $1`, task).Scan(&raw))

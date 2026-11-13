@@ -24,14 +24,15 @@ repos:
 limits: {max_files: 10, max_changed_lines: 300, max_landings_per_day: 5, max_in_flight_per_repo: 1}
 `
 
-// Serial: FreezeEventClock.
 func TestLandingEnableObservationSurvivesRuleVersion(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
 	observed := at("2026-10-24T12:00:00Z")
-	restore := store.FreezeEventClock(observed)
+	restore := freezeClock(t, observed)
 	defer restore()
 	observe := func(now time.Time) time.Time {
 		t.Helper()

@@ -68,6 +68,7 @@ func (s *seenCards) cardOf(t *testing.T, task string) string {
 // recommends closing the mission (R1).
 func (w *world) ledgerMission(t *testing.T, m string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: m, Title: "TD-378's ratchet in the infra check",
 			Goal: "Run scripts/test_access_checks.py in the check every infra task runs (TD-378).", Deadline: time.Now().Add(24 * time.Hour),
@@ -97,6 +98,7 @@ func ratchetEvidence() store.Evidence {
 // askAndReady asks item's assessment with ev and readies its task.
 func (w *world) askAndReady(t *testing.T, item store.AssessItem, ev store.Evidence) (task, mission string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	task, err := giveRequestedAssessment(t, ctx, w.rt, item, ev, nil, false)
 	ok(t, err)
 	if task == "" {
@@ -116,6 +118,7 @@ func (w *world) askAndReady(t *testing.T, item store.AssessItem, ev store.Eviden
 // none.
 func (w *world) assessed(t *testing.T, kind, id string) (map[string]any, string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	var a map[string]any
 	var why string
 	rows, err := w.rt.Query(ctx, `SELECT body_json FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' ORDER BY seq`,
@@ -422,8 +425,9 @@ func TestAssessmentUnavailable(t *testing.T) {
 // unavailable: its live attempt is cancelled with its task, its mission
 // stopped, and the rule answers by the card. TD-393: one still within it
 // does not hold the rule's answer either (a card is answered within seconds).
-// Serial: it sets the package's event clock (FreezeEventClock).
 func TestAssessmentTimesOut(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	late, inTime := w.ledgerMission(t, "M-3"), w.ledgerMission(t, "M-4")
 	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 2 {
@@ -433,7 +437,7 @@ func TestAssessmentTimesOut(t *testing.T) {
 	if _, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil {
 		t.Fatal(err)
 	}
-	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - 5*time.Minute))
+	unfreeze := freezeClock(t, time.Now().Add(-store.AssessTimeout-5*time.Minute))
 	task, mission := w.askAndReady(t, s.item(s.cardOf(t, late)), ratchetEvidence())
 	unfreeze()
 	if _, err := giveRequestedAssessment(t, ctx, w.rt, s.item(s.cardOf(t, inTime)), ratchetEvidence(), s.question, false); err != nil {
@@ -467,8 +471,9 @@ func TestAssessmentTimesOut(t *testing.T) {
 // recorded unavailable, as that pass would, and the rule answers by the
 // card. Before the fix it was taken, and one that differed held the card
 // from the rule for good.
-// Serial: it sets the package's event clock (FreezeEventClock).
 func TestALateReportIsNotTaken(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	late := w.ledgerMission(t, "M-3")
 	if n, err := store.BlockSpentForTest(ctx, w.rt); err != nil || n != 1 {
@@ -479,7 +484,7 @@ func TestALateReportIsNotTaken(t *testing.T) {
 		t.Fatal(err)
 	}
 	card := s.cardOf(t, late)
-	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - 5*time.Minute))
+	unfreeze := freezeClock(t, time.Now().Add(-store.AssessTimeout-5*time.Minute))
 	task, mission := w.askAndReady(t, s.item(card), ratchetEvidence())
 	unfreeze()
 	w.work(t, task, report("b", [][2]string{{"已在 main 上。", "commit:bifrost-platform@6b9507328434"}, {"台账等签收。", "ledger:TD-378"}}), "done")
@@ -500,6 +505,7 @@ func TestALateReportIsNotTaken(t *testing.T) {
 // Existing dispatch regressions explicitly request advice under TD-463.
 func requestAssessment(t *testing.T, db store.DB, item store.AssessItem) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.RequestAssessment(ctx, db, store.Writer{Actor: "owner"}, item.Kind, item.ID, func(context.Context) error { return nil }))
 }
 

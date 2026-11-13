@@ -26,13 +26,13 @@ func TestStgCardsPGOwnerAdapter(t *testing.T) {
 			ctx := context.Background()
 			x, _ := b5gFixture(t, tc.mode)
 			svc := questions.New(filepath.Join(t.TempDir(), "questions"), nil)
-			svc.SetClock(store.DecisionAt)
+			svc.SetClock(decisionClock(ctx))
 			q := questioncards.New(svc)
-			preps, err := store.PrepareLandingCards(ctx, x.w.rt, "bifrost-platform", store.DecisionAt())
+			preps, err := store.PrepareLandingCards(ctx, x.w.rt, "bifrost-platform", store.DecisionAt(ctx))
 			ok(t, err)
 			var card store.CardRecord
 			for _, prep := range preps {
-				_, err = store.AskLandingCard(ctx, x.w.rt, q, "bifrost-platform", prep, store.DecisionAt(), true)
+				_, err = store.AskLandingCard(ctx, x.w.rt, q, "bifrost-platform", prep, store.DecisionAt(ctx), true)
 				ok(t, err)
 			}
 			_, bound, err := store.LandingCardsToSettle(ctx, x.w.rt, "bifrost-platform")
@@ -60,10 +60,10 @@ func TestStgCardsPGOwnerAdapter(t *testing.T) {
 			bad := card
 			bad.QuestionID = "another-question"
 			before := x.read(t).LastSeq
-			if _, _, err = store.HandleLandingCardAnswer(ctx, x.w.rt, bad, fact, store.DecisionAt()); err == nil || x.read(t).LastSeq != before {
+			if _, _, err = store.HandleLandingCardAnswer(ctx, x.w.rt, bad, fact, store.DecisionAt(ctx)); err == nil || x.read(t).LastSeq != before {
 				t.Fatal("forged binding wrote", err)
 			}
-			status, err := store.SettleLandingCard(ctx, x.w.rt, q, card, store.DecisionAt())
+			status, err := store.SettleLandingCard(ctx, x.w.rt, q, card, store.DecisionAt(ctx))
 			ok(t, err)
 			if status != "acked" {
 				t.Fatal(status)
@@ -79,7 +79,7 @@ func TestStgCardsPGOwnerAdapter(t *testing.T) {
 			if !found || principal.Answer == nil || principal.Answer.By != "admin" || principal.Answer.Approval || principal.Answer.Read == nil {
 				t.Fatal("answer/approval/Ack contract", principal)
 			}
-			status, err = store.SettleLandingCard(ctx, x.w.rt, q, card, store.DecisionAt())
+			status, err = store.SettleLandingCard(ctx, x.w.rt, q, card, store.DecisionAt(ctx))
 			ok(t, err)
 			if status != "acked" || x.read(t).LastSeq != state.LastSeq {
 				t.Fatal("replay reapplied business")

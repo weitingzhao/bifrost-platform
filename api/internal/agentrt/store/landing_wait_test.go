@@ -289,7 +289,7 @@ func TestC4T41T42RefreshGenerationsAndLostBranchResponse(t *testing.T) {
 func TestC4T39T47ExpirationSettlesWithoutLiveAndRetries(t *testing.T) {
 	w, root, op, _, at := c4Wait(t)
 	store.FreezeEventClock(at.Add(71 * time.Hour))
-	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: false, Now: store.DecisionAt, Reconcile: &controller.LandingReconcile{}}
+	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: false, Now: decisionClock(ctx), Reconcile: &controller.LandingReconcile{}}
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if phase, _ := phaseOf(t, w, op); phase != "awaiting_grant" {
 		t.Fatal(phase)
@@ -314,7 +314,7 @@ func TestC4T39T47ExpirationSettlesWithoutLiveAndRetries(t *testing.T) {
 		}
 		return err
 	}))
-	ok(t, applyRetry(w.rt, root, op, "retry after expired grant wait", at.Add(72*time.Hour)))
+	ok(t, applyRetry(ctx, w.rt, root, op, "retry after expired grant wait", at.Add(72*time.Hour)))
 	b := landing.RootTiming(landingState(t, w, landingRepoStream), root, at.Add(72*time.Hour))
 	if b.Execution != 0 || b.Waiting != 0 || b.Operations != 1 {
 		t.Fatal(b)

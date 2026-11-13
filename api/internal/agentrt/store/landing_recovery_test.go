@@ -75,13 +75,15 @@ func (g *recoveryUnavailableGit) Delete(ctx context.Context, ref, sha string) er
 	}
 }
 
-// Serial: FreezeEventClock. Scale the real 2-minute Git / 5-minute pass
+// Scale the real 2-minute Git / 5-minute pass
 // deadlines to 400ms / 1s; three older cleanup reads exhaust the pass.
 func TestDrillRecoveryCleanupCannotStarveExpiredOperation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	now := time.Now()
 	first := now.Add(-7 * time.Hour)
-	restore := store.FreezeEventClock(first)
+	restore := freezeClock(t, first)
 	defer restore()
 	active := "land:zzz:1"
 	for i := 1; i <= 4; i++ {
@@ -103,7 +105,7 @@ func TestDrillRecoveryCleanupCannotStarveExpiredOperation(t *testing.T) {
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "discarded", "why", "main_changed")))
 		}
 	}
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	remote := &recoveryUnavailableGit{}
 	c := controller.Controller{DB: w.db.Pool(t, w.db.Runtime), Env: "stg", Now: func() time.Time { return now }, DrillGit: map[string]controller.DrillGit{"bifrost-platform": remote}, Drill: &controller.DrillSources{}}
 	passCtx, cancel := context.WithTimeout(ctx, time.Second)
@@ -159,7 +161,7 @@ func TestDrillRecoveryDiscardRestartPastBudget(t *testing.T) {
 	if len(landingState(t, w, landingRepoStream).Operations) != 2 {
 		t.Fatal("restart duplicated bound failure")
 	}
-	ok(t, applyRetry(w.rt, task, latestID, "retry after recovery", later))
+	ok(t, applyRetry(ctx, w.rt, task, latestID, "retry after recovery", later))
 	next, decision, err := store.ClaimLandingDrill(ctx, w.rt, src, task, later)
 	ok(t, err)
 	if next == "" || !decision.Allowed {

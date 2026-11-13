@@ -21,7 +21,7 @@ import (
 // only after that commits. A refusal is a record, not an error.
 
 // applyRetry answers try_again on a fresh card and fails unless it applied.
-func applyRetry(db store.DB, root, op, text string, at time.Time) error {
+func applyRetry(ctx context.Context, db store.DB, root, op, text string, at time.Time) error {
 	q := store.Question{ID: fmt.Sprintf("q-retry-%s-%s-%d", root, op, at.UnixNano()), Status: store.QuestionAnswered, Channel: "console",
 		Option: "try_again", Text: text, AnsweredBy: "owner", AnsweredAt: at.Format(time.RFC3339Nano)}
 	res, err := store.HandleLandingAnswer(ctx, db, q, root, op, at)
@@ -53,6 +53,7 @@ func answerCard(id, option string, at time.Time) store.Question {
 // root on the repository stream.
 func answerRecords(t *testing.T, w *world, question, root string) (records, retries int) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, w.rt.QueryRow(ctx, `SELECT
 	    count(*) FILTER (WHERE body_json->'landing_answer'->>'question_id' = $2),
 	    count(*) FILTER (WHERE body_json->'landing'->>'kind' = 'retry' AND body_json->'landing'->>'root' = $3)
@@ -60,14 +61,15 @@ func answerRecords(t *testing.T, w *world, question, root string) (records, retr
 	return records, retries
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerRefusedAfterCloseIsRecorded(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "refused:1", "bound")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "stopped", "test") }))
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-refused", "try_again", at.Add(time.Minute))
 
 	res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "refused:1", at.Add(time.Minute))
@@ -88,13 +90,14 @@ func TestLandingAnswerRefusedAfterCloseIsRecorded(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerAckAfterCommitAndOnlyOnce(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "ack:1", "stale")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-ack", "try_again", at.Add(time.Minute))
 	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
 
@@ -166,13 +169,14 @@ func (tx *commitFailTx) Commit(c context.Context) error {
 	return tx.Tx.Commit(c)
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerDatabaseFailureLeavesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "transient:1", "ci_red")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-transient", "try_again", at.Add(time.Minute))
 	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
 	acked := 0
@@ -192,11 +196,12 @@ func TestLandingAnswerDatabaseFailureLeavesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerVerdicts(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	type c struct {
 		name, outcome, why, option string
 		fail                       string // the operation's failure; "" leaves it claimed
@@ -206,13 +211,13 @@ func TestLandingAnswerVerdicts(t *testing.T) {
 	later := at.Add(time.Hour)
 	cases := []c{
 		// Moot: nothing at all is needed.
-		{"retried", store.LandingAnswerMoot, "already_retried", "try_again", "bound", func(root, op string) { ok(t, applyRetry(w.rt, root, op, "first", later)) }, later},
+		{"retried", store.LandingAnswerMoot, "already_retried", "try_again", "bound", func(root, op string) { ok(t, applyRetry(ctx, w.rt, root, op, "first", later)) }, later},
 		{"declined", store.LandingAnswerMoot, "already_declined", "do_not_merge", "bound", func(root, op string) {
 			_, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-first-"+op, "do_not_merge", later), root, op, later)
 			ok(t, err)
 		}, later},
 		{"superseded", store.LandingAnswerMoot, "superseded", "try_again", "bound", func(root, op string) {
-			ok(t, applyRetry(w.rt, root, op, "first", later))
+			ok(t, applyRetry(ctx, w.rt, root, op, "first", later))
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op+":2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 		}, later},
 		// Refused: not carried out; the Owner answers a new card (review 655 R1).
@@ -226,13 +231,13 @@ func TestLandingAnswerVerdicts(t *testing.T) {
 	}
 	for i, k := range cases {
 		op := fmt.Sprintf("verdict:%d", i)
-		store.FreezeEventClock(at)
+		freezeClock(t, at)
 		root := w.ready(t, store.Task{OffPlanReason: "verdict " + k.name})
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 		if k.fail != "" {
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", k.fail)))
 		}
-		store.FreezeEventClock(later)
+		freezeClock(t, later)
 		if k.setup != nil {
 			k.setup(root, op)
 		}
@@ -254,15 +259,17 @@ func TestLandingAnswerVerdicts(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A stored verdict is returned before anything is
+// A stored verdict is returned before anything is
 // judged again: a later operation, or a mission that came back, does not
 // change what the card already did (review 655 R3).
 func TestLandingAnswerStoredVerdictComesFirst(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "stored:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	applied := answerCard("q-stored-applied", "try_again", at.Add(time.Minute))
 	res, err := store.HandleLandingAnswer(ctx, w.rt, applied, root, "stored:1", at.Add(time.Minute))
 	ok(t, err)
@@ -302,14 +309,15 @@ func TestLandingAnswerStoredVerdictComesFirst(t *testing.T) {
 	}
 }
 
-// Serial: SetHook, FreezeEventClock. A failure between the business record
+// Serial: SetHook. A failure between the business record
 // and the verdict leaves neither (review 655 R3).
 func TestLandingAnswerFailureBetweenAppendsLeavesNothing(t *testing.T) {
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "between:1", "ci_red")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-between", "try_again", at.Add(time.Minute))
 	cut, cancel := context.WithCancel(ctx)
 	defer store.SetHook(func(point, _ string) {
@@ -325,19 +333,21 @@ func TestLandingAnswerFailureBetweenAppendsLeavesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A card bound to no operation of its root, or
+// A card bound to no operation of its root, or
 // recorded for another root, is S3's binding error: nothing is recorded.
 func TestLandingAnswerBindingMismatch(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	a := failedRoot(t, w, "bind:a", "bound")
 	b := failedRoot(t, w, "bind:b", "bound")
 	q := answerCard("q-bind", "try_again", at)
 	if _, err := store.HandleLandingAnswer(ctx, w.rt, q, b, "bind:a", at); !errors.Is(err, store.ErrLandingAnswerBinding) {
 		t.Fatal("an operation of another root", err)
 	}
-	ok(t, applyRetry(w.rt, a, "bind:a", "", at))
+	ok(t, applyRetry(ctx, w.rt, a, "bind:a", "", at))
 	recorded := answerCard("q-bind-recorded", "do_not_merge", at)
 	_, err := store.HandleLandingAnswer(ctx, w.rt, recorded, a, "bind:a", at)
 	ok(t, err)
@@ -349,13 +359,14 @@ func TestLandingAnswerBindingMismatch(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerNotRetryableIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "conflict:1", "conflict")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	res, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-conflict", "try_again", at.Add(time.Minute)), root, "conflict:1", at.Add(time.Minute))
 	ok(t, err)
 	if res.Outcome != store.LandingAnswerRefused || res.Why != "not_retryable" || !res.Recorded {
@@ -366,13 +377,14 @@ func TestLandingAnswerNotRetryableIsRefused(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestLandingAnswerConcurrentPassesActOnce(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "race:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-race", "try_again", at.Add(time.Minute))
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -400,18 +412,20 @@ func TestLandingAnswerConcurrentPassesActOnce(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A note longer than the protocol's reason is
+// A note longer than the protocol's reason is
 // still a retry: the retry keeps a bounded reason, the record the whole text
 // (review 656 A-R5). 1001 bytes, and multibyte text cut on a rune.
 func TestLandingAnswerLongTextStillRetries(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	for i, text := range []string{strings.Repeat("a", 1000), strings.Repeat("a", 1001), strings.Repeat("重试", 400)} {
 		op := fmt.Sprintf("long:%d", i)
-		store.FreezeEventClock(at)
+		freezeClock(t, at)
 		root := failedRoot(t, w, op, "bound")
-		store.FreezeEventClock(at.Add(time.Minute))
+		freezeClock(t, at.Add(time.Minute))
 		q := answerCard(fmt.Sprintf("q-long-%d", i), "try_again", at.Add(time.Minute))
 		q.Text = text
 		res, err := store.HandleLandingAnswer(ctx, w.rt, q, root, op, at.Add(time.Minute))
@@ -428,15 +442,17 @@ func TestLandingAnswerLongTextStillRetries(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A lost commit reports no verdict (review 656
+// A lost commit reports no verdict (review 656
 // A-R2), and a stored record returns as committed, whatever the card says
 // now (A-R3).
 func TestLandingAnswerReportsOnlyWhatCommitted(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "commit:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-commit", "try_again", at.Add(time.Minute))
 	failed := false
 	res, err := store.HandleLandingAnswer(ctx, commitFailDB{DB: w.rt, failed: &failed}, q, root, "commit:1", at.Add(time.Minute))
@@ -453,16 +469,18 @@ func TestLandingAnswerReportsOnlyWhatCommitted(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A stored record is a credential: one that is not
+// A stored record is a credential: one that is not
 // the controller's, or whose fields contradict each other, is an error and
 // is not acked (review 656 A-R1). The append guard keeps anyone else from
 // writing one.
 func TestLandingAnswerStoredRecordMustBeTrustworthy(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "trust:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-trust", "do_not_merge", at.Add(time.Minute))
 	_, err := store.HandleLandingAnswer(ctx, w.rt, q, root, "trust:1", at.Add(time.Minute))
 	ok(t, err)
@@ -507,18 +525,20 @@ func TestLandingAnswerStoredRecordMustBeTrustworthy(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Every record the decision writes reads back
+// Every record the decision writes reads back
 // (review 657 B657-1): a superseded card with an unknown or empty choice,
 // and a refusal under a mission in any real state (a root rebound to a
 // mission awaiting the Owner).
 func TestLandingAnswerEveryDecidedRecordReadsBack(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "back:1", "bound")
 	later := at.Add(time.Hour)
-	store.FreezeEventClock(later)
-	ok(t, applyRetry(w.rt, root, "back:1", "first", later))
+	freezeClock(t, later)
+	ok(t, applyRetry(ctx, w.rt, root, "back:1", "first", later))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("back:2", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 	for _, choice := range []string{"none", ""} {
 		q := answerCard("q-back-"+choice, choice, later)
@@ -568,15 +588,17 @@ func (tx *committedThenLostTx) Commit(c context.Context) error {
 	return errors.New("reply lost")
 }
 
-// Serial: FreezeEventClock. A commit that landed but whose reply was lost:
+// A commit that landed but whose reply was lost:
 // nothing is reported or acked; another connection sees the record; the next
 // pass finds it, does not act again and acks.
 func TestLandingAnswerCommitLandedReplyLost(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "lost:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-lost-reply", "try_again", at.Add(time.Minute))
 	read := func(context.Context, string, string) (store.Question, bool) { return q, true }
 	acked := 0
@@ -607,16 +629,17 @@ func TestLandingAnswerCommitLandedReplyLost(t *testing.T) {
 	}
 }
 
-// Serial: SetHook, FreezeEventClock. Two passes on one card: the second
+// Serial: SetHook. Two passes on one card: the second
 // really waits on the first's stream lock (pg_blocking_pids), then reads its
 // record: one record, one retry, the same snapshot, recorded once (review
 // 657 R657-3).
 func TestLandingAnswerSecondPassWaitsAndReads(t *testing.T) {
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := failedRoot(t, w, "wait:1", "bound")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	q := answerCard("q-wait", "try_again", at.Add(time.Minute))
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -670,17 +693,19 @@ func TestLandingAnswerSecondPassWaitsAndReads(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. do_not_merge from every phase an S2 drill reaches
+// do_not_merge from every phase an S2 drill reaches
 // (review 657 R657-3): it applies (failed{declined}) wherever the protocol
 // takes it and is refused (not_declinable) on a rehearsal; one record each,
 // none twice.
 func TestLandingAnswerDeclineSources(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	for i, phase := range []string{"claimed", "prepared", "branch_intent", "branch_pushed", "parked", "failed", "rehearsed"} {
 		op := fmt.Sprintf("decline:%d", i)
-		store.FreezeEventClock(at)
+		freezeClock(t, at)
 		root := w.ready(t, store.Task{OffPlanReason: "decline " + phase})
 		ref := "refs/heads/land/stg/" + root + "/1"
 		chain := [][]any{
@@ -701,12 +726,12 @@ func TestLandingAnswerDeclineSources(t *testing.T) {
 		case "failed":
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "bound")))
 		case "rehearsed":
-			store.FreezeEventClock(at.Add(2 * time.Second))
+			freezeClock(t, at.Add(2*time.Second))
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "R", commitB, "run", "green", "status", "Succeeded", "created_at", at.Add(time.Second).Format(time.RFC3339Nano))))
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "rehearsed", "R", commitB)))
 		}
 		later := at.Add(time.Minute)
-		store.FreezeEventClock(later)
+		freezeClock(t, later)
 		q := answerCard("q-decline-"+phase, "do_not_merge", later)
 		want, why := store.LandingAnswerApplied, "declined"
 		if phase == "rehearsed" {

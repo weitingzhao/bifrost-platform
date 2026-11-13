@@ -20,7 +20,7 @@ func (c *Controller) LandingDecision(ctx context.Context, src store.LandingSourc
 	mode := mode(c.Env)
 	err := store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var err error
-		now := store.DecisionAt() // CUT §9: not the pass's start
+		now := store.DecisionAt(ctx) // CUT §9: not the pass's start
 		f, err = store.LandingFacts(ctx, tx, src, c.Env, mode, task, op, "", now)
 		if err != nil {
 			return err
@@ -137,7 +137,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// Bounds are checked before any external read: an unavailable Gitea or
 	// window must not keep the active slot forever.
 	_, n := landing.RootBudget(s, o.Task)
-	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
+	if why := landing.RootBound(s, o.Task, store.DecisionAt(ctx), false); why != "" {
 		return settleBound()
 	}
 	if src.Main == nil || src.CI == nil || src.WindowBlocked == nil {
@@ -170,7 +170,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	if o.S5.Required || landing.S5AutomaticRoute(f) {
 		return c.landingS5CI(ctx, src, op)
 	}
-	if repo == "bifrost-trade-infra" && o.Kicked && landing.PreparationDecision(f, store.DecisionAt()).Allowed {
+	if repo == "bifrost-trade-infra" && o.Kicked && landing.PreparationDecision(f, store.DecisionAt(ctx)).Allowed {
 		if src.EnsureInfraCI == nil {
 			return landing.DrillAction{Kind: "wait"}, fmt.Errorf("infra CI creator unavailable")
 		}
@@ -187,7 +187,7 @@ func (c *Controller) LandingDrillCI(ctx context.Context, src DrillSources, op st
 	// Decided at the clock after the reads above, not the pass's start: the
 	// ten-minute rebuild and thirty-minute stuck checks and the CI's creation
 	// time are judged as of now (CUT §9, review 656 B-R1).
-	at := store.DecisionAt()
+	at := store.DecisionAt(ctx)
 	// The rule, the day's counts and the operation as of at, not as of the
 	// decision before the reads (review 659 R659-1): a version that took
 	// effect meanwhile decides whether CI is kicked.

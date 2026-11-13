@@ -19,7 +19,7 @@ func (s *Server) wireLandingRequests(c *controller.Controller) {
 		if err != nil {
 			return nil, err
 		}
-		seen := store.DecisionAt()
+		seen := store.DecisionAt(ctx)
 		var out []store.LandingGrantRequest
 		for _, a := range list {
 			repo, _ := a.Params["repo"].(string)

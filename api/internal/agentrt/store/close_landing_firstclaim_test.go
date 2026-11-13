@@ -114,18 +114,20 @@ func TestRefusalThatMayPassHoldsUntilTheWindow(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The handoff is durable facts, not the current
+// The handoff is durable facts, not the current
 // rule (CUT §7.7, §5 item 5): landing was enabled on the stream, the rule then
 // expired; the root still holds its mission (c3cb9e76 closed it once the rule
 // was gone).
 func TestHandoffHoldsWithoutACurrentRule(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	expires := time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339)
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, expires, landingRuleBody))
 	ok(t, err)
 	enabled := time.Now().Add(-time.Hour)
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
@@ -134,7 +136,7 @@ func TestHandoffHoldsWithoutACurrentRule(t *testing.T) {
 	w.goalMission(t, "M-3")
 	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "an operator's drill", BaseCommit: commitB})
 	w.passRound(t, task, "h1", "h2", "h3")
-	defer store.FreezeEventClock(time.Now().Add(time.Hour))()
+	defer freezeClock(t, time.Now().Add(time.Hour))()
 	closed, err := store.CloseMissions(ctx, w.rt)
 	ok(t, err)
 	if len(closed) != 0 {
@@ -208,11 +210,13 @@ func TestClaimPastTheWindowRecordsBoundWithoutGit(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Only a root in the handoff is ever recorded
+// Only a root in the handoff is ever recorded
 // unclaimed (review 653 R653-1): a mission created, and its task accepted,
 // before landing was enabled is out of it, so a claim past six hours refuses
 // before_enable as before and writes nothing (bffe7c04 wrote failed{bound}).
 func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
@@ -221,7 +225,7 @@ func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
 	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "an operator's drill", BaseCommit: commitB})
 	w.passRound(t, task, "h1", "h2", "h3")
 	enabled := time.Now().Add(10 * time.Minute)
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e

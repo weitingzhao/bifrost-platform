@@ -158,7 +158,7 @@ func fixture708(t *testing.T, db *agentrttest.DB, repo, dep, env string, at time
 		fence := state.Fence()
 		if fence.IsZero() || fence.After(databaseNow) || created.Before(fence) || accepted.Before(fence) {
 			return fmt.Errorf("Review 708 fixture clock order: enabled=%s live=%s fence=%s database_now=%s mission=%s accepted=%s event_now=%s rule_effective=%s",
-				state.EnabledAt, state.LiveAt, fence, databaseNow, created, accepted, store.DecisionAt(), at.Add(-2*time.Hour).Truncate(time.Second))
+				state.EnabledAt, state.LiveAt, fence, databaseNow, created, accepted, store.DecisionAt(ctx), at.Add(-2*time.Hour).Truncate(time.Second))
 		}
 		return nil
 	}))

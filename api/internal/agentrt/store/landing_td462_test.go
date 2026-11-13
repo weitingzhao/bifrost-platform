@@ -25,7 +25,7 @@ func td462Controller(c *c5, p *livePusher) *controller.Controller {
 	var calls ciCalls
 	src := pinSources(c.src, &calls, &c.ci, "Succeeded")
 	ctl := liveController(c.w)
-	ctl.Drill, ctl.Now = &src, func() time.Time { return store.DecisionAt() }
+	ctl.Drill, ctl.Now = &src, func() time.Time { return store.DecisionAt(ctx) }
 	ctl.OpenLive = func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }
 	return &ctl
 }
@@ -60,7 +60,7 @@ func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
 	// Reconciliation releases the active slot; the consumed grant does
 	// not hold claims after the operation lands.
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(c.op, "landed", "R", commitB)))
-	op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", root, store.DecisionAt())
+	op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", root, store.DecisionAt(ctx))
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("landed grant kept the new root waiting", d)
@@ -123,7 +123,7 @@ func TestTD462PriorityEndsWithGrantUsabilityPG(t *testing.T) {
 			}
 			root := td462Root(t, c)
 			src := c4Source("console/src/components/TD462.tsx")
-			op, d, err := store.ClaimLanding(ctx, c.w.rt, src, "prod", root, store.DecisionAt())
+			op, d, err := store.ClaimLanding(ctx, c.w.rt, src, "prod", root, store.DecisionAt(ctx))
 			ok(t, err)
 			if op == "" || !d.Allowed {
 				t.Fatal("unusable grant blocked a new root", d)

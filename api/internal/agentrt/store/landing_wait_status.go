@@ -196,7 +196,7 @@ func ReadLandingWait(ctx context.Context, db DB, op string) (*LandingWaitStatus,
 		if err != nil {
 			return err
 		}
-		out, err = readLandingWaitStatusIn(ctx, tx, s, grantStream(repo), op, DecisionAt())
+		out, err = readLandingWaitStatusIn(ctx, tx, s, grantStream(repo), op, DecisionAt(ctx))
 		return err
 	})
 	return out, err

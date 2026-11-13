@@ -326,12 +326,14 @@ func TestReconcileOkMissingThenFoundLands(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. An S2 drill never has a main_intent: it is no
+// An S2 drill never has a main_intent: it is no
 // candidate and main is never read for it (review 658).
 func TestReconcileIgnoresDrills(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := w.ready(t, store.Task{OffPlanReason: "drill"})
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("drill:1", "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true)))
@@ -376,24 +378,26 @@ func atMainR(t *testing.T, w *world, op, r string, at time.Time) time.Time {
 		newLandingRecord(op, "ci_seen", "run", "ci-"+op, "status", "Succeeded", "R", r, "created_at", at.Add(3*time.Minute).Format(time.RFC3339Nano)),
 		newLandingRecord(op, "main_intent", "R", r, "M0", commitA),
 	} {
-		store.FreezeEventClock(at.Add(time.Duration(i) * time.Minute))
+		freezeClock(t, at.Add(time.Duration(i)*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, rec))
 	}
 	return at.Add(5 * time.Minute)
 }
 
-// Serial: FreezeEventClock. A read that fails holds back that operation only
+// A read that fails holds back that operation only
 // (review 658 R3, 659 R659-4): the other is settled in the same pass; the
 // failed one is not read again until its wait is over, then is.
 func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	badR, goodR := strings.Repeat("c", 40), strings.Repeat("d", 40)
 	intent := atMainR(t, w, "land:loop:bad", badR, at)
 	atMainR(t, w, "land:loop:good", goodR, at)
 	now := intent.Add(store.MainFence + time.Minute)
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	reads := map[string]int{}
 	failing := true
 	ctl := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return now }}
@@ -419,7 +423,7 @@ func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
 	}
 	failing = false
 	now = now.Add(2 * time.Minute)
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if p, _ := phaseOf(t, w, "land:loop:bad"); reads[badR] != 2 || p != "failed" {
 		t.Fatalf("after its wait: %d reads, %s", reads[badR], p)
@@ -644,22 +648,24 @@ func TestMainEvidenceRecordsAreChecked(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 662 R-04: a landing, from ok or from
+// Review 662 R-04: a landing, from ok or from
 // unknown, is read again every thirty minutes, not every minute past the
 // fence.
 func TestReconcileLoopRereadsALandingHalfHourly(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, outcome := range []string{"ok", "unknown"} {
 		t.Run(outcome, func(t *testing.T) {
 			w := newKernelWorld(t)
 			at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			r := strings.Repeat("d", 40)
 			intent := atMainR(t, w, "land:half:1", r, at)
 			if outcome == "ok" {
 				ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:half:1", "main_result", "outcome", "ok")))
 			}
 			now := intent.Add(store.MainFence + time.Minute)
-			store.FreezeEventClock(now)
+			freezeClock(t, now)
 			reads := 0
 			ctl := controller.Controller{DB: w.rt, Env: "prod", Now: func() time.Time { return now }}
 			ctl.Reconcile = &controller.LandingReconcile{MainEvidence: func(context.Context, string, string, string, string) (store.MainEvidence, error) {
@@ -672,7 +678,7 @@ func TestReconcileLoopRereadsALandingHalfHourly(t *testing.T) {
 			}
 			for i, step := range []time.Duration{time.Minute, 28 * time.Minute, time.Minute} {
 				now = now.Add(step)
-				store.FreezeEventClock(now)
+				freezeClock(t, now)
 				ok(t, ctl.LandingReconcilePass(ctx))
 				if want := []int{1, 1, 2}[i]; reads != want {
 					t.Fatalf("after step %d: %d reads, want %d", i, reads, want)

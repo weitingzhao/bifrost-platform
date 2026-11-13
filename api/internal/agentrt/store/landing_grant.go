@@ -666,7 +666,7 @@ func UsableLandingGrant(ctx context.Context, db DB, op string) (string, error) {
 		if err != nil {
 			return err
 		}
-		g := candidateGrant(order, op, o, DecisionAt())
+		g := candidateGrant(order, op, o, DecisionAt(ctx))
 		if g == nil {
 			return nil
 		}
@@ -768,7 +768,7 @@ func RevokeLandingGrant(ctx context.Context, db DB, grantID string) (RevokeResul
 	}
 	if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "owner", TaskID: g.Task,
 		Body: map[string]any{"text": "Landing grant revoked by the Owner", "landing_grant_revoked": toBody(LandingGrantRevoked{
-			V: LandingGrantVersion, GrantID: grantID, By: "owner", At: DecisionAt().UTC().Format(time.RFC3339Nano)})}}); err != nil {
+			V: LandingGrantVersion, GrantID: grantID, By: "owner", At: DecisionAt(ctx).UTC().Format(time.RFC3339Nano)})}}); err != nil {
 		return out, err
 	}
 	hook("landing grant: revoke before commit", grantID)

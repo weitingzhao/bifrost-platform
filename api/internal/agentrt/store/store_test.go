@@ -17,6 +17,29 @@ import (
 
 var ctx = context.Background()
 
+// A test that moves time has an event clock of its own (ownclock_test.go):
+// it starts with ctx := ownClock(t), which hides the ctx above, and freezes
+// with freezeClock(t, at). A helper that calls the store starts with
+// ctx := ctxOf(t): the test's own context when it has a clock, a plain one
+// when it has none.
+func ownClock(t testing.TB) context.Context {
+	t.Helper()
+	return store.OwnClock(t)
+}
+
+func ctxOf(t testing.TB) context.Context { return store.CtxOf(t) }
+
+func freezeClock(t testing.TB, at time.Time) func() {
+	t.Helper()
+	return store.FreezeClock(t, at)
+}
+
+// decisionClock is store.DecisionAt read for ctx, as the clock a controller
+// or a fake takes.
+func decisionClock(ctx context.Context) func() time.Time {
+	return func() time.Time { return store.DecisionAt(ctx) }
+}
+
 func wantErr(t *testing.T, err error, contains string) {
 	t.Helper()
 	if err == nil {
@@ -38,8 +61,11 @@ func ok(t *testing.T, err error) {
 // round R2 > item R2:2.1 > steps S1 (bound to M-1), S2 (unbound), S3 (bound
 // to M-1).
 type world struct {
-	db   *agentrttest.DB
-	rt   *pgx.Conn
+	db *agentrttest.DB
+	rt *pgx.Conn
+	// ctx is the context of the test the world was made for (ctxOf), for a
+	// helper that has the world and no t.
+	ctx  context.Context
 	spec string
 	// impl is an implementation's spec as a plan's is (store.ImplementSpec),
 	// the one a proposed implementation needs (R5:5.7-8).
@@ -79,8 +105,9 @@ func seedTemplate(ctx context.Context, owner *pgx.Conn) error {
 // clock, which many tests freeze before they make their world.
 func newWorld(t *testing.T) *world {
 	t.Helper()
+	ctx := ctxOf(t)
 	db := seededDB(t)
-	w := &world{db: db, rt: db.Connect(t, db.Runtime)}
+	w := &world{db: db, rt: db.Connect(t, db.Runtime), ctx: ctx}
 	var err error
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
@@ -130,6 +157,7 @@ func slowTest(t *testing.T) {
 
 func (w *world) task(t *testing.T, mission, step, subject, role string) (string, error) {
 	t.Helper()
+	ctx := ctxOf(t)
 	id := store.NewTaskID()
 	err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		task := store.Task{ID: id, MissionID: mission, PlanNode: step, Subject: subject, Role: role,
@@ -145,6 +173,7 @@ func (w *world) task(t *testing.T, mission, step, subject, role string) (string,
 
 func (w *world) lastSeq(t *testing.T, stream string) int64 {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int64
 	ok(t, w.rt.QueryRow(ctx, `SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id = $1`, stream).Scan(&n))
 	return n

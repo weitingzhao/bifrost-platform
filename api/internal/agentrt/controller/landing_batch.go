@@ -368,7 +368,7 @@ func (c *Controller) landingBatchBranch(ctx context.Context, g DrillGit, source 
 	facts := map[string]landing.Facts{}
 	for _, op := range b.Members {
 		o := s.Operations[op]
-		if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
+		if why := landing.RootBound(s, o.Task, store.DecisionAt(ctx), false); why != "" {
 			_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 			return err
 		}
@@ -426,7 +426,7 @@ func (c *Controller) landingBatchBranch(ctx context.Context, g DrillGit, source 
 	}
 	// Before the new intents and pushes: each member as of now (review 659
 	// R659-1). Out of it, nothing new is written; the next pass judges.
-	at := store.DecisionAt()
+	at := store.DecisionAt(ctx)
 	for _, op := range b.Members {
 		f, err := store.RefreshLandingFacts(ctx, c.DB, source, c.Env, mode(c.Env), s.Operations[op].Task, op, facts[op], at)
 		if err != nil {

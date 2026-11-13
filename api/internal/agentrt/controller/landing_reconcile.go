@@ -189,7 +189,7 @@ func (c *Controller) reconcileMainReads(ctx context.Context, repo string) error 
 		if c.clock().Before(w.until) && !urgent[cand.Op] {
 			continue
 		}
-		started := store.DecisionAt()
+		started := store.DecisionAt(ctx)
 		readCtx, cancelRead := context.WithTimeout(budget, reconcileReadLimit)
 		ev, err := r.MainEvidence(readCtx, repo, cand.Root, cand.A, cand.R)
 		cancelRead()

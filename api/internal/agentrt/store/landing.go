@@ -183,7 +183,7 @@ func ObserveLandingEnabled(ctx context.Context, tx pgx.Tx, env, tenant, repo str
 	if err := lockStream(ctx, tx, stream); err != nil {
 		return time.Time{}, err
 	}
-	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
+	rule, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx))
 	if err != nil {
 		return time.Time{}, err
 	}

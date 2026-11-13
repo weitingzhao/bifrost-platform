@@ -83,18 +83,20 @@ func TestClaimWindowEndingDuringTheReadIsBound(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A decision is taken at the event clock, the
+// A decision is taken at the event clock, the
 // clock its records are written with, whatever the pass's now says (CUT §9
 // v2, review 656 B-R2).
 func TestDecisionAtIsTheEventClock(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
-	restore := store.FreezeEventClock(now.Add(-time.Minute))
+	restore := freezeClock(t, now.Add(-time.Minute))
 	defer restore()
-	if got := store.DecisionAt(); !got.Equal(now.Add(-time.Minute)) {
+	if got := store.DecisionAt(ctx); !got.Equal(now.Add(-time.Minute)) {
 		t.Fatal("not the clock", got)
 	}
-	store.FreezeEventClock(now.Add(time.Minute))
-	if got := store.DecisionAt(); !got.Equal(now.Add(time.Minute)) {
+	freezeClock(t, now.Add(time.Minute))
+	if got := store.DecisionAt(ctx); !got.Equal(now.Add(time.Minute)) {
 		t.Fatal("not the clock", got)
 	}
 }

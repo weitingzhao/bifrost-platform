@@ -136,7 +136,7 @@ func (x *b5Fixture) none(t *testing.T) {
 	body := strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: none", 1)
 	_, err := store.TightenRule(ctx, x.w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", since, until, body)))
 	ok(t, err)
-	b5AssertRule(t, x.w, store.DecisionAt(), 2, "none")
+	b5AssertRule(t, x.w, store.DecisionAt(ctx), 2, "none")
 }
 
 // Serial: FreezeEventClock and real PostgreSQL transactions.
@@ -331,8 +331,8 @@ func TestStgGatePGConsumedCoreGrant(t *testing.T) {
 	ok(t, err)
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(c.op, "landed", "R", commitB)))
 	ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "loosen", since, until, landingRuleBody))))
-	b5AssertRule(t, c.w, store.DecisionAt(), 2, "bifrost-deliver-platform")
-	x := b5Snapshot(t, c.w, c.root, c.op, store.DecisionAt())
+	b5AssertRule(t, c.w, store.DecisionAt(ctx), 2, "bifrost-deliver-platform")
+	x := b5Snapshot(t, c.w, c.root, c.op, store.DecisionAt(ctx))
 	x.obs.Commits[0].Changes[0].OldPath = c5Core
 	x.obs.Commits[0].Changes[0].NewPath = c5Core
 	p := x.permit(t)

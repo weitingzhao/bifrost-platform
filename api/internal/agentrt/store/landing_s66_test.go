@@ -110,7 +110,7 @@ func s66Landed(t *testing.T, w *world, mission, repo string, at time.Time) strin
 	root := s66Root(t, w, mission, repo)
 	op := "land:" + root + ":1"
 	ref := "refs/heads/land/prod/" + root + "/1"
-	base := store.DecisionAt()
+	base := store.DecisionAt(ctx)
 	for i, r := range []map[string]any{
 		newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1),
 		newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", base.Add(time.Second).Format(time.RFC3339Nano), "dry_run", false),

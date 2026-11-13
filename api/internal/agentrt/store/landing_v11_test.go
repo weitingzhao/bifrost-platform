@@ -19,18 +19,20 @@ func newLandingRecord(op, kind string, kv ...any) map[string]any {
 	return r
 }
 
-// Serial: FreezeEventClock. Real migrated PG, runtime role, every new edge and
+// Real migrated PG, runtime role, every new edge and
 // refusals from every landing phase; no in-memory database substitute.
 func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	at := time.Now().Add(-time.Hour)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	phases := []string{"empty", "claimed", "prepared", "branch_intent", "branch_pushed", "green", "parked", "failed", "discarded", "rehearsed", "main_intent", "main_result", "landed", "reverted"}
 	number := 0
 	for _, phase := range phases {
 		for _, kind := range []string{"discarded", "rehearsed", "retry"} {
 			t.Run(phase+"/"+kind, func(t *testing.T) {
-				store.FreezeEventClock(at)
+				freezeClock(t, at)
 				number++
 				op := fmt.Sprintf("matrix:%d", number)
 				root := fmt.Sprintf("t_%026d", number)
@@ -61,7 +63,7 @@ func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
 									put("discarded", "why", "main_changed")
 								case "branch_pushed":
 								default:
-									restore := store.FreezeEventClock(at.Add(2 * time.Second))
+									restore := freezeClock(t, at.Add(2*time.Second))
 									put("ci_seen", "R", commitB, "run", "green", "status", "Succeeded", "created_at", at.Add(time.Second).Format(time.RFC3339Nano))
 									if phase == "rehearsed" {
 										put("rehearsed", "R", commitB)
@@ -93,7 +95,7 @@ func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
 					r = newLandingRecord(op, kind, "root", root, "after_op", op, "reason", "explicit retry", "by", "owner")
 					want = phase == "failed"
 				}
-				restore := store.FreezeEventClock(at.Add(time.Minute))
+				restore := freezeClock(t, at.Add(time.Minute))
 				defer restore()
 				err := appendLanding(w, landingRepoStream, r)
 				if (err == nil) != want {
@@ -112,17 +114,18 @@ func TestLandingV11TransitionMatrixDatabase(t *testing.T) {
 	ok(t, err)
 }
 
-// Serial: FreezeEventClock.
 func TestLandingV11RetryAnswersDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	// Answers lock the root's task and mission (review 645 R1): the roots
 	// are real tasks of an active mission.
 	w := newKernelWorld(t)
 	at := time.Now().Add(-7 * time.Hour)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	reasons := []string{"bound", "stale", "ci_red", "ci_failed", "declined", "conflict", "floor", "limit", "denied", "rule", "ci_stuck", "window"}
 	for i, why := range reasons {
-		store.FreezeEventClock(at)
+		freezeClock(t, at)
 		op := fmt.Sprintf("retry:%d", i)
 		root := w.ready(t, store.Task{OffPlanReason: fmt.Sprintf("answer %d", i)})
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
@@ -134,7 +137,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 			}
 			return q, true
 		}
-		restore := store.FreezeEventClock(at.Add(7 * time.Hour))
+		restore := freezeClock(t, at.Add(7*time.Hour))
 		res, err := ctl.LandingAnswer(ctx, root, op, read)
 		ok(t, err)
 		retryable := slices.Contains([]string{"bound", "stale", "ci_red"}, why)
@@ -166,7 +169,7 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 		}
 		restore()
 	}
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	// No answer, rule answer or an unrelated answer must not write retry.
 	op := "answer:decline"
 	root := w.ready(t, store.Task{OffPlanReason: "answer decline"})
@@ -203,18 +206,20 @@ func TestLandingV11RetryAnswersDatabase(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Malformed fields, wrong bindings, and stale CI are
+// Malformed fields, wrong bindings, and stale CI are
 // refused through Append, not only through the pure validator.
 func TestLandingV11RefusesBadEvidenceDatabase(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w := newWorld(t)
 	at := time.Now().Add(-time.Hour)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	op := "evidence:1"
 	ref := "refs/heads/land/stg/" + landingTask + "/1"
 	for _, r := range []map[string]any{newLandingRecord(op, "claimed", "task", landingTask, "attempt", landingAttempt, "A", commitA, "rule_version", 1), newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	for _, status := range []string{"Failed", "Unknown", "Running"} {
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "R", commitB, "run", "latest", "status", status, "created_at", at.Add(time.Second).Format(time.RFC3339Nano))))
 		if appendLanding(w, landingRepoStream, newLandingRecord(op, "rehearsed", "R", commitB)) == nil {
@@ -248,18 +253,19 @@ func TestLandingV11RefusesBadEvidenceDatabase(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestLandingV11LiveCannotRehearseDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	root := w.ready(t, store.Task{OffPlanReason: "live"}) // answers lock the root's task (review 645 R1)
 	at := time.Now().Add(-time.Hour)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	op := "live:1"
 	ref := "refs/heads/land/prod/" + root + "/1"
 	for _, r := range []map[string]any{newLandingRecord(op, "claimed", "task", root, "attempt", landingAttempt, "A", commitA, "rule_version", 1), newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "R", commitB, "run", "green", "status", "Succeeded", "created_at", at.Add(time.Second).Format(time.RFC3339Nano))))
 	if appendLanding(w, landingRepoStream, newLandingRecord(op, "rehearsed", "R", commitB)) == nil {
 		t.Fatal("live rehearsal")

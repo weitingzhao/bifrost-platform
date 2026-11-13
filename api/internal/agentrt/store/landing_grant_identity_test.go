@@ -130,7 +130,7 @@ func (r *grantIdentityGateRows) Scan(dest ...any) error {
 	return nil
 }
 func grantIdentityGateFixture(t *testing.T) *grantIdentityGateDB {
-	at := DecisionAt()
+	at := DecisionAt(context.Background())
 	d := &grantIdentityGateDB{t: t, at: at, signed: "test-owner"}
 	header := func(id string) string {
 		return fmt.Sprintf("rule_id: %s\nrule_version: 1\ndirection: initial\neffective_at: %s\nexpires_at: %s\n", id, at.Add(-4*time.Hour).Format(time.RFC3339), at.Add(24*time.Hour).Format(time.RFC3339))

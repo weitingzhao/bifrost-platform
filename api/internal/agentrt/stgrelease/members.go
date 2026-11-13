@@ -23,7 +23,7 @@ func (c *Controller) prepareMembers(ctx context.Context, s store.StgState, b *st
 			continue
 		}
 		o := s.Legacy.Operations[m.Op]
-		readAt := store.DecisionAt()
+		readAt := store.DecisionAt(ctx)
 		ev, err := c.Sources.MainEvidence(ctx, "bifrost-platform", m.Root, o.A, m.R)
 		if err != nil {
 			errs = append(errs, err)
@@ -67,7 +67,7 @@ func (c *Controller) readBlockHead(ctx context.Context, s store.StgState, block 
 		if !o.EverLanded || o.Phase != "landed" || s.Legacy.LatestOperation(o.Task) != op {
 			continue
 		}
-		at := store.DecisionAt()
+		at := store.DecisionAt(ctx)
 		ev, err := c.Sources.MainEvidence(ctx, "bifrost-platform", o.Task, o.A, o.R)
 		if err != nil {
 			return false, err

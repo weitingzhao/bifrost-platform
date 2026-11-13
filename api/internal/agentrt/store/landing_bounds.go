@@ -42,7 +42,7 @@ func SettleLandingOperationBound(ctx context.Context, db DB, op string, observed
 			o.Phase != observed.Phase || !o.LastAt.Equal(observed.LastAt) {
 			return nil
 		}
-		why = landing.RootBound(s, o.Task, DecisionAt(), false)
+		why = landing.RootBound(s, o.Task, DecisionAt(ctx), false)
 		if why == "" {
 			return nil
 		}
@@ -73,7 +73,7 @@ func SettleLandingDrillBounds(ctx context.Context, db DB, now time.Time, repos .
 		if e := lockStream(ctx, tx, stream); e != nil {
 			return e
 		}
-		now := DecisionAt() // CUT §9: the clock its records are written with
+		now := DecisionAt(ctx) // CUT §9: the clock its records are written with
 		var e error
 		state, e = LandingState(ctx, tx, stream)
 		if e != nil {

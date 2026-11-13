@@ -410,7 +410,7 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegis
 		if !isNoRows(err) {
 			return nil, err
 		}
-		now := timeText(eventClock())
+		now := timeText(eventNow(ctx))
 		n := externalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
 		if collector {
 			n.Host, n.Vendor, n.Session, n.Epoch, n.Sidebar = w.Host, in.Vendor, in.Session, in.Epoch, in.Sidebar
@@ -620,7 +620,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		if (n.State == "Submitted" || n.State == "Cancelled") && in.Type != "linked" {
 			return nil, ErrState
 		}
-		now := timeText(eventClock())
+		now := timeText(eventNow(ctx))
 		n.Seq, n.Type, n.RequestDigest, n.ObservedAt = seq, in.Type, sum, in.ObservedAt
 		switch in.Type {
 		case "started":

@@ -331,7 +331,7 @@ func handleLandingAnswerTx(ctx context.Context, tx pgx.Tx, q Question, root, aft
 	if err != nil {
 		return res, err
 	}
-	at := eventClock().UTC().Truncate(time.Microsecond)
+	at := eventNow(ctx).UTC().Truncate(time.Microsecond)
 	outcome, why, record, err := decideLandingAnswer(s, root, after, q, answeredAt, missionState, at)
 	if err != nil {
 		return res, err

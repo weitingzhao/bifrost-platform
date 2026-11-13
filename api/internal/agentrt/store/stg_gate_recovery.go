@@ -95,7 +95,7 @@ func recordStgRecovery(ctx context.Context, db DB, tenant, batch string, try int
 		if b == nil || b.Phase == "CLOSED" || b.Try != try {
 			return nil
 		}
-		at := DecisionAt()
+		at := DecisionAt(ctx)
 		out = StgRecoveryDecision(b.Tries[try], obs, at)
 		switch out {
 		case "bound":

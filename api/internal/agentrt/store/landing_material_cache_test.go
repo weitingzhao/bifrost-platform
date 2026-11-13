@@ -60,7 +60,7 @@ func TestMaterialCacheCountsBatchMemberBytes(t *testing.T) {
 
 func cacheFixture() (grantDB, GrantSources) {
 	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
-	now := DecisionAt()
+	now := DecisionAt(context.Background())
 	d := grantDB{opID: "land:task:1", latest: true, enabled: true,
 		op:     landing.Operation{A: a, M0: a, R: b, Task: "task", Attempt: "attempt", Phase: "awaiting_grant", PreparedAt: now.Add(-time.Minute)},
 		facts:  landing.Facts{Repo: "bifrost-platform", Tenant: "dev", Task: "task", Attempt: "attempt", Base: b, A: a, ExecutorPin: "pin"},
@@ -314,7 +314,7 @@ func TestMaterialCacheRefreshesLiveEvidence(t *testing.T) {
 	read := func() (*LandingGrantMaterial, error) {
 		return readGrantMaterial(context.Background(), src, false, func() (grantDB, error) { return d, nil })
 	}
-	d.grants = []*grantView{{LandingGrant: LandingGrant{Op: d.opID, A: d.op.A, R: d.op.R, M0: d.op.M0}, exp: DecisionAt().Add(time.Hour)}}
+	d.grants = []*grantView{{LandingGrant: LandingGrant{Op: d.opID, A: d.op.A, R: d.op.R, M0: d.op.M0}, exp: DecisionAt(context.Background()).Add(time.Hour)}}
 	first, err := read()
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestMaterialCacheRefreshesLiveEvidence(t *testing.T) {
 	if len(first.Grants) != 1 || !first.Grants[0].Valid {
 		t.Fatal("invalid grant control", first.Grants)
 	}
-	d.grants[0].RevokedAt = DecisionAt()
+	d.grants[0].RevokedAt = DecisionAt(context.Background())
 	d.latest, d.enabled = false, false
 	d.op.Phase = "landed"
 	d.acceptance = []GrantAcceptance{{VerificationID: "changed", Result: "fail"}}

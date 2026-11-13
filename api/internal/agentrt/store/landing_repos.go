@@ -59,7 +59,7 @@ func LandingRuleIncludes(ctx context.Context, db DB, tenant, repo string) (bool,
 }
 
 func landingRuleIncludes(ctx context.Context, tx pgx.Tx, tenant, repo string) (bool, error) {
-	r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
+	r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx))
 	if err != nil || r == nil || r.Landing == nil {
 		return false, err
 	}

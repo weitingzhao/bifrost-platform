@@ -207,7 +207,7 @@ func refreshWaitingLocked(ctx context.Context, tx pgx.Tx, task, op, mission, hea
 	if head == o.M0 {
 		return false, invalid("main_unchanged")
 	}
-	if why := landing.RootBound(s, task, DecisionAt(), false); why != "" {
+	if why := landing.RootBound(s, task, DecisionAt(ctx), false); why != "" {
 		return false, failLandingLimit(ctx, tx, op, why)
 	}
 	_, err = Append(ctx, tx, Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", MissionID: mission, TaskID: task,

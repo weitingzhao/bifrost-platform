@@ -119,7 +119,7 @@ func AuthorizeStgRelease(ctx context.Context, db DB, batch string, try int64, sr
 			decision.Why = "not_ready"
 			return nil
 		}
-		at := DecisionAt()
+		at := DecisionAt(ctx)
 		facts, err := stgReadGateFacts(ctx, tx, s, again, at)
 		if err != nil {
 			return err

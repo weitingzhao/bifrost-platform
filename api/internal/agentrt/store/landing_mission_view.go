@@ -62,7 +62,7 @@ func ReadMissionLandingStatus(ctx context.Context, db DB, mission string) (Missi
 			return err
 		}
 		st.Closed = closed
-		at := DecisionAt()
+		at := DecisionAt(ctx)
 		inScope, roots, rule, err := classifyLandingRoots(ctx, tx, landingFolds{}, mission, round, at)
 		if err != nil || !inScope {
 			return err

@@ -64,6 +64,7 @@ func (w *world) handIn(t *testing.T, report, conclusion string) string {
 // report with the given conclusion.
 func (w *world) work(t *testing.T, id, report, conclusion string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := w.claim(t, "h1", store.LeaseTTL, claude)
 	if c == nil || c.TaskID != id {
 		t.Fatalf("claude claimed %v, not the plan %s", c, id)

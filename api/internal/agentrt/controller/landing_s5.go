@@ -37,11 +37,11 @@ func (c *Controller) landingS5CI(ctx context.Context, src DrillSources, op strin
 	if err = store.BindS5Run(ctx, c.DB, o.S5.Key, uid); err != nil {
 		return landing.DrillAction{Kind: "wait", Why: "S5_CI_IDENTITY"}, err
 	}
-	f, _, err := c.LandingDecision(ctx, src.Facts, o.Task, op, "claim", store.DecisionAt())
+	f, _, err := c.LandingDecision(ctx, src.Facts, o.Task, op, "claim", store.DecisionAt(ctx))
 	if err != nil {
 		return landing.DrillAction{Kind: "wait"}, err
 	}
-	v, ci, why, err := store.VerifyLandingS5(ctx, src.Facts, f, store.DecisionAt())
+	v, ci, why, err := store.VerifyLandingS5(ctx, src.Facts, f, store.DecisionAt(ctx))
 	if err != nil {
 		return landing.DrillAction{Kind: "wait", Why: why}, err
 	}
@@ -55,7 +55,7 @@ func (c *Controller) landingS5CI(ctx context.Context, src DrillSources, op strin
 		}
 		return c.settleS5(ctx, o, op, why, ci, moved)
 	}
-	why, soft := landing.AuthorizeLanding(f, v, store.DecisionAt())
+	why, soft := landing.AuthorizeLanding(f, v, store.DecisionAt(ctx))
 	if why != "" || len(soft) > 0 {
 		return landing.DrillAction{Kind: "wait", Why: why}, nil
 	}
@@ -83,7 +83,7 @@ func (c *Controller) landingS5CI(ctx context.Context, src DrillSources, op strin
 	if ci.Status != "Succeeded" {
 		return landing.DrillAction{Kind: "wait"}, fmt.Errorf("S5_EVIDENCE_MISSING")
 	}
-	return landing.DrillAction{Kind: "ready"}, c.finishLandingDrill(ctx, src, op, store.DecisionAt(), f.Repo)
+	return landing.DrillAction{Kind: "ready"}, c.finishLandingDrill(ctx, src, op, store.DecisionAt(ctx), f.Repo)
 }
 
 // settleS5 disposes of a refused S5 step (design §5.1). Only evidence that
@@ -114,7 +114,7 @@ func (c *Controller) settleS5(ctx context.Context, o landing.Operation, op, why 
 		if n >= landing.S5InfraRetries {
 			return c.failS5(ctx, o, op, "S5_EVIDENCE_MISSING")
 		}
-		if store.DecisionAt().Before(o.S5.KeyAt.Add(landing.S5InfraRetryAfter(n))) {
+		if store.DecisionAt(ctx).Before(o.S5.KeyAt.Add(landing.S5InfraRetryAfter(n))) {
 			return wait, nil
 		}
 		return wait, store.RetryS5Generation(ctx, c.DB, o.S5.Key)

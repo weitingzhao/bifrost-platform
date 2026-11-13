@@ -230,5 +230,5 @@ func readGrantMaterial(ctx context.Context, src GrantSources, stg bool, readDB f
 	if err != nil {
 		return nil, err
 	}
-	return composeMaterial(d, x, stg, DecisionAt())
+	return composeMaterial(d, x, stg, DecisionAt(ctx))
 }

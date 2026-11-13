@@ -49,7 +49,7 @@ func (c *c5) inFlight(t *testing.T) int {
 	var f landing.Facts
 	ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
 		var err error
-		f, err = store.LandingFacts(ctx, tx, c.src, "prod", "live", c.root, c.op, "", store.DecisionAt())
+		f, err = store.LandingFacts(ctx, tx, c.src, "prod", "live", c.root, c.op, "", store.DecisionAt(ctx))
 		return err
 	}))
 	return f.OtherInFlight

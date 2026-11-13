@@ -98,7 +98,7 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "failed" || o.Outcome != "bound" {
 		t.Fatal("fixture: claimed operation not failed{bound}", o.Phase, o.Outcome)
 	}
-	ok(t, applyRetry(w.rt, task, op, "retry", bound))
+	ok(t, applyRetry(ctx, w.rt, task, op, "retry", bound))
 	closeKeeps(t, w, "closed between the retry and its claim")
 
 	later := bound.Add(6*time.Hour + time.Minute)

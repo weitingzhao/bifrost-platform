@@ -31,6 +31,7 @@ func (w *world) ended(t *testing.T, outcomes ...string) (string, []string) {
 // accepted.
 func (w *world) endedAs(t *testing.T, final string, outcomes ...string) (string, []string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	task := store.NewTaskID()
 	var attempts []string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -139,6 +140,7 @@ type progressDoc struct {
 
 func (w *world) progress(t *testing.T) progressDoc {
 	t.Helper()
+	ctx := ctxOf(t)
 	out, err := store.Progress(ctx, w.rt)
 	ok(t, err)
 	raw, err := json.Marshal(out)
@@ -571,11 +573,11 @@ func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 // Review 184 B3: more tasks ended and attempts failed at one moment than the
 // lists hold: each list is the newest by event, ties of time broken by event
 // id, the same on every read.
-//
-// Serial: it freezes the package's event clock (FreezeEventClock).
 func TestRecentTiesAtOneMoment(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
-	undo := store.FreezeEventClock(time.Now())
+	undo := freezeClock(t, time.Now())
 	defer undo()
 	for range 45 {
 		w.ended(t, "failed")

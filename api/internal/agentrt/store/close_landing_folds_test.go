@@ -94,7 +94,7 @@ func TestClosePassFoldsAgainWhenTheStreamMovesMidPass(t *testing.T) {
 				return
 			}
 			done = true
-			injected = applyRetry(answerConn.Conn(), other, op, "mid-pass", later)
+			injected = applyRetry(ctx, answerConn.Conn(), other, op, "mid-pass", later)
 		}
 	})()
 	closed, err := store.CloseMissions(ctx, w.rt)

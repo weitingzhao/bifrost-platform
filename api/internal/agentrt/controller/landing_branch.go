@@ -126,7 +126,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 		return nil
 	}
 	_, n := landing.RootBudget(s, o.Task)
-	if why := landing.RootBound(s, o.Task, store.DecisionAt(), false); why != "" {
+	if why := landing.RootBound(s, o.Task, store.DecisionAt(ctx), false); why != "" {
 		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 		return err
 	}
@@ -172,7 +172,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	}
 	// The decision read Git: the window is checked again as of now, before a
 	// new branch intent (review 657 R657-2).
-	at := store.DecisionAt()
+	at := store.DecisionAt(ctx)
 	if why := landing.RootBound(s, o.Task, at, false); why != "" {
 		_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 		return err
@@ -199,7 +199,7 @@ func (c *Controller) LandingDrillBranch(ctx context.Context, g DrillGit, op stri
 	// either, nothing new is written this pass; the next pass parks or
 	// fails it on its own reads.
 	recheck := func() (bool, error) {
-		at := store.DecisionAt()
+		at := store.DecisionAt(ctx)
 		if why := landing.RootBound(s, o.Task, at, false); why != "" {
 			_, err := store.SettleLandingOperationBound(ctx, c.DB, op, o, repo)
 			return true, err

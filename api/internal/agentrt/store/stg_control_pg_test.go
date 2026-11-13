@@ -125,7 +125,7 @@ func TestStgControlPGRuleProofReadsCurrentRule(t *testing.T) {
 			block := b5Append(t, x.w, b5Record("blocked", "block", "block", id, "why", "rule", "P", commitB, "base", base, "first_at", x.at.Format(time.RFC3339Nano), "evidence_version", "prior", "detail", map[string]any{"rules": map[string]any{"dev": 0}}))
 			x.advance(x.at.Add(time.Minute))
 			s = x.read(t)
-			proof := store.StgRecord(b5Record("rule_observed", "block", "block", id, "interval_seq", block.Seq, "rule_id", "landing:dev", "rule_version", version, "read_at", store.DecisionAt().Format(time.RFC3339Nano)))
+			proof := store.StgRecord(b5Record("rule_observed", "block", "block", id, "interval_seq", block.Seq, "rule_id", "landing:dev", "rule_version", version, "read_at", store.DecisionAt(ctx).Format(time.RFC3339Nano)))
 			close := store.StgRecord(b5Record("unblocked", "block", "block", id, "why", "rule_changed", "ref", s.LastSeq+1))
 			changed, err := store.CommitStgControl(ctx, x.w.rt, "dev", func() bool { return true }, s.LastSeq, []store.StgRecord{proof, close})
 			if version == 1 {
@@ -184,7 +184,7 @@ func TestStgControlPGNoneGuardsLateRecoveryAndGate(t *testing.T) {
 				x.none(t)
 			}
 			before := x.read(t)
-			action, err := store.RecordStgControlRecovery(ctx, x.w.rt, "dev", b5Batch, 1, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: "late-uid", ReadAt: store.DecisionAt()})
+			action, err := store.RecordStgControlRecovery(ctx, x.w.rt, "dev", b5Batch, 1, store.StgRunObservation{IntentSeq: p.IntentSeq, PermitSeq: p.PermitSeq, Kind: "found", UID: "late-uid", ReadAt: store.DecisionAt(ctx)})
 			ok(t, err)
 			if disabled {
 				if action != "wait" || x.read(t).LastSeq != before.LastSeq {

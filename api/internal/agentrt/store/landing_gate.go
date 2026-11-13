@@ -43,7 +43,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		if err = lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
-		at := DecisionAt() // CUT §9: the rule and the window as of these locks
+		at := DecisionAt(ctx) // CUT §9: the rule and the window as of these locks
 		f, err := LandingFacts(ctx, tx, src, "stg", "dry_run", o.Task, op, "", at)
 		if err != nil {
 			return err
@@ -69,7 +69,7 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 		// the reads decides, review 656 B-B1) with the database half read
 		// again; the external evidence read above stands, its keys held by
 		// these locks.
-		final := DecisionAt()
+		final := DecisionAt(ctx)
 		g, _, err := landingFactsDB(ctx, tx, src, "stg", "dry_run", o.Task, op, final)
 		if err != nil {
 			return err
@@ -82,14 +82,14 @@ func FinishLandingDrill(ctx context.Context, db DB, src LandingSource, op string
 			if obs.Main != o.M0 || obs.WindowBlocked {
 				return fmt.Errorf("S5_BINDING: main/window")
 			}
-			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt())
+			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt(ctx))
 			if e != nil {
 				return e
 			}
 			if why != "" {
 				return fmt.Errorf("%s", why)
 			}
-			final = DecisionAt()
+			final = DecisionAt(ctx)
 			latest, _, e := landingFactsDB(ctx, tx, src, "stg", "dry_run", o.Task, op, final)
 			if e != nil {
 				return e

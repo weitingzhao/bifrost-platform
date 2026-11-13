@@ -33,6 +33,7 @@ func startVerify(ctx context.Context, db store.DB, task string) (string, error) 
 // submit with the given conclusion; a branch task pushes its own branch.
 func (w *world) run(t *testing.T, host string, tool store.Tool, conclusion string) *store.Claim {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := w.claim(t, host, store.LeaseTTL, tool)
 	if c == nil {
 		t.Fatalf("%s on %s found nothing to claim", tool.Executor, host)
@@ -59,6 +60,7 @@ func (w *world) run(t *testing.T, host string, tool store.Tool, conclusion strin
 
 func (w *world) checker(t *testing.T, subject, role string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var id string
 	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE subject_task_id = $1 AND role = $2 AND state = 'ready'`,
 		subject, role).Scan(&id))

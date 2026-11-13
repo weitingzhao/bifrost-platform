@@ -76,12 +76,12 @@ func reviewLandReversalPG(t *testing.T, x *b5Fixture, src store.LandingSource, p
 	w := x.w
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "authorized reversal", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
-	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, root, store.DecisionAt())
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, root, store.DecisionAt(ctx))
 	ok(t, err)
 	if !d.Allowed || op == "" {
 		t.Fatal("reversal claim", d)
 	}
-	prepared := store.DecisionAt()
+	prepared := store.DecisionAt(ctx)
 	ref := "refs/heads/land/prod/" + root + "/1"
 	for _, r := range []map[string]any{
 		newLandingRecord(op, "prepared", "R", p, "M0", commitB, "committer_date", prepared.Format(time.RFC3339Nano), "dry_run", false),
@@ -114,7 +114,7 @@ func TestStgControlPGOpenReversalAndReadFailure(t *testing.T) {
 			if mode == "landed_revert" {
 				reversalRoot, reversalOp = reviewLandReversalPG(t, x, src, p)
 			}
-			at := store.DecisionAt().Add(time.Second)
+			at := store.DecisionAt(ctx).Add(time.Second)
 			store.FreezeEventClock(at)
 			clock := clocktesting.NewFakeClock(at)
 			core := fake.NewSimpleClientset()

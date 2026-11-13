@@ -43,6 +43,7 @@ func wr(actor string) store.Writer { return store.Writer{Actor: actor, Token: "o
 // fixture for actors the routes do not create (retired ones, odd kinds).
 func (w *world) legacy(t *testing.T, stmts ...string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {

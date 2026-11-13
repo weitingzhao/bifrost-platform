@@ -369,7 +369,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		}
 		c = cards[prep]
 		if (c.Family == "stg" || c.Kind == CardReworkLanded) && !c.AskStarted && !c.Bound && !c.Ended() {
-			applies, err := cardApplies(ctx, tx, c, DecisionAt())
+			applies, err := cardApplies(ctx, tx, c, DecisionAt(ctx))
 			if err != nil {
 				return err
 			}
@@ -416,7 +416,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		// question first, even if its trigger moved on, so settlement can
 		// record a moot answer or withdraw it instead of leaving an orphan.
 		if (c.Family == "stg" || c.Kind == CardReworkLanded) && !ok {
-			applies, err := cardApplies(ctx, tx, c, DecisionAt())
+			applies, err := cardApplies(ctx, tx, c, DecisionAt(ctx))
 			if err != nil {
 				return err
 			}
@@ -428,7 +428,7 @@ func AskLandingCard(ctx context.Context, db DB, q CardQuestions, repo, prep stri
 		switch {
 		case ok:
 			id = found.ID
-		case !DecisionAt().Before(c.AskStartedAt.Add(CardRecoverWindow)):
+		case !DecisionAt(ctx).Before(c.AskStartedAt.Add(CardRecoverWindow)):
 			// Decided on the clock after the lookup (review 670 B-03): an
 			// answer may have been trimmed. Say so, never ask under it.
 			return appendCardRecord(ctx, tx, repo, "landing_card_closed", map[string]any{"prep": prep, "why": "unconfirmed"})

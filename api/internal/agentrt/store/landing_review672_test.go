@@ -126,7 +126,7 @@ func TestB4FenceNeedsEnabledAndMode(t *testing.T) {
 		var fence time.Time
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var e error
-			fence, e = store.ObserveLandingEnabled(ctx, tx, env, "dev", "bifrost-platform", store.DecisionAt())
+			fence, e = store.ObserveLandingEnabled(ctx, tx, env, "dev", "bifrost-platform", store.DecisionAt(ctx))
 			return e
 		}))
 		return fence

@@ -567,7 +567,7 @@ func composeMaterial(d grantDB, x grantExt, stg bool, now time.Time) (*LandingGr
 func ReadLandingGrantMaterial(ctx context.Context, db DB, src GrantSources, op string, stg bool) (*LandingGrantMaterial, error) {
 	return readGrantMaterial(ctx, src, stg, func() (d grantDB, err error) {
 		err = InTx(ctx, db, func(tx pgx.Tx) error {
-			d, err = readGrantDB(ctx, tx, src.Facts, op, DecisionAt())
+			d, err = readGrantDB(ctx, tx, src.Facts, op, DecisionAt(ctx))
 			return err
 		})
 		return
@@ -647,7 +647,7 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	var existing *grantView
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var e error
-		pre, e = readGrantDB(ctx, tx, src.Facts, p.Op, DecisionAt())
+		pre, e = readGrantDB(ctx, tx, src.Facts, p.Op, DecisionAt(ctx))
 		if e != nil {
 			return e
 		}
@@ -714,7 +714,7 @@ func WriteLandingGrant(ctx context.Context, db DB, src GrantSources, a GrantAppr
 	if err = lockStream(ctx, tx, grantStream(pre.repo)); err != nil {
 		return LandingGrant{}, err
 	}
-	now := DecisionAt()
+	now := DecisionAt(ctx)
 	d, err := readGrantDB(ctx, tx, src.Facts, p.Op, now)
 	if err != nil {
 		return LandingGrant{}, err

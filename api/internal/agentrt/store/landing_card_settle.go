@@ -252,7 +252,7 @@ func HandleLandingCardAnswer(ctx context.Context, db DB, c CardRecord, q Questio
 			outcome, why = o.outcome, o.why
 			return err
 		}
-		applies, err := cardApplies(ctx, tx, c, DecisionAt())
+		applies, err := cardApplies(ctx, tx, c, DecisionAt(ctx))
 		if err != nil {
 			return err
 		}

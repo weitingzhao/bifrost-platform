@@ -75,7 +75,7 @@ func RecoverBatchPush(ctx context.Context, db DB, src GrantSources, p PushRecove
 			return invalid("recovery batch differs")
 		}
 		g := scan.byID[p.GrantID]
-		now := DecisionAt()
+		now := DecisionAt(ctx)
 		if g == nil || g.Op != p.Op || g.R != p.R || g.M0 != p.M0 || g.CI.Run != p.CIRun || g.ConsumedSeq == 0 || g.ConsumedOp != p.Op || !g.RevokedAt.IsZero() || !g.RefusedAt.IsZero() || !now.Before(g.exp) || g.Batch == nil || !slices.Equal(g.Batch.Members, b.Members) {
 			return invalid("original batch grant is not recoverable")
 		}
@@ -114,7 +114,7 @@ func RecoverBatchPush(ctx context.Context, db DB, src GrantSources, p PushRecove
 		if ci.Status != "Succeeded" || ci.Run != g.CI.Run || ci.UID != g.CI.UID || ci.Pipeline != g.CI.Pipeline || ci.Candidate != p.R || !ci.CreatedAt.Equal(created) {
 			return invalid("original green CI no longer matches")
 		}
-		if !DecisionAt().Before(g.exp) {
+		if !DecisionAt(ctx).Before(g.exp) {
 			return invalid("original grant expired during read")
 		}
 		if approvalID == "" {

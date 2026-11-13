@@ -33,6 +33,7 @@ func archGates(env string, tests ...string) string {
 // rule set by a plan change when there is one.
 func (w *world) arch(t *testing.T, rows ...[2]string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
 			Root: "ARCH"}); err != nil {
@@ -429,17 +430,18 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 
 // Review 427 C1, 429: the latest note is the one appended last (event_id),
 // whatever its time says.
-// Serial: FreezeEventClock
 func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""})
 	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 	later := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
-	restore := store.FreezeEventClock(later)
+	restore := freezeClock(t, later)
 	first, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "written first, stamped later")
 	restore()
 	ok(t, err)
-	restore = store.FreezeEventClock(later.Add(-time.Hour))
+	restore = freezeClock(t, later.Add(-time.Hour))
 	second, err := store.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "written second, stamped earlier")
 	restore()
 	ok(t, err)

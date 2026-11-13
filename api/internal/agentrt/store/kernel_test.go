@@ -32,6 +32,7 @@ const (
 // tool the tests use a candidate for every job.
 func newKernelWorld(t *testing.T) *world {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	for i := 1; i <= 8; i++ {
@@ -54,6 +55,7 @@ func newKernelWorld(t *testing.T) *world {
 // own.
 func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := store.LockCapabilities(ctx, tx); err != nil {
 			return err
@@ -85,6 +87,7 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 // ready proposes a task, defaults filled in, and moves it to ready.
 func (w *world) ready(t *testing.T, task store.Task) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	if task.ID == "" {
 		task.ID = store.NewTaskID()
 	}
@@ -115,6 +118,7 @@ func (w *world) ready(t *testing.T, task store.Task) string {
 
 func (w *world) claim(t *testing.T, host string, ttl time.Duration, tools ...store.Tool) *store.Claim {
 	t.Helper()
+	ctx := ctxOf(t)
 	c, err := store.ClaimFor(ctx, w.rt, store.ClaimRequest{HostID: host, FreeSlots: 1, Tools: tools}, ttl)
 	ok(t, err)
 	return c
@@ -158,6 +162,7 @@ func fence(c *store.Claim, host string) store.Fence {
 
 func (w *world) state(t *testing.T, table, id string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var s string
 	ok(t, w.rt.QueryRow(ctx, fmt.Sprintf(`SELECT state FROM agentrt.%[1]s WHERE %[1]s_id = $1`, table), id).Scan(&s))
 	return s
@@ -172,6 +177,7 @@ func (w *world) events(t *testing.T, typ, attempt string) int {
 
 func (w *world) artifact(t *testing.T, kind, body string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error

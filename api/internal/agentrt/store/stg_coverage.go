@@ -116,7 +116,7 @@ func CommitStgCoverage(ctx context.Context, db DB, tenant string, expected int64
 		if err != nil || s.LastSeq != expected {
 			return err
 		}
-		events, err := StgCoverageEvents(s, evidence, m, ev, DecisionAt())
+		events, err := StgCoverageEvents(s, evidence, m, ev, DecisionAt(ctx))
 		if err != nil {
 			return err
 		}

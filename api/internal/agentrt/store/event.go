@@ -69,22 +69,46 @@ func envelope(ev Event, seq int64, prev string, at time.Time) map[string]any {
 	}
 }
 
-// eventClock gives an event its time; a test freezes it to write events at
-// one moment.
+// eventClock is the process's event clock: the wall clock, except while a
+// test that has no clock of its own has frozen it (FreezeEventClock,
+// SetEventClock). An event's time is read through eventNow, which asks the
+// context first.
 var eventClock = time.Now
+
+type eventClockKey struct{}
+
+// WithEventClock returns a context whose events and decisions are timed by
+// clock, not by the process's event clock: Append and DecisionAt under it
+// read clock. A test gives itself one and moves time while its neighbours
+// run, each on its own; nothing in the platform calls it, so the platform's
+// contexts carry none and read the wall clock.
+func WithEventClock(ctx context.Context, clock func() time.Time) context.Context {
+	return context.WithValue(ctx, eventClockKey{}, clock)
+}
+
+// eventNow is the event clock read for ctx: the clock ctx carries
+// (WithEventClock), the process's otherwise.
+func eventNow(ctx context.Context) time.Time {
+	if clock, ok := ctx.Value(eventClockKey{}).(func() time.Time); ok {
+		return clock()
+	}
+	return eventClock()
+}
 
 // DecisionAt is the time a locked decision is taken at (CUT §9 v2): the
 // event clock, read once the gate holds its locks and again after any slow
 // read it makes under them. It is the clock the gate's records are written
 // with (Append), so what is decided and what is recorded agree; a test moves
 // time by freezing this clock, not by passing a later now. The pass's own now
-// only schedules: which candidates run, whether a retry_at is due.
+// only schedules: which candidates run, whether a retry_at is due. It is read
+// for ctx (eventNow), as Append reads it: the context the decision's records
+// are written under.
 //
 // The wall clock is trusted to move forward: a step back (NTP) may let a
 // window that ended look open again for that pass. Not guarded; the ledger
 // records it (review 656 B-R2).
-func DecisionAt() time.Time {
-	return eventClock().UTC().Truncate(time.Microsecond)
+func DecisionAt(ctx context.Context) time.Time {
+	return eventNow(ctx).UTC().Truncate(time.Microsecond)
 }
 
 func nullable(s string) any {
@@ -151,7 +175,7 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		ev.Stream).Scan(&lastSeq, &lastSHA); err != nil {
 		return Appended{}, err
 	}
-	at := eventClock().UTC().Truncate(time.Microsecond)
+	at := eventNow(ctx).UTC().Truncate(time.Microsecond)
 	if err := checkLandingAnswerAppend(ev); err != nil {
 		return Appended{}, err
 	}

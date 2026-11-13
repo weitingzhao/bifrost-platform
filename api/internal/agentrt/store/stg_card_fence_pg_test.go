@@ -65,15 +65,15 @@ func stgSettlementFixture(t *testing.T, action string) (*b5Fixture, *fakeCards, 
 		mode = "blocked"
 	}
 	x, trigger := b5gFixture(t, mode)
-	f := newFakeCards(store.DecisionAt)
+	f := newFakeCards(decisionClock(ctx))
 	kind := store.CardSTGFailed
 	if action == "withdraw" {
 		kind = store.CardSTGBlocked
 	}
 	c := b5gCard(t, x, f, kind)
 	if action == "ack" {
-		f.answer(c.QuestionID, "a", store.DecisionAt())
-		out, _, err := store.HandleLandingCardAnswer(ctx, x.w.rt, c, f.byID[c.QuestionID].q, store.DecisionAt())
+		f.answer(c.QuestionID, "a", store.DecisionAt(ctx))
+		out, _, err := store.HandleLandingCardAnswer(ctx, x.w.rt, c, f.byID[c.QuestionID].q, store.DecisionAt(ctx))
 		ok(t, err)
 		if out != "applied" {
 			t.Fatal(out)
@@ -114,7 +114,7 @@ func TestStgCardsPGSettlementNoneInterleaving(t *testing.T) {
 				q.Withdraw = func(ctx context.Context, id, why string) (string, error) { calls++; return withdraw(ctx, id, why) }
 				before, cards := x.read(t), cardsNow(t, x.w)
 				count := x.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id IN ('landing:bifrost-platform','landing-cards:bifrost-platform')`)
-				result, err := store.SettleLandingCard(ctx, db, q, c, store.DecisionAt())
+				result, err := store.SettleLandingCard(ctx, db, q, c, store.DecisionAt(ctx))
 				ok(t, err)
 				want := "acked"
 				if action == "withdraw" {
@@ -129,7 +129,7 @@ func TestStgCardsPGSettlementNoneInterleaving(t *testing.T) {
 						t.Fatal("none wrote question or receipt", result, calls)
 					}
 					stgSettlementResume(t, x)
-					result, err = store.SettleLandingCard(ctx, x.w.rt, f.source(), c, store.DecisionAt())
+					result, err = store.SettleLandingCard(ctx, x.w.rt, f.source(), c, store.DecisionAt(ctx))
 					ok(t, err)
 					if result != want {
 						t.Fatal("same card did not resume", result)
@@ -192,7 +192,7 @@ func TestStgCardsPGSettlementHoldsPolicyThroughWrite(t *testing.T) {
 				}
 				return withdraw(ctx, id, why)
 			}
-			result, err := store.SettleLandingCard(runCtx, x.w.rt, q, c, store.DecisionAt())
+			result, err := store.SettleLandingCard(runCtx, x.w.rt, q, c, store.DecisionAt(ctx))
 			ok(t, err)
 			select {
 			case err := <-done:
@@ -203,7 +203,7 @@ func TestStgCardsPGSettlementHoldsPolicyThroughWrite(t *testing.T) {
 			if result == "" || !cardsNow(t, x.w)[c.Prep].Ended() {
 				t.Fatal("question write lacked receipt", result)
 			}
-			b5AssertRule(t, x.w, store.DecisionAt(), 2, "none")
+			b5AssertRule(t, x.w, store.DecisionAt(ctx), 2, "none")
 		})
 	}
 }

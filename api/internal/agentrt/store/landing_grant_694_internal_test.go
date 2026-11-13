@@ -190,7 +190,7 @@ func TestC5R01RevokeReadbackUsesItsOwnContext(t *testing.T) {
 	for _, cancelRequest := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancel=%v", cancelRequest), func(t *testing.T) {
 			t.Parallel()
-			now := DecisionAt().Add(-time.Minute)
+			now := DecisionAt(context.Background()).Add(-time.Minute)
 			sha := strings.Repeat("a", 40)
 			digest := "sha256:" + strings.Repeat("b", 64)
 			task := "t_00000000000000000000000001"

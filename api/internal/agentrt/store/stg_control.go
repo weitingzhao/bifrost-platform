@@ -15,7 +15,7 @@ import (
 func StgControlRule(ctx context.Context, db DB, tenant string) (*rules.Rule, error) {
 	var out *rules.Rule
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		r, err := effectiveRule(ctx, tx, "landing:"+tenant, DecisionAt(), true)
+		r, err := effectiveRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx), true)
 		if r != nil {
 			out = &r.Rule
 		}
@@ -67,7 +67,7 @@ func stgControlEnabled(ctx context.Context, tx pgx.Tx, tenant string, live func(
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1,hashtext($2))`, ruleLock, "landing:"+tenant); err != nil {
 		return false, err
 	}
-	r, err := effectiveRule(ctx, tx, "landing:"+tenant, DecisionAt(), true)
+	r, err := effectiveRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx), true)
 	if err != nil || r == nil || r.Landing == nil {
 		return false, err
 	}
@@ -93,12 +93,12 @@ func OpenStgBatch(ctx context.Context, db DB, tenant string, live func() bool) (
 		if err != nil {
 			return err
 		}
-		current, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
-		if err != nil || current == nil || !stgRuleEnabled(&current.Rule, DecisionAt()) {
+		current, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx))
+		if err != nil || current == nil || !stgRuleEnabled(&current.Rule, DecisionAt(ctx)) {
 			return err
 		}
 		if s.Legacy.STGEnabledAt.IsZero() {
-			r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt())
+			r, err := CurrentRule(ctx, tx, "landing:"+tenant, DecisionAt(ctx))
 			if err != nil {
 				return err
 			}
@@ -116,7 +116,7 @@ func OpenStgBatch(ctx context.Context, db DB, tenant string, live func() bool) (
 				return nil
 			}
 		}
-		at := DecisionAt()
+		at := DecisionAt(ctx)
 		pending := map[string]any{}
 		members := []StgMemberKey{}
 		active := false

@@ -39,13 +39,15 @@ func wantSampleCode(t *testing.T, err error, code string) {
 	}
 }
 
-// Serial: FreezeEventClock. The whole life of a sample on PostgreSQL, with
+// The whole life of a sample on PostgreSQL, with
 // the allocation's global event id as the batch number and every refusal of
 // the stream leaving it unchanged.
 func TestStgSamplePGLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := sampleWorldPG(t, "none")
 	at := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	open, err := store.StgSampleOpenRule(ctx, w.rt, "dev")
 	ok(t, err)
 	if open {
@@ -140,10 +142,11 @@ func TestStgSamplePGAppendGuards(t *testing.T) {
 
 // An enabled rule refuses every new sample; the sample is for the first
 // opening only.
-// Serial: FreezeEventClock
 func TestStgSamplePGRuleOpenRefuses(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := sampleWorldPG(t, "bifrost-deliver-platform")
-	defer store.FreezeEventClock(time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))()
+	defer freezeClock(t, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))()
 	open, err := store.StgSampleOpenRule(ctx, w.rt, "dev")
 	ok(t, err)
 	if !open {
@@ -172,23 +175,25 @@ func TestStgSamplePGRefusesAfterB5Opened(t *testing.T) {
 	wantSampleCode(t, err, "not_first")
 }
 
-// Serial: FreezeEventClock. An allocation whose run never appeared is
+// An allocation whose run never appeared is
 // abandoned only by another approval's proof read after the grace.
 func TestStgSamplePGAbandon(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := sampleWorldPG(t, "none")
 	at := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer func() { restore() }()
 	old, err := store.AllocateStgSample(ctx, w.rt, sampleAlloc("A1"))
 	ok(t, err)
 	early := sampleAlloc("A2")
 	early.Abandon = &store.StgSampleAbsence{Approval: "A1", Run: "stgrel-x", ReadAt: at.Add(time.Minute)}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	_, err = store.AllocateStgSample(ctx, w.rt, early)
 	wantSampleCode(t, err, "conflict")
 	later := sampleAlloc("A2")
 	later.Abandon = &store.StgSampleAbsence{Approval: "A1", Run: "stgrel-x", ReadAt: at.Add(3 * time.Minute)}
-	store.FreezeEventClock(at.Add(3 * time.Minute))
+	freezeClock(t, at.Add(3*time.Minute))
 	y, err := store.AllocateStgSample(ctx, w.rt, later)
 	ok(t, err)
 	s, err := store.ReadStgSamples(ctx, w.rt)
@@ -209,19 +214,21 @@ func TestStgSamplePGAbandon(t *testing.T) {
 	wantSampleCode(t, err, "abandoned")
 }
 
-// Serial: FreezeEventClock. TD-460 review A1: the send permit records each
+// TD-460 review A1: the send permit records each
 // send; an abandon needs the grace from the last one, and an abandon
 // committed first makes the send permit refuse.
 func TestStgSamplePGSendPermit(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := sampleWorldPG(t, "none")
 	at := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer func() { restore() }()
 	_, err := store.PermitStgSampleSend(ctx, w.rt, "dev", "A1")
 	wantSampleCode(t, err, "missing")
 	_, err = store.AllocateStgSample(ctx, w.rt, sampleAlloc("A1"))
 	ok(t, err)
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	x, err := store.PermitStgSampleSend(ctx, w.rt, "dev", "A1")
 	ok(t, err)
 	if !x.SentAt.Equal(at.Add(2*time.Minute)) || x.SendingSeq != 2 {
@@ -229,19 +236,19 @@ func TestStgSamplePGSendPermit(t *testing.T) {
 	}
 	early := sampleAlloc("A2")
 	early.Abandon = &store.StgSampleAbsence{Approval: "A1", Run: "stgrel-x", ReadAt: at.Add(3 * time.Minute)}
-	store.FreezeEventClock(at.Add(3 * time.Minute))
+	freezeClock(t, at.Add(3*time.Minute))
 	_, err = store.AllocateStgSample(ctx, w.rt, early)
 	wantSampleCode(t, err, "conflict")
 	// TD-460 landing review P1: a 404 shortly after the client deadline is
 	// not proof after a send; the proof needs 30 minutes from the send.
 	notYet := sampleAlloc("A2")
 	notYet.Abandon = &store.StgSampleAbsence{Approval: "A1", Run: "stgrel-x", ReadAt: at.Add(31 * time.Minute)}
-	store.FreezeEventClock(at.Add(31 * time.Minute))
+	freezeClock(t, at.Add(31*time.Minute))
 	_, err = store.AllocateStgSample(ctx, w.rt, notYet)
 	wantSampleCode(t, err, "conflict")
 	later := sampleAlloc("A2")
 	later.Abandon = &store.StgSampleAbsence{Approval: "A1", Run: "stgrel-x", ReadAt: at.Add(2*time.Minute + store.StgSampleAbandonAfterSend)}
-	store.FreezeEventClock(at.Add(2*time.Minute + store.StgSampleAbandonAfterSend))
+	freezeClock(t, at.Add(2*time.Minute+store.StgSampleAbandonAfterSend))
 	_, err = store.AllocateStgSample(ctx, w.rt, later)
 	ok(t, err)
 	_, err = store.PermitStgSampleSend(ctx, w.rt, "dev", "A1")

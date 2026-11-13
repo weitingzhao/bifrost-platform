@@ -136,13 +136,13 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		waiting := o.Phase == "awaiting_grant"
 		var grant *grantView
 		if waiting {
-			why := landing.RootBound(state, o.Task, DecisionAt(), false)
+			why := landing.RootBound(state, o.Task, DecisionAt(ctx), false)
 			if why == "" && state.LatestOperation(o.Task) == op {
 				_, order, err := readLandingGrants(ctx, tx, stream)
 				if err != nil {
 					return err
 				}
-				grant = candidateGrant(order, op, o, DecisionAt())
+				grant = candidateGrant(order, op, o, DecisionAt(ctx))
 			}
 			if why != "" || grant == nil && (!recheck || state.LatestOperation(o.Task) != op) {
 				if why == "" {
@@ -154,7 +154,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		}
 		// A waiting operation with a usable grant yields only to a landing
 		// past its CI (landingFactsGate), not to one claimed after it.
-		f, err := landingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt(), waiting)
+		f, err := landingFacts(ctx, tx, src, "prod", "live", o.Task, op, "", DecisionAt(ctx), waiting)
 		if err != nil {
 			return err
 		}
@@ -172,7 +172,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 		}
 		// The reads above took as long as they took: decide now, on the
 		// rule in force now (CUT §9.7, review 656 B-B1).
-		final := DecisionAt()
+		final := DecisionAt(ctx)
 		g, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, waiting)
 		if err != nil {
 			return err
@@ -199,7 +199,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 				decision = landing.Decision{Reason: "S5_BINDING"}
 				return nil
 			}
-			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt())
+			v, ci, why, e := VerifyLandingS5(ctx, src, g, DecisionAt(ctx))
 			if e != nil {
 				return e
 			}
@@ -209,7 +209,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			}
 			// CI reads may cross rule expiry/effectivity. Re-read DB and trusted
 			// deployment material at the clock after CI, still under all locks.
-			final = DecisionAt()
+			final = DecisionAt(ctx)
 			latest, _, e := landingFactsDB(ctx, tx, src, "prod", "live", o.Task, op, final)
 			if e != nil {
 				return e
@@ -388,7 +388,7 @@ func authorizeLandingPushTx(ctx context.Context, tx pgx.Tx, src LandingSource, o
 			// decided at the clock after them, on the facts and rule in
 			// force then, as the S5 route does after its CI reads. A grant
 			// that expired during the reads authorizes nothing.
-			final = DecisionAt()
+			final = DecisionAt(ctx)
 			latest, _, err := landingFactsGate(ctx, tx, src, "prod", "live", o.Task, op, final, true)
 			if err != nil {
 				return err
@@ -605,7 +605,7 @@ func AuthorizationCurrent(ctx context.Context, db DB, auth Authorization) (bool,
 		if err != nil {
 			return err
 		}
-		current = at.Equal(auth.IntentAt) && DecisionAt().Before(auth.Deadline)
+		current = at.Equal(auth.IntentAt) && DecisionAt(ctx).Before(auth.Deadline)
 		return nil
 	})
 	if err != nil {

@@ -47,7 +47,7 @@ func TestStgB4PGReversalBeforeAndAfterAdmission(t *testing.T) {
 				m := store.StgMemberKey{Root: root, Op: op, R: commitB}
 				if admitted {
 					store.FreezeEventClock(at.Add(time.Minute))
-					b5StateFixture(t, w, root, op, store.DecisionAt(), false)
+					b5StateFixture(t, w, root, op, store.DecisionAt(ctx), false)
 				}
 				p := strings.Repeat("f", 40)
 				if legal {
@@ -57,7 +57,7 @@ func TestStgB4PGReversalBeforeAndAfterAdmission(t *testing.T) {
 				s, err := store.ReadStgRelease(ctx, w.rt)
 				ok(t, err)
 				o := s.Legacy.Operations[op]
-				_, err = store.ReconcileStgMainOne(ctx, w.rt, "dev", platformRepo, store.MainCandidate{Op: op, Root: root, R: commitB, A: o.A, M0: o.M0, Phase: o.Phase, Outcome: o.Outcome}, store.MainEvidence{Head: p, HasR: true, Validity: "reverted", RevertedBy: p, ReadAt: store.DecisionAt()})
+				_, err = store.ReconcileStgMainOne(ctx, w.rt, "dev", platformRepo, store.MainCandidate{Op: op, Root: root, R: commitB, A: o.A, M0: o.M0, Phase: o.Phase, Outcome: o.Outcome}, store.MainEvidence{Head: p, HasR: true, Validity: "reverted", RevertedBy: p, ReadAt: store.DecisionAt(ctx)})
 				ok(t, err)
 				s, err = store.ReadStgRelease(ctx, w.rt)
 				ok(t, err)
@@ -128,15 +128,15 @@ func TestStgControlPGExpiredRuleBaseline(t *testing.T) {
 				op := "land:" + root + ":1"
 				store.FreezeEventClock(at.Add(time.Minute))
 				if baseline != "missing" {
-					b5StateFixture(t, w, root, op, store.DecisionAt(), phase == "SNAP")
+					b5StateFixture(t, w, root, op, store.DecisionAt(ctx), phase == "SNAP")
 					if baseline == "ambiguous" {
-						b5fEvidence(t, w, store.DecisionAt(), "cluster/cicd/conflicting")
+						b5fEvidence(t, w, store.DecisionAt(ctx), "cluster/cicd/conflicting")
 					}
 				} else {
-					b5Append(t, w, b5Record("opened", "batch", "members", []any{map[string]any{"root": root, "op": op, "R": commitB, "gen": 1}}, "first_pending_at", map[string]any{commitB: store.DecisionAt().Format(time.RFC3339Nano)}))
+					b5Append(t, w, b5Record("opened", "batch", "members", []any{map[string]any{"root": root, "op": op, "R": commitB, "gen": 1}}, "first_pending_at", map[string]any{commitB: store.DecisionAt(ctx).Format(time.RFC3339Nano)}))
 				}
 				if phase == "OPEN" {
-					b5Append(t, w, b5Record("p_selected", "batch", "P", commitB, "at", store.DecisionAt().Format(time.RFC3339Nano)))
+					b5Append(t, w, b5Record("p_selected", "batch", "P", commitB, "at", store.DecisionAt(ctx).Format(time.RFC3339Nano)))
 				}
 				at = at.Add(2 * time.Hour)
 				store.FreezeEventClock(at)

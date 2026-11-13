@@ -16,6 +16,7 @@ import (
 // accepted.
 func (w *world) passRound(t *testing.T, impl, author, checker, reviewer string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	if c := w.run(t, author, cursor, "done"); c.TaskID != impl {
 		t.Fatalf("claimed %s, not %s", c.TaskID, impl)
 	}

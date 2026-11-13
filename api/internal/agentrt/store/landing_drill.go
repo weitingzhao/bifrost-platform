@@ -187,7 +187,7 @@ func bindDrillClaim(ctx context.Context, tx pgx.Tx, src LandingSource, env, task
 	if err := lockStream(ctx, tx, stream); err != nil {
 		return b, err
 	}
-	now = DecisionAt()
+	now = DecisionAt(ctx)
 	b.at = now
 	// A repository stopped by a denied push takes no claim until the Owner
 	// resumes it (B6); nothing is recorded.

@@ -52,7 +52,7 @@ func PrepareS5Evidence(ctx context.Context, db DB, src LandingSource, env, op st
 			decision = landing.Decision{Reason: "S5_PREPARATION_ONLY"}
 			return nil
 		}
-		if why := landing.RootBound(state, o.Task, DecisionAt(), false); why != "" {
+		if why := landing.RootBound(state, o.Task, DecisionAt(ctx), false); why != "" {
 			decision = landing.Decision{Reason: why}
 			return nil
 		}
@@ -73,12 +73,12 @@ func PrepareS5Evidence(ctx context.Context, db DB, src LandingSource, env, op st
 		if env == "stg" {
 			mode = "dry_run"
 		}
-		f, err := LandingFacts(ctx, tx, read, env, mode, o.Task, op, "", DecisionAt())
+		f, err := LandingFacts(ctx, tx, read, env, mode, o.Task, op, "", DecisionAt(ctx))
 		if err != nil {
 			return err
 		}
 		// Slow Git reads cannot extend rule validity or hide a newer review.
-		g, _, err := landingFactsDB(ctx, tx, read, env, mode, o.Task, op, DecisionAt())
+		g, _, err := landingFactsDB(ctx, tx, read, env, mode, o.Task, op, DecisionAt(ctx))
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func PrepareS5Evidence(ctx context.Context, db DB, src LandingSource, env, op st
 			decision = landing.Decision{Allowed: true}
 			return nil
 		}
-		decision = landing.MayPrepareS5(g, q, DecisionAt()).Decision
+		decision = landing.MayPrepareS5(g, q, DecisionAt(ctx)).Decision
 		if !decision.Allowed {
 			return nil
 		}

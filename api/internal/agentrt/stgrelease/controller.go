@@ -106,7 +106,8 @@ func (c *Controller) now() time.Time {
 	if c.Clock != nil {
 		return c.Clock.Now().UTC()
 	}
-	return store.DecisionAt()
+	// No request's context reaches here: the process's event clock.
+	return store.DecisionAt(context.Background())
 }
 func (c *Controller) configured() bool {
 	if c.Policy == nil {

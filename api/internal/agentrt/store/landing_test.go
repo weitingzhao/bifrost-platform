@@ -21,6 +21,7 @@ func landingRecord(op, kind string, kv ...any) map[string]any {
 	return r
 }
 func appendLanding(w *world, stream string, r map[string]any) error {
+	ctx := w.ctx
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": "Landing protocol test", "landing": r}})
 		return err
@@ -28,6 +29,7 @@ func appendLanding(w *world, stream string, r map[string]any) error {
 }
 func landingState(t *testing.T, w *world, stream string) landing.State {
 	t.Helper()
+	ctx := ctxOf(t)
 	var s landing.State
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { var e error; s, e = store.LandingState(ctx, tx, stream); return e }))
 	return s
@@ -35,17 +37,18 @@ func landingState(t *testing.T, w *world, stream string) landing.State {
 
 // This uses the real migration harness and runtime role. Without PG it skips,
 // never substitutes an in-memory database or claims the CHECK was exercised.
-// Serial: FreezeEventClock.
 func TestLandingAllKindsMigratedDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
 	clock := at
-	t.Cleanup(store.FreezeEventClock(clock))
+	t.Cleanup(freezeClock(t, clock))
 	seen := map[string]bool{}
 	put := func(stream string, r map[string]any) {
 		t.Helper()
 		clock = clock.Add(time.Minute)
-		restore := store.FreezeEventClock(clock)
+		restore := freezeClock(t, clock)
 		defer restore()
 		ok(t, appendLanding(w, stream, r))
 		seen[r["kind"].(string)] = true

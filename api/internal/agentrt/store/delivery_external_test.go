@@ -214,6 +214,7 @@ func TestFoldExternalDelivery(t *testing.T) {
 // externalSubmitted registers an external work on node and submits it naming commits.
 func externalSubmitted(t *testing.T, w *world, actor, node, run string, commits ...string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	who := wr(actor)
 	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg-" + run, Root: root, Node: node, RunKey: run, Artifact: externalSpec(t, w)})
 	ok(t, err)
@@ -227,6 +228,7 @@ func externalSubmitted(t *testing.T, w *world, actor, node, run string, commits 
 
 func recordRuns(t *testing.T, w *world, runs ...store.PipelineRun) {
 	t.Helper()
+	ctx := ctxOf(t)
 	facts := make([]map[string]any, 0, len(runs))
 	for _, r := range runs {
 		facts = append(facts, r.Body())
@@ -241,11 +243,12 @@ func recordRuns(t *testing.T, w *world, runs ...store.PipelineRun) {
 // GET /delivery?commit= of a commit only an external work names: the work,
 // its step and the stages its recorded runs tell, against the migrated
 // database. A commit a landing operation names keeps its own answer.
-// Serial: FreezeEventClock
 func TestReadExternalDelivery(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
-	t.Cleanup(store.FreezeEventClock(at.Add(40 * time.Minute)))
+	t.Cleanup(freezeClock(t, at.Add(40*time.Minute)))
 	read := func(commit string, p *store.DeliveryProduction) (map[string]any, error) {
 		return store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit, Production: p}, nil, nil)
 	}
@@ -319,11 +322,12 @@ func TestReadExternalDelivery(t *testing.T) {
 // GET /delivery?commit= answers from the earliest event carrying the commit,
 // with no submitted event. Every commit any event of the work named is found,
 // each from when it was first named; the step is the work's as bound now.
-// Serial: FreezeEventClock
 func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
-	clock := func(d time.Duration) { t.Cleanup(store.FreezeEventClock(at.Add(d))) }
+	clock := func(d time.Duration) { t.Cleanup(freezeClock(t, at.Add(d))) }
 	read := func(commit string) map[string]any {
 		t.Helper()
 		doc, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit}, nil, nil)

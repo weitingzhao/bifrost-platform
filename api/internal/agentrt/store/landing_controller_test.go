@@ -18,14 +18,15 @@ import (
 
 // CUT §2.2, §2.4: a controller call reaches the migrated DB, the accepted
 // verification, current signed rule, enable note, and fresh trusted evidence.
-// Serial: FreezeEventClock
 func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
 	enabled := time.Now().Add(-time.Hour)
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
@@ -66,7 +67,7 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 	// A pushed landing branch (a red landing CI is no longer rerun as it is,
 	// R6:6.2-1, so there is no retry intent to recover here).
 	clock := time.Now().Add(time.Minute)
-	restore = store.FreezeEventClock(clock)
+	restore = freezeClock(t, clock)
 	put := func(kind string, kv ...any) {
 		t.Helper()
 		ok(t, appendLanding(w, landingRepoStream, landingRecord(op, kind, kv...)))
@@ -98,11 +99,12 @@ func TestControllerLandingFactsWiredThroughStore(t *testing.T) {
 
 // CUT §3 S2 ③: waiting on the window consumes the six-hour budget even if
 // every external source is unavailable. Restart a new controller from notes.
-// Serial: FreezeEventClock
 func TestDrillWindowBoundFreesActiveSlotInDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newWorld(t)
 	first := time.Now().Add(-6 * time.Hour)
-	restore := store.FreezeEventClock(first)
+	restore := freezeClock(t, first)
 	defer restore()
 	op := "land:window:1"
 	put := func(kind string, kv ...any) {
@@ -118,7 +120,7 @@ func TestDrillWindowBoundFreesActiveSlotInDatabase(t *testing.T) {
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	// A fresh controller with no I/O sources still expires the operation.
 	// Time passes on the clock the gates decide at (CUT §9).
-	store.FreezeEventClock(first.Add(6 * time.Hour))
+	freezeClock(t, first.Add(6*time.Hour))
 	a, err := ctl.LandingDrillCI(ctx, controller.DrillSources{}, op, first.Add(6*time.Hour))
 	ok(t, err)
 	if a.Kind != "failed" || a.Why != "bound" {
@@ -130,7 +132,7 @@ func TestDrillWindowBoundFreesActiveSlotInDatabase(t *testing.T) {
 		t.Fatal(o)
 	}
 	again := controller.Controller{DB: w.rt, Env: "stg"}
-	store.FreezeEventClock(first.Add(7 * time.Hour))
+	freezeClock(t, first.Add(7*time.Hour))
 	a, err = again.LandingDrillCI(ctx, controller.DrillSources{}, op, first.Add(7*time.Hour))
 	ok(t, err)
 	if a.Kind != "cleanup" {

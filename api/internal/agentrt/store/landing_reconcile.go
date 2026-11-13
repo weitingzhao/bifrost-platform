@@ -142,7 +142,7 @@ func MainCandidates(ctx context.Context, db DB, repo string) ([]MainCandidate, e
 			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
 			  WHERE t.task_id = $1 AND (m.state IN ('active','paused','awaiting_owner','proposed')
 			    OR m.state = 'done' AND EXISTS (SELECT 1 FROM agentrt.event e WHERE e.mission_id = m.mission_id
-			      AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done' AND e.at > $2)))`, o.Task, DecisionAt().Add(-LateRevertWithin)).Scan(&open); err != nil {
+			      AND e.event_type = 'mission_state_changed' AND e.body_json->>'to' = 'done' AND e.at > $2)))`, o.Task, DecisionAt(ctx).Add(-LateRevertWithin)).Scan(&open); err != nil {
 				return err
 			}
 			if open {
@@ -223,7 +223,7 @@ func reconcileMainOne(ctx context.Context, db DB, tenant, repo string, c MainCan
 		// Absence counts only from a read begun past the fence (2A, review
 		// 658 B2); the decision clock is past it too, read under the lock.
 		fence := c.IntentAt.Add(MainFence)
-		fenced := !c.IntentAt.IsZero() && !ev.ReadAt.IsZero() && !ev.ReadAt.Before(fence) && !DecisionAt().Before(fence)
+		fenced := !c.IntentAt.IsZero() && !ev.ReadAt.IsZero() && !ev.ReadAt.Before(fence) && !DecisionAt(ctx).Before(fence)
 		write := func(records ...map[string]any) error {
 			for _, r := range records {
 				if err := appendMainRecord(ctx, tx, stream, c.Root, r); err != nil {
@@ -333,7 +333,7 @@ func ReconcileMain(ctx context.Context, db DB, repo string, read MainEvidenceFun
 	}
 	var errs []error
 	for _, c := range cands {
-		started := DecisionAt()
+		started := DecisionAt(ctx)
 		ev, err := read(ctx, repo, c.Root, c.A, c.R)
 		ev.ReadAt = started
 		if err != nil {

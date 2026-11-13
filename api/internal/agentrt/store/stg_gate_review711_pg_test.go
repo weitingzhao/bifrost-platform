@@ -58,7 +58,7 @@ func TestReview711PGInFlightCreateAndLateReadback(t *testing.T) {
 			if action != "bound" || runs.creates != 1 {
 				t.Fatal("late readback failed", action, runs.creates)
 			}
-			b5Append(t, x.w, b5Record("run_evidence", "batch", "try", 1, "uid", "uid-one", "status", "Succeeded", "raw", map[string]any{"results": []any{}, "child_refs": []any{}, "conditions": []any{}}, "at", store.DecisionAt().Format(time.RFC3339Nano)))
+			b5Append(t, x.w, b5Record("run_evidence", "batch", "try", 1, "uid", "uid-one", "status", "Succeeded", "raw", map[string]any{"results": []any{}, "child_refs": []any{}, "conditions": []any{}}, "at", store.DecisionAt(ctx).Format(time.RFC3339Nano)))
 			tr = x.read(t).Batches[b5Batch].Tries[1]
 			if tr.Occupied() || tr.IsQuarantined() || tr.RunEvidence.Seq == 0 {
 				t.Fatal("terminal evidence did not reconcile isolation", tr)

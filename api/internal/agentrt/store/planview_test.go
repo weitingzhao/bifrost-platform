@@ -50,6 +50,7 @@ func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
 }
 func externalSpec(t *testing.T, w *world) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -201,12 +202,13 @@ func TestPlanViewDevBoundary(t *testing.T) {
 	is(t, err, store.ErrInvalid)
 }
 
-// Serial: freezes the shared event clock.
 func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	spec := externalSpec(t, w)
 	who := wr("thread:recover")
-	thaw := store.FreezeEventClock(time.Now().Add(-61 * time.Second))
+	thaw := freezeClock(t, time.Now().Add(-61*time.Second))
 	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "recover", Artifact: spec, ObservedAt: "1999-01-01T00:00:00Z"})
 	thaw()
 	ok(t, err)

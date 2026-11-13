@@ -32,7 +32,7 @@ func liveReady(t *testing.T, clock ...time.Time) (*world, string, string, store.
 func liveReadyInWorld(t *testing.T, w *world, prepared time.Time) (*world, string, string, store.LandingSource, time.Time) {
 	t.Helper()
 	w, task, src := goalDrillInWorld(t, w, "M-3", prepared.Add(-time.Minute))
-	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, store.DecisionAt())
+	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, store.DecisionAt(ctx))
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("fixture claim", d)
@@ -196,7 +196,7 @@ func TestLivePushResultAndDeniedStopsTheRepository(t *testing.T) {
 	// Another root of the repository is not claimed while it is stopped.
 	other := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "another drill", BaseCommit: commitB})
 	w.passRound(t, other, "h1", "h2", "h3")
-	opOther, dOther, err := store.ClaimLandingDrill(ctx, w.rt, src, other, store.DecisionAt())
+	opOther, dOther, err := store.ClaimLandingDrill(ctx, w.rt, src, other, store.DecisionAt(ctx))
 	ok(t, err)
 	if opOther != "" || dOther.Reason != "stopped" {
 		t.Fatalf("claimed while stopped: %q %+v", opOther, dOther)

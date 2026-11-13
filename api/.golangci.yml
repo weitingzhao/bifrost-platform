@@ -20,6 +20,13 @@ linters:
       enable-all: true
   exclusions:
     generated: lax
+    rules:
+      # A store test with an event clock of its own starts with
+      # ctx := ownClock(t), and a helper with ctx := ctxOf(t): hiding the
+      # package-level ctx of the test files is what the line is for.
+      - path: internal/agentrt/store/.*_test\.go
+        linters: [govet]
+        text: 'shadow: declaration of "ctx" shadows declaration at line'
     paths:
       - third_party$
       - builtin$

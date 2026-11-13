@@ -158,7 +158,7 @@ func TestB5HCrossPGPartialRolloutCreates(t *testing.T) {
 			if !due.Equal(tr.RunEvidence.Record.Time("at").Add(10 * time.Minute)) {
 				t.Fatal("backoff was not terminal-based")
 			}
-			x.advance(t, due.Sub(store.DecisionAt())-time.Second)
+			x.advance(t, due.Sub(store.DecisionAt(ctx))-time.Second)
 			x.restart(t)
 			ok(t, x.c.Pass(ctx))
 			if x.runs.creates != 1 || x.state(t).Batches[b5Batch].Try != 1 {
@@ -185,8 +185,8 @@ func TestB5HCrossPGUnknownLeaseAndNone(t *testing.T) {
 			x := b5hFixture(t)
 			if mode == "expired_before_post" {
 				x.runs.beforeSend = func() {
-					store.FreezeEventClock(store.DecisionAt().Add(3 * time.Minute))
-					x.clock.SetTime(store.DecisionAt())
+					store.FreezeEventClock(store.DecisionAt(ctx).Add(3 * time.Minute))
+					x.clock.SetTime(store.DecisionAt(ctx))
 				}
 				if err := x.c.Pass(ctx); err == nil {
 					t.Fatal("expired send accepted")
@@ -313,7 +313,7 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 	for n := int64(1); n <= 3; n++ {
 		if n > 1 {
 			due := x.state(t).Debits[x.p].NotBefore
-			x.advance(t, due.Sub(store.DecisionAt()))
+			x.advance(t, due.Sub(store.DecisionAt(ctx)))
 			ok(t, x.c.Pass(ctx))
 		}
 		ok(t, x.c.Pass(ctx))
@@ -329,11 +329,11 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 		trigger = b
 	}
 	svc := questions.New(filepath.Join(t.TempDir(), "questions"), nil)
-	svc.SetClock(store.DecisionAt)
+	svc.SetClock(decisionClock(ctx))
 	source := questioncards.New(svc)
 	// Fill the real store's open capacity, then remove those test questions.
 	fillers := b5hFillQuota(t, svc)
-	ctl := &controller.Controller{DB: x.w.rt, Env: "prod", Now: store.DecisionAt, LandingCards: source}
+	ctl := &controller.Controller{DB: x.w.rt, Env: "prod", Now: decisionClock(ctx), LandingCards: source}
 	if err := ctl.LandingCardsPass(ctx); !errors.Is(err, store.ErrCardQuota) {
 		t.Fatal("expected actual question quota", err)
 	}
@@ -351,12 +351,12 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 		}
 		return "", time.Time{}, context.DeadlineExceeded
 	}
-	_, err = store.AskLandingCard(ctx, x.w.rt, source, platformRepo, preps[0].Prep, store.DecisionAt(), true)
+	_, err = store.AskLandingCard(ctx, x.w.rt, source, platformRepo, preps[0].Prep, store.DecisionAt(ctx), true)
 	if err == nil {
 		t.Fatal("lost Ask reply hidden")
 	}
 	source.AskRaw = ask
-	id, err := store.AskLandingCard(ctx, x.w.rt, source, platformRepo, preps[0].Prep, store.DecisionAt(), true)
+	id, err := store.AskLandingCard(ctx, x.w.rt, source, platformRepo, preps[0].Prep, store.DecisionAt(ctx), true)
 	ok(t, err)
 	_, bound, err := store.LandingCardsToSettle(ctx, x.w.rt, platformRepo)
 	ok(t, err)
@@ -370,7 +370,7 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 	}
 	ack := source.Ack
 	source.Ack = func(context.Context, string) (bool, error) { return false, context.DeadlineExceeded }
-	_, err = store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt())
+	_, err = store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt(ctx))
 	if err == nil {
 		t.Fatal("Ack loss hidden")
 	}
@@ -379,13 +379,13 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 		t.Fatal("grant changed history or identity")
 	}
 	for range 3 {
-		_, err = store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt())
+		_, err = store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt(ctx))
 		if err == nil || x.state(t).LastSeq != after.LastSeq {
 			t.Fatal("Ack replay granted twice")
 		}
 	}
 	source.Ack = ack
-	status, err := store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt())
+	status, err := store.SettleLandingCard(ctx, x.w.rt, source, card, store.DecisionAt(ctx))
 	ok(t, err)
 	q, found, err := svc.Lookup(id)
 	ok(t, err)

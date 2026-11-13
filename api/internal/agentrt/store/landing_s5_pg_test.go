@@ -162,7 +162,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 			if variant == "expired" {
 				store.FreezeEventClock(at(until))
 			}
-			_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt())
+			_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 			ok(t, err)
 			if strings.HasPrefix(variant, "freeze") {
 				// Inside each backoff the operation waits; after it, one new
@@ -173,7 +173,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 						t.Fatalf("retry %d: %+v", n, before.S5)
 					}
 					store.FreezeEventClock(before.S5.KeyAt.Add(landing.S5InfraRetryAfter(n)))
-					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt())
+					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 					ok(t, err)
 					after := landingState(t, w, landingRepoStream).Operations[op]
 					same := after.S5.Key
@@ -181,7 +181,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 					if after.S5.Key.Generation != before.S5.Key.Generation+1 || same != before.S5.Key || after.S5.InfraRetries != n+1 {
 						t.Fatalf("retry %d did not open the next generation: %+v", n, after.S5)
 					}
-					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt())
+					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 					ok(t, err)
 					if variant == "freeze retry" {
 						break
@@ -190,7 +190,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 				if variant == "freeze exhausted" {
 					o := landingState(t, w, landingRepoStream).Operations[op]
 					store.FreezeEventClock(o.S5.KeyAt.Add(landing.S5InfraRetryAfter(landing.S5InfraRetries)))
-					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt())
+					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 					ok(t, err)
 				}
 			}
