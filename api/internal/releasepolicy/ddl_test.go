@@ -86,6 +86,12 @@ func TestPinnedReleaseMustShipWhatTheSourceShipped(t *testing.T) {
 	if !strings.Contains(d.ClauseText(), "pinned_to:deliver-app-stg") || d.SHAText() != "repo-app="+newSHA+",repo-lib="+newLib {
 		t.Fatalf("clauses = %s sha = %s", d.ClauseText(), d.SHAText())
 	}
+	// The action catalog hands the nested params over as map[string]string.
+	normalised := pinned(newSHA, newLib)
+	normalised["params"] = map[string]string{"appRevision": newSHA}
+	if d := f.decide(normalised); !d.Auto || d.SHAText() != "repo-app="+newSHA+",repo-lib="+newLib {
+		t.Fatalf("normalised params: auto = %v sha = %s reasons = %v", d.Auto, d.SHAText(), d.Reasons)
+	}
 	wantWait(t, f.decide(pinned(rptest.SHA("other"), newLib)), "is not what the newest deliver-app-stg record shipped")
 	wantWait(t, f.decide(pinned(newSHA, "main")), "repo-lib: pinned revision main is not a full commit id")
 	wantWait(t, f.decide(map[string]any{"name": "deliver-pinned", "revision": newLib, "who": "agent@mac"}), "repo-app: the request pins no commit for it")

@@ -503,9 +503,8 @@ func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pi
 		return []string{"the policy pins " + d.Pipeline + " to no source pipeline"}
 	}
 	pinned := map[string]string{}
-	inner, _ := params["params"].(map[string]any)
 	for key, repo := range pin.Params {
-		sha := str(inner[key])
+		sha := innerParam(params, key)
 		if key == "revision" {
 			sha = str(params["revision"])
 		}
@@ -651,6 +650,19 @@ func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits [
 func str(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+// innerParam reads one key of the request's nested params object. A direct
+// call and a new approval carry it as the action catalog normalised it
+// (map[string]string); a request decoded from JSON carries map[string]any.
+func innerParam(params map[string]any, key string) string {
+	switch inner := params["params"].(type) {
+	case map[string]string:
+		return strings.TrimSpace(inner[key])
+	case map[string]any:
+		return str(inner[key])
+	}
+	return ""
 }
 
 func short(sha string) string {
