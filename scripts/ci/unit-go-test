@@ -1,0 +1,117 @@
+#!/bin/sh
+# unit-go-test: the test task of one Go package, as CI runs a unit (landing
+# stage 2 §4.0, §4.3). It runs in the package's directory and needs nothing
+# of the cluster: set the variables below and run it by hand for the same
+# result.
+#
+#   UNIT_SHARD_INDEX, UNIT_SHARD_TOTAL  this run's part of the package's tests
+#                                       (default 0 of 1: all of them)
+#   UNIT_TASK                           test, or test-slow (BIFROST_SLOW_TESTS=1)
+#   UNIT_PG_DSN, UNIT_REDIS_URL         the throwaway database and Redis, if any
+#   UNIT_CACHE                          a directory kept between runs, if any
+#   UNIT_RESULT_DIR                     where the results go (default /unit/result)
+#
+# Results, one file each:
+#   tests         "<expected> <sha256 of the package's whole test list> <ran> <skipped>"
+#                 expected is the number of tests of this part
+#   failed-tests  the tests that failed, comma separated, at most 1500 bytes
+#                 (cut at a name, then ",…")
+#   fail-class    test when a test failed; build when the run failed and no
+#                 test did (it did not compile, or the test program died);
+#                 empty when it passed
+# The exit code is go test's: 0 only when every test of the part passed.
+#
+# The tests are split by name: the package's tests sorted, dealt round to the
+# parts, so the parts together are every test once. -count=1: whether a unit
+# runs is the ledger's to say, not go's test cache.
+set -u
+result="${UNIT_RESULT_DIR:-/unit/result}"
+index="${UNIT_SHARD_INDEX:-0}"
+total="${UNIT_SHARD_TOTAL:-1}"
+mkdir -p "$result" || exit 2
+: > "$result/failed-tests"
+: > "$result/fail-class"
+: > "$result/tests"
+case "$index$total" in *[!0-9]*) echo "unit-go-test: the shard index and total are numbers" >&2; exit 2 ;; esac
+[ "$total" -ge 1 ] && [ "$index" -lt "$total" ] || { echo "unit-go-test: shard $index of $total" >&2; exit 2; }
+
+if [ -n "${UNIT_PG_DSN:-}" ]; then
+  export AGENTRT_TEST_PG="$UNIT_PG_DSN" AGENTRT_TEST_REQUIRED=1
+fi
+[ -n "${UNIT_REDIS_URL:-}" ] && export AGENTRT_TEST_REDIS="$UNIT_REDIS_URL"
+if [ -n "${UNIT_CACHE:-}" ]; then
+  export GOCACHE="$UNIT_CACHE/go/build" GOMODCACHE="$UNIT_CACHE/go/mod/$(date -u +%Y-%m)"
+fi
+[ "${UNIT_TASK:-test}" = test-slow ] && export BIFROST_SLOW_TESTS=1
+
+tmp="$(mktemp -d)" || exit 2
+trap 'rm -rf "$tmp"' EXIT
+
+# The package's tests, sorted (benchmarks are listed too and are not run).
+if ! go test -list '.*' . > "$tmp/list.out" 2> "$tmp/list.err"; then
+  cat "$tmp/list.out" "$tmp/list.err"
+  printf build > "$result/fail-class"
+  echo "unit-go-test: the package does not build"
+  exit 1
+fi
+grep -E '^(Test|Example|Fuzz)' "$tmp/list.out" | LC_ALL=C sort > "$tmp/all"
+hash="$(sha256sum < "$tmp/all" 2>/dev/null | cut -d' ' -f1)"
+[ -n "$hash" ] || hash="$(shasum -a 256 < "$tmp/all" | cut -d' ' -f1)"
+awk -v i="$index" -v n="$total" '(NR - 1) % n == i' "$tmp/all" > "$tmp/mine"
+expected="$(wc -l < "$tmp/mine" | tr -d ' ')"
+if [ "$expected" -eq 0 ]; then
+  printf '0 %s 0 0' "$hash" > "$result/tests"
+  echo "unit-go-test: part $index of $total has no test"
+  exit 0
+fi
+
+status=0
+if [ "$total" -eq 1 ]; then
+  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" . > "$tmp/events" 2> "$tmp/stderr" || status=$?
+else
+  run="^($(paste -sd'|' "$tmp/mine"))\$"
+  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" -run "$run" . > "$tmp/events" 2> "$tmp/stderr" || status=$?
+fi
+cat "$tmp/stderr" >&2
+
+python3 - "$tmp/events" "$tmp/mine" "$result" "$status" "$expected" "$hash" <<'PY'
+import json, sys
+events, mine, result, status, expected, digest = sys.argv[1:7]
+mine = set(open(mine).read().split())
+done, failed, out = {}, set(), []
+for line in open(events, errors="replace"):
+    try:
+        e = json.loads(line)
+    except ValueError:
+        out.append(line.rstrip("\n"))  # compiler output is not JSON
+        continue
+    test, action = e.get("Test"), e.get("Action")
+    if action == "output" and (not test or e.get("Output", "").startswith(("--- FAIL", "panic:", "FAIL"))):
+        out.append(e.get("Output", "").rstrip("\n"))
+    if not test:
+        continue
+    if action == "fail":
+        failed.add(e.get("Package", "") + "." + test)
+    if "/" not in test and action in ("pass", "fail", "skip") and test in mine:
+        done[test] = action
+ran = sum(1 for a in done.values() if a != "skip")
+skipped = sum(1 for a in done.values() if a == "skip")
+names, size, cut = [], 0, False
+for name in sorted(failed):
+    if size + len(name.encode()) + 1 > 1490:
+        cut = True
+        break
+    names.append(name)
+    size += len(name.encode()) + 1
+with open(result + "/failed-tests", "w") as fh:
+    fh.write(",".join(names) + (",…" if cut else ""))
+with open(result + "/fail-class", "w") as fh:
+    fh.write("" if status == "0" else ("test" if failed else "build"))
+with open(result + "/tests", "w") as fh:
+    fh.write("%s %s %d %d" % (expected, digest, ran, skipped))
+print("\n".join(out[-80:]))
+print("unit-go-test: %s tests of this part, %d ran, %d skipped, %d failed; exit %s" % (expected, ran, skipped, len(failed), status))
+if failed:
+    print("Failing tests: " + ",".join(sorted(failed)))
+PY
+exit "$status"

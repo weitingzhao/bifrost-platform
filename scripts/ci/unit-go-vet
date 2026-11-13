@@ -1,0 +1,19 @@
+#!/bin/sh
+# unit-go-vet: the vet task of one Go module, as CI runs a unit (landing stage
+# 2 §4.0). It runs in the module's directory. Results as unit-go-test writes
+# them: fail-class is build when vet fails (it reports no test), tests is
+# empty. The exit code is go vet's.
+set -u
+result="${UNIT_RESULT_DIR:-/unit/result}"
+mkdir -p "$result" || exit 2
+: > "$result/failed-tests"
+: > "$result/fail-class"
+: > "$result/tests"
+if [ -n "${UNIT_CACHE:-}" ]; then
+  export GOCACHE="$UNIT_CACHE/go/build" GOMODCACHE="$UNIT_CACHE/go/mod/$(date -u +%Y-%m)"
+fi
+status=0
+go vet ./... || status=$?
+[ "$status" -eq 0 ] || printf build > "$result/fail-class"
+echo "unit-go-vet: exit $status"
+exit "$status"

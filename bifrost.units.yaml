@@ -101,6 +101,7 @@ modules:
       api/internal/statefile: ["."]
       api/internal/storedurability: ["."]
       api/internal/testscope: ["."]
+      api/internal/unitscript: ["."]
       api/internal/tradevocab: ["."]
 
   - name: console
