@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
 func TestEvidenceGateOn(t *testing.T) {
@@ -97,5 +100,77 @@ func TestLedgerCI(t *testing.T) {
 	}
 	if _, _, err := ledgerCI(func() store.DB { return nil }, nil)(ctx, "bifrost-platform", h("a")); err == nil {
 		t.Fatal("no database, and an answer")
+	}
+}
+
+// A unit task's row is not the repository's CI (review 2026-11-13, A1). The
+// rows unit tasks write are scope full too: a commit with one unit task
+// passed was answered Succeeded, whatever its whole CI did; and the rows of
+// the unit named "repo" (the repository's own checks) carry a tree, so the
+// same held for any commit of that tree. Only the rows a CI pipeline's run
+// wrote say whether the commit's CI passed.
+func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	pool := db.Pool(t, db.Runtime)
+	h := func(c string) string { return strings.Repeat(c, 40) }
+	unitRow := func(run, unit, task, commit string, inputs map[string]any) {
+		t.Helper()
+		raw, err := json.Marshal(inputs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		row, err := store.UnitEvidenceRow(store.UnitEvidence{Repo: "bifrost-platform", Unit: unit, Task: task, InputKey: unitplan.Hash(inputs), Inputs: raw,
+			Passed: true, Commit: commit, Tree: h("c"), RunName: run, RunUID: "uid-" + run, CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, err := store.RecordEvidence(ctx, pool, []store.EvidenceRow{row}); err != nil || n != 1 {
+			t.Fatalf("unit row %s: %d %v", run, n, err)
+		}
+	}
+	ci := func(name, commit, tree, result string) {
+		t.Helper()
+		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
+			Scope: "full", CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
+			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
+		e, is, err := store.RunEvidence(p)
+		if err != nil || !is {
+			t.Fatalf("run %s: %v", name, err)
+		}
+		if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	trees := map[string]string{h("a"): h("c"), h("b"): h("c"), h("d"): h("8"), h("e"): h("7")}
+	tree := func(_ context.Context, _, commit string) (string, error) { return trees[commit], nil }
+	for _, anyScope := range []bool{false, true} {
+		read := ledgerCIScoped(func() store.DB { return pool }, tree, anyScope)
+		ask := func(when, commit, status, run string) {
+			t.Helper()
+			gotStatus, gotRun, err := read(ctx, "bifrost-platform", commit)
+			if err != nil || gotStatus != status || gotRun != run {
+				t.Fatalf("any scope %v, %s, commit %s: %q %q %v, want %q %q", anyScope, when, commit[:1], gotStatus, gotRun, err, status, run)
+			}
+		}
+		if !anyScope {
+			// A package's test task passed for commit a; its whole CI never ran.
+			unitRow("unit-1", "api/internal/x", "test", h("a"), map[string]any{"v": 2, "repo": "bifrost-platform", "unit": "api/internal/x", "task": "test"})
+			// The repository's own checks passed for commit a: unit "repo", a tree in its inputs.
+			unitRow("unit-2", "repo", "check", h("a"), map[string]any{"v": 2, "repo": "bifrost-platform", "unit": "repo", "task": "check", "tree": h("c")})
+			// Commit d: its whole CI failed, a unit task of it passed afterwards.
+			ci("ci-d-red", h("d"), h("8"), "Failed")
+			unitRow("unit-3", "api/internal/x", "test", h("d"), map[string]any{"v": 2, "repo": "bifrost-platform", "unit": "api/internal/x", "task": "test", "n": 3})
+			// Commit e: its whole CI passed, then many unit rows came after it.
+			ci("ci-e", h("e"), h("7"), "Succeeded")
+			for i := 0; i < 60; i++ {
+				unitRow(fmt.Sprintf("unit-e-%d", i), "api/internal/x", "test", h("e"), map[string]any{"v": 2, "repo": "bifrost-platform", "unit": "api/internal/x", "task": "test", "n": 100 + i})
+			}
+		}
+		ask("only unit tasks passed", h("a"), "", "")
+		ask("the same tree, only unit tasks passed", h("b"), "", "")
+		ask("the whole CI failed and a unit task passed", h("d"), delivery.CIFailed, "ci-d-red")
+		ask("the whole CI passed and sixty unit rows followed", h("e"), delivery.CISucceeded, "ci-e")
 	}
 }

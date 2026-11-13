@@ -99,7 +99,7 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 		if d == nil {
 			return "", "", errors.New("the evidence ledger is not connected")
 		}
-		rows, err := store.EvidenceByCommit(ctx, d, repo, sha, 50)
+		rows, err := store.EvidenceCIByCommit(ctx, d, repo, sha, 50)
 		if err != nil {
 			return "", "", err
 		}

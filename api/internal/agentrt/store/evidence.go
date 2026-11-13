@@ -287,8 +287,29 @@ func evidenceQuery(ctx context.Context, db DB, sql string, args ...any) ([]Evide
 // a repository: which tasks give evidence for it, and what each used beside
 // the repository the last time it ran.
 func EvidenceTasks(ctx context.Context, db DB, repo, unit string) ([]EvidenceRow, error) {
+	if unit == EvidenceUnitRepo {
+		// The repository's CI pipelines, not the tasks of the unit a plan
+		// names "repo" (see ciRunRows).
+		return evidenceQuery(ctx, db, `SELECT DISTINCT ON (task) `+evidenceColumns+` FROM agentrt.evidence
+		  WHERE repo = $1 AND `+ciRunRows+` ORDER BY task, evidence_id DESC`, repo)
+	}
 	return evidenceQuery(ctx, db, `SELECT DISTINCT ON (task) `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND unit = $2 ORDER BY task, evidence_id DESC`, repo, unit)
+}
+
+// ciRunRows is the rows a CI pipeline's run wrote (RunEvidence): the whole
+// repository as the unit, and a key document of the first wave, which has no
+// version. A unit task's row (UnitEvidenceRow) is neither, even when its unit
+// is the one a plan names "repo": its key document says "v". Whether a
+// commit's CI passed is asked of these rows alone (review 2026-11-13, A1:
+// asked of every row, one unit task's pass answered for the whole commit).
+const ciRunRows = `unit = '` + EvidenceUnitRepo + `' AND NOT (inputs ? 'v')`
+
+// EvidenceCIByCommit is the newest rows the CI pipelines' runs recorded for a
+// commit, newest first: what says whether the commit's CI passed.
+func EvidenceCIByCommit(ctx context.Context, db DB, repo, commit string, limit int) ([]EvidenceRow, error) {
+	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
+	  WHERE repo = $1 AND commit_sha = $2 AND `+ciRunRows+` ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
 
 // EvidenceByKey is the rows of one key, oldest first.
@@ -304,11 +325,12 @@ func EvidenceByCommit(ctx context.Context, db DB, repo, commit string, limit int
 	  WHERE repo = $1 AND commit_sha = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
 
-// EvidenceByTree is the newest rows recorded for a git tree of a repository,
-// under whatever commit and whatever was beside it, newest first.
+// EvidenceByTree is the newest rows the CI pipelines' runs recorded for a git
+// tree of a repository, under whatever commit and whatever was beside it,
+// newest first.
 func EvidenceByTree(ctx context.Context, db DB, repo, tree string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
-	  WHERE repo = $1 AND unit = $2 AND inputs->>'tree' = $3 ORDER BY evidence_id DESC LIMIT $4`, repo, EvidenceUnitRepo, tree, limit)
+	  WHERE repo = $1 AND `+ciRunRows+` AND inputs->>'tree' = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, tree, limit)
 }
 
 // The classes of a failed run (PipelineRun.FailClass).
