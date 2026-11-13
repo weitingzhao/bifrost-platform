@@ -27,7 +27,7 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 
 func (h *Handler) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("ns")
-	resp, err := h.svc.Overview(r.Context(), ns)
+	resp, err := h.svc.Overview(r.Context(), ns, r.URL.Query().Get("group"))
 	if err != nil {
 		h.writeError(w, err)
 		return

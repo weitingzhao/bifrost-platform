@@ -12,6 +12,8 @@ type MetricResult struct {
 	ID     string        `json:"id"`
 	Title  string        `json:"title"`
 	Unit   string        `json:"unit,omitempty"`
+	Target string        `json:"target,omitempty"`
+	Note   string        `json:"note,omitempty"`
 	Status string        `json:"status"` // ok | empty | error
 	Detail string        `json:"detail,omitempty"`
 	Points []SamplePoint `json:"points"`
@@ -19,6 +21,7 @@ type MetricResult struct {
 
 type OverviewResponse struct {
 	Namespace     string         `json:"namespace"`
+	Group         string         `json:"group,omitempty"`
 	PrometheusURL string         `json:"prometheus_url,omitempty"`
 	LayerBStatus  string         `json:"layer_b_status,omitempty"`
 	Reachability  string         `json:"reachability,omitempty"`
@@ -55,18 +58,18 @@ type AlertsResponse struct {
 }
 
 type TargetEntry struct {
-	Labels           map[string]string `json:"labels"`
-	ScrapePool       string            `json:"scrape_pool,omitempty"`
-	ScrapeURL        string            `json:"scrape_url,omitempty"`
-	Health           string            `json:"health"`
-	LastError        string            `json:"last_error,omitempty"`
-	LastScrape       string            `json:"last_scrape,omitempty"`
-	LastScrapeDuration float64         `json:"last_scrape_duration,omitempty"`
+	Labels             map[string]string `json:"labels"`
+	ScrapePool         string            `json:"scrape_pool,omitempty"`
+	ScrapeURL          string            `json:"scrape_url,omitempty"`
+	Health             string            `json:"health"`
+	LastError          string            `json:"last_error,omitempty"`
+	LastScrape         string            `json:"last_scrape,omitempty"`
+	LastScrapeDuration float64           `json:"last_scrape_duration,omitempty"`
 }
 
 type TargetsResponse struct {
-	PrometheusURL string        `json:"prometheus_url,omitempty"`
-	ActiveTargets []TargetEntry `json:"active_targets"`
+	PrometheusURL  string        `json:"prometheus_url,omitempty"`
+	ActiveTargets  []TargetEntry `json:"active_targets"`
 	DroppedTargets []TargetEntry `json:"dropped_targets,omitempty"`
-	GeneratedAt   time.Time     `json:"generated_at"`
+	GeneratedAt    time.Time     `json:"generated_at"`
 }

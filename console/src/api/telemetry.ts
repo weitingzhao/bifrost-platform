@@ -31,6 +31,16 @@ export async function postAttentionMute(body: {
   return r.json() as Promise<AttentionMuteApiResponse>
 }
 
+/** The compute readings: the same route as the overview, group=compute. */
+export async function fetchComputeReadings(): Promise<TelemetryOverviewResponse> {
+  const r = await serverFetch('/api/v1/telemetry/overview?group=compute')
+  if (!r.ok) {
+    const detail = await r.text()
+    throw new Error(`compute readings: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
+  }
+  return r.json() as Promise<TelemetryOverviewResponse>
+}
+
 export async function fetchTelemetryOverview(ns?: string): Promise<TelemetryOverviewResponse> {
   const query = ns != null && ns !== '' ? `?ns=${encodeURIComponent(ns)}` : ''
   const r = await serverFetch(`/api/v1/telemetry/overview${query}`)

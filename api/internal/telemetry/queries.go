@@ -6,7 +6,11 @@ type QuerySpec struct {
 	ID    string
 	Title string
 	Unit  string
-	Build func(ns string) string
+	// Target and Note are shown beside the value: what the reading should be,
+	// and what it answers. Empty for the overview presets.
+	Target string
+	Note   string
+	Build  func(ns string) string
 }
 
 func PresetQueries() []QuerySpec {
@@ -99,7 +103,7 @@ func PresetQueries() []QuerySpec {
 
 func FindQuery(id string) (QuerySpec, bool) {
 	id = strings.TrimSpace(id)
-	for _, q := range PresetQueries() {
+	for _, q := range append(PresetQueries(), ComputeQueries()...) {
 		if q.ID == id {
 			return q, true
 		}

@@ -15,6 +15,7 @@ vi.mock('@/pages/ClusterPage', () => ({ ClusterPage: () => <p>Cluster controls</
 vi.mock('@/pages/NetworkPage', () => ({ NetworkPage: () => <p>Network panels</p> }))
 vi.mock('@/pages/shell/infrastructure/RuntimeMapSection', () => ({ RuntimeMapSection: () => <p>Runtime topology</p> }))
 vi.mock('@/pages/shell/infrastructure/RuntimeHosts', () => ({ RuntimeHosts: () => <p>Runtime host readings</p> }))
+vi.mock('@/pages/shell/infrastructure/ComputeReadings', () => ({ ComputeReadings: () => <p>Compute readings</p> }))
 vi.mock('@/pages/shell/infrastructure/MiniCards', () => ({ MiniCards: () => <p>Mini host controls</p> }))
 vi.mock('@/pages/shell/data/BackupStatusPanel', () => ({ BackupStatusPanel: () => <p>Backup freshness</p> }))
 afterEach(() => { cleanup(); vi.useRealTimers(); window.location.hash = '' })
@@ -57,7 +58,7 @@ describe('P3 domain destinations', () => {
   it('retains network, cluster and mini controls alongside the moved hosts and backup', () => {
     const client = new QueryClient({defaultOptions: {queries: {retry:false}}})
     const view = render(<QueryClientProvider client={client}><InfrastructurePage /></QueryClientProvider>)
-    for (const text of ['Cluster controls', 'Network panels', 'Runtime topology', 'Runtime host readings', 'Mini host controls', 'Backup freshness']) expect(screen.getByText(text)).toBeTruthy()
+    for (const text of ['Cluster controls', 'Compute readings', 'Network panels', 'Runtime topology', 'Runtime host readings', 'Mini host controls', 'Backup freshness']) expect(screen.getByText(text)).toBeTruthy()
     view.unmount(); client.clear()
   })
   it('scrolls below wrapped sticky navigation, and cancels a pending destination', () => {

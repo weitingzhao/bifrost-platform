@@ -29,7 +29,9 @@ func (s *Service) prometheusURL() string {
 	return entry.PrometheusURL()
 }
 
-func (s *Service) Overview(ctx context.Context, namespace string) (OverviewResponse, error) {
+// Overview runs one group of preset queries: the default presets, or the
+// compute readings when group is "compute". An unknown group is the default.
+func (s *Service) Overview(ctx context.Context, namespace, group string) (OverviewResponse, error) {
 	ns := ResolveNamespace(namespace)
 	promURL := s.prometheusURL()
 	if promURL == "" {
@@ -38,6 +40,11 @@ func (s *Service) Overview(ctx context.Context, namespace string) (OverviewRespo
 
 	client := NewClient(promURL)
 	queries := PresetQueries()
+	if group == GroupCompute {
+		queries = ComputeQueries()
+	} else {
+		group = ""
+	}
 	metrics := make([]MetricResult, len(queries))
 	var wg sync.WaitGroup
 	for i, spec := range queries {
@@ -52,6 +59,7 @@ func (s *Service) Overview(ctx context.Context, namespace string) (OverviewRespo
 
 	resp := OverviewResponse{
 		Namespace:     ns,
+		Group:         group,
 		PrometheusURL: promURL,
 		Metrics:       metrics,
 		GeneratedAt:   time.Now().UTC(),
@@ -144,6 +152,8 @@ func (s *Service) runQuery(ctx context.Context, client *Client, spec QuerySpec, 
 			ID:     spec.ID,
 			Title:  spec.Title,
 			Unit:   spec.Unit,
+			Target: spec.Target,
+			Note:   spec.Note,
 			Status: "error",
 			Detail: err.Error(),
 			Points: []SamplePoint{},
@@ -159,6 +169,8 @@ func (s *Service) runQuery(ctx context.Context, client *Client, spec QuerySpec, 
 		ID:     spec.ID,
 		Title:  spec.Title,
 		Unit:   spec.Unit,
+		Target: spec.Target,
+		Note:   spec.Note,
 		Status: status,
 		Detail: detail,
 		Points: points,

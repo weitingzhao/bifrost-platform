@@ -2,6 +2,7 @@ import { useDomainSection } from '@/lib/shell/useHashSection'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { BackupStatusPanel } from '../data/BackupStatusPanel'
 import { RuntimeHosts } from './RuntimeHosts'
+import { ComputeReadings } from './ComputeReadings'
 import { useQuery } from '@tanstack/react-query'
 import { fetchContext } from '@/api/core'
 import { ClusterPage } from '@/pages/ClusterPage'
@@ -23,6 +24,7 @@ export function InfrastructurePage() {
       <DomainSection active={selected == null || selected === 'cluster'} id="cluster" label="Cluster">
         <h2 className="m-0 text-sm font-semibold">Cluster</h2>
         <ClusterPage />
+        <ComputeReadings />
       </DomainSection>
       <DomainSection active={selected == null || selected === 'network'} id="network" label="Network">
         <h2 className="m-0 text-sm font-semibold">Network</h2>

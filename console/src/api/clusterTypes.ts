@@ -569,6 +569,9 @@ export interface TelemetryMetricResult {
   id: string
   title: string
   unit?: string
+  /** Compute readings only: what the value should be, and what it answers. */
+  target?: string
+  note?: string
   status: 'ok' | 'empty' | 'error'
   detail?: string
   points: TelemetrySamplePoint[]
