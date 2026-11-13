@@ -31,9 +31,13 @@ type Sources struct {
 	Approvals    func(context.Context) ([]store.ApprovalFact, error)
 	Questions    func(context.Context) ([]store.Question, error)
 	PipelineRuns func(context.Context) ([]store.PipelineRun, error)
-	Plan         store.PlanSources
-	Approval     func(ctx context.Context, number int64) (store.ApprovalFact, bool)
-	Question     func(ctx context.Context, id string) (q store.Question, ok bool)
+	// CommitTree reads the git tree of a commit of a repository, for a CI
+	// run that reports a commit it used without its tree (evidence.go);
+	// nil: such a run gives no evidence.
+	CommitTree func(ctx context.Context, repo, commit string) (string, error)
+	Plan       store.PlanSources
+	Approval   func(ctx context.Context, number int64) (store.ApprovalFact, bool)
+	Question   func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error

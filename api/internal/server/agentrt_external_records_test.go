@@ -3,13 +3,18 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -171,4 +176,68 @@ func TestWirePipelineRecords(t *testing.T) {
 		t.Fatal("the release recorder is not kicked by a recorded run")
 	}
 	c.PipelineRecorded() // no recorder loop runs here: it must return
+}
+
+// A CI run's results name what it tested: <short>-commit and <short>-tree a
+// repository, source-* the run's own; other results are not inputs, and a
+// delivery run has none.
+func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {
+	t.Parallel()
+	a, b, c, d := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40), strings.Repeat("d", 40)
+	run := func(pipeline, repo string, results map[string]string) store.PipelineRun {
+		var list []any
+		for k, v := range results {
+			list = append(list, map[string]any{"name": k, "value": v})
+		}
+		u := unstructured.Unstructured{Object: map[string]any{
+			"spec":   map[string]any{"pipelineRef": map[string]any{"name": pipeline}},
+			"status": map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}}, "results": list},
+		}}
+		u.SetName("r")
+		u.SetLabels(map[string]string{"bifrost.io/repo": repo})
+		f, ok := pipelineRunFact(u)
+		if !ok {
+			t.Fatal("not a fact")
+		}
+		return f
+	}
+	f := run("bifrost-ci-platform", "bifrost-platform", map[string]string{"platform-commit": a, "platform-tree": b, "ui-commit": c, "infra-commit": d,
+		"api-scope": "incremental", "base-commit": a, "tested-by": "r", "failed-tests": ""})
+	want := []store.RepoAt{{Repo: "bifrost-platform", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: d}, {Repo: "bifrost-ui", Commit: c}}
+	if !reflect.DeepEqual(f.Inputs, want) || f.Scope != "incremental" || f.Tree != b {
+		t.Fatalf("platform run: %+v scope %q", f.Inputs, f.Scope)
+	}
+	f = run("bifrost-ci-python", "bifrost-trade-core", map[string]string{"source-commit": a, "source-tree": b, "infra-commit": c, "infra-tree": d, "ui-commit": "main"})
+	want = []store.RepoAt{{Repo: "bifrost-trade-core", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
+	if !reflect.DeepEqual(f.Inputs, want) || f.Scope != "" {
+		t.Fatalf("python run: %+v scope %q", f.Inputs, f.Scope)
+	}
+	if f = run("bifrost-deliver-platform", "", map[string]string{"agentd-commit": a, "platform-commit": a}); len(f.Inputs) != 0 {
+		t.Fatalf("delivery run has inputs: %+v", f.Inputs)
+	}
+}
+
+func TestGiteaCommitTree(t *testing.T) {
+	t.Parallel()
+	commit, tree := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if user, pass, _ := r.BasicAuth(); user != "u" || pass != "p" || r.URL.Path != "/api/v1/repos/bifrost/bifrost-ui/git/commits/"+commit {
+			http.Error(w, "no", http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"sha":"` + commit + `","commit":{"tree":{"sha":"` + tree + `"}}}`))
+	}))
+	defer srv.Close()
+	read := giteaCommitTree(func(context.Context) (delivery.GiteaAccess, error) {
+		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost", User: "u", Pass: "p"}, nil
+	}, srv.Client())
+	if got, err := read(context.Background(), "bifrost-ui", commit); err != nil || got != tree {
+		t.Fatalf("tree %q %v", got, err)
+	}
+	if _, err := read(context.Background(), "bifrost-platform", commit); err == nil {
+		t.Fatal("a commit Gitea does not have gave a tree")
+	}
+	if _, err := read(context.Background(), "bifrost-ui", "main"); err == nil {
+		t.Fatal("a branch name was read as a commit")
+	}
 }

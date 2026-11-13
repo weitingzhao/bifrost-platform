@@ -2,16 +2,22 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -42,6 +48,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		}
 	}
 	if s.delivery != nil {
+		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
 		src.PipelineRuns = func(ctx context.Context) ([]store.PipelineRun, error) {
 			items, err := s.delivery.PipelineRunObservations(ctx)
 			if err != nil {
@@ -171,15 +178,95 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		}
 	}
 	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
+	inputs := map[string]*store.RepoAt{}
 	for _, value := range results {
 		r, _ := value.(map[string]any)
 		v, _ := r["value"].(string)
-		switch r["name"] {
+		name, _ := r["name"].(string)
+		switch name {
 		case "platform-tree":
 			f.Tree = v
 		case "tested-by":
 			f.TestedBy = v
+		case "api-scope":
+			f.Scope = v
+		}
+		// What a CI run tested, for the evidence ledger: <short>-commit and
+		// <short>-tree name a repository it used (ciResultRepos), source-* the
+		// repository of the run itself.
+		short, field, _ := strings.Cut(name, "-")
+		repo := ciResultRepos[short]
+		if short == "source" {
+			repo = f.Repo
+		}
+		if f.Kind != "ci" || repo == "" || !commitID.MatchString(v) || (field != "commit" && field != "tree") {
+			continue
+		}
+		if inputs[repo] == nil {
+			inputs[repo] = &store.RepoAt{Repo: repo}
+		}
+		if field == "commit" {
+			inputs[repo].Commit = v
+		} else {
+			inputs[repo].Tree = v
 		}
 	}
+	for _, in := range inputs {
+		f.Inputs = append(f.Inputs, *in)
+	}
+	sort.Slice(f.Inputs, func(i, j int) bool { return f.Inputs[i].Repo < f.Inputs[j].Repo })
 	return f, true
+}
+
+// ciResultRepos is the repository a CI pipeline result names by its prefix
+// (ui-commit, infra-tree); a result with another prefix is not an input.
+var ciResultRepos = map[string]string{
+	"platform": "bifrost-platform", "ui": "bifrost-ui", "infra": "bifrost-trade-infra",
+	"core": "bifrost-trade-core", "api": "bifrost-trade-api", "worker": "bifrost-trade-worker",
+	"frontend": "bifrost-trade-frontend", "research": "bifrost-research",
+}
+
+// giteaCommitTree reads the git tree of a commit of <org>/<repo> from Gitea,
+// with the delivery service's read-only credential.
+func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error), client *http.Client) func(context.Context, string, string) (string, error) {
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return func(ctx context.Context, repo, commit string) (string, error) {
+		if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) {
+			return "", fmt.Errorf("gitea: %q of %q is not a commit of a repository", commit, repo)
+		}
+		acc, err := access(ctx)
+		if err != nil {
+			return "", fmt.Errorf("gitea access: %w", err)
+		}
+		u := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/git/commits/" + commit +
+			"?stat=false&verification=false&files=false"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return "", err
+		}
+		if acc.User != "" || acc.Pass != "" {
+			req.SetBasicAuth(acc.User, acc.Pass)
+		}
+		resp, err := c.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("gitea: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("gitea: %s/%s commit %s: HTTP %d", acc.Org, repo, commit, resp.StatusCode)
+		}
+		var doc struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				Tree struct {
+					SHA string `json:"sha"`
+				} `json:"tree"`
+			} `json:"commit"`
+		}
+		if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&doc); err != nil || doc.SHA != commit || !commitID.MatchString(doc.Commit.Tree.SHA) {
+			return "", fmt.Errorf("gitea: %s/%s commit %s: no tree in the answer (%v)", acc.Org, repo, commit, err)
+		}
+		return doc.Commit.Tree.SHA, nil
+	}
 }

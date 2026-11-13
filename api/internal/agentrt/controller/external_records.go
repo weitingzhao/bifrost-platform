@@ -53,6 +53,12 @@ type pipelineMemo struct {
 	mu   sync.Mutex
 	docs map[string]string
 	full time.Time
+	// evidenced is the listed runs whose evidence is settled (in the ledger,
+	// or the run is none), by run and uid; trees is the tree of each commit
+	// read for them, by repository and commit. Neither is emptied with docs:
+	// a completed run and a commit's tree do not change.
+	evidenced map[string]bool
+	trees     map[string]string
 }
 
 // PipelineRecords records completed runs; the source omits unfinished runs.
@@ -88,6 +94,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 	}
 	held := make(map[string]string, len(r.runs))
 	sent := map[string]string{}
+	byKey := make(map[string]store.PipelineRun, len(r.runs))
 	var facts []map[string]any
 	var errs []error
 	for _, p := range r.runs {
@@ -102,6 +109,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 			continue
 		}
 		key := p.Run + "\x00" + p.UID
+		byKey[key] = p
 		if m.docs[key] == string(doc) {
 			held[key] = string(doc)
 			continue
@@ -128,7 +136,86 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 	if n > 0 && c.PipelineRecorded != nil {
 		c.PipelineRecorded()
 	}
+	// The evidence of the runs this pass compared with the database: every
+	// new run, and every listed run on a full pass, so one that failed here
+	// is tried again within PipelineFullEvery. It is written beside the
+	// pipeline_seen records and changes nothing about them.
+	evidenced := make(map[string]bool, len(byKey))
+	var rows []store.EvidenceRow
+	var rowKeys []string
+	for key := range byKey {
+		if m.evidenced[key] {
+			evidenced[key] = true
+		}
+	}
+	for key, p := range byKey {
+		if evidenced[key] || sent[key] == "" || held[key] == "" {
+			continue
+		}
+		e, is, err := c.runEvidence(ctx, m, p)
+		if err != nil {
+			// A tree could not be read: the rest wait for the next full pass
+			// rather than each wait out a read of its own.
+			errs = append(errs, fmt.Errorf("evidence of run %s: %w", p.Run, err))
+			break
+		}
+		if !is {
+			evidenced[key] = true
+			continue
+		}
+		rows, rowKeys = append(rows, e), append(rowKeys, key)
+	}
+	if len(rows) > 0 {
+		if _, err := store.RecordEvidence(ctx, c.DB, rows); err != nil {
+			errs = append(errs, err)
+		} else {
+			for _, key := range rowKeys {
+				evidenced[key] = true
+			}
+		}
+	}
+	m.evidenced = evidenced
 	return n, errors.Join(errs...)
+}
+
+// runEvidence is the evidence a completed run is (store.RunEvidence), after
+// reading from Sources.CommitTree the tree of each commit the run reports
+// without one.
+func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.PipelineRun) (store.EvidenceRow, bool, error) {
+	if p.Kind != "ci" || len(p.Inputs) == 0 {
+		return store.EvidenceRow{}, false, nil
+	}
+	inputs := append([]store.RepoAt(nil), p.Inputs...)
+	for i, in := range inputs {
+		if in.Tree != "" || in.Commit == "" {
+			continue
+		}
+		if c.Sources.CommitTree == nil {
+			return store.EvidenceRow{}, false, nil
+		}
+		at := in.Repo + "@" + in.Commit
+		tree, ok := m.trees[at]
+		if !ok {
+			type result struct {
+				tree string
+				err  error
+			}
+			r := bounded(c, ctx, func(ctx context.Context) result {
+				tree, err := c.Sources.CommitTree(ctx, in.Repo, in.Commit)
+				return result{tree, err}
+			})
+			if r.err != nil {
+				return store.EvidenceRow{}, false, r.err
+			}
+			if m.trees == nil {
+				m.trees = map[string]string{}
+			}
+			tree, m.trees[at] = r.tree, r.tree
+		}
+		inputs[i].Tree = tree
+	}
+	p.Inputs = inputs
+	return store.RunEvidence(p)
 }
 
 func recordList[T any](c *Controller, ctx context.Context, kind string, list func(context.Context) ([]T, error), body func(T) (map[string]any, error)) (int, error) {
