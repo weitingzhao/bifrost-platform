@@ -41,6 +41,7 @@ type b5hWorld struct {
 
 func b5hFixture(t *testing.T) *b5hWorld {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, at := b5fWorld(t, "enabled") // SELECT now(), truncated to seconds.
 	f := localGit704(t)
 	base := f.bases[platformRepo]
@@ -57,7 +58,7 @@ func b5hFixture(t *testing.T) *b5hWorld {
 	lc := &controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: gits, Drill: &controller.DrillSources{Facts: src}}
 	ok(t, lc.LandingDrillBranch(ctx, gits[platformRepo], op, store.DecisionAt(ctx)))
 	prepared := landingState(t, w, landingRepoStream).Operations[op].PreparedAt
-	store.FreezeEventClock(prepared.Add(2 * time.Minute))
+	freezeClock(t, prepared.Add(2*time.Minute))
 	_, err = lc.LandingDrillCI(ctx, controller.DrillSources{Facts: src,
 		Main:          func(context.Context, string) (string, error) { return base, nil },
 		WindowBlocked: func(context.Context, string) (bool, error) { return false, nil },
@@ -149,6 +150,7 @@ func (x *b5hWorld) controller(db store.DB) *stgrelease.Controller {
 }
 func (x *b5hWorld) state(t *testing.T) store.StgState {
 	t.Helper()
+	ctx := ctxOf(t)
 	s, err := store.ReadStgRelease(ctx, x.w.rt)
 	ok(t, err)
 	return s
@@ -165,12 +167,14 @@ func (x *b5hWorld) restart(t *testing.T) {
 }
 func (x *b5hWorld) advance(t *testing.T, d time.Duration) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, x.c.Close())
-	store.FreezeEventClock(store.DecisionAt(ctx).Add(d))
+	freezeClock(t, store.DecisionAt(ctx).Add(d))
 	x.clock.SetTime(store.DecisionAt(ctx))
 }
 func (x *b5hWorld) until(t *testing.T, want func(store.StgState) bool) {
 	t.Helper()
+	ctx := ctxOf(t)
 	for range 12 {
 		if want(x.state(t)) {
 			return

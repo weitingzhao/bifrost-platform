@@ -27,10 +27,12 @@ func firstOp(t *testing.T, w *world, task string) (landing.Operation, bool) {
 	return o, found
 }
 
-// Serial: FreezeEventClock (goalDrill). A refusal no later pass can turn
+// A refusal no later pass can turn
 // around is recorded, and the mission is free at once; a read error after a
 // refusing answer does not hide it (the claim stops reading there).
 func TestClaimRecordsRefusalForGood(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	readErr := errors.New("history read failed")
 	for _, c := range []struct {
 		name, reason, why string
@@ -77,11 +79,13 @@ func TestClaimRecordsRefusalForGood(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A refusal that may pass by itself (here: history
+// A refusal that may pass by itself (here: history
 // unknown) records nothing and keeps the mission, past the old grace and for
 // hours; at the window's end the close records failed{bound} and closes, in
 // one transaction.
 func TestRefusalThatMayPassHoldsUntilTheWindow(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	src.History = func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{State: landing.Unknown}, nil
@@ -95,17 +99,17 @@ func TestRefusalThatMayPassHoldsUntilTheWindow(t *testing.T) {
 	if _, found := firstOp(t, w, task); found {
 		t.Fatal("a refusal that may pass was recorded")
 	}
-	restore := store.FreezeEventClock(accepted)
+	restore := freezeClock(t, accepted)
 	defer restore()
 	for _, after := range []time.Duration{3 * time.Minute, time.Hour, landing.ClaimWindow - time.Minute} {
-		store.FreezeEventClock(accepted.Add(after))
+		freezeClock(t, accepted.Add(after))
 		closed, err := store.CloseMissions(ctx, w.rt)
 		ok(t, err)
 		if len(closed) != 0 {
 			t.Fatalf("closed %v after %v with the root still queued", closed, after)
 		}
 	}
-	store.FreezeEventClock(accepted.Add(landing.ClaimWindow + time.Minute))
+	freezeClock(t, accepted.Add(landing.ClaimWindow+time.Minute))
 	closed, err := store.CloseMissions(ctx, w.rt)
 	ok(t, err)
 	o, found := firstOp(t, w, task)
@@ -144,11 +148,13 @@ func TestHandoffHoldsWithoutACurrentRule(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock (goalDrill). The pass's database step: no Git, no
+// The pass's database step: no Git, no
 // rule, no claim. A root of a stopped mission ends failed{stale}; a root whose
 // window is over ends failed{bound}; a paused mission's root waits. Once
 // recorded, a second run records nothing.
 func TestSettleUnclaimed(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, stopped, _ := goalDrill(t, "M-3")
 	w.goalMission(t, "M-4")
 	late := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a second drill", BaseCommit: commitB})
@@ -169,7 +175,7 @@ func TestSettleUnclaimed(t *testing.T) {
 		t.Fatalf("now: recorded %v, want the stopped mission's root", got)
 	}
 	// A decision is taken at the clock (CUT §9): the time passes on it.
-	defer store.FreezeEventClock(now.Add(landing.ClaimWindow + time.Minute))()
+	defer freezeClock(t, now.Add(landing.ClaimWindow+time.Minute))()
 	got, err = store.SettleUnclaimed(ctx, w.rt, "bifrost-platform", now.Add(landing.ClaimWindow+time.Minute))
 	ok(t, err)
 	slices.Sort(got)
@@ -190,16 +196,18 @@ func TestSettleUnclaimed(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock (goalDrill). Never claimed and past its window, the
+// Never claimed and past its window, the
 // claim records failed{bound} from the database alone: no Git read.
 func TestClaimPastTheWindowRecordsBoundWithoutGit(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	src.Result = func(context.Context, string, string, string, string, string) (bool, []rules.LandingChange, error) {
 		t.Fatal("Result read for a root past its window")
 		return false, nil, nil
 	}
 	later := time.Now().Add(landing.ClaimWindow + time.Minute)
-	defer store.FreezeEventClock(later)() // CUT §9: decided at the clock
+	defer freezeClock(t, later)() // CUT §9: decided at the clock
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, later)
 	ok(t, err)
 	if op != "" || d.Reason != "bound" {
@@ -251,11 +259,13 @@ func TestClaimOutsideTheHandoffRecordsNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via acceptedDrill. Through the pass itself (review
+// Through the pass itself (review
 // 654 N654-1): a claim whose read takes two minutes and then fails waits a
 // minute from when it failed, not from when the pass began; the next pass a
 // second later reads nothing for it, one at the wait's end reads it again.
 func TestDrillPassWaitStartsWhenTheReadFails(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, src := acceptedDrill(t)
 	start := time.Now()
 	clock := start

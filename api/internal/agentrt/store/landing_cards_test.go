@@ -14,6 +14,7 @@ import (
 var cardStream = store.CardsStream("bifrost-platform")
 
 func putCard(w *world, actor, stream, name string, body map[string]any) error {
+	ctx := w.ctx
 	body["v"] = "1"
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: stream, Type: "note", Actor: actor, Body: map[string]any{"text": "card", name: body}})

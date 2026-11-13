@@ -12,9 +12,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Serial: PG and event clock. A foreign holder appears between the committed
+// Serial: t.Setenv (the local Git fixture). A foreign holder appears between the committed
 // debit and the transport's last permit check, then an external run covers R.
 func TestB5HCrossPGLostLeaseThenExternal(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5hFixture(t)
 	var foreign delivery.STGWindow
 	x.runs.beforeSend = func() {
@@ -73,9 +74,10 @@ func TestB5HCrossPGLostLeaseThenExternal(t *testing.T) {
 	}
 }
 
-// Serial: change the authoritative rule during the external Git read, while
+// Serial: t.Setenv (the local Git fixture). Change the authoritative rule during the external Git read, while
 // the controller's immutable local policy is still stale and enabled.
 func TestB5HCrossPGNoneAfterGateRead(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5hFixture(t)
 	before := x.state(t)
 	reads := 0

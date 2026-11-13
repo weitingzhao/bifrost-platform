@@ -47,6 +47,7 @@ func (*reviewControlRuns) ReadHealth(context.Context) delivery.STGHealth {
 
 func reviewOpenPG(t *testing.T) (*b5Fixture, store.LandingSource) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	// PostgreSQL owns defaults on task/mission rows. Use its clock as the
 	// reference for claim/prepared as well as the gate. A fixed historical
@@ -55,7 +56,7 @@ func reviewOpenPG(t *testing.T) (*b5Fixture, store.LandingSource) {
 	ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&dbNow))
 	w, root, op, src, prepared := liveReadyInWorld(t, w, dbNow.UTC().Truncate(time.Microsecond))
 	at := prepared.Add(10 * time.Minute)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
 	if !d.Allowed {
@@ -73,6 +74,7 @@ func reviewOpenPG(t *testing.T) (*b5Fixture, store.LandingSource) {
 
 func reviewLandReversalPG(t *testing.T, x *b5Fixture, src store.LandingSource, p string) (string, string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := x.w
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "authorized reversal", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
@@ -90,7 +92,7 @@ func reviewLandReversalPG(t *testing.T, x *b5Fixture, src store.LandingSource, p
 	} {
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
-	store.FreezeEventClock(prepared.Add(time.Minute))
+	freezeClock(t, prepared.Add(time.Minute))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, func(context.Context, landing.Operation) (store.LiveObservation, error) {
 		return store.LiveObservation{Main: commitB, CI: landing.CIRun{Run: "reversal-ci", R: p, Status: "Succeeded", CreatedAt: prepared.Add(time.Second)}}, nil
 	})
@@ -104,8 +106,10 @@ func reviewLandReversalPG(t *testing.T, x *b5Fixture, src store.LandingSource, p
 	return root, op
 }
 
-// Serial: real PostgreSQL plus FreezeEventClock; all external I/O is injected.
+// Real PostgreSQL; all external I/O is injected.
 func TestStgControlPGOpenReversalAndReadFailure(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"manual_revert", "landed_revert", "read_failure"} {
 		t.Run(mode, func(t *testing.T) {
 			x, src := reviewOpenPG(t)
@@ -115,7 +119,7 @@ func TestStgControlPGOpenReversalAndReadFailure(t *testing.T) {
 				reversalRoot, reversalOp = reviewLandReversalPG(t, x, src, p)
 			}
 			at := store.DecisionAt(ctx).Add(time.Second)
-			store.FreezeEventClock(at)
+			freezeClock(t, at)
 			clock := clocktesting.NewFakeClock(at)
 			core := fake.NewSimpleClientset()
 			gvr := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}

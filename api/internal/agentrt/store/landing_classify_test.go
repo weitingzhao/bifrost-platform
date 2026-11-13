@@ -18,6 +18,7 @@ import (
 // landing enabled, the live mode recorded, then mission M-3 active.
 func liveWorld(t *testing.T, stgRelease string, at time.Time) *world {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	body := strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: "+stgRelease, 1)
@@ -29,15 +30,15 @@ func liveWorld(t *testing.T, stgRelease string, at time.Time) *world {
 	if earlier := databaseNow.Add(-time.Hour); earlier.Before(liveAt) {
 		liveAt = earlier
 	}
-	store.FreezeEventClock(liveAt.Add(-time.Hour))
+	freezeClock(t, liveAt.Add(-time.Hour))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", at)
 		return e
 	}))
-	store.FreezeEventClock(liveAt)
+	freezeClock(t, liveAt)
 	_, err = store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
-	store.FreezeEventClock(at.Add(-50 * time.Minute))
+	freezeClock(t, at.Add(-50*time.Minute))
 	w.goalMission(t, "M-3")
 	var created, checkedAt time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT created_at, now() FROM agentrt.mission WHERE mission_id='M-3'`).Scan(&created, &checkedAt))
@@ -52,12 +53,12 @@ func liveWorld(t *testing.T, stgRelease string, at time.Time) *world {
 // last (prodChain's phases), then the records given.
 func liveRoot(t *testing.T, w *world, op string, at time.Time, last string, then ...map[string]any) string {
 	t.Helper()
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "live " + op, BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	prodChain(t, w, root, op, at.Add(-30*time.Minute), last)
 	for i, r := range then {
-		store.FreezeEventClock(at.Add(-20*time.Minute + time.Duration(i)*time.Minute))
+		freezeClock(t, at.Add(-20*time.Minute+time.Duration(i)*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
 	return root
@@ -65,7 +66,8 @@ func liveRoot(t *testing.T, w *world, op string, at time.Time, last string, then
 
 func closePass(t *testing.T, w *world, now time.Time) string {
 	t.Helper()
-	store.FreezeEventClock(now)
+	ctx := ctxOf(t)
+	freezeClock(t, now)
 	_, err := store.CloseMissions(ctx, w.rt)
 	ok(t, err)
 	return w.state(t, "mission", "M-3")
@@ -73,17 +75,20 @@ func closePass(t *testing.T, w *world, now time.Time) string {
 
 func effectiveRead(t *testing.T, w *world, now time.Time) {
 	t.Helper()
-	store.FreezeEventClock(now)
+	ctx := ctxOf(t)
+	freezeClock(t, now)
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}))
 	ok(t, err)
 }
 
-// Serial: FreezeEventClock. A landed root: the first pass opens a closing
+// A landed root: the first pass opens a closing
 // round and holds; a read after the round's start lets it close done; a read
 // before it does not.
 func TestB4ClosesALandingOnFreshEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4a:1", at, "main_intent", newLandingRecord("land:b4a:1", "main_result", "outcome", "ok"))
 	effectiveRead(t, w, at.Add(-10*time.Minute)) // landed, effective, but before any round
@@ -109,11 +114,13 @@ func TestB4ClosesALandingOnFreshEvidence(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A round past its 30 minutes does not count; a
+// A round past its 30 minutes does not count; a
 // new round opens.
 func TestB4RoundExpires(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4b:1", at, "main_intent", newLandingRecord("land:b4b:1", "main_result", "outcome", "ok"))
 	effectiveRead(t, w, at.Add(-10*time.Minute))
@@ -129,11 +136,13 @@ func TestB4RoundExpires(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Unresolved roots hold the mission whatever the
+// Unresolved roots hold the mission whatever the
 // time; disposed ones let it stop; a rule that is not none holds a landing.
 func TestB4HoldsAndStops(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-48 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4c:1", at, "branch_pushed", newLandingRecord("land:b4c:1", "failed", "why", "stale"))
 	for _, d := range []time.Duration{0, 7 * time.Hour, 30 * time.Hour} {
@@ -164,11 +173,13 @@ func TestB4HoldsAndStops(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A mission without the live mode closes as
+// A mission without the live mode closes as
 // before (the STG drill and old missions are unchanged).
 func TestB4LeavesMissionsOutsideTheScope(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	w.goalMission(t, "M-3")
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "no landing", BaseCommit: commitB})
@@ -185,32 +196,36 @@ func TestB4LeavesMissionsOutsideTheScope(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. CUT §11.8 v3 item 6: with the live mode on the
+// CUT §11.8 v3 item 6: with the live mode on the
 // stream, the reconciler's own loop ends a root at its six hours with the
 // live switch off and no Git: failed{bound}, which the cards then ask about.
 func TestB4BoundsSettleWithoutTheLiveLoop(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4f:1", at, "branch_pushed")
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Now: func() time.Time { return at.Add(6 * time.Hour) }}
 	ctl.Reconcile = &controller.LandingReconcile{}
-	store.FreezeEventClock(at.Add(6 * time.Hour))
+	freezeClock(t, at.Add(6*time.Hour))
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if p, o := phaseOf(t, w, "land:b4f:1"); p != "failed" || o != "bound" {
 		t.Fatalf("not ended at its bound: %s %s", p, o)
 	}
 }
 
-// Serial: FreezeEventClock. CUT §11.8 v3 item 4: every unresolved root has
+// CUT §11.8 v3 item 4: every unresolved root has
 // an Owner's exit. A root already in main asks to be counted; counted
 // delivered, its mission closes done. A landing main has not shown in
 // effect for two hours asks too; counted not delivered, the mission stops.
 func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "in main", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+root+":1", "failed", "why", "in_main")))
@@ -239,7 +254,7 @@ func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
 
 	w2 := liveWorld(t, "none", at)
 	liveRoot(t, w2, "land:b4g:1", at, "main_intent", newLandingRecord("land:b4g:1", "main_result", "outcome", "ok"))
-	store.FreezeEventClock(at.Add(-10 * time.Minute))
+	freezeClock(t, at.Add(-10*time.Minute))
 	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true})) // landed, validity unknown
 	ok(t, err)
 	f2 := newFakeCards(func() time.Time { return at })
@@ -258,12 +273,14 @@ func TestB4OwnerCountsAndTheMissionCloses(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. CUT §11.8 v3 items 2, 4: after its mission
+// CUT §11.8 v3 items 2, 4: after its mission
 // closed done, a landing is still read for a day; a reversal then is told
 // on a late_revert card, and the mission stays done.
 func TestB4ReversalAfterTheCloseIsTold(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4h:1", at, "main_intent", newLandingRecord("land:b4h:1", "main_result", "outcome", "ok"))
 	effectiveRead(t, w, at.Add(-10*time.Minute))
@@ -273,7 +290,7 @@ func TestB4ReversalAfterTheCloseIsTold(t *testing.T) {
 		t.Fatal(st)
 	}
 	revert := strings.Repeat("f", 40)
-	store.FreezeEventClock(at.Add(3 * time.Hour))
+	freezeClock(t, at.Add(3*time.Hour))
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations["land:b4h:1"]; !o.Reverted {
@@ -287,11 +304,13 @@ func TestB4ReversalAfterTheCloseIsTold(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 670 R-07: a card that ended with its
+// Review 670 R-07: a card that ended with its
 // answer unknown (lost) is shown on its root in the mission's status.
 func TestB4StatusShowsALostCard(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:b4i:1", at, "branch_pushed", newLandingRecord("land:b4i:1", "failed", "why", "conflict"))
 	f := newFakeCards(func() time.Time { return at })

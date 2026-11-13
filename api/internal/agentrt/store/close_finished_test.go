@@ -12,6 +12,7 @@ import (
 // closeReason is the reason of mission m's last move.
 func (w *world) closeReason(t *testing.T, m string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var reason string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE mission_id = $1
 	  AND event_type = 'mission_state_changed' ORDER BY event_id DESC LIMIT 1`, m).Scan(&reason))

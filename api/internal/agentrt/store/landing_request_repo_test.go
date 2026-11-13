@@ -8,8 +8,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. Both repository fixtures freeze the event clock.
+// Both repository fixtures freeze the event clock.
 func TestLandingRequestsUseOperationRepository(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, repo := range []string{"bifrost-platform", infraRepo} {
 		t.Run(repo, func(t *testing.T) {
 			var w *world

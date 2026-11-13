@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,12 +40,13 @@ type cores struct {
 // lines[i] lines, claimed and recorded as one batch, every branch pushed.
 func coresBatch(t *testing.T, lines ...int) *cores {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, roots, at := batchRoots(t, len(lines))
 	c := &cores{w: w, roots: roots, at: at, lines: map[string]int{}, presentation: map[string]bool{}}
 	for i, root := range roots {
 		c.lines[root] = lines[i]
 	}
-	store.FreezeEventClock(at.Add(-35 * time.Minute))
+	freezeClock(t, at.Add(-35*time.Minute))
 	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
 	c.src = store.LandingSource{
 		Result: func(_ context.Context, _, task, _, _, _ string) (bool, []rules.LandingChange, error) {
@@ -69,7 +71,7 @@ func coresBatch(t *testing.T, lines ...int) *cores {
 		},
 	}
 	c.gsrc = store.GrantSources{Facts: c.src, Main: func(context.Context) (string, error) { return commitA, nil }}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	for _, root := range roots {
 		op, d, err := store.ClaimLandingInBatch(ctx, w.rt, c.src, "prod", root, at, c.ops)
 		ok(t, err)
@@ -99,6 +101,7 @@ func (c *cores) coresSetPresentation(root string, fail bool) {
 
 func (c *cores) coresGate(t *testing.T) ([]store.Authorization, landing.Decision) {
 	t.Helper()
+	ctx := ctxOf(t)
 	auths, d, err := store.AuthorizeBatchPush(ctx, c.w.rt, c.src, c.ops, func(context.Context, landing.Operation) (store.LiveObservation, error) {
 		return store.LiveObservation{Main: commitA, CI: c.ci}, nil
 	})
@@ -109,7 +112,7 @@ func (c *cores) coresGate(t *testing.T) ([]store.Authorization, landing.Decision
 // waiting runs the batch gate before any grant: the lead alone waits.
 func (c *cores) coresWaiting(t *testing.T) {
 	t.Helper()
-	store.FreezeEventClock(c.at.Add(-20 * time.Minute))
+	freezeClock(t, c.at.Add(-20*time.Minute))
 	if auths, d := c.coresGate(t); d.Allowed || d.Reason != "awaiting_grant" || d.Detail["op"] != c.ops[0] || auths != nil {
 		t.Fatalf("the lead does not wait: %+v", d)
 	}
@@ -119,22 +122,26 @@ func (c *cores) coresWaiting(t *testing.T) {
 			t.Fatal("member", i, p)
 		}
 	}
-	store.FreezeEventClock(c.at)
+	freezeClock(t, c.at)
 }
 
 func (c *cores) coresMaterial(t *testing.T) *store.LandingGrantMaterial {
 	t.Helper()
+	ctx := ctxOf(t)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.ops[0], false)
 	ok(t, err)
 	return m
 }
 
-var coresApprovals = 0
+// coresApprovals numbers the approvals of the whole run: tests that run at
+// once take from it, each number once.
+var coresApprovals atomic.Int64
 
 func (c *cores) coresGrant(t *testing.T, m *store.LandingGrantMaterial) store.LandingGrant {
 	t.Helper()
-	coresApprovals++
-	a := store.GrantApproval{ID: fmt.Sprintf("appr_cores_%d", coresApprovals), Number: int64(300 + coresApprovals), Action: m.Action,
+	ctx := ctxOf(t)
+	n := coresApprovals.Add(1)
+	a := store.GrantApproval{ID: fmt.Sprintf("appr_cores_%d", n), Number: 300 + n, Action: m.Action,
 		ParamsHash: strings.Repeat("cd", 32), ApprovedAt: c.at.Add(-time.Minute)}
 	g, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, a, store.GrantParams{Env: "prod", Repo: "bifrost-platform", Task: c.roots[0], Op: c.ops[0],
 		R: commitB, MaterialDigest: m.MaterialDigest})
@@ -146,6 +153,7 @@ func (c *cores) coresGrant(t *testing.T, m *store.LandingGrantMaterial) store.La
 // the grant its landing_batch_grant names.
 func (c *cores) coresIntents(t *testing.T) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	rows, err := c.w.rt.Query(ctx, `SELECT body_json->'landing'->>'op', COALESCE(body_json->'landing_grant_use'->>'grant_id',''),
 	    COALESCE(body_json->'landing_batch_grant'->>'grant_id','') FROM agentrt.event
 	  WHERE event_stream_id = $1 AND body_json->'landing'->>'kind' = 'main_intent' ORDER BY seq`, landingRepoStream)
@@ -160,12 +168,14 @@ func (c *cores) coresIntents(t *testing.T) []string {
 	return out
 }
 
-// Serial: FreezeEventClock. Two core roots, the second's change large:
+// Two core roots, the second's change large:
 // the lead's material waives their soft checks without a size category, each
 // member's shown, and takes approve_core_landing; the one grant on it names
 // the batch, and at the gate authorizes both members, the lead consuming it
 // and the other's main_intent naming it.
 func TestBatchCoresOneGrantAuthorizesTheBatch(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	c := coresBatch(t, 1, 10000)
 	c.coresWaiting(t)
 	m := c.coresMaterial(t)
@@ -195,11 +205,13 @@ func TestBatchCoresOneGrantAuthorizesTheBatch(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The STG gate reads the batch as the landing
+// The STG gate reads the batch as the landing
 // gate wrote it: the lead used the grant, the other member rests on it, and
 // the member carries that grant and the batch it names (M-374, 2026-11-10:
 // without it B5 refused the batch as "rule").
 func TestBatchCoresSTGGateReadsTheMemberGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := coresBatch(t, 1, 400)
 	c.coresWaiting(t)
 	g := c.coresGrant(t, c.coresMaterial(t))
@@ -218,11 +230,13 @@ func TestBatchCoresSTGGateReadsTheMemberGrant(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A grant that does not waive one of a member's
+// A grant that does not waive one of a member's
 // soft checks authorizes nothing: the member is refused awaiting_grant,
 // naming it, nothing of the batch is written, and the grant stays usable.
 // The member's new check also changes the lead's material: another card.
 func TestBatchCoresGateRefusesAMemberTheGrantDoesNotWaive(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := coresBatch(t, 1, 1)
 	c.coresWaiting(t)
 	m := c.coresMaterial(t)
@@ -251,9 +265,11 @@ func TestBatchCoresGateRefusesAMemberTheGrantDoesNotWaive(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A grant whose batch is another (other
+// A grant whose batch is another (other
 // members) is the lead's alone: the member is refused, nothing written.
 func TestBatchCoresGateRefusesTheGrantOfAnotherBatch(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := coresBatch(t, 1, 1)
 	c.coresWaiting(t)
 	m := c.coresMaterial(t)

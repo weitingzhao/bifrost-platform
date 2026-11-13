@@ -15,10 +15,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// Serial: FreezeEventClock (through goalDrill). The normal controller can run
+// The normal controller can run
 // Close between acceptance and the next drill tick. At that point an eligible
 // task must still get its first landing turn.
 func TestWork638FirstClaimSurvivesCloseTick(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	closed, err := store.CloseMissions(ctx, w.rt)
 	ok(t, err)
@@ -30,8 +32,10 @@ func TestWork638FirstClaimSurvivesCloseTick(t *testing.T) {
 }
 
 // Removing the drill adapters models AGENTRT_LANDING_DRILL=off after restart.
-// Serial: FreezeEventClock. No pass can settle anything, yet the hold ends.
+// No pass can settle anything, yet the hold ends.
 func TestWork638DisabledDrillDoesNotHoldForever(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, phase := range []string{"claimed", "parked", "discarded"} {
 		t.Run(phase, func(t *testing.T) {
 			w, task, src := goalDrill(t, "M-3")
@@ -53,7 +57,7 @@ func TestWork638DisabledDrillDoesNotHoldForever(t *testing.T) {
 				}
 			}
 			later := at.Add(7 * time.Hour)
-			restore := store.FreezeEventClock(later)
+			restore := freezeClock(t, later)
 			defer restore()
 			c := controller.Controller{DB: w.rt, Env: "stg", Now: func() time.Time { return later }}
 			ok(t, c.LandingDrillPass(ctx))
@@ -110,11 +114,13 @@ func (r work638AfterMissionRow) Scan(dest ...any) error {
 	return r.after()
 }
 
-// Serial: FreezeEventClock (acceptedDrill). A legal step rebind that tries to
+// A legal step rebind that tries to
 // move the task while the claim holds its locks waits for the claim: the claim
 // reads, locks and records the task under one mission. At 89722fd8 (mission
 // lock only) the rebind went through mid-claim.
 func TestWork638ClaimLocksTheMissionUsedByFacts(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	w.goalMission(t, "M-3")
 	a := &asker{}

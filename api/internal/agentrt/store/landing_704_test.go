@@ -16,6 +16,7 @@ import (
 // Count absent streams; lastSeq deliberately requires an existing row.
 func landingStreamRows704(t *testing.T, w *world, stream string) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event_stream WHERE event_stream_id=$1`, stream).Scan(&n))
 	return n
@@ -25,9 +26,11 @@ func link704(t *testing.T, w *world, root, dep string) {
 	w.legacy(t, fmt.Sprintf("INSERT INTO agentrt.task_dependency(task_id,depends_on_task_id) VALUES('%s','%s')", root, dep))
 }
 
-// Serial: signing anchor and event clock. All cases enter the actual claim
+// All cases enter the actual claim
 // transaction; an accepted dependency has not yet taken effect on main.
 func TestReview704PendingDependencyDoesNotHideFloorPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, which := range []string{"path"} {
 		for _, bad := range []bool{false, true} {
 			for _, effective := range []bool{false, true} {
@@ -86,10 +89,11 @@ func TestReview704PendingDependencyDoesNotHideFloorPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and the signing anchor.
 func TestReview704UnsignedDependencyClaimPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	dep := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "infra dependency", Repo: infraRepo, BaseCommit: commitB})
 	w.passRound(t, dep, "h1", "h2", "h3")

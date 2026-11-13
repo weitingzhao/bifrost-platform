@@ -8,11 +8,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: SetHook, FreezeEventClock (goalDrill).
+// Serial: SetHook.
 // TD-447 3: one CloseMissions pass folds a repository's landing stream once
 // for all its closable missions while the stream does not move, and again
 // once it moves.
 func TestClosePassFoldsTheLandingStreamOnce(t *testing.T) {
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	w.goalMission(t, "M-4")
 	other := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a second drill", BaseCommit: commitB})
@@ -32,7 +33,7 @@ func TestClosePassFoldsTheLandingStreamOnce(t *testing.T) {
 	// the claim recorded that it never will be (TD-447 4), so M-4 closes;
 	// both read the same stream.
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+other+":1", "failed", "why", "result")))
-	restore := store.FreezeEventClock(time.Now().Add(3 * time.Minute))
+	restore := freezeClock(t, time.Now().Add(3*time.Minute))
 	defer restore()
 	closed, err := store.CloseMissions(ctx, w.rt)
 	ok(t, err)
@@ -52,12 +53,13 @@ func TestClosePassFoldsTheLandingStreamOnce(t *testing.T) {
 	}
 }
 
-// Serial: SetHook, FreezeEventClock (goalDrill). Review 648 R648-1: within
+// Serial: SetHook. Review 648 R648-1: within
 // one pass, after the first mission's fold is kept and before the second
 // mission is read, a retry for the second mission's root commits on another
 // connection. The second read sees the head moved, folds again, and holds
 // the mission; reusing the kept fold (no head check) would close it.
 func TestClosePassFoldsAgainWhenTheStreamMovesMidPass(t *testing.T) {
+	ctx := ownClock(t)
 	w, first, src := goalDrill(t, "M-3")
 	w.goalMission(t, "M-4")
 	other := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a second drill", BaseCommit: commitB})
@@ -65,16 +67,16 @@ func TestClosePassFoldsAgainWhenTheStreamMovesMidPass(t *testing.T) {
 	// M-3's root was never claimed and never will be (TD-447 4): M-3 closes.
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+first+":1", "failed", "why", "result")))
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, other, at)
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("fixture claim", d)
 	}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "stale")))
 	later := at.Add(3 * time.Minute)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 
 	answerConn, err := w.db.Pool(t, w.db.Runtime).Acquire(ctx)
 	ok(t, err)

@@ -31,29 +31,30 @@ func c4Source(path string) store.LandingSource {
 
 func c4Ready(t *testing.T, path string) (*world, string, string, store.LandingSource, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C4", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	// Nothing waits for a grant until grants are enabled (review 694 R-03).
 	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
 	src := c4Source(path)
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {
 		t.Fatal("preparation claim", d)
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	return w, root, op, src, at
 }
 
 func c4Prepare(t *testing.T, w *world, root, op string, at time.Time, pushed bool) {
 	t.Helper()
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	parts := strings.Split(op, ":")
 	ref := "refs/heads/land/prod/" + root + "/" + parts[len(parts)-1]
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false)))
@@ -65,6 +66,7 @@ func c4Prepare(t *testing.T, w *world, root, op string, at time.Time, pushed boo
 
 func c4Wait(t *testing.T) (*world, string, string, store.LandingSource, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, root, op, src, at := c4Ready(t, "api/internal/agentrt/store/c4.go")
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(at.Add(-29*time.Minute)))
 	ok(t, err)
@@ -78,10 +80,12 @@ func c4Request(op, status string, at time.Time) store.LandingGrantRequest {
 	return store.LandingGrantRequest{Op: op, ApprovalID: "approval_c4", ApprovalNumber: 100, Status: status, ParamsHash: strings.Repeat("a", 64), SeenAt: at}
 }
 
-// Serial: the real database fixtures freeze the global event clock. T37's
+// T37's
 // C-4 half: a core root prepares/waits, releases its slot and quota, another
 // root lands. Grant creation/consumption and PROD acceptance belong to C-5/C-7.
 func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, src, at := c4Wait(t)
 	s := landingState(t, w, landingRepoStream)
 	o := s.Operations[op]
@@ -129,7 +133,7 @@ func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
 		t.Fatal("wait held slot", d)
 	}
 	c4Prepare(t, w, other, op2, at, true)
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, plain, op2, observed(at))
 	ok(t, err)
 	if !d.Allowed || auth.Op != op2 {
@@ -143,7 +147,7 @@ func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
 	}
 	// Reject only the first root; B4 then closes on the second root's
 	// fresh delivery and preserves the rejected approval as disposition.
-	store.FreezeEventClock(at.Add(4 * time.Minute))
+	freezeClock(t, at.Add(4*time.Minute))
 	_, err = store.RecordLandingGrantRequest(ctx, w.rt, c4Request(op, "rejected", at.Add(4*time.Minute)))
 	ok(t, err)
 	closePass(t, w, at.Add(5*time.Minute))
@@ -153,9 +157,11 @@ func TestC4T37WaitingReleasesSlotAndNoGrantNeverPushes(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T40: latest rejection atomically binds the approval;
+// T40: latest rejection atomically binds the approval;
 // expiry/unknown merely observe. Every malformed rejection has a valid control.
 func TestC4T40RejectionOwnershipAndObservation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, _, at := c4Wait(t)
 	for i, status := range []string{"pending", "expired", "unknown"} {
 		r := c4Request(op, status, at)
@@ -202,10 +208,12 @@ func TestC4T40RejectionOwnershipAndObservation(t *testing.T) {
 	}))
 }
 
-// Serial: FreezeEventClock; concurrent workers use independent PG connections.
+// Concurrent workers use independent PG connections.
 // T41/T42/T43: shared refresh transition, unique k+1, old-decision isolation,
 // and branch push response loss recovered by reading the same ref and SHA.
 func TestC4T41T42RefreshGenerationsAndLostBranchResponse(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, src, at := c4Wait(t)
 	old := landingState(t, w, landingRepoStream).Operations[op]
 	if _, err := store.RefreshWaitingForTest(ctx, w.rt, root, op, commitA); err == nil {
@@ -256,7 +264,7 @@ func TestC4T41T42RefreshGenerationsAndLostBranchResponse(t *testing.T) {
 	if newOp.Ref == old.Ref || newOp.ClaimNumber != 2 {
 		t.Fatal(newOp)
 	}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	_, err = store.RecordLandingGrantRequest(ctx, w.rt, c4Request(op, "rejected", at.Add(time.Minute)))
 	ok(t, err)
 	if phase, _ := phaseOf(t, w, next); phase != "branch_pushed" {
@@ -284,17 +292,19 @@ func TestC4T41T42RefreshGenerationsAndLostBranchResponse(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T39/T43/T47: 72h settlement runs with live off;
+// T39/T43/T47: 72h settlement runs with live off;
 // repetition adds no event, expiry offers try_again and retry resets E/W only.
 func TestC4T39T47ExpirationSettlesWithoutLiveAndRetries(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, _, at := c4Wait(t)
-	store.FreezeEventClock(at.Add(71 * time.Hour))
+	freezeClock(t, at.Add(71*time.Hour))
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: false, Now: decisionClock(ctx), Reconcile: &controller.LandingReconcile{}}
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if phase, _ := phaseOf(t, w, op); phase != "awaiting_grant" {
 		t.Fatal(phase)
 	}
-	store.FreezeEventClock(at.Add(72 * time.Hour))
+	freezeClock(t, at.Add(72*time.Hour))
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if phase, why := phaseOf(t, w, op); phase != "failed" || why != "approval_expired" {
 		t.Fatal(phase, why)
@@ -321,9 +331,11 @@ func TestC4T39T47ExpirationSettlesWithoutLiveAndRetries(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T46: same reconciler entry succeeds on an active
+// T46: same reconciler entry succeeds on an active
 // mission and fails stale after only its state changes, with no Git/CI source.
 func TestC4T46WaitingMissionStop(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, _, at := c4Wait(t)
 	ended, err := store.SettleWaitingLandingStale(ctx, w.rt)
 	ok(t, err)
@@ -338,7 +350,7 @@ func TestC4T46WaitingMissionStop(t *testing.T) {
 		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET state='stopped',version=version+1 WHERE mission_id='M-3'`)
 		return err
 	}))
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ended, err = store.SettleWaitingLandingStale(ctx, w.rt)
 	ok(t, err)
 	if !slices.Equal(ended, []string{op}) {
@@ -349,11 +361,13 @@ func TestC4T46WaitingMissionStop(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T39: two generations contribute to the same
+// T39: two generations contribute to the same
 // retry epoch; main movement does not reset the 72-hour waiting allowance.
 func TestC4T39WaitingAccumulatesAcrossGenerations(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, src, at := c4Wait(t)
-	store.FreezeEventClock(at.Add(40 * time.Hour))
+	freezeClock(t, at.Add(40*time.Hour))
 	_, err := store.RefreshWaitingForTest(ctx, w.rt, root, op, commitB)
 	ok(t, err)
 	next, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at.Add(40*time.Hour))
@@ -362,14 +376,14 @@ func TestC4T39WaitingAccumulatesAcrossGenerations(t *testing.T) {
 		t.Fatal(d)
 	}
 	c4Prepare(t, w, root, next, at.Add(40*time.Hour), true)
-	store.FreezeEventClock(at.Add(40*time.Hour + 2*time.Minute))
+	freezeClock(t, at.Add(40*time.Hour+2*time.Minute))
 	_, d, err = store.AuthorizeLandingPush(ctx, w.rt, src, next, observed(at.Add(40*time.Hour)))
 	ok(t, err)
 	if d.Reason != "awaiting_grant" {
 		t.Fatal(d)
 	}
 	now := at.Add(73*time.Hour + 2*time.Minute)
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	s, err := store.SettleLandingDrillBounds(ctx, w.rt, now)
 	ok(t, err)
 	if o := s.Operations[next]; o.Phase != "failed" || o.Outcome != "approval_expired" {
@@ -380,9 +394,11 @@ func TestC4T39WaitingAccumulatesAcrossGenerations(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T44: the eighth operation may reach main; only
+// T44: the eighth operation may reach main; only
 // the need to open a ninth ends the root bound. Same stream and gate each time.
 func TestC4T44EighthPushAndNinthRefusal(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, ninth := range []bool{false, true} {
 		t.Run(fmt.Sprint(ninth), func(t *testing.T) {
 			w, root, op, src, at := c4Ready(t, "console/src/components/A.tsx")
@@ -397,14 +413,14 @@ func TestC4T44EighthPushAndNinthRefusal(t *testing.T) {
 				}
 				c4Prepare(t, w, root, op, at, true)
 			}
-			store.FreezeEventClock(at.Add(2 * time.Minute))
+			freezeClock(t, at.Add(2*time.Minute))
 			if !ninth {
 				auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(at))
 				ok(t, err)
 				if !d.Allowed || auth.Op != op {
 					t.Fatal("eighth denied", d)
 				}
-				store.FreezeEventClock(at.Add(100 * time.Hour))
+				freezeClock(t, at.Add(100*time.Hour))
 				_, err = store.SettleLandingDrillBounds(ctx, w.rt, at.Add(100*time.Hour))
 				ok(t, err)
 				if phase, _ := phaseOf(t, w, op); phase != "main_intent" {

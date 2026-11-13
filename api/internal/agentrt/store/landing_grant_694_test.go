@@ -52,13 +52,15 @@ func strictCI(c *c5, run *unstructured.Unstructured) {
 	c.gsrc.Facts.GrantCI = client.GrantCI
 }
 
-// Serial: FreezeEventClock. B-01 through the real reader (landingci.Client
+// B-01 through the real reader (landingci.Client
 // .GrantCI, as the server wires it): a run with no sibling results, with
 // another sibling, or with a remote pipeline is not green; the material says
 // so, the request and the executor refuse, nothing is written. The control's
 // grant, whose run then turns out so, is not pushed nor reserved. (On
 // dff96c3c the grant read v1's LandingCI, which took all three as green.)
 func TestC5B01StrictCIThroughTheReader(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	variants := map[string]func(*testing.T, *unstructured.Unstructured){
 		"missing siblings": func(t *testing.T, o *unstructured.Unstructured) {
 			results, _, _ := unstructured.NestedSlice(o.Object, "status", "results")
@@ -120,33 +122,35 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// Serial: FreezeEventClock. B-01 at the kick: an operation that will need a
+// B-01 at the kick: an operation that will need a
 // grant (core, grants enabled) runs CI pinned to the siblings' heads read
 // at its kick, recorded with the ci_kick; an ordinary one keeps v1's CI and
 // records no key. Without a pinning creator the waiting operation has no
 // key, and its material says ci_not_pinned.
 func TestC5B01PinnedKickForGrantOperations(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name, path string
 		pinned     bool
 	}{{"core", c5Core, true}, {"ordinary", "console/src/components/C5.tsx", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			at := time.Now().UTC().Truncate(time.Second)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			w := liveWorld(t, "none", at)
-			store.FreezeEventClock(at.Add(-40 * time.Minute))
+			freezeClock(t, at.Add(-40*time.Minute))
 			root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 B-01 kick", BaseCommit: commitB})
 			w.passRound(t, root, "h1", "h2", "h3")
 			enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
 			src := c4Source(tc.path)
-			store.FreezeEventClock(at.Add(-30 * time.Minute))
+			freezeClock(t, at.Add(-30*time.Minute))
 			op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 			ok(t, err)
 			if op == "" || !d.Allowed {
 				t.Fatal("claim", d)
 			}
 			c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-			store.FreezeEventClock(at.Add(-15 * time.Minute)) // ten minutes past preparation: CI is due
+			freezeClock(t, at.Add(-15*time.Minute)) // ten minutes past preparation: CI is due
 			var legacy, pinned []string
 			var keys []store.GrantCIKey
 			sources := controller.DrillSources{Facts: src,
@@ -191,13 +195,15 @@ func TestC5B01PinnedKickForGrantOperations(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-06 (§5.1 step 4): a pinned root waits on
+// R-06 (§5.1 step 4): a pinned root waits on
 // rule_paths with no request yet; the Owner signs a rule that allows its
 // path. The controller's next pass rechecks it once and pushes it on the
 // rule's authority (landing_rule_clear), every unwaivable check done; before
 // the new rule the recheck writes nothing. (On dff96c3c it stayed waiting
 // until main moved or 72 hours passed.)
 func TestC5R06RuleClearsAWaitingOperation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	const page = "console/src/pages/C5Page.tsx"
 	c := c5Wait(t, page, true, true)
 	p := &livePusher{outcome: landinggit.PushOK}
@@ -226,10 +232,12 @@ func TestC5R06RuleClearsAWaitingOperation(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. B-01: a waiting operation whose CI was never
+// B-01: a waiting operation whose CI was never
 // pinned (kicked before grants, or by a process that could not pin) has no
 // key: its material says ci_not_pinned and no grant can rest on it.
 func TestC5B01UnpinnedCINeverGranted(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, src, _ := c4Wait(t)
 	src.GrantPatch = func(context.Context, string, string, string) (store.GrantPatch, error) {
 		return store.GrantPatch{SHA256: strings.Repeat("7", 64), Match: true}, nil

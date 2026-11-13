@@ -35,20 +35,22 @@ func (s *statements) Exec(ctx context.Context, q string, args ...any) (pgconn.Co
 // daily quota stream read removed in cleanup wave 1.
 const landingFactsStatements = 6
 
-// Serial: FreezeEventClock. Review 694 R-03/R-04: with no grant anywhere
+// Review 694 R-03/R-04: with no grant anywhere
 // and grants not enabled, the gates' common reader makes exactly the
 // round trips it made before C-5 — the enabled check rides on the task
 // read, and the stream is read once (on dff96c3c: two more, a second read of
 // the stream for grants on each of the two stream folds).
 func TestC5R04LandingFactsCostsWhatItDid(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 R-04", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	src := c4Source("console/src/components/C5.tsx")
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 	ok(t, err)
 	if op == "" || !d.Allowed {

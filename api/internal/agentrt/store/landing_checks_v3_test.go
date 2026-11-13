@@ -9,10 +9,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: acceptedDrill freezes the process event clock. The world fixture
+// The world fixture
 // uses AGENTRT_TEST_PG and skips without it. These are the existing v1 store
 // entrypoints, not C-4/C-5's as-yet-unimplemented grant lifecycle.
 func TestLandingV1StructuralAndFloorStoreRefusals(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name   string
 		mutate func(*rules.LandingChange)
@@ -62,10 +64,12 @@ func TestLandingV1StructuralAndFloorStoreRefusals(t *testing.T) {
 	}
 }
 
-// Serial: liveReady/FreezeEventClock. Verify the existing final gate rejects
+// Verify the existing final gate rejects
 // a changed trusted diff without writing main_intent or reserving quota.
 // C-4 now prepares core paths for a grant; absolute/structure still refuse.
 func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name   string
 		mutate func(*rules.LandingChange)
@@ -84,7 +88,7 @@ func TestLandingV1FinalGateRechecksAbsoluteAndStructure(t *testing.T) {
 			for _, reject := range []bool{false, true} {
 				w, _, op, src, prepared := liveReady(t)
 				at := prepared.Add(10 * time.Minute)
-				restore := store.FreezeEventClock(at)
+				restore := freezeClock(t, at)
 				original := src.Result
 				src.Result = func(ctx context.Context, repo, task, attempt, a, base string) (bool, []rules.LandingChange, error) {
 					valid, changes, err := original(ctx, repo, task, attempt, a, base)

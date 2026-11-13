@@ -16,6 +16,7 @@ import (
 
 func (w *world) count(t *testing.T, q string, args ...any) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, q, args...).Scan(&n))
 	return n
@@ -26,6 +27,7 @@ func (w *world) count(t *testing.T, q string, args ...any) int {
 // controls, artifacts and their bodies.
 func (w *world) footprint(t *testing.T) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var s string
 	ok(t, w.rt.QueryRow(ctx, `SELECT concat_ws(' ',
 	  (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event), (SELECT count(*) FROM agentrt.event_stream),

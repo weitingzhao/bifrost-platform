@@ -29,6 +29,7 @@ func (w *world) step(t *testing.T, id string, ordinal int, rule string, binds ..
 // authorized plan change does.
 func (w *world) rule(t *testing.T, node, rule string, binds ...[2]string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, planChange(w, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, node, rule); err != nil {
 			return err
@@ -45,6 +46,7 @@ func (w *world) rule(t *testing.T, node, rule string, binds ...[2]string) {
 
 func (w *world) stepState(t *testing.T, id string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var s string
 	ok(t, w.rt.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, id).Scan(&s))
 	return s
@@ -109,6 +111,7 @@ func (d *deployments) read(_ context.Context, env string) (string, map[string]an
 
 func (w *world) evaluate(t *testing.T, step string, d *deployments) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	moved, err := store.EvaluateStep(ctx, w.rt, step, d.read)
 	ok(t, err)
 	return moved

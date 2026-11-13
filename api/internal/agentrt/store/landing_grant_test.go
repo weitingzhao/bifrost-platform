@@ -5,6 +5,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,14 +62,15 @@ func c5Wait(t *testing.T, path string, pinned, enabled bool) *c5 {
 // accept.
 func c5WaitAccepted(t *testing.T, path string, pinned, enabled bool, accept func(w *world, root string)) *c5 {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := c5Prepared(t, c4Source(path), pinned, enabled, accept)
-	store.FreezeEventClock(c.at.Add(-20 * time.Minute))
+	freezeClock(t, c.at.Add(-20*time.Minute))
 	_, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, c.observe())
 	ok(t, err)
 	if d.Reason != "awaiting_grant" {
 		t.Fatal("not waiting", d)
 	}
-	store.FreezeEventClock(c.at)
+	freezeClock(t, c.at)
 	return c
 }
 
@@ -79,10 +81,10 @@ func c5Ready(t *testing.T, src store.LandingSource, pinned, enabled bool, accept
 	// Grant expiry during a read must not accidentally cross the quota day
 	// first (T35). All relative grant times derive from this injected clock.
 	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	c := &c5{at: at, main: commitA, signer: signer{t, rptest.NewKey(t)}}
 	c.w = liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	c.root = c.w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C5", BaseCommit: commitB})
 	accept(c.w, c.root)
 	if pinned {
@@ -109,9 +111,10 @@ func c5Ready(t *testing.T, src store.LandingSource, pinned, enabled bool, accept
 // kicked, before the final gate has run. c.ci is green.
 func c5Prepared(t *testing.T, src store.LandingSource, pinned, enabled bool, accept func(w *world, root string)) *c5 {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := c5Ready(t, src, pinned, enabled, accept)
 	at := c.at
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", c.root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {
@@ -141,6 +144,7 @@ func (c *c5) enable(t *testing.T, version int) {
 // external host (grants enabled) or not (a tightening that stops them).
 func enableGrants(t *testing.T, w *world, s signer, version int, hosts bool) {
 	t.Helper()
+	ctx := ctxOf(t)
 	if version == 1 {
 		registerSeat(t, w)
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", externalHost, store.HostExternal))
@@ -162,6 +166,7 @@ func (c *c5) observe() func(context.Context, landing.Operation) (store.LiveObser
 
 func c5Pin(t *testing.T, w *world, task string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	var db string
 	ok(t, w.rt.QueryRow(ctx, `SELECT current_database()`).Scan(&db))
 	admin, err := pgx.Connect(ctx, os.Getenv("AGENTRT_TEST_PG")+" dbname="+db)
@@ -173,18 +178,21 @@ func c5Pin(t *testing.T, w *world, task string) {
 	ok(t, err)
 }
 
-var c5Approvals = 0
+// c5Approvals numbers the approvals of the whole run: tests that run at once
+// take from it, each number once.
+var c5Approvals atomic.Int64
 
 // approval is a verified approval record for action, approved ago.
 func (c *c5) approval(action string, ago time.Duration) store.GrantApproval {
-	c5Approvals++
-	return store.GrantApproval{ID: "appr_c5_" + strings.Repeat("x", c5Approvals), Number: int64(100 + c5Approvals), Action: action,
+	n := c5Approvals.Add(1)
+	return store.GrantApproval{ID: "appr_c5_" + strings.Repeat("x", int(n)), Number: 100 + n, Action: action,
 		ParamsHash: strings.Repeat("ab", 32), ApprovedAt: c.at.Add(-ago)}
 }
 
 // params are a request's parameters for the material as it is now.
 func (c *c5) params(t *testing.T) store.GrantParams {
 	t.Helper()
+	ctx := ctxOf(t)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
 	return store.GrantParams{Env: "prod", Repo: "bifrost-platform", Task: c.root, Op: c.op, R: commitB, MaterialDigest: m.MaterialDigest, STGRelease: true}
@@ -192,6 +200,7 @@ func (c *c5) params(t *testing.T) store.GrantParams {
 
 func (c *c5) grant(t *testing.T, action string) store.LandingGrant {
 	t.Helper()
+	ctx := ctxOf(t)
 	g, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(action, time.Minute), c.params(t))
 	ok(t, err)
 	return g
@@ -199,6 +208,7 @@ func (c *c5) grant(t *testing.T, action string) store.LandingGrant {
 
 func (c *c5) gate(t *testing.T) (store.Authorization, landing.Decision) {
 	t.Helper()
+	ctx := ctxOf(t)
 	auth, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, c.observe())
 	ok(t, err)
 	return auth, d
@@ -217,11 +227,13 @@ func refusedWith(t *testing.T, err error, code string) {
 	}
 }
 
-// Serial: FreezeEventClock. T27's success and its consumption (§5.6, §5.1
+// T27's success and its consumption (§5.6, §5.1
 // step 5): the material is clean, the executor's grant carries every
 // field, the final gate pushes it once with landing_grant_use in the
 // main_intent, the quota counts it, and the grant cannot be used again.
 func TestC5GrantWrittenAndConsumed(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
@@ -266,10 +278,12 @@ func TestC5GrantWrittenAndConsumed(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T27's refusals: each changes one thing of the
+// T27's refusals: each changes one thing of the
 // success above (which runs last, on the same world), writes no grant, and
 // the operation keeps waiting; main advanced writes discarded{main_changed}.
 func TestC5ExecutorRefusals(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	grants := func() int {
 		return c.w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'landing_grant'`, landingRepoStream)
@@ -325,10 +339,12 @@ func TestC5ExecutorRefusals(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Main moved: the execution fails and the waiting
+// Main moved: the execution fails and the waiting
 // operation is discarded{main_changed} (§5.4, §5.6 item 4); the old ref is
 // not touched and the next claim makes k+1. Its control writes the grant.
 func TestC5ExecutorMainAdvanced(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	p := c.params(t)
 	c.main = commitC
@@ -344,21 +360,23 @@ func TestC5ExecutorMainAdvanced(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 694 R-03: before the Owner signs the
+// Review 694 R-03: before the Owner signs the
 // external host entry nothing waits for a grant. A core root is refused at
 // the claim as floor, as before C-4/C-5: no operation, no preparation, no CI
 // kick, no wait. The control signs the entry and the next root of the same
 // change is claimed. (A grant's consumption once the entry is removed:
 // TestC5GrantStopsWhenTheEntryGoes.)
 func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 R-03", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	src := c4Source(c5Core)
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	// The controller's pass on PROD, live on, the v1 rule: no CI, no Git.
 	kicks, opens := 0, 0
 	sources := controller.DrillSources{Facts: src,
@@ -388,7 +406,7 @@ func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
 	if records != 0 {
 		t.Fatal("prepared before the entry", records)
 	}
-	store.FreezeEventClock(at.Add(-25 * time.Minute))
+	freezeClock(t, at.Add(-25*time.Minute))
 	control := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "694 R-03 control", BaseCommit: commitB})
 	w.passRound(t, control, "h4", "h5", "h6")
 	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
@@ -399,11 +417,13 @@ func TestC5NothingChangesBeforeTheEntry(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The entry removed (a tightening, no signature
+// The entry removed (a tightening, no signature
 // needed by design) stops a grant already written: the gate refuses it,
 // nothing is reserved or pushed, the controller no longer sees it usable.
 // Signed again, the same grant is consumed.
 func TestC5GrantStopsWhenTheEntryGoes(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
 	enableGrants(t, c.w, c.signer, 2, false)
@@ -420,13 +440,15 @@ func TestC5GrantStopsWhenTheEntryGoes(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T23 and review 694 R-05: a rule signed after the
+// T23 and review 694 R-05: a rule signed after the
 // grant makes presentation fail anew: grant_insufficient, nothing reserved or
 // pushed, the operation waiting. The grant is spent on the record
 // (landing_grant_refused): the status shows grant_refused with the reason,
 // not "authorized", and W runs again from the refusal. A new request under
 // the new rule is granted and pushes.
 func TestC5T23NewRuleCheckNeedsANewGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	original := c.src.Result
 	c.src.Result = func(ctx context.Context, repo, task, attempt, base, commit string) (bool, []rules.LandingChange, error) {
@@ -451,7 +473,7 @@ func TestC5T23NewRuleCheckNeedsANewGrant(t *testing.T) {
 		t.Fatalf("status after the refusal: %+v", st)
 	}
 	before := st.WaitingSeconds
-	store.FreezeEventClock(c.at.Add(time.Hour))
+	freezeClock(t, c.at.Add(time.Hour))
 	if st, _ = store.ReadLandingWait(ctx, c.w.rt, c.op); st.WaitingSeconds != before+3600 {
 		t.Fatal("W did not run after the refusal", before, st.WaitingSeconds)
 	}
@@ -467,12 +489,14 @@ func TestC5T23NewRuleCheckNeedsANewGrant(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T24 and the guardrail action: a pinned root's
+// T24 and the guardrail action: a pinned root's
 // soft failures (rule_paths), granted; a rule signed since allows its path,
 // so nothing fails now: it pushes all the same with landing_grant_use. The
 // same root without its pin cannot be granted (not_pinned): only a pinned
 // root waits on soft failures alone (§3.4).
 func TestC5T24LooserRuleStillConsumes(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	const page = "console/src/pages/C5Page.tsx"
 	c := c5Wait(t, page, true, true)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
@@ -503,13 +527,14 @@ func TestC5T24LooserRuleStillConsumes(t *testing.T) {
 // prepare (C-4's MayAwaitGrant): there is no wait to grant.
 func c5WaitUnpinnedSoft(t *testing.T, path string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C5 unpinned", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(path), "prod", root, at)
 	ok(t, err)
 	if op != "" {
@@ -518,11 +543,13 @@ func c5WaitUnpinnedSoft(t *testing.T, path string) string {
 	return d.Reason
 }
 
-// Serial: FreezeEventClock. T25: with a real grant, every unwaivable check
+// T25: with a real grant, every unwaivable check
 // still refuses: the repository stopped, the day's quota full, the mission
 // stopped, the repository taken out of the rule, the rule expired. Zero
 // pushes; the control is TestC5GrantWrittenAndConsumed.
 func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	cases := map[string]func(t *testing.T, c *c5){
 		"stopped": func(t *testing.T, c *c5) {
 			ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
@@ -537,7 +564,7 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 		},
 		"rule missing": func(t *testing.T, c *c5) {
 			// Before the rule took effect: no rule in force at the decision.
-			store.FreezeEventClock(time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
+			freezeClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
 		},
 		"mission": func(t *testing.T, c *c5) {
 			ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-3", "stopped", "test") }))
@@ -545,7 +572,7 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 		"rule expired": func(t *testing.T, c *c5) {
 			short := ruleText("landing:dev", 2, "tighten", since, c.at.Add(time.Minute).Format(time.RFC3339), c5RuleBody)
 			ok(t, firstErr(c.signer.sign(c.w, short)))
-			store.FreezeEventClock(c.at.Add(2 * time.Minute))
+			freezeClock(t, c.at.Add(2*time.Minute))
 		},
 	}
 	want := map[string]string{"stopped": "stopped", "mission": "stale", "rule expired": "rule", "repo out of the rule": "rule", "rule missing": "rule"}
@@ -562,17 +589,19 @@ func TestC5T25GrantNeverWaivesTheUnwaivable(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T28: the same approval executed again answers
+// T28: the same approval executed again answers
 // the grant it wrote, one record, its expiry unchanged; other parameters
 // under the same approval are a conflict. T29: a second approval while the
 // first grant is valid is refused; after the Owner revokes it, it succeeds.
 func TestC5T28T29OneGrantPerApprovalAndOp(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	a := c.approval(store.ActionCoreLanding, time.Minute)
 	p := c.params(t)
 	first, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, a, p)
 	ok(t, err)
-	store.FreezeEventClock(c.at.Add(time.Hour))
+	freezeClock(t, c.at.Add(time.Hour))
 	again, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, a, p)
 	ok(t, err)
 	if again.ExpiresAt != first.ExpiresAt || again.GrantedAt != first.GrantedAt {
@@ -597,12 +626,14 @@ func TestC5T28T29OneGrantPerApprovalAndOp(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T30: the append checks are the last line: only
+// T30: the append checks are the last line: only
 // the controller writes a grant, closed and complete; only the Owner revokes;
 // landing_grant_use rides only on the main_intent of its operation; a
 // waiting operation's main_intent without it is refused. Control: the
 // executor's own write (c.grant) and the gate's consumption succeed.
 func TestC5T30AppendGuards(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)

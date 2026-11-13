@@ -7,11 +7,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. CUT §11.8 v3 item 1: PROD claims only after its
+// CUT §11.8 v3 item 1: PROD claims only after its
 // live mode is recorded; the fence then is the mode, so work accepted
 // between enabled and the mode is not taken (and not held by Close), while
 // work after it is. The mode is recorded once.
 func TestLiveModeFencesTheProdClaim(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, before, src := goalDrill(t, "M-3")
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", before, time.Now())
 	ok(t, err)

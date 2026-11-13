@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ type floorCase struct {
 // host for both repositories: grants are enabled for infra (§2.1).
 func enableInfraGrants(t *testing.T, w *world) {
 	t.Helper()
+	ctx := ctxOf(t)
 	registerSeat(t, w)
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", externalHost, store.HostExternal))
 	body := strings.Replace(pinEnvelope(1, rules.Initial, true), "repos: [bifrost-platform]", "repos: [bifrost-platform, bifrost-trade-infra]", 1)
@@ -56,6 +58,7 @@ func floorChange() rules.LandingChange {
 // floorWait claims, prepares and gates the change to awaiting_grant.
 func floorWait(t *testing.T) *floorCase {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, root, src := infraWorld(t, []rules.LandingChange{floorChange()})
 	enableInfraGrants(t, w)
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, time.Now())
@@ -64,7 +67,7 @@ func floorWait(t *testing.T) *floorCase {
 		t.Fatalf("a floor-grantable change was refused: %+v", d)
 	}
 	c := &floorCase{w: w, root: root, op: op, src: src, main: commitA, at: time.Now().UTC().Truncate(time.Second)}
-	t.Cleanup(store.FreezeEventClock(c.at))
+	t.Cleanup(freezeClock(t, c.at))
 	prepareS6(t, w, infraRepo, root, op, c.at)
 	c.ci = landing.CIRun{Run: "landing-ci-infra-green-1", UID: "uid-infra", R: commitB, Status: "Succeeded", CreatedAt: c.at.Add(time.Minute),
 		Results: map[string]string{"infra-commit": commitB}}
@@ -82,7 +85,7 @@ func floorWait(t *testing.T) *floorCase {
 		}
 		return c.tree, nil
 	}
-	store.FreezeEventClock(c.at.Add(2 * time.Minute))
+	freezeClock(t, c.at.Add(2*time.Minute))
 	if _, d := c.gate(t); d.Reason != "awaiting_grant" {
 		t.Fatalf("not waiting: %+v", d)
 	}
@@ -90,7 +93,7 @@ func floorWait(t *testing.T) *floorCase {
 		t.Fatal("phase", p)
 	}
 	c.gsrc = store.GrantSources{Facts: c.src, Main: func(context.Context) (string, error) { return c.main, nil }}
-	store.FreezeEventClock(c.at.Add(3 * time.Minute))
+	freezeClock(t, c.at.Add(3*time.Minute))
 	return c
 }
 
@@ -102,6 +105,7 @@ func (c *floorCase) observe() func(context.Context, landing.Operation) (store.Li
 
 func (c *floorCase) gate(t *testing.T) (store.Authorization, landing.Decision) {
 	t.Helper()
+	ctx := ctxOf(t)
 	auth, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, c.observe(), infraRepo)
 	ok(t, err)
 	return auth, d
@@ -109,16 +113,18 @@ func (c *floorCase) gate(t *testing.T) (store.Authorization, landing.Decision) {
 
 func (c *floorCase) material(t *testing.T) *store.LandingGrantMaterial {
 	t.Helper()
+	ctx := ctxOf(t)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, false)
 	ok(t, err)
 	return m
 }
 
-var floorApprovals = 0
+// floorApprovals numbers the approvals of the whole run (see c5Approvals).
+var floorApprovals atomic.Int64
 
 func (c *floorCase) approval(action string) store.GrantApproval {
-	floorApprovals++
-	return store.GrantApproval{ID: "appr_floor_" + strings.Repeat("y", floorApprovals), Number: int64(500 + floorApprovals), Action: action,
+	n := floorApprovals.Add(1)
+	return store.GrantApproval{ID: "appr_floor_" + strings.Repeat("y", int(n)), Number: 500 + n, Action: action,
 		ParamsHash: strings.Repeat("cd", 32), ApprovedAt: c.at.Add(2 * time.Minute)}
 }
 
@@ -129,6 +135,7 @@ func (c *floorCase) params(t *testing.T) store.GrantParams {
 
 func (c *floorCase) grant(t *testing.T) store.LandingGrant {
 	t.Helper()
+	ctx := ctxOf(t)
 	g, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(store.ActionFloorLanding), c.params(t))
 	ok(t, err)
 	return g
@@ -141,15 +148,18 @@ func (c *floorCase) count(t *testing.T, where string) int {
 
 func (c *floorCase) usable(t *testing.T) bool {
 	t.Helper()
+	ctx := ctxOf(t)
 	u, err := store.HasUsableLandingGrant(ctx, c.w.rt, c.op)
 	ok(t, err)
 	return u
 }
 
-// Serial: FreezeEventClock and the signing anchor. (a), (c) and (e): the
+// (a), (c) and (e): the
 // k8s change waits; the material pins floor_paths; the grant pushes R with
 // landing_grant_use, once; the push result names the pusher.
 func TestFloorGrantPushesExactlyThePinnedFiles(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := floorWait(t)
 	m := c.material(t)
 	if len(m.Problems) != 0 || m.Action != store.ActionFloorLanding || !slices.Equal(m.SoftAtRequest, []string{"floor_grant", "rule_paths"}) ||
@@ -200,11 +210,13 @@ func TestFloorGrantPushesExactlyThePinnedFiles(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and the signing anchor. (c): a changed byte, an
+// (c): a changed byte, an
 // extra file, a missing file, a never-grantable path, a Secret, or R not on
 // M0 spend the grant and nothing is pushed; a moved main, red or unknown CI
 // and a held window leave it usable and push nothing either.
 func TestFloorGrantFinalGate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	stale := map[string]func(*floorCase){
 		"changed byte": func(c *floorCase) { c.tree.Files[0].SHA256 = strings.Repeat("6", 64) },
 		"extra file": func(c *floorCase) {
@@ -274,11 +286,13 @@ func TestFloorGrantFinalGate(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and the signing anchor. P1 of attempt 1's
+// P1 of attempt 1's
 // review: a grant still valid when the gate starts, which expires while
 // M0..R is read from Git, authorizes nothing: the gate decides at the clock
 // after its Git reads.
 func TestFloorGrantExpiresDuringGitReads(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := floorWait(t)
 	start := c.at.Add(3 * time.Minute) // floorWait's clock
 	a := c.approval(store.ActionFloorLanding)
@@ -290,7 +304,7 @@ func TestFloorGrantExpiresDuringGitReads(t *testing.T) {
 	}
 	read := c.src.FloorFiles
 	c.src.FloorFiles = func(ctx context.Context, repo, m0, r string) (landing.FloorTree, error) {
-		store.FreezeEventClock(start.Add(31 * time.Second)) // a slow read, past the expiry
+		freezeClock(t, start.Add(31*time.Second)) // a slow read, past the expiry
 		return read(ctx, repo, m0, r)
 	}
 	if start.UTC().Format("2006-01-02") != start.Add(31*time.Second).UTC().Format("2006-01-02") {
@@ -305,11 +319,13 @@ func TestFloorGrantExpiresDuringGitReads(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and the signing anchor. (b) and (d): a material
+// (b) and (d): a material
 // over a never-grantable tree cannot be granted; a guardrail or core grant
 // is never written for infra, and a platform core change never takes a
 // floor grant.
 func TestFloorGrantKinds(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := floorWait(t)
 	for _, action := range []string{store.ActionGuardrailLanding, store.ActionCoreLanding} {
 		_, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, c.approval(action), c.params(t))
@@ -361,6 +377,7 @@ func TestFloorGrantKinds(t *testing.T) {
 
 func appendGrant(t *testing.T, c *floorCase, stream string, g store.LandingGrant) error {
 	t.Helper()
+	ctx := ctxOf(t)
 	tx, err := c.w.rt.Begin(ctx)
 	ok(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -588,11 +605,13 @@ func platformFloorWait(t *testing.T) (*c5, *landing.FloorTree) {
 	return c, tree
 }
 
-// Serial: FreezeEventClock and the signing anchor. A platform floor change
+// A platform floor change
 // takes approve_floor_landing: its material pins the files and the pinned
 // CI run, the grant records both, and the final gate pushes R once with
 // landing_grant_use.
 func TestPlatformFloorGrantPinsFilesAndCI(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c, tree := platformFloorWait(t)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
@@ -641,10 +660,12 @@ func TestPlatformFloorGrantPinsFilesAndCI(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and the signing anchor. The final gate of a
+// The final gate of a
 // platform floor grant: a changed byte, an extra file or a newer CI run of
 // R spend the grant and nothing is pushed; CI not green yet holds it.
 func TestPlatformFloorGrantFinalGate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	stale := map[string]func(*c5, *landing.FloorTree){
 		"changed byte": func(_ *c5, tree *landing.FloorTree) { tree.Files[0].SHA256 = strings.Repeat("6", 64) },
 		"extra file": func(_ *c5, tree *landing.FloorTree) {

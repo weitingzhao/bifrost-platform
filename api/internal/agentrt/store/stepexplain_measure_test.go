@@ -27,9 +27,9 @@ import (
 // decode and fold at most 300 MB. Run by hand (it takes a while):
 //
 //	AGENTRT_EXPLAIN_MEASURE=1 go test ./internal/agentrt/store/ -run TestExplainFoldsAtTheBound -v
-//
-// Serial: FreezeEventClock.
 func TestExplainFoldsAtTheBound(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	if os.Getenv("AGENTRT_EXPLAIN_MEASURE") != "1" {
 		t.Skip("a measurement, run by hand: AGENTRT_EXPLAIN_MEASURE=1")
 	}
@@ -185,9 +185,9 @@ func TestExplainFoldsAtTheBound(t *testing.T) {
 // above:
 //
 //	AGENTRT_EXPLAIN_MEASURE=1 go test ./internal/agentrt/store/ -run TestExplainWholeAtScale -v
-//
-// Serial: FreezeEventClock.
 func TestExplainWholeAtScale(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	if os.Getenv("AGENTRT_EXPLAIN_MEASURE") != "1" {
 		t.Skip("a measurement, run by hand: AGENTRT_EXPLAIN_MEASURE=1")
 	}

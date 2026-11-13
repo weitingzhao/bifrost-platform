@@ -17,16 +17,18 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/clock"
 )
 
 // All time comes from b5fWorld's SELECT now(), before creating the mission.
 // The fixture uses real Append/Parse/Fold for every release transition.
 func b5gFixture(t *testing.T, mode string) (*b5Fixture, store.Appended) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, at := b5fWorld(t, "enabled")
 	root := s66Landed(t, w, "M-3", "bifrost-platform", at)
 	at = store.DecisionAt(ctx).Add(time.Minute)
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	x := b5Snapshot(t, w, root, "land:"+root+":1", at)
 	member := map[string]any{"root": root, "op": x.op, "R": commitB}
 	snap := x.read(t).Batches[b5Batch].Tries[1].Snapshot.Record
@@ -41,12 +43,12 @@ func b5gFixture(t *testing.T, mode string) (*b5Fixture, store.Appended) {
 			if n > 1 {
 				due := x.read(t).Debits[commitB].NotBefore
 				b5Append(t, w, b5Record("retry", "batch", "try", n, "not_before", due.Format(time.RFC3339Nano)))
-				store.FreezeEventClock(due)
+				freezeClock(t, due)
 				b5Append(t, w, b5Record("snapshot", "batch", "try", n, "inputs", snap["inputs"], "base", snap["base"], "set", snap["set"], "not_before", due.Format(time.RFC3339Nano)))
 			}
 			b5gStart(t, x, n)
 			b5Append(t, w, b5Record("bound", "batch", "try", n, "uid", fmt.Sprintf("b5g-run-%d", n)))
-			store.FreezeEventClock(store.DecisionAt(ctx).Add(time.Minute))
+			freezeClock(t, store.DecisionAt(ctx).Add(time.Minute))
 			b5Append(t, w, b5Record("run_evidence", "batch", "try", n, "uid", fmt.Sprintf("b5g-run-%d", n), "status", "Failed", "raw", map[string]any{"results": []any{}, "child_refs": []any{}, "conditions": []any{}}, "at", store.DecisionAt(ctx).Format(time.RFC3339Nano)))
 			ref = b5Append(t, w, b5Record("verify", "batch", "try", n, "outcome", "failed", "why", "run_failed", "evidence", ""))
 			b5gEffect(t, x, n)
@@ -80,15 +82,27 @@ func (*b5gEffectRuns) RemoveArchivedFinalizer(context.Context, delivery.NamedDel
 	return nil // The terminal archive was already appended by the fixture.
 }
 
+// eventTime is the real clock whose Now is the event clock of ctx: what a
+// stgrelease.Controller reads (it has no context where it reads the time)
+// in a test with an event clock of its own.
+type eventTime struct {
+	clock.RealClock
+	ctx context.Context
+}
+
+func (e eventTime) Now() time.Time                  { return store.DecisionAt(e.ctx) }
+func (e eventTime) Since(t time.Time) time.Duration { return e.Now().Sub(t) }
+
 func b5gEffect(t *testing.T, x *b5Fixture, n int64) {
 	t.Helper()
+	ctx := ctxOf(t)
 	before := x.read(t)
 	rule := inForce(t, x.w, "landing:dev", store.DecisionAt(ctx))
 	if rule == nil {
 		t.Fatal("effect fixture has no current landing rule")
 	}
 	runs := &b5gEffectRuns{workloads: x.obs.Workloads}
-	c := &stgrelease.Controller{DB: x.w.rt, Tenant: "dev", Runs: runs,
+	c := &stgrelease.Controller{DB: x.w.rt, Tenant: "dev", Runs: runs, Clock: eventTime{ctx: ctx},
 		Policy: func() stgrelease.WindowPolicy {
 			return stgrelease.WindowPolicy{Environment: "prod", Rule: &rule.Rule}
 		}}
@@ -110,6 +124,7 @@ func b5gEffect(t *testing.T, x *b5Fixture, n int64) {
 
 func b5gStart(t *testing.T, x *b5Fixture, n int64) {
 	t.Helper()
+	ctx := ctxOf(t)
 	b5Append(t, x.w, b5Record("started", "batch", "try", n, "intent_seq", 0, "run", fmt.Sprintf("stgrel-1-%d-%s", n, commitB[:8]),
 		"labels", map[string]any{"bifrost.io/stg-release": "true", "bifrost.io/stg-release-n": "1", "bifrost.io/stg-release-try": fmt.Sprint(n)},
 		"annotations", map[string]any{"bifrost.io/stg-release-batch": b5Batch, "bifrost.io/stg-release-intent": "0"}, "fingerprint", strings.Repeat("0", 64), "spend", []any{},
@@ -118,6 +133,7 @@ func b5gStart(t *testing.T, x *b5Fixture, n int64) {
 
 func b5gCard(t *testing.T, x *b5Fixture, f *fakeCards, kind string) store.CardRecord {
 	t.Helper()
+	ctx := ctxOf(t)
 	cardPass(t, x.w, f, store.DecisionAt(ctx))
 	for _, c := range cardsNow(t, x.w) {
 		if c.Kind == kind && !c.Ended() {
@@ -128,8 +144,10 @@ func b5gCard(t *testing.T, x *b5Fixture, f *fakeCards, kind string) store.CardRe
 	return store.CardRecord{}
 }
 
-// Serial: shared event clock, real transaction commits and Ack failure.
+// Real transaction commits and Ack failure.
 func TestStgCardsPGAnswerBeforeAckAndReplay(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, letter := range []string{"a", "b"} {
 		t.Run(letter, func(t *testing.T) {
 			x, trigger := b5gFixture(t, "exhausted")
@@ -178,8 +196,10 @@ func TestStgCardsPGAnswerBeforeAckAndReplay(t *testing.T) {
 	}
 }
 
-// Serial: real rule/stream locks; none must fence every card entry.
+// Real rule/stream locks; none must fence every card entry.
 func TestStgCardsPGNoneDoesNotAskOrWrite(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, stage := range []string{"trigger", "prepared", "bound", "answered", "handled"} {
 		t.Run(stage, func(t *testing.T) {
 			x, _ := b5gFixture(t, "exhausted")
@@ -229,10 +249,12 @@ func TestStgCardsPGNoneDoesNotAskOrWrite(t *testing.T) {
 	}
 }
 
-// Serial: a full question store keeps the PG-backed durable preparation;
+// A full question store keeps the PG-backed durable preparation;
 // each pass asks it once more (the 30-minute pause went in cleanup wave 1,
 // 2026-11-11) and never duplicates the trigger.
 func TestStgCardsPGQuotaRetainsTriggerAndPreparation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x, trigger := b5gFixture(t, "exhausted")
 	f := newFakeCards(decisionClock(ctx))
 	src := f.source()
@@ -274,8 +296,10 @@ func TestStgCardsPGQuotaRetainsTriggerAndPreparation(t *testing.T) {
 	}
 }
 
-// Serial: card lifecycle and 24-hour reminders use a database-anchored clock.
+// Card lifecycle and 24-hour reminders use a database-anchored clock.
 func TestStgCardsPGNoticesRemindersExpiryAndResolution(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"blocked", "floor", "quarantine"} {
 		t.Run(mode, func(t *testing.T) {
 			x, _ := b5gFixture(t, mode)
@@ -293,13 +317,13 @@ func TestStgCardsPGNoticesRemindersExpiryAndResolution(t *testing.T) {
 			if len(x.read(t).Grants) != len(before.Grants) || !reflect.DeepEqual(x.read(t).Blocks, before.Blocks) {
 				t.Fatal("reminder changed business state")
 			}
-			store.FreezeEventClock(at.Add(23 * time.Hour))
+			freezeClock(t, at.Add(23*time.Hour))
 			_, err = store.PrepareLandingCards(ctx, x.w.rt, c.Repo, store.DecisionAt(ctx))
 			ok(t, err)
 			if len(cardsAtKind(t, x.w, kind)) != 1 {
 				t.Fatal("reminded before 24h")
 			}
-			store.FreezeEventClock(at.Add(24 * time.Hour))
+			freezeClock(t, at.Add(24*time.Hour))
 			second := b5gCard(t, x, f, kind)
 			if second.N != 2 || second.TriggerSeq != c.TriggerSeq {
 				t.Fatal("reminder changed interval", second)
@@ -307,7 +331,7 @@ func TestStgCardsPGNoticesRemindersExpiryAndResolution(t *testing.T) {
 			f.byID[second.QuestionID].q.Status = "expired"
 			_, err = store.SettleLandingCard(ctx, x.w.rt, f.source(), second, store.DecisionAt(ctx))
 			ok(t, err)
-			store.FreezeEventClock(at.Add(30 * time.Hour))
+			freezeClock(t, at.Add(30*time.Hour))
 			third := b5gCard(t, x, f, kind)
 			if third.N != 3 {
 				t.Fatal("expired card not replaced")
@@ -342,8 +366,10 @@ func cardsAtKind(t *testing.T, w *world, kind string) []store.CardRecord {
 	return out
 }
 
-// Serial: distinct PostgreSQL connections serialize competing answers.
+// Distinct PostgreSQL connections serialize competing answers.
 func TestStgCardsPGConcurrentAnswerAndMootAfterCover(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, covered := range []bool{false, true} {
 		t.Run(fmt.Sprint(covered), func(t *testing.T) {
 			x, _ := b5gFixture(t, "exhausted")
@@ -392,8 +418,10 @@ func TestStgCardsPGConcurrentAnswerAndMootAfterCover(t *testing.T) {
 	}
 }
 
-// Serial: a block's automatic resolution withdraws the same durable card.
+// A block's automatic resolution withdraws the same durable card.
 func TestStgCardsPGResolvedAndBindingRefusals(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x, trigger := b5gFixture(t, "blocked")
 	f := newFakeCards(decisionClock(ctx))
 	c := b5gCard(t, x, f, store.CardSTGBlocked)
@@ -427,16 +455,19 @@ func TestStgCardsPGResolvedAndBindingRefusals(t *testing.T) {
 
 func b5gResolveCI(t *testing.T, x *b5Fixture, c store.CardRecord, trigger store.Appended) {
 	t.Helper()
-	store.FreezeEventClock(store.DecisionAt(ctx).Add(time.Minute))
+	ctx := ctxOf(t)
+	freezeClock(t, store.DecisionAt(ctx).Add(time.Minute))
 	ci := x.obs.CI.Accepted
 	ci["read_at"], ci["created_at"], ci["uid"] = store.DecisionAt(ctx).Format(time.RFC3339Nano), store.DecisionAt(ctx).Format(time.RFC3339Nano), "new-ci"
 	p := b5Append(t, x.w, b5Record("ci_observed", "block", "block", c.Block, "interval_seq", trigger.Seq, "P", commitB, "ci", ci, "status", "Succeeded"))
 	b5Append(t, x.w, b5Record("unblocked", "block", "block", c.Block, "why", "inputs_changed", "ref", p.Seq))
 }
 
-// Serial: a lost Ask reply can leave a protected question after its trigger
+// A lost Ask reply can leave a protected question after its trigger
 // resolves. Recovery must bind it before withdrawing; never orphan it.
 func TestStgCardsPGRecoverLostAskAfterResolution(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x, trigger := b5gFixture(t, "blocked")
 	f := newFakeCards(decisionClock(ctx))
 	f.loseReply = true

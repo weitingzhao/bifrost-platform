@@ -161,9 +161,11 @@ func TestStgSamplePGRuleOpenRefuses(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Once B5 has opened a batch, a later none does
+// Once B5 has opened a batch, a later none does
 // not make the sample usable again: B5's own held runs are the samples.
 func TestStgSamplePGRefusesAfterB5Opened(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	x.none(t)
 	s, err := store.ReadStgRelease(ctx, x.w.rt)
@@ -274,10 +276,12 @@ func TestStgSamplePGSendPermit(t *testing.T) {
 	wantSampleCode(t, err, "conflict")
 }
 
-// Serial: FreezeEventClock. TD-460 review B1: an allocation that has not
+// TD-460 review B1: an allocation that has not
 // been created yet passes the first-opening gate again on retry, both in the
 // allocation and in the send permit; a created one is returned as recorded.
 func TestStgSamplePGRetryKeepsTheGate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	// An allocation from before the opening, written as Allocate writes it.
 	ok(t, store.InTx(ctx, x.w.rt, func(tx pgx.Tx) error {

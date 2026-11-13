@@ -117,7 +117,8 @@ func (f *fakeCards) answer(id, letter string, at time.Time) {
 // cardPass is one pass of the engine: settle, ask, prepare, then ask again.
 func cardPass(t *testing.T, w *world, f *fakeCards, now time.Time) {
 	t.Helper()
-	store.FreezeEventClock(now)
+	ctx := ctxOf(t)
+	freezeClock(t, now)
 	src := f.source()
 	settle := func() {
 		_, bound, err := store.LandingCardsToSettle(ctx, w.rt, "bifrost-platform")
@@ -142,6 +143,7 @@ func cardPass(t *testing.T, w *world, f *fakeCards, now time.Time) {
 
 func cardsNow(t *testing.T, w *world) map[string]store.CardRecord {
 	t.Helper()
+	ctx := ctxOf(t)
 	var cards map[string]store.CardRecord
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -155,17 +157,19 @@ func cardFailedRoot(t *testing.T, w *world, op, why string, at time.Time) string
 	t.Helper()
 	root := w.ready(t, store.Task{OffPlanReason: "card " + op})
 	prodChain(t, w, root, op, at, "branch_pushed")
-	store.FreezeEventClock(at.Add(10 * time.Minute))
+	freezeClock(t, at.Add(10*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", why)))
 	return root
 }
 
-// Serial: FreezeEventClock. A failed root: a card, answered try again; the
+// A failed root: a card, answered try again; the
 // retry is recorded once, the card acknowledged, and no new card follows.
 func TestLandingCardAnsweredAndCarriedOut(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	cardFailedRoot(t, w, "land:c1:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 	cardPass(t, w, f, at.Add(time.Hour))
@@ -192,14 +196,16 @@ func TestLandingCardAnsweredAndCarriedOut(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The store made the card but the reply was lost:
+// The store made the card but the reply was lost:
 // the next pass finds it by its key and binds it; nothing is asked twice.
 // An ask started more than seven days ago that finds nothing is closed
 // unconfirmed, never asked again.
 func TestLandingCardAskRecovery(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-10 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	cardFailedRoot(t, w, "land:c2:1", "conflict", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 	f.loseReply = true
@@ -233,12 +239,14 @@ func TestLandingCardAskRecovery(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. ok_missing answered wait: held 24 hours, then a
+// ok_missing answered wait: held 24 hours, then a
 // second card; when the push lands, the open card is withdrawn as resolved.
 func TestLandingCardHeldThenResolved(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := w.ready(t, store.Task{OffPlanReason: "card ok missing"})
 	prodChain(t, w, root, "land:c4:1", at, "main_intent")
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:c4:1", "main_result", "outcome", "ok")))
@@ -270,13 +278,15 @@ func TestLandingCardHeldThenResolved(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A stop's card answered resume writes the resume
+// A stop's card answered resume writes the resume
 // of that generation once; an old stop's card answered after a newer stop
 // is moot and resumes nothing.
 func TestLandingCardRepoResume(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := w.ready(t, store.Task{OffPlanReason: "card stop"})
 	stop := func(gen int) {
 		controllerNote(t, w, root, map[string]any{"text": "stop", "landing_stop": map[string]any{"repo": "bifrost-platform", "op": "land:x:1", "root": root, "generation": gen}})
@@ -317,13 +327,15 @@ func TestLandingCardRepoResume(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A bound card the store no longer has, never
+// A bound card the store no longer has, never
 // handled: closed lost. An Ack that fails is retried; the answer is handled
 // once.
 func TestLandingCardLostAndAckRetried(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	cardFailedRoot(t, w, "land:c6:1", "conflict", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 	cardPass(t, w, f, at.Add(time.Hour))
@@ -354,14 +366,16 @@ func TestLandingCardLostAndAckRetried(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 670 B-02: a card answered try again after
+// Review 670 B-02: a card answered try again after
 // its mission became no_merge is moot under the same locks; nothing is
 // retried. Review 670 B-03: the seven days are decided on the clock after
 // the lookup: a lookup that crosses them closes the card unconfirmed.
 func TestLandingCardDecidesOnTheStateAtTheAnswer(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-10 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root := cardFailedRoot(t, w, "land:c8:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 	cardPass(t, w, f, at.Add(time.Hour))
@@ -390,10 +404,10 @@ func TestLandingCardDecidesOnTheStateAtTheAnswer(t *testing.T) {
 	src := f2.source()
 	look := src.LookupKey
 	src.LookupKey = func(c context.Context, key string, req map[string]any) (store.Question, time.Time, bool, error) {
-		store.FreezeEventClock(at.Add(time.Hour + store.CardRecoverWindow + time.Second))
+		freezeClock(t, at.Add(time.Hour+store.CardRecoverWindow+time.Second))
 		return look(c, key, req)
 	}
-	store.FreezeEventClock(at.Add(time.Hour + store.CardRecoverWindow - time.Second))
+	freezeClock(t, at.Add(time.Hour+store.CardRecoverWindow-time.Second))
 	ask, _, err := store.LandingCardsToSettle(ctx, w2.rt, "bifrost-platform")
 	ok(t, err)
 	for _, c := range ask {

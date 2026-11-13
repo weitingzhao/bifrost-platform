@@ -100,6 +100,7 @@ func (f *local704) adapters() map[string]controller.DrillGit {
 
 func passReal704(t *testing.T, w *world, root, sha string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := w.claim(t, "h1", store.LeaseTTL, cursor)
 	if c == nil || c.TaskID != root {
 		t.Fatal("wrong implementation", c)

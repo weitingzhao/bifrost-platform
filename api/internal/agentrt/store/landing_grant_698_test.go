@@ -21,22 +21,23 @@ import (
 // prepared at branch_pushed with no CI kicked yet.
 func grantPrepared(t *testing.T) (*world, string, string, store.LandingSource, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "698", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	enableGrants(t, w, signer{t, rptest.NewKey(t)}, 1, true)
 	src := c4Source(c5Core)
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("claim", d)
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-	store.FreezeEventClock(at.Add(-28 * time.Minute))
+	freezeClock(t, at.Add(-28*time.Minute))
 	return w, root, op, src, at
 }
 
@@ -71,7 +72,7 @@ func liveController(w *world) controller.Controller {
 	}}
 }
 
-// Serial: FreezeEventClock. B-01: the push webhook's run of R is green before
+// B-01: the push webhook's run of R is green before
 // any kick: the operation that needs a grant still gets its pinned run
 // first (ci_kick with its key), and is not taken to the gate on the
 // webhook's run. Its webhook red with main green, the kick already used by
@@ -80,6 +81,8 @@ func liveController(w *world) controller.Controller {
 // (On 082125dd: ready, awaiting_grant with no key; and "fixed at the first
 // kick".)
 func TestC5B01PinnedRunComesFirst(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	t.Run("webhook green", func(t *testing.T) {
 		w, _, op, src, at := grantPrepared(t)
 		var calls ciCalls
@@ -125,13 +128,15 @@ func TestC5B01PinnedRunComesFirst(t *testing.T) {
 	})
 }
 
-// Serial: FreezeEventClock. R-01: a waiting operation with no grant is
+// R-01: a waiting operation with no grant is
 // rechecked under a rule version until the gate's stable answer (soft
 // failures remain) — a failed workspace open is tried again after a while,
 // not dropped for the version; once the stable answer is in, nothing more
 // until the next rule version, which pushes it. (On 082125dd the version was
 // spent on the failed open: one open until a restart.)
 func TestC5R01RecheckRetriesUntilItsStableAnswer(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	const page = "console/src/pages/C5Page.tsx"
 	c := c5Wait(t, page, true, true)
 	p := &livePusher{outcome: landinggit.PushOK}
@@ -177,11 +182,13 @@ func TestC5R01RecheckRetriesUntilItsStableAnswer(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-02: a newer run of R than the one the grant
+// R-02: a newer run of R than the one the grant
 // names — running or red — ends the grant on the record: no push, the
 // status says grant_refused, the grant is not valid, W runs again. (On
 // 082125dd the gate stopped at the ordinary CI check: still authorized.)
 func TestC5R02NewerRunEndsTheGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, status := range []string{"Running", "Failed"} {
 		t.Run(status, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
@@ -196,7 +203,7 @@ func TestC5R02NewerRunEndsTheGrant(t *testing.T) {
 				t.Fatalf("%+v", st)
 			}
 			before := st.WaitingSeconds
-			store.FreezeEventClock(c.at.Add(time.Hour))
+			freezeClock(t, c.at.Add(time.Hour))
 			if st, _ = store.ReadLandingWait(ctx, c.w.rt, c.op); st.WaitingSeconds != before+3600 {
 				t.Fatal("W paused by a refused grant", before, st.WaitingSeconds)
 			}
@@ -204,10 +211,12 @@ func TestC5R02NewerRunEndsTheGrant(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-03: main moved, the operation is discarded:
+// R-03: main moved, the operation is discarded:
 // its unspent grant is shown not valid, ended operation_discarded — never
 // "authorized" beside a discarded operation. (On 082125dd valid stayed true.)
 func TestC5R03DiscardedOperationsGrantIsNotValid(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
 	c.main = commitC

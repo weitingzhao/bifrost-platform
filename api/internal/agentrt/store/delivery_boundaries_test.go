@@ -95,8 +95,9 @@ limits: {max_files: 100, max_changed_lines: 3000, max_landings_per_day: 100, max
 	}
 }
 
-// Serial: FreezeEventClock
 func TestBoundaryPrecheckReadOnlyAndSameClaimGate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, roots, at := batchRoots(t, 1)
 	var before, after int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&before))

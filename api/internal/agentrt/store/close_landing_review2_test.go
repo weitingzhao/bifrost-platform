@@ -19,16 +19,18 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. A k+1 claim does not restart the root's
+// A k+1 claim does not restart the root's
 // wall-clock budget; an explicit retry does. Exact 6h15m is outside the hold.
 func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, retry := range []bool{false, true} {
 		t.Run(fmt.Sprint(retry), func(t *testing.T) {
 			w, task, src := goalDrill(t, "M-3")
 			op, _, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
 			ok(t, err)
 			first := landingState(t, w, landingRepoStream).Operations[op].ClaimedAt
-			restore := store.FreezeEventClock(first.Add(time.Hour))
+			restore := freezeClock(t, first.Add(time.Hour))
 			defer restore()
 			if retry {
 				ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "stale")))
@@ -41,13 +43,13 @@ func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
 			}
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op+":next", "claimed", "task", task, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 			deadline := first.Add(6*time.Hour + 15*time.Minute)
-			store.FreezeEventClock(deadline.Add(-time.Microsecond))
+			freezeClock(t, deadline.Add(-time.Microsecond))
 			closed, err := store.CloseMissions(ctx, w.rt)
 			ok(t, err)
 			if slices.Contains(closed, "M-3") {
 				t.Fatal("released before root deadline")
 			}
-			store.FreezeEventClock(deadline)
+			freezeClock(t, deadline)
 			closed, err = store.CloseMissions(ctx, w.rt)
 			ok(t, err)
 			if !slices.Contains(closed, "M-3") {
@@ -57,7 +59,7 @@ func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A close that runs while a claim reads Git
+// A close that runs while a claim reads Git
 // (TD-447 5: the claim holds no lock then). A root never claimed is queued by
 // its facts until the stream records its claim or its refusal (TD-447 4), so
 // a close during the reads keeps the mission however long they take (the old
@@ -67,6 +69,8 @@ func TestWork640RootHoldDeadlineAndRetry(t *testing.T) {
 // locked read sees the mission done and claims nothing: never an operation
 // under a closed mission, never a silent miss.
 func TestConcurrentCloseDuringClaimReads(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, c := range []struct {
 		name   string
 		after  time.Duration
@@ -79,7 +83,7 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			// the close runs at the later time (CUT §9: each locked read
 			// decides at its own clock).
 			start := time.Now()
-			restore := store.FreezeEventClock(start)
+			restore := freezeClock(t, start)
 			defer restore()
 			bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
@@ -116,7 +120,7 @@ func TestConcurrentCloseDuringClaimReads(t *testing.T) {
 			case <-bounded.Done():
 				t.Fatal("claim never reached external source")
 			}
-			store.FreezeEventClock(start.Add(c.after))
+			freezeClock(t, start.Add(c.after))
 			// The claim holds no transaction now: the close is not blocked
 			// (on the version that read Git under the mission lock it waits
 			// here until the bounded context ends).
@@ -225,11 +229,13 @@ func TestWork640CloseErrorIsolationAndJoin(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via goalDrill. TD-447 5: while the claim reads Git
+// TD-447 5: while the claim reads Git
 // it holds no lock and no transaction. Another transaction takes the mission
 // row exclusively with NOWAIT, on another connection; on the version that read Git inside the
 // locked transaction the NOWAIT fails.
 func TestClaimReadsGitWithNoLockHeld(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	pool := w.db.Pool(t, w.db.Runtime)
 	claimConn, err := pool.Acquire(ctx)
@@ -289,10 +295,12 @@ func (tx *openTx) end() {
 func (tx *openTx) Commit(c context.Context) error   { defer tx.end(); return tx.Tx.Commit(c) }
 func (tx *openTx) Rollback(c context.Context) error { defer tx.end(); return tx.Tx.Rollback(c) }
 
-// Serial: FreezeEventClock via goalDrill. TD-447 5, review 646: every
+// TD-447 5, review 646: every
 // external read of a claim (the result, main's history, each dependency's
 // history) runs with no transaction of the claim open.
 func TestClaimEvidenceReadsOpenNoTransaction(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	var open atomic.Int32
 	db := openTxDB{DB: w.rt, open: &open}
@@ -324,11 +332,13 @@ func TestClaimEvidenceReadsOpenNoTransaction(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via goalDrill. The evidence's keys move while it
+// The evidence's keys move while it
 // is read (here the task's base, as a rebase would): the claim refuses
 // "changed" and writes nothing. Review 646's mutants that compare less than
 // the keys claim on the stale evidence.
 func TestClaimRefusesEvidenceWhoseKeysMoved(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	admin := w.db.Connect(t, w.db.Admin)
 	result := src.Result
@@ -356,11 +366,13 @@ func TestClaimRefusesEvidenceWhoseKeysMoved(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via goalDrill. Review 646 N646-1: another root's
+// Review 646 N646-1: another root's
 // operation holds the only in-flight slot when the claim starts and ends
 // while the claim reads Git; the claim judges the slot on its second read
 // and lands, instead of throwing its reads away as "changed".
 func TestClaimUsesASlotFreedDuringItsReads(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	other := "t_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	otherOp := "land:" + other + ":1"

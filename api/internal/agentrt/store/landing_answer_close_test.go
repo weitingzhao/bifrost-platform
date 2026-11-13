@@ -53,19 +53,20 @@ func (tx *answerAfterHoldTx) Commit(c context.Context) error {
 	return nil
 }
 
-// Serial: FreezeEventClock.
 func TestRetryAnsweredDuringCloseIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, at)
 	ok(t, err)
 	if op == "" || !d.Allowed {
 		t.Fatal("fixture claim", d)
 	}
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "failed", "why", "stale")))
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

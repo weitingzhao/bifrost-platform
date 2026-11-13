@@ -27,6 +27,7 @@ var (
 
 func rwNotes(t *testing.T, w *world, key string) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json ? $1`, key).Scan(&n))
 	return n
@@ -122,12 +123,14 @@ func letterOf(t *testing.T, c store.CardRecord, choice string) string {
 	return ""
 }
 
-// Serial: FreezeEventClock. The whole way: three passes compare the three
+// The whole way: three passes compare the three
 // pairs, one each, and the third records the set once; a restart compares
 // again and records nothing new. One card asks; count_replaced excuses the
 // root and the step moves done through the controller's evaluation; nothing
 // asks again.
 func TestReworkLandedCardCountsTheRootDelivered(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	differ := &deliveredGit{}
 	r := newRWWorld(t, differ)
 	r.w.rule(t, s2, `{"step_landed":{}}`)
@@ -190,11 +193,13 @@ func TestReworkLandedCardCountsTheRootDelivered(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. still_owed records no excuse: the root holds the
+// still_owed records no excuse: the root holds the
 // step and the same set is not asked again. A sibling that moves off the
 // step changes the set: a new record and a new card, which the Owner may
 // answer differently.
 func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -255,10 +260,12 @@ func TestReworkLandedStillOwedAndANewSet(t *testing.T) {
 // six-hour cooldown between two cards and a minute, until cleanup wave 1).
 const laterPass = 6*time.Hour + time.Minute
 
-// Serial: FreezeEventClock. One sibling the same change, one different: the
+// One sibling the same change, one different: the
 // same one writes landing_delivered_by, the root is excused that way, and
 // no rework record or card follows.
 func TestReworkSameChangeKeepsItsOwnPath(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w, c := dbWorld(t)
 	root := dbAccepted(t, w, c, s2, "bifrost-platform")
 	same := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -287,8 +294,10 @@ func TestReworkSameChangeKeepsItsOwnPath(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. NotServed is a wait, not a result: no record.
+// NotServed is a wait, not a result: no record.
 func TestReworkNotServedRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	r := newRWWorld(t, &deliveredGit{err: landinggit.ErrNotServed})
 	for range 4 {
 		r.rwPass(t)
@@ -298,9 +307,11 @@ func TestReworkNotServedRecordsNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. §2.4: a step already done is not reopened, so
+// §2.4: a step already done is not reopened, so
 // nothing about its declined root is recorded or asked.
 func TestReworkClosedStepRecordsAndAsksNothing(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	r.w.rule(t, s2, `{"step_tasks":{"state":"accepted"}}`)
 	if moved := r.w.evaluate(t, s2, &deployments{}); moved != "done" {
@@ -319,9 +330,11 @@ func TestReworkClosedStepRecordsAndAsksNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A card prepared while the step was open whose
+// A card prepared while the step was open whose
 // step moves done before it is asked: closed resolved, never asked.
 func TestReworkPreparedThenStepDone(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)

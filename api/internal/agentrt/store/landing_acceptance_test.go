@@ -15,11 +15,13 @@ import (
 // S3 cross-block acceptance (CUT §3 S3 cases, §11.11): what the per-block
 // tests left to the whole.
 
-// Serial: FreezeEventClock. Cases ②, ③ and B6 at the second gate: a change
+// Cases ②, ③ and B6 at the second gate: a change
 // after the branch was pushed (the mission marked no_merge, the change
 // merged by hand and reverted, the repository stopped) refuses the push and
 // writes nothing.
 func TestLiveGateRefusesLateChanges(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, c := range []struct {
 		name   string
 		reason string
@@ -40,7 +42,7 @@ func TestLiveGateRefusesLateChanges(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			w, task, op, src, prepared := liveReady(t)
 			at := prepared.Add(10 * time.Minute)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			c.late(t, w, task, op, &src)
 			_, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 			ok(t, err)
@@ -54,30 +56,32 @@ func TestLiveGateRefusesLateChanges(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Case ① (the other order) and ⑩: a rule
+// Case ① (the other order) and ⑩: a rule
 // tightened after main_intent does not undo the push; main read with R
 // under a later commit of someone else's records it landed.
 func TestLiveTighteningAfterTheIntentStillLands(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
 	if !d.Allowed {
 		t.Fatal(d)
 	}
 	body := strings.Replace(landingRuleBody, "deny: []", "deny: [\"console/src/components/**\"]", 1)
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	_, err = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev",
 		[]byte(ruleText("landing:dev", 2, "tighten", at.Add(time.Minute).Format(time.RFC3339), until, body)))
 	ok(t, err)
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	wrote, err := store.RecordPushResult(ctx, w.rt, auth, "ok", "agentrt-lander")
 	ok(t, err)
 	if !wrote {
 		t.Fatal("result not recorded")
 	}
-	store.FreezeEventClock(at.Add(3 * time.Minute))
+	freezeClock(t, at.Add(3*time.Minute))
 	_, err = store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: strings.Repeat("d", 40), HasR: true, Validity: "effective"}))
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "landed" || !o.EverLanded {
@@ -85,12 +89,14 @@ func TestLiveTighteningAfterTheIntentStillLands(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Case ⑤ with B4: one root delivered and one
+// Case ⑤ with B4: one root delivered and one
 // failed unanswered keep the mission active; the rule changing to not none
 // just before the close holds the landed root pending STG coverage.
 func TestB4CloseCombinations(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:acc1:1", at, "main_intent", newLandingRecord("land:acc1:1", "main_result", "outcome", "ok"))
 	liveRoot(t, w, "land:acc2:1", at, "branch_pushed", newLandingRecord("land:acc2:1", "failed", "why", "stale"))
@@ -110,7 +116,7 @@ func TestB4CloseCombinations(t *testing.T) {
 	closePass(t, w2, at)
 	readOne(t, w2, "land:acc3:1", at.Add(time.Minute), "effective")
 	// The rule turns to an STG release just before the close.
-	store.FreezeEventClock(at.Add(90 * time.Second))
+	freezeClock(t, at.Add(90*time.Second))
 	// Asking for an STG release widens what a landing must reach: the
 	// Owner signs it.
 	_, err := signer{t, rptest.NewKey(t)}.sign(w2, ruleText("landing:dev", 2, "loosen", at.Add(90*time.Second).Format(time.RFC3339), until, landingRuleBody))
@@ -126,19 +132,22 @@ func TestB4CloseCombinations(t *testing.T) {
 }
 
 func appendNote(w *world, stream string, body map[string]any) error {
+	ctx := w.ctx
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: stream, Type: "note", Actor: "controller", Body: body})
 		return err
 	})
 }
 
-// Serial: FreezeEventClock. CUT §11.13: a refused claim says why on the
+// CUT §11.13: a refused claim says why on the
 // mission's landing status; the same reason is recorded once, a new one again.
 func TestClaimRefusalShowsOnTheStatus(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "refused", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
@@ -146,7 +155,7 @@ func TestClaimRefusalShowsOnTheStatus(t *testing.T) {
 	if len(status.Roots) != 1 || status.Roots[0].Reason != "unclaimed" {
 		t.Fatalf("before any refusal: %+v", status.Roots)
 	}
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	for i, want := range []bool{true, false} {
 		wrote, err := store.RecordClaimRefusal(ctx, w.rt, "bifrost-platform", root, "stale")
 		ok(t, err)

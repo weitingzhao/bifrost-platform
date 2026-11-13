@@ -29,17 +29,18 @@ func (w s65Workspace) PushMain(ctx context.Context, r, m0 string, until time.Tim
 	return w.LiveWorkspace.PushMain(ctx, r, m0, until)
 }
 
-// Serial: signing anchor, event clock and local Git PATH. Each refusal shares
+// Serial: t.Setenv (the local Git fixture). Each refusal shares
 // the successful control's claim/preparation/controller/gate entry points.
 // PostgreSQL now(), not the wall clock, determines every assertion's UTC day.
 func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
+	ctx := ownClock(t)
 	for _, mode := range []string{"green", "no status", "failed", "wrong result", "push", "inline", "red at final gate"} {
 		t.Run(mode, func(t *testing.T) {
 			w, _ := s66World(t, true, 5)
 			var databaseNow time.Time
 			ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&databaseNow))
 			at := databaseNow.UTC().Truncate(time.Second).Add(time.Minute)
-			store.FreezeEventClock(at)
+			freezeClock(t, at)
 			git := localGit704(t)
 			gits := git.adapters()
 			src := controller.MultiRepoGitFacts(gits)
@@ -106,7 +107,7 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 				t.Fatal("restart repinned sibling")
 			}
 			kickAt := at.Add(11 * time.Minute)
-			store.FreezeEventClock(kickAt)
+			freezeClock(t, kickAt)
 			action, err := restarted.LandingDrillCI(ctx, sources, op, at, infraRepo)
 			ok(t, err)
 			if action.Kind != "ci_kick" {
@@ -163,7 +164,7 @@ func TestS65InfraPreparedCIAndFinalGatePG(t *testing.T) {
 			ok(t, err)
 			ciReads = 0
 			final := kickAt.Add(time.Minute)
-			store.FreezeEventClock(final)
+			freezeClock(t, final)
 			action, err = restarted.LandingDrillCI(ctx, sources, op, at, infraRepo)
 			ok(t, err)
 			state := landingState(t, w, infraStream).Operations[op]

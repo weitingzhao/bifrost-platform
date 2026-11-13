@@ -9,10 +9,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// Serial: real PostgreSQL locks, global event clock and local Git PATH.
+// Serial: t.Setenv (the local Git fixture).
 // An independent connection holds the mission exactly as B4 Close does;
 // pg_blocking_pids must show the sender waiting, before any debit or Create.
 func TestB5HCrossPGMissionLockContention(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5hFixture(t)
 	locker := x.w.db.Connect(t, x.w.db.Runtime)
 	observer := x.w.db.Connect(t, x.w.db.Runtime)

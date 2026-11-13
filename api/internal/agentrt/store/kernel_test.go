@@ -142,6 +142,7 @@ func (w *world) waitFor(t *testing.T, fragment string, deadline time.Time) {
 // waitForN is waitFor for at least n backends.
 func (w *world) waitForN(t *testing.T, fragment string, want int, deadline time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	for {
 		var n int
 		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()

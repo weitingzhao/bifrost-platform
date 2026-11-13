@@ -14,15 +14,17 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. The name is kept from when a red landing CI was
+// The name is kept from when a red landing CI was
 // rerun once and the rerun's recovery was tested here. Since R6:6.2-1 a red
 // landing CI is not rerun as it is: the operation ends as ci_red, creates no
 // run, and a restarted controller creates none either.
 func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	op, prepared := pushedDrill(t, w, task, src)
 	intent := prepared.Add(time.Minute).Truncate(time.Second).Add(100 * time.Millisecond)
-	restore := store.FreezeEventClock(intent)
+	restore := freezeClock(t, intent)
 	defer restore()
 	creates := 0
 	drill := controller.DrillSources{
@@ -48,7 +50,7 @@ func TestDrillRecoveryRerunCreatedAfterIntentInSameSecond(t *testing.T) {
 		t.Fatal(action, creates)
 	}
 	later := intent.Add(time.Minute)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	c = controller.Controller{DB: w.rt, Env: "stg"} // restart
 	_, err = c.LandingDrillCI(ctx, drill, op, later)
 	ok(t, err)
@@ -120,16 +122,18 @@ func TestDrillRecoveryCleanupCannotStarveExpiredOperation(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Crash after discarded and before the next claim;
+// Crash after discarded and before the next claim;
 // restart with all facts available after the root's six-hour deadline.
 func TestDrillRecoveryDiscardRestartPastBudget(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	op, at := pushedDrill(t, w, task, src)
-	restore := store.FreezeEventClock(at.Add(5*time.Hour + 59*time.Minute))
+	restore := freezeClock(t, at.Add(5*time.Hour+59*time.Minute))
 	defer restore()
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "discarded", "why", "main_changed")))
 	later := at.Add(7 * time.Hour)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	if err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "owner", Body: map[string]any{
 			"text": "invalid writer", "landing": newLandingRecord(fmt.Sprintf("land:%s:2", task), "failed", "why", "bound"),

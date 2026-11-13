@@ -21,9 +21,11 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
-// Serial: b5Ready freezes the recorder clock; PG fixtures use separate DBs.
+// b5Ready freezes the test's own clock; PG fixtures use separate DBs.
 // The late callback is the last POST boundary used by the real run adapter.
 func TestStgLeasePGSenderFencesTakeoverBeforeRenewalTick(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, takeover := range []bool{false, true} {
 		t.Run(fmt.Sprintf("takeover=%t", takeover), func(t *testing.T) {
 			x := b5Ready(t)

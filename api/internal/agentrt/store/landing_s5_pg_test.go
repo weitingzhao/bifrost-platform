@@ -18,18 +18,20 @@ import (
 // Real migration/runtime-role tests. The harness skips without PostgreSQL.
 // CI and immutable Git trees are doubles; all claims, keys, locks, quota and
 // intents below use the production store/controller functions.
-// Serial: FreezeEventClock.
+//
+// Serial: it replaces the package-level store.S5SigningReady while it signs.
 func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
+	ctx := ownClock(t)
 	for _, variant := range []string{"pass", "missing", "forged", "old generation", "profile update", "main drift", "latest review fail", "expired", "final review fail", "final expired", "final main drift", "final CI failed", "final profile changed", "checker finding", "freeze retry", "freeze exhausted"} {
 		t.Run(variant, func(t *testing.T) {
 			now := time.Now().UTC().Truncate(time.Second)
 			w, task, src := goalDrill(t, "M-3", now.Add(-time.Minute))
 			fence := landingState(t, w, landingRepoStream).Fence()
-			restore := store.FreezeEventClock(fence.Add(time.Second))
+			restore := freezeClock(t, fence.Add(time.Second))
 			_, err := store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 			restore()
 			ok(t, err)
-			defer store.FreezeEventClock(now)()
+			defer freezeClock(t, now)()
 			body := strings.Replace(landingRuleBody, `allow: ["console/src/components/**/*.tsx"]`, `allow: ["console/src/components/**/*.tsx", "`+strings.Join(rules.S5Paths(), `", "`)+`"]`, 1)
 			// The deployment's trust root is the test's policy below: the S5
 			// rule may be signed (design §9 order, store.S5SigningReady).
@@ -91,7 +93,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "branch_intent", "ref", ref, "R", r)))
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "branch_pushed", "ref", ref, "R", r)))
 			assertNoMain()
-			store.FreezeEventClock(now.Add(5 * time.Minute))
+			freezeClock(t, now.Add(5*time.Minute))
 			finalGate := false
 			src.S5CI = func(_ context.Context, k landing.S5CIKey, uid string) (landing.S5CIResult, error) {
 				name, _ := k.RunName()
@@ -131,7 +133,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 					failReview()
 				}
 				if variant == "final expired" {
-					store.FreezeEventClock(at(until))
+					freezeClock(t, at(until))
 				}
 				if variant == "final profile changed" {
 					policy.TestsDigest = strings.Repeat("e", 64)
@@ -160,7 +162,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 				failReview()
 			}
 			if variant == "expired" {
-				store.FreezeEventClock(at(until))
+				freezeClock(t, at(until))
 			}
 			_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 			ok(t, err)
@@ -172,7 +174,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 					if before.Terminal() || before.S5.InfraRetries != n {
 						t.Fatalf("retry %d: %+v", n, before.S5)
 					}
-					store.FreezeEventClock(before.S5.KeyAt.Add(landing.S5InfraRetryAfter(n)))
+					freezeClock(t, before.S5.KeyAt.Add(landing.S5InfraRetryAfter(n)))
 					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 					ok(t, err)
 					after := landingState(t, w, landingRepoStream).Operations[op]
@@ -189,7 +191,7 @@ func TestS5PGFirstClaimRecoveryAndFinalGate(t *testing.T) {
 				}
 				if variant == "freeze exhausted" {
 					o := landingState(t, w, landingRepoStream).Operations[op]
-					store.FreezeEventClock(o.S5.KeyAt.Add(landing.S5InfraRetryAfter(landing.S5InfraRetries)))
+					freezeClock(t, o.S5.KeyAt.Add(landing.S5InfraRetryAfter(landing.S5InfraRetries)))
 					_, err = ctl.LandingDrillCI(ctx, sources, op, store.DecisionAt(ctx))
 					ok(t, err)
 				}

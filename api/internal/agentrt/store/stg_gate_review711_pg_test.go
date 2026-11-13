@@ -8,10 +8,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock and real transactions. The pause is AFTER the
+// The pause is AFTER the
 // final permit check, inside Create and before persistence. The adapter's
 // actual POST boundary has an independent fake-Kubernetes regression.
 func TestReview711PGInFlightCreateAndLateReadback(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"success", "none", "live off", "none lost response"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
@@ -67,9 +69,11 @@ func TestReview711PGInFlightCreateAndLateReadback(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The public gate leaves no interval/debit while
+// The public gate leaves no interval/debit while
 // the new UID is nonterminal, then accept that very UID when it succeeds.
 func TestReview711PGUnknownCIProgressesWithSameUID(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	t.Run("same-entry success", func(t *testing.T) { b5Ready(t).permit(t) })
 	x := b5Ready(t)
 	accepted := x.obs.CI.Accepted
@@ -95,9 +99,11 @@ func TestReview711PGUnknownCIProgressesWithSameUID(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Definite reader errors persist ci_results; they must not acquire
+// Definite reader errors persist ci_results; they must not acquire
 // the transient Unknown exemption.
 func TestReview711PGCIResultsErrorsStillBlock(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, reason := range []string{"ci_results", "ci_identity", "ci_tie"} {
 		t.Run(reason, func(t *testing.T) {
 			x := b5Ready(t)

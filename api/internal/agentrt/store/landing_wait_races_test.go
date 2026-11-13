@@ -12,9 +12,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. Independent connections append snapshots in both
+// Independent connections append snapshots in both
 // orders; A's pending snapshot predates B's terminal snapshot, but arrives last.
 func TestC4Review690RequestInterleaving(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, status := range []string{"approved", "running", "unknown", "expired", "failed", "executed", "rejected"} {
 		for _, late := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/late=%v", status, late), func(t *testing.T) {
@@ -58,17 +60,19 @@ func TestC4Review690RequestInterleaving(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. B is in CI with an old branch_pushed snapshot;
+// B is in CI with an old branch_pushed snapshot;
 // A commits awaiting_grant at E=5h59m using a separate connection. B returns
 // at wall age 6h01m. With no A, the same entry must really settle bound.
 func TestC4Review690CITimerInterleaving(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, wait := range []bool{false, true} {
 		t.Run(fmt.Sprint(wait), func(t *testing.T) {
 			w, root, op, src, at := c4Ready(t, "api/internal/agentrt/store/c4.go")
 			other := w.db.Connect(t, w.db.Runtime)
 			start := at.Add(5*time.Hour + 29*time.Minute)
 			finish := start.Add(2 * time.Minute)
-			store.FreezeEventClock(start)
+			freezeClock(t, start)
 			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true}
 			a, err := ctl.LandingDrillCI(ctx, controller.DrillSources{
 				Facts:         src,
@@ -82,7 +86,7 @@ func TestC4Review690CITimerInterleaving(t *testing.T) {
 							t.Fatal(d)
 						}
 					}
-					store.FreezeEventClock(finish)
+					freezeClock(t, finish)
 					return landing.CIRun{Run: "ci-review", R: commitB, Status: "Succeeded", CreatedAt: at.Add(-28 * time.Minute)}, nil
 				},
 			}, op, start)
@@ -102,19 +106,21 @@ func TestC4Review690CITimerInterleaving(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The locked store entry checks the latest state
+// The locked store entry checks the latest state
 // even if a controller submits an already-expired snapshot.
 func TestC4Review690LockedTimerGuards(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, _, at := c4Wait(t)
 	observed := landingState(t, w, landingRepoStream).Operations[op]
-	store.FreezeEventClock(at.Add(7 * time.Hour))
+	freezeClock(t, at.Add(7*time.Hour))
 	before := w.lastSeq(t, landingRepoStream)
 	why, err := store.SettleLandingOperationBound(ctx, w.rt, op, observed)
 	ok(t, err)
 	if why != "" || before != w.lastSeq(t, landingRepoStream) {
 		t.Fatal("paused E ended", why)
 	}
-	store.FreezeEventClock(at.Add(72 * time.Hour))
+	freezeClock(t, at.Add(72*time.Hour))
 	why, err = store.SettleLandingOperationBound(ctx, w.rt, op, observed)
 	ok(t, err)
 	if why != "approval_expired" {

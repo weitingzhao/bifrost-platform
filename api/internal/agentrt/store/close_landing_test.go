@@ -22,6 +22,7 @@ func goalDrill(t *testing.T, mission string, clock ...time.Time) (*world, string
 
 func goalDrillInWorld(t *testing.T, w *world, mission string, clock ...time.Time) (*world, string, store.LandingSource) {
 	t.Helper()
+	ctx := ctxOf(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
@@ -33,7 +34,7 @@ func goalDrillInWorld(t *testing.T, w *world, mission string, clock ...time.Time
 	if len(clock) > 0 && clock[0].Add(-time.Hour).Before(enabled) {
 		enabled = clock[0].Add(-time.Hour)
 	}
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	t.Cleanup(restore)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
@@ -41,7 +42,7 @@ func goalDrillInWorld(t *testing.T, w *world, mission string, clock ...time.Time
 	}))
 	restore()
 	if len(clock) > 0 {
-		store.FreezeEventClock(clock[0])
+		freezeClock(t, clock[0])
 	}
 	w.goalMission(t, mission)
 	task := w.ready(t, store.Task{MissionID: mission, OffPlanReason: "an operator's drill", BaseCommit: commitB})
@@ -62,11 +63,13 @@ func goalDrillInWorld(t *testing.T, w *world, mission string, clock ...time.Time
 	return w, task, src
 }
 
-// Serial: FreezeEventClock. S2 found on STG (M-114, 2026-10-22): a mission
+// S2 found on STG (M-114, 2026-10-22): a mission
 // bound to no plan step closed 34 ms after its last task was accepted, so a
 // drill claimed in between would end failed{stale} at its next gate. An
 // operation in flight now holds the mission; its end releases it.
 func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	if w.state(t, "task", task) != "accepted" {
 		t.Fatal("fixture: task not accepted")
@@ -81,7 +84,7 @@ func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
 		t.Fatalf("closed under a claimed operation: %v %v", closed, err)
 	}
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	ref := "refs/heads/land/stg/" + task + "/1"
 	for _, r := range []map[string]any{newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
 		ok(t, appendLanding(w, landingRepoStream, r))
@@ -97,7 +100,7 @@ func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
 	}
 	// The bound gives the discarded root its terminal successor; then it closes.
 	later := time.Now().Add(7 * time.Hour)
-	restore = store.FreezeEventClock(later)
+	restore = freezeClock(t, later)
 	_, err = store.SettleLandingDrillBounds(ctx, w.rt, later)
 	restore()
 	ok(t, err)
@@ -110,14 +113,16 @@ func TestCloseMissionsWaitsForLandingInFlight(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The other order: the close decided first. A root
+// The other order: the close decided first. A root
 // in the first-claim handoff past its window with no record (the loop never
 // reached it) is recorded by the close itself, failed{bound} as
 // land:<root>:1, in the transaction that closes the mission (TD-447 4); a
 // claim after that reads the mission done and claims nothing.
 func TestLandingClaimAfterCloseIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-4")
-	restore := store.FreezeEventClock(time.Now().Add(6*time.Hour + time.Minute))
+	restore := freezeClock(t, time.Now().Add(6*time.Hour+time.Minute))
 	closed, err := store.CloseMissions(ctx, w.rt)
 	restore()
 	if err != nil || len(closed) != 1 {

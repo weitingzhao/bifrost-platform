@@ -47,6 +47,7 @@ func (tx td462SnapshotTx) Commit(ctx context.Context) error {
 
 func td462PrepareBusy(t *testing.T, c *c5, root, op string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	c4Prepare(t, c.w, root, op, c.at, true)
 	ok(t, store.AppendCIKick(ctx, c.w.rt, op, "ci_kick", 1, c.key, "TD-462: competing controller"))
 }
@@ -56,7 +57,7 @@ func td462PrepareBusy(t *testing.T, c *c5, root, op string) {
 // final gate (PROD 2026-11-06); one still in CI does not.
 func td462AtMain(t *testing.T, c *c5, op string) {
 	t.Helper()
-	store.FreezeEventClock(c.at.Add(time.Second)) // its CI ran after its preparation at c.at
+	freezeClock(t, c.at.Add(time.Second)) // its CI ran after its preparation at c.at
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(op, "ci_seen", "run", "busy-green", "status", "Succeeded", "R", commitB,
 		"created_at", c.at.Add(time.Second/2).Format(time.RFC3339Nano))))
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(op, "main_intent", "R", commitB, "M0", commitA)))
@@ -73,17 +74,20 @@ func td462CountOpens(ctl *controller.Controller, p *livePusher) *int {
 
 func td462GrantUses(t *testing.T, c *c5, grant string) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var uses int
 	ok(t, c.w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id=$1
 	  AND body_json->'landing_grant_use'->>'grant_id'=$2`, landingRepoStream, grant).Scan(&uses))
 	return uses
 }
 
-// Serial: FreezeEventClock. Review 787 B1: X's whole active lifetime lies
+// Review 787 B1: X's whole active lifetime lies
 // between A's snapshots. B claims X before W gets a grant and X reaches
 // main (an operation in CI holds no slot against W), then main refuses X
 // (non_ff) before A scans again.
 func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	root := td462Root(t, c)
 	pA, pB := &livePusher{outcome: landinggit.PushOK}, &livePusher{outcome: landinggit.PushOK}
@@ -110,27 +114,29 @@ func TestTD462ReleaseBetweenControllerSnapshotsPG(t *testing.T) {
 	if busy == "" || *opens != 1 || len(pA.pushes) != 0 {
 		t.Fatal("A did not hit the unseen in-flight blocker", busy, *opens, pA.pushes)
 	}
-	store.FreezeEventClock(c.at.Add(2 * time.Second))
+	freezeClock(t, c.at.Add(2*time.Second))
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(busy, "main_result", "outcome", "non_ff")))
 	if o := landingState(t, c.w, landingRepoStream).Operations[busy]; o.Active() {
 		t.Fatal("main's refusal did not release X", o.Phase)
 	}
-	store.FreezeEventClock(c.at.Add(15 * time.Second))
+	freezeClock(t, c.at.Add(15*time.Second))
 	ok(t, a.LandingDrillPass(ctx))
 	if *opens < 2 || len(pA.pushes) != 1 || len(pB.pushes) != 0 || c.phase(t) != "main_result" || td462GrantUses(t, c, grant.GrantID) != 1 {
 		t.Fatal("A did not push W exactly once on the next scan", *opens, pA.pushes, pB.pushes)
 	}
-	store.FreezeEventClock(c.at.Add(30 * time.Second))
+	freezeClock(t, c.at.Add(30*time.Second))
 	ok(t, a.LandingDrillPass(ctx))
 	if len(pA.pushes) != 1 || len(pB.pushes) != 0 || td462GrantUses(t, c, grant.GrantID) != 1 {
 		t.Fatal("repeated scan pushed or consumed twice")
 	}
 }
 
-// Serial: FreezeEventClock. Review 787 B1: the snapshot sees X, but the
+// Review 787 B1: the snapshot sees X, but the
 // gate is refused by Y. X's disappearance must not wake W. (The daily quota
 // case is gone with the quota, cleanup wave 1.)
 func TestTD462NoWakeForReplacementPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, reason := range []string{"replacement"} {
 		t.Run(reason, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
@@ -167,7 +173,7 @@ func TestTD462NoWakeForReplacementPG(t *testing.T) {
 				t.Fatal("first refusal", *opens, p.pushes)
 			}
 			for scan := 1; scan <= 3; scan++ {
-				store.FreezeEventClock(c.at.Add(time.Duration(scan) * 15 * time.Second))
+				freezeClock(t, c.at.Add(time.Duration(scan)*15*time.Second))
 				ok(t, ctl.LandingDrillPass(ctx))
 				if *opens != 1 || len(p.pushes) != 0 {
 					t.Fatal("unrelated exit woke a still-blocked gate", scan, *opens, p.pushes)
@@ -177,10 +183,12 @@ func TestTD462NoWakeForReplacementPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 787 B2: closed-window scans only read
+// Review 787 B2: closed-window scans only read
 // the window. When it opens, the full gate still catches a reclose/revoke
 // between the lightweight probe and authorization.
 func TestTD462WindowProbeAndFinalGatePG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, race := range []string{"open", "reclosed", "revoked"} {
 		t.Run(race, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
@@ -218,7 +226,7 @@ func TestTD462WindowProbeAndFinalGatePG(t *testing.T) {
 				t.Fatal("first window refusal not reached", *opens, windowReads, initialReads)
 			}
 			for scan := 1; scan <= 45; scan++ {
-				store.FreezeEventClock(c.at.Add(time.Duration(scan) * 15 * time.Second))
+				freezeClock(t, c.at.Add(time.Duration(scan)*15*time.Second))
 				ok(t, ctl.LandingDrillPass(ctx))
 				if *opens != 1 || evidenceReads != initialReads || windowReads != scan+1 || len(p.pushes) != 0 {
 					t.Fatal("closed window repeated full work", scan, *opens, evidenceReads, windowReads)
@@ -235,7 +243,7 @@ func TestTD462WindowProbeAndFinalGatePG(t *testing.T) {
 				}
 				return p, nil
 			}
-			store.FreezeEventClock(c.at.Add(46 * 15 * time.Second))
+			freezeClock(t, c.at.Add(46*15*time.Second))
 			ok(t, ctl.LandingDrillPass(ctx))
 			want := 0
 			if race == "open" {

@@ -18,11 +18,12 @@ import (
 // FreezeEventClock cannot move that clock or repair a fence after creation.
 func b5fWorld(t *testing.T, mode string) (*world, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	var at time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT now()`).Scan(&at))
 	at = at.UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at.Add(-time.Hour)))
+	t.Cleanup(freezeClock(t, at.Add(-time.Hour)))
 	body := landingRuleBody
 	if mode == "none" {
 		body = strings.Replace(body, "stg_release: bifrost-deliver-platform", "stg_release: none", 1)
@@ -39,14 +40,14 @@ func b5fWorld(t *testing.T, mode string) (*world, time.Time) {
 		_, err := store.ObserveLandingEnabled(ctx, tx, "prod", "dev", "bifrost-platform", store.DecisionAt(ctx))
 		return err
 	}))
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	w.goalMission(t, "M-3")
 	return w, at
 }
 
 func b5fEvidence(t *testing.T, w *world, at time.Time, id string) {
 	t.Helper()
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	d := "sha256:" + strings.Repeat("d", 64)
 	b5Append(t, w, b5Record("evidence", "ext", "evidence", id, "source", "external", "run", "manual", "P", commitB, "U", commitA, "infra", commitA,
 		"content", map[string]any{"api_digest": d, "console_digest": d}, "deployed", map[string]any{"pin_sync_ok": true, "workloads": map[string]any{"observed": true}, "at": at.Format(time.RFC3339Nano)}, "health", map[string]any{"status": "ok"}))
@@ -54,7 +55,8 @@ func b5fEvidence(t *testing.T, w *world, at time.Time, id string) {
 
 func b5fCover(t *testing.T, w *world, m store.StgMemberKey, id string, at time.Time) {
 	t.Helper()
-	store.FreezeEventClock(at)
+	ctx := ctxOf(t)
+	freezeClock(t, at)
 	s, err := store.ReadStgRelease(ctx, w.rt)
 	ok(t, err)
 	written, err := store.CommitStgCoverage(ctx, w.rt, "dev", s.LastSeq, id, m, store.MainEvidence{Head: commitB, HasR: true, Validity: "effective", ReadAt: at})
@@ -68,6 +70,7 @@ func b5fCover(t *testing.T, w *world, m store.StgMemberKey, id string, at time.T
 // Repeating it must preserve the interval and never issue a send permit.
 func b5fRefuse(t *testing.T, x *b5Fixture, why string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	for i := 0; i < 2; i++ {
 		before := x.read(t)
 		p, d, err := store.AuthorizeStgRelease(ctx, x.w.rt, b5Batch, 1, x.src, nil)
@@ -82,8 +85,10 @@ func b5fRefuse(t *testing.T, x *b5Fixture, why string) {
 	}
 }
 
-// Serial: PostgreSQL fixtures and FreezeEventClock; same close入口 in all modes.
+// PostgreSQL fixtures; same close入口 in all modes.
 func TestStgB4PGNoneEnabledMissingAndClosed(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"none", "enabled", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			w, at := b5fWorld(t, mode)
@@ -141,15 +146,17 @@ func TestStgB4PGNoneEnabledMissingAndClosed(t *testing.T) {
 	}
 }
 
-// Serial: the round and both per-root main reads are real stored events.
+// The round and both per-root main reads are real stored events.
 func TestStgB4PGPartialEvidenceKeepsRoundAndNewProofChangesIt(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, at := b5fWorld(t, "enabled")
 	root1 := s66Landed(t, w, "M-3", "bifrost-platform", at)
 	root2 := s66Landed(t, w, "M-3", "bifrost-platform", at)
 	id := "cluster/cicd/manual"
 	// Two contradictory deployment observations at the same database-based
 	// time leave the current baseline unknown, while historical covers stand.
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	x := b5Snapshot(t, w, root1, "land:"+root1+":1", store.DecisionAt(ctx))
 	b5fEvidence(t, w, at.Add(time.Minute), id)
 	for _, root := range []string{root1, root2} {
@@ -182,8 +189,10 @@ func TestStgB4PGPartialEvidenceKeepsRoundAndNewProofChangesIt(t *testing.T) {
 	}
 }
 
-// Serial: real dual connections contend for the CAS, with no cluster I/O.
+// Real dual connections contend for the CAS, with no cluster I/O.
 func TestStgCoveragePGCASAndNoneFence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, none := range []bool{false, true} {
 		t.Run(fmt.Sprint(none), func(t *testing.T) {
 			w, at := b5fWorld(t, "enabled")
@@ -233,8 +242,10 @@ func TestStgCoveragePGCASAndNoneFence(t *testing.T) {
 	}
 }
 
-// Serial: existing B3 Owner count, B5 coverage, and B4 close use real rows.
+// Existing B3 Owner count, B5 coverage, and B4 close use real rows.
 func TestStgB4PGInMainNeedsOwnerAndRecordedHCoverage(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, choice := range []string{"count_as_delivered", "confirm_not_delivered"} {
 		t.Run(choice, func(t *testing.T) {
 			w, at := b5fWorld(t, "enabled")
@@ -280,7 +291,7 @@ func TestStgB4PGInMainNeedsOwnerAndRecordedHCoverage(t *testing.T) {
 			if len(candidates) != 1 || candidates[0].R != commitB {
 				t.Fatal("used A instead of recorded H", candidates)
 			}
-			store.FreezeEventClock(at.Add(7 * time.Minute))
+			freezeClock(t, at.Add(7*time.Minute))
 			did, err := store.CommitStgCoverage(ctx, w.rt, "dev", s.LastSeq, "cluster/cicd/manual", candidates[0], store.MainEvidence{Head: commitB, HasR: true, Validity: "unknown", ReadAt: store.DecisionAt(ctx)})
 			ok(t, err)
 			if !did {
@@ -293,9 +304,11 @@ func TestStgB4PGInMainNeedsOwnerAndRecordedHCoverage(t *testing.T) {
 	}
 }
 
-// Serial: the legacy card disposition and new hard-floor withholding coexist
+// The legacy card disposition and new hard-floor withholding coexist
 // in the real stream; the same B4 entry must retain their priority.
 func TestStgB4PGLegacyOwnerAndWithheldCoexist(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, oldOwner := range []bool{false, true} {
 		t.Run(fmt.Sprint(oldOwner), func(t *testing.T) {
 			w, at := b5fWorld(t, "enabled")
@@ -321,7 +334,7 @@ func TestStgB4PGLegacyOwnerAndWithheldCoexist(t *testing.T) {
 				f.answer(question, answer, at.Add(3*time.Hour+time.Minute))
 				cardPass(t, w, f, at.Add(3*time.Hour+2*time.Minute))
 			}
-			store.FreezeEventClock(at.Add(4 * time.Hour))
+			freezeClock(t, at.Add(4*time.Hour))
 			x := b5Snapshot(t, w, root, op, store.DecisionAt(ctx))
 			x.obs.Commits[0].Changes[0].OldPath = ".github/workflows/ci.yaml"
 			x.obs.Commits[0].Changes[0].NewPath = ".github/workflows/ci.yaml"

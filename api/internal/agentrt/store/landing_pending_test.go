@@ -26,7 +26,7 @@ func prodChain(t *testing.T, w *world, task, op string, at time.Time, last strin
 		landingRecord(op, "main_result", "outcome", "non_ff"),
 	}
 	for i, r := range chain {
-		store.FreezeEventClock(at.Add(time.Duration(i) * time.Minute))
+		freezeClock(t, at.Add(time.Duration(i)*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, r))
 		if r["kind"] == last {
 			return
@@ -36,6 +36,7 @@ func prodChain(t *testing.T, w *world, task, op string, at time.Time, last strin
 
 func closeKeeps(t *testing.T, w *world, why string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	closed, err := store.CloseMissions(ctx, w.rt)
 	if err != nil || len(closed) != 0 || w.state(t, "mission", "M-3") != "active" {
 		t.Fatalf("%s: closed=%v err=%v", why, closed, err)
@@ -44,27 +45,30 @@ func closeKeeps(t *testing.T, w *world, why string) {
 
 func closeEnds(t *testing.T, w *world, why string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	closed, err := store.CloseMissions(ctx, w.rt)
 	if err != nil || len(closed) != 1 || w.state(t, "mission", "M-3") != "done" {
 		t.Fatalf("%s: closed=%v err=%v state=%s", why, closed, err, w.state(t, "mission", "M-3"))
 	}
 }
 
-// Serial: FreezeEventClock. A push main did not fast-forward ends only that
+// A push main did not fast-forward ends only that
 // operation: the replay k+1 is due, so the mission holds (review 638
 // TestWork638NonFFKeepsMissionForReplay), and the bound gives the root its
 // born-terminal successor as it does after discarded.
 func TestCloseHoldsNonFFUntilBound(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, _ := goalDrill(t, "M-3")
 	op := "land:" + task + ":1"
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer restore()
 	prodChain(t, w, task, op, at, "main_result")
 	closeKeeps(t, w, "non_ff lost its replay")
 
 	later := at.Add(7 * time.Hour)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	_, err := store.SettleLandingDrillBounds(ctx, w.rt, later)
 	ok(t, err)
 	s := landingState(t, w, landingRepoStream)
@@ -78,13 +82,15 @@ func TestCloseHoldsNonFFUntilBound(t *testing.T) {
 	closeEnds(t, w, "not closed after the bound")
 }
 
-// Serial: FreezeEventClock. An Owner retry with no claim yet: k+1 is due, so
+// An Owner retry with no claim yet: k+1 is due, so
 // the mission holds; six hours after the retry with no claim, the root gets
 // its born-terminal failed{bound}, which uses the retry up (review 642 §2).
 func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer restore()
 	op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, at)
 	ok(t, err)
@@ -92,7 +98,7 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 		t.Fatal("claim refused", d)
 	}
 	bound := at.Add(7 * time.Hour)
-	store.FreezeEventClock(bound)
+	freezeClock(t, bound)
 	_, err = store.SettleLandingDrillBounds(ctx, w.rt, bound)
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations[op]; o.Phase != "failed" || o.Outcome != "bound" {
@@ -102,7 +108,7 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 	closeKeeps(t, w, "closed between the retry and its claim")
 
 	later := bound.Add(6*time.Hour + time.Minute)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	_, err = store.SettleLandingDrillBounds(ctx, w.rt, later)
 	ok(t, err)
 	s := landingState(t, w, landingRepoStream)
@@ -116,23 +122,25 @@ func TestCloseHoldsRetryUntilClaimedOrBound(t *testing.T) {
 	closeEnds(t, w, "not closed after the retry expired")
 }
 
-// Serial: FreezeEventClock. An operation at main_intent cannot take
+// An operation at main_intent cannot take
 // failed{bound} (only reconciling with main ends it). The settlement leaves it alone and
 // still ends the other roots' expired operations, instead of rolling all of
 // them back; Close keeps its mission past the hold limit.
 func TestSettleSkipsOperationAtMain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, _ := goalDrill(t, "M-3")
 	op := "land:" + task + ":1"
 	other := "t_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	otherOp := "land:" + other + ":1"
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer restore()
 	ok(t, appendLanding(w, landingRepoStream, landingRecord(otherOp, "claimed", "task", other, "attempt", landingAttempt, "A", commitA, "rule_version", 1)))
 	prodChain(t, w, task, op, at.Add(time.Second), "main_intent")
 
 	later := at.Add(7 * time.Hour)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	_, err := store.SettleLandingDrillBounds(ctx, w.rt, later)
 	ok(t, err)
 	s := landingState(t, w, landingRepoStream)

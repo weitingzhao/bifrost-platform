@@ -25,12 +25,13 @@ import (
 // (its own host), the clock 30 minutes before at.
 func batchRoots(t *testing.T, n int) (*world, []string, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
 	var roots []string
 	for i := range n {
-		store.FreezeEventClock(at.Add(-40*time.Minute + time.Duration(i)*time.Second))
+		freezeClock(t, at.Add(-40*time.Minute+time.Duration(i)*time.Second))
 		root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: fmt.Sprintf("batch %d", i), BaseCommit: commitB})
 		if c := w.run(t, fmt.Sprintf("h%d", i+1), cursor, "done"); c.TaskID != root {
 			t.Fatalf("claimed %s, not %s", c.TaskID, root)
@@ -40,13 +41,14 @@ func batchRoots(t *testing.T, n int) (*world, []string, time.Time) {
 		}
 		roots = append(roots, root)
 	}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	return w, roots, at
 }
 
 // batchClaims claims roots for one batch, in order.
 func batchClaims(t *testing.T, w *world, roots []string, at time.Time) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var ops []string
 	for _, root := range roots {
 		op, d, err := store.ClaimLandingInBatch(ctx, w.rt, c4Source(precheckPath), "prod", root, at, ops)
@@ -68,17 +70,19 @@ func batchOf(ops []string, at time.Time) store.LandingBatch {
 // last's when last is false.
 func batchWorld(t *testing.T, n int, last bool) (*world, []string, []string, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, roots, at := batchRoots(t, n)
 	ops := batchClaims(t, w, roots, at)
 	ok(t, store.AppendLandingBatch(ctx, w.rt, "bifrost-platform", batchOf(ops, at.Add(-30*time.Minute))))
 	for i, op := range ops {
 		c4Prepare(t, w, roots[i], op, at.Add(-29*time.Minute), last || i < len(ops)-1)
 	}
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	return w, roots, ops, at
 }
 
 func batchNote(w *world, actor string, body map[string]any) error {
+	ctx := w.ctx
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: actor, Body: body})
 		return err
@@ -94,7 +98,7 @@ func batchBody(b store.LandingBatch) map[string]any {
 		"M0": b.M0, "R": b.R, "committer_date": b.CommitterDate.UTC().Format(time.RFC3339Nano), "after": b.After}}
 }
 
-// Serial: FreezeEventClock. The claims of one batch do not count each
+// The claims of one batch do not count each
 // other in flight (the rule allows one); the note is refused, with nothing
 // written, unless its members are each root's latest operation, claimed or
 // prepared with its M0 and R, in no other batch, after names a split red
@@ -102,6 +106,8 @@ func batchBody(b store.LandingBatch) map[string]any {
 // with it a member's facts count no mate in flight, while a root outside
 // the batch is refused for the limit.
 func TestBatchNoteAppendCheck(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, roots, at := batchRoots(t, 4)
 	if op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", roots[0], at); err != nil || op == "" {
 		t.Fatal("first claim", d, err)
@@ -152,7 +158,7 @@ func TestBatchNoteAppendCheck(t *testing.T) {
 	if n := rwNotes(t, w, "landing_batch"); n != 0 {
 		t.Fatal("a refused note was written", n)
 	}
-	store.FreezeEventClock(at.Add(-28 * time.Minute))
+	freezeClock(t, at.Add(-28*time.Minute))
 	ok(t, store.AppendLandingBatch(ctx, w.rt, "bifrost-platform", good))
 	again := batchOf([]string{ops[1], ops[0]}, date)
 	if err := batchNote(w, "controller", batchBody(again)); !errors.Is(err, store.ErrBatchRefused) {
@@ -188,10 +194,12 @@ func TestBatchNoteAppendCheck(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A red batch blaming one member: that one goes
+// A red batch blaming one member: that one goes
 // back for its next round (no card), the others fail ci_red and are retried
 // by the controller (no card), and no half waits. Recorded once.
 func TestBatchRedBlamedAndOthers(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, roots, ops, at := batchWorld(t, 3, true)
 	reworked, err := store.RecordBatchRed(ctx, w.rt, "bifrost-platform", landing.BatchID(ops[0]), redCI, []string{ops[1]}, "test: failed", store.PrecheckCI)
 	ok(t, err)
@@ -225,16 +233,18 @@ func TestBatchRedBlamedAndOthers(t *testing.T) {
 		t.Fatal("recorded twice")
 	}
 	// The unblamed roots claim again, free, and may form the next batch.
-	store.FreezeEventClock(at.Add(-15 * time.Minute))
+	freezeClock(t, at.Add(-15*time.Minute))
 	next := batchClaims(t, w, []string{roots[0], roots[2]}, at)
 	ok(t, store.AppendLandingBatch(ctx, w.rt, "bifrost-platform", batchOf(next, at.Add(-15*time.Minute))))
 }
 
-// Serial: FreezeEventClock. A red batch blaming none: every member fails
+// A red batch blaming none: every member fails
 // ci_red and is retried, no card; its halves succeed it, first half first:
 // the first half's batch names it as after, then the second half waits.
 // The red note itself is checked: not twice, halves as Split's.
 func TestBatchRedSplitsWhenNothingMaps(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, roots, ops, at := batchWorld(t, 3, true)
 	id := landing.BatchID(ops[0])
 	if err := batchNote(w, "controller", map[string]any{"text": "red", "landing_batch_red": map[string]any{"v": "1", "batch": id,
@@ -264,7 +274,7 @@ func TestBatchRedSplitsWhenNothingMaps(t *testing.T) {
 	if !slices.Equal(half, roots[:2]) || red != id {
 		t.Fatal("first half", half, red)
 	}
-	store.FreezeEventClock(at.Add(-15 * time.Minute))
+	freezeClock(t, at.Add(-15*time.Minute))
 	next := batchClaims(t, w, half, at)
 	b := batchOf(next, at.Add(-15*time.Minute))
 	b.After = red
@@ -282,13 +292,15 @@ func batchObserved(prepared time.Time) func(context.Context, landing.Operation) 
 	}
 }
 
-// Serial: FreezeEventClock. The batch gate is all or nothing: a member not
+// The batch gate is all or nothing: a member not
 // ready refuses the batch, naming it, and nothing is written, no intent;
 // once every member is ready, every member's main_intent on one R and M0, each resting on the one green run; the
 // reconciler lands each, as any operation.
 func TestBatchGateAllOrNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, roots, ops, at := batchWorld(t, 3, false)
-	store.FreezeEventClock(at.Add(-10 * time.Minute))
+	freezeClock(t, at.Add(-10*time.Minute))
 	auths, d, err := store.AuthorizeBatchPush(ctx, w.rt, c4Source(precheckPath), ops, batchObserved(at.Add(-29*time.Minute)))
 	ok(t, err)
 	if d.Allowed || auths != nil || d.Detail["op"] != ops[2] {

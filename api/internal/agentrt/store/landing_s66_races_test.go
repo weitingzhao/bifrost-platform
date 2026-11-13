@@ -82,14 +82,16 @@ func s66ClosingPair(t *testing.T) (*world, time.Time) {
 		t.Fatal("missing close round", st)
 	}
 	s66ReadBoth(t, w, at.Add(3*time.Minute))
-	store.FreezeEventClock(at.Add(4 * time.Minute))
+	freezeClock(t, at.Add(4*time.Minute))
 	return w, at
 }
 
-// Serial: event clock, real PG scheduler. T52: sequential control, two
+// T52: sequential control, two
 // simultaneous B4 closes, and a reversed-order mutation that actually
 // deadlocks. Both missions carry both repositories in every case.
 func TestS66T52B4LockOrderPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	t.Run("sequential control", func(t *testing.T) {
 		w, _ := s66ClosingPair(t)
 		ids, err := store.CloseMissions(ctx, w.rt)
@@ -142,9 +144,10 @@ func TestS66T52B4LockOrderPG(t *testing.T) {
 	}
 }
 
-// Serial: hook and event clock. T52's other edge: the final gate waits on
+// Serial: SetHook. T52's other edge: the final gate waits on
 // B4's mission lock without holding a stream the close needs.
 func TestS66T52CloseAgainstSecondGatePG(t *testing.T) {
+	ctx := ownClock(t)
 	w, at := s66World(t, true, 5)
 	s66Landed(t, w, "M-3", platformRepo, at)
 	root := s66Root(t, w, "M-3", infraRepo)
@@ -154,7 +157,7 @@ func TestS66T52CloseAgainstSecondGatePG(t *testing.T) {
 		t.Fatal(d)
 	}
 	prepareS6(t, w, infraRepo, root, op, at)
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	held, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }

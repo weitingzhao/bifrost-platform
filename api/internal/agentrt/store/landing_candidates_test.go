@@ -8,7 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock via acceptedDrill. The drill lists only tasks it
+// The drill lists only tasks it
 // could claim: one accepted, or of a mission created, before the landing was
 // enabled, or whose mission is not active or carries no_merge, would be
 // refused after a Git read inside a held transaction (2026-10-27 STG: twelve
@@ -17,6 +17,8 @@ import (
 // the superuser as the tamper hand, so each predicate is pinned on its own
 // (review 641).
 func TestLandingCandidatesLeaveOutWhatOnlyTheDatabaseRefuses(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	type facts struct {
 		w        *world
 		task     string

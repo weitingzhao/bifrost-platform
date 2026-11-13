@@ -22,6 +22,7 @@ func td462Root(t *testing.T, c *c5) string {
 }
 
 func td462Controller(c *c5, p *livePusher) *controller.Controller {
+	ctx := c.w.ctx
 	var calls ciCalls
 	src := pinSources(c.src, &calls, &c.ci, "Succeeded")
 	ctl := liveController(c.w)
@@ -30,8 +31,9 @@ func td462Controller(c *c5, p *livePusher) *controller.Controller {
 	return &ctl
 }
 
-// Serial: FreezeEventClock.
 func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
 	root := td462Root(t, c)
@@ -46,7 +48,7 @@ func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
 	// Window opens without any landing-stream transition: the next scan
 	// must push the approved operation, with the new root still unclaimed.
 	blocked = false
-	store.FreezeEventClock(c.at.Add(time.Second))
+	freezeClock(t, c.at.Add(time.Second))
 	ok(t, ctl.LandingDrillPass(ctx))
 	if len(p.pushes) != 1 || c.phase(t) != "main_result" {
 		t.Fatal("authorized operation did not push next scan", p.pushes, c.phase(t))
@@ -67,8 +69,9 @@ func TestTD462GrantedWaitingPrecedesNewClaimPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestTD462GrantedRetryAfterAwaitingGrantPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	root := td462Root(t, c)
 	// Another claim wins before the approval is written.
@@ -102,8 +105,9 @@ func TestTD462GrantedRetryAfterAwaitingGrantPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestTD462PriorityEndsWithGrantUsabilityPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, end := range []string{"ungranted", "revoked", "expired", "disabled"} {
 		t.Run(end, func(t *testing.T) {
 			c := c5Wait(t, c5Core, false, true)
@@ -116,7 +120,7 @@ func TestTD462PriorityEndsWithGrantUsabilityPG(t *testing.T) {
 				case "expired":
 					expires, err := time.Parse(time.RFC3339Nano, g.ExpiresAt)
 					ok(t, err)
-					store.FreezeEventClock(expires)
+					freezeClock(t, expires)
 				case "disabled":
 					enableGrants(t, c.w, c.signer, 2, false)
 				}
@@ -132,8 +136,9 @@ func TestTD462PriorityEndsWithGrantUsabilityPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock.
 func TestTD462PriorityRecheckedAfterExternalReadsPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	root := td462Root(t, c)
 	src := c4Source("console/src/components/TD462.tsx")

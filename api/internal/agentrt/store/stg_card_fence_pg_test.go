@@ -60,6 +60,7 @@ func stgSettlementResume(t *testing.T, x *b5Fixture) {
 }
 func stgSettlementFixture(t *testing.T, action string) (*b5Fixture, *fakeCards, store.CardRecord) {
 	t.Helper()
+	ctx := ctxOf(t)
 	mode := "exhausted"
 	if action == "withdraw" {
 		mode = "blocked"
@@ -84,9 +85,11 @@ func stgSettlementFixture(t *testing.T, action string) (*b5Fixture, *fakeCards, 
 	return x, f, c
 }
 
-// Serial: DB-anchored clock; two real connections interleave a tightening
+// DB-anchored clock; two real connections interleave a tightening
 // commit after the initial read or Lookup, before the final external write.
 func TestStgCardsPGSettlementNoneInterleaving(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, action := range []string{"ack", "withdraw"} {
 		phases := []string{"enabled", "none_at_entry", "after_read"}
 		if action == "withdraw" {
@@ -146,10 +149,12 @@ func TestStgCardsPGSettlementNoneInterleaving(t *testing.T) {
 	}
 }
 
-// Serial: real advisory locks and safego; no sleep-based concurrency oracle.
+// Real advisory locks and safego; no sleep-based concurrency oracle.
 // A tightening already waiting at Ack/Withdraw must stay blocked through
 // the receipt commit, then become visible. This kills a recheck-only fix.
 func TestStgCardsPGSettlementHoldsPolicyThroughWrite(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, action := range []string{"ack", "withdraw"} {
 		t.Run(action, func(t *testing.T) {
 			x, f, c := stgSettlementFixture(t, action)

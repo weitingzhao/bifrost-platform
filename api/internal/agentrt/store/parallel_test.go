@@ -205,6 +205,11 @@ func TestHelperAsValue(t *testing.T) {
 func TestNotItsT(t *testing.T) {
 	other.Parallel()
 }
+
+func TestParallelButSigning(t *testing.T) {
+	t.Parallel()
+	store.S5SigningReady = nil
+}
 `
 	const inside = `package store
 
@@ -228,9 +233,9 @@ func TestInsideClock(t *testing.T) {
 		got[strings.Fields(p)[0]] = true
 	}
 	want := []string{"TestForgot", "TestParallelButHooked", "TestParallelButFrozen", "TestParallelButEnv", "TestParallelLate", "TestBoth",
-		"TestEmptyWhy", "TestPing", "TestPong", "TestAliased", "TestStoredClosure", "TestHelperAsValue", "TestNotItsT", "TestInsideClock"}
-	if tests != 17 || len(got) != len(want) {
-		t.Fatalf("%d tests, problems %v; want 17 tests and %v", tests, problems, want)
+		"TestEmptyWhy", "TestPing", "TestPong", "TestAliased", "TestStoredClosure", "TestHelperAsValue", "TestNotItsT", "TestParallelButSigning", "TestInsideClock"}
+	if tests != 18 || len(got) != len(want) {
+		t.Fatalf("%d tests, problems %v; want 18 tests and %v", tests, problems, want)
 	}
 	for _, name := range want {
 		if !got[name] {
@@ -241,10 +246,11 @@ func TestInsideClock(t *testing.T) {
 
 // serialOnly are the switches a parallel test must not reach: the package's
 // test hook, its event clock and the limits a test lowers (export_test.go,
-// or the variables themselves from a test inside the package), and the
-// process's environment and working directory.
+// or the variables themselves from a test inside the package), the check a
+// test replaces to sign an S5 rule, and the process's environment and
+// working directory.
 var serialOnly = []string{"SetHook", "FreezeEventClock", "LimitPendingChangesForTest", "DecidePageForTest",
-	"testHook", "eventClock", "pendingChangeLimit", "decidePageSize", "Setenv", "Unsetenv", "Chdir"}
+	"testHook", "eventClock", "pendingChangeLimit", "decidePageSize", "S5SigningReady", "Setenv", "Unsetenv", "Chdir"}
 
 // parallelProblems reads the test files of the package (store_test, and
 // store's own): how many Test functions there are, and what each one breaks

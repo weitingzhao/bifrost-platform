@@ -25,6 +25,7 @@ const platformRepo = "bifrost-platform"
 // schema triggers: the two repositories use the real signed rule and tasks.
 func s66World(t *testing.T, liveInfra bool, quota int, clock ...time.Time) (*world, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	at := time.Now().UTC().Truncate(time.Second)
 	var databaseNow time.Time
@@ -39,7 +40,7 @@ func s66World(t *testing.T, liveInfra bool, quota int, clock ...time.Time) (*wor
 	// Mission.created_at comes from PostgreSQL now(), not FreezeEventClock.
 	// Put the real mode/enabled records before both clocks; a future midnight
 	// acceptance must not put the fence after the mission's creation.
-	t.Cleanup(store.FreezeEventClock(enabled))
+	t.Cleanup(freezeClock(t, enabled))
 	s := signer{t, rptest.NewKey(t)}
 	body := strings.Replace(infraRuleBody, "max_landings_per_day: 5", fmt.Sprintf("max_landings_per_day: %d", quota), 1)
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, body))
@@ -54,7 +55,7 @@ func s66World(t *testing.T, liveInfra bool, quota int, clock ...time.Time) (*wor
 			return err
 		}))
 	}
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	w.goalMission(t, "M-3")
 	return w, at
 }
@@ -79,9 +80,11 @@ func s66Source() store.LandingSource {
 	}}
 }
 
-// Serial: event clock and signing anchor. T51: each same-entry control can
+// T51: each same-entry control can
 // claim; one platform flight never occupies infra's independent flight slot.
 func TestS66T51PerRepoInFlightPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, at := s66World(t, true, 5)
 	src := s66Source()
 	for _, repo := range landing.LandingRepoNames() {
@@ -107,6 +110,7 @@ func TestS66T51PerRepoInFlightPG(t *testing.T) {
 // CloseMissions with accepted roots and honest per-repo main evidence.
 func s66Landed(t *testing.T, w *world, mission, repo string, at time.Time) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	root := s66Root(t, w, mission, repo)
 	op := "land:" + root + ":1"
 	ref := "refs/heads/land/prod/" + root + "/1"
@@ -120,10 +124,10 @@ func s66Landed(t *testing.T, w *world, mission, repo string, at time.Time) strin
 		newLandingRecord(op, "main_intent", "R", commitB, "M0", commitA),
 		newLandingRecord(op, "main_result", "outcome", "ok"),
 	} {
-		store.FreezeEventClock(base.Add(time.Duration(i) * time.Second))
+		freezeClock(t, base.Add(time.Duration(i)*time.Second))
 		ok(t, appendLanding(w, "landing:"+repo, r))
 	}
-	store.FreezeEventClock(base.Add(10 * time.Second))
+	freezeClock(t, base.Add(10*time.Second))
 	_, err := store.ReconcileMain(ctx, w.rt, repo, evidence(store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}))
 	ok(t, err)
 	return root
@@ -131,16 +135,19 @@ func s66Landed(t *testing.T, w *world, mission, repo string, at time.Time) strin
 
 func s66ReadBoth(t *testing.T, w *world, at time.Time) {
 	t.Helper()
-	store.FreezeEventClock(at)
+	ctx := ctxOf(t)
+	freezeClock(t, at)
 	for _, repo := range landing.LandingRepoNames() {
 		_, err := store.ReconcileMain(ctx, w.rt, repo, evidence(store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}))
 		ok(t, err)
 	}
 }
 
-// Serial: global clock. T53's positive and negative use the same close
+// T53's positive and negative use the same close
 // entry; only the infra root is left unclaimed in the negative.
 func TestS66T53CloseNeedsEveryRepositoryPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, unresolved := range []bool{false, true} {
 		t.Run(fmt.Sprint(unresolved), func(t *testing.T) {
 			w, at := s66World(t, true, 5)
@@ -186,10 +193,12 @@ func TestS66T53CloseNeedsEveryRepositoryPG(t *testing.T) {
 	}
 }
 
-// Serial: event clock. T54: changing only infra's live state selects its
+// T54: changing only infra's live state selects its
 // legacy hold. An unclaimed root inside the first-claim window still holds a
 // mixed mission, even when the platform root is ready to close.
 func TestS66T54PartialLiveKeepsLegacyHoldPG(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	for _, live := range []bool{true, false} {
 		t.Run(fmt.Sprint(live), func(t *testing.T) {
 			w, at := s66World(t, live, 5)
@@ -211,15 +220,17 @@ type s66GateResult struct {
 	err      error
 }
 
-// Serial: event clock and signing anchor. Card identity, persisted floor
+// Card identity, persisted floor
 // detail and the mission read all stay on infra; lookup by question must not
 // silently search platform alone.
 func TestS66InfraCardAndMissionProjectionPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	bad := infraChange()
 	bad.OldPath, bad.NewPath = "agent-config/work/multi-agent/PLAN-x.md", "agent-config/work/multi-agent/PLAN-x.md"
 	w, root, src := infraWorld(t, []rules.LandingChange{bad})
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	_, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 	ok(t, err)
 	if d.Reason != "floor" {
@@ -250,13 +261,14 @@ func TestS66InfraCardAndMissionProjectionPG(t *testing.T) {
 	}
 }
 
-// Serial: signing, clock, hooks and the local Git fixture. T50: both
+// Serial: SetHook, t.Setenv (the local Git fixture). T50: both
 // repositories individually pass the gate and push their own bare remote;
 // concurrently, both land although the rule states a legacy daily quota of
 // one (cleanup wave 1: the quota bounds nothing, and no tenant-wide quota
 // lock serializes the two gates). These are real transactions on two
 // connections. No production remote is used.
 func TestS66T50DualRemotePG(t *testing.T) {
+	ctx := ownClock(t)
 	for _, repos := range [][]string{{platformRepo}, {infraRepo}, landing.LandingRepoNames()} {
 		t.Run(strings.Join(repos, "+"), func(t *testing.T) {
 			w, at := s66World(t, true, 1)
@@ -277,7 +289,7 @@ func TestS66T50DualRemotePG(t *testing.T) {
 				ctl.Drill.InfraPlatformHead = func(ctx context.Context) (string, error) { return gits[platformRepo].Ref(ctx, "refs/heads/main") }
 				ok(t, ctl.LandingDrillBranch(ctx, gits[repo], op, at, repo))
 			}
-			store.FreezeEventClock(at.Add(2 * time.Minute))
+			freezeClock(t, at.Add(2*time.Minute))
 			gate := func(db store.DB, repo string) s66GateResult {
 				a, d, err := store.AuthorizeLandingPush(ctx, db, src, ops[repo], func(_ context.Context, o landing.Operation) (store.LiveObservation, error) {
 					return store.LiveObservation{Main: o.M0, CI: landing.CIRun{Run: "s66-green", R: o.R, Status: "Succeeded", CreatedAt: o.PreparedAt.Add(time.Second)}}, nil

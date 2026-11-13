@@ -52,8 +52,9 @@ type consoleFixture struct {
 	Cases []consoleFixtureCase `json:"cases"`
 }
 
-// Serial: FreezeEventClock.
 func TestConsoleDeliveryFixtures(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	attemptOf := func(task string) string {
 		t.Helper()

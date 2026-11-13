@@ -10,10 +10,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. TD-514: while a landing holds the stream, the pass
+// TD-514: while a landing holds the stream, the pass
 // must not stall on an observation it already recorded; a new status still
 // waits its turn, and a disagreeing repeat is still refused.
 func TestTD514RecordedRequestSkipsTheStreamLock(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, _, at := c4Wait(t)
 	pending := c4Request(op, "pending", at)
 	wrote, err := store.RecordLandingGrantRequest(ctx, w.rt, pending)

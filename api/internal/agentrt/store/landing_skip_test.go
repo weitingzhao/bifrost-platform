@@ -29,12 +29,14 @@ func countedFacts(src store.LandingSource) (store.LandingSource, *atomic.Int32, 
 	}, &results, &histories
 }
 
-// Serial: FreezeEventClock via acceptedDrill. A pass reads no Git for a
+// A pass reads no Git for a
 // candidate the landing stream already refuses (rehearsed; an operation in
 // progress), and still reads it for one it does not (review 642 §4). Without
 // the pass's unsettled filter the two refusals come only after Result and
 // History.
 func TestDrillPassSkipsStreamRefusalsBeforeFacts(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	stillCandidate := func(t *testing.T, w *world, task string) {
 		t.Helper()
 		tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
@@ -55,7 +57,7 @@ func TestDrillPassSkipsStreamRefusalsBeforeFacts(t *testing.T) {
 	t.Run("rehearsed", func(t *testing.T) {
 		w, task, src := acceptedDrill(t)
 		op, at := pushedDrill(t, w, task, src)
-		restore := store.FreezeEventClock(at.Add(time.Second))
+		restore := freezeClock(t, at.Add(time.Second))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_seen", "R", commitB, "run", "green", "status", "Succeeded", "created_at", at.Add(time.Second).Format(time.RFC3339Nano))))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "rehearsed", "R", commitB)))
 		restore()

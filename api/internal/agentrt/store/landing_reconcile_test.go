@@ -28,7 +28,7 @@ func atMain(t *testing.T, w *world, op, outcome string, at time.Time) (string, t
 	prodChain(t, w, root, op, at, "main_intent")
 	intent := at.Add(5 * time.Minute)
 	if outcome != "" {
-		store.FreezeEventClock(intent.Add(time.Minute))
+		freezeClock(t, intent.Add(time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "main_result", "outcome", outcome)))
 	}
 	return root, intent
@@ -44,9 +44,11 @@ func phaseOf(t *testing.T, w *world, op string) (string, string) {
 	return o.Phase, o.Outcome
 }
 
-// Serial: FreezeEventClock. Every branch of §10.2 / §10.6, each run twice:
+// Every branch of §10.2 / §10.6, each run twice:
 // the second pass writes nothing more.
 func TestReconcileMainBranches(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
 	in := store.MainEvidence{Head: commitB, HasR: true}
 	unchanged := store.MainEvidence{Head: commitA}
@@ -71,10 +73,10 @@ func TestReconcileMainBranches(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := newKernelWorld(t)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			op := "land:main:1"
 			_, intent := atMain(t, w, op, c.outcome, at)
-			store.FreezeEventClock(intent.Add(c.after))
+			freezeClock(t, intent.Add(c.after))
 			for pass := 0; pass < 2; pass++ {
 				done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(c.ev))
 				ok(t, err)
@@ -99,14 +101,16 @@ func TestReconcileMainBranches(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. denied ends failed{denied} with no Git read; the
+// denied ends failed{denied} with no Git read; the
 // mission is no longer held for it.
 func TestReconcileDeniedNeedsNoGit(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root, intent := atMain(t, w, "land:denied:1", "denied", at)
-	store.FreezeEventClock(intent.Add(time.Hour))
+	freezeClock(t, intent.Add(time.Hour))
 	if s := landingState(t, w, landingRepoStream); !s.RootPending(root) {
 		t.Fatal("fixture: denied should hold the root")
 	}
@@ -123,15 +127,17 @@ func TestReconcileDeniedNeedsNoGit(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. ok with R missing is recorded once and held;
+// ok with R missing is recorded once and held;
 // main showing R later lands it; or the Owner confirms it lost on a card
 // (1A), and then the root no longer holds its mission.
 func TestReconcileOkMissingEndsOnlyByTheOwner(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root, intent := atMain(t, w, "land:lost:1", "ok", at)
-	store.FreezeEventClock(intent.Add(time.Hour))
+	freezeClock(t, intent.Add(time.Hour))
 	missing := evidence(store.MainEvidence{Head: commitA})
 	for range 2 {
 		_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", missing)
@@ -168,14 +174,16 @@ func TestReconcileOkMissingEndsOnlyByTheOwner(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Evidence read for a state that moved before the
+// Evidence read for a state that moved before the
 // locked write is stale: nothing is written (§10.2).
 func TestReconcileStaleEvidenceWritesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:moved:1", "", at)
-	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
+	freezeClock(t, intent.Add(store.MainFence+time.Minute))
 	cands, err := store.MainCandidates(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	if len(cands) != 1 {
@@ -190,15 +198,17 @@ func TestReconcileStaleEvidenceWritesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A read that fails skips that operation only; it
+// A read that fails skips that operation only; it
 // is never taken as R absent.
 func TestReconcileReadFailureSkipsOnlyThatOperation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:fail:1", "", at)
 	atMain(t, w, "land:fail:2", "", at)
-	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
+	freezeClock(t, intent.Add(store.MainFence+time.Minute))
 	calls := 0
 	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		calls++
@@ -219,20 +229,22 @@ func TestReconcileReadFailureSkipsOnlyThatOperation(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. An operation ended as never sent whose R main
+// An operation ended as never sent whose R main
 // later shows is recorded once for the Owner (2A).
 func TestReconcileLateLandingIsRecordedOnce(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:late:1", "", at)
-	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
+	freezeClock(t, intent.Add(store.MainFence+time.Minute))
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
 	ok(t, err)
 	if p, o := phaseOf(t, w, "land:late:1"); p != "failed" || o != "bound" {
 		t.Fatalf("fixture: %s{%s}", p, o)
 	}
-	store.FreezeEventClock(intent.Add(time.Hour))
+	freezeClock(t, intent.Add(time.Hour))
 	for pass := 0; pass < 2; pass++ {
 		done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
 		ok(t, err)
@@ -249,18 +261,20 @@ func TestReconcileLateLandingIsRecordedOnce(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Absence read by a pass that began inside the
+// Absence read by a pass that began inside the
 // fence proves nothing, however late it is written (review 658 B2); a read
 // begun past the fence does.
 func TestReconcileAbsenceReadInsideTheFenceProvesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:fence:1", "unknown", at)
 	fence := intent.Add(store.MainFence)
-	store.FreezeEventClock(fence.Add(-time.Second))
+	freezeClock(t, fence.Add(-time.Second))
 	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
-		store.FreezeEventClock(fence.Add(time.Second)) // the read ends past the fence
+		freezeClock(t, fence.Add(time.Second)) // the read ends past the fence
 		return store.MainEvidence{Head: commitA}, nil
 	})
 	ok(t, err)
@@ -274,19 +288,21 @@ func TestReconcileAbsenceReadInsideTheFenceProvesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Two passes holding the same late candidate
+// Two passes holding the same late candidate
 // record it once (review 658 R1); a late landing is still watched after the
 // Owner declined the unsent operation (R2).
 func TestReconcileLateLandingOnceAndAfterDecline(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	root, intent := atMain(t, w, "land:late:2", "", at)
-	store.FreezeEventClock(intent.Add(store.MainFence + time.Minute))
+	freezeClock(t, intent.Add(store.MainFence+time.Minute))
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
 	ok(t, err)
 	later := intent.Add(time.Hour)
-	store.FreezeEventClock(later)
+	freezeClock(t, later)
 	res, err := store.HandleLandingAnswer(ctx, w.rt, answerCard("q-late-decline", "do_not_merge", later), root, "land:late:2", later)
 	ok(t, err)
 	if p, o := phaseOf(t, w, "land:late:2"); res.Outcome != store.LandingAnswerApplied || p != "failed" || o != "declined" {
@@ -309,14 +325,16 @@ func TestReconcileLateLandingOnceAndAfterDecline(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. ok with R missing, recorded; R shows later: it
+// ok with R missing, recorded; R shows later: it
 // lands.
 func TestReconcileOkMissingThenFoundLands(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:found:1", "ok", at)
-	store.FreezeEventClock(intent.Add(time.Hour))
+	freezeClock(t, intent.Add(time.Hour))
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitA}))
 	ok(t, err)
 	done, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
@@ -349,15 +367,17 @@ func TestReconcileIgnoresDrills(t *testing.T) {
 	_ = landing.Version
 }
 
-// Serial: FreezeEventClock. The reconciler's own loop runs without the drill
+// The reconciler's own loop runs without the drill
 // (any environment): with no main reader it still settles denied (PROD
 // today).
 func TestReconcileLoopSettlesDeniedWithoutTheDrill(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	atMain(t, w, "land:loop:denied", "denied", at)
-	store.FreezeEventClock(at.Add(time.Hour))
+	freezeClock(t, at.Add(time.Hour))
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Reconcile: &controller.LandingReconcile{}}
 	ok(t, ctl.LandingReconcilePass(ctx))
 	if p, o := phaseOf(t, w, "land:loop:denied"); p != "failed" || o != "denied" {
@@ -430,18 +450,20 @@ func TestReconcileLoopBacksOffPerOperation(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. ⑪ (S3 B-02): pushed, then reverted before the
+// ⑪ (S3 B-02): pushed, then reverted before the
 // landing was recorded: landed and reverted, both, in that order, in one
 // pass. Reverted after it was recorded: the landed operation, read again
 // while its mission is open, gets reverted. Unknown validity records landed
 // only.
 func TestReconcileRecordsReversals(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	revert := strings.Repeat("f", 40)
 	_, intent := atMain(t, w, "land:rev:1", "unknown", at)
-	store.FreezeEventClock(intent.Add(time.Minute))
+	freezeClock(t, intent.Add(time.Minute))
 	_, err := store.ReconcileMain(ctx, w.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations["land:rev:1"]; !o.EverLanded || !o.Reverted {
@@ -450,13 +472,13 @@ func TestReconcileRecordsReversals(t *testing.T) {
 
 	w2 := newKernelWorld(t)
 	_, intent2 := atMain(t, w2, "land:rev:2", "ok", at)
-	store.FreezeEventClock(intent2.Add(time.Minute))
+	freezeClock(t, intent2.Add(time.Minute))
 	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true, Validity: "effective"}))
 	ok(t, err)
 	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; !o.EverLanded || o.Reverted {
 		t.Fatalf("landed: %+v", o)
 	}
-	store.FreezeEventClock(intent2.Add(2 * time.Minute)) // a later read
+	freezeClock(t, intent2.Add(2*time.Minute)) // a later read
 	done, err := store.ReconcileMain(ctx, w2.rt, "bifrost-platform", evidence(store.MainEvidence{Head: revert, HasR: true, Validity: "reverted", RevertedBy: revert}))
 	ok(t, err)
 	if o := landingState(t, w2, landingRepoStream).Operations["land:rev:2"]; done["land:rev:2"] != "reverted" || !o.Reverted {
@@ -465,7 +487,7 @@ func TestReconcileRecordsReversals(t *testing.T) {
 
 	w3 := newKernelWorld(t)
 	_, intent3 := atMain(t, w3, "land:rev:3", "unknown", at)
-	store.FreezeEventClock(intent3.Add(time.Minute))
+	freezeClock(t, intent3.Add(time.Minute))
 	_, err = store.ReconcileMain(ctx, w3.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
 	ok(t, err)
 	if o := landingState(t, w3, landingRepoStream).Operations["land:rev:3"]; !o.EverLanded || o.Reverted {
@@ -495,7 +517,7 @@ func TestReconcileRecordsReversals(t *testing.T) {
 	if !listed() {
 		t.Fatal("a landing not read in the day after its mission closed (CUT §11.8 v3 item 2)")
 	}
-	store.FreezeEventClock(intent3.Add(time.Minute + store.LateRevertWithin + time.Hour))
+	freezeClock(t, intent3.Add(time.Minute+store.LateRevertWithin+time.Hour))
 	if listed() {
 		t.Fatal("a closed mission's landing read again after a day")
 	}
@@ -505,6 +527,7 @@ func TestReconcileRecordsReversals(t *testing.T) {
 // verdict/validity.
 func mainEvidenceRows(t *testing.T, w *world, op string) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	rows, err := w.rt.Query(ctx, `SELECT body_json->'landing_main'->>'verdict' || '/' || (body_json->'landing_main'->>'validity')
 	  FROM agentrt.event WHERE event_stream_id = $1 AND body_json->'landing_main'->>'op' = $2 ORDER BY event_id`, landingRepoStream, op)
 	ok(t, err)
@@ -513,18 +536,20 @@ func mainEvidenceRows(t *testing.T, w *world, op string) []string {
 	return out
 }
 
-// Serial: FreezeEventClock. Review 662 B-04: a landing's evidence is read
+// Review 662 B-04: a landing's evidence is read
 // again and recorded when it says something new: unknown to effective,
 // unreadable, R gone from main; the same again, or an older read, writes
 // nothing.
 func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	_, intent := atMain(t, w, "land:ev:1", "ok", at)
 	pass := func(k int, ev store.MainEvidence, err error) map[string]string {
 		t.Helper()
-		store.FreezeEventClock(intent.Add(time.Duration(k) * time.Minute))
+		freezeClock(t, intent.Add(time.Duration(k)*time.Minute))
 		done, e := store.ReconcileMain(ctx, w.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) { return ev, err })
 		if err == nil {
 			ok(t, e)
@@ -565,7 +590,7 @@ func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
 	// another answer, committed after it, is not recorded.
 	w3 := newKernelWorld(t)
 	_, intent3 := atMain(t, w3, "land:ev:3", "ok", at)
-	store.FreezeEventClock(intent3.Add(time.Minute))
+	freezeClock(t, intent3.Add(time.Minute))
 	_, err = store.ReconcileMain(ctx, w3.rt, "bifrost-platform", evidence(store.MainEvidence{Head: commitB, HasR: true}))
 	ok(t, err)
 	c3 := store.MainCandidate{Op: "land:ev:3", Root: landingState(t, w3, landingRepoStream).Operations["land:ev:3"].Task, Phase: "landed", Outcome: "ok", R: commitB, M0: commitA}
@@ -579,7 +604,7 @@ func TestReconcileRefreshesALandingsEvidence(t *testing.T) {
 	// A failed read of an operation not yet landed writes nothing.
 	w2 := newKernelWorld(t)
 	_, intent2 := atMain(t, w2, "land:ev:2", "unknown", at)
-	store.FreezeEventClock(intent2.Add(store.MainFence + time.Minute))
+	freezeClock(t, intent2.Add(store.MainFence+time.Minute))
 	_, err = store.ReconcileMain(ctx, w2.rt, "bifrost-platform", func(context.Context, string, string, string, string) (store.MainEvidence, error) {
 		return store.MainEvidence{}, errors.New("fetch failed")
 	})

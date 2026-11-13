@@ -30,14 +30,16 @@ func b5fReversal(t *testing.T, w *world, at time.Time) string {
 		newLandingRecord(op, "main_result", "outcome", "ok"),
 		newLandingRecord(op, "landed", "R", p),
 	} {
-		store.FreezeEventClock(at.Add(time.Duration(i) * time.Second))
+		freezeClock(t, at.Add(time.Duration(i)*time.Second))
 		ok(t, appendLanding(w, landingRepoStream, r))
 	}
 	return p
 }
 
-// Serial: real B4 CloseMissions, PostgreSQL now() anchor and FreezeEventClock.
+// Real B4 CloseMissions on a PostgreSQL now() anchor.
 func TestStgB4PGReversalBeforeAndAfterAdmission(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, admitted := range []bool{false, true} {
 		for _, legal := range []bool{false, true} {
 			t.Run(fmt.Sprintf("admitted=%t/legal=%t", admitted, legal), func(t *testing.T) {
@@ -46,14 +48,14 @@ func TestStgB4PGReversalBeforeAndAfterAdmission(t *testing.T) {
 				op := "land:" + root + ":1"
 				m := store.StgMemberKey{Root: root, Op: op, R: commitB}
 				if admitted {
-					store.FreezeEventClock(at.Add(time.Minute))
+					freezeClock(t, at.Add(time.Minute))
 					b5StateFixture(t, w, root, op, store.DecisionAt(ctx), false)
 				}
 				p := strings.Repeat("f", 40)
 				if legal {
 					p = b5fReversal(t, w, at.Add(2*time.Minute))
 				}
-				store.FreezeEventClock(at.Add(3 * time.Minute))
+				freezeClock(t, at.Add(3*time.Minute))
 				s, err := store.ReadStgRelease(ctx, w.rt)
 				ok(t, err)
 				o := s.Legacy.Operations[op]
@@ -114,9 +116,11 @@ func TestStgB4PGReversalBeforeAndAfterAdmission(t *testing.T) {
 	}
 }
 
-// Serial: expires_at is anchored to whole-second PostgreSQL now(), with the
+// expires_at is anchored to whole-second PostgreSQL now(), with the
 // enabled/mode fences before mission creation (b5fWorld's missing-rule mode).
 func TestStgControlPGExpiredRuleBaseline(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, phase := range []string{"OPEN", "SNAP"} {
 		for _, baseline := range []string{"known", "missing", "ambiguous"} {
 			if phase == "SNAP" && baseline == "missing" {
@@ -126,7 +130,7 @@ func TestStgControlPGExpiredRuleBaseline(t *testing.T) {
 				w, at := b5fWorld(t, "missing")
 				root := s66Landed(t, w, "M-3", platformRepo, at)
 				op := "land:" + root + ":1"
-				store.FreezeEventClock(at.Add(time.Minute))
+				freezeClock(t, at.Add(time.Minute))
 				if baseline != "missing" {
 					b5StateFixture(t, w, root, op, store.DecisionAt(ctx), phase == "SNAP")
 					if baseline == "ambiguous" {
@@ -139,7 +143,7 @@ func TestStgControlPGExpiredRuleBaseline(t *testing.T) {
 					b5Append(t, w, b5Record("p_selected", "batch", "P", commitB, "at", store.DecisionAt(ctx).Format(time.RFC3339Nano)))
 				}
 				at = at.Add(2 * time.Hour)
-				store.FreezeEventClock(at)
+				freezeClock(t, at)
 				rule, err := store.StgControlRule(ctx, w.rt, "dev")
 				ok(t, err)
 				if rule == nil || rule.Expires.After(at) {

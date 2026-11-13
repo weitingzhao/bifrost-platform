@@ -19,7 +19,8 @@ import (
 // readOne reads main for one landing operation only.
 func readOne(t *testing.T, w *world, op string, now time.Time, validity string) {
 	t.Helper()
-	store.FreezeEventClock(now)
+	ctx := ctxOf(t)
+	freezeClock(t, now)
 	cands, err := store.MainCandidates(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	for _, c := range cands {
@@ -35,17 +36,20 @@ func readOne(t *testing.T, w *world, op string, now time.Time, validity string) 
 
 func closeRounds(t *testing.T, w *world) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'mission:M-3' AND body_json ? 'landing_close_round'`).Scan(&n))
 	return n
 }
 
-// Serial: FreezeEventClock. B-01: two landed roots; each read in turn
+// B-01: two landed roots; each read in turn
 // narrows the round, it does not reopen it; the mission closes in round 1,
 // and the close keeps each root as decided (N-01).
 func TestB4PartialEvidenceKeepsTheRound(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	a := liveRoot(t, w, "land:r672a:1", at, "main_intent", newLandingRecord("land:r672a:1", "main_result", "outcome", "ok"))
 	liveRoot(t, w, "land:r672b:1", at, "main_intent", newLandingRecord("land:r672b:1", "main_result", "outcome", "ok"))
@@ -82,12 +86,14 @@ func TestB4PartialEvidenceKeepsTheRound(t *testing.T) {
 	_ = a
 }
 
-// Serial: FreezeEventClock. B-01: a root that joins the mission after the
+// B-01: a root that joins the mission after the
 // round opened changes the snapshot: a new round, whose reads count; the
 // earlier ones do not.
 func TestB4SnapshotChangeReopensTheRound(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r672c:1", at, "main_intent", newLandingRecord("land:r672c:1", "main_result", "outcome", "ok"))
 	effectiveRead(t, w, at.Add(-10*time.Minute))
@@ -96,11 +102,11 @@ func TestB4SnapshotChangeReopensTheRound(t *testing.T) {
 	}
 	readOne(t, w, "land:r672c:1", at.Add(time.Minute), "effective")
 	// A second root, ended declined: disposed, but a new identity.
-	store.FreezeEventClock(at.Add(90 * time.Second))
+	freezeClock(t, at.Add(90*time.Second))
 	d := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "joins late", BaseCommit: commitB})
 	w.passRound(t, d, "h1", "h2", "h3")
 	prodChain(t, w, d, "land:r672d:1", at.Add(91*time.Second), "branch_pushed")
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:r672d:1", "failed", "why", "declined")))
 	if st := closePass(t, w, at.Add(3*time.Minute)); st != "active" || closeRounds(t, w) != 2 {
 		t.Fatalf("a changed snapshot kept its round: %s, %d rounds", st, closeRounds(t, w))
@@ -111,17 +117,19 @@ func TestB4SnapshotChangeReopensTheRound(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. B-02: the mode alone puts no root in scope
+// B-02: the mode alone puts no root in scope
 // (claim, close and settle agree); PROD records enabled only after its mode;
 // with both, the fence is the later.
 func TestB4FenceNeedsEnabledAndMode(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
-	store.FreezeEventClock(at.Add(-3 * time.Hour))
+	freezeClock(t, at.Add(-3*time.Hour))
 	enabled := func(env string) time.Time {
 		var fence time.Time
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -137,14 +145,14 @@ func TestB4FenceNeedsEnabledAndMode(t *testing.T) {
 	if st := landingState(t, w, landingRepoStream); !st.EnabledAt.IsZero() {
 		t.Fatal("enabled written on PROD without the mode")
 	}
-	store.FreezeEventClock(at.Add(-2 * time.Hour))
+	freezeClock(t, at.Add(-2*time.Hour))
 	mode, err := store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	if st := landingState(t, w, landingRepoStream); !st.Fence().IsZero() {
 		t.Fatal("the mode alone made a fence", st.Fence())
 	}
 	// A mission and its root accepted with only the mode.
-	store.FreezeEventClock(at.Add(-90 * time.Minute))
+	freezeClock(t, at.Add(-90*time.Minute))
 	w.goalMission(t, "M-3")
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "mode only", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
@@ -161,7 +169,7 @@ func TestB4FenceNeedsEnabledAndMode(t *testing.T) {
 	if st := closePass(t, w, at); st != "done" {
 		t.Fatal("a mission outside the scope did not close as before", st)
 	}
-	store.FreezeEventClock(at.Add(-time.Hour))
+	freezeClock(t, at.Add(-time.Hour))
 	f := enabled("prod")
 	st := landingState(t, w, landingRepoStream)
 	if st.EnabledAt.IsZero() || !f.Equal(st.EnabledAt) || !f.After(mode) {
@@ -169,11 +177,13 @@ func TestB4FenceNeedsEnabledAndMode(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-01: the Owner's disposition stands over an
+// R-01: the Owner's disposition stands over an
 // effective read outside any round: the mission stops, no round opens.
 func TestB4DispositionOverEvidenceOutsideTheRound(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r672e:1", at, "main_intent", newLandingRecord("land:r672e:1", "main_result", "outcome", "ok"))
 	readOne(t, w, "land:r672e:1", at.Add(-10*time.Minute), "unknown")
@@ -187,12 +197,14 @@ func TestB4DispositionOverEvidenceOutsideTheRound(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-02: a root the Owner counted not delivered,
+// R-02: a root the Owner counted not delivered,
 // then read effective in a round another root opened, is delivered; its
 // reversal within the day is told whatever the disposition.
 func TestB4LateRevertAfterADisposition(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r672f:1", at, "main_intent", newLandingRecord("land:r672f:1", "main_result", "outcome", "ok"))
 	readOne(t, w, "land:r672f:1", at.Add(-10*time.Minute), "unknown")
@@ -201,11 +213,11 @@ func TestB4LateRevertAfterADisposition(t *testing.T) {
 	f.answer("q1", "a", at.Add(2*time.Hour+time.Minute))
 	cardPass(t, w, f, at.Add(2*time.Hour+2*time.Minute))
 	// A second landed root opens a round that reads both.
-	store.FreezeEventClock(at.Add(2*time.Hour + 3*time.Minute))
+	freezeClock(t, at.Add(2*time.Hour+3*time.Minute))
 	g := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "second", BaseCommit: commitB})
 	w.passRound(t, g, "h1", "h2", "h3")
 	prodChain(t, w, g, "land:r672g:1", at.Add(2*time.Hour+4*time.Minute), "main_intent")
-	store.FreezeEventClock(at.Add(2*time.Hour + 12*time.Minute))
+	freezeClock(t, at.Add(2*time.Hour+12*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:r672g:1", "main_result", "outcome", "ok")))
 	readOne(t, w, "land:r672g:1", at.Add(2*time.Hour+13*time.Minute), "effective")
 	readOne(t, w, "land:r672f:1", at.Add(2*time.Hour+13*time.Minute), "effective")
@@ -228,7 +240,7 @@ func TestB4LateRevertAfterADisposition(t *testing.T) {
 	if delivered != 2 {
 		t.Fatalf("the disposed root read in the round was not delivered: %+v", status.Closed.Roots)
 	}
-	store.FreezeEventClock(at.Add(4 * time.Hour))
+	freezeClock(t, at.Add(4*time.Hour))
 	cands, err := store.MainCandidates(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	for _, c := range cands {
@@ -242,12 +254,14 @@ func TestB4LateRevertAfterADisposition(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-05, R-07: a park changes reason in one
+// R-05, R-07: a park changes reason in one
 // transaction, and only from the park observed; the status shows the park,
 // its since and, from its start (cleanup wave 1), that it is told.
 func TestB4ParkShowsAndChangesWhole(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r672h:1", at, "branch_pushed",
 		newLandingRecord("land:r672h:1", "parked", "why", "window", "retry_at", at.Add(time.Hour).Format(time.RFC3339Nano)))
@@ -258,7 +272,7 @@ func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 		t.Fatalf("park status: %+v", r)
 	}
 	seen := landingState(t, w, landingRepoStream).Operations["land:r672h:1"].LastAt
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	if done, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r672h:1", "rule", seen, "ci_stuck", at.Add(2*time.Minute), "test "); err != nil || done {
 		t.Fatal("re-parked from a park not observed", done, err)
 	}
@@ -274,15 +288,17 @@ func TestB4ParkShowsAndChangesWhole(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. R-04: with no way to ask, an existing question
+// R-04: with no way to ask, an existing question
 // is still taken up by its key.
 func TestB4LookupWithoutAsk(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r672i:1", at, "branch_pushed", newLandingRecord("land:r672i:1", "failed", "why", "stale"))
 	f := newFakeCards(func() time.Time { return at })
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	prepared, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at)
 	ok(t, err)
 	if len(prepared) != 1 {
@@ -303,12 +319,14 @@ func TestB4LookupWithoutAsk(t *testing.T) {
 	_ = context.Background
 }
 
-// Serial: FreezeEventClock. R-03: a disposition without its applied answer,
+// R-03: a disposition without its applied answer,
 // an outcome naming another kind or a wrong reminder, and a second record
 // for a handled question are refused.
 func TestB4CardRecordsBindTheirAnswer(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	root := liveRoot(t, w, "land:r672j:1", at, "branch_pushed", newLandingRecord("land:r672j:1", "failed", "why", "stale"))
 	f := newFakeCards(func() time.Time { return at })
@@ -378,27 +396,29 @@ func TestB4CardRecordsBindTheirAnswer(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 675 R-05: a park observed, then changed
+// Review 675 R-05: a park observed, then changed
 // to ci_stuck and back to window by another caller, is not the park the old
 // observation saw: the old caller writes nothing.
 func TestB4ReparkRefusesABA(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r675a:1", at, "branch_pushed",
 		newLandingRecord("land:r675a:1", "parked", "why", "window", "retry_at", at.Add(time.Hour).Format(time.RFC3339Nano)))
 	old := landingState(t, w, landingRepoStream).Operations["land:r675a:1"].LastAt
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ok1, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "window", old, "ci_stuck", at.Add(2*time.Minute), "test ")
 	ok(t, err)
 	mid := landingState(t, w, landingRepoStream).Operations["land:r675a:1"].LastAt
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	ok2, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "ci_stuck", mid, "window", at.Add(3*time.Minute), "test ")
 	ok(t, err)
 	if !ok1 || !ok2 {
 		t.Fatal("the two re-parks of the other caller", ok1, ok2)
 	}
-	store.FreezeEventClock(at.Add(3 * time.Minute))
+	freezeClock(t, at.Add(3*time.Minute))
 	stale, err := store.ReparkLanding(ctx, w.rt, "bifrost-platform", "land:r675a:1", "window", old, "ci_stuck", at.Add(4*time.Minute), "test ")
 	ok(t, err)
 	if o := landingState(t, w, landingRepoStream).Operations["land:r675a:1"]; stale || o.Why != "window" {
@@ -406,16 +426,18 @@ func TestB4ReparkRefusesABA(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 675 R-07: a card prepared and not asked
+// Review 675 R-07: a card prepared and not asked
 // shows as pending; once the Owner answers wait, the root shows held until a
 // day after the answer, on that question.
 func TestB4StatusShowsHeldAndPendingCards(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	liveRoot(t, w, "land:r675h:1", at, "main_intent", newLandingRecord("land:r675h:1", "main_result", "outcome", "ok"))
 	readOne(t, w, "land:r675h:1", at.Add(-10*time.Minute), "unknown")
-	store.FreezeEventClock(at.Add(2 * time.Hour))
+	freezeClock(t, at.Add(2*time.Hour))
 	_, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at.Add(2*time.Hour))
 	ok(t, err)
 	status, err := store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
@@ -428,7 +450,7 @@ func TestB4StatusShowsHeldAndPendingCards(t *testing.T) {
 	answered := at.Add(2*time.Hour + time.Minute)
 	f.answer("q1", "b", answered) // wait
 	cardPass(t, w, f, at.Add(2*time.Hour+2*time.Minute))
-	store.FreezeEventClock(at.Add(3 * time.Hour))
+	freezeClock(t, at.Add(3*time.Hour))
 	status, err = store.ReadMissionLandingStatus(ctx, w.rt, "M-3")
 	ok(t, err)
 	r := status.Roots[0]

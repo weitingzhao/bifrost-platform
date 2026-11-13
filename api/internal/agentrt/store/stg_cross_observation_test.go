@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -104,7 +103,7 @@ func b5hObservation(t *testing.T, in delivery.NamedDeliverInput, status, uid, ap
 	run.Object["status"].(map[string]any)["childReferences"] = refs
 	client := dynfake.NewSimpleDynamicClient(runtime.NewScheme(), objects...)
 	adapter := &delivery.STGReleaseAdapter{Dynamic: func() (dynamic.Interface, error) { return client, nil }}
-	obs, err := adapter.ObserveRun(context.Background(), delivery.STGRunIdentity{Namespace: "cicd", Name: run.GetName(), UID: run.GetUID()})
+	obs, err := adapter.ObserveRun(ctxOf(t), delivery.STGRunIdentity{Namespace: "cicd", Name: run.GetName(), UID: run.GetUID()})
 	if err != nil {
 		t.Fatal(err)
 	}

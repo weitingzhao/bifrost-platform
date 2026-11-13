@@ -16,6 +16,7 @@ import (
 
 func triggersAt(t *testing.T, w *world, now time.Time) map[string]store.CardTrigger {
 	t.Helper()
+	ctx := ctxOf(t)
 	var ts []store.CardTrigger
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -38,22 +39,24 @@ func triggersAt(t *testing.T, w *world, now time.Time) map[string]store.CardTrig
 
 func controllerNote(t *testing.T, w *world, root string, body map[string]any) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: landingRepoStream, Type: "note", Actor: "controller", TaskID: root, Body: body})
 		return err
 	}))
 }
 
-// Serial: FreezeEventClock.
 func TestLandingCardTriggers(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w := newKernelWorld(t)
 	at := time.Now().Add(-5 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	ended := func(op, kind string, kv ...any) string {
 		t.Helper()
 		root := w.ready(t, store.Task{OffPlanReason: "trigger " + op})
 		prodChain(t, w, root, op, at, "branch_pushed")
-		store.FreezeEventClock(at.Add(10 * time.Minute))
+		freezeClock(t, at.Add(10*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, kind, kv...)))
 		return root
 	}
@@ -136,16 +139,18 @@ func TestLandingCardTriggers(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 670 R-06: a park whose reason changes (a
+// Review 670 R-06: a park whose reason changes (a
 // window park whose CI then runs long) becomes a new park with the new
 // reason, so its start and reason are what the triggers read.
 func TestAParkWhoseReasonChangesIsANewPark(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	op, at := pushedDrill(t, w, task, src)
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "window", "retry_at", at.Add(2*time.Minute).Format(time.RFC3339Nano))))
 	now := at.Add(40 * time.Minute)
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	ctl := controller.Controller{DB: w.rt, Env: "stg"}
 	drill := controller.DrillSources{Facts: src,
 		Main:          func(context.Context, string) (string, error) { return commitA, nil },

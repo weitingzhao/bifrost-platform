@@ -63,8 +63,9 @@ func ok(t *testing.T, err error) {
 type world struct {
 	db *agentrttest.DB
 	rt *pgx.Conn
-	// ctx is the context of the test the world was made for (ctxOf), for a
-	// helper that has the world and no t.
+	// t is the test the world was made for and ctx its context (ctxOf), for
+	// a helper that has the world and no t.
+	t    *testing.T
 	ctx  context.Context
 	spec string
 	// impl is an implementation's spec as a plan's is (store.ImplementSpec),
@@ -107,7 +108,7 @@ func newWorld(t *testing.T) *world {
 	t.Helper()
 	ctx := ctxOf(t)
 	db := seededDB(t)
-	w := &world{db: db, rt: db.Connect(t, db.Runtime), ctx: ctx}
+	w := &world{db: db, rt: db.Connect(t, db.Runtime), t: t, ctx: ctx}
 	var err error
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
@@ -313,6 +314,7 @@ func TestTamperIsDetected(t *testing.T) {
 }
 
 func planChange(w *world, fn func(tx pgx.Tx) error) error {
+	ctx := w.ctx
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {

@@ -21,6 +21,7 @@ import (
 // cardEventCount counts the events on a stream.
 func cardEventCount(t *testing.T, w *world, stream string) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1`, stream).Scan(&n))
 	return n
@@ -29,6 +30,7 @@ func cardEventCount(t *testing.T, w *world, stream string) int {
 // repoNotes counts the notes on the repository landing stream that carry key.
 func repoNotes(t *testing.T, w *world, key string) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND body_json ? $2`, landingRepoStream, key).Scan(&n))
 	return n
@@ -62,7 +64,7 @@ func okMissingRoot(t *testing.T, w *world, op string, at time.Time) string {
 // has: a late_landing notice (ack, remind_later).
 func lateLandingRoot(t *testing.T, w *world, op string, at time.Time) string {
 	t.Helper()
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	root := w.ready(t, store.Task{OffPlanReason: "card " + op})
 	controllerNote(t, w, root, map[string]any{"text": "anomaly", "landing_anomaly": map[string]any{"op": op, "root": root, "kind": "late_landing", "R": commitB, "M0": commitA, "head": commitB}})
 	return root
@@ -71,20 +73,21 @@ func lateLandingRoot(t *testing.T, w *world, op string, at time.Time) string {
 // cardCtl is a PROD controller over the world with a clock the test moves;
 // each pass freezes the event clock at its time.
 type cardCtl struct {
+	w   *world
 	ctl *controller.Controller
 	now time.Time
 }
 
 func newCardCtl(w *world, q store.CardQuestions) *cardCtl {
-	c := &cardCtl{}
+	c := &cardCtl{w: w}
 	c.ctl = &controller.Controller{DB: w.rt, Env: "prod", LandingCards: q, Now: func() time.Time { return c.now }}
 	return c
 }
 
 func (c *cardCtl) cardsPassAt(at time.Time) error {
 	c.now = at
-	store.FreezeEventClock(at)
-	return c.ctl.LandingCardsPass(ctx)
+	freezeClock(c.w.t, at)
+	return c.ctl.LandingCardsPass(c.w.ctx)
 }
 
 // quotaSource wraps the fake question store: while *full, AskRaw takes no
@@ -105,13 +108,15 @@ func quotaSource(f *fakeCards, full *bool, refused *int) store.CardQuestions {
 
 // ---- A. The settle table (CUT §11.6 v3 item 2) ----
 
-// Serial: FreezeEventClock. Row «bound, not handled»: the store says the
+// Row «bound, not handled»: the store says the
 // question expired, or was withdrawn, unanswered: the card is closed for that
 // reason; the trigger still applies, so card n+1 is prepared and asked in
 // the same pass (the six-hour cooldown went in cleanup wave 1, 2026-11-11).
 func TestS3CardSettleExpiredOrWithdrawnAsksAgain(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-2 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	for _, status := range []string{"expired", "withdrawn"} {
 		t.Run(status, func(t *testing.T) {
 			w := newKernelWorld(t)
@@ -138,13 +143,15 @@ func TestS3CardSettleExpiredOrWithdrawnAsksAgain(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Row «handled, not acknowledged»: the answer was
+// Row «handled, not acknowledged»: the answer was
 // carried out, the Ack failed, then the store lost the question (404): the
 // card is closed gone_after_handled; the answer is not carried out again and
 // no Ack is forged.
 func TestS3CardSettleGoneAfterHandled(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	cardFailedRoot(t, w, "land:acc2:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
@@ -165,7 +172,7 @@ func TestS3CardSettleGoneAfterHandled(t *testing.T) {
 	if len(bound) != 1 {
 		t.Fatal(bound)
 	}
-	store.FreezeEventClock(at.Add(3 * time.Hour))
+	freezeClock(t, at.Add(3*time.Hour))
 	did, err := store.SettleLandingCard(ctx, w.rt, f.source(), bound[0], at.Add(3*time.Hour))
 	ok(t, err)
 	if did != "gone_after_handled" {
@@ -187,22 +194,24 @@ func TestS3CardSettleGoneAfterHandled(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Row «to withdraw»: an open card whose trigger no
+// Row «to withdraw»: an open card whose trigger no
 // longer applies is withdrawn and closed (the code's why is resolved). When
 // the Withdraw finds the question answered meanwhile, nothing is written on
 // that step; the next pass reads the answer and handles it as moot
 // (trigger_gone, the §8 choice not carried out), then acknowledges it: the
 // answer is not lost.
 func TestS3CardSettleWithdrawnOrAnsweredMeanwhile(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 
 	t.Run("withdrawn", func(t *testing.T) {
 		w := newKernelWorld(t)
 		okMissingRoot(t, w, "land:acc3a:1", at)
 		f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 		cardPass(t, w, f, at.Add(time.Hour))
-		store.FreezeEventClock(at.Add(90 * time.Minute))
+		freezeClock(t, at.Add(90*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:acc3a:1", "landed", "R", commitB)))
 		cardPass(t, w, f, at.Add(2*time.Hour))
 		if f.byID["q1"].q.Status != "withdrawn" {
@@ -218,7 +227,7 @@ func TestS3CardSettleWithdrawnOrAnsweredMeanwhile(t *testing.T) {
 		okMissingRoot(t, w, "land:acc3b:1", at)
 		f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
 		cardPass(t, w, f, at.Add(time.Hour))
-		store.FreezeEventClock(at.Add(90 * time.Minute))
+		freezeClock(t, at.Add(90*time.Minute))
 		ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:acc3b:1", "landed", "R", commitB)))
 		// The Owner answers confirm_main_lost just before the Withdraw lands.
 		src := f.source()
@@ -233,7 +242,7 @@ func TestS3CardSettleWithdrawnOrAnsweredMeanwhile(t *testing.T) {
 			t.Fatal(bound)
 		}
 		cardsBefore, repoBefore := cardEventCount(t, w, store.CardsStream("bifrost-platform")), cardEventCount(t, w, landingRepoStream)
-		store.FreezeEventClock(at.Add(2 * time.Hour))
+		freezeClock(t, at.Add(2*time.Hour))
 		did, err := store.SettleLandingCard(ctx, w.rt, src, bound[0], at.Add(2*time.Hour))
 		ok(t, err)
 		if did != "" || f.byID["q1"].q.Status != store.QuestionAnswered {
@@ -260,12 +269,14 @@ func TestS3CardSettleWithdrawnOrAnsweredMeanwhile(t *testing.T) {
 	})
 }
 
-// Serial: FreezeEventClock. A read of the question store that fails writes
+// A read of the question store that fails writes
 // nothing: not on the card stream, not on the repository stream; an open
 // card and an answered one alike.
 func TestS3CardSettleFailedReadWritesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	cardFailedRoot(t, w, "land:acc4:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
@@ -282,7 +293,7 @@ func TestS3CardSettleFailedReadWritesNothing(t *testing.T) {
 			t.Fatal(bound)
 		}
 		cardsBefore, repoBefore := cardEventCount(t, w, store.CardsStream("bifrost-platform")), cardEventCount(t, w, landingRepoStream)
-		store.FreezeEventClock(now)
+		freezeClock(t, now)
 		did, err := store.SettleLandingCard(ctx, w.rt, src, bound[0], now)
 		if err == nil || did != "" {
 			t.Fatalf("a failed read settled: %q %v", did, err)
@@ -304,12 +315,14 @@ func TestS3CardSettleFailedReadWritesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Q1 handled (held), its Ack failing; after the
+// Q1 handled (held), its Ack failing; after the
 // hold the same root gets card Q2, bound; Q1 is still acknowledged on a
 // later pass (landing_card_acked names Q1), and Q2 stays open.
 func TestS3CardSettleOldAckAfterNewCard(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-3 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	okMissingRoot(t, w, "land:acc5:1", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
@@ -360,19 +373,21 @@ func TestS3CardSettleOldAckAfterNewCard(t *testing.T) {
 
 // ---- B. LandingCardsPass (CUT §11.6 v3 items 6, 9; §11.10) ----
 
-// Serial: FreezeEventClock. The first card asked this pass meets a full
+// The first card asked this pass meets a full
 // store: the card after it, whose question the store already has, is still
 // taken up by its key and bound; nothing new is asked or prepared this pass.
 // The next pass, the store free again, asks at once: the 30-minute pause
 // went in cleanup wave 1 (2026-11-11).
 func TestS3CardPassFullStoreStopsNewCardsForOnePass(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	cardFailedRoot(t, w, "land:acc6a:1", "stale", at)
 	cardFailedRoot(t, w, "land:acc6b:1", "stale", at.Add(5*time.Minute))
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
-	store.FreezeEventClock(at.Add(time.Hour))
+	freezeClock(t, at.Add(time.Hour))
 	prepared, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at.Add(time.Hour))
 	ok(t, err)
 	if len(prepared) != 2 {
@@ -421,12 +436,14 @@ func TestS3CardPassFullStoreStopsNewCardsForOnePass(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A card held (wait on ok_missing, remind_later on
+// A card held (wait on ok_missing, remind_later on
 // late_landing) is acknowledged; the same trigger has no new card for 24
 // hours from the answer (CardHoldFor), then one.
 func TestS3CardPassHeldWaitsADay(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-3 * 24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	for _, tc := range []struct {
 		name, kind, why string
 		make            func(*testing.T, *world, string, time.Time) string
@@ -465,13 +482,15 @@ func TestS3CardPassHeldWaitsADay(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. CardQuestions without LookupKey: the pass still
+// CardQuestions without LookupKey: the pass still
 // carries a bound card to its end (answer handled, acknowledged), returns no
 // error, and neither asks nor prepares a card (code as it is: it returns
 // before the ask step; LandingCardsComplete says the store is not complete).
 func TestS3CardPassWithoutLookupKey(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	cardFailedRoot(t, w, "land:acc8a:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
@@ -503,16 +522,18 @@ func TestS3CardPassWithoutLookupKey(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review 675 R-04: with LookupKey alone (no Ask,
+// Review 675 R-04: with LookupKey alone (no Ask,
 // Lookup or Ack, as on a restart that wired only it), the pass takes up a card
 // the question store already has by its key, and asks nothing new.
 func TestS3CardPassLookupKeyAlone(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	cardFailedRoot(t, w, "land:acc9a:1", "stale", at)
 	f := newFakeCards(func() time.Time { return at.Add(time.Hour) })
-	store.FreezeEventClock(at.Add(time.Hour))
+	freezeClock(t, at.Add(time.Hour))
 	prepared, err := store.PrepareLandingCards(ctx, w.rt, "bifrost-platform", at.Add(time.Hour))
 	ok(t, err)
 	if len(prepared) != 1 {
@@ -531,13 +552,15 @@ func TestS3CardPassLookupKeyAlone(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. W-31 S6: a denied push stops bifrost-trade-infra
+// W-31 S6: a denied push stops bifrost-trade-infra
 // on its own stream; the PROD pass carries that repository's cards too, so
 // the Owner gets the stop card in Console, and answering resume writes the
 // resume on the infra stream once. bifrost-platform is untouched.
 func TestS6CardPassCarriesInfraStop(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := newKernelWorld(t)
 	const infra = "landing:bifrost-trade-infra"
 	root := w.ready(t, store.Task{OffPlanReason: "infra stop"})

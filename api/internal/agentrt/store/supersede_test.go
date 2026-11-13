@@ -102,8 +102,9 @@ func TestSupersedeAcceptedTaskRequiresUndeliveredResult(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock
 func TestSupersedeAcceptedTaskWaitsForLandingToEnd(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, terminal := range []string{"failed", "discarded"} {
 		w, roots, ops, _ := batchWorld(t, 2, true)
 		w.landedNote(t, "M-3", roots[1], commitB, "")
@@ -196,10 +197,12 @@ func TestSupersedeMissionClosure(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Reproduce the live M-358 closure path.
+// Reproduce the live M-358 closure path.
 func TestSupersedeMissionClosesAfterFreshLandingEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	replacement := liveRoot(t, w, "land:replacement:1", at, "main_intent", newLandingRecord("land:replacement:1", "main_result", "outcome", "ok"))
 	old := liveRoot(t, w, "land:obsolete:1", at, "branch_pushed", newLandingRecord("land:obsolete:1", "failed", "why", "declined"))

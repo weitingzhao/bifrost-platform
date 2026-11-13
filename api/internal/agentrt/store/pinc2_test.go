@@ -617,6 +617,7 @@ func TestEnsureSeats(t *testing.T) {
 // registerSeat registers the coordinator's seat as the platform's start does.
 func registerSeat(t *testing.T, w *world) {
 	t.Helper()
+	ctx := ctxOf(t)
 	_, err := store.EnsureSeats(ctx, w.rt, []string{coordinatorSeat})
 	ok(t, err)
 }

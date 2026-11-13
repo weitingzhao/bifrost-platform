@@ -25,6 +25,7 @@ type b5Fixture struct {
 
 func b5Append(t *testing.T, w *world, r map[string]any) store.Appended {
 	t.Helper()
+	ctx := ctxOf(t)
 	var a store.Appended
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -45,9 +46,10 @@ func b5Record(kind, scope string, kv ...any) map[string]any {
 }
 func b5Ready(t *testing.T) *b5Fixture {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, root, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	b5AssertRule(t, w, at, 1, "bifrost-deliver-platform")
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
@@ -111,12 +113,14 @@ func b5StateFixture(t *testing.T, w *world, root, op string, at time.Time, snaps
 }
 func (x *b5Fixture) read(t *testing.T) store.StgState {
 	t.Helper()
+	ctx := ctxOf(t)
 	s, err := store.ReadStgRelease(ctx, x.w.rt)
 	ok(t, err)
 	return s
 }
 func (x *b5Fixture) permit(t *testing.T) store.StgSendPermit {
 	t.Helper()
+	ctx := ctxOf(t)
 	p, d, err := store.AuthorizeStgRelease(ctx, x.w.rt, b5Batch, 1, x.src, nil)
 	ok(t, err)
 	if !d.Allowed || p.IntentSeq == 0 {
@@ -125,7 +129,7 @@ func (x *b5Fixture) permit(t *testing.T) store.StgSendPermit {
 	return p
 }
 func (x *b5Fixture) advance(at time.Time) {
-	store.FreezeEventClock(at)
+	freezeClock(x.w.t, at)
 	x.obs.ReadAt = at
 	x.obs.CI.ReadAt = at
 	x.obs.CI.Accepted["read_at"] = at.Format(time.RFC3339Nano)
@@ -133,14 +137,16 @@ func (x *b5Fixture) advance(at time.Time) {
 }
 func (x *b5Fixture) none(t *testing.T) {
 	t.Helper()
+	ctx := ctxOf(t)
 	body := strings.Replace(landingRuleBody, "stg_release: bifrost-deliver-platform", "stg_release: none", 1)
 	_, err := store.TightenRule(ctx, x.w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", since, until, body)))
 	ok(t, err)
 	b5AssertRule(t, x.w, store.DecisionAt(ctx), 2, "none")
 }
 
-// Serial: FreezeEventClock and real PostgreSQL transactions.
 func TestStgGatePGFirstPermitAndDuplicate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	p := x.permit(t)
 	s := x.read(t)
@@ -169,8 +175,10 @@ func TestStgGatePGFirstPermitAndDuplicate(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. none disables sends but keeps facts recordable.
+// none disables sends but keeps facts recordable.
 func TestStgGatePGNoneRecoveryAndBudget(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"enabled absence", "none absence", "observe under none", "none first"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
@@ -224,9 +232,11 @@ func TestStgGatePGNoneRecoveryAndBudget(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Slow external reads hold no database locks; a
+// Slow external reads hold no database locks; a
 // signed tightening during them is selected only at the final DecisionAt.
 func TestStgGatePGRuleChangesDuringSlowRead(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	x.src.Observe = func(context.Context, store.StgRecord) (store.StgGateObservation, error) { x.none(t); return x.obs, nil }
 	_, d, err := store.AuthorizeStgRelease(ctx, x.w.rt, b5Batch, 1, x.src, nil)
@@ -239,6 +249,7 @@ func TestStgGatePGRuleChangesDuringSlowRead(t *testing.T) {
 // Serial: SetHook changes the binding after discovery, before locks. No
 // record (including a block) may survive the transaction's required rollback.
 func TestStgGatePGBindingChangeRollsBack(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	before := x.read(t).LastSeq
 	defer store.SetHook(func(point, _ string) {
@@ -252,9 +263,10 @@ func TestStgGatePGBindingChangeRollsBack(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock/SetHook; PostgreSQL confirms the second connection
+// Serial: SetHook. PostgreSQL confirms the second connection
 // waits on the first before it can attempt a second debit.
 func TestStgGatePGTwoConnectionsOnePermit(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	second := x.w.db.Connect(t, x.w.db.Runtime)
 	observer := x.w.db.Connect(t, x.w.db.Runtime)
@@ -317,10 +329,12 @@ func TestStgGatePGTwoConnectionsOnePermit(t *testing.T) {
 	}
 }
 
-// Serial: the C-5 fixture consumes a real recorded grant before B5 reads it.
+// The C-5 fixture consumes a real recorded grant before B5 reads it.
 // The current rule does not allow core changes; only the grant's STG flag
 // authorizes this commit, and the B5 debit never changes that grant record.
 func TestStgGatePGConsumedCoreGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	g := c.grant(t, store.ActionCoreLanding)
 	auth, d := c.gate(t)

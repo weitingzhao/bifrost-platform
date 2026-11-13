@@ -67,9 +67,11 @@ func (r *b5Runs) CreatePermittedNamedDeliverRun(ctx context.Context, in delivery
 	return cluster.ActuationResponse{OK: true}, obj, nil
 }
 
-// Serial: FreezeEventClock. PROD's none rule creates zero objects through
+// PROD's none rule creates zero objects through
 // the same Sender entry as the success and lost-response controls.
 func TestStgGatePGSenderNoneAndLostResponse(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"success", "lost response", "none", "expired after reads", "generation changed"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
@@ -117,9 +119,11 @@ func TestStgGatePGSenderNoneAndLostResponse(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Unknown GETs keep the slot; a retained-object
+// Unknown GETs keep the slot; a retained-object
 // 404 under withdrawn authorization isolates without refund or Create.
 func TestStgGatePGSenderAbsenceAndQuarantine(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"none absence", "no retention", "bound lost", "unknown"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)

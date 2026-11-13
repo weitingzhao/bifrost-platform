@@ -14,17 +14,19 @@ import (
 // adopted by the coordinator).
 // Requires the real PG/Redis harness.
 
-// Serial: FreezeEventClock. The eighth operation ending non_ff within the
+// The eighth operation ending non_ff within the
 // hour still gets its failed{bound} successor (the count, not the clock).
 func TestNonFFCountBoundSettlesWithinTheHour(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, _ := goalDrill(t, "M-3")
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	for i := 1; i <= 8; i++ {
 		prodChain(t, w, task, fmt.Sprintf("land:%s:%d", task, i), at.Add(time.Duration(i-1)*7*time.Minute), "main_result")
 	}
 	now := at.Add(time.Hour)
-	store.FreezeEventClock(now)
+	freezeClock(t, now)
 	s, err := store.SettleLandingDrillBounds(ctx, w.rt, now)
 	ok(t, err)
 	next := fmt.Sprintf("land:%s:9", task)
@@ -34,19 +36,21 @@ func TestNonFFCountBoundSettlesWithinTheHour(t *testing.T) {
 	closeEnds(t, w, "count-bound successor did not release mission")
 }
 
-// Serial: FreezeEventClock. main_result ok, denied and unknown hold their
+// main_result ok, denied and unknown hold their
 // mission past the hold limit until reconciled (review 645 m3).
 func TestMainResultHoldsUntilReconciled(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, outcome := range []string{"ok", "denied", "unknown"} {
 		t.Run(outcome, func(t *testing.T) {
 			w, task, _ := goalDrill(t, "M-3")
 			at := time.Now().UTC().Truncate(time.Microsecond)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			op := "land:" + task + ":1"
 			prodChain(t, w, task, op, at, "main_intent")
 			ok(t, appendLanding(w, landingRepoStream, landingRecord(op, "main_result", "outcome", outcome)))
 			later := at.Add(7 * time.Hour)
-			store.FreezeEventClock(later)
+			freezeClock(t, later)
 			s, err := store.SettleLandingDrillBounds(ctx, w.rt, later)
 			ok(t, err)
 			if s.Operations[op].Phase != "main_result" || s.Operations[op].Outcome != outcome {

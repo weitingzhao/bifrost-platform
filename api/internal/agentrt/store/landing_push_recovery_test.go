@@ -11,12 +11,19 @@ import (
 	"time"
 )
 
-// Serial: FreezeEventClock
-func TestRecoverBatchPushKeepsGreenCIAndOriginalGrant(t *testing.T) { runRecoveryTest(t, false) }
+func TestRecoverBatchPushKeepsGreenCIAndOriginalGrant(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
+	runRecoveryTest(t, false)
+}
 
-// Serial: FreezeEventClock
-func TestRecoverBatchPushAfterBoundKeepsGreenCI(t *testing.T) { runRecoveryTest(t, true) }
+func TestRecoverBatchPushAfterBoundKeepsGreenCI(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
+	runRecoveryTest(t, true)
+}
 func runRecoveryTest(t *testing.T, bound bool) {
+	ctx := ctxOf(t)
 	c := coresBatch(t, 10, 10)
 	c.coresWaiting(t)
 	g := c.coresGrant(t, c.coresMaterial(t))
@@ -32,7 +39,7 @@ func runRecoveryTest(t *testing.T, bound bool) {
 	if err := store.RecoverBatchPush(ctx, c.w.rt, c.gsrc, p, "appr_recovery"); err == nil {
 		t.Fatal("recovered inside push fence")
 	}
-	store.FreezeEventClock(c.at.Add(store.MainFence + time.Minute))
+	freezeClock(t, c.at.Add(store.MainFence+time.Minute))
 	if bound {
 		for _, op := range c.ops {
 			ok(t, appendLanding(c.w, "landing:bifrost-platform", map[string]any{"v": landing.Version, "kind": "failed", "op": op, "why": "bound"}))
@@ -56,11 +63,11 @@ func runRecoveryTest(t *testing.T, bound bool) {
 	if err := store.RecoverBatchPush(ctx, c.w.rt, red, p, "appr_recovery"); err == nil {
 		t.Fatal("accepted red CI")
 	}
-	store.FreezeEventClock(c.at.Add(25 * time.Hour))
+	freezeClock(t, c.at.Add(25*time.Hour))
 	if err := store.RecoverBatchPush(ctx, c.w.rt, c.gsrc, p, "appr_recovery"); err == nil {
 		t.Fatal("expired original grant accepted")
 	}
-	store.FreezeEventClock(c.at.Add(store.MainFence + time.Minute))
+	freezeClock(t, c.at.Add(store.MainFence+time.Minute))
 	uid := c.ci.UID
 	c.ci.UID = "different-run-object"
 	if err := store.RecoverBatchPush(ctx, c.w.rt, c.gsrc, p, "appr_recovery"); err == nil {
@@ -104,8 +111,9 @@ func runRecoveryTest(t *testing.T, bound bool) {
 	}
 }
 
-// Serial: FreezeEventClock
 func TestRecoveryRecordCannotBeInjected(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := coresBatch(t, 10, 10)
 	err := store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
 		_, err := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "forged", "landing": map[string]any{"v": landing.Version, "kind": "push_recovered", "op": c.ops[0], "R": commitB, "M0": commitA, "grant_id": "lg_fake", "approval_id": "appr_fake", "resume": "awaiting_grant"}}})

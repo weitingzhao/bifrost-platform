@@ -20,6 +20,7 @@ import (
 // prepared and its branch pushed, and max rounds as given (0: the default).
 func checkedRed(t *testing.T, maxRounds int) (*world, string, string, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, root, at := ciRoot(t)
 	if maxRounds > 0 {
 		w.legacy(t, fmt.Sprintf(`UPDATE agentrt.task SET max_rounds = %d WHERE task_id = '%s'`, maxRounds, root))
@@ -39,20 +40,21 @@ func checkedRed(t *testing.T, maxRounds int) (*world, string, string, time.Time)
 	if got := verificationsOf(t, w, root); !slices.Equal(got, []string{"deterministic/pass/accepts"}) {
 		t.Fatalf("verifications: %v", got)
 	}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {
 		t.Fatal("claim", d)
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	return w, root, op, at
 }
 
 // rounds are root's round_no and max_rounds.
 func rounds(t *testing.T, w *world, root string) (int, int) {
 	t.Helper()
+	ctx := ctxOf(t)
 	var round, maxRounds int
 	ok(t, w.rt.QueryRow(ctx, `SELECT round_no, max_rounds FROM agentrt.task WHERE task_id = $1`, root).Scan(&round, &maxRounds))
 	return round, maxRounds
@@ -61,17 +63,20 @@ func rounds(t *testing.T, w *world, root string) (int, int) {
 // reworkReason is the reason of root's move to rework.
 func reworkReason(t *testing.T, w *world, root string) string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var why string
 	ok(t, w.rt.QueryRow(ctx, `SELECT COALESCE(body_json->>'reason', '') FROM agentrt.event WHERE task_id = $1
 	  AND event_type = 'task_state_changed' AND body_json->>'to' = 'rework' ORDER BY event_id DESC LIMIT 1`, root).Scan(&why))
 	return why
 }
 
-// Serial: FreezeEventClock. An attempt the deterministic check accepted
+// An attempt the deterministic check accepted
 // whose landing CI is red goes back to ready in round 2: the failed
 // landing_ci verification names the operation, and its evidence the CI's
 // failure. No root_failed card.
 func TestLandingCIReworkCheckedAttemptGoesBack(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, at := checkedRed(t, 0)
 	reworked, err := store.RecordLandingCIRed(ctx, w.rt, "bifrost-platform", op, "test: failed", redCI, store.PrecheckCI)
 	ok(t, err)
@@ -107,11 +112,13 @@ func TestLandingCIReworkCheckedAttemptGoesBack(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A replay that does not merge onto main ends
+// A replay that does not merge onto main ends
 // its operation failed{conflict} and sends the root back as a red CI does:
 // the failed landing_ci check's evidence names M0 and the conflicting
 // paths. No root_failed card.
 func TestLandingConflictReworkNamesThePaths(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, at := checkedRed(t, 0)
 	m0 := strings.Repeat("e", 40)
 	reworked, err := store.RecordLandingConflict(ctx, w.rt, "bifrost-platform", op, "test: failed", m0, []string{"api/a.go", "api/b.go"}, store.PrecheckCI)
@@ -139,9 +146,11 @@ func TestLandingConflictReworkNamesThePaths(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A task in its last round goes back too, its
+// A task in its last round goes back too, its
 // max_rounds raised by one, and the move says so. No root_failed card.
 func TestLandingCIReworkLastRoundRaisesTheBound(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name  string
 		setup func(*testing.T, int) (*world, string, string, time.Time)
@@ -166,9 +175,11 @@ func TestLandingCIReworkLastRoundRaisesTheBound(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Precheck verify keeps the Owner's card, for an
+// Precheck verify keeps the Owner's card, for an
 // attempt the check accepted in its last round as for any.
 func TestLandingCIReworkPrecheckVerifyKeepsTheCard(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, at := checkedRed(t, 1)
 	reworked, err := store.RecordLandingCIRed(ctx, w.rt, "bifrost-platform", op, "test: failed", redCI, store.PrecheckVerify)
 	ok(t, err)

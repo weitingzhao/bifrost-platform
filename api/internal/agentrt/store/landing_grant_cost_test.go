@@ -50,18 +50,20 @@ func (t *stmtTx) Exec(ctx context.Context, q string, a ...any) (pgconn.CommandTa
 // cleanup wave 1.
 const ordinaryCIStatements = 18
 
-// Serial: FreezeEventClock. R-05: an ordinary operation's CI step (kicked,
+// R-05: an ordinary operation's CI step (kicked,
 // its run still going) costs the round trips it did before C-5: no read of
 // a pinned key it cannot have. (On 082125dd: one more transaction.)
 func TestC5R05OrdinaryCIStepCostsWhatItDid(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "698 R-05", BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	src := c4Source("console/src/components/C5.tsx")
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", root, at)
 	ok(t, err)
 	if op == "" || !d.Allowed {
@@ -69,7 +71,7 @@ func TestC5R05OrdinaryCIStepCostsWhatItDid(t *testing.T) {
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_kick", "try", 1)))
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	running := landing.CIRun{Run: landing.CIName(op, 1), R: commitB, Status: "Running", CreatedAt: at.Add(-25 * time.Minute)}
 	ensured := 0
 	srcs := controller.DrillSources{Facts: src,

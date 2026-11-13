@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -12,8 +11,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
-// Serial: FreezeEventClock and signing key; full adapter -> PG answer -> Ack.
+// Serial: t.Setenv (the question service's environment). Full adapter -> PG answer -> Ack.
 func TestStgCardsPGOwnerAdapter(t *testing.T) {
+	ownClock(t)
 	t.Setenv("APPROVAL_NOTIFY_URL", "")
 	t.Setenv("OPS_VIEWER_ENV", "prod")
 	for _, tc := range []struct{ mode, letter, outcome, why string }{
@@ -23,7 +23,7 @@ func TestStgCardsPGOwnerAdapter(t *testing.T) {
 		{"quarantine", "a", "acknowledged", "ack"}, {"quarantine", "b", "held", "remind_later"}, {"quarantine", "c", "applied", "quarantine_closed"},
 	} {
 		t.Run(tc.mode+"/"+tc.letter, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := ctxOf(t)
 			x, _ := b5gFixture(t, tc.mode)
 			svc := questions.New(filepath.Join(t.TempDir(), "questions"), nil)
 			svc.SetClock(decisionClock(ctx))

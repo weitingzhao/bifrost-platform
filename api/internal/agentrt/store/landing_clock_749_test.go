@@ -37,11 +37,13 @@ func TestReview749RootWindowCounterexample(t *testing.T) {
 	}
 }
 
-// Serial: reviewOpenPG changes FreezeEventClock. On a3651f81 this fails at
+// On a3651f81 this fails at
 // "original landing prerequisite" once database now reaches 2026-10-28
 // 17:49 UTC. Keep the SQL timestamps real: freezing event time does not
 // freeze mission/task created_at, including for the later reversal root.
 func TestReview749OpenLandingTimelinePG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x, _ := reviewOpenPG(t)
 	s := landingState(t, x.w, landingRepoStream)
 	o := s.Operations[x.op]

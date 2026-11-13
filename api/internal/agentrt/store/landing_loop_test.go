@@ -20,12 +20,13 @@ import (
 
 func acceptedDrill(t *testing.T) (*world, string, store.LandingSource) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, landingRuleBody))
 	ok(t, err)
 	enabled := time.Now().Add(-time.Hour)
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, e := store.ObserveLandingEnabled(ctx, tx, "stg", "dev", "bifrost-platform", enabled)
 		return e
@@ -43,13 +44,14 @@ func acceptedDrill(t *testing.T) (*world, string, store.LandingSource) {
 }
 func pushedDrill(t *testing.T, w *world, task string, src store.LandingSource) (string, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	op, d, e := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
 	ok(t, e)
 	if !d.Allowed || op == "" {
 		t.Fatal(d)
 	}
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer restore()
 	ref := "refs/heads/land/stg/" + task + "/1"
 	for _, r := range []map[string]any{newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", true), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
@@ -58,8 +60,10 @@ func pushedDrill(t *testing.T, w *world, task string, src store.LandingSource) (
 	return op, at
 }
 
-// Serial: FreezeEventClock. S2 ①, actual persisted discard and automatic k+1.
+// S2 ①, actual persisted discard and automatic k+1.
 func TestDrillScanMainMovementOpensNextOperation(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	op, at := pushedDrill(t, w, task, src)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "parked", "why", "ci_stuck", "retry_at", at.Add(time.Minute).Format(time.RFC3339Nano))))
@@ -86,14 +90,16 @@ func TestDrillScanMainMovementOpensNextOperation(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. S2 ② plus Q3's fresh second gate and cleanup.
+// S2 ② plus Q3's fresh second gate and cleanup.
 func TestDrillFinalGateAndRehearsalDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, change := range []string{"none", "latest_ci", "main", "window"} {
 		t.Run(change, func(t *testing.T) {
 			w, task, src := acceptedDrill(t)
 			op, at := pushedDrill(t, w, task, src)
 			now := at.Add(5 * time.Minute)
-			restore := store.FreezeEventClock(now)
+			restore := freezeClock(t, now)
 			defer restore()
 			mainReads, ciReads, windowReads := 0, 0, 0
 			drill := controller.DrillSources{Facts: src, Main: func(context.Context, string) (string, error) {
@@ -168,9 +174,11 @@ func (g *startupDrillGit) Open(context.Context, string) (*landinggit.Workspace, 
 func (g *startupDrillGit) Ref(context.Context, string) (string, error)  { return "", nil }
 func (g *startupDrillGit) Delete(context.Context, string, string) error { return nil }
 
-// Serial: FreezeEventClock via acceptedDrill. Startup scans before the first
+// Startup scans before the first
 // hourly timer. Nil Drill leaves the loop disabled even on STG.
 func TestDrillStartScansImmediately(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	g := &startupDrillGit{}
 	ctl := controller.Controller{DB: w.rt, Env: "stg", LeaseEvery: time.Hour, FactsEvery: time.Hour, DrillGit: map[string]controller.DrillGit{"bifrost-platform": g}, Drill: &controller.DrillSources{Facts: src}}
@@ -202,14 +210,16 @@ func TestDrillStartScansImmediately(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Retry lifts the persisted claim block but does
+// Retry lifts the persisted claim block but does
 // not bypass the real eligibility reader or reset the eight-attempt budget.
 func TestDrillRetryClaimBudgetDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, count := range []int{1, 8} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			w, task, src := acceptedDrill(t)
 			first := time.Now().Add(-7 * time.Hour)
-			restore := store.FreezeEventClock(first)
+			restore := freezeClock(t, first)
 			defer restore()
 			var latest string
 			for i := 1; i <= count; i++ {
@@ -225,7 +235,7 @@ func TestDrillRetryClaimBudgetDatabase(t *testing.T) {
 				}
 			}
 			now := time.Now()
-			store.FreezeEventClock(now)
+			freezeClock(t, now)
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(latest, "retry", "root", task, "after_op", latest, "reason", "again", "by", "owner")))
 			op, d, e := store.ClaimLandingDrill(ctx, w.rt, src, task, now)
 			ok(t, e)
@@ -240,8 +250,9 @@ func TestDrillRetryClaimBudgetDatabase(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via acceptedDrill.
 func TestDrillBranchCollisionAutomaticallyReclaims(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := acceptedDrill(t)
 	op, d, e := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now())
 	ok(t, e)
@@ -263,9 +274,11 @@ func TestDrillBranchCollisionAutomaticallyReclaims(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via acceptedDrill. Removing the final gate's rule
+// Removing the final gate's rule
 // check would make this record a rehearsal after the Owner tightened the rule.
 func TestDrillFinalGateReadsTightenedRule(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, src := acceptedDrill(t)
 	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
 	ok(t, e)
@@ -277,7 +290,7 @@ func TestDrillFinalGateReadsTightenedRule(t *testing.T) {
 	_, e = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", since, until, body)))
 	ok(t, e)
 	now := at.Add(time.Minute)
-	restore := store.FreezeEventClock(now)
+	restore := freezeClock(t, now)
 	defer restore()
 	e = store.FinishLandingDrill(ctx, w.rt, src, op, now, func(context.Context, landing.Operation) (landing.DrillObservation, error) {
 		return landing.DrillObservation{Main: commitA, Candidate: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: at.Add(time.Second)}}, nil
@@ -287,11 +300,13 @@ func TestDrillFinalGateReadsTightenedRule(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via acceptedDrill. A tightened version installed
+// A tightened version installed
 // beforehand takes effect while the final gate reads CI under its locks: the
 // gate selects the rule again after its reads and refuses (review 656 B-B1).
 // Selecting it once, when the locks were taken, admits the rehearsal.
 func TestDrillFinalGateSelectsTheRuleAfterItsReads(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, src := acceptedDrill(t)
 	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
 	ok(t, e)
@@ -304,12 +319,12 @@ func TestDrillFinalGateSelectsTheRuleAfterItsReads(t *testing.T) {
 	effective := start.Add(time.Minute).Format(time.RFC3339)
 	_, e = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", effective, until, body)))
 	ok(t, e)
-	restore := store.FreezeEventClock(start)
+	restore := freezeClock(t, start)
 	defer restore()
 	observed := false
 	e = store.FinishLandingDrill(ctx, w.rt, src, op, start, func(context.Context, landing.Operation) (landing.DrillObservation, error) {
 		observed = true
-		store.FreezeEventClock(start.Add(2 * time.Minute)) // the read takes two minutes
+		freezeClock(t, start.Add(2*time.Minute)) // the read takes two minutes
 		return landing.DrillObservation{Main: commitA, Candidate: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: at.Add(time.Second)}}, nil
 	})
 	if !observed {
@@ -320,11 +335,13 @@ func TestDrillFinalGateSelectsTheRuleAfterItsReads(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock via acceptedDrill. A version that takes effect
+// A version that takes effect
 // during the gate's reads and still allows the change: the rehearsal is
 // recorded, under that version (review 657 R657-1: the record named the
 // version selected before the reads).
 func TestDrillFinalGateRecordsTheVersionItDecidedOn(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, src := acceptedDrill(t)
 	tasks, e := store.LandingCandidates(ctx, w.rt, landingState(t, w, landingRepoStream).EnabledAt)
 	ok(t, e)
@@ -333,10 +350,10 @@ func TestDrillFinalGateRecordsTheVersionItDecidedOn(t *testing.T) {
 	body := strings.Replace(landingRuleBody, "max_files: 10", "max_files: 9", 1)
 	_, e = store.TightenRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "landing:dev", []byte(ruleText("landing:dev", 2, "tighten", start.Add(time.Minute).Format(time.RFC3339), until, body)))
 	ok(t, e)
-	restore := store.FreezeEventClock(start)
+	restore := freezeClock(t, start)
 	defer restore()
 	e = store.FinishLandingDrill(ctx, w.rt, src, op, start, func(context.Context, landing.Operation) (landing.DrillObservation, error) {
-		store.FreezeEventClock(start.Add(2 * time.Minute))
+		freezeClock(t, start.Add(2*time.Minute))
 		return landing.DrillObservation{Main: commitA, Candidate: landing.CIRun{Run: "green", R: commitB, Status: "Succeeded", CreatedAt: at.Add(time.Second)}}, nil
 	})
 	ok(t, e)

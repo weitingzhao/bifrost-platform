@@ -31,15 +31,16 @@ const precheckPath = "console/src/components/Precheck.tsx"
 func ciRoot(t *testing.T) (*world, string, time.Time) {
 	t.Helper()
 	at := time.Now().UTC().Truncate(time.Second)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	return w, w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "precheck", BaseCommit: commitB}), at
 }
 
 // checksOf are the verification and review tasks of subject.
 func checksOf(t *testing.T, w *world, subject string) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	rows, err := w.rt.Query(ctx, `SELECT role FROM agentrt.task WHERE subject_task_id = $1 ORDER BY created_at`, subject)
 	ok(t, err)
 	roles, err := pgx.CollectRows(rows, pgx.RowTo[string])
@@ -51,6 +52,7 @@ func checksOf(t *testing.T, w *world, subject string) []string {
 // method/verdict[/accepts].
 func verificationsOf(t *testing.T, w *world, subject string) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	rows, err := w.rt.Query(ctx, `SELECT method || '/' || verdict || CASE WHEN accepts_attempt THEN '/accepts' ELSE '' END
 	  FROM agentrt.verification WHERE task_id = $1 ORDER BY created_at, verification_id`, subject)
 	ok(t, err)
@@ -63,6 +65,7 @@ func verificationsOf(t *testing.T, w *world, subject string) []string {
 // precheck.
 func acceptOnSubmission(t *testing.T, w *world, root string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	if c := w.run(t, "h1", cursor, "done"); c.TaskID != root {
 		t.Fatalf("claimed %s, not %s", c.TaskID, root)
 	}
@@ -73,11 +76,13 @@ func acceptOnSubmission(t *testing.T, w *world, root string) {
 	}
 }
 
-// Serial: FreezeEventClock. The defaults: the controller's acceptance pass
+// The defaults: the controller's acceptance pass
 // accepts a platform attempt on submission, with no verify task and no
 // review, a landing_ci verification accepting it; and its landing is
 // prepared.
 func TestPrecheckCIAcceptsOnSubmission(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, at := ciRoot(t)
 	if c := w.run(t, "h1", cursor, "done"); c.TaskID != root {
 		t.Fatal("claimed", c.TaskID)
@@ -93,7 +98,7 @@ func TestPrecheckCIAcceptsOnSubmission(t *testing.T) {
 	if v := verificationsOf(t, w, root); !slices.Equal(v, []string{"landing_ci/pass/accepts"}) {
 		t.Fatalf("verifications: %v", v)
 	}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {
@@ -101,11 +106,13 @@ func TestPrecheckCIAcceptsOnSubmission(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A core-path attempt accepted on submission gets
+// A core-path attempt accepted on submission gets
 // its core landing grant material with no problem: no review, so the card's
 // review is empty and has no trust answers; the acceptance is the landing
 // CI's. The grant is written from it.
 func TestPrecheckCICoreGrantMaterial(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5WaitAccepted(t, c5Core, false, true, func(w *world, root string) { acceptOnSubmission(t, w, root) })
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
@@ -130,19 +137,20 @@ func TestPrecheckCICoreGrantMaterial(t *testing.T) {
 // default).
 func ciRed(t *testing.T, maxRounds int) (*world, string, string, time.Time) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w, root, at := ciRoot(t)
 	if maxRounds > 0 {
 		w.legacy(t, fmt.Sprintf(`UPDATE agentrt.task SET max_rounds = %d WHERE task_id = '%s'`, maxRounds, root))
 	}
 	acceptOnSubmission(t, w, root)
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {
 		t.Fatal("claim", d)
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	return w, root, op, at
 }
 
@@ -153,6 +161,7 @@ var redCI = landing.CIFailure{Pipeline: "bifrost-ci-platform", Run: "landing-ci-
 // rootFailed says whether root has a root_failed card trigger now.
 func rootFailed(t *testing.T, w *world, root string, at time.Time) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var choices []string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		triggers, err := store.LandingCardTriggers(ctx, tx, "bifrost-platform", at)
@@ -166,13 +175,15 @@ func rootFailed(t *testing.T, w *world, root string, at time.Time) []string {
 	return choices
 }
 
-// Serial: FreezeEventClock. A red landing CI with rounds left: the operation
+// A red landing CI with rounds left: the operation
 // fails ci_red, and the task goes back to ready in round 2 with no
 // root_failed card; its next claim names the landing CI's failure as the
 // failed check, with the failed TaskRun and its log. The next attempt is
 // accepted on submission, which retries the landing: the next operation
 // claims it.
 func TestPrecheckCIRedLandingIsRework(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, at := ciRed(t, 0)
 	reworked, err := store.RecordLandingCIRed(ctx, w.rt, "bifrost-platform", op, "test: failed", redCI, store.PrecheckCI)
 	ok(t, err)
@@ -193,7 +204,7 @@ func TestPrecheckCIRedLandingIsRework(t *testing.T) {
 	if choices := rootFailed(t, w, root, at); choices != nil {
 		t.Fatal("a root_failed card for a rework:", choices)
 	}
-	store.FreezeEventClock(at.Add(-15 * time.Minute))
+	freezeClock(t, at.Add(-15*time.Minute))
 	c := w.claim(t, "h2", store.LeaseTTL, cursor)
 	if c == nil || c.TaskID != root || len(c.Failed) != 1 || c.Failed[0].Method != store.MethodLandingCI || c.Failed[0].AttemptNo != 1 {
 		t.Fatalf("round 2's claim: %+v", c)
@@ -227,7 +238,7 @@ func TestPrecheckCIRedLandingIsRework(t *testing.T) {
 	if o := landingState(t, w, landingRepoStream).Operations[op]; !o.Retried {
 		t.Fatal("the red operation was not retried")
 	}
-	store.FreezeEventClock(at.Add(-10 * time.Minute))
+	freezeClock(t, at.Add(-10*time.Minute))
 	next, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || next == "" || next == op {
@@ -238,10 +249,12 @@ func TestPrecheckCIRedLandingIsRework(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Precheck verify is today's: a platform attempt
+// Precheck verify is today's: a platform attempt
 // whose landing runs a CI is still checked, then reviewed, and only the
 // review accepts; a red landing CI is the Owner's card.
 func TestPrecheckVerifyChecksThenReviews(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, at := ciRoot(t)
 	w.passRound(t, root, "h1", "h2", "h3")
 	if checks := checksOf(t, w, root); !slices.Equal(checks, []string{"verify", "review"}) {
@@ -250,14 +263,14 @@ func TestPrecheckVerifyChecksThenReviews(t *testing.T) {
 	if v := verificationsOf(t, w, root); !slices.Equal(v, []string{"deterministic/pass", "review/pass/accepts"}) {
 		t.Fatalf("verifications: %v", v)
 	}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed {
 		t.Fatal("claim", d)
 	}
 	c4Prepare(t, w, root, op, at.Add(-29*time.Minute), true)
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	reworked, err := store.RecordLandingCIRed(ctx, w.rt, "bifrost-platform", op, "test: failed", redCI, store.PrecheckVerify)
 	ok(t, err)
 	if reworked || w.state(t, "task", root) != "accepted" || rootFailed(t, w, root, at) == nil {
@@ -310,15 +323,17 @@ func TestParsePrecheck(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The drill's own CI step: the rerun of a root
+// The drill's own CI step: the rerun of a root
 // accepted on submission is red while main is green, so the operation ends
 // failed{ci_red}; the controller reads what the run failed on and the root
 // goes back for its next round.
 func TestPrecheckCIRedFromTheDrill(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, at := ciRed(t, 0)
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_kick", "try", 1)))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "ci_rerun", "try", 2)))
-	store.FreezeEventClock(at.Add(-18 * time.Minute))
+	freezeClock(t, at.Add(-18*time.Minute))
 	red := landing.CIRun{Run: landing.CIName(op, 2), R: commitB, Status: "Failed", CreatedAt: at.Add(-19 * time.Minute)}
 	read := ""
 	drill := controller.DrillSources{Facts: c4Source(precheckPath),
@@ -349,11 +364,13 @@ func TestPrecheckCIRedFromTheDrill(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Precheck check (the production default since
+// Precheck check (the production default since
 // 2026-11-10): a platform attempt whose landing runs a CI is not accepted
 // on submission; the deterministic check runs, and its pass accepts it with
 // no review. Its landing is then prepared as before.
 func TestPrecheckCheckChecksBeforeTheLanding(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, at := ciRoot(t)
 	if c := w.run(t, "h1", cursor, "done"); c.TaskID != root {
 		t.Fatal("claimed", c.TaskID)
@@ -376,7 +393,7 @@ func TestPrecheckCheckChecksBeforeTheLanding(t *testing.T) {
 	if got := verificationsOf(t, w, root); !slices.Equal(got, []string{"deterministic/pass/accepts"}) {
 		t.Fatalf("verifications %v", got)
 	}
-	store.FreezeEventClock(at.Add(-30 * time.Minute))
+	freezeClock(t, at.Add(-30*time.Minute))
 	op, d, err := store.ClaimLanding(ctx, w.rt, c4Source(precheckPath), "prod", root, at)
 	ok(t, err)
 	if !d.Allowed || op == "" {

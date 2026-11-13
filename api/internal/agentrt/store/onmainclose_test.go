@@ -15,6 +15,7 @@ import (
 // landed_via when via is set.
 func (w *world) landedNote(t *testing.T, mission, task, sha, via string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	body := map[string]any{"text": "its change is on main", "landed": sha}
 	if via != "" {
 		body["landed_via"] = via

@@ -54,6 +54,7 @@ func idOf(text string) string {
 
 func inForce(t *testing.T, w *world, id string, at time.Time) *store.StoredRule {
 	t.Helper()
+	ctx := ctxOf(t)
 	var r *store.StoredRule
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error

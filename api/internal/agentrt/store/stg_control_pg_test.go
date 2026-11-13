@@ -12,8 +12,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// Serial: real PG fixtures and FreezeEventClock.
 func TestStgControlPGCompareAppendAndNone(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, mode := range []string{"enabled", "none", "stale"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5Ready(t)
@@ -40,8 +41,10 @@ func TestStgControlPGCompareAppendAndNone(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock; separate connections race on the stream CAS.
+// Separate connections race on the stream CAS.
 func TestStgControlPGTwoConnectionsOnlyOneDecision(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	x := b5Ready(t)
 	s := x.read(t)
 	second := x.w.db.Connect(t, x.w.db.Runtime)
@@ -55,7 +58,7 @@ func TestStgControlPGTwoConnectionsOnlyOneDecision(t *testing.T) {
 	for _, db := range []store.DB{x.w.rt, second} {
 		safego.Go("test-stg-control-cas", func() {
 			<-start
-			did, err := store.CommitStgControl(context.Background(), db, "dev", func() bool { return true }, s.LastSeq, rs)
+			did, err := store.CommitStgControl(ctxOf(t), db, "dev", func() bool { return true }, s.LastSeq, rs)
 			results <- result{did, err}
 		})
 	}
@@ -77,8 +80,10 @@ func TestStgControlPGTwoConnectionsOnlyOneDecision(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock; committed archive identity is read from real PG.
+// Committed archive identity is read from real PG.
 func TestStgControlPGArchiveReceiptExactIdentity(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	x := b5Ready(t)
 	p := x.permit(t)
 	archive := stgrelease.PostgresLedger{DB: x.w.rt, Tenant: "dev"}
@@ -112,9 +117,11 @@ func TestStgControlPGArchiveReceiptExactIdentity(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A forged rule version cannot unblock a rule
+// A forged rule version cannot unblock a rule
 // refusal; the same entry with the actual enabled rule is the control.
 func TestStgControlPGRuleProofReadsCurrentRule(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, version := range []int{1, 2} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			x := b5Ready(t)
@@ -140,8 +147,9 @@ func TestStgControlPGRuleProofReadsCurrentRule(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and real PostgreSQL transactions.
 func TestStgControlPGEnableFenceOnceAndNone(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, disabled := range []bool{false, true} {
 		t.Run(fmt.Sprint(disabled), func(t *testing.T) {
 			x := b5Ready(t)
@@ -174,8 +182,10 @@ func TestStgControlPGEnableFenceOnceAndNone(t *testing.T) {
 	}
 }
 
-// Serial: the policy changes after a GET/final gate read but before writing.
+// The policy changes after a GET/final gate read but before writing.
 func TestStgControlPGNoneGuardsLateRecoveryAndGate(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, disabled := range []bool{false, true} {
 		t.Run(fmt.Sprint(disabled), func(t *testing.T) {
 			x := b5Ready(t)
@@ -211,11 +221,13 @@ func TestStgControlPGNoneGuardsLateRecoveryAndGate(t *testing.T) {
 	}
 }
 
-// Serial: the pending member is a real landed root with a fresh main proof.
+// The pending member is a real landed root with a fresh main proof.
 func TestStgControlPGAdmissionFromLandedMember(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute).Truncate(time.Microsecond)
-	t.Cleanup(store.FreezeEventClock(at))
+	t.Cleanup(freezeClock(t, at))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
 	if !d.Allowed {

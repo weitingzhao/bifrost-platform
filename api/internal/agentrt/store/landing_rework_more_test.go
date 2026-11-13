@@ -21,6 +21,7 @@ import (
 // be refused for.
 
 func rwAppend(w *world, stream, actor, task string, body map[string]any) error {
+	ctx := w.ctx
 	b := map[string]any{"text": "rework"}
 	for k, v := range body {
 		b[k] = v
@@ -63,10 +64,12 @@ func refusedFor(t *testing.T, name string, err error, reason string) {
 	}
 }
 
-// Serial: FreezeEventClock. §3.1 one check at a time, before any record
+// §3.1 one check at a time, before any record
 // exists (so the duplicate check cannot stand in for another), then the
 // record that passes, then the duplicate.
 func TestReworkSeenAppendChecksOneAtATime(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	all := sortedSibs(r.rwAll())
 	good := rwSeenBody(r.root, r.rootOp, dbOldA, all)
@@ -109,10 +112,12 @@ func TestReworkSeenAppendChecksOneAtATime(t *testing.T) {
 		seen(rwSeenBody(w2.root, w2.rootOp, dbOldA, sortedSibs(w2.rwAll())))), "root's step is closed")
 }
 
-// Serial: FreezeEventClock. §3.2: no landing_replaced without the Owner's
+// §3.2: no landing_replaced without the Owner's
 // count_replaced on this card: not with no answer, not for a record that is
 // not the trigger, not after still_owed, not a second for one question.
 func TestReworkReplacedNeedsCountReplaced(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -157,10 +162,11 @@ func TestReworkReplacedNeedsCountReplaced(t *testing.T) {
 		"already has its landing_replaced")
 }
 
-// Serial: FreezeEventClock, SetHook. The answer's two records are one
+// Serial: SetHook. The answer's two records are one
 // transaction: the second failing (its context cancelled at the hook) rolls
 // the outcome back too; handled again, both are written once.
 func TestReworkAnswerIsOneTransaction(t *testing.T) {
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -197,10 +203,11 @@ func TestReworkAnswerIsOneTransaction(t *testing.T) {
 	r.rwLanded(t, "counted delivered", plan.True)
 }
 
-// Serial: FreezeEventClock, SetHook. A record whose write fails is written
+// Serial: SetHook. A record whose write fails is written
 // on a later pass from the comparisons already settled, with no new read;
 // two writers at once write it once.
 func TestReworkSeenWriteRetriedAndWrittenOnce(t *testing.T) {
+	ctx := ownClock(t)
 	differ := &deliveredGit{}
 	r := newRWWorld(t, differ)
 	r.rwPass(t)
@@ -244,9 +251,11 @@ func TestReworkSeenWriteRetriedAndWrittenOnce(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A set the Owner answered still_owed comes back
+// A set the Owner answered still_owed comes back
 // after another: its own record and seq again, its answer stands, no card.
 func TestReworkSetComesBack(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -272,9 +281,11 @@ func TestReworkSetComesBack(t *testing.T) {
 	r.rwLanded(t, "the first set is still owed", plan.False)
 }
 
-// Serial: FreezeEventClock. The answer is judged against the trigger as it
+// The answer is judged against the trigger as it
 // is then: a sibling reverted before the answer makes it moot.
 func TestReworkAnswerAfterARevertIsMoot(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -293,10 +304,12 @@ func TestReworkAnswerAfterARevertIsMoot(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The excuse is for the declined root alone: an
+// The excuse is for the declined root alone: an
 // implementation of the step that has not landed still holds it, and the
 // STG reading is the landed siblings' only.
 func TestReworkExcuseIsTheRootsAlone(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -315,10 +328,12 @@ func TestReworkExcuseIsTheRootsAlone(t *testing.T) {
 	r.rwLanded(t, "another implementation, not landed", plan.False)
 }
 
-// Serial: FreezeEventClock. A closed step is put off, not remembered: once
+// A closed step is put off, not remembered: once
 // the step is active again the record is written and the card asked, by the
 // same controller.
 func TestReworkClosedStepComesBack(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	state := func(to string) {
 		t.Helper()
@@ -348,9 +363,11 @@ func TestReworkClosedStepComesBack(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. §6.2 through the real trigger: a set too large
+// §6.2 through the real trigger: a set too large
 // for even task ids prepares no card.
 func TestReworkTooManySiblingsPrepareNoCard(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	slowTest(t)
 	w, c := dbWorld(t)
 	rootTask := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -385,10 +402,12 @@ func TestReworkTooManySiblingsPrepareNoCard(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. RecordReworkSeen reads again, under the lock,
+// RecordReworkSeen reads again, under the lock,
 // what would excuse the root without a card: with no record of the set
 // yet, a same change landed or an excuse in force makes it stale.
 func TestReworkSeenReadsTheExcusesAgain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	r.c.dbTick()
 	ok(t, store.RecordLandingDeliveredBy(ctx, r.w.rt, "bifrost-platform", deliveredBy(r.root, r.rootOp, r.b, r.bOp, dbOldA, rwA1)))
@@ -417,9 +436,11 @@ func TestReworkSeenReadsTheExcusesAgain(t *testing.T) {
 	r2.rwLanded(t, "the excuse holds with a fourth sibling", plan.True)
 }
 
-// Serial: FreezeEventClock. A prepared rework card must bind to its root's
+// A prepared rework card must bind to its root's
 // record for the operation: one naming another seq is refused.
 func TestReworkPreparedCardBindsItsRecord(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	for range 3 {
 		r.rwPass(t)
@@ -452,9 +473,11 @@ func TestReworkPreparedCardBindsItsRecord(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. wait holds the card a day, then it is asked
+// wait holds the card a day, then it is asked
 // again; a pair the remote cannot compare is recorded not_comparable.
 func TestReworkWaitAndNotComparable(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{err: fmt.Errorf("%w: binary", landinggit.ErrNotComparable)})
 	for range 3 {
 		r.rwPass(t)
@@ -487,9 +510,10 @@ func TestReworkWaitAndNotComparable(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock, SetHook. Two writers meet at the lock: the
+// Serial: SetHook. Two writers meet at the lock: the
 // first holds it at its write until the second has started; one record.
 func TestReworkSeenWritersMeetAtTheLock(t *testing.T) {
+	ctx := ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	all := r.rwAll()
 	held, release := make(chan struct{}), make(chan struct{})

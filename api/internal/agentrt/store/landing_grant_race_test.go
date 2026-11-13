@@ -20,12 +20,13 @@ import (
 // lost COMMIT answers, expiry, the push object, the wait, lock order, B5's
 // read, the create check and the controller (§6 T31–T36, T38/T39, T48, T49).
 
-// Serial: FreezeEventClock and a test hook. T31: revocation and consumption
+// Serial: SetHook. T31: revocation and consumption
 // on two connections, each first in turn. Revoked first: the gate, which
 // waits on the stream lock, finds no usable grant and pushes nothing.
 // Consumed first: the revocation, which waits, answers "handed to the push"
 // and writes nothing.
 func TestC5T31RevokeAgainstConsume(t *testing.T) {
+	ctx := ownClock(t)
 	t.Run("revoke first", func(t *testing.T) {
 		c := c5Wait(t, c5Core, false, true)
 		g := c.grant(t, store.ActionCoreLanding)
@@ -142,11 +143,13 @@ func armed(db store.DB, fault string, readback bool) *lostCommit {
 	return &lostCommit{DB: db, fault: fault, readback: readback}
 }
 
-// Serial: FreezeEventClock. T32: a COMMIT whose answer was lost, for the
+// T32: a COMMIT whose answer was lost, for the
 // executor's grant: written → the grant; not written → a failure (the
 // approval can be requested again); the read back failing → uncertain.
 // The pre-read transactions run on the plain connection.
 func TestC5T32CreateUncertain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		fault    string
 		readback bool
@@ -192,8 +195,10 @@ func (g *grantWriteFault) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx,
 	return g.DB.BeginTx(ctx, o)
 }
 
-// Serial: FreezeEventClock. T33: the same for a revocation (§5.7 table).
+// T33: the same for a revocation (§5.7 table).
 func TestC5T33RevokeUncertain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		fault    string
 		readback bool
@@ -226,11 +231,13 @@ func TestC5T33RevokeUncertain(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T34: the consuming main_intent's COMMIT answer
+// T34: the consuming main_intent's COMMIT answer
 // is lost: no Authorization comes back (so nothing pushes), the stream has
 // the intent and the grant is consumed; the next gate does not authorize
 // again. The reconciler owns it from here (AtMain).
 func TestC5T34ConsumeUncertain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
 	auth, _, err := store.AuthorizeLandingPush(ctx, armed(c.w.rt, "after", false), c.src, c.op, c.observe())
@@ -247,16 +254,18 @@ func TestC5T34ConsumeUncertain(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T35: the grant expires between the gate's first
+// T35: the grant expires between the gate's first
 // look and its decision (the reads took long): refused at the decision,
 // nothing written. Control: TestC5GrantWrittenAndConsumed.
 func TestC5T35ExpiryAtTheDecision(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	a := c.approval(store.ActionCoreLanding, store.LandingGrantTTL-time.Minute)
 	_, err := store.WriteLandingGrant(ctx, c.w.rt, c.gsrc, a, c.params(t))
 	ok(t, err)
 	slow := func(ctx context.Context, o landing.Operation) (store.LiveObservation, error) {
-		store.FreezeEventClock(c.at.Add(2 * time.Minute))
+		freezeClock(t, c.at.Add(2*time.Minute))
 		return c.observe()(ctx, o)
 	}
 	_, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c.src, c.op, slow)
@@ -266,11 +275,13 @@ func TestC5T35ExpiryAtTheDecision(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T36: what is pushed is R itself. A candidate
+// T36: what is pushed is R itself. A candidate
 // with another R (a trailer added after approval) has another digest even
 // with the same patch; a grant for it is refused by the append check, and
 // the gate's grant is the operation's R only.
 func TestC5T36PushIsR(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	g := c.grant(t, store.ActionCoreLanding)
 	auth, d := c.gate(t)
@@ -293,14 +304,16 @@ func TestC5T36PushIsR(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T38/T39 on a real grant: a valid grant stops W
+// T38/T39 on a real grant: a valid grant stops W
 // (its interval is not waiting), revocation starts it again, from the
 // stream alone (a fresh read is a restart, T43).
 func TestC5GrantPausesTheWait(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	g := c.grant(t, store.ActionCoreLanding) // granted at c.at
 	waited := func(at time.Time) time.Duration {
-		store.FreezeEventClock(at)
+		freezeClock(t, at)
 		st, err := store.ReadLandingWait(ctx, c.w.rt, c.op)
 		ok(t, err)
 		return time.Duration(st.WaitingSeconds) * time.Second
@@ -309,7 +322,7 @@ func TestC5GrantPausesTheWait(t *testing.T) {
 	if w := waited(c.at.Add(5 * time.Hour)); w != before {
 		t.Fatal("W ran under a valid grant", before, w)
 	}
-	store.FreezeEventClock(c.at.Add(5 * time.Hour))
+	freezeClock(t, c.at.Add(5*time.Hour))
 	_, err := store.RevokeLandingGrant(ctx, c.w.rt, g.GrantID)
 	ok(t, err)
 	if w := waited(c.at.Add(6 * time.Hour)); w != before+time.Hour {
@@ -317,7 +330,7 @@ func TestC5GrantPausesTheWait(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock and test hooks. T48 (review 694 R-07): B4's
+// Serial: SetHook. T48 (review 694 R-07): B4's
 // Close takes the mission (FOR NO KEY UPDATE) and stops before the
 // repository stream; the executor then starts and must wait on the mission
 // holding nothing Close needs, while the Owner revokes the first grant
@@ -326,6 +339,7 @@ func TestC5GrantPausesTheWait(t *testing.T) {
 // stream before the mission would deadlock here (PostgreSQL ends one side:
 // an error, red); the mutant was run by hand (C-5 fix report).
 func TestC5T48LockOrder(t *testing.T) {
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	first := c.grant(t, store.ActionCoreLanding)
 	p := c.params(t)
@@ -402,10 +416,12 @@ func TestC5T48LockOrder(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T49: B5's read gives evidence only for an
+// T49: B5's read gives evidence only for an
 // operation whose main_intent consumed its grant and that then landed R;
 // not for an unconsumed or revoked grant, nor for another operation.
 func TestC5T49B5Evidence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	g := c.grant(t, store.ActionCoreLanding)
 	evidence := func(op string) bool {
@@ -464,11 +480,13 @@ func TestC5T49B5Evidence(t *testing.T) {
 	}))
 }
 
-// Serial: FreezeEventClock. The create check's store half (§5.6 item 2):
+// The create check's store half (§5.6 item 2):
 // the request as handin.sh status prints it passes; main moved refuses it;
 // a stale digest refuses it. A core change whose review has no trust
 // chain's answers needs none (R5:5.7-9): its material has no problem.
 func TestC5CreateCheck(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
@@ -491,12 +509,14 @@ func TestC5CreateCheck(t *testing.T) {
 	refusedWith(t, err, "action_mismatch")
 }
 
-// Serial: FreezeEventClock. §5.5: the grant is usable only for the candidate
+// §5.5: the grant is usable only for the candidate
 // the Owner saw. R's latest CI replaced by another run (green too), or R's
 // patch read differently, makes it stale: nothing reserved or pushed, and
 // the grant is spent (review 694 R-05). A new request on the evidence as
 // it is now is granted and pushes (the control).
 func TestC5GrantStaleOnOtherEvidence(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	c.grant(t, store.ActionCoreLanding)
 	ci := c.ci
@@ -520,12 +540,14 @@ func TestC5GrantStaleOnOtherEvidence(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The controller's resume of a waiting operation
+// The controller's resume of a waiting operation
 // (C-5): with live off nothing opens or pushes; with live on and no usable
 // grant nothing is read outside the database; with its grant it pushes
 // once, the patch read through DrillSources.GrantPatch; without a patch
 // reader the gate refuses (T25 "live off" and the controller half of T27).
 func TestC5ControllerResumesOnlyWithAGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Core, false, true)
 	p := &livePusher{outcome: landinggit.PushOK}
 	opened := 0

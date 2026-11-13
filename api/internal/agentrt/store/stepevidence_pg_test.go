@@ -17,6 +17,7 @@ import (
 
 func stepEvidence(t *testing.T, w *world, step, state string, min int64) store.StepEvidence {
 	t.Helper()
+	ctx := ctxOf(t)
 	ev, err := store.ReadStepEvidence(ctx, w.rt, step, state, min)
 	ok(t, err)
 	return ev
@@ -26,6 +27,7 @@ func stepEvidence(t *testing.T, w *world, step, state string, min int64) store.S
 // authorized plan change does.
 func moveToStep(t *testing.T, w *world, task, step string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, planChange(w, func(tx pgx.Tx) error {
 		// The subject first: a check moves to where its subject already sits.
 		for _, q := range []string{`WHERE task_id = $1`, `WHERE subject_task_id = $1`} {
@@ -80,15 +82,17 @@ func TestStepTasksCountsTheStepsOwnWork(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. step_landed follows the repository's landing
+// step_landed follows the repository's landing
 // fold: false while the work waits for its claim or is on its way, unknown
 // while main's answer is not settled, true once landed (the step moves),
 // false again when another accepted implementation's landing fails.
 // step_stg_settled implies landed; under stg_release none no batch admits
 // the landed operation, so it is false.
 func TestStepLandedFollowsTheLandingFold(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	w.rule(t, s2, `{"step_landed":{}}`)
 	d := &deployments{}
@@ -100,7 +104,7 @@ func TestStepLandedFollowsTheLandingFold(t *testing.T) {
 	}
 	want("no work", plan.False, plan.False)
 
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	freezeClock(t, at.Add(-40*time.Minute))
 	r1 := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, BaseCommit: commitB})
 	w.passRound(t, r1, "h1", "h2", "h3")
 	want("accepted, in the handoff, not claimed yet", plan.False, plan.False)
@@ -108,24 +112,24 @@ func TestStepLandedFollowsTheLandingFold(t *testing.T) {
 	op1 := "land:" + r1 + ":1"
 	prodChain(t, w, r1, op1, at.Add(-30*time.Minute), "branch_pushed")
 	want("branch pushed", plan.False, plan.False)
-	store.FreezeEventClock(at.Add(-26 * time.Minute))
+	freezeClock(t, at.Add(-26*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op1, "ci_seen", "run", "ci-green", "status", "Succeeded", "R", commitB,
 		"created_at", at.Add(-26*time.Minute-30*time.Second).Format(time.RFC3339Nano))))
-	store.FreezeEventClock(at.Add(-25 * time.Minute))
+	freezeClock(t, at.Add(-25*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op1, "main_intent", "R", commitB, "M0", commitA)))
 	want("main asked to move", plan.Unknown, plan.Unknown)
-	store.FreezeEventClock(at.Add(-24 * time.Minute))
+	freezeClock(t, at.Add(-24*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op1, "main_result", "outcome", "ok")))
 	want("pushed, not yet reconciled", plan.Unknown, plan.Unknown)
 	if moved := w.evaluate(t, s2, d); moved != "" || w.stepState(t, s2) != "planned" {
 		t.Fatalf("an unknown landing moved the step: %q", moved)
 	}
 
-	store.FreezeEventClock(at.Add(-23 * time.Minute))
+	freezeClock(t, at.Add(-23*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op1, "landed", "R", commitB)))
 	want("landed, no B5 batch under none", plan.True, plan.False)
 	// An implementation that writes no code has nothing to land.
-	store.FreezeEventClock(at.Add(-22 * time.Minute))
+	freezeClock(t, at.Add(-22*time.Minute))
 	exempt := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, Effect: "none"})
 	w.passRound(t, exempt, "h1", "h2", "h3")
 	want("beside an accepted implementation that writes no code", plan.True, plan.False)
@@ -133,13 +137,13 @@ func TestStepLandedFollowsTheLandingFold(t *testing.T) {
 		t.Fatalf("landed work did not move the step: %q", moved)
 	}
 
-	store.FreezeEventClock(at.Add(-20 * time.Minute))
+	freezeClock(t, at.Add(-20*time.Minute))
 	r2 := w.ready(t, store.Task{MissionID: "M-3", PlanNode: s2, BaseCommit: commitB})
 	w.passRound(t, r2, "h1", "h2", "h3")
 	want("a second implementation waits for its claim", plan.False, plan.False)
 	op2 := "land:" + r2 + ":1"
 	prodChain(t, w, r2, op2, at.Add(-15*time.Minute), "branch_pushed")
-	store.FreezeEventClock(at.Add(-5 * time.Minute))
+	freezeClock(t, at.Add(-5*time.Minute))
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op2, "failed", "why", "stale")))
 	want("the second landing failed", plan.False, plan.False)
 	// Done stays done: the rule names no standing condition.
@@ -148,11 +152,12 @@ func TestStepLandedFollowsTheLandingFold(t *testing.T) {
 	}
 }
 
-// Serial: real PostgreSQL, signing anchor, local Git PATH and event clock.
+// Serial: t.Setenv (the local Git fixture).
 // step_stg_settled on the B5 production paths: unknown while the batch that
 // admitted the step's landed operation runs, true once it settled the
 // member delivered, and the step moves.
 func TestStepSTGSettledFollowsB5(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5hFixture(t)
 	w := x.w
 	moveToStep(t, w, x.root, s2)
@@ -242,12 +247,14 @@ func TestPlanStandingStepEvidence(t *testing.T) {
 	}
 }
 
-// Serial: global clock and signing anchor. Work landed only in
+// Work landed only in
 // bifrost-trade-infra never joins a B5 batch (B5 releases bifrost-platform
 // only), so it has no STG release to wait for: step_stg_settled holds with
 // step_landed, and the step's usual rule moves it (R5:5.5-9; before, a
 // documents-only step such as R5:5.8-1 stayed active for ever).
 func TestStepSTGSettledInfraOnlyHoldsOnceLanded(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w, at := s66World(t, true, 5)
 	root := s66Landed(t, w, "M-3", infraRepo, at)
 	if o := landingState(t, w, "landing:"+infraRepo).Operations["land:"+root+":1"]; o.Phase != "landed" {
@@ -263,11 +270,13 @@ func TestStepSTGSettledInfraOnlyHoldsOnceLanded(t *testing.T) {
 	}
 }
 
-// Serial: global clock and signing anchor. Infra work landed beside
+// Infra work landed beside
 // platform work B5 never admitted: the infra root settles nothing for the
 // platform one, whichever comes first (review of 24642337: a skip that
 // answered for the whole step passed every other test).
 func TestStepSTGSettledInfraBesidePlatformWaitsForB5(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	w, at := s66World(t, true, 5)
 	infra := s66Landed(t, w, "M-3", infraRepo, at)
 	platform := s66Landed(t, w, "M-3", "bifrost-platform", at)

@@ -22,6 +22,7 @@ import (
 // exActive puts step in progress with its state event.
 func exActive(t *testing.T, w *world, step string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.SetStepState(ctx, tx, "controller", root, step, "active", "test")
 		return err
@@ -31,6 +32,7 @@ func exActive(t *testing.T, w *world, step string) {
 // exSteps is root R2's explanation now.
 func exSteps(t *testing.T, w *world) map[string]any {
 	t.Helper()
+	ctx := ctxOf(t)
 	steps, at, err := store.ExplainRoot(ctx, w.rt, root)
 	ok(t, err)
 	if at.IsZero() {
@@ -79,11 +81,13 @@ func kleeneAll(vs ...plan.Tri) string {
 	return out.String()
 }
 
-// Serial: FreezeEventClock. Each root's state from landing()'s own final
+// Each root's state from landing()'s own final
 // classification: in the first-claim handoff, on its way, declined, failed,
 // landed (no blocker), reverted. The rule's value is Eval's over the same
 // atoms; STG waits for landing. Every other step gets its own result.
 func TestExplainRootLandingStates(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	unclaimed := dbAccepted(t, w, c, s2, "bifrost-platform")
 	pending := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -224,12 +228,14 @@ func TestExplainRootLandingStates(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A declined root's rework records (§4.3), as the
+// A declined root's rework records (§4.3), as the
 // runtime writes them: none; the set recorded (current); its card bound;
 // the Owner's still_owed handled. Then count_replaced on a new world: the
 // root no longer blocks, and a step whose rule holds reads true with no
 // blocker while its record is still in progress.
 func TestExplainReworkRecords(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	r := newRWWorld(t, &deliveredGit{})
 	r.w.rule(t, s2, `{"step_landed":{}}`)
 	exActive(t, r.w, s2)
@@ -334,18 +340,21 @@ func (t *countTx) Exec(c context.Context, sql string, args ...any) (pgconn.Comma
 // statements is how many statements one explanation within lim sends.
 func (d *countDB) statements(t *testing.T, lim store.ExplainBounds) int64 {
 	t.Helper()
+	ctx := ctxOf(t)
 	d.n.Store(0)
 	_, _, err := store.ExplainRootWithin(ctx, d, root, lim)
 	ok(t, err)
 	return d.n.Load()
 }
 
-// Serial: FreezeEventClock. Review round 11 M3, M4, M5: a step past the
+// Review round 11 M3, M4, M5: a step past the
 // step bound reads nothing; roots of steps not explained cost no statement
 // (the card triggers and the batched reads cover the explained roots
 // only); and work that runs past the deadline is not kept, even when its
 // last read then succeeds.
 func TestExplainRootReadsOnlyWhatItExplains(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	declined := dbAccepted(t, w, c, s2, "bifrost-platform")
 	dbOp(t, w, c, declined, dbOldA, "declined")
@@ -390,11 +399,13 @@ func TestExplainRootReadsOnlyWhatItExplains(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Review round 12 M2: the bytes bound counts the
+// Review round 12 M2: the bytes bound counts the
 // JSON the reads decode, not its stored size: a stream of notes whose long,
 // repetitive text compresses well stays under the bound when stored and
 // goes over it when read, and is refused before anything is read.
 func TestExplainBytesBoundIsTheDecodedJSON(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	r := dbAccepted(t, w, c, s2, "bifrost-platform")
 	dbOp(t, w, c, r, dbOldA, "intent")

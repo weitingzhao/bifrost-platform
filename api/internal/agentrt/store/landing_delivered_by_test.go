@@ -32,11 +32,14 @@ var (
 
 // dbClock moves the frozen event clock on ten seconds at a time, so the
 // stream's records keep their order in time.
-type dbClock struct{ at time.Time }
+type dbClock struct {
+	t  *testing.T
+	at time.Time
+}
 
 func (c *dbClock) dbTick() time.Time {
 	c.at = c.at.Add(10 * time.Second)
-	store.FreezeEventClock(c.at)
+	freezeClock(c.t, c.at)
 	return c.at
 }
 
@@ -54,14 +57,15 @@ func dbWorld(t *testing.T) (*world, *dbClock) {
 // dbWorldAt is dbWorld whose records are written from 45 minutes before at.
 func dbWorldAt(t *testing.T, at time.Time) (*world, *dbClock) {
 	t.Helper()
-	t.Cleanup(store.FreezeEventClock(at))
+	ctx := ctxOf(t)
+	t.Cleanup(freezeClock(t, at))
 	w := liveWorld(t, "none", at)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: dbStep, Parent: item, Kind: "step", Label: "2.1-9", Title: "s9",
 			StepKind: "agent", Ordinal: 9, Root: root})
 		return err
 	}))
-	return w, &dbClock{at: at.Add(-45 * time.Minute)}
+	return w, &dbClock{t: t, at: at.Add(-45 * time.Minute)}
 }
 
 // dbAccepted is an accepted implementation of M-3 on step, in repo.
@@ -119,6 +123,7 @@ func dbOp(t *testing.T, w *world, c *dbClock, root, a, end string) string {
 
 func deliveredNotes(t *testing.T, w *world) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE body_json ? 'landing_delivered_by'`).Scan(&n))
 	return n
@@ -129,10 +134,12 @@ func deliveredBy(root, op, by, byOp, oldA, newA string) store.DeliveredBy {
 		PatchID: strings.Repeat("d", 40), DiffSHA256: strings.Repeat("e", 64)}
 }
 
-// Serial: FreezeEventClock. §6 item 1: each check refuses on its own, with
+// §6 item 1: each check refuses on its own, with
 // nothing written; the note that passes them all is written and changes
 // nothing the fold says.
 func TestDeliveredByAppendChecks(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	old := dbAccepted(t, w, c, s2, "bifrost-platform")
 	cur := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -225,10 +232,12 @@ func TestDeliveredByAppendChecks(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. §6 item 4: step_landed lets a declined root
+// §6 item 4: step_landed lets a declined root
 // step aside only for a delivery it reads as landed in the same step, the
 // latest note winning, and still needs a root truly landed.
 func TestStepLandedReadsDeliveredBy(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	landed := func(why string, want plan.Tri) {
 		t.Helper()
@@ -277,9 +286,11 @@ func TestStepLandedReadsDeliveredBy(t *testing.T) {
 	landed("the delivering landing reverted", plan.False)
 }
 
-// Serial: FreezeEventClock and signing anchor. §6 item 1: a landing grant
+// §6 item 1: a landing grant
 // request the Owner rejected declines the root as "Do not merge" does.
 func TestDeliveredByAfterRejectedGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, root, op, _, at := c4Wait(t)
 	moveToStep(t, w, root, s2)
 	wrote, err := store.RecordLandingGrantRequest(ctx, w.rt, c4Request(op, "rejected", at))
@@ -288,7 +299,7 @@ func TestDeliveredByAfterRejectedGrant(t *testing.T) {
 	if !wrote || o.Phase != "failed" || o.Outcome != "declined" || o.A == "" {
 		t.Fatalf("fixture: %v %s{%s} A %q", wrote, o.Phase, o.Outcome, o.A)
 	}
-	c := &dbClock{at: at}
+	c := &dbClock{t: t, at: at}
 	cur := dbAccepted(t, w, c, s2, "bifrost-platform")
 	curOp := dbOp(t, w, c, cur, dbNewA, "landed")
 	if ev := stepEvidence(t, w, s2, "accepted", 1); ev.Landed != plan.False {
@@ -335,10 +346,11 @@ func (g *deliveredGit) Changes(_ context.Context, a, b string) (landinggit.Chang
 // deliveredPass runs the backfill's pass over repo's stream as it stands.
 func deliveredPass(t *testing.T, w *world, ctl *controller.Controller, repo string) error {
 	t.Helper()
+	ctx := ctxOf(t)
 	return ctl.LandingDeliveredByPass(ctx, repo, landingState(t, w, "landing:"+repo))
 }
 
-// Serial: FreezeEventClock. §6 item 3: each pass compares at most one pair;
+// §6 item 3: each pass compares at most one pair;
 // a pair whose changes differ, or that cannot be compared, is not read
 // again, the latter logged once; one whose commits the remote seemed not to
 // serve is read again after six hours, not before, logged each time; any
@@ -347,6 +359,8 @@ func deliveredPass(t *testing.T, w *world, ctl *controller.Controller, repo stri
 // turn: another repository's pass, with nothing to compare, forgets none of
 // this one's.
 func TestDeliveredByControllerPass(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	old2 := dbAccepted(t, w, c, s2, "bifrost-platform")
 	old3 := dbAccepted(t, w, c, dbStep, "bifrost-platform")
@@ -437,11 +451,13 @@ func TestDeliveredByControllerPass(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A root whose note names a sibling that has since
+// A root whose note names a sibling that has since
 // moved off the step is compared again, with a sibling landed on the step
 // now, so step_landed (which reads only a by landed on the step) can hold
 // again.
 func TestDeliveredByNotedAgainOnceTheDeliveryMoved(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	old := dbAccepted(t, w, c, s2, "bifrost-platform")
 	cur := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -497,12 +513,14 @@ func (g *budgetGit) Changes(ctx context.Context, _, _ string) (landinggit.Change
 	return landinggit.ChangeIdentity{}, landinggit.ChangeIdentity{}, ctx.Err()
 }
 
-// Serial: FreezeEventClock. §6 item 3: the backfill runs outside the landing
+// §6 item 3: the backfill runs outside the landing
 // pass's work budget. With a pair to compare whose read takes all it is
 // given, the pending operation is still visited first and with its whole
 // share; the backfill gets what the work left, short of the cleanup's
 // reservation, and nothing at all when that is under DeliveredByMinShare.
 func TestDeliveredByRunsAfterTheWork(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorldAt(t, time.Now().UTC().Truncate(time.Second))
 	old := dbAccepted(t, w, c, s2, "bifrost-platform")
 	cur := dbAccepted(t, w, c, s2, "bifrost-platform")
@@ -550,13 +568,14 @@ func TestDeliveredByRunsAfterTheWork(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock, local Git PATH. Today's real shape end to end
+// Serial: t.Setenv (the local Git fixture). Today's real shape end to end
 // with real Git (§5, §6 item 6): the old result stacked on an earlier slice
 // that never landed, the new one on the new main where that slice landed as
 // another commit; the change itself byte for byte the same. The controller
 // reads the two commits alone and writes the note; a hand-in whose change
 // was edited (one space) gets none.
 func TestDeliveredByRealShapeWithGit(t *testing.T) {
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	f := localGit704(t)
 	src, remote := f.sources[platformRepo], f.remotes[platformRepo]

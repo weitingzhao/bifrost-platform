@@ -34,12 +34,13 @@ limits: {max_files: 10, max_changed_lines: 300, max_landings_per_day: 5, max_in_
 
 func infraWorld(t *testing.T, changes []rules.LandingChange) (*world, string, store.LandingSource) {
 	t.Helper()
+	ctx := ctxOf(t)
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	_, err := s.sign(w, ruleText("landing:dev", 1, "initial", since, until, infraRuleBody))
 	ok(t, err)
 	enabled := time.Now().Add(-time.Hour)
-	restore := store.FreezeEventClock(enabled)
+	restore := freezeClock(t, enabled)
 	_, err = store.EnsureLandingMode(ctx, w.rt, infraRepo)
 	ok(t, err)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -68,12 +69,14 @@ func infraChange() rules.LandingChange {
 	return rules.LandingChange{OldPath: infraPath, NewPath: infraPath, OldMode: "100644", NewMode: "100644", Added: 20}
 }
 
-// Serial: FreezeEventClock and the signing test anchor. T1–T12 through the
+// T1–T12 through the
 // real claim/append transaction. Grants are not enabled here, so a
 // floor-grantable change (T1, T4-runbook) is refused as soft, with its
 // floor paths; deletions of hard paths fail their change kind first. Each negative has a successful same-entry
 // control; no branch, intent or quota can be produced by a refusal.
 func TestS6InfraClaimLayersPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name, layer string
 		changes     func() []rules.LandingChange
@@ -155,9 +158,11 @@ func TestS6InfraClaimLayersPG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T63: closing the repository disables writes but
+// T63: closing the repository disables writes but
 // its committed main intent still reaches landed on the read-only loop.
 func TestS6InfraClosedRepositoryReconcilesPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := infraWorld(t, []rules.LandingChange{infraChange()})
 	op, d, err := store.ClaimLanding(ctx, w.rt, src, "prod", task, time.Now())
 	ok(t, err)
@@ -165,13 +170,13 @@ func TestS6InfraClosedRepositoryReconcilesPG(t *testing.T) {
 		t.Fatal(d)
 	}
 	at := time.Now().UTC().Truncate(time.Second)
-	restore := store.FreezeEventClock(at)
+	restore := freezeClock(t, at)
 	defer restore()
 	ref := "refs/heads/land/prod/" + task + "/1"
 	for _, r := range []map[string]any{newLandingRecord(op, "prepared", "R", commitB, "M0", commitA, "committer_date", at.Format(time.RFC3339Nano), "dry_run", false), newLandingRecord(op, "branch_intent", "ref", ref, "R", commitB), newLandingRecord(op, "branch_pushed", "ref", ref, "R", commitB)} {
 		ok(t, appendLanding(w, infraStream, r))
 	}
-	store.FreezeEventClock(at.Add(2 * time.Minute))
+	freezeClock(t, at.Add(2*time.Minute))
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(at), infraRepo)
 	ok(t, err)
 	if !d.Allowed || auth.Repo != infraRepo {
@@ -266,20 +271,22 @@ func infraControl(name string) []rules.LandingChange {
 	return []rules.LandingChange{c}
 }
 
-// Serial: FreezeEventClock. T61: candidates, facts, operation streams and
+// T61: candidates, facts, operation streams and
 // CI adapters remain separate even when both tasks accepted commitA and
 // both prepared commitB. No CI backend selection is added here (S6-5).
 func TestS6SameSHAIsolatedCandidatesAndCIPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, infraTask, infraSrc := infraWorld(t, []rules.LandingChange{infraChange()})
 	at := time.Now().UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at.Add(-time.Hour))()
+	defer freezeClock(t, at.Add(-time.Hour))()
 	_, err := store.EnsureLandingMode(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.ObserveLandingEnabled(ctx, tx, "prod", "dev", "bifrost-platform", at)
 		return err
 	}))
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	platformTask := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "same SHA control", BaseCommit: commitB})
 	w.passRound(t, platformTask, "h1", "h2", "h3")
 	platformSrc := c4Source("console/src/components/Pair.tsx")
@@ -312,7 +319,7 @@ func TestS6SameSHAIsolatedCandidatesAndCIPG(t *testing.T) {
 		ops[repo] = op
 		prepareS6(t, w, repo, task, op, at)
 	}
-	store.FreezeEventClock(at.Add(15 * time.Minute))
+	freezeClock(t, at.Add(15*time.Minute))
 	for repo, op := range ops {
 		var ciReads, kicks int
 		check := func(got string) {
@@ -354,9 +361,11 @@ func prepareS6(t *testing.T, w *world, repo, task, op string, at time.Time) {
 	}
 }
 
-// Serial: event clock and signing anchor. T13 proves the real gate's
+// T13 proves the real gate's
 // platform wait and the infra soft failure, without an infra grant read.
 func TestS6SoftFailureNeverWaitsForInfraGrantPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Soft, true, true)
 	if c.phase(t) != "awaiting_grant" {
 		t.Fatal("platform control did not wait")
@@ -384,9 +393,11 @@ func TestS6SoftFailureNeverWaitsForInfraGrantPG(t *testing.T) {
 	}
 }
 
-// Serial: event clock and signing anchor. T15 refuses an unknown repo at
+// T15 refuses an unknown repo at
 // binding, before evidence, while the identical accepted platform succeeds.
 func TestS6UnknownRepoRefusedBeforeEvidencePG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, src := goalDrill(t, "M-3")
 	if op, d, err := store.ClaimLandingDrill(ctx, w.rt, src, task, time.Now()); err != nil || op == "" || !d.Allowed {
 		t.Fatal(op, d, err)
@@ -406,9 +417,11 @@ func TestS6UnknownRepoRefusedBeforeEvidencePG(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. T63 includes a recovered unknown push and a
+// T63 includes a recovered unknown push and a
 // successful push later missing from main, settled by the Owner's answer.
 func TestS6ClosedInfraUnknownAndMainLostPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, outcome := range []string{"unknown", "ok"} {
 		t.Run(outcome, func(t *testing.T) {
 			w, task, src := infraWorld(t, []rules.LandingChange{infraChange()})
@@ -418,9 +431,9 @@ func TestS6ClosedInfraUnknownAndMainLostPG(t *testing.T) {
 				t.Fatal(d)
 			}
 			at := time.Now().UTC().Truncate(time.Second)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			prepareS6(t, w, infraRepo, task, op, at)
-			store.FreezeEventClock(at.Add(2 * time.Minute))
+			freezeClock(t, at.Add(2*time.Minute))
 			auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(at), infraRepo)
 			ok(t, err)
 			if !d.Allowed {
@@ -428,7 +441,7 @@ func TestS6ClosedInfraUnknownAndMainLostPG(t *testing.T) {
 			}
 			_, err = store.RecordPushResult(ctx, w.rt, auth, outcome, "agentrt-lander")
 			ok(t, err)
-			store.FreezeEventClock(at.Add(time.Hour))
+			freezeClock(t, at.Add(time.Hour))
 			ctl := controller.Controller{DB: w.rt, Env: "prod", LiveRepos: []string{}, Reconcile: &controller.LandingReconcile{Repos: []string{infraRepo}, MainEvidence: func(_ context.Context, repo, root, a, r string) (store.MainEvidence, error) {
 				if repo != infraRepo || root != task {
 					t.Fatal(repo, root)

@@ -19,6 +19,7 @@ import (
 // operation and its plain source.
 func c5Other(t *testing.T) (*c5, string, store.LandingSource) {
 	t.Helper()
+	ctx := ctxOf(t)
 	c := c5Wait(t, c5Core, false, true)
 	other := c.w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "C5 other root", BaseCommit: commitB})
 	c.w.passRound(t, other, "h1", "h2", "h3")
@@ -38,7 +39,7 @@ func c5Other(t *testing.T) (*c5, string, store.LandingSource) {
 		t.Fatal("a claim did not count the operation in CI", op, d, err)
 	}
 	c.grant(t, store.ActionCoreLanding)
-	store.FreezeEventClock(c.at.Add(2 * time.Minute))
+	freezeClock(t, c.at.Add(2*time.Minute))
 	return c, op2, plain
 }
 
@@ -46,6 +47,7 @@ func c5Other(t *testing.T) (*c5, string, store.LandingSource) {
 // reads for op.
 func (c *c5) inFlight(t *testing.T) int {
 	t.Helper()
+	ctx := ctxOf(t)
 	var f landing.Facts
 	ok(t, store.InTx(ctx, c.w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -55,10 +57,12 @@ func (c *c5) inFlight(t *testing.T) int {
 	return f.OtherInFlight
 }
 
-// Serial: FreezeEventClock. The second operation's CI runs (branch_pushed,
+// The second operation's CI runs (branch_pushed,
 // kicked): the granted one is allowed and pushes; other readers still count
 // the second operation.
 func TestGrantSlotNotHeldByLandingInCI(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	c, op2, _ := c5Other(t)
 	if p, _ := phaseOf(t, c.w, op2); p != "branch_pushed" {
 		t.Fatal(p)
@@ -72,9 +76,11 @@ func TestGrantSlotNotHeldByLandingInCI(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The second operation waits for its own card:
+// The second operation waits for its own card:
 // the granted one is allowed.
 func TestGrantSlotNotHeldByLandingAwaitingCard(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c, op2, _ := c5Other(t)
 	if _, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, c4Source(c5Core), op2, observed(c.at)); err != nil || d.Reason != "awaiting_grant" {
 		t.Fatal("second root not waiting", d, err)
@@ -85,9 +91,11 @@ func TestGrantSlotNotHeldByLandingAwaitingCard(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The second operation is pushing to main
+// The second operation is pushing to main
 // (main_intent): the granted one is refused for the limit and keeps waiting.
 func TestGrantSlotHeldByLandingAtMain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c, op2, plain := c5Other(t)
 	if auth, d, err := store.AuthorizeLandingPush(ctx, c.w.rt, plain, op2, observed(c.at)); err != nil || !d.Allowed || auth.Op != op2 {
 		t.Fatal("second root's final gate", d, err)

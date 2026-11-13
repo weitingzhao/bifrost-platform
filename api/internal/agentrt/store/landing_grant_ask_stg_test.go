@@ -9,11 +9,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: c5Wait freezes the event clock. The card the platform asks for
+// The card the platform asks for
 // itself (R5:5.7) carries stg_release true: the create check accepts it as
 // it does the coordinator's, the grant written from its approval has
 // STGRelease true, and the final gate pushes on it. Both actions.
 func TestGrantAskSTGControllerCardWritesSTGGrant(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, tc := range []struct {
 		name, path, action string
 		pinned             bool

@@ -92,8 +92,9 @@ func TestApproveRule(t *testing.T) {
 	}
 }
 
-// Serial: the landing clock and signing anchor are global.
 func TestLandingInFlightCapacityApprovalAndClaimPG(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, now := s66World(t, true, 5)
 	body := strings.Replace(infraRuleBody, "max_in_flight: 1", "max_in_flight: 2", 1)
 	body = strings.Replace(body, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2", 1)

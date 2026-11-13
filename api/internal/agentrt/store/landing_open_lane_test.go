@@ -45,6 +45,7 @@ func openLaneAccept(t *testing.T) func(*world, string) {
 // its checks_version, and whether a grant was consumed.
 func openLaneIntent(t *testing.T, c *c5) (clear bool, checks int, use bool) {
 	t.Helper()
+	ctx := ctxOf(t)
 	ok(t, c.w.rt.QueryRow(ctx, `SELECT body_json ? 'landing_rule_clear', COALESCE((body_json->'landing_rule_clear'->>'checks_version')::int, 0),
 	    body_json ? 'landing_grant_use' FROM agentrt.event
 	  WHERE event_stream_id=$1 AND body_json->'landing'->>'kind'='main_intent' AND body_json->'landing'->>'op'=$2`, landingRepoStream, c.op).Scan(&clear, &checks, &use))
@@ -58,12 +59,14 @@ func openLaneApprovals(t *testing.T, c *c5) int {
 	  AND (body_json ? 'landing_grant' OR body_json ? 'landing_grant_request')`, landingRepoStream)
 }
 
-// Serial: FreezeEventClock. An open-only change with green CI lands with no
+// An open-only change with green CI lands with no
 // approval, regardless of the legacy size values.
 func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	t.Run("within limits", func(t *testing.T) {
 		c := c5Prepared(t, openLaneSource(1, openLanePath), false, true, openLaneAccept(t))
-		store.FreezeEventClock(c.at)
+		freezeClock(t, c.at)
 		auth, d := c.gate(t)
 		if !d.Allowed || auth.R != commitB || c.phase(t) != "main_intent" {
 			t.Fatal(d, auth, c.phase(t))
@@ -74,7 +77,7 @@ func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
 	})
 	t.Run("large change", func(t *testing.T) {
 		c := c5Prepared(t, openLaneSource(10000, openLanePath), false, true, openLaneAccept(t))
-		store.FreezeEventClock(c.at)
+		freezeClock(t, c.at)
 		if _, d := c.gate(t); !d.Allowed || c.phase(t) != "main_intent" || openLaneApprovals(t, c) != 0 {
 			t.Fatal(d, c.phase(t))
 		}
@@ -82,28 +85,32 @@ func TestOpenLaneGreenLandsWithoutApproval(t *testing.T) {
 
 }
 
-// Serial: FreezeEventClock. An open change whose CI is red does not land:
+// An open change whose CI is red does not land:
 // no main_intent, no quota, the branch stays pushed.
 func TestOpenLaneRedCIDoesNotLand(t *testing.T) {
+	t.Parallel()
+	ownClock(t)
 	c := c5Prepared(t, openLaneSource(1, openLanePath), false, true, openLaneAccept(t))
 	c.ci.Status = "Failed"
-	store.FreezeEventClock(c.at)
+	freezeClock(t, c.at)
 	auth, d := c.gate(t)
 	if d.Allowed || d.Reason != "ci" || auth.Op != "" || c.phase(t) != "branch_pushed" {
 		t.Fatal(d, auth, c.phase(t))
 	}
 }
 
-// Serial: FreezeEventClock. An open path beside a permission (core) path
+// An open path beside a permission (core) path
 // does not open the change: it waits on core and asks approve_core_landing,
 // naming only the core path.
 func TestOpenLaneMixedAsksCore(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Prepared(t, openLaneSource(1, openLanePath, c5Core), false, true, openLaneAccept(t))
-	store.FreezeEventClock(c.at.Add(-20 * time.Minute))
+	freezeClock(t, c.at.Add(-20*time.Minute))
 	if _, d := c.gate(t); d.Reason != "awaiting_grant" {
 		t.Fatal("mixed change not waiting", d)
 	}
-	store.FreezeEventClock(c.at)
+	freezeClock(t, c.at)
 	m, err := store.ReadLandingGrantMaterial(ctx, c.w.rt, c.gsrc, c.op, true)
 	ok(t, err)
 	if m.Action != store.ActionCoreLanding || !slices.Contains(m.SoftAtRequest, "core") || len(m.Candidate.HardCorePaths) != 1 {
@@ -114,17 +121,19 @@ func TestOpenLaneMixedAsksCore(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. A signed deny still refuses an open path, as
+// A signed deny still refuses an open path, as
 // rule: the claim prepares nothing, even with grants enabled; without the
 // deny the same change claims.
 func TestOpenLaneDenyRefusedAsRule(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, deny := range []bool{false, true} {
 		c := c5Ready(t, openLaneSource(1, openLanePath), false, true, openLaneAccept(t))
 		if deny {
 			denied := strings.Replace(c5RuleBody, "deny: []", `deny: ["`+openLanePath+`"]`, 1)
 			ok(t, firstErr(c.signer.sign(c.w, ruleText("landing:dev", 2, "tighten", since, until, denied))))
 		}
-		store.FreezeEventClock(c.at.Add(-30 * time.Minute))
+		freezeClock(t, c.at.Add(-30*time.Minute))
 		op, d, err := store.ClaimLanding(ctx, c.w.rt, c.src, "prod", c.root, c.at)
 		ok(t, err)
 		if !deny {
@@ -142,22 +151,24 @@ func TestOpenLaneDenyRefusedAsRule(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. An operation that waited on core under checks
+// An operation that waited on core under checks
 // version 2 (its awaiting_grant written as that gate wrote it) with a
 // pending approve_core_landing card, whose change is open-only under version
 // 3: the recheck lands it on the rule (landing_rule_clear, checks_version 3)
 // with no grant, and the controller's next requests pass withdraws the
 // pending card from the Owner's list, once; while it waited, it did not.
 func TestOpenLaneV2CoreWaitClearsAndSettlesItsApproval(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Prepared(t, openLaneSource(1, openLaneV2Core), false, true, openLaneAccept(t))
-	store.FreezeEventClock(c.at.Add(-20 * time.Minute))
+	freezeClock(t, c.at.Add(-20*time.Minute))
 	ok(t, appendLanding(c.w, landingRepoStream, landing.CIRecord(c.op, c.ci)))
 	ok(t, appendLanding(c.w, landingRepoStream, newLandingRecord(c.op, "awaiting_grant", "soft", []any{"core"}, "files", 1, "lines", 2,
 		"material", "sha256:"+strings.Repeat("c", 64))))
 	if c.phase(t) != "awaiting_grant" {
 		t.Fatal("v2 wait", c.phase(t))
 	}
-	store.FreezeEventClock(c.at.Add(-10 * time.Minute))
+	freezeClock(t, c.at.Add(-10*time.Minute))
 	pending := store.LandingGrantRequest{Op: c.op, R: commitB, ApprovalID: "appr_open_v2", ApprovalNumber: 900, Status: "pending",
 		ParamsHash: strings.Repeat("d", 64), SeenAt: c.at.Add(-10 * time.Minute)}
 	wrote, err := store.RecordLandingGrantRequest(ctx, c.w.rt, pending)
@@ -182,7 +193,7 @@ func TestOpenLaneV2CoreWaitClearsAndSettlesItsApproval(t *testing.T) {
 		t.Fatal("a waiting operation's card withdrawn", settled)
 	}
 
-	store.FreezeEventClock(c.at)
+	freezeClock(t, c.at)
 	_, d, err := store.RecheckWaitingLanding(ctx, c.w.rt, c.src, c.op, c.observe())
 	ok(t, err)
 	if !d.Allowed || c.phase(t) != "main_intent" {

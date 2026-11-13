@@ -44,10 +44,12 @@ func liveSources(src store.LandingSource, prepared time.Time) controller.DrillSo
 	}
 }
 
-// Serial: FreezeEventClock. Green CI on PROD: the gate writes reserved and
+// Green CI on PROD: the gate writes reserved and
 // main_intent, the push runs once against the intent's deadline, and its
 // answer is recorded; the next pass pushes nothing more.
 func TestLiveLandingPushesMainOnce(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	for _, c := range []struct {
 		outcome landinggit.PushOutcome
 		phase   string
@@ -55,7 +57,7 @@ func TestLiveLandingPushesMainOnce(t *testing.T) {
 		t.Run(string(c.outcome), func(t *testing.T) {
 			w, _, op, src, prepared := liveReady(t)
 			at := prepared.Add(10 * time.Minute)
-			defer store.FreezeEventClock(at)()
+			defer freezeClock(t, at)()
 			p := &livePusher{outcome: c.outcome}
 			ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
 				OpenLive: func(_ context.Context, _ string, r string) (controller.LiveWorkspace, error) {
@@ -80,12 +82,14 @@ func TestLiveLandingPushesMainOnce(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. The gate refusing (main moved under it) opens a
+// The gate refusing (main moved under it) opens a
 // workspace but pushes nothing and writes no intent.
 func TestLiveLandingGateRefusalPushesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	p := &livePusher{outcome: landinggit.PushOK}
 	reads := 0
 	s := liveSources(src, prepared)
@@ -108,13 +112,15 @@ func TestLiveLandingGateRefusalPushesNothing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Without Live, PROD neither scans, claims nor
+// Without Live, PROD neither scans, claims nor
 // pushes, whatever its sources; a workspace that cannot open writes no
 // intent.
 func TestLiveLandingOffOnProd(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	opened := 0
 	open := func(context.Context, string, string) (controller.LiveWorkspace, error) {
 		opened++
@@ -138,13 +144,14 @@ func TestLiveLandingOffOnProd(t *testing.T) {
 	}
 }
 
-// Serial: SetHook, FreezeEventClock. The reconciler moves the operation on
+// Serial: SetHook. The reconciler moves the operation on
 // between the gate's commit and the push: nothing is pushed or recorded
 // (review 663 R-01).
 func TestLiveLandingRereadsTheIntentBeforePushing(t *testing.T) {
+	ctx := ownClock(t)
 	w, _, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	defer store.SetHook(func(point, arg string) {
 		if point == "landing live: before push check" && arg == op {
 			ok(t, appendLanding(w, landingRepoStream, newLandingRecord(op, "main_result", "outcome", "unknown")))
@@ -163,12 +170,14 @@ func TestLiveLandingRereadsTheIntentBeforePushing(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. Past the intent's deadline at the re-read:
+// Past the intent's deadline at the re-read:
 // nothing is pushed.
 func TestLiveLandingPushesNothingPastTheDeadline(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, task, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	auth, d, err := store.AuthorizeLandingPush(ctx, w.rt, src, op, observed(prepared))
 	ok(t, err)
 	if !d.Allowed {
@@ -177,13 +186,13 @@ func TestLiveLandingPushesNothingPastTheDeadline(t *testing.T) {
 	if cur, err := store.AuthorizationCurrent(ctx, w.rt, auth); err != nil || !cur {
 		t.Fatal("a fresh authorization is not current", cur, err)
 	}
-	store.FreezeEventClock(auth.Deadline)
+	freezeClock(t, auth.Deadline)
 	if cur, err := store.AuthorizationCurrent(ctx, w.rt, auth); err != nil || cur {
 		t.Fatal("current at its deadline", cur, err)
 	}
 	other := auth
 	other.IntentSeq++
-	store.FreezeEventClock(at)
+	freezeClock(t, at)
 	if cur, err := store.AuthorizationCurrent(ctx, w.rt, other); err != nil || cur {
 		t.Fatal("another intent's licence", cur, err, task)
 	}
@@ -194,12 +203,14 @@ type namedPusher struct{ livePusher }
 
 func (p *namedPusher) Pusher() (string, error) { return "agentrt-lander", nil }
 
-// Serial: FreezeEventClock. (e): the push result names the identity the
+// (e): the push result names the identity the
 // push went as (the lander's username file), beside the outcome.
 func TestLiveLandingRecordsThePusher(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, _, op, src, prepared := liveReady(t)
 	at := prepared.Add(10 * time.Minute)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	p := &namedPusher{livePusher{outcome: landinggit.PushOK}}
 	ctl := controller.Controller{DB: w.rt, Env: "prod", Live: true, DrillGit: map[string]controller.DrillGit{"bifrost-platform": &branchObserved{}},
 		OpenLive: func(context.Context, string, string) (controller.LiveWorkspace, error) { return p, nil }}

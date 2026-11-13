@@ -16,7 +16,8 @@ import (
 // failed{in_main}, with a landed note naming landed when it is not "".
 func inMainRoot(t *testing.T, w *world, at time.Time, landed string) string {
 	t.Helper()
-	store.FreezeEventClock(at.Add(-40 * time.Minute))
+	ctx := ctxOf(t)
+	freezeClock(t, at.Add(-40*time.Minute))
 	root := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "in main " + landed, BaseCommit: commitB})
 	w.passRound(t, root, "h1", "h2", "h3")
 	ok(t, appendLanding(w, landingRepoStream, newLandingRecord("land:"+root+":1", "failed", "why", "in_main")))
@@ -32,6 +33,7 @@ func inMainRoot(t *testing.T, w *world, at time.Time, landed string) string {
 
 func disposals(t *testing.T, w *world, root string) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var whys []string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT body_json->'landing_disposed'->>'why' FROM agentrt.event WHERE event_stream_id = $1
@@ -45,10 +47,11 @@ func disposals(t *testing.T, w *world, root string) []string {
 	return whys
 }
 
-// Serial: FreezeEventClock.
 func TestSettleInMain(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	landed := inMainRoot(t, w, at, commitB)
 	asked := inMainRoot(t, w, at, "")
@@ -67,7 +70,7 @@ func TestSettleInMain(t *testing.T) {
 		t.Fatalf("in_main cards before the pass: %v", open)
 	}
 
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	n, err := store.SettleInMain(ctx, w.rt, "bifrost-platform")
 	ok(t, err)
 	if n != 1 {
@@ -116,16 +119,18 @@ func TestSettleInMain(t *testing.T) {
 	}
 }
 
-// Serial: FreezeEventClock. main_delivered is the controller's, for a
+// main_delivered is the controller's, for a
 // failed{in_main} root's landed commit, once; owner_delivered still follows
 // the Owner's answer.
 func TestLandingDisposedMainDelivered(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	at := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
-	defer store.FreezeEventClock(at)()
+	defer freezeClock(t, at)()
 	w := liveWorld(t, "none", at)
 	landed := inMainRoot(t, w, at, commitB)
 	bare := inMainRoot(t, w, at, "")
-	store.FreezeEventClock(at.Add(time.Minute))
+	freezeClock(t, at.Add(time.Minute))
 	disposal := func(actor, root, why, main string) error {
 		d := map[string]any{"v": "1", "root": root, "op": "land:" + root + ":1", "why": why}
 		if main != "" {

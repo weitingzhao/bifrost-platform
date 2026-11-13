@@ -9,9 +9,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: c5Wait freezes the event clock. Exercise the real database reader
+// Exercise the real database reader
 // and create check with a shared cache; the executor/final gate stay uncached.
 func TestMaterialCacheRequestChecksStayLive(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	c := c5Wait(t, c5Soft, true, true)
 	c.gsrc.Cache = &store.GrantMaterialCache{}
 	result, patch := c.gsrc.Facts.Result, c.gsrc.Facts.GrantPatch

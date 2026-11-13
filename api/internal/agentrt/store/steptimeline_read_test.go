@@ -11,10 +11,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// Serial: FreezeEventClock. One read of a round: its steps in ordinal
+// One read of a round: its steps in ordinal
 // order, a step's accepted and landed task as events in time, and a card
 // voided and asked again as one card of two attempts.
 func TestReadRoundTimelineStepsEventsAndCards(t *testing.T) {
+	t.Parallel()
+	ctx := ownClock(t)
 	w, c := dbWorld(t)
 	task := dbAccepted(t, w, c, s2, "bifrost-platform")
 	dbOp(t, w, c, task, dbNewA, "landed")

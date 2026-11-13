@@ -34,6 +34,7 @@ func b5hCount(s store.StgState, kind string) int {
 func b5hClosed(s store.StgState) bool { return s.Batches[b5Batch].Phase == "CLOSED" }
 func (x *b5hWorld) assertDelivered(t *testing.T, tries int) {
 	t.Helper()
+	ctx := ctxOf(t)
 	s := x.state(t)
 	m := store.StgMemberKey{Root: x.root, Op: x.op, R: x.p}
 	if !b5hClosed(s) || s.Members[m].To != "delivered" || b5hCount(s, "started") != tries || b5hCount(s, "bound") != tries || b5hCount(s, "run_evidence") != tries || b5hCount(s, "verify") != tries || b5hCount(s, "member") != 1 || b5hCount(s, "settled") != 1 || x.runs.creates != tries || len(x.runs.uids) != tries || s.Budget[store.StgBudgetKey{R: x.p, Gen: 1}] != int64(tries) {
@@ -63,8 +64,9 @@ func (x *b5hWorld) assertDelivered(t *testing.T, tries int) {
 	}
 }
 
-// Serial: real PostgreSQL, signing anchor, local Git PATH and event clock.
+// Serial: t.Setenv (the local Git fixture).
 func TestB5HCrossPGRestartAndCreateReplies(t *testing.T) {
+	ctx := ownClock(t)
 	for _, cut := range []string{"snapshot", "started", "bound", "archive", "verified", "closed", "409", "lost_reply"} {
 		t.Run(cut, func(t *testing.T) {
 			x := b5hFixture(t)
@@ -119,9 +121,10 @@ func TestB5HCrossPGRestartAndCreateReplies(t *testing.T) {
 	}
 }
 
-// Serial: PG + fake clock. These reach actual second Creates, not just retry
+// Serial: t.Setenv (the local Git fixture). These reach actual second Creates, not just retry
 // records; every try is authorized and debited by the final gate again.
 func TestB5HCrossPGPartialRolloutCreates(t *testing.T) {
+	ctx := ownClock(t)
 	for _, effect := range []string{"unchanged", "partial", "all", "third_party"} {
 		t.Run(effect, func(t *testing.T) {
 			x := b5hFixture(t)
@@ -178,14 +181,15 @@ func TestB5HCrossPGPartialRolloutCreates(t *testing.T) {
 	}
 }
 
-// Serial: PG and policy interleavings; explicit none freezes the whole loop.
+// Serial: t.Setenv (the local Git fixture). PG and policy interleavings; explicit none freezes the whole loop.
 func TestB5HCrossPGUnknownLeaseAndNone(t *testing.T) {
+	ctx := ownClock(t)
 	for _, mode := range []string{"read_timeout", "live_off", "none", "expired_before_post"} {
 		t.Run(mode, func(t *testing.T) {
 			x := b5hFixture(t)
 			if mode == "expired_before_post" {
 				x.runs.beforeSend = func() {
-					store.FreezeEventClock(store.DecisionAt(ctx).Add(3 * time.Minute))
+					freezeClock(t, store.DecisionAt(ctx).Add(3*time.Minute))
 					x.clock.SetTime(store.DecisionAt(ctx))
 				}
 				if err := x.c.Pass(ctx); err == nil {
@@ -236,8 +240,9 @@ func TestB5HCrossPGUnknownLeaseAndNone(t *testing.T) {
 	}
 }
 
-// Serial: PG; ExternalPass and CoverPass must not settle an archived but unverified try.
+// Serial: t.Setenv (the local Git fixture). ExternalPass and CoverPass must not settle an archived but unverified try.
 func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
+	ctx := ownClock(t)
 	for _, externalFirst := range []bool{true, false} {
 		t.Run(fmt.Sprint(externalFirst), func(t *testing.T) {
 			x := b5hFixture(t)
@@ -304,9 +309,10 @@ func TestB5HCrossPGExternalWrongInputOrder(t *testing.T) {
 	}
 }
 
-// Serial: real question adapter, PG, rule clock and local Git. The same
+// Serial: t.Setenv (the local Git fixture, the question service's environment). Real question adapter and PG. The same
 // controller-produced budget trigger survives quota, lost Ask and failed Ack.
 func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
+	ctx := ownClock(t)
 	t.Setenv("APPROVAL_NOTIFY_URL", "")
 	t.Setenv("OPS_VIEWER_ENV", "prod")
 	x := b5hFixture(t)
@@ -394,8 +400,9 @@ func TestB5HCrossPGBudgetCardFaults(t *testing.T) {
 	}
 }
 
-// Serial: actual independent PG connections, bounded concurrent controllers.
+// Serial: t.Setenv (the local Git fixture). Actual independent PG connections, bounded concurrent controllers.
 func TestB5HCrossPGTwoObserversOneArchive(t *testing.T) {
+	ctx := ownClock(t)
 	x := b5hFixture(t)
 	ok(t, x.c.Pass(ctx))
 	x.runs.work = b5hWork("d", "f")

@@ -13,6 +13,7 @@ import (
 
 func b5hFillQuota(t *testing.T, svc *questions.Service) []string {
 	t.Helper()
+	ctx := ctxOf(t)
 	var ids []string
 	for i := 0; i < 100; i++ {
 		res := svc.Create(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", []byte(fmt.Sprintf(`{"title":"Quota %d","body":"Quota probe","urgency":"now","meanwhile":"Wait for the quota probe","options":[{"label":"Yes"},{"label":"No"}],"idempotency_key":"b5h-quota-fill-%04d"}`, i, i)))
@@ -30,6 +31,7 @@ func b5hFillQuota(t *testing.T, svc *questions.Service) []string {
 
 func b5hReleaseQuota(t *testing.T, svc *questions.Service, ids []string) {
 	t.Helper()
+	ctx := ctxOf(t)
 	for _, id := range ids {
 		res := svc.Withdraw(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", id, []byte(`{"reason":"fixture quota released"}`))
 		if res.Code != http.StatusOK {
