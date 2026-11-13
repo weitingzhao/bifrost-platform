@@ -25,8 +25,10 @@ import (
 const evidenceGateEnv = "EVIDENCE_GATE"
 
 // evidenceGateDefault is the environments whose platform asks the ledger
-// when EVIDENCE_GATE is unset: STG first; PROD joins once STG has been read.
-var evidenceGateDefault = map[string]bool{"stg": true}
+// when EVIDENCE_GATE is unset: STG since 2026-11-13 06:00Z, PROD since the
+// Owner's word the same day, after the comparison on PROD showed no commit
+// the runs call green and the ledger does not know.
+var evidenceGateDefault = map[string]bool{"stg": true, "prod": true}
 
 func evidenceGateOn(env string) bool {
 	switch v := strings.ToLower(strings.TrimSpace(os.Getenv(evidenceGateEnv))); v {

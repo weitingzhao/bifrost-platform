@@ -16,7 +16,7 @@ func TestEvidenceGateOn(t *testing.T) {
 	for _, tc := range []struct {
 		value, env string
 		want       bool
-	}{{"", "stg", true}, {"", "prod", false}, {"", "", false}, {"ledger", "prod", true}, {"runs", "stg", false}, {" Ledger ", "prod", true}, {"yes", "prod", false}, {"yes", "stg", true}} {
+	}{{"", "stg", true}, {"", "prod", true}, {"", "dev", false}, {"", "", false}, {"ledger", "dev", true}, {"runs", "stg", false}, {"runs", "prod", false}, {" Ledger ", "dev", true}, {"yes", "dev", false}, {"yes", "stg", true}} {
 		t.Setenv(evidenceGateEnv, tc.value)
 		if got := evidenceGateOn(tc.env); got != tc.want {
 			t.Errorf("%s=%q on %q: %v", evidenceGateEnv, tc.value, tc.env, got)
