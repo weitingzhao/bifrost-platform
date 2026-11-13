@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -220,6 +221,13 @@ func vectorToPoints(entries []promVectorEntry) []SamplePoint {
 		}
 		val, ok := parseFloatAny(entry.Value[1])
 		if !ok {
+			continue
+		}
+		// Prometheus answers NaN and ±Inf as values (a quantile over no
+		// requests, 0/0). encoding/json refuses them, and one such sample
+		// used to empty the whole response body. A sample with no number
+		// is no sample.
+		if math.IsNaN(val) || math.IsInf(val, 0) {
 			continue
 		}
 		labels := entry.Metric
