@@ -23,7 +23,35 @@ func perHost(expr string) string {
 func ComputeQueries() []QuerySpec {
 	w := computeWindow
 	fixed := func(q string) func(string) string { return func(string) string { return q } }
+	// Cluster nodes only: their node exporter runs as a pod, the exporters on
+	// the hosts outside the cluster do not.
+	clusterBusy := `sum(rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",pod!=""}[5m]))`
+	clusterThreads := `count(node_cpu_seconds_total{mode="idle",pod!=""})`
 	return []QuerySpec{
+		{
+			ID:     "compute_cluster_cpu_used_p50",
+			Title:  "Cluster CPU in use, half of the time at most",
+			Unit:   "ratio",
+			Target: "a signal, no target",
+			Note:   "Share of the cluster's CPU threads busy, median. With the next two rows this is the signal for \"is compute getting tight\": it is not a goal to raise.",
+			Build:  fixed(`quantile_over_time(0.5, ` + clusterBusy + `[` + w + `:5m]) / ` + clusterThreads),
+		},
+		{
+			ID:     "compute_cluster_cpu_used_p95",
+			Title:  "Cluster CPU in use, 95% of the time at most",
+			Unit:   "ratio",
+			Target: "a signal, no target",
+			Note:   "Same share at the 95th percentile: how full the cluster gets when it is busy.",
+			Build:  fixed(`quantile_over_time(0.95, ` + clusterBusy + `[` + w + `:5m]) / ` + clusterThreads),
+		},
+		{
+			ID:     "compute_node_cpu_used_avg",
+			Title:  "CPU in use per cluster node, average",
+			Unit:   "ratio",
+			Target: "even across nodes",
+			Note:   "How evenly the work is spread. One node far above the rest means the work is pinned or the requests mislead the scheduler, not that the cluster is full.",
+			Build:  fixed(perHost(`avg_over_time((1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle",pod!=""}[5m])))[` + w + `:5m])`)),
+		},
 		{
 			ID:     "compute_pods_pending_avg",
 			Title:  "Pods waiting for a node, average",
