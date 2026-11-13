@@ -1,0 +1,161 @@
+#!/bin/sh
+# unit-node: one task of a Node package as CI runs a unit (landing stage 2
+# §4.0, §4.4). It runs in the package's directory and needs nothing of the
+# cluster: set the variables below and run it by hand for the same result.
+#
+#   unit-node typecheck|lint|test|build     (or UNIT_TASK, when no argument)
+#
+#   UNIT_SHARD_INDEX, UNIT_SHARD_TOTAL  this run's part of the tests (test only;
+#                                       default 0 of 1: all of them)
+#   UNIT_CACHE                          a directory kept between runs, if any:
+#                                       npm's package cache goes under it
+#   UNIT_RESULT_DIR                     where the results go (default /unit/result)
+#   UNIT_NODE_TEST_WORKERS              vitest workers (default 2)
+#
+# Nothing here names a repository. What a task runs is the package's own
+# npm script: typecheck is "type-check", lint is "lint", build is "build";
+# test is vitest (its --shard cuts the parts). A dependency the package takes
+# from a directory beside it ("file:../x" in package.json) is installed
+# first, scripts on, because such a package builds what it exports when it is
+# installed. So another Node package becomes a unit by a few lines of
+# bifrost.units.yaml; its repository needs this file and the four one-line
+# scripts beside it, since a unit's command is a path in its own checkout.
+#
+# Results, one file each:
+#   tests         test only: "<tests of this part> <sha256 of the sorted list
+#                 of all test files> <ran> <skipped>"
+#   failed-tests  what failed, comma separated, at most 1500 bytes (cut at a
+#                 name, then ",…"): for test "file > test name"
+#   fail-class    test when the task judged the code and it is red (a test,
+#                 the linter); build when it does not compile (typecheck,
+#                 build, a test file that does not load); empty when it
+#                 passed, and empty when the code was not judged: the
+#                 dependencies could not be installed, or every failure is a
+#                 timeout (too little CPU, not a verdict on the code)
+# The exit code is 0 only when the task passed.
+#
+# Two lines of the output say where the time went:
+#   unit-node: install <n>s   and   unit-node: <task> <n>s
+set -u
+task="${1:-${UNIT_TASK:-}}"
+result="${UNIT_RESULT_DIR:-/unit/result}"
+index="${UNIT_SHARD_INDEX:-0}"
+total="${UNIT_SHARD_TOTAL:-1}"
+mkdir -p "$result" || exit 2
+: > "$result/failed-tests"
+: > "$result/fail-class"
+: > "$result/tests"
+case "$task" in typecheck|lint|test|build) ;; *) echo "unit-node: the task is typecheck, lint, test or build, not '$task'" >&2; exit 2 ;; esac
+case "$index$total" in *[!0-9]*) echo "unit-node: the shard index and total are numbers" >&2; exit 2 ;; esac
+[ "$total" -ge 1 ] && [ "$index" -lt "$total" ] || { echo "unit-node: shard $index of $total" >&2; exit 2; }
+[ -f package.json ] || { echo "unit-node: no package.json in $(pwd)" >&2; exit 2; }
+
+if [ -n "${UNIT_CACHE:-}" ]; then
+  # A directory a month: npm never trims its cache, and nothing clears the
+  # month in use (the same layout the pipeline's console task used).
+  export npm_config_cache="$UNIT_CACHE/npm/$(date -u +%Y-%m)"
+  mkdir -p "$npm_config_cache" 2>/dev/null || unset npm_config_cache
+fi
+export CI=1 npm_config_audit=false npm_config_fund=false npm_config_update_notifier=false
+
+# Install: the packages beside this one that it depends on, then this one.
+# A failure here is not a verdict on the code: no fail-class is written.
+started="$(date +%s)"
+here="$(pwd)"
+node -e '
+  const p = require("./package.json");
+  for (const deps of [p.dependencies, p.devDependencies, p.optionalDependencies])
+    for (const v of Object.values(deps || {}))
+      if (typeof v === "string" && v.startsWith("file:")) console.log(v.slice(5));
+' | sort -u > "$result/.beside" || exit 1
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
+  [ -f "$here/$dir/package.json" ] || { echo "unit-node: $dir, a dependency of this package, is not beside it"; rm -f "$result/.beside"; exit 1; }
+  echo "==> unit-node: npm ci in $dir"
+  (cd "$here/$dir" && npm ci --prefer-offline) || { echo "unit-node: installing $dir failed"; rm -f "$result/.beside"; exit 1; }
+done < "$result/.beside"
+rm -f "$result/.beside"
+echo "==> unit-node: npm ci"
+npm ci --prefer-offline || { echo "unit-node: installing this package failed"; exit 1; }
+echo "unit-node: install $(( $(date +%s) - started ))s"
+
+started="$(date +%s)"
+status=0
+case "$task" in
+  typecheck) npm run type-check || status=$? ;;
+  lint)      npm run lint || status=$? ;;
+  build)     npm run build || status=$? ;;
+  test)
+    report="$(mktemp)"
+    shard=""
+    [ "$total" -gt 1 ] && shard="--shard=$(( index + 1 ))/$total"
+    # shellcheck disable=SC2086
+    npx vitest run $shard --maxWorkers="${UNIT_NODE_TEST_WORKERS:-2}" --reporter=default --reporter=json --outputFile.json="$report" || status=$?
+    node - "$report" "$result" "$status" <<'JS'
+const fs = require("fs"), path = require("path"), crypto = require("crypto");
+const [report, result, status] = process.argv.slice(2);
+// The list the parts are cut from: every test file of the package, sorted.
+const files = [];
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === "node_modules" || e.name === "dist" || e.name.startsWith(".")) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p);
+    else if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(e.name)) files.push(p.split(path.sep).join("/"));
+  }
+})(".");
+files.sort();
+const digest = crypto.createHash("sha256").update(files.join("\n") + (files.length ? "\n" : "")).digest("hex");
+let doc = null;
+try { doc = JSON.parse(fs.readFileSync(report, "utf8")); } catch (e) { /* vitest died before it wrote one */ }
+if (!doc) {
+  // No report: vitest did not get to judge anything. Not a verdict.
+  console.log("unit-node: vitest wrote no report; exit " + status);
+  process.exit(0);
+}
+const failed = [], timeouts = [];
+let loadFailures = 0;
+for (const suite of doc.testResults || []) {
+  const file = path.relative(process.cwd(), suite.name || "").split(path.sep).join("/");
+  const tests = suite.assertionResults || [];
+  if (suite.status === "failed" && !tests.some((t) => t.status === "failed")) loadFailures++;
+  for (const t of tests) {
+    if (t.status !== "failed") continue;
+    const name = (file + " > " + (t.fullName || t.title || "")).replace(/,/g, ";").replace(/\s+/g, " ");
+    failed.push(name);
+    if ((t.failureMessages || []).some((m) => /timed out in \d+ ?ms/i.test(m))) timeouts.push(name);
+  }
+}
+const total = doc.numTotalTests || 0;
+const skipped = (doc.numPendingTests || 0) + (doc.numTodoTests || 0);
+const ran = (doc.numPassedTests || 0) + (doc.numFailedTests || 0);
+fs.writeFileSync(result + "/tests", `${total} ${digest} ${ran} ${skipped}`);
+const names = [];
+let size = 0, cut = false;
+for (const name of failed.sort()) {
+  const n = Buffer.byteLength(name) + 1;
+  if (size + n > 1490) { cut = true; break; }
+  names.push(name); size += n;
+}
+fs.writeFileSync(result + "/failed-tests", names.join(",") + (cut ? ",…" : ""));
+let cls = "";
+if (status !== "0") {
+  if (failed.length > 0 && timeouts.length === failed.length) {
+    console.log(`unit-node: all ${failed.length} failures are timeouts; that is too little CPU, not a verdict on the code`);
+  } else if (failed.length > 0) cls = "test";
+  else if (loadFailures > 0) cls = "build";
+}
+fs.writeFileSync(result + "/fail-class", cls);
+console.log(`unit-node: ${total} tests of this part, ${ran} ran, ${skipped} skipped, ${failed.length} failed (${timeouts.length} by timeout), ${loadFailures} files did not load; exit ${status}`);
+JS
+    rm -f "$report"
+    ;;
+esac
+if [ "$status" -ne 0 ]; then
+  case "$task" in
+    typecheck|build) printf build > "$result/fail-class" ;;
+    lint) printf test > "$result/fail-class" ;;
+  esac
+fi
+echo "unit-node: $task $(( $(date +%s) - started ))s"
+exit "$status"

@@ -1,0 +1,3 @@
+#!/bin/sh
+# The lint task of a Node unit: see unit-node beside this file.
+exec "$(dirname "$0")/unit-node" lint

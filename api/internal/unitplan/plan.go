@@ -49,6 +49,11 @@ var entryScripts = map[string]string{
 	"/check": "scripts/ci/unit-check",
 }
 
+// sharedScripts is what the entry scripts of a kind run beside themselves:
+// the four scripts of a node unit are one line each and exec unit-node, so
+// its blob id is in their keys too.
+var sharedScripts = map[string][]string{"node": {"scripts/ci/unit-node"}}
+
 // Build computes the plan of a commit from its tree and the manifest in it.
 func Build(repo, commit string, t *Tree, src Source) (*Plan, error) {
 	doc, err := t.ReadFile(ManifestPath)
@@ -128,7 +133,16 @@ func buildPlan(repo, commit string, t *Tree, src Source, doc []byte, own bool) (
 			path = entryScripts["/"+task]
 		}
 		e, _ := t.Lookup(path)
-		return map[string]any{"path": path, "id": e.ID}
+		out := map[string]any{"path": path, "id": e.ID}
+		if shared := sharedScripts[kind]; len(shared) > 0 {
+			with := make([]any, 0, len(shared))
+			for _, p := range shared {
+				se, _ := t.Lookup(p)
+				with = append(with, map[string]any{"path": p, "id": se.ID})
+			}
+			out["with"] = with
+		}
+		return out
 	}
 	add := func(mod Module, unit, task string, shards int, parts map[string]any) error {
 		if !unitName.MatchString(unit) {
