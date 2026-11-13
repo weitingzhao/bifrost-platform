@@ -318,6 +318,7 @@ func New(cfg *config.Config) (*Server, error) {
 	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
 		return srv.lookupDaemonReplicas(ctx, namespace)
 	})
+	actions.SetD10Paths(srv.d10Paths)
 	if pol, err := actuationpolicy.LoadFromConfigDir(cfg.ConfigDir()); err != nil {
 		slog.Error("actuation policy not loaded; generic write actions refuse", "err", err)
 	} else {

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/stgrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // executorContextKey is unexported. An HTTP request cannot construct it, and
@@ -118,6 +120,36 @@ func (s *Server) lookupDaemonReplicas(ctx context.Context, namespace string) (in
 	}
 	return 0, false
 }
+
+// d10Paths is what owner_run_command is classified against: the spine's D10
+// status and the no_d10_paths globs of the signed release policy. Anything
+// unreadable counts as locked and unknown, which classifies as tier X.
+func (s *Server) d10Paths(ctx context.Context) actions.D10Paths {
+	d := actions.D10Paths{Locked: true, Match: releasepolicy.PathMatches}
+	if s.cluster != nil {
+		d.Locked = !s.cluster.Service().D10Unlocked()
+	}
+	if s.releasePolicy != nil {
+		d.Patterns, d.Known = s.releasePolicy.SignedPaths(ctx, "no_d10_paths")
+	}
+	// A claim that classifies as X fails the card for good, so one unreadable
+	// ConfigMap must not do that: fall back to the last signed paths this
+	// process read. A process that never read them stays unknown (tier X).
+	d10PathsMu.Lock()
+	defer d10PathsMu.Unlock()
+	if d.Known {
+		d10PathsLast, d10PathsSeen = d.Patterns, true
+	} else if d10PathsSeen {
+		d.Patterns, d.Known = d10PathsLast, true
+	}
+	return d
+}
+
+var (
+	d10PathsMu   sync.Mutex
+	d10PathsLast []string
+	d10PathsSeen bool
+)
 
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	if s.work == nil {

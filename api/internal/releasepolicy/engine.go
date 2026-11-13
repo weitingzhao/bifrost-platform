@@ -274,6 +274,21 @@ func ComparisonFileCap() int { return compareFileCap }
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+// SignedPaths returns every glob of one path rule from the policy the Owner
+// signed, across repos. ok is false when no policy with a good signature can
+// be read. An expired policy still answers: expiry ends what the policy lets
+// through, not what it names as off-limits.
+func (e *Engine) SignedPaths(ctx context.Context, rule string) (patterns []string, ok bool) {
+	st := e.Status(ctx)
+	if st.policy == nil {
+		return nil, false
+	}
+	for _, entry := range st.policy.Paths[rule] {
+		patterns = append(patterns, entry.Paths...)
+	}
+	return patterns, true
+}
+
 // Decide reports whether this call may run without a manual approval. Any
 // failure to establish a fact is a reason, so the answer defaults to no.
 func (e *Engine) Decide(ctx context.Context, actionID string, tier actions.Tier, params map[string]any) Decision {

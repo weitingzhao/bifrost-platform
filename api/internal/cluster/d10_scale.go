@@ -35,6 +35,10 @@ func (s *Service) d10Unlocked() bool {
 	return spineD10Status(path) == "UNLOCKED"
 }
 
+// D10Unlocked is d10Unlocked for callers outside this package that gate on
+// the same spine field.
+func (s *Service) D10Unlocked() bool { return s.d10Unlocked() }
+
 // spineD10Status reads decisions[id=D10].status from ops-context.yaml.
 // preflight.js reads the same field and fails closed to BLOCKED.
 func spineD10Status(path string) string {
