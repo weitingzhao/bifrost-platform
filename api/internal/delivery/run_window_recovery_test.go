@@ -23,7 +23,7 @@ import (
 
 func recoveryFixture(t *testing.T) (*fake.Clientset, *dynfake.FakeDynamicClient) {
 	t.Helper()
-	r := windowRecord{Who: "run", Reason: "PipelineRun/run", What: "bifrost-platform", StartedAt: time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), ExpiresAt: time.Now().Add(4 * time.Minute).UTC().Format(time.RFC3339)}
+	r := windowRecord{Who: "run", Reason: "PipelineRun/run", What: "bifrost-platform", StartedAt: time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), ExpiresAt: time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339)}
 	body, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)

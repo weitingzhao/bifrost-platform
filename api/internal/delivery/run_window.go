@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -112,42 +113,96 @@ func (w *runWindow) follow(res dynamic.ResourceInterface, name string, created b
 	safego.Go("delivery-run-window", func() {
 		ticker := time.NewTicker(20 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			// A lost create reply has not proved that a run ever existed.
-			// Do not turn a 404 into an early release of an uncertain POST.
-			if !created {
-				_, err := res.Get(ctx, name, metav1.GetOptions{})
-				if err != nil {
-					cancel()
-					return
-				} // leave the bounded TTL intact
-				created = true
-			}
-			ended, err := w.observe(ctx, res, name)
-			cancel()
-			if err != nil || ended {
-				return
-			}
-		}
+		w.followTicks(context.Background(), res, name, created, ticker.C)
 	})
 }
 
-// StartRunWindowRecovery is called once by the API process after recorder wiring.
+const runWindowFailureLimit = 5
+
+func windowFenced(err error) bool {
+	var changed *WindowChanged
+	return errors.As(err, &changed) || apierrors.IsConflict(err)
+}
+
+func (w *runWindow) followTicks(parent context.Context, res dynamic.ResourceInterface, name string, created bool, ticks <-chan time.Time) {
+	failures := 0
+	for {
+		select {
+		case <-parent.Done():
+			return
+		case _, open := <-ticks:
+			if !open {
+				return
+			}
+			ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+			var err error
+			ended := false
+			// A lost create reply has not proved that a run ever existed.
+			// Do not turn a 404 into an early release of an uncertain POST.
+			if !created {
+				_, err = res.Get(ctx, name, metav1.GetOptions{})
+				created = err == nil
+			}
+			if err == nil {
+				ended, err = w.observe(ctx, res, name)
+			}
+			cancel()
+			if windowFenced(err) || (err == nil && ended) {
+				return
+			}
+			if err == nil {
+				failures = 0
+				continue
+			}
+			failures++
+			if failures == runWindowFailureLimit {
+				w.failed("follow_failed", err)
+				return
+			}
+			slog.Warn("release window follow failed; retrying", "run", name, "attempt", failures, "err", err)
+		}
+	}
+}
+
+func (w *runWindow) failed(action string, err error) {
+	slog.Error("release window retries exhausted; TTL fallback", "action", action, "run", w.who, "err", err)
+	recordWindow(windowContext(context.Background(), w.recorder), w.ns, action, windowRecord{Who: w.who, Reason: err.Error()}, "", "")
+}
+
+// Both API and workers scan. Fresh renewals are left alone; a stale snapshot
+// can be claimed by exactly one CAS, fencing the old follower and other scanners.
 // Actual Kubernetes permissions, not the UI's viewer environment, select the writer.
 func (h *Handler) StartRunWindowRecovery() {
 	safego.Go("delivery-run-window-recovery", func() {
-		// An old pod can win the first CAS just before it exits. Retry recovery
-		// from a fresh snapshot on errors; never rebase an existing follower's CAS.
-		for {
-			if err := h.recoverRunWindowOnce(); err == nil {
-				return
-			} else {
-				slog.Warn("release window recovery failed; retrying with TTL fallback", "err", err)
-			}
-			time.Sleep(20 * time.Second)
-		}
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		h.recoverRunWindowTicks(context.Background(), ticker.C)
 	})
+}
+
+func (h *Handler) recoverRunWindowTicks(ctx context.Context, ticks <-chan time.Time) {
+	failures := 0
+	for {
+		if err := h.recoverRunWindowOnce(); err == nil {
+			failures = 0
+		} else {
+			failures++
+			slog.Warn("release window recovery failed; retrying with TTL fallback", "err", err)
+			if failures == runWindowFailureLimit {
+				w := &runWindow{ns: h.svc.PipelinesNamespace(), recorder: h.svc.windowRecorder}
+				w.failed("recovery_failed", err)
+				failures = 0
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case _, open := <-ticks:
+			if !open {
+				return
+			}
+		}
+	}
 }
 
 func (h *Handler) recoverRunWindowOnce() error {
@@ -164,6 +219,9 @@ func (h *Handler) recoverRunWindowOnce() error {
 	}
 	res := dyn.Resource(pipelineRunGVR).Namespace(s.PipelinesNamespace())
 	w, name, err := recoverRunWindow(ctx, cs, res, s.PipelinesNamespace(), s.windowRecorder)
+	if windowFenced(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -205,11 +263,23 @@ func recoverRunWindow(ctx context.Context, cs kubernetes.Interface, res dynamic.
 	}
 	// Recovery cannot prove an ambiguous create ever succeeded. A missing run
 	// leaves the TTL intact, just like follow(created=false); never renew it.
-	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err != nil {
+	run, err := res.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, "run missing; TTL remains", nil
 		}
 		return nil, "", err
+	}
+	// Two minutes without a renewal leaves three minutes of the five-minute
+	// TTL for recovery. A healthy follower renews every twenty seconds.
+	if !runEnded(run) {
+		expires, err := time.Parse(time.RFC3339, r.ExpiresAt)
+		if err != nil {
+			return nil, "", err
+		}
+		if time.Until(expires) > windowLifetime-2*time.Minute {
+			return nil, "run has a recent renewal", nil
+		}
 	}
 	w := &runWindow{cs: cs, ns: ns, who: r.Who, version: cm.ResourceVersion, recorder: recorder}
 	// Immediate observation also releases a terminal run at startup. Its CAS

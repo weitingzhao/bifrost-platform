@@ -377,7 +377,7 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.wireAgentThreads(dataDir, role, titleStore)
 	srv.wireAgentProgress(dataDir, role)
 	srv.wireAgentRuntime(role)
-	if role.RunsAPI() {
+	if role.RunsAPI() || role.RunsWorkers() {
 		srv.delivery.StartRunWindowRecovery()
 	}
 	srv.wireSessionBindings()
