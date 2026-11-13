@@ -245,6 +245,11 @@ type CIOutcome struct {
 // not counted at all: it cannot vouch for sha, nor stand as its newest run.
 // An invalid tested-by green is Unknown with an error naming the run.
 func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run string, err error) {
+	// With a ledger reader set (SetCIReader), the evidence ledger answers and
+	// the runs are not listed; CIIndex stays the reading by runs.
+	if f.s.ciReader != nil {
+		return f.s.ciReader(ctx, repo, sha)
+	}
 	idx, err := f.CIIndex(ctx)
 	o := idx[repo+"@"+sha]
 	if err == nil {
@@ -252,6 +257,16 @@ func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run s
 	}
 	return o.Status, o.Run, err
 }
+
+// CIReader answers CIRun from another source than the retained runs: the
+// status (CISucceeded, CIFailed, or "" when it knows of no verdict) and the
+// run it rests on.
+type CIReader func(ctx context.Context, repo, sha string) (status, run string, err error)
+
+// SetCIReader has CIRun, and so the release policy's ci_succeeded, ask r
+// instead of listing runs; nil restores the runs. Set while wiring, before
+// the service serves.
+func (s *Service) SetCIReader(r CIReader) { s.ciReader = r }
 
 // CIIndex lists the ci-* runs once and keeps, for each repo@revision,
 // CIRun's outcome: so a reader with many commits to look at lists once.

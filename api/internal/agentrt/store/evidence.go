@@ -289,3 +289,10 @@ func EvidenceByCommit(ctx context.Context, db DB, repo, commit string, limit int
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND commit_sha = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
+
+// EvidenceByTree is the newest rows recorded for a git tree of a repository,
+// under whatever commit and whatever was beside it, newest first.
+func EvidenceByTree(ctx context.Context, db DB, repo, tree string, limit int) ([]EvidenceRow, error) {
+	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
+	  WHERE repo = $1 AND unit = $2 AND inputs->>'tree' = $3 ORDER BY evidence_id DESC LIMIT $4`, repo, EvidenceUnitRepo, tree, limit)
+}

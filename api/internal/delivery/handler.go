@@ -37,6 +37,9 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 }
 
 // GiteaAccess exposes the delivery service's Gitea base URL and read-only
+// SetCIReader exposes the service's switch of the CI reading to wiring.
+func (h *Handler) SetCIReader(r CIReader) { h.svc.SetCIReader(r) }
+
 // credential (TD-432).
 func (h *Handler) GiteaAccess(ctx context.Context) (GiteaAccess, error) {
 	return h.svc.GiteaAccess(ctx)

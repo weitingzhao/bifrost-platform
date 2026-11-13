@@ -30,6 +30,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -54,6 +55,9 @@ type agentRuntime struct {
 	// schema is what the platform last read of the database's agentrt
 	// schema (TD-411, agentrt_schema.go); nil without AGENTRT_DSN.
 	schema *schemaWatch
+	// evidenceCI, when set, is the ledger answering "did CI pass"
+	// (evidence_gate.go); nil: the retained runs answer.
+	evidenceCI delivery.CIReader
 	// late is the runtime's database as it connects: its routes are ready
 	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
 	late *lateDB
@@ -95,6 +99,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 	}
 	s.agentRuntime = rt
+	rt.evidenceCI = s.wireEvidenceGate(rt.env)
 	if s.releases != nil && s.releases.Service() != nil {
 		rt.api.ProductionDelivery = func(ctx context.Context) store.DeliveryProduction {
 			return productionDeliveryEvidence(ctx, s.releases.Service())
@@ -519,6 +524,13 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 		rel = s.releases.Service()
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
+	if s.agentRuntime != nil && s.agentRuntime.evidenceCI != nil {
+		read := s.agentRuntime.evidenceCI
+		src.CI = func(ctx context.Context, repo, commit string) (string, string, bool) {
+			status, run, err := read(ctx, repo, commit)
+			return status, run, err == nil && status != ""
+		}
+	}
 	s.wireExternalRecords(&src)
 	src.Ack = s.questionRuntime.agentRuntimeAck()
 	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
