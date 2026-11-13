@@ -562,6 +562,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/release-policy/freeze", s.guard("release_freeze", s.handleReleaseFreeze))
 			r.Post("/release-policy/unfreeze", s.guard("release_unfreeze", s.handleReleaseUnfreeze))
 			r.Post("/delivery/mirrors/sync", s.guard("sync_mirrors", s.delivery.HandleSyncMirrors))
+			// Run the unit tasks of a commit the ledger has no verdict on
+			// (units_dispatch.go); refused while UNIT_DISPATCH is off.
+			r.Post("/units/evidence", s.guard("request_unit_evidence", s.handleUnitEvidenceRequest))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/network/clients/fixed-ip", s.guard("unifi_client_fixed_ip", s.network.HandleClientFixedIP))

@@ -310,6 +310,10 @@ func (s *Server) bindActionExecutors() {
 		func(map[string]any) string { return "/api/v1/delivery/mirrors/sync" },
 		nil, fields("repos", "commits"), s.delivery.HandleSyncMirrors)
 
+	reg("request_unit_evidence", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/units/evidence" },
+		nil, fields("repo", "commit"), s.handleUnitEvidenceRequest)
+
 	reg("delete_pipeline_run", http.MethodDelete,
 		func(p map[string]any) string {
 			u := "/api/v1/delivery/runs/" + url.PathEscape(text(p["id"]))

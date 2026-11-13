@@ -185,6 +185,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body, query) => withQuery(asRecord(body), query, ['force']),
   },
   {
+    action: 'request_unit_evidence',
+    method: 'POST',
+    pattern: /^\/api\/v1\/units\/evidence$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'sync_mirrors',
     method: 'POST',
     pattern: /^\/api\/v1\/delivery\/mirrors\/sync$/,

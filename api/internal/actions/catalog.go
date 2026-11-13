@@ -161,6 +161,15 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "request_unit_evidence", Tier: TierB,
+		Description: "Have the platform run the unit tasks of a commit that the evidence ledger has no verdict on. Creates TaskRuns in the delivery namespace; refused while unit dispatch is off. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/units/evidence",
+		Params: []Param{
+			{Name: "repo", Type: "string", Required: true, In: "body"},
+			{Name: "commit", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "delete_pipeline_run", Tier: TierB,
 		Description: "Delete a terminal Tekton PipelineRun. Tier B; call the endpoint directly.",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/runs/{id}",

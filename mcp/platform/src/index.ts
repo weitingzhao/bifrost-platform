@@ -514,6 +514,16 @@ reg(
 )
 
 reg(
+  'request_unit_evidence',
+  'Have the platform run the unit tasks of one commit that the evidence ledger has no verdict on (operator, tier B). It computes the commit\'s plan and creates the TaskRuns that are not there yet; a run is named by its plan and number, so asking twice starts nothing twice. Returns {repo, commit, plan, mode, tasks, to_run, created: [run names], present, deferred, retried: [run names], refused: [why a task cannot be dispatched], lost: [runs the cluster lost twice]}. deferred counts runs put off because the platform\'s limit of unit runs at a time is reached: ask again later. Results arrive in the ledger as the runs finish; read them with get_unit_plan. Answers 409 while unit dispatch is off on that platform.',
+  {
+    repo: z.string().describe('Repository name, e.g. bifrost-platform'),
+    commit: z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA'),
+  },
+  async ({ repo, commit }) => jsonResult(await platformPost('/api/v1/units/evidence', { repo, commit })),
+)
+
+reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},

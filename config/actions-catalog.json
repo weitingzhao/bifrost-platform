@@ -34,6 +34,7 @@
     "release_window_hold",
     "release_window_release",
     "repair_cnpg_wal_store",
+    "request_unit_evidence",
     "rolling_reboot",
     "rollout_restart_deployment",
     "run_probe_pod",

@@ -28,8 +28,8 @@ import (
 // evidence for each task whose parts add up to a verdict.
 //
 // Who calls advanceUnits is another layer (Owner 2026-11-13: a push event,
-// with a slow poll behind it), and so is the route an agent asks through;
-// neither is in this file yet. Until then only the receiving pass runs.
+// with a slow poll behind it) and is not written yet. Until then an agent
+// asks through POST /api/v1/units/evidence, and the receiving pass runs.
 //
 // UNIT_DISPATCH is off (the default: nothing is created), shadow or on (both
 // create; what a gate does with the result is not this file's). A platform
@@ -432,4 +432,41 @@ func (s *Server) unitRunsSource() func(context.Context) error {
 		}
 		return err
 	}
+}
+
+// POST /api/v1/units/evidence {repo, commit}: have the platform run what the
+// ledger has no verdict on for this commit (operator, tier B). The answer is
+// what this call started; the results arrive in the ledger as the runs
+// finish (GET /api/v1/units/plan shows them).
+func (s *Server) handleUnitEvidenceRequest(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Repo   string `json:"repo"`
+		Commit string `json:"commit"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the body is {repo, commit}"})
+		return
+	}
+	repo, commit := strings.TrimSpace(body.Repo), strings.TrimSpace(body.Commit)
+	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name and commit a 40-character lowercase SHA"})
+		return
+	}
+	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})
+		return
+	}
+	cfg := unitDispatchConfigFromEnv(s.delivery.PipelinesNamespace())
+	if cfg.Mode == "off" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "unit dispatch is off on this platform (" + unitDispatchEnv + ")"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	defer cancel()
+	out, err := advanceUnits(ctx, s.agentRuntime.api.DB, s.unitTreesOf(), s.unitClusterOf(), cfg, repo, commit, "branch")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "partial": out})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

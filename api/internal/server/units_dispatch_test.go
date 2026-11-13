@@ -271,3 +271,20 @@ func TestUnitDispatchConfigFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// The route takes a repository and a full commit and nothing else, and says
+// so before it reads anything.
+func TestUnitEvidenceRequestRefusesWhatIsNotACommit(t *testing.T) {
+	for _, body := range []string{``, `{"repo":"bifrost-platform","commit":"main"}`, `{"repo":"../x","commit":"` + strings.Repeat("a", 40) + `"}`, `{"repo":"r.git","commit":"` + strings.Repeat("a", 40) + `"}`} {
+		w := httptest.NewRecorder()
+		(&Server{}).handleUnitEvidenceRequest(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(body)))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%q: %d", body, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	(&Server{}).handleUnitEvidenceRequest(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(`{"repo":"r","commit":"`+strings.Repeat("a", 40)+`"}`)))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("a platform with no ledger answered %d", w.Code)
+	}
+}
