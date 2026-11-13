@@ -6,6 +6,12 @@ import (
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	dynfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -21,7 +27,8 @@ func TestStartDeliveryIfFree(t *testing.T) {
 			ctx := context.Background()
 			pipe := baselinePipelines(t)[name].DeepCopy()
 			pipe.SetNamespace("cicd")
-			s, dyn, _ := contractService(t, pipe, "unknown")
+			s, _, _ := contractService(t, pipe, "unknown")
+			dyn := listingDynamic(s, pipe)
 			cs := fake.NewSimpleClientset(readyAmd64Node())
 			s.SetClientsetForTest(cs)
 			if state != "absent" {
@@ -40,7 +47,7 @@ func TestStartDeliveryIfFree(t *testing.T) {
 			})
 			run, heldBy, err := h.StartDeliveryIfFree(ctx, "head-release", name, factSHA1, map[string]string{"uiRevision": strings.Repeat("b", 40)})
 			if state == "held" {
-				if err != nil || heldBy != "session" || run.Name != "" || len(told) != 0 {
+				if err != nil || heldBy != "the release window is held by session" || run.Name != "" || len(told) != 0 {
 					t.Fatalf("held: run %+v heldBy %q told %v err %v", run, heldBy, told, err)
 				}
 				assertNoContractCreate(t, dyn)
@@ -59,4 +66,44 @@ func TestStartDeliveryIfFree(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Codex review 2026-11-13, A1 (reproduced there on the real service with a
+// fake cluster: "both live: automatic=... manual=..."). A run's window was
+// not renewed and expired while the run still builds. The loop's start looks
+// at the runs as well as the window and starts nothing beside it.
+func TestStartDeliveryIfFreeStartsNothingBesideAnUnfinishedRun(t *testing.T) {
+	const name = "bifrost-deliver-platform"
+	ctx := context.Background()
+	pipe := baselinePipelines(t)[name].DeepCopy()
+	pipe.SetNamespace("cicd")
+	s, _, _ := contractService(t, pipe, "unknown")
+	dyn := listingDynamic(s, pipe)
+	cs := fake.NewSimpleClientset(readyAmd64Node())
+	s.SetClientsetForTest(cs)
+	h := NewHandlerForTest(s, nil)
+	first, heldBy, err := h.StartDeliveryIfFree(ctx, "head-release", name, factSHA1, map[string]string{"uiRevision": strings.Repeat("b", 40)})
+	if err != nil || heldBy != "" || first.Name == "" {
+		t.Fatalf("first: %+v %q %v", first, heldBy, err)
+	}
+	// Its window is long expired; the run has no verdict yet.
+	if _, err := putReleaseWindow(ctx, cs, "cicd", windowInput{Who: first.Name, What: sortedKeys(windowPipelines[name].repos)}, time.Now().UTC().Add(-2*windowLifetime)); err != nil {
+		t.Fatal(err)
+	}
+	second, heldBy, err := h.StartDeliveryIfFree(ctx, "head-release", name, strings.Repeat("c", 40), map[string]string{"uiRevision": strings.Repeat("b", 40)})
+	if err != nil || second.Name != "" || !strings.Contains(heldBy, first.Name) {
+		t.Fatalf("second beside an unfinished run: %+v %q %v", second, heldBy, err)
+	}
+	runs, err := dyn.Resource(pipelineRunGVR).Namespace("cicd").List(ctx, metav1.ListOptions{})
+	if err != nil || len(runs.Items) != 1 {
+		t.Fatalf("%d runs, %v", len(runs.Items), err)
+	}
+}
+
+// listingDynamic gives the service a fake cluster that can list runs (the
+// start lists them), holding pipe.
+func listingDynamic(s *Service, pipe *unstructured.Unstructured) *dynfake.FakeDynamicClient {
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList"}, pipe)
+	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	return dyn
 }

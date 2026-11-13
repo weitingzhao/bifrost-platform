@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,25 +94,36 @@ func TestHeadRunsReadsOnePipelineNewestFirst(t *testing.T) {
 
 // The parameter named revision is the pipeline's own revision and the others
 // go beside it (the start refuses a revision that differs from
-// params.revision); a held window is "busy", not a failure.
-func TestHeadWorldStartSplitsTheRevisionAndReportsAHeldWindow(t *testing.T) {
+// params.revision). What stands in the way of a start is said in words that
+// reach the record: who holds the window (Codex review 2026-11-13, C1: the
+// holder was dropped), or the freeze (B3: while frozen nothing is started, so
+// no failed run is left to mark the head "failed once").
+func TestHeadWorldStartSplitsTheRevisionAndSaysWhyNotNow(t *testing.T) {
 	var gotRevision string
 	var gotExtra map[string]string
-	held := ""
-	w := &headWorld{start: func(_ context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error) {
-		gotRevision, gotExtra = revision, params
-		if held != "" {
-			return delivery.PipelineRunView{}, held, nil
-		}
-		return delivery.PipelineRunView{Name: pipeline + "-1"}, "", nil
-	}}
-	run, busy, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r", "uiRevision": "u", "infraRevision": "i"})
-	if err != nil || busy || run != "bifrost-deliver-platform-1" || gotRevision != "r" || len(gotExtra) != 2 || gotExtra["uiRevision"] != "u" || gotExtra["infraRevision"] != "i" {
-		t.Fatalf("start: %q busy=%v %v; revision %q extra %v", run, busy, err, gotRevision, gotExtra)
+	held, frozen, calls := "", false, 0
+	w := &headWorld{
+		start: func(_ context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error) {
+			calls++
+			gotRevision, gotExtra = revision, params
+			if held != "" {
+				return delivery.PipelineRunView{}, held, nil
+			}
+			return delivery.PipelineRunView{Name: pipeline + "-1"}, "", nil
+		},
+		frozen: func(context.Context) (bool, string) { return frozen, "incident 12" },
 	}
-	held = "biz-align"
-	if run, busy, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"}); err != nil || !busy || run != "" {
-		t.Fatalf("held: %q busy=%v %v", run, busy, err)
+	run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r", "uiRevision": "u", "infraRevision": "i"})
+	if err != nil || wait != "" || run != "bifrost-deliver-platform-1" || gotRevision != "r" || len(gotExtra) != 2 || gotExtra["uiRevision"] != "u" || gotExtra["infraRevision"] != "i" {
+		t.Fatalf("start: %q wait=%q %v; revision %q extra %v", run, wait, err, gotRevision, gotExtra)
+	}
+	held = "the release window is held by biz-align"
+	if run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"}); err != nil || run != "" || !strings.Contains(wait, "biz-align") {
+		t.Fatalf("held: %q wait=%q %v", run, wait, err)
+	}
+	held, frozen, calls = "", true, 0
+	if run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"}); err != nil || run != "" || wait != "releases are frozen: incident 12" || calls != 0 {
+		t.Fatalf("frozen: %q wait=%q %v, %d starts asked", run, wait, err, calls)
 	}
 }
 

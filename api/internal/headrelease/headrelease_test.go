@@ -12,8 +12,11 @@ type world struct {
 	ci     map[string]string            // repo@commit -> Succeeded | Failed
 	beside map[string]map[string]string // repo@commit -> what its CI ran with
 	runs   map[string][]Run             // by pipeline, newest first
-	busy   bool
-	starts int
+	busy   string                       // why Start does not start now ("": it starts)
+	// afterRuns, when set, runs once after the first listing of runs: the
+	// world moving between a step's reading and its start.
+	afterRuns func()
+	starts    int
 }
 
 func (w *world) Head(_ context.Context, repo string) (string, error) { return w.heads[repo], nil }
@@ -24,10 +27,17 @@ func (w *world) CI(_ context.Context, repo, commit string) (string, string, map[
 	}
 	return w.ci[repo+"@"+commit], run, w.beside[repo+"@"+commit], nil
 }
-func (w *world) Runs(_ context.Context, pipeline string) ([]Run, error) { return w.runs[pipeline], nil }
-func (w *world) Start(_ context.Context, pipeline string, params map[string]string) (string, bool, error) {
-	if w.busy {
-		return "", true, nil
+func (w *world) Runs(_ context.Context, pipeline string) ([]Run, error) {
+	runs := append([]Run(nil), w.runs[pipeline]...)
+	if f := w.afterRuns; f != nil {
+		w.afterRuns = nil
+		f()
+	}
+	return runs, nil
+}
+func (w *world) Start(_ context.Context, pipeline string, params map[string]string) (string, string, error) {
+	if w.busy != "" {
+		return "", w.busy, nil
 	}
 	w.starts++
 	name := pipeline + "-" + string(rune('0'+w.starts))
@@ -36,7 +46,7 @@ func (w *world) Start(_ context.Context, pipeline string, params map[string]stri
 		copied[k] = v
 	}
 	w.runs[pipeline] = append([]Run{{Name: name, Params: copied, Status: RunRunning}}, w.runs[pipeline]...)
-	return name, false, nil
+	return name, "", nil
 }
 
 // green makes a commit of platform green, tested with ui u and infra i.
@@ -130,10 +140,10 @@ func TestAHeldWindowIsWaitedFor(t *testing.T) {
 	w := newWorld()
 	w.heads["bifrost-platform"] = "a"
 	w.green("a")
-	w.busy = true
+	w.busy = "the release window is held by biz-align"
 	step(t, w, platform, Waiting)
 	step(t, w, platform, Waiting)
-	w.busy = false
+	w.busy = ""
 	step(t, w, platform, Started)
 	if w.starts != 1 {
 		t.Fatalf("%d starts", w.starts)
@@ -274,4 +284,74 @@ func TestTheTableThatShips(t *testing.T) {
 			t.Errorf("%s was accepted", name)
 		}
 	}
+}
+
+// Codex review 2026-11-13, A2 (reproduced there with a paused step: "main=b
+// latest manual=b automatic=a"). The step reads main=a and no run; before it
+// starts, a person delivers b and main is b. The step must not release a
+// over b: it reads again before it starts.
+func TestAStepReadsAgainBeforeItStarts(t *testing.T) {
+	w := newWorld()
+	w.heads["bifrost-platform"] = "a"
+	w.green("a")
+	w.afterRuns = func() {
+		w.heads["bifrost-platform"] = "b"
+		w.green("b")
+		w.runs["bifrost-deliver-platform"] = []Run{{Name: "manual-b", Params: map[string]string{"revision": "b"}, Status: RunSucceeded}}
+	}
+	out := step(t, w, platform, Delivered)
+	if w.starts != 0 || out.Commits["revision"] != "b" {
+		t.Fatalf("%d starts, judged %v", w.starts, out.Commits)
+	}
+	// The same, with the person's delivery still running at the second look.
+	w = newWorld()
+	w.heads["bifrost-platform"] = "a"
+	w.green("a")
+	w.afterRuns = func() {
+		w.runs["bifrost-deliver-platform"] = []Run{{Name: "manual-a", Params: map[string]string{"revision": "a"}, Status: RunRunning}}
+	}
+	if step(t, w, platform, Waiting); w.starts != 0 {
+		t.Fatalf("%d starts beside a running delivery", w.starts)
+	}
+}
+
+// Codex review 2026-11-13, A3 (reproduced there: "manual rollback
+// overwritten: started map[... revision:a ...]"). Head a is on STG; STG
+// breaks; a person delivers the older o. The loop leaves the rollback alone
+// until main moves, and then releases the new head.
+func TestARollbackByHandStandsUntilMainMoves(t *testing.T) {
+	w := newWorld()
+	w.heads["bifrost-platform"] = "a"
+	w.green("a")
+	step(t, w, platform, Started)
+	w.end("bifrost-deliver-platform", RunSucceeded)
+	w.runs["bifrost-deliver-platform"] = append([]Run{{Name: "manual-o", Params: map[string]string{"revision": "o"}, Status: RunSucceeded}}, w.runs["bifrost-deliver-platform"]...)
+	out := step(t, w, platform, Refused)
+	step(t, w, platform, Refused)
+	if w.starts != 1 || out.PreviousRun != "manual-o" {
+		t.Fatalf("%d starts over a rollback; previous %s", w.starts, out.PreviousRun)
+	}
+	w.heads["bifrost-platform"] = "b"
+	w.green("b")
+	if out := step(t, w, platform, Started); out.Commits["revision"] != "b" {
+		t.Fatalf("the head after the rollback: %v", out.Commits)
+	}
+}
+
+// Codex review 2026-11-13, B3 and C1: while releases are frozen the loop
+// started a delivery, freeze-check failed it, and the head was then "failed
+// once" and never tried again after the thaw. A start that says "not now"
+// leaves no run behind, the reason is in the outcome (who holds the window,
+// or the freeze), and the same head is released when the reason is gone.
+func TestAFreezeIsWaitedOutAndLeavesNoFailedRun(t *testing.T) {
+	w := newWorld()
+	w.heads["bifrost-platform"] = "a"
+	w.green("a")
+	w.busy = "releases are frozen: incident 12"
+	out := step(t, w, platform, Waiting)
+	if out.Why != "releases are frozen: incident 12" || len(w.runs["bifrost-deliver-platform"]) != 0 {
+		t.Fatalf("why %q, runs %v", out.Why, w.runs["bifrost-deliver-platform"])
+	}
+	w.busy = ""
+	step(t, w, platform, Started)
 }

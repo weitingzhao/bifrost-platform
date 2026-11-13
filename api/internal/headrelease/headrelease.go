@@ -19,7 +19,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -56,19 +55,13 @@ type Table struct {
 //go:embed deliverables.yaml
 var shipped []byte
 
-// LoadTable reads the file PLATFORM_HEAD_RELEASE names, or the table that
-// ships. A table that says something this package cannot do is an error, and
-// nothing is released.
+// LoadTable reads the table that ships. There is no other: a table read
+// from a path would let a file outside review enable any row (Codex review
+// 2026-11-13: ParseTable does not know which repositories are Trade's; only
+// the test of the shipped table does).
 func LoadTable() (Table, string, error) {
-	path, raw := "deliverables.yaml (built in)", shipped
-	if p := strings.TrimSpace(os.Getenv("PLATFORM_HEAD_RELEASE")); p != "" {
-		b, err := os.ReadFile(p) // #nosec G304 -- the operator's own path
-		if err != nil {
-			return Table{}, p, err
-		}
-		path, raw = p, b
-	}
-	t, err := ParseTable(raw)
+	const path = "deliverables.yaml (built in)"
+	t, err := ParseTable(shipped)
 	if err != nil {
 		return Table{}, path, fmt.Errorf("%s: %w", path, err)
 	}
@@ -143,9 +136,9 @@ type World interface {
 	// Runs lists the pipeline's delivery runs, newest first.
 	Runs(ctx context.Context, pipeline string) ([]Run, error)
 	// Start starts the delivery with these parameters and returns the run.
-	// busy is true when it was not started because a release is under way
-	// (someone holds the release window): try again later.
-	Start(ctx context.Context, pipeline string, params map[string]string) (run string, busy bool, err error)
+	// wait is why it was not started and may be later: someone holds the
+	// release window (it names the holder), or releases are frozen.
+	Start(ctx context.Context, pipeline string, params map[string]string) (run string, wait string, err error)
 }
 
 // Outcome is what one step of one deliverable did, and why.
@@ -174,7 +167,48 @@ const (
 )
 
 // Step takes one deliverable one step: it starts at most one delivery.
+//
+// What it starts, it has judged twice. Between the first reading of main and
+// the runs and the start, a person's delivery can begin and end (Codex review
+// 2026-11-13, A2: reproduced with a paused step; the loop then released the
+// older head over the newer one). So a step that would start reads everything
+// again, and starts only when the second reading says the same.
 func Step(ctx context.Context, w World, d Deliverable) (Outcome, error) {
+	out, start, err := judge(ctx, w, d)
+	if err != nil || !start {
+		return out, err
+	}
+	again, still, err := judge(ctx, w, d)
+	if err != nil || !still {
+		return again, err
+	}
+	for _, c := range d.Commits {
+		if c.TestedWith == "" && again.Commits[c.Param] != out.Commits[c.Param] {
+			again.Action, again.Why = Waiting, "main moved while this step judged it"
+			return again, nil
+		}
+	}
+	out = again
+	run, wait, err := w.Start(ctx, d.Pipeline, out.Commits)
+	if err != nil {
+		return out, fmt.Errorf("%s: starting %s: %w", d.Name, d.Pipeline, err)
+	}
+	if wait != "" {
+		out.Action, out.Why = Waiting, wait
+		return out, nil
+	}
+	out.Action, out.Run, out.Why = Started, run, "main's head is green and is not what the environment runs"
+	return out, nil
+}
+
+// judge reads the world once and says what a step would do; start is true
+// when that is to start a delivery of out.Commits.
+func judge(ctx context.Context, w World, d Deliverable) (out Outcome, start bool, err error) {
+	out, err = judged(ctx, w, d)
+	return out, err == nil && out.Action == "", err
+}
+
+func judged(ctx context.Context, w World, d Deliverable) (Outcome, error) {
 	out := Outcome{Deliverable: d.Name, Commits: map[string]string{}, Evidence: map[string]string{}}
 	if !d.Enabled || d.prod() {
 		out.Action, out.Why = Waiting, "the deliverable is not enabled"
@@ -261,25 +295,28 @@ func Step(ctx context.Context, w World, d Deliverable) (Outcome, error) {
 	}
 	// A set that failed is not tried again by itself: a broken head must not
 	// fill the cluster with deliveries. A new head, or a person, moves it.
+	//
+	// A set that was delivered and then replaced is not delivered again
+	// either: the newest successful delivery is of other commits although
+	// these succeeded before it, so a person released something older over
+	// them. That rollback stands until main moves; it needs no switch
+	// (Codex review 2026-11-13, A3: the loop released main's head over a
+	// rollback on its next pass).
 	for _, r := range runs {
 		if same(r) {
-			if r.Status == RunFailed {
+			switch r.Status {
+			case RunFailed:
 				out.Action, out.Run, out.Why = Refused, r.Name, "the last delivery of these commits failed; it is not tried again by itself"
+				return out, nil
+			case RunSucceeded:
+				out.Action, out.Run = Refused, r.Name
+				out.Why = fmt.Sprintf("these commits were delivered (%s) and then replaced by %s: a rollback by hand stands until main moves", r.Name, out.PreviousRun)
 				return out, nil
 			}
 			break
 		}
 	}
-	run, busy, err := w.Start(ctx, d.Pipeline, out.Commits)
-	if err != nil {
-		return out, fmt.Errorf("%s: starting %s: %w", d.Name, d.Pipeline, err)
-	}
-	if busy {
-		out.Action, out.Why = Waiting, "a release window is held"
-		return out, nil
-	}
-	out.Action, out.Run, out.Why = Started, run, "main's head is green and is not what the environment runs"
-	return out, nil
+	return out, nil // Action "": start
 }
 
 // Released says whether a commit of a repository is in what a deliverable's

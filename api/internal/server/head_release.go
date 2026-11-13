@@ -45,13 +45,13 @@ func headReleaseOn() bool {
 // headWorld is headrelease.World on this process's Gitea access, ledger and
 // delivery service.
 type headWorld struct {
-	head   func(ctx context.Context, repo string) (string, error)
-	ci     delivery.CIReader
-	db     func() store.DB
-	runs   func(ctx context.Context) ([]unstructured.Unstructured, error)
-	start  func(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error)
-	listed []unstructured.Unstructured // one listing serves one pass
-	have   bool
+	head  func(ctx context.Context, repo string) (string, error)
+	ci    delivery.CIReader
+	db    func() store.DB
+	runs  func(ctx context.Context) ([]unstructured.Unstructured, error)
+	start func(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error)
+	// frozen reports a release freeze someone set, and its reason.
+	frozen func(ctx context.Context) (bool, string)
 }
 
 func (w *headWorld) Head(ctx context.Context, repo string) (string, error) { return w.head(ctx, repo) }
@@ -112,14 +112,14 @@ func besideOf(rows []store.EvidenceRow, repo, run string) (map[string]string, bo
 
 // Runs lists the runs of the pipeline the cluster keeps, newest first.
 func (w *headWorld) Runs(ctx context.Context, pipeline string) ([]headrelease.Run, error) {
-	if !w.have {
-		items, err := w.runs(ctx)
-		if err != nil {
-			return nil, err
-		}
-		w.listed, w.have = items, true
+	// Every call lists again: a step reads the runs a second time just
+	// before it starts, and that reading must be the cluster's, not this
+	// pass's memory of it.
+	items, err := w.runs(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return headRuns(w.listed, pipeline), nil
+	return headRuns(items, pipeline), nil
 }
 
 func headRuns(items []unstructured.Unstructured, pipeline string) []headrelease.Run {
@@ -167,9 +167,17 @@ func headRuns(items []unstructured.Unstructured, pipeline string) []headrelease.
 	return out
 }
 
-// Start starts the delivery unless a release window is held. The parameter
-// named revision is the pipeline's revision; the rest go beside it.
-func (w *headWorld) Start(ctx context.Context, pipeline string, params map[string]string) (string, bool, error) {
+// Start starts the delivery, or says why not now: releases are frozen (the
+// pipeline's freeze-check would fail the run, and a failed run of a head is
+// not tried again: Codex review 2026-11-13, B3), a release window is held, or
+// a run of the pipeline is under way. The parameter named revision is the
+// pipeline's revision; the rest go beside it.
+func (w *headWorld) Start(ctx context.Context, pipeline string, params map[string]string) (string, string, error) {
+	if w.frozen != nil {
+		if frozen, reason := w.frozen(ctx); frozen {
+			return "", "releases are frozen: " + reason, nil
+		}
+	}
 	extra := map[string]string{}
 	for k, v := range params {
 		if k != "revision" {
@@ -178,10 +186,12 @@ func (w *headWorld) Start(ctx context.Context, pipeline string, params map[strin
 	}
 	run, heldBy, err := w.start(ctx, headReleasePrincipal, pipeline, params["revision"], extra)
 	if err != nil {
-		return "", false, err
+		return "", "", err
 	}
-	w.have = false // the listing is older than this run
-	return run.Name, heldBy != "", nil
+	if heldBy != "" {
+		return "", "not started: " + heldBy, nil
+	}
+	return run.Name, "", nil
 }
 
 // headWorldOf builds the world of one pass, or nil when this process has no
@@ -198,6 +208,12 @@ func (s *Server) headWorldOf() *headWorld {
 		db:    db,
 		runs:  s.delivery.PipelineRunObservations,
 		start: s.delivery.StartDeliveryIfFree,
+		frozen: func(ctx context.Context) (bool, string) {
+			if s.releasePolicy == nil {
+				return false, ""
+			}
+			return s.releasePolicy.FreezeSet(ctx)
+		},
 	}
 }
 
@@ -228,8 +244,10 @@ func (s *Server) headReleaseSource() func(context.Context) error {
 			}
 			out, err := headrelease.Step(ctx, w, d)
 			if err != nil {
+				// What it could not read or do is a decision not to release
+				// as well, and is recorded like one (Codex review, C1).
 				errs = append(errs, err)
-				continue
+				out.Deliverable, out.Action, out.Why = d.Name, "error", err.Error()
 			}
 			said := out.Action + "|" + out.Why + "|" + out.Run + "|" + fmt.Sprint(out.Commits) + "|" + fmt.Sprint(out.Evidence)
 			mu.Lock()
