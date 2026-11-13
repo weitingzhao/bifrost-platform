@@ -281,7 +281,7 @@ export const HARDWARE_ROWS: HardwareRow[] = [
     id: 'ubt-k3s-06',
     host: '192.168.10.79',
     roleCompose: '— (former bare PG .80 decommissioned 2026-06-29)',
-    roleK3s: 'K3s agent · general pool (reinstalled former PG box)',
+    roleK3s: 'Outside the cluster since 2026-10-17 · Agent host (agentd for PROD and STG)',
   },
   {
     id: 'mini-pc-c',

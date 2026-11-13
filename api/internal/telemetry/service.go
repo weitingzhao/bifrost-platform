@@ -176,3 +176,29 @@ func (s *Service) runQuery(ctx context.Context, client *Client, spec QuerySpec, 
 		Points: points,
 	}
 }
+
+// ScrapedHosts maps the IP of every host a node exporter is scraped on to its
+// host name (node_uname_info). Cluster nodes and the hosts outside the cluster
+// are both in it. It is empty when Prometheus is not configured or not
+// reachable: the caller treats that as "not known", not as "no hosts".
+func (s *Service) ScrapedHosts(ctx context.Context) map[string]string {
+	hosts := map[string]string{}
+	promURL := s.prometheusURL()
+	if promURL == "" {
+		return hosts
+	}
+	points, err := NewClient(promURL).QueryInstant(ctx, `node_uname_info`)
+	if err != nil {
+		return hosts
+	}
+	for _, p := range points {
+		instance, name := p.Labels["instance"], p.Labels["nodename"]
+		if i := strings.LastIndex(instance, ":"); i > 0 {
+			instance = instance[:i]
+		}
+		if instance != "" && name != "" {
+			hosts[instance] = name
+		}
+	}
+	return hosts
+}

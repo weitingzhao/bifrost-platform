@@ -208,7 +208,7 @@ func collectViolations(pools []PoolView, rules []RuleView) []ViolationView {
 			out = append(out, ViolationView{
 				Severity: "warning",
 				Code:     "gpu_pool_planned",
-				Message:  "GPU pool not joined yet (P5a gpu-server pending)",
+				Message:  "GPU node is on standby: gpu-server is a cluster node that stays powered off until it is woken",
 			})
 		}
 		if !r.Satisfied && r.WorkloadClass == "nfs_storage" {

@@ -31,7 +31,7 @@ func TestBuild_ProdEdgeStatuses(t *testing.T) {
 			{ID: "postgres", Reachability: probe.ReachOK, Detail: "TCP open"},
 		},
 	}
-	resp := Build(topo, env, matrix)
+	resp := Build(topo, env, matrix, Live{})
 	if len(resp.Edges) != 1 {
 		t.Fatalf("edges: %d", len(resp.Edges))
 	}

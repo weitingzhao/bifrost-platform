@@ -16,13 +16,15 @@ type ServiceView struct {
 }
 
 type NodeView struct {
-	ID             string             `json:"id"`
-	Label          string             `json:"label"`
-	Host           string             `json:"host,omitempty"`
-	Group          string             `json:"group"`
-	ComposeRoles   []string           `json:"compose_roles"`
-	K3sRoles       []string           `json:"k3s_roles"`
-	InK3sCluster   bool               `json:"in_k3s_cluster"`
+	ID           string   `json:"id"`
+	Label        string   `json:"label"`
+	Host         string   `json:"host,omitempty"`
+	Group        string   `json:"group"`
+	ComposeRoles []string `json:"compose_roles"`
+	K3sRoles     []string `json:"k3s_roles"`
+	InK3sCluster bool     `json:"in_k3s_cluster"`
+	// Discovered: read from the cluster or Prometheus, not drawn in topology.yaml.
+	Discovered     bool               `json:"discovered,omitempty"`
 	Grid           config.GridPos     `json:"grid"`
 	Status         probe.Reachability `json:"status"`
 	Detail         string             `json:"detail"`
@@ -41,10 +43,10 @@ type EdgeView struct {
 }
 
 type Response struct {
-	Environment     string    `json:"environment"`
-	Label           string    `json:"label"`
-	DeploymentPhase string    `json:"deployment_phase"`
-	GeneratedAt     time.Time `json:"generated_at"`
+	Environment     string     `json:"environment"`
+	Label           string     `json:"label"`
+	DeploymentPhase string     `json:"deployment_phase"`
+	GeneratedAt     time.Time  `json:"generated_at"`
 	Nodes           []NodeView `json:"nodes"`
 	Edges           []EdgeView `json:"edges"`
 }
@@ -53,6 +55,7 @@ func Build(
 	topo *config.TopologyFile,
 	env config.Environment,
 	matrix probe.MatrixResponse,
+	live Live,
 ) Response {
 	targetByID := map[string]probe.Target{}
 	for _, t := range matrix.Targets {
@@ -127,6 +130,7 @@ func Build(
 		}
 		nodes = append(nodes, nv)
 	}
+	nodes = applyLive(nodes, live)
 
 	return Response{
 		Environment:     env.ID,

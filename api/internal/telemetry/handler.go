@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -135,4 +136,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// ScrapedHosts exposes the scraped host inventory to other packages (topology).
+func (h *Handler) ScrapedHosts(ctx context.Context) map[string]string {
+	return h.svc.ScrapedHosts(ctx)
 }

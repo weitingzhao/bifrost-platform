@@ -32,14 +32,16 @@ nodes:
     grid: { row: 1, col: 0 }
 
   - id: ubt-k3s-06
-    # Reinstalled former bare-metal PG box (.80 decommissioned 2026-06-29 → CNPG @ data NS).
-    label: ubt-k3s-06
+    # Left the cluster on 2026-10-17; the Agent host (agentd for PROD and STG).
+    # in_k3s_cluster here is only the fallback for a run that cannot read the
+    # cluster: /api/v1/topology reads the node list and corrects it.
+    label: ubt-k3s-06 (Ubuntu · Agent host)
     host: 192.168.10.79
     ssh_port: 22
     group: linux
     compose_roles: []
-    k3s_roles: [k3s_agent]
-    in_k3s_cluster: true   # ubt-k3s-06 · K3s node Ready · general pool (16 vCPU / 32GB)
+    k3s_roles: [agent_host]
+    in_k3s_cluster: false
     grid: { row: 1, col: 2 }
 
   - id: mini-pc-c

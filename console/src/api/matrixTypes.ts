@@ -46,6 +46,8 @@ export interface TopologyNode {
   compose_roles: string[]
   k3s_roles: string[]
   in_k3s_cluster: boolean
+  /** Read from the cluster or Prometheus; not drawn in topology.yaml. */
+  discovered?: boolean
   grid: { row: number; col: number }
   status: Reachability
   detail: string

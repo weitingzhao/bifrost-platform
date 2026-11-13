@@ -772,8 +772,30 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 	}
 
 	matrix := s.prober.ProbeEnvironmentWithDatastore(r.Context(), *env, s.datastoreSnapshot(r.Context()))
-	resp := topology.Build(s.cfg.Topology, *env, matrix)
+	resp := topology.Build(s.cfg.Topology, *env, matrix, s.liveHosts(r.Context()))
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// liveHosts reads which machines are cluster nodes and which hosts Prometheus
+// scrapes, for the topology answer. Either source may be missing (no cluster
+// in a local run, Prometheus down): the answer then keeps what the file says.
+func (s *Server) liveHosts(ctx context.Context) topology.Live {
+	live := topology.Live{ClusterNodes: map[string]string{}}
+	if s.cluster != nil {
+		nodes := s.cluster.ClusterNodes(ctx)
+		if nodes.Reachability != probe.ReachFail && len(nodes.Nodes) > 0 {
+			live.ClusterKnown = true
+			for _, n := range nodes.Nodes {
+				if n.InternalIP != "" {
+					live.ClusterNodes[n.InternalIP] = n.Name
+				}
+			}
+		}
+	}
+	if s.telemetry != nil {
+		live.Scraped = s.telemetry.ScrapedHosts(ctx)
+	}
+	return live
 }
 
 func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
