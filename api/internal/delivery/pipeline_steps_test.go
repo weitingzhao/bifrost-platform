@@ -185,7 +185,7 @@ func TestPipelineRunSkippedTasks(t *testing.T) {
 }
 
 // pipelineTasks is what each pipeline with a phase table runs, read from
-// `kubectl -n cicd get pipeline <name>` on 2026-11-12 (the same lists as
+// `kubectl -n cicd get pipeline <name>` on 2026-11-13 (the same lists as
 // bifrost-trade-infra k8s/cicd/tekton/pipeline-*.yaml on main). The
 // definitions live in another repository, so this copy is what the tables
 // are held to; update both when a pipeline's tasks change.
@@ -193,7 +193,7 @@ var pipelineTasks = map[string][]string{
 	"bifrost-deliver-stg": {"freeze-check", "mirror-sync", "clone-core", "clone-worker", "clone-api", "clone-frontend", "clone-ui", "clone-infra",
 		"prepare", "stage-api-dockerfile", "build-all-apis", "stage-frontend-dockerfile", "build-frontend", "build-worker", "rollout", "verify-stg", "gitops-sync"},
 	"bifrost-deliver-platform": {"freeze-check", "mirror-sync", "clone-infra", "clone-platform", "clone-ui", "stage-api-dockerfile", "stage-console-dockerfile",
-		"build-platform-api", "build-platform-console", "agentrt-migrate", "promote-images", "gitops-sync", "rollout", "agentd-package"},
+		"build-platform-api", "build-platform-console", "agentrt-migrate", "promote-images", "gitops-sync", "rollout"},
 	"bifrost-deliver-platform-prod": {"freeze-check", "preflight-stg", "mirror-sync", "check-source", "clone-platform", "agentrt-schema", "promote-images", "gitops-sync", "rollout"},
 	"bifrost-deliver-research": {"freeze-check", "release-window", "validate-revision", "mirror-sync", "clone-research", "clone-infra", "lint-test",
 		"build-research", "pin-check", "gitops-sync", "rollout-research", "verify-research"},
