@@ -113,40 +113,6 @@ func (a *API) getRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"rule_id": id, "in_force": rule.Doc(), "signed_by": rule.SignedBy})
 }
 
-// getLandingCard is GET /agentrt/landing/cards/{question_id} (S3 B3, CUT
-// §11.6 v3 item 8): what a landing card asked and what became of its answer,
-// readable after the question store trimmed the question.
-func (a *API) getLandingCard(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "question_id")
-	v, found, err := store.FindLandingCard(r.Context(), a.DB, id)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	if !found {
-		writeError(w, http.StatusNotFound, "not_found", "no landing card was asked with this question")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"repo": v.Repo, "question_id": v.QuestionID, "prep": v.Prep, "kind": v.Kind, "root": v.Root, "op": v.Op,
-		"family": v.Family, "block": v.Block, "batch": v.Batch,
-		"trigger_seq": v.TriggerSeq, "stop_generation": v.StopGeneration, "acked": v.Acked, "closed": v.Closed, "closed_why": v.ClosedWhy,
-		"options": v.Options, "outcome": v.Outcome, "next_step": v.NextStep})
-}
-
-// getMissionLanding is GET /agentrt/landing/missions/{id} (S3 B4, CUT §11.8
-// v3 item 9): each live-scope root's class, reason and card, the rule as
-// read now and the closing round. in_scope false: the mission closes by the
-// rules before S3.
-func (a *API) getMissionLanding(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	st, err := store.ReadMissionLandingStatus(r.Context(), a.DB, id)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	a.writeMissionLanding(w, r, id, st)
-}
-
 func (a *API) writeMissionLanding(w http.ResponseWriter, r *http.Request, id string, st store.MissionLandingStatus) {
 	roots := make([]map[string]any, 0, len(st.Roots))
 	for _, x := range st.Roots {
@@ -164,7 +130,6 @@ func (a *API) writeMissionLanding(w http.ResponseWriter, r *http.Request, id str
 		if x.Waiting != nil {
 			// Preserve the unknown-main view if the live read is unavailable.
 			x.Waiting.ObserveMain("")
-			a.observeLandingWait(r, x.Waiting)
 			root["authorization_wait"] = x.Waiting
 		}
 		if !x.HeldUntil.IsZero() {

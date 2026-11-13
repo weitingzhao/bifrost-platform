@@ -24,15 +24,6 @@ func SetPresencePassLimitForTest(d time.Duration) func() {
 	return func() { presencePassLimit = old }
 }
 
-// SetUsableLandingGrantForTest sets what the drill pass reads as an
-// awaiting_grant operation's usable grant and returns the function that
-// restores it.
-func SetUsableLandingGrantForTest(f func(ctx context.Context, db store.DB, op string) (string, error)) func() {
-	old := usableLandingGrant
-	usableLandingGrant = f
-	return func() { usableLandingGrant = old }
-}
-
 // SetTaskWaitForTest sets how AckUsedAnswers reads an answered card's task
 // and returns the function that restores it.
 func SetTaskWaitForTest(f func(ctx context.Context, db store.DB, task string) (string, bool, bool, error)) func() {

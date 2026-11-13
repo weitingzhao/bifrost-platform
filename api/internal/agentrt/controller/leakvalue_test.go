@@ -74,7 +74,7 @@ func TestLeakValuePassDedupe(t *testing.T) {
 	leakValueMarked(t)
 	now := time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC)
 	c := &Controller{DB: pool, Now: func() time.Time { return now },
-		Drill: &DrillSources{Main: func(context.Context, string) (string, error) { return strings.Repeat("1", 40), nil }}}
+		FullCI: &FullCI{Main: func(context.Context) (string, error) { return strings.Repeat("1", 40), nil }}}
 	pass := func() int {
 		t.Helper()
 		n, err := c.LeakValuePass(ctx)

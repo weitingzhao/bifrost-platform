@@ -314,14 +314,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	pinned := pinnedFixture(t, f.pool)
 	exact := ok("POST claim/pinned", "agentd:coordinator-mbp", "POST", "claim/pinned", map[string]any{"host_id": "coordinator-mbp",
 		"task_id": pinned, "idempotency_key": pinned + ":1", "free_slots": 1})
-	// Its landing waiting for a grant, main moved on: the executor
-	// refreshes it (C-4, landing_wait.go).
-	op := landingWait(t, f.pool, pinned, exact)
-	// Its grant, as an approval's executor writes it; the Owner revokes it
-	// (C-5, landing_grant.go): no route writes a grant.
-	grant := grantFixture(t, f.pool, op)
-	ok("POST landing/grants/{grant_id}/revoke", "admin", "POST", "landing/grants/"+grant+"/revoke", nil)
-	ok("POST landing/refresh", "agentd:coordinator-mbp", "POST", "landing/refresh", map[string]any{"task": pinned, "op": op})
+	_ = exact
 	ok("POST hosts/{id}/drain", "operator", "POST", "hosts/h2/drain", map[string]any{"idempotency_key": "v5", "reason": "maintenance"})
 	// A wave of bifrost-platform opened on main's head and abandoned (M-368).
 	wave := ok("POST waves", "operator", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "R2"})

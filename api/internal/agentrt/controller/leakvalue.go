@@ -48,8 +48,6 @@ func (c *Controller) startLeakValue(ctx context.Context, wg *sync.WaitGroup) {
 // the full CI's; nil for none.
 func (c *Controller) leakValueMain() func(ctx context.Context, repo string) (string, error) {
 	switch {
-	case c.Drill != nil && c.Drill.Main != nil:
-		return c.Drill.Main
 	case c.FullCI != nil && c.FullCI.Main != nil:
 		main := c.FullCI.Main
 		return func(ctx context.Context, _ string) (string, error) { return main(ctx) }

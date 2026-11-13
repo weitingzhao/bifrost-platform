@@ -30,9 +30,6 @@ func TestRuleApproveOpenKey(t *testing.T) {
 	if k := approvalOpenKey("mark_missions_no_merge", map[string]any{"rule_id": "concurrency"}); k != "" {
 		t.Fatalf("another action has key %q", k)
 	}
-	if k := approvalOpenKey("approve_core_landing", map[string]any{"op": "op-1"}); k != "landing-grant:op-1" {
-		t.Fatalf("a landing grant's key is %q", k)
-	}
 }
 
 // The request binds to this platform: PROD only, a PROD runtime, exactly

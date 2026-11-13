@@ -38,23 +38,6 @@ func (a *API) getPlanTimeline(w http.ResponseWriter, r *http.Request) {
 // exactly one of commit or task. The PROD stages come from ReleaseCycles;
 // unwired, or failing, they are unknown and the warnings say why.
 func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("view") == "task_precheck" {
-		if r.URL.Query().Get("commit") != "" || r.URL.Query().Get("task") == "" {
-			writeError(w, 400, "bad_request", "task_precheck requires task and no commit")
-			return
-		}
-		var sources store.GrantSources
-		if a.Grants != nil {
-			sources = a.Grants()
-		}
-		out, err := store.ReadBoundaryPrecheck(r.Context(), a.DB, sources, r.URL.Query().Get("task"))
-		if err != nil {
-			a.fail(w, err)
-			return
-		}
-		writeJSON(w, 200, out)
-		return
-	}
 	if r.URL.Query().Get("view") == "configuration" {
 		if r.URL.Query().Get("commit") != "" || r.URL.Query().Get("task") != "" {
 			writeError(w, 400, "bad_request", "configuration is a configuration snapshot; omit commit and task")

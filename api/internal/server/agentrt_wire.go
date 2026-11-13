@@ -104,15 +104,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	if s.delivery != nil {
 		rt.api.ConfigurationBoundaries = s.delivery.ConfigurationBoundaries
 	}
-	rt.api.Grants = s.landingGrantSources
 	rt.api.CheckAssessment = s.checkAssessment
 	if s.approvals != nil {
 		s.approvals.Assessment = s.assessmentReader(store.AssessApproval)
 	}
 	s.wireQuestionAssessments()
-	// Rule signing takes an S5-enrolling landing rule only once this
-	// binary's embedded S5 trust root is usable (S5 design §9 order).
-	store.S5SigningReady = landingS5Deployable
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")

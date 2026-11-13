@@ -113,9 +113,6 @@ func agentdDeployOpenKey(action string, params map[string]any) string {
 
 // approvalOpenKey is the one-open-request rule of every action that has one.
 func approvalOpenKey(action string, params map[string]any) string {
-	if k := landingGrantOpenKey(action, params); k != "" {
-		return k
-	}
 	if k := ruleApproveOpenKey(action, params); k != "" {
 		return k
 	}

@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"slices"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // approvalCreateCheck runs before an approval row is written: a pipeline run
@@ -15,21 +13,8 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	if action == agentdeploy.DeployAgentdAction {
 		return agentdDeployCreateCheck(params)
 	}
-	if action == supersedeAction {
-		return s.supersedeCreateCheck(ctx, params)
-	}
 	if action == RuleApproveAction {
 		return s.ruleApproveCreateCheck(ctx, params)
-	}
-	if action == "mark_missions_no_merge" {
-		_, err := s.noMergeRequest(params)
-		return err
-	}
-	if action == store.RecoverBatchPushAction {
-		return s.pushRecoveryCreateCheck(ctx, params)
-	}
-	if slices.Contains(store.GrantActions, action) {
-		return s.landingGrantCreateCheck(ctx, action, params)
 	}
 	if action != "start_pipeline_run" || s.delivery == nil {
 		return nil

@@ -19,7 +19,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Sources read the records the runtime does not own. ok is false when a
@@ -45,9 +44,9 @@ type Sources struct {
 	// HeadRelease takes each deliverable the platform releases by itself
 	// one step (server/head_release.go); nil when that is switched off.
 	HeadRelease func(ctx context.Context) error
-	Plan     store.PlanSources
-	Approval func(ctx context.Context, number int64) (store.ApprovalFact, bool)
-	Question func(ctx context.Context, id string) (q store.Question, ok bool)
+	Plan        store.PlanSources
+	Approval    func(ctx context.Context, number int64) (store.ApprovalFact, bool)
+	Question    func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
@@ -85,29 +84,11 @@ type Sources struct {
 // Controller holds what the loops need. Zero intervals take the design's
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
-	Drill    *DrillSources // nil by default; workers opt in on STG (drill) or PROD (live)
-	DrillGit map[string]DrillGit
-	// LiveRepos is the configured allowlist; nil preserves the legacy platform-only test/caller contract.
-	LiveRepos       []string
-	otherDrillWaits map[string]*drillBackoff
-	// Live runs the landing loop on PROD (S3, CUT §11.5): set only by the
-	// wiring, with AGENTRT_LANDING_LIVE_REPOS and the lander identity as
-	// DrillGit. Without it PROD claims nothing and pushes nothing.
-	Live bool
-	// OpenLive opens the workspace the live landing pushes main from; nil
-	// uses DrillGit.Open (tests replace it: a real push needs the lander).
-	OpenLive func(ctx context.Context, repo, r string) (LiveWorkspace, error)
-	// LandingCards is the landing cards' reach into the question store
-	// (landing_cards.go); zero carries no landing cards.
-	LandingCards store.CardQuestions
 	// tuning is the tuning rule the last pass read (tuning.go).
-	tuning atomic.Pointer[rules.Tuning]
-	// Reconcile is the main reconciler's loop (landing_reconcile.go): nil
-	// runs none. Apart from the drill: any environment, any rule.
-	Reconcile *LandingReconcile
-	DB        store.DB
-	Sources   Sources
-	Logf      func(format string, args ...any)
+	tuning  atomic.Pointer[rules.Tuning]
+	DB      store.DB
+	Sources Sources
+	Logf    func(format string, args ...any)
 	// Infof logs what the controller did that needs no one's attention (an
 	// answer it acknowledged); nil uses Logf.
 	Infof          func(format string, args ...any)
@@ -152,17 +133,6 @@ type Controller struct {
 	PlatformUp    func(ctx context.Context) error
 	PlatformProbe string
 	platform      platformSeen
-	// drillWaits backs off drill claims refused for a reason that may pass
-	// (landing_scan.go, TD-447 4); memory only.
-	drillWaits drillBackoff
-	// grantTries spaces the final gate's tries of one waiting operation's
-	// grant (C-5): each try opens a workspace and reads main, CI and R's
-	// patch, and a grant the gate refuses (stale, insufficient) stays
-	// usable-looking on the stream until it expires.
-	grantTries grantTries
-	// deliveredBy remembers the delivered-by backfill's comparisons
-	// (landing_delivered_by.go, R5:5.6-1); memory only.
-	deliveredBy deliveredByMemo
 	// PageOwner pages the Owner's phone and says how the relay took it
 	// ("sent", or "skipped" with no target), an error when it did not
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
@@ -371,9 +341,6 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 	// A task in a repository the goal kept no base for starts from main's
 	// head, read as the landing drill reads it; with no drill, none is read.
 	var readMain store.ReadMain
-	if c.Drill != nil && c.Drill.Main != nil {
-		readMain = c.Drill.Main
-	}
 	for _, id := range plans {
 		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk(), c.boundedWithdraw(), readMain)
 		if err != nil {
@@ -750,58 +717,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
-	// PROD records its live mode before its first claim (CUT §11.8 v3 item
-	// 1); without it the live loop does not start.
-	if c.Env == "prod" && c.landingRuns() {
-		for _, repo := range c.landingRepoNames() {
-			if _, err := store.EnsureLandingMode(ctx, c.DB, repo); err != nil {
-				c.logf("agentrt landing live not started: recording the live mode: %v", err)
-				delete(c.DrillGit, repo)
-			}
-		}
-		if len(c.landingRepoNames()) == 0 {
-			c.Live = false
-		}
-	}
-	if c.landingRuns() {
-		wg.Add(1)
-		safego.Go("agentrt-landing-drill", func() {
-			defer wg.Done()
-			run := func() error {
-				passCtx, cancel := context.WithTimeout(ctx, DrillPassCeiling)
-				defer cancel()
-				return c.LandingDrillPass(passCtx)
-			}
-			if err := run(); err != nil {
-				c.logf("agentrt-landing-drill startup: %v", err)
-			}
-			var loops sync.WaitGroup
-			c.every(ctx, &loops, "agentrt-landing-drill", facts, run)
-			loops.Wait()
-		})
-	}
-	// Any reach runs the pass; each step checks only what it needs (review 675 R-04).
-	if c.Env == "prod" && (c.LandingCards.Lookup != nil || c.LandingCards.Ack != nil || c.LandingCards.LookupKey != nil) {
-		c.every(ctx, &wg, "agentrt-landing-cards", LandingCardsEvery, func() error {
-			passCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			defer cancel()
-			return c.LandingCardsPass(passCtx)
-		})
-	}
-	if c.Reconcile != nil && c.Reconcile.Requests != nil && c.Env == "prod" {
-		c.every(ctx, &wg, "agentrt-landing-requests", 30*time.Second, func() error {
-			passCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-			return c.LandingRequestsPass(passCtx)
-		})
-	}
-	if c.Reconcile != nil {
-		c.every(ctx, &wg, "agentrt-landing-reconcile", facts, func() error {
-			passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-			defer cancel()
-			return c.LandingReconcilePass(passCtx)
-		})
-	}
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
 	if c.Sources.Plan.History != nil || c.Sources.Plan.Deployed != nil {
 		c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
@@ -866,4 +781,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	c.startFullCI(ctx, &wg)
 	c.startAgentdDeploy(ctx, &wg)
 	return wg.Wait
+}
+
+// clock is the controller's clock: Now when a test set it.
+func (c *Controller) clock() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+	return time.Now()
 }

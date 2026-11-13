@@ -43,9 +43,6 @@ func (c *Controller) startCheckValue(ctx context.Context, wg *sync.WaitGroup) {
 // checkValueMain reads a repository's main for a goal: the landing's
 // reader, else the full CI's (bifrost-platform's); nil without either.
 func (c *Controller) checkValueMain() func(ctx context.Context, repo string) (string, error) {
-	if c.Drill != nil && c.Drill.Main != nil {
-		return c.Drill.Main
-	}
 	if f := c.FullCI; f != nil && f.Main != nil {
 		return func(ctx context.Context, _ string) (string, error) { return f.Main(ctx) }
 	}

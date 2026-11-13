@@ -94,31 +94,3 @@ limits: {max_files: 100, max_changed_lines: 3000, max_landings_per_day: 100, max
 		t.Fatalf("preview hid downstream clamp: %v", effects)
 	}
 }
-
-func TestBoundaryPrecheckReadOnlyAndSameClaimGate(t *testing.T) {
-	t.Parallel()
-	ctx := ownClock(t)
-	w, roots, at := batchRoots(t, 1)
-	var before, after int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&before))
-	src := c4Source(precheckPath)
-	out, err := store.ReadBoundaryPrecheck(ctx, w.rt, store.GrantSources{Facts: src}, roots[0])
-	ok(t, err)
-	if out["state"] != "claim_eligible" {
-		t.Fatalf("precheck: %v", out)
-	}
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&after))
-	if after != before {
-		t.Fatalf("read wrote events: %d -> %d", before, after)
-	}
-	unknown, err := store.ReadBoundaryPrecheck(ctx, w.rt, store.GrantSources{}, roots[0])
-	ok(t, err)
-	if unknown["state"] != "unknown" {
-		t.Fatalf("missing readers: %v", unknown)
-	}
-	_, decision, err := store.ClaimLanding(ctx, w.rt, src, "prod", roots[0], at)
-	ok(t, err)
-	if !decision.Allowed {
-		t.Fatalf("execution disagreed: %+v", decision)
-	}
-}
