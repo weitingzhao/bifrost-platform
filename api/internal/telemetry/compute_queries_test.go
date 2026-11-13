@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -41,12 +42,16 @@ func TestComputeQueriesAreNamedOnceAndSayWhatTheyAnswer(t *testing.T) {
 }
 
 // promStub answers every instant query with one sample and records the
-// expressions it was asked.
+// expressions it was asked. The queries of one overview arrive at once, so the
+// record is guarded.
 func promStub(t *testing.T, asked *[]string) *httptest.Server {
 	t.Helper()
+	var mu sync.Mutex
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
+		mu.Lock()
 		*asked = append(*asked, r.Form.Get("query"))
+		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status": "success",
 			"data": map[string]any{"resultType": "vector", "result": []any{
