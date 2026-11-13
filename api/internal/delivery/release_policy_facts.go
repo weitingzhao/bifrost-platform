@@ -345,18 +345,36 @@ func fullAPIScope(item unstructured.Unstructured) bool {
 	return n == 0 || n == 1 && scope == "full"
 }
 
-// HeldBy is "" when who holds an open window that covers pipeline. Unlike the
-// start gate, no window at all is a refusal here.
+// HeldBy is "" only when a live window covers pipeline and its holder is who.
+// It does not share the start gate's rule (decideReleaseWindow), which lets a
+// pipeline that need not hold a window run when none is open: here no window
+// is a refusal, and so is the expired record every release leaves behind.
 func (f PolicyFacts) HeldBy(ctx context.Context, pipeline, who string) string {
 	found, window, err := f.s.readReleaseWindow(ctx)
 	if err != nil {
 		return "cannot read the release window: " + err.Error()
 	}
-	if !found {
+	holder, _ := window["who"].(string)
+	holder = strings.TrimSpace(holder)
+	if !found || holder == "" || releaseWindowExpired(window, time.Now().UTC()) {
 		return "no release window is open; hold one first: release.sh hold --what <repo>"
 	}
-	if strings.TrimSpace(who) == "" {
+	who = strings.TrimSpace(who)
+	if who == "" {
 		return "the request has no who, so it cannot be the window holder"
 	}
-	return decideReleaseWindow(found, window, pipeline, who)
+	what, _ := window["what"].(string)
+	held := fmt.Sprintf("who=%s what=%s expires=%v", holder, what, window["expires_at"])
+	repos, known := requiredRepos(pipeline)
+	if !known || !intersects(parseWhat(what), repos) {
+		need := "no release window covers it"
+		if known {
+			need = "it needs one of " + sortedKeys(repos)
+		}
+		return fmt.Sprintf("the open release window (%s) does not cover %s: %s", held, pipeline, need)
+	}
+	if who != holder {
+		return fmt.Sprintf("release window held by someone else (%s)", held)
+	}
+	return ""
 }

@@ -184,6 +184,52 @@ func TestPolicyFactsWindowAndConfigMaps(t *testing.T) {
 	}
 }
 
+// The policy's window clause holds only for a live window that covers the
+// pipeline and is held by the caller. The pipelines here need not hold a
+// window to start a run (windowPipelines: required false), which is the case
+// where the start gate's rule would let any who through.
+func TestPolicyFactsHeldByNeedsALiveWindowHeldByTheCaller(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	past, future := now.Add(-time.Minute).Format(time.RFC3339), now.Add(5*time.Minute).Format(time.RFC3339)
+	record := func(body string) PolicyFacts {
+		return newFactsService(t, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"},
+			Data:       map[string]string{"window.json": body},
+		})
+	}
+	live := `{"who":"agent@mac","what":"bifrost-platform","started_at":"` + past + `","expires_at":"` + future + `"}`
+	expired := `{"who":"agent@mac","what":"bifrost-platform,bifrost-ui","started_at":"` + past + `","expires_at":"` + past + `"}`
+	released := `{"who":"agent@mac","what":"bifrost-platform","started_at":"` + past + `","expires_at":"` + past + `","ended_at":"` + past + `"}`
+	const noWindow = "no release window is open"
+	for _, tc := range []struct {
+		name, body, pipeline, who, want string
+	}{
+		{"expired record, any who", expired, "bifrost-deliver-platform-prod", "anyone", noWindow},
+		{"expired record, its old holder", expired, "bifrost-deliver-platform-prod", "agent@mac", noWindow},
+		{"expired record, no who", expired, "bifrost-deliver-platform-prod", "", noWindow},
+		{"released record", released, "bifrost-deliver-platform", "agent@mac", noWindow},
+		{"expired record, staging", expired, "bifrost-deliver-stg", "anyone", noWindow},
+		{"expired record, a pipeline that must hold one", expired, "bifrost-deliver-research", "agent@mac", noWindow},
+		{"record without a holder", `{"what":"bifrost-platform","expires_at":"` + future + `"}`, "bifrost-deliver-platform-prod", "anyone", noWindow},
+		{"empty record", "", "bifrost-deliver-platform-prod", "anyone", noWindow},
+		{"live, the holder", live, "bifrost-deliver-platform-prod", "agent@mac", ""},
+		{"live, the holder, spaces", live, "bifrost-deliver-platform", " agent@mac ", ""},
+		{"live, someone else", live, "bifrost-deliver-platform-prod", "anyone", "held by someone else (who=agent@mac what=bifrost-platform"},
+		{"live, no who", live, "bifrost-deliver-platform-prod", "", "no who"},
+		{"live, another release", live, "bifrost-deliver-stg", "agent@mac", "does not cover bifrost-deliver-stg: it needs one of bifrost-trade-api"},
+		{"live, a pipeline outside the table", live, "bifrost-smoke", "agent@mac", "does not cover bifrost-smoke: no release window covers it"},
+	} {
+		got := record(tc.body).HeldBy(ctx, tc.pipeline, tc.who)
+		if tc.want == "" && got != "" || tc.want != "" && !strings.Contains(got, tc.want) {
+			t.Errorf("%s: HeldBy(%s, %q) = %q, want %q", tc.name, tc.pipeline, tc.who, got, tc.want)
+		}
+	}
+	if got := newFactsService(t).HeldBy(ctx, "bifrost-deliver-platform-prod", "anyone"); !strings.Contains(got, noWindow) {
+		t.Errorf("no ConfigMap: %q", got)
+	}
+}
+
 func TestPolicyFactsReadFilesAndWriteConfigMaps(t *testing.T) {
 	f := newFactsService(t)
 	ctx := context.Background()
