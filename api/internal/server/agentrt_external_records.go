@@ -51,6 +51,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			return out, nil
 		}
 	}
+	src.UnitRuns = s.unitRunsSource()
 	if s.delivery != nil {
 		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
 		src.RunFailure = func(ctx context.Context, run string) ([]string, []string, string, error) {

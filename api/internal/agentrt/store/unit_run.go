@@ -2,9 +2,15 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // The four ways a unit task ends (0019_unit_run.sql). Only the first three
@@ -97,4 +103,67 @@ func UnitRunsByKey(ctx context.Context, db DB, repo, unit, task, key string, lim
 		return rows.Err()
 	})
 	return out, err
+}
+
+// UnitEvidence is what a settled unit task writes into the ledger.
+type UnitEvidence struct {
+	Repo, Unit, Task, InputKey string
+	// Inputs is the plan's key document as the plan hashed it (its JSON with
+	// sorted keys); InputKey is the sha256 of exactly these bytes.
+	Inputs      json.RawMessage
+	Passed      bool
+	Commit      string
+	Tree        string
+	RunName     string
+	RunUID      string
+	CompletedAt time.Time
+	FailedTests []string
+	FailClass   string
+	// Runs names every TaskRun the verdict rests on (the parts of the unit).
+	Runs []string
+}
+
+// UnitEvidenceRow builds the ledger row of a unit task: scope full, the run
+// of its first part as the row's run, an in-toto Statement like a pipeline's.
+func UnitEvidenceRow(u UnitEvidence) (EvidenceRow, error) {
+	result := EvidenceFailed
+	if u.Passed {
+		result = EvidencePassed
+	}
+	predicate := map[string]any{
+		"result":        map[string]string{EvidencePassed: "PASSED", EvidenceFailed: "FAILED"}[result],
+		"configuration": []any{map[string]any{"name": u.Task, "uri": "bifrost://units/" + u.Repo + "/" + u.Unit + "#" + u.Task}},
+		"url":           "tekton://cicd/taskruns/" + u.RunName,
+		"scope":         EvidenceScopeFull,
+		"run_uid":       u.RunUID,
+		"completed_at":  u.CompletedAt.UTC().Format(time.RFC3339),
+		"runs":          evidenceNames(u.Runs, maxFailedTests),
+	}
+	if !u.Passed {
+		if len(u.FailedTests) > 0 {
+			predicate["failedTests"] = evidenceNames(u.FailedTests, maxFailedTests)
+		}
+		if u.FailClass == FailClassTest || u.FailClass == FailClassBuild {
+			predicate["fail_class"] = u.FailClass
+		}
+	}
+	statement := map[string]any{
+		"_type":         "https://in-toto.io/Statement/v1",
+		"subject":       []any{map[string]any{"name": u.Repo, "digest": map[string]any{"gitCommit": u.Commit, "gitTree": u.Tree}}},
+		"predicateType": "https://in-toto.io/attestation/test-result/v0.1",
+		"predicate":     predicate,
+	}
+	e := EvidenceRow{Repo: u.Repo, Unit: u.Unit, Task: u.Task, InputKey: u.InputKey, Result: result, Scope: EvidenceScopeFull,
+		CommitSHA: u.Commit, RunName: u.RunName, RunUID: u.RunUID}
+	// A row whose inputs are not what its key is the hash of would answer
+	// for content nobody can recompute: it is not written.
+	if sum := sha256.Sum256(u.Inputs); hex.EncodeToString(sum[:]) != u.InputKey {
+		return EvidenceRow{}, fmt.Errorf("unit evidence of %s %s: the key is not the hash of the inputs", u.Unit, u.Task)
+	}
+	e.Inputs = u.Inputs
+	var err error
+	if e.Statement, err = canon.Encode(statement); err != nil {
+		return EvidenceRow{}, err
+	}
+	return e, nil
 }

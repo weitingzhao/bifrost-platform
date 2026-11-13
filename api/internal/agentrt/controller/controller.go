@@ -39,9 +39,12 @@ type Sources struct {
 	// tasks, the tests they name and the class (store.PipelineRun's fields),
 	// for its evidence row; nil: the row says only that it failed.
 	RunFailure func(ctx context.Context, run string) (tasks, tests []string, class string, err error)
-	Plan       store.PlanSources
-	Approval   func(ctx context.Context, number int64) (store.ApprovalFact, bool)
-	Question   func(ctx context.Context, id string) (q store.Question, ok bool)
+	// UnitRuns records the unit tasks that finished and settles what they
+	// add up to (server: receiveUnits); nil: this platform runs no units.
+	UnitRuns func(ctx context.Context) error
+	Plan     store.PlanSources
+	Approval func(ctx context.Context, number int64) (store.ApprovalFact, bool)
+	Question func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
@@ -731,6 +734,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			_, err := c.PipelineRecords(ctx)
 			return err
 		})
+	}
+	if c.Sources.UnitRuns != nil {
+		every := c.PipelineEvery
+		if every <= 0 {
+			every = DefaultPipelineEvery
+		}
+		c.every(ctx, &wg, "agentrt-unit-runs", every, func() error { return c.Sources.UnitRuns(ctx) })
 	}
 	// PROD records its live mode before its first claim (CUT §11.8 v3 item
 	// 1); without it the live loop does not start.

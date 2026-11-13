@@ -225,3 +225,13 @@ func cut(s string, max int) string {
 	}
 	return s
 }
+
+// Finished says whether the TaskRun's condition is settled.
+func Finished(tr TaskRun) bool {
+	for _, c := range tr.Status.Conditions {
+		if c.Type == "Succeeded" {
+			return c.Status == "True" || c.Status == "False"
+		}
+	}
+	return false
+}

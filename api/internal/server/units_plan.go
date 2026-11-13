@@ -147,13 +147,18 @@ func (g *giteaTrees) blob(ctx context.Context, repo, id string) ([]byte, error) 
 	return raw, nil
 }
 
-// unitPlan computes the plan and reads the ledger for each of its keys.
-func unitPlan(ctx context.Context, db store.DB, trees func(ctx context.Context, repo, commit string) (*unitplan.Tree, error), repo, commit string, withInputs bool) (unitPlanAnswer, error) {
+// buildUnitPlan computes the plan of a commit from its tree and its pins'.
+func buildUnitPlan(ctx context.Context, trees func(ctx context.Context, repo, commit string) (*unitplan.Tree, error), repo, commit string) (*unitplan.Plan, error) {
 	t, err := trees(ctx, repo, commit)
 	if err != nil {
-		return unitPlanAnswer{}, err
+		return nil, err
 	}
-	plan, err := unitplan.Build(repo, commit, t, unitplan.Source{Pinned: func(pinned, at string) (*unitplan.Tree, error) { return trees(ctx, pinned, at) }})
+	return unitplan.Build(repo, commit, t, unitplan.Source{Pinned: func(pinned, at string) (*unitplan.Tree, error) { return trees(ctx, pinned, at) }})
+}
+
+// unitPlan computes the plan and reads the ledger for each of its keys.
+func unitPlan(ctx context.Context, db store.DB, trees func(ctx context.Context, repo, commit string) (*unitplan.Tree, error), repo, commit string, withInputs bool) (unitPlanAnswer, error) {
+	plan, err := buildUnitPlan(ctx, trees, repo, commit)
 	if err != nil {
 		return unitPlanAnswer{}, err
 	}
