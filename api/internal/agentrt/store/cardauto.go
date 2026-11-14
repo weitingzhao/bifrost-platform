@@ -107,16 +107,6 @@ func ruleNoted(ctx context.Context, tx pgx.Tx, stream, question string) (bool, e
 	return noted, err
 }
 
-// ensureRuleNote is the note of a blocked card a rule answered, written by
-// whoever uses the answer when the rule's own transaction did not keep it:
-// the card's decision, which acknowledges the answer, so the note is never
-// left to a scan of unacknowledged answers (review 443 B1). mission is the
-// one the card was asked in. Nothing for the Owner's.
-func ensureRuleNote(ctx context.Context, tx pgx.Tx, mission string, t taskRow, by answerer, question, option string) error {
-	return ensureRuleNoteOn(ctx, tx, cardOn{kind: CardBlocked, task: t.id, step: t.step, mission: mission, stream: MissionStream(mission)},
-		by, question, option)
-}
-
 // ensureRuleNoteOn is ensureRuleNote for a card of any kind, where it is.
 func ensureRuleNoteOn(ctx context.Context, tx pgx.Tx, on cardOn, by answerer, question, option string) error {
 	if by.rule == "" {

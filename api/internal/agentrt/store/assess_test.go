@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"context"
-	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -25,18 +24,4 @@ func (s *seenCards) ask(ctx context.Context, c store.Card) (string, error) {
 		s.mu.Unlock()
 	}
 	return id, err
-}
-
-// cardOf is the card asked for task.
-func (s *seenCards) cardOf(t *testing.T, task string) string {
-	t.Helper()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for id, c := range s.asked {
-		if c.TaskID == task {
-			return id
-		}
-	}
-	t.Fatalf("no card for task %s", task)
-	return ""
 }

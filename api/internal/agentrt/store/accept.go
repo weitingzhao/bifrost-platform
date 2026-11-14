@@ -5,8 +5,6 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // Acceptance (design v5 §5.2 控制器「验收编排」; R5:5.7-9, precheck.go). By
@@ -85,45 +83,6 @@ func lockStep(ctx context.Context, tx pgx.Tx, taskID string) (string, error) {
 	return step, nil
 }
 
-// checkSpec is the task spec of a verification or review: the attempt it is
-// about and what the checker needs, as canonical JSON.
-type checkSpec struct {
-	check, subject, attempt, commit, repo, taskSpec string
-	round                                           int64
-	verification, verifyReport                      string // a review's deterministic pass
-	salvage                                         bool   // the attempt is a lost one whose result was salvaged (adopt.go)
-}
-
-// readCheckSpec reads the spec of a check; ok is false when it is not one
-// the controller wrote (a check proposed by hand pins no attempt).
-func readCheckSpec(ctx context.Context, tx pgx.Tx, artifactID string) (checkSpec, bool, error) {
-	var body []byte
-	if err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, artifactID).Scan(&body); err != nil {
-		return checkSpec{}, false, err
-	}
-	v, err := canon.Parse(body)
-	if err != nil {
-		return checkSpec{}, false, nil
-	}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return checkSpec{}, false, nil
-	}
-	str := func(k string) string { s, _ := m[k].(string); return s }
-	var c checkSpec
-	c.check, c.subject, c.attempt, c.commit, c.repo, c.taskSpec = str("check"), str("subject_task"), str("attempt"), str("commit"), str("repo"), str("task_spec")
-	c.verification, c.verifyReport = str("verification"), str("verify_report")
-	c.salvage, _ = m["salvage"].(bool)
-	n, ok := m["round"].(interface{ Int64() (int64, error) })
-	if !ok || c.check == "" || c.subject == "" || c.attempt == "" {
-		return checkSpec{}, false, nil
-	}
-	if c.round, err = n.Int64(); err != nil {
-		return checkSpec{}, false, nil
-	}
-	return c, true, nil
-}
-
 // TestNeedFailFirstVerify is a need a task may carry to show the rework path
 // on STG (T26; the Owner 2026-10-18): where the controller runs with
 // ConcludeOptions.FailFirstVerify (STG only), the task's first deterministic
@@ -137,87 +96,6 @@ type ConcludeOptions struct {
 	FailFirstVerify bool
 	// Precheck is how an implementation is checked (precheck_mode.go).
 	Precheck Precheck
-}
-
-// openCheck are the states of a verification or review that is still open:
-// one that may yet be leased or used, a blocked one included (a pass blocks a
-// check its mission's budget will not let run, TD-384; review 428 A1). Every
-// test of "another check of the subject is open" reads this one list.
-const openCheck = `('proposed','awaiting_owner','ready','leased','running','submitted','paused','blocked')`
-
-// checkVersion says whether a check (spec, and vd its task) ran on what it
-// pins and pins what the attempt is (review 152 A1): the attempt's own commit
-// (pinnedCommit), the subject's repo and task spec (sd), and a checkout of
-// that repo at that commit, or at the subject's base when the attempt pushed
-// none. Conclude uses a check's result only when it does; stillChecked counts
-// a check only when it does (review 432 A1).
-func checkVersion(spec checkSpec, pinnedCommit string, sd, vd taskDetail) bool {
-	base := pinnedCommit
-	if base == "" {
-		base = sd.base
-	}
-	return spec.commit == pinnedCommit && spec.repo == sd.repo && spec.taskSpec == sd.spec && vd.repo == sd.repo && vd.base == base
-}
-
-// stillChecked says whether an open check of s other than dropped can
-// still accept s: it pins s itself, s's latest submitted attempt and s's
-// round, is a check of its own role, and is not a salvaged result's (one
-// cannot accept a task that is verifying), and its version is the attempt's
-// (checkVersion); a review needs the attempt's deterministic pass. Not doing
-// a check blocks s when none is left (reviews 428 A2, 430 A1, 432 A1: a check
-// that only names the latest attempt, of an older round or another task spec,
-// say, is closed by Conclude and accepts nothing).
-// s and dropped are locked; the attempt is read without a lock (attempts
-// come before tasks), and with s locked and verifying none of its attempts
-// is submitted meanwhile.
-func stillChecked(ctx context.Context, tx pgx.Tx, s taskRow, dropped string) (bool, error) {
-	var latest, commit string
-	err := tx.QueryRow(ctx, `SELECT attempt_id, COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE task_id = $1 AND state = 'submitted'
-	  ORDER BY attempt_no DESC LIMIT 1`, s.id).Scan(&latest, &commit)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	sd, err := readDetail(ctx, tx, s.id)
-	if err != nil {
-		return false, err
-	}
-	var passed bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.verification WHERE attempt_id = $1
-	  AND method = 'deterministic' AND verdict = 'pass')`, latest).Scan(&passed); err != nil {
-		return false, err
-	}
-	rows, err := tx.Query(ctx, `SELECT task_id, role FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
-	  AND role IN ('verify','review') AND state IN `+openCheck, s.id, dropped)
-	if err != nil {
-		return false, err
-	}
-	type row struct{ task, role string }
-	checks, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
-		var x row
-		return x, r.Scan(&x.task, &x.role)
-	})
-	if err != nil {
-		return false, err
-	}
-	for _, c := range checks {
-		vd, err := readDetail(ctx, tx, c.task)
-		if err != nil {
-			return false, err
-		}
-		spec, pinned, err := readCheckSpec(ctx, tx, vd.spec)
-		if err != nil {
-			return false, err
-		}
-		// What Conclude requires of a check before it uses its result.
-		if pinned && !spec.salvage && spec.check == c.role && spec.subject == s.id && spec.attempt == latest &&
-			spec.round == int64(sd.round) && checkVersion(spec, commit, sd, vd) && (c.role != "review" || passed) {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // Pending lists the tasks the acceptance pass has to look at: submitted

@@ -56,35 +56,6 @@ func (b *buttonWorld) legacy(stmt string) {
 	})
 }
 
-// staleMission makes mission m, 30 hours old on a two-hour budget, with one
-// ready task, and returns the task.
-func (b *buttonWorld) staleMission(m string) string {
-	b.t.Helper()
-	ctx := context.Background()
-	task := store.NewTaskID()
-	b.tx(func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: m, Title: "goal " + m, Goal: "a goal",
-			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {
-			return err
-		}
-		if err := store.MoveMission(ctx, tx, "controller", m, "active", "test"); err != nil {
-			return err
-		}
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: m, OffPlanReason: "a goal", Role: "implement",
-			Effect: "branch", Repo: "bifrost-platform", Class: "go", Title: "a task of " + m, SpecArtifact: spec}); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", task)
-	})
-	b.legacy(`UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '30 hours',
-	  budget_json = '{"max_attempts": 9, "max_wall_hours": 2}' WHERE mission_id = '` + m + `'`)
-	return task
-}
-
 // answer answers a card as the Owner's Console does: POST
 // /api/v1/questions/{id}/answer from the session owner-console.
 func (b *buttonWorld) answer(id, option, text string) {
@@ -236,57 +207,18 @@ func TestOwnerButtonPaths(t *testing.T) {
 		fixture[kind] = map[string]any{"status": res.Code, "body": res.Body}
 	}
 
-	// Blocked cards: a, b and c, each on its own stale mission.
-	tasks := map[string]string{"a": b.staleMission("M-3"), "b": b.staleMission("M-4"), "c": b.staleMission("M-5")}
-	// Blocked for their budgets as the budget pass blocked before
-	// 2026-11-06 (nothing blocks so any more; such blocks still get cards).
-	b.tx(func(tx pgx.Tx) error {
-		for _, m := range []string{"M-3", "M-4", "M-5"} {
-			var task string
-			if err := tx.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1`, m).Scan(&task); err != nil {
-				return err
-			}
-			if err := store.MoveTask(ctx, tx, "controller", task, "blocked",
-				"mission "+m+" is past its 2 hours (it started 30.0 hours ago): no host may take this task until the budget grows"); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if n, err := store.AskBlocked(ctx, b.conn, ask); err != nil || n != 3 {
-		t.Fatalf("asked %d (%v)", n, err)
-	}
-	cards, err := b.rt.agentRuntimeOpenCards()(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range cards {
-		for option, task := range tasks {
-			if c.TaskID == task {
-				if option == "c" {
-					keep("blocked", c.ID)
-				}
-				b.answer(c.ID, option, "")
-			}
-		}
-	}
-	if n, err := store.DecideBlocked(ctx, b.conn, question, ack); err != nil || n != 3 {
-		t.Fatalf("blocked cards decided %d (%v)", n, err)
-	}
-	if got := b.state("task", tasks["a"]); got != "ready" {
-		t.Errorf("a (one more round): the task is %s", got)
-	}
-	if got := b.state("task", tasks["b"]); got != "cancelled" {
-		t.Errorf("b (do not do it): the task is %s", got)
-	}
-	if got := b.state("mission", "M-5"); got != "stopped" {
-		t.Errorf("c (close the mission): M-5 is %s", got)
-	}
-
-	group()
 	// Plan changes: a applies, b refuses. Two steps of a plan, bound to M-3,
 	// each proposed to move to M-4.
 	b.tx(func(tx pgx.Tx) error {
+		for _, m := range []string{"M-3", "M-4"} {
+			if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: m, Title: "goal " + m, Goal: "a goal",
+				Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {
+				return err
+			}
+			if err := store.MoveMission(ctx, tx, "controller", m, "active", "test"); err != nil {
+				return err
+			}
+		}
 		for _, n := range []store.PlanNode{
 			{ID: "R9", Kind: "round", Label: "9", Title: "round", Root: "R9"},
 			{ID: "R9:1", Parent: "R9", Kind: "item", Label: "1", Title: "item", Root: "R9"},
@@ -435,7 +367,6 @@ func TestOwnerButtonPaths(t *testing.T) {
 	before := b.count(`SELECT count(*) FROM agentrt.event WHERE mission_id = 'M-20'`)
 	b.answer(planner, "b", "")
 	for _, pass := range []func() (int, error){
-		func() (int, error) { return store.DecideBlocked(ctx, b.conn, question, ack) },
 		func() (int, error) { return store.DecidePlanChanges(ctx, b.conn, question, ack) },
 		func() (int, error) { return store.DecideMissions(ctx, b.conn, question, ack) },
 	} {

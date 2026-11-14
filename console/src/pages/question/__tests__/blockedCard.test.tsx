@@ -11,8 +11,9 @@ vi.mock('@/pages/ServerContactStatus', () => ({ ServerContactStatus: () => null 
 
 /**
  * A blocked task's card as GET /api/v1/questions/{id} answers it, made on a test database and the real
- * question store (api/internal/server/agentrt_blockedcard_test.go writes the fixture): three options,
- * the third closing the mission, the recommended one with the runtime's why as its detail.
+ * question store: three options, the third closing the mission, the recommended one with the runtime's
+ * why as its detail. The runtime no longer asks this card (store cut 3b-3, 2026-11-14); the fixture is
+ * kept as it was read then, as the sample of a card with a recommendation that these tests draw.
  */
 function blockedCard(): Question {
   const parsed = parseQuestion(fixture.body)

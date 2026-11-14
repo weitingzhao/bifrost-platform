@@ -28,16 +28,6 @@ import (
 // with a new card. The round starts at the task's move back to ready, whose
 // reason carries liftMark; the failures leased after it are the ones since.
 
-const (
-	// failuresToStop is the number of failures in a row after which an
-	// executor is no longer offered the task.
-	failuresToStop = 3
-)
-
-// liftMark is in the reason of a task's move back to ready that gives it one
-// more round past its withdrawals (decideBlocked).
-const liftMark = ", offering it once more to each executor withdrawn from it"
-
 // Policy alert phrases of this file: the closed phrases the event records.
 const (
 	repeatedFailurePhrase = "failed three times in a row; not offered the task again"

@@ -47,26 +47,3 @@ func envelopeFit(env *StoredRule, p MissionProposal) (bool, string) {
 	}
 	return true, ""
 }
-
-// ruleCache is the rules one claim acts on, each read once (in force at the
-// database's clock, nil when none is).
-type ruleCache map[string]*StoredRule
-
-func (rc ruleCache) get(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
-	if r, ok := rc[id]; ok {
-		return r, nil
-	}
-	r, err := inForce(ctx, tx, id)
-	if err != nil {
-		return nil, err
-	}
-	rc[id] = r
-	return r, nil
-}
-
-// missionBudget is a mission as a claim checks it, read under its lock.
-type missionBudget struct {
-	state, tenant, envelope string
-	budget                  []byte
-	created                 time.Time
-}

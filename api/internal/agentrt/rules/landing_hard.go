@@ -106,7 +106,6 @@ var landingStorePermission = map[string]string{
 	"vocab.go":             "the event types each writer may append",
 	"keyed.go":             "idempotency keys of requests",
 	"accept.go":            "starts verification and concludes a task: its acceptance",
-	"adopt.go":             "adopts a salvaged attempt's work as the task's",
 	"alerts.go":            "records policy alerts and tells the Owner of them",
 	"artifactsearch.go":    "artifact search; hides exam artifacts from Agent hosts",
 	"assess.go":            "assessments, including whether a signed rule already answers an item",
@@ -116,7 +115,6 @@ var landingStorePermission = map[string]string{
 	"benchmark.go":         "benchmark runs that scores and routing read",
 	"blockedcard.go":       "asks and decides blocked-task cards",
 	"blockedclose.go":      "closes a mission and cancels its work on a card's answer",
-	"blockedexcerpt.go":    "the check report blockedcard.go puts before the Owner",
 	"blockedrecommend.go":  "the option a blocked card recommends, which cardauto.go may take",
 	"brief.go":             "turns mail into brief tasks, or refuses it",
 	"briefdue.go":          "schedules briefs and the Owner's nudges",
@@ -155,7 +153,6 @@ var landingStorePermission = map[string]string{
 	"localpath.go":         "the artifact kinds that skip the local-path scan",
 	"loopalert.go":         "tells the Owner of failing controller loops",
 	"messages.go":          "message sends and the kinds a writer may send",
-	"missionbudget.go":     "mission budgets and round grants",
 	"planbindings.go":      "installs plan bindings and bound done rules",
 	"planchange.go":        "applies plan changes",
 	"plandecide.go":        "decides plan changes on the Owner's cards",
@@ -185,7 +182,6 @@ var landingStorePermission = map[string]string{
 	"signals.go":           "outbox, mailboxes, ready marks and SetControl/ClearControl for the Owner's controls",
 	"snapshot.go":          "the runtime snapshot and envelope lines planners and exams are given",
 	"waits.go":             "records waits past their limit",
-	"withdrawn.go":         "blocks a task no executor may take",
 	"workspaceref.go":      "the artifact kinds that skip the workspace-path scan",
 }
 

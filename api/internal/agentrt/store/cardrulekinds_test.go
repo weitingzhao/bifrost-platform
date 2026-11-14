@@ -3,8 +3,6 @@ package store_test
 import (
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -41,12 +39,7 @@ func TestCardsAreAskedByRuleWhenTheRuleAnswersThem(t *testing.T) {
 		MissionID: "M-2"}}, s.ask)
 	ok(t, err)
 	planCard, _ := out["question_id"].(string)
-	plain := w.ready(t, store.Task{})
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, plain) }))
-	if _, err = store.AskBlocked(ctx, w.rt, s.ask); err != nil {
-		t.Fatal(err)
-	}
-	for id, want := range map[string]bool{before: false, mission: true, markedCard: false, planCard: false, s.cardOf(t, plain): true} {
+	for id, want := range map[string]bool{before: false, mission: true, markedCard: false, planCard: false} {
 		if got := s.asked[id].ByRule; got != want {
 			t.Errorf("card %s (%s) asked ByRule %v; want %v", id, s.asked[id].Title, got, want)
 		}
