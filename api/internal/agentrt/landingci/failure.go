@@ -42,7 +42,7 @@ func (c *Client) Failure(ctx context.Context, run string) (landing.CIFailure, er
 		if child["kind"] != "TaskRun" || name == "" {
 			continue
 		}
-		task, err := s5Resource(d, c.namespace(), "taskruns").Get(ctx, name, metav1.GetOptions{})
+		task, err := d.Resource(pipelineRunGVR.GroupVersion().WithResource("taskruns")).Namespace(c.namespace()).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return f, fmt.Errorf("landing CI TaskRun %s: %w", name, err)
 		}

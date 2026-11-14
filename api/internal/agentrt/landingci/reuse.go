@@ -2,7 +2,6 @@ package landingci
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"time"
 )
 
 // ValidReuse verifies a tested-by run against the listed bifrost-ci-platform
@@ -61,32 +60,6 @@ func reuseResult(item unstructured.Unstructured, items []unstructured.Unstructur
 		b, bok := r.Results[name]
 		if aok != bok || a != b {
 			return fail()
-		}
-	}
-	return out
-}
-
-// landingReuse additionally binds an incremental original to the landing base.
-func landingReuse(item unstructured.Unstructured, items []unstructured.Unstructured, revision string) Evidence {
-	out := reuseResult(item, items, revision)
-	if !ClaimsReuse(item) || out.Reason != "" {
-		return out
-	}
-	e := ReleaseEvidence{ReadAt: time.Now().UTC()}
-	e.LastFullRun, e.LastFullCommit, e.LastFullAt = lastFull(items, e.ReadAt)
-	if !(fullScope(out.Results) || out.Results[APIScopeResult] == APIScopeIncremental && e.FullFresh()) {
-		out.Status, out.Reason = "Unknown", "ci_reuse"
-		return out
-	}
-	params, counts := namedValues(item, "spec", "params")
-	if out.Results[APIScopeResult] == APIScopeIncremental && counts["base"] > 0 {
-		for _, original := range items {
-			if original.GetName() == out.Results["tested-by"] {
-				p, n := namedValues(original, "spec", "params")
-				if counts["base"] != 1 || n["base"] != 1 || p["base"] != params["base"] {
-					out.Status, out.Reason = "Unknown", "ci_reuse"
-				}
-			}
 		}
 	}
 	return out

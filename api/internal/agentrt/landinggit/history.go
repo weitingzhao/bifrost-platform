@@ -9,6 +9,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
+// The trailers a landed commit's history is read by.
+var taskTrailer = regexp.MustCompile(`(?im)^Agentrt-Task:\s*(\S+)\s*$`)
+var changeTrailer = regexp.MustCompile(`(?im)^Change-Id:\s*(I[0-9a-f]{40})\s*$`)
+
 // HistoryCommit is one commit of main's history; Parents (first parent first)
 // let a revert of a merge undo what the merge brought in.
 type HistoryCommit struct {

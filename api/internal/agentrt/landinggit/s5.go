@@ -103,18 +103,3 @@ func (w *Workspace) S5Patch(ctx context.Context, task, base, a, m0, r string) (l
 	p.ResultTree = strings.TrimSpace(tree)
 	return p, nil
 }
-
-// FetchS5Patch is the remote reader after the candidate branch is pushed.
-// The workspace was opened at A; a cherry-picked R does not contain A in its
-// ancestry, so fetching just R would not supply the reviewed source object.
-func (w *Workspace) FetchS5Patch(ctx context.Context, task, base, a, m0, r string) (landing.PatchEvidence, error) {
-	if r != "" {
-		if !fullSHA.MatchString(r) {
-			return landing.PatchEvidence{}, fmt.Errorf("S5_BINDING: result SHA")
-		}
-		if _, err := w.git.run(ctx, w.dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", r); err != nil {
-			return landing.PatchEvidence{}, err
-		}
-	}
-	return w.S5Patch(ctx, task, base, a, m0, r)
-}

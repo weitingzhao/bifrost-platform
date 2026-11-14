@@ -6,60 +6,10 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
-
-// Ensure creates CI for a fully pinned candidate. The existing platform run
-// name format stays unchanged; operation identity is persisted by its caller.
-func (c *Client) Ensure(ctx context.Context, name string, key Key) error {
-	repo, err := key.validate()
-	if err != nil {
-		return err
-	}
-	params := map[string]string{"revision": key.Revision}
-	for sibling, param := range repo.SiblingParams {
-		params[param] = key.Siblings[sibling]
-	}
-	if key.Repo == "bifrost-platform" {
-		params["repo-url"] = PlatformRepoURL
-		if c.BaseParam {
-			params[BaseParamName] = key.Base
-		}
-	}
-	if key.Repo == "bifrost-trade-infra" {
-		if name != landing.InfraCIName(key.Revision, key.Base, key.Siblings["bifrost-platform"], key.Generation) {
-			return fmt.Errorf("invalid landing CI identity")
-		}
-		params = infraParams(key)
-	}
-	return c.ensure(ctx, name, key.Repo, repo.Pipeline, key.Revision, params)
-}
-
-// EnsureLandingCI preserves v1's platform spec, including uiRevision=main.
-// It shares all collision and uncertain-create handling with the pinned API.
-// Like every platform CI it names repo-url, which B5's ReadRelease requires.
-// With BaseParam it names base=M0 too, when base is a full SHA.
-func (c *Client) EnsureLandingCI(ctx context.Context, name, revision, base string) error {
-	params := map[string]string{"revision": revision, "uiRevision": "main", "repo-url": PlatformRepoURL}
-	if c.BaseParam && fullSHA.MatchString(base) {
-		params[BaseParamName] = base
-	}
-	return c.ensure(ctx, name, "bifrost-platform", "bifrost-ci-platform", revision, params)
-}
-func (c *Client) ensure(ctx context.Context, name, repo, pipeline, revision string, params map[string]string) error {
-	r, supported := landing.LandingRepos[repo]
-	if !supported || !r.CINamePattern.MatchString(name) || !fullSHA.MatchString(revision) {
-		return fmt.Errorf("invalid landing CI identity")
-	}
-	labels := map[string]string{"tekton.dev/pipeline": pipeline, "bifrost.io/repo": repo, "bifrost.io/trigger": "agentrt-landing-drill", "bifrost.io/revision": revision}
-	if repo == "bifrost-trade-infra" {
-		labels["bifrost.io/base"], labels["bifrost.io/purpose"] = params["base"], "landing"
-	}
-	return c.create(ctx, name, pipeline, params, labels)
-}
 
 // create creates the PipelineRun name once: an existing run of that name is
 // accepted only with this spec and these labels, else it collides.

@@ -81,13 +81,6 @@ func FullCISettings(getenv func(string) string) (on bool, at string, param bool,
 	return on, at, param, err
 }
 
-// LandingCIBaseParam reads AGENTRT_LANDING_CI_BASE_PARAM: on has a
-// platform landing CI name its base M0 (base=M0), which stays off until the
-// pipeline declares that param; anything else leaves it off.
-func LandingCIBaseParam(getenv func(string) string) bool {
-	return strings.TrimSpace(getenv("AGENTRT_LANDING_CI_BASE_PARAM")) == "on"
-}
-
 var fullCIAtShape = regexp.MustCompile(`^([01][0-9]|2[0-3]):([0-5][0-9])$`)
 
 func fullCIClock(at string) (int, int, error) {

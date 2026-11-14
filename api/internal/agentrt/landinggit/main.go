@@ -9,49 +9,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
-// MainEvidence reads main for the main reconciler (S3 must 3, CUT §10.6 C-R1,
-// review 658 B1): main's head after a complete fetch, and whether r is in
-// the history reachable from that head now. hasR comes from walking that
-// history in full (rev-list) and finding r in it or not; it is false only
-// when the walk completed without r. Every failure (the fetch, a shallow
-// clone, a malformed head, a walk that did not finish) is an error, never a
-// false: an unreadable main is not evidence that a push did not land. A
-// commit main once had and lost (a rewrite) reads as absent: absent from the
-// history main has now.
-//
-// With the root's task and accepted commit A, it also says whether R is in
-// effect now (S3 B-02): the main history of A's result evaluated at the same
-// head, Effective or Reverted (with the reversal in effect) when that names
-// R, and Unknown otherwise or when it does not read. Unknown is never taken
-// as in effect. A is fetched apart from main and only when R is in it: A no
-// longer fetchable (its agent branch pruned) leaves head and hasR standing
-// with validity unknown, never an error (review 662 R-03).
-func (g *Git) MainEvidence(ctx context.Context, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
-	return g.readEvidence(ctx, "", r, task, a)
-}
-
-// ReleaseEvidence reads the complete history at a release's immutable P.
-// It never substitutes today's main head for that historical snapshot.
-func (g *Git) ReleaseEvidence(ctx context.Context, p, r, task, a string) (string, bool, landing.MainHistory, error) {
-	if !fullSHA.MatchString(p) {
-		return "", false, landing.MainHistory{}, errors.New("invalid release P")
-	}
-	return g.readEvidence(ctx, p, r, task, a)
-}
-
-func (g *Git) readEvidence(ctx context.Context, snapshot, r, task, a string) (head string, hasR bool, hist landing.MainHistory, err error) {
-	hist = landing.MainHistory{State: landing.Unknown}
-	if !fullSHA.MatchString(r) || (a != "" && !fullSHA.MatchString(a)) {
-		return "", false, hist, errors.New("invalid R or A")
-	}
-	er, err := g.OpenEvidence(ctx)
-	if err != nil {
-		return "", false, hist, err
-	}
-	defer er.Close()
-	return er.read(ctx, snapshot, r, task, a)
-}
-
 // EvidenceReader is one workspace with main fetched, for reading many pairs
 // in one pass (R5:5.7-5): STG coverage reads every archived evidence for a
 // newly landed member, and opening a workspace for each pair fetched main's

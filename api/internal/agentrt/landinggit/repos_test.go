@@ -6,65 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
-
-// Serial: credential environment; two independent local HTTP Git remotes.
-// The mapping uses the constructor's actual closed remote, so accidentally
-// constructing platform for infra writes the control remote and fails.
-func TestS6T60InfraTransportNeverWritesPlatform(t *testing.T) {
-	platform, _, platformSource := fixture(t)
-	infra, in, infraSource := fixture(t)
-	t.Setenv(LanderUsernameFileEnv, infra.usernameFile)
-	t.Setenv(LanderPasswordFileEnv, infra.passwordFile)
-	g, err := LanderFromEnv("prod", "bifrost-trade-infra")
-	if err != nil {
-		t.Fatal(err)
-	}
-	remotes := map[string]string{landing.LandingRepos["bifrost-platform"].Remote: platform.remote, landing.LandingRepos["bifrost-trade-infra"].Remote: infra.remote}
-	g.remote = remotes[g.remote]
-	if g.Repository() != "bifrost-trade-infra" || g.remote == "" {
-		t.Fatal("constructor binding")
-	}
-	control := filepath.Join(filepath.Dir(platformSource), "remote.git")
-	before := gitTest(t, control, "show-ref")
-	in.Env = "prod"
-	w, err := g.Open(context.Background(), in.A)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	single, changes, err := w.Result(context.Background(), in.Task, in.Base, in.A)
-	if err != nil || !single || len(changes) != 1 {
-		t.Fatalf("result: %v %v %v", single, changes, err)
-	}
-	r, err := w.Replay(context.Background(), in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ref := "refs/heads/land/prod/" + in.Task + "/1"
-	if err := w.Push(context.Background(), ref, r); err != nil {
-		t.Fatal(err)
-	}
-	if out := w.PushMain(context.Background(), r, in.M0, time.Now().Add(time.Minute)); out != PushOK {
-		t.Fatal(out)
-	}
-	head, has, _, err := g.MainEvidence(context.Background(), r, in.Task, in.A)
-	if err != nil || !has || head != r {
-		t.Fatalf("main: %s %v %v", head, has, err)
-	}
-	if got, err := g.Ref(context.Background(), ref); err != nil || got != r {
-		t.Fatal(got, err)
-	}
-	if after := gitTest(t, control, "show-ref"); after != before {
-		t.Fatal("platform refs changed")
-	}
-	if got := gitTest(t, filepath.Join(filepath.Dir(infraSource), "remote.git"), "rev-parse", "refs/heads/main"); got != r {
-		t.Fatal("infra did not move")
-	}
-}
 
 // Serial: constructors read process environment; no remote or credential I/O.
 func TestS6ConstructorsBindClosedRepository(t *testing.T) {

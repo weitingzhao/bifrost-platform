@@ -1,10 +1,8 @@
 package landingci
 
 import (
-	"context"
 	"fmt"
 	"reflect"
-	"sort"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -59,58 +57,10 @@ func fullScope(results map[string]string) bool {
 	return !named || scope == APIScopeFull
 }
 
-// FullFresh: a last full green exists and is at most FullMaxAge old at ReadAt.
-func (e ReleaseEvidence) FullFresh() bool {
-	return e.LastFullRun != "" && !e.LastFullAt.IsZero() && !e.ReadAt.Before(e.LastFullAt) && e.ReadAt.Sub(e.LastFullAt) <= FullMaxAge
-}
-
 // releaseScope: the results vouch for P at STG, as a full run or as an
 // incremental one, independently of the daily audit.
 func (e ReleaseEvidence) releaseScope(results map[string]string) bool {
 	return fullScope(results) || results[APIScopeResult] == APIScopeIncremental
-}
-
-// Scope is the api-scope of the run that decided P, for people reading why P
-// waits: an incremental green set aside as stale reads incremental, a
-// verdict without the result full, and a run with no scope yet (none,
-// running) "".
-func (e ReleaseEvidence) Scope() string {
-	if scope, named := e.Results[APIScopeResult]; named && e.Run != "" {
-		return scope
-	}
-	if e.Run != "" && (e.Status == "Succeeded" || e.Status == "Failed") {
-		return APIScopeFull
-	}
-	if len(e.Stale) > 0 {
-		return APIScopeIncremental
-	}
-	return ""
-}
-
-// LastFullAgeHours is the last full green's age at ReadAt in whole hours, -1
-// when there is none.
-func (e ReleaseEvidence) LastFullAgeHours() int {
-	if e.LastFullRun == "" || e.LastFullAt.IsZero() {
-		return -1
-	}
-	return int(e.ReadAt.Sub(e.LastFullAt).Hours())
-}
-
-// ScopeNote says which scope decided P and how old the last full green is,
-// e.g. "scope=incremental; last full CI green 51 h ago (run r, commit c), cap 48 h".
-func (e ReleaseEvidence) ScopeNote() string {
-	scope := e.Scope()
-	if e.TestedBy != "" {
-		scope += fmt.Sprintf("; tested by run %s (same tree)", e.TestedBy)
-	}
-	if scope == "" {
-		scope = "none"
-	}
-	maxAge := int(FullMaxAge.Hours())
-	if e.LastFullAgeHours() < 0 {
-		return fmt.Sprintf("scope=%s; no full CI green found, cap %d h", scope, maxAge)
-	}
-	return fmt.Sprintf("scope=%s; last full CI green %d h ago (run %s, commit %s), cap %d h", scope, e.LastFullAgeHours(), e.LastFullRun, e.LastFullCommit, maxAge)
 }
 
 // Record is the closed ci_accepted.ci shape consumed by B5-a. Never turn an
@@ -124,175 +74,6 @@ func (e ReleaseEvidence) Record() (map[string]any, error) {
 		record["tested_by"] = e.TestedBy
 	}
 	return record, nil
-}
-
-// ReadRelease implements B5 §4 without changing Read/legacy selection rules.
-// Missing repo-url is unknown, never inferred from a label or today's Pipeline
-// default. Older CI installations must supply that evidence before B5 opens.
-//
-// R5:5.7-2 amends §4.3 for one case only: a newer run of P that has no
-// verdict yet (normally main's push CI, still running over the landing CI of
-// the same commit) does not hide the newest run that has one. A newer red or
-// unusable run is a verdict and still wins over an older green.
-func (c *Client) ReadRelease(ctx context.Context, revision string) (ReleaseEvidence, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	out := ReleaseEvidence{PipelineRef: "bifrost-ci-platform", RepoURL: PlatformRepoURL}
-	out.R, out.Status = revision, "Missing"
-	if !fullSHA.MatchString(revision) || c.namespace() != "cicd" {
-		return out, fmt.Errorf("invalid release CI revision")
-	}
-	items, err := c.pipelineRuns(ctx, out.PipelineRef)
-	out.ReadAt = time.Now().UTC()
-	if err != nil {
-		return out, err
-	}
-	out.LastFullRun, out.LastFullCommit, out.LastFullAt = lastFull(items, out.ReadAt)
-	var matches []unstructured.Unstructured
-	for _, item := range items {
-		if item.GetLabels()["bifrost.io/trigger"] == FullCITrigger {
-			continue // Daily audits never decide B5 release eligibility.
-		}
-		params, counts := namedValues(item, "spec", "params")
-		// Keep malformed duplicate revisions in the ordering if any entry
-		// names P, so a contradictory duplicate cannot revive older green.
-		rawParams, _, _ := unstructured.NestedSlice(item.Object, "spec", "params")
-		matchesRevision := false
-		for _, raw := range rawParams {
-			param, _ := raw.(map[string]any)
-			matchesRevision = matchesRevision || param["name"] == "revision" && param["value"] == revision
-		}
-		if !matchesRevision {
-			continue
-		}
-		if counts["repo-url"] == 1 && params["repo-url"] != PlatformRepoURL {
-			continue
-		}
-		if item.GetCreationTimestamp().Time.IsZero() || item.GetCreationTimestamp().Time.After(out.ReadAt) {
-			out.Status, out.Reason = "Unknown", "ci_identity"
-			return out, nil
-		}
-		matches = append(matches, item)
-	}
-	// A green that ran only the console's share of the API (api-scope=console)
-	// says nothing about the rest of P: set it aside before selecting. A red
-	// of any scope stays a verdict. Incremental greens count independently
-	// of the daily full audit.
-	kept := matches[:0]
-	for _, item := range matches {
-		r := reuseResult(item, items, revision)
-		green := r.Status == "Succeeded" && r.Reason == ""
-		if green && r.Results[APIScopeResult] == APIScopeConsole {
-			out.Partial = append(out.Partial, item.GetName())
-			continue
-		}
-		kept = append(kept, item)
-	}
-	matches = kept
-	if len(matches) == 0 {
-		return out, nil
-	}
-	sort.Slice(matches, func(i, j int) bool {
-		a, b := matches[i].GetCreationTimestamp(), matches[j].GetCreationTimestamp()
-		if a.Equal(&b) {
-			return matches[i].GetName() < matches[j].GetName()
-		}
-		return a.After(b.Time)
-	})
-	// Pass over strictly newer runs that have no verdict yet and whose own
-	// identity is valid. With nothing decided, report the newest as before.
-	// An equal creation time is a tie, never "newer": it keeps ci_tie.
-	skip := 0
-	for skip < len(matches) && undecided(matches[skip], revision) {
-		skip++
-	}
-	if skip == len(matches) {
-		skip = 0
-	}
-	for skip > 0 && matches[skip-1].GetCreationTimestamp().Time.Equal(matches[skip].GetCreationTimestamp().Time) {
-		skip--
-	}
-	for _, item := range matches[:skip] {
-		out.Undecided = append(out.Undecided, item.GetName())
-	}
-	chosen := matches[skip]
-	selected := reuseResult(chosen, items, revision)
-	if selected.Reason == "" {
-		out.TestedBy = selected.Results["tested-by"]
-	}
-	if selected.Status == "Succeeded" && selected.Results["tested-by"] != "" && !out.releaseScope(selected.Results) {
-		selected.Status, selected.Reason = "Unknown", "ci_reuse"
-		out.TestedBy = ""
-	}
-	out.Evidence = selected
-	for _, item := range matches[skip+1:] {
-		if !item.GetCreationTimestamp().Time.Equal(chosen.GetCreationTimestamp().Time) {
-			break
-		}
-		other := reuseResult(item, items, revision)
-		if other.Status != selected.Status || other.Reason != selected.Reason || !reflect.DeepEqual(other.Results, selected.Results) {
-			out.Status, out.Reason = "Unknown", "ci_tie"
-		}
-	}
-	out.Tree, out.CIRun.TestedBy, out.TestedUID = reuseProvenance(out.Results, items)
-	if err := c.recordReuse(ctx, out.CIRun); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-// lastFull finds the newest bifrost-ci-platform green of any revision whose
-// identity is valid as releaseResult checks it and that tested the whole API
-// (api-scope full, or none: older runs ran everything). A run created after
-// readAt is not trusted to be the last one.
-func lastFull(items []unstructured.Unstructured, readAt time.Time) (string, string, time.Time) {
-	var run, commit string
-	var at time.Time
-	for _, item := range items {
-		params, counts := namedValues(item, "spec", "params")
-		created := item.GetCreationTimestamp().Time
-		if counts["revision"] != 1 || created.IsZero() || created.After(readAt) {
-			continue
-		}
-		r := releaseResult(item, params["revision"])
-		if ClaimsReuse(item) {
-			continue
-		}
-		if r.Status != "Succeeded" || r.Reason != "" || !fullScope(r.Results) {
-			continue
-		}
-		if run == "" || created.After(at) || created.Equal(at) && r.Run < run {
-			run, commit, at = r.Run, r.PlatformCommit, created
-		}
-	}
-	return run, commit, at
-}
-
-// undecided: the run's identity is valid and Tekton has not given a verdict.
-// Succeeded=Unknown is non-terminal by definition (Running, Pending, finally
-// tasks after a cancel); a run with no Succeeded condition has not started.
-// A completion time, or more than one Succeeded condition, is never undecided.
-func undecided(item unstructured.Unstructured, revision string) bool {
-	if ClaimsReuse(item) {
-		return false
-	}
-	if releaseResult(item, revision).Reason != "" {
-		return false
-	}
-	if _, done, _ := unstructured.NestedFieldNoCopy(item.Object, "status", "completionTime"); done {
-		return false
-	}
-	conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")
-	n, open := 0, false
-	for _, cond := range conds {
-		m, _ := cond.(map[string]any)
-		if m["type"] != "Succeeded" {
-			continue
-		}
-		n++
-		open = m["status"] == "Unknown"
-	}
-	return n == 0 || n == 1 && open
 }
 
 // emptyResultAllowed are the results a green run may leave empty: no failed

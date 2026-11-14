@@ -18,7 +18,6 @@ import (
 	"time"
 )
 
-const remoteURL = "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
 const UsernameFileEnv = "AGENTRT_LANDING_USERNAME_FILE"
 const PasswordFileEnv = "AGENTRT_LANDING_PASSWORD_FILE"
 

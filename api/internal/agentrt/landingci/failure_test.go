@@ -39,7 +39,7 @@ func TestFailureReadsTheFailedTaskRuns(t *testing.T) {
 			map[string]any{"name": "setup", "container": "step-setup", "terminated": map[string]any{"exitCode": int64(0)}},
 			map[string]any{"name": "test", "container": "step-test", "terminated": map[string]any{"exitCode": int64(1)}},
 		}})
-	c, _ := s5TestClient(run, build, test)
+	c, _ := fakeClient(run, build, test)
 	c.Logs = func(_ context.Context, pod, container string) (string, error) {
 		if pod != "landing-ci-x-2-test-pod" || container != "step-test" {
 			t.Fatalf("log of %s/%s", pod, container)
@@ -68,7 +68,7 @@ func TestFailureReadsTheFailedTaskRuns(t *testing.T) {
 // condition's message.
 func TestFailureOfARunWithNoFailedTaskRun(t *testing.T) {
 	run := failureObject("PipelineRun", "landing-ci-y-1", map[string]any{"conditions": succeeded("False", "PipelineRun timed out")})
-	c, _ := s5TestClient(run)
+	c, _ := fakeClient(run)
 	f, err := c.Failure(context.Background(), "landing-ci-y-1")
 	if err != nil || len(f.TaskRuns) != 1 || f.TaskRuns[0].Name != "landing-ci-y-1" || f.TaskRuns[0].Message != "PipelineRun timed out" {
 		t.Fatalf("failure: %+v %v", f, err)
