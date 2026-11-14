@@ -62,6 +62,16 @@ func (b Binding) Digest() string {
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 func (b Binding) SignoffRef() string { return "plan-acceptance:" + b.Digest() }
+
+// Retired says the binding rests on the dispatch lane's records: a task and
+// its attempt, a verification, or a deployment's gate verification (2026-11-14:
+// nothing writes them any more). An adopted document that holds one still
+// parses and keeps its digests; the binding reads Unknown, and no new
+// document may be adopted with one. What stays: an Owner signoff, and a
+// commit's standing on main that names no task.
+func (b Binding) Retired() bool {
+	return b.Source == "verification" || b.Source == "deployment" || b.Task != ""
+}
 func ParseBinding(raw []byte) (Binding, error) {
 	var b Binding
 	if v, err := canon.Parse(raw); err != nil {

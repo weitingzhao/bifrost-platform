@@ -25,7 +25,6 @@ type signoffViewDB struct {
 	adoption   viewAdoption
 	now        time.Time
 	nodes      []map[string]any
-	attempted  map[string]bool
 	candidates map[string][]candidateEvidence
 }
 type signoffViewRows struct {
@@ -78,7 +77,7 @@ func (d *signoffViewDB) Query(_ context.Context, q string, _ ...any) (pgx.Rows, 
 	case strings.Contains(q, "SELECT to_jsonb(n)"):
 		for _, n := range d.nodes {
 			raw, _ := json.Marshal(n)
-			r.data = append(r.data, []any{raw, d.attempted[n["plan_node_id"].(string)]})
+			r.data = append(r.data, []any{raw})
 		}
 	case strings.Contains(q, "SELECT DISTINCT ON (event_stream_id) body_json->'plan_view'"):
 		raw, _ := json.Marshal(d.adoption)
@@ -115,7 +114,6 @@ func newSignoffViewFixture(t *testing.T) *signoffViewDB {
 	d.Items[2].Order = &thirdOrder
 	d.Items[2].Title = "Future acceptance"
 	f := &signoffViewDB{doc: d, now: time.Date(2026, 10, 26, 22, 0, 0, 0, time.UTC), adoption: viewAdoption{V: 1, Kind: "agentrt.plan_view/v1", Root: d.Root, Tenant: "dev", Version: d.Version, Artifact: "sha256:" + strings.Repeat("a", 64), Nodes: map[string]string{}}}
-	f.attempted = map[string]bool{}
 	f.candidates = map[string][]candidateEvidence{}
 	for _, step := range []string{"R4:4.1-1", "R4:4.2-1"} {
 		for i, source := range []string{"external_work.report:ew_fixture", "external_work.registration:ew_fixture", "verification:v_fixture"} {

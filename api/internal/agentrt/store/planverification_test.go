@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -77,16 +76,8 @@ func pvEvaluate(t *testing.T, w *world, step, want string) {
 func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
-	var attempt string
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id FROM agentrt.verification WHERE task_id=$1 AND accepts_attempt`, task).Scan(&attempt))
 	d := pvDocument(t, 1)
 	b := pvBinding(d, s1, "main_effective", "git")
-	b.Task = task
-	b.Round = 1
-	b.Attempt = attempt
-	b.Mission = "M-1"
 	b.Result = commitA
 	b.Repo = "bifrost-platform"
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
@@ -98,7 +89,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	if count, err := ctl.PlanObservations(ctx); err != nil || count < 1 {
 		t.Fatalf("controller plan observations: %d %v", count, err)
 	}
-	pvEvaluate(t, w, s1, "planned") // accepted is not landed
+	pvEvaluate(t, w, s1, "planned") // not landed
 	history = landing.Effective
 	pvPoll(t, w, src)
 	if w.stepState(t, s1) == "done" {
@@ -185,134 +176,52 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	pvPoll(t, w, store.PlanSources{})
 	pvEvaluate(t, w, s1, "done")
 }
-func TestPV2BindingRejectsCrossStepAndMissingVerification(t *testing.T) {
+
+// The coordinator, 2026-11-14 (store cut 4's first half): the binding sources
+// that rest on the dispatch lane's records are retired. A view document with
+// a verification binding, a deployment binding, or a git binding that names
+// a task is not adopted; one that names no task still is.
+func TestPV2RetiredSourcesAreNotAdopted(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
-	var attempt string
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id FROM agentrt.verification WHERE task_id=$1 AND accepts_attempt`, task).Scan(&attempt))
-	d := pvDocument(t, 1)
-	b := pvBinding(d, s2, "review_valid", "verification")
-	b.Task = task
-	b.Round = 1
-	b.Attempt = attempt
-	b.Mission = "M-1"
-	b.Repo = "bifrost-platform"
-	b.Result = commitA
-	b.Verification = "v_missing"
-	id := pvArtifact(t, w, d, b)
 	zero := 0
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "cross-step", root, "test", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
-	if err == nil {
-		t.Fatal("accepted cross-step runtime binding")
+	adopt := func(key string, d *planview.Document, b planview.Binding) error {
+		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), key, root, "test",
+			[]store.PlanChange{{Op: "adopt_plan_view", Artifact: pvArtifact(t, w, d, b), ExpectedVersion: &zero}}, (&asker{}).ask)
+		return err
 	}
-	b.Step = s1
-	id = pvArtifact(t, w, d, b)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "missing-verification", root, "test", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
-	if err == nil {
-		t.Fatal("accepted dangling verification")
+	runtime := func(b planview.Binding) planview.Binding {
+		b.Task, b.Round, b.Attempt, b.Mission = "t_01M5192P0JPMJAP63ZKRPXJ2VV", 1, "a_01M5192P0JPMJAP63ZKRPXJ2VV", "M-1"
+		b.Repo, b.Result = "bifrost-platform", commitA
+		return b
 	}
-}
-func TestPV2ReviewAndActualDeployment(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
-	var attempt, verification string
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id,verification_id FROM agentrt.verification WHERE task_id=$1 AND method='review'`, task).Scan(&attempt, &verification))
 	d := pvDocument(t, 1)
-	b := pvBinding(d, s1, "review_valid", "verification")
-	b.Task = task
-	b.Round = 1
-	b.Attempt = attempt
-	b.Mission = "M-1"
-	b.Repo = "bifrost-platform"
-	b.Result = commitA
-	b.Verification = verification
-	deploy := b
-	deploy.ID = "deployment"
-	deploy.Atom = "deployment_verified"
-	deploy.Source = "deployment"
-	deploy.Verification = ""
-	deploy.Application = "bifrost-platform"
-	deploy.Environment = "stg"
-	deploy.Check = "T01"
-	deploy.Spec = strings.Repeat("a", 64)
-	adoptView(t, w, pvArtifact(t, w, d, b, deploy), 0)
-	ref := map[string]any{"delivery_run": "run-1", "images": map[string]any{"platform-api": "sha256:" + strings.Repeat("b", 64)}}
-	src := store.PlanSources{History: func(_ context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
-		if snapshot != commitB {
-			t.Errorf("snapshot not actual SHA: %s", snapshot)
+	review := runtime(pvBinding(d, s1, "review_valid", "verification"))
+	review.Verification = "v_any"
+	deploy := runtime(pvBinding(d, s1, "deployment_verified", "deployment"))
+	deploy.Application, deploy.Environment, deploy.Check, deploy.Spec = "bifrost-platform", "stg", "health", strings.Repeat("ab", 32)
+	for name, b := range map[string]planview.Binding{
+		"verification":    review,
+		"deployment":      deploy,
+		"git with a task": runtime(pvBinding(d, s1, "main_effective", "git")),
+	} {
+		if !b.Retired() {
+			t.Fatalf("%s: not told as retired", name)
 		}
-		return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
-	}, Deployed: func(_ context.Context, app, env string) (string, map[string]any, bool) {
-		if app != "bifrost-platform" || env != "stg" {
-			t.Error("wrong deployment scope")
+		if err := adopt("retired-"+name, pvDocument(t, 1), b); !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "retired") {
+			t.Errorf("%s: adopted or refused for another reason: %v", name, err)
 		}
-		return commitB, ref, true
-	}}
-	pvPoll(t, w, src)
-	pvEvaluate(t, w, s1, "planned")
-	w.gateVerification(t, task, attempt, "gate", "pass", "T01", "stg", commitB, deploy.Spec, ref)
-	pvPoll(t, w, src)
-	pvEvaluate(t, w, s1, "done")
-	ref["delivery_run"] = "run-2"
-	pvPoll(t, w, src)
-	pvEvaluate(t, w, s1, "active")
-	out, err := store.PlanView(ctx, w.rt, root)
-	ok(t, err)
-	if out["freshness"] == nil {
-		t.Fatal(fmt.Sprint(out))
+	}
+	plain := pvBinding(d, s2, "main_effective", "git")
+	plain.Repo, plain.Result = "bifrost-platform", commitA
+	if plain.Retired() {
+		t.Fatal("a git binding without a task is told as retired")
+	}
+	// The control: the same document with a binding that is not retired is adopted.
+	if err := adopt("plain", pvDocument(t, 1), plain); err != nil {
+		t.Fatalf("a git binding without a task was not adopted: %v", err)
 	}
 }
-
-func TestPV2ExternalVerificationPinsSubmission(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
-	var attempt, verification string
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id,verification_id FROM agentrt.verification WHERE task_id=$1 AND method='deterministic'`, task).Scan(&attempt, &verification))
-	who := wr("thread:external")
-	reg, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "external", Root: root, Node: s1, RunKey: "work630", Artifact: externalSpec(t, w), Mission: "M-1", Task: task})
-	ok(t, err)
-	id := reg["external_work_id"].(string)
-	report := w.artifact(t, "report", "external result")
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
-	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: report, Commits: []string{commitA}})
-	ok(t, err)
-	d := pvDocument(t, 1)
-	b := pvBinding(d, s1, "external_verified", "verification")
-	b.Task = task
-	b.Round = 1
-	b.Attempt = attempt
-	b.Mission = "M-1"
-	b.Repo = "bifrost-platform"
-	b.Result = commitA
-	b.Verification = verification
-	b.ExternalWork = id
-	b.ExternalSeq = 2
-	b.Report = report
-	adoptView(t, w, pvArtifact(t, w, d, b), 0)
-	pvEvaluate(t, w, s1, "planned")
-	pvPoll(t, w, store.PlanSources{})
-	pvEvaluate(t, w, s1, "done")
-	out, err := store.PlanView(ctx, w.rt, root)
-	ok(t, err)
-	ext := out["external_work"].([]map[string]any)
-	if len(ext) != 1 || ext[0]["state"] != "Submitted" || ext[0]["verification"] != "Verified" {
-		t.Fatalf("external verification not derived: %v", ext)
-	}
-	// A registrant cannot emit the trusted observation or completion state.
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "verify", Seq: 3, Type: "verified"})
-	is(t, err, store.ErrInvalid)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "relink", Seq: 3, Type: "linked", Root: root, Node: s1, Mission: "M-1", Task: task})
-	ok(t, err)
-	pvEvaluate(t, w, s1, "active")
-}
-
 func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)

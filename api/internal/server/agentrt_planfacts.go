@@ -12,15 +12,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 )
 
-func (s *Server) agentRuntimePlanSources(deployed store.Deployed) store.PlanSources {
-	src := store.PlanSources{Deployed: func(ctx context.Context, app, env string) (string, map[string]any, bool) {
-		// Existing actual-pod digest reader is for the platform only. Unknown
-		// applications cannot borrow another application's healthy release.
-		if app != "bifrost-platform" || deployed == nil {
-			return "", nil, false
-		}
-		return deployed(ctx, env)
-	}}
+func (s *Server) agentRuntimePlanSources() store.PlanSources {
+	var src store.PlanSources
 	if s.delivery != nil {
 		// One reader for the process: it keeps each repo's main between passes.
 		reader := &lineage.PlanHistoryReader{

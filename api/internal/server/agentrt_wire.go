@@ -416,7 +416,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
-	src.Plan = s.agentRuntimePlanSources(src.Deployed)
+	src.Plan = s.agentRuntimePlanSources()
 	return src
 }
 

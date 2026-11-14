@@ -104,33 +104,6 @@ func (w *world) seeded(t *testing.T, fn func(tx pgx.Tx)) {
 	}))
 }
 
-// passRound leaves impl as a round its checks passed left it: its attempt
-// by author, a deterministic check by checker and a review by reviewer, both
-// passing, the review accepting the attempt, the task accepted.
-func (w *world) passRound(t *testing.T, impl, author, checker, reviewer string) {
-	t.Helper()
-	w.seeded(t, func(tx pgx.Tx) {
-		a := seedAttempt(t, tx, impl, author, cursor, "done", commitA)
-		seedCheck(t, tx, impl, a, "verify", checker, deterministic, "pass", false)
-		seedCheck(t, tx, impl, a, "review", reviewer, codex, "pass", true)
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'accepted', version = version + 1 WHERE task_id = $1`, impl)
-		ok(t, err)
-	})
-}
-
-// failRound leaves impl as a round whose deterministic check failed left it:
-// back to ready in its next round. It answers what the lane did: "rework".
-func (w *world) failRound(t *testing.T, impl, author, checker string) string {
-	t.Helper()
-	w.seeded(t, func(tx pgx.Tx) {
-		a := seedAttempt(t, tx, impl, author, cursor, "done", commitA)
-		seedCheck(t, tx, impl, a, "verify", checker, deterministic, "fail", false)
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready', round_no = round_no + 1, version = version + 1 WHERE task_id = $1`, impl)
-		ok(t, err)
-	})
-	return "rework"
-}
-
 // seedLease writes task's first attempt as leased to executor, in the
 // caller's transaction, and answers its id and lease epoch: the row a lease
 // left, for the tests that need an attempt to exist (the event rule on the

@@ -64,8 +64,6 @@ func TestPV2SignoffEvidenceAtSigning(t *testing.T) {
 func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
 	d := pvDocument(t, 1)
 	b := pvBinding(d, s1, "external_verified", "owner_signoff")
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
@@ -100,15 +98,13 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 		t.Fatalf("not ready: %s", raw)
 	}
 	ids := map[string]bool{}
-	verified := false
 	for _, c := range out.Ready[0].Candidates {
 		if ids[c.ID] || c.Label == "" || c.Source == "" {
 			t.Fatalf("bad candidate %+v", c)
 		}
 		ids[c.ID] = true
-		verified = verified || strings.HasPrefix(c.Source, "verification:")
 	}
-	if !ids[spec] || !ids[report] || ids[otherSpec] || !verified {
+	if !ids[spec] || !ids[report] || ids[otherSpec] {
 		t.Fatalf("missing or cross-step evidence: %+v", out)
 	}
 	pvPoll(t, w, store.PlanSources{})

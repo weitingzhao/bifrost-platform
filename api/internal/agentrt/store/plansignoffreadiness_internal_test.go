@@ -6,14 +6,15 @@ import (
 )
 
 // Exercise the response builder, including the execution facts read from its
-// read-only snapshot. Real SQL and historical attempts are covered separately.
+// read-only snapshot. A task's attempts no longer count as work started
+// (store cut 4's first half, 2026-11-14): the step's state and candidate
+// evidence do.
 func TestPlanSignoffReadiness(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		state     any
 		candidate bool
-		attempt   bool
 		blocked   bool
 		readiness string
 	}{
@@ -22,15 +23,13 @@ func TestPlanSignoffReadiness(t *testing.T) {
 		{name: "active", state: "active", readiness: "Ready"},
 		{name: "running", state: "running", readiness: "Ready"},
 		{name: "done", state: "done", readiness: "Ready"},
-		{name: "historical attempt", state: "planned", attempt: true, readiness: "Ready"},
 		{name: "unknown", state: "Unknown", readiness: "Not started"},
 		{name: "missing state", readiness: "Not started"},
 		{name: "unknown with candidate", state: "Unknown", candidate: true, readiness: "Ready"},
-		{name: "stopped without attempt", state: "stopped", readiness: "Not started"},
+		{name: "stopped", state: "stopped", readiness: "Not started"},
 		{name: "blocked before start", state: "planned", blocked: true, readiness: "Blocked"},
 		{name: "blocked with candidate", state: "planned", candidate: true, blocked: true, readiness: "Blocked"},
 		{name: "blocked while active", state: "active", blocked: true, readiness: "Blocked"},
-		{name: "blocked with attempt", state: "planned", attempt: true, blocked: true, readiness: "Blocked"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newSignoffViewFixture(t)
@@ -46,9 +45,6 @@ func TestPlanSignoffReadiness(t *testing.T) {
 			if !tc.candidate {
 				delete(f.candidates, step)
 			}
-			f.attempted[step] = tc.attempt
-			// Work and candidates for another step cannot make this one Ready.
-			f.attempted["R4:4.3-1"] = true
 			out, err := PlanView(context.Background(), f, f.doc.Root)
 			if err != nil {
 				t.Fatal(err)

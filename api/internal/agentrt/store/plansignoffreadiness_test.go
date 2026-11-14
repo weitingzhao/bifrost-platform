@@ -51,8 +51,6 @@ func TestPV2SignoffReadinessRequiresWork(t *testing.T) {
 	b := pvBinding(d, s1, "external_verified", "owner_signoff")
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
 	pvSignoffReadiness(t, w, s1, "Not started", false)
-	w.ready(t, store.Task{}) // A task without an attempt is still unstarted.
-	pvSignoffReadiness(t, w, s1, "Not started", false)
 	who := wr("thread:signoff-readiness")
 	reg, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-635", Artifact: externalSpec(t, w)})
 	ok(t, err)
@@ -70,37 +68,17 @@ func TestPV2SignoffReadinessRequiresWork(t *testing.T) {
 
 func TestPV2SignoffReadinessExecution(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"active", "done", "attempt", "other-step attempt"} {
+	for _, mode := range []string{"active", "done"} {
 		t.Run(mode, func(t *testing.T) {
 			w := newKernelWorld(t)
 			d := pvDocument(t, 1)
 			b := pvBinding(d, s1, "external_verified", "owner_signoff")
 			adoptView(t, w, pvArtifact(t, w, d, b), 0)
-			if mode == "active" || mode == "done" {
-				ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-					_, err := store.SetStepState(ctx, tx, "controller", root, s1, mode, "execution readiness test")
-					return err
-				}))
-				pvSignoffReadiness(t, w, s1, "Ready", false)
-				return
-			}
-			step, want := s1, "Ready"
-			if mode == "other-step attempt" {
-				step, want = s2, "Not started"
-			}
-			task := w.ready(t, store.Task{PlanNode: step})
-			var attempt string
-			w.seeded(t, func(tx pgx.Tx) { attempt = seedAttempt(t, tx, task, "h1", codex, "none", "") })
-			if w.stepState(t, s1) != "planned" {
-				t.Fatal("attempt case must use an unstarted controller state")
-			}
-			pvSignoffReadiness(t, w, s1, want, false)
-			w.seeded(t, func(tx pgx.Tx) {
-				_, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(), end_how = 'daemon_restart' WHERE attempt_id = $1`, attempt)
-				ok(t, err)
-			})
-			// Readiness must retain an ended attempt, not just liveAttempts.
-			pvSignoffReadiness(t, w, s1, want, false)
+			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+				_, err := store.SetStepState(ctx, tx, "controller", root, s1, mode, "execution readiness test")
+				return err
+			}))
+			pvSignoffReadiness(t, w, s1, "Ready", false)
 		})
 	}
 }

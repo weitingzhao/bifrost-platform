@@ -18,8 +18,6 @@ type planFactsSnapshot struct {
 	Docs         map[string]*planview.Document
 	Warnings     map[string]string
 	Observations map[string]planObservation
-	Current      map[string]bool
-	External     map[string]externalNote
 	Passes       map[string]planPassSeen
 }
 
@@ -38,26 +36,16 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
  SELECT DISTINCT ON(event_stream_id) body_json->'plan_view' a FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id,seq DESC
  ), docs AS (
  SELECT a,encode(b.body,'base64') body FROM views LEFT JOIN agentrt.artifact_blob b ON b.artifact_id=a->>'artifact_id'
- ), view_nodes AS (
- SELECT n.value FROM views CROSS JOIN LATERAL jsonb_each_text(a->'nodes') n
  ), observations AS (
  SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_observation' AND actor_id='controller'
  ORDER BY body_json->'plan_observation'->>'binding_sha256',(body_json->'plan_observation'->>'source_version')::bigint DESC
  ), passes AS (
  SELECT p.* FROM views v CROSS JOIN LATERAL (SELECT body_json->'plan_observation_pass' pass FROM agentrt.event WHERE event_stream_id='plan-observation-pass:'||(v.a->>'root') AND actor_id='controller' AND body_json ? 'plan_observation_pass' ORDER BY seq DESC LIMIT 1) p
- ), external AS (
- SELECT DISTINCT ON(event_stream_id) body_json->'external_work' e FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC
  ) SELECT jsonb_build_object('now',statement_timestamp(),
  'views',COALESCE((SELECT jsonb_agg(a) FROM docs),'[]'),
  'docs',COALESCE((SELECT jsonb_agg(jsonb_build_object('root',a->>'root','body',body)) FROM docs),'[]'),
  'observations',COALESCE((SELECT jsonb_agg(o) FROM observations),'[]'),
- 'external',COALESCE((SELECT jsonb_agg(e) FROM external),'[]'),
- 'passes',COALESCE((SELECT jsonb_agg(pass) FROM passes),'[]'),
- 'current',COALESCE((SELECT jsonb_object_agg(a.attempt_id,jsonb_build_object('task',t.task_id,'attempt',a.attempt_id,'mission',t.mission_id,'step',t.plan_node_id,'repo',t.repo,'result',a.pushed_commit,'round',t.round_no))
- FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) JOIN agentrt.attempt a USING(task_id) JOIN agentrt.plan_node n ON n.plan_node_id=t.plan_node_id
- WHERE m.tenant='dev' AND (n.plan_node_id IN (SELECT value FROM view_nodes) OR n.parent_plan_node_id IN (SELECT value FROM view_nodes))
- AND a.attempt_no=(SELECT max(attempt_no) FROM agentrt.attempt WHERE task_id=t.task_id) AND t.state NOT IN ('rework','cancelled','stopped','dropped')
- ),'{}'))`).Scan(&raw)
+ 'passes',COALESCE((SELECT jsonb_agg(pass) FROM passes),'[]'))`).Scan(&raw)
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +57,12 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 			Body []byte
 		}
 		Observations []planObservation
-		Current      map[string]planview.Binding
-		External     []externalNote
 		Passes       []planObservationPass
 	}
 	if err = json.Unmarshal(raw, &rows); err != nil {
 		return nil, err
 	}
-	s := &planFactsSnapshot{Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Warnings: map[string]string{}, Observations: map[string]planObservation{}, Current: map[string]bool{}, External: map[string]externalNote{}, Passes: map[string]planPassSeen{}}
+	s := &planFactsSnapshot{Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Warnings: map[string]string{}, Observations: map[string]planObservation{}, Passes: map[string]planPassSeen{}}
 	for _, v := range rows.Views {
 		s.Views[v.Root] = v
 	}
@@ -96,11 +82,6 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 			continue
 		}
 		s.Docs[r.Root] = d
-		bs, _ := d.Bindings() // Parse already validated every binding.
-		for _, b := range bs {
-			c, ok := rows.Current[b.Attempt]
-			s.Current[b.Digest()] = ok && c.Task == b.Task && c.Mission == b.Mission && c.Step == b.Step && c.Repo == b.Repo && c.Result == b.Result && c.Round == b.Round
-		}
 	}
 	for _, o := range rows.Observations {
 		s.Observations[o.Digest] = o
@@ -119,9 +100,6 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 			}
 		}
 		s.applyPass(p.Root, seen)
-	}
-	for _, e := range rows.External {
-		s.External[e.ID] = e
 	}
 	return s, nil
 }
@@ -155,10 +133,8 @@ func (s *planFactsSnapshot) find(step, atom, id string, version int) (planview.B
 }
 func (s *planFactsSnapshot) reading(b planview.Binding) (plan.Tri, string, planObservation) {
 	o := s.Observations[b.Digest()]
-	if b.Task != "" && !s.Current[b.Digest()] {
-		return plan.Unknown, "Unknown", o
-	}
-	if b.ExternalWork != "" && !externalMatches(s.External[b.ExternalWork], b) {
+	if b.Retired() {
+		// Its source is retired: whatever was last observed proves nothing now.
 		return plan.Unknown, "Unknown", o
 	}
 	if o.Digest == "" {

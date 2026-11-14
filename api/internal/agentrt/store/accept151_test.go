@@ -14,22 +14,6 @@ import (
 
 // Regression tests for review 151.
 
-// gatePass records a passing gate verification of test on env for a task
-// and attempt of step, at commit and ref.
-func (w *world) gateVerification(t *testing.T, task, attempt, method, verdict, test, env, commit, spec string, ref map[string]any) {
-	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(method+verdict+test+env+commit+spec))
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
-		  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-			store.NewVerificationID(), task, attempt, method, test, env, verdict, ev, commit, ref, spec)
-		return err
-	}))
-}
-
 // A5: a source is read under its record's lock. A read that a newer one
 // overtakes is not recorded as a change back.
 func TestOutsideReadsUnderTheLock(t *testing.T) {

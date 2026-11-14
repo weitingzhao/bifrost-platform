@@ -119,18 +119,6 @@ func (c *Controller) PlanObservations(ctx context.Context) (int, error) {
 			return original(rctx, repo, task, result, snapshot)
 		}
 	}
-	if src.Deployed != nil {
-		original := src.Deployed
-		src.Deployed = func(ctx context.Context, app, env string) (string, map[string]any, bool) {
-			type answer struct {
-				sha string
-				ref map[string]any
-				ok  bool
-			}
-			r := bounded(c, ctx, func(ctx context.Context) answer { sha, ref, ok := original(ctx, app, env); return answer{sha, ref, ok} })
-			return r.sha, r.ref, r.ok
-		}
-	}
 	return store.CollectPlanObservations(ctx, c.DB, src)
 }
 
@@ -412,12 +400,11 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
-	if c.Sources.Plan.History != nil || c.Sources.Plan.Deployed != nil {
-		c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
-			_, err := c.PlanObservations(ctx)
-			return err
-		})
-	}
+	// Always: an Owner signoff's observation needs no Git reader.
+	c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
+		_, err := c.PlanObservations(ctx)
+		return err
+	})
 	// The old dispatch lane is retired (the Owner 2026-11-13): nothing is
 	// leased, routed, dispatched, accepted, closed or timed any more, hosts
 	// are not watched and no assessment is asked for. What stays in this

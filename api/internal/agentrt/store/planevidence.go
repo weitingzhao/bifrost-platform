@@ -44,11 +44,7 @@ func planEvidenceCandidates(ctx context.Context, tx pgx.Tx, snap *planFactsSnaps
  FROM external CROSS JOIN LATERAL (VALUES (e->>'report_digest','Submitted report','external_work.report'),
  (e->>'artifact_id','Work registration','external_work.registration')) x(id,label,source)
  WHERE e->>'root'=$1 AND e->>'state'='Submitted' AND e->>'plan_node_id'=ANY($2::text[])
- UNION ALL
- SELECT t.plan_node_id,v.evidence_artifact_id, v.method || ' · ' || v.verdict || ' · ' || t.task_id,
- 'verification:' || v.verification_id
- FROM agentrt.verification v JOIN agentrt.task t USING(task_id) JOIN agentrt.mission m USING(mission_id)
- WHERE t.plan_node_id=ANY($2::text[]) AND m.tenant='dev'
+
  ) SELECT c.step,c.id,c.label,c.source FROM candidates c JOIN agentrt.artifact a ON a.artifact_id=c.id
  ORDER BY c.step,c.id,c.source`, root, steps)
 	if err != nil {

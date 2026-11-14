@@ -29,11 +29,9 @@ const (
 )
 
 // PlanSources are controller-owned adapters, never request payloads. History
-// must read complete Git history, including reverts. Deployed must check actual
-// running digests; health is independently checked against a gate record below.
+// must read complete Git history, including reverts.
 type PlanSources struct {
-	History  func(context.Context, string, string, string, string) (landing.MainHistory, error)
-	Deployed func(context.Context, string, string) (string, map[string]any, bool)
+	History func(context.Context, string, string, string, string) (landing.MainHistory, error)
 }
 
 type planObservation struct {
@@ -108,15 +106,13 @@ func (p planObservationPass) validate() error {
 	return nil
 }
 
-// remoteRead is a binding's Git or deployment answer, read before the
-// collector's transaction so a slow source holds no lock.
+// remoteRead is a binding's Git answer, read before the collector's
+// transaction so a slow source holds no lock.
 type remoteRead struct {
-	read      bool
-	at        time.Time
-	history   landing.MainHistory
-	err       error
-	snapshot  string
-	deployRef map[string]any
+	read    bool
+	at      time.Time
+	history landing.MainHistory
+	err     error
 }
 
 type planObservationPosition struct{ pass, observation int64 }
@@ -141,7 +137,7 @@ func readPlanRemotes(ctx context.Context, db DB, src PlanSources, bindings []pla
 		if rctx.Err() != nil {
 			break
 		}
-		if b.Source != "git" && b.Source != "deployment" {
+		if b.Source != "git" || b.Retired() {
 			remote[i].read = true
 			continue
 		}
@@ -168,26 +164,11 @@ func readPlanRemotes(ctx context.Context, db DB, src PlanSources, bindings []pla
 
 func readRemote(ctx context.Context, src PlanSources, b planview.Binding) remoteRead {
 	var r remoteRead
-	if b.Source != "git" && b.Source != "deployment" {
-		return r
-	}
 	if src.History == nil {
 		r.err = errors.New("history unavailable")
 		return r
 	}
-	if b.Source == "deployment" {
-		if src.Deployed == nil {
-			r.err = errors.New("deployment unavailable")
-			return r
-		}
-		var ok bool
-		r.snapshot, r.deployRef, ok = src.Deployed(ctx, b.Application, b.Environment)
-		if !ok || len(r.snapshot) != 40 || len(r.deployRef) == 0 {
-			r.err = errors.New("deployment unavailable")
-			return r
-		}
-	}
-	r.history, r.err = src.History(ctx, b.Repo, b.Task, b.Result, r.snapshot)
+	r.history, r.err = src.History(ctx, b.Repo, "", b.Result, "")
 	return r
 }
 
@@ -280,6 +261,9 @@ func CollectPlanObservations(ctx context.Context, db DB, src PlanSources) (int, 
 				current, ok := s.find(b.Step, b.Atom, b.ID, b.Version)
 				if !ok || current.Digest() != b.Digest() {
 					continue
+				}
+				if b.Retired() {
+					continue // no source to read: it stays Unknown (planview.Binding.Retired)
 				}
 				old := s.Observations[b.Digest()]
 				n := planObservation{V: 1, Kind: "agentrt.plan_observation/v1", Root: b.Root, Step: b.Step, Binding: b.ID, Version: b.Version, Digest: b.Digest(), Source: observationKey(b), SourceVersion: old.SourceVersion + 1, Status: "Fresh", Value: "unknown", Evidence: []string{}, Reason: "No trusted verification yet"}
@@ -385,27 +369,6 @@ func recordPlanObservation(ctx context.Context, tx pgx.Tx, n planObservation) (b
 }
 
 func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planview.Binding, n *planObservation) error {
-	if b.ExternalWork != "" {
-		x, e := bindingExternal(ctx, tx, b.ExternalWork)
-		if e != nil {
-			return e
-		}
-		if !externalMatches(x, b) {
-			n.Reason = "External submission changed"
-			return nil
-		}
-	}
-	if b.Task != "" {
-		var current bool
-		e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) JOIN agentrt.attempt a USING(task_id) WHERE t.task_id=$1 AND a.attempt_id=$2 AND t.mission_id=$3 AND t.plan_node_id=$4 AND m.tenant='dev' AND t.repo=$5 AND a.pushed_commit=$6 AND t.round_no=$7 AND a.attempt_no=(SELECT max(attempt_no) FROM agentrt.attempt WHERE task_id=t.task_id) AND t.state NOT IN ('rework','cancelled','stopped','dropped'))`, b.Task, b.Attempt, b.Mission, b.Step, b.Repo, b.Result, b.Round).Scan(&current)
-		if e != nil {
-			return e
-		}
-		if !current {
-			n.Reason = "Runtime result changed"
-			return nil
-		}
-	}
 	switch b.Source {
 	case "owner_signoff":
 		var id int64
@@ -432,45 +395,11 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 		n.Value = "true"
 		n.Evidence = append([]string{fmt.Sprintf("event:%d", id)}, signed.Evidence...)
 		n.Reason = "Owner signed this acceptance version and evidence"
-	case "verification":
-		// Keep the adopted ID as the method anchor, not as the verdict. This
-		// preserves existing binding digests while following re-verification of
-		// the exact same task/attempt/result (the round is checked above).
-		var id, verdict, method, evidence string
-		var independent bool
-		e := tx.QueryRow(ctx, `SELECT v.verification_id,v.verdict,v.method,v.evidence_artifact_id,
-    COALESCE(va.executor_actor_id<>a.executor_actor_id AND vt.subject_task_id=t.task_id AND vt.role='review' AND vt.mission_id=t.mission_id AND va.model_provider IS NOT NULL AND NOT EXISTS(SELECT 1 FROM agentrt.attempt sa WHERE sa.task_id=t.task_id AND (sa.executor_actor_id=va.executor_actor_id OR sa.model_provider IS NULL OR sa.model_provider=va.model_provider)) AND convert_from(vb.body,'UTF8')::jsonb @> jsonb_build_object('round',t.round_no,'attempt',a.attempt_id,'commit',a.pushed_commit,'subject_task',t.task_id),false)
-    FROM agentrt.verification anchor JOIN agentrt.verification v ON v.task_id=anchor.task_id AND v.attempt_id=anchor.attempt_id AND v.method=anchor.method AND v.subject_commit=anchor.subject_commit
-    JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id AND a.task_id=v.task_id JOIN agentrt.task t ON t.task_id=a.task_id
-    LEFT JOIN agentrt.attempt va ON va.attempt_id=v.verifier_attempt_id LEFT JOIN agentrt.task vt ON vt.task_id=va.task_id LEFT JOIN agentrt.artifact_blob vb ON vb.artifact_id=vt.spec_artifact_id
-    WHERE anchor.verification_id=$1 AND v.task_id=$2 AND v.attempt_id=$3 AND a.pushed_commit=$4 AND v.subject_commit=$4
-    ORDER BY v.created_at DESC,v.verification_id DESC LIMIT 1`, b.Verification, b.Task, b.Attempt, b.Result).Scan(&id, &verdict, &method, &evidence, &independent)
-		if errors.Is(e, pgx.ErrNoRows) {
-			return nil
-		}
-		if e != nil {
-			return e
-		}
-		if b.Atom == "review_valid" && (method != "review" || !independent) {
-			n.Reason = "No independent review of this result"
-			return nil
-		}
-		if b.Atom == "external_verified" && method != "deterministic" && (method != "review" || !independent) {
-			n.Reason = "Not an allowed external verifier"
-			return nil
-		}
-		n.Evidence = []string{id, evidence}
-		n.Reason = "Latest same-method verification of exact task/attempt/result"
-		if verdict == "pass" {
-			n.Value = "true"
-		} else if verdict == "fail" {
-			n.Value = "false"
-		}
-	case "git", "deployment":
+	case "git":
 		if remote.err != nil {
 			return remote.err
 		}
-		h, snapshot, deployRef := remote.history, remote.snapshot, remote.deployRef
+		h := remote.history
 		switch h.State {
 		case landing.Unknown:
 			return fmt.Errorf("incomplete history")
@@ -493,34 +422,6 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 		n.Evidence = []string{b.Repo + "@" + h.Commit}
 		n.Value = "true"
 		n.Reason = "Result effective on main"
-		if b.Source == "deployment" {
-			// A green delivery run alone is insufficient. A platform gate must
-			// attest health for the same actual SHA, digest set and specification.
-			raw, e := canon.Encode(deployRef)
-			if e != nil {
-				return e
-			}
-			var evidence, id, verdict string
-			e = tx.QueryRow(ctx, `SELECT v.verification_id,v.evidence_artifact_id,v.verdict FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id=v.attempt_id AND a.task_id=v.task_id JOIN agentrt.task t ON t.task_id=v.task_id JOIN agentrt.mission m USING(mission_id) WHERE v.method='gate' AND m.tenant='dev' AND t.repo=$1 AND v.env=$2 AND v.subject_commit=$3 AND v.deploy_ref_json=$4::jsonb AND v.check_ref=$5 AND v.spec_sha256=$6 ORDER BY v.created_at DESC,v.verification_id DESC LIMIT 1`, b.Repo, b.Environment, snapshot, string(raw), b.Check, b.Spec).Scan(&id, &evidence, &verdict)
-			n.Value = "unknown"
-			n.Reason = "Waiting for health verification of actual deployment"
-			if errors.Is(e, pgx.ErrNoRows) {
-				return nil
-			}
-			if e != nil {
-				return e
-			}
-			n.Value = "unknown"
-			n.Reason = "Health verification has no verdict"
-			if verdict == "pass" {
-				n.Value = "true"
-				n.Reason = "Deployment and health verified"
-			} else if verdict == "fail" {
-				n.Value = "false"
-				n.Reason = "Deployment health verification failed"
-			}
-			n.Evidence = append(n.Evidence, snapshot, string(raw), id, evidence)
-		}
 	}
 	return nil
 }
