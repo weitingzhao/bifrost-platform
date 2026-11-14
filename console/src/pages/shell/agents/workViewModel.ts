@@ -11,7 +11,7 @@ import { canonicalQuery } from '@/lib/shell/useHashSection'
 
 export const WORK_TABS = ['round', 'signoffs', 'live', 'changes'] as const
 export type WorkTab = (typeof WORK_TABS)[number]
-export const WORK_SECTIONS = ['activity', 'code-health', 'commit-lineage', 'delivery-boundaries'] as const
+export const WORK_SECTIONS = ['activity', 'code-health', 'commit-lineage', 'delivery-boundaries', 'ci'] as const
 export type WorkSection = (typeof WORK_SECTIONS)[number]
 export type WorkView = { kind: 'tab'; tab: WorkTab } | { kind: 'section'; section: WorkSection }
 
@@ -57,5 +57,5 @@ export const workSectionHref = (section: WorkSection, root: string | null = null
 
 export const WORK_SECTION_TITLES: Record<WorkSection, string> = {
   activity: 'Activity', 'code-health': 'Code health', 'commit-lineage': 'Commit lineage',
-  'delivery-boundaries': 'Delivery boundaries',
+  'delivery-boundaries': 'Delivery boundaries', ci: 'CI',
 }

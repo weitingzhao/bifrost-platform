@@ -372,6 +372,7 @@ describe('the address of each view of Work', () => {
     ['section=activity', { kind: 'section', section: 'activity' }],
     ['section=code-health', { kind: 'section', section: 'code-health' }],
     ['section=commit-lineage', { kind: 'section', section: 'commit-lineage' }],
+    ['section=ci', { kind: 'section', section: 'ci' }],
   ])('%s opens %j', (query, view) => {
     expect(workViewOf(query)).toEqual(view)
   })

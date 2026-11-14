@@ -5,6 +5,7 @@ import { NeedsCleanupSection } from '../agents/NeedsCleanup'
 import { WorkPlanView } from '../agents/WorkPlanView'
 import { WORK_SECTION_TITLES, useWorkView, type WorkSection } from '../agents/workViewModel'
 import { DeliveryBoundaries } from '../agents/DeliveryBoundaries'
+import { CiSection } from '../ci/CiSection'
 import { ProgressPage } from '../progress/ProgressPage'
 import { Card } from './OwnerParts'
 import { OwnerReleaseLane } from './OwnerReleaseLane'
@@ -74,7 +75,7 @@ function WorkSectionPage({ section, data }: { section: WorkSection; data: OwnerC
       <OwnerRuntimeCards data={data} />
       <OwnerReleaseLane data={data} />
       <ProgressPage part="activity" />
-    </> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : <ProgressPage part={section} />}
+    </> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : section === 'ci' ? <CiSection /> : <ProgressPage part={section} />}
   </section>
 }
 

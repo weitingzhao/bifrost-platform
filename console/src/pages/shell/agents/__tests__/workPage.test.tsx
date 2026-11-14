@@ -201,6 +201,8 @@ describe('every block that was on Work is still reachable', () => {
     ['#work?section=activity', ['Coordinator', 'Release lane', 'Activity', 'History'], ['Where the round stands', 'Goals', 'Now', 'Open goals', 'Crew', 'Quota']],
     ['#work?section=commit-lineage', ['Commit lineage'], ['Where the round stands', 'Code health']],
     ['#work?section=code-health', ['Code health'], ['Where the round stands', 'Commit lineage']],
+    // 2026-11-13/14, the Owner: he accepts CI's configuration and runs only when the Ops page shows them.
+    ['#work?section=ci', ['CI'], ['Where the round stands', 'Code health']],
   ])('%s', async (hash, regions, elsewhere) => {
     page(hash)
     for (const name of regions) expect(await screen.findByRole('region', { name })).toBeInTheDocument()
