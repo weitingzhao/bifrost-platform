@@ -28,7 +28,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -86,14 +85,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), Commits: s.agentRuntimeCommits(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
 		DiskFloor:   diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
-	if s.promote != nil && s.promote.Service() != nil {
-		cycles := s.promote.Service().CycleStore()
-		if cycles != nil {
-			rt.api.ReleaseCycles = func(context.Context) ([]store.ReleaseCycle, error) {
-				return releaseCyclesForAgentRuntime(cycles)
-			}
-		}
-	}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate(rt.env)
 	if s.releases != nil && s.releases.Service() != nil {
@@ -576,36 +567,4 @@ func apiTakesCalls(ctx context.Context, client *http.Client, url string) error {
 		return errors.New("its agentrt routes are not ready")
 	}
 	return nil
-}
-
-// releaseCyclesForAgentRuntime exposes only the platform lane's PROD steps.
-func releaseCyclesForAgentRuntime(cycles *promote.CycleStore) ([]store.ReleaseCycle, error) {
-	records, err := cycles.Records(promote.ReleaseCycleLanePlatform)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]store.ReleaseCycle, 0, len(records))
-	for _, record := range records {
-		cycle := store.ReleaseCycle{Revision: record.Revision, TriggeredBy: record.TriggeredBy}
-		for _, step := range record.Steps {
-			switch step.Kind {
-			case promote.CycleStepProdDeploy:
-				if step.StartedAt != nil {
-					cycle.ProdDeployStartedAt = *step.StartedAt
-				}
-				if step.CompletedAt != nil {
-					cycle.ProdDeployCompletedAt = *step.CompletedAt
-				}
-				cycle.ProdDeployResult = step.Result
-			case promote.CycleStepProdGate:
-				if step.Result == promote.CycleStepResultPass {
-					if step.CompletedAt != nil {
-						cycle.ProdGatePassedAt = *step.CompletedAt
-					}
-				}
-			}
-		}
-		out = append(out, cycle)
-	}
-	return out, nil
 }

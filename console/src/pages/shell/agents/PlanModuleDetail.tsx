@@ -6,7 +6,7 @@ import type { PlanNode, PlanSnapshot, PlanSnapshotRead } from '@/api/planSnapsho
 import { fetchQuestionList } from '@/api/questions'
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
-import { DeliveryStrip, WorkDeliveryStrips } from './DeliveryStrip'
+import { WorkDeliveryStrips } from './DeliveryStrip'
 import { WorkRow } from './PlanLiveWork'
 import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
@@ -134,11 +134,10 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
   const records = cell.links.filter(l => l.kind === 'question' || l.kind === 'goal')
   const own = <>
     {(latest || all.length === 0) && <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Latest task</dt>
-      <dd className="m-0 inline">{latest ? <Task task={latest} /> : 'None'}{all.length > 1 && ` · ${all.length - 1} earlier`}{checks > 0 && ` · ${plural(checks, 'check')}`}
-        {latest && <DeliveryStrip task={latest.id} />}</dd></dl>}
+      <dd className="m-0 inline">{latest ? <Task task={latest} /> : 'None'}{all.length > 1 && ` · ${all.length - 1} earlier`}{checks > 0 && ` · ${plural(checks, 'check')}`}</dd></dl>}
     {open && earlier.length > 0 && <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs text-muted-foreground">Earlier own work</span>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime, view.explain, now)} /><DeliveryStrip task={t.task_id} /></li>)}</ul>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime, view.explain, now)} /></li>)}</ul>
     </div>}
     {active && all.length === 0 && <span className="text-muted-foreground">No work task on this step yet (checks are under Review)</span>}
   </>

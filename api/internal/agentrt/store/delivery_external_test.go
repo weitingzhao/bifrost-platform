@@ -250,7 +250,7 @@ func TestReadExternalDelivery(t *testing.T) {
 	at := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
 	t.Cleanup(freezeClock(t, at.Add(40*time.Minute)))
 	read := func(commit string, p *store.DeliveryProduction) (map[string]any, error) {
-		return store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit, Production: p}, nil, nil)
+		return store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit, Production: p})
 	}
 	_, err := read(externalCommit[:8], nil)
 	is(t, err, pgx.ErrNoRows)
@@ -330,7 +330,7 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	clock := func(d time.Duration) { t.Cleanup(freezeClock(t, at.Add(d))) }
 	read := func(commit string) map[string]any {
 		t.Helper()
-		doc, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit}, nil, nil)
+		doc, err := store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit})
 		ok(t, err)
 		return doc
 	}
@@ -349,7 +349,7 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 		ok(t, err)
 	}
 	post(store.ExternalEvent{Key: "start", Type: "started"})
-	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit}, nil, nil)
+	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit})
 	is(t, err, pgx.ErrNoRows)
 
 	// started + heartbeat{commit_shas}: the strip is there, handed in at the heartbeat.
@@ -406,9 +406,18 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	if doc = read(externalCommit[:16]); doc["external_work_id"] != id {
 		t.Fatalf("same commit named later by another work: %v", doc["external_work_id"])
 	}
-	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit[:12]}, nil, nil)
+	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit[:12]})
 	is(t, err, store.ErrInvalid)
 	if !strings.Contains(err.Error(), externalOther) {
 		t.Fatalf("ambiguous prefix does not name both: %v", err)
 	}
+}
+
+func anyContains(list []string, sub string) bool {
+	for _, s := range list {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }

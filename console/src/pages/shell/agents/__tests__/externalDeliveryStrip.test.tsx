@@ -15,7 +15,7 @@ import { PlanModuleRows } from '../PlanModuleRows'
 import { moduleRows } from '../planModuleModel'
 
 // Main lane, wave 1: an external work that recorded a commit shows the same stage strip a runtime task does, read by
-// that commit (GET /delivery?commit=). The answers are Go's own (store TestConsoleDeliveryFixtures).
+// that commit (GET /delivery?commit=). The answers were captured from Go's.
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -30,13 +30,12 @@ const strip = (commit: string) => document.querySelector<HTMLElement>(`[data-del
 const stage = (commit: string, name: string) => strip(commit).querySelector<HTMLElement>(`[data-stage="${name}"]`)!
 
 describe("an external work's delivery strip", () => {
-  it('shows each stage with its time, and On main Unknown with why on hover', () => {
+  it('shows each stage with its time, and leaves out On main, which the platform does not record', () => {
     render(<CommitStageStrip commit={onProd.commit} read={{ state: 'ok', data: parseDelivery(onProd) }} />)
     const at = (name: string, key: 'entered_at' | 'left_at') => clockText(stageOf(onProd, name)[key]!)
     expect(strip(onProd.commit)).toHaveTextContent(
-      `${onProd.commit.slice(0, 8)} · Handed in ${at('handed_in', 'entered_at')} → CI ${at('landing_ci', 'left_at')} → On main Unknown → STG ${at('stg', 'left_at')} → PROD ${at('on_prod', 'entered_at')}`)
-    expect(stage(onProd.commit, 'on_main')).toHaveAttribute('title', stageOf(onProd, 'on_main').reason)
-    expect(stage(onProd.commit, 'on_main')).toHaveAttribute('data-stage-state', 'unknown')
+      `${onProd.commit.slice(0, 8)} · Handed in ${at('handed_in', 'entered_at')} → CI ${at('landing_ci', 'left_at')} → STG ${at('stg', 'left_at')} → PROD ${at('on_prod', 'entered_at')}`)
+    expect(strip(onProd.commit).querySelector('[data-stage="on_main"]')).toBeNull()
     expect(stage(onProd.commit, 'on_prod').querySelector('time')).toHaveAttribute('datetime', stageOf(onProd, 'on_prod').entered_at)
   })
 
@@ -47,7 +46,7 @@ describe("an external work's delivery strip", () => {
     expect(stage(failed.commit, 'on_prod')).toHaveTextContent('PROD —')
     cleanup()
     render(<CommitStageStrip commit={failed.commit} read={{ state: 'unknown', reason: 'Delivery: HTTP 503' }} />)
-    expect(strip(failed.commit)).toHaveTextContent('Handed in Unknown → CI Unknown → On main Unknown → STG Unknown → PROD Unknown')
+    expect(strip(failed.commit)).toHaveTextContent('Handed in Unknown → CI Unknown → STG Unknown → PROD Unknown')
     expect(stage(failed.commit, 'ci')).toHaveAttribute('title', 'Delivery: HTTP 503')
   })
 
@@ -71,8 +70,8 @@ describe("an external work's delivery strip", () => {
     vi.stubGlobal('fetch', fetcher)
     const others = ['a', 'b', 'c'].map(c => c.repeat(40))
     const { container } = render(withQueries(<><WorkDeliveryStrips commits={[onProd.commit, ...others]} /><WorkDeliveryStrips commits={undefined} /><WorkDeliveryStrips commits={[]} /></>))
-    await waitFor(() => expect(strip(onProd.commit)).toHaveTextContent('On main Unknown'))
-    await waitFor(() => expect(strip(others[0]!)).toHaveTextContent('Handed in — → CI — → On main — → STG — → PROD —'))
+    await waitFor(() => expect(strip(onProd.commit)).toHaveTextContent('Handed in'))
+    await waitFor(() => expect(strip(others[0]!)).toHaveTextContent('Handed in — → CI — → STG — → PROD —'))
     expect(container.querySelectorAll('[data-delivery-strip]')).toHaveLength(3)
     expect(container).toHaveTextContent('Delivery of 1 more commits not shown')
     expect(fetcher.mock.calls.map(c => String(c[0]))).toEqual([onProd.commit, others[0], others[1]].map(c => `/api/v1/agentrt/delivery?commit=${c}`))
@@ -90,7 +89,7 @@ describe('where the strip shows', () => {
     const { submitted } = view()
     render(withQueries(<ul><ExternalRecord work={{ ...submitted, commit_shas: [onProd.commit] }} /></ul>))
     expect(screen.getByRole('listitem')).toHaveTextContent(`Commit · ${onProd.commit}`)
-    await waitFor(() => expect(strip(onProd.commit)).toHaveTextContent('On main Unknown'))
+    await waitFor(() => expect(strip(onProd.commit)).toHaveTextContent('Handed in'))
     cleanup()
     render(withQueries(<ul><ExternalRecord work={submitted} /></ul>))
     expect(document.querySelector('[data-delivery-strip]')).toBeNull()
@@ -118,7 +117,7 @@ describe('where the strip shows', () => {
     render(withQueries(<PlanModuleRows view={plan} selected="" />))
     fireEvent.click(screen.getByRole('button', { name: /^Step 4\.1-3: / }))
     const detail = screen.getByRole('region', { name: 'Step 4.1-3' })
-    await waitFor(() => expect(detail.querySelector(`[data-delivery-strip="${onProd.commit}"]`)).toHaveTextContent('On main Unknown'))
+    await waitFor(() => expect(detail.querySelector(`[data-delivery-strip="${onProd.commit}"]`)).toHaveTextContent('Handed in'))
     expect(detail.querySelectorAll('[data-delivery-strip]')).toHaveLength(1)
   })
 })

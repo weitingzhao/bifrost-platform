@@ -7,7 +7,7 @@ import { useState } from 'react'
 import type { ExternalWork, PlanSnapshotRead as PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
-import { DeliveryStrip, WorkDeliveryStrips } from './DeliveryStrip'
+import { WorkDeliveryStrips } from './DeliveryStrip'
 import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
@@ -71,7 +71,6 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
       {external && <> · <time dateTime={work.heartbeat_at}>{work.heartbeat_at}</time> · {work.description.repo} · {work.description.branch}{work.backfilled && ' · Backfilled'}</>}
       {!external && <> · Host · {work.attempt!.host_id || 'Unknown'}{work.external_work?.length ? ` · Linked external history · ${work.external_work.length} records` : ''} · {work.attempt!.reason}</>}
     </span>
-    {work.task_id && <span className="basis-full"><DeliveryStrip task={work.task_id} /></span>}
     {external && work.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={work.commit_shas} /></span> : null}
     {!external && <LiveAttemptAction attempt={work.attempt!} now={now} />}
     {wait?.text && <WaitLine wait={wait} />}

@@ -34,9 +34,9 @@ func (a *API) getPlanTimeline(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-// getDelivery is GET /delivery: the delivery stages of one change, named by
-// exactly one of commit or task. The PROD stages come from ReleaseCycles;
-// unwired, or failing, they are unknown and the warnings say why.
+// getDelivery is GET /delivery: the delivery stages of one commit an external
+// work handed in, from its recorded pipeline runs and the current PROD
+// release.
 func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("view") == "configuration" {
 		if r.URL.Query().Get("commit") != "" || r.URL.Query().Get("task") != "" {
@@ -73,21 +73,20 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, out)
 		return
 	}
-	q := store.DeliveryQuery{Commit: r.URL.Query().Get("commit"), Task: r.URL.Query().Get("task")}
-	if (q.Commit == "") == (q.Task == "") {
-		writeError(w, 400, "bad_request", "name exactly one of commit or task")
+	if r.URL.Query().Get("task") != "" {
+		writeError(w, 400, "bad_request", "delivery by task ended with the dispatch lane; name a commit an external work handed in")
 		return
 	}
-	var cycles []store.ReleaseCycle
-	var cyclesErr error
-	if a.ReleaseCycles != nil {
-		cycles, cyclesErr = a.ReleaseCycles(r.Context())
+	q := store.DeliveryQuery{Commit: r.URL.Query().Get("commit")}
+	if q.Commit == "" {
+		writeError(w, 400, "bad_request", "commit is required")
+		return
 	}
 	if a.ProductionDelivery != nil {
 		observed := a.ProductionDelivery(r.Context())
 		q.Production = &observed
 	}
-	out, err := store.ReadDelivery(r.Context(), a.DB, q, cycles, cyclesErr)
+	out, err := store.ReadDelivery(r.Context(), a.DB, q)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
