@@ -120,6 +120,15 @@ modules:
       - api/internal/approvals/handler.go
       - api/internal/mcp/catalog.go
       - api/internal/server/agent_threads_wire.go
+      # Measured 2026-11-14 by running the console's tests with every file
+      # access recorded: beside the five above they read these. A replay of
+      # 150 commits of main had found six that changed only mcp/ and would
+      # have left the console's keys as they were.
+      - mcp/platform
+      - mcp/trade/src
+      - agent/remediation/src
+      - config/trade-api-domains.yaml
+      - scripts/ci/console_reads_api.txt
     image: docker.io/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
     template: bifrost-unit-run
     tasks:
