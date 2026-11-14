@@ -1,7 +1,6 @@
 import { record, text, type RuntimeAttempt, type RuntimeEvent, type RuntimeProgress } from '@/api/agentRuntime'
 import { activityCounts, attemptActivity } from '../owner/attemptActivity'
 import type { GoalData, GoalTask } from '@/api/agentRuntimeGoals'
-import type { MissionLanding } from '@/api/missionLanding'
 import type { Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
@@ -90,17 +89,8 @@ function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageSt
   if (impls.length && passed === impls.length) return { state: 'done', completed: passed }
   return { state: running ? 'running' : 'future', completed: passed }
 }
-/**
- * landing: undefined when the caller has no landing reading (the old policy);
- * null when the landing scope is unknown (the read failed or has not come
- * back): then only the mission's own state says done, never accepted tasks
- * alone (review 675 R-08); a reading says in or out of scope.
- */
-export function goalDone(data: GoalData, landing?: MissionLanding | null): boolean {
+export function goalDone(data: GoalData): boolean {
   if (['stopped', 'failed', 'cancelled'].includes(text(data.mission.state))) return false
-  if (landing === null) return ['done', 'accepted'].includes(text(data.mission.state))
-  // S3 roots must be settled before the controller closes the mission; accepted tasks alone do not close it.
-  if (landing?.in_scope && landing.roots.length) return ['done', 'accepted'].includes(text(data.mission.state))
   // A failed check of a task the Owner dropped says nothing of the goal.
   const dropped = droppedTasks(data)
   if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail' && !dropped.has(e.task_id)))) return false
@@ -110,8 +100,8 @@ export function goalDone(data: GoalData, landing?: MissionLanding | null): boole
   return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.some(t => ['implement', 'brief'].includes(t.role) && t.state === 'accepted')
     && data.tasks.every(t => t.state === 'accepted' || dropped.has(t.task_id)))
 }
-export function goalStages(data: GoalData, landing?: MissionLanding | null): GoalStage[] {
-  const done = goalDone(data, landing)
+export function goalStages(data: GoalData): GoalStage[] {
+  const done = goalDone(data)
   const dropped = droppedTasks(data)
   const byRule = droppedByRule(data)
   const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1, dropped: 0 }]
@@ -136,9 +126,7 @@ export function goalStages(data: GoalData, landing?: MissionLanding | null): Goa
     stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed, dropped: all.length - tasks.length,
       droppedByRule: all.filter(t => byRule.has(t.task_id)).length })
   }
-  // Accepted work with no landing reading has an unknown completion, not another check in progress (724 N-01).
-  const unknown = landing === null && !terminalMission(text(data.mission.state)) && stages.every(s => s.state === 'done' || s.state === 'skipped')
-  stages.push({ label: 'Done', state: done ? 'done' : unknown ? 'unknown' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
+  stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
   return stages
 }
 // Task states in which a stage moves without a live attempt of its own: waiting for the controller, a host or a check.
@@ -161,12 +149,12 @@ export function stalledStage(stage: GoalStage, live: readonly RuntimeAttempt[]):
   }
   return activityCounts(stalled)
 }
-export function goalStatus(data: GoalData, waiting: boolean, landing?: MissionLanding | null): string {
+export function goalStatus(data: GoalData, waiting: boolean): string {
   if (['stopped', 'cancelled'].includes(text(data.mission.state))) return 'Stopped'
   if (waiting || data.mission.state === 'awaiting_owner') return 'Waiting for you'
-  const stages = goalStages(data, landing)
+  const stages = goalStages(data)
   if (stages.some(s => s.state === 'failed') || data.mission.state === 'failed') return 'Blocked'
-  if (goalDone(data, landing)) return 'Done'
+  if (goalDone(data)) return 'Done'
   if (data.mission.state === 'paused' || stages.some(s => s.state === 'waiting')) return 'Blocked'
   if (stages.some(s => s.state === 'unknown')) return 'Unknown'
   const active = stages.find(s => s.state === 'running')?.label || stages.find(s => s.state === 'future')?.label
@@ -211,55 +199,3 @@ export function missionIds(runtime?: RuntimeProgress, submitted = ''): string[] 
 /** A task's details on its goal card: the element `#work?goal=M-n&task=t_…` brings into view (T36). */
 export const goalTaskId = (goal: string, task: string) => `goal-${goal}-task-${task}`
 
-const landingReasons: Record<string, string> = {
-  awaiting_grant: 'Unresolved: waiting for landing authorization',
-  'failed:approval_expired': 'Landing authorization wait expired; retry from the landing question',
-  'failed:declined': 'Landing was declined by you',
-  at_main: 'Waiting for the main update to be confirmed',
-  evidence: 'Waiting for fresh evidence from main',
-  landed_unverified: 'Landed, but main evidence is not verified',
-  rule: 'The current landing rule does not allow closing',
-  in_main_unverified: 'Already in main, awaiting delivery confirmation',
-  stg_pending: 'Waiting for a verified STG release',
-  stg_running: 'Included in an STG release batch',
-  stg_exhausted: 'STG release attempts exhausted',
-  stg_blocked: 'STG release is blocked',
-  stg_withheld: 'STG release withheld by a hard boundary',
-  'failed:stale': 'Landing failed: the task or evidence is no longer current',
-  'failed:floor': 'Landing failed: the change is outside permitted landing boundaries',
-  unclaimed: 'Waiting for landing to be claimed',
-  reverted: 'The change was reverted',
-  declined: 'Landing was declined',
-  owner: 'Disposed by you',
-  dropped: 'The task was dropped',
-  landed: 'Landed and verified in main',
-  in_main: 'Already in main, confirmed delivered by you',
-  main_lost: 'The change is no longer in main',
-}
-/** Why the landing loop refused a root's claim (landing_refusal, CUT §11.13). */
-const claimRefusals: Record<string, string> = {
-  mode: 'the live landing is off',
-  before_enable: 'accepted before landing was enabled',
-  stale: 'not landable as set up (no producing plan, the mission not active, or marked no_merge)',
-  result: 'the accepted result is not one commit on its base',
-  history: 'the change is already in main or was reverted there',
-  terminal: 'its landing has already ended',
-  floor: 'the change touches what no landing rule can allow',
-  dependencies: 'a task it depends on has not landed',
-  rule: 'the change is outside what the landing rule allows',
-  limit: "the day's landing limit is used, or another landing is in flight",
-  stage: 'its plan step is not ready',
-  facts_unreadable: 'the facts it needs could not be read',
-  stopped: 'landings in this repository are stopped',
-  bound: 'its six hours to land are over',
-  in_progress: 'another landing of it is in progress',
-}
-export const landingReason = (reason: string): string => {
-  if (Object.hasOwn(landingReasons, reason)) return landingReasons[reason]!
-  if (reason.startsWith('unclaimed:')) {
-    const why = reason.slice('unclaimed:'.length)
-    return `Waiting to be claimed: ${Object.hasOwn(claimRefusals, why) ? claimRefusals[why] : why}`
-  }
-  if (reason.startsWith('parked:')) return reason === 'parked:ci_stuck' ? 'Parked: CI running long' : `Parked: ${reason.slice('parked:'.length) || 'no reason given'}`
-  return reason
-}

@@ -151,10 +151,6 @@ export function assessmentFromSnapshot(snapshot?: AssessmentSnapshot): Assessmen
   }
 }
 
-export async function requestAssessment(kind: AssessmentKind, id: string): Promise<Assessment> {
-  const r = await authedFetch('Request AI assessment', `/api/v1/agentrt/assessments/${kind}/${encodeURIComponent(id)}`, { method: 'POST' }, assessmentResponseError)
-  return parseAssessmentStream(await r.json())
-}
 
 // Runtime errors carry the human reason in message, and a short code in error.
 async function assessmentResponseError(prefix: string, response: Response, token = ''): Promise<Error> {

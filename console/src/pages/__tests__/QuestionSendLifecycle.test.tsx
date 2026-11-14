@@ -11,11 +11,6 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { QuestionPage } from '@/pages/QuestionPage'
 
-// Keep send lifecycle fixtures independent of the optional landing read.
-vi.mock('@/api/landingCards', async importOriginal => ({
-  ...await importOriginal<typeof import('@/api/landingCards')>(),
-  fetchLandingCard: vi.fn(async () => null),
-}))
 
 const ADMIN_CAPS: AuthCapabilities = {
   authenticated: true,

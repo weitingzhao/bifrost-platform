@@ -31,30 +31,9 @@ export type ChecklistSignalsResponse = {
   new_failures?: string[]
 }
 
-export type ChecklistKPIsResponse = {
-  quiet_success_streak: number
-  last_run_id?: string
-  updated_at?: string
-  last_fail_at?: string
-  last_all_ok_at?: string
-  new_fail_hint?: string
-  last_counts?: {
-    at: string
-    ok: number
-    fail: number
-    unknown: number
-    all_ok: boolean
-  }
-}
 
 export async function fetchChecklistSignals(): Promise<ChecklistSignalsResponse> {
   const r = await serverFetch('/api/v1/checklist/signals')
   if (!r.ok) throw await parseError('checklist signals', r)
   return r.json() as Promise<ChecklistSignalsResponse>
-}
-
-export async function fetchChecklistKPIs(): Promise<ChecklistKPIsResponse> {
-  const r = await serverFetch('/api/v1/checklist/kpis')
-  if (!r.ok) throw await parseError('checklist kpis', r)
-  return r.json() as Promise<ChecklistKPIsResponse>
 }

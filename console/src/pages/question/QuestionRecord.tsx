@@ -1,10 +1,6 @@
 import type { ReactNode } from 'react'
 import { questionLink, questionNumberLabel, storedAnswerWords, type Question, type QuestionAnswer } from '@/api/questions'
 import type { ActionLinkView } from '@/api/agentProgress'
-import { useQuery } from '@tanstack/react-query'
-import { fetchRuntimeTaskDetail } from '@/api/agentRuntime'
-import { LANDING_KIND_LABELS, type LandingCard, type LandingOutcome } from '@/api/landingCards'
-import { goalHref } from '@/lib/shell/consoleRoutes'
 
 export const FROM_AN_AGENT = 'From an agent thread. Answering approves nothing.'
 export const SECRETS_LINE = 'Visible to every agent thread. Do not paste secrets.'
@@ -107,48 +103,6 @@ export function StoredAnswer({ question, answer }: { question: Question; answer:
   )
 }
 
-function landingStatus(outcome: LandingOutcome): string {
-  switch (outcome.outcome) {
-    case 'applied': return 'Carried out'
-    case 'held': return `Held until ${new Date(outcome.remind_at!).toLocaleString()}`
-    case 'acknowledged': return 'Noted'
-    case 'moot': return 'Not carried out (moot)'
-    case 'refused': return 'Not carried out (refused)'
-  }
-}
-
-/** A root is a task id, not a Work number; resolve its actual mission for the existing detail route. */
-export function LandingOutcomeRecord({ card }: { card: LandingCard }) {
-  const stg = card.family === 'stg'
-  const heading = stg ? 'STG release outcome' : 'Landing outcome'
-  const taskQ = useQuery({
-    queryKey: ['agent-runtime-task', card.root],
-    queryFn: ({ signal }) => fetchRuntimeTaskDetail(card.root, signal),
-    enabled: card.root !== '',
-    staleTime: 10 * 60_000,
-    retry: false,
-  })
-  const task = taskQ.data
-  const href = card.root !== '' && !taskQ.isError && task?.task_id === card.root && task.mission_id !== '' ? goalHref(task.mission_id, card.root) : null
-  return (
-    <section aria-label={heading} className="ops-decision-receipt flex w-full min-w-0 flex-col gap-2">
-      <h3 className="m-0 text-sm font-medium">{heading}</h3>
-      <Field label="Repository" value={card.repo ?? 'bifrost-platform'} />
-      <Field label="Kind" value={LANDING_KIND_LABELS[card.kind]} />
-      {stg ? <>
-        {card.block ? <Field label="Block" value={card.block} /> : null}
-        {card.batch ? <Field label="Batch" value={card.batch} /> : null}
-        <p className="m-0 text-sm">An answer is not an approval.</p>
-      </> : null}
-      {card.outcome !== null ? <>
-        <Field label="Status" value={landingStatus(card.outcome)} />
-        <Field label="Why" value={card.outcome.why} />
-      </> : null}
-      <Field label="Next step" value={card.next_step} />
-      {href !== null ? <a href={href} className="break-words text-sm underline">View task</a> : null}
-    </section>
-  )
-}
 
 export function ClosedLine({ question }: { question: Question }): ReactNode {
   if (question.status === 'withdrawn') {

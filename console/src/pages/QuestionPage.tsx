@@ -3,8 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
-import { QuestionHttpError, RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
-import { fetchLandingCard } from '@/api/landingCards'
+import { RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
 import { decisionBlockReason } from '@/pages/decisionSignIn'
@@ -13,7 +12,7 @@ import { AssessmentSection } from '@/pages/question/AssessmentPanel'
 import { assessmentFromSnapshot } from '@/api/assessment'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
-import { ClosedLine, FROM_AN_AGENT, LandingOutcomeRecord, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
+import { ClosedLine, FROM_AN_AGENT, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
 import { NowClock } from '@/pages/shell/progress/progressClock'
 
 function questionIdFromHash(hash: string): string | null {
@@ -91,20 +90,6 @@ function QuestionSession({ id }: { id: string }) {
   const runtimeCard = shown != null && shown.requester === RUNTIME_REQUESTER
   const assessment = assessmentFromSnapshot(shown?.assessment)
   const aiRecommended = assessment.state === 'ready' ? assessment.recommended : null
-  const landingQ = useQuery({
-    queryKey: ['questions', 'landing', id],
-    queryFn: ({ signal }) => fetchLandingCard(id, signal),
-    // After the question's own read: once shown, or once it fails, so a
-    // trimmed question still shows the runtime's lasting record (review 672
-    // R-06).
-    enabled: shown != null || unreadable,
-    retry: false,
-    refetchInterval: query => {
-      const card = query.state.data
-      return card === undefined || (card !== null && card.outcome === null && !card.closed) ? 15_000 : false
-    },
-  })
-
   let state: 'loading' | 'unreadable' | 'stale' | 'ready' = 'ready'
   if (itemQ.isLoading && loaded == null) state = 'loading'
   else if (unreadable) state = 'unreadable'
@@ -127,21 +112,11 @@ function QuestionSession({ id }: { id: string }) {
       {unreadable || stale ? (
         <button type="button" disabled={itemQ.isFetching} onClick={() => { void itemQ.refetch() }}>Retry</button>
       ) : null}
-      {shown == null && unreadable && !landingQ.isError && landingQ.data != null ? (
-        <NowClock>
-          {/* Trimmed only on a 404; any other failure is a read that may come back (review 675 N-02). */}
-          {itemQ.error instanceof QuestionHttpError && itemQ.error.status === 404
-            ? <p className="m-0 text-sm">The question itself is no longer kept. The runtime&apos;s record of it:</p>
-            : <p className="m-0 text-sm">The question cannot be read right now. The runtime&apos;s record of it:</p>}
-          <LandingOutcomeRecord card={landingQ.data} />
-        </NowClock>
-      ) : null}
       {shown != null ? (
         <NowClock>
           <div className="flex w-full min-w-0 flex-col gap-3">
             <QuestionBody question={shown} environment={environment} />
             {showStored && answer != null ? <StoredAnswer question={shown} answer={answer} /> : null}
-            {!landingQ.isError && landingQ.data != null ? <LandingOutcomeRecord card={landingQ.data} /> : null}
             {showClosed ? <ClosedLine question={shown} /> : null}
             {runtimeCard ? (
               <AssessmentSection

@@ -36,8 +36,7 @@ function mockFetch() {
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     let data: unknown = {}
-    if (url.includes('/agentrt/landing/missions/')) data = { mission_id: url.split('/').at(-1), in_scope: false, rule: '', roots: [] }
-    else if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
+    if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
     else if (url.includes('/agentrt/tasks?')) data = tasks
     else if (url.includes('/agentrt/events?stream=')) data = events
     else if (url.includes('/agentrt/events?')) data = { events: [], next: '0.0' }
@@ -66,16 +65,6 @@ describe('goal stages from the production stream', () => {
     expect(goalDone(full)).toBe(true)
     expect(goalStages(full).map(s => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
     expect(goalStatus(full, false)).toBe('Done')
-  })
-  it('uses Unknown for accepted work without a landing reading, preserving known progress and mission outcomes', () => {
-    expect(goalDone(full, null)).toBe(false)
-    expect(goalStages(full, null).at(-1)?.state).toBe('unknown')
-    expect(goalStatus(full, false, null)).toBe('Unknown')
-    expect(goalStatus(cut(46), false, null)).toBe('Reviewing')
-    expect(goalStatus(full, true, null)).toBe('Waiting for you')
-    for (const [state, status] of [['done', 'Done'], ['accepted', 'Done'], ['failed', 'Blocked'], ['paused', 'Blocked'], ['stopped', 'Stopped'], ['cancelled', 'Stopped']]) {
-      expect(goalStatus({ ...full, mission: { ...full.mission, state } }, false, null)).toBe(status)
-    }
   })
   it('moves from the accepted plan to implementation, then from checks to review', () => {
     const planAccepted = events.find(e => e.event_type === 'task_state_changed' && e.task_id === tasks.tasks[0]!.task_id && 'to' in e.body_json && e.body_json.to === 'accepted')!
@@ -234,9 +223,9 @@ describe('goal cards and source links', () => {
     const { rerender } = wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />, client)
     rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={2} questions={[]} /></QueryClientProvider>)
     await screen.findByText('Done', { selector: 'strong.text-lg' })
-    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(fetch).toHaveBeenCalledTimes(3)
     rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={3} questions={[]} /></QueryClientProvider>)
-    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(fetch).toHaveBeenCalledTimes(3)
   })
   it('does not give the Owner the move for silent threads alone', () => {
     expect(whoseMove({ state: 'known', count: 4 }, parseRuntimeProgress({ live: [{ task_id: 't' }] }), false, 4)).toBe("Agents' move")
