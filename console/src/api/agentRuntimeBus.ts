@@ -43,12 +43,6 @@ async function request(prefix: string, path: string, init?: RequestInit): Promis
   const response = await authedFetch(prefix, `/api/v1/agentrt${path}`, init, busError)
   return record(await response.json())
 }
-export async function fetchAttemptActions(id: string, options: { last?: number; after?: string; limit?: number } = {}, signal?: AbortSignal): Promise<AttemptActions> {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(options)) if (value !== undefined) params.set(key, String(value))
-  try { return parseAttemptActions(await request('Actions', `/attempts/${encodeURIComponent(id)}/actions?${params}`, { signal })) }
-  catch (e) { if (e instanceof ActionsUnavailable) return { attempt_id: id, actions: [], next: options.after ?? '', unavailable: true }; throw e }
-}
 export function setGlobalStop(reason: string) {
   return request('Control', '/controls', { method: 'POST', body: JSON.stringify({ idempotency_key: crypto.randomUUID(), scope: 'global', kind: 'stop', reason }) })
 }
@@ -56,13 +50,6 @@ export async function liftControl(id: string) {
   await authedFetch('Control', `/api/v1/agentrt/controls/${encodeURIComponent(id)}`, { method: 'DELETE' }, busError)
 }
 export const messageBytes = (body: string) => new TextEncoder().encode(body).length
-export function sendChiefMessage(body: string) {
-  if (messageBytes(body) < 1 || messageBytes(body) > 8192) return Promise.reject(new Error('Message must be 1 to 8192 bytes.'))
-  return request('Messages', '/messages', { method: 'POST', body: JSON.stringify({ to: 'seat:chief_of_staff', kind: 'ask', body }) })
-}
-export async function fetchChiefThread(signal?: AbortSignal) {
-  return parseChiefThread(await request('Messages', '/messages/thread?with=seat:chief_of_staff&limit=50', { signal }))
-}
 export type CoordinatorNote = { body: string; at: string }
 /** How many of the latest messages between the Owner and the coordinating thread are read for its note. */
 export const COORDINATOR_WINDOW = 50
@@ -88,4 +75,3 @@ export async function fetchCoordinatorNote(signal?: AbortSignal, thread = COORDI
   if (read.actor !== 'owner') throw new Error(COORDINATOR_SIGN_IN)
   return { note: latestNote(read, thread), full: read.messages.length >= COORDINATOR_WINDOW }
 }
-export const ackMessages = (ids: string[]) => request('Messages', '/messages/ack', { method: 'POST', body: JSON.stringify({ message_ids: ids }) })

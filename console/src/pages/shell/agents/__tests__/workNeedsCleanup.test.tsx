@@ -44,7 +44,6 @@ function planView(round: number, o: { asOf?: string; working?: boolean; clean?: 
 }
 /** GET /progress from real rows (W-31 3.5): h1 online, h2 reported offline; two rounds. */
 const progressBody = { ...presenceFixture, plan: [{ plan_node_id: 'R4', kind: 'round', title: '第 4 轮', items: [] }, { plan_node_id: 'R5', kind: 'round', title: '第 5 轮', items: [] }] }
-const HOST = 'Host h2 is offline: its last poll was 3 days ago.'
 const auth = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
 
 let client: QueryClient
@@ -96,22 +95,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('Work\'s first screen', () => {
-  it('no longer says the offline host; the summary counts what needs cleanup and goes to it, with no request of its own', async () => {
+  it('the summary counts what needs cleanup and goes to it, with no request of its own', async () => {
     page('#work')
     const card = await summary()
     // Each group with its reach in the visible words (review of 16435ae7): the round, not a total of two reaches.
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 1 external work without heartbeat in Round 5 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 5 ›'))
     expect(entry()).toHaveAttribute('href', '#work?section=activity')
-    expect(entry().title).toContain('Hosts the controller reports offline 1: every host of the runtime')
     expect(entry().title).toContain('Registered external work with no heartbeat for over 60 s 1: Round 5 only')
     expect(card).toContainElement(entry())
     // How each group is counted is in "How this is read" too, not in a title alone.
     const read = within(card).getByText('How this is read').closest('details')!
-    expect(read).toHaveTextContent('Needs cleanup · Hosts the controller reports offline 1: every host of the runtime')
-    expect(read).toHaveTextContent("Needs cleanup · Registered external work with no heartbeat for over 60 s 1: Round 5 only")
-    expect(document.body).not.toHaveTextContent(HOST)
-    // The other lines of the health notice stay on Work's top.
-    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent('exec:claude is unavailable')
+    expect(read).toHaveTextContent('Needs cleanup · Registered external work with no heartbeat for over 60 s 1: Round 5 only')
     // Read from what Work and the shell already read: of the runtime, one plan view, this round's tree, GET /progress;
     // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13)
     // (R5:5.7-8).
@@ -122,7 +116,7 @@ describe('Work\'s first screen', () => {
   it('keeps the round an address names on the way to the list', async () => {
     page('#work?root=R4')
     await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 1 external work without heartbeat in Round 4 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 4 ›'))
     expect(entry()).toHaveAttribute('href', '#work?section=activity&root=R4')
   })
 
@@ -132,7 +126,7 @@ describe('Work\'s first screen', () => {
     view = round => planView(round, { working: round === 4 })
     page('#work')
     await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 0 external works without heartbeat in Round 5 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 0 external works without heartbeat in Round 5 ›'))
     expect(entry().textContent).not.toMatch(/\bitems?\b/)
     await go('#work?section=activity')
     const list = await screen.findByRole('region', { name: 'Needs cleanup' })
@@ -141,27 +135,23 @@ describe('Work\'s first screen', () => {
     cleanup(); client.clear()
     page('#work?root=R4')
     await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 1 external work without heartbeat in Round 4 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 4 ›'))
   })
 })
 
 describe('Needs cleanup on Work → Activity', () => {
-  it('lists every item the entry counts: the offline host as it was said, and the registered work with no heartbeat', async () => {
+  it('lists every item the entry counts: the registered work with no heartbeat', async () => {
     page('#work')
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 1 external work without heartbeat in Round 5 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 5 ›'))
     await go(entry().getAttribute('href')!)
     const list = await screen.findByRole('region', { name: 'Needs cleanup' })
-    await waitFor(() => expect(list).toHaveTextContent('Needs cleanup · 1 offline host · 1 external work without heartbeat in Round 5'))
-    expect(within(list).getByRole('list', { name: 'Offline hosts' })).toHaveTextContent(HOST)
+    await waitFor(() => expect(list).toHaveTextContent('Needs cleanup · 1 external work without heartbeat in Round 5'))
     const silent = within(list).getByRole('list', { name: 'Registered external work with no heartbeat' })
     expect(within(silent).getAllByRole('listitem')).toHaveLength(1)
     expect(silent).toHaveTextContent('TD-457: fix the landing gate')
     expect(silent).toHaveTextContent('Unconfirmed')
     expect(silent).toHaveTextContent('Last heartbeat · 50h 0m ago')
-    expect(list).toHaveTextContent('Hosts the controller reports offline · 1 · every host of the runtime')
     expect(list).toHaveTextContent('Registered external work with no heartbeat for over 60 seconds · 1 · Round 5 only')
-    // Said once on the page: the health notice above leaves the host to this list.
-    expect(screen.getAllByText(HOST)).toHaveLength(1)
     // The list comes first on Activity, before the coordinator's note.
     const regions = screen.getAllByRole('region').map(r => r.getAttribute('aria-label'))
     expect(regions.indexOf('Needs cleanup')).toBeLessThan(regions.indexOf('Coordinator'))
@@ -173,7 +163,7 @@ describe('Needs cleanup on Work → Activity', () => {
     view = round => planView(round, { working: false, underAttempt: true })
     page('#work')
     await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 offline host · 1 external work without heartbeat in Round 5 ›'))
+    await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 5 ›'))
     await go('#work?section=activity')
     const list = await screen.findByRole('region', { name: 'Needs cleanup' })
     await waitFor(() => expect(within(list).getByRole('list', { name: 'Registered external work with no heartbeat' })).toHaveTextContent('TD-457: fix the landing gate'))
@@ -185,47 +175,17 @@ describe('Needs cleanup on Work → Activity', () => {
     progress = { ...progressBody, hosts: progressBody.hosts.map(h => ({ ...h, reported_offline: false })) }
     page('#work?section=activity')
     const list = await screen.findByRole('region', { name: 'Needs cleanup' })
-    await waitFor(() => expect(list).toHaveTextContent('Needs cleanup · 0 offline hosts · 0 external works without heartbeat in Round 5'))
-    expect(list).toHaveTextContent('None reported offline.')
+    await waitFor(() => expect(list).toHaveTextContent('Needs cleanup · 0 external works without heartbeat in Round 5'))
     expect(list).toHaveTextContent("None in Round 5's plan view.")
   })
 })
 
 describe('what cannot be read says Unknown, on the entry and the list alike', () => {
-  it('a GET /progress that fails leaves the hosts Unknown with why, the rest counted as "at least"', async () => {
-    failing = /\/agentrt\/progress$/
-    page('#work?root=R5')
-    await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent(/^Needs cleanup: offline hosts Unknown: GET \/progress could not be read \(.+\) · 1 external work without heartbeat in Round 5 ›$/))
-    await go('#work?section=activity&root=R5')
-    const list = await screen.findByRole('region', { name: 'Needs cleanup' })
-    await waitFor(() => expect(list).toHaveTextContent('Hosts the controller reports offline · Unknown · every host of the runtime'))
-    expect(within(list).getAllByRole('alert')[0]).toHaveTextContent(/^Unknown · GET \/progress could not be read/)
-  })
-
-  // Platform review of b48fec12: the shell's last answer two minutes old, its refresh hanging, said "0 offline hosts".
-  it('a GET /progress two minutes old leaves the hosts Unknown with its age, on the entry and the list, with no number', async () => {
-    const allOnline = { ...progressBody, hosts: progressBody.hosts.map(h => ({ ...h, reported_offline: false })), generated_at: prod.as_of }
-    client.setQueryData(['agent-runtime-progress'], (await import('@/api/agentRuntime')).parseRuntimeProgress(allOnline), { updatedAt: NOW - 120_000 })
-    hang = true
-    page('#work')
-    await summary()
-    const age = `GET /progress is older than twice the shell's 5 s poll: last answered 2 min ago (${new Date(NOW - 120_000).toISOString()})`
-    await waitFor(() => expect(entry()).toHaveTextContent(`Needs cleanup: offline hosts Unknown: ${age} · 1 external work without heartbeat in Round 5 ›`))
-    expect(entry()).not.toHaveTextContent(/\d+\+? offline hosts?/)
-    await go('#work?section=activity')
-    const list = await screen.findByRole('region', { name: 'Needs cleanup' })
-    await waitFor(() => expect(list).toHaveTextContent('Hosts the controller reports offline · Unknown · every host of the runtime'))
-    expect(within(list).getAllByRole('alert')[0]).toHaveTextContent(`Unknown · ${age}.`)
-    expect(list).not.toHaveTextContent('None reported offline.')
-    expect(list).not.toHaveTextContent(/\d+\+? offline hosts?/)
-  })
-
   it('a plan view older than 60 s leaves the registered work Unknown, listed as last read and not counted', async () => {
     view = round => planView(round, { asOf: new Date(NOW - 120_000).toISOString() })
     page('#work')
     await summary()
-    await waitFor(() => expect(entry()).toHaveTextContent(/^Needs cleanup: 1 offline host · external work without heartbeat in Round 5 Unknown: Round 5's plan view is older than 60 s; as of .+ ›$/))
+    await waitFor(() => expect(entry()).toHaveTextContent(/^Needs cleanup: external work without heartbeat in Round 5 Unknown: Round 5's plan view is older than 60 s; as of .+ ›$/))
     // The same old view behind every other count of the page (R5:5.5-4 audit): the sign-offs are Unknown, not "13 later",
     // and the tab under the row says its counts are that snapshot's.
     const asOf = new Date(NOW - 120_000).toISOString()

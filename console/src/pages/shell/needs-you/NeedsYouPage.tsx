@@ -4,7 +4,6 @@ import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchLineage } from '@/api/lineage'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { RuntimeHostRow } from '@/components/shell/HostHeartbeatRow'
 import { AnswerGroup } from '@/pages/shell/needs-you/AnswerGroup'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
@@ -138,7 +137,6 @@ export function NeedsYouPage() {
     drills,
     recent,
     silent,
-    lost,
     capacityText,
     now,
     questions,
@@ -284,8 +282,7 @@ export function NeedsYouPage() {
           : <Note>Generated: {runtimeQuery.data?.generated_at || 'Unknown'}</Note>}
         {runtimeCount.state === 'loading' && <Note>Loading…</Note>}
         {runtimeCount.state === 'unknown' && !runtimeUnreadable && <Note>Could not load agent runtime: {runtimeCount.reason}. Count is incomplete.</Note>}
-        {runtimeCount.state === 'known' && runtimeItems.length === 0 && lost.length === 0 && <Note>No requests.</Note>}
-        {lost.length > 0 && <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">{lost.map(host => <RuntimeHostRow key={host.host_id} host={host} />)}</ul>}
+        {runtimeCount.state === 'known' && runtimeItems.length === 0 && <Note>No requests.</Note>}
         <ul className="m-0 flex flex-col gap-2 p-0">{runtimeItems.map(item => <li key={item.id} className="list-none text-sm">
           <strong>{item.title}</strong>{item.kind && ` · ${item.kind}`} {item.since && <time>{item.since}</time>}
           <p><a className="underline" href={item.href}>{item.instruction}</a></p>

@@ -1,8 +1,6 @@
 import { useRef } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { text } from '@/api/agentRuntime'
 import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@/api/agentRuntimeBus'
-import { fetchRuntimeGoal } from '@/api/agentRuntimeGoals'
 import { operatorToken } from '@/api/client'
 import { fetchClusterPostgresBackupStatus, fetchDataFreshness } from '@/api/cluster'
 import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
@@ -19,13 +17,9 @@ import {
   releaseWindowView,
   splitReleaseRuns,
 } from '@/pages/shell/releases/releaseView'
-import { useRuntimeArch } from '../agents/useRuntimePlan'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile, type ProbeReach } from './dataTiles'
 import {
   ownerVerdict,
-  goalRefreshMs,
-  lastResult,
-  workNow,
 } from './ownerModel'
 import { current, errorText, useOwnerYours } from './useOwnerYours'
 
@@ -62,14 +56,6 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
 
   // A failed refresh voids the last answer: agents idle, nodes ready and so on are not shown from a cache (review 221 A7).
   const runtime = current(needsYou.runtimeQuery)
-  const work = workNow(runtime)
-  // Architecture keeps its existing read; WorkPlanView owns the aggregate plan snapshot.
-  const arch = useRuntimeArch(blocks.work)
-  const lastId = work?.lastAccepted?.mission ?? ''
-  const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
-    enabled: blocks.work && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
-    refetchInterval: q => goalRefreshMs(text(q.state.data?.mission.state)) })
-
   // What the coordinating thread is doing: its latest note in the Owner's mailbox (2.5 G3).
   const coordinatorQ = useQuery({ queryKey: ['agent-runtime-thread', COORDINATOR_THREAD, 'note'], queryFn: ({ signal }) => fetchCoordinatorNote(signal),
     enabled: blocks.work && hasToken, retry: false, refetchInterval: 60_000 })
@@ -89,8 +75,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const runsError = runSources.map(q => (q.isError ? errorText(q.error) : q.isPaused ? 'offline' : null)).find(e => e != null) ?? null
   const runsLoading = blocks.work && !runsRead && runsError == null
 
-  const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null,
-    running: work ? work.running : null, stalled: work ? work.stalled : null, stalledWords: work?.stalledWords, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
+  const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
 
   const marketData = current(marketQ)
   const marketItems = marketData != null && !isProxyError(marketData) && marketData.ok !== false ? marketData.freshness_summary ?? [] : undefined
@@ -121,8 +106,6 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
     alerts,
     alertsError,
     standbyEvidence,
-    work,
-    live: runtime?.live ?? [],
     /** The runtime as last read, for what stops its controller (RuntimeHealthNotice, TD-411). */
     runtime,
     controls: runtime?.controls ?? [],
@@ -131,16 +114,11 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
     runtimeError: needsYou.runtimeQuery.isError || needsYou.runtimeQuery.isPaused,
     runtimeReadAt: typeof needsYou.runtimeQuery.dataUpdatedAt === 'number' && needsYou.runtimeQuery.dataUpdatedAt > 0 ? needsYou.runtimeQuery.dataUpdatedAt : null,
     runtimeOpenedAt: openedAt.current,
-    lastGoal: text(lastGoalQ.data?.mission.goal) || text(lastGoalQ.data?.mission.title),
-    last: lastResult(work, current(lastGoalQ) ? text(lastGoalQ.data?.mission.state) : ''),
     coordinator: !hasToken ? { state: 'error' as const, error: COORDINATOR_SIGN_IN }
       : coordinatorQ.isError ? { state: 'error' as const, error: errorText(coordinatorQ.error) ?? 'Request failed' }
       : coordinatorQ.isPaused ? { state: 'error' as const, error: 'offline' }
       : coordinatorQ.data === undefined ? { state: 'loading' as const }
       : { state: 'read' as const, note: coordinatorQ.data.note, full: coordinatorQ.data.full },
-    arch,
-    hosts: runtime?.hosts ?? [],
-    missions: runtime?.work.missions ?? [],
     nodes,
     nodeCount,
     nodesError: errorText(nodesQ.error),

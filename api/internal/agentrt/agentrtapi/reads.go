@@ -70,14 +70,6 @@ func (a *API) getRow(w http.ResponseWriter, r *http.Request, q, id string) {
 	_, _ = w.Write(doc)
 }
 
-func (a *API) getTask(w http.ResponseWriter, r *http.Request) {
-	a.getRow(w, r, `SELECT to_jsonb(t) FROM agentrt.task t WHERE task_id = $1`, chi.URLParam(r, "id"))
-}
-
-func (a *API) getAttempt(w http.ResponseWriter, r *http.Request) {
-	a.getRow(w, r, `SELECT to_jsonb(a) FROM agentrt.attempt a WHERE attempt_id = $1`, chi.URLParam(r, "id"))
-}
-
 // hiddenFrom are the streams a principal of a role may not read: an Agent
 // host's agentd does not read the exams' records (capability_exams: which
 // rules an answer failed). The cut keeps per-rule results off the host

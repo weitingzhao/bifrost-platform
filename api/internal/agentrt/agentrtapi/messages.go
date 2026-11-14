@@ -3,81 +3,12 @@ package agentrtapi
 import (
 	"context"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
-
-// attemptActions is an attempt's action stream (GET /attempts/{id}/actions):
-// after= a stream id from a previous answer, limit= 1 to 500 (default 200);
-// last=1 answers only the newest action, for the Console's "now" line.
-func (a *API) attemptActions(w http.ResponseWriter, r *http.Request) {
-	if a.Actions == nil {
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "this platform keeps no actions (no redis-agents)")
-		return
-	}
-	id, q := chi.URLParam(r, "id"), r.URL.Query()
-	if q.Get("last") == "1" {
-		e, ok, err := a.Actions.Last(r.Context(), id)
-		if err != nil {
-			a.fail(w, err)
-			return
-		}
-		out := map[string]any{"attempt_id": id, "actions": []actions.Entry{}}
-		if ok {
-			out["actions"] = []actions.Entry{e}
-		}
-		writeJSON(w, http.StatusOK, out)
-		return
-	}
-	limit := 200
-	if s := q.Get("limit"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n < 1 || n > 500 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to 500")
-			return
-		}
-		limit = n
-	}
-	after := q.Get("after")
-	if after != "" && !validStreamID(after) {
-		writeError(w, http.StatusBadRequest, "bad_request", "after is a stream id from a previous answer (digits-digits)")
-		return
-	}
-	es, err := a.Actions.Read(r.Context(), id, after, limit)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	next := after
-	if len(es) > 0 {
-		next = es[len(es)-1].ID
-	}
-	if es == nil {
-		es = []actions.Entry{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"attempt_id": id, "actions": es, "next": next})
-}
-
-// streamID is a Redis stream id, the cursor of an action stream; each half
-// fits an unsigned 64-bit integer (review 265 C7).
-var streamID = regexp.MustCompile(`^[0-9]{1,20}-[0-9]{1,20}$`)
-
-func validStreamID(s string) bool {
-	if !streamID.MatchString(s) {
-		return false
-	}
-	ms, seq, _ := strings.Cut(s, "-")
-	_, e1 := strconv.ParseUint(ms, 10, 64)
-	_, e2 := strconv.ParseUint(seq, 10, 64)
-	return e1 == nil && e2 == nil
-}
 
 type messageBody struct {
 	To   string `json:"to"`

@@ -1,16 +1,12 @@
 import { ago } from '../progress/attemptActionWords'
 export { ago } from '../progress/attemptActionWords'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
-import type { MissionEta, RuntimeProgress } from '@/api/agentRuntime'
-import { record, text } from '@/api/agentRuntime'
-import type { RuntimeRound } from '@/api/agentRuntimePlan'
 import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/alertMapping'
 import type { MappedAlert } from '@/lib/observability/types'
 import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import type { ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { standbyVerdict, type StandbyEvidence } from './standbyEvidence'
-import { activityCounts, attemptActivity } from './attemptActivity'
 
 /**
  * The Owner Console (Owner 2026-10-16): what is his to do first, then what is worth a look, the
@@ -167,19 +163,11 @@ export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount)
 export function ownerVerdict(input: {
   yours: NeedsYouCount
   approvals: number | null
-  running: number | null
-  /** Live attempts not counted as running, and the runtime's words for them ("1 host lost · 1 maybe stuck"; T24). */
-  stalled?: number | null
-  stalledWords?: string
   lane: string
   nodes: { ready: number; total: number } | null
 }): Verdict {
   const facts = [
     input.approvals == null ? 'approvals unknown' : input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
-    input.running == null ? 'agents unknown' : input.running === 0 && !input.stalled ? 'agents idle'
-      : [input.running > 0 ? `${plural(input.running, 'agent')} running` : '',
-        input.stalled ? `${plural(input.stalled, 'agent')} not confirmed running${input.stalledWords ? ` (${input.stalledWords})` : ''}` : '']
-        .filter(Boolean).join(', '),
     input.lane,
     input.nodes == null ? 'nodes unknown' : `${input.nodes.ready} of ${input.nodes.total} nodes ready`,
   ]
@@ -193,119 +181,11 @@ export function ownerVerdict(input: {
   return { tone: 'attention', headline: `${plural(n, 'thing')} ${n === 1 ? 'is' : 'are'} yours`, line }
 }
 
-export type WorkNow = {
-  /** Live attempts the runtime calls working or slow; one on a lost host, maybe stuck or unknown is not running (T24). */
-  running: number
-  /** The other live attempts, and how many of each ("1 host lost · 1 maybe stuck"). */
-  stalled: number
-  stalledWords: string
-  stuck: number
-  open: number
-  /** The latest accepted implementation, and its mission's state when the open list has it. Accepted is not done (review 224 A-224-1). */
-  lastAccepted: { mission: string; at: string; openState: string } | null
-}
-
-const STUCK_TASK = new Set(['blocked', 'rejected', 'failed'])
-const STUCK_MISSION = new Set(['paused', 'blocked', 'failed'])
-
-export function workNow(runtime: RuntimeProgress | undefined): WorkNow | null {
-  if (!runtime) return null
-  const missions = runtime.work.missions
-  const stuck = missions.filter(m => STUCK_MISSION.has(m.state) || m.tasks.some(t => STUCK_TASK.has(t.state))).length
-  const accepted = runtime.recent.tasks
-    .filter(t => text(t.role) === 'implement' && text(t.state) === 'accepted' && text(t.mission_id))
-    .sort((a, b) => text(b.ended_at).localeCompare(text(a.ended_at)))[0]
-  const mission = text(accepted?.mission_id)
-  const stalled = runtime.live.filter(a => attemptActivity(a) !== 'running')
-  return {
-    running: runtime.live.length - stalled.length,
-    stalled: stalled.length,
-    stalledWords: activityCounts(stalled),
-    stuck,
-    open: missions.length,
-    lastAccepted: accepted ? { mission, at: text(accepted.ended_at), openState: missions.find(m => m.mission_id === mission)?.state ?? '' } : null,
-  }
-}
-
-/** A goal not yet done is read again every 30 s while its block is shown; a done one never changes (review 225 B-225-1). */
-export const GOAL_STATE_REFRESH_MS = 30_000
-
-export function goalRefreshMs(missionState: string): number | false {
-  return missionState === 'done' ? false : GOAL_STATE_REFRESH_MS
-}
-
-export type LastResult = { mission: string; at: string; status: 'done' | 'open' | 'unknown'; state: string }
-
-/**
- * What became of the latest accepted implementation's goal. Done only when the mission says so
- * (the goal read, `mission.state`); a mission still on the open list is open whatever its tasks
- * say; otherwise all that is known is that the implementation was accepted.
- */
-export function lastResult(work: WorkNow | null, missionState: string): LastResult | null {
-  const last = work?.lastAccepted
-  if (!last) return null
-  if (missionState === 'done') return { mission: last.mission, at: last.at, status: 'done', state: 'done' }
-  const open = missionState || last.openState
-  if (open) return { mission: last.mission, at: last.at, status: 'open', state: open }
-  return { mission: last.mission, at: last.at, status: 'unknown', state: '' }
-}
-
-/** One line for it: "M-2 done 15 h ago", "M-7 implementation accepted 2 h ago; the goal is paused". */
-export function lastResultLine(r: LastResult, now: number): string {
-  if (r.status === 'done') return `${r.mission} done ${ago(r.at, now)}`
-  const accepted = `${r.mission} implementation accepted ${ago(r.at, now)}`
-  return r.status === 'open' ? `${accepted}; the goal is ${r.state}` : accepted
-}
-
-export type PlanRow = { key: string; name: string; done: number; total: number; manual: number; stopped: number; tone: Tone; tag: '' | 'now' | 'next' }
-
-export function planRows(round: RuntimeRound | undefined): PlanRow[] {
-  if (!round || round.unknown !== undefined) return []
-  const firstTodo = round.items.findIndex(i => i.state === 'todo')
-  return round.items.map((item, i) => {
-    const live = record(item).live === true
-    const tone: Tone = item.state === 'done' ? 'ok' : item.state === 'todo' ? 'muted' : 'info'
-    return { key: item.key, name: item.name, done: item.done ?? 0, total: item.total ?? 0, manual: item.manual ?? 0, stopped: item.stopped ?? 0, tone,
-      tag: live ? 'now' : i === firstTodo ? 'next' : '' }
-  })
-}
-
 /** A time of day, with the date when it is not today. */
 export function clockTime(ms: number, now: number): string {
   const d = new Date(ms)
   const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   return d.toDateString() === new Date(now).toDateString() ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`
-}
-
-function span(ms: number): string {
-  const m = Math.max(1, Math.round(ms / 60_000))
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`
-}
-
-/** A usual time to the second under an hour: "1 min 40 s". */
-function usual(s: number): string {
-  if (s < 60) return `${s} s`
-  if (s < 3600) return `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`
-  return `${Math.floor(s / 3600)} h${Math.floor((s % 3600) / 60) ? ` ${Math.floor((s % 3600) / 60)} min` : ''}`
-}
-
-/** When a goal should be done, as a range of local times and how far off; or that it is unknown, and why. */
-export function etaLine(eta: MissionEta, now: number): string {
-  if (eta.state === 'unknown') return `Done by: unknown — ${eta.reason}`
-  const lo = Date.parse(eta.earliest), hi = Date.parse(eta.latest)
-  if (hi <= now) return `Expected by ${clockTime(hi, now)}; that time has passed`
-  if (lo <= now) return `Expected by ${clockTime(hi, now)}, within ${span(hi - now)}`
-  const range = clockTime(lo, now) === clockTime(hi, now) ? clockTime(hi, now) : `${clockTime(lo, now)}–${clockTime(hi, now)}`
-  return `Expected ${range}, in ${span(lo - now)}${hi - lo >= 60_000 ? ` to ${span(hi - now)}` : ''}`
-}
-
-/** What an estimate stands on: each role and task class with its usual time and how many accepted attempts gave it. */
-export function etaBasis(eta: MissionEta): string[] {
-  if (eta.state === 'unknown') return []
-  return [
-    ...eta.basis.map(b => `${b.role} ${b.task_class || 'tasks'}: usually ${usual(b.usual_s)}, from ${plural(b.samples, 'accepted attempt')} in 30 days`),
-    ...(eta.past_usual.length ? [`${plural(eta.past_usual.length, 'task')} already past 1.5 times its usual time: ${eta.past_usual.join(', ')}`] : []),
-  ]
 }
 
 export type DataTile = { name: string; tone: Tone; state: string; figure: string; detail: string; href: string }

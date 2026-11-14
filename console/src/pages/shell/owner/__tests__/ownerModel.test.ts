@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
-import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
-import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
-import { parseMissionEta, parseRuntimeProgress } from '@/api/agentRuntime'
-import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, clockTime, etaBasis, etaLine, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, splitAlerts, waitingRow, workNow, yoursCount } from '../ownerModel'
+import { ago, yoursNavBadge, ownerVerdict, splitAlerts, waitingRow, yoursCount } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
@@ -136,16 +131,16 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
 })
 
 describe('the verdict', () => {
-  const base = { approvals: 0, running: 0, lane: 'release lane free', nodes: { ready: 5, total: 5 } }
-  it('says nothing needs him, with the four facts behind it', () => {
+  const base = { approvals: 0, lane: 'release lane free', nodes: { ready: 5, total: 5 } }
+  it('says nothing needs him, with the three facts behind it', () => {
     expect(ownerVerdict({ ...base, yours: { state: 'known', count: 0 } })).toEqual({
-      tone: 'ok', headline: 'Nothing needs you', line: 'Nothing to approve · agents idle · release lane free · 5 of 5 nodes ready' })
+      tone: 'ok', headline: 'Nothing needs you', line: 'Nothing to approve · release lane free · 5 of 5 nodes ready' })
   })
   it('counts his alerts with his waiting items', () => {
-    const v = ownerVerdict({ ...base, approvals: 1, running: 2, yours: yoursCount({ state: 'known', count: 1 }, { state: 'known', count: 1 }) })
+    const v = ownerVerdict({ ...base, approvals: 1, yours: yoursCount({ state: 'known', count: 1 }, { state: 'known', count: 1 }) })
     expect(v.headline).toBe('2 things are yours')
     expect(v.tone).toBe('attention')
-    expect(v.line).toBe('1 request to approve · 2 agents running · release lane free · 5 of 5 nodes ready')
+    expect(v.line).toBe('1 request to approve · release lane free · 5 of 5 nodes ready')
   })
   it('alerts not read, or still loading, never add up to nothing (review 221 A1)', () => {
     const unread = yoursCount({ state: 'known', count: 0 }, { state: 'unknown', reason: 'Alerts could not be read: HTTP 503' })
@@ -155,8 +150,8 @@ describe('the verdict', () => {
     expect(ownerVerdict({ ...base, yours: { state: 'loading' } }).headline).toBe('Checking what is yours…')
   })
   it('says what it could not read in the facts too', () => {
-    const v = ownerVerdict({ ...base, approvals: null, running: null, nodes: null, yours: { state: 'unknown', reason: 'questions request failed' } })
-    expect(v.line).toBe('questions request failed · approvals unknown · agents unknown · release lane free · nodes unknown')
+    const v = ownerVerdict({ ...base, approvals: null, nodes: null, yours: { state: 'unknown', reason: 'questions request failed' } })
+    expect(v.line).toBe('questions request failed · approvals unknown · release lane free · nodes unknown')
   })
   it('makes a waiting item a row with its way in', () => {
     expect(waitingRow({ id: 'q', title: 'Q1', href: '#needs-you', instruction: 'Answer', since: '2026-10-19T12:00:00Z' }))
@@ -165,81 +160,15 @@ describe('the verdict', () => {
 })
 
 describe('work, plan and quota', () => {
-  it('reads running, stuck, open goals and the latest accepted implementation from the runtime', () => {
-    const runtime = parseRuntimeProgress(progressFixture)
-    const work = workNow(runtime)!
-    expect(work.running).toBe(runtime.live.length)
-    expect(work.open).toBe(runtime.work.missions.length)
-    expect(work.lastAccepted?.mission).toMatch(/^M-\d+$/)
-    expect(workNow(undefined)).toBeNull()
-  })
-  it('calls a goal done only when its mission is done; an accepted implementation is not a done goal (review 224 A-224-1)', () => {
-    const work = { running: 0, stuck: 1, open: 1, lastAccepted: { mission: 'M-7', at: new Date(NOW - 2 * 3600_000).toISOString(), openState: 'paused' } }
-    expect(lastResult(work, '')).toMatchObject({ status: 'open', state: 'paused' })
-    expect(lastResultLine(lastResult(work, '')!, NOW)).toBe('M-7 implementation accepted 2 h ago; the goal is paused')
-    expect(lastResult(work, 'active')).toMatchObject({ status: 'open', state: 'active' })
-    expect(lastResultLine(lastResult(work, 'done')!, NOW)).toBe('M-7 done 2 h ago')
-    const gone = { ...work, lastAccepted: { ...work.lastAccepted, openState: '' } }
-    expect(lastResultLine(lastResult(gone, '')!, NOW)).toBe('M-7 implementation accepted 2 h ago')
-    expect(lastResult(null, 'done')).toBeNull()
-  })
 
-  it('reads a goal that is not done again, and stops once it is (review 225 B-225-1)', () => {
-    expect(goalRefreshMs('active')).toBe(30_000)
-    expect(goalRefreshMs('paused')).toBe(30_000)
-    expect(goalRefreshMs('')).toBe(30_000)
-    expect(goalRefreshMs('done')).toBe(false)
-  })
 
   it('names the subject, not kube-state-metrics\' own pod, as where an alert is', () => {
     const job = { labels: { alertname: 'KubeJobFailed', severity: 'warning', namespace: 'data', job_name: 'drill', pod: 'kube-state-metrics-x', container: 'kube-state-metrics' }, annotations: {}, state: 'firing', active_at: '2026-10-16T10:00:00Z' }
     expect(splitAlerts([job], null, NOW).worth[0].detail).toBe('warning · data · since 10 h ago')
   })
 
-  it('tags the first step not started as next', () => {
-    const rows = planRows(parseRuntimeRound(roadmap.round))
-    expect(rows.map(r => r.key)).toEqual(['2.0', '2.1', '2.2', '2.2b', '2.3', '2.4', '2.5'])
-    expect(rows.find(r => r.tag === 'next')?.key).toBe('2.3')
-    expect(rows[0]).toMatchObject({ tone: 'ok', done: 3, total: 3 })
-    expect(rows[1].tone).toBe('info')
-  })
 })
 
-// GET /agentrt/progress from the handler on a test database (store's kernel world: three accepted
-// implementations of 100 s, two queued): M-1 is estimated, M-2 waits for a decision.
-describe('when a goal should be done (2.5 G8)', () => {
-  const [m1, m2] = parseRuntimeProgress(etaFixture).work.missions
-  const generated = Date.parse('2026-10-19T23:35:51Z')
-  it('reads the estimate as a range with its basis, and an unknown one with why', () => {
-    expect(m1.eta).toEqual({ state: 'estimated', earliest: '2026-10-19T23:39:11Z', latest: '2026-10-19T23:40:51Z', past_usual: [],
-      basis: [{ role: 'implement', task_class: 'go', usual_s: 100, samples: 3 }], reason: etaFixture.work.missions[0].eta.reason })
-    expect(m2.eta).toEqual({ state: 'unknown', reason: 'the mission is proposed: a wait for a decision has no usual time' })
-  })
-  it('says the range in local times and how far off, never a fixed unknown', () => {
-    const lo = Date.parse('2026-10-19T23:39:11Z'), hi = Date.parse('2026-10-19T23:40:51Z')
-    expect(etaLine(m1.eta, generated)).toBe(`Expected ${clockTime(lo, generated)}–${clockTime(hi, generated)}, in 3 min to 5 min`)
-    expect(etaLine(m1.eta, lo + 1000)).toBe(`Expected by ${clockTime(hi, lo)}, within 2 min`)
-    expect(etaLine(m1.eta, hi + 1000)).toBe(`Expected by ${clockTime(hi, hi)}; that time has passed`)
-    expect(etaLine(m2.eta, generated)).toBe('Done by: unknown — the mission is proposed: a wait for a decision has no usual time')
-    expect(etaBasis(m1.eta)).toEqual(['implement go: usually 1 min 40 s, from 3 accepted attempts in 30 days'])
-    expect(etaBasis(m2.eta)).toEqual([])
-  })
-  it('names tasks past their usual time, and takes an estimate it cannot read as unknown', () => {
-    const late = parseMissionEta({ ...etaFixture.work.missions[0].eta, past_usual: ['t_1'] })
-    expect(etaBasis(late)[1]).toBe('1 task already past 1.5 times its usual time: t_1')
-    const basis = etaFixture.work.missions[0].eta.basis![0]
-    // A basis without its task class, or with no samples behind its usual time, is not read as another basis (review 411 C2).
-    for (const bad of [{ ...basis, task_class: { name: 'go' } }, { ...basis, task_class: undefined }, { ...basis, samples: 0 }]) {
-      expect(parseMissionEta({ ...etaFixture.work.missions[0].eta, basis: [bad] })).toEqual({ state: 'unknown', reason: 'the runtime\'s estimate could not be read' })
-    }
-    expect(parseMissionEta({ ...etaFixture.work.missions[0].eta, basis: [{ ...basis, task_class: '' }] })).toMatchObject({ state: 'estimated' })
-    for (const broken of [{ ...etaFixture.work.missions[0].eta, latest: 'soon' }, { ...etaFixture.work.missions[0].eta, basis: [] },
-      { ...etaFixture.work.missions[0].eta, earliest: '2026-10-19T23:41:00Z' }, false, null, { state: 'estimated' }]) {
-      expect(parseMissionEta(broken)).toEqual({ state: 'unknown', reason: expect.any(String) })
-    }
-    expect(parseMissionEta({})).toEqual({ state: 'unknown', reason: 'the runtime gave no estimate' })
-  })
-})
 
 describe('data tiles', () => {
   it('says unknown, never OK, when a source cannot be read', () => {

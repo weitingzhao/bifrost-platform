@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import prod from '@/api/__fixtures__/plan-view-pv2-prod-r4.json'
 import presenceFixture from '@/api/__fixtures__/agentrt-progress-presence.testdb.json'
-import stgProgress from '@/api/__fixtures__/agentrt-progress.stg.json'
-import { parseRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
 import type { RoundsRead } from '../planRoundModel'
-import { cleanupBreakdown, cleanupGaps, cleanupHosts, cleanupWork, cleanupWords, groupCount, heartbeatUnconfirmed, needsCleanup, type NeedsCleanup } from '../needsCleanupModel'
+import { cleanupBreakdown, cleanupGaps, cleanupWork, cleanupWords, groupCount, heartbeatUnconfirmed, needsCleanup, type NeedsCleanup } from '../needsCleanupModel'
 
 /*
  * R5:5.5-4: what was left stale on Work's first screen (PROD 2026-11-01: "Host mbp-dev is offline: its last poll was 14
@@ -17,8 +16,6 @@ import { cleanupBreakdown, cleanupGaps, cleanupHosts, cleanupWork, cleanupWords,
 /** GET /progress from real rows (W-31 3.5): h1 online, h2 reported offline 45 s after its last poll. */
 const presence = parseRuntimeProgress(presenceFixture)
 const at = Date.parse(presence.generated_at)
-/** GET /progress as the shell's cache holds it, answered `age` ms before `at` (fresh by default). */
-const ok = (data: RuntimeProgress, age = 0) => ({ data, error: null, isError: false, isPaused: false, dataUpdatedAt: at - age })
 
 /**
  * The PROD R4 plan view (2026-10-27) as of `now`, with two registered external works Running: one silent, one beating;
@@ -39,51 +36,6 @@ function view(now: number, o: { silentS?: number; beatingS?: number; serverSays?
 const roundsOk: RoundsRead = { state: 'ok', rounds: [{ id: 'R4', title: '' }], newest: 'R4', ignored: [], at: 0, failed: '' }
 const read = (v: PlanSnapshot | undefined, o: { failed?: string | null; root?: string | null; rounds?: RoundsRead } = {}) =>
   ({ view: v, failed: o.failed ?? null, root: o.root === undefined ? 'R4' : o.root, rounds: o.rounds ?? roundsOk })
-
-describe('the offline hosts', () => {
-  it('are the hosts the controller reports offline, every one, in For you\'s order', () => {
-    expect(cleanupHosts(ok(presence), at)).toEqual({ state: 'ok', items: [presence.hosts[1]] })
-    expect(cleanupHosts(ok({ ...presence, hosts: presence.hosts.map(h => ({ ...h, reported_offline: false })) }), at)).toEqual({ state: 'ok', items: [] })
-  })
-  it('are Unknown, with the condition, when GET /progress is not read or presence is not judged; reading before any answer', () => {
-    expect(cleanupHosts({ data: presence, error: new Error('Agent runtime: 503'), isError: true, isPaused: false, dataUpdatedAt: 0 }, at))
-      .toEqual({ state: 'unknown', reason: 'GET /progress could not be read (Agent runtime: 503)', items: [] })
-    expect(cleanupHosts({ data: undefined, error: null, isError: false, isPaused: true, dataUpdatedAt: 0 }, at)).toMatchObject({ state: 'unknown', reason: 'GET /progress could not be read (offline)' })
-    expect(cleanupHosts({ data: undefined, error: null, isError: false, isPaused: false, dataUpdatedAt: 0 }, at)).toEqual({ state: 'reading' })
-    const since = new Date(at - 3 * 60_000).toISOString()
-    const unjudged = cleanupHosts(ok({ ...presence, presence_unjudged: { since, why: 'the platform has not answered its health probe' } }), at)
-    expect(unjudged).toEqual({ state: 'unknown', reason: 'host presence cannot be judged since 3 min ago: the platform has not answered its health probe', items: [presence.hosts[1]] })
-    expect(cleanupHosts(ok({ ...presence, presence_deferred: { since, why: 'h1 silent for up to 2m5s but not judged' } }), at))
-      .toMatchObject({ state: 'unknown', reason: 'host presence judgment is deferred since 3 min ago: h1 silent for up to 2m5s but not judged' })
-    // A platform before W-31 3.5 does not say which hosts are offline: not "none".
-    expect(cleanupHosts(ok(parseRuntimeProgress(stgProgress)), at))
-      .toEqual({ state: 'unknown', reason: 'the platform does not say whether gate-b, mbp-dev are offline (a platform before W-31 3.5)', items: [] })
-  })
-})
-
-// Platform review of b48fec12: a GET /progress refresh that hangs neither fails nor answers, and its two-minute-old
-// "0 offline hosts" was said as now. Old is the module page's rule for this read: more than twice the shell's 5 s poll.
-describe('the offline hosts from an old GET /progress', () => {
-  const allOnline = { ...presence, hosts: presence.hosts.map(h => ({ ...h, reported_offline: false })) }
-  it('are Unknown, with the answer\'s age, when it is two minutes old: no number, not "0 offline hosts"', () => {
-    const old = cleanupHosts(ok(allOnline, 120_000), at)
-    expect(old).toEqual({ state: 'unknown', lastRead: true, items: [],
-      reason: `GET /progress is older than twice the shell's 5 s poll: last answered 2 min ago (${new Date(at - 120_000).toISOString()})` })
-    expect(groupCount(old)).toBe('Unknown')
-    const words = cleanupWords({ hosts: old, work: { state: 'ok', items: [] }, root: 'R4' })
-    expect(words).toBe(`offline hosts Unknown: GET /progress is older than twice the shell's 5 s poll: last answered 2 min ago (${new Date(at - 120_000).toISOString()}) · 0 external works without heartbeat in Round 4`)
-    expect(words).not.toMatch(/\d+\+? offline hosts?/)
-  })
-  it('lists an old answer\'s offline hosts as last read, never counted; fresh within twice the poll', () => {
-    const old = cleanupHosts(ok(presence, 11_000), at)
-    expect(old).toMatchObject({ state: 'unknown', lastRead: true, items: [presence.hosts[1]] })
-    expect(groupCount(old)).toBe('Unknown')
-    // In seconds (review: "just now" for an answer 11 s old contradicted "older than twice the 5 s poll").
-    expect(cleanupWords({ hosts: old, work: { state: 'ok', items: [] }, root: 'R4' })).toBe(
-      `offline hosts Unknown: GET /progress is older than twice the shell's 5 s poll: last answered 11 s ago (${new Date(at - 11_000).toISOString()}) · 0 external works without heartbeat in Round 4`)
-    expect(cleanupHosts(ok(presence, 10_000), at)).toEqual({ state: 'ok', items: [presence.hosts[1]] })
-  })
-})
 
 describe('the registered external work with no heartbeat', () => {
   const now = Date.parse('2026-11-01T10:00:00Z')
@@ -130,32 +82,25 @@ describe('the registered external work with no heartbeat', () => {
 
 describe('the count of the list', () => {
   const now = at
-  const list = (o: Partial<NeedsCleanup>): NeedsCleanup => ({ ...needsCleanup(ok(presence), read(view(now)), now), ...o })
-  // Review of 16435ae7: one total ("3 items") of a runtime-wide group and a one-round group hid the round.
-  it('says each group with its own count and reach, the round in visible words; 0 is said as 0, never "all clean"', () => {
-    const c = needsCleanup(ok(presence), read(view(now)), now)
-    expect(cleanupWords(c)).toBe('1 offline host · 1 external work without heartbeat in Round 4')
+  const list = (o: Partial<NeedsCleanup>): NeedsCleanup => ({ ...needsCleanup(read(view(now)), now), ...o })
+  // Review of 16435ae7: the count names its round in visible words. The offline-hosts group that stood beside it went
+  // with the dispatch lane (2026-11-14).
+  it('says the count and its reach, the round in visible words; 0 is said as 0, never "all clean"', () => {
+    const c = needsCleanup(read(view(now)), now)
+    expect(cleanupWords(c)).toBe('1 external work without heartbeat in Round 4')
     expect(cleanupBreakdown(c)).toEqual([
-      'Hosts the controller reports offline 1: every host of the runtime (GET /progress, reported_offline: silent past 30 s, active, no stop or drain).',
       "Registered external work with no heartbeat for over 60 s 1: Round 4 only (plan-view R4 external_work, Running or Registered, Unconfirmed; those on a task a runtime attempt runs included); each other round's is on its own Live tab, not read here.",
     ])
-    expect(cleanupWords(list({ hosts: { state: 'ok', items: [] }, work: { state: 'ok', items: [] } }))).toBe('0 offline hosts · 0 external works without heartbeat in Round 4')
-    expect(cleanupWords(list({ work: { state: 'ok', items: [] } }))).toBe('1 offline host · 0 external works without heartbeat in Round 4')
-    expect(cleanupWords({ ...list({}), root: null, work: { state: 'ok', items: [] } })).toBe('1 offline host · 0 external works without heartbeat: the runtime holds no round')
+    expect(cleanupWords(list({ work: { state: 'ok', items: [] } }))).toBe('0 external works without heartbeat in Round 4')
+    expect(cleanupWords({ ...list({}), root: null, work: { state: 'ok', items: [] } })).toBe('0 external works without heartbeat: the runtime holds no round')
   })
-  it('says in its own part what of a group is Unknown and why, counting only what was read now ("n+"), never a last read', () => {
-    const old = needsCleanup(ok(presence), read(view(now - 90_000)), now)
-    expect(cleanupWords(old)).toMatch(/^1 offline host · external work without heartbeat in Round 4 Unknown: Round 4's plan view is older than 60 s; as of /)
+  it('says what is Unknown and why, never counting a last read', () => {
+    const old = needsCleanup(read(view(now - 90_000)), now)
+    expect(cleanupWords(old)).toMatch(/^external work without heartbeat in Round 4 Unknown: Round 4's plan view is older than 60 s; as of /)
     expect(groupCount(old.work)).toBe('Unknown')
-    const deferred = { ...presence, presence_deferred: { since: presence.generated_at, why: 'probe failing' } }
-    const partly = needsCleanup(ok(deferred), read(view(now)), now)
-    expect(groupCount(partly.hosts)).toBe('1+ · Unknown')
-    expect(cleanupWords(partly)).toBe('1+ offline hosts, Unknown: host presence judgment is deferred since just now: probe failing · 1 external work without heartbeat in Round 4')
-    const none = needsCleanup({ data: undefined, error: new Error('down'), isError: true, isPaused: false, dataUpdatedAt: 0 }, read(undefined, { failed: 'down' }), now)
-    expect(cleanupWords(none)).toBe("offline hosts Unknown: GET /progress could not be read (down) · external work without heartbeat in Round 4 Unknown: Round 4's plan view could not be read (down)")
-    expect(cleanupGaps(none)).toHaveLength(2)
-    expect(groupCount(none.hosts)).toBe('Unknown')
-    expect(cleanupWords(needsCleanup({ data: undefined, error: null, isError: false, isPaused: false, dataUpdatedAt: 0 }, read(view(now)), now))).toBe('offline hosts reading… · 1 external work without heartbeat in Round 4')
-    expect(cleanupWords(needsCleanup(ok(presence), read(undefined), now))).toBe('1 offline host · external work in Round 4 reading…')
+    const none = needsCleanup(read(undefined, { failed: 'down' }), now)
+    expect(cleanupWords(none)).toBe("external work without heartbeat in Round 4 Unknown: Round 4's plan view could not be read (down)")
+    expect(cleanupGaps(none)).toHaveLength(1)
+    expect(cleanupWords(needsCleanup(read(undefined), now))).toBe('external work in Round 4 reading…')
   })
 })

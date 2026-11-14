@@ -19,8 +19,6 @@ allow	POST /api/v1/agent/threads/heartbeat
 deny	GET /api/v1/agentrt/artifacts
 allow	GET /api/v1/agentrt/artifacts/{id}
 allow	PUT /api/v1/agentrt/artifacts/{id}
-deny	GET /api/v1/agentrt/attempts/{id}
-deny	GET /api/v1/agentrt/attempts/{id}/actions
 deny	GET /api/v1/agentrt/controls
 deny	POST /api/v1/agentrt/controls
 deny	DELETE /api/v1/agentrt/controls/{id}
@@ -57,7 +55,6 @@ deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack
 deny	GET /api/v1/agentrt/messages/thread
-deny	GET /api/v1/agentrt/missions/{id}
 deny	GET /api/v1/agentrt/plan
 deny	GET /api/v1/agentrt/plan-view
 deny	GET /api/v1/agentrt/plan-pace
@@ -72,8 +69,6 @@ deny	POST /api/v1/agentrt/rules/{rule_id}/check
 deny	POST /api/v1/agentrt/rules/{rule_id}/proposals
 deny	POST /api/v1/agentrt/rules/{rule_id}/sign
 deny	POST /api/v1/agentrt/rules/{rule_id}/tighten
-deny	GET /api/v1/agentrt/tasks
-deny	GET /api/v1/agentrt/tasks/{id}
 allow	GET /api/v1/agentrt/whoami
 deny	GET /api/v1/approvals
 deny	POST /api/v1/approvals

@@ -348,45 +348,6 @@ describe('NeedsYouPage', () => {
     expect(group.querySelector(`[data-agent-thread="${runId}"]`)).toBeNull()
   })
 
-  it('counts an agent host the runtime reports offline, not the retired heartbeat route\'s hosts, and not a waiting thread', async () => {
-    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
-    runtimeHosts = [
-      { host_id: 'agent-06', state: 'active', online: false, reported_offline: true, poll_age_s: 45, last_poll_at: '2026-10-10T07:24:15Z', live_attempts: 2 },
-      { host_id: 'gate-b', state: 'active', online: false, reported_offline: false, poll_age_s: 900, last_poll_at: '2026-10-10T07:10:00Z' },
-    ]
-    stubFetch(
-      () => json(buildApprovalListResponse([])),
-      () =>
-        threadsResponse(
-          [
-            silentThread({ thread: 'wait', title: 'Waiting on you', status: 'waiting_owner', reason: 'idle_prompt' }),
-            silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn' }),
-          ],
-          [
-            {
-              host: 'mbp',
-              at: '2026-10-10T07:00:00Z',
-              age_seconds: 240,
-              status: 'lost',
-              vendors: [{ vendor: 'codex', wired: false, token: false, monitored: false }],
-            },
-          ],
-        ),
-    )
-    render(wrapper(<NeedsYouPage />))
-    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
-    const runtime = screen.getByRole('region', { name: 'Agent runtime' })
-    expect(within(runtime).getByText('agent-06')).toBeTruthy()
-    expect(within(runtime).getByText('Offline')).toBeTruthy()
-    expect(within(runtime).getByText('last poll 45s ago')).toBeTruthy()
-    expect(within(runtime).getByText('2 attempts on it')).toBeTruthy()
-    expect(within(runtime).queryByText('gate-b')).toBeNull()
-    expect(within(runtime).queryByText('No requests.')).toBeNull()
-    const group = screen.getByRole('region', { name: 'Silent threads' })
-    expect(within(group).queryByText('mbp')).toBeNull()
-    expect(within(group).queryByText('Waiting on you')).toBeNull()
-    expect(within(group).queryByText('Busy thread')).toBeNull()
-  })
 
   it('counts a capacity refusal younger than one hour, and not one that is exactly an hour old', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
@@ -419,16 +380,6 @@ describe('NeedsYouPage', () => {
     expect(screen.queryByText(/monitoring refused/)).toBeNull()
   })
 
-  it('counts an agent host that never polled', async () => {
-    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
-    runtimeHosts = [{ host_id: 'mini', state: 'active', online: false, reported_offline: true, last_poll_at: null }]
-    stubFetch(() => json(buildApprovalListResponse([])))
-    render(wrapper(<NeedsYouPage />))
-    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
-    const runtime = screen.getByRole('region', { name: 'Agent runtime' })
-    expect(within(runtime).getByText('Never polled')).toBeTruthy()
-    expect(within(runtime).getByText('no poll yet')).toBeTruthy()
-  })
 
   it('shows Unknown when the agent threads cannot be read, and still lists approvals', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')

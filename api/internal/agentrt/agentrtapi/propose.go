@@ -3,11 +3,7 @@ package agentrtapi
 import (
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -60,42 +56,5 @@ type budgetBody struct {
 	MaxWallHours int `json:"max_wall_hours"`
 }
 
-// getMission is the mission row with its tasks counted by state.
-func (a *API) getMission(w http.ResponseWriter, r *http.Request) {
-	a.getRow(w, r, `SELECT to_jsonb(m) || jsonb_build_object('task_counts', COALESCE((
-	    SELECT jsonb_object_agg(state, n) FROM (SELECT state, count(*) AS n FROM agentrt.task
-	      WHERE mission_id = m.mission_id GROUP BY state) s), '{}'::jsonb))
-	  FROM agentrt.mission m WHERE mission_id = $1`, chi.URLParam(r, "id"))
-}
-
-// taskStates are the states a task list may filter by.
-var taskStates = []string{"proposed", "awaiting_owner", "ready", "leased", "running", "submitted", "verifying",
-	"accepted", "rework", "rejected", "blocked", "paused", "cancelled"}
-
 // listLimit is the most rows a list answers.
 const listLimit = 500
-
-// listTasks is GET /tasks?mission=&state=: tasks oldest first, at most
-// listLimit, and whether there were more (truncated).
-func (a *API) listTasks(w http.ResponseWriter, r *http.Request) {
-	mission, state := r.URL.Query().Get("mission"), r.URL.Query().Get("state")
-	if state != "" && !slices.Contains(taskStates, state) {
-		writeError(w, http.StatusBadRequest, "bad_request", "state is one of "+strings.Join(taskStates, ", "))
-		return
-	}
-	var doc []byte
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
-		return tx.QueryRow(r.Context(), `SELECT jsonb_build_object(
-		    'tasks', COALESCE(jsonb_agg(to_jsonb(t) - 'n' ORDER BY t.created_at, t.task_id) FILTER (WHERE t.n <= $3), '[]'::jsonb),
-		    'truncated', COALESCE(max(t.n) > $3, false))
-		  FROM (SELECT x.*, row_number() OVER (ORDER BY x.created_at, x.task_id) AS n FROM agentrt.task x
-		    WHERE ($1 = '' OR x.mission_id = $1) AND ($2 = '' OR x.state = $2) ORDER BY x.created_at, x.task_id LIMIT $3 + 1) t`,
-			mission, state, listLimit).Scan(&doc)
-	})
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(doc)
-}

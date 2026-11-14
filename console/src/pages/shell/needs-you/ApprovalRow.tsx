@@ -6,9 +6,7 @@ import {
   formatWaited,
   type ApprovalItem,
 } from '@/api/approvals'
-import { approvalOptionLabel } from '@/api/assessment'
 import { approvalHref, formatShellHash } from '@/lib/shell/consoleRoutes'
-import { AssessmentLines } from '@/pages/question/AssessmentPanel'
 import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
 import { partOfLine, type ProgressPart } from '@/pages/shell/progress/progressPart'
 import { ApprovalRowPlanSteps } from '@/pages/shell/needs-you/ApprovalPlanSteps'
@@ -72,14 +70,6 @@ export function ApprovalRow({
               ? `waited ${formatWaited(item.created_at, now)} · ${formatTimeRemaining(item.expires_at, now)}`
               : `${item.requester || '—'} · decided ${formatDecidedAt(item)}`}
         </span>
-        {pending && item.number != null && item.number > 0 ? (
-          <AssessmentLines
-            snapshot={item.assessment}
-            rule={null}
-            label={approvalOptionLabel}
-            className="block min-w-0 break-words text-sm text-foreground"
-          />
-        ) : null}
       </a>
       {pending && partOf != null ? (
         <a

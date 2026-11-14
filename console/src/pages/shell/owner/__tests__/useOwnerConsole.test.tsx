@@ -4,7 +4,6 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
-import archFixture from '@/api/__fixtures__/agentrt-progress-arch.testdb.json'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 
@@ -151,40 +150,8 @@ describe('useOwnerConsole', () => {
   })
 
 
-  it('a goal whose mission is not done is not called done (review 224 A-224-1)', async () => {
-    api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'paused' }, tasks: [], events: [] })
-    const { result } = run({ system: false, work: true, chief: false })
-    await waitFor(() => expect(result.current.last).toMatchObject({ status: 'open', state: 'paused' }))
-  })
 
-  it('a goal read as active becomes done on the next read, without a tab switch (review 225 B-225-1)', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    try {
-      api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'active' }, tasks: [], events: [] })
-      const { result } = run({ system: false, work: true, chief: false })
-      await waitFor(() => expect(result.current.last).toMatchObject({ status: 'open', state: 'active' }))
-      api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'done' }, tasks: [], events: [] })
-      await vi.advanceTimersByTimeAsync(31_000)
-      await waitFor(() => expect(result.current.last).toMatchObject({ status: 'done' }))
-      const calls = api.goal.mock.calls.length
-      await vi.advanceTimersByTimeAsync(61_000)
-      expect(api.goal.mock.calls.length).toBe(calls)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
 
-  it('reads architecture without stitching the Work plan from progress and plan', async () => {
-    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined } })
-    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
-      return new Response(JSON.stringify(url.includes('/agentrt/progress') ? archFixture : {}))
-    })
-    vi.stubGlobal('fetch', fetcher)
-    const read = run({ system: false, work: true, chief: false })
-    await waitFor(() => expect(read.result.current.arch.from).toBe('runtime'))
-    expect(fetcher.mock.calls.some(([url]) => String(url).includes('/agentrt/plan?'))).toBe(false)
-  })
 
   it('with a node on standby, the cluster\'s evidence moves its alerts to noise; without it they stay', async () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })

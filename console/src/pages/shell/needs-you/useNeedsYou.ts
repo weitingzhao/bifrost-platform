@@ -1,7 +1,7 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
-import { mergedWaitingCount, offlineHostItem, offlineHosts, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
+import { mergedWaitingCount, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { capacityRefusalActive, capacityRefusalText, silentThreads } from '@/api/agentThreads'
@@ -79,7 +79,6 @@ export function useNeedsYou() {
   const questionsStale = questionsFailed && questionsQ.data != null
   const silent = silentThreads(threadsQuery.data?.threads ?? [])
   // The agent hosts are the runtime's (W-31 3.5): the retired heartbeat route's hosts are no longer read.
-  const lost = offlineHosts(runtimeQuery.data?.hosts)
   const capacityActive = threadsQuery.data != null && capacityRefusalActive(threadsQuery.data)
   const capacityText =
     capacityActive && threadsQuery.data?.last_thread_refusal
@@ -113,7 +112,7 @@ export function useNeedsYou() {
 
   const runtimeItems = runtimeWaiting(runtimeQuery.data?.needs_you.items ?? [], questions)
   const runtimeCount = knownOrPending(runtimeQuery.isError || runtimeQuery.isPaused || runtimeQuery.data?.needs_you.truncated === true,
-    runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length + lost.length)
+    runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length)
   // What waits for the Owner comes only from items with a way in: approvals, questions, the runtime.
   // The board's hand-written owner_now is not read (2.5 slice 3): the coordinator asks with a card or a request.
   count = mergedWaitingCount([count, runtimeCount])
@@ -124,7 +123,6 @@ export function useNeedsYou() {
     }))),
     ...openQuestions.map(openQuestionItem),
     ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: NEEDS_YOU_HREF, kind: 'silent_thread', instruction: 'For you · Check the silent thread' })),
-    ...lost.map(offlineHostItem),
     ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: NEEDS_YOU_HREF, instruction: 'For you · Restore thread monitoring capacity' }] : []),
     ...runtimeItems,
   ]
@@ -164,7 +162,6 @@ export function useNeedsYou() {
     drills: groups.drills,
     recent,
     silent,
-    lost,
     capacityText,
     now,
     questions,

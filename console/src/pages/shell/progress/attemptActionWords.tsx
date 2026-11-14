@@ -1,12 +1,5 @@
-import type { AttemptAction } from '@/api/agentRuntimeBus'
 
-/** Silence longer than this may mean a runtime attempt is stuck. */
-export const ATTEMPT_ACTION_STUCK_MS = 10 * 60_000
 
-export function ActionLabel({ action }: { action: AttemptAction }) {
-  const label = action.kind === 'result' ? `Exit ${action.code ?? '?'}` : ({ read: 'Read', edit: 'Edit', run: 'Run' }[action.kind] ?? action.kind)
-  return <span className="shrink-0 font-semibold" style={action.kind === 'result' && action.code !== undefined && action.code !== 0 ? { color: 'var(--color-danger)' } : undefined}>{label}</span>
-}
 // Shared formatting lives with the action label; this module has no local state.
 // eslint-disable-next-line react-refresh/only-export-components
 export function ago(at: string | number | undefined, now: number): string {

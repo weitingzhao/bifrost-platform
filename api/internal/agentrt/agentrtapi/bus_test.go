@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
 )
 
 // claimOne leases the world's task to agentd h1 and starts it; it returns the

@@ -1,4 +1,4 @@
-import { authedFetch, pathSegment } from '@/api/client'
+import { authedFetch } from '@/api/client'
 
 export const AGENT_RUNTIME_POLL_MS = 5_000
 export type RuntimeRecord = Record<string, unknown>
@@ -115,11 +115,6 @@ export type RuntimeProgress = {
 export type RuntimeEvent = {
   seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
 }
-/**
- * The repositories a goal may name: the platform's `store.Repos` (a Go test,
- * TestConsoleGoalReposAreTheRuntimes, reads this list and holds it to them).
- */
-export const GOAL_REPOS = ['bifrost-platform', 'bifrost-trade-infra'] as const
 
 export function parseRuntimeTask(v: unknown): RuntimeTask {
   const r = record(v)
@@ -255,31 +250,4 @@ export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
 export async function fetchRuntimeProgress(signal?: AbortSignal): Promise<RuntimeProgress> {
   const r = await authedFetch('Agent runtime', '/api/v1/agentrt/progress', { signal })
   return parseRuntimeProgress(await r.json())
-}
-export async function fetchRuntimeEvents(mission: string, signal?: AbortSignal): Promise<RuntimeEvent[]> {
-  const events: RuntimeEvent[] = []
-  let after = 0
-  for (;;) {
-    const r = await authedFetch('Agent events', `/api/v1/agentrt/events?${new URLSearchParams({ stream: `mission:${mission}`, after_seq: String(after) })}`, { signal })
-    const page = parseRuntimeEvents(await r.json())
-    events.push(...page)
-    if (page.length < 500) return events
-    const last = page.at(-1)?.seq
-    if (last === undefined || last <= after) throw new Error('Agent events: invalid pagination cursor')
-    after = last
-  }
-}
-/** One task as GET /agentrt/tasks/{id} answers (store.TaskView): what the Crew card names a live attempt by. */
-export type RuntimeTaskDetail = { task_id: string; title: string; role: string; mission_id: string; subject_task_id: string }
-export function parseRuntimeTaskDetail(v: unknown): RuntimeTaskDetail {
-  const r = record(v)
-  return { task_id: text(r.task_id), title: text(r.title), role: text(r.role), mission_id: text(r.mission_id), subject_task_id: text(r.subject_task_id) }
-}
-export async function fetchRuntimeTaskDetail(id: string, signal?: AbortSignal): Promise<RuntimeTaskDetail> {
-  const r = await authedFetch('Agent task', `/api/v1/agentrt/tasks/${encodeURIComponent(id)}`, { signal })
-  return parseRuntimeTaskDetail(await r.json())
-}
-export async function fetchRuntimeArtifact(id: string, signal?: AbortSignal): Promise<string> {
-  const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${pathSegment(id)}`, { signal })
-  return r.text()
 }

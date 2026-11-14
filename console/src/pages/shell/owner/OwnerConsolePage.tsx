@@ -62,8 +62,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     <VerdictBanner verdict={data.verdict} compact={entry !== 'command'} updatedAt={data.updatedAt} now={data.now} />
     {blocks.you && <OwnerYou data={data} />}
     {blocks.you && <OwnerWaiting />}
-    {/* Work's offline hosts are under Needs cleanup on its Activity page (R5:5.5-4); System still says them here. */}
-    {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} offlineHosts={!blocks.work} />}
+    {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
     {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}

@@ -1,5 +1,3 @@
-import { authedFetch } from '@/api/client'
-import { signInSafeError } from '@/lib/signInError'
 import { record, text } from '@/api/agentRuntime'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { approvalHref, goalHref } from '@/lib/shell/consoleRoutes'
@@ -101,63 +99,13 @@ export function parseAssessmentStream(value: unknown): Assessment {
   return asked !== '' ? { state: 'pending', askedAt: asked } : requested !== '' ? { state: 'requested', requestedAt: requested } : { state: 'none' }
 }
 
-export function assessmentKey(kind: AssessmentKind, id: string) {
-  return ['agentrt', 'assessment', kind, id] as const
-}
 
-export async function fetchAssessment(kind: AssessmentKind, id: string, signal?: AbortSignal): Promise<Assessment> {
-  const params = new URLSearchParams({ stream: assessmentStream(kind, id) })
-  const r = await authedFetch('AI assessment', `/api/v1/agentrt/events?${params}`, { signal }, assessmentResponseError)
-  return parseAssessmentStream(await r.json())
-}
 
-/** An approval's options as its assessment names them. */
-export function approvalOptionLabel(key: string): string {
-  return key === 'approve' ? 'Approve' : key === 'reject' ? 'Reject' : key
-}
 
-/** How often a page reads an assessment that may still come. */
-export const ASSESSMENT_PENDING_REFRESH_MS = 60_000
 
-/**
- * One line for a list row: the runtime rule's recommendation and the AI assessment as one when they agree,
- * both when they differ; an approval has the assessment alone. `label` names an option by its key.
- */
-export function assessmentLines(
-  a: Assessment | undefined,
-  rule: { key: string; line: string } | null,
-  label: (key: string) => string,
-): string[] {
-  const ruleLine = rule != null ? [rule.line] : []
-  if (a == null || a.state === 'none') return ruleLine
-  if (a.state === 'requested') return [...ruleLine, 'AI assessment: requested']
-  if (a.state === 'pending') return [...ruleLine, 'AI assessment: in progress']
-  if (a.state === 'unavailable') return [...ruleLine, `AI assessment unavailable: ${a.reason}`]
-  const ai = `${label(a.recommended)} (${a.confidence} confidence)`
-  if (rule != null && rule.key === a.recommended) return [`${rule.line} · the AI assessment agrees (${a.confidence} confidence)`]
-  if (rule != null) return [`Runtime rule: ${rule.line.replace(/^Recommended: /, '')}`, `AI assessment: ${ai}`]
-  return [`AI assessment: ${ai}`]
-}
 
 /** Snapshot carried by the ordinary approval/question read, never persisted in its material. */
 export type AssessmentSnapshot = { events?: unknown; error?: string }
 
-export function assessmentFromSnapshot(snapshot?: AssessmentSnapshot): Assessment {
-  if (snapshot?.error) return { state: 'unavailable', reason: snapshot.error }
-  try {
-    return parseAssessmentStream(snapshot?.events ?? [])
-  } catch {
-    return { state: 'unavailable', reason: 'this Console cannot read the assessment record' }
-  }
-}
 
 
-// Runtime errors carry the human reason in message, and a short code in error.
-async function assessmentResponseError(prefix: string, response: Response, token = ''): Promise<Error> {
-  let message = `HTTP ${response.status}`
-  try {
-    const body = record(await response.json())
-    message = text(body.message) || text(body.error) || message
-  } catch { /* Keep the HTTP status for non-JSON failures. */ }
-  return new Error(signInSafeError(`${prefix}: ${message}`, token, response.status))
-}
