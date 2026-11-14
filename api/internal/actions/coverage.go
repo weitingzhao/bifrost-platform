@@ -47,9 +47,6 @@ func exempt(reason string, keys ...string) {
 var exemptions = map[string]string{}
 
 func init() {
-	exempt("Owner-requested AI advice (TD-463): admin records one opt-in event; existing read-only assessment loop dispatches it; answers no question, approves nothing, changes no material or execution authority",
-		"POST /api/v1/agentrt/assessments/{kind}/{id}",
-	)
 	exempt("owner question workflow, not a catalog action",
 		"POST /api/v1/questions",
 		"POST /api/v1/questions/{id}/answer",
@@ -69,26 +66,16 @@ func init() {
 		"POST /api/v1/agentrt/claim",
 		"POST /api/v1/agentrt/attempts/{id}/{action}",
 		"PUT /api/v1/agentrt/artifacts/{id}",
-		"POST /api/v1/agentrt/claim/pinned",
 	)
 	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card; PV1 adopt_plan_view uses the same plan/proposals decision path), a note on an architecture row only adds words beside the tick its done rule decides, a control only stops or pauses work, and only the Owner (admin) lifts one, a withdrawal only cancels the proposer's own tasks that have not started; not a cluster write",
-		"POST /api/v1/agentrt/missions",
-		"POST /api/v1/agentrt/missions/{id}/tasks",
-		"POST /api/v1/agentrt/tasks/withdraw",
 		"POST /api/v1/agentrt/goals",
 		"POST /api/v1/agentrt/messages",
 		"POST /api/v1/agentrt/messages/ack",
 		"POST /api/v1/agentrt/controls",
 		"DELETE /api/v1/agentrt/controls/{id}",
-		"POST /api/v1/agentrt/hosts/{id}/drain",
 		"POST /api/v1/agentrt/plan/proposals",
 		"POST /api/v1/agentrt/plan/imports",
 		"POST /api/v1/agentrt/plan/{id}/notes",
-	)
-	exempt("agent runtime waves (M-368): opening, closing or abandoning a repository's wave records wave events the store writes in one transaction, with the proposers' gate the mission and plan proposals have; a wave starts no work and lands nothing by itself (its landing is the existing landing path with its own CI, grant and card); not a cluster write",
-		"POST /api/v1/agentrt/waves",
-		"POST /api/v1/agentrt/waves/{id}/close",
-		"POST /api/v1/agentrt/waves/{id}/abandon",
 	)
 	exempt("agent runtime external work (W-31 PV1): registration and observations are runtime records the store writes with their events in one transaction; they grant no execution authority and cannot verify or complete work; not a cluster write",
 		"POST /api/v1/agentrt/external-work",
@@ -105,9 +92,6 @@ func init() {
 	)
 	exempt("agent runtime vendor pools (W-31 2.4 slice ①): the Owner's (admin's) reading of a vendor quota window from its usage page; the store records it with its event in one transaction, and at most it holds work back from that account or lets it through again; not a cluster write",
 		"POST /api/v1/agentrt/pools/{id}/reading",
-	)
-	exempt("agent runtime benchmark runs (W-31 2.4 slice ⑤): an agentd token hands in, for the host it is bound to, the outcome of the question set it ran with one executor; the store records it with its event in one transaction, and at most it changes which candidates routing's competence step lets through; not a cluster write",
-		"POST /api/v1/agentrt/benchmark",
 	)
 	exempt("agent runtime branch cleanup (TD-383, the Owner's 「分支 B 用 agentd」): an agentd token reports, for the host it is bound to, what it did with the attempt branches it was given (GET /api/v1/agentrt/prunes); the deletion itself is agentd's, with its own Gitea identity, on branches Gitea lets it delete; the store records each outcome as a note in one transaction; not a cluster write",
 		"POST /api/v1/agentrt/prunes",

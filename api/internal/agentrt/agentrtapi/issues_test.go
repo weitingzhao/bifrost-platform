@@ -180,7 +180,7 @@ func TestIssueRoutesOverHTTP(t *testing.T) {
 		do(caller, "POST", "intake/updates", map[string]any{}, http.StatusUnauthorized)
 	}
 	for _, r := range []struct{ method, path string }{{"GET", "whoami"}, {"GET", "events"}, {"GET", "artifacts"}, {"GET", "missions/" + mission},
-		{"POST", "missions"}, {"POST", "controls"}, {"GET", "plan"}} {
+		{"POST", "plan/proposals"}, {"POST", "controls"}, {"GET", "plan"}} {
 		do("intake:dots-p2", r.method, r.path, map[string]any{}, http.StatusUnauthorized)
 	}
 

@@ -116,35 +116,11 @@ func TestControlsAndHosts(t *testing.T) {
 		t.Fatalf("controls in force after the lift: %d %v", got, out)
 	}
 
-	// A drain: only operators and the Owner; the host takes no new work. The
-	// operator writes as a thread of its own (s1 is the viewer's, TD-370).
-	drain := map[string]any{"idempotency_key": "d1", "reason": "maintenance"}
-	if got, _ := call(t, s, "viewer", "POST", "hosts/h1/drain", drain, session, "s1"); got != http.StatusUnauthorized && got != http.StatusForbidden {
-		t.Fatalf("a viewer drained: %d", got)
-	}
-	if got, out := call(t, s, "operator", "POST", "hosts/nope/drain", drain, session, "s2"); got != http.StatusUnprocessableEntity {
-		t.Fatalf("a host there is not: %d %v", got, out)
-	}
-	code, drained := call(t, s, "operator", "POST", "hosts/h1/drain", drain, session, "s2")
-	if code != http.StatusOK || drained["kind"] != "drain" || drained["scope_ref"] != "h1" {
-		t.Fatalf("drain: %d %v", code, drained)
-	}
-	if got, _ := call(t, s, "agentd:h1", "POST", "claim", claimBody); got != http.StatusNoContent {
-		t.Fatalf("a drained host claimed: %d", got)
-	}
-	_, hosts = call(t, s, "viewer", "GET", "hosts", nil)
-	h1 := hostOf(t, hosts, "h1")
-	if h1["online"] != true || len(h1["controls"].([]any)) != 1 {
-		t.Fatalf("h1 after a poll and a drain: %v", h1)
-	}
-	if got, _ := call(t, s, "admin", "DELETE", "controls/"+drained["control_id"].(string), nil); got != http.StatusOK {
-		t.Fatalf("lift the drain: %d", got)
-	}
 	if got, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody); got != http.StatusOK || claim["task_id"] != task {
 		t.Fatalf("a claim after the lift: %d %v", got, claim)
 	}
 	_, hosts = call(t, s, "viewer", "GET", "hosts", nil)
-	if h1 = hostOf(t, hosts, "h1"); h1["live_attempts"] != float64(1) {
+	if h1 := hostOf(t, hosts, "h1"); h1["live_attempts"] != float64(1) {
 		t.Fatalf("h1 with its attempt: %v", h1)
 	}
 

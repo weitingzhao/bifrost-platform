@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -77,39 +76,6 @@ type missionBody struct {
 	NeedsOwner     string      `json:"needs_owner"` // why its cards wait for the Owner himself (TD-390)
 }
 
-// proposeMission is POST /missions: mission_proposed with a number the
-// platform gives. Inside the standing envelope in force the mission is active
-// at once; outside it, it waits as awaiting_owner on the Owner's decision
-// card (the answer names the question), or stays proposed when the platform
-// has no question store (the answer says why either way). A title, goal or
-// success list longer than a card holds is refused (Owner 2026-10-15
-// 「决策卡 A」).
-func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
-	var b missionBody
-	if !decode(w, r, &b) {
-		return
-	}
-	who, err := writer(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	p := store.MissionProposal{WorkID: b.WorkID, Title: b.Title, Goal: b.Goal, Tenant: b.Tenant, Success: b.Success,
-		Repos: b.Repos, MaxAction: b.MaxAction, NoMerge: b.NoMerge, NeedsOwner: b.NeedsOwner}
-	if b.DeadlineAt != nil {
-		p.Deadline = *b.DeadlineAt
-	}
-	if b.Budget != nil {
-		p.MaxAttempts, p.MaxWallHours = b.Budget.MaxAttempts, b.Budget.MaxWallHours
-	}
-	out, err := store.ProposeMission(r.Context(), a.DB, who, b.IdempotencyKey, p, a.Ask)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 type taskBody struct {
 	Wave           string   `json:"wave"`
 	Urgent         bool     `json:"urgent"`
@@ -143,69 +109,6 @@ type taskBody struct {
 type tasksBody struct {
 	IdempotencyKey string     `json:"idempotency_key"`
 	Tasks          []taskBody `json:"tasks"`
-}
-
-// proposeTasks is POST /missions/{id}/tasks: a batch of task_proposed, all
-// or nothing; the controller readies them (store.Dispatch). A batch that
-// pins a task is store.ProposePinnedTasks's, its X-Bifrost-Session header
-// recorded on each pinned task (via_session) and granting nothing.
-func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
-	var b tasksBody
-	if !decode(w, r, &b) {
-		return
-	}
-	who, err := writer(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	tasks := make([]store.PinnedTask, 0, len(b.Tasks))
-	pinned := false
-	var unexplained []string // pinned to the coordinator with no reason, accepted under warn
-	for _, t := range b.Tasks {
-		// Bounded before it becomes a duration, which a large number would
-		// wrap (review 175 B5).
-		if t.HardLimitS < 0 || t.HardLimitS > int(store.MaxHardLimit/time.Second) {
-			writeError(w, http.StatusUnprocessableEntity, "invalid",
-				fmt.Sprintf("task %s: hard_limit_s is from 0 to %d", t.Ref, int(store.MaxHardLimit/time.Second)))
-			return
-		}
-		task := store.PinnedTask{TaskProposal: store.TaskProposal{Wave: t.Wave, Urgent: t.Urgent, Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
-			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
-			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
-			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second}, ExecutorPin: t.ExecutorPin, Providers: t.Providers, Executor: t.Executor,
-			PinReason: t.PinReason}
-		missing, err := store.CheckPinReason(task, a.pinReason())
-		if err != nil {
-			a.fail(w, err)
-			return
-		}
-		if missing {
-			unexplained = append(unexplained, t.Ref)
-		}
-		tasks = append(tasks, task)
-		pinned = pinned || t.ExecutorPin != ""
-	}
-	var out map[string]any
-	if pinned {
-		out, err = store.ProposePinnedTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), r.Header.Get(SessionHeader), tasks)
-	} else {
-		plain := make([]store.TaskProposal, 0, len(tasks))
-		for _, t := range tasks {
-			plain = append(plain, t.TaskProposal)
-		}
-		out, err = store.ProposeTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), plain)
-	}
-	if err != nil {
-		a.recordHandinRefusal(r.Context(), store.HandinRefusalTask(err, tasks), "", err)
-		a.fail(w, err)
-		return
-	}
-	if len(unexplained) > 0 {
-		a.logf("mission %s: %s pinned tasks %v to %s without a pin_reason (AGENTRT_PIN_REASON=warn: accepted, counted as unexplained)",
-			chi.URLParam(r, "id"), who.Actor, unexplained, rules.PinCoordinator)
-	}
-	writeJSON(w, http.StatusOK, out)
 }
 
 // getMission is the mission row with its tasks counted by state.

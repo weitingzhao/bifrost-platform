@@ -29,14 +29,6 @@ import {
   splitReleaseRuns,
 } from '@/pages/shell/releases/releaseView'
 
-type Wave = {
-  id: string
-  n: number
-  plan_root: string
-  base: string
-  state: string
-}
-
 function errorText(error: unknown): string | null {
   return error instanceof Error ? error.message : null
 }
@@ -104,22 +96,12 @@ export function ReleasesPage() {
     queryFn: limited(signal => get<RunningImagesResponse>('running images', '/api/v1/releases/running-images', signal)),
     refetchInterval: 30_000,
   })
-  const waves = useQuery({
-    queryKey: ['agentrt', 'waves', 'open'],
-    queryFn: limited(async signal => {
-      const data = await get<Wave[]>('waves', '/api/v1/agentrt/waves?state=open', signal, true)
-      if (!Array.isArray(data)) throw new Error('waves: expected a list')
-      return data
-    }),
-    refetchInterval: 30_000,
-  })
   // The whole audit list (the platform keeps the newest 500): the route takes no filter. Once a minute is enough for decisions made per release.
   const audit = useQuery({
     queryKey: ['audit', 'records', 'releases'],
     queryFn: limited(signal => get<AuditResponse>('audit', '/api/v1/audit', signal)),
     refetchInterval: 60_000,
   })
-  const openWaves = waves.data ?? []
   const hasToken = operatorToken() !== ''
   const releaseWindow = useQuery({
     queryKey: ['delivery', 'release-window'],
@@ -201,24 +183,6 @@ export function ReleasesPage() {
         rule={{ data: landingRule.data, error: errorText(landingRule.error) }}
         approvals={pending}
       />
-
-      <OpsSection title="Open waves" bodyPadding="compact">
-        {waves.isError || waves.isPaused ? (
-          <p>Waves could not be read.</p>
-        ) : waves.isPending ? (
-          <p>Loading waves…</p>
-        ) : openWaves.length === 0 ? (
-          <p>No open wave</p>
-        ) : (
-          <ul className="m-0 list-none space-y-1 p-0 [overflow-wrap:anywhere]">
-            {openWaves.map(wave => (
-              <li key={wave.id}>
-                Wave {wave.n} · {wave.plan_root} · {wave.base.slice(0, 8)} · {wave.id}
-              </li>
-            ))}
-          </ul>
-        )}
-      </OpsSection>
 
       <ReleaseNeedsYouSection
         hasToken={hasToken}

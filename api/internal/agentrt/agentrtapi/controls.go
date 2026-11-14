@@ -141,17 +141,6 @@ type drainBody struct {
 	Reason         string `json:"reason"`
 }
 
-// drainHost is POST /hosts/{id}/drain: a drain control on the host, so the
-// host takes no new work while what it runs goes on; the Owner lifts it
-// like any control.
-func (a *API) drainHost(w http.ResponseWriter, r *http.Request) {
-	var b drainBody
-	if !decode(w, r, &b) {
-		return
-	}
-	a.control(w, r, controlBody{IdempotencyKey: b.IdempotencyKey, Scope: "host", ScopeRef: chi.URLParam(r, "id"), Kind: "drain", Reason: b.Reason})
-}
-
 // liftControl is DELETE /controls/{id}: control_cleared by the Owner.
 func (a *API) liftControl(w http.ResponseWriter, r *http.Request) {
 	out, err := store.LiftControl(r.Context(), a.DB, "owner", chi.URLParam(r, "id"))

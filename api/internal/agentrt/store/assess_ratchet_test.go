@@ -30,7 +30,6 @@ func TestAssessmentsCannotAnswer(t *testing.T) {
 		{"assess.go", false},
 		{"assessaccept.go", false},
 		{"assessrequest.go", false},
-		{filepath.Join("..", "agentrtapi", "assess.go"), false},
 		{filepath.Join("..", "controller", "assess.go"), false},
 		{filepath.Join("..", "..", "server", "agentrt_assess.go"), true},
 	} {

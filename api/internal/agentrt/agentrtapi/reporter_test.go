@@ -120,7 +120,7 @@ func TestReporterUploadScope(t *testing.T) {
 func TestReporterCannotPropose(t *testing.T) {
 	// Refuse at the route, before even consulting the database or body.
 	s := server(t, nil)
-	for _, path := range []string{"missions", "missions/M-1/tasks", "goals", "plan/proposals", "plan/imports", "plan/R2/notes", "messages", "messages/ack", "rules/routing:dev/proposals", "rules/routing:dev/sign"} {
+	for _, path := range []string{"goals", "plan/proposals", "plan/imports", "plan/R2/notes", "messages", "messages/ack", "rules/routing:dev/proposals", "rules/routing:dev/sign"} {
 		t.Run(path, func(t *testing.T) {
 			for _, as := range []string{"limited", "seat:chief_of_staff"} {
 				if code, out := call(t, s, "reporter", "POST", path, map[string]any{}, session, as); code != 403 {

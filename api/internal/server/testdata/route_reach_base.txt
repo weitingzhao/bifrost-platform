@@ -345,8 +345,6 @@ reporter	POST /api/v1/agentrt/controls
 reporter	POST /api/v1/agentrt/goals
 reporter	POST /api/v1/agentrt/messages
 reporter	POST /api/v1/agentrt/messages/ack
-reporter	POST /api/v1/agentrt/missions
-reporter	POST /api/v1/agentrt/missions/{id}/tasks
 reporter	POST /api/v1/agentrt/plan/imports
 reporter	POST /api/v1/agentrt/plan/proposals
 reporter	POST /api/v1/agentrt/plan/{id}/notes
@@ -497,11 +495,8 @@ operator	POST /api/v1/agent/hosts/heartbeat
 operator	POST /api/v1/agent/threads/heartbeat
 operator	POST /api/v1/agentrt/controls
 operator	POST /api/v1/agentrt/goals
-operator	POST /api/v1/agentrt/hosts/{id}/drain
 operator	POST /api/v1/agentrt/messages
 operator	POST /api/v1/agentrt/messages/ack
-operator	POST /api/v1/agentrt/missions
-operator	POST /api/v1/agentrt/missions/{id}/tasks
 operator	POST /api/v1/agentrt/plan/imports
 operator	POST /api/v1/agentrt/plan/proposals
 operator	POST /api/v1/agentrt/plan/{id}/notes
@@ -686,11 +681,8 @@ admin	POST /api/v1/agent/hosts/heartbeat
 admin	POST /api/v1/agent/threads/heartbeat
 admin	POST /api/v1/agentrt/controls
 admin	POST /api/v1/agentrt/goals
-admin	POST /api/v1/agentrt/hosts/{id}/drain
 admin	POST /api/v1/agentrt/messages
 admin	POST /api/v1/agentrt/messages/ack
-admin	POST /api/v1/agentrt/missions
-admin	POST /api/v1/agentrt/missions/{id}/tasks
 admin	POST /api/v1/agentrt/plan/imports
 admin	POST /api/v1/agentrt/plan/proposals
 admin	POST /api/v1/agentrt/plan/{id}/notes
@@ -891,11 +883,8 @@ trade-satellite	POST /api/v1/agent/hosts/heartbeat
 trade-satellite	POST /api/v1/agent/threads/heartbeat
 trade-satellite	POST /api/v1/agentrt/controls
 trade-satellite	POST /api/v1/agentrt/goals
-trade-satellite	POST /api/v1/agentrt/hosts/{id}/drain
 trade-satellite	POST /api/v1/agentrt/messages
 trade-satellite	POST /api/v1/agentrt/messages/ack
-trade-satellite	POST /api/v1/agentrt/missions
-trade-satellite	POST /api/v1/agentrt/missions/{id}/tasks
 trade-satellite	POST /api/v1/agentrt/plan/imports
 trade-satellite	POST /api/v1/agentrt/plan/proposals
 trade-satellite	POST /api/v1/agentrt/plan/{id}/notes
@@ -1057,7 +1046,6 @@ agentd:h1	GET /api/v1/watchlist/union
 agentd:h1	GET /health
 agentd:h1	GET /metrics
 agentd:h1	POST /api/v1/agentrt/attempts/{id}/{action}
-agentd:h1	POST /api/v1/agentrt/benchmark
 agentd:h1	POST /api/v1/agentrt/claim
 agentd:h1	POST /api/v1/agentrt/controls
 agentd:h1	POST /api/v1/agentrt/prunes

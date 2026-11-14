@@ -65,10 +65,8 @@ var intendedRouteAdditions = map[string][]string{
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.
-	"POST /api/v1/agentrt/assessments/{kind}/{id}": {"admin"},
 	// C-2: the external host's exact claim, an agentd route; the store
 	// refuses every host but the one the envelope names (claimpinned.go).
-	"POST /api/v1/agentrt/claim/pinned": {"agentd:h1"},
 	// C-4: an authorization wait, for every reader, and the executor's
 	// refresh of it, an agentd route the store holds to the pin's host.
 	// C-5: a landing grant's material, for every reader; its revocation,
@@ -90,10 +88,6 @@ var intendedRouteAdditions = map[string][]string{
 	// M-368 waves: the list for every reader; opening and closing behind
 	// the same proposers' gate as POST missions (operator, admin and the
 	// trade satellite reach it there too).
-	"GET /api/v1/agentrt/waves":               {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	"POST /api/v1/agentrt/waves":              {"operator", "admin", "trade-satellite"},
-	"POST /api/v1/agentrt/waves/{id}/close":   {"operator", "admin", "trade-satellite"},
-	"POST /api/v1/agentrt/waves/{id}/abandon": {"operator", "admin", "trade-satellite"},
 	// R5:5.7: the check value table, read-only, every reader.
 	"GET /api/v1/agentrt/check-value": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// The leak value projection, read-only, every reader, as /progress is.
@@ -106,7 +100,6 @@ var intendedRouteAdditions = map[string][]string{
 	"POST /api/v1/agentrt/external-work/{id}/events": {"reporter", "operator", "admin", "trade-satellite"},
 	// A proposer withdraws its unstarted tasks: whoever may propose them
 	// (POST /missions/{id}/tasks); the store holds it to their proposer.
-	"POST /api/v1/agentrt/tasks/withdraw":   {"operator", "admin", "trade-satellite"},
 	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},
 }
@@ -115,8 +108,6 @@ var intendedRouteAdditions = map[string][]string{
 // own observations. Keep the historical snapshot; remove only these exact
 // reporter/proposal pairs, so either restored access or another lost route fails.
 var reporterProposalRemovals = []string{
-	"POST /api/v1/agentrt/missions",
-	"POST /api/v1/agentrt/missions/{id}/tasks",
 	"POST /api/v1/agentrt/goals",
 	"POST /api/v1/agentrt/messages",
 	"POST /api/v1/agentrt/messages/ack",

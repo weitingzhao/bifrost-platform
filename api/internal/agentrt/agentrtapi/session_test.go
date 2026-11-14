@@ -13,7 +13,7 @@ import (
 // and whoami says why; the first token goes on writing and reading.
 func TestSessionHeldToItsToken(t *testing.T) {
 	t.Parallel()
-	pool, existing := world(t)
+	pool, _ := world(t)
 	s := server(t, pool)
 	as := func(caller, method, path string, body any) (int, map[string]any) {
 		t.Helper()
@@ -22,8 +22,8 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		}
 		return call(t, s, caller, method, path, body, session, "s1")
 	}
-	mission := map[string]any{"idempotency_key": "k1", "title": "m", "goal": "g", "success": []string{"it works"}}
-	if code, out := as("operator", "POST", "missions", mission); code != http.StatusOK {
+	first := map[string]any{"idempotency_key": "k1", "scope": "host", "scope_ref": "h1", "kind": "pause", "reason": "the first write of the session"}
+	if code, out := as("operator", "POST", "controls", first); code != http.StatusOK {
 		t.Fatalf("the first write registers the session: %d %v", code, out)
 	}
 	spec := []byte("# a spec\n")
@@ -44,12 +44,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		caller, method, path string
 		body                 any
 	}{
-		"a mission":           {"proposer", "POST", "missions", map[string]any{"idempotency_key": "k2", "title": "m", "goal": "g", "success": []string{"x"}}},
-		"a replay of its key": {"proposer", "POST", "missions", mission},
-		"tasks": {"proposer", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "k3", "tasks": []any{map[string]any{
-			"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec),
-			"effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA, "depends_on": []string{existing}}}}},
-		"a goal": {"proposer", "POST", "goals", map[string]any{"idempotency_key": "k4", "goal": "do a thing", "repo": "bifrost-platform"}},
+		"a replay of its key": {"proposer", "POST", "controls", first},
 		"a plan change": {"proposer", "POST", "plan/proposals", map[string]any{"idempotency_key": "k5", "root": "R2", "reason": "rename",
 			"changes": []any{map[string]any{"op": "retitle", "node": "R2:1", "title": "x"}}}},
 		"a control":            {"proposer", "POST", "controls", map[string]any{"idempotency_key": "k6", "scope": "global", "kind": "pause", "reason": "test"}},
@@ -79,7 +74,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	if code, out := as("operator", "POST", "messages/ack", map[string]any{"message_ids": []any{msg}}); code != http.StatusOK {
 		t.Fatalf("its own acknowledgement: %d %v", code, out)
 	}
-	if code, out := as("operator", "POST", "missions", mission); code != http.StatusOK || out["mission_id"] != "M-2" {
+	if code, out := as("operator", "POST", "controls", first); code != http.StatusOK || out["scope_ref"] != "h1" {
 		t.Fatalf("its own replay: %d %v", code, out)
 	}
 	// Another session of the second token is its own thread.

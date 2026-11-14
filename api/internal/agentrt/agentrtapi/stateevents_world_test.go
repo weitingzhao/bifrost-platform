@@ -42,23 +42,19 @@ const (
 // valid request does. Reads that write are listed too (an exam paper is
 // recorded when it is handed out).
 var routeExpect = map[string]string{
-	"POST assessments/{kind}/{id}": expectWrites,
-	"POST claim":                   expectWrites, "POST claim/pinned": expectWrites, "POST landing/refresh": expectWrites, "PUT artifacts/{id}": expectWrites,
-	"POST landing/grants/{grant_id}/revoke": expectWrites,
-	"POST attempts/{id}/start":              expectWrites, "POST attempts/{id}/heartbeat": expectAnswers,
+	"POST claim": expectWrites, "PUT artifacts/{id}": expectWrites,
+	"POST attempts/{id}/start": expectWrites, "POST attempts/{id}/heartbeat": expectAnswers,
 	"POST attempts/{id}/checkpoint": expectWrites, "POST attempts/{id}/computed": expectWrites,
 	"POST attempts/{id}/persist": expectWrites, "POST attempts/{id}/submit": expectWrites,
 	"POST attempts/{id}/salvage": expectWrites, "POST attempts/{id}/ended": expectWrites,
-	"POST missions": expectWrites, "POST missions/{id}/tasks": expectWrites, "POST goals": expectWrites, "POST tasks/withdraw": expectWrites,
+	"POST goals": expectWrites, "POST pools/{id}/reading": expectWrites,
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
-	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites, "POST hosts/{id}/drain": expectWrites,
-	"POST waves": expectWrites, "POST waves/{id}/close": expectWrites, "POST waves/{id}/abandon": expectWrites,
+	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
 	"POST plan/{id}/signoff": expectWrites,
 	"POST external-work":     expectWrites, "POST external-work/{id}/events": expectWrites,
 	"POST rules/{rule_id}/check": expectAnswers, "POST rules/{rule_id}/proposals": expectWrites,
 	"POST rules/{rule_id}/sign": expectWrites, "POST rules/{rule_id}/tighten": expectWrites,
-	"POST pools/{id}/reading": expectWrites, "POST benchmark": expectWrites,
 	// A report names branches the cleanup offered, the attempt branches of
 	// finished tasks: no world here finishes one, so the valid report is the
 	// empty one (TestPruneRoutes records real ones).
@@ -276,51 +272,12 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 // valid request, in an order in which each finds what it needs.
 func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, caller, method, path string, body any, header ...string) map[string]any, key rptest.Key) {
 	t.Helper()
-	for _, kind := range []string{store.AssessCard, store.AssessApproval} {
-		path := "assessments/" + kind + "/463"
-		ok("POST assessments/{kind}/{id}", "admin", "POST", path, nil)
-		// A retry answers without another event; a closed item must leave
-		// every runtime row untouched, just like any other refused write.
-		before := f.lastEvent(t)
-		ok("POST assessments/{kind}/{id}", "admin", "POST", path, nil)
-		if f.lastEvent(t) != before {
-			t.Fatal("a repeated assessment request appended another event")
-		}
-		if code, out := f.send(t, s, "POST assessments/{kind}/{id}", false, "admin", "POST", "assessments/"+kind+"/closed", nil); code != http.StatusConflict {
-			t.Fatalf("closed assessment request: %d %v", code, out)
-		}
-	}
-	spec := implSpec(t, "implement x")
-	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec")
-	ok("POST missions", "operator", "POST", "missions", map[string]any{"idempotency_key": "v1", "title": "m", "goal": "g",
-		"success": []string{"it works"}, "budget": map[string]any{"max_attempts": 4, "max_wall_hours": 2}})
-	ok("POST missions/{id}/tasks", "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "v2", "tasks": []any{
-		map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a",
-			"spec_artifact_id": artifactID(spec), "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}})
-	// A task the operator's thread proposes and withdraws before it runs.
-	gone := ok("POST missions/{id}/tasks", "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "v2-withdrawn", "tasks": []any{
-		map[string]any{"ref": "w", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "w",
-			"spec_artifact_id": artifactID(spec), "effect_class": "branch", "repo": "bifrost-platform", "base_commit": commitA}}})
-	ok("POST tasks/withdraw", "operator", "POST", "tasks/withdraw", map[string]any{"idempotency_key": "v2-withdraw",
-		"task_ids": []any{gone["tasks"].([]any)[0].(map[string]any)["task_id"]}, "reason": "fuzz"})
 	ok("POST goals", "admin", "POST", "goals", map[string]any{"idempotency_key": "v3", "goal": "do this", "repo": "bifrost-platform"})
 	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": store.Seat, "kind": "ask", "body": "status?"})
 	ok("POST messages/ack", "seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []any{msg["message_id"]}})
 	ctl := ok("POST controls", "operator", "POST", "controls", map[string]any{"idempotency_key": "v4", "scope": "host", "scope_ref": "h2",
 		"kind": "pause", "reason": "fuzz"})
 	ok("DELETE controls/{id}", "admin", "DELETE", "controls/"+fmt.Sprint(ctl["control_id"]), nil)
-	// The coordinator's exact claim of its pinned task (pin_test.go's
-	// world, on the business tenant so the dev envelope stays as it is).
-	pinned := pinnedFixture(t, f.pool)
-	exact := ok("POST claim/pinned", "agentd:coordinator-mbp", "POST", "claim/pinned", map[string]any{"host_id": "coordinator-mbp",
-		"task_id": pinned, "idempotency_key": pinned + ":1", "free_slots": 1})
-	_ = exact
-	ok("POST hosts/{id}/drain", "operator", "POST", "hosts/h2/drain", map[string]any{"idempotency_key": "v5", "reason": "maintenance"})
-	// A wave of bifrost-platform opened on main's head and abandoned (M-368).
-	wave := ok("POST waves", "operator", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "R2"})
-	ok("POST waves/{id}/abandon", "operator", "POST", "waves/"+fmt.Sprint(wave["id"])+"/abandon", nil)
-	closing := ok("POST waves", "operator", "POST", "waves", map[string]any{"repo": "bifrost-platform", "plan_root": "R2"})
-	ok("POST waves/{id}/close", "operator", "POST", "waves/"+fmt.Sprint(closing["id"])+"/close", nil)
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "add_node", "parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}})
 
@@ -360,9 +317,6 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 
 	ok("POST pools/{id}/reading", "admin", "POST", "pools/cursor:owner:monthly/reading", map[string]any{"idempotency_key": "v9",
 		"used_fraction": 0.2, "resets_at": time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)})
-	ok("POST benchmark", "agentd:h1", "POST", "benchmark", map[string]any{"host_id": "h1", "run_id": "run-0001-codex", "executor": "exec:codex",
-		"provider": "openai", "model": "gpt-x", "questions_sha256": strings.Repeat("ab", 32), "started_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-		"question_ids": []string{"Q01"}, "results": []any{map[string]any{"question": "Q01", "class": "go", "outcome": "pass", "wall_s": 300}}})
 	ok("GET prunes", "agentd:h1", "GET", "prunes?host_id=h1", nil)
 	ok("POST prunes", "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": []any{}})
 }
