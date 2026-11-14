@@ -43,19 +43,6 @@ func (b *buttonWorld) tx(fn func(pgx.Tx) error) {
 	}
 }
 
-// legacy runs a statement under an import event, as a fixture may.
-func (b *buttonWorld) legacy(stmt string) {
-	b.t.Helper()
-	b.tx(func(tx pgx.Tx) error {
-		if _, err := store.Append(context.Background(), tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(context.Background(), stmt)
-		return err
-	})
-}
-
 // answer answers a card as the Owner's Console does: POST
 // /api/v1/questions/{id}/answer from the session owner-console.
 func (b *buttonWorld) answer(id, option, text string) {
@@ -96,48 +83,6 @@ func (b *buttonWorld) decision(question string) string {
 		b.t.Fatal(err)
 	}
 	return d
-}
-
-// handInPlan makes mission m with a planning task that has handed in a plan
-// asking the Owner one question, as an attempt's submit leaves it.
-func (b *buttonWorld) handInPlan(m string) string {
-	b.t.Helper()
-	ctx := context.Background()
-	task := store.NewTaskID()
-	plan := "One task.\n\n```json\n" + `{"tasks": [{"ref": "t1", "title": "Document MainHead", "repo": "bifrost-platform", "text": "Say which ref MainHead reads."}],
-  "questions": [{"question": "Document the Console too?", "body": "It has no goal docs.", "options": ["Not now", "Yes, a third task"],
-    "recommended": 1, "meanwhile": "the task goes on without the Console", "owner_duty": "goal"}],
-  "decisions": [{"decision": "one task", "why": "one review"}]}` + "\n```\n"
-	var report string
-	b.tx(func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: m, Title: "goal " + m, Goal: "a goal",
-			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess},
-			MaxAttempts: 10, MaxWallHours: 24}); err != nil {
-			return err
-		}
-		if err := store.MoveMission(ctx, tx, "controller", m, "active", "test"); err != nil {
-			return err
-		}
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# plan\n"))
-		if err != nil {
-			return err
-		}
-		if report, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte(plan)); err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: m, OffPlanReason: "a goal", Role: "plan",
-			Effect: "none", Repo: "bifrost-platform", BaseCommit: strings.Repeat("a", 40), Class: "plan", Title: "plan " + m,
-			SpecArtifact: spec}); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", task)
-	})
-	b.legacy(`INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch, lease_expires_at, heartbeat_at,
-	  state, started_at, computed_at, persisted_at, end_how, exit_code, conclusion, report_artifact_id)
-	  VALUES ('` + store.NewAttemptID() + `', '` + task + `', 1, 'exec:claude', nextval('agentrt.lease_epoch_seq'), now(), now(),
-	  'submitted', clock_timestamp(), clock_timestamp(), clock_timestamp(), 'exit', 0, 'done', '` + report + `')`)
-	b.legacy(`UPDATE agentrt.task SET state = 'submitted' WHERE task_id = '` + task + `'`)
-	return task
 }
 
 // recorderLog seals events the way the recorder's events.py does.
@@ -340,42 +285,6 @@ func TestOwnerButtonPaths(t *testing.T) {
 		if got := b.state("mission", missions[option]); got != want {
 			t.Errorf("mission card answered %s: %s; want %s", option, got, want)
 		}
-	}
-
-	// A planner's question through the planner's own path (review 453 B2):
-	// a planning task of M-20 hands in a plan that asks one question, and
-	// AcceptPlan asks it. The Owner's answer moves nothing: the plan's task
-	// goes on as the plan made it.
-	planTask := b.handInPlan("M-20")
-	if did, err := store.AcceptPlan(ctx, b.conn, planTask, ask, b.rt.agentRuntimeWithdraw(), nil); err != nil || did == "" {
-		t.Fatalf("the plan: %q %v", did, err)
-	}
-	var planner string
-	open, err := b.rt.agentRuntimeOpenCards()(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range open {
-		if c.TaskID == planTask {
-			planner = c.ID
-		}
-	}
-	if planner == "" {
-		t.Fatalf("no card of the planning task %s among %+v", planTask, open)
-	}
-	keep("plan_question", planner)
-	before := b.count(`SELECT count(*) FROM agentrt.event WHERE mission_id = 'M-20'`)
-	b.answer(planner, "b", "")
-	for _, pass := range []func() (int, error){
-		func() (int, error) { return store.DecidePlanChanges(ctx, b.conn, question, ack) },
-		func() (int, error) { return store.DecideMissions(ctx, b.conn, question, ack) },
-	} {
-		if n, err := pass(); err != nil || n != 0 {
-			t.Fatalf("a pass acted on the planner's answer: %d %v", n, err)
-		}
-	}
-	if after := b.count(`SELECT count(*) FROM agentrt.event WHERE mission_id = 'M-20'`); after != before {
-		t.Errorf("the planner's answer moved M-20: %d events, %d before", after, before)
 	}
 
 	if os.Getenv("CONSOLE_QUESTION_FIXTURE_WRITE") == "1" {

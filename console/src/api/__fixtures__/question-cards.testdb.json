@@ -113,46 +113,6 @@
     },
     "status": 200
   },
-  "plan_question": {
-    "body": {
-      "id": "q_ac31c8792a726308",
-      "number": 4,
-      "status": "open",
-      "requester": "agentrt",
-      "requester_principal": "agentrt",
-      "owner_duty": "goal",
-      "task_id": "t_01M5FYMAJ0ANC4P90NDZQM03YD",
-      "title": "Document the Console too?",
-      "body": "It has no goal docs.",
-      "options": [
-        {
-          "key": "a",
-          "label": "Not now"
-        },
-        {
-          "key": "b",
-          "label": "Yes, a third task"
-        }
-      ],
-      "recommended": "a",
-      "allow_text": false,
-      "urgency": "when you can: the work goes on with the recommended option",
-      "meanwhile": "the task goes on without the Console",
-      "created_at": "2026-10-21T19:22:24.204818Z",
-      "expires_at": "2026-10-22T19:22:24.204818Z",
-      "deliveries": [
-        {
-          "kind": "created",
-          "channel": "ntfy",
-          "target": "relay",
-          "at": "2026-10-21T19:22:24.205518Z",
-          "result": "skipped",
-          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
-        }
-      ]
-    },
-    "status": 200
-  },
   "recorder_import": {
     "body": {
       "id": "q_579409d25d7de369",

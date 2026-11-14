@@ -198,38 +198,14 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	}
 }
 
-// agentRuntimeController is the platform-workers' controller for env
-// (AGENTRT_ENV). What is STG's alone: the test switch that forces a rework
-// (T26), answering cards by rule (TD-390: 「PROD 不变」; no PROD rule file
-// names the kind either, review 442 C1), and leaving unassessed the cards
-// that rule answers (TD-401's second half: the Owner 2026-10-20 20:0x
-// 「PROD 不变」). PROD and DEV assess every card, whatever rule is in force.
-//
-// No environment leaves the chief of staff scheduled briefs or nudges (the
-// Owner 2026-11-13: 「每天早晚定时的那个 briefing 的卡点提醒也都不要了」); Briefs
-// stays false until the brief code is removed with the old dispatch lane.
+// agentRuntimeController is the platform-workers' controller. Every
+// environment runs the same passes.
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
-	stg := env == "stg"
-	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), FailFirstVerify: stg, Precheck: precheckFromEnv(),
-		Env: env, GateRepo: agentrtDeployRepo, Logf: func(format string, args ...any) {
-			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
-		}, Infof: func(format string, args ...any) {
-			slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
-		}}
-}
-
-// precheckFromEnv is how the controller checks a submitted implementation
-// (store/precheck.go), read once at start from AGENTRT_PRECHECK: check (the
-// default since 2026-11-10: the deterministic check on every submission, its
-// pass accepts), ci (the landing CI where the landing runs one, else the
-// deterministic check, never a review) or verify (the deterministic check,
-// then a review). Any other value is logged and check is used.
-func precheckFromEnv() store.Precheck {
-	p, err := store.ParsePrecheck(os.Getenv("AGENTRT_PRECHECK"))
-	if err != nil {
-		slog.Error("agentrt precheck", "error", err, "using", p)
-	}
-	return p
+	return &controller.Controller{DB: db, Sources: src, Env: env, Logf: func(format string, args ...any) {
+		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
+	}, Infof: func(format string, args ...any) {
+		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
+	}}
 }
 
 // pinReasonFromEnv is what an implement task pinned to the coordinator
@@ -242,17 +218,6 @@ func pinReasonFromEnv() store.PinReasonMode {
 		slog.Error("agentrt pin reason", "error", err, "using", m)
 	}
 	return m
-}
-
-// cardRuleOnlyOnSTG leaves the controller the card-auto-answer loop's
-// sources on STG alone (TD-390 「PROD 不变」, TD-393: every kind, every five
-// seconds, still STG's only): elsewhere it reads no cards and answers none.
-// The assessments (TD-391) stay: they answer nothing.
-func cardRuleOnlyOnSTG(env string, src controller.Sources) controller.Sources {
-	if env != "stg" {
-		src.Cards, src.RuleAnswer = nil, nil
-	}
-	return src
 }
 
 // agentrtRedisPrefix is a key prefix of the runtime: "agrt:" in PROD and STG
@@ -451,12 +416,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
-	src.Cards = s.questionRuntime.agentRuntimeCards()
-	src.RuleAnswer = s.questionRuntime.agentRuntimeRuleAnswer()
 	src.Plan = s.agentRuntimePlanSources(src.Deployed)
-	src.Assessable = s.agentRuntimeAssessable()
-	src.CheckAssessment = s.checkAssessment
-	src.Evidence = s.agentRuntimeEvidence()
 	return src
 }
 

@@ -105,7 +105,7 @@ describe("the Owner's buttons on every kind of runtime card", () => {
   })
 
   it('has one card of each kind the runtime asks', () => {
-    expect(Object.keys(KINDS).sort()).toEqual(['mission', 'plan_change', 'plan_import', 'plan_question', 'recorder_import'])
+    expect(Object.keys(KINDS).sort()).toEqual(['mission', 'plan_change', 'plan_import', 'recorder_import'])
     expect(KINDS.mission!.body.options.map(o => o.label)).toEqual(['Start the mission', 'Do not start it'])
     expect(KINDS.plan_change!.body.options.map(o => o.label)).toEqual(['Apply the change', 'Do not apply it'])
     // A recorder import's card recommends importing, with why (W-31 2.3; review 482 C1): what STG's card

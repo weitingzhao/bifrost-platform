@@ -1,6 +1,5 @@
 import prod from '@/api/__fixtures__/plan-view-pv2-prod-r4.json'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
-import cards from '@/api/__fixtures__/question-cards.testdb.json'
 import { parseRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import type { ApprovalItem } from '@/api/approvals'
@@ -77,9 +76,42 @@ export function r5Raw(): Raw {
 }
 export const r5 = (): PlanSnapshot => parsePlanSnapshot(r5Raw(), 'R5')
 
+/** An open question of the runtime as GET /api/v1/questions/{id} answered it (the question store, 2026-10-21). */
+const QUESTION_BODY = {
+  id: 'q_ac31c8792a726308',
+  number: 4,
+  status: 'open',
+  requester: 'agentrt',
+  requester_principal: 'agentrt',
+  owner_duty: 'goal',
+  task_id: 't_01M5FYMAJ0ANC4P90NDZQM03YD',
+  title: 'Document the Console too?',
+  body: 'It has no goal docs.',
+  options: [
+    { key: 'a', label: 'Not now' },
+    { key: 'b', label: 'Yes, a third task' },
+  ],
+  recommended: 'a',
+  allow_text: false,
+  urgency: 'when you can: the work goes on with the recommended option',
+  meanwhile: 'the task goes on without the Console',
+  created_at: '2026-10-21T19:22:24.204818Z',
+  expires_at: '2026-10-22T19:22:24.204818Z',
+  deliveries: [
+    {
+      kind: 'created',
+      channel: 'ntfy',
+      target: 'relay',
+      at: '2026-10-21T19:22:24.205518Z',
+      result: 'skipped',
+      error: 'APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset',
+    },
+  ],
+}
+
 export function question(qid: string, patch: Partial<Question> & Record<string, unknown>): Question {
   // A key set to undefined is left out, as the server omits it.
-  const body = Object.fromEntries(Object.entries({ ...cards.plan_question.body, id: qid, ...patch }).filter(([, v]) => v !== undefined))
+  const body = Object.fromEntries(Object.entries({ ...QUESTION_BODY, id: qid, ...patch }).filter(([, v]) => v !== undefined))
   const parsed = parseQuestion(body)
   if (!parsed.ok) throw new Error(parsed.reason)
   return parsed.question

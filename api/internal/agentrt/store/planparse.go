@@ -190,9 +190,6 @@ func lastPlanBlock(report []byte) []byte {
 	return last
 }
 
-// planIgnoredMax is how many ignored keys a used plan's reason names.
-const planIgnoredMax = 5
-
 // ignoredKeys names the keys of a plan block that PlanDoc does not have: at
 // the top level, in mission and in each task, question and decision, in that
 // order. A key matches a field whatever its case, as the decoder matches it.

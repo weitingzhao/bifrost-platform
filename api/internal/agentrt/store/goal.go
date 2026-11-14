@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -51,9 +50,4 @@ func cutRunes(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n-1]) + "…"
-}
-
-// oneLineRunes is s on one line, cut to n runes.
-func oneLineRunes(s string, n int) string {
-	return cutRunes(strings.Join(strings.Fields(s), " "), n)
 }

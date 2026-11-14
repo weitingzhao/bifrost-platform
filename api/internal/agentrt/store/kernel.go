@@ -174,14 +174,6 @@ func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reaso
 	return moveTaskBy(ctx, tx, actor, t, to, reason, taskMoves)
 }
 
-// failWork blocks a task whose work did not pass, its checks failed with no
-// round left or nothing usable handed in: the in-job scores count it as a
-// failure of the executor of its last attempt (scores.go). A task blocked for
-// any other reason (waiting, a mission that ended) counts for nobody.
-func failWork(ctx context.Context, tx pgx.Tx, actor string, t taskRow, reason string) error {
-	return moveTaskWith(ctx, tx, actor, t, "blocked", reason, taskMoves, true)
-}
-
 // moveTaskBy moves a task by the given table of moves (a path with moves of
 // its own, as accepting a salvaged result, keeps them out of taskMoves).
 func moveTaskBy(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string, moves map[string][]string) error {

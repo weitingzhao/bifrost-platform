@@ -60,20 +60,6 @@ type Sources struct {
 	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
-	// Cards lists the runtime's open cards and RuleAnswer answers one as the
-	// card-auto-answer rule in force (store.AnswerByRule, TD-390); nil
-	// answers nothing.
-	Cards      func(ctx context.Context) ([]store.RuntimeCard, error)
-	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time, why string) error
-	// Assessable lists what is assessed now (TD-391): the runtime's open
-	// cards and the approvals waiting for the Owner; with an error, those it
-	// could read. Only Owner-requested items proceed (TD-463). CheckAssessment
-	// rechecks item eligibility before dispatch after external reads. Evidence reads what an assessment reads outside the
-	// runtime (main's commits, the ledger). nil Assessable assesses nothing;
-	// nil Evidence gives the assessments the runtime's records only.
-	Assessable      func(ctx context.Context) ([]store.AssessItem, error)
-	CheckAssessment func(context.Context, string, string) error
-	Evidence        store.EvidenceReader
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -91,23 +77,12 @@ type Controller struct {
 	LeaseEvery     time.Duration
 	FactsEvery     time.Duration
 	ReadTimeout    time.Duration // per source read; zero means 10 seconds
-	// Briefs has the controller leave the chief of staff its scheduled briefs
-	// and nudges (W-31 2.4 slice ④); Now is the clock they and the waits
-	// (Waits) read, time.Now when nil.
-	Briefs bool
-	// FailFirstVerify honours store.TestNeedFailFirstVerify: on STG only
-	// (T26's rework path, the Owner 2026-10-18).
-	FailFirstVerify bool
-	// Precheck is how a submitted implementation is checked
-	// (AGENTRT_PRECHECK, store/precheck.go): the zero value is ci.
-	Precheck store.Precheck
-	Now      func() time.Time
-	// Env is the platform's own environment and GateRepo the repository its
-	// deployments are of: the architecture table's gates run there
-	// (Gates, TD-397). Either empty, no gate runs.
-	Env, GateRepo string
-	Started       time.Time
-	FullCI        *FullCI // the daily full CI (fullci.go); nil runs none
+	// Now is the clock the passes read, time.Now when nil.
+	Now func() time.Time
+	// Env is the platform's own environment (AGENTRT_ENV).
+	Env     string
+	Started time.Time
+	FullCI  *FullCI // the daily full CI (fullci.go); nil runs none
 	// PipelineEvery is how often the retained pipeline runs are listed for
 	// the ones that completed (PipelineRecords); zero means
 	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares

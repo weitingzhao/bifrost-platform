@@ -32,15 +32,6 @@ func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) e
 	return moveTask(ctx, tx, actor, t, to, "test")
 }
 
-// FailWorkForTest blocks a task as failed work (failWork).
-func FailWorkForTest(ctx context.Context, tx pgx.Tx, taskID string) error {
-	t, err := readTask(ctx, tx, taskID, true)
-	if err != nil {
-		return err
-	}
-	return failWork(ctx, tx, "controller", t, "test: checks failed with no round left")
-}
-
 // LiveForTest is a live attempt as the projection reads one: its state,
 // whether its host is known, when the host last polled, and its elapsed
 // seconds.
@@ -127,21 +118,6 @@ var BlockedCardWhyForTest = strings.Repeat("w", RecommendWhyMax)
 func BlockedPageForTest(n int) func() {
 	old := blockedPage.Swap(int64(n))
 	return func() { blockedPage.Store(old) }
-}
-
-// ReworkSpecAsRefused is the spec refusePlan writes for the next round of
-// the planning spec specID, refused for why: reworkSpec with the reason
-// worded as refusePlan words it, read back.
-func ReworkSpecAsRefused(ctx context.Context, db DB, specID string, round int, why string) ([]byte, error) {
-	var body []byte
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		id, err := reworkSpec(ctx, tx, specID, round, oneLineRunes("plan not used: "+why, 500))
-		if err != nil {
-			return err
-		}
-		return tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, id).Scan(&body)
-	})
-	return body, err
 }
 
 // ProposeIssueMissionForTest proposes a mission as take_issue would (its

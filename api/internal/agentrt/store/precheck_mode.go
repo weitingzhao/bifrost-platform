@@ -27,6 +27,3 @@ func ParsePrecheck(s string) (Precheck, error) {
 	}
 	return PrecheckCheck, fmt.Errorf("AGENTRT_PRECHECK is check, ci or verify, not %q", s)
 }
-
-// reviews: a review follows the deterministic check.
-func (p Precheck) reviews() bool { return p == PrecheckVerify }

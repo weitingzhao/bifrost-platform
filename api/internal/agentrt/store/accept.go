@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -35,53 +34,6 @@ import (
 // A2); then the attempts (the check's, then the subject's); then the tasks,
 // the subject before its check (a claim, which locks the check first, takes
 // the subject with SKIP LOCKED and so never waits for it); then streams.
-
-var errNoSubmitted = errors.New("store: no submitted attempt")
-
-// submittedAttempt locks the latest submitted attempt of a task.
-func submittedAttempt(ctx context.Context, tx pgx.Tx, taskID string, mode string) (id, conclusion, report, commit string, err error) {
-	var c, r, p *string
-	err = tx.QueryRow(ctx, `SELECT attempt_id, conclusion, report_artifact_id, pushed_commit FROM agentrt.attempt
-	  WHERE task_id = $1 AND state = 'submitted' ORDER BY attempt_no DESC LIMIT 1 `+mode, taskID).Scan(&id, &c, &r, &p)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", "", "", "", errNoSubmitted
-	}
-	for dst, src := range map[*string]*string{&conclusion: c, &report: r, &commit: p} {
-		if src != nil {
-			*dst = *src
-		}
-	}
-	return id, conclusion, report, commit, err
-}
-
-type taskDetail struct {
-	spec, offPlanReason, subject, repo, base string
-	core                                     bool
-	round, maxRounds                         int
-}
-
-func readDetail(ctx context.Context, tx pgx.Tx, taskID string) (taskDetail, error) {
-	var d taskDetail
-	err := tx.QueryRow(ctx, `SELECT spec_artifact_id, COALESCE(off_plan_reason, ''), COALESCE(subject_task_id, ''),
-	  COALESCE(repo, ''), COALESCE(base_commit, ''), core, round_no, max_rounds
-	  FROM agentrt.task WHERE task_id = $1`, taskID).Scan(&d.spec, &d.offPlanReason, &d.subject, &d.repo, &d.base, &d.core, &d.round, &d.maxRounds)
-	return d, err
-}
-
-// lockStep takes a task's step FOR SHARE before anything else, as a plan
-// change takes steps before tasks, and returns it ("" off the plan).
-func lockStep(ctx context.Context, tx pgx.Tx, taskID string) (string, error) {
-	var step string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(plan_node_id, '') FROM agentrt.task WHERE task_id = $1`, taskID).Scan(&step); err != nil {
-		return "", err
-	}
-	if step != "" {
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, step); err != nil {
-			return "", err
-		}
-	}
-	return step, nil
-}
 
 // TestNeedFailFirstVerify is a need a task may carry to show the rework path
 // on STG (T26; the Owner 2026-10-18): where the controller runs with
