@@ -76,11 +76,12 @@ beforeEach(() => {
       held ??= new Promise<void>(release => { holdProgress = release })
       await held
     }
-    const view = /plan-view\?root=R(\d+)(?:&explain=1)?$/.exec(url)
+    const view = /plan-view\?root=R(\d+)$/.exec(url)
     if (view) {
       const snapshot = { ...planView(Number(view[1])), as_of: prod.as_of }
       if (verdictCase === 'stuck') snapshot.working = [{ ...snapshot.external_work[0], state: 'Running', status: 'Unconfirmed', heartbeat_age_s: 61 }]
-      if (verdictCase === 'owner') snapshot.owner_waiting = [{ task_id: 'waiting-task', plan_node_id: 'R5:5.1-3', reason: 'Owner decision', source: 'test' }]
+      if (verdictCase === 'owner') snapshot.owner_waiting = [{ plan_node_id: 'R5:5.1-3', ref: 'acc-1', acceptance: 'Owner accepts 5.1', plan_version: 1, evidence: null, candidate_evidence: [],
+        reason: 'every binding true', source: 'plan view', readiness: 'Ready' }]
       return json(snapshot)
     }
     const tree = /\/agentrt\/plan\?root=(R\d+)$/.exec(url)
@@ -126,7 +127,7 @@ describe('Work opens on the round', () => {
     }
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
     expect(urls().filter(u => STEP_AWAY.test(u))).toEqual([])
-    expect(urls().filter(u => u.includes('plan-view'))).toEqual(['/api/v1/agentrt/plan-view?root=R5&explain=1'])
+    expect(urls().filter(u => u.includes('plan-view'))).toEqual(['/api/v1/agentrt/plan-view?root=R5'])
     // This round's tree alone for the sign-off count (R5:5.5-4): R4's, though GET /progress lists it, is not read.
     expect(urls().filter(u => u.includes('/agentrt/plan?'))).toEqual(['/api/v1/agentrt/plan?root=R5'])
   })
@@ -286,16 +287,16 @@ describe('with an acceptance root beside the newest round (PROD 2026-11-01: R4)'
     // The round tab reads R5's tree alone (R5:5.5-4): it says other rounds are on Sign-offs, nothing of R4 itself.
     await waitFor(() => expect(within(card).getByRole('link', { name: /^Sign-offs:/ })).toHaveTextContent('Sign-offs: 0 ready · 13 later · Round 5 only · other rounds on the Sign-offs tab'))
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
-    expect(urls().filter(u => u.includes('plan-view'))).toEqual(['/api/v1/agentrt/plan-view?root=R5&explain=1'])
+    expect(urls().filter(u => u.includes('plan-view'))).toEqual(['/api/v1/agentrt/plan-view?root=R5'])
     await go('#work?tab=signoffs')
     await waitFor(() => expect(within(card).getByRole('link', { name: /^Sign-offs:/ })).toHaveTextContent('Sign-offs: 0 ready · 13 later in Round 5 · R4 acceptance not counted here'))
     expect(card.querySelector('[data-summary-tone]')).toHaveAccessibleName(expect.stringContaining('acceptance sign-offs of R4 are not counted here'))
     const signoffs = await screen.findByRole('region', { name: 'Sign-offs' })
     expect(signoffs).toHaveTextContent('Acceptance sign-offs of R4 are below and not counted here.')
     expect(within(signoffs).getByText('Acceptance sign-offs in Round 4')).toBeInTheDocument()
-    await waitFor(() => expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4&explain=1')).toHaveLength(1))
+    await waitFor(() => expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4')).toHaveLength(1))
     await waitFor(() => expect(within(signoffs).queryByText('Reading acceptance sign-offs…')).toBeNull())
-    expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4&explain=1')).toHaveLength(1)
+    expect(urls().filter(u => u === '/api/v1/agentrt/plan-view?root=R4')).toHaveLength(1)
   })
 })
 

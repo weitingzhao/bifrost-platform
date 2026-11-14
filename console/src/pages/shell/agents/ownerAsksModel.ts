@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { approvalNumbers } from '@/api/agentRuntimePlan'
 import { fetchApprovalList, isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
 import { isLandingAction } from '@/api/landingActions'
-import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
+import type { PlanNode } from '@/api/planSnapshot'
 import { fetchQuestionList, type Question } from '@/api/questions'
 import { isStale, shellRead, SHELL_POLL_MS, type ShellRead } from './moduleDetailModel'
 import { ruleQuestionIds, type HeldItem } from './planModuleModel'
@@ -15,12 +15,10 @@ import { ruleQuestionIds, type HeldItem } from './planModuleModel'
  * (moduleDetailModel ShellRead, read now while not stale: isStale, two polls): the 10-31 PROD platform-api OOM came
  * from Work's reads, so the Work page adds no request.
  *
- * A question is on a step when it is open and either names one of the step's own tasks (task_id: a landing that failed
- * asks "Try again" this way) or is named by the step's done rule (question_answered). A request is on a step when its
- * done rule names its number (approval_executed) and it still awaits a decision as Needs you counts one: pending and
- * not expired (isAwaitingDecision), not a drill (never approved), not a landing request (a landing's grant is read from
- * the landing's own phase, awaiting_grant, and Needs you confirms a landing request apart). Nothing else ties a question
- * or a request to a step, so nothing else is read as one.
+ * A question is on a step when it is open and named by the step's done rule (question_answered). A request is on a
+ * step when its done rule names its number (approval_executed) and it still awaits a decision as Needs you counts one:
+ * pending and not expired (isAwaitingDecision), not a drill (never approved), not a landing request (Needs you confirms
+ * a landing request apart). Nothing else ties a question or a request to a step, so nothing else is read as one.
  */
 
 /** The two shell reads that can ask the Owner on a step: the questions, and the requests open. */
@@ -42,13 +40,11 @@ export type StepAsks = { items: HeldItem[]; unread: string[] }
 
 /**
  * The open questions and the requests awaiting a decision on a step. A read is used only when something could tie it
- * to the step (the step has tasks or its done rule names a question, for questions; its done rule names a request, for
- * requests); one not read now (not read yet, being read, failed, offline, or stale: older than two polls) is named in
+ * to the step (its done rule names a question, for questions; its done rule names a request, for requests); one not read now (not read yet, being read, failed, offline, or stale: older than two polls) is named in
  * unread, so its absence is never taken for "none".
  */
-export function stepAsks(view: PlanSnapshot, step: PlanNode, asks: OwnerAsks, now: number): StepAsks {
+export function stepAsks(step: PlanNode, asks: OwnerAsks, now: number): StepAsks {
   const items: HeldItem[] = [], unread: string[] = []
-  const tasks = new Map(view.tasks.filter(t => t.plan_node_id === step.plan_node_id).map(t => [t.task_id, t.title || t.task_id]))
   const named = new Set(ruleQuestionIds(step.done_rule_json))
   const numbers = new Set(approvalNumbers(step.done_rule_json))
   const current = <T>(name: string, read: ShellRead<T[]>, poll: number): T[] | null => {
@@ -57,11 +53,10 @@ export function stepAsks(view: PlanSnapshot, step: PlanNode, asks: OwnerAsks, no
       : read.state === 'unknown' ? read.reason : read.state === 'reading' ? 'being read' : 'not read yet'}`)
     return null
   }
-  const questions = tasks.size > 0 || named.size > 0 ? current('Questions', asks.questions, SHELL_POLL_MS.questions) : []
+  const questions = named.size > 0 ? current('Questions', asks.questions, SHELL_POLL_MS.questions) : []
   for (const q of questions ?? []) {
     if (q.status !== 'open') continue
-    const on = q.task_id && tasks.has(q.task_id) ? `on task ${tasks.get(q.task_id)}` : named.has(q.id) ? 'its done rule names it' : ''
-    if (on) items.push({ kind: 'question', text: `question #${q.number} “${cut(q.title)}” waits for your answer (${on})` })
+    if (named.has(q.id)) items.push({ kind: 'question', text: `question #${q.number} “${cut(q.title)}” waits for your answer (its done rule names it)` })
   }
   const requests = numbers.size > 0 ? current('Requests', asks.requests, SHELL_POLL_MS.open) : []
   for (const r of requests ?? []) {

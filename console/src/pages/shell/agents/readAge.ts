@@ -41,3 +41,11 @@ export function viewOldReason(view: Pick<PlanSnapshot, 'as_of' | 'freshness'>, r
   const why = failed ? `could not be read (${failed})` : old ? 'is older than 60 s' : `reads the database as ${view.freshness.database.status}`
   return `${roundLabel(root)}'s plan view ${why}; as of ${view.as_of}`
 }
+
+const pad = (n: number) => String(n).padStart(2, '0')
+/** A record's time as a step card says it: hh:mm on the day it is read, with the date on another day. */
+export function clockWords(iso: string, now: number): string {
+  const d = new Date(iso)
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return d.toDateString() === new Date(now).toDateString() ? hm : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${hm}`
+}

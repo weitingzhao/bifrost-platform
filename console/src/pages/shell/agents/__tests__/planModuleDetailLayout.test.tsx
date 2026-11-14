@@ -9,7 +9,7 @@ import { questionHref } from '@/lib/shell/consoleRoutes'
 import { NowClock } from '../../progress/progressClock'
 import { PlanModuleDetail } from '../PlanModuleDetail'
 import { moduleOf } from '../moduleDetailModel'
-import { allRequests, AT, openRequests, progress, Q_RULE, questions, r5, r5Raw, T3, T_OTHER, type Raw } from './moduleDetailFixture'
+import { allRequests, AT, externalWork, openRequests, progress, Q_OPEN, Q_RULE, questions, r5, r5Raw, W3, type Raw } from './moduleDetailFixture'
 
 /*
  * The module detail laid out as Design v3.6 ItemDetail (R5:5.5-3): its head card, the steps as a timeline, and the
@@ -92,22 +92,17 @@ describe('module detail laid out as Design v3.6 ItemDetail (R5:5.5-3)', () => {
     expect(region('Summary of 5.6').querySelector('[data-kicker]')).toHaveTextContent(/^5\.6 · Support$/)
   })
 
-  it('lays the steps out as a timeline: the step in progress open with its earlier own work and done rule, the others one line each', () => {
+  it('lays the steps out as a timeline: the step in progress open with its done rule and external work, the others one line each', () => {
     seedShell()
     detail()
     expect(steps().filter(li => li.dataset.stepOpen).map(li => li.dataset.stepRow)).toEqual(['5.1-3'])
     const open = step('5.1-3')
-    expect(open).toHaveTextContent('Earlier own work')
-    expect(open).toHaveTextContent("Done whenAt least 1 of this step's own tasks accepted")
-    // Its records never list a check as a task (B1): the verification that failed is told only under Review.
-    expect(within(open).queryByRole('link', { name: /verify/ })).toBeNull()
-    expect(open).toHaveTextContent('ReviewVerify fail of t_…F0WBP3')
+    expect(open).toHaveTextContent(`Done whenAll of these hold:Question ${Q_OPEN} is answered “a”Request #7 is approved and executedRequest #8 is approved and executed`)
+    expect(open).toHaveTextContent('External work on this stepModule detail page · codex · Registered')
     for (const label of ['5.1-1', '5.1-4', '5.1-6']) {
       expect(step(label)).not.toHaveTextContent('Done when')
-      expect(step(label)).toHaveTextContent('Latest task')
-      expect(step(label)).toHaveTextContent('Review')
+      expect(step(label)).not.toHaveTextContent('External work on this step')
     }
-    expect(within(region('Steps of 5.1')).queryAllByRole('group').map(g => g.getAttribute('aria-label'))).toEqual(['Now on 5.1-3'])
   })
 
   it('opens the step an address names too: its done rule in words and the question its rule waits on', () => {
@@ -119,9 +114,6 @@ describe('module detail laid out as Design v3.6 ItemDetail (R5:5.5-3)', () => {
     expect(document.activeElement).toBe(named)
     expect(named).toHaveTextContent(`Done whenQuestion ${Q_RULE} is answered “a”`)
     expect(within(named).getByRole('link', { name: `Question ${Q_RULE}` })).toHaveAttribute('href', questionHref(Q_RULE))
-    // Not in progress: no "Now" on it, and no claim that it has no work task.
-    expect(within(named).queryByRole('group')).toBeNull()
-    expect(named).not.toHaveTextContent('No work task on this step yet')
     cleanup()
     seedShell()
     detail(r5(), 'R5:5.1-4')
@@ -135,7 +127,6 @@ describe('module detail laid out as Design v3.6 ItemDetail (R5:5.5-3)', () => {
     detail(parsePlanSnapshot(raw, 'R5'))
     expect(region('Summary of 5.1')).toContainElement(region('Now'))
     expect(region('Now')).toHaveTextContent('No step in progress.')
-    expect(screen.queryByRole('group', { name: /^Now on/ })).toBeNull()
     expect(steps().filter(li => li.dataset.stepOpen)).toHaveLength(0)
     cleanup()
     nodeOf(raw, 'R5:5.1-6').state = null
@@ -237,13 +228,9 @@ describe('module detail laid out as Design v3.6 ItemDetail (R5:5.5-3)', () => {
   })
 
   it('lists the registered work on the module\'s steps, and never says nobody works when none is registered', () => {
-    const raw = r5Raw() as Raw & { working: Record<string, unknown>[] }
-    const t3 = raw.tasks.find(t => t.task_id === T3)!
-    Object.assign(t3, { state: 'running', attempt: { attempt_id: 'a_1', attempt_no: 2, task_id: T3, mission_id: 'M-251', host_id: 'mac-mini', executor: 'codex', model: 'gpt-6-astra',
-      state: 'running', elapsed_s: 600, heartbeat_age_s: 3, status: 'Running', reason: 'implementing', persisted: true } })
-    const other = { ...raw.tasks.find(t => t.task_id === T_OTHER)!, attempt: { attempt_id: 'a_2', attempt_no: 1, task_id: T_OTHER, mission_id: 'M-260', executor: 'claude', state: 'running',
-      heartbeat_age_s: 3, status: 'Running', reason: '', persisted: true } }
-    raw.working = [t3, other]
+    // 5.1-3 has its registered work (the fixture's); 5.2-1, another module's step, has work running.
+    const raw = r5Raw()
+    externalWork(raw, 'R5:5.2-1', { description: { ...(raw.external_work[0].description as Record<string, unknown>), task: 'Release lanes' } })
     seedShell()
     detail(parsePlanSnapshot(raw, 'R5'))
     const live = region('Live on 5.1')
@@ -253,14 +240,15 @@ describe('module detail laid out as Design v3.6 ItemDetail (R5:5.5-3)', () => {
     expect(live).toHaveTextContent('Module detail page')
     expect(live).not.toHaveTextContent('Release lanes')
     cleanup()
+    const none = () => { const bare = r5Raw(); bare.external_work = bare.external_work.filter(w => w.external_work_id !== W3); bare.working = []; return parsePlanSnapshot(bare, 'R5') }
     seedShell()
-    detail()
+    detail(none())
     expect(region('Live on 5.1')).toHaveTextContent('Live on 5.1 · 0 registered')
     expect(region('Live on 5.1')).toHaveTextContent('No registered work on 5.1 in this snapshot.')
     expect(region('Live on 5.1')).toHaveTextContent('Unregistered work is not seen (R5 coverage: 0 unregistered · Not reconciled).')
     cleanup()
     seedShell()
-    const view = r5()
+    const view = none()
     render(wrap(<PlanModuleDetail view={view} item={moduleOf(view, 'R5:5.1')!.item} step="" stale />))
     expect(region('Live on 5.1')).toHaveTextContent('Live on 5.1 · last read 0 registered')
     expect(region('Live on 5.1')).toHaveTextContent('Current activity is Unknown. Last read contained no registered work on 5.1.')

@@ -1,5 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { fetchRuntimeProgress } from '@/api/agentRuntime'
+import type { UseQueryResult } from '@tanstack/react-query'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { TONE_COLOR, type Tone } from '../owner/ownerModel'
 import { useNow } from '../progress/progressClock'
@@ -11,7 +10,6 @@ import { NeedsCleanupEntry } from './NeedsCleanup'
 import { PlanPaceLine } from './PlanPaceLine'
 import { cleanupBreakdown } from './needsCleanupModel'
 import { useNeedsCleanup } from './useNeedsCleanup'
-import { runtimeTasks } from './moduleDetailModel'
 import { useOwnerAsks } from './ownerAsksModel'
 import { stepRows } from './stepStateModel'
 import { answeredWords, progressOld, sinceWords as since } from './readAge'
@@ -67,10 +65,6 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
   const failure = failed && <PlanReadFailure query={query} />
   // What needs cleanup, from the shell's GET /progress and this plan view: no request of its own (R5:5.5-4).
   const cleanup = useNeedsCleanup(plan, query, now)
-  // GET /progress as the shell already holds it (never fetched here: enabled false), for the tasks' roles: the same read
-  // the module rows judge with, so that a check task is told apart alike in the summary and the rows (R5:5.5-10).
-  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
-  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
   // The open questions and requests Needs you already polls, from the cache: the same asks the rows judge with.
   const asks = useOwnerAsks()
   if (!view) {
@@ -84,7 +78,7 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
     </section>
   }
   // Each active step by what it has now (R5:5.5-10): the summary counts the same states the rows show.
-  const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, runtime, asks })
+  const rows = stepRows(view, { failed: failed ? query.isPaused ? 'Offline' : query.error?.message ?? 'Request failed' : null, now, asks })
   const countdown = planCountdown(rows)
   const stale = failed || now - Date.parse(view.as_of) > 60_000 || view.freshness.database.status !== 'Fresh'
   const mainline = mainlineSentence(view, rows)
@@ -112,7 +106,6 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
       <a href={workTabHref('signoffs', plan.root, named)} data-summary-signoffs className="text-inherit underline-offset-2 hover:underline"
         title={signoffBreakdown(count).join('\n')}>
         Sign-offs: {signoffWords(count)}{signoffGaps(count).length > 0 && ` · ${signoffGaps(count).join('; ')}`}
-        {count.tasks.length > 0 && ` · ${count.tasks.length} task${count.tasks.length === 1 ? ' waits' : 's wait'} on you`}
         {count.uncounted.length > 0 && ` · ${count.uncounted.join(', ')} acceptance not counted here`}
         {count.scope === 'round' && ` · ${OTHER_ROUNDS}`}</a>
       <span data-summary-waits title={waits.state === 'ok' ? `Blocking dependencies whose milestone is not verified: ${waits.blocked} Blocked, ${waits.unverified} Unknown` : undefined}>

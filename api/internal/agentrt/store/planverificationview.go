@@ -3,7 +3,6 @@ package store
 import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"time"
 )
 
 func snapshotItemValue(s *planFactsSnapshot, root, node string) plan.Tri {
@@ -29,8 +28,8 @@ func snapshotItemValue(s *planFactsSnapshot, root, node string) plan.Tri {
 	return plan.Unknown
 }
 
-func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, tasks []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence, attemptedSteps map[string]bool) (map[string]any, []any, []map[string]any, []any, []any, string) {
-	mainline, next, later := viewExecutionSummary(nodes, tasks, graph, adoption)
+func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any, graph planview.Graph, adoption viewAdoption, candidates map[string][]candidateEvidence, attemptedSteps map[string]bool) (map[string]any, []any, []map[string]any, []any, []any, string) {
+	mainline, next, later := viewExecutionSummary(nodes, graph, adoption)
 	waiting := []map[string]any{}
 	ready := []any{}
 	freshness := "Unknown"
@@ -149,58 +148,6 @@ func verificationView(s *planFactsSnapshot, root string, nodes []map[string]any,
 		mainline = map[string]any{"path": path, "current": current, "basis": "Versioned acceptance observations"}
 	}
 	return mainline, next, waiting, ready, later, freshness
-}
-
-func snapshotTaskDelivery(s *planFactsSnapshot, task string) string {
-	label := "Landing unverified"
-	onMain, deployFailed, deployPassed := false, false, false
-	for _, d := range s.Docs {
-		bs, _ := d.Bindings()
-		for _, b := range bs {
-			if b.Task != task {
-				continue
-			}
-			v, _, _ := s.reading(b)
-			switch b.Atom {
-			case "main_effective":
-				if v == plan.True {
-					onMain = true
-				} else if v == plan.False {
-					label = "Not landed"
-				}
-			case "deployment_verified":
-				deployFailed = deployFailed || v == plan.False
-				deployPassed = deployPassed || v == plan.True
-			}
-		}
-	}
-	if onMain {
-		label = "On main"
-		if deployFailed {
-			label = "On main · Deployment verification failed"
-		}
-		if deployPassed {
-			label = "On main · Deployment verified"
-		}
-	}
-	return label
-}
-
-// Landing lifecycle is folded from note.landing by the existing reducer. It
-// explains waiting/delivery but cannot replace fresh Git and deployment proof.
-func snapshotTaskLanding(s *planFactsSnapshot, task string) map[string]any {
-	var latest time.Time
-	var out map[string]any
-	for stream, state := range s.Landings {
-		for id, o := range state.Operations {
-			if o.Task != task || !o.LastAt.After(latest) {
-				continue
-			}
-			latest = o.LastAt
-			out = map[string]any{"stream": stream, "operation": id, "phase": o.Phase, "outcome": o.Outcome, "reason": o.Why, "attempt": o.Attempt, "result": o.A, "main_commit": o.R, "run": o.Run, "observed_at": timeText(o.LastAt), "basis": "note.landing; current validity requires verification"}
-		}
-	}
-	return out
 }
 
 func snapshotExternalVerification(s *planFactsSnapshot, id string) string {

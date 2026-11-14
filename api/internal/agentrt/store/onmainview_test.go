@@ -108,33 +108,3 @@ func TestProgressOnMain(t *testing.T) {
 		}
 	}
 }
-
-// The plan view: the tasks on main carry on_main and wait for nothing, not
-// stopped or withdrawn; the stopped task without a note still reads stopped.
-func TestPlanViewOnMain(t *testing.T) {
-	t.Parallel()
-	w := newOnMainWorld(t)
-	out, err := store.PlanView(ctx, w.rt, root)
-	ok(t, err)
-	tasks := map[string]map[string]any{}
-	for _, x := range generic(t, out)["tasks"].([]any) {
-		x := x.(map[string]any)
-		tasks[x["task_id"].(string)] = x
-	}
-	for _, task := range []string{w.ready, w.stopped, w.cancelled} {
-		x := tasks[task]
-		om, _ := x["on_main"].(map[string]any)
-		if om == nil || om["commit"] != onMainSHA || om["via"] != "on main" {
-			t.Errorf("task %s in the plan view: on_main %v", task, x["on_main"])
-		}
-		if x["stopped"] != nil || x["withdrawn"] != nil || x["waiting"] != nil {
-			t.Errorf("task %s in the plan view: %v; want neither stopped, withdrawn nor waiting", task, x)
-		}
-	}
-	x := tasks[w.stillStopped]
-	if stopped, _ := x["stopped"].(map[string]any); stopped == nil || stopped["control_id"] != w.missionStop || x["on_main"] != nil {
-		t.Errorf("the stopped task without a note in the plan view: %v; want stopped by %s", x, w.missionStop)
-	} else if wait, _ := x["waiting"].(map[string]any); wait == nil || wait["on"] != store.WaitStop {
-		t.Errorf("the stopped task without a note waits on %v; want the stop", x["waiting"])
-	}
-}

@@ -46,8 +46,8 @@ export function moduleClass(row: ModuleRow): ModuleClass {
 
 const CLASS_ORDER: ModuleClass[] = ['in-progress', 'waiting', 'held', 'yours', 'idle', 'active-unknown', 'not-started', 'all-done', 'partly', 'stopped', 'unknown', 'no-steps']
 /**
- * Each class in the runtime's own terms (nodes[].state, the controller's record of a step, and the plan view's tasks,
- * attempts, landings and external work for an active one): never a claim about work outside it (R5:5.5-2 review: on
+ * Each class in the runtime's own terms (nodes[].state, the controller's record of a step, and the plan view's
+ * external work for an active one): never a claim about work outside it (R5:5.5-2 review: on
  * PROD every step of 5.5-1 was still planned while its work had been done and reviewed).
  */
 const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
@@ -66,13 +66,13 @@ const CLASS_WORDS: Record<ModuleClass, [string, string]> = {
 }
 /** What each class means, for "How this is read". */
 export const CLASS_MEANINGS: [string, string][] = [
-  ['a step in progress', 'the controller has a step active and the plan view, read now, shows work on it running (a live attempt with its heartbeat confirmed, a landing with a record in the last 30 min, running external work) or queued (a task proposed, ready, back for rework, submitted or being verified; a landing parked, which the controller unparks itself; external work registered and not started).'],
-  ['a step waiting on you', 'the controller has a step active, nothing on it runs or is queued, and something on it is only yours to move: a task awaiting your decision, a landing awaiting your grant, an acceptance sign-off Ready for it (the plan view), an open question on one of its tasks or named by its done rule, or a request its done rule names awaiting your decision, as Needs you counts one: pending, not expired, not a drill, not a landing request (the questions and requests Needs you reads every 30 s, while read within two of its polls; when those were not read now, the step says so and is judged by the plan view alone).'],
-  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, nothing on it was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so), and something on it waits: a task blocked or paused (each moves only when it is made ready again or cancelled), an accepted work task with no landing recorded (the plan view does not say whether it lands), or submitted external work whose verification result is Verification failed. None of these is counted as progress. Submitted external work with verification Unknown or not recorded is noted on its step separately; it does not by itself establish a hold (most is never verified). A stale verification reads Unknown now.'],
+  ['a step in progress', 'the controller has a step active and the plan view, read now, shows work on it running (external work running with its heartbeat confirmed) or queued (external work registered and not started).'],
+  ['a step waiting on you', 'the controller has a step active, nothing on it runs or is queued, and something on it is only yours to move: an acceptance sign-off Ready for it (the plan view), an open question named by its done rule, or a request its done rule names awaiting your decision, as Needs you counts one: pending, not expired, not a drill, not a landing request (the questions and requests Needs you reads every 30 s, while read within two of its polls; when those were not read now, the step says so and is judged by the plan view alone).'],
+  ['an active step held', 'the controller has a step active, nothing on it runs or is queued, nothing on it was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so), and something on it waits: submitted external work whose verification result is Verification failed. It is not counted as progress. Submitted external work with verification Unknown or not recorded is noted on its step separately; it does not by itself establish a hold (most is never verified). A stale verification reads Unknown now.'],
   ['an Owner step active', 'the controller has an Owner step (owner_step) active and, read now, nothing on it runs, is queued or is held, and nothing was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so).'],
-  ['an active step with nothing running now', 'the controller has a step active and, read now, nothing on it runs, is queued or is held, and nothing was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so). The active state alone is not work: the controller opens a step when a task on it is first leased, and a recorded event can move a step to active with no task on it.'],
-  ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or an attempt on the step is stale or its heartbeat unconfirmed, or a landing on it has no record for over 30 min, or submitted external work on it has a stale verification reading (the last recorded successful read is over 25 min old), or a task, attempt or landing reads in a state this page does not know.'],
-  ['no step started', 'every step is planned in the runtime: no task on it has been taken there. Work done outside the runtime (a thread, an external run not linked to a step) moves no step, so this does not say nothing was done.'],
+  ['an active step with nothing running now', 'the controller has a step active and, read now, nothing on it runs, is queued or is held, and nothing was read as waiting on you (the plan view, and the questions and requests while they were read now; a step whose lists were not read says so). The active state alone is not work: a recorded event can move a step to active with no work on it.'],
+  ['an active step whose work now is Unknown', 'the plan view is not now (older than 60 s, its refresh failed or its database not Fresh), or external work on the step has no heartbeat confirmed, or submitted external work on it has a stale verification reading (the last recorded successful read is over 25 min old).'],
+  ['no step started', 'every step is planned in the runtime. Work done outside the runtime (a thread, an external run not linked to a step) moves no step, so this does not say nothing was done.'],
   ['every step done', 'the controller marked each step done: not acceptance, not deployment.'],
   ['steps done and none active', 'some steps done, the rest planned, none active.'],
   ['a stopped step', 'the controller stopped a step.'],
@@ -139,7 +139,6 @@ export type SignoffRow =
   | { kind: 'step'; node: string; label: string; title: string; wait: SignoffWait }
   | { kind: 'acceptance'; node: string; label: string; title: string; signoff: AcceptanceSignoff }
   | { kind: 'owner-step'; node: string; label: string; title: string; reason: string }
-export type TaskWait = { task_id: string; plan_node_id: string; reason: string }
 
 /** How one source of the sign-offs was read: answered, being read, or Unknown with why. */
 export type SourceRead = 'ok' | 'reading' | { unknown: string }
@@ -151,12 +150,12 @@ export type SourceRead = 'ok' | 'reading' | { unknown: string }
  * - notStarted: step sign-offs whose work has not started, of the same rounds (GET /plan, TD-425);
  * - later: the shown round's plan-view owner_later only (acceptance sign-offs Blocked or Not started, Owner steps whose
  *   readiness it cannot judge): other rounds' are not read here;
- * with the tasks awaiting the Owner (the shown round's), the rounds whose acceptance sign-offs are not counted, and how
+ * with the rounds whose acceptance sign-offs are not counted, and how
  * each source was read (steps: GET /plan; round: the shown round's plan view). A source not read leaves its rows out,
  * and the counts say so; what the other source lists is still shown and signable.
  */
 export type SignoffCount = {
-  ready: SignoffRow[]; notStarted: SignoffRow[]; later: SignoffRow[]; tasks: TaskWait[]; uncounted: string[]; root: string | null
+  ready: SignoffRow[]; notStarted: SignoffRow[]; later: SignoffRow[]; uncounted: string[]; root: string | null
   /** The rounds whose GET /plan was read. */
   stepRounds: string[]
   steps: SourceRead; round: SourceRead
@@ -170,11 +169,11 @@ export type SignoffCount = {
    * What a source too old to be said as now, or whose refresh failed, last listed (R5:5.5-4): shown as last read, with
    * signing off, never in any count above. Empty while both sources are now.
    */
-  lastRead: { ready: SignoffRow[]; notStarted: SignoffRow[]; later: SignoffRow[]; tasks: TaskWait[] }
+  lastRead: { ready: SignoffRow[]; notStarted: SignoffRow[]; later: SignoffRow[] }
 }
 export type SignoffScope = 'every' | 'round'
 /** How many rows are listed as last read. */
-export const lastReadRows = (c: SignoffCount) => c.lastRead.ready.length + c.lastRead.notStarted.length + c.lastRead.later.length + c.lastRead.tasks.length
+export const lastReadRows = (c: SignoffCount) => c.lastRead.ready.length + c.lastRead.notStarted.length + c.lastRead.later.length
 
 /**
  * What plan-view the sign-offs are counted with: its last answer (if any), why it failed, the round, the rounds read,
@@ -255,7 +254,7 @@ function roundStepsRead(waits: SignoffWaitsRead, read: ViewRead): SourceRead {
  * The sign-offs, from the two reads Work already makes: GET /plan (every round's on the Sign-offs tab, the shown
  * round's alone elsewhere: scope; a step whose done rule waits on an unsigned owner_signoff: ready once its work has
  * started, not started while it has not; TD-425) and the shown round's plan-view (owner_waiting: acceptance sign-offs
- * Ready and tasks awaiting the Owner; owner_later: later). A sign-off both list is one row; an Owner step plan-view
+ * Ready; owner_later: later). A sign-off both list is one row; an Owner step plan-view
  * lists without a sign-off is a later row unless GET /plan lists it. A read too old to be said as now (readAge.ts), or
  * whose refresh failed, is Unknown with why, and its rows are left out of every count: never "0 ready" from it. They
  * are kept in lastRead, to be listed as last read with signing off (R5:5.5-4).
@@ -270,8 +269,8 @@ export function signoffCount(waits: SignoffWaitsRead, read: ViewRead): SignoffCo
   // The plan view's rows: counted while it is now, else last read.
   const view = read.view
   const viewNow = !!view && !viewOld(read)
-  const counted = { ready: [] as SignoffRow[], notStarted: [] as SignoffRow[], later: [] as SignoffRow[], tasks: [] as TaskWait[] }
-  const last = { ready: [] as SignoffRow[], notStarted: [] as SignoffRow[], later: [] as SignoffRow[], tasks: [] as TaskWait[] }
+  const counted = { ready: [] as SignoffRow[], notStarted: [] as SignoffRow[], later: [] as SignoffRow[] }
+  const last = { ready: [] as SignoffRow[], notStarted: [] as SignoffRow[], later: [] as SignoffRow[] }
   const node = (id: string) => view?.nodes.find(n => n.plan_node_id === id)
   // node|ref of the step rows counted (signed) and listed as last read (lastSigned): a sign-off both sources list is one
   // row. An acceptance row is not added beside a counted step row, nor, as last read, beside a last-read one; a last-read
@@ -292,10 +291,7 @@ export function signoffCount(waits: SignoffWaitsRead, read: ViewRead): SignoffCo
     if (signed.has(key) || (!viewNow && lastSigned.has(key))) return []
     return [{ kind: 'acceptance', node: s.plan_node_id, label: node(s.plan_node_id)?.label ?? s.plan_node_id, title: node(s.plan_node_id)?.title ?? '', signoff: s }]
   }
-  for (const w of view?.owner_waiting ?? []) {
-    if ('task_id' in w) into.tasks.push(w)
-    else into.ready.push(...acceptance(w))
-  }
+  for (const w of view?.owner_waiting ?? []) into.ready.push(...acceptance(w))
   const all = () => [...counted.ready, ...counted.notStarted, ...counted.later, ...last.ready, ...last.notStarted, ...last.later]
   for (const w of view?.owner_later ?? []) {
     if ('ref' in w) { into.later.push(...acceptance(w)); continue }
@@ -365,7 +361,7 @@ export function signoffBreakdown(count: SignoffCount): string[] {
 }
 
 /**
- * The summary's lamp and why: attention (yellow) when a sign-off is ready, a task waits on the Owner or a step is
+ * The summary's lamp and why: attention (yellow) when a sign-off is ready or a step is
  * stopped; otherwise unknown (grey) while anything it would need is not known: the plan view old or unread, the
  * mainline Unknown, a source of the sign-offs not read, another round's acceptance sign-offs not counted, or an Owner
  * step's readiness Unknown; ok (green) only when none holds, and then only for what was read: with one round's step
@@ -376,7 +372,6 @@ export function summaryLamp({ stale, mainlineUnknown, count, rows }: { stale: bo
   const stopped = rows.filter(r => r.stopped > 0).length
   const attention = [
     ...(count.ready.length ? [`${count.ready.length} sign-off${count.ready.length === 1 ? '' : 's'} ready for you${count.scope === 'round' ? ` in ${round}` : ''}`] : []),
-    ...(count.tasks.length ? [`${count.tasks.length} task${count.tasks.length === 1 ? '' : 's'} in ${round} waiting on you`] : []),
     ...(stopped ? [`${stopped} module${stopped === 1 ? '' : 's'} in ${round} with a stopped step`] : []),
   ]
   if (attention.length) return { tone: 'attention', why: attention }
@@ -390,8 +385,8 @@ export function summaryLamp({ stale, mainlineUnknown, count, rows }: { stale: bo
     ...(owner ? [`${owner} Owner step${owner === 1 ? '\'s' : 's\''} readiness in ${round} is Unknown`] : []),
   ]
   if (unknown.length) return { tone: 'unknown', why: unknown }
-  if (count.scope === 'round') return { tone: 'ok', why: [`in ${round} only, no step sign-off ready, no acceptance sign-off ready, no task waiting on you, no step stopped; other rounds are read on the Sign-offs tab`] }
-  return { tone: 'ok', why: [`no step sign-off ready in any round; in ${round}, no acceptance sign-off ready, no task waiting on you, no step stopped`] }
+  if (count.scope === 'round') return { tone: 'ok', why: [`in ${round} only, no step sign-off ready, no acceptance sign-off ready, no step stopped; other rounds are read on the Sign-offs tab`] }
+  return { tone: 'ok', why: [`no step sign-off ready in any round; in ${round}, no acceptance sign-off ready, no step stopped`] }
 }
 
 /** Runtime countdown only; delivery percent requires the stage model, absent from this wire contract. */

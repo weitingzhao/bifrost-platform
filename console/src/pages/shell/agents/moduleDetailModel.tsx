@@ -1,12 +1,11 @@
-import { waitWords } from './waitWords'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
-import { records, text, type RuntimeProgress, type RuntimeRecord, type RuntimeTask } from '@/api/agentRuntime'
+import { records, text, type RuntimeProgress } from '@/api/agentRuntime'
 import { isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
 import { isLandingAction } from '@/api/landingActions'
-import type { ExplainRead, PlanNode, PlanSnapshot } from '@/api/planSnapshot'
+import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { optionLabel, questionNumberLabel, type Question } from '@/api/questions'
-import { approvalHref, goalHref, questionHref } from '@/lib/shell/consoleRoutes'
+import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
 import { groupOpenApprovals } from '../needs-you/needsYouGroups'
 import { SIGNOFF_SECTION_HREF } from '../progress/progressPart'
 import { moduleRows, noViewReason, ruleQuestionIds, type ModuleRow, type StepCell } from './planModuleModel'
@@ -22,7 +21,6 @@ import { planNodeHref } from './usePlanSnapshot'
 export const moduleDetailId = (id: string) => `module-detail-${id}`
 export const moduleStepRowId = (id: string) => `module-detail-step-${id}`
 
-export type ModuleTask = PlanSnapshot['tasks'][number]
 type RecentEvent = PlanSnapshot['recent_changes'][number]
 
 /** A list the shell reads (Needs you's reads): its data when it answered, else why there is none. */
@@ -43,7 +41,6 @@ export function shellRead<T>(q: Pick<UseQueryResult<T>, 'isError' | 'error' | 'i
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
 const str = (v: unknown) => typeof v === 'string' ? v : ''
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s
-const FINISHED = new Set(['accepted', 'rejected', 'cancelled'])
 // The controller's word for a step's move: active is not "in progress" (R5:5.5-10: an active step may have nothing running).
 const STEP_WORDS: Record<string, string> = { planned: 'Not started', active: 'Active', done: 'Done', stopped: 'Stopped', dropped: 'Dropped' }
 
@@ -62,14 +59,12 @@ export function moduleOf(view: PlanSnapshot, selected: string): { item: PlanNode
   return { item: node, step: picked?.node_kind === 'step' ? picked.plan_node_id : '' }
 }
 
-/** What belongs to one module: its row, every node under it (dropped steps too), its tasks and what its rules name. */
+/** What belongs to one module: its row, every node under it (dropped steps too) and what its rules name. */
 export type ModuleScope = {
   item: PlanNode; row: ModuleRow
   /** Every step under the item in plan order, dropped ones too (a link to a dropped step is still this module's). */
   steps: PlanNode[]
   nodeIds: Set<string>; labels: Set<string>
-  /** plan-view tasks on the item or a node under it; taskNode says which node each is on. */
-  tasks: ModuleTask[]; taskNode: Map<string, string>
   /** The step whose done rule names a question (question_answered) or a request number (approval_executed). */
   ruleQuestions: Map<string, string>; ruleApprovals: Map<number, string>
 }
@@ -93,62 +88,51 @@ export function moduleScopes(view: PlanSnapshot, shown: ModuleRow[] = moduleRows
     walk(item.plan_node_id, new Set())
     const steps = under.filter(n => n.node_kind === 'step')
     const nodeIds = new Set([item.plan_node_id, ...under.map(n => n.plan_node_id)])
-    const tasks = view.tasks.filter(t => nodeIds.has(t.plan_node_id))
     const ruleQuestions = new Map<string, string>(), ruleApprovals = new Map<number, string>()
     for (const step of steps) {
       for (const q of ruleQuestionIds(step.done_rule_json)) if (!ruleQuestions.has(q)) ruleQuestions.set(q, step.plan_node_id)
       for (const n of approvalNumbers(step.done_rule_json)) if (!ruleApprovals.has(n)) ruleApprovals.set(n, step.plan_node_id)
     }
-    out.set(item.plan_node_id, { item, row: rows.get(item.plan_node_id)!, steps, nodeIds, labels: new Set([item.label, ...under.map(n => n.label)]), tasks,
-      taskNode: new Map(tasks.map(t => [t.task_id, t.plan_node_id])), ruleQuestions, ruleApprovals })
+    out.set(item.plan_node_id, { item, row: rows.get(item.plan_node_id)!, steps, nodeIds, labels: new Set([item.label, ...under.map(n => n.label)]), ruleQuestions, ruleApprovals })
   }
   return out
 }
 
-/** The nodes a proposed plan change touches: a node, an added node's parent, the step a moved task is on. */
-function touched(e: RecentEvent, view: PlanSnapshot): string[] {
+/** The nodes a proposed plan change touches: a node, an added node's parent. */
+function touched(e: RecentEvent): string[] {
   const changes = Array.isArray(e.body_json.changes) ? e.body_json.changes : []
-  return changes.flatMap(c => {
-    if (!isRecord(c)) return []
-    const task = str(c.task) ? view.tasks.find(t => t.task_id === str(c.task))?.plan_node_id ?? '' : ''
-    return [str(c.node), str(c.parent), task].filter(Boolean)
-  })
+  return changes.flatMap(c => isRecord(c) ? [str(c.node), str(c.parent)].filter(Boolean) : [])
 }
 
-/** One open card of GET /progress needs_you (store/progressneeds.go): its question, its title, and the task it names. */
-export type NeedsYouCard = { question: string; title: string; task: string }
+/** One open card of GET /progress needs_you (store/progressneeds.go): its question and its title. */
+export type NeedsYouCard = { question: string; title: string }
 export function needsYouCards(progress: ShellRead<RuntimeProgress>): { cards: Map<string, NeedsYouCard>; truncated: boolean } | null {
   if (progress.state !== 'ok') return null
   const cards = new Map<string, NeedsYouCard>()
   for (const it of records(progress.data.needs_you.items)) {
     const action = isRecord(it.action) ? it.action : {}
     const question = text(action.question_id)
-    if (question) cards.set(question, { question, title: text(it.title), task: text(it.task_id) })
+    if (question) cards.set(question, { question, title: text(it.title) })
   }
   return { cards, truncated: progress.data.needs_you.truncated === true }
 }
 
 /**
- * A plan node a card or request names directly, and how: its task's step (the card's or the request's task_id, as
- * plan-view's tasks place it), a step whose done rule names it, or a node a plan change it decides touches (a
- * proposal in the snapshot's recent window). Nothing else is evidence: a mission a card holds up is not (two modules
- * can share one), so a card tied only by a mission ties to no module.
+ * A plan node a card or request names directly, and how: a step whose done rule names it, or a node a plan change it
+ * decides touches (a proposal in the snapshot's recent window). Nothing else is evidence: a mission a card holds up is
+ * not (two modules can share one), so a card tied only by a mission ties to no module.
  */
 export type Link = { step: string; via: string }
-function taskEvidence(task: string, view: PlanSnapshot): Link[] {
-  const node = task ? view.tasks.find(t => t.task_id === task)?.plan_node_id : undefined
-  return node ? [{ step: node, via: 'its task' }] : []
-}
-function questionEvidence(id: string, task: string, view: PlanSnapshot, scopes: Map<string, ModuleScope>, cards: Map<string, NeedsYouCard>): Link[] {
-  const out = [...taskEvidence(task, view), ...taskEvidence(cards.get(id)?.task ?? '', view)]
+function questionEvidence(id: string, view: PlanSnapshot, scopes: Map<string, ModuleScope>): Link[] {
+  const out: Link[] = []
   for (const s of scopes.values()) { const rule = s.ruleQuestions.get(id); if (rule) out.push({ step: rule, via: "a step's done rule" }) }
   for (const e of view.recent_changes) {
-    if (e.event_type === 'plan_change_proposed' && str(e.body_json.question_id) === id) out.push(...touched(e, view).map(step => ({ step, via: 'the plan change it decides' })))
+    if (e.event_type === 'plan_change_proposed' && str(e.body_json.question_id) === id) out.push(...touched(e).map(step => ({ step, via: 'the plan change it decides' })))
   }
   return out
 }
-function approvalEvidence(a: ApprovalItem, view: PlanSnapshot, scopes: Map<string, ModuleScope>): Link[] {
-  const out = taskEvidence(str(a.params?.task), view)
+function approvalEvidence(a: ApprovalItem, scopes: Map<string, ModuleScope>): Link[] {
+  const out: Link[] = []
   for (const s of scopes.values()) { const rule = a.number != null ? s.ruleApprovals.get(a.number) : undefined; if (rule) out.push({ step: rule, via: "a step's done rule" }) }
   return out
 }
@@ -156,7 +140,7 @@ function approvalEvidence(a: ApprovalItem, view: PlanSnapshot, scopes: Map<strin
 const within = (evidence: Link[], scope: ModuleScope) => evidence.find(e => scope.nodeIds.has(e.step)) ?? null
 
 /** One thing that waits on the Owner now; counted is false for what this page cannot confirm still needs him. */
-export type NeedItem = { key: string; kind: 'task_wait' | 'signoff' | 'question' | 'approval'; text: string; href: string; step: string; counted: boolean; note: string }
+export type NeedItem = { key: string; kind: 'signoff' | 'question' | 'approval'; text: string; href: string; step: string; counted: boolean; note: string }
 export type NeedsNow = {
   items: NeedItem[]
   /** A list it could not read, said in words ("Questions Unknown · …"). */
@@ -182,33 +166,27 @@ export function needsNow(view: PlanSnapshot, scopes: Map<string, ModuleScope>, s
   const cards = needs?.cards ?? new Map<string, NeedsYouCard>()
   for (const w of view.owner_waiting) {
     if (!scope.nodeIds.has(w.plan_node_id)) continue
-    if ('task_id' in w) {
-      const task = view.tasks.find(t => t.task_id === w.task_id)
-      items.push({ key: `wait-${w.task_id}`, kind: 'task_wait', text: `${label(w.plan_node_id)} · task ${task?.title || w.task_id} waits for you`,
-        href: task ? goalHref(task.mission_id, task.task_id) : planNodeHref(view.root, w.plan_node_id), step: w.plan_node_id, counted: true, note: w.reason })
-    } else {
-      items.push({ key: `signoff-${w.ref}`, kind: 'signoff', text: `${label(w.plan_node_id)} · sign off acceptance ${w.acceptance}`, href: SIGNOFF_SECTION_HREF,
-        step: w.plan_node_id, counted: true, note: `Ready · plan v${w.plan_version}` })
-    }
+    items.push({ key: `signoff-${w.ref}`, kind: 'signoff', text: `${label(w.plan_node_id)} · sign off acceptance ${w.acceptance}`, href: SIGNOFF_SECTION_HREF,
+      step: w.plan_node_id, counted: true, note: `Ready · plan v${w.plan_version}` })
   }
   if (reads.questions.state === 'ok') {
     for (const q of reads.questions.data) {
       if (q.status !== 'open') continue
-      const link = within(questionEvidence(q.id, q.task_id ?? '', view, scopes, cards), scope)
+      const link = within(questionEvidence(q.id, view, scopes), scope)
       if (link) items.push({ key: `question-${q.id}`, kind: 'question', text: `${questionNumberLabel(q.number)} · ${q.title}`, href: questionHref(q.id), step: link.step,
         counted: true, note: `On ${label(link.step)}, by ${link.via}` })
     }
   } else {
     // Needs you's cards without the question list: whether each is still open is the question store's to say.
     for (const card of cards.values()) {
-      const link = within(questionEvidence(card.question, card.task, view, scopes, cards), scope)
+      const link = within(questionEvidence(card.question, view, scopes), scope)
       if (link) items.push({ key: `question-${card.question}`, kind: 'question', text: card.title, href: questionHref(card.question), step: link.step,
         counted: false, note: `On ${label(link.step)}, by ${link.via} · whether the card is still open is not read` })
     }
   }
   if (reads.open.state === 'ok') {
     for (const [a, ask] of asksOf(reads.open.data, now)) {
-      const link = within(approvalEvidence(a, view, scopes), scope)
+      const link = within(approvalEvidence(a, scopes), scope)
       if (!link) continue
       // Whether a landing request is still the Owner's decision only landing/operations says, which this page does not read.
       const unconfirmed = ask === 'decide' && isLandingAction(a.action)
@@ -237,125 +215,17 @@ export function actionsLeft(scope: ModuleScope, needs: NeedsNow): ActionsLeft {
     stopped: scope.steps.filter(s => s.owner_step && s.state === 'stopped').length, floor: needs.floor }
 }
 
-/*
- * Tasks: a step's own work and the checks of it sit on the same step (store/stepevidence.go), and a check is accepted
- * whatever its verdict (accept.go: "result used: fail"), so a task is told apart by its role before anything is said
- * of it. The role is the runtime's (GET /progress: unfinished tasks and its latest ended ones); else the title the
- * controller gives a check ("verify <task>", "review <task>", accept.go proposeChecker) or a gate ("Gate … on … at
- * <commit>", gates.go); else Unknown, and said so.
- */
-export type TaskRole = { role: string; check: boolean; subject: string; from: 'runtime' | 'title' | '' }
-const CHECK_TITLE = /^(verify|review) (t_[0-9A-Z]{26})$/
-const GATE_TITLE = /^Gate .+ on .+ at [0-9a-f]{12}$/
 /**
- * The runtime's view of tasks: unfinished ones (with round) and its latest ended ones (role, state, conclusion); read
- * is false when GET /progress was not read, so that "not listed" is never said of a list nobody read.
+ * The Review cell: the verification of the step's latest recorded external work that has one; '' when none has.
  */
-export type RuntimeTasks = { read: boolean; work: Map<string, RuntimeTask>; ended: Map<string, RuntimeRecord> }
-export function runtimeTasks(progress: ShellRead<RuntimeProgress>): RuntimeTasks {
-  if (progress.state !== 'ok') return { read: false, work: new Map(), ended: new Map() }
-  return { read: true, work: new Map(progress.data.work.missions.flatMap(m => m.tasks.map(t => [t.task_id, t] as const))),
-    ended: new Map(progress.data.recent.tasks.map(t => [text(t.task_id), t] as const)) }
-}
-export function taskRole(task: Pick<ModuleTask, 'task_id' | 'title'>, runtime: RuntimeTasks): TaskRole {
-  const title = CHECK_TITLE.exec(task.title)
-  const role = runtime.work.get(task.task_id)?.role || text(runtime.ended.get(task.task_id)?.role)
-  if (role) return { role, check: role === 'verify' || role === 'review', subject: title?.[2] ?? '', from: 'runtime' }
-  if (title) return { role: title[1], check: true, subject: title[2], from: 'title' }
-  if (GATE_TITLE.test(task.title)) return { role: 'verify', check: true, subject: '', from: 'title' }
-  return { role: '', check: false, subject: '', from: '' }
+export function reviewWords(view: PlanSnapshot, step: string): string {
+  const external = view.external_work.filter(w => w.plan_node_id === step && w.verification).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0]
+  return external ? `External work · ${external.verification}` : ''
 }
 
-/** A step's tasks, newest first: a task id is a ULID, so its order is the order the runtime made them. */
-export function stepTasks(scope: ModuleScope, step: string): ModuleTask[] {
-  return scope.tasks.filter(t => t.plan_node_id === step).sort((a, b) => b.task_id.localeCompare(a.task_id))
-}
-
-/**
- * "round 3 of 3" from GET /progress; nothing for a finished task. Unknown says which: the list was not read, the
- * runtime's unfinished tasks do not list it, or it lists it without a round.
- */
-export function roundWords(task: ModuleTask, runtime: RuntimeTasks): string {
-  if (FINISHED.has(task.state)) return ''
-  const round = runtime.work.get(task.task_id)
-  const number = round?.round_no ?? task.round_no
-  const max = round?.max_rounds ?? task.max_rounds
-  if (number != null && max != null) return `round ${number} of ${max}`
-  if (!runtime.read) return 'round Unknown (runtime progress not read)'
-  const t = runtime.work.get(task.task_id)
-  if (!t) return "round Unknown (not among the runtime's unfinished tasks)"
-  return t.round_no != null && t.max_rounds != null ? `round ${t.round_no} of ${t.max_rounds}` : 'round Unknown (the runtime gives no round)'
-}
-
-export type TaskLine = { id: string; role: string; title: string; state: string; round: string; attempt: string; href: string; detail: string; waiting: string; waitingHref: string }
-/** Why a role is Unknown: the runtime's lists were not read, or they were and do not list the task (and its title is no check's). */
-const roleUnknown = (runtime: RuntimeTasks) => runtime.read ? "Role Unknown (not in the runtime's lists)" : 'Role Unknown (runtime progress not read)'
-
-/** A task whose change is on main reads finished, as an accepted one, whatever its state (store/progressstop.go). */
-const onMainWords = (o: { commit: string; via: string }) => `Finished · on main as ${o.commit.slice(0, 12)} (${o.via})`
-
-/** A task of the step's own work, with its role (or why it is Unknown). */
-export function taskLine(task: ModuleTask, runtime: RuntimeTasks, explain?: ExplainRead, now = Date.now()): TaskLine {
-  const wait = waitWords(task, explain, now)
-  const a = task.attempt
-  const role = taskRole(task, runtime)
-  const landing = task.landing ? `landing ${task.landing.phase} · ${task.landing.outcome}` : ''
-  return { id: task.task_id, role: role.role ? cap(role.role) : roleUnknown(runtime), title: task.title || task.task_id, state: task.on_main ? onMainWords(task.on_main) : task.withdrawn ? `Withdrawn by ${task.withdrawn.by}: ${task.withdrawn.reason}` : task.stopped ? `Stopped by ${task.stopped.by}: ${task.stopped.reason}` : task.state, round: roundWords(task, runtime),
-    attempt: a ? `attempt ${a.attempt_no} · ${a.executor}${a.status ? ` · ${a.status}` : ''}` : '', href: goalHref(task.mission_id, task.task_id),
-    waiting: wait.text, waitingHref: wait.href,
-    detail: [task.delivery, landing].filter(Boolean).join(' · ') }
-}
-/** The step's own work, newest first: every task that is not a check (one whose role is Unknown is kept, and says so). */
-export function workTasks(scope: ModuleScope, step: string, runtime: RuntimeTasks): ModuleTask[] {
-  return stepTasks(scope, step).filter(t => !taskRole(t, runtime).check)
-}
-
-/** A task id as a row names it: its last six characters (t_…F0WBP3). */
-export const shortTask = (id: string) => `t_…${id.slice(-6)}`
-
-/**
- * The Review cell: the newest check of the step's newest work task, and nothing else (an older task's failed check is
- * not that task's). A check is tied to its task by the subject its title names (accept.go proposeChecker). Its verdict
- * is its attempt's conclusion while the runtime lists it among its latest 20 ended tasks (accept.go: done passes,
- * failed or none fails; a check the controller closed unused is not told apart). Every Unknown says the condition
- * that was found.
- */
-export function reviewWords(scope: ModuleScope, view: PlanSnapshot, step: string, runtime: RuntimeTasks): string {
-  const tasks = stepTasks(scope, step)
-  const roles = new Map(tasks.map(t => [t.task_id, taskRole(t, runtime)]))
-  const latest = tasks.find(t => !roles.get(t.task_id)!.check)
-  if (!latest) {
-    if (tasks.length > 0) return 'Unknown: the step has checks but no work task in what was read'
-    const external = view.external_work.filter(w => w.plan_node_id === step && w.verification).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0]
-    return external ? `External work · ${external.verification}` : 'No task yet'
-  }
-  const of = shortTask(latest.task_id)
-  const check = tasks.find(t => roles.get(t.task_id)!.check && roles.get(t.task_id)!.subject === latest.task_id)
-  if (check) {
-    const role = cap(roles.get(check.task_id)!.role)
-    if (!FINISHED.has(check.state)) return `${role} of ${of}: ${check.state}`
-    if (check.state === 'cancelled') return `${role} of ${of}: cancelled`
-    if (!runtime.read) return `${role} of ${of}: verdict Unknown (runtime progress not read)`
-    const ended = runtime.ended.get(check.task_id)
-    if (!ended) return `${role} of ${of}: verdict Unknown (not among the runtime's latest 20 ended tasks)`
-    const c = text(ended.conclusion)
-    if (c === 'done') return `${role} pass of ${of}`
-    if (c === 'failed' || c === 'none') return `${role} fail of ${of}`
-    return `${role} of ${of}: verdict Unknown (the runtime gives ${c ? `conclusion "${c}"` : 'no conclusion'})`
-  }
-  // "No check yet" only when every task's role is known and every check names the task it checks.
-  const unknownRole = tasks.filter(t => !roles.get(t.task_id)!.from).length
-  const noSubject = tasks.filter(t => roles.get(t.task_id)!.check && !roles.get(t.task_id)!.subject).length
-  if (unknownRole === 0 && noSubject === 0) return 'No check of the latest task yet'
-  const why = [unknownRole > 0 && (runtime.read ? `${unknownRole} task role${unknownRole === 1 ? '' : 's'} not in what was read` : 'runtime progress not read, so task roles are not known'),
-    noSubject > 0 && `${noSubject} check${noSubject === 1 ? '' : 's'} whose title names no task`].filter(Boolean).join('; ')
-  return `Unknown: ${why}`
-}
-
-export type NowStep = { cell: StepCell; tasks: TaskLine[] }
 /** The steps the controller has active, each with what it has now (in progress, held, nothing running, yours or Unknown) on its cell. */
-export function nowSteps(scope: ModuleScope, runtime: RuntimeTasks, explain?: ExplainRead, now = Date.now()): NowStep[] {
-  return scope.row.cells.filter(c => c.step === 'active').map(cell => ({ cell, tasks: workTasks(scope, cell.id, runtime).map(t => taskLine(t, runtime, explain, now)) }))
+export function nowSteps(scope: ModuleScope): StepCell[] {
+  return scope.row.cells.filter(c => c.step === 'active')
 }
 /** The first step not started, in plan order: plan order only, not a commitment. */
 export function nextInPlanOrder(scope: ModuleScope): StepCell | undefined {
@@ -365,16 +235,8 @@ export function nextInPlanOrder(scope: ModuleScope): StepCell | undefined {
 /** One line of Recent activity: when, what kind, what happened, and where it opens. */
 export type ActivityRow = { key: string; at: string; kind: string; text: string; href: string; source: string }
 
-function landingTask(body: Record<string, unknown>): string {
-  const landing = isRecord(body.landing) ? body.landing : {}
-  const task = str(landing.task)
-  if (task) return task
-  const op = /^land:(.+):\d+$/.exec(str(landing.op))
-  return op ? op[1] : ''
-}
-
 /**
- * The plan events of the snapshot's recent window that this module's nodes or tasks own. Nothing is counted of the
+ * The plan events of the snapshot's recent window that this module's nodes own. Nothing is counted of the
  * rest: what is not shown here is not said to be anything. A plan change's events in the window (its proposal, its
  * decision, the change applied) are one group, joined by the ids they name (proposal_event_id, decided_event_id; an
  * event whose id is missing or not a positive integer joins no group and stands on its own evidence); the group is this
@@ -384,7 +246,7 @@ function landingTask(body: Record<string, unknown>): string {
 /** An event id an event names: a positive integer, else 0 (none). */
 const eventRef = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : 0
 
-export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string, ModuleScope>, cards: Map<string, NeedsYouCard>): { rows: ActivityRow[] } {
+export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string, ModuleScope>): { rows: ActivityRow[] } {
   const byId = new Map(view.nodes.map(n => [n.plan_node_id, n]))
   const byStateEvent = new Map(view.nodes.filter(n => n.state_event_id != null && scope.nodeIds.has(n.plan_node_id)).map(n => [n.state_event_id!, n]))
   const ordered = [...view.recent_changes].sort((a, b) => a.event_id - b.event_id)
@@ -395,12 +257,12 @@ export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map
     let group = '', mine = false
     if (e.event_type === 'plan_change_proposed') {
       group = `p${e.event_id}`
-      mine = touched(e, view).some(n => scope.nodeIds.has(n))
+      mine = touched(e).some(n => scope.nodeIds.has(n))
     } else if (e.event_type === 'plan_change_decided') {
       const proposal = eventRef(b.proposal_event_id)
       group = proposal ? groupOf.get(proposal) ?? `p${proposal}` : `e${e.event_id}`
       const q = str(b.question_id)
-      mine = q !== '' && within(questionEvidence(q, '', view, scopes, cards), scope) !== null
+      mine = q !== '' && within(questionEvidence(q, view, scopes), scope) !== null
     } else if (e.event_type === 'plan_changed') {
       const decided = eventRef(b.decided_event_id)
       group = decided ? groupOf.get(decided) ?? `d${decided}` : `e${e.event_id}`
@@ -441,15 +303,11 @@ export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map
       case 'note': {
         const work = isRecord(b.external_work) ? b.external_work : null
         const observation = isRecord(b.plan_observation) ? b.plan_observation : null
-        const task = landingTask(b)
         if (work && scope.nodeIds.has(str(work.plan_node_id))) {
           const record = view.external_work.find(w => w.external_work_id === str(work.external_work_id))
           row('External work', `${byId.get(str(work.plan_node_id))?.label ?? ''} · ${str(b.text) || str(work.type)}${record ? ` · ${record.description.task}` : ''}`)
         } else if (observation && scope.nodeIds.has(str(observation.step))) {
           row('Evidence', `${byId.get(str(observation.step))?.label ?? ''} · ${str(observation.binding)} reads ${str(observation.value) || 'Unknown'}`)
-        } else if (isRecord(b.landing) && scope.taskNode.has(task)) {
-          const t = scope.tasks.find(x => x.task_id === task)
-          row('Landing', `${str(b.text).replaceAll('<nil>', 'not recorded') || 'Landing'} · ${t?.title || task}`, t ? goalHref(t.mission_id, t.task_id) : '')
         }
         break
       }
@@ -459,10 +317,10 @@ export function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map
 }
 
 /** Questions about this module asked or answered (GET /questions, the shell's read). */
-export function questionActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string, ModuleScope>, questions: ShellRead<Question[]>, cards: Map<string, NeedsYouCard>): ActivityRow[] {
+export function questionActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string, ModuleScope>, questions: ShellRead<Question[]>): ActivityRow[] {
   if (questions.state !== 'ok') return []
   return questions.data.flatMap(q => {
-    if (!within(questionEvidence(q.id, q.task_id ?? '', view, scopes, cards), scope)) return []
+    if (!within(questionEvidence(q.id, view, scopes), scope)) return []
     const name = `${questionNumberLabel(q.number)} · ${q.title}`
     const rows: ActivityRow[] = [{ key: `q-${q.id}-asked`, at: q.created_at, kind: 'Question', text: `Asked · ${name}`, href: questionHref(q.id), source: 'questions' }]
     if (q.answer) rows.push({ key: `q-${q.id}-answered`, at: q.answer.at, kind: 'Question', text: `Answered “${q.answer.option ? optionLabel(q, q.answer.option) : q.answer.text ?? ''}” · ${name}`, href: questionHref(q.id), source: 'questions' })
@@ -471,39 +329,14 @@ export function questionActivity(view: PlanSnapshot, scope: ModuleScope, scopes:
 }
 
 /** Requests about this module made or decided (GET /approvals?status=all, the shell's read). */
-export function approvalActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string, ModuleScope>, approvals: ShellRead<ApprovalItem[]>): ActivityRow[] {
+export function approvalActivity(scope: ModuleScope, scopes: Map<string, ModuleScope>, approvals: ShellRead<ApprovalItem[]>): ActivityRow[] {
   if (approvals.state !== 'ok') return []
   return approvals.data.flatMap(a => {
-    if (!within(approvalEvidence(a, view, scopes), scope)) return []
+    if (!within(approvalEvidence(a, scopes), scope)) return []
     const name = `Request #${a.number ?? '?'} · ${a.summary || a.action}`
     const rows: ActivityRow[] = [{ key: `a-${a.id}-made`, at: a.created_at, kind: 'Request', text: `Made · ${name}`, href: approvalHref(a.id), source: 'requests' }]
     if (!isUnsetDecidedAt(a.decided_at)) rows.push({ key: `a-${a.id}-decided`, at: a.decided_at!, kind: 'Request', text: `${cap(a.status)} · ${name}`, href: approvalHref(a.id), source: 'requests' })
     return rows
-  })
-}
-
-/**
- * Tasks of this module among the runtime's latest 20 ended tasks (GET /progress recent.tasks): a check says its role
- * and verdict and the work it checked; the step's own work says how it ended.
- */
-export function taskActivity(scope: ModuleScope, runtime: RuntimeTasks): ActivityRow[] {
-  return [...runtime.ended.values()].flatMap(t => {
-    const id = text(t.task_id), at = text(t.ended_at)
-    if (!scope.taskNode.has(id) || !at) return []
-    const node = scope.taskNode.get(id)!
-    const label = scope.steps.find(s => s.plan_node_id === node)?.label ?? scope.item.label
-    const task = scope.tasks.find(x => x.task_id === id)!
-    const role = taskRole(task, runtime)
-    const state = text(t.state)
-    if (role.check) {
-      const subject = scope.tasks.find(x => x.task_id === role.subject)
-      const c = text(t.conclusion)
-      const verdict = state === 'cancelled' ? 'cancelled' : c === 'done' ? 'pass' : c === 'failed' || c === 'none' ? 'fail' : `verdict Unknown (the runtime gives ${c ? `conclusion "${c}"` : 'no conclusion'})`
-      return [{ key: `t-${id}-${at}`, at, kind: 'Check', text: `${label} · ${cap(role.role)} ${verdict} · ${subject?.title || role.subject || text(t.title) || id}`,
-        href: goalHref(text(t.mission_id), role.subject || id), source: 'tasks' }]
-    }
-    return [{ key: `t-${id}-${at}`, at, kind: 'Task', text: `${label} · ${cap(role.role) || roleUnknown(runtime)} ${state || 'ended'} · ${text(t.title) || id}`,
-      href: goalHref(text(t.mission_id), id), source: 'tasks' }]
   })
 }
 
@@ -594,7 +427,7 @@ export function dependentsOf(view: PlanSnapshot, item: PlanNode): DependentsView
   return { state: 'ok', groups: [...groups.values()].sort((a, b) => Number(a.related) - Number(b.related)) }
 }
 
-/** Registered work now on the module's nodes (plan-view working: live runtime attempts and running or registered external work). */
+/** Registered work now on the module's nodes (plan-view working: running or registered external work). */
 export function liveOn(view: PlanSnapshot, scope: ModuleScope): PlanSnapshot['working'] {
   return view.working.filter(w => scope.nodeIds.has(w.plan_node_id))
 }

@@ -98,7 +98,6 @@
     "plan:R4": 21,
     "system": 4
   },
-  "tasks": [],
   "waiting_on": [],
   "warnings": [
     "Legacy evidence: plan has no adopted view; nodes are Unclassified",

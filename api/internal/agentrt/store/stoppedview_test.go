@@ -177,38 +177,6 @@ func TestStoppedViewProgress(t *testing.T) {
 	}
 }
 
-// The plan view snapshot: the stopped tasks carry their stop, the withdrawn
-// one how it was withdrawn, the others neither.
-func TestWithdrawnViewPlanSnapshot(t *testing.T) {
-	t.Parallel()
-	w := newStopWorld(t)
-	out, err := store.PlanView(ctx, w.rt, root)
-	ok(t, err)
-	tasks := map[string]map[string]any{}
-	for _, x := range generic(t, out)["tasks"].([]any) {
-		x := x.(map[string]any)
-		tasks[x["task_id"].(string)] = x
-	}
-	for task, control := range map[string]string{w.stopped: w.taskStop, w.subject: w.subjectStop, w.check: w.subjectStop} {
-		stopped, _ := tasks[task]["stopped"].(map[string]any)
-		if stopped == nil || stopped["control_id"] != control || stopped["by"] != "owner" || stopped["reason"] == "" || stopped["since"] == "" {
-			t.Errorf("task %s in the plan view: stopped %v; want control %s", task, tasks[task]["stopped"], control)
-		}
-		if tasks[task]["withdrawn"] != nil {
-			t.Errorf("task %s reads withdrawn", task)
-		}
-	}
-	wd, _ := tasks[w.withdrawn]["withdrawn"].(map[string]any)
-	if wd == nil || wd["by"] != "thread:s1" || wd["reason"] != "not needed any more" || wd["at"] == "" {
-		t.Errorf("the withdrawn task in the plan view: %v", tasks[w.withdrawn])
-	}
-	for _, task := range []string{w.free, w.cancelled} {
-		if x := tasks[task]; x == nil || x["stopped"] != nil || x["withdrawn"] != nil {
-			t.Errorf("task %s in the plan view: %v; want neither stopped nor withdrawn", task, x)
-		}
-	}
-}
-
 // Once its stop is lifted the task is queued again.
 func TestStoppedViewLiftedStop(t *testing.T) {
 	t.Parallel()

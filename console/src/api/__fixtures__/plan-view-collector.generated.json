@@ -256,7 +256,7 @@
       "status": "Fresh"
     },
     "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
-    "owner_waiting": "Runtime task waits and versioned acceptance signoffs; legacy readiness remains Unknown",
+    "owner_waiting": "Versioned acceptance signoffs; legacy readiness remains Unknown",
     "verification": "Partial"
   },
   "items": [
@@ -1011,12 +1011,12 @@
       },
       "effect_step": false,
       "execution_progress": {
-        "basis": "Tasks on this step (checks not counted); the state is the step's",
+        "basis": "Existing controller step states; not delivery verification",
         "done": 0,
         "state": "planned",
         "stopped": 0,
         "total": 1,
-        "unit": "tasks"
+        "unit": "steps"
       },
       "label": "4.3-1",
       "lane_kind": "Unclassified",
@@ -1111,87 +1111,6 @@
   "root": "R4",
   "schema": "agentrt.plan_view_response/v1",
   "source_watermarks": {},
-  "tasks": [
-    {
-      "attempt": {
-        "attempt_id": "a_fixture_live",
-        "attempt_no": 1,
-        "task_id": "t_fixture_live",
-        "mission_id": "M-fixture",
-        "host_id": "h1",
-        "executor": "exec:claude",
-        "model": "claude-opus",
-        "state": "running",
-        "started_at": "2026-10-26T21:59:50Z",
-        "elapsed_s": 10,
-        "heartbeat_age_s": 10,
-        "reason": "",
-        "persisted": false,
-        "unpersisted_for_s": 10
-      },
-      "external_work": [
-        {
-          "artifact_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "backfilled": false,
-          "description": {
-            "v": 1,
-            "kind": "agentrt.external_work/v1",
-            "task": "collector work beside a live attempt",
-            "executor": "claude",
-            "provider": "anthropic",
-            "repo": "platform",
-            "branch": "test",
-            "acceptance_refs": [
-              "PV1"
-            ],
-            "estimate_minutes": [
-              1,
-              2
-            ]
-          },
-          "elapsed_s": 10,
-          "epoch": 1,
-          "external_work_id": "ew_4444444444444444444444444444444444444444444444444444444444444444",
-          "heartbeat_age_s": 10,
-          "heartbeat_at": "2026-10-26T21:59:50.000000Z",
-          "host": "h1",
-          "kind": "agentrt.external_work/v1",
-          "mission_id": "M-fixture",
-          "plan_node_id": "R4:4.3-1",
-          "recorded_at": "2026-10-26T21:59:50.000000Z",
-          "registered_at": "2026-10-26T21:59:50.000000Z",
-          "registrant": "thread:collector@h1",
-          "registration_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "request_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "root": "R4",
-          "seq": 1,
-          "session": "9e5f0a1c-1111-2222-3333-444455556666",
-          "source_run_key": "claude:9e5f0a1c-1111-2222-3333-444455556666:1",
-          "started_at": "2026-10-26T21:59:50.000000Z",
-          "state": "Running",
-          "status": "Running",
-          "task_id": "t_fixture_live",
-          "type": "started",
-          "v": 1,
-          "vendor": "claude",
-          "verification": "Unknown"
-        }
-      ],
-      "max_rounds": 3,
-      "mission_id": "M-fixture",
-      "plan_node_id": "R4:4.3-1",
-      "role": "implement",
-      "round_no": 1,
-      "state": "running",
-      "task_id": "t_fixture_live",
-      "title": "a task with a live attempt",
-      "waiting": {
-        "on": "working",
-        "reason": "attempt a_fixture_live on h1",
-        "since": "2026-10-26T21:59:50Z"
-      }
-    }
-  ],
   "waiting_on": [
     {
       "edge": {
@@ -1307,83 +1226,50 @@
       "verification": "Unknown"
     },
     {
-      "attempt": {
-        "attempt_id": "a_fixture_live",
-        "attempt_no": 1,
-        "task_id": "t_fixture_live",
-        "mission_id": "M-fixture",
-        "host_id": "h1",
-        "executor": "exec:claude",
-        "model": "claude-opus",
-        "state": "running",
-        "started_at": "2026-10-26T21:59:50Z",
-        "elapsed_s": 10,
-        "heartbeat_age_s": 10,
-        "reason": "",
-        "persisted": false,
-        "unpersisted_for_s": 10
+      "artifact_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "backfilled": false,
+      "description": {
+        "v": 1,
+        "kind": "agentrt.external_work/v1",
+        "task": "collector work beside a live attempt",
+        "executor": "claude",
+        "provider": "anthropic",
+        "repo": "platform",
+        "branch": "test",
+        "acceptance_refs": [
+          "PV1"
+        ],
+        "estimate_minutes": [
+          1,
+          2
+        ]
       },
-      "external_work": [
-        {
-          "artifact_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "backfilled": false,
-          "description": {
-            "v": 1,
-            "kind": "agentrt.external_work/v1",
-            "task": "collector work beside a live attempt",
-            "executor": "claude",
-            "provider": "anthropic",
-            "repo": "platform",
-            "branch": "test",
-            "acceptance_refs": [
-              "PV1"
-            ],
-            "estimate_minutes": [
-              1,
-              2
-            ]
-          },
-          "elapsed_s": 10,
-          "epoch": 1,
-          "external_work_id": "ew_4444444444444444444444444444444444444444444444444444444444444444",
-          "heartbeat_age_s": 10,
-          "heartbeat_at": "2026-10-26T21:59:50.000000Z",
-          "host": "h1",
-          "kind": "agentrt.external_work/v1",
-          "mission_id": "M-fixture",
-          "plan_node_id": "R4:4.3-1",
-          "recorded_at": "2026-10-26T21:59:50.000000Z",
-          "registered_at": "2026-10-26T21:59:50.000000Z",
-          "registrant": "thread:collector@h1",
-          "registration_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "request_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "root": "R4",
-          "seq": 1,
-          "session": "9e5f0a1c-1111-2222-3333-444455556666",
-          "source_run_key": "claude:9e5f0a1c-1111-2222-3333-444455556666:1",
-          "started_at": "2026-10-26T21:59:50.000000Z",
-          "state": "Running",
-          "status": "Running",
-          "task_id": "t_fixture_live",
-          "type": "started",
-          "v": 1,
-          "vendor": "claude",
-          "verification": "Unknown"
-        }
-      ],
-      "max_rounds": 3,
+      "elapsed_s": 10,
+      "epoch": 1,
+      "external_work_id": "ew_4444444444444444444444444444444444444444444444444444444444444444",
+      "heartbeat_age_s": 10,
+      "heartbeat_at": "2026-10-26T21:59:50.000000Z",
+      "host": "h1",
+      "kind": "agentrt.external_work/v1",
       "mission_id": "M-fixture",
       "plan_node_id": "R4:4.3-1",
-      "role": "implement",
-      "round_no": 1,
-      "state": "running",
+      "recorded_at": "2026-10-26T21:59:50.000000Z",
+      "registered_at": "2026-10-26T21:59:50.000000Z",
+      "registrant": "thread:collector@h1",
+      "registration_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "request_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "root": "R4",
+      "seq": 1,
+      "session": "9e5f0a1c-1111-2222-3333-444455556666",
+      "source_run_key": "claude:9e5f0a1c-1111-2222-3333-444455556666:1",
+      "started_at": "2026-10-26T21:59:50.000000Z",
+      "state": "Running",
+      "status": "Running",
       "task_id": "t_fixture_live",
-      "title": "a task with a live attempt",
-      "waiting": {
-        "on": "working",
-        "reason": "attempt a_fixture_live on h1",
-        "since": "2026-10-26T21:59:50Z"
-      }
+      "type": "started",
+      "v": 1,
+      "vendor": "claude",
+      "verification": "Unknown"
     }
   ]
 }

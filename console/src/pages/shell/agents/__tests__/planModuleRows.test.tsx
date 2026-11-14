@@ -18,7 +18,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 type Progress = { state: string; done: number; total: number; stopped: number; basis: string }
 type RawNode = { plan_node_id: string; parent_plan_node_id: string | null; state: string | null; done_rule_json: Record<string, unknown>; mission_id: string | null; execution_progress: Progress }
-type Raw = { nodes: RawNode[]; tasks: Record<string, unknown>[]; external_work: Record<string, unknown>[]; mainline: { path: { plan_node_id: string; execution_state?: string }[]; current: { execution_state?: string } | null } }
+type Raw = { nodes: RawNode[]; external_work: Record<string, unknown>[]; mainline: { path: { plan_node_id: string; execution_state?: string }[]; current: { execution_state?: string } | null } }
 
 const TASK = 't_01ABCDEFGHJKMNPQRSTVWXYZ01'
 const QUESTION = 'q_0123456789abcdef'
@@ -48,8 +48,6 @@ function advanced(): PlanSnapshot {
   input.mainline.current!.execution_state = 'active'
   const steps41 = input.nodes.filter(n => n.parent_plan_node_id === 'R4:4.1')
   input.nodes = [...input.nodes.filter(n => n.parent_plan_node_id !== 'R4:4.1'), ...steps41.reverse()]
-  input.tasks = [{ task_id: TASK, plan_node_id: 'R4:4.1-1', mission_id: 'M-7', title: 'Cut the landing rules', state: 'accepted', delivery: 'Delivered on STG',
-    landing: { stream: 'landing', operation: 'op_17', phase: 'landed', outcome: 'landed', reason: '', attempt: 'a_1', result: 'ok', main_commit: '9f4c873e1234567890abcdef1234567890abcdef', run: 'ci-1', observed_at: '2026-10-27T02:40:00Z', basis: 'landing stream' } }]
   input.external_work = [...input.external_work, { ...input.external_work[0], external_work_id: 'ew_step', plan_node_id: 'R4:4.1-3',
     description: { ...(input.external_work[0].description as Record<string, unknown>), task: 'Rehearse case 3 on STG' } }]
   return parsePlanSnapshot(input, 'R4')
@@ -90,7 +88,7 @@ describe('module rows model', () => {
 
   it('counts done, active, stopped and unknown steps, leaves dropped ones out, and agrees with execution_progress', () => {
     const view = advanced()
-    // Judged at the snapshot's time: 4.1-3 is active with no task and external work submitted, its verification Unknown:
+    // Judged at the snapshot's time: 4.1-3 is active with external work submitted, its verification Unknown:
     // nothing running, queued or held on it, the submitted work a note (R5:5.5-10: most external work is never verified).
     const rows = stepRows(view, { failed: null, now: Date.parse(prod.as_of) })
     const r41 = row(rows, '4.1')
@@ -112,8 +110,8 @@ describe('module rows model', () => {
     const cells = row(moduleRows(advanced()), '4.1').cells
     const links = (label: string) => cells.find(c => c.label === label)!.links.map(l => [l.kind, l.href])
     const node = (id: string) => ['node', `#work?section=plan&root=R4&node=${encodeURIComponent(id)}`]
-    expect(links('4.1-1')).toEqual([['task', `#work?goal=M-7&task=${TASK}`], node('R4:4.1-1')])
-    expect(cells[0].links[0]).toMatchObject({ text: 'Task · Cut the landing rules', note: 'accepted · Delivered on STG · Landing op_17 · landed · landed · main 9f4c873' })
+    // A task its done rule names is no record the page opens: the rule says it in words.
+    expect(links('4.1-1')).toEqual([node('R4:4.1-1')])
     expect(links('4.1-2')).toEqual([['goal', '#work?goal=M-8'], node('R4:4.1-2')])
     expect(links('4.1-3')).toEqual([['approval', '#approvals?id=42'], ['question', `#questions?id=${QUESTION}`], node('R4:4.1-3')])
     // Q1 is not a server question id: the rule names it, the page cannot open it.
@@ -123,7 +121,7 @@ describe('module rows model', () => {
 
   it('writes the done rule in words', () => {
     const cells = row(moduleRows(advanced()), '4.1').cells
-    expect(cells[0].rule).toEqual([{ text: 'Task Cut the landing rules is accepted' }])
+    expect(cells[0].rule).toEqual([{ text: `Task ${TASK} is accepted` }])
     const rule = cells.find(c => c.label === '4.1-3')!.rule
     expect(rule).toEqual([{ text: 'All of these hold:', join: 'all', children: [
       { text: 'Request #42 is approved and executed' },

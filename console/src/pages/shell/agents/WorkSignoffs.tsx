@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { plainTitle, type SignoffWait } from '@/api/agentRuntimePlan'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import type { AcceptanceSignoff } from '@/api/planSnapshotSchema'
-import { goalHref, NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { hashNamesSection, scrollAfterShell } from '@/lib/shell/useHashSection'
 import { ActionLink } from '../owner/OwnerParts'
 import { roundLabel } from './planRoundModel'
@@ -58,18 +58,12 @@ function ReadyRow({ entry, view, stale, lastRead = false }: { entry: SignoffRow;
 function LastReadRows({ count, view }: { count: SignoffCount; view: PlanSnapshot | undefined }) {
   const n = lastReadRows(count)
   if (n === 0) return null
-  const { ready, tasks, notStarted, later } = count.lastRead
+  const { ready, notStarted, later } = count.lastRead
   return <div data-signoff-last-read={n} className="flex min-w-0 flex-col gap-2 pt-1">
     <span className={caps}>As last read · not counted · {n}</span>
     <p className="m-0 text-xs text-muted-foreground">What the last read of {signoffGaps(count).length ? 'a source said above to be Unknown' : 'the sources'} listed: not in any count above, and not signable until the plan is read again.</p>
     <ul aria-label="Sign-offs as last read" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
       {ready.map(entry => <ReadyRow key={`r|${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} view={view} stale lastRead />)}
-      {tasks.map(wait => {
-        const task = view?.tasks.find(t => t.task_id === wait.task_id)
-        return <li key={`t|${wait.task_id}`} data-last-read className={row}><span className="min-w-0 flex-[1_1_15rem] text-sm">{task?.title || wait.task_id} <span className="text-muted-foreground">· {wait.reason}</span></span>
-          <span className={chip(true)}>as last read</span>
-          <ActionLink href={task ? goalHref(task.mission_id, task.task_id) : planNodeHref(rootOf(wait.plan_node_id), wait.plan_node_id)}>Review task</ActionLink></li>
-      })}
       {[...notStarted, ...later].map(entry => <LaterRow key={`l|${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} lastRead />)}
     </ul>
   </div>
@@ -153,14 +147,6 @@ export function WorkSignoffs({ count, view, stale }: { count: SignoffCount; view
     {status}
     {count.ready.length > 0 && <ul aria-label="Ready for your sign-off" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
       {count.ready.map(entry => <ReadyRow key={`${entry.node}|${entry.kind === 'acceptance' ? entry.signoff.ref : ''}`} entry={entry} view={view} stale={stale} />)}</ul>}
-    {count.tasks.length > 0 && view && <>
-      <span className={caps}>Tasks waiting on you · {count.tasks.length}</span>
-      <ul aria-label="Tasks waiting on you" className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">{count.tasks.map(wait => {
-        const task = view.tasks.find(t => t.task_id === wait.task_id)
-        return <li key={wait.task_id} className={row}><span className="min-w-0 flex-[1_1_15rem] text-sm">{task?.title || wait.task_id} <span className="text-muted-foreground">· {wait.reason}</span></span>
-          <ActionLink href={task ? goalHref(task.mission_id, task.task_id) : planNodeHref(view.root, wait.plan_node_id)}>Review task</ActionLink></li>
-      })}</ul>
-    </>}
     {(count.notStarted.length > 0 || count.steps !== 'ok') && <>
       <span className={`${caps} pt-1`}>Not started · {stepsPart && count.notStarted.length === 0 ? 'Unknown' : `${count.notStarted.length}${stepsPart}`} · {stepsReach(count)}</span>
       <p className="m-0 text-xs text-muted-foreground">Step sign-offs whose done rule waits on you, set ahead of the work (TD-425): no task on the step has started. A step moves up to Ready once one does. From GET /plan ({stepsReach(count)}).</p>

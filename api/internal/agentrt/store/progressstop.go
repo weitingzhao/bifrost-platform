@@ -1,10 +1,8 @@
 package store
 
 import (
-	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 )
 
 // A stopped task reads stopped, a withdrawn one withdrawn (the progress
@@ -129,46 +127,3 @@ func (s *stopScan) stop(format func(time.Time) string) *ProgressStop {
 	return &ProgressStop{ControlID: *s.id, By: *s.by, Reason: *s.reason, Since: format(*s.at)}
 }
 
-// planViewHolds adds to the plan view's tasks the stop that holds an
-// unfinished one (stopped), how a cancelled one was withdrawn (withdrawn) and,
-// instead of either, the commit main holds a task's change as (on_main), read
-// in the view's transaction.
-func planViewHolds(ctx context.Context, tx pgx.Tx, root string, tasks []map[string]any) error {
-	rows, err := tx.Query(ctx, viewTree+`SELECT t.task_id, t.state NOT IN ('accepted','rejected','cancelled'), `+stopColumns+`,
-	    wd.withdrawn_by, wd.withdraw_reason, wd.withdrawn_at, `+landedColumns+`
-	  FROM agentrt.task t JOIN tree USING(plan_node_id)`+stopHolding+withdrawnSQL+landedNote, root)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	byID := make(map[string]map[string]any, len(tasks))
-	for _, t := range tasks {
-		byID[t["task_id"].(string)] = t
-	}
-	for rows.Next() {
-		var id string
-		var open bool
-		var s stopScan
-		var by, reason *string
-		var at *time.Time
-		var l landedScan
-		if err = rows.Scan(append(append(append([]any{&id, &open}, s.dest()...), &by, &reason, &at), l.dest()...)...); err != nil {
-			return err
-		}
-		t := byID[id]
-		if t == nil {
-			continue
-		}
-		if o := l.onMain(); o != nil {
-			t["on_main"] = o
-			continue
-		}
-		if st := s.stop(timeText); st != nil && open {
-			t["stopped"] = st
-		}
-		if by != nil {
-			t["withdrawn"] = map[string]any{"by": *by, "reason": *reason, "at": timeText(*at)}
-		}
-	}
-	return rows.Err()
-}

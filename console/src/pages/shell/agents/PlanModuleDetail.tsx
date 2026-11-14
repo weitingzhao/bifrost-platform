@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import { fetchApprovalList } from '@/api/approvals'
-import type { PlanNode, PlanSnapshot, PlanSnapshotRead } from '@/api/planSnapshot'
+import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { fetchQuestionList } from '@/api/questions'
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { useNow } from '../progress/progressClock'
@@ -10,17 +10,15 @@ import { WorkDeliveryStrips } from './DeliveryStrip'
 import { WorkRow } from './PlanLiveWork'
 import { StepBadge } from './StepText'
 import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, isStale, liveOn, mainlineOf, mergeActivity, moduleDetailId, moduleScopes, moduleStepRowId,
-  needsNow, needsYouCards, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, runtimeTasks, SHELL_POLL_MS, shellRead, stepTasks, taskActivity, taskLine, workTasks,
-  type ModuleScope, type RuntimeTasks, type ShellRead, type ShellReads, type TaskLine } from './moduleDetailModel'
+  needsNow, nextInPlanOrder, nowSteps, planActivity, questionActivity, reviewWords, SHELL_POLL_MS, shellRead,
+  type ModuleScope, type ShellRead, type ShellReads } from './moduleDetailModel'
 import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, unverifiedNote, type CellState, type ModuleRow,
   type RuleLine, type StepCell } from './planModuleModel'
 import { roundLabel, workRoundHref } from './planRoundModel'
 import { responsibility, validity } from './planSnapshotModel'
-import { explainBanner } from './explainModel'
-import { viewOldReason } from './readAge'
 import { StepSignoffHere } from './StepSignoffHere'
-import { HowRead, StepWhy, WhyBanner } from './StepWhy'
-import { stepJudge, withWhy } from './stepStateModel'
+import { HowRead } from './HowRead'
+import { stepJudge } from './stepStateModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /** Recent activity shows this many rows until the Owner asks for all. */
@@ -57,13 +55,6 @@ function CardHead({ title, children }: { title: string; children?: ReactNode }) 
 }
 function Who({ owner }: { owner: boolean }) {
   return <span className="shrink-0 rounded-full bg-[var(--card-fill)] px-1.5 text-xs font-semibold" title={owner ? "The Owner's step (owner_step)" : 'Not an Owner step: the crew does it'}>{owner ? 'Owner' : 'Agent'}</span>
-}
-function Task({ task }: { task: TaskLine }) {
-  return <span className="min-w-0">
-    {task.role} · <a href={task.href} className="underline-offset-2 hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center">{task.title}</a>
-    {' · '}{task.state}{task.round && ` · ${task.round}`}{task.attempt && ` · ${task.attempt}`}{task.detail && ` · ${task.detail}`}
-    {task.waiting && <span className="block text-xs text-muted-foreground">{task.waitingHref ? <a href={task.waitingHref} className="underline-offset-2 hover:underline">{task.waiting}</a> : task.waiting}</span>}
-  </span>
 }
 function Rule({ lines }: { lines: RuleLine[] }) {
   return <ul className="m-0 list-disc space-y-0.5 pl-5">{lines.map((line, i) => <li key={i}>{line.text}{line.children && <Rule lines={line.children} />}</li>)}</ul>
@@ -108,39 +99,19 @@ function Dot({ state }: { state: CellState }) {
 }
 
 /**
- * One step on the timeline: its state, title, number and who does it; its latest own task and the review of it. The
- * step in progress, and the step an address names, open into a card: the rest of its own work (for a step in
- * progress, this is what runs now), its done rule in words, external work and the records its rule names.
+ * One step on the timeline: its state, title, number and who does it, and the verification of its latest external
+ * work. An active step, and the step an address names, open into a card: its done rule in words, external work and
+ * the records its rule names.
  */
-function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cell: StepCell; scope: ModuleScope; view: PlanSnapshotRead; runtime: RuntimeTasks; selected: boolean; last: boolean
+function Stage({ cell, view, selected, last, now, stale }: { cell: StepCell; view: PlanSnapshot; selected: boolean; last: boolean
   now: number; stale: boolean }) {
-  // While work on it runs, the live state stays on top and what is left to finish sits at the bottom, folded (R7).
-  const running = cell.now?.kind === 'running'
-  // Latest task is the newest of all the step's own work (the one Review is of), never an older one. A task the rows in
-  // the way show is not named again here (R5:5.5-20: a task's name appears once on the card): the newest so shown leaves
-  // out the Latest task line, the others stay earlier work. While those rows are folded (work running), none is left out.
-  const named = new Set(running ? [] : cell.why?.tasks ?? [])
-  const all = workTasks(scope, cell.id, runtime)
-  const checks = stepTasks(scope, cell.id).length - all.length
-  const latest = all[0] && !named.has(all[0].task_id) ? taskLine(all[0], runtime, view.explain, now) : null
-  const earlier = all.slice(1).filter(t => !named.has(t.task_id))
   // Every step the controller has active opens, whatever it has now (in progress, nothing running, yours or Unknown).
   const active = cell.step === 'active'
   const open = active || selected
   const note = active ? unverifiedNote(cell) : null
-  const listed = active && !!cell.why?.list
-  // The rule's question and the step's goal; tasks are told under Latest task and Review (a task link would list a
-  // check as "accepted" beside the work it failed), a request by its number in the rule, the step's own address is here.
+  const review = reviewWords(view, cell.id)
+  // The rule's question and the step's goal; a request is told by its number in the rule, the step's own address is here.
   const records = cell.links.filter(l => l.kind === 'question' || l.kind === 'goal')
-  const own = <>
-    {(latest || all.length === 0) && <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Latest task</dt>
-      <dd className="m-0 inline">{latest ? <Task task={latest} /> : 'None'}{all.length > 1 && ` · ${all.length - 1} earlier`}{checks > 0 && ` · ${plural(checks, 'check')}`}</dd></dl>}
-    {open && earlier.length > 0 && <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">Earlier own work</span>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{earlier.map(t => <li key={t.task_id}><Task task={taskLine(t, runtime, view.explain, now)} /></li>)}</ul>
-    </div>}
-    {active && all.length === 0 && <span className="text-muted-foreground">No work task on this step yet (checks are under Review)</span>}
-  </>
   return <li id={moduleStepRowId(cell.id)} tabIndex={-1} data-step-row={cell.label} data-step-open={open || undefined} aria-current={selected ? 'step' : undefined}
     className="grid min-w-0 scroll-mt-4 grid-cols-[24px_minmax(0,1fr)] gap-2.5 rounded-xl focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">
     <span aria-hidden="true" className="flex flex-col items-center">
@@ -159,14 +130,9 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
         <StateWord state={cell.state} />
       </div>
       {active && nowLines(cell).map(line => <p key={line} data-step-now={cell.now?.kind} className="m-0 text-[13px] leading-[1.45] text-muted-foreground">{line}</p>)}
-      {active && !running && <StepWhy cell={cell} now={now} />}
       {note && <p data-step-note="unverified" className="m-0 text-xs leading-[1.45] text-muted-foreground">{note}</p>}
-      <div className={`flex min-w-0 flex-col gap-0.5 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}>
-        {active ? <div role="group" aria-label={`Now on ${cell.label}`} className="flex min-w-0 flex-col gap-0.5">{own}</div> : own}
-        <dl className="m-0 min-w-0"><dt className="mr-1.5 inline text-muted-foreground">Review</dt><dd className="m-0 inline">{reviewWords(scope, view, cell.id, runtime)}</dd></dl>
-      </div>
-      {/* The rows in the way say the rule in one line ("Done when: …"); without them it is said here. */}
-      {open && !listed && <div className="flex min-w-0 flex-col gap-0.5 text-[13px] leading-[1.45]">
+      {review && <dl className={`m-0 min-w-0 leading-[1.45] ${open ? 'text-sm' : 'text-[13px]'}`}><dt className="mr-1.5 inline text-muted-foreground">Review</dt><dd className="m-0 inline">{review}</dd></dl>}
+      {open && <div className="flex min-w-0 flex-col gap-0.5 text-[13px] leading-[1.45]">
         <span className="text-xs text-muted-foreground">Done when</span>
         {cell.rule.length > 0 ? <Rule lines={cell.rule} /> : <p className="m-0" data-no-rule-text>{noRuleText(cell)}</p>}
       </div>}
@@ -179,7 +145,6 @@ function Stage({ cell, scope, view, runtime, selected, last, now, stale }: { cel
         {records.map(link => <li key={`${link.kind}-${link.href}`}><a href={link.href} data-step-link={link.kind}
           className="inline-flex min-h-8 items-center rounded-[10px] border border-[var(--ops-edge)] px-2.5 text-xs text-foreground no-underline shadow-[var(--ops-raised)] [background:var(--ops-control)] hover:text-foreground pointer-coarse:min-h-11">{link.text}</a></li>)}
       </ul>}
-      {active && running && <StepWhy cell={cell} now={now} />}
       {active && <HowRead cell={cell} asOf={view.as_of} now={now} />}
     </div>
   </li>
@@ -194,9 +159,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** The head card (v3.6 item header): which module and where on the mainline, its title, steps to go, now, next and ETA. */
-function Head({ view, item, row, scope, runtime, reads, stale, now, heading }: { view: PlanSnapshotRead; item: PlanNode; row: ModuleRow; scope: ModuleScope; runtime: RuntimeTasks
+function Head({ view, item, row, scope, reads, stale, now, heading }: { view: PlanSnapshot; item: PlanNode; row: ModuleRow; scope: ModuleScope
   reads: ShellReads; stale: boolean; now: number; heading: RefObject<HTMLHeadingElement | null> }) {
-  const current = nowSteps(scope, runtime, view.explain, now)
+  const current = nowSteps(scope)
   const next = nextInPlanOrder(scope)
   const of = mainlineOf(view, item)
   return <section aria-label={`Summary of ${item.label}`} className={`${panel} gap-2.5 px-4`}>
@@ -218,10 +183,10 @@ function Head({ view, item, row, scope, runtime, reads, stale, now, heading }: {
       <Field label="Now">
         {current.length === 0
           ? <p className="m-0">{row.unknown > 0 ? `No step in progress by the runtime's states; ${plural(row.unknown, 'step')} without a state (Unknown).` : 'No step in progress.'}</p>
-          : <ul className="m-0 flex list-none flex-col gap-1 p-0">{current.map(s => <li key={s.cell.id} className="flex min-w-0 flex-wrap items-center gap-2">
-            <a href={planNodeHref(view.root, s.cell.id)} aria-label={`Step ${s.cell.label} ${spokenState(s.cell)}`} className="inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"><StepBadge label={s.cell.label} /></a>
-            <span className="min-w-0 break-words">{s.cell.title || 'Untitled step'}</span>
-            <span data-now-state={s.cell.state} className="text-xs text-muted-foreground">{cellLabels[s.cell.state]}</span></li>)}</ul>}
+          : <ul className="m-0 flex list-none flex-col gap-1 p-0">{current.map(cell => <li key={cell.id} className="flex min-w-0 flex-wrap items-center gap-2">
+            <a href={planNodeHref(view.root, cell.id)} aria-label={`Step ${cell.label} ${spokenState(cell)}`} className="inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"><StepBadge label={cell.label} /></a>
+            <span className="min-w-0 break-words">{cell.title || 'Untitled step'}</span>
+            <span data-now-state={cell.state} className="text-xs text-muted-foreground">{cellLabels[cell.state]}</span></li>)}</ul>}
       </Field>
       <Field label="Next in plan order">
         {next ? <>
@@ -319,8 +284,8 @@ function Live({ view, item, scope, stale }: { view: PlanSnapshot; item: PlanNode
   return <section aria-label={`Live on ${item.label}`} className={`${panel} gap-2`}>
     <CardHead title={`Live on ${item.label} · ${stale ? 'last read ' : ''}${live.length} registered`}><span className="font-mono text-[11px] text-muted-foreground">plan-view · working</span></CardHead>
     {live.length === 0 ? <p className="m-0 text-sm">{stale ? `Current activity is Unknown. Last read contained no registered work on ${item.label}.` : `No registered work on ${item.label} in this snapshot.`}</p>
-      : <ul aria-label={`Work now on ${item.label}`} className="m-0 flex list-none flex-col gap-2 p-0">{live.map(w => <WorkRow key={'external_work_id' in w ? w.external_work_id : w.task_id} work={w} view={view} stale={stale} />)}</ul>}
-    <p className={note}>Runtime attempts and registered external work on {item.label}'s steps · Unconfirmed after 60s without a heartbeat. Unregistered work is not seen ({view.root} coverage: {view.coverage.unregistered_work} unregistered · {view.coverage.reconciled ? 'Reconciled' : 'Not reconciled'}).</p>
+      : <ul aria-label={`Work now on ${item.label}`} className="m-0 flex list-none flex-col gap-2 p-0">{live.map(w => <WorkRow key={w.external_work_id} work={w} view={view} stale={stale} />)}</ul>}
+    <p className={note}>Registered external work on {item.label}'s steps · Unconfirmed after 60s without a heartbeat. Unregistered work is not seen ({view.root} coverage: {view.coverage.unregistered_work} unregistered · {view.coverage.reconciled ? 'Reconciled' : 'Not reconciled'}).</p>
   </section>
 }
 
@@ -331,35 +296,28 @@ function Live({ view, item, scope, stale }: { view: PlanSnapshot; item: PlanNode
  * dependencies and live work; then what happened lately. Each from a field the Console already reads, Unknown where
  * none says (claims: MODULE_DETAIL_CLAIMS, WORK_V36_3_CLAIMS).
  */
-export function PlanModuleDetail({ view, item, step, stale, failed = null, readAgain }: { view: PlanSnapshotRead; item: PlanNode; step: string; stale: boolean
+export function PlanModuleDetail({ view, item, step, stale, failed = null }: { view: PlanSnapshot; item: PlanNode; step: string; stale: boolean
   /** Why the plan view's latest refresh failed (or Offline); null while it did not. */
-  failed?: string | null
-  /** Reads the plan view, and its explanation, again now (the query's own refetch: no request of its own). */
-  readAgain?: () => void }) {
+  failed?: string | null }) {
   const now = useNow()
   const reads = useShellReads()
   // The questions and requests the step judge reads are these same shell reads (ownerAsksModel).
   const asks = { questions: reads.questions, requests: reads.open }
   const heading = useRef<HTMLHeadingElement>(null)
   const [allActivity, setAllActivity] = useState(false)
-  const runtime = runtimeTasks(reads.progress)
   // The modules' scopes, once per plan view; this module's row is judged again on the page clock (R5:5.5-10): its
   // active steps by what they have now, as the read ages and heartbeats go unconfirmed.
   const scopes = useMemo(() => moduleScopes(view), [view])
   const base = scopes.get(item.plan_node_id)!
-  const clock = { failed, now, runtime, asks }
-  const scope: ModuleScope = { ...base, row: withWhy(view, judgeRow(view, base.row, stepJudge(view, clock)), clock) }
+  const scope: ModuleScope = { ...base, row: judgeRow(view, base.row, stepJudge(view, { failed, now, asks })) }
   const row = scope.row
-  const cards = needsYouCards(reads.progress)?.cards ?? new Map()
   const needs = needsNow(view, scopes, scope, reads, now)
   const actions = actionsLeft(scope, needs)
-  const plan = planActivity(view, scope, scopes, cards)
-  const activity = mergeActivity(plan.rows, questionActivity(view, scope, scopes, reads.questions, cards), approvalActivity(view, scope, scopes, reads.all), taskActivity(scope, runtime))
+  const plan = planActivity(view, scope, scopes)
+  const activity = mergeActivity(plan.rows, questionActivity(view, scope, scopes, reads.questions), approvalActivity(scope, scopes, reads.all))
   const shown = allActivity ? activity : activity.slice(0, ACTIVITY_ROWS)
   const stales = SOURCES.filter(([key]) => isStale(reads[key], SHELL_POLL_MS[key], now)).map(([, name]) => name)
   const estimate = estimateOf(view, item)
-  // What the steps wait on, when its read cannot be used as now: once above them (each card says it too).
-  const banner = explainBanner(view, row.cells.flatMap(c => view.nodes.filter(n => n.plan_node_id === c.id)), now, viewOldReason(view, view.root, failed, now))
   // Arriving at a module, or at one of its steps, puts the keyboard there: the step's row, else the module's heading.
   useEffect(() => {
     const target = step ? document.getElementById(moduleStepRowId(step)) : heading.current
@@ -381,19 +339,17 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null, readA
       </ol>
     </nav>
 
-    <Head view={view} item={item} row={row} scope={scope} runtime={runtime} reads={reads} stale={stale} now={now} heading={heading} />
+    <Head view={view} item={item} row={row} scope={scope} reads={reads} stale={stale} now={now} heading={heading} />
 
     {/* Steps, then what needs the Owner (on a phone, before the activity); beside the steps on a wide screen, and the activity under them. */}
     <div className="grid min-w-0 grid-cols-1 items-start gap-2.5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] xl:grid-rows-[auto_1fr]">
       <section aria-label={`Steps of ${item.label}`} className={`${panel} gap-2.5 xl:col-start-1 xl:row-start-1`}>
-        <CardHead title="Steps · plan order"><span className="font-mono text-[11px] text-muted-foreground">plan-view nodes · tasks · runtime progress{view.explain && ' · explain'}</span></CardHead>
-        {banner && <WhyBanner banner={banner} readAgain={readAgain} />}
+        <CardHead title="Steps · plan order"><span className="font-mono text-[11px] text-muted-foreground">plan-view nodes · external_work</span></CardHead>
         {row.cells.length === 0 ? <p className="m-0 text-sm">No steps in this module.</p>
           : <ol className="m-0 flex min-w-0 list-none flex-col p-0">{row.cells.map((cell, i) =>
-            <Stage key={cell.id} cell={cell} scope={scope} view={view} runtime={runtime} selected={cell.id === step} last={i === row.cells.length - 1} now={now} stale={stale} />)}</ol>}
+            <Stage key={cell.id} cell={cell} view={view} selected={cell.id === step} last={i === row.cells.length - 1} now={now} stale={stale} />)}</ol>}
         <div className="flex min-w-0 flex-col gap-1.5 border-t border-[var(--table-rule)] pt-2.5">
           {row.dropped > 0 && <p className={note}>{plural(row.dropped, 'dropped step')} not listed.</p>}
-          <p className={note}>Latest task is the step's newest own work, not its checks: a task's role is the runtime's while it lists the task (unfinished, or among its latest 20 ended), else the title the controller gives a check, else Unknown. Review is the newest check of that task only (by the task its title names); its verdict is its attempt's conclusion (done passes) while the runtime lists it among its latest 20 ended tasks. A check the controller closed without using its result is not told apart.</p>
           <div data-estimate className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground">
             {estimate.state === 'ok' ? <>
               <span className={dashedPill}>Plan estimate</span>
@@ -429,7 +385,7 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null, readA
               {n.note && <span className="pb-1 text-xs text-muted-foreground">{n.note}{!n.counted && ' · not counted'}</span>}
             </li>)}</ul>}
             {needs.gaps.map(g => <span key={g} className="text-xs text-muted-foreground">{g}</span>)}
-            <span className="text-xs text-muted-foreground">Listed only with direct evidence: its task is on a step of {item.label}, a step's done rule names it, or the plan change it decides touches {item.label} (seen only while its proposal is among the plan's latest {view.recent_changes.length} events). Not listed: cards and requests with no such evidence here, including those that only share a mission with {item.label}; so a card of {item.label} can be missing from this list and from Your actions found.</span>
+            <span className="text-xs text-muted-foreground">Listed only with direct evidence: a step's done rule names it, or the plan change it decides touches {item.label} (seen only while its proposal is among the plan's latest {view.recent_changes.length} events). Not listed: cards and requests with no such evidence here, including those that only share a mission with {item.label}; so a card of {item.label} can be missing from this list and from Your actions found.</span>
             <a href={NEEDS_YOU_HREF} data-needs-you className="inline-flex min-h-11 items-center text-xs underline-offset-2 hover:underline">Cards with no evidence here for a module of {view.root} are on Needs you</a>
           </section>
         </div>
@@ -449,7 +405,7 @@ export function PlanModuleDetail({ view, item, step, stale, failed = null, readA
         {activity.length > ACTIVITY_ROWS && <button type="button" onClick={() => setAllActivity(v => !v)} aria-expanded={allActivity}
           className="min-h-11 self-start border-0 bg-transparent p-0 text-sm font-semibold text-[var(--primary)]">{allActivity ? 'Show fewer' : `Show all ${activity.length}`}</button>}
         <p className={note}>Plan events: only the latest {view.recent_changes.length} of {view.root} up to <time dateTime={view.recent_as_of}>{view.recent_as_of}</time> (older ones under Recent changes); a step's earlier moves are not tied to it there. A plan change appears here only when one of its events in that window names a node of {item.label} or decides a question of it; the others are under Recent changes.</p>
-        <p className={note}>Ended tasks and checks: only those among the runtime's latest 20 ended tasks of every goal. Questions: the question store keeps a bounded history of answered ones. Requests: as the Console last read them.</p>
+        <p className={note}>Questions: the question store keeps a bounded history of answered ones. Requests: as the Console last read them.</p>
       </section>
     </div>
   </section>

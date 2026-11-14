@@ -79,21 +79,18 @@ describe('Work plan/live view', () => {
     // the rounds from the shell's GET /progress in the cache: no progress read of Work's own. Live's Unlinked sessions
     // (R5:5.5-12 §3.3) read GET /agent/threads under the query Needs you polls in the shell: here, without the shell, once.
     // The summary's lines read the round's GET /plan-pace.
-    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1', '/api/v1/agentrt/plan?root=R4', '/api/v1/agent/threads', '/api/v1/agentrt/plan-pace?root=R4']))
+    expect(new Set(fetcher.mock.calls.map(([url]) => String(url)))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4', '/api/v1/agentrt/plan?root=R4', '/api/v1/agent/threads', '/api/v1/agentrt/plan-pace?root=R4']))
   })
-  it('shows runtime attempts on a historical root and preserves the old round parameter', async () => {
+  it('shows a historical root and preserves the old round parameter', async () => {
     reply = legacy
     show('#work?section=plan&round=R2&tab=live')
     const live = await screen.findByRole('region', { name: 'Live work' })
-    expect(live).toHaveTextContent('Runtime attempt')
-    expect(live).toHaveTextContent('exec:cursor')
-    expect(live).toHaveTextContent('Host · h1')
-    expect(live).toHaveTextContent('Linked external history · 1 records')
-    expect(within(within(live).getByRole('list', { name: 'Work now' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(live).toHaveTextContent('Now · 0 registered')
+    expect(live).toHaveTextContent('plan-view R2 · working')
     await go('#work?section=plan&round=R2')
     await unfold(/^Whole plan/)
     expect(screen.getByRole('region', { name: 'Whole plan' })).toHaveTextContent('Unclassified')
-    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/agentrt/plan-view?root=R2&explain=1')
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/agentrt/plan-view?root=R2')
   })
   it('distinguishes a real zero from loading, while keeping Owner readiness unknown', async () => {
     reply = empty; show('#work?root=R3&tab=live')

@@ -35,7 +35,7 @@ describe('the Unlinked sessions of a P-c2 answer', () => {
     render(withQueries(<PlanLiveWork view={view()} stale={false} sessions={ok()} />))
     const now = screen.getByRole('list', { name: 'Work now' })
     expect(within(now).getAllByRole('listitem').map(li => li.textContent)).toEqual([
-      expect.stringContaining('collector hook work'), expect.stringContaining('an MCP registration'), expect.stringContaining('a task with a live attempt'),
+      expect.stringContaining('collector hook work'), expect.stringContaining('an MCP registration'), expect.stringContaining('collector work beside a live attempt'),
     ])
     expect(screen.getByText(/Finished today · 1/).closest('details')).toHaveTextContent('collector work submitted today')
     const unlinked = screen.getByRole('list', { name: 'Unlinked sessions' })

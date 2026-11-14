@@ -19,9 +19,9 @@ vi.mock('@/api/client', async original => ({ ...await original<object>(), operat
 const NOW = Date.parse(prod.as_of)
 /**
  * The PROD R4 answer renumbered to round n, with TD-457 registered on n.2-1 and Running, silent for 50 hours: in working,
- * or (underAttempt) only in external_work and the history of a task a runtime attempt runs, as the server leaves it.
+ * or (onlyRecorded) only in external_work, linked to a task, and not in working.
  */
-function planView(round: number, o: { asOf?: string; working?: boolean; clean?: boolean; underAttempt?: boolean } = {}) {
+function planView(round: number, o: { asOf?: string; working?: boolean; clean?: boolean; onlyRecorded?: boolean } = {}) {
   const v = JSON.parse(JSON.stringify(prod).replace(/"R4"/g, `"R${round}"`).replace(/R4:4\./g, `R${round}:${round}.`)
     .replace(/"4\.(\d+(?:-\d+)?)"/g, `"${round}.$1"`).replace(/plan:R4/g, `plan:R${round}`))
   const asOf = o.asOf ?? prod.as_of
@@ -30,15 +30,11 @@ function planView(round: number, o: { asOf?: string; working?: boolean; clean?: 
     ended_at: undefined, exit_code: undefined, report_digest: undefined, report_path_digest: undefined,
     description: { ...v.external_work[0].description, task: 'TD-457: fix the landing gate', branch: 'td/td-457' } }
   if (o.working !== false) Object.assign(v, { working: [silent], external_work: [...v.external_work, silent] })
-  if (o.underAttempt) {
-    const task = { task_id: 't_01M69PWCTHGN75N160E9F0WBP3', plan_node_id: silent.plan_node_id, mission_id: 'M-251', title: 'Fix the landing gate', state: 'running',
-      attempt: { attempt_id: 'a_1', attempt_no: 1, task_id: 't_01M69PWCTHGN75N160E9F0WBP3', mission_id: 'M-251', host_id: 'h1', executor: 'codex', model: 'gpt-6-astra',
-        state: 'running', elapsed_s: 600, heartbeat_age_s: 3, status: 'Running', reason: 'implementing', persisted: true },
-      external_work: [{ ...silent, task_id: 't_01M69PWCTHGN75N160E9F0WBP3' }] }
-    Object.assign(v, { tasks: [...v.tasks, { ...task, attempt: undefined, external_work: undefined }], working: [task],
-      external_work: [...v.external_work.filter((w: { external_work_id: string }) => w.external_work_id !== 'ew_td457'), { ...silent, task_id: task.task_id }] })
+  if (o.onlyRecorded) {
+    Object.assign(v, { working: [],
+      external_work: [...v.external_work.filter((w: { external_work_id: string }) => w.external_work_id !== 'ew_td457'), { ...silent, task_id: 't_01M69PWCTHGN75N160E9F0WBP3' }] })
   }
-  // Nothing for the Owner in this round: no Owner step of unknown readiness, no sign-off, no task waiting.
+  // Nothing for the Owner in this round: no Owner step of unknown readiness, no sign-off.
   if (o.clean) Object.assign(v, { owner_later: [], owner_waiting: [] })
   return { ...v, as_of: asOf }
 }
@@ -82,7 +78,7 @@ beforeEach(() => {
   fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (failing?.test(url)) return json({ error: 'unavailable', message: 'unavailable' }, 503)
-    const pv = /plan-view\?root=R(\d+)(?:&explain=1)?$/.exec(url)
+    const pv = /plan-view\?root=R(\d+)$/.exec(url)
     if (pv) return json(view(Number(pv[1])))
     const tree = /\/agentrt\/plan\?root=(R\d+)$/.exec(url)
     if (tree && hangTrees) return new Promise<Response>(() => {})
@@ -110,7 +106,7 @@ describe('Work\'s first screen', () => {
     // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13)
     // (R5:5.7-8).
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
-    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5']))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5']))
   })
 
   it('keeps the round an address names on the way to the list', async () => {
@@ -157,10 +153,10 @@ describe('Needs cleanup on Work → Activity', () => {
     expect(regions.indexOf('Needs cleanup')).toBeLessThan(regions.indexOf('Coordinator'))
   })
 
-  // Review of 16435ae7: the server lists a record on a task a runtime attempt runs only in external_work and that
-  // task's history, not in working; the list read working alone, missed it and said "None".
-  it('lists registered work silent on a task a runtime attempt runs, which Live shows under the attempt', async () => {
-    view = round => planView(round, { working: false, underAttempt: true })
+  // Review of 16435ae7: a record may be only in external_work and not in working; the list read working alone, missed
+  // it and said "None".
+  it('lists registered work silent that only external_work holds, not working', async () => {
+    view = round => planView(round, { working: false, onlyRecorded: true })
     page('#work')
     await summary()
     await waitFor(() => expect(entry()).toHaveTextContent('Needs cleanup: 1 external work without heartbeat in Round 5 ›'))
@@ -207,7 +203,7 @@ describe('the lamp of the round tab', () => {
     const card = await summary()
     const lamp = () => card.querySelector('[data-summary-tone]')!
     await waitFor(() => expect(lamp()).toHaveAttribute('data-summary-tone', 'ok'))
-    expect(lamp().getAttribute('aria-label')).toBe('Nothing for you, as far as read: in Round 5 only, no step sign-off ready, no acceptance sign-off ready, no task waiting on you, no step stopped; other rounds are read on the Sign-offs tab')
+    expect(lamp().getAttribute('aria-label')).toBe('Nothing for you, as far as read: in Round 5 only, no step sign-off ready, no acceptance sign-off ready, no step stopped; other rounds are read on the Sign-offs tab')
     expect(lamp().getAttribute('aria-label')).not.toContain('any round')
     await go('#work?tab=signoffs')
     await waitFor(() => expect(urls()).toContain('/api/v1/agentrt/plan?root=R4'))

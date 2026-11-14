@@ -6,8 +6,7 @@ import { parsePlanSnapshot, type ExternalWork } from '../planSnapshot'
 
 // R5:5.5-12 §7, mixed versions. plan-view-collector.generated.json is what Go's
 // PlanView writes for a collector's work in every place a row goes (running:
-// external_work and working; submitted today: finished_today; beside a live
-// attempt: tasks[].external_work and working[].external_work) and an MCP
+// external_work and working; submitted today: finished_today) and an MCP
 // registrant's (store TestPlanViewCollectorWorkFixture, byte for byte). The
 // P-c1 reader reads it, and reads it again with what P-c2 adds
 // (coverage.sessions); an answer without any of the new fields reads as it
@@ -18,22 +17,15 @@ const identityKeys = ['host', 'vendor', 'session', 'epoch', 'sidebar'] as const
 const sessions = { linked: 1, unlinked: 2, refused: 0, unsupported: 1, unknown: 0, scope: 'Sessions heard from in the last 72 hours, by host, vendor, session and epoch' }
 
 function clone(): Json { return structuredClone(collector) as unknown as Json }
-function rows(value: Json, list: 'external_work' | 'working' | 'finished_today' | 'tasks'): Json[] { return value[list] as Json[] }
-/** Every external work row wherever it sits: the top list, working and finished today, and each task's history (in tasks and in working). */
+function rows(value: Json, list: 'external_work' | 'working' | 'finished_today'): Json[] { return value[list] as Json[] }
+/** Every external work row wherever it sits: the top list, working and finished today. */
 function everyRow(value: Json): Json[] {
-  const out = [...rows(value, 'external_work')]
-  for (const list of ['working', 'finished_today', 'tasks'] as const) for (const row of rows(value, list)) {
-    if ('external_work_id' in row) out.push(row)
-    else out.push(...((row.external_work as Json[] | undefined) ?? []))
-  }
-  return out
+  return [...rows(value, 'external_work'), ...rows(value, 'working'), ...rows(value, 'finished_today')]
 }
 function withoutIdentity(value: Json): Json {
   for (const row of everyRow(value)) for (const k of identityKeys) delete row[k]
   return value
 }
-/** The task beside a live attempt, as working holds it. */
-const workingTask = (value: Json) => rows(value, 'working').find(r => !('external_work_id' in r))!
 const collectorRow = (list: ExternalWork[]) => list.find(r => r.registrant === 'thread:collector@h1')
 
 describe('P-c1 reader, P-c2 answer', () => {
@@ -51,16 +43,13 @@ describe('P-c1 reader, P-c2 answer', () => {
   it('reads the identity in every place a row goes', () => {
     const view = parsePlanSnapshot(collector, 'R4') as unknown as Json
     const rowsOf = everyRow(view)
-    expect(rowsOf).toHaveLength(9)
+    expect(rowsOf).toHaveLength(8)
     for (const row of rowsOf) {
       const mine = row.registrant === 'thread:collector@h1'
       for (const k of ['host', 'vendor', 'session', 'epoch'] as const) expect(row[k] !== undefined).toBe(mine)
     }
     const finished = rows(view, 'finished_today')[0]
     expect(finished).toMatchObject({ host: 'h1', vendor: 'claude', session: '7c1d9e3b-1111-2222-3333-444455556666', epoch: 2, status: 'Submitted' })
-    const history = { host: 'h1', vendor: 'claude', session: '9e5f0a1c-1111-2222-3333-444455556666', epoch: 1, task_id: 't_fixture_live' }
-    expect((rows(view, 'tasks')[0].external_work as Json[])[0]).toMatchObject(history)
-    expect((workingTask(view).external_work as Json[])[0]).toMatchObject(history)
   })
   it('reads the session counts P-c2 adds to coverage', () => {
     const value = clone()
@@ -92,8 +81,6 @@ describe('the new fields are closed', () => {
     ['a collector row without its host', (v: Json) => { delete rows(v, 'external_work')[0].host }],
     ['a working row without its epoch', (v: Json) => { delete rows(v, 'working')[0].epoch }],
     ['a finished row without its session', (v: Json) => { delete rows(v, 'finished_today')[0].session }],
-    ['a task history row without its vendor', (v: Json) => { delete (rows(v, 'tasks')[0].external_work as Json[])[0].vendor }],
-    ['a working task history row without its vendor', (v: Json) => { delete (workingTask(v).external_work as Json[])[0].vendor }],
     ['a sidebar on a row with no identity', (v: Json) => { rows(v, 'external_work')[1].sidebar = 'local_x' }],
     ['a host alone', (v: Json) => { rows(v, 'external_work')[1].host = 'h2' }],
     ['a vendor not in the set', (v: Json) => { rows(v, 'external_work')[0].vendor = 'gemini' }],

@@ -3,8 +3,6 @@ import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { stepRows } from './stepStateModel'
 import { workTabHref } from './workViewModel'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { fetchRuntimeProgress } from '@/api/agentRuntime'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { NowClock, useNow } from '../progress/progressClock'
@@ -14,7 +12,7 @@ import type { SessionsRead } from './unlinkedSessionsModel'
 import { PlanModuleDetail } from './PlanModuleDetail'
 import { PlanModuleRows } from './PlanModuleRows'
 import { useOwnerAsks } from './ownerAsksModel'
-import { moduleDetailId, moduleOf, moduleStepRowId, runtimeTasks } from './moduleDetailModel'
+import { moduleDetailId, moduleOf, moduleStepRowId } from './moduleDetailModel'
 import { returnToModuleRow } from './moduleRowReturn'
 import { PlanTree } from './PlanTree'
 import { PlanRecentChanges } from './PlanRecentChanges'
@@ -40,10 +38,6 @@ function Fold({ title, open, children }: { title: string; open: boolean; childre
 
 /** Work → the round tab: every module as a row, and folded: the dependency waits and the whole plan. */
 function RoundTab({ view, selected, failed }: { view: PlanSnapshot; selected: string; failed: string | null }) {
-  // GET /progress as the shell already holds it (ConsolePage polls it every 5 s): never fetched here (enabled: false),
-  // read only for a running task's role on the rows' Now line.
-  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
-  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
   // The open questions and requests Needs you already polls (every 30 s), from the cache: no request of its own.
   const asks = useOwnerAsks()
   const targetId = selected ? view.nodes.find(n => n.plan_node_id === selected || n.label === selected)?.plan_node_id : undefined
@@ -56,7 +50,7 @@ function RoundTab({ view, selected, failed }: { view: PlanSnapshot; selected: st
   const waits = dependencyWaits(view, moduleRows(view))
   return <>
     {selected && !targetId && <p role="alert">Node not found in {view.root}: {selected}</p>}
-    <PlanModuleRows view={view} selected={selected} failed={failed} runtime={runtime} asks={asks} />
+    <PlanModuleRows view={view} selected={selected} failed={failed} asks={asks} />
     <Fold title={waits.state === 'unknown' ? 'Dependency waits · Unknown' : `Dependency waits · ${waits.total}${waits.unread ? ' · some Unknown' : ''}`} open={false}>
       <section aria-label="Waiting on" className="flex min-w-0 flex-col gap-2 text-sm">
         {view.waiting_on.length === 0 && <p className="m-0">{waits.state === 'unknown' ? `Dependencies Unknown · ${waits.reason}.`
@@ -133,15 +127,10 @@ function WorkVerdict({ plan, query }: { plan: ReturnType<typeof usePlanAddress>;
   const now = useNow()
   const asks = useOwnerAsks()
   const view = query.data
-  const progress = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), enabled: false, retry: false })
-  const runtime = runtimeTasks(progress.data === undefined ? { state: 'unread' } : { state: 'ok', data: progress.data, at: progress.dataUpdatedAt })
-  const rows = view ? stepRows(view, { failed: failureOf(query), now, asks, runtime }) : []
+  const rows = view ? stepRows(view, { failed: failureOf(query), now, asks }) : []
   const unknown = !view || !!viewOldReason(view, view.root, failureOf(query), now)
     || asks.questions.state !== 'ok' || asks.requests.state !== 'ok'
-  const stuck = view?.working.filter(w => {
-    const run = 'external_work_id' in w ? w : w.attempt
-    return !!run && heartbeatUnconfirmed(run, view, now)
-  }).length ?? 0
+  const stuck = view?.working.filter(w => heartbeatUnconfirmed(w, view, now)).length ?? 0
   const running = (view?.working.length ?? 0) - stuck
   const waiting = new Set([
     ...(view?.owner_waiting.map(w => w.plan_node_id) ?? []),
@@ -175,7 +164,7 @@ function ModulePage({ query, view, item, step, failed }: { query: ReturnType<typ
   useEffect(() => scrollAfterShell(() => document.getElementById(scrollTo) ?? document.getElementById(moduleDetailId(item.plan_node_id))), [scrollTo, item.plan_node_id])
   return <>
     {failed && <PlanReadFailure query={query} />}
-    <PlanModuleDetail key={item.plan_node_id} view={view} item={item} step={step} stale={stale} failed={failureOf(query)} readAgain={() => { void query.refetch() }} />
+    <PlanModuleDetail key={item.plan_node_id} view={view} item={item} step={step} stale={stale} failed={failureOf(query)} />
   </>
 }
 

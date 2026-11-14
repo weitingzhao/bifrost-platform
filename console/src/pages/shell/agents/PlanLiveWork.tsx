@@ -1,7 +1,5 @@
-import { waitWords, type WaitWords } from './waitWords'
 import { useState } from 'react'
-import type { ExternalWork, PlanSnapshotRead as PlanSnapshot, PlanWork } from '@/api/planSnapshot'
-import { goalHref } from '@/lib/shell/consoleRoutes'
+import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { useNow } from '../progress/progressClock'
 import { WorkDeliveryStrips } from './DeliveryStrip'
 import { heartbeatUnconfirmed } from './needsCleanupModel'
@@ -9,10 +7,6 @@ import { roundLabel } from './planRoundModel'
 import { planNodeHref } from './usePlanSnapshot'
 import { workSectionHref } from './workViewModel'
 import { coverageGroups, shortSession, unlinkedSessions, type SessionsRead } from './unlinkedSessionsModel'
-
-function WaitLine({ wait }: { wait: WaitWords }) {
-  return <span className="basis-full text-xs text-muted-foreground">{wait.href ? <a href={wait.href}>{wait.text}</a> : wait.text}</span>
-}
 
 /** How many submitted runs show before "Show n more". */
 const SUBMITTED_SHOWN = 8
@@ -30,33 +24,26 @@ function duration(seconds: number | undefined) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
 }
-/** One registered piece of work now (Live and a module's Live on card): its executor, task, step, state and heartbeat. */
+/** One registered piece of external work now (Live and a module's Live on card): its executor, task, step, state and heartbeat. */
 export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnapshot; stale: boolean }) {
   const now = useNow()
   const drift = Math.max(0, (now - Date.parse(view.as_of)) / 1000)
-  const external = 'external_work_id' in work
-  const run = external ? work : work.attempt!
-  const task = external ? undefined : view.tasks.find(t => t.task_id === work.task_id)
-  const wait = task ? waitWords(task, view.explain, now) : undefined
-  const heartbeatAge = run.heartbeat_age_s + drift
-  const unconfirmed = stale || heartbeatUnconfirmed(run, view, now)
+  const heartbeatAge = work.heartbeat_age_s + drift
+  const unconfirmed = stale || heartbeatUnconfirmed(work, view, now)
   const node = view.nodes.find(n => n.plan_node_id === work.plan_node_id)
-  const elapsed = run.elapsed_s === undefined ? undefined : run.elapsed_s + (stale ? 0 : drift)
-  const state = unconfirmed ? 'Unconfirmed' : run.status || run.state
-  const tone = unconfirmed ? 'unknown' : state === 'Running' || state === 'running' ? 'ok' : 'info'
+  const elapsed = work.elapsed_s === undefined ? undefined : work.elapsed_s + (stale ? 0 : drift)
+  const state = unconfirmed ? 'Unconfirmed' : work.status || work.state
+  const tone = unconfirmed ? 'unknown' : state === 'Running' ? 'ok' : 'info'
   return <li className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-[14px] px-3 py-2.5 [overflow-wrap:anywhere] [background:var(--ops-selection)]">
-    <span className="min-w-[6.875rem] text-[13px] font-semibold">{external ? work.description.executor : work.attempt!.executor}</span>
-    <strong className="min-w-0 flex-[1_1_13.75rem] text-[15px] font-normal leading-[1.45]">{external ? work.description.task : work.title}</strong>
+    <span className="min-w-[6.875rem] text-[13px] font-semibold">{work.description.executor}</span>
+    <strong className="min-w-0 flex-[1_1_13.75rem] text-[15px] font-normal leading-[1.45]">{work.description.task}</strong>
     <a className={`${mono} inline-flex min-h-6 items-center pointer-coarse:min-h-11`} href={planNodeHref(view.root, work.plan_node_id)} title={node?.title}>Step · {node?.label}</a>
     <span className={`inline-flex h-[22px] items-center whitespace-nowrap rounded-full px-2 text-xs font-semibold ${PILL[tone]}`}>{state}</span>
     <span className="basis-full text-xs text-muted-foreground">
-      {external ? work.description.provider : work.attempt!.model || 'Model unknown'} · {external ? 'External work' : `Runtime attempt · ${work.attempt!.attempt_id}`} · Elapsed {duration(elapsed)}{stale && ' at last read'} · Last heartbeat · {duration(heartbeatAge)} ago
-      {external && <> · <time dateTime={work.heartbeat_at}>{work.heartbeat_at}</time> · {work.description.repo} · {work.description.branch}{work.backfilled && ' · Backfilled'}</>}
-      {!external && <> · Host · {work.attempt!.host_id || 'Unknown'}{work.external_work?.length ? ` · Linked external history · ${work.external_work.length} records` : ''} · {work.attempt!.reason}</>}
+      {work.description.provider} · External work · Elapsed {duration(elapsed)}{stale && ' at last read'} · Last heartbeat · {duration(heartbeatAge)} ago
+      {' '}· <time dateTime={work.heartbeat_at}>{work.heartbeat_at}</time> · {work.description.repo} · {work.description.branch}{work.backfilled && ' · Backfilled'}
     </span>
-    {external && work.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={work.commit_shas} /></span> : null}
-    {wait?.text && <WaitLine wait={wait} />}
-    {!external && <a className="inline-flex min-h-11 items-center text-sm" href={goalHref(work.mission_id, work.task_id)}>Open task</a>}
+    {work.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={work.commit_shas} /></span> : null}
   </li>
 }
 export function ExternalRecord({ work }: { work: ExternalWork }) {
@@ -102,14 +89,12 @@ export function UnlinkedSessions({ read }: { read: SessionsRead }) {
 }
 
 /**
- * Work → Live (Design v3.6 WorkPage): this round's work now (plan-view working: runtime attempts and registered external
- * work, Unconfirmed after 60 s without a heartbeat) and its submitted runs, newest first. Submitted is the executor's
+ * Work → Live (Design v3.6 WorkPage): this round's work now (plan-view working: registered external work, Unconfirmed
+ * after 60 s without a heartbeat) and its submitted runs, newest first. Submitted is the executor's
  * word that it ended, not verification and not plan completion. What is not registered is not seen here; the runtime
  * as a whole (running attempts, hosts, open goals, release runs) is on Activity.
  */
 export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; stale: boolean; sessions?: SessionsRead }) {
-  const now = useNow()
-  const waiting = view.tasks.filter(t => waitWords(t, view.explain, now).text && !view.working.some(w => !('external_work_id' in w) && w.task_id === t.task_id))
   const [all, setAll] = useState(false)
   const submitted = view.external_work.filter(w => w.state === 'Submitted').sort((a, b) => endedAt(b).localeCompare(endedAt(a)))
   const shown = all ? submitted : submitted.slice(0, SUBMITTED_SHOWN)
@@ -120,16 +105,9 @@ export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; st
       <h3 className={`m-0 ${caps}`}>Now · {stale ? 'last read ' : ''}{view.working.length} registered</h3>
       <span className={mono}>plan-view {view.root} · working</span>
     </div>
-    <p className="m-0 text-xs text-muted-foreground">Runtime attempts and registered external work in {roundLabel(view.root)} · Unconfirmed after 60s without a heartbeat.</p>
+    <p className="m-0 text-xs text-muted-foreground">Registered external work in {roundLabel(view.root)} · Unconfirmed after 60s without a heartbeat.</p>
     {view.working.length === 0 && <p className="m-0 text-sm">{stale ? 'Current activity is Unknown. Last read contained no active work.' : 'No active work in this snapshot.'}</p>}
-    {view.working.length > 0 && <ul aria-label="Work now" className="m-0 flex list-none flex-col gap-2 p-0">{view.working.map(work => <WorkRow key={'external_work_id' in work ? work.external_work_id : work.task_id} work={work} view={view} stale={stale} />)}</ul>}
-    {waiting.length > 0 && <div className="flex flex-col gap-2">
-      <h4 className={`m-0 ${caps}`}>Waiting</h4>
-      <ul aria-label="Waiting" className="m-0 flex list-none flex-col gap-2 p-0">{waiting.map(task => <li key={task.task_id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
-        <a href={goalHref(task.mission_id, task.task_id)}>{task.title || task.task_id}</a>
-        <WaitLine wait={waitWords(task, view.explain, now)} />
-      </li>)}</ul>
-    </div>}
+    {view.working.length > 0 && <ul aria-label="Work now" className="m-0 flex list-none flex-col gap-2 p-0">{view.working.map(work => <WorkRow key={work.external_work_id} work={work} view={view} stale={stale} />)}</ul>}
     <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5">
       <h3 className={`m-0 ${caps}`}>Recently submitted · {shown.length} of {submitted.length}</h3>
       {submitted.length > 0 && <span className="text-xs text-muted-foreground">verification {[...verification].map(([v, n]) => `${v} on ${n === submitted.length ? 'all' : n}`).join(' · ')}</span>}
@@ -147,7 +125,7 @@ export function PlanLiveWork({ view, stale, sessions }: { view: PlanSnapshot; st
       className="min-h-11 self-start border-0 bg-transparent p-0 text-sm font-semibold text-[var(--primary)]">Show {submitted.length - SUBMITTED_SHOWN} more</button>}
     <details className="text-sm"><summary className="min-h-11 cursor-pointer py-3">Finished today · {view.finished_today.length} · {view.day_timezone}</summary>
       <p>Execution ended; this does not mean the plan is complete.</p>
-      <ul>{view.finished_today.map(work => 'external_work_id' in work ? <ExternalRecord key={work.external_work_id} work={work} /> : <li key={work.attempt_id}>{work.task_id} · {work.state} · {work.ended_at}</li>)}</ul>
+      <ul>{view.finished_today.map(work => <ExternalRecord key={work.external_work_id} work={work} />)}</ul>
     </details>
     {sessions && <UnlinkedSessions read={sessions} />}
     <p className="m-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">Coverage · {coverageGroups(view.coverage).join(' · ')} · {view.coverage.scope}{view.coverage.sessions && ` · ${view.coverage.sessions.scope}`}</p>

@@ -83,5 +83,3 @@
 @media (prefers-reduced-motion: reduce) {
   .work-live-ring, .work-live-dot { animation: none; opacity: 1; }
 }
-/* A landing with no record for over 30 min: still and faint, in either motion setting. */
-.work-live-ring.work-live-ring--quiet, .work-live-dot.work-live-dot--quiet { animation: none; opacity: .4; }

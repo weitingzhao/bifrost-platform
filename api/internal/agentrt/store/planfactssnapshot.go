@@ -8,14 +8,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
 type planFactsSnapshot struct {
-	Landings     map[string]*landing.State
 	Now          time.Time
 	Views        map[string]viewAdoption
 	Docs         map[string]*planview.Document
@@ -56,7 +53,6 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
  'observations',COALESCE((SELECT jsonb_agg(o) FROM observations),'[]'),
  'external',COALESCE((SELECT jsonb_agg(e) FROM external),'[]'),
  'passes',COALESCE((SELECT jsonb_agg(pass) FROM passes),'[]'),
- 'landings',COALESCE((SELECT jsonb_agg(jsonb_build_object('stream',event_stream_id,'at',at,'record',body_json->'landing') ORDER BY event_stream_id,seq) FROM agentrt.event WHERE event_type='note' AND actor_id='controller' AND event_stream_id LIKE 'landing:%' AND body_json ? 'landing'),'[]'),
  'current',COALESCE((SELECT jsonb_object_agg(a.attempt_id,jsonb_build_object('task',t.task_id,'attempt',a.attempt_id,'mission',t.mission_id,'step',t.plan_node_id,'repo',t.repo,'result',a.pushed_commit,'round',t.round_no))
  FROM agentrt.task t JOIN agentrt.mission m USING(mission_id) JOIN agentrt.attempt a USING(task_id) JOIN agentrt.plan_node n ON n.plan_node_id=t.plan_node_id
  WHERE m.tenant='dev' AND (n.plan_node_id IN (SELECT value FROM view_nodes) OR n.parent_plan_node_id IN (SELECT value FROM view_nodes))
@@ -66,11 +62,6 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 		return nil, err
 	}
 	var rows struct {
-		Landings []struct {
-			Stream string
-			At     time.Time
-			Record json.RawMessage
-		}
 		Now   time.Time
 		Views []viewAdoption
 		Docs  []struct {
@@ -85,7 +76,7 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 	if err = json.Unmarshal(raw, &rows); err != nil {
 		return nil, err
 	}
-	s := &planFactsSnapshot{Landings: map[string]*landing.State{}, Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Warnings: map[string]string{}, Observations: map[string]planObservation{}, Current: map[string]bool{}, External: map[string]externalNote{}, Passes: map[string]planPassSeen{}}
+	s := &planFactsSnapshot{Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Warnings: map[string]string{}, Observations: map[string]planObservation{}, Current: map[string]bool{}, External: map[string]externalNote{}, Passes: map[string]planPassSeen{}}
 	for _, v := range rows.Views {
 		s.Views[v.Root] = v
 	}
@@ -131,24 +122,6 @@ func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 	}
 	for _, e := range rows.External {
 		s.External[e.ID] = e
-	}
-	for _, r := range rows.Landings {
-		v, e := canon.Parse(r.Record)
-		if e != nil {
-			return nil, e
-		}
-		record, e := landing.Parse(v)
-		if e != nil {
-			return nil, e
-		}
-		state := s.Landings[r.Stream]
-		if state == nil {
-			state = &landing.State{}
-			s.Landings[r.Stream] = state
-		}
-		if e = state.Apply(landing.Entry{At: r.At, Record: record}); e != nil {
-			return nil, e
-		}
 	}
 	return s, nil
 }

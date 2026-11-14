@@ -7,7 +7,7 @@ import type { OwnerAsks } from '../ownerAsksModel'
 import { cellLabels, howRead, nowLines, spokenState, stepCounts, type StepCell } from '../planModuleModel'
 import { stepRows, type StepClock } from '../stepStateModel'
 import { CLASS_MEANINGS, moduleClass } from '../workSummaryModel'
-import { AT, id, Q_RULE, r5Raw, T3, T_OTHER, type Raw } from './moduleDetailFixture'
+import { AT, externalWork, Q_RULE, r5Raw, W3, type Raw } from './moduleDetailFixture'
 
 /*
  * R5:5.5-10 slice 2 (the Owner 2026-11-02, Q75): a step on which something only the Owner moves waits on him reads
@@ -17,19 +17,18 @@ import { AT, id, Q_RULE, r5Raw, T3, T_OTHER, type Raw } from './moduleDetailFixt
 const NOW = Date.parse(AT) + 5_000
 type Rec = Record<string, unknown>
 const step = (raw: Raw, nid: string) => raw.nodes.find(n => n.plan_node_id === nid)!
+const qid = (n: number) => `q_${String(n).padStart(16, '0')}`
 /** 5.1-4 active, with what a case adds. */
 const view514 = (change: (raw: Raw) => void = () => {}): PlanSnapshot => {
   const raw = r5Raw()
-  raw.tasks.find(t => t.task_id === T_OTHER)!.state = 'ready'
   Object.assign(step(raw, 'R5:5.1-4'), { state: 'active' })
   change(raw)
   return parsePlanSnapshot(raw, 'R5')
 }
-const onStep = (raw: Raw, tid: string, state: string, more: Rec = {}) =>
-  raw.tasks.push({ task_id: tid, plan_node_id: 'R5:5.1-4', mission_id: 'M-250', title: `Work ${tid.slice(-1)}`, state, ...more })
-const ended = { stream: 'landing:bifrost-trade-infra', operation: 'land:x:1', phase: 'failed', outcome: 'ci_red', reason: '', attempt: 'a_1',
-  result: 'r', main_commit: '', run: '', observed_at: new Date(Date.parse(AT) - 60_000).toISOString(), basis: 'note.landing; current validity requires verification' }
-const question = (n: number, more: Partial<Question>): Question => ({ id: `q_${String(n).padStart(16, '0')}`, number: n, status: 'open', requester: 'agentrt',
+/** 5.1-4's done rule waits on question n. */
+const asksOn514 = (raw: Raw, n = 91) => Object.assign(step(raw, 'R5:5.1-4'), { done_rule_json: { question_answered: { question: qid(n), option: 'a' } } })
+const titled = (raw: Raw, task: string): Rec => ({ description: { ...(raw.external_work[0].description as Rec), task } })
+const question = (n: number, more: Partial<Question>): Question => ({ id: qid(n), number: n, status: 'open', requester: 'agentrt',
   title: `Landing failed: card ${n}`, options: [], allow_text: true, urgency: 'when you can', meanwhile: 'nothing merges', created_at: AT, expires_at: AT, ...more })
 const LATER = new Date(NOW + 3_600_000).toISOString()
 const request = (n: number, status: string, more: Partial<ApprovalItem> = {}): ApprovalItem => ({ id: `appr_${n}`, number: n, action: 'deliver', tier: 'C', params: {},
@@ -40,29 +39,27 @@ const clock = (asks?: OwnerAsks): StepClock => ({ failed: null, now: NOW, asks }
 const cellOf = (v: PlanSnapshot, label: string, c: StepClock): StepCell => stepRows(v, c).flatMap(r => r.cells).find(x => x.label === label)!
 
 describe('waiting on you (R5:5.5-10 slice 2)', () => {
-  it('an open question on a task of the step waits on you: a landing that failed and asks "Try again" (5.11-1 on 11-03)', () => {
-    const tid = id('M')
-    const v = view514(raw => onStep(raw, tid, 'accepted', { landing: ended }))
-    // The plan view alone: an accepted task whose landing ended reads nothing running.
+  it('an open question the step\'s done rule names waits on you: a landing that failed and asks "Try again" (5.11-1 on 11-03)', () => {
+    const v = view514(raw => asksOn514(raw))
+    // The plan view alone: a step with no work on it reads nothing running.
     expect(cellOf(v, '5.1-4', clock()).now).toEqual({ kind: 'idle' })
-    const c = cellOf(v, '5.1-4', clock(lists([question(91, { task_id: tid })])))
+    const c = cellOf(v, '5.1-4', clock(lists([question(91, {})])))
     expect(c).toMatchObject({ state: 'waiting', now: { kind: 'waiting', held: [], recorded: null,
-      waiting: [{ kind: 'question', text: 'question #91 “Landing failed: card 91” waits for your answer (on task Work M)' }] } })
+      waiting: [{ kind: 'question', text: 'question #91 “Landing failed: card 91” waits for your answer (its done rule names it)' }] } })
     expect(cellLabels[c.state]).toBe('Waiting on you')
     expect(spokenState(c)).toBe('waiting on you: 1 open question for you')
-    expect(nowLines(c)[0]).toBe('Waiting on you: question #91 “Landing failed: card 91” waits for your answer (on task Work M). '
+    expect(nowLines(c)[0]).toBe('Waiting on you: question #91 “Landing failed: card 91” waits for your answer (its done rule names it). '
       + 'An open question moves when you answer it (Needs you lists questions); nothing on the step runs or is queued.')
-    // Answered, withdrawn or on another task's step: nothing waits on you.
-    for (const q of [question(91, { task_id: tid, status: 'answered' }), question(91, { task_id: tid, status: 'withdrawn' }), question(91, { task_id: id('Z') }), question(91, {})]) {
+    // Answered, withdrawn or another question: nothing waits on you.
+    for (const q of [question(91, { status: 'answered' }), question(91, { status: 'withdrawn' }), question(93, {})]) {
       expect(cellOf(v, '5.1-4', clock(lists([q]))).now).toEqual({ kind: 'idle' })
     }
   })
 
   it('a question title is cut at 80 characters in the line; its page has it whole', () => {
-    const tid = id('M')
-    const v = view514(raw => onStep(raw, tid, 'accepted', { landing: ended }))
-    const c = cellOf(v, '5.1-4', clock(lists([question(92, { task_id: tid, title: 'x'.repeat(100) })])))
-    expect(c.now?.kind === 'waiting' && c.now.waiting[0].text).toBe(`question #92 “${'x'.repeat(80)}…” waits for your answer (on task Work M)`)
+    const v = view514(raw => asksOn514(raw, 92))
+    const c = cellOf(v, '5.1-4', clock(lists([question(92, { title: 'x'.repeat(100) })])))
+    expect(c.now?.kind === 'waiting' && c.now.waiting[0].text).toBe(`question #92 “${'x'.repeat(80)}…” waits for your answer (its done rule names it)`)
   })
 
   it('a question or request the done rule names waits on you while it is open or pending', () => {
@@ -84,43 +81,41 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
   })
 
   it('an acceptance sign-off Ready on an agent step waits on you', () => {
-    const v = view514(raw => (raw as Raw & { owner_waiting: Rec[] }).owner_waiting.push({ plan_node_id: 'R5:5.1-4', ref: 'acc-2', acceptance: 'Owner accepts 5.1',
+    const v = view514(raw => raw.owner_waiting.push({ plan_node_id: 'R5:5.1-4', ref: 'acc-2', acceptance: 'Owner accepts 5.1',
       plan_version: 1, evidence: null, candidate_evidence: [], reason: 'every binding true', source: 'plan view', readiness: 'Ready' }))
     expect(cellOf(v, '5.1-4', clock(lists([]))).now).toMatchObject({ kind: 'waiting',
       waiting: [{ kind: 'signoff', text: 'acceptance sign-off Owner accepts 5.1 is Ready for you' }] })
   })
 
   it('beside queued or Unknown work, what waits on you is kept and said, not the state', () => {
-    const tid = id('M')
-    const asked = 'question #91 “Landing failed: card 91” waits for your answer (on task Work M)'
-    const v = view514(raw => { onStep(raw, tid, 'accepted', { landing: ended }); onStep(raw, id('N'), 'ready') })
-    const c = cellOf(v, '5.1-4', clock(lists([question(91, { task_id: tid })])))
-    expect(c.now).toEqual({ kind: 'queued', why: ['task Work N ready'], held: [], waiting: [asked] })
+    const asked = 'question #91 “Landing failed: card 91” waits for your answer (its done rule names it)'
+    const v = view514(raw => { asksOn514(raw); externalWork(raw, 'R5:5.1-4', { state: 'Registered', status: 'Registered', type: 'registered', started_at: undefined, ...titled(raw, 'Run N') }) })
+    const c = cellOf(v, '5.1-4', clock(lists([question(91, {})])))
+    expect(c.now).toEqual({ kind: 'queued', why: ['external work “Run N” registered, not started'], held: [], waiting: [asked] })
     expect(nowLines(c)).toContain(`Waiting on you: ${asked}.`)
-    // A task leased with no live attempt is Unknown; what waits on you is kept beside it.
-    const u = cellOf(view514(raw => { onStep(raw, tid, 'accepted', { landing: ended }); onStep(raw, id('N'), 'leased') }), '5.1-4', clock(lists([question(91, { task_id: tid })])))
-    expect(u.now).toEqual({ kind: 'unknown', why: ['task Work N is leased, but the plan view holds no live attempt for it'], queued: [], held: [], waiting: [asked] })
+    // Work whose heartbeat is unconfirmed is Unknown; what waits on you is kept beside it.
+    const u = cellOf(view514(raw => { asksOn514(raw); externalWork(raw, 'R5:5.1-4', { heartbeat_age_s: 130, ...titled(raw, 'Run N') }) }), '5.1-4', clock(lists([question(91, {})])))
+    expect(u.now).toEqual({ kind: 'unknown', why: ['external work “Run N” Running: no heartbeat confirmed for over 60 s'], queued: [], held: [], waiting: [asked] })
     expect(nowLines(u)).toContain(`Waiting on you: ${asked}.`)
   })
 
   it('lists not read now are named, and "nothing waits on you" is then said of the plan view only', () => {
-    const tid = id('M')
-    const v = view514(raw => onStep(raw, tid, 'accepted', { landing: ended }))
+    const v = view514(raw => asksOn514(raw))
     const unread: OwnerAsks = { questions: { state: 'unread' }, requests: { state: 'unknown', reason: 'Offline' } }
     const c = cellOf(v, '5.1-4', clock(unread))
     expect(c.now).toEqual({ kind: 'idle', unread: ['Questions: not read yet'] })
     const yours = (cell: StepCell) => howRead(cell)!.find(r => r.label === 'Waits on you')!.text
     expect(yours(c)).toMatch(/^Nothing in the plan view: .* Questions and requests were not read now\.$/)
-    expect(yours(c)).not.toMatch(/no open question on its tasks/)
+    expect(yours(c)).not.toMatch(/no open question named by its done rule/)
     expect(nowLines(c)).toContain('Not read now: Questions: not read yet. Whether a question or request of yours waits on this step is Unknown.')
     // Stale past two of Needs you's 30 s polls, as the module page's sources read it: 60 s is now, 60.001 s is not.
-    const at = (ms: number) => cellOf(v, '5.1-4', clock(lists([question(91, { task_id: tid })], [], NOW - ms))).now
+    const at = (ms: number) => cellOf(v, '5.1-4', clock(lists([question(91, {})], [], NOW - ms))).now
     expect(at(60_000)).toMatchObject({ kind: 'waiting' })
     expect(at(60_001)).toEqual({ kind: 'idle', unread: ['Questions: last read 60 s ago (stale)'] })
     expect(at(90_000)).toEqual({ kind: 'idle', unread: ['Questions: last read 90 s ago (stale)'] })
     // Read now and none open: the whole clause.
-    expect(yours(cellOf(v, '5.1-4', clock(lists([]))))).toMatch(/no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision/)
-    // A step nothing could tie a question or request to (no task, no rule naming one) reads neither list.
+    expect(yours(cellOf(v, '5.1-4', clock(lists([]))))).toMatch(/no open question named by its done rule, no request its done rule names awaiting your decision/)
+    // A step nothing could tie a question or request to (no rule naming one) reads neither list.
     expect(cellOf(view514(), '5.1-4', clock(unread)).now).toEqual({ kind: 'idle' })
   })
 
@@ -132,8 +127,7 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
     expect(shellRead({ ...base, data: undefined })).toEqual({ state: 'unread' })
     expect(shellRead({ ...base, data: undefined, fetchStatus: 'fetching' })).toEqual({ state: 'reading' })
     // The step names each such read: an unread or failed list is never taken for none.
-    const tid = id('M')
-    const v = view514(raw => onStep(raw, tid, 'accepted', { landing: ended }))
+    const v = view514(raw => asksOn514(raw))
     expect(cellOf(v, '5.1-4', clock({ questions: { state: 'unknown', reason: 'HTTP 502' }, requests: { state: 'unread' } })).now)
       .toEqual({ kind: 'idle', unread: ['Questions: HTTP 502'] })
   })
@@ -146,30 +140,11 @@ describe('waiting on you (R5:5.5-10 slice 2)', () => {
   })
 
   it('the row counts it and the summary classes its module as waiting on you, ahead of held (in progress still comes first)', () => {
-    const tid = id('M')
-    // 5.1-3's implementation cancelled, so nothing in the module is queued: 5.1-3 idle, 5.1-4 waiting on you.
-    const v = view514(raw => { onStep(raw, tid, 'accepted', { landing: ended }); raw.tasks.find(t => t.task_id === T3)!.state = 'cancelled' })
-    const r = stepRows(v, clock(lists([question(91, { task_id: tid })]))).find(x => x.cells.some(c => c.label === '5.1-4'))!
+    // 5.1-3's registered work gone, so nothing in the module is queued: 5.1-3 idle, 5.1-4 waiting on you.
+    const v = view514(raw => { asksOn514(raw); raw.external_work = raw.external_work.filter(w => w.external_work_id !== W3); raw.working = [] })
+    const r = stepRows(v, clock(lists([question(91, {})]))).find(x => x.cells.some(c => c.label === '5.1-4'))!
     expect(r.waiting).toBe(1)
     expect(stepCounts(r)).toMatch(/1 waiting on you/)
     expect(moduleClass(r)).toBe('waiting')
   })
-})
-
-it('the step task line uses the recorded wait and its age', async () => {
-  const { taskLine, runtimeTasks } = await import('../moduleDetailModel')
-  const view = view514(raw => onStep(raw, id('W'), 'blocked', { waiting: { on: 'blocked', reason: 'Needs repair', since: AT } }))
-  const task = view.tasks.find(t => t.task_id === id('W'))!
-  const line = taskLine(task, runtimeTasks({ state: 'unread' }), undefined, NOW)
-  expect(line.waiting).toContain('Needs repair · since ')
-  expect(line.waiting).toContain(' · 0 min')
-})
-
-it('Live lists waiting tasks without an attempt using the shared words', async () => {
-  const { render, screen } = await import('@testing-library/react')
-  const { PlanLiveWork } = await import('../PlanLiveWork')
-  const view = view514(raw => onStep(raw, id('W'), 'blocked', { waiting: { on: 'blocked', reason: 'Needs repair' } }))
-  const rendered = render(<PlanLiveWork view={view} stale={false} />)
-  expect(screen.getByRole('list', { name: 'Waiting' }).textContent).toContain('Needs repair · since Unknown')
-  rendered.unmount()
 })

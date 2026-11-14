@@ -72,7 +72,7 @@ beforeEach(() => {
   progressReply = { status: 200, body: progressBody() }
   fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    const root = /plan-view\?root=R(\d+)(?:&explain=1)?$/.exec(url)
+    const root = /plan-view\?root=R(\d+)$/.exec(url)
     if (root) return new Response(JSON.stringify(planView(Number(root[1]))), { status: 200 })
     if (url.endsWith('/agentrt/progress')) return new Response(JSON.stringify(progressReply.body), { status: progressReply.status })
     const tree = /agentrt\/plan\?root=R(\d+)$/.exec(url)
@@ -97,14 +97,14 @@ describe('Work → Plan opens the newest round', () => {
     // /plan-pace (R5:5.5-13), and its coordinator pin line GET /pin-share (R5:5.7-8), which names no round.
     expect(urls().filter(u => u !== '/api/v1/agentrt/plan?root=R5' && u !== '/api/v1/agentrt/plan-pace?root=R5' && u !== '/api/v1/agentrt/pin-share')).toEqual(planViewUrls())
     expect(urls().some(u => u.endsWith('/agentrt/progress'))).toBe(false)
-    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1']))
+    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
   })
 
   it('reads GET /progress itself, once, only when nothing has read it yet', async () => {
     page('#work')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R5'))
     expect(urls().filter(u => u.endsWith('/agentrt/progress'))).toHaveLength(1)
-    expect(planViewUrls().every(u => u.endsWith('root=R5&explain=1'))).toBe(true)
+    expect(planViewUrls().every(u => u.endsWith('root=R5'))).toBe(true)
   })
 
   it('keeps the round an address names, the old round= too, and offers the newest as its own link', async () => {
@@ -117,7 +117,7 @@ describe('Work → Plan opens the newest round', () => {
     expect(newest).not.toHaveAttribute('aria-current')
     expect(rounds).toHaveTextContent('Round 4')
     expect(roundNote()).toHaveTextContent('an earlier round')
-    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1']))
+    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4']))
     await go('#work?section=plan&round=R3')
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R3'))
   })
@@ -137,7 +137,7 @@ describe('Work → Plan opens the newest round', () => {
     await go(href)
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     await waitFor(() => expect(modulesTitle()).toHaveTextContent('Modules · R4'))
-    expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4&explain=1')
+    expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4')
     expect(planViewUrls().some(u => /root=R[23]$/.test(u))).toBe(false)
   })
 
@@ -212,16 +212,16 @@ describe('Work\'s plan reads with an acceptance root (PROD 2026-11-01)', () => {
     expect(trees()).toEqual(new Set(['/api/v1/agentrt/plan?root=R5']))
     // Not having read R4's tree, the round tab cannot know R4 is an acceptance root, and does not say anything of it.
     expect(document.querySelector('[data-summary-signoffs]')).not.toHaveTextContent('R4')
-    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1']))
+    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
     await go('#work?tab=signoffs')
     // The Sign-offs tab reads every round's tree (the Owner 2026-10-22), as SignoffWaiting did, and counts them all.
     await waitFor(() => expect(trees()).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`))))
     await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('R4 acceptance not counted here'))
-    await waitFor(() => expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4&explain=1'))
+    await waitFor(() => expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4'))
     await waitFor(() => expect(screen.queryByText('Reading acceptance sign-offs…')).toBeNull())
-    expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R5&explain=1')).toBe(1)
-    expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R4&explain=1')).toBe(1)
-    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4&explain=1', '/api/v1/agentrt/plan-view?root=R5&explain=1']))
+    expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R5')).toBe(1)
+    expect(count(planViewUrls(), '/api/v1/agentrt/plan-view?root=R4')).toBe(1)
+    expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R4', '/api/v1/agentrt/plan-view?root=R5']))
   })
 })
 

@@ -44,13 +44,8 @@ const node = object({
   done_rule_json: dict, state: nullable(one('planned', 'active', 'done', 'stopped', 'dropped')), state_event_id: nullable(nonnegative),
   usual_s: nullable(nonnegative), created_by_actor_id: str, created_at: timestamp, version: nonnegative,
   lane_kind: one('mainline', 'branch', 'support', 'Unclassified'), view: optional(item),
-  execution_progress: object({ state: one('planned', 'active', 'done', 'stopped'), done: nonnegative, total: nonnegative, stopped: nonnegative, unit: optional(one('steps', 'tasks')), basis: str }),
+  execution_progress: object({ state: one('planned', 'active', 'done', 'stopped'), done: nonnegative, total: nonnegative, stopped: nonnegative, unit: optional(one('steps')), basis: str }),
   acceptance_status: optional(nullable(array(acceptanceStatus))), current_validity: optional(tri),
-})
-const attempt = object({
-  attempt_id: str, attempt_no: nonnegative, task_id: str, mission_id: str, host_id: optional(str), executor: str, model: optional(str),
-  state: str, started_at: optional(timestamp), elapsed_s: optional(nonnegative), heartbeat_age_s: num, status: optional(str), reason: str,
-  persisted: bool, last_checkpoint_seq: optional(nonnegative), last_checkpoint_at: optional(timestamp), unpersisted_for_s: optional(nonnegative), ended_at: optional(timestamp),
 })
 // A collector's work (R5:5.5-12 §1.4, written from P-b): the host the server
 // wrote from its token and the session identity it registered with. All
@@ -76,20 +71,6 @@ const external: Parser<ReturnType<typeof externalRow>> = (v, p) => {
   if (named === 0 && row.sidebar !== undefined) invalid(`${p}.sidebar`)
   return row
 }
-const landing = object({ stream: str, operation: str, phase: str, outcome: str, reason: str, attempt: str, result: str, main_commit: str, run: str, observed_at: timestamp, basis: str })
-// What a task waits on (store/planviewwaits.go); an older API writes none.
-const taskWaiting = object({
-  on: one('stop', 'owner', 'checks', 'landing', 'dependencies', 'host', 'queued', 'rework', 'blocked', 'working'), reason: str, since: optional(timestamp),
-  question_id: optional(str), checks: optional(array(object({ task_id: str, role: str, state: str }))),
-  // Each named only when it applies: the dependencies, the operation holding
-  // the landing slot, the executor a host or queued wait is for.
-  depends_on: optional(array(object({ task_id: str, title: str, state: str }))),
-  slot_holder: optional(object({ operation: str, task_id: str, title: str, phase: str, since: optional(timestamp) })),
-  executor: optional(object({ pool: optional(str), executor: optional(str), host_id: optional(str) })),
-})
-const task = object({ stopped: optional(object({ control_id: str, by: str, reason: str, since: timestamp })), withdrawn: optional(object({ by: str, reason: str, at: timestamp })), on_main: optional(object({ commit: str, via: str })), task_id: str, plan_node_id: str, mission_id: str, title: str, state: str, role: optional(str), round_no: optional(nonnegative), max_rounds: optional(nonnegative), waiting: optional(taskWaiting), attempt: optional(attempt), external_work: optional(array(external)), landing: optional(landing), delivery: optional(str) })
-const working: Parser<ReturnType<typeof external> | ReturnType<typeof task>> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : task(v, p)
-const finished: Parser<ReturnType<typeof external> | { attempt_id: string; task_id: string; state: string; ended_at: string; meaning: string }> = (v, p) => 'external_work_id' in dict(v, p) ? external(v, p) : object({ attempt_id: str, task_id: str, state: str, ended_at: timestamp, meaning: str })(v, p)
 // PV1 entries carry the execution state; PV2 entries (a view with bindings) the verified milestone and current validity.
 const mainlineEntry = object({ ref, plan_node_id: str, execution_state: optional(one('planned', 'active', 'done', 'stopped')), milestone_status: one('Unknown', 'true', 'false', 'unknown'), current_validity: optional(tri) })
 const candidateEvidence = object({ artifact_id: str, label: str, source: str })
@@ -101,14 +82,12 @@ const snapshot = object({
   mainline: object({ path: array(mainlineEntry), current: nullable(mainlineEntry), basis: str, milestone_status: optional(one('Unknown')) }),
   next: array(object({ plan_node_id: str, action: str, reason: optional(str), responsible: optional(responsible) })),
   waiting_on: array(object({ edge, status: one('Unknown', 'Blocked'), reason: str, responsible })),
-  // A runtime task's wait, or (PV2) an acceptance sign-off the Owner can give now.
-  owner_waiting: array((v: unknown, p: string) => 'task_id' in dict(v, p)
-    ? object({ task_id: str, plan_node_id: str, reason: str, source: str })(v, p)
-    : object({ ...signoff, readiness: one('Ready') })(v, p)),
+  // (PV2) An acceptance sign-off the Owner can give now.
+  owner_waiting: array(object({ ...signoff, readiness: one('Ready') })),
   owner_later: array((v: unknown, p: string) => 'ref' in dict(v, p)
     ? object({ ...signoff, readiness: one('Not started', 'Blocked') })(v, p)
     : object({ plan_node_id: str, title: str, readiness: one('Unknown'), reason: str })(v, p)),
-  working: array(working), finished_today: array(finished), day_timezone: str, tasks: array(task), external_work: array(external),
+  working: array(external), finished_today: array(external), day_timezone: str, external_work: array(external),
   // sessions (R5:5.5-12 §3.2) is read from P-c1 and written from P-c2: the
   // retained sessions by binding state, five counts and their scope.
   coverage: object({
@@ -147,6 +126,5 @@ export function parsePlanSnapshot(value: unknown, root: string): PlanSnapshot {
     if (edge.to.root === root && !items.has(edge.to.node)) invalid('edge.to')
   }
   if (out.mainline.current && !out.mainline.path.some(n => n.plan_node_id === out.mainline.current?.plan_node_id)) invalid('mainline.current')
-  for (const work of out.working) if (!('external_work_id' in work) && !work.attempt) invalid('working.attempt')
   return out
 }

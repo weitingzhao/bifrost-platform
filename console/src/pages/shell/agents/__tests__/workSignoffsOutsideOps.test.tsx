@@ -38,7 +38,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
 })
 
 const notStarted: SignoffRow[] = signoffNotStarted(plan).map(w => ({ kind: 'step', node: w.node, label: w.label, title: w.title, wait: w }))
-const none = { ready: [], notStarted: [], later: [], tasks: [] }
+const none = { ready: [], notStarted: [], later: [] }
 function count(over: Partial<SignoffCount> = {}): SignoffCount {
   return { ...none, notStarted, uncounted: [], root: 'R2', stepRounds: ['R2'], steps: 'ok', round: 'ok', scope: 'every', lastRead: none, ...over }
 }

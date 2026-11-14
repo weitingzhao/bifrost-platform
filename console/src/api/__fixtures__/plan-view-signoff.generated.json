@@ -39,7 +39,7 @@
       "status": "Fresh"
     },
     "external_work": "Per-record server heartbeat; Unconfirmed after 60 seconds",
-    "owner_waiting": "Runtime task waits and versioned acceptance signoffs; legacy readiness remains Unknown",
+    "owner_waiting": "Versioned acceptance signoffs; legacy readiness remains Unknown",
     "verification": "Partial"
   },
   "items": [
@@ -894,7 +894,6 @@
   "root": "R4",
   "schema": "agentrt.plan_view_response/v1",
   "source_watermarks": {},
-  "tasks": [],
   "waiting_on": [
     {
       "edge": {

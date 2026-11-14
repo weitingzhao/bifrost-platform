@@ -71,9 +71,6 @@ func (d *collectorWorkViewDB) Query(ctx context.Context, q string, args ...any) 
 	if strings.HasPrefix(q, "SELECT a.attempt_id") {
 		return &signoffViewRows{data: d.live}, nil
 	}
-	if strings.Contains(q, planViewWaitFacts) {
-		return &signoffViewRows{data: d.waits}, nil
-	}
 	return d.signoffViewDB.Query(ctx, q, args...)
 }
 
@@ -130,9 +127,8 @@ func TestPlanViewCollectorWorkFixture(t *testing.T) {
 	}
 	ext, _ := out["external_work"].([]map[string]any)
 	working, finished := out["working"].([]any), out["finished_today"].([]any)
-	tasks, _ := out["tasks"].([]map[string]any)
-	if len(ext) != 4 || len(working) != 3 || len(finished) != 1 || len(tasks) != 1 {
-		t.Fatalf("external work %d, working %d, finished %d, tasks %d", len(ext), len(working), len(finished), len(tasks))
+	if len(ext) != 4 || len(working) != 3 || len(finished) != 1 {
+		t.Fatalf("external work %d, working %d, finished %d", len(ext), len(working), len(finished))
 	}
 	// Every place a row goes: a collector's names its host and identity, the
 	// MCP registrant's none of it.
@@ -141,16 +137,10 @@ func TestPlanViewCollectorWorkFixture(t *testing.T) {
 		rows[fmt.Sprintf("external_work[%d]", i)] = e
 	}
 	for _, w := range working {
-		if m := w.(map[string]any); m["external_work_id"] != nil {
-			rows["working/"+m["external_work_id"].(string)] = m
-		} else if history, _ := m["external_work"].([]map[string]any); len(history) == 1 {
-			rows["working task history"] = history[0]
-		}
+		m := w.(map[string]any)
+		rows["working/"+m["external_work_id"].(string)] = m
 	}
-	if history, _ := tasks[0]["external_work"].([]map[string]any); len(history) == 1 {
-		rows["task history"] = history[0]
-	}
-	if len(rows) != 9 {
+	if len(rows) != 8 {
 		t.Fatalf("the rows of every place: %d", len(rows))
 	}
 	for where, row := range rows {

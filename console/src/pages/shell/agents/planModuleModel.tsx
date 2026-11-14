@@ -2,19 +2,18 @@ import type { CSSProperties } from 'react'
 import { approvalNumbers, plainTitle } from '@/api/agentRuntimePlan'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { approvalHref, goalHref, isQuestionId, questionHref } from '@/lib/shell/consoleRoutes'
-import type { StepWhyModel } from './explainModel'
 import { planNodeHref } from './usePlanSnapshot'
 
 /*
  * Work → Plan module rows (Design v3.6 WorkPage, DATA-MAP P25): one row per plan item, one cell per runtime step in
- * plan order, and how many steps are left. Read from plan-view as it is (nodes[].state, edges, waiting_on, tasks):
+ * plan order, and how many steps are left. Read from plan-view as it is (nodes[].state, edges, waiting_on, external_work):
  * these are controller step states (execution progress), not acceptance or deployment.
  */
 
 /**
  * A step's state as its cell shows it (R5:5.5-10): done, not started and stopped are the controller's; an active step
  * is shown by what it has now (stepStateModel.ts): in progress (work running or queued), waiting on you (something on
- * it only the Owner moves), held (a task waits on a decision), active with nothing running (idle), the Owner's (yours),
+ * it only the Owner moves), held (external work on it failed verification), active with nothing running (idle), the Owner's (yours),
  * or active with its work now Unknown; unknown is a step the runtime holds no state for.
  */
 export type CellState = 'done' | 'active' | 'waiting' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
@@ -50,23 +49,22 @@ export const cellStyle: Record<CellState, CSSProperties> = {
 
 /**
  * What an active step has now, derived from the plan view held (stepStateModel.ts judgeStep), each with what made it so:
- * running (a live attempt with its heartbeat confirmed, a landing seen moving, running external work), queued, unknown
+ * running (external work running with its heartbeat confirmed), queued, unknown
  * (the condition tested), held (each item with what holds it; on an Owner step with what the plan view records on it),
  * the Owner's with what the plan view records on it, or idle. Queued and Unknown keep what is held too, so that none is
  * hidden.
  */
 /**
- * What holds an active step with nothing running or queued: a task waiting on a decision (blocked, paused), an accepted
- * task with no landing recorded, external work submitted whose verification read failed; or what waits on the Owner
- * (OWNER_KINDS): a task awaiting him, a landing waiting for his grant, an acceptance sign-off Ready, an open question on
- * the step, a request its done rule names awaiting his decision.
+ * What holds an active step with nothing running or queued: external work submitted whose verification read failed; or
+ * what waits on the Owner (OWNER_KINDS): an acceptance sign-off Ready, an open question on the step, a request its done
+ * rule names awaiting his decision.
  */
 export type HeldItem = {
-  kind: 'stopped' | 'decision' | 'owner-decision' | 'grant' | 'signoff' | 'question' | 'request' | 'no-landing' | 'verify-failed'
+  kind: 'signoff' | 'question' | 'request' | 'verify-failed'
   text: string
 }
 /** The held items only the Owner moves: a step with any of them, and nothing running, Unknown or queued, waits on him. */
-export const OWNER_KINDS: ReadonlySet<HeldItem['kind']> = new Set(['owner-decision', 'grant', 'signoff', 'question', 'request'])
+export const OWNER_KINDS: ReadonlySet<HeldItem['kind']> = new Set(['signoff', 'question', 'request'])
 /**
  * External work on the step submitted and not read Verified or failed: its title and its verification as read
  * (Unknown, Stale, or '' when none is recorded). A note beside the step's state, never what holds it.
@@ -89,7 +87,7 @@ export type ControllerState = 'done' | 'active' | 'planned' | 'stopped' | null
 const NOT_JUDGED: StepNow = { kind: 'unknown', why: ['what runs on it now is not judged here (no plan-view clock given)'], queued: [], held: [], waiting: [] }
 
 /** A record a step links to; kind says which page the link opens. */
-export type StepLink = { kind: 'task' | 'goal' | 'approval' | 'question' | 'node'; href: string; text: string; note?: string }
+export type StepLink = { kind: 'goal' | 'approval' | 'question' | 'node'; href: string; text: string }
 /** A done rule in words: one line per atom, an all / any with its parts under it (join says which). */
 export type RuleLine = { text: string; children?: RuleLine[]; join?: 'all' | 'any' }
 export type StepCell = {
@@ -98,11 +96,6 @@ export type StepCell = {
   step: ControllerState
   /** What an active step has now (null for a step not active). */
   now: StepNow | null
-  /**
-   * Why an active step is not done, from the plan view's explain block (R5:5.5-19, laid out in R5:5.5-20: explainModel.ts
-   * stepWhy); absent or null when nothing is said of it.
-   */
-  why?: StepWhyModel | null
   /** Its done rule is {}: nothing closes it by evidence (R5:5.5-10 c). */
   noRule: boolean
   /** When the step took its state: the time of its state event (state_event_id) while that event is in recent_changes; else null. */
@@ -160,10 +153,6 @@ function atomValues(rule: unknown, atom: string, depth = 0): unknown[] {
   }
   return out
 }
-/** The task ids a done rule names (task_accepted), each once. */
-export function ruleTaskIds(rule: unknown): string[] {
-  return [...new Set(atomValues(rule, 'task_accepted').map(str).filter(Boolean))]
-}
 /** The question ids a done rule names (question_answered), each once. */
 export function ruleQuestionIds(rule: unknown): string[] {
   return [...new Set(atomValues(rule, 'question_answered').map(q => isRecord(q) ? str(q.question) : '').filter(Boolean))]
@@ -185,7 +174,7 @@ const bound: Record<string, string> = {
  * One part of a done rule in words. The grammar is plan/rule.go's, plus the step atoms of design D3 (step_tasks,
  * step_landed, step_stg_settled, step_deployed); anything else is shown as not recognised, never guessed.
  */
-function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: number): RuleLine {
+function ruleLine(rule: unknown, depth: number): RuleLine {
   if (!isRecord(rule)) return { text: 'Unreadable rule part' }
   if (Object.hasOwn(rule, 'gates_passed')) {
     const tests = Array.isArray(rule.gates_passed) ? rule.gates_passed.map(g => isRecord(g) ? str(g.test) : '').filter(Boolean) : []
@@ -198,9 +187,9 @@ function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: numbe
     case 'all': case 'any': {
       const list = Array.isArray(value) ? value : []
       return { text: key === 'all' ? 'All of these hold:' : 'Any one of these holds:', join: key,
-        children: depth >= RULE_DEPTH ? [{ text: 'Nested too deep to read' }] : list.map(child => ruleLine(child, taskTitle, depth + 1)) }
+        children: depth >= RULE_DEPTH ? [{ text: 'Nested too deep to read' }] : list.map(child => ruleLine(child, depth + 1)) }
     }
-    case 'task_accepted': return { text: `Task ${taskTitle(str(value)) || str(value) || '(unnamed)'} is accepted` }
+    case 'task_accepted': return { text: `Task ${str(value) || '(unnamed)'} is accepted` }
     case 'approval_executed': return { text: `Request #${String(value)} is approved and executed` }
     case 'question_answered': return { text: `Question ${str(fields.question) || '(unnamed)'} is answered “${str(fields.option)}”` }
     case 'ci_succeeded': return { text: `CI passes on ${str(fields.repo) || '(unnamed repo)'} at ${short(str(fields.commit))}` }
@@ -216,9 +205,9 @@ function ruleLine(rule: unknown, taskTitle: (id: string) => string, depth: numbe
   return { text: `Rule not recognised · ${key}` }
 }
 /** A done rule in words; [] for the empty rule {} (no condition: the step moves only by a recorded event). */
-export function ruleWords(rule: unknown, taskTitle: (id: string) => string = () => ''): RuleLine[] {
+export function ruleWords(rule: unknown): RuleLine[] {
   if (isRecord(rule) && Object.keys(rule).length === 0) return []
-  return [ruleLine(rule, taskTitle, 0)]
+  return [ruleLine(rule, 0)]
 }
 
 /** A part of a sentence after its first: lower-cased at its start unless it starts with a name ("CI", "STG"). */
@@ -287,20 +276,10 @@ function laneWords(node: PlanNode) {
   return node.lane_kind === 'Unclassified' ? 'Unclassified' : node.lane_kind[0].toUpperCase() + node.lane_kind.slice(1)
 }
 
-/** What a step links to: its tasks, its goal, the requests and questions its done rule waits on, and its place in the plan. */
+/** What a step links to: its goal, the requests and questions its done rule waits on, and its place in the plan. */
 export function stepLinks(view: PlanSnapshot, step: PlanNode): StepLink[] {
   const links: StepLink[] = []
-  const own = view.tasks.filter(t => t.plan_node_id === step.plan_node_id)
-  const named = ruleTaskIds(step.done_rule_json).flatMap(id => view.tasks.filter(t => t.task_id === id && !own.includes(t)))
-  const tasks = [...own, ...named]
-  for (const t of tasks) {
-    const landing = t.landing ? `Landing ${t.landing.operation} · ${t.landing.phase} · ${t.landing.outcome}${t.landing.main_commit ? ` · main ${short(t.landing.main_commit)}` : ''}` : ''
-    links.push({ kind: 'task', href: goalHref(t.mission_id, t.task_id), text: `Task · ${t.title || t.task_id}`, note: [t.state, t.delivery, landing].filter(Boolean).join(' · ') })
-  }
-  // The step's own goal, when none of its tasks already opens that goal's card.
-  if (step.mission_id && !tasks.some(t => t.mission_id === step.mission_id)) {
-    links.push({ kind: 'goal', href: goalHref(step.mission_id), text: `Goal ${step.mission_id}` })
-  }
+  if (step.mission_id) links.push({ kind: 'goal', href: goalHref(step.mission_id), text: `Goal ${step.mission_id}` })
   for (const n of approvalNumbers(step.done_rule_json)) links.push({ kind: 'approval', href: approvalHref(String(n)), text: `Request #${n}` })
   for (const q of ruleQuestionIds(step.done_rule_json).filter(isQuestionId)) links.push({ kind: 'question', href: questionHref(q), text: `Question ${q}` })
   // The step's address opens its module's detail with the step marked (Work → Plan, R5:5.1-7).
@@ -328,7 +307,6 @@ export function moduleRows(view: PlanSnapshot, judge?: StepJudge): ModuleRow[] {
   const mainline = new Map(view.mainline.path.map((p, i) => [p.plan_node_id, i]))
   const rank = (n: PlanNode) => mainline.get(n.plan_node_id) ?? mainline.size
   const items = view.nodes.filter(n => n.node_kind === 'item').sort((a, b) => rank(a) - rank(b) || a.ordinal - b.ordinal)
-  const taskTitle = (id: string) => view.tasks.find(t => t.task_id === id)?.title ?? ''
   return items.map(item => {
     const steps = itemSteps(item.plan_node_id, children)
     const cells: StepCell[] = steps.flatMap(step => {
@@ -336,7 +314,7 @@ export function moduleRows(view: PlanSnapshot, judge?: StepJudge): ModuleRow[] {
       const now = step.state === 'active' ? judge ? judge(step) : NOT_JUDGED : null
       return [{ id: step.plan_node_id, label: step.label, title: plainTitle(step.title), state: shownState(step.state, now), owner: step.owner_step, effect: step.effect_step,
         step: step.state, now, noRule: isEmptyRule(step.done_rule_json), since: stateSince(view, step),
-        rule: ruleWords(step.done_rule_json, taskTitle), links: stepLinks(view, step),
+        rule: ruleWords(step.done_rule_json), links: stepLinks(view, step),
         ...externalLines(view.external_work.filter(w => w.plan_node_id === step.plan_node_id)) }]
     })
     const key = item.view?.plan_node_id ?? item.plan_node_id
@@ -401,34 +379,24 @@ export function noRuleText(cell: Pick<StepCell, 'noRule' | 'step'>): string {
 
 const oneOrMany = (n: number, one: string, many: string) => n === 1 ? one : many
 /** Each kind of held item aloud, counted; and what moves it on, for the detail. */
-const HELD_ORDER: HeldItem['kind'][] = ['owner-decision', 'grant', 'signoff', 'question', 'request', 'stopped', 'decision', 'no-landing', 'verify-failed']
+const HELD_ORDER: HeldItem['kind'][] = ['signoff', 'question', 'request', 'verify-failed']
 const HELD_SPOKEN: Record<HeldItem['kind'], (n: number) => string> = {
-  'owner-decision': n => `${n} ${oneOrMany(n, 'task awaits', 'tasks await')} your decision`,
   signoff: n => `${n} acceptance ${oneOrMany(n, 'sign-off', 'sign-offs')} Ready for you`,
   question: n => `${n} open ${oneOrMany(n, 'question', 'questions')} for you`,
   request: n => `${n} ${oneOrMany(n, 'request awaits', 'requests await')} your decision`,
-  stopped: n => `${n} ${oneOrMany(n, 'task is', 'tasks are')} stopped`,
-  decision: n => `${n} ${oneOrMany(n, 'task waits', 'tasks wait')} on a decision`,
-  grant: n => `${n} ${oneOrMany(n, 'landing waits', 'landings wait')} for your grant`,
-  'no-landing': n => `${n} accepted ${oneOrMany(n, 'task', 'tasks')} with no landing recorded`,
   'verify-failed': n => `${n} external ${oneOrMany(n, 'work', 'works')} failed verification`,
 }
 const HELD_MOVES: Record<HeldItem['kind'], string> = {
-  'owner-decision': 'a task awaiting you moves when you decide on its card (Needs you lists it)',
   signoff: 'an acceptance sign-off Ready is yours to give',
   question: 'an open question moves when you answer it (Needs you lists questions)',
   request: 'a request awaiting your decision moves when you approve or reject it (Needs you lists requests)',
-  stopped: 'only you can lift a stopped task',
-  decision: 'a held task moves only when it is made ready again or cancelled',
-  grant: 'a landing awaiting the grant waits on your grant (Needs you lists grants)',
-  'no-landing': 'whether an accepted task lands the plan view does not say: it may never land',
   'verify-failed': 'a submitted external work has a verification result of Verification failed',
 }
 /** What was read for an Owner step's records: the plan view's waits on it and its done rule, nothing else. */
 const RECORD_SOURCES = 'none in plan-view owner_waiting or its done rule'
 
 /**
- * A cell's state aloud: a held step says how many tasks wait on a decision, an Owner step what the plan view records
+ * A cell's state aloud: a held step says how many of each kind hold it, an Owner step what the plan view records
  * on it (or the sources it read when none), never that nothing asks the Owner.
  */
 export function spokenState(cell: StepCell): string {
@@ -443,7 +411,7 @@ export function spokenState(cell: StepCell): string {
 /*
  * What an active step has now, in words (R5:5.5-10). Claims and sources: the R5:5.5-10 hand-in reports.
  * "In progress" is said only of work running or queued; an active step with neither, read now, waits on you while
- * something on it is only yours to move, is held while a task on it waits on a decision, else "Active · nothing
+ * something on it is only yours to move, is held while external work on it failed verification, else "Active · nothing
  * running"; anything not judged is Unknown with the condition tested. Questions and requests are read from the shell's
  * lists: when those were not read now, nothing is said of them but that.
  */
@@ -455,17 +423,17 @@ export function spokenState(cell: StepCell): string {
 export type ReadRow = { label: 'Running' | 'Queued' | 'Waits on you' | 'Held'; text: string }
 /** What "nothing waits on you" was read from: the plan view always, the shell's lists only when they were read now. */
 const nothingYours = (unread: boolean) => unread
-  ? 'Nothing in the plan view: no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it. Questions and requests were not read now.'
-  : 'Nothing: no task awaiting your decision, no landing awaiting your grant, no acceptance sign-off Ready for it, no open question on its tasks or named by its done rule, no request its done rule names awaiting your decision.'
+  ? 'Nothing in the plan view: no acceptance sign-off Ready for it. Questions and requests were not read now.'
+  : 'Nothing: no acceptance sign-off Ready for it, no open question named by its done rule, no request its done rule names awaiting your decision.'
 /** The four rows of an idle step or an Owner step read now; null for any other (its own lines say what it has). */
 export function howRead(cell: Pick<StepCell, 'now'>): ReadRow[] | null {
   const now = cell.now
   if (now?.kind !== 'idle' && now?.kind !== 'yours') return null
   return [
-    { label: 'Running', text: 'Nothing: no running attempt with its heartbeat confirmed, no landing seen moving, no running external work.' },
-    { label: 'Queued', text: 'Nothing: no task proposed, ready, back for rework, submitted or being verified; no landing parked; no external work registered and not started.' },
+    { label: 'Running', text: 'Nothing: no running external work with its heartbeat confirmed.' },
+    { label: 'Queued', text: 'Nothing: no external work registered and not started.' },
     { label: 'Waits on you', text: nothingYours(!!now.unread?.length) },
-    { label: 'Held', text: 'Nothing: no task blocked or paused; no accepted work task with no landing recorded; no external work whose verification read failed.' },
+    { label: 'Held', text: 'Nothing: no external work whose verification read failed.' },
   ]
 }
 const heldLine = (held: string[], lead = 'Held') => held.length ? [`${lead}: ${held.join('; ')}.`] : []

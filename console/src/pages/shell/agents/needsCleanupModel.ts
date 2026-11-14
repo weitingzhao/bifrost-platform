@@ -9,8 +9,7 @@ import { answeredWords, progressOld, viewOldReason } from './readAge'
  * - registered external work of the shown round, Running or Registered, with no heartbeat for over 60 s (plan-view
  *   external_work, every record of the round: the server's Unconfirmed, planviewsnapshot.go snapshotExternal, or its
  *   heartbeat age plus the time since the snapshot past 60 s, as Live's rows say it), that round only. Not working[]
- *   alone: a record on a task a runtime attempt now runs is only in that task's history and in external_work (review of
- *   16435ae7).
+ *   alone: external_work holds every record of the round (review of 16435ae7).
  * A group not read, or read old, is Unknown with the condition that made it so, and says no number for it. Old is each
  * read's own rule elsewhere on Work: GET /progress answered more than twice the shell's 5 s poll ago (the module page's
  * "Read as of", moduleDetailModel.ts isStale / SHELL_POLL_MS; PlanRoundNote's rounds the same); the plan view's

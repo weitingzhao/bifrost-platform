@@ -124,12 +124,10 @@ describe('the sign-offs', () => {
     ])
   })
 
-  it('keeps tasks awaiting the Owner apart, and an Owner step either source already lists is not a second row', () => {
+  it('an Owner step either source already lists is not a second row', () => {
     const view = prodView()
-    const withTask = { ...view, owner_waiting: [{ task_id: 't_1', plan_node_id: 'R4:4.1-1', reason: 'Runtime task awaits Owner', source: 'agentrt.task' }] }
     const listed = view.owner_later[0].plan_node_id
-    const c = signoffCount(waitsOk([], [wait(listed, 'x', 'planned')]), read(withTask))
-    expect(c.tasks).toHaveLength(1)
+    const c = signoffCount(waitsOk([], [wait(listed, 'x', 'planned')]), read(view))
     expect(c.ready).toHaveLength(0)
     expect([...c.notStarted, ...c.later].filter(r => r.node === listed)).toHaveLength(1)
     expect(c.later.filter(r => r.kind === 'owner-step')).toHaveLength(view.owner_later.length - 1)
@@ -193,13 +191,13 @@ describe('the summary lamp', () => {
   const clean = { ...view, owner_later: [] }
   const lamp = (count: ReturnType<typeof signoffCount>, o: { stale?: boolean; mainlineUnknown?: boolean; rows?: ModuleRow[] } = {}) =>
     summaryLamp({ stale: o.stale ?? false, mainlineUnknown: o.mainlineUnknown ?? false, count, rows: o.rows ?? rows })
-  it('is yellow for a ready sign-off, a task waiting or a stopped step, and says which', () => {
+  it('is yellow for a ready sign-off or a stopped step, and says which', () => {
     expect(lamp(signoffCount(waitsOk([wait('R4:4.1-1', '4.1-1')]), read(clean)))).toEqual({ tone: 'attention', why: ['1 sign-off ready for you'] })
     expect(lamp(signoffCount(waitsOk(), read(clean)), { rows: [row({ stopped: 1 })] })).toEqual({ tone: 'attention', why: ['1 module in Round 4 with a stopped step'] })
   })
   it('is green only for what was read, and says so: in Round N', () => {
     expect(lamp(signoffCount(waitsOk(), read(clean)))).toEqual({ tone: 'ok',
-      why: ['no step sign-off ready in any round; in Round 4, no acceptance sign-off ready, no task waiting on you, no step stopped'] })
+      why: ['no step sign-off ready in any round; in Round 4, no acceptance sign-off ready, no step stopped'] })
   })
   it('is grey, with why, while anything it would need is not known', () => {
     expect(lamp(signoffCount(waitsOk(), read(view)))).toEqual({ tone: 'unknown', why: [`${view.owner_later.length} Owner steps' readiness in Round 4 is Unknown`] })
@@ -252,7 +250,7 @@ describe('the sign-offs of one round (the round tab)', () => {
   it('lights green for that round only, never "any round"; yellow says the ready sign-off is that round\'s', () => {
     const clean = { ...pv2(), owner_waiting: [], owner_later: [] }
     const green = summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: one({ ...waitsOk(), rounds: ['R4'] }, clean) })
-    expect(green).toEqual({ tone: 'ok', why: ['in Round 4 only, no step sign-off ready, no acceptance sign-off ready, no task waiting on you, no step stopped; other rounds are read on the Sign-offs tab'] })
+    expect(green).toEqual({ tone: 'ok', why: ['in Round 4 only, no step sign-off ready, no acceptance sign-off ready, no step stopped; other rounds are read on the Sign-offs tab'] })
     expect(green.why.join(' ')).not.toContain('any round')
     expect(summaryLamp({ stale: false, mainlineUnknown: false, rows: [], count: one({ ...waitsOk([wait('R4:4.1-1', '4.1-1')]), rounds: ['R4'] }, clean) }))
       .toEqual({ tone: 'attention', why: ['1 sign-off ready for you in Round 4'] })
@@ -320,7 +318,7 @@ describe('the sign-offs from reads too old to be said as now', () => {
     expect(blinked.lastRead.ready.map(r => r.node)).toEqual(['R4:4.1-1'])
     expect(blinked.lastRead.notStarted.map(r => r.node)).toEqual(['R4:4.3-1'])
     expect(signoffWords(blinked)).toBe('0+ ready · not started Unknown · 0 later · Round 4 only')
-    expect(count({ read: 'error' }, clean(), 'round').lastRead).toEqual({ ready: [], notStarted: [], later: [], tasks: [] })
+    expect(count({ read: 'error' }, clean(), 'round').lastRead).toEqual({ ready: [], notStarted: [], later: [] })
   })
   // Review of 13191da1: one sign-off listed twice when both sources held it as last read, or when GET /plan was old and
   // the view, now, listed it later. The 5.5-2 overlap: GET /plan's step and the view's acceptance on the same node|ref.
