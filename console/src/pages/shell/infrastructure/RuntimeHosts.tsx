@@ -3,7 +3,7 @@ import { useNeedsYou } from '../needs-you/useNeedsYou'
 import { runtimeUnreadLine } from '../owner/ownerModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { NowClock, Tick } from '../progress/progressClock'
-import { relative } from '../progress/goalCardModel'
+import { relative } from '../progress/progressClock'
 import { slotsPhrase } from './slotsModel'
 
 export function RuntimeHosts() {

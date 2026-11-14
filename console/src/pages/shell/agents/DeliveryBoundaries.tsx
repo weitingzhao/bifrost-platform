@@ -5,12 +5,11 @@ import { createApprovalRequest } from '@/api/approvals'
 import { fetchSelfHealth } from '@/api/core'
 import { readBoundaries, ruleRequest, type BoundaryRule, type RulePreview } from '@/api/deliveryBoundaries'
 import { DeliveryConfiguration } from './DeliveryConfiguration'
-import { BoundaryTaskCheck } from './BoundaryTaskCheck'
 
 const field = 'w-full rounded border border-[var(--table-rule)] bg-transparent p-2 text-sm'
 const button = 'min-h-11 rounded border border-[var(--table-rule)] px-3 text-sm disabled:opacity-50'
 const cell = 'border-b border-[var(--table-rule)] p-2 text-left align-top text-sm'
-const sections = [['rules', 'Rules & allowances'], ['configuration', 'CI configuration'], ['resources', 'Resources & quota'], ['task', 'Task checks'], ['limits', 'Code limits']] as const
+const sections = [['rules', 'Rules & allowances'], ['configuration', 'CI configuration'], ['resources', 'Resources & quota'], ['limits', 'Code limits']] as const
 type Section = typeof sections[number][0]
 const ruleLabel = (id: string) => {
   if (id.startsWith('job:')) return `Role · ${id.slice(4).replaceAll('_', ' ')}`
@@ -55,7 +54,6 @@ export function DeliveryBoundaries() {
       </section>
       <section className="panel-elevated p-3" aria-label="Landing limits"><h3>Landing capacity</h3><p>Size limits are not in effect. Repository capacity overrides are included.</p><ObservationTable rows={data.landing} columns={['repo', 'rule_id', 'rule_version', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight']} /></section>
       </>}
-      {section === 'task' && <BoundaryTaskCheck />}
       {section === 'limits' && <section className="panel-elevated p-3" aria-label="Code limits"><h3>Limits not yet controlled by rules</h3><p>These values come from this API binary. A separately deployed workers version has not been verified by this snapshot. Editing another rule cannot override them.</p>
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Boundary', 'Value', 'Source', 'How it changes'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.code_limits.map(limit => <tr key={limit.boundary_id}><th className={cell}>{limit.boundary_id}</th><td className={cell}>{limit.value} {limit.unit}</td><td className={cell}>{limit.source}</td><td className={cell}>{limit.adjustment}</td></tr>)}</tbody></table></div>
       </section>}

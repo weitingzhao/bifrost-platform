@@ -189,13 +189,6 @@ describe('every address Work took still lands where it did', () => {
     expect(screen.queryByRole('region', { name: 'Module 5.1' })).toBeNull()
   })
 
-  it('goal= and goal=&task= open the goal cards a step away, with ‹ Work back', async () => {
-    page('#work?goal=M-2&task=t_1')
-    const goals = await screen.findByRole('region', { name: 'Goals' })
-    expect(await within(goals).findByText(/M-2/)).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Where the round stands' })).toBeNull()
-    expect(within(screen.getByRole('navigation', { name: 'Work page' })).getByRole('link', { name: 'Back to Work' })).toHaveAttribute('href', '#work')
-  })
 })
 
 describe('every block that was on Work is still reachable', () => {
@@ -205,8 +198,7 @@ describe('every block that was on Work is still reachable', () => {
     ['#work?tab=signoffs', ['Where the round stands', 'Sign-offs'], ['Modules', 'Live work']],
     ['#work?tab=live', ['Where the round stands', 'Live work'], ['Modules', 'Recent changes']],
     ['#work?tab=changes', ['Where the round stands', 'Recent changes'], ['Modules', 'Live work']],
-    ['#work?section=goals', ['Goals'], ['Where the round stands', 'Now']],
-    ['#work?section=activity', ['Now', 'Open goals', 'Crew', 'Quota', 'Release lane', 'Activity', 'History'], ['Where the round stands', 'Goals']],
+    ['#work?section=activity', ['Coordinator', 'Release lane', 'Activity', 'History'], ['Where the round stands', 'Goals', 'Now', 'Open goals', 'Crew', 'Quota']],
     ['#work?section=commit-lineage', ['Commit lineage'], ['Where the round stands', 'Code health']],
     ['#work?section=code-health', ['Code health'], ['Where the round stands', 'Commit lineage']],
   ])('%s', async (hash, regions, elsewhere) => {
@@ -237,9 +229,6 @@ describe('every block that was on Work is still reachable', () => {
     await waitFor(() => expect(urls().some(u => u.endsWith('/delivery/pipelines'))).toBe(true))
     expect(urls().some(u => u.includes('/releases?limit='))).toBe(true)
     expect(urls().some(u => u.includes('/messages/thread'))).toBe(true)
-    await go('#work?section=goals')
-    expect(await screen.findByRole('link', { name: 'Governance references · Blueprint, Standards, MCP and protocols' })).toBeInTheDocument()
-    await waitFor(() => expect(urls().some(u => /\/agentrt\/missions\/M-\d+$/.test(u))).toBe(true))
   })
 })
 

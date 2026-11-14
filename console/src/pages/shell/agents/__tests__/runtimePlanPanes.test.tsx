@@ -1,7 +1,7 @@
 import { CapabilityEvidence } from '../CapabilityEvidence'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
@@ -21,9 +21,8 @@ import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import { IMPORT_HEAD_PAGES, runtimeArch } from '@/api/agentRuntimePlan'
 import rootOnly from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
 import { STREAM_PAGE, planStream, streamPage } from '@/test/agentrtPlanStream'
-import { ProgressOverview } from '../../progress/ProgressOverview'
 import { AgentsPlan } from '../AgentsPlan'
-import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead, useRuntimeArch, useRuntimePlan } from '../useRuntimePlan'
+import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead } from '../useRuntimePlan'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { unavailableLine } from '@/test/lastRead'
 
@@ -69,9 +68,6 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   if (url.includes('/auth/capabilities')) return json({ authenticated: false })
   throw new Error(`Unexpected URL ${url}`)
 })
-function Overview() {
-  return <ProgressOverview count={{ state: 'known', count: 0 }} plan={useRuntimePlan()} arch={useRuntimeArch()} failed={false} />
-}
 const boardRead = () => fetchMock.mock.calls.some(call => String(call[0]).includes('/agent/progress'))
 const clients: QueryClient[] = []
 function show(node: ReactNode) {
@@ -92,7 +88,6 @@ beforeEach(() => {
 afterEach(() => { cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); fetchMock.mockClear() })
 
 const boardOnly = /2\.2 接口层与 agentd/
-const counted = (f: typeof imported | typeof moved) => f.progress.plan[0]
 
 describe('the plan pane on Progress', () => {
   it('reads an imported plan from the runtime: its items, counts, each step\'s ledger date and line, nothing kept by hand', async () => {
@@ -122,14 +117,6 @@ describe('the plan pane on Progress', () => {
       ['Request #18', '#approvals?id=18']])
   })
 
-  it('says the plan is not in the runtime while it holds none (404), and never reads the board', async () => {
-    source.plan = 'absent'
-    show(<AgentsPlan />)
-    expect(await screen.findByText(PLAN_NOT_IMPORTED)).toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
-    expect(boardRead()).toBe(false)
-  })
 
   it('shows a failed read as failed, never the board\'s plan', async () => {
     source.plan = 'fail'
@@ -163,28 +150,7 @@ describe('the plan pane on Progress', () => {
     expect(within(owners).queryByTitle('An effect step (effect_step)')).not.toBeInTheDocument()
   })
 
-  it('shows a round with no items as empty, with zero counts, not as unavailable', async () => {
-    source.plan = 'root-only'
-    show(<><Overview /><AgentsPlan /></>)
-    expect(await screen.findByText("No items in the runtime's plan.")).toBeInTheDocument()
-    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText('0/0 items')).toBeInTheDocument()
-    expect(screen.getByText('0/0 steps')).toBeInTheDocument()
-    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
 
-  it('counts that fail after a good read make the plan unavailable in both panes, not the last counts (review 416 B2)', async () => {
-    const { client } = show(<><Overview /><AgentsPlan /></>)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText(`${counted(imported).count.done}/${counted(imported).count.total} steps`)).toBeInTheDocument()
-    source.progressFails = true
-    await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
-    expect(await screen.findAllByText(unavailableLine('Plan unavailable: Agent runtime: unavailable'))).toHaveLength(2)
-    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
-    expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
 
   // 2026-10-21 PROD: the import request was read by sha256%3A…, the platform answered 404, and the whole plan, with the
   // Owner's Sign off, was "Plan unavailable". The request only gives ledger lines and imported steps' dates.
@@ -198,20 +164,6 @@ describe('the plan pane on Progress', () => {
     expect(screen.queryByText(/The ledger lines could not be read/)).not.toBeInTheDocument()
   })
 
-  it('a request that fails on a read after a good one leaves the plan standing, without the lines read before (review 418)', async () => {
-    const { client } = show(<><Overview /><AgentsPlan /></>)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    const steps = `${counted(imported).count.done}/${counted(imported).count.total} steps`
-    expect(screen.getByText(steps)).toBeInTheDocument()
-    source.artifact = 'fail'
-    await client.refetchQueries({ queryKey: ['agent-runtime-plan-request', 'R2'] })
-    expect(await screen.findByText(/^The ledger lines could not be read: Plan import request: internal\. The steps are shown without them/)).toBeInTheDocument()
-    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText(steps)).toBeInTheDocument()
-    expect(screen.queryByText('Ledger line')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
 
   it.each([
     ['the request cannot be read', { artifact: 'fail' }, 'Plan import request: internal'],
@@ -252,29 +204,6 @@ describe('the plan pane on Progress', () => {
   })
 })
 
-describe('the round progress on the overview', () => {
-  it.each([['imported', imported], ['moved on', moved]] as const)('counts as GET /progress does: %s', async (name, f) => {
-    source.plan = name === 'imported' ? 'imported' : 'moved'
-    show(<Overview />)
-    const c = counted(f)
-    const card = (await screen.findByText(`${c.count.done}/${c.count.total} steps`)).closest('div.flex') as HTMLElement
-    const doneItems = c.items.filter(i => i.count.state === 'done').length
-    expect(within(card).getByText(`${doneItems}/${c.items.length} items`)).toBeInTheDocument()
-    expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
-  })
-
-  it('says the plan is not in the runtime while it holds none; a failed read is unavailable', async () => {
-    source.plan = 'absent'
-    const first = show(<Overview />)
-    expect(await screen.findByText(PLAN_NOT_IMPORTED)).toBeInTheDocument()
-    expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument()
-    first.unmount()
-    source.plan = 'fail'
-    show(<Overview />)
-    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable'))).toBeInTheDocument()
-    await waitFor(() => expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument())
-  })
-})
 
 describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
   const rows = archFixture.plan.find(r => r.kind === 'arch_root')!.rows!
@@ -302,25 +231,7 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
     expect(boardRead()).toBe(false)
   })
 
-  it('counts the rows by tick on the overview', async () => {
-    source.arch = true
-    show(<Overview />)
-    expect(await screen.findByText('1/4 passed')).toBeInTheDocument()
-    expect(screen.getByText('1/4 not yet')).toBeInTheDocument()
-    expect(screen.getByText('1/4 no gate yet')).toBeInTheDocument()
-    expect(screen.getByText('1/4 unknown')).toBeInTheDocument()
-  })
 
-  it('a read that fails after a good one is unavailable, never the rows read before', async () => {
-    source.arch = true
-    const { client } = show(<><Overview /><CapabilityEvidence /></>)
-    expect(await screen.findByText('1/4 passed')).toBeInTheDocument()
-    source.progressFails = true
-    await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
-    await waitFor(() => expect(screen.getAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2))
-    expect(screen.queryByText('1/4 passed')).not.toBeInTheDocument()
-    expect(document.querySelector('[data-arch-row]')).toBeNull()
-  })
 
   it('a tick it does not know is unknown, never a pass', () => {
     const odd = runtimeArch([{ kind: 'arch_root', plan_node_id: 'ARCH', title: 't', rows: [

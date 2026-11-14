@@ -26,3 +26,14 @@ export function Tick({ text, className }: { text: (nowMs: number) => string | nu
   if (className == null) return <>{value}</>
   return <span className={className}>{value}</span>
 }
+
+/** A span in words: seconds under a minute, minutes under an hour, then hours and minutes. */
+export function duration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`
+}
+/** How long ago an RFC 3339 time was, or that it is unknown. */
+export function relative(at: string, now: number): string {
+  const ms = Date.parse(at)
+  return Number.isFinite(ms) ? `${duration((now - ms) / 1000)} ago` : 'Time unknown'
+}

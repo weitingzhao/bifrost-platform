@@ -8,7 +8,6 @@ import { responsibility, validity } from './planSnapshotModel'
 import type { PlanAddress } from './usePlanSnapshot'
 import { workTabHref } from './workViewModel'
 import { NeedsCleanupEntry } from './NeedsCleanup'
-import { PinShareLine } from './PinShareLine'
 import { PlanPaceLine } from './PlanPaceLine'
 import { cleanupBreakdown } from './needsCleanupModel'
 import { useNeedsCleanup } from './useNeedsCleanup'
@@ -108,7 +107,6 @@ export function WorkSummaryCard({ plan, query, count }: { plan: PlanAddress; que
       <PlanPaceLine root={view.root} />
       <span data-summary-progress className="text-[13px] text-muted-foreground">Progress Unknown · done {countdown.done} · left {countdown.left} <button type="button" aria-label="How plan progress is counted" title={PLAN_PROGRESS_HELP} className="inline-flex min-h-6 items-center rounded-full px-1 pointer-coarse:min-h-11">ⓘ</button></span>
     </div>
-    <PinShareLine />
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
       <span data-summary-mainline>{labels.length ? `Mainline ${labels.join(' → ')}` : 'Mainline Unknown'}</span>
       <a href={workTabHref('signoffs', plan.root, named)} data-summary-signoffs className="text-inherit underline-offset-2 hover:underline"

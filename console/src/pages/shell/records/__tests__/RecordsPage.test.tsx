@@ -102,7 +102,7 @@ describe('RecordsPage', () => {
   })
 
   // What was Progress's History (W-31 2.2b, finished work goes to Records).
-  it('holds finished work: older goals, the runtime timeline, recent tasks and failed attempts', async () => {
+  it('holds finished work: the runtime timeline', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/agentrt/progress')) return json(runtimeFixture)
@@ -113,8 +113,6 @@ describe('RecordsPage', () => {
     window.location.hash = '#records?tab=work'
     render(wrapper(<RecordsPage />))
     const history = await screen.findByRole('region', { name: 'Work history' })
-    expect(await within(history).findByText('Recent runtime tasks')).toBeTruthy()
-    expect(within(history).getByText('Failed attempts')).toBeTruthy()
     expect(await within(history).findByText('Host h1 had a report refused: it named a local path (H8)')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Work history' })).toBeTruthy()
   })

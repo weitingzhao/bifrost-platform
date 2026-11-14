@@ -2,17 +2,16 @@ import { SIGNOFF_SECTION_HREF } from '@/pages/shell/progress/progressPart'
 import { OwnerStop } from './OwnerStop'
 import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
 import { useState } from 'react'
-import { NEEDS_YOU_HREF, goalHref } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
 import { ActionLink, Card, Dot } from './OwnerParts'
 import { plural, waitingRow, type OwnerRow } from './ownerModel'
-import { ownerNextLine } from './ownerNextModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 /** Worth a look shows this many first; the rest open below it. */
 const WORTH_SHOWN = 6
 
-function Row({ row, onGoal }: { row: OwnerRow; onGoal?: (draft: string) => void }) {
+function Row({ row }: { row: OwnerRow }) {
   return <li className="ops-owner-row flex flex-wrap items-start gap-3 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-3">
     <span className="mt-1.5"><Dot tone={row.tone} /></span>
     <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
@@ -21,13 +20,11 @@ function Row({ row, onGoal }: { row: OwnerRow; onGoal?: (draft: string) => void 
       {row.whose && <span className="text-xs font-semibold text-[var(--color-warning)]">{row.whose}</span>}
     </div>
     {row.href && row.action && <ActionLink href={row.href} primary>{row.action}</ActionLink>}
-    {row.goalDraft && onGoal && <button type="button" onClick={() => onGoal(row.goalDraft!)}
-      className="min-h-11 shrink-0 rounded-[var(--control-radius)] border border-[var(--color-info)] px-3 text-sm font-semibold text-[var(--color-info)]">Make it a goal</button>}
   </li>
 }
 
 /** For you: what only the Owner can do, then what is worth a look and whose it is. */
-export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (draft: string) => void }) {
+export function OwnerYou({ data }: { data: OwnerConsoleData }) {
   const [showAll, setShowAll] = useState(false)
   const { needsYou, alerts } = data
   const yours: OwnerRow[] = [...(alerts?.yours ?? []), ...needsYou.decisionItems.map(waitingRow)]
@@ -41,8 +38,6 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   const unknown = count.state === 'unknown' ? count.reason : null
   const title = count.state === 'known' ? String(count.count) : count.state === 'unknown' ? 'Unknown' : '…'
   const recent = needsYou.recentCount.state === 'known' ? String(needsYou.recentCount.count) : needsYouCountText(needsYou.recentCount)
-  // After what waits now: when he is next needed, from the runtime (v4 §20.2's top line; W-31 2.5 gap 1).
-  const next = ownerNextLine(data.runtime?.owner_next, data.now)
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="sr-only">For you</h2>
     <div className="ops-you-grid">
@@ -52,8 +47,6 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
           : count.state === 'known' && <p className="m-0 text-sm">No request, question or alert is yours right now.</p>}
-        {next && <p data-owner-next className="m-0 text-sm [overflow-wrap:anywhere]"><strong>Next time you are needed:</strong>{' '}
-          {next.mission ? <a href={goalHref(next.mission)}>{next.text}</a> : next.text}</p>}
         <div className="flex flex-wrap justify-between gap-2 border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">
           <span>{needsYou.count.state !== 'known' ? 'Approvals, questions and agent cards: not all read'
             : needsYou.decide.length === 0 && needsYou.openQuestions.length === 0 && needsYou.runtimeItems.length === 0
@@ -70,10 +63,10 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
       </div>
       <Card label="Worth a look" title={`Worth a look · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
-        <p className="m-0 text-sm text-muted-foreground">Not yours to fix. Hand one to the chief of staff when it should be worked on.</p>
+        <p className="m-0 text-sm text-muted-foreground">Not yours to fix.</p>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
         {worth.length > 0
-          ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{(showAll ? worth : worth.slice(0, WORTH_SHOWN)).map(row => <Row key={row.id} row={row} onGoal={onGoal} />)}</ul>
+          ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{(showAll ? worth : worth.slice(0, WORTH_SHOWN)).map(row => <Row key={row.id} row={row} />)}</ul>
           : alerts && <p className="m-0 text-sm">Nothing else is firing.</p>}
         {worth.length > WORTH_SHOWN && <button type="button" onClick={() => setShowAll(v => !v)} className="min-h-11 rounded-[var(--control-radius)] border border-[var(--card-border)] text-sm font-semibold">
           {showAll ? 'Show fewer' : `Show ${worth.length - WORTH_SHOWN} more`}</button>}

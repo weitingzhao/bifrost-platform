@@ -1,7 +1,6 @@
-import { RuntimeHosts } from '../../infrastructure/RuntimeHosts'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => null }))
@@ -13,10 +12,7 @@ import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { useNeedsYou } from '../../needs-you/useNeedsYou'
 import { NeedsYouPage } from '../../needs-you/NeedsYouPage'
-import { ProgressPage } from '../ProgressPage'
 import { ProgressHistory } from '../ProgressHistory'
-import { AttemptActions } from '../AttemptActions'
-import { GoalCard } from '../GoalCard'
 import { LastRead } from '../../owner/LastRead'
 import { useOwnerConsole } from '../../owner/useOwnerConsole'
 
@@ -57,34 +53,15 @@ beforeEach(() => {
 })
 afterEach(() => { onlineManager.setOnline(true); cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); fetchMock.mockClear() })
 
-const runningCard = () => within(screen.getByRole('region', { name: 'Overview' })).getByText('Running').parentElement as HTMLElement
 
 describe('Work while the runtime cannot be read (A1)', () => {
-  it('tells what runs and the hosts from a good read, and nothing of it once a read fails', async () => {
-    const { client } = show(<><ProgressPage /><section aria-label="Hosts"><RuntimeHosts /></section></>)
-    await waitFor(() => expect(within(runningCard()).getByText('2')).toBeInTheDocument())
-    expect(within(runningCard()).getByText('Not confirmed running: 1 host lost · 1 maybe stuck')).toBeInTheDocument()
-    const hosts = screen.getByRole('region', { name: 'Hosts' })
-    expect(within(hosts).getAllByRole('listitem').length).toBeGreaterThan(0)
-
-    source.progress = false
-    await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-progress'] }) })
-    // Unknown, as Now and Crew say it, not the last answer's 2 and its lost host.
-    await waitFor(() => expect(within(runningCard()).getByText('?')).toBeInTheDocument())
-    expect(within(runningCard()).queryByText(/Not confirmed running/)).toBeNull()
-    expect(within(hosts).queryAllByRole('listitem')).toHaveLength(0)
-    expect(within(hosts).queryByText(/Runtime updated/)).toBeNull()
-    expect(within(hosts).getByRole('alert')).toHaveTextContent(/^The agent runtime could not be read; last read \d\d:\d\d \(just now\)\. Error: /)
-    expect(screen.getByRole('region', { name: 'Overview' })).toHaveTextContent(/Whose move.*Unknown.*The agent runtime could not be read; last read/)
-  })
 
   it('keeps history as last read and says so, with when', async () => {
     const { client } = show(<ProgressHistory />)
-    expect(await screen.findByText('Recent runtime tasks')).toBeInTheDocument()
+    expect(await screen.findByText(/Runtime updated/)).toBeInTheDocument()
     source.progress = false
     await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-progress'] }) })
     expect(await screen.findByText(/^The agent runtime could not be read; last read \d\d:\d\d \(just now\)\. Error: .*Below is what was read then\.$/)).toHaveAttribute('role', 'alert')
-    expect(screen.getByText('Recent runtime tasks')).toBeInTheDocument()
     expect(screen.queryByText(/Runtime updated/)).toBeNull()
   })
 })
@@ -121,30 +98,9 @@ describe('Needs you counts from lists that cannot be read (A2)', () => {
   })
 })
 
-describe('an attempt\'s actions that cannot be read (A4)', () => {
-  it('says the read failed and never that there are no actions', async () => {
-    const { container } = show(<AttemptActions id="a_1" />)
-    const details = container.querySelector('details') as HTMLDetailsElement
-    details.open = true
-    fireEvent(details, new Event('toggle'))
-    expect(await screen.findByText(/the agent runtime database is not connected yet/)).toHaveAttribute('role', 'alert')
-    expect(screen.queryByText('no actions yet')).toBeNull()
-    expect(screen.queryByText('Reading actions…')).toBeNull()
-  })
-})
-
 // Review 493: a read paused offline is not a read either, and "not read since this page opened" counts from the
 // page's or the card's own opening.
 describe('reads paused offline (review 493 B1, C)', () => {
-  it('a goal card says it is offline and when its details were read, not that it is loading or current', async () => {
-    const { client } = show(<GoalCard id="M-2" updatedAt={0} questions={[]} />)
-    await waitFor(() => expect(screen.queryByText('Loading mission details…')).toBeNull())
-    expect(screen.queryByRole('alert')).toBeNull()
-    onlineManager.setOnline(false)
-    void client.refetchQueries({ queryKey: ['agent-runtime-goal', 'M-2'] })
-    expect(await screen.findByText(/^Could not load M-2: offline; last read \d\d:\d\d \(just now\)\. Showing the details read then\./)).toHaveAttribute('role', 'alert')
-    expect(screen.queryByText('Loading mission details…')).toBeNull()
-  })
 
   it('Work\'s upper cards say the runtime could not be read while its read is paused, not "Reading"', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client)

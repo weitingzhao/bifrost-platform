@@ -366,8 +366,9 @@ describe('the address of each view of Work', () => {
     ['tab=live&root=R4', { kind: 'tab', tab: 'live' }],
     ['tab=changes', { kind: 'tab', tab: 'changes' }],
     ['tab=nonsense', { kind: 'tab', tab: 'round' }],
-    ['section=goals', { kind: 'section', section: 'goals' }],
-    ['goal=M-12&task=t_1', { kind: 'section', section: 'goals' }],
+    // The goal cards went with the dispatch lane (2026-11-13): an old goal address lands on the round.
+    ['section=goals', { kind: 'tab', tab: 'round' }],
+    ['goal=M-12&task=t_1', { kind: 'tab', tab: 'round' }],
     ['section=activity', { kind: 'section', section: 'activity' }],
     ['section=code-health', { kind: 'section', section: 'code-health' }],
     ['section=commit-lineage', { kind: 'section', section: 'commit-lineage' }],

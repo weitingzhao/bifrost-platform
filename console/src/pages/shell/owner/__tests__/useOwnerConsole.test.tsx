@@ -150,10 +150,6 @@ describe('useOwnerConsole', () => {
     await waitFor(() => expect(result.current.tiles[1]).toMatchObject({ name: 'Plugins', state: 'Unknown' }))
   })
 
-  it('the chief of staff\'s block reads the last finished goal on its own (review 221 B3)', async () => {
-    const { result } = run({ system: false, work: false, chief: true })
-    await waitFor(() => expect(result.current.lastGoal).toBe('Add a comment'))
-  })
 
   it('a goal whose mission is not done is not called done (review 224 A-224-1)', async () => {
     api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'paused' }, tasks: [], events: [] })

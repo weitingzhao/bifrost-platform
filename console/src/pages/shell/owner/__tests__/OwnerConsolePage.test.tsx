@@ -1,18 +1,16 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
-import { splitAlerts, workNow } from '../ownerModel'
-import marksFixture from '@/api/__fixtures__/agentrt-progress-marks.testdb.json'
+import { splitAlerts } from '../ownerModel'
 import type { ArchRead } from '../../agents/useRuntimePlan'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 import poolsFixture from './fixtures/pools-utc.json'
 import capabilitiesFixture from '@/api/__fixtures__/agentrt-capabilities.testdb.json'
-import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
 import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.json'
 import presenceFixture from '@/api/__fixtures__/agentrt-progress-presence.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
@@ -190,7 +188,7 @@ describe('Owner Console entries', () => {
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {
     show('#you')
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')
-    expect(headings()).toEqual(['For you', 'Chief of staff'])
+    expect(headings()).toEqual(['For you'])
   })
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {
@@ -223,32 +221,6 @@ describe('Owner Console entries', () => {
     expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
   })
 
-  // R5:5.5-2: Work opens on the round (summary and tabs); what was further down the page is a step away, each part on
-  // its own page that the address names, with ‹ Work back. Nothing of a part is drawn on another.
-  it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', async () => {
-    // Every read here fails plainly (503): each part says it could not read, rather than drawing a stub's body.
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 })))
-    show('#work', true)
-    expect(headings()).toEqual(['Work'])
-    expect(screen.getByTestId('plan-view')).toBeInTheDocument()
-    expect(screen.queryByTestId('merged-progress')).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Now' })).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Release lane' })).toBeNull()
-    const parts: [string, string[]][] = [
-      ['#work?section=goals', ['Goals']], ['#work?goal=M-2', ['Goals']], ['#work?section=activity', ['Activity', 'History']],
-      ['#work?section=commit-lineage', ['Commit lineage']], ['#work?section=code-health', ['Code health']],
-    ]
-    for (const [hash, sections] of parts) {
-      await go(hash, 'Work')
-      const progress = await screen.findByTestId('merged-progress')
-      expect(Array.from(progress.children).filter(b => b.tagName === 'SECTION').map(b => b.getAttribute('aria-label'))).toEqual(sections)
-      expect(screen.queryByTestId('plan-view')).toBeNull()
-      expect(within(screen.getByRole('navigation', { name: 'Work page' })).getByRole('link', { name: 'Back to Work' })).toHaveAttribute('href', '#work')
-    }
-    await go('#work?section=goals', 'Work')
-    expect(within(screen.getByTestId('merged-progress')).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
-    expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
-  })
 
   it('the other entries do not carry the merged sections', () => {
     stubRuntimeReads()
@@ -283,76 +255,25 @@ describe('Owner Console entries', () => {
     expect(within(worth).getAllByRole('listitem')).toHaveLength(total)
   })
 
-  it('Make it a goal opens the chief of staff with a draft in its box; nothing is sent', async () => {
-    show('#you')
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
-    fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
-    expect(window.location.hash).toBe('#command?section=new-goal')
-    expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toContain('kube-prometheus-stack-grafana targets down')
-    expect(submit).not.toHaveBeenCalled()
-  })
 
-  it('a second draft replaces the first, and only Submit sends it', async () => {
-    show('#you')
-    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
-    await go('#you', 'For you')
-    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[1])
-    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
-    const box = screen.getByLabelText('Goal') as HTMLTextAreaElement
-    expect(box.value).toContain('Job logical-backup-drill-manual-1 failed')
-    expect(box.value).not.toContain('grafana')
-    expect(submit).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
-    expect(submit).toHaveBeenCalledTimes(1)
-    expect(submit.mock.calls[0][0]).toContain('Job logical-backup-drill-manual-1 failed')
-  })
 
-  it('an edited draft and a goal just sent outlive moving to another entry (review 224 B-224-1)', async () => {
-    show('#you')
-    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
-    await waitFor(() => expect(headings()).toEqual(['For you', 'Chief of staff']))
-    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'My own words' } })
-    await go('#work', 'Work')
-    await go('#chief', 'For you')
-    expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('My own words')
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
-    expect(submit).toHaveBeenCalledTimes(1)
-    await go('#work', 'Work')
-    await go('#chief', 'For you')
-    expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('')
-    expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
-  })
 
   it('puts the aggregate plan view on Work, and the runtime cards with the release lane on its Activity page', async () => {
     show('#work')
     expect(screen.getByTestId('plan-view')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Now' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Coordinator' })).toBeNull()
     await go('#work?section=activity', 'Work')
-    const now = screen.getByRole('region', { name: 'Now' })
-    for (const name of ['Open goals', 'Crew', 'Quota', 'Release lane']) {
+    const now = screen.getByRole('region', { name: 'Coordinator' })
+    for (const name of ['Release lane']) {
       expect(now.compareDocumentPosition(screen.getByRole('region', { name })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
     expect(screen.queryByTestId('plan-view')).toBeNull()
   })
 
-  it('counts on Now only the attempts running, says which are not, and marks a goal with work off plan (T24)', () => {
-    const runtime = parseRuntimeProgress(marksFixture)
-    workValue.value = workNow(runtime)
-    missionsValue.value = runtime.work.missions
-    nowValue.value = Date.parse(runtime.generated_at) + 30_000
-    show('#work?section=activity')
-    const now = screen.getByRole('region', { name: 'Now' })
-    expect(within(now).getByText('running').previousSibling).toHaveTextContent('2')
-    expect(within(now).getByText('Not confirmed running: 1 host lost · 1 maybe stuck (Crew)')).toBeInTheDocument()
-    const goals = screen.getByRole('region', { name: 'Open goals' })
-    expect(within(goals).getByText('1 of 5 tasks off plan').parentElement).toHaveTextContent('T24 drill: an errand outside the plan')
-  })
 
   it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {
     show('#work?section=activity')
-    const now = screen.getByRole('region', { name: 'Now' })
+    const now = screen.getByRole('region', { name: 'Coordinator' })
     expect(now).toHaveTextContent('Owner console, first version')
     expect(now).toHaveTextContent('Note 7 min ago')
     expect(now).not.toHaveTextContent('Board text, not shown')
@@ -368,64 +289,13 @@ describe('Owner Console entries', () => {
     coordinatorView.value = view
     try {
       show('#work?section=activity')
-      expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent(line)
+      expect(screen.getByRole('region', { name: 'Coordinator' })).toHaveTextContent(line)
     } finally {
       coordinatorView.value = undefined
     }
   })
 
-  it('shows each pool\'s last reading from the runtime with when, an old one marked; no hand-kept quota (2.5 G7 A)', async () => {
-    stubRuntimeReads()
-    nowValue.value = Date.parse('2026-10-19T21:00:00Z')
-    show('#crew')
-    const quota = screen.getByRole('region', { name: 'Capacity and cost' })
-    expect(await within(quota).findByText('claude · weekly')).toBeInTheDocument()
-    expect(within(quota).getAllByText('old')).toHaveLength(3)
-    expect(within(quota).getAllByText('read 25 h ago')).toHaveLength(3)
-    expect(within(quota).getAllByText('old')[0]).toHaveAttribute('title', 'its window has reset since it was read')
-    expect(within(quota).getByText('no reading yet')).toBeInTheDocument()
-    expect(quota).not.toHaveTextContent('✎')
-  })
 
-  it('gives each open goal when it should be done, as a range with its basis, or unknown with why (2.5 G8)', () => {
-    missionsValue.value = parseRuntimeProgress(etaFixture).work.missions
-    nowValue.value = Date.parse('2026-10-19T23:35:51Z')
-    show('#work?section=activity')
-    const goals = screen.getByRole('region', { name: 'Open goals' })
-    expect(goals).toHaveTextContent('Open goals · 2')
-    const [m2, m1] = within(goals).getAllByRole('listitem').filter(li => li.parentElement?.parentElement === goals)
-    expect(m2).toHaveTextContent('M-2')
-    expect(m2).toHaveTextContent('Done by: unknown — the mission is proposed: a wait for a decision has no usual time')
-    expect(m1).toHaveTextContent(/M-1 M-1queued · ready for a host to claim/)
-    expect(m1).toHaveTextContent(/Expected \d\d:\d\d–\d\d:\d\d, in 3 min to 5 min/)
-    expect(m1).toHaveTextContent('implement go: usually 1 min 40 s, from 3 accepted attempts in 30 days')
-    expect(m1).not.toHaveTextContent('unknown')
-  })
 
-  it('Crew puts the capability scores beside the quota, from GET /capabilities (2.5 G9)', async () => {
-    stubRuntimeReads()
-    show('#crew')
-    const card = screen.getByRole('region', { name: 'Capabilities' })
-    const implementer = await within(card).findByRole('region', { name: 'Scores for implementer' })
-    expect(within(implementer).getAllByRole('listitem').map(li => li.textContent)).toEqual([
-      expect.stringMatching(/^codex \(gpt-x\) · go · core95%exam · 6 attempts: 5 first pass, 6 accepted, 0 rework · window ended/),
-      expect.stringMatching(/^cursor \(auto\) · go80%in the job · 4 attempts: 2 first pass, 3 accepted, 1 rework · median 7 min · window ended/),
-    ])
-    expect(within(card).getByRole('region', { name: 'Scores for reviewer' })).toHaveTextContent('claude (opus) · ts50%')
-    expect(within(card).getByText('Candidates · 40')).toBeInTheDocument()
-    expect(within(card).getByText('Capability facts · 6')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Quota' })).toBeInTheDocument()
-  })
 })
 
-it('P2 keeps the same draft through a detail route and sends a created goal to its Work entity', async () => {
-  show('#chief')
-  fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Keep this across a detail page' } })
-  await act(async () => { window.location.hash = '#records?tab=closed' })
-  await waitFor(() => expect(screen.getByLabelText('Goal')).not.toBeVisible())
-  await go('#chief', 'For you')
-  expect(screen.getByLabelText('Goal')).toHaveValue('Keep this across a detail page')
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
-  await waitFor(() => expect(window.location.hash).toBe('#work?goal=M-9'))
-  expect(submit).toHaveBeenCalledTimes(1)
-})

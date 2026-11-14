@@ -113,10 +113,10 @@ describe('Work\'s first screen', () => {
     // The other lines of the health notice stay on Work's top.
     expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent('exec:claude is unavailable')
     // Read from what Work and the shell already read: of the runtime, one plan view, this round's tree, GET /progress;
-    // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13), and its coordinator pin line, GET /pin-share
+    // and the summary's pace line, this round's GET /plan-pace (R5:5.5-13)
     // (R5:5.7-8).
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
-    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5', '/api/v1/agentrt/pin-share']))
+    expect(new Set(urls().filter(u => u.includes('/agentrt/')))).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5&explain=1', '/api/v1/agentrt/plan?root=R5', '/api/v1/agentrt/progress', '/api/v1/agentrt/plan-pace?root=R5']))
   })
 
   it('keeps the round an address names on the way to the list', async () => {
@@ -162,9 +162,9 @@ describe('Needs cleanup on Work → Activity', () => {
     expect(list).toHaveTextContent('Registered external work with no heartbeat for over 60 seconds · 1 · Round 5 only')
     // Said once on the page: the health notice above leaves the host to this list.
     expect(screen.getAllByText(HOST)).toHaveLength(1)
-    // The list comes first on Activity, before Now and Crew.
+    // The list comes first on Activity, before the coordinator's note.
     const regions = screen.getAllByRole('region').map(r => r.getAttribute('aria-label'))
-    expect(regions.indexOf('Needs cleanup')).toBeLessThan(regions.indexOf('Now'))
+    expect(regions.indexOf('Needs cleanup')).toBeLessThan(regions.indexOf('Coordinator'))
   })
 
   // Review of 16435ae7: the server lists a record on a task a runtime attempt runs only in external_work and that

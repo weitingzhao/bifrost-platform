@@ -35,7 +35,7 @@ import { current, errorText, useOwnerYours } from './useOwnerYours'
  * only while Work's Activity page is on screen (work; R5:5.5-2: Work's own page reads none of them); everything that
  * feeds the verdict is always read.
  */
-export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean; services?: boolean }) {
+export function useOwnerConsole(blocks: { system: boolean; work: boolean; services?: boolean }) {
   const openedAt = useRef(Date.now())
   const now = Date.now()
   const { needsYou, alertsQ, nodesQ, nodes, standby, alerts, alertsError, standbyEvidence, yours } = useOwnerYours(now)
@@ -67,7 +67,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const arch = useRuntimeArch(blocks.work)
   const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
-    enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
+    enabled: blocks.work && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
     refetchInterval: q => goalRefreshMs(text(q.state.data?.mission.state)) })
 
   // What the coordinating thread is doing: its latest note in the Owner's mailbox (2.5 G3).
