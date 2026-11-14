@@ -280,6 +280,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	if !runOwnsWindow {
 		if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
+			msg = approvedRunWaits(msg, approvedAttempt, who)
 			resp.Message = msg
 			return resp, empty, fmt.Errorf("%s", msg)
 		}
@@ -1534,4 +1535,22 @@ func pipelineDeclaresTask(pipe *unstructured.Unstructured, name string) bool {
 		}
 	}
 	return false
+}
+
+const missingWhoRefusal = "REFUSED: missing who; pass who matching the release window holder "
+
+// approvedRunWaits rewords the refusal an approved run gets while someone
+// else holds the release window. Such a run carries no who (it takes the
+// window itself when it is free), so "missing who; pass who" told it to do
+// what it cannot, and the approval's executor, which retries the refusals
+// that clear by themselves ("REFUSED: release window held by ..."), took it
+// for one that never clears and failed the request at once. 2026-11-14
+// 00:32Z, #524: the Owner approved a PROD release while the STG run
+// bifrost-deliver-platform-1794616265 held the window; it failed in 28 ms and
+// had to be approved again (the second time that day, after #514).
+func approvedRunWaits(msg string, approvedAttempt bool, who string) string {
+	if !approvedAttempt || strings.TrimSpace(who) != "" || !strings.HasPrefix(msg, missingWhoRefusal) {
+		return msg
+	}
+	return "REFUSED: release window held by another release " + strings.TrimPrefix(msg, missingWhoRefusal) + "; this approved run starts when the window is free"
 }

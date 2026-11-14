@@ -19,6 +19,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -52,6 +53,9 @@ type headWorld struct {
 	start func(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error)
 	// frozen reports a release freeze someone set, and its reason.
 	frozen func(ctx context.Context) (bool, string)
+	// approved names a release the Owner approved that has not run yet
+	// ("" when there is none).
+	approved func() (string, error)
 }
 
 func (w *headWorld) Head(ctx context.Context, repo string) (string, error) { return w.head(ctx, repo) }
@@ -178,6 +182,19 @@ func (w *headWorld) Start(ctx context.Context, pipeline string, params map[strin
 			return "", "releases are frozen: " + reason, nil
 		}
 	}
+	// An approved release goes first. It waits for the window and tries
+	// again at intervals longer than this loop's pass, so the loop would
+	// take the window from under it each time main moved (#524, 2026-11-14:
+	// an approved PROD release found the loop's STG run on the window).
+	if w.approved != nil {
+		waiting, err := w.approved()
+		if err != nil {
+			return "", "", err
+		}
+		if waiting != "" {
+			return "", "an approved release goes first: " + waiting, nil
+		}
+	}
 	extra := map[string]string{}
 	for k, v := range params {
 		if k != "revision" {
@@ -192,6 +209,35 @@ func (w *headWorld) Start(ctx context.Context, pipeline string, params map[strin
 		return "", "not started: " + heldBy, nil
 	}
 	return run.Name, "", nil
+}
+
+// approvedReleaseWaiting names the oldest approved start of a delivery
+// pipeline that has not run yet and can still run (its execution deadline is
+// not past): "#524 bifrost-deliver-platform-prod". A request still waiting
+// for its approval is not one: nobody knows when, or whether, it is approved.
+func approvedReleaseWaiting(items []approvals.Approval, now time.Time) string {
+	var first *approvals.Approval
+	for i := range items {
+		a := &items[i]
+		if a.Action != "start_pipeline_run" || (a.Status != approvals.StatusApproved && a.Status != approvals.StatusRunning) {
+			continue
+		}
+		name, _ := a.Params["name"].(string)
+		if !strings.HasPrefix(name, "bifrost-deliver-") {
+			continue
+		}
+		if a.Execution != nil && !a.Execution.Deadline.IsZero() && now.After(a.Execution.Deadline) {
+			continue
+		}
+		if first == nil || a.DecidedAt.Before(first.DecidedAt) {
+			first = a
+		}
+	}
+	if first == nil {
+		return ""
+	}
+	name, _ := first.Params["name"].(string)
+	return fmt.Sprintf("#%d %s", first.Number, name)
 }
 
 // headWorldOf builds the world of one pass, or nil when this process has no
@@ -213,6 +259,16 @@ func (s *Server) headWorldOf() *headWorld {
 				return false, ""
 			}
 			return s.releasePolicy.FreezeSet(ctx)
+		},
+		approved: func() (string, error) {
+			if s.approvals == nil {
+				return "", nil
+			}
+			items, err := s.approvals.Observations()
+			if err != nil {
+				return "", err
+			}
+			return approvedReleaseWaiting(items, time.Now()), nil
 		},
 	}
 }
