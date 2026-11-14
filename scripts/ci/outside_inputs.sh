@@ -10,6 +10,9 @@
 # one (bifrost-trade-infra, bifrost-ui): the whole tree, each top-level entry and
 # each entry one level below. Prints nothing for a checkout it cannot read: the
 # variable stays unset and Go caches as it did before.
+#
+# In CI since 2026-11-14 (task bifrost-ci-platform-test-api): the first run with
+# it, ci-platform-kz4dm, exported 388 variables.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 clean() { printf '%s' "$1" | tr 'a-z' 'A-Z' | tr -c 'A-Z0-9' '_'; }
