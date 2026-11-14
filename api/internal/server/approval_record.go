@@ -4,41 +4,50 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
+
+// approvedRecord is the approval an action executes under, as read back.
+type approvedRecord struct {
+	ID         string
+	Number     int64
+	Action     string
+	ParamsHash string
+	ApprovedAt time.Time
+}
 
 // grantApproval reads the approval this execution is for back from the
 // approval service and checks it is what may write a grant (§5.6 item 4,
 // §12.2 item 5): the context alone proves nothing, since any code in this
 // process can build it (actions.WithCreateAttempt is exported).
-func (s *Server) grantApproval(ctx context.Context, action string, params map[string]any) (store.GrantApproval, error) {
+func (s *Server) grantApproval(ctx context.Context, action string, params map[string]any) (approvedRecord, error) {
 	att, ok := actions.CreateAttemptFrom(ctx)
 	if !ok {
-		return store.GrantApproval{}, errors.New(action + " runs only as an approval's execution")
+		return approvedRecord{}, errors.New(action + " runs only as an approval's execution")
 	}
 	if s.approvals == nil {
-		return store.GrantApproval{}, errors.New("no approval service to read the approval back from")
+		return approvedRecord{}, errors.New("no approval service to read the approval back from")
 	}
 	rec, found, err := s.approvals.Lookup(att.ApprovalID)
 	if err != nil {
-		return store.GrantApproval{}, err
+		return approvedRecord{}, err
 	}
 	hash, err := actions.ParamsHash(params)
 	if err != nil {
-		return store.GrantApproval{}, err
+		return approvedRecord{}, err
 	}
 	ctxHash, _ := actions.ParamsHashFrom(ctx)
 	if !found {
-		return store.GrantApproval{}, fmt.Errorf("approval %s does not exist", att.ApprovalID)
+		return approvedRecord{}, fmt.Errorf("approval %s does not exist", att.ApprovalID)
 	}
 	if err := checkGrantRecord(rec, action, hash, ctxHash, approvalhome.IsProd()); err != nil {
-		return store.GrantApproval{}, err
+		return approvedRecord{}, err
 	}
-	return store.GrantApproval{ID: rec.ID, Number: int64(rec.Number), Action: rec.Action, ParamsHash: rec.ParamsHash, ApprovedAt: rec.DecidedAt}, nil
+	return approvedRecord{ID: rec.ID, Number: int64(rec.Number), Action: rec.Action, ParamsHash: rec.ParamsHash, ApprovedAt: rec.DecidedAt}, nil
 }
 
 // checkGrantRecord is the read-back record's check (§5.6 item 4, §12.2

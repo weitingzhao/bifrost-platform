@@ -198,16 +198,6 @@ func StartVerificationWith(ctx context.Context, db DB, taskID string, opts Concl
 		if err != nil {
 			return err
 		}
-		if opts.Precheck.acceptsOnSubmission() {
-			pipeline, err := landingCIOf(ctx, tx, t.id, commit)
-			if err != nil {
-				return err
-			}
-			if pipeline != "" {
-				accepted = true
-				return acceptOnSubmission(ctx, tx, t, sa, commit, pipeline)
-			}
-		}
 		if err = moveTask(ctx, tx, "controller", t, "verifying", "deterministic verification"); err != nil {
 			return err
 		}
@@ -246,9 +236,7 @@ const TestNeedFailFirstVerify = "test:fail-first-verify"
 type ConcludeOptions struct {
 	// FailFirstVerify honours TestNeedFailFirstVerify (STG only).
 	FailFirstVerify bool
-	// Precheck is how an implementation is checked (precheck.go); the zero
-	// value acts as PrecheckCI (production reads AGENTRT_PRECHECK, check
-	// when unset).
+	// Precheck is how an implementation is checked (precheck_mode.go).
 	Precheck Precheck
 }
 
@@ -440,7 +428,7 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 			if err = moveTask(ctx, tx, "controller", s, "accepted", passed); err != nil {
 				return err
 			}
-			return retryReworkedLanding(ctx, tx, s, spec.attempt)
+			return nil
 		case verdict == "pass":
 			did = "review"
 			review := spec

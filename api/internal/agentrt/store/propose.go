@@ -633,11 +633,6 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 // proposeBatchTx is the write of a batch; p, when not nil, pins some of its
 // tasks (pin.go), each checked before any task is written.
 func proposeBatchTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, tasks []TaskProposal, p *pinning) (map[string]any, error) {
-	for _, t := range tasks {
-		if err := checkTaskWave(ctx, tx, t); err != nil {
-			return nil, err
-		}
-	}
 	if err := lockBatch(ctx, tx, tasks); err != nil {
 		return nil, err
 	}

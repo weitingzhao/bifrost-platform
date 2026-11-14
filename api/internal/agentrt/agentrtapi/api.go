@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -33,10 +32,6 @@ import (
 // before the database is wired.
 type API struct {
 	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
-	// Explain caches the explanation of steps in progress (plan-view
-	// explain=1); nil makes one over DB on first use.
-	Explain     *store.ExplainCache
-	explainInit sync.Once
 	// CheckAssessment verifies a canonical card id or approval number is still open.
 	CheckAssessment func(context.Context, string, string) error
 	DB              store.DB

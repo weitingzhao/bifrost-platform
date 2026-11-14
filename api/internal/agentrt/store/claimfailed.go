@@ -39,7 +39,7 @@ func failedChecks(ctx context.Context, tx pgx.Tx, task string, n int) ([]FailedC
 	  FROM agentrt.verification v JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id JOIN agentrt.task t ON t.task_id = v.task_id
 	  WHERE v.task_id = $1 AND t.round_no > 1 AND a.attempt_no < $2 AND v.method IN ('deterministic', 'review', $4)
 	    AND v.check_ref IS DISTINCT FROM $3
-	  ORDER BY v.method, v.created_at DESC, v.verification_id DESC`, task, n, TestNeedFailFirstVerify, MethodLandingCI)
+	  ORDER BY v.method, v.created_at DESC, v.verification_id DESC`, task, n, TestNeedFailFirstVerify, "landing_ci")
 	if err != nil {
 		return nil, err
 	}

@@ -81,7 +81,6 @@ var landingHardRoots = [...]string{
 const landingStore = "api/internal/agentrt/store/"
 
 var landingStorePermission = map[string]string{
-	"landing*":             "landing state, grants, cards, CI reads and rework: the gate that lands agent commits",
 	"pin*":                 "pinned checks and their reviews: what a task's commit must pass",
 	"nomerge*":             "no-merge marks that hold a commit back from landing",
 	"rules.go":             "stores and reads the Owner's signed rules",
@@ -101,7 +100,6 @@ var landingStorePermission = map[string]string{
 	"competence.go":        "executor competence that routing trusts",
 	"repos.go":             "the repositories a mission may write",
 	"core.go":              "store primitives every write goes through",
-	"close.go":             "closing missions and tasks",
 	"examstream.go":        "names the stream of the removed exams, whose artifacts stay hidden from Agent hosts",
 	"event.go":             "the append-only event log and its checks",
 	"write.go":             "writer identity and idempotent writes",
@@ -183,7 +181,6 @@ var landingStorePermission = map[string]string{
 	"progress.go":          "the progress projection; presence reads its HostLostAfter",
 	"progressarch.go":      "architecture rows; gates read its recorded deploys",
 	"progressgates.go":     "gate status for progressarch.go",
-	"prune.go":             "prunes attempt branches and records landings",
 	"recorderimport.go":    "proposes and decides recorder imports",
 	"retry.go":             "failure backoff, holds and handover",
 	"scores.go":            "computes the executor scores routing reads",
@@ -191,17 +188,12 @@ var landingStorePermission = map[string]string{
 	"seed.go":              "seeds capability facts",
 	"signals.go":           "outbox, mailboxes, ready marks and SetControl/ClearControl for the Owner's controls",
 	"snapshot.go":          "the runtime snapshot and envelope lines planners and exams are given",
-	"stepevidence.go":      "the step evidence done rules read",
-	"stepexplain.go":       "explanations; stepevidence.go reads its repository and STG readers",
-	"stg_*":                "STG release state, gate, cards, coverage and recovery",
 	"waits.go":             "records waits past their limit",
 	"withdrawn.go":         "blocks a task no executor may take",
 	"workspaceref.go":      "the artifact kinds that skip the workspace-path scan",
 }
 
 var landingStoreOpen = map[string]string{
-	"explaincache.go":         "caches plan-view explanations for the plan view API; reads only",
-	"explainroot.go":          "explains why a root's steps are not done, for the plan view; reads only",
 	"planpace.go":             "a round's pace and quiet hours, for the Console; reads only",
 	"planverificationview.go": "the plan view's verification column; reads only",
 	"planviewrecent.go":       "the plan view's recent changes; reads only",

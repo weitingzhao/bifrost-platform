@@ -411,14 +411,6 @@ func (rt *questionRuntime) agentRuntimeUnacked() func(context.Context) ([]store.
 	return questioncards.Unacked(rt.svc)
 }
 
-// landingCardQuestions uses the shared trusted question-store adapter.
-func (rt *questionRuntime) landingCardQuestions() store.CardQuestions {
-	if rt == nil {
-		return store.CardQuestions{}
-	}
-	return questioncards.New(rt.svc)
-}
-
 func (s *Server) wireQuestionAssessments() {
 	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
 		s.questionRuntime.svc.Assessment = s.assessmentReader(store.AssessCard)

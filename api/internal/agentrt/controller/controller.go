@@ -61,10 +61,6 @@ type Sources struct {
 	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
-	// MainResults reads a repository's main for the runtime's results that
-	// stand there (store.OnMain); ok false when it cannot be read now. nil
-	// records no landings (TD-383).
-	MainResults store.MainResults
 	// Cards lists the runtime's open cards and RuleAnswer answers one as the
 	// card-auto-answer rule in force (store.AnswerByRule, TD-390); nil
 	// answers nothing.
@@ -525,36 +521,6 @@ const LandingsEvery = 5 * time.Minute
 // seconds: four operations each needing ~25s of Git fetches got 22.5s, were
 // cut off every pass, and no claim ever ran.
 const DrillPassCeiling = 15 * time.Minute
-
-// Landings records every implementation whose change first stands on main,
-// in whatever state, not only accepted ones, with the route it took there
-// (store.RecordLandings, TD-383); each repository's main is read with a minute's bound. It returns
-// how many it recorded and closed through CloseOnMain.
-func (c *Controller) Landings(ctx context.Context) (int, error) {
-	if c.Sources.MainResults == nil {
-		return 0, nil
-	}
-	n, err := store.RecordLandings(ctx, c.DB, func(ctx context.Context, repo string) (store.OnMain, bool) {
-		rctx, cancel := context.WithTimeout(ctx, time.Minute)
-		defer cancel()
-		return c.Sources.MainResults(rctx, repo)
-	})
-	closed, cerr := store.CloseOnMain(ctx, c.DB)
-	return n + closed, errors.Join(err, cerr)
-}
-
-// Close is one pass of closing the missions whose tasks are all finished
-// (store.CloseMissions): no plan step bound, and every task accepted, dropped
-// by the Owner on its card, a check of a stopped task, withdrawn by its
-// proposer, cancelled or rejected with its change on main, or cancelled while
-// a stop held it (or one holds it now). Such a mission closes done when an
-// implementation (or brief) is accepted or an implementation is on main,
-// stopped otherwise; the landing hold may still keep it active. It returns
-// how many it closed.
-func (c *Controller) Close(ctx context.Context) (int, error) {
-	closed, err := store.CloseMissions(ctx, c.DB)
-	return len(closed), err
-}
 
 // PlanDecisions is one pass of the plan decisions: proposals outside the
 // standing authorization whose decision card is answered are applied or

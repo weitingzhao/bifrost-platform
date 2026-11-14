@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
@@ -329,10 +328,6 @@ func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[str
 	return progressAt(ctx, db, at, since)
 }
 
-// BadLandingGate and CheckLandingGateAppend check landing_gate records (tests).
-var BadLandingGate = badLandingGate
-var CheckLandingGateAppend = checkLandingGateAppend
-
 // ClaimPinnedFor is ClaimPinned with a lease of the test's choosing (a lease
 // already past its grace, for salvage).
 func ClaimPinnedFor(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Duration) (map[string]any, error) {
@@ -387,47 +382,24 @@ func SelfCheckForTest(c SelfCheck) error {
 	return checkBody("attempt_computed", map[string]any{"end_how": "exit", "conclusion": "done", "self_check": c.body()})
 }
 
-// ParseLandingGrantForTest is parseLandingGrant: a landing_grant body's
-// closed-schema and §5.5/§12 check, without a database.
-func ParseLandingGrantForTest(v any) (LandingGrant, error) { return parseLandingGrant(v) }
-
-// FloorTreeStaleForTest is floorTreeStale: why M0..R is not what a floor
-// grant of repo pinned, "" when it is.
-func FloorTreeStaleForTest(repo string, pinned []GrantFloorPath, tree landing.FloorTree) string {
-	return floorTreeStale(repo, pinned, tree)
+// SeenCopy is an approval_seen or question_seen event as the external facts
+// test reads it back: Ref is the approval number or question id.
+type SeenCopy struct {
+	Ref, Status, Option, AnsweredBy, AnsweredAt, TaskID string
+	At                                                  time.Time
+	EventID                                             int64
 }
 
-// BadLandingRefusalForTest is badLandingRefusal, and RefusalAppendForTest
-// checkLandingRefusalAppend: a landing_refusal body and its event.
-func BadLandingRefusalForTest(v any) string { return badLandingRefusal(v) }
-func RefusalAppendForTest(ev Event) error   { return checkLandingRefusalAppend(ev) }
-
-// SeenCopiesForTest reads the same copies the step timeline uses.
-func SeenCopiesForTest(ctx context.Context, tx pgx.Tx, kind, key string, refs []string) ([]SeenCopy, error) {
-	return seenCopies(ctx, tx, kind, key, refs, nil)
-}
-
-// StgGateAuthorityForTest is the STG gate's landing authority for op as it
-// reads the landing stream, each of roots bound to bifrost-platform in
-// tenant dev: whether op used a grant itself, the batch grant it rests on,
-// the grant attached and whether it is, and the batch that grant names.
-func StgGateAuthorityForTest(ctx context.Context, db DB, op string, roots []string, at time.Time) (used bool, batchGrant, grantID string, has bool, members []string, err error) {
-	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		s, err := StgReleaseState(ctx, tx)
-		if err != nil {
-			return err
-		}
-		bindings := map[string]stgBinding{}
-		for _, r := range roots {
-			bindings[r] = stgBinding{Root: r, Tenant: "dev", Repo: "bifrost-platform"}
-		}
-		f, err := stgReadGateFacts(ctx, tx, s, bindings, at)
-		if err != nil {
-			return err
-		}
-		a := f.Authority[op]
-		used, batchGrant, grantID, has, members = a.UsedGrant, a.BatchGrant, a.Grant.GrantID, a.HasGrant, a.BatchMembers
-		return nil
+// SeenCopiesForTest reads the approval_seen or question_seen copies of refs,
+// in event order.
+func SeenCopiesForTest(ctx context.Context, tx pgx.Tx, typ, key string, refs []string) ([]SeenCopy, error) {
+	var tasks []string
+	rows, err := tx.Query(ctx, `SELECT event_id,at,COALESCE(task_id,''),COALESCE(body_json->>$2,''),COALESCE(body_json->>'status',''),COALESCE(body_json->>'option',''),COALESCE(body_json->>'answered_by',''),COALESCE(body_json->>'answered_at','') FROM agentrt.event WHERE event_type=$1 AND (body_json->>$2=ANY($3) OR task_id=ANY($4)) ORDER BY event_id`, typ, key, refs, tasks)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (SeenCopy, error) {
+		var c SeenCopy
+		return c, r.Scan(&c.EventID, &c.At, &c.TaskID, &c.Ref, &c.Status, &c.Option, &c.AnsweredBy, &c.AnsweredAt)
 	})
-	return
 }

@@ -358,6 +358,12 @@ func tasks(n int) string {
 	return fmt.Sprintf("%d tasks", n)
 }
 
+// checkClosed is a check (t) CloseStoppedChecks cancelled: its last move's
+// reason begins with stoppedSubject (stoppedchecks.go).
+const checkClosed = `t.state = 'cancelled' AND t.role IN ('verify','review') AND EXISTS (SELECT 1 FROM (SELECT e.body_json FROM agentrt.event e
+    WHERE e.task_id = t.task_id AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) l
+  WHERE starts_with(l.body_json->>'reason', '` + stoppedSubject + `'))`
+
 // closedWithCheck: the card o, of task t, was closed as moot in the last week
 // by CloseStoppedChecks, which cancelled its check (stoppedchecks.go).
 const closedWithCheck = checkClosed + ` AND EXISTS (SELECT 1 FROM agentrt.event x WHERE x.task_id = o.task_id

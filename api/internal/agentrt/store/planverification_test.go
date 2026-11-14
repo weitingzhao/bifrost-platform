@@ -367,39 +367,6 @@ func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	pvEvaluate(t, w, s1, "active")
 }
 
-func TestPV2LandingNoteAdapter(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitB})
-	w.passRound(t, task, "h1", "h2", "h3")
-	var attempt string
-	ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id FROM agentrt.verification WHERE task_id=$1 AND accepts_attempt`, task).Scan(&attempt))
-	op := "land:" + task + ":1"
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.Append(ctx, tx, store.Event{Stream: "landing:bifrost-platform", Type: "note", Actor: "controller", Body: map[string]any{"text": "Claim observed", "landing": map[string]any{"v": "1.1", "kind": "claimed", "op": op, "task": task, "attempt": attempt, "A": commitA, "rule_version": 1}}})
-		return e
-	}))
-	out, err := store.PlanView(ctx, w.rt, root)
-	ok(t, err)
-	tasks := out["tasks"].([]map[string]any)
-	found := false
-	for _, x := range tasks {
-		if x["task_id"] == task {
-			l, has := x["landing"].(map[string]any)
-			found = has && l["phase"] == "claimed" && l["operation"] == op
-		}
-	}
-	if !found {
-		t.Fatal("note.landing was not folded into task detail")
-	}
-	if !strings.Contains(string(out["recent_changes"].(json.RawMessage)), op) {
-		t.Fatal("landing operation absent from recent changes")
-	}
-	if w.stepState(t, s1) == "done" {
-		t.Fatal("landing lifecycle was treated as completion proof")
-	}
-}
-
 // PV2 review 2026-10-26 S2: a card-auto-answer rule that answers plan changes
 // does not adopt a view binding completion atoms; the same view without
 // bindings it does (the control).

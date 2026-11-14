@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -118,6 +119,41 @@ func nullable(s string) any {
 	return s
 }
 
+// retiredNoteFields are the records of the landing lane, the B5 STG release
+// and the platform's waves. Their writers were removed on 2026-11-14
+// (LANE-BIZ-ALIGN, store cut 1); rows already written stay readable until
+// the table clean-up.
+var retiredNoteFields = []string{"landing", "stg_release", "stg_sample", "landing_answer", "landing_gate", "landing_grant_request",
+	"landing_grant", "landing_grant_revoked", "landing_grant_use", "landing_grant_refused", "landing_ci_key", "landing_rule_clear",
+	"landing_batch_grant", "landing_anomaly", "landing_main", "landing_stop", "landing_resume", "landing_card_prepared",
+	"landing_card_ask_started", "landing_card", "landing_card_acked", "landing_card_closed", "landing_card_outcome",
+	"landing_close_round", "landing_close", "landing_refusal", "landing_floor", "landing_repo", "landing_pusher", "landing_disposed",
+	"landing_delivered_by", "landing_rework_seen", "landing_replaced", "landing_batch", "landing_batch_red",
+	"wave_opened", "wave_appended", "wave_append_refused", "wave_closed", "wave_landing", "wave_red", "wave_landed",
+	"wave_abandoned", "wave_tally"}
+
+// retiredStreams are the prefixes of the streams those records lived on.
+var retiredStreams = []string{"landing:", "landing-cards:", "stg-sample:", "wave:"}
+
+// retiredRecord refuses an event that would write one of them: the stream is
+// retired, and nothing checks such a record any more.
+func retiredRecord(ev Event) error {
+	for _, prefix := range retiredStreams {
+		if strings.HasPrefix(ev.Stream, prefix) {
+			return invalid("stream %s is retired: the landing lane, the B5 STG release and waves ended on 2026-11-14", ev.Stream)
+		}
+	}
+	if ev.Type != "note" {
+		return nil
+	}
+	for _, name := range retiredNoteFields {
+		if _, ok := ev.Body[name]; ok {
+			return invalid("the %s record is retired: the landing lane, the B5 STG release and waves ended on 2026-11-14", name)
+		}
+	}
+	return nil
+}
+
 // Append writes one event inside tx and names it as this transaction's event
 // (SET LOCAL agentrt.event_id), so the state rows written next in tx pass the
 // database's check. The stream is created on first use. Callers write their
@@ -151,18 +187,10 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if ev.Body == nil {
 		ev.Body = map[string]any{}
 	}
-	if raw, ok := ev.Body["stg_release"]; ok {
-		if err := stgEnvelope(ev); err != nil {
-			return Appended{}, err
-		}
-		if _, err := ParseStgRelease(raw); err != nil {
-			return Appended{}, err
-		}
+	if err := retiredRecord(ev); err != nil {
+		return Appended{}, err
 	}
 	if err := checkBody(ev.Type, ev.Body); err != nil {
-		if _, ok := ev.Body["stg_release"]; ok {
-			return Appended{}, stgError("invalid", "", err.Error())
-		}
 		return Appended{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`,
@@ -176,81 +204,7 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		return Appended{}, err
 	}
 	at := eventNow(ctx).UTC().Truncate(time.Microsecond)
-	if err := checkLandingAnswerAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingAnomalyAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingMainAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingStopAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingGateAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingRequestAppend(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingGrantAppend(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingCIKeyAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingRuleClearAppend(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingBatchGrantAppend(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingAppend(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingGateGrounds(ctx, tx, ev, at); err != nil {
-		return Appended{}, err
-	}
-	if err := checkCardAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkCardOutcomeAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkCloseRoundAppend(ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingDisposedAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingDeliveredByAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingReworkSeenAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingReplacedAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkWaveAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingBatchAppend(ctx, tx, ev); err != nil {
-		return Appended{}, err
-	}
-	if err := checkLandingRefusalAppend(ev); err != nil {
-		return Appended{}, err
-	}
 	seq := lastSeq + 1
-	if err := checkStgSampleAppend(ctx, tx, ev, seq, at); err != nil {
-		return Appended{}, err
-	}
-	if old, err := checkStgReleaseAppend(ctx, tx, &ev, seq, at); err != nil {
-		return Appended{}, err
-	} else if old != nil {
-		return *old, nil
-	}
 	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
 	if err != nil {
 		return Appended{}, fmt.Errorf("store: %s body: %w", ev.Type, err)

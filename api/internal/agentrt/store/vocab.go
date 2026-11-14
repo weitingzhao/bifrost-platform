@@ -8,7 +8,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -185,90 +184,14 @@ var bodies = map[string][]field{
 		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
 		// card: on an issue's stream, the runtime's record of an Owner's
 		// card on it (issuecard.go): opened or settled, ids and enums only.
-		{"card", kAny, true}, {"landing", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
-		{"stg_release", kAny, true},
-		// stg_sample: on stg-sample:bifrost-platform, the first-opening
-		// finalizer sample of B5 and its archive and release (TD-460).
-		{"stg_sample", kAny, true},
+		{"card", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
 		{"leak_value", kAny, true},
-		// landing_answer: on the repository's landing stream, how one
-		// answered landing card was handled (landing_answer.go, CUT §8): the
-		// question, root and operation, applied / moot / refused and why.
-		{"landing_answer", kAny, true},
 		// full_ci: on the controller's stream, the daily full CI runs started
 		// and how a red one was handled (fullci.go).
 		{"full_ci", kAny, true},
 		// check_value: on the controller's stream, the goal proposed to
 		// delete a check or retry the check value table marked (checkvalue.go).
 		{"check_value", kAny, true},
-		// landing_gate: on a main_intent, what the live second gate decided
-		// on (landing_live.go, review 662 N-02): the rule version, the
-		// decision time and the CI run (quota_day on gates written before
-		// cleanup wave 1).
-		{"landing_gate", kAny, true},
-		{"landing_grant_request", kAny, true},
-		// landing_grant / landing_grant_revoked / landing_grant_use: a D-tier
-		// approval's grant on the repository stream, its revocation by the
-		// Owner, and its consumption on the main_intent that uses it
-		// (landing_grant.go, coordinator v3 §5.5).
-		{"landing_grant", kAny, true}, {"landing_grant_revoked", kAny, true}, {"landing_grant_use", kAny, true},
-		{"landing_grant_refused", kAny, true},
-		// landing_ci_key: on a ci_kick, the pinned CI key of an operation
-		// that needs a grant; landing_rule_clear: on a waiting operation's
-		// main_intent, the rule that no longer fails it (landing_grant_ci.go).
-		{"landing_ci_key", kAny, true}, {"landing_rule_clear", kAny, true},
-		// landing_batch_grant: on a batch member's main_intent, the lead's
-		// grant it rests on (landing_batch_grant.go).
-		{"landing_batch_grant", kAny, true},
-		// landing_anomaly: what the main reconciler found that only the
-		// Owner settles (landing_reconcile.go, CUT §10.6): ok_missing or
-		// late_landing, once per operation.
-		{"landing_anomaly", kAny, true},
-		// landing_main: what a main reconciliation rested on (the head
-		// read, when the read began), beside its records (CUT §10.6).
-		{"landing_main", kAny, true},
-		// landing_stop / landing_resume: a denied push stopped the
-		// repository; the Owner's resume answers that stop's generation
-		// (landing_live.go, CUT §11.4 B6).
-		{"landing_stop", kAny, true}, {"landing_resume", kAny, true},
-		// landing cards: on landing-cards:<repo>, the Owner's cards about
-		// landings and where each stands (landing_cards.go, CUT §11.6 v3).
-		{"landing_card_prepared", kAny, true}, {"landing_card_ask_started", kAny, true}, {"landing_card", kAny, true},
-		{"landing_card_acked", kAny, true}, {"landing_card_closed", kAny, true},
-		// landing_card_outcome: on the repository stream, how a card's
-		// answer outside §8 was handled (a resume, held, acknowledged).
-		{"landing_card_outcome", kAny, true},
-		// landing_close_round: on a mission's stream, the operations whose
-		// main is read again before the mission closes (CUT §11.8 v3 item 2).
-		{"landing_close_round", kAny, true},
-		// landing_close: on a mission's stream, what a close from landing
-		// evidence decided on (review 672 N-01).
-		{"landing_close", kAny, true},
-		// landing_refusal: why the landing loop refused a task's claim, on
-		// the repository stream, once per change of reason (CUT §11.13).
-		{"landing_refusal", kAny, true},
-		{"landing_floor", kAny, true},
-		{"landing_repo", kStr, true},
-		// landing_pusher: the Gitea username a push of main went as, beside
-		// its main_result (landing_live.go RecordPushResult).
-		{"landing_pusher", kStr, true},
-		// landing_disposed: the Owner counted a landed or in-main root as
-		// delivered or not, on its card (CUT §11.8 v3 item 4); or the
-		// controller found an in-main root landed (main_delivered).
-		{"landing_disposed", kAny, true},
-		// landing_delivered_by: the controller's record that a root the
-		// Owner declined had its same change landed from another accepted
-		// implementation of its step (landing_delivered_by.go, R5:5.6-1).
-		{"landing_delivered_by", kAny, true},
-		// landing_rework_seen / landing_replaced: a declined root whose step
-		// has reworked work landed, every change different, and the Owner's
-		// count_replaced on its card (landing_rework.go, R5:5.5-18).
-		{"landing_rework_seen", kAny, true}, {"landing_replaced", kAny, true},
-		// landing_batch / landing_batch_red: a batch of operations landed
-		// on one landing CI, and how a red one ended (landing_batch.go,
-		// R5:5.7 goal 2).
-		{"wave_opened", kAny, true}, {"wave_appended", kAny, true}, {"wave_append_refused", kAny, true}, {"wave_closed", kAny, true}, {"wave_landing", kAny, true}, {"wave_red", kAny, true}, {"wave_landed", kAny, true}, {"wave_abandoned", kAny, true}, {"wave_tally", kAny, true},
-		{"landing_batch", kAny, true}, {"landing_batch_red", kAny, true},
 		// offered, disk_below: on a host's offers stream, what its claim
 		// offers (executor, provider, model each) and whether the free disk
 		// it reports is below the floor, when either changed (presence.go,
@@ -546,7 +469,7 @@ var (
 	verifyID    = shaped("a verification id", regexp.MustCompile(`^v_`+ulid+`$`))
 	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
-	agentBranch = shaped("an attempt branch (refs/heads/agent/<task>/a<n>)", agentRef)
+	agentBranch = shaped("an attempt branch (refs/heads/agent/<task>/a<n>)", regexp.MustCompile(`^refs/heads/agent/(t_[0-9A-HJKMNP-TV-Z]{26})/a([1-9][0-9]{0,5})$`))
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
 	approvalRef = shaped("an approval (appr_<16 hex>)", approvalIDRE)
@@ -576,7 +499,7 @@ var fieldValues = map[string]map[string]value{
 	"host_registered":         {"host_kind": oneOf(hostKinds...)},
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
 	"host_slots_set":          {"policy": oneOf(rules.SlotPolicies...)},
-	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", MethodLandingCI), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
+	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", "landing_ci"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
@@ -660,79 +583,8 @@ func badValue(eventType, name string, v any) string {
 	if eventType == "note" && name == "assessment_requested" {
 		return badAssessmentRequest(v)
 	}
-	if eventType == "note" && name == "stg_release" {
-		return badStgRelease(v)
-	}
 	if eventType == "note" && name == "agentd_build" {
 		return badAgentdBuild(v)
-	}
-	if eventType == "note" && name == "landing" {
-		if _, err := landing.Parse(v); err != nil {
-			return err.Error()
-		}
-		return ""
-	}
-	if eventType == "note" && name == "landing_answer" {
-		return badLandingAnswer(v)
-	}
-	if eventType == "note" && name == "landing_anomaly" {
-		return badLandingAnomaly(v)
-	}
-	if eventType == "note" && name == "landing_main" {
-		return badLandingMain(v)
-	}
-	if eventType == "note" && name == "landing_grant_request" {
-		return badLandingGrantRequest(v)
-	}
-	if eventType == "note" && (name == "landing_grant" || name == "landing_grant_revoked" || name == "landing_grant_use" || name == "landing_grant_refused" || name == "landing_ci_key" || name == "landing_rule_clear") {
-		return badGrantRecord(name, v)
-	}
-	if eventType == "note" && name == "landing_batch_grant" {
-		return badLandingBatchGrant(v)
-	}
-	if eventType == "note" && name == "landing_gate" {
-		return badLandingGate(v)
-	}
-	if eventType == "note" && slices.Contains(cardRecordKeys, name) {
-		return badCardRecord(name, v)
-	}
-	if eventType == "note" && name == "landing_card_outcome" {
-		return badCardOutcome(v)
-	}
-	if eventType == "note" && name == "landing_close_round" {
-		return badCloseRound(v)
-	}
-	if eventType == "note" && name == "landing_close" {
-		return badLandingClose(v)
-	}
-	if eventType == "note" && name == "landing_refusal" {
-		return badLandingRefusal(v)
-	}
-	if eventType == "note" && name == "landing_disposed" {
-		return badLandingDisposed(v)
-	}
-	if eventType == "note" && name == "landing_delivered_by" {
-		return badLandingDeliveredBy(v)
-	}
-	if eventType == "note" && name == "landing_rework_seen" {
-		return badLandingReworkSeen(v)
-	}
-	if eventType == "note" && name == "landing_replaced" {
-		return badLandingReplaced(v)
-	}
-	if eventType == "note" {
-		if _, ok := waveFields[name]; ok {
-			return badWave(name, v)
-		}
-	}
-	if eventType == "note" && name == "landing_batch" {
-		return badLandingBatch(v)
-	}
-	if eventType == "note" && name == "landing_batch_red" {
-		return badLandingBatchRed(v)
-	}
-	if eventType == "note" && (name == "landing_stop" || name == "landing_resume") {
-		return badLandingStop(name, v)
 	}
 	if eventType == "task_proposed" && name == "via_session" {
 		// Only on a pinned task (pin.go): the header the proposal came

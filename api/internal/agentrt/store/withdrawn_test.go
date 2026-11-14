@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -55,113 +54,6 @@ func (w *world) failEach(t *testing.T, task string, rounds int, tools ...store.T
 		w.ago(t, task, 10*time.Minute)
 	}
 	return ids
-}
-
-// TD-395 (PROD M-22, 2026-10-20): three executors each failing a task three
-// times in a row left it at ready, no host offered it, no card. Now the
-// controller's pass blocks it, naming each executor and the attempts it
-// failed, and its card recommends not doing it (R6). One more round offers
-// it once to each executor again; one more failure each blocks it again,
-// with a new card that recommends the same. Not doing it cancels it, and
-// its mission finishes.
-func TestNoExecutorLeftBlocksWithACard(t *testing.T) {
-	t.Parallel()
-	w := newWorldOf(t, codex, cursor, claude)
-	w.goalMission(t, "M-3")
-	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-	w.failEach(t, task, 3, codex, cursor, claude)
-	for _, tl := range []store.Tool{codex, cursor, claude} {
-		if c := w.claim(t, "h1", store.LeaseTTL, tl); c != nil {
-			t.Fatalf("%s was leased the task after three failures in a row: %+v", tl.Executor, c)
-		}
-	}
-	if s := w.state(t, "task", task); s != "ready" {
-		t.Fatalf("the task is %s before the pass", s)
-	}
-	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 1 {
-		t.Fatalf("blocked %d (%v); want the task", n, err)
-	}
-	if s := w.state(t, "task", task); s != "blocked" {
-		t.Fatalf("the task is %s after the pass; want blocked", s)
-	}
-	reason := w.blockReason(t, task)
-	for _, want := range []string{"no executor on its route may take it any more: ",
-		"exec:codex failed attempts 1, 4, 7 in a row (the last: exit)", "exec:cursor failed attempts 2, 5, 8 in a row (the last: exit)",
-		"exec:claude failed attempts 3, 6, 9 in a row (the last: exit)", "after 3 failures in a row of its own doing"} {
-		if !strings.Contains(reason, want) {
-			t.Fatalf("the block's reason %q lacks %q", reason, want)
-		}
-	}
-	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("a second pass blocked %d (%v)", n, err)
-	}
-
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
-		t.Fatalf("asked %d (%v)", n, err)
-	}
-	c := a.cards[0]
-	why := "every executor on its route failed it in a row (claude, codex, cursor); another round is worth it only once what failed is fixed"
-	if c.TaskID != task || c.Recommended != 2 || c.RecommendedWhy != why ||
-		!slices.Equal(c.Options, []string{store.BlockedRetry, store.BlockedDrop, "Close mission M-3"}) {
-		t.Fatalf("card %+v", c)
-	}
-	for _, want := range []string{"Recommended: Do not do this task — " + why, "Why: no executor on its route may take it any more: exec:claude",
-		store.BlockedRetry + ": it goes back to ready, offered once more to each executor withdrawn from it; one more failure withdraws it again"} {
-		if !strings.Contains(c.Body, want) {
-			t.Fatalf("the card lacks %q:\n%s", want, c.Body)
-		}
-	}
-
-	// One more round: each executor is offered the task once more, at once.
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	if s := w.state(t, "task", task); s != "ready" || !strings.Contains(w.lastReason(t, task), "offering it once more to each executor withdrawn from it") {
-		t.Fatalf("the task is %s, %q", s, w.lastReason(t, task))
-	}
-	again := w.claim(t, "h1", store.LeaseTTL, codex)
-	if again == nil || again.TaskID != task {
-		t.Fatalf("codex was not offered the task again at once: %+v", again)
-	}
-	w.fail(t, again, "h1")
-	if c := w.claim(t, "h1", store.LeaseTTL, codex); c != nil {
-		t.Fatalf("codex was leased the task again after its failure past the round: %+v", c)
-	}
-	w.ago(t, task, time.Hour)
-	if c := w.claim(t, "h1", store.LeaseTTL, codex); c != nil {
-		t.Fatalf("codex was leased the task an hour after its failure past the round: %+v", c)
-	}
-	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("blocked %d (%v) while cursor and claude are still offered it", n, err)
-	}
-	w.failEach(t, task, 1, cursor, claude)
-	if n, err := store.BlockWithdrawn(ctx, w.rt); err != nil || n != 1 {
-		t.Fatalf("blocked %d (%v) after every executor failed once more", n, err)
-	}
-	if !strings.Contains(w.blockReason(t, task), "exec:codex failed attempts 1, 4, 7, 10 in a row") {
-		t.Fatalf("the second block: %q", w.blockReason(t, task))
-	}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || len(a.cards) != 2 {
-		t.Fatalf("asked %d (%v), %d cards", n, err, len(a.cards))
-	}
-	if c := a.cards[1]; c.Recommended != 2 || c.RecommendedWhy != why {
-		t.Fatalf("the second card recommends %d %q", c.Recommended, c.RecommendedWhy)
-	}
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardRefuseKey)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	if s := w.state(t, "task", task); s != "cancelled" {
-		t.Fatalf("the task is %s; want cancelled", s)
-	}
-	if _, err := store.CloseMissions(ctx, w.rt); err != nil {
-		t.Fatal(err)
-	}
-	if s := w.state(t, "mission", "M-3"); s == "active" {
-		t.Fatalf("M-3 is %s with its only task not done", s)
-	}
 }
 
 // The pass blocks only when every executor that may take the task is
