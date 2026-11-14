@@ -1,0 +1,131 @@
+{
+  "repo": "r",
+  "as_of": "2026-11-14T16:45:00Z",
+  "runs": [
+    {
+      "name": "ci-5",
+      "pipeline": "ci-pipeline",
+      "revision": "5555555555555555555555555555555555555555",
+      "status": "Running",
+      "trigger": "gitea-webhook",
+      "full": false,
+      "created_at": "2026-11-14T16:40:00Z",
+      "asked": true,
+      "run_modules": "*",
+      "scope_why": "the platform says every module runs",
+      "tasks": [
+        {
+          "task": "changes",
+          "status": "Succeeded",
+          "seconds": 9,
+          "waited": 6
+        },
+        {
+          "task": "test-web",
+          "status": "Running",
+          "waited": 5
+        }
+      ]
+    },
+    {
+      "name": "ci-full-444444444444-20261114",
+      "pipeline": "ci-pipeline",
+      "revision": "4444444444444444444444444444444444444444",
+      "status": "Failed",
+      "trigger": "agentrt-full-ci",
+      "full": true,
+      "created_at": "2026-11-14T09:00:00Z",
+      "seconds": 215,
+      "asked": true,
+      "run_modules": "*",
+      "scope_why": "not asked: the changes against main were not read",
+      "tasks": [
+        {
+          "task": "changes",
+          "status": "Succeeded",
+          "seconds": 8,
+          "waited": 6
+        },
+        {
+          "task": "test-svc",
+          "status": "Succeeded",
+          "seconds": 130,
+          "waited": 7
+        },
+        {
+          "task": "test-web",
+          "status": "Failed",
+          "seconds": 199,
+          "waited": 6
+        }
+      ]
+    },
+    {
+      "name": "ci-3",
+      "pipeline": "ci-pipeline",
+      "revision": "3333333333333333333333333333333333333333",
+      "status": "Succeeded",
+      "trigger": "gitea-webhook",
+      "full": false,
+      "created_at": "2026-11-14T08:05:00Z",
+      "seconds": 25,
+      "tested_by": "ci-2",
+      "asked": true,
+      "run_modules": "*",
+      "scope_why": "not asked: the changes against main were not read",
+      "tasks": [
+        {
+          "task": "changes",
+          "status": "Succeeded",
+          "seconds": 8,
+          "waited": 6
+        }
+      ]
+    },
+    {
+      "name": "ci-2",
+      "pipeline": "ci-pipeline",
+      "revision": "3333333333333333333333333333333333333333",
+      "status": "Succeeded",
+      "trigger": "gitea-webhook",
+      "full": false,
+      "created_at": "2026-11-14T08:00:00Z",
+      "seconds": 136,
+      "asked": true,
+      "run_modules": " svc repo ",
+      "scope_why": "not run, their keys are the base's: web",
+      "tasks": [
+        {
+          "task": "changes",
+          "status": "Succeeded",
+          "seconds": 11,
+          "waited": 6
+        },
+        {
+          "task": "test-svc",
+          "status": "Succeeded",
+          "seconds": 123,
+          "waited": 7
+        },
+        {
+          "task": "test-web",
+          "status": "Succeeded",
+          "seconds": 12,
+          "waited": 5
+        }
+      ]
+    },
+    {
+      "name": "ci-1",
+      "pipeline": "another-pipeline",
+      "revision": "2222222222222222222222222222222222222222",
+      "status": "Succeeded",
+      "trigger": "platform-api",
+      "full": false,
+      "created_at": "2026-11-13T20:00:00Z",
+      "seconds": 300,
+      "asked": false,
+      "tasks": []
+    }
+  ]
+}

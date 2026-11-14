@@ -1,0 +1,8 @@
+{
+  "repo": "r",
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "declared": false,
+  "note": "no bifrost.units.yaml: the project is one block and all of it runs every time",
+  "pins": [],
+  "modules": []
+}

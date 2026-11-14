@@ -70,7 +70,9 @@ type Server struct {
 	delivery *delivery.Handler
 	// unitTrees reads commits' trees from Gitea for the unit plan
 	// (units_plan.go), keeping the blobs it read.
-	unitTrees       *giteaTrees
+	unitTrees *giteaTrees
+	// unitRunsKept keeps the run view's answers a short while (units_runs.go).
+	unitRunsKept    unitRunsCache
 	unitTreesOnce   sync.Once
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler
@@ -547,6 +549,9 @@ func (s *Server) Router() http.Handler {
 		// what failed and which landings left a module out. Read-only; viewer
 		// and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/full-ci", s.handleUnitFullCI)
+		// The newest CI runs of one project, for the run view. Read-only;
+		// viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/runs", s.handleUnitRuns)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

@@ -11,6 +11,10 @@
 #
 # The request and response examples both sides test against (questions).
 api/internal/questions/testdata/contract/
+# The bodies the units routes answer (CI's own views, Work > CI). The server's
+# tests compare them with what the routes compute on every run
+# (units_contract_test.go); the Console's CI tests read them as their fixtures.
+api/internal/server/testdata/contract/units/
 # approvals.test.ts parses the Go types and the handler's routes.
 api/internal/approvals/types.go
 api/internal/approvals/handler.go

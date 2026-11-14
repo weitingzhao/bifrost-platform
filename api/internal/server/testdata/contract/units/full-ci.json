@@ -1,0 +1,54 @@
+{
+  "runs": [
+    {
+      "at": "2026-11-15T09:00:00Z",
+      "full_ci": {
+        "alert": true,
+        "commit": "2222222222222222222222222222222222222222",
+        "failed_key": "TestA TestB",
+        "run": "ci-full-222222222222-20261115",
+        "unreconciled": "no full run in the last 3 days was green"
+      },
+      "text": "Full CI run ci-full-222222222222-20261115 of 2222222222222222222222222222222222222222 ended red; no failed task could be read. Which landed commits had a module left out of their own CI run was not reconciled: no full run in the last 3 days was green."
+    },
+    {
+      "at": "2026-11-15T08:00:00Z",
+      "full_ci": {
+        "alert": true,
+        "commit": "1111111111111111111111111111111111111111",
+        "failed_tasks": [
+          "test-web"
+        ],
+        "run": "ci-full-111111111111-20261114",
+        "suspects": [
+          {
+            "commit": "3333333333333333333333333333333333333333",
+            "modules": " svc repo ",
+            "run": "ci-2",
+            "subject": "feat: a change to svc alone"
+          }
+        ],
+        "unread": 1
+      },
+      "text": "Full CI run ci-full-111111111111-20261114 of 1111111111111111111111111111111111111111 ended red; failed tasks: test-web. 1 commit(s) landed since the last green full run ci-full-444444444444-20261113 with a module left out of their own CI run: 33333333 ( svc repo ); the CI run of 1 more could not be read."
+    },
+    {
+      "at": "2026-11-15T07:00:00Z",
+      "full_ci": {
+        "started": [
+          "ci-full-111111111111-20261114"
+        ]
+      },
+      "text": "Full CI started: ci-full-111111111111-20261114."
+    },
+    {
+      "at": "2026-11-15T06:00:00Z",
+      "full_ci": {
+        "started": [
+          "ci-full-444444444444-20261113"
+        ]
+      },
+      "text": "Full CI started: ci-full-444444444444-20261113."
+    }
+  ]
+}

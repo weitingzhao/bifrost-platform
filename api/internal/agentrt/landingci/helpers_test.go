@@ -20,7 +20,8 @@ const factSHA2 = "2222222222222222222222222222222222222222"
 
 func drillService(t *testing.T, objs ...runtime.Object) (*Client, *dynfake.FakeDynamicClient) {
 	t.Helper()
-	d := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList"}, objs...)
+	d := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList",
+		pipelineRunGVR.GroupVersion().WithResource("taskruns"): "TaskRunList"}, objs...)
 	s := &Client{Dynamic: func() (dynamic.Interface, error) { return d, nil }}
 	return s, d
 }
@@ -51,6 +52,7 @@ func fakeClient(objects ...*unstructured.Unstructured) (*Client, *dynfake.FakeDy
 	for _, o := range objects {
 		objs = append(objs, o)
 	}
-	d := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList"}, objs...)
+	d := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList",
+		pipelineRunGVR.GroupVersion().WithResource("taskruns"): "TaskRunList"}, objs...)
 	return &Client{Dynamic: func() (dynamic.Interface, error) { return d, nil }}, d
 }

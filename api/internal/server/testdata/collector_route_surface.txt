@@ -229,6 +229,7 @@ deny	GET /api/v1/trade-agent/domains
 deny	GET /api/v1/units/config
 deny	GET /api/v1/units/full-ci
 deny	GET /api/v1/units/plan
+deny	GET /api/v1/units/runs
 deny	GET /api/v1/units/scope
 deny	POST /api/v1/units/evidence
 deny	GET /api/v1/watchlist/union

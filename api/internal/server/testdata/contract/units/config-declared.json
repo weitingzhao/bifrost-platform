@@ -1,0 +1,53 @@
+{
+  "repo": "r",
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "declared": true,
+  "pins": [
+    {
+      "repo": "lib",
+      "commit": "1111111111111111111111111111111111111111",
+      "tree": "63206560b712c4225a93644bc9b7aadce32982a3"
+    }
+  ],
+  "modules": [
+    {
+      "name": "svc",
+      "kind": "go",
+      "root": "svc",
+      "image": "example.invalid/go:1",
+      "template": "run-db",
+      "needs": [],
+      "tasks": [
+        {
+          "task": "test",
+          "units": 2,
+          "shards": 3
+        },
+        {
+          "task": "vet",
+          "units": 1
+        }
+      ],
+      "units": 3,
+      "declared_inputs": 2,
+      "whole_repository": 1
+    },
+    {
+      "name": "web",
+      "root": "web",
+      "needs": [
+        "svc/a/a.go",
+        "lib:."
+      ],
+      "tasks": [
+        {
+          "task": "check",
+          "units": 1
+        }
+      ],
+      "units": 1,
+      "declared_inputs": 0,
+      "whole_repository": 0
+    }
+  ]
+}

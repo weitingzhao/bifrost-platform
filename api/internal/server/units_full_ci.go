@@ -30,9 +30,14 @@ func (s *Server) handleUnitFullCI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	writeJSON(w, http.StatusOK, unitFullCIAnswer(notes))
+}
+
+// unitFullCIAnswer is the route's body for the notes read.
+func unitFullCIAnswer(notes []store.FullCINote) map[string]any {
 	runs := make([]map[string]any, len(notes))
 	for i, n := range notes {
 		runs[i] = map[string]any{"at": n.At.UTC().Format(time.RFC3339), "text": n.Text, "full_ci": n.Body}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+	return map[string]any{"runs": runs}
 }
