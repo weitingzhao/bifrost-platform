@@ -177,7 +177,7 @@ func TestSeedAndFirstCreation(t *testing.T) {
 	t1, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
+		_, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
 		return err
 	}))
 
@@ -206,7 +206,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	ok(t, err)
 	var attempt string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		attempt, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
+		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
 		return err
 	}))
 

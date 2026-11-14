@@ -31,15 +31,6 @@ type HostDisk struct {
 	Host, Root int64
 }
 
-// Below says whether either volume has less free than floor (floor 0 or
-// less: DefaultDiskFloor).
-func (d HostDisk) Below(floor int64) bool {
-	if floor <= 0 {
-		floor = DefaultDiskFloor
-	}
-	return d.Host < floor || d.Root < floor
-}
-
 // DiskPage is a record of a host's disk to page the Owner with: the event,
 // its host, whether the host went below or back above, the text and when.
 type DiskPage struct {

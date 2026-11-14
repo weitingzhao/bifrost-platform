@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -76,41 +75,6 @@ func TestCardRuleOnTheStore(t *testing.T) {
 		if err = os.WriteFile(consoleRuleAnsweredFixture, append(raw, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}
-	}
-}
-
-// TD-393: the card-auto-answer loop (every kind; every second since TD-402)
-// is wired on STG alone; PROD's and DEV's controllers get no card list and no
-// rule's answer, so the loop never starts there (controller.Start needs
-// both), while the assessments stay. TD-401's second half: only STG's
-// controller leaves the cards that rule answers unassessed; PROD's and DEV's
-// assess every card, whatever rule is in force.
-func TestOnlySTGAnswersCardsByRule(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-	full := controller.Sources{Cards: rt.agentRuntimeCards(), RuleAnswer: rt.agentRuntimeRuleAnswer(),
-		Assessable: assessable(rt.agentRuntimeOpenCards(), nil)}
-	if full.Cards == nil || full.RuleAnswer == nil || full.Assessable == nil {
-		t.Fatal("the sources are nil before the environment is applied")
-	}
-	for _, env := range []string{"prod", "dev", "", "STG"} {
-		c := agentRuntimeController(env, nil, full)
-		if src := c.Sources; src.Cards != nil || src.RuleAnswer != nil || src.Assessable == nil || c.SkipCardsTheRuleAnswers || c.FailFirstVerify {
-			t.Errorf("%q: cards %v, rule answer %v, assessments %v, skips the rule's cards %v, fails the first verify %v", env,
-				src.Cards != nil, src.RuleAnswer != nil, src.Assessable != nil, c.SkipCardsTheRuleAnswers, c.FailFirstVerify)
-		}
-	}
-	if c := agentRuntimeController("stg", nil, full); c.Sources.Cards == nil || c.Sources.RuleAnswer == nil || c.Sources.Assessable == nil ||
-		!c.SkipCardsTheRuleAnswers || !c.FailFirstVerify {
-		t.Fatalf("STG's controller: %+v", c)
-	}
-	// The Owner 2026-11-13: no scheduled briefs or nudges anywhere.
-	for _, env := range []string{"prod", "dev", "stg", ""} {
-		if agentRuntimeController(env, nil, full).Briefs {
-			t.Errorf("%q: the controller leaves scheduled briefs and nudges", env)
-		}
-	}
-	if controller.CardRuleEvery != time.Second {
-		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)
 	}
 }
 

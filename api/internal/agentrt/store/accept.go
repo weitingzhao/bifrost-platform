@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -95,23 +94,6 @@ type checkSpec struct {
 	salvage                                         bool   // the attempt is a lost one whose result was salvaged (adopt.go)
 }
 
-func (c checkSpec) put(ctx context.Context, tx pgx.Tx) (string, error) {
-	doc := map[string]any{"check": c.check, "subject_task": c.subject, "attempt": c.attempt, "round": c.round, "task_spec": c.taskSpec}
-	if c.salvage {
-		doc["salvage"] = true
-	}
-	for k, v := range map[string]string{"commit": c.commit, "repo": c.repo, "verification": c.verification, "verify_report": c.verifyReport} {
-		if v != "" {
-			doc[k] = v
-		}
-	}
-	b, err := canon.Encode(doc)
-	if err != nil {
-		return "", err
-	}
-	return PutArtifact(ctx, tx, "controller", "task_spec", "application/json", b)
-}
-
 // readCheckSpec reads the spec of a check; ok is false when it is not one
 // the controller wrote (a check proposed by hand pins no attempt).
 func readCheckSpec(ctx context.Context, tx pgx.Tx, artifactID string) (checkSpec, bool, error) {
@@ -142,76 +124,6 @@ func readCheckSpec(ctx context.Context, tx pgx.Tx, artifactID string) (checkSpec
 	return c, true, nil
 }
 
-// proposeChecker proposes a verification or review of subject on the
-// subject's step, starting from its repository at the attempt's commit, and
-// makes it ready to claim.
-func proposeChecker(ctx context.Context, tx pgx.Tx, subject taskRow, d taskDetail, spec checkSpec) (string, error) {
-	limit, err := pinnedReview(ctx, tx, subject.id, &spec)
-	if err != nil {
-		return "", err
-	}
-	specID, err := spec.put(ctx, tx)
-	if err != nil {
-		return "", err
-	}
-	base := spec.commit
-	if base == "" {
-		base = d.base
-	}
-	id := NewTaskID()
-	if _, err := ProposeTask(ctx, tx, "controller", Task{ID: id, MissionID: subject.mission, PlanNode: subject.step,
-		OffPlanReason: d.offPlanReason, Subject: subject.id, Role: spec.check, Class: subject.class, Title: spec.check + " " + subject.id,
-		SpecArtifact: specID, Effect: "none", Core: d.core, Repo: d.repo, BaseCommit: base, HardLimit: limit}); err != nil {
-		return "", err
-	}
-	return id, MarkReady(ctx, tx, "controller", id)
-}
-
-// StartVerificationWith checks a submitted implementation as opts.Precheck
-// says. With precheck ci, an attempt whose landing runs a CI (landingCIOf)
-// is accepted on submission (accepted is true, and no task is proposed).
-// Otherwise the implementation moves to verifying and its deterministic
-// verification task is proposed, ready to claim, pinned to the submitted
-// attempt; id is the new task's. Both are zero when the task is not a
-// submitted implementation (or moved while this ran: the next pass tries
-// again).
-func StartVerificationWith(ctx context.Context, db DB, taskID string, opts ConcludeOptions) (id string, accepted bool, err error) {
-	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		id, accepted = "", false
-		step, err := lockStep(ctx, tx, taskID)
-		if err != nil {
-			return err
-		}
-		sa, _, _, commit, err := submittedAttempt(ctx, tx, taskID, "FOR SHARE")
-		if errors.Is(err, errNoSubmitted) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		hook("verifying", taskID)
-		t, err := readTask(ctx, tx, taskID, true)
-		if err != nil || t.state != "submitted" || t.role != "implement" || t.step != step {
-			return err
-		}
-		d, err := readDetail(ctx, tx, taskID)
-		if err != nil {
-			return err
-		}
-		if err = moveTask(ctx, tx, "controller", t, "verifying", "deterministic verification"); err != nil {
-			return err
-		}
-		t.state = "verifying"
-		id, err = proposeChecker(ctx, tx, t, d, checkSpec{check: "verify", subject: t.id, attempt: sa, round: int64(d.round),
-			commit: commit, repo: d.repo, taskSpec: d.spec})
-		return err
-	})
-	if err != nil {
-		return "", false, err
-	}
-	return id, accepted, nil
-}
-
 // TestNeedFailFirstVerify is a need a task may carry to show the rework path
 // on STG (T26; the Owner 2026-10-18): where the controller runs with
 // ConcludeOptions.FailFirstVerify (STG only), the task's first deterministic
@@ -227,252 +139,11 @@ type ConcludeOptions struct {
 	Precheck Precheck
 }
 
-// ConcludeWith is Conclude with the controller's switches.
-func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOptions) (string, error) {
-	var did string
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		var role, specID, subject string
-		if err := tx.QueryRow(ctx, `SELECT role, spec_artifact_id, COALESCE(subject_task_id, '') FROM agentrt.task WHERE task_id = $1`,
-			taskID).Scan(&role, &specID, &subject); err != nil {
-			return err
-		}
-		if role != "verify" && role != "review" {
-			return nil
-		}
-		if subject == "" {
-			// A gate task checks no task: its result is a gate's (gateconclude.go).
-			if role != "verify" {
-				return nil
-			}
-			var err error
-			did, err = concludeGate(ctx, tx, taskID)
-			return err
-		}
-		step, err := lockStep(ctx, tx, taskID)
-		if err != nil {
-			return err
-		}
-		va, conclusion, report, _, err := submittedAttempt(ctx, tx, taskID, "FOR UPDATE")
-		if errors.Is(err, errNoSubmitted) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		spec, pinned, err := readCheckSpec(ctx, tx, specID)
-		if err != nil {
-			return err
-		}
-		var pinnedState, pinnedCommit string
-		if pinned {
-			err = tx.QueryRow(ctx, `SELECT state, COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE attempt_id = $1 AND task_id = $2 FOR SHARE`,
-				spec.attempt, subject).Scan(&pinnedState, &pinnedCommit)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-		}
-		// Accepting a salvaged result cancels the subject's live attempt:
-		// it is locked here, with the subject's attempts, and checked again
-		// once the subject is locked (adopt.go).
-		var live string
-		if pinned && spec.salvage {
-			if live, err = liveAttempt(ctx, tx, subject, "FOR UPDATE"); err != nil {
-				return err
-			}
-			hook("adopting", subject)
-		}
-		current, _, _, _, err := submittedAttempt(ctx, tx, subject, "FOR SHARE")
-		if err != nil && !errors.Is(err, errNoSubmitted) {
-			return err
-		}
-		s, err := readTask(ctx, tx, subject, true)
-		if err != nil {
-			return err
-		}
-		// A check of a stopped task is not used while the stop holds: its
-		// result waits, and nothing of the subject moves (review 341 A3). The
-		// subject is locked, as a stop takes it, so a stop and a conclusion
-		// come one after the other.
-		if stopped, herr := held(ctx, tx, []scope{{"task", s.id}}, "stop"); herr != nil || stopped {
-			return herr
-		}
-		v, err := readTask(ctx, tx, taskID, true)
-		if err != nil {
-			return err
-		}
-		if v.state != "submitted" || v.step != step || s.step != step {
-			return nil
-		}
-		sd, err := readDetail(ctx, tx, s.id)
-		if err != nil {
-			return err
-		}
-		vd, err := readDetail(ctx, tx, v.id)
-		if err != nil {
-			return err
-		}
-		// A check that is not about the attempt under verification closes and
-		// moves nothing; when it was the subject's only check, a new pinned
-		// verification takes its place (review 152 A2).
-		closeCheck := func(reason string) error {
-			did = "closed"
-			if moveErr := moveTask(ctx, tx, "controller", v, "accepted", reason); moveErr != nil {
-				return moveErr
-			}
-			return ensureCheck(ctx, tx, s, sd, v.id)
-		}
-		base := pinnedCommit
-		if base == "" {
-			base = sd.base
-		}
-		stale := ""
-		if pinned && spec.salvage && spec.check == v.role && spec.subject == s.id {
-			stale, err = salvageStale(ctx, tx, spec, s, sd, v.id, pinnedState, live)
-			if errors.Is(err, errLiveMoved) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-		}
-		switch {
-		case !pinned || spec.check != v.role || spec.subject != s.id:
-			return closeCheck("the check pins no attempt of its subject")
-		case spec.salvage && stale != "":
-			return closeCheck(stale)
-		case !spec.salvage && (pinnedState != "submitted" || spec.attempt != current || s.state != "verifying" || int64(sd.round) != spec.round):
-			return closeCheck(fmt.Sprintf("stale: about attempt %s of round %d; the subject is %s in round %d", spec.attempt, spec.round, s.state, sd.round))
-		// The check ran on what it pins, and pins what the attempt is (review
-		// 152 A1): the attempt's own commit, the subject's repo and task
-		// spec, and a checkout of that repo at that commit.
-		case !checkVersion(spec, pinnedCommit, sd, vd):
-			return closeCheck("the check's version is not the attempt's")
-		case v.role == "review":
-			var passed bool
-			if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.verification WHERE attempt_id = $1
-			  AND method = 'deterministic' AND verdict = 'pass')`, spec.attempt).Scan(&passed); err != nil {
-				return err
-			}
-			if !passed {
-				return closeCheck("no deterministic pass of attempt " + spec.attempt)
-			}
-		}
-		verdict, method := "fail", "deterministic"
-		if conclusion == "done" {
-			verdict = "pass"
-		}
-		if v.role == "review" {
-			method = "review"
-		}
-		injected := false
-		// Never a salvaged result's check: it has no round to go again in
-		// (review 291 B1).
-		if opts.FailFirstVerify && v.role == "verify" && verdict == "pass" && sd.round == 1 && !spec.salvage {
-			if err = tx.QueryRow(ctx, `SELECT needs_json ? $2 FROM agentrt.task WHERE task_id = $1`, s.id, TestNeedFailFirstVerify).Scan(&injected); err != nil {
-				return err
-			}
-			if injected {
-				verdict = "fail"
-			}
-		}
-		why := method
-		if injected {
-			why = method + " (a failure the STG test switch injected)"
-		}
-		// A review's pass accepts; so does a deterministic pass unless a
-		// review follows it (precheck verify).
-		accepts := verdict == "pass" && (v.role == "review" || !opts.Precheck.reviews())
-		vid := NewVerificationID()
-		if _, err = Append(ctx, tx, Event{Stream: MissionStream(s.mission), Type: "verification_recorded", Actor: "controller",
-			MissionID: s.mission, PlanNode: s.step, TaskID: s.id, AttemptID: spec.attempt,
-			Body: verificationBody(vid, method, verdict, injected)}); err != nil {
-			return err
-		}
-		// An injected failure says so on its row as on its event (review 291 B2).
-		checkRef, env := "", ""
-		if injected {
-			checkRef, env = TestNeedFailFirstVerify, "stg"
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
-		  evidence_artifact_id, verifier_attempt_id, subject_commit, accepts_attempt, check_ref, env)
-		  VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''))`, vid, s.id, spec.attempt, method, verdict,
-			report, va, spec.commit, accepts, checkRef, env); err != nil {
-			return fmt.Errorf("store: record verification: %w", err)
-		}
-		if err = moveTask(ctx, tx, "controller", v, "accepted", "result used: "+verdict); err != nil {
-			return err
-		}
-		switch {
-		case accepts && spec.salvage:
-			did = "accepted"
-			return adopt(ctx, tx, s, spec.attempt, live, v.role)
-		case accepts:
-			did = "accepted"
-			passed := "review passed"
-			if v.role == "verify" {
-				passed = "deterministic verification passed"
-			}
-			if err = moveTask(ctx, tx, "controller", s, "accepted", passed); err != nil {
-				return err
-			}
-			return nil
-		case verdict == "pass":
-			did = "review"
-			review := spec
-			review.check, review.verification, review.verifyReport = "review", vid, report
-			_, err = proposeChecker(ctx, tx, s, sd, review)
-			return err
-		case spec.salvage:
-			did = "closed" // a salvaged result that fails moves nothing: the task goes on with its own attempts
-			return nil
-		}
-		if sd.round+1 > sd.maxRounds {
-			did = "blocked"
-			return failWork(ctx, tx, "controller", s, fmt.Sprintf("%s failed in round %d of %d", why, sd.round, sd.maxRounds))
-		}
-		did = "rework"
-		if err = moveTask(ctx, tx, "controller", s, "rework", fmt.Sprintf("%s failed in round %d of %d", why, sd.round, sd.maxRounds)); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE agentrt.task SET round_no = round_no + 1 WHERE task_id = $1`, s.id); err != nil {
-			return err
-		}
-		s.state = "rework"
-		return moveTask(ctx, tx, "controller", s, "ready", fmt.Sprintf("round %d", sd.round+1))
-	})
-	return did, err
-}
-
 // openCheck are the states of a verification or review that is still open:
 // one that may yet be leased or used, a blocked one included (a pass blocks a
 // check its mission's budget will not let run, TD-384; review 428 A1). Every
 // test of "another check of the subject is open" reads this one list.
 const openCheck = `('proposed','awaiting_owner','ready','leased','running','submitted','paused','blocked')`
-
-// ensureCheck proposes a pinned verification of the subject's attempt under
-// verification when the subject is verifying and no other check of it is
-// still open (except is the one being closed).
-func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, except string) error {
-	if s.state != "verifying" {
-		return nil
-	}
-	var open bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
-	  AND role IN ('verify','review') AND state IN `+openCheck+`)`,
-		s.id, except).Scan(&open); err != nil || open {
-		return err
-	}
-	sa, _, _, commit, err := submittedAttempt(ctx, tx, s.id, "FOR SHARE")
-	if errors.Is(err, errNoSubmitted) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	_, err = proposeChecker(ctx, tx, s, sd, checkSpec{check: "verify", subject: s.id, attempt: sa, round: int64(sd.round),
-		commit: commit, repo: sd.repo, taskSpec: sd.spec})
-	return err
-}
 
 // checkVersion says whether a check (spec, and vd its task) ran on what it
 // pins and pins what the attempt is (review 152 A1): the attempt's own commit
@@ -575,12 +246,4 @@ func Pending(ctx context.Context, db DB) ([]string, []string, error) {
 		return rows.Err()
 	})
 	return implementations, checks, err
-}
-
-func verificationBody(id, method, verdict string, injected bool) map[string]any {
-	body := map[string]any{"verification_id": id, "method": method, "verdict": verdict}
-	if injected {
-		body["injected"], body["check_ref"], body["env"] = true, TestNeedFailFirstVerify, "stg"
-	}
-	return body
 }

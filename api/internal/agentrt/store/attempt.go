@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -189,48 +188,6 @@ func Start(ctx context.Context, db DB, f Fence, model, provider string) error {
 	})
 }
 
-// Checkpoint records sample seq of a live attempt: the artifacts of the
-// sample (log tail, patch), or that the patch was too large to keep. The key
-// is the attempt plus the sample number, so each sample is recorded once and
-// a retried sample gets the first answer (review 142 R2).
-func Checkpoint(ctx context.Context, db DB, f Fence, seq int, artifacts []string, tooLarge bool) (map[string]any, error) {
-	if seq < 1 {
-		return nil, fmt.Errorf("%w: checkpoint numbers start at 1", ErrState)
-	}
-	req := map[string]any{"epoch": f.Epoch, "seq": seq, "artifacts": nonNil(artifacts), "too_large": tooLarge}
-	return idempotent(ctx, db, hostActor(f.HostID), "checkpoint", fmt.Sprintf("%s:%d", f.AttemptID, seq), req, nil,
-		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f, false)
-			if err != nil {
-				return nil, err
-			}
-			if err = haveArtifacts(ctx, tx, artifacts); err != nil {
-				return nil, err
-			}
-			body := map[string]any{"checkpoint_seq": seq}
-			if len(artifacts) > 0 {
-				body["artifacts"] = artifacts
-			}
-			if tooLarge {
-				body["too_large"] = true
-			}
-			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_checkpointed", body); err != nil {
-				return nil, err
-			}
-			return map[string]any{"checkpoint_seq": seq}, nil
-		})
-}
-
-// endHows are the ways an attempt ends; prepare_failed is before its
-// executor started (TD-394, preparefailed.go).
-var endHows = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost", prepareFailed}
-
-// Computed records that the executor ended and its result is on the host.
-// exitCode is nil when the process had none (killed by a signal).
-func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclusion string) (map[string]any, error) {
-	return ComputedWith(ctx, db, f, Ending{ExitCode: exitCode, EndHow: endHow, Conclusion: conclusion})
-}
-
 // Ending is how an executor ended, with what it used and what its vendor
 // said about its pools (2.4 slice ①); an agentd older than 2.4 sends neither.
 type Ending struct {
@@ -252,102 +209,6 @@ type SelfCheck struct {
 	Fixed     int  `json:"fixed"`
 	LastGreen bool `json:"last_green"`
 	Seconds   int  `json:"seconds"`
-}
-
-// check says what makes a count impossible: a negative one, more fixed than
-// red, or more red than runs.
-func (c SelfCheck) check() error {
-	switch {
-	case c.Runs < 0 || c.Red < 0 || c.Fixed < 0 || c.Seconds < 0:
-		return fmt.Errorf("%w: self_check: a negative count", ErrInvalid)
-	case c.Fixed > c.Red || c.Red > c.Runs:
-		return fmt.Errorf("%w: self_check: fixed %d, red %d and runs %d are not fixed <= red <= runs", ErrInvalid, c.Fixed, c.Red, c.Runs)
-	}
-	return nil
-}
-
-func (c SelfCheck) body() map[string]any {
-	return map[string]any{"runs": c.Runs, "red": c.Red, "fixed": c.Fixed, "last_green": c.LastGreen, "seconds": c.Seconds}
-}
-
-// ComputedWith is Computed with the attempt's usage and pool readings: the
-// usage goes to the ledger with the wall time since the start, and the
-// readings to the pools of the attempt's own tool, in the same transaction.
-func ComputedWith(ctx context.Context, db DB, f Fence, e Ending) (map[string]any, error) {
-	exitCode, endHow, conclusion := e.ExitCode, e.EndHow, e.Conclusion
-	if !slices.Contains(endHows, endHow) || !slices.Contains([]string{"done", "failed", "none"}, conclusion) {
-		return nil, fmt.Errorf("%w: end %q and conclusion %q", ErrState, endHow, conclusion)
-	}
-	req := map[string]any{"epoch": f.Epoch, "end_how": endHow, "conclusion": conclusion}
-	body := map[string]any{"end_how": endHow, "conclusion": conclusion}
-	if exitCode != nil {
-		req["exit_code"], body["exit_code"] = *exitCode, *exitCode
-	}
-	// The usage and the self-check are not part of the request's identity: a
-	// retry after agentd restarted measures again from the output, and must get the first
-	// answer, never a key conflict that would hold the ending forever. The
-	// first report is the one kept.
-	return idempotent(ctx, db, hostActor(f.HostID), "computed", f.AttemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		a, err := lockLive(ctx, tx, f, false)
-		if err != nil {
-			return nil, err
-		}
-		if !a.started || a.computed {
-			return nil, fmt.Errorf("%w: attempt %s is not started-and-uncomputed", ErrState, a.id)
-		}
-		var executor string
-		var wallS int64
-		if err = tx.QueryRow(ctx, `SELECT executor_actor_id, GREATEST(0, EXTRACT(EPOCH FROM clock_timestamp() - started_at))::bigint
-		  FROM agentrt.attempt WHERE attempt_id = $1`, a.id).Scan(&executor, &wallS); err != nil {
-			return nil, err
-		}
-		// A report the platform cannot take never fails the ending: the
-		// attempt is computed without it, and the answer says why (as with a
-		// heartbeat's actions, review 264 A1).
-		out := map[string]any{"computed": true}
-		if rerr := checkPoolReport(executor, e.Usage, e.Pools); rerr != nil {
-			e.Usage, e.Pools = nil, nil
-			out["usage_refused"] = rerr.Error()
-		}
-		// A self-check that cannot be is dropped the same way.
-		if e.SelfCheck != nil {
-			if cerr := e.SelfCheck.check(); cerr != nil {
-				out["self_check_refused"] = cerr.Error()
-			} else {
-				body["self_check"] = e.SelfCheck.body()
-			}
-		}
-		var pools []string
-		if e.Usage != nil {
-			pools = append(pools, e.Usage.Pool)
-		}
-		for _, r := range e.Pools {
-			pools = append(pools, r.Pool)
-		}
-		if err = lockPools(ctx, tx, pools...); err != nil {
-			return nil, err
-		}
-		if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_computed", body); err != nil {
-			return nil, err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET computed_at = clock_timestamp(), exit_code = $2, end_how = $3, conclusion = $4
-		  WHERE attempt_id = $1`, a.id, exitCode, endHow, conclusion); err != nil {
-			return nil, err
-		}
-		if err = chargeAttempt(ctx, tx, hostActor(f.HostID), a, wallS, e.Usage); err != nil {
-			return nil, err
-		}
-		for _, r := range e.Pools {
-			source := "reading"
-			if r.Limited {
-				source = "exit_text"
-			}
-			if err = measurePools(ctx, tx, hostActor(f.HostID), source, []PoolReading{r}); err != nil {
-				return nil, err
-			}
-		}
-		return out, nil
-	})
 }
 
 // BranchHead reads the commit a branch of a repository on the main Git
@@ -485,75 +346,6 @@ func (r Result) body() map[string]any {
 	return body
 }
 
-// Persist records that the result has left the host (attempt_persisted):
-// the report and artifacts are stored here, and the branch, if any, points at
-// the commit reported. Only a persisted attempt can be accepted.
-func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (map[string]any, error) {
-	return PersistChecked(ctx, db, f, r, head, nil)
-}
-
-// PersistChecked is Persist with the forge's reader of commits, which a
-// pinned task's result needs (pinresult.go); without it such a result waits
-// (ErrNoHead).
-func PersistChecked(ctx context.Context, db DB, f Fence, r Result, head BranchHead, commits CommitReader) (map[string]any, error) {
-	if r.Report == "" {
-		return nil, fmt.Errorf("%w: a result has a report", ErrState)
-	}
-	var pr pinnedRead
-	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.pinnedCheck(db, f.AttemptID, head, commits, &pr),
-		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f, false)
-			if err != nil {
-				return nil, err
-			}
-			if !a.computed || a.persisted {
-				return nil, fmt.Errorf("%w: attempt %s is not computed-and-unpersisted", ErrState, a.id)
-			}
-			if err = r.fits(ctx, tx, a); err != nil {
-				return nil, err
-			}
-			pinned, err := checkPinnedResult(ctx, tx, a, r, pr)
-			if err != nil {
-				return nil, err
-			}
-			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_persisted", withPinned(r.body(), pinned)); err != nil {
-				return nil, err
-			}
-			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
-			  pushed_ref = NULLIF($3, ''), pushed_commit = NULLIF($4, '') WHERE attempt_id = $1`, a.id, r.Report, r.Ref, r.Commit); err != nil {
-				return nil, err
-			}
-			return map[string]any{"persisted": true}, nil
-		})
-}
-
-// Submit hands a persisted attempt over for verification. The key is the
-// attempt: an attempt has one result, so this is the same as keying by its
-// pushed commit.
-func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
-	return idempotent(ctx, db, hostActor(f.HostID), "submit", f.AttemptID, map[string]any{"epoch": f.Epoch}, nil,
-		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f, true)
-			if err != nil {
-				return nil, err
-			}
-			hook("submitting", a.id)
-			if !a.persisted {
-				return nil, fmt.Errorf("%w: attempt %s is not persisted", ErrState, a.id)
-			}
-			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_submitted", map[string]any{}); err != nil {
-				return nil, err
-			}
-			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'submitted' WHERE attempt_id = $1`, a.id); err != nil {
-				return nil, err
-			}
-			if err = moveTask(ctx, tx, hostActor(f.HostID), a.t, "submitted", ""); err != nil {
-				return nil, err
-			}
-			return map[string]any{"submitted": true}, nil
-		})
-}
-
 // Salvage keeps the result of an attempt that lost its lease (v5 §5.2,
 // §6.2). Only the attempt's host may salvage it, and only once its lease plus
 // the grace has passed, whatever state the attempt is in (review 148 A1):
@@ -605,55 +397,6 @@ func SalvageChecked(ctx context.Context, db DB, attemptID, hostID string, r Resu
 			}
 			return map[string]any{"salvaged": true, "persisted": persisted}, nil
 		})
-}
-
-// Ended records that the attempt's process group is gone on its host
-// (attempt_ended). An attempt already ended keeps its state; a live one ends
-// as failed and its task moves by effect class (§6.2, T01). The key is the
-// attempt, so a repeated report gets the first answer.
-func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCleared bool) (map[string]any, error) {
-	if !slices.Contains(endHows, endHow) {
-		return nil, fmt.Errorf("%w: end %q", ErrState, endHow)
-	}
-	req := map[string]any{"end_how": endHow, "group_cleared": groupCleared}
-	return idempotent(ctx, db, hostActor(hostID), "ended", attemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		a, err := lockAttempt(ctx, tx, attemptID, true)
-		if err != nil {
-			return nil, err
-		}
-		if a.host != hostID {
-			return nil, ErrFenced
-		}
-		if err = attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_ended",
-			map[string]any{"end_how": endHow, "group_cleared": groupCleared}); err != nil {
-			return nil, err
-		}
-		if !liveState(a.state) {
-			return map[string]any{"state": a.state}, nil
-		}
-		// An attempt that computed a result and ends without having handed it
-		// over says why in its task's move (TD-382).
-		reason := "attempt ended on its host: " + endHow
-		why, err := handOverFailure(ctx, tx, a)
-		if err != nil {
-			return nil, err
-		}
-		if why != "" {
-			reason += "; " + why
-		}
-		var executor string
-		if err = tx.QueryRow(ctx, `UPDATE agentrt.attempt SET state = 'failed', ended_at = clock_timestamp(),
-		  end_how = COALESCE(end_how, $2) WHERE attempt_id = $1 RETURNING executor_actor_id`, a.id, endHow).Scan(&executor); err != nil {
-			return nil, err
-		}
-		if err = releaseTask(ctx, tx, hostActor(hostID), a.t, reason); err != nil {
-			return nil, err
-		}
-		if err = alertRepeatedFailure(ctx, tx, a, executor); err != nil {
-			return nil, err
-		}
-		return map[string]any{"state": "failed"}, nil
-	})
 }
 
 func haveArtifacts(ctx context.Context, tx pgx.Tx, ids []string) error {

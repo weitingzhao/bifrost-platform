@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -70,48 +69,4 @@ type missionBudget struct {
 	state, tenant, envelope string
 	budget                  []byte
 	created                 time.Time
-}
-
-// allows says whether a task of the mission may be leased now, and its hard
-// time limit (proposal §2, T10; review 186 A3, A4): the tenant's budget rule
-// is in force (none: nothing is dispatched) and caps the limit; and a
-// mission that started inside a standing envelope still fits the envelope in
-// force, with the task's effect too. The attempts the mission has used and
-// the hours since it started refuse nothing (missionbudget.go). The budget
-// the envelope bounds is the one the mission started with: what the Owner
-// and the platform added to it before is left out (TD-384).
-func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c candidate) (int, bool, error) {
-	s, ok, err := m.spend(ctx, tx, rc, c.mission)
-	if err != nil || !ok {
-		return 0, false, err
-	}
-	if m.envelope != "" {
-		env, err := rc.get(ctx, tx, m.envelope)
-		if err != nil || env == nil {
-			return 0, false, err
-		}
-		e, b := env.Envelope, s.budget
-		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts-b.OwnerAttempts-b.AutoAttempts > e.Budget.MaxAttempts ||
-			b.MaxWallHours-b.OwnerHours-b.AutoHours > e.Budget.MaxWallHours {
-			return 0, false, nil
-		}
-	}
-	return min(c.limitS, s.limitS), true, nil
-}
-
-// envelopeTools narrows a claim to the envelope a mission started under: the
-// host must be one it lists, and only the tools of its executors may take
-// the task. ok is false when nothing here may.
-func envelopeTools(env *StoredRule, r ClaimRequest) (ClaimRequest, bool) {
-	if env == nil || !slices.Contains(env.Envelope.Hosts, r.HostID) {
-		return r, false
-	}
-	var tools []Tool
-	for _, tl := range r.Tools {
-		if slices.Contains(env.Envelope.Executors, tl.Executor) {
-			tools = append(tools, tl)
-		}
-	}
-	r.Tools = tools
-	return r, len(tools) > 0
 }

@@ -9,27 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RuleChoiceForTest is ruleChoice for a card of kind that recommends rec,
-// whose AI assessment came recommending assessed ("": none asked), under a
-// rule with or without assessment: veto, on a card with options.
-func RuleChoiceForTest(kind, rec, assessed string, veto bool, options []string) (option, why string) {
-	st := assessState{asked: assessed != "", done: assessed != "", recommended: assessed}
-	option, why, _ = ruleChoice(kind, rec, st, time.Now(), veto, options)
-	return option, why
-}
-
-// ClaimFor is ClaimNext with a lease of the test's choosing, so a test can
-// start from a lease that has lapsed, or is past its grace, without waiting.
-func ClaimFor(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*Claim, error) {
-	return claimNext(ctx, db, r, claimOpts{ttl: ttl, effects: dispatched})
-}
-
-// ClaimExternalFor also hands out external work, which round 2 never
-// dispatches: the fixture for the takeover rules of external tasks.
-func ClaimExternalFor(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*Claim, error) {
-	return claimNext(ctx, db, r, claimOpts{ttl: ttl, effects: append([]string{"external"}, dispatched...)})
-}
-
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
 func SetHook(f func(point, arg string)) func() {
@@ -293,28 +272,10 @@ func ProposeIssueMissionForTest(ctx context.Context, tx pgx.Tx, w Writer, workID
 	return proposeMissionTx(ctx, tx, w, p, "k-ask", ask)
 }
 
-// The presence reads' SQL, for EXPLAIN (review 526 B2).
-var (
-	OpenAlertsSQL  = openAlertsSQL
-	LatestClaimSQL = latestClaimSQL
-)
-
 // ProgressAtForTest is the projection at at, a host's silence counted from no
 // earlier than since.
 func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
 	return progressAt(ctx, db, at, since)
-}
-
-// PinnedReviewForTest fits a review's spec of subject's attempt as the
-// controller does when it proposes it: the time limit.
-func PinnedReviewForTest(ctx context.Context, tx pgx.Tx, subject, attempt string) (time.Duration, error) {
-	spec := checkSpec{check: "review", subject: subject, attempt: attempt}
-	// The review is of the attempt's pushed commit (review 691: the facts are
-	// read for that commit only).
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&spec.commit); err != nil {
-		return 0, err
-	}
-	return pinnedReview(ctx, tx, subject, &spec)
 }
 
 // QuestionSeenBodyForTest is the question_seen body of q as read, checked
@@ -325,15 +286,6 @@ func QuestionSeenBodyForTest(id string, q Question) (map[string]any, error) {
 		return nil, err
 	}
 	return body, checkBody("question_seen", body)
-}
-
-// SelfCheckForTest says whether c is a self-check an ending keeps, and the
-// attempt_computed body it makes, checked against the event's vocabulary.
-func SelfCheckForTest(c SelfCheck) error {
-	if err := c.check(); err != nil {
-		return err
-	}
-	return checkBody("attempt_computed", map[string]any{"end_how": "exit", "conclusion": "done", "self_check": c.body()})
 }
 
 // SeenCopy is an approval_seen or question_seen event as the external facts

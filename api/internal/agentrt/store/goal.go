@@ -42,16 +42,6 @@ const GoalSuccess = "the goal's plan is accepted and every task it splits into i
 // PlanOffPlanReason is why a goal's tasks are off the plan tree.
 const PlanOffPlanReason = "a goal from the Console, planned by the chief of staff's seat; the runtime has no plan tree yet"
 
-func firstTaskID(t map[string]any) string {
-	if list, ok := t["tasks"].([]any); ok && len(list) > 0 {
-		if first, ok := list[0].(map[string]any); ok {
-			id, _ := first["task_id"].(string)
-			return id
-		}
-	}
-	return ""
-}
-
 // maxTaskTitle is the longest task title a goal or a plan gives, in runes.
 const maxTaskTitle = 100
 
@@ -62,14 +52,6 @@ func cutRunes(s string, n int) string {
 	}
 	return string([]rune(s)[:n-1]) + "…"
 }
-
-// Snapshot bounds: what a planner reads is a page, not the database.
-const (
-	// a title or a decision's field, and the whole snapshot (review 269 B4)
-	snapTitleRunes = 200
-	snapFieldRunes = 300
-	snapMaxBytes   = 64 << 10
-)
 
 // oneLineRunes is s on one line, cut to n runes.
 func oneLineRunes(s string, n int) string {

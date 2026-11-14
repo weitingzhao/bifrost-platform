@@ -3,8 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -32,38 +30,6 @@ const prepareFailed = "prepare_failed"
 // prepareBlockMark starts the reason of a task blocked because its
 // preparation failed (a card tells such a block by it).
 const prepareBlockMark = "its preparation failed before any executor started: "
-
-// preparesFailed is the reason to block task id when its last failuresToStop
-// attempts since it last went back to ready from a block all ended
-// prepare_failed, else "".
-func preparesFailed(ctx context.Context, tx pgx.Tx, id string) (string, error) {
-	rows, err := tx.Query(ctx, `SELECT a.attempt_no, a.state, COALESCE(a.end_how, '') FROM agentrt.attempt a
-	  WHERE a.task_id = $1 AND a.attempt_no > COALESCE((SELECT max((l.body_json->>'attempt_no')::int) FROM agentrt.event l
-	    WHERE l.task_id = $1 AND l.event_type = 'attempt_leased' AND l.event_id < (SELECT max(r.event_id) FROM agentrt.event r
-	      WHERE r.task_id = $1 AND r.event_type = 'task_state_changed' AND r.body_json->>'from' = 'blocked' AND r.body_json->>'to' = 'ready')), 0)
-	  ORDER BY a.attempt_no DESC LIMIT $2`, id, failuresToStop)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	var nos []string
-	for rows.Next() {
-		var no int
-		var state, end string
-		if err = rows.Scan(&no, &state, &end); err != nil {
-			return "", err
-		}
-		if state != "failed" || end != prepareFailed {
-			return "", nil
-		}
-		nos = append([]string{strconv.Itoa(no)}, nos...)
-	}
-	if err = rows.Err(); err != nil || len(nos) < failuresToStop {
-		return "", err
-	}
-	return prepareBlockMark + fmt.Sprintf("attempts %s in a row (its setup, its checkout or a sibling; the host's or the repository's, "+
-		"not an executor's: no executor is withdrawn for it)", strings.Join(nos, ", ")), nil
-}
 
 // lastPrepare is what a card quotes of the task's last attempt that failed
 // before its executor: the report it handed in as a checkpoint (the only

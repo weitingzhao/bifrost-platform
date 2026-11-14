@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -67,20 +66,4 @@ func entryOf(ctx context.Context, tx pgx.Tx, tenant, pin, host string) (rules.Ex
 		return rules.ExternalHost{}, fmt.Errorf("%w: %s v%d names no external host %s for pin %s", ErrNotExternal, env.ID, env.Version, host, pin)
 	}
 	return h, nil
-}
-
-// externalNamed says whether a standing envelope in force, signed or not,
-// for any tenant names host as an external host: such a host is never
-// registered as an ordinary one (kernel.go).
-func externalNamed(ctx context.Context, tx pgx.Tx, host string) (bool, error) {
-	for _, t := range []string{"dev", "business"} {
-		env, err := inForce(ctx, tx, rules.KindEnvelope+":"+t)
-		if err != nil {
-			return false, err
-		}
-		if env != nil && slices.ContainsFunc(env.Envelope.ExternalHosts, func(h rules.ExternalHost) bool { return h.Host == host }) {
-			return true, nil
-		}
-	}
-	return false, nil
 }

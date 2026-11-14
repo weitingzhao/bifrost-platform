@@ -147,7 +147,7 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 			return store.MoveTask(ctx, tx, "controller", id, to, "test")
 		})
 	}
-	must(t, store.RegisterHost(ctx, f.pool, "owner", "h2", "dev"))
+	must(t, seedHost(ctx, f.pool, "owner", "h2", "dev"))
 	chiefJob(t, f.pool)
 
 	// What the routes need beside the database: a key the rules verify

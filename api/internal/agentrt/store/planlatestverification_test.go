@@ -148,10 +148,7 @@ func TestPV2VerificationLatestKeepsScope(t *testing.T) {
 				method = "deterministic"
 			case "task":
 				other.Task = w.ready(t, store.Task{BaseCommit: commitB})
-				claim := w.run(t, "h6", cursor, "done")
-				if claim.TaskID != other.Task {
-					t.Fatalf("claimed %s, want %s", claim.TaskID, other.Task)
-				}
+				w.seeded(t, func(tx pgx.Tx) { seedAttempt(t, tx, other.Task, "h6", cursor, "done", commitA) })
 				ok(t, w.rt.QueryRow(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE task_id=$1`, other.Task).Scan(&other.Attempt))
 			case "result":
 				other.Result = commitB

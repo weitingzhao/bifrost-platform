@@ -415,54 +415,6 @@ func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dep
 	return ev, err
 }
 
-// LeaseAttempt opens attempt n of a task for an executor with a fresh
-// fencing epoch.
-func LeaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, executor, hostID string, n int, lease time.Duration) (string, int64, error) {
-	return leaseAttemptWith(ctx, tx, actor, missionID, taskID, Tool{Executor: executor}, hostID, n, lease, nil)
-}
-
-// leaseAttemptWith also records the model and provider the attempt is for
-// (independence is checked against them) and, for a claim, why its tool was
-// the one picked (pick.go).
-func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration, choice map[string]any, baseCommit ...string) (string, int64, error) {
-	// The task before the event's stream (review 149 B1).
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID); err != nil {
-		return "", 0, err
-	}
-	var epoch int64
-	if err := tx.QueryRow(ctx, `SELECT nextval('agentrt.lease_epoch_seq')`).Scan(&epoch); err != nil {
-		return "", 0, err
-	}
-	id := NewAttemptID()
-	body := map[string]any{"attempt_no": n, "lease_epoch": epoch, "executor": tl.Executor}
-	if hostID != "" {
-		body["host_id"] = hostID
-	}
-	if tl.Model != "" {
-		body["model"] = tl.Model
-	}
-	if tl.Provider != "" {
-		body["model_provider"] = tl.Provider
-	}
-	if choice != nil {
-		body["choice"] = choice
-	}
-	// Optional string fields must be omitted when absent: empty strings fail
-	// event validation, including for tasks without a repository base.
-	if len(baseCommit) > 0 && baseCommit[0] != "" {
-		body["base_commit"] = baseCommit[0]
-	}
-	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "attempt_leased", Actor: actor,
-		TaskID: taskID, AttemptID: id, Body: body}); err != nil {
-		return "", 0, err
-	}
-	_, err := tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, host_id,
-	  model, model_provider, lease_epoch, lease_expires_at, heartbeat_at, state)
-	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8, clock_timestamp() + make_interval(secs => $9), clock_timestamp(), 'leased')`,
-		id, taskID, n, tl.Executor, nullable(hostID), nullable(tl.Model), nullable(tl.Provider), epoch, lease.Seconds())
-	return id, epoch, err
-}
-
 // anyMap is m as canonical JSON takes it.
 func anyMap(m map[string]string) map[string]any {
 	out := make(map[string]any, len(m))

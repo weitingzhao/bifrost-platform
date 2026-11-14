@@ -57,12 +57,6 @@ const (
 	WaitMessageLimit   = 10 * time.Minute
 	WaitMessageHorizon = 7 * 24 * time.Hour // older unread mail is no longer a wait anyone is in
 	waitsPerPass       = 20                 // of each wait, the oldest first; the rest on the next pass
-	// A pass is bounded in time and in each lock it waits for (review 474
-	// B3): a record waits at its commit for a row another transaction
-	// holds; past the bound the pass fails, its loop says so, and the next
-	// pass tries again.
-	waitsPassTimeout = 30 * time.Second
-	waitsLockTimeout = "5s"
 )
 
 // What a wait's limit came from.

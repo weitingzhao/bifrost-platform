@@ -15,21 +15,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
-// failRound carries impl, ready, through one round whose deterministic
-// verification fails, and returns what using that result did.
-func (w *world) failRound(t *testing.T, impl, author, checker string) string {
-	t.Helper()
-	if c := w.run(t, author, cursor, "done"); c.TaskID != impl {
-		t.Fatalf("claimed %s, not %s", c.TaskID, impl)
-	}
-	v, err := startVerify(ctx, w.rt, impl)
-	ok(t, err)
-	w.run(t, checker, deterministic, "failed")
-	did, err := store.ConcludeWith(ctx, w.rt, v, verifyMode)
-	ok(t, err)
-	return did
-}
-
 // proposed proposes a task, defaults filled in as ready does, and leaves it
 // proposed.
 func (w *world) proposed(t *testing.T, task store.Task) string {
@@ -66,50 +51,6 @@ func (w *world) closedCard(t *testing.T, question string) (outcome, answer, text
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'outcome', COALESCE(body_json->>'answer', ''), COALESCE(body_json->>'text', '')
 	  FROM agentrt.event WHERE event_type = 'owner_wait_closed' AND body_json->>'question_id' = $1`, question).Scan(&outcome, &answer, &text))
 	return outcome, answer, text
-}
-
-func (w *world) rounds(t *testing.T, task string) (int, int) {
-	t.Helper()
-	var round, max int
-	ok(t, w.rt.QueryRow(ctx, `SELECT round_no, max_rounds FROM agentrt.task WHERE task_id = $1`, task).Scan(&round, &max))
-	return round, max
-}
-
-// A planning task refused in its last round goes again with the refusal in
-// its spec, as a rework round does, in a round more.
-func TestBlockedPlanOneMoreRound(t *testing.T) {
-	t.Parallel()
-	w := planWorld(t)
-	var s cards
-	id := w.handIn(t, "no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "rework" || err != nil {
-		t.Fatalf("round 1: %q %v", did, err)
-	}
-	w.work(t, id, "still no plan", "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "blocked" || err != nil {
-		t.Fatalf("round 2: %q %v", did, err)
-	}
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || !strings.Contains(a.cards[0].Body, "round 3 of 3") {
-		t.Fatalf("asked %d (%v) %+v", n, err, a.cards)
-	}
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", id) != "ready" {
-		t.Fatalf("decided %d (%v), plan %s", n, err, w.state(t, "task", id))
-	}
-	if r, m := w.rounds(t, id); r != 3 || m != 3 {
-		t.Fatalf("round %d of %d", r, m)
-	}
-	var text string
-	ok(t, w.rt.QueryRow(ctx, `SELECT convert_from(b.body, 'UTF8')::jsonb->>'text' FROM agentrt.task t
-	  JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id WHERE t.task_id = $1`, id).Scan(&text))
-	if !strings.Contains(text, "## Round 3\n\nThe plan you handed in before was not used: the report has no ```json block\n") {
-		t.Fatalf("the spec of round 3:\n%s", text)
-	}
-	w.work(t, id, goodPlan, "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil); did != "accepted" || err != nil {
-		t.Fatalf("round 3 with a plan: %q %v", did, err)
-	}
 }
 
 // Two passes at once make one card and act on one answer once.

@@ -76,11 +76,11 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 	pgError0010(t, update(`UPDATE agentrt.task SET executor_pin=NULL WHERE task_id=$1`, pinned), "23514", "keeps its executor pin")
 	must0010(t, update(`UPDATE agentrt.host SET state='draining' WHERE host_id='old-dev'`))
 	pgError0010(t, update(`UPDATE agentrt.host SET host_kind='external' WHERE host_id='old-dev'`), "23514", "keeps its kind")
-	must0010(t, store.RegisterHost(ctx, rt, "owner", "t50-external", "external"))
-	pgError0010(t, store.RegisterHost(ctx, rt, "owner", "t50-second", "external"), "23505", "host_one_external")
+	must0010(t, seedHost(ctx, rt, "owner", "t50-external", "external"))
+	pgError0010(t, seedHost(ctx, rt, "owner", "t50-second", "external"), "23505", "host_one_external")
 	lease := func(task, host string) error {
 		return store.InTx(ctx, rt, func(tx pgx.Tx) error {
-			_, _, err := store.LeaseAttempt(ctx, tx, "controller", "M-1", task, "exec:codex", host, 1, time.Minute)
+			_, _, err := seedLease(ctx, tx, "controller", "M-1", task, "exec:codex", host, 1, time.Minute)
 			return err
 		})
 	}

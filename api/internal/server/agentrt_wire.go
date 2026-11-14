@@ -2,15 +2,11 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -176,7 +172,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		s.wirePipelineRecords(c)
 		s.wireFullCI(c)
 		rt.fullCI.Store(c.FullCI)
-		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})
 		if rdb == nil {
@@ -216,7 +211,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
 	stg := env == "stg"
 	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), FailFirstVerify: stg, Precheck: precheckFromEnv(),
-		SkipCardsTheRuleAnswers: stg, Env: env, GateRepo: agentrtDeployRepo, PageOwner: diskPage, WatchPresence: true, Logf: func(format string, args ...any) {
+		Env: env, GateRepo: agentrtDeployRepo, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}, Infof: func(format string, args ...any) {
 			slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
@@ -476,98 +471,4 @@ func (s *Server) closeAgentRuntime() {
 	if s.agentRuntime != nil && s.agentRuntime.stop != nil {
 		s.agentRuntime.stop()
 	}
-}
-
-// platformProbe is how the controller of a process asks whether the platform
-// takes agentd's calls now, and its name (review 528 A1b): a process that is
-// the API itself asks its own routes; platform-workers asks the API through
-// its in-cluster Service, AGENTRT_API_HEALTH_URL (by default
-// http://platform-api:8780/health, where the checklist prober reaches it),
-// whose /health says agentrt_ready once the API's runtime routes are.
-func platformProbe(role config.Role, late *lateDB) (func(context.Context) error, string) {
-	if role.RunsAPI() {
-		return func(context.Context) error {
-			if !late.Ready() {
-				return errNotConnected
-			}
-			return nil
-		}, "this process's own agentrt routes"
-	}
-	url := strings.TrimSpace(os.Getenv("AGENTRT_API_HEALTH_URL"))
-	if url == "" {
-		url = "http://platform-api:8780/health"
-	}
-	// No connection is kept: each probe is a connection of its own, which
-	// the Service sends to any of its endpoints.
-	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
-	return func(ctx context.Context) error { return serviceTakesCalls(ctx, client, url, probeConnections) }, url
-}
-
-// probeConnections is how many probes a pass sends the API's Service at once
-// (review 529 A-1, A-2): an instance whose agentrt routes are not ready yet
-// still answers /health, and the Service may send a probe to it while
-// another instance serves. Any ready answer means the platform takes
-// agentd's calls; only a pass whose every probe fails is an outage. With
-// several API instances this is probabilistic, not a guarantee: with one
-// ready and one unready endpoint, chosen at random for each connection, a
-// pass is all unready one time in 32, and each such pass restarts the hosts'
-// 30 s. Runs of them can defer a host's judgment; the controller tells a
-// deferral past two minutes (store.PresenceDeferral, review 530 A-2), so it
-// is never silent. The platform runs one API instance.
-const probeConnections = 5
-
-// serviceTakesCalls asks the API's Service n times at once, each probe on a
-// connection of its own: nil once one answers that its agentrt routes are
-// ready, else why none did (each distinct reason once).
-func serviceTakesCalls(ctx context.Context, client *http.Client, url string, n int) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	answers := make(chan error, n)
-	for range n {
-		safego.Go("agentrt-platform-probe", func() {
-			err := errors.New("the probe failed")
-			defer func() { answers <- err }()
-			err = apiTakesCalls(ctx, client, url)
-		})
-	}
-	seen := map[string]bool{}
-	var why []string
-	for range n {
-		err := <-answers
-		if err == nil {
-			return nil
-		}
-		if !seen[err.Error()] {
-			seen[err.Error()] = true
-			why = append(why, err.Error())
-		}
-	}
-	sort.Strings(why)
-	return fmt.Errorf("none of %d probes found the API's agentrt routes ready: %s", n, strings.Join(why, "; "))
-}
-
-// apiTakesCalls asks the API at url whether its runtime routes are ready:
-// nil for yes, else why not (no answer, another status or another body).
-func apiTakesCalls(ctx context.Context, client *http.Client, url string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	var body struct {
-		Ready *bool `json:"agentrt_ready"`
-	}
-	switch {
-	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	case json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&body) != nil || body.Ready == nil:
-		return errors.New("its answer does not say agentrt_ready")
-	case !*body.Ready:
-		return errors.New("its agentrt routes are not ready")
-	}
-	return nil
 }

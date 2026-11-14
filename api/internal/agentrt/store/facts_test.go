@@ -356,7 +356,7 @@ func TestStandingGate(t *testing.T) {
 			return err
 		}
 		var err error
-		attempt, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
+		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
 		return err
 	}))
 	gate := func(test, env, commit, specSHA string, ref map[string]any) {

@@ -2,15 +2,8 @@ package store
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"slices"
-	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Retrying after a failure (TD-381, TD-382; v5 §5.1.2 「分流顺序」, §6.2).
@@ -36,184 +29,14 @@ import (
 // reason carries liftMark; the failures leased after it are the ones since.
 
 const (
-	// retryBackoff is how long an executor waits after its first failure
-	// in a row; each further failure doubles it. The tuning rule's
-	// retry_backoff_s, when one is in force.
-	retryBackoff = 30 * time.Second
 	// failuresToStop is the number of failures in a row after which an
 	// executor is no longer offered the task.
 	failuresToStop = 3
 )
 
-// executorEnds are the ways an attempt ends that are its executor's doing.
-var executorEnds = []string{"exit", "hard_limit"}
-
-// failureRun is a task's latest failures in a row, by executor: how many,
-// and when the latest ended; now is the database clock when it was read.
-type failureRun struct {
-	now time.Time
-	by  map[string]runOf
-	// lifted: the task was given one more round past its withdrawals, and
-	// each run's since counts its failures leased after that.
-	lifted bool
-	// first is the wait after a first failure, as the tuning rule had it
-	// when the run was read; zero is retryBackoff.
-	first time.Duration
-}
-
-type runOf struct {
-	n     int
-	last  time.Time
-	nos   []int  // the attempts of the run, newest first
-	how   string // how the newest ended
-	since int    // failures leased after the latest round past the withdrawals
-}
-
-// readFailureRun reads the task's attempts newest first while each failed
-// by its executor's doing.
-func readFailureRun(ctx context.Context, tx pgx.Tx, taskID string) (failureRun, error) {
-	run := failureRun{by: map[string]runOf{}}
-	tune, err := tuningIn(ctx, tx)
-	if err != nil {
-		return run, err
-	}
-	run.first = tune.Duration(rules.TuneRetryBackoff)
-	// The clock and a page of the newest attempts in one statement (review
-	// 400 C1); a further page only while the run has not ended (review 401
-	// B1: a run from before the stop existed can be longer than a page).
-	before, broken := 0, false
-	for {
-		n := 0
-		rows, err := tx.Query(ctx, `SELECT c.now, a.attempt_no, a.executor_actor_id, a.state, COALESCE(a.end_how, ''), a.ended_at
-		  FROM (SELECT clock_timestamp() AS now) c LEFT JOIN LATERAL (SELECT * FROM agentrt.attempt WHERE task_id = $1
-		    AND ($3 = 0 OR attempt_no < $3) ORDER BY attempt_no DESC LIMIT $2) a ON true`, taskID, runRows, before)
-		if err != nil {
-			return run, err
-		}
-		for rows.Next() {
-			var now time.Time
-			var no *int
-			var executor, state, endHow *string
-			var ended *time.Time
-			if err = rows.Scan(&now, &no, &executor, &state, &endHow, &ended); err != nil {
-				rows.Close()
-				return run, err
-			}
-			if run.now.IsZero() {
-				run.now = now
-			}
-			if no == nil {
-				break
-			}
-			n, before = n+1, *no
-			if broken || *state != "failed" || ended == nil || !slices.Contains(executorEnds, *endHow) {
-				broken = true
-				continue
-			}
-			r := run.by[*executor]
-			if r.n == 0 {
-				r.last, r.how = *ended, *endHow
-			}
-			r.n++
-			r.nos = append(r.nos, *no)
-			run.by[*executor] = r
-		}
-		rows.Close()
-		if err = rows.Err(); err != nil {
-			return run, err
-		}
-		if broken || n < runRows {
-			return run, run.readLift(ctx, tx, taskID)
-		}
-	}
-}
-
 // liftMark is in the reason of a task's move back to ready that gives it one
 // more round past its withdrawals (decideBlocked).
 const liftMark = ", offering it once more to each executor withdrawn from it"
-
-// readLift finds the task's latest round past its withdrawals and counts
-// each run's failures leased after it. It reads nothing while no executor
-// has been withdrawn, so a claim reads no more than before (TD-381).
-func (run *failureRun) readLift(ctx context.Context, tx pgx.Tx, taskID string) error {
-	withdrawn := false
-	for _, r := range run.by {
-		withdrawn = withdrawn || r.n >= failuresToStop
-	}
-	if !withdrawn {
-		return nil
-	}
-	// By event order, not by clock: the attempt numbers leased before the
-	// move (the task is locked by both, so their events are in order).
-	var before *int
-	err := tx.QueryRow(ctx, `SELECT (SELECT max((l.body_json->>'attempt_no')::int) FROM agentrt.event l
-	    WHERE l.task_id = $1 AND l.event_type = 'attempt_leased' AND l.event_id < r.event_id)
-	  FROM agentrt.event r WHERE r.task_id = $1 AND r.event_type = 'task_state_changed' AND r.body_json->>'to' = 'ready'
-	    AND strpos(r.body_json->>'reason', $2) > 0 ORDER BY r.event_id DESC LIMIT 1`, taskID, liftMark).Scan(&before)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	run.lifted = true
-	for executor, r := range run.by {
-		for _, no := range r.nos {
-			if before == nil || no > *before {
-				r.since++
-			}
-		}
-		run.by[executor] = r
-	}
-	return nil
-}
-
-// runRows is how many attempts a page of a run reads.
-const runRows = 64
-
-// backoff is how long an executor waits after n failures in a row.
-func backoff(n int) time.Duration { return backoffFrom(retryBackoff, n) }
-
-// backoffFrom is backoff with first the wait after the first failure.
-func backoffFrom(first time.Duration, n int) time.Duration {
-	if n <= 0 {
-		return 0
-	}
-	return first << (n - 1)
-}
-
-// backoff is how long the run's executor waits after n failures in a row.
-func (run failureRun) backoff(n int) time.Duration {
-	if run.first > 0 {
-		return backoffFrom(run.first, n)
-	}
-	return backoff(n)
-}
-
-// holdsBack says why the run keeps executor from the task now, or "".
-func (run failureRun) holdsBack(executor string) string {
-	why, _ := run.hold(executor)
-	return why
-}
-
-// hold is holdsBack, and whether the executor is withdrawn: not offered the
-// task again (unlike a wait, which ends) until the task is given one more
-// round past its withdrawals. An executor withdrawn before that round is
-// offered the task at once, and withdrawn again by one more failure.
-func (run failureRun) hold(executor string) (string, bool) {
-	r := run.by[executor]
-	switch {
-	case run.lifted && r.n-r.since >= failuresToStop && r.since == 0:
-		return "", false
-	case run.lifted && r.n-r.since >= failuresToStop:
-		return "failed the task " + strconv.Itoa(r.n) + " times in a row, once more after it was offered it again", true
-	case r.n >= failuresToStop:
-		return "failed the task " + strconv.Itoa(r.n) + " times in a row", true
-	case r.n > 0 && run.now.Before(r.last.Add(run.backoff(r.n))):
-		return "waiting after " + strconv.Itoa(r.n) + " failures in a row", false
-	}
-	return "", false
-}
 
 // Policy alert phrases of this file: the closed phrases the event records.
 const (
@@ -221,19 +44,6 @@ const (
 	localPathPhrase       = "a local path (H8)"
 	workspaceRefPhrase    = "another task's workspace"
 )
-
-// alertRepeatedFailure records a policy_alert on a's mission when the
-// failure just recorded is executor's failuresToStop-th in a row on the
-// task: from then on it is not offered the task (claim.go). It is recorded
-// once, when the run reaches the count. a and its task must be locked.
-func alertRepeatedFailure(ctx context.Context, tx pgx.Tx, a attemptRow, executor string) error {
-	run, err := readFailureRun(ctx, tx, a.task)
-	if err != nil || run.by[executor].n != failuresToStop {
-		return err
-	}
-	return attemptEvent(ctx, tx, "controller", a, "policy_alert",
-		map[string]any{"rule": "repeated_failure", "source": "attempt", "phrase": repeatedFailurePhrase})
-}
 
 // refusedRules are the rules by which the platform refuses an artifact:
 // the phrase each records.
@@ -270,29 +80,4 @@ func RefusedReport(ctx context.Context, db DB, hostID, kind, artifactID, rule st
 		return err
 	})
 	return err == nil, err
-}
-
-// handOverFailure is why an attempt that ends live without a persisted
-// result did not hand it over, or "" when it never computed one. It says
-// so, and when its host had a report refused since the attempt computed, it
-// says that too, as what happened on the host, not as the attempt's cause:
-// the refusal does not name its attempt (RefusedReport).
-func handOverFailure(ctx context.Context, tx pgx.Tx, a attemptRow) (string, error) {
-	if !a.computed || a.persisted {
-		return "", nil
-	}
-	why := "its result was computed but not persisted"
-	var rule string
-	var event int64
-	err := tx.QueryRow(ctx, `SELECT e.body_json->>'rule', e.event_id FROM agentrt.attempt a JOIN agentrt.event e
-	    ON e.event_stream_id = 'host:' || a.host_id AND e.event_type = 'policy_alert' AND e.at >= a.computed_at
-	  WHERE a.attempt_id = $1 AND e.body_json->>'rule' IN ('local_path', 'workspace_ref')
-	  ORDER BY e.event_id DESC LIMIT 1`, a.id).Scan(&rule, &event)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return why, nil
-	case err != nil:
-		return "", err
-	}
-	return fmt.Sprintf("%s; meanwhile its host had a report refused by rule %s (event %d)", why, rule, event), nil
 }

@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
 const agentRuntimeAuthYAML = `
@@ -265,86 +262,5 @@ func TestTheRoutesOpenWithTheirMoment(t *testing.T) {
 	<-done
 	if !late.Ready() || !late.Back().Equal(at) || ready() != true {
 		t.Fatalf("after connecting: ready %v back %v health %v", late.Ready(), late.Back(), ready())
-	}
-}
-
-// Review 528 A1b: platform-workers asks the API through its Service whether
-// it takes agentd's calls: yes only for a 200 whose body says agentrt_ready.
-// Two API instances behind the Service, one exits: the Service sends the
-// probe to the other, and the answer stays yes, so detection is not
-// suppressed; both gone, no; a hung API is no within the probe's limit. A
-// process that is the API itself asks its own routes.
-func TestTheWorkersAskTheAPIThroughItsService(t *testing.T) {
-	instance := func(ready bool) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "agentrt_ready": ready})
-		}))
-	}
-	a, b := instance(true), instance(true)
-	defer b.Close()
-	var aGone atomic.Bool
-	// The Service: an instance gone has no endpoint, the other one answers.
-	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		target := a.URL
-		if aGone.Load() {
-			target = b.URL
-		}
-		resp, err := http.Get(target + r.URL.Path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, resp.Body)
-	}))
-	defer service.Close()
-	ask := func(url string, limit time.Duration) bool {
-		ctx, cancel := context.WithTimeout(context.Background(), limit)
-		defer cancel()
-		return apiTakesCalls(ctx, http.DefaultClient, url) == nil
-	}
-	if !ask(service.URL+"/health", time.Second) {
-		t.Fatal("two instances up: no")
-	}
-	a.Close()
-	aGone.Store(true)
-	if !ask(service.URL+"/health", time.Second) {
-		t.Fatal("one instance exited, the other serving: no")
-	}
-	b.Close()
-	if ask(service.URL+"/health", time.Second) {
-		t.Fatal("both gone: yes")
-	}
-	notReady := instance(false)
-	defer notReady.Close()
-	unavailable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "starting", http.StatusServiceUnavailable)
-	}))
-	defer unavailable.Close()
-	release := make(chan struct{})
-	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
-	defer hung.Close()
-	defer close(release)
-	start := time.Now()
-	if ask(notReady.URL, time.Second) || ask(unavailable.URL, time.Second) || ask(hung.URL, 100*time.Millisecond) {
-		t.Fatal("an API not ready, unavailable or hung said yes")
-	}
-	if took := time.Since(start); took > 2*time.Second {
-		t.Fatalf("the probes took %v", took)
-	}
-	late := &lateDB{}
-	self, name := platformProbe(config.RoleAll, late)
-	if self(context.Background()) == nil || name == "" {
-		t.Fatal("the API itself, not connected: yes")
-	}
-	late.open(&pgxpool.Pool{}, time.Now())
-	if self(context.Background()) != nil {
-		t.Fatal("the API itself, connected: no")
-	}
-	t.Setenv("AGENTRT_API_HEALTH_URL", notReady.URL)
-	other, name := platformProbe(config.RoleWorkers, late)
-	if err := other(context.Background()); err == nil || name != notReady.URL || !strings.Contains(err.Error(), "not ready") {
-		t.Fatalf("the workers asking an API not ready: %v (%s)", err, name)
 	}
 }

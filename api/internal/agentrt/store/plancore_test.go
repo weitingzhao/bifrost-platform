@@ -1,11 +1,8 @@
 package store_test
 
 import (
-	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -101,41 +98,5 @@ func TestPlanCoreLabel(t *testing.T) {
 	// The same keys in different objects, and arrays of objects, still read.
 	if _, err := store.ParsePlan([]byte(goodPlan), repos); err != nil {
 		t.Errorf("goodPlan: %v", err)
-	}
-}
-
-// The core label goes from the plan into the task as it is, and routing
-// takes it as any core task: only claude (only author_core) may claim it.
-func TestAcceptPlanCarriesCore(t *testing.T) {
-	t.Parallel()
-	w := planWorld(t)
-	plan := w.handIn(t, corePlan, "done")
-	var s cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
-		t.Fatalf("accept: %q %v", did, err)
-	}
-	rows, err := w.rt.Query(ctx, `SELECT t.title, t.core, COALESCE(e.body_json->'core', 'false')::text FROM agentrt.task t
-	  JOIN agentrt.event e ON e.task_id = t.task_id AND e.event_type = 'task_proposed'
-	  WHERE t.mission_id = 'M-3' AND t.role = 'implement' ORDER BY t.title`)
-	ok(t, err)
-	got := map[string]string{}
-	for rows.Next() {
-		var title, proposed string
-		var core bool
-		ok(t, rows.Scan(&title, &core, &proposed))
-		got[title] = strconv.FormatBool(core) + " " + proposed
-	}
-	ok(t, rows.Err())
-	if got["Document MainHead"] != "true true" || got["Document GoalRepos"] != "false false" {
-		t.Fatalf("core of the planned tasks (row, task_proposed) = %v", got)
-	}
-	var core string
-	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = 'M-3' AND title = 'Document MainHead'`).Scan(&core))
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MarkReady(ctx, tx, "controller", core) }))
-	if c := w.claim(t, "h2", store.LeaseTTL, codex, cursor); c != nil && c.TaskID == core {
-		t.Fatalf("the core task went to %s", c.Tool.Executor)
-	}
-	if c := w.claim(t, "h3", store.LeaseTTL, claude); c == nil || c.TaskID != core {
-		t.Fatalf("claude's claim = %+v; want the core task %s", c, core)
 	}
 }

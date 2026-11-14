@@ -44,7 +44,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 	must0010(t, err)
 	rt := db.Connect(t, db.Runtime)
 	for host, kind := range map[string]string{"old-dev": "dev", "old-vm": "vm"} {
-		must0010(t, store.RegisterHost(ctx, rt, "owner", host, kind))
+		must0010(t, seedHost(ctx, rt, "owner", host, kind))
 	}
 	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
 		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{

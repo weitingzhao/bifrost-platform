@@ -4,9 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -19,34 +16,6 @@ const twoRepoPlan = "Two changes.\n\n```json\n" + `{
     {"ref": "t2", "title": "Name the test", "repo": "bifrost-platform", "text": "Name it in repos.go.",
      "verify": [["go", "-C", "api", "test", "./internal/agentrt/store/"]], "depends_on": ["t1"]}]
 }` + "\n```\n"
-
-// A mission of two repositories that kept no base for the second (one a
-// route proposed, before goals kept bases): a plan with a task there is sent
-// back, never started from the other repository's commit.
-func TestPlanWithoutABaseIsSentBack(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-3", Title: "goal", Goal: "a goal",
-			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform", infra}, Success: []string{store.GoalSuccess},
-			MaxAttempts: 10, MaxWallHours: 24}); err != nil {
-			return err
-		}
-		return store.MoveMission(ctx, tx, "controller", "M-3", "active", "test")
-	}))
-	plan := w.ready(t, store.Task{MissionID: "M-3", Role: "plan", Effect: "none", OffPlanReason: "a goal", BaseCommit: commitA})
-	w.work(t, plan, twoRepoPlan, "done")
-	var c cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw, nil); err != nil || did != "rework" ||
-		!strings.Contains(lastReason(t, w, plan), "tasks[0]: the goal recorded no commit of bifrost-trade-infra to start from") {
-		t.Fatalf("a plan without a base: %q %v %q", did, err, lastReason(t, w, plan))
-	}
-	var n int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE mission_id = 'M-3' AND role = 'implement'`).Scan(&n))
-	if n != 0 {
-		t.Fatalf("a refused plan made %d tasks", n)
-	}
-}
 
 // T26's first run (PROD M-9): a planner that read the goal's repositories
 // side by side gave a platform task work only an infra checkout could do. A

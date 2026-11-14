@@ -164,10 +164,10 @@ func TestAttemptKeepsItsResult(t *testing.T) {
 	var a1, a2 string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		if a1, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
+		if a1, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
 			return err
 		}
-		a2, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", t2, "exec:codex", "", 1, time.Minute)
+		a2, _, err = seedLease(ctx, tx, "controller", "M-1", t2, "exec:codex", "", 1, time.Minute)
 		return err
 	}))
 	persist := func(tx pgx.Tx) error {
@@ -225,7 +225,7 @@ func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 	var a1 string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		if a1, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
+		if a1, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
 			return err
 		}
 		if _, err = store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "attempt_persisted", Actor: "controller",

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
@@ -90,16 +89,16 @@ func TestPV2SignoffReadinessExecution(t *testing.T) {
 				step, want = s2, "Not started"
 			}
 			task := w.ready(t, store.Task{PlanNode: step})
-			c := w.claim(t, "h1", time.Minute, codex)
-			if c == nil || c.TaskID != task {
-				t.Fatal("task was not claimed")
-			}
+			var attempt string
+			w.seeded(t, func(tx pgx.Tx) { attempt = seedAttempt(t, tx, task, "h1", codex, "none", "") })
 			if w.stepState(t, s1) != "planned" {
 				t.Fatal("attempt case must use an unstarted controller state")
 			}
 			pvSignoffReadiness(t, w, s1, want, false)
-			_, err := store.Ended(ctx, w.rt, c.AttemptID, "h1", "daemon_restart", true)
-			ok(t, err)
+			w.seeded(t, func(tx pgx.Tx) {
+				_, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(), end_how = 'daemon_restart' WHERE attempt_id = $1`, attempt)
+				ok(t, err)
+			})
 			// Readiness must retain an ended attempt, not just liveAttempts.
 			pvSignoffReadiness(t, w, s1, want, false)
 		})

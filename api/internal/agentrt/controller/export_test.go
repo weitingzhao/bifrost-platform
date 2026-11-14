@@ -16,14 +16,6 @@ func (c *Controller) RunLoopForTest(ctx context.Context, name string, d time.Dur
 	wg.Wait()
 }
 
-// SetPresencePassLimitForTest sets the presence pass's bound and returns the
-// function that restores it.
-func SetPresencePassLimitForTest(d time.Duration) func() {
-	old := presencePassLimit
-	presencePassLimit = d
-	return func() { presencePassLimit = old }
-}
-
 // SetTaskWaitForTest sets how AckUsedAnswers reads an answered card's task
 // and returns the function that restores it.
 func SetTaskWaitForTest(f func(ctx context.Context, db store.DB, task string) (string, bool, bool, error)) func() {

@@ -114,62 +114,13 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	}
 }
 
-func TestActivateLeasedSteps(t *testing.T) {
-	t.Parallel()
-	for _, granted := range []bool{false, true} {
-		t.Run(fmt.Sprint("granted=", granted), func(t *testing.T) {
-			t.Parallel()
-			w := newWorld(t)
-			putPlanStanding(t, w, false, granted)
-			t1, err := w.task(t, "M-1", s1, "", "implement")
-			ok(t, err)
-			_, err = w.task(t, "M-1", s3, "", "implement") // a task never leased
-			ok(t, err)
-			var leased int64
-			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-				if _, _, lerr := store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute); lerr != nil {
-					return lerr
-				}
-				return tx.QueryRow(ctx, `SELECT max(event_id) FROM agentrt.event WHERE event_type = 'attempt_leased'`).Scan(&leased)
-			}))
-			n, err := store.ActivateLeasedSteps(ctx, w.rt)
-			ok(t, err)
-			states := map[string]string{}
-			for _, s := range []string{s1, s3} {
-				var st string
-				ok(t, w.rt.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, s).Scan(&st))
-				states[s] = st
-			}
-			if !granted {
-				if n != 0 || states[s1] != "planned" {
-					t.Fatalf("without the grant: %d moved, %v", n, states)
-				}
-				return
-			}
-			if n != 1 || states[s1] != "active" || states[s3] != "planned" {
-				t.Fatalf("with the grant: %d moved, %v", n, states)
-			}
-			var cause string
-			var causedBy int64
-			ok(t, w.rt.QueryRow(ctx, `SELECT e.body_json->>'cause', e.cause_event_id FROM agentrt.plan_node n
-			  JOIN agentrt.event e ON e.event_id = n.state_event_id WHERE n.plan_node_id = $1`, s1).Scan(&cause, &causedBy))
-			if cause != "task_leased" || causedBy != leased {
-				t.Fatalf("cause %s caused by %d, the lease %d", cause, causedBy, leased)
-			}
-			if n, err := store.ActivateLeasedSteps(ctx, w.rt); err != nil || n != 0 {
-				t.Fatalf("a second pass moved %d: %v", n, err)
-			}
-		})
-	}
-}
-
 // The rule is read again once the plan stream's lock is held: a rule that
 // expires while the write waits for that lock grants nothing (review 313 A4).
 //
 // Serial: a window of four seconds: the write must be waiting for the lock
 // before the rule expires, which parallel neighbours could delay.
 func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
-	for _, path := range []string{"activate", "standing"} {
+	for _, path := range []string{"standing"} {
 		t.Run(path, func(t *testing.T) {
 			w := newWorld(t)
 			var now time.Time
@@ -185,12 +136,6 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 			  effective_at, expires_at) VALUES ('plan-standing', 1, $1, $2, 'initial', 'test', 'test', '2026-01-01T00:00:00Z', $3)`,
 				string(body), text, expires)
 			ok(t, err)
-			t1, err := w.task(t, "M-1", s1, "", "implement")
-			ok(t, err)
-			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-				_, _, lerr := store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
-				return lerr
-			}))
 			t2, err := w.task(t, "M-2", s2, "", "implement")
 			ok(t, err)
 			// Separate connections: the write waits on one, the test polls
@@ -205,11 +150,6 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 			done := make(chan map[string]any, 1)
 			a := &asker{}
 			go func() {
-				if path == "activate" {
-					n, aerr := store.ActivateLeasedSteps(ctx, pool)
-					done <- map[string]any{"n": n, "err": aerr}
-					return
-				}
 				out, perr := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "test", []store.PlanChange{{Op: "set_done_rule",
 					Node: s2, Rule: []byte(`{"task_accepted":"` + t2 + `"}`)}}, a.ask)
 				if perr != nil {
@@ -230,12 +170,6 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 			ok(t, tx.Commit(ctx))
 			out := <-done
 			switch path {
-			case "activate":
-				var state string
-				ok(t, w.rt.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, s1).Scan(&state))
-				if out["err"] != nil || state != "planned" {
-					t.Fatalf("an expired rule activated %s: %v, state %s", s1, out, state)
-				}
 			case "standing":
 				if out["decision"] != "" || out["question_id"] == nil {
 					t.Fatalf("an expired rule decided at once: %v", out)

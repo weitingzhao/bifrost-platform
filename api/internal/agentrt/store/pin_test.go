@@ -45,26 +45,6 @@ hosts: [h1, coordinator-mbp]
 	return ruleText("standing-envelope:dev", version, direction, since, until, body)
 }
 
-// pinWorld is a kernel world with the coordinator's seat and the external
-// host registered, and the envelope with its external host signed.
-func pinWorld(t *testing.T) *world {
-	t.Helper()
-	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
-			Body: map[string]any{"actors": []string{coordinatorSeat}, "note": "test: the coordinator's seat"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'seat', 'Coordinator seat')`,
-			coordinatorSeat)
-		return err
-	}))
-	ok(t, store.RegisterHost(ctx, w.rt, "owner", externalHost, store.HostExternal))
-	s := signer{t, rptest.NewKey(t)}
-	ok(t, firstErr(s.sign(w, pinEnvelope(1, rules.Initial, true))))
-	return w
-}
-
 // §2.2: what builds a task anywhere but the tasks route has no pin to set.
 // TaskProposal (goals, briefs, plans, imports) and Task (the controller's
 // checks and gates) export no pin and no session: only PinnedTask does.
@@ -82,27 +62,6 @@ func TestOnlyPinnedTaskCarriesAPin(t *testing.T) {
 	if _, ok := reflect.TypeOf(store.PinnedTask{}).FieldByName("ExecutorPin"); !ok {
 		t.Fatal("PinnedTask has no ExecutorPin")
 	}
-}
-
-// 0010: one external host at most, and a host keeps its kind.
-func TestOneExternalHostThatKeepsItsKind(t *testing.T) {
-	t.Parallel()
-	w := pinWorld(t)
-	wantErr(t, store.RegisterHost(ctx, w.rt, "owner", "another-mac", store.HostExternal), "host_one_external")
-	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h9", "vm"))
-	update := func(host, set string) error {
-		return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: "host:" + host, Type: "host_state_changed", Actor: "owner",
-				Body: map[string]any{"host_id": host, "from": "active", "to": "draining"}}); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `UPDATE agentrt.host SET `+set+` WHERE host_id = $1`, host)
-			return err
-		})
-	}
-	wantErr(t, update("h1", `host_kind = 'external'`), "keeps its kind")
-	wantErr(t, update(externalHost, `host_kind = 'dev'`), "keeps its kind")
-	ok(t, update("h1", `state = 'draining'`))
 }
 
 // An envelope's external host entry names what is there: never a host

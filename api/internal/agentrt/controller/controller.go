@@ -101,38 +101,13 @@ type Controller struct {
 	// Precheck is how a submitted implementation is checked
 	// (AGENTRT_PRECHECK, store/precheck.go): the zero value is ci.
 	Precheck store.Precheck
-	// SkipCardsTheRuleAnswers leaves unassessed the cards the
-	// card-auto-answer rule in force answers (store.ruleAnswersItem): on STG
-	// only (TD-401's second half, the Owner 2026-10-20 20:0x 「STG 上规则会答
-	// 的卡不起评估；needs_owner 的卡和审批单照常评估；PROD 不变」). Unset, every
-	// card is assessed, whatever rule is in force.
-	SkipCardsTheRuleAnswers bool
-	Now                     func() time.Time
+	Now      func() time.Time
 	// Env is the platform's own environment and GateRepo the repository its
 	// deployments are of: the architecture table's gates run there
 	// (Gates, TD-397). Either empty, no gate runs.
 	Env, GateRepo string
-	// WatchPresence has the controller watch the hosts and executors every
-	// PresenceEvery (presence.go, W-31 3.5); the server sets it, and a test
-	// that runs Start without it leaves the loop off. Started is when this
-	// controller started (Start sets it when unset): a host's silence counts
-	// from no earlier than it.
-	WatchPresence bool
 	Started       time.Time
-	// PlatformUp says whether the platform takes agentd's calls now: nil
-	// for yes, else why not (the server probes the API; review 528 A1b);
-	// PlatformProbe names the probe in what is told. While neither it nor a
-	// recent claim says yes, the presence pass tells nothing of the hosts;
-	// a host's silence counts from no earlier than the moment one did again
-	// (presence.go). nil: as if always.
-	PlatformUp    func(ctx context.Context) error
-	PlatformProbe string
-	platform      platformSeen
-	// PageOwner pages the Owner's phone and says how the relay took it
-	// ("sent", or "skipped" with no target), an error when it did not
-	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
-	PageOwner func(ctx context.Context, title, body, id string) (string, error)
-	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
+	FullCI        *FullCI // the daily full CI (fullci.go); nil runs none
 	// PipelineEvery is how often the retained pipeline runs are listed for
 	// the ones that completed (PipelineRecords); zero means
 	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares
@@ -409,13 +384,6 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 	return moved, errors.Join(errs...)
 }
 
-// Activate is one pass moving to active the planned steps whose work has
-// started, while the plan-standing rule in force says so
-// (store.ActivateLeasedSteps).
-func (c *Controller) Activate(ctx context.Context) (int, error) {
-	return store.ActivateLeasedSteps(ctx, c.DB)
-}
-
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
 // tasks whose job's candidates changed, acceptance, blocked tasks' cards (a
@@ -480,17 +448,15 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	// are not watched and no assessment is asked for. What stays in this
 	// pass is what the plan tree, the rules and the business issues need:
 	// the facts their rules read, plan decisions, issue cards, the
-	// acknowledging of used answers, the steps whose work has started, and
-	// the rules themselves.
+	// acknowledging of used answers, and the rules themselves.
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		c.readTuning(ctx)
 		_, ferr := c.Facts(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, ierr := c.IssueCards(ctx)
 		_, qerr := c.ackUsedAnswersDue(ctx)
-		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, perr, ierr, qerr, verr, rerr)
+		return errors.Join(ferr, perr, ierr, qerr, rerr)
 	})
 	c.startFullCI(ctx, &wg)
 	return wg.Wait

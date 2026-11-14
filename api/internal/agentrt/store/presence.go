@@ -33,16 +33,6 @@ import (
 // runtime has recorded and however long ago the state was set. Nothing else
 // is written to these streams.
 
-// HostOffersStream holds what a host's claims offer (RecordHostOffered).
-func HostOffersStream(host string) string { return "offers:host:" + host }
-
-// HostPresenceStream holds a host's presence turns (presencepass.go).
-func HostPresenceStream(host string) string { return "presence:host:" + host }
-
-// ExecutorPresenceStream holds an executor's presence turns, executor
-// named as its actor (exec:claude).
-func ExecutorPresenceStream(executor string) string { return "presence:" + executor }
-
 // headSQL is the SQL of the last event of the stream the SQL expression
 // stream names, as one jsonb value {"type", "at", "body"}, NULL while the
 // stream has none. It is a scalar subquery, so it is read by the stream's
@@ -108,103 +98,6 @@ type Offer struct {
 }
 
 func (o Offer) tool() Tool { return Tool{Executor: o.Executor, Provider: o.Provider, Model: o.Model} }
-
-func (o Offer) words() string {
-	if o.Model == "" {
-		return fmt.Sprintf("%s (%s)", o.Executor, o.Provider)
-	}
-	return fmt.Sprintf("%s (%s, %s)", o.Executor, o.Provider, o.Model)
-}
-
-// offersOf is tools as offers, in one order whatever the host's preference:
-// a change of preference is not a change of what it offers.
-func offersOf(tools []Tool) []Offer {
-	out := make([]Offer, 0, len(tools))
-	for _, t := range tools {
-		o := Offer{Executor: t.Executor, Provider: t.Provider, Model: t.Model}
-		if !slices.Contains(out, o) {
-			out = append(out, o)
-		}
-	}
-	slices.SortFunc(out, func(a, b Offer) int {
-		return strings.Compare(a.Executor+"\x00"+a.Provider+"\x00"+a.Model, b.Executor+"\x00"+b.Provider+"\x00"+b.Model)
-	})
-	return out
-}
-
-// claimSaid is what a host's latest claim said as its offers stream records
-// it; found false while nothing is recorded.
-type claimSaid struct {
-	found     bool
-	offers    []Offer
-	diskBelow bool
-}
-
-var latestClaimSQL = `SELECT ` + headSQL("$1::text")
-
-// latestClaim reads the head of host's offers stream.
-func latestClaim(ctx context.Context, tx pgx.Tx, host string) (claimSaid, error) {
-	var c claimSaid
-	var head []byte
-	if err := tx.QueryRow(ctx, latestClaimSQL, HostOffersStream(host)).Scan(&head); err != nil || head == nil {
-		return c, err
-	}
-	var h struct {
-		Body struct {
-			Offered   []Offer `json:"offered"`
-			DiskBelow bool    `json:"disk_below"`
-		} `json:"body"`
-	}
-	if err := json.Unmarshal(head, &h); err != nil {
-		return c, err
-	}
-	return claimSaid{found: true, offers: h.Body.Offered, diskBelow: h.Body.DiskBelow}, nil
-}
-
-// RecordHostOffered records what host's claim offers, and whether the free
-// disk it reports is below the floor (false when it reports none), when that
-// differs from what its offers stream last recorded (or nothing is recorded
-// yet): a note with both. It reports whether it recorded one. A claim
-// request calls it once, before its polls; the stream is locked before its
-// head is read again, so two claims of one host record a change once.
-func RecordHostOffered(ctx context.Context, db DB, host string, tools []Tool, diskBelow bool) (bool, error) {
-	offers := offersOf(tools)
-	same := func(tx pgx.Tx) (bool, error) {
-		last, err := latestClaim(ctx, tx, host)
-		return last.found && slices.Equal(last.offers, offers) && last.diskBelow == diskBelow, err
-	}
-	recorded := false
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		recorded = false
-		if s, err := same(tx); err != nil || s {
-			return err
-		}
-		stream := HostOffersStream(host)
-		if err := lockStream(ctx, tx, stream); err != nil {
-			return err
-		}
-		if s, err := same(tx); err != nil || s {
-			return err
-		}
-		list, words := make([]any, 0, len(offers)), make([]string, 0, len(offers))
-		for _, o := range offers {
-			list = append(list, map[string]any{"executor": o.Executor, "provider": o.Provider, "model": o.Model})
-			words = append(words, o.words())
-		}
-		text := "Host " + host + " offers no executor"
-		if len(words) > 0 {
-			text = "Host " + host + " offers " + strings.Join(words, ", ")
-		}
-		if diskBelow {
-			text += "; its free disk is below the floor"
-		}
-		_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
-			Body: map[string]any{"text": text + ".", "offered": list, "disk_below": diskBelow}})
-		recorded = err == nil
-		return err
-	})
-	return recorded && err == nil, err
-}
 
 // AgentdBuild is the build of agentd a host runs, as its claims report it: the
 // commit it was built from, whether the work tree had changes then, and the
@@ -293,22 +186,6 @@ func (h HostPresence) usable() bool {
 // silence is no news) nor a host that makes any job's executor available.
 func (h HostPresence) external() bool { return h.HostKind == HostExternal }
 
-// watched says whether the presence pass tells this host's turns: an active
-// host under no stop or drain (on it, or on every host), not the external
-// host. A host taken out of work on purpose is not reported, either way
-// (review 526 B1).
-func (h HostPresence) watched() bool {
-	if h.State != "active" || h.external() {
-		return false
-	}
-	for _, c := range h.Controls {
-		if c.Kind == "stop" || c.Kind == "drain" {
-			return false
-		}
-	}
-	return true
-}
-
 // waited is a host whose claim loop is silent but not known to have stopped
 // yet: its silence is counted from the reader's start (review 526 A1b). What
 // it can take is not known.
@@ -341,15 +218,6 @@ type presence struct {
 	unknown   []string
 	unjudged  map[string]any // presencejudge.go
 	deferred  map[string]any
-}
-
-func (p presence) executor(id string) *ExecutorPresence {
-	for i := range p.executors {
-		if p.executors[i].Executor == id {
-			return &p.executors[i]
-		}
-	}
-	return nil
 }
 
 // readPresence reads the view at now (zero: the database's clock), a host's
@@ -561,13 +429,6 @@ func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, coolin
 			"started, or whose claim has not said what it offers) may offer it"}}
 	}
 	return judged{ok: no(), why: notOffered(jc, hosts)}
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // notOffered says why no host that could take work offers a tool jc fits:

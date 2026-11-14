@@ -5,15 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gaterun"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The architecture table's gates, run by the runtime itself (TD-397; the
@@ -55,8 +52,6 @@ const (
 	GateBatchHours = 6
 	// GateUnclaimed is how long a ready gate task waits for a host.
 	GateUnclaimed = 2 * time.Hour
-	// gatePassTimeout bounds one dispatch, its locks and its live read.
-	gatePassTimeout = 30 * time.Second
 )
 
 // gateEntry is one gate of a batch: its task and the gate it runs.
@@ -67,14 +62,6 @@ type gateRun struct {
 	Env, Commit string
 	Ref         map[string]any
 	Gates       []gateEntry
-}
-
-func (g gateRun) doc() map[string]any {
-	gates := []any{}
-	for _, e := range g.Gates {
-		gates = append(gates, map[string]any{"task": e.Task, "test": e.Test, "spec_sha256": e.Spec})
-	}
-	return map[string]any{"env": g.Env, "commit": g.Commit, "deploy_ref": g.Ref, "gates": gates}
 }
 
 var (
@@ -210,195 +197,6 @@ func gateMemberOf(ctx context.Context, tx pgx.Tx, b gateBatch, taskID string) (g
 	ok := mission == b.mission && role == "verify" && class == GateClass && effect == "none" && spec == "sha256:"+e.Spec &&
 		repo == b.repo && base == b.run.Commit && by == "controller" && offPlan && subject == nil
 	return e, ok, nil
-}
-
-// RunGates is one pass of the gates in env, the platform's own environment
-// (nothing for any other name): dispatch, then the end of what cannot run
-// and the close of what has ended. repo is the repository the environment's
-// deployments are of; deployed reads what env runs now. It returns how many
-// tasks it made, cancelled and closed.
-func RunGates(ctx context.Context, db DB, env, repo string, deployed Deployed) (int, error) {
-	if !envNames[env] || repo == "" || deployed == nil {
-		return 0, nil
-	}
-	made, derr := dispatchGates(ctx, db, env, repo, deployed)
-	ended, eerr := EndGates(ctx, db, env)
-	return made + ended, errors.Join(derr, eerr)
-}
-
-// errGateNotStarted: the batch mission would not start inside the envelope;
-// the dispatch is rolled back and tried again next pass.
-var errGateNotStarted = errors.New("store: a gate batch would not start inside the standing envelope")
-
-// dispatchGates makes the batch of the gates not dispatched yet for what env
-// runs (see the top of this file), in one transaction bounded in time that
-// touches no task that exists: the deployment's lock (SeeDeploy's), the live
-// read, the architecture rows (FOR SHARE, in id order), then the batch.
-func dispatchGates(ctx context.Context, db DB, env, repo string, deployed Deployed) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, gatePassTimeout)
-	defer cancel()
-	made := 0
-	var invalidSpecs []error
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		made, invalidSpecs = 0, nil
-		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '5s'`); err != nil {
-			return err
-		}
-		keyDoc, err := canon.Encode(map[string]any{"env": env})
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742104, hashtext($1))`, "deploy_seen|"+string(keyDoc)); err != nil {
-			return err
-		}
-		d := newRecordedDeploys(ctx, tx).get(env)
-		if !d.ok {
-			return nil
-		}
-		commit, ref, ok := deployed(ctx, env)
-		if !ok || commit != d.commit || !sameRef(ref, d.ref) || !commitRe.MatchString(commit) {
-			return nil // not what was recorded, or not read: nothing new this pass
-		}
-		wanted, err := wantedGates(ctx, tx, env)
-		if err != nil || len(wanted) == 0 {
-			return err
-		}
-		done, err := dispatchedGates(ctx, tx, env, commit, ref)
-		if err != nil {
-			return err
-		}
-		var missing []plan.GateRef
-		for _, g := range wanted {
-			if done[[2]string{g.Test, g.Spec}] {
-				continue
-			}
-			if verr := storedGateSpec(ctx, tx, g.Spec); verr != nil {
-				invalidSpecs = append(invalidSpecs, fmt.Errorf("gate %s: %w", g.Test, verr))
-				continue
-			}
-			missing = append(missing, g)
-		}
-		if len(missing) == 0 {
-			return nil
-		}
-		envelope, err := inForce(ctx, tx, rules.KindEnvelope+":dev")
-		if err != nil || envelope == nil || envelope.Envelope == nil {
-			return err
-		}
-		tune, err := tuningIn(ctx, tx)
-		if err != nil {
-			return err
-		}
-		run := gateRun{Env: env, Commit: commit, Ref: ref}
-		for _, g := range missing {
-			run.Gates = append(run.Gates, gateEntry{Task: NewTaskID(), Test: g.Test, Spec: g.Spec})
-		}
-		p, err := MissionProposal{Title: fmt.Sprintf("Gates of %s %s on %s", repo, commit[:12], env),
-			Goal:    fmt.Sprintf("Run the architecture table's gates on %s at %s, the commit %s runs", repo, commit, env),
-			Success: []string{GateSuccess}, Repos: []string{repo}, MaxAction: "none",
-			MaxAttempts:  min(envelope.Envelope.Budget.MaxAttempts, tune.Int(rules.TuneGateAttemptsEach)*len(run.Gates)),
-			MaxWallHours: min(envelope.Envelope.Budget.MaxWallHours, GateBatchHours),
-			Deadline:     time.Now().Add(24 * time.Hour), gateRun: run.doc()}.check()
-		if err != nil {
-			return err
-		}
-		m, err := proposeMissionTx(ctx, tx, Writer{Actor: "controller"}, p, "", nil)
-		if err != nil {
-			return err
-		}
-		if m["state"] != "active" {
-			return fmt.Errorf("%w: %v", errGateNotStarted, m["waiting"])
-		}
-		mission, _ := m["mission_id"].(string)
-		for _, e := range run.Gates {
-			if _, err = ProposeTask(ctx, tx, "controller", Task{ID: e.Task, MissionID: mission, OffPlanReason: GateOffPlanReason,
-				Role: "verify", Class: GateClass, Title: fmt.Sprintf("Gate %s on %s at %s", e.Test, env, commit[:12]),
-				SpecArtifact: "sha256:" + e.Spec, Effect: "none", Repo: repo, BaseCommit: commit}); err != nil {
-				return err
-			}
-			if err = MarkReady(ctx, tx, "controller", e.Task); err != nil {
-				return err
-			}
-		}
-		made = len(run.Gates)
-		return nil
-	})
-	return made, errors.Join(append([]error{err}, invalidSpecs...)...)
-}
-
-// wantedGates is every gate the architecture rows' rules name in env, each
-// once, the rows held FOR SHARE in id order (a plan change takes them FOR
-// UPDATE, so the rules read are the rules in force).
-func wantedGates(ctx context.Context, tx pgx.Tx, env string) ([]plan.GateRef, error) {
-	rows, err := tx.Query(ctx, `SELECT done_rule_json::text FROM agentrt.plan_node WHERE node_kind = 'arch_row'
-	  ORDER BY plan_node_id FOR SHARE`)
-	if err != nil {
-		return nil, err
-	}
-	docs, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, err
-	}
-	seen := map[[2]string]bool{}
-	var out []plan.GateRef
-	for _, doc := range docs {
-		r, perr := plan.Parse([]byte(doc))
-		if perr != nil {
-			continue // the table shows it as a rule that does not parse
-		}
-		for _, g := range r.Gates() {
-			k := [2]string{g.Test, g.Spec}
-			if g.Env == env && !seen[k] {
-				seen[k] = true
-				out = append(out, g)
-			}
-		}
-	}
-	slices.SortFunc(out, func(a, b plan.GateRef) int {
-		if a.Test != b.Test {
-			if a.Test < b.Test {
-				return -1
-			}
-			return 1
-		}
-		if a.Spec < b.Spec {
-			return -1
-		}
-		if a.Spec > b.Spec {
-			return 1
-		}
-		return 0
-	})
-	return out, nil
-}
-
-// dispatchedGates is every (test, spec) a batch of this deployment has
-// listed, whatever became of its task.
-func dispatchedGates(ctx context.Context, tx pgx.Tx, env, commit string, ref map[string]any) (map[[2]string]bool, error) {
-	rows, err := tx.Query(ctx, `SELECT (scope_json->'gate_run')::text FROM agentrt.mission WHERE scope_json ? 'gate_run'
-	  AND created_by_actor_id = 'controller' AND scope_json->'gate_run'->>'env' = $1 AND scope_json->'gate_run'->>'commit' = $2`, env, commit)
-	if err != nil {
-		return nil, err
-	}
-	docs, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, err
-	}
-	out := map[[2]string]bool{}
-	for _, doc := range docs {
-		v, perr := canon.Parse([]byte(doc))
-		if perr != nil {
-			continue
-		}
-		g, ok := parseGateRun(v)
-		if !ok || !sameRef(g.Ref, ref) {
-			continue
-		}
-		for _, e := range g.Gates {
-			out[[2]string{e.Test, e.Spec}] = true
-		}
-	}
-	return out, nil
 }
 
 // storedGateSpec checks that the spec a gate pins is stored, is a task

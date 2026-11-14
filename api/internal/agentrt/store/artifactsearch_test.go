@@ -43,39 +43,17 @@ func TestSearchArtifacts(t *testing.T) {
 	handover, _, err := store.UploadArtifact(ctx, w.rt, thread, "handover", "text/markdown", []byte("# handover\nwhat I judged"))
 	ok(t, err)
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
-	ic := w.run(t, "h1", cursor, "done")
-	if ic.TaskID != impl {
-		t.Fatalf("ran %s, want %s", ic.TaskID, impl)
-	}
-	var report string
-	ok(t, w.rt.QueryRow(ctx, `SELECT report_artifact_id FROM agentrt.attempt WHERE attempt_id = $1`, ic.AttemptID).Scan(&report))
-	check, err := startVerify(ctx, w.rt, impl)
-	ok(t, err)
-	var checkSpec string
+	// The rows a round left (the dispatch lane is retired): the
+	// implementation's attempt with its report, a check task with a spec of
+	// its own, and the check's verdict with its evidence.
+	var attempt, check string
+	w.seeded(t, func(tx pgx.Tx) {
+		attempt = seedAttempt(t, tx, impl, "h1", cursor, "done", commitA)
+		check = seedCheck(t, tx, impl, attempt, "verify", "h2", deterministic, "pass", false)
+	})
+	var report, checkSpec, evidence string
+	ok(t, w.rt.QueryRow(ctx, `SELECT report_artifact_id FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&report))
 	ok(t, w.rt.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, check).Scan(&checkSpec))
-	// The check runs and leaves a checkpoint: an artifact only an event names.
-	cc := w.claim(t, "h2", time.Hour, deterministic)
-	if cc == nil || cc.TaskID != check {
-		t.Fatalf("the check's claim %+v", cc)
-	}
-	ok(t, store.Start(ctx, w.rt, fence(cc, "h2"), "", ""))
-	logTail := w.artifact(t, "log_tail", "the check's log so far")
-	_, err = store.Checkpoint(ctx, w.rt, fence(cc, "h2"), 1, []string{logTail}, false)
-	ok(t, err)
-	// It ends, and its verdict on the implementation is a verification with
-	// its evidence: the implementation's record.
-	exit := 0
-	_, err = store.Computed(ctx, w.rt, fence(cc, "h2"), &exit, "exit", "done")
-	ok(t, err)
-	calls := 0
-	_, err = store.Persist(ctx, w.rt, fence(cc, "h2"), store.Result{Report: w.artifact(t, "verify", `{"pass": true}`)},
-		heads(map[string]string{}, &calls))
-	ok(t, err)
-	_, err = store.Submit(ctx, w.rt, fence(cc, "h2"))
-	ok(t, err)
-	_, err = store.ConcludeWith(ctx, w.rt, check, verifyMode)
-	ok(t, err)
-	var evidence string
 	ok(t, w.rt.QueryRow(ctx, `SELECT evidence_artifact_id FROM agentrt.verification WHERE task_id = $1`, impl).Scan(&evidence))
 	// A task of M-2 with a spec of its own.
 	otherSpec := w.artifact(t, "task_spec", "# M-2's task\n")
@@ -130,17 +108,16 @@ func TestSearchArtifacts(t *testing.T) {
 			t.Fatalf("task %s: %v has no %s", impl, got, want)
 		}
 	}
-	for _, not := range []string{otherSpec, handover, checkSpec, logTail, exam} {
+	for _, not := range []string{otherSpec, handover, checkSpec, exam} {
 		if slices.Contains(got, not) {
 			t.Fatalf("task %s: %v has %s", impl, got, not)
 		}
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: check}); !slices.Contains(got, checkSpec) || !slices.Contains(got, logTail) ||
-		slices.Contains(got, report) {
+	if got, _ = search(t, w, store.ArtifactQuery{Task: check}); !slices.Contains(got, checkSpec) || slices.Contains(got, report) {
 		t.Fatalf("the check's: %v", got)
 	}
 	got, _ = search(t, w, store.ArtifactQuery{Mission: "M-1"})
-	for _, want := range []string{w.spec, report, checkSpec, logTail} {
+	for _, want := range []string{w.spec, report, checkSpec} {
 		if !slices.Contains(got, want) {
 			t.Fatalf("mission M-1: %v has no %s", got, want)
 		}

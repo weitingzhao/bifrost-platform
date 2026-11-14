@@ -3,23 +3,12 @@ package store_test
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The exact claim and the pinned result (W-31 round 4, core block C-2;
 // DESIGN-coordinator-landing-v3-2026-10-29.md §2.4–§2.8, §6 T5–T18).
-
-func TestPinnedReviewLimit(t *testing.T) {
-	t.Parallel()
-	for lines, want := range map[int]time.Duration{0: time.Hour, 1: 90 * time.Minute, 300: 90 * time.Minute, 301: 2 * time.Hour,
-		1200: 3 * time.Hour, 100000: 3 * time.Hour} {
-		if got := store.PinnedReviewLimit(lines); got != want {
-			t.Errorf("%d lines: %v, want %v", lines, got, want)
-		}
-	}
-}
 
 // The seat the platform registers at its start (the gap C-1 left): only
 // RegisterableSeats, only when the token table names it, once.

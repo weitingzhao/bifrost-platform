@@ -2,13 +2,11 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -54,10 +52,6 @@ func (q *reviewTx) Exec(_ context.Context, s string, a ...any) (pgconn.CommandTa
 func (*reviewTx) Commit(context.Context) error   { return nil }
 func (*reviewTx) Rollback(context.Context) error { return nil }
 
-type reviewDB struct{ tx *reviewTx }
-
-func (db reviewDB) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) { return db.tx, nil }
-
 const reviewEnvelope = `rule_id: standing-envelope:dev
 rule_version: 1
 direction: initial
@@ -77,112 +71,6 @@ external_hosts:
     repos: [bifrost-platform]
     roles: [implement]
 `
-
-func Test691SalvageCannotReplaceReviewFacts(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	now := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
-	base, oldResult, newResult := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40)
-	task, attempt, host := "t_00000000000000000000000001", "a_fixture", "coordinator-mbp"
-	rule, err := rules.Parse([]byte(reviewEnvelope))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := rule.BodyJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	signer := "fixture"
-	latest := map[string]any{"changed_lines": float64(1200), "hard": true, "pushed_commit": oldResult}
-	storedResult := oldResult
-	storedReport := "sha256:" + strings.Repeat("d", 64)
-	storedRef := AttemptRef(task, 1)
-	persistedFacts := map[string]any{"changed_lines": float64(1200), "hard": true, "pushed_commit": oldResult}
-	q := &reviewTx{}
-	q.exec = func(sql string, args []any) error {
-		if strings.Contains(sql, "UPDATE agentrt.attempt SET persisted_at") {
-			storedResult = args[3].(string)
-		}
-		return nil
-	}
-	q.query = func(sql string, args []any) pgx.Row {
-		switch {
-		case strings.Contains(sql, "FROM agentrt.idempotency_key"):
-			return reviewRow{err: pgx.ErrNoRows}
-		case strings.Contains(sql, "SELECT COALESCE(executor_pin, '')"):
-			return pinnedTaskRow()
-		case strings.Contains(sql, "SELECT COALESCE(t.repo, '') FROM agentrt.attempt"):
-			return reviewValues("bifrost-platform")
-		case strings.Contains(sql, "SELECT COALESCE(t.executor_pin, '')") && strings.Contains(sql, "FROM agentrt.attempt"):
-			return reviewValues(rules.PinCoordinator, "bifrost-platform")
-		case strings.Contains(sql, "SELECT attempt_id, task_id, attempt_no"):
-			return reviewValues(attempt, task, 1, &host, "lost", int64(1), now.Add(-time.Hour), true, true, true)
-		case strings.Contains(sql, "SELECT clock_timestamp()"):
-			return reviewValues(now)
-		case strings.Contains(sql, "SELECT COALESCE(pushed_ref"):
-			return reviewValues(storedRef, storedResult, storedReport)
-		case strings.Contains(sql, "COALESCE(body_json->'artifacts'"):
-			return reviewValues([]byte(fmt.Sprintf(`[%q]`, storedReport)))
-		case strings.Contains(sql, "SELECT effect_class, role"):
-			return reviewValues("branch", "implement", base)
-		case strings.Contains(sql, "FROM unnest($1::text[])"):
-			return reviewValues([]string{})
-		case strings.Contains(sql, "SELECT a.artifact_kind, b.body"):
-			return reviewValues("report", []byte("fixture report"))
-		case strings.Contains(sql, "SELECT COALESCE(t.executor_pin, '')"):
-			return reviewValues(rules.PinCoordinator, "bifrost-platform", base, true, "dev")
-		case strings.Contains(sql, "FROM agentrt.rule"):
-			return reviewValues(rule.Version, rule.Direction, rule.Effective, rule.Expires, reviewEnvelope, body, &signer)
-		case strings.Contains(sql, "SELECT mission_id FROM agentrt.task"):
-			return reviewValues("M-1")
-		case strings.Contains(sql, "SELECT last_seq, last_sha256"):
-			return reviewValues(int64(1), strings.Repeat("0", 64))
-		case strings.Contains(sql, "INSERT INTO agentrt.event"):
-			if err := json.Unmarshal([]byte(args[9].(string)), &latest); err != nil {
-				t.Fatal(err)
-			}
-			return reviewValues(int64(2))
-		case strings.Contains(sql, "body_json->>'changed_lines'"):
-			facts := latest
-			if len(args) == 2 && args[1] == oldResult {
-				facts = persistedFacts
-			}
-			return reviewValues(int(facts["changed_lines"].(float64)))
-		default:
-			t.Fatalf("unexpected query: %s", sql)
-			return reviewRow{err: errors.New("unexpected SQL")}
-		}
-	}
-	res := Result{Report: "sha256:" + strings.Repeat("d", 64), Ref: AttemptRef(task, 1), Commit: newResult}
-	facts := CommitFacts{Parents: []string{base}, Message: "fixture\n\nAgentrt-Task: " + task + "\nChange-Id: I" + strings.Repeat("e", 40) + "\n", Paths: []string{"docs/note.txt"}, Lines: 1}
-	salvage := func(r Result) error {
-		_, err := SalvageChecked(ctx, reviewDB{q}, attempt, host, r,
-			func(context.Context, string, string) (string, error) { return r.Commit, nil },
-			func(context.Context, string, string) (CommitFacts, error) { return facts, nil })
-		return err
-	}
-	if err := salvage(res); !errors.Is(err, ErrState) {
-		t.Fatalf("salvage B after persisted A: %v", err)
-	}
-	if latest["pushed_commit"] != oldResult || storedResult != oldResult {
-		t.Fatal("rejected replacement changed result facts")
-	}
-	res.Commit = oldResult
-	facts.Lines, facts.Paths = 1200, []string{"api/internal/agentrt/store/pin.go"}
-	if err := salvage(res); err != nil {
-		t.Fatal(err)
-	}
-	// Legacy/corrupt later events about B cannot supply A's review facts.
-	latest = map[string]any{"changed_lines": float64(1), "hard": false, "pushed_commit": newResult}
-	spec := checkSpec{check: "review", attempt: attempt, commit: oldResult}
-	limit, err := pinnedReview(ctx, q, task, &spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if limit != 3*time.Hour {
-		t.Fatalf("review A used B facts: %v", limit)
-	}
-}
 
 func Test691PendingExternalKnownNames(t *testing.T) {
 	t.Parallel()
@@ -218,37 +106,4 @@ func Test691PendingExternalKnownNames(t *testing.T) {
 			}
 		})
 	}
-}
-
-func Test691ReviewFactsMatchCommit(t *testing.T) {
-	t.Parallel()
-	q := &reviewTx{query: func(sql string, args []any) pgx.Row {
-		if strings.Contains(sql, "SELECT COALESCE(executor_pin") {
-			return pinnedTaskRow()
-		}
-		if strings.Contains(sql, "changed_lines") {
-			if len(args) == 2 && args[1] == "A" {
-				return reviewValues(1200)
-			}
-			return reviewValues(1)
-		}
-		t.Fatalf("unexpected query %s", sql)
-		return reviewRow{}
-	}}
-	spec := checkSpec{check: "review", attempt: "attempt", commit: "A"}
-	limit, err := pinnedReview(context.Background(), q, "task", &spec)
-	if err != nil || limit != 3*time.Hour {
-		t.Fatalf("review A: %v %v", limit, err)
-	}
-	spec = checkSpec{check: "review", attempt: "attempt", commit: "B"}
-	limit, err = pinnedReview(context.Background(), q, "task", &spec)
-	if err != nil || limit != 90*time.Minute {
-		t.Fatalf("review B control: %v %v", limit, err)
-	}
-}
-
-// pinnedTaskRow is pinnedReview's one read of a pinned task (review 698
-// R-05): the pin, core, repository, role, tenant and no envelope.
-func pinnedTaskRow() pgx.Row {
-	return reviewValues(rules.PinCoordinator)
 }

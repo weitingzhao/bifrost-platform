@@ -249,28 +249,6 @@ func TestLiveOrder(t *testing.T) {
 	}
 }
 
-// Review 181 B2: the usual time is read from accepted attempts only: done
-// attempts of tasks that were then rejected give none.
-func TestUsualCountsAcceptedAttemptsOnly(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	for range 3 {
-		w.endedAs(t, "rejected", "done")
-	}
-	id := w.ready(t, store.Task{})
-	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.TaskID != id {
-		t.Fatalf("claim: %+v", c)
-	}
-	doc := w.progress(t)
-	for _, m := range doc.Work.Missions {
-		for _, task := range m.Tasks {
-			if task.TaskID == id && task.UsualS != nil {
-				t.Fatalf("a usual time of %d s from attempts nobody accepted", *task.UsualS)
-			}
-		}
-	}
-}
-
 // Review 181 B3: the recent ended tasks are picked by when they ended, not
 // by updated_at, which a plan change moves: of 21 ended tasks the oldest is
 // not among the 20, even after a later change touches it.

@@ -1,13 +1,7 @@
 package controller
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // AssessEvery is how often the assessments pass runs (TD-391): a loop of its
@@ -17,62 +11,3 @@ const AssessEvery = 30 * time.Second
 
 // EvidenceTimeout bounds one assessment's read of the repositories.
 const EvidenceTimeout = 45 * time.Second
-
-// Assess is one pass of the assessments (store/assess.go, TD-391): an
-// assessment that can no longer come is recorded unavailable; then each card
-// the runtime asked and each approval waiting for the Owner is considered.
-// Only an explicit Owner request not yet dispatched is given to the chief of
-// staff's seat, a few a pass, with what the repositories hold about it. A card is read again when its task is
-// made, so one answered after the list (by the rule on STG, within seconds)
-// is not assessed (TD-401); on STG neither is a card the rule will answer
-// (SkipCardsTheRuleAnswers). It only reads the cards and the approvals:
-// nothing here answers a card or decides an approval. It returns how many it
-// asked.
-func (c *Controller) Assess(ctx context.Context) (int, error) {
-	_, eerr := store.EndAssessments(ctx, c.DB)
-	if c.Sources.Assessable == nil {
-		return 0, eerr
-	}
-	var question func(context.Context, string) (store.Question, bool)
-	if c.Sources.Question != nil {
-		question = c.question
-	}
-	type list struct {
-		items []store.AssessItem
-		err   error
-	}
-	x := bounded(c, ctx, func(ctx context.Context) list { items, err := c.Sources.Assessable(ctx); return list{items, err} })
-	errs := []error{eerr}
-	if x.err != nil {
-		errs = append(errs, fmt.Errorf("what is assessed: %w", x.err))
-	}
-	asked, most := 0, c.readTuning(ctx).Int(rules.TuneAssessPerPass)
-	for _, it := range x.items {
-		if asked == most {
-			break
-		}
-		q, fresh, err := store.AssessmentQuery(ctx, c.DB, it, c.SkipCardsTheRuleAnswers)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
-			continue
-		}
-		if !fresh {
-			continue
-		}
-		ev := store.Evidence{NotRead: []string{"the repositories: this platform reads none for assessments"}}
-		if c.Sources.Evidence != nil {
-			rctx, cancel := context.WithTimeout(ctx, EvidenceTimeout)
-			ev = c.Sources.Evidence(rctx, q)
-			cancel()
-		}
-		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question, c.SkipCardsTheRuleAnswers, c.Sources.CheckAssessment)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
-			continue
-		}
-		if task != "" {
-			asked++
-		}
-	}
-	return asked, errors.Join(errs...)
-}

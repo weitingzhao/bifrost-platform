@@ -64,7 +64,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 	} {
 		tx(func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err })
 	}
-	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+	must(t, seedHost(ctx, pool, "owner", "h1", "dev"))
 	_, ferr := pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, ferr)
 	tx(func(tx pgx.Tx) error {
