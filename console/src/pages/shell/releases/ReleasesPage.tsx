@@ -2,7 +2,7 @@ import { useQuery, useQueries } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow } from '@bifrost/ui'
 import { fetchApprovalList } from '@/api/approvals'
 import type { AuditResponse } from '@/api/auditTypes'
-import { authedFetch, operatorToken, pathSegment } from '@/api/client'
+import { authedFetch, operatorToken } from '@/api/client'
 import type { DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, GitOpsAppsResponse, ReleaseWindowResponse, StgSmokeResponse } from '@/api/deliveryTypes'
 import type { ReleaseListResponse, RunningImagesResponse } from '@/api/releases'
 import { serverFetch } from '@/api/serverContact'
@@ -12,7 +12,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { shellNavEntry } from '@/lib/shell/consoleRoutes'
 import { ReleaseHistorySection } from '@/pages/shell/releases/ReleaseHistorySection'
 import { ReleaseInProgressSection } from '@/pages/shell/releases/ReleaseInProgressSection'
-import { ReleaseLanesSection, type LandingRuleRead } from '@/pages/shell/releases/ReleaseLanesSection'
+import { ReleaseLanesSection } from '@/pages/shell/releases/ReleaseLanesSection'
 import { ReleaseNeedsYouSection } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import { ReleasePolicyDecisionsSection } from '@/pages/shell/releases/ReleasePolicyDecisionsSection'
 import {
@@ -116,12 +116,6 @@ export function ReleasesPage() {
     enabled: hasToken,
     refetchInterval: 30_000,
   })
-  const landingRule = useQuery({
-    queryKey: ['agentrt', 'rules', 'landing:dev'],
-    queryFn: limited(signal => get<LandingRuleRead>('landing rule', `/api/v1/agentrt/rules/${pathSegment('landing:dev')}`, signal, true)),
-    enabled: hasToken,
-    refetchInterval: 60_000,
-  })
 
   const pipelineNames = (pipelines.data?.pipelines ?? [])
     .map(pipeline => pipeline.name)
@@ -180,7 +174,6 @@ export function ReleasesPage() {
         pipelines={{ data: pipelines.data == null || pipelinesUnreached != null ? undefined : pipelineNames, error: errorText(pipelines.error) ?? pipelinesUnreached }}
         runs={laneRuns}
         images={{ data: images.data == null || images.data.error ? undefined : (images.data.cells ?? []), error: errorText(images.error) ?? (images.data?.error || null) }}
-        rule={{ data: landingRule.data, error: errorText(landingRule.error) }}
         approvals={pending}
       />
 

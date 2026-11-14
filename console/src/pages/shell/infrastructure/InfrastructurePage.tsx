@@ -1,7 +1,6 @@
 import { useDomainSection } from '@/lib/shell/useHashSection'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { BackupStatusPanel } from '../data/BackupStatusPanel'
-import { RuntimeHosts } from './RuntimeHosts'
 import { ComputeReadings } from './ComputeReadings'
 import { useQuery } from '@tanstack/react-query'
 import { fetchContext } from '@/api/core'
@@ -30,7 +29,7 @@ export function InfrastructurePage() {
         <h2 className="m-0 text-sm font-semibold">Network</h2>
         <NetworkPage context={contextQ.data} />
       </DomainSection>
-      <DomainSection active={selected == null || selected === 'hosts'} id="hosts" label="Hosts"><RuntimeHosts /><RuntimeMapSection /><MiniCards /></DomainSection>
+      <DomainSection active={selected == null || selected === 'hosts'} id="hosts" label="Hosts"><RuntimeMapSection /><MiniCards /></DomainSection>
       <DomainSection active={selected == null || selected === 'backup'} id="backup" label="Storage and backup"><BackupStatusPanel /></DomainSection>
     </div>
   )

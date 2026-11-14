@@ -10,7 +10,7 @@ import { approvalHref, releaseWindowView } from '@/pages/shell/releases/releaseV
 const NOW = Date.parse('2026-11-01T06:00:00Z')
 const P = 'abcd1234567890abcd1234567890abcd12345678'
 const U = '1234567890abcdef1234567890abcdef12345678'
-// Shapes of the Go handlers: releases.Record, delivery.PipelineRunView, releases.ImageCell, agentrtapi getRule (rules.Rule.Doc).
+// Shapes of the Go handlers: releases.Record, delivery.PipelineRunView, releases.ImageCell.
 const record = (run: string, pipeline: string, lane: string, env: string, deploys: boolean, at: string) => ({
   run, pipeline, lane, env, deploys, started_at: at, completed_at: at, recorded_at: at,
   repos: { 'bifrost-platform': { sha: P, source: 'result' }, 'bifrost-ui': { sha: U, source: 'result' } },
@@ -19,9 +19,6 @@ const run = (name: string, pipeline: string, reason: string, start: string, end?
   name, namespace: 'cicd', pipeline, revision, status: reason === 'Running' ? 'Unknown' : reason === 'Succeeded' ? 'True' : 'False', reason, start_time: start, completion_time: end,
 })
 const approval = { id: 'ap-prod-1', action: 'start_pipeline_run', tier: 'C', status: 'pending', params: { name: 'bifrost-deliver-platform-prod', revision: P } } as unknown as ApprovalItem
-const RULE = { rule_id: 'landing:dev', signed_by: 'owner', in_force: { rule_id: 'landing:dev', rule_version: 7, tenant: 'dev',
-  repos: [{ repo: 'bifrost-platform', allow: [], deny: [], stg_release: 'bifrost-deliver-platform' }, { repo: 'bifrost-trade-infra', allow: [], deny: [], stg_release: 'none' }],
-  limits: { max_files: 20, max_changed_lines: 300, max_landings_per_day: 12, max_in_flight_per_repo: 1 } } }
 
 function props(over: Partial<ReleaseLanesProps> = {}): ReleaseLanesProps {
   return {
@@ -34,7 +31,6 @@ function props(over: Partial<ReleaseLanesProps> = {}): ReleaseLanesProps {
       'bifrost-deliver-prod': { data: [], error: null }, 'bifrost-build-flex-query': { data: [run('flex-1', 'bifrost-build-flex-query', 'Succeeded', '2026-10-30T00:00:00Z')], error: null } },
     images: { data: [{ lane: 'research', env: 'stg', absent: true, text: 'No STG' }, { lane: 'research', env: 'prod', text: 'research-api 0.205.0' },
       { lane: 'market-data', env: 'stg', absent: true, text: 'No STG' }, { lane: 'market-data', env: 'prod', text: 'market-data-api 0.61.0 · flex-query-api 0.9.1 · ib-gateway unread' }], error: null },
-    rule: { data: RULE, error: null },
     ...over,
   }
 }
@@ -51,7 +47,7 @@ function show(id: string, over: Partial<ReleaseLanesProps>): string {
 describe('ReleaseLanesSection', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('shows each line: landing, STG and PROD commits with time, runs in flight, and a link to a waiting approval', () => {
+  it('shows each line: STG and PROD commits with time, runs in flight, and a link to a waiting approval', () => {
     render(<ReleaseLanesSection {...props()} />)
     const platform = within(lane('platform'))
     expect(platform.getAllByText('platform abcd123 · ui 1234567')).toHaveLength(2)
@@ -99,7 +95,7 @@ describe('ReleaseLanesSection', () => {
   it('1: says it is the last successful delivery, and names a newer run that ended unsuccessfully', () => {
     const { unmount } = render(<ReleaseLanesSection {...props()} />)
     expect(screen.getByText(/the last successful STG and PROD delivery \(what runs now is not confirmed\)/)).toBeTruthy()
-    expect(screen.getByRole('list', { name: 'Release lanes: landing and last successful delivery per environment' })).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Release lanes: last successful delivery per environment' })).toBeTruthy()
     unmount()
     const text = show('platform', { runs: { 'bifrost-deliver-platform-prod': { error: null, data: [
       run('prod-C', 'bifrost-deliver-platform-prod', 'Failed', '2026-11-01T04:40:00Z', '2026-11-01T05:00:00Z'),
@@ -137,13 +133,6 @@ describe('ReleaseLanesSection', () => {
     expect(text).toContain('stgrel-14-1-abcd1234 · Running · started 6m ago · platform abcd123')
   })
 
-  it("4: says what the landing rule allows, with each repository's own limit, and when no rule is in force", () => {
-    const rule = { ...RULE, in_force: { ...RULE.in_force, repos: [{ repo: 'bifrost-platform', limits: { max_in_flight: 2 } }, { repo: 'bifrost-trade-infra' }] } }
-    expect(show('platform', { rule: { data: rule, error: null } }))
-      .toContain('LandingUnknownlanding:dev v7 allows platform (at most 2 in flight), trade-infra (at most 1 in flight); live state and landings in flight not read')
-    expect(show('research', {})).toContain('LandingNot allowed by landing:dev v7')
-    expect(show('platform', { rule: { data: { in_force: null }, error: null } })).toContain('LandingNo landing rule in force')
-  })
 
   it('5: names the commits and image digests a release record is missing', () => {
     const records = { data: [{ ...record('stgrel-12-1-abcd1234', 'bifrost-deliver-platform', 'platform', 'stg', true, '2026-11-01T03:00:00Z'),
@@ -158,26 +147,24 @@ describe('ReleaseLanesSection', () => {
     const text = screen.getByTestId('release-lanes-window').textContent
     expect(text).toContain('Held by stgrel-bifrost-platform-12-1')
     expect(text).toContain('bifrost-platform · stg · 4m left')
-    expect(text).toContain('Blocks landings and releases in every repository')
+    expect(text).toContain('Blocks releases in every repository')
   })
 
   it('shows Unknown with the reason when the reads fail, and does not crash', () => {
-    render(<ReleaseLanesSection {...props({ records: { error: 'releases: HTTP 502' }, images: { error: 'running images: HTTP 500' }, rule: { error: 'landing rule: HTTP 503' },
+    render(<ReleaseLanesSection {...props({ records: { error: 'releases: HTTP 502' }, images: { error: 'running images: HTTP 500' },
       runs: { 'bifrost-deliver-stg': { error: 'pipeline runs: HTTP 502' } }, approvals: [],
       window: releaseWindowView({ hasToken: true, isLoading: false, error: 'release window: HTTP 502', data: undefined, now: NOW }) })} />)
     expect(lane('trade').textContent).toContain('release records: releases: HTTP 502; bifrost-deliver-stg runs not read (pipeline runs: HTTP 502)')
     expect(lane('platform').textContent).toContain('bifrost-deliver-platform runs not read (pipeline not listed)')
     expect(lane('research').textContent).toContain('running-images: running images: HTTP 500')
-    expect(lane('research').textContent).toContain('landing rule: HTTP 503')
     expect(screen.getByTestId('release-lanes-window').textContent).toContain('Unknown')
   })
 
-  it('without records, runs or a token says none was found and why landing is unknown', () => {
-    render(<ReleaseLanesSection {...props({ hasToken: false, approvals: [], records: { data: [], error: null }, images: { data: [], error: null }, rule: { error: null },
+  it('without records, runs or a token says none was found', () => {
+    render(<ReleaseLanesSection {...props({ hasToken: false, approvals: [], records: { data: [], error: null }, images: { data: [], error: null },
       runs: { 'bifrost-deliver-platform': { data: [], error: null }, 'bifrost-deliver-platform-prod': { data: [], error: null } },
       window: releaseWindowView({ hasToken: false, isLoading: false, error: null, data: undefined, now: NOW }) })} />)
     expect(lane('platform').textContent).toContain('None in the newest 40 records or the run list')
-    expect(lane('platform').textContent).toContain('This device has no viewer token')
     expect(lane('research').textContent).toContain('running-images has no prod cell for research')
     expect(lane('platform').textContent).toContain('platform runs · 0')
   })
@@ -198,7 +185,6 @@ describe('ReleaseLanesSection', () => {
       }
       const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/delivery/pipelines')) return json({ reachability: 'ok', pipelines: ['stg', 'prod', 'platform', 'platform-prod', 'research'].map(n => ({ name: `bifrost-deliver-${n}` })) })
-      if (url.endsWith('/rules/landing:dev')) return json(RULE)
       if (url.endsWith('/releases/running-images')) return json({ cells: [{ lane: 'research', env: 'stg', absent: true, text: 'No STG' }, { lane: 'research', env: 'prod', text: 'research-api 0.205.0' }] })
       if (url.endsWith('/gitops/apps')) return json({ apps: [{ name: 'bifrost-prod', namespace: 'argocd', destination_namespace: 'bifrost-prod', revision: P, sync_status: 'Synced', health_status: 'Healthy' }] })
       if (url.endsWith('/api/v1/actions')) return json([{ id: 'gitops_rollback_app', tier: 'B', description: 'rollback', params: [{ name: 'name', type: 'string', required: true }] }])
@@ -207,7 +193,7 @@ describe('ReleaseLanesSection', () => {
     const { unmount } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ReleasesPage /></QueryClientProvider>)
     return Object.assign(state, { unmount })
   }
-  const own = (c: { url: string }) => /releases|gitops|delivery|rules\/landing/.test(c.url)
+  const own = (c: { url: string }) => /releases|gitops|delivery/.test(c.url)
 
   it('6: on the Releases page, with a PROD application listed, never has more than four reads in flight, and makes no heavy runtime read', async () => {
     const state = page()

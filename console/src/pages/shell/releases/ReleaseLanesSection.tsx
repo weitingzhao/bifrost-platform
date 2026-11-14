@@ -4,12 +4,9 @@ import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatPipelineRunStatus, isPipelineRunFailed, isPipelineRunRunning, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
-import { NO_VIEWER_TOKEN, RELEASE_RECORD_LIMIT, approvalHref, formatBuiltFrom, formatBuiltFromTitle, formatDuration, formatInstant, shortSha,
+import { RELEASE_RECORD_LIMIT, approvalHref, formatBuiltFrom, formatBuiltFromTitle, formatDuration, formatInstant, shortSha,
   type ReleaseWindowView } from '@/pages/shell/releases/releaseView'
 
-/** GET /api/v1/agentrt/rules/landing:dev (agentrtapi getRule): `in_force` is rules.Rule.Doc of the landing rule. */
-export type LandingRuleRead = { in_force?: { rule_version?: number; repos?: { repo: string; limits?: { max_in_flight?: number } }[]
-  limits?: { max_in_flight_per_repo?: number } } | null }
 
 /** One read: `data` once answered, `error` once failed, neither while it is read. */
 export type LaneRead<T> = { data?: T; error: string | null }
@@ -24,7 +21,6 @@ export type ReleaseLanesProps = {
   /** By pipeline; a pipeline missing here was not read. */
   runs: Record<string, LaneRead<DeliveryPipelineRunView[]>>
   images: LaneRead<RunningImageCell[]>
-  rule: LaneRead<LandingRuleRead>
   approvals: ApprovalItem[]
 }
 
@@ -46,7 +42,6 @@ const LANES: Lane[] = [
   { id: 'ib-gateway', lane: 'market-data', repos: ['bifrost-platform-plugin'], rev: 'plugin', build: 'bifrost-build-ib-gateway', image: 'ib-gateway' },
 ]
 
-const IN_FLIGHT_GAP = 'no per-repository landing read exists. landing/operations/{op} needs an operation id; landing/missions/* folds the whole event stream (the read that ran PROD platform-api out of memory on 2026-10-31) and is not used here.'
 
 type Note = { text: string; title?: string; href?: string }
 /** `at`: when what the cell shows finished, NaN when unknown. */
@@ -166,18 +161,6 @@ function imageCell(row: Lane, env: 'stg' | 'prod', p: ReleaseLanesProps): Cell {
   return { ...cell, notes: [...cell.notes, ...built, ...inFlight(row.build, 'Building', p, row.rev)] }
 }
 
-function landingCell(row: Lane, p: ReleaseLanesProps): Cell {
-  if (!p.hasToken) return unknown(NO_VIEWER_TOKEN)
-  if (p.rule.error != null) return unknown(p.rule.error)
-  if (p.rule.data == null) return READING
-  const rule = p.rule.data.in_force
-  if (rule == null) return { text: 'No landing rule in force', notes: [] }
-  // A repository's own limit replaces the default (rules.Landing.EffectiveLimits).
-  const allowed = (rule.repos ?? []).filter(r => row.repos.includes(r.repo))
-    .map(r => `${short(r.repo)} (at most ${r.limits?.max_in_flight ?? rule.limits?.max_in_flight_per_repo ?? '?'} in flight)`)
-  if (allowed.length === 0) return { text: `Not allowed by landing:dev v${rule.rule_version ?? '?'}`, notes: [] }
-  return { text: 'Unknown', notes: [{ text: `landing:dev v${rule.rule_version ?? '?'} allows ${allowed.join(', ')}; live state and landings in flight not read` }] }
-}
 
 function LaneCell({ label, cell }: { label: string; cell: Cell }) {
   return <div className="min-w-0 text-sm [overflow-wrap:anywhere]">
@@ -205,25 +188,19 @@ function LaneRuns({ row, p }: { row: Lane; p: ReleaseLanesProps }) {
 
 export function ReleaseLanesSection(p: ReleaseLanesProps) {
   const w = p.window
-  const rule = p.rule.data?.in_force
-  const meta = 'm-0 px-3 pb-1 text-xs text-muted-foreground [overflow-wrap:anywhere]'
   return <OpsSection id="release-lanes" title="Release lanes" bodyPadding="none" overflow="visible"
-    description="Each release line: landing, the last successful STG and PROD delivery (what runs now is not confirmed), and the one release window every repository shares.">
+    description="Each release line: the last successful STG and PROD delivery (what runs now is not confirmed), and the one release window every repository shares.">
     <div className="@container flex min-w-0 flex-col">
       <div data-testid="release-lanes-window" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm">
         <DenseTag variant={w.state === 'held' ? 'warning' : w.state === 'free' ? 'success' : 'neutral'}>{w.state === 'held' || w.state === 'free' ? w.state : 'unknown'}</DenseTag>
         <span className="font-medium">{w.text}</span>
         {w.detail !== '' && <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{w.detail}</span>}
-        {w.state === 'held' && <strong>Blocks landings and releases in every repository until it is released or expires.</strong>}
+        {w.state === 'held' && <strong>Blocks releases in every repository until it is released or expires.</strong>}
       </div>
-      <p className={`${meta} pb-2`}>
-        Landings in flight: <strong className="text-foreground">Unknown</strong>{` — ${IN_FLIGHT_GAP} Default limit ${rule?.limits?.max_in_flight_per_repo ?? 'unknown'} per repository; a repository's own limit shows on its line.`}
-      </p>
-      <ul aria-label="Release lanes: landing and last successful delivery per environment" className="m-0 list-none p-0">
+      <ul aria-label="Release lanes: last successful delivery per environment" className="m-0 list-none p-0">
         {LANES.map(row => <li key={row.id} data-lane={row.id}
-          className="grid gap-x-4 gap-y-1 border-t border-[var(--card-border)] px-3 py-2 @3xl:grid-cols-[minmax(0,9rem)_repeat(3,minmax(0,1fr))]">
+          className="grid gap-x-4 gap-y-1 border-t border-[var(--card-border)] px-3 py-2 @3xl:grid-cols-[minmax(0,9rem)_repeat(2,minmax(0,1fr))]">
           <div className="min-w-0"><strong>{row.id}</strong><div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.repos.map(short).join(' · ')}</div></div>
-          <LaneCell label="Landing" cell={landingCell(row, p)} />
           {(['stg', 'prod'] as const).map(env => (row.stg != null
             ? <LaneCell key={env} label={`${env.toUpperCase()} · last successful delivery`} cell={deployCell(row, env, p)} />
             : <LaneCell key={env} label={`${env.toUpperCase()} · image in Deployment spec`} cell={imageCell(row, env, p)} />))}
