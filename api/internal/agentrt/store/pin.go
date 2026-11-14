@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -60,10 +59,6 @@ type PinnedTask struct {
 // work); nothing of the batch was written. It is an ErrInvalid.
 var ErrMixedSource = fmt.Errorf("%w: mixed_source_not_supported", ErrInvalid)
 
-// generatedSpec stands in, until the write, for the spec of a pinned task
-// that names none: the platform writes it (pinnedSpec).
-const generatedSpec = "generated"
-
 // pinning is what a pinned batch adds to its tasks: each one's pin, by ref,
 // and the session header it came with.
 type pinning struct {
@@ -72,99 +67,6 @@ type pinning struct {
 	providers  map[string][]string
 	reasons    map[string]string
 	viaSession string
-}
-
-// ProposePinnedTasks is ProposeTasks for a batch with an executor pin on
-// some of its tasks (the route calls it only then; a batch with none is
-// ProposeTasks's, with its digest). viaSession is the X-Bifrost-Session
-// header, "" for none. A pinned task the writer may not propose refuses the
-// whole batch (ErrPinNotPermitted); a retry with the key is answered again
-// only to the writer who may pin (§2.6).
-func ProposePinnedTasks(ctx context.Context, db DB, w Writer, key, missionID, viaSession string, tasks []PinnedTask) (map[string]any, error) {
-	executors := map[string]string{}
-	props := make([]TaskProposal, 0, len(tasks))
-	pins, providers, reasons := map[string]string{}, map[string][]string{}, map[string]string{}
-	for _, t := range tasks {
-		// The mode is the route's (CheckPinReason there); here only the
-		// reason's own shape, whoever calls.
-		if _, err := CheckPinReason(t, PinReasonWarn); err != nil {
-			return nil, err
-		}
-		if t.ExecutorPin != "" {
-			executors[t.Ref] = t.Executor
-			pins[t.Ref], providers[t.Ref], reasons[t.Ref] = t.ExecutorPin, slices.Clone(t.Providers), t.PinReason
-			if t.SpecArtifact == "" {
-				t.SpecArtifact = generatedSpec
-			}
-		}
-		props = append(props, t.TaskProposal)
-	}
-	if len(pins) == 0 {
-		return ProposeTasks(ctx, db, w, key, missionID, props)
-	}
-	if key == "" {
-		return nil, invalid("an idempotency key is required")
-	}
-	if err := checkBatch(props); err != nil {
-		return nil, err
-	}
-	if why := badViaSession(viaSession); why != "" {
-		return nil, invalid("X-Bifrost-Session %s", why)
-	}
-	for ref, pin := range pins {
-		if !slices.Contains(ExecutorPins, pin) {
-			return nil, &handinRefusal{task: ref, err: pinRefused("task %s: executor_pin %q is none of %v", ref, pin, ExecutorPins)}
-		}
-	}
-	req := batchRequest(missionID, props)
-	for i, t := range tasks {
-		if t.ExecutorPin != "" {
-			req["tasks"].([]any)[i].(map[string]any)["executor_pin"] = t.ExecutorPin
-			req["tasks"].([]any)[i].(map[string]any)["providers"] = nonNil(t.Providers)
-			if t.PinReason != "" {
-				// Only when given, so a retry of a batch from before the
-				// field digests as it did.
-				req["tasks"].([]any)[i].(map[string]any)["pin_reason"] = t.PinReason
-			}
-		}
-	}
-	for i, t := range tasks {
-		if t.ExecutorPin != "" && t.Executor != "" {
-			req["tasks"].([]any)[i].(map[string]any)["executor"] = t.Executor
-		}
-	}
-	req["via_session"] = viaSession
-	p := &pinning{executors: executors, pins: pins, providers: providers, reasons: reasons, viaSession: viaSession}
-	for try := 1; ; try++ {
-		out, err := idempotentHeld(ctx, db, w, "missions/"+missionID+"/tasks", key, req,
-			func(pgx.Tx) error { return pinWriter(w) },
-			func(tx pgx.Tx) (map[string]any, error) {
-				if err := ensureWriter(ctx, tx, w, true); err != nil {
-					return nil, err
-				}
-				// The rules' lock, shared, before any step or task (review
-				// 686 R-01): every rule write takes it exclusively, after its
-				// writer, as here, so the envelope checkPin reads stays the one
-				// in force until this commits. A tightening that drops the
-				// entry commits before this reads it or after this commits,
-				// never in between.
-				if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
-					return nil, err
-				}
-				hook("pin rules held", w.Actor)
-				if err := checkImplementSpecs(ctx, tx, props, pins); err != nil {
-					return nil, err
-				}
-				return proposeBatchTx(ctx, tx, w, missionID, props, p)
-			})
-		if !lockNotAvailable(err) {
-			return out, err
-		}
-		if try == busyTries {
-			return nil, fmt.Errorf("%w: mission %s: %v", ErrBusy, missionID, err)
-		}
-		time.Sleep(time.Duration(try*try) * 20 * time.Millisecond)
-	}
 }
 
 // pinWriter is what a writer must be to set a pin, whatever the rules say:

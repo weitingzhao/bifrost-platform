@@ -10,29 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// claimOne leases the world's task to agentd h1 and starts it; it returns the
-// attempt id and a fence builder.
-func claimOne(t *testing.T, s interface{ Close() }, call2 func(caller, method, path string, body any) (int, map[string]any)) (string, func(map[string]any) map[string]any) {
-	t.Helper()
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	code, claim := call2("agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}})
-	if code != http.StatusOK {
-		t.Fatalf("claim: %d %v", code, claim)
-	}
-	attempt := claim["attempt_id"].(string)
-	fence := func(extra map[string]any) map[string]any {
-		b := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]}
-		for k, v := range extra {
-			b[k] = v
-		}
-		return b
-	}
-	if code, out := call2("agentd:h1", "POST", "attempts/"+attempt+"/start", fence(map[string]any{"model_provider": "cursor-mix"})); code != http.StatusOK {
-		t.Fatalf("start: %d %v", code, out)
-	}
-	return attempt, fence
-}
-
 // The Owner asks the chief of staff; only the receiver reads and acknowledges it.
 func TestMessages(t *testing.T) {
 	t.Parallel()

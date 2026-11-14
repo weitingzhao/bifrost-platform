@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -22,41 +21,6 @@ func badAssessmentRequest(v any) string {
 		return "needs a card or approval kind and a non-empty string id"
 	}
 	return ""
-}
-
-// RequestAssessment records the Owner's opt-in, without reading evidence or
-// creating a mission. The existing item stream serializes repeated clicks and
-// dispatch. check reads the current item; even a replay must reject a closed item.
-func RequestAssessment(ctx context.Context, db DB, w Writer, kind, id string, check func(context.Context) error) error {
-	if w.Actor != "owner" {
-		return ErrNotOwner
-	}
-	if (kind != AssessCard && kind != AssessApproval) || strings.TrimSpace(id) == "" {
-		return fmt.Errorf("%w: an assessment needs a card or approval id", ErrState)
-	}
-	if check == nil {
-		return fmt.Errorf("%w: assessment item cannot be checked", ErrState)
-	}
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		if err := ensureWriter(ctx, tx, w, false); err != nil {
-			return err
-		}
-		stream := AssessStream(kind, id)
-		if err := lockStream(ctx, tx, stream); err != nil {
-			return err
-		}
-		if err := check(ctx); err != nil {
-			return err
-		}
-		st, err := assessStateOf(ctx, tx, stream)
-		if err != nil || st.requested || st.asked || st.done {
-			return err
-		}
-		_, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: w.Actor,
-			Body: map[string]any{"text": "the Owner requested an AI assessment; advice only",
-				"assessment_requested": map[string]any{"kind": kind, "id": id}}})
-		return err
-	})
 }
 
 // ReadAssessment reads only the lasting record, including pre-opt-in results.

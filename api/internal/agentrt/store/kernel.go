@@ -252,16 +252,6 @@ func RegisterHost(ctx context.Context, db DB, by, hostID, kind string) error {
 	return registerHost(ctx, db, by, hostID, kind, "", false)
 }
 
-// RegisterAgentdHost registers, on its first claim, the host an agentd token
-// is bound to (Owner 2026-10-14 「主机登记 A」: adding the token, bound to the
-// host, is the authorization). A host registered already, in any state, is
-// left as it is; the event names the token. A host a standing envelope in
-// force names as an external host is refused (ErrExternalHost): only its
-// exact claim registers it, as the external host (pinclaim.go).
-func RegisterAgentdHost(ctx context.Context, db DB, hostID, token string) error {
-	return registerHost(ctx, db, "controller", hostID, "dev", token, true)
-}
-
 func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, anyKind bool) error {
 	if !slices.Contains(hostKinds, kind) {
 		return fmt.Errorf("%w: host kind %q is not one of %v", ErrState, kind, hostKinds)

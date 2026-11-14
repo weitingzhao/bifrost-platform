@@ -120,7 +120,6 @@ var landingStorePermission = map[string]string{
 	"blockedrecommend.go":  "the option a blocked card recommends, which cardauto.go may take",
 	"brief.go":             "turns mail into brief tasks, or refuses it",
 	"briefdue.go":          "schedules briefs and the Owner's nudges",
-	"briefwait.go":         "tells the Owner when no host can take a brief",
 	"claimfailed.go":       "the failed checks a retried implementation is told of",
 	"claims.go":            "detects claims of the Owner's approval in messages",
 	"claimsubject.go":      "what a check is told of the attempt it checks",

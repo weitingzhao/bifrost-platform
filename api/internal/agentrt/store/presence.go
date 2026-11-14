@@ -36,10 +36,6 @@ import (
 // HostOffersStream holds what a host's claims offer (RecordHostOffered).
 func HostOffersStream(host string) string { return "offers:host:" + host }
 
-// HostBuildStream holds the agentd builds a host's claims report
-// (RecordHostBuild).
-func HostBuildStream(host string) string { return "build:host:" + host }
-
 // HostPresenceStream holds a host's presence turns (presencepass.go).
 func HostPresenceStream(host string) string { return "presence:host:" + host }
 
@@ -232,14 +228,6 @@ func (b AgentdBuild) Check() error {
 	return nil
 }
 
-func (b AgentdBuild) words() string {
-	w := "commit " + b.Commit[:12] + ", binary sha256 " + b.SHA256[:12]
-	if b.Modified {
-		w += ", built from a work tree with changes"
-	}
-	return w
-}
-
 // badAgentdBuild is why v is not a note's agentd_build, or "".
 func badAgentdBuild(v any) string {
 	raw, err := json.Marshal(v)
@@ -258,51 +246,6 @@ func badAgentdBuild(v any) string {
 		return err.Error()
 	}
 	return ""
-}
-
-var latestBuildSQL = `SELECT ` + headSQL("$1::text") + `->'body'->'agentd_build'`
-
-// RecordHostBuild records the agentd build host's claim reports when it
-// differs from what its build stream last recorded (or nothing is recorded
-// yet): a note with it, whose time is when the host's claims started
-// reporting it. It reports whether it recorded one. A claim request calls it
-// once, before its polls; the stream is locked before its head is read
-// again, so two claims of one host record a change once.
-func RecordHostBuild(ctx context.Context, db DB, host string, b AgentdBuild) (bool, error) {
-	if err := b.Check(); err != nil {
-		return false, err
-	}
-	stream := HostBuildStream(host)
-	same := func(tx pgx.Tx) (bool, error) {
-		var raw []byte
-		if err := tx.QueryRow(ctx, latestBuildSQL, stream).Scan(&raw); err != nil || raw == nil {
-			return false, err
-		}
-		var last AgentdBuild
-		if err := json.Unmarshal(raw, &last); err != nil {
-			return false, err
-		}
-		return last == b, nil
-	}
-	recorded := false
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		recorded = false
-		if s, err := same(tx); err != nil || s {
-			return err
-		}
-		if err := lockStream(ctx, tx, stream); err != nil {
-			return err
-		}
-		if s, err := same(tx); err != nil || s {
-			return err
-		}
-		_, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller",
-			Body: map[string]any{"text": "Host " + host + " runs agentd " + b.words() + ".",
-				"agentd_build": map[string]any{"commit": b.Commit, "sha256": b.SHA256, "modified": b.Modified}}})
-		recorded = err == nil
-		return err
-	})
-	return recorded && err == nil, err
 }
 
 // HostPresence is a host as the hosts document has it.

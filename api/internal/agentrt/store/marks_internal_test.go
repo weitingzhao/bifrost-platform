@@ -43,9 +43,9 @@ func TestMarksHaveTheirWriters(t *testing.T) {
 			}
 		}
 	}
-	// Who writes them: one block, one move back to ready.
-	for f, want := range map[string]string{"withdrawn.go": `moveTask(ctx, tx, "controller", t, "blocked", why)`,
-		"blockedcard.go": "lift = liftMark"} {
+	// Who writes them: the move back to ready (the pass that blocked a task whose
+	// executors were all withdrawn left with the dispatch passes, 2026-11-14).
+	for f, want := range map[string]string{"blockedcard.go": "lift = liftMark"} {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

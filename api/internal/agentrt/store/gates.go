@@ -55,9 +55,6 @@ const (
 	GateBatchHours = 6
 	// GateUnclaimed is how long a ready gate task waits for a host.
 	GateUnclaimed = 2 * time.Hour
-	// gateAttemptsEach is the attempts a batch's budget allows each task
-	// (the tuning rule's gate_attempts_each when one is in force).
-	gateAttemptsEach = 2
 	// gatePassTimeout bounds one dispatch, its locks and its live read.
 	gatePassTimeout = 30 * time.Second
 )

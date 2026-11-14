@@ -46,40 +46,6 @@ func (w *world) retire(t *testing.T, candidate string) {
 	}))
 }
 
-// ① With no candidates for its job a task goes to nobody, however able the
-// tools; once candidates are written, the controller routes it again, once.
-func TestRouteNeedsCandidates(t *testing.T) {
-	t.Parallel()
-	w := newRoutedWorld(t)
-	task := w.ready(t, store.Task{})
-	if c := w.claim(t, "h1", store.LeaseTTL, claude, codex, cursor); c != nil {
-		t.Fatalf("claimed %s with no candidates", c.TaskID)
-	}
-	if r := w.lastRoute(t, task); r["job"] != "implementer" || len(r["candidates"].([]any)) != 0 {
-		t.Fatalf("route = %v", r)
-	}
-	w.jobs(t, "active", "*", claude)
-	n, err := store.Reroute(ctx, w.rt)
-	ok(t, err)
-	if n != 1 {
-		t.Fatalf("rerouted %d", n)
-	}
-	if n, err = store.Reroute(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("a second reroute decided %d (%v)", n, err)
-	}
-	if c := w.claim(t, "h1", store.LeaseTTL, codex, claude); c == nil || c.TaskID != task || c.Tool != claude {
-		t.Fatalf("claim = %+v", c)
-	}
-
-	other := w.ready(t, store.Task{Role: "other", Effect: "none", OffPlanReason: "outside the plan"})
-	if r := w.lastRoute(t, other); r["job"] != "none" {
-		t.Fatalf("route of role other = %v", r)
-	}
-	if c := w.claim(t, "h2", store.LeaseTTL, claude); c != nil {
-		t.Fatalf("a task with no job went to %s", c.Tool.Executor)
-	}
-}
-
 // T08, routing half: the route says who was dropped and why; the claim
 // follows the route's order, active before probation, not the host's.
 func TestRouteRecordsWhyAndOrder(t *testing.T) {

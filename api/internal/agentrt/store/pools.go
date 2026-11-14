@@ -35,11 +35,6 @@ var poolRE = regexp.MustCompile(`^([a-z][a-z0-9-]{0,31}):([a-z0-9][a-z0-9-]{0,31
 // vendor login is the Owner's own.
 const DefaultAccount = "owner"
 
-// unknownResetCooldown: a refusal that names no reset (cursor's "You've hit
-// your usage limit", measured 10-18) is believed for this long, and again on
-// the next refusal, unless the Owner's reading says otherwise.
-const unknownResetCooldown = 6 * time.Hour
-
 // maxReset: a reset further ahead than a monthly window and a little is not
 // believed.
 const maxReset = 35 * 24 * time.Hour
@@ -132,17 +127,6 @@ func checkReading(r PoolReading) error {
 		return invalid("the refusal text of %s is not one short line", r.Pool)
 	}
 	return nil
-}
-
-// cooldownUntil is how long a reading cools its pool: a refusal until the
-// reset it named (or unknownResetCooldown), a full window until its reset;
-// otherwise not at all (zero).
-//
-// A reset already past cools nothing: the window has come round (a refusal
-// handed over after its reset, review 274 B6). A reset further ahead than
-// maxReset is not believed, and the refusal counts as one that named none.
-func cooldownUntil(r PoolReading, now time.Time) time.Time {
-	return cooldownUntilWith(r, now, unknownResetCooldown)
 }
 
 // cooldownUntilWith is cooldownUntil with unknown the cooling of a refusal
@@ -317,50 +301,6 @@ func poolReason(source string, r PoolReading) string {
 	return "the vendor's reading says the window is spent"
 }
 
-// RecordOwnerReading records the Owner's reading of a pool from the vendor's
-// usage page (Owner 2026-10-18 「额度自动加手填」): how much of the window is
-// used and, for a spent one, when it resets. It replaces a cooldown in force,
-// and lifts it when the pool has quota left.
-func RecordOwnerReading(ctx context.Context, db DB, w Writer, key string, r PoolReading) (map[string]any, error) {
-	switch {
-	case key == "":
-		return nil, invalid("an idempotency key is required")
-	case r.UsedFraction == nil:
-		return nil, invalid("a reading says how much of the window is used")
-	case r.Limited || r.Text != "":
-		return nil, invalid("the Owner's reading is a used fraction and a reset, not a refusal")
-	case *r.UsedFraction >= 1 && r.ResetsAt == nil:
-		return nil, invalid("a spent pool's reading says when it resets")
-	case r.ResetsAt != nil && (!r.ResetsAt.After(time.Now()) || time.Until(*r.ResetsAt) > maxReset):
-		return nil, invalid("the reset is not ahead and within %d days", int(maxReset.Hours()/24))
-	}
-	if _, _, _, ok := ParsePool(r.Pool); !ok {
-		return nil, invalid("%q is not a pool (tool:account:window)", r.Pool)
-	}
-	if err := checkReading(r); err != nil {
-		return nil, err
-	}
-	req := map[string]any{"pool": r.Pool, "used_permille": int64(math.Round(*r.UsedFraction * 1000))}
-	if r.ResetsAt != nil {
-		req["resets_at"] = r.ResetsAt.UTC().Truncate(time.Microsecond).Format(timeLayout)
-	}
-	return idempotentAs(ctx, db, w, "pool_reading", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, w, false); err != nil {
-			return nil, err
-		}
-		if w.Actor != "owner" {
-			return nil, invalid("only the Owner reads a pool by hand")
-		}
-		if err := lockPools(ctx, tx, r.Pool); err != nil {
-			return nil, err
-		}
-		if err := measurePools(ctx, tx, w.Actor, "owner", []PoolReading{r}); err != nil {
-			return nil, err
-		}
-		return map[string]any{"vendor_pool_id": r.Pool, "recorded": true}, nil
-	})
-}
-
 // coolingAccounts are the tool:account pairs with a pool cooling down now.
 func coolingAccounts(ctx context.Context, tx pgx.Tx) (map[string]bool, error) {
 	rows, err := tx.Query(ctx, `SELECT vendor_pool_id FROM agentrt.vendor_pool WHERE cooldown_until > clock_timestamp()`)
@@ -410,18 +350,6 @@ type PoolView struct {
 	Pace          *float64           `json:"pace"` // used fraction less the fraction of the window gone
 	Used          map[string]float64 `json:"used"` // the ledger since the window began, by unit
 	Since         time.Time          `json:"used_since"`
-}
-
-// ListPools reads every pool with its pace and what the ledger charged it
-// since its window began (the last window length when no reset is known).
-func ListPools(ctx context.Context, db DB) ([]PoolView, error) {
-	var out []PoolView
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		var err error
-		out, err = listPools(ctx, tx)
-		return err
-	})
-	return out, err
 }
 
 func listPools(ctx context.Context, tx pgx.Tx) ([]PoolView, error) {

@@ -1,17 +1,13 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/infracheck"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -27,13 +23,6 @@ func TestInfraUsesSharedGenerator(t *testing.T) {
 		t.Fatal("agentd must use the same infra check and setup as CI")
 	}
 }
-
-// infraPlan is a planner's plan for an infra goal: one task, no checks of
-// its own.
-const infraPlan = "One change.\n\n```json\n" + `{
-  "mission": {"success": ["the probe has a test"]},
-  "tasks": [{"ref": "t1", "title": "Test the probe", "repo": "bifrost-trade-infra", "text": "Add a test to scripts/agentrt.", "verify": []}]
-}` + "\n```\n"
 
 // The infra repository's spec (CUT-runtime-repo-infra-2026-10-19): its own
 // Python tests, run by the Python of a virtual environment the setup makes
@@ -157,94 +146,6 @@ func TestImplementSpecQuotesCommands(t *testing.T) {
 		if err != nil || strings.TrimSpace(string(out)) != filepath.Join(bin, name)+" x" {
 			t.Fatalf("%q ran as %q (%v)", line, out, err)
 		}
-	}
-}
-
-// An infra goal: its planning spec names infra's checks and takes no checks
-// of a plan's own; the plan's task is an infra implementation whose spec is
-// infra's; a plan that adds a check to an infra task is refused, as is a
-// platform goal's plan naming infra; a repository the runtime does not know
-// is still refused.
-func TestInfraGoalToImplementation(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	owner := store.Writer{Actor: "owner", Token: "admin"}
-	main := func(context.Context, string) (string, error) { return commitA, nil }
-	if _, err := store.ProposeGoal(ctx, w.rt, owner, "g0", store.Goal{Title: "x", Text: "x", Repos: []string{"bifrost-trade-api"}, Main: main}); !errors.Is(err, store.ErrInvalid) ||
-		!strings.Contains(err.Error(), "may name bifrost-platform, bifrost-trade-infra, not \"bifrost-trade-api\"") {
-		t.Fatalf("an unknown repository: %v", err)
-	}
-	goal := func(key, repo string) (mission, plan string) {
-		t.Helper()
-		out, err := store.ProposeGoal(ctx, w.rt, owner, key, store.Goal{Title: "Test the probe", Text: "Test the probe", Repos: []string{repo}, Main: main})
-		ok(t, err)
-		mission, plan = out["mission_id"].(string), out["task_id"].(string)
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "active", "test") }))
-		_, err = store.Dispatch(ctx, w.rt)
-		ok(t, err)
-		return mission, plan
-	}
-	text := func(id string) string {
-		var body []byte
-		ok(t, w.rt.QueryRow(ctx, `SELECT b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
-		  WHERE t.task_id = $1`, id).Scan(&body))
-		return string(body)
-	}
-
-	mission, plan := goal("g1", infra)
-	var spec struct{ Text string }
-	ok(t, json.Unmarshal([]byte(text(plan)), &spec))
-	for _, want := range []string{"- " + infra + ": `sh -c '", "Every task is in " + infra + ", the goal's repository",
-		"takes no\n  checks of a plan's own: leave verify empty", `"repo": "` + infra + `"`, `"verify": [], "depends_on"`} {
-		if !strings.Contains(spec.Text, want) {
-			t.Fatalf("the planning spec lacks %q:\n%s", want, spec.Text)
-		}
-	}
-	if strings.Contains(spec.Text, "go -C api test [-run") {
-		t.Fatalf("an infra plan is told to add go tests:\n%s", spec.Text)
-	}
-	w.work(t, plan, infraPlan, "done")
-	var c2 cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "accepted" {
-		t.Fatalf("accept: %q %v", did, err)
-	}
-	var impl, repo, base, class string
-	ok(t, w.rt.QueryRow(ctx, `SELECT task_id, repo, base_commit, task_class FROM agentrt.task WHERE mission_id = $1 AND role = 'implement'`,
-		mission).Scan(&impl, &repo, &base, &class))
-	r := store.Repos[infra]
-	want, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", r, r.Verify, store.HandInChecks(r, nil))
-	ok(t, err)
-	if repo != infra || base != commitA || class != "goal" || text(impl) != string(want) {
-		t.Fatalf("the implementation: %s %s %s\n%s", repo, base, class, text(impl))
-	}
-
-	// A check of the plan's own on infra is not taken: there is no module a
-	// plan may test there; it is dropped and the plan used, with a note (the
-	// Owner, 2026-11-06). A platform goal's plan may not name infra. (Each
-	// implementation and refused plan is cancelled, so the planner claims the
-	// next plan.)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", impl, "cancelled", "test") }))
-	m2, plan := goal("g2", infra)
-	w.work(t, plan, strings.Replace(infraPlan, `"verify": []`, `"verify": [["python3", "-m", "pytest", "scripts/agentrt"]]`, 1), "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "accepted" {
-		t.Fatalf("g2: %q %v", did, err)
-	}
-	var reason string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
-	  AND body_json->>'to' = 'accepted'`, plan).Scan(&reason))
-	if !strings.Contains(reason, "fixed: tasks[0].verify dropped: this repository takes no checks of a plan's own") {
-		t.Fatalf("g2's accepted reason: %q", reason)
-	}
-	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1 AND role = 'implement'`, m2).Scan(&impl))
-	if text(impl) != string(want) {
-		t.Fatalf("g2's implementation:\n%s", text(impl))
-	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", impl, "cancelled", "test") }))
-	_, plan = goal("g3", "bifrost-platform")
-	w.work(t, plan, infraPlan, "done")
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, c2.ask, c2.withdraw, nil); err != nil || did != "rework" ||
-		!strings.Contains(lastReason(t, w, plan), `repo is one of bifrost-platform, not "bifrost-trade-infra"`) {
-		t.Fatalf("g3: %q %v %q", did, err, lastReason(t, w, plan))
 	}
 }
 

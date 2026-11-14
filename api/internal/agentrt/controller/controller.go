@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/metriccompute"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -217,12 +216,6 @@ func (c *Controller) logf(format string, args ...any) {
 	}
 }
 
-// Sweep is one pass of the lease loop.
-func (c *Controller) Sweep(ctx context.Context) error {
-	_, _, err := store.SweepLeases(ctx, c.DB)
-	return err
-}
-
 // Facts is one pass of the external facts loop: each outside record a rule
 // of a live step or of an architecture row depends on is read, and a change
 // is recorded. One record that cannot be read or recorded does not stop the
@@ -294,126 +287,6 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 	return false, nil
 }
 
-// Accept is one pass of the acceptance loop (v5 §5.2 控制器「验收编排」):
-// every submitted implementation is checked as c.Precheck says (accepted on
-// submission where its landing runs a CI, else verified), every submitted
-// verification or review result is used, and every salvaged result still to
-// be checked gets its verification. One that fails does not stop the
-// others. It returns how many tasks it moved.
-func (c *Controller) Accept(ctx context.Context) (int, error) {
-	implementations, checks, err := store.Pending(ctx, c.DB)
-	if err != nil {
-		return 0, err
-	}
-	moved := 0
-	var errs []error
-	opts := store.ConcludeOptions{FailFirstVerify: c.FailFirstVerify, Precheck: c.Precheck}
-	for _, id := range implementations {
-		v, accepted, err := store.StartVerificationWith(ctx, c.DB, id, opts)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
-		}
-		if v != "" || accepted {
-			moved++
-		}
-	}
-	for _, id := range checks {
-		did, err := store.ConcludeWith(ctx, c.DB, id, opts)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
-		}
-		if did != "" {
-			moved++
-		}
-	}
-	// Plans handed in by the chief of staff's seat (W-31 2.2b).
-	plans, perr := store.PendingPlans(ctx, c.DB)
-	if perr != nil {
-		errs = append(errs, perr)
-	}
-	// A task in a repository the goal kept no base for starts from main's
-	// head, read as the landing drill reads it; with no drill, none is read.
-	var readMain store.ReadMain
-	for _, id := range plans {
-		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk(), c.boundedWithdraw(), readMain)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("plan %s: %w", id, err))
-		}
-		if did != "" {
-			moved++
-		}
-	}
-	// The chief of staff's briefs at 8:00 and 21:00, and its nudges (W-31
-	// 2.4 slice ④): notes to the seat, made briefs below like any mail.
-	if c.Briefs {
-		now := time.Now()
-		if c.Now != nil {
-			now = c.Now()
-		}
-		if left, err := store.ScheduleBrief(ctx, c.DB, now); err != nil {
-			errs = append(errs, fmt.Errorf("scheduled brief: %w", err))
-		} else if left {
-			moved++
-		}
-		if n, err := store.Nudges(ctx, c.DB, now); err != nil {
-			errs = append(errs, fmt.Errorf("nudges: %w", err))
-		} else {
-			moved += n
-		}
-	}
-	// Mail to the chief of staff's seat becomes briefs, and the briefs'
-	// answers go back to their senders (W-31 2.3).
-	mail, perr := store.PendingMail(ctx, c.DB)
-	if perr != nil {
-		errs = append(errs, perr)
-	}
-	for _, id := range mail {
-		task, err := store.TakeMail(ctx, c.DB, id)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("message %s: %w", id, err))
-		}
-		if task != "" {
-			moved++
-		}
-	}
-	briefs, perr := store.PendingBriefs(ctx, c.DB)
-	if perr != nil {
-		errs = append(errs, perr)
-	}
-	for _, id := range briefs {
-		did, err := store.AcceptBrief(ctx, c.DB, id)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("brief %s: %w", id, err))
-		}
-		if did != "" {
-			moved++
-		}
-	}
-	// In-job scores, when a task has ended since the last computation (W-31
-	// 2.4 slice ②).
-	if _, err := store.ComputeScores(ctx, c.DB); err != nil {
-		errs = append(errs, fmt.Errorf("scores: %w", err))
-	}
-	if _, err := metriccompute.Compute(ctx, c.DB, time.Now()); err != nil {
-		errs = append(errs, fmt.Errorf("metrics: %w", err))
-	}
-	// Salvaged results of lost attempts get a check of their own (T34 case 8).
-	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
-	if perr != nil {
-		errs = append(errs, perr)
-	}
-	for _, id := range salvaged {
-		v, err := store.StartSalvageCheck(ctx, c.DB, id)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("attempt %s: %w", id, err))
-		}
-		if v != "" {
-			moved++
-		}
-	}
-	return moved, errors.Join(errs...)
-}
-
 // boundedAsk is Sources.Ask with the per-read timeout: a card that is not
 // made in time is an error, and the plan waits for the next pass.
 func (c *Controller) boundedAsk() store.Ask {
@@ -443,36 +316,6 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 	}
 }
 
-// BlockedCards is one pass over the blocked tasks' decision cards (design v5
-// §5.2 「验收编排」): an answered card gives its task one more round, drops
-// it or closes its mission (store.DecideBlocked), a task that landed in a
-// mission after the Owner closed it is cancelled (store.CancelAfterClose),
-// the pending checks of a stopped task are cancelled, as they can never be
-// used (store.CloseStoppedChecks), the open cards of missions that have
-// ended are withdrawn, and so are those of such checks, of tasks no longer
-// blocked and cards asked before the third option (store.WithdrawStaleCards:
-// the other cards of a mission closed on a card, so their places in the
-// question store are free for this pass), a ready task no executor may take
-// any more is blocked with the reason (store.BlockWithdrawn, TD-395), then
-// every blocked task that needs a card and has none open gets one
-// (store.AskBlocked), the tasks blocked before this pass included. A
-// mission's attempts and hours block nothing (store/missionbudget.go).
-// Without a question store there are no cards. It returns how many cards it closed,
-// withdrew and asked and how many tasks it cancelled and blocked.
-func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
-	if c.Sources.Question == nil || c.Sources.Ask == nil {
-		return 0, nil
-	}
-	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
-	late, lerr := store.CancelAfterClose(ctx, c.DB)
-	// Before the withdrawals, so their cards are withdrawn in this pass.
-	moot, merr := store.CloseStoppedChecks(ctx, c.DB)
-	withdrawn, werr := store.WithdrawStaleCards(ctx, c.DB, c.question, c.boundedWithdraw())
-	gone, gerr := store.BlockWithdrawn(ctx, c.DB)
-	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + late + moot + withdrawn + gone + asked, errors.Join(derr, lerr, merr, werr, gerr, aerr)
-}
-
 // CardRuleEvery is how often the cards are answered by rule: a loop of its
 // own, so a slow question store never holds up dispatch. Every second
 // (TD-402, the coordinating thread 2026-10-21; TD-393's 「循环每 5 秒」 ran it
@@ -486,30 +329,6 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 // decoded) and no database work; a pass that fails logs once. Only STG wires
 // it (server/agentrt_wire.go).
 const CardRuleEvery = time.Second
-
-// AnswerByRule answers the runtime's cards by the card-auto-answer rule in
-// force (store.AnswerByRule, TD-390): none without the rule, the lister or the
-// answerer. Each call to the question store has the per-read timeout. It
-// returns how many it answered.
-func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
-	if c.Sources.Cards == nil || c.Sources.RuleAnswer == nil {
-		return 0, nil
-	}
-	type list struct {
-		cards []store.RuntimeCard
-		err   error
-	}
-	return store.AnswerByRule(ctx, c.DB, store.CardRule{
-		Cards: func(ctx context.Context) ([]store.RuntimeCard, error) {
-			x := bounded(c, ctx, func(ctx context.Context) list { cs, err := c.Sources.Cards(ctx); return list{cs, err} })
-			return x.cards, x.err
-		},
-		Answer: func(ctx context.Context, id, option, rule string, until time.Time, why string) error {
-			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule, until, why) })
-		},
-		Ack: c.ack(),
-	})
-}
 
 // LandingsEvery is how often the landings pass reads main: a loop of its own,
 // so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
@@ -531,16 +350,6 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	return store.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
-}
-
-// MissionDecisions is one pass over the missions outside the standing
-// envelope that wait on a decision card: an answered card starts or stops the
-// mission (store.DecideMissions).
-func (c *Controller) MissionDecisions(ctx context.Context) (int, error) {
-	if c.Sources.Question == nil {
-		return 0, nil
-	}
-	return store.DecideMissions(ctx, c.DB, c.question, c.ack())
 }
 
 // IssueCards is one pass over the Owner's cards on business issues: an
@@ -598,26 +407,6 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 		}
 	}
 	return moved, errors.Join(errs...)
-}
-
-// Waits is one pass recording the waits that passed their limit
-// (store.WaitLimits: RULE-waits 总则 4, the platform keeps the clock) and
-// telling the Owner of the chief of staff's briefs among them
-// (store.TellWaitingBriefs), read at Now.
-func (c *Controller) Waits(ctx context.Context) (int, error) {
-	now := time.Now()
-	if c.Now != nil {
-		now = c.Now()
-	}
-	n, err := store.WaitLimits(ctx, c.DB, now)
-	// A brief past its wait is told to the Owner by the platform itself: the
-	// chief of staff, who would tell him, is what does not run (review 487
-	// A1).
-	told, terr := store.TellWaitingBriefs(ctx, c.DB, now)
-	if terr != nil {
-		terr = fmt.Errorf("waiting briefs: %w", terr)
-	}
-	return n + told, errors.Join(err, terr)
 }
 
 // Activate is one pass moving to active the planned steps whose work has

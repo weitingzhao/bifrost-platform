@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -36,91 +35,6 @@ import (
 // executor on its route was withdrawn (a card's recommendation tells such a
 // block by it).
 const withdrawnBlockMark = "no executor on its route may take it any more: "
-
-// BlockWithdrawn is one pass blocking every ready task no executor may take
-// any more, with the reason. It returns how many tasks it blocked. One that
-// cannot be blocked now does not hold up the others; the next pass tries it
-// again.
-func BlockWithdrawn(ctx context.Context, db DB) (int, error) {
-	n := 0
-	var errs []error
-	after := ""
-	page := int(blockedPage.Load())
-	for {
-		var ids []string
-		// Only tasks with a run of failuresToStop at their end are read
-		// further: most ready tasks have none.
-		if err := InTx(ctx, db, func(tx pgx.Tx) error {
-			// Or of one whose preparation failed: TD-394, preparefailed.go.
-			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
-			  WHERE t.state = 'ready' AND m.state = 'active' AND t.role <> 'brief' AND t.effect_class = ANY($1) AND t.task_id > $2
-			    AND ((SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
-			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = ANY($4)) = $3
-			    OR (SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
-			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = $6) = $3)
-			  ORDER BY t.task_id LIMIT $5`, dispatched, after, failuresToStop, executorEnds, page, prepareFailed)
-			if err != nil {
-				return err
-			}
-			ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-			return err
-		}); err != nil {
-			return n, errors.Join(append(errs, err)...)
-		}
-		for _, id := range ids {
-			did, err := blockNoneLeft(ctx, db, id)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("task %s: %w", id, err))
-			} else if did {
-				n++
-			}
-		}
-		if len(ids) < page {
-			return n, errors.Join(errs...)
-		}
-		after = ids[len(ids)-1]
-	}
-}
-
-// blockNoneLeft blocks one task if its preparation failed in a row, or no
-// executor may take it any more, read
-// under the locks a claim takes, in its order: the capability lock (what the
-// candidates and restrictions are), the task, then its mission. A claim
-// skips a task this holds, and one that holds the task first leases it or
-// leaves it as it was.
-func blockNoneLeft(ctx context.Context, db DB, taskID string) (bool, error) {
-	did := false
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		did = false
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
-			return err
-		}
-		t, err := readTask(ctx, tx, taskID, true)
-		if err != nil || t.state != "ready" || t.role == "brief" {
-			return err
-		}
-		if member, err := isGateMember(ctx, tx, taskID); err != nil || member {
-			return err // its batch ends it (gateend.go)
-		}
-		m, err := readMissionBudget(ctx, tx, t.mission, "FOR SHARE")
-		if err != nil || m.state != "active" {
-			return err
-		}
-		if stop, err := held(ctx, tx, []scope{{"mission", t.mission}, {"task", t.id}}, "stop", "pause"); err != nil || stop {
-			return err
-		}
-		why, err := preparesFailed(ctx, tx, t.id)
-		if err == nil && why == "" {
-			why, err = noneLeft(ctx, tx, t.id, m.envelope)
-		}
-		if err != nil || why == "" {
-			return err
-		}
-		did = true
-		return moveTask(ctx, tx, "controller", t, "blocked", why)
-	})
-	return did && err == nil, err
-}
 
 // noneLeft is the reason to block task id when every candidate on its route
 // that may still take it (its hard checks and competence as a claim applies

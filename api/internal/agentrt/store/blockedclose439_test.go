@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"sync/atomic"
@@ -159,86 +158,6 @@ func TestCloseMissionNeverDeadlocksWithDispatch(t *testing.T) {
 	}
 	if w.state(t, "mission", "M-3") != "stopped" || w.state(t, "task", first) != "cancelled" || w.state(t, "task", dependent) != "cancelled" {
 		t.Fatalf("M-3 %s, tasks %s %s", w.state(t, "mission", "M-3"), w.state(t, "task", first), w.state(t, "task", dependent))
-	}
-}
-
-// Review 439 A1: a task proposed into a mission after its close committed
-// (a proposal reads the mission without its lock) is cancelled by the next
-// pass; one of a mission that ended any other way is left as it is.
-func TestCancelAfterClose(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.goalMission(t, "M-3")
-	w.goalMission(t, "M-4")
-	a := &asker{}
-	q := w.closingCard(t, a)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, nil); err != nil || n != 1 || w.state(t, "mission", "M-3") != "stopped" {
-		t.Fatalf("decided %d (%v), M-3 %s", n, err, w.state(t, "mission", "M-3"))
-	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-4", "stopped", "test") }))
-	late := w.proposed(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-	other := w.proposed(t, store.Task{MissionID: "M-4", OffPlanReason: "a goal"})
-	if n, err := store.CancelAfterClose(ctx, w.rt); err != nil || n != 1 {
-		t.Fatalf("cancelled %d (%v)", n, err)
-	}
-	if s, o := w.state(t, "task", late), w.state(t, "task", other); s != "cancelled" || o != "proposed" {
-		t.Fatalf("the late task is %s, M-4's %s", s, o)
-	}
-	if r := w.lastMove(t, late); r != "mission M-3 was closed on a card (question "+q+"); this task came after the close" {
-		t.Fatalf("cancelled because %q", r)
-	}
-	if n, err := store.CancelAfterClose(ctx, w.rt); err != nil || n != 0 {
-		t.Fatalf("a second pass cancelled %d (%v)", n, err)
-	}
-}
-
-// Review 439 A4: a card closes the mission it was asked in, whose name its
-// option carries. Its task moved to another mission since (a plan change
-// rebinds its step): the card is withdrawn while open, an answer on it moves
-// nothing, and the next card names the mission the task is in.
-func TestCloseNamesTheCardsMission(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test") }))
-	other := w.ready(t, store.Task{MissionID: "M-2", OffPlanReason: "a goal"})
-	moved := w.ready(t, store.Task{}) // on step s1 of M-1
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, moved) }))
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[0].Options[2] != "Close mission M-1" {
-		t.Fatalf("asked %d (%v) %+v", n, err, a.cards)
-	}
-	q := a.lastID()
-	a.answer(q, store.QuestionAnswered, store.CardCloseKey)
-	plan := &asker{}
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, plan.ask)
-	ok(t, err)
-	plan.answer(plan.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	if n, err := store.DecidePlanChanges(ctx, w.rt, plan.question, nil); err != nil || n != 1 {
-		t.Fatalf("the rebind: %d %v", n, err)
-	}
-	var now string
-	ok(t, w.rt.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, moved).Scan(&now))
-	if now != "M-2" {
-		t.Fatalf("the task is in %s after the rebind", now)
-	}
-	var wd withdrawals
-	open := func(ctx context.Context, id string) (store.Question, bool) {
-		return store.Question{ID: id, Status: "open", Options: 3}, true
-	}
-	if n, err := store.WithdrawStaleCards(ctx, w.rt, open, wd.withdraw); err != nil || n != 1 ||
-		wd.why[0] != "its task is in mission M-2 now; a card naming that mission takes its place" {
-		t.Fatalf("withdrew %d (%v) %v", n, err, wd.why)
-	}
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	if o, _, _ := w.closedCard(t, q); o != store.OutcomeMoot || w.state(t, "mission", "M-1") != "active" || w.state(t, "mission", "M-2") != "active" ||
-		w.state(t, "task", other) != "ready" || w.state(t, "task", moved) != "blocked" {
-		t.Fatalf("the card closed %q; M-1 %s, M-2 %s, M-2's tasks %s %s", o, w.state(t, "mission", "M-1"), w.state(t, "mission", "M-2"),
-			w.state(t, "task", other), w.state(t, "task", moved))
-	}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[1].Options[2] != "Close mission M-2" {
-		t.Fatalf("asked %d (%v) %v", n, err, a.cards[len(a.cards)-1].Options)
 	}
 }
 

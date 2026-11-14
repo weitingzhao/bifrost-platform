@@ -4,8 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // Routing decisions as pure functions, without a database (review 155 B2).
@@ -151,56 +149,6 @@ func TestPatternMustMatch(t *testing.T) {
 	}
 	if (jobCandidate{executor: "exec:codex", provider: "other", pattern: "*"}).fits(codexTool) {
 		t.Fatal("another provider matched")
-	}
-}
-
-// The canonical record read back gives the same input, decision and
-// fingerprint; another algorithm's record is refused.
-func TestRecordReplays(t *testing.T) {
-	t.Parallel()
-	in := routeInput{job: "reviewer", subject: "t_S", needs: []string{"gpu"},
-		candidates: []jobCandidate{
-			{id: "a", status: "active", executor: "exec:claude", provider: "anthropic", pattern: "*", version: 3,
-				rule: ruleRef{id: ptr("job:initial"), version: ptr(2)}},
-			{id: "b", status: "probation", executor: "exec:codex", provider: "openai", pattern: "gpt-*"},
-		},
-		facts:    []restriction{{id: "f", executor: "exec:claude", kind: "cannot", subject: "gpu", rule: ruleRef{id: ptr("caps")}}},
-		attempts: []priorAttempt{{id: "x", executor: "exec:cursor", provider: ptr("cursor-mix")}, {id: "y", executor: "exec:cursor"}}}
-	doc, err := canon.Encode(in.record())
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := canon.Parse(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	back, err := replayInput(v.(map[string]any))
-	if err != nil {
-		t.Fatal(err)
-	}
-	fp, _ := in.fingerprint()
-	fp2, _ := back.fingerprint()
-	r1, e1 := in.decide()
-	r2, e2 := back.decide()
-	d1, _ := canon.Encode([]any{r1, e1})
-	d2, _ := canon.Encode([]any{r2, e2})
-	if fp != fp2 || string(d1) != string(d2) {
-		t.Fatalf("replayed %s (%s), decided %s (%s)", d2, fp2, d1, fp)
-	}
-	rec := in.record()
-	first := rec["candidates"].([]any)[0].(map[string]any)
-	if r, _ := canon.Encode(first["rule"]); string(r) != `{"id":"job:initial","version":2}` || rec["facts"].([]any)[0].(map[string]any)["rule"] == nil {
-		t.Fatalf("recorded rules = %s, %v", r, rec["facts"])
-	}
-	rec["algorithm"] = routeAlgorithm + 1
-	if _, err := replayInput(rec); err == nil {
-		t.Fatal("replayed a record of another algorithm")
-	}
-	// Review 422 A1: a record of algorithm 2, before the deterministic check
-	// could verify core work, is not replayed by this build's checks.
-	rec["algorithm"] = 2
-	if _, err := replayInput(rec); err == nil {
-		t.Fatal("replayed a record of algorithm 2")
 	}
 }
 

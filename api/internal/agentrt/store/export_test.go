@@ -31,18 +31,6 @@ func ClaimExternalFor(ctx context.Context, db DB, r ClaimRequest, ttl time.Durat
 	return claimNext(ctx, db, r, claimOpts{ttl: ttl, effects: append([]string{"external"}, dispatched...)})
 }
 
-// ReplayRoute decides a route from the inputs a route_decided body recorded:
-// the route, the exclusions and the input's fingerprint.
-func ReplayRoute(inputs map[string]any) ([]string, []any, string, error) {
-	in, err := replayInput(inputs)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	fp, err := in.fingerprint()
-	route, excluded := in.decide()
-	return route, excluded, fp, err
-}
-
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
 func SetHook(f func(point, arg string)) func() {
@@ -183,10 +171,6 @@ func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any,
 	return out, err
 }
 
-// RefuseMailForTest is refuseMail, the end of a message that cannot become a
-// brief.
-var RefuseMailForTest = refuseMail
-
 // DecidePageForTest lowers how many waiting missions a decision pass reads
 // at a time, and returns the function that restores it.
 func DecidePageForTest(n int) func() {
@@ -297,12 +281,6 @@ func ReworkSpecAsRefused(ctx context.Context, db DB, specID string, round int, w
 	return body, err
 }
 
-// ParseAssessmentForTest is parseAssessment: a report read as an assessment
-// of an item with these option keys and refs (TD-391).
-func ParseAssessmentForTest(text string, options []string, refs map[string]any) (map[string]any, string) {
-	return parseAssessment(text, options, refs)
-}
-
 // ProposeIssueMissionForTest proposes a mission as take_issue would (its
 // work id an issue's, outside the dev envelope) but passing ask, which
 // take_issue never does: askMission refuses a BI- mission's card (review
@@ -326,18 +304,6 @@ var (
 // earlier than since.
 func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
 	return progressAt(ctx, db, at, since)
-}
-
-// ClaimPinnedFor is ClaimPinned with a lease of the test's choosing (a lease
-// already past its grace, for salvage).
-func ClaimPinnedFor(ctx context.Context, db DB, r PinnedClaimRequest, ttl time.Duration) (map[string]any, error) {
-	return claimPinned(ctx, db, r, ttl)
-}
-
-// ReadBackClaimPinned is the read-back an exact claim whose commit failed
-// makes: the answer its key stored, if any.
-func ReadBackClaimPinned(ctx context.Context, db DB, host, key, task string) (map[string]any, bool) {
-	return readBackKey(ctx, db, hostActor(host), "claim_pinned", key, map[string]any{"task_id": task})
 }
 
 // PinnedReviewForTest fits a review's spec of subject's attempt as the

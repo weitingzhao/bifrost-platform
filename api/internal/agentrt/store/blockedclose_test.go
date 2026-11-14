@@ -1,11 +1,8 @@
 package store_test
 
 import (
-	"context"
 	"fmt"
-	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,20 +10,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
-
-// withdrawals is a question store's withdraw that records what it withdrew.
-type withdrawals struct {
-	mu       sync.Mutex
-	ids, why []string
-}
-
-func (w *withdrawals) withdraw(_ context.Context, id, reason string) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.ids = append(w.ids, id)
-	w.why = append(w.why, reason)
-	return nil
-}
 
 // taskEvents is how many events of typ a task has.
 func (w *world) taskEvents(t *testing.T, typ, task string) int {
@@ -226,45 +209,4 @@ func TestBlockedCardRecommends(t *testing.T) {
 			t.Fatalf("recommended %d %q, first line %q", c.Recommended, c.RecommendedWhy, first(c.Body))
 		}
 	})
-}
-
-// A card asked before cards had the third option (two options) is withdrawn
-// while open, and its block is asked again with a card of today's kind; a
-// card whose options the reader does not say, or that has three, is left.
-func TestOldBlockedCardIsAskedAgain(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.goalMission(t, "M-3")
-	var ids []string
-	for range 3 {
-		id := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, id) }))
-		ids = append(ids, id)
-	}
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 3 {
-		t.Fatalf("asked %d (%v)", n, err)
-	}
-	options := map[string]int{"q_a": 2, "q_b": 3, "q_c": 0}
-	read := func(ctx context.Context, id string) (store.Question, bool) {
-		q, ok := a.question(ctx, id)
-		q.Options = options[id]
-		return q, ok
-	}
-	var wd withdrawals
-	if n, err := store.WithdrawStaleCards(ctx, w.rt, read, wd.withdraw); err != nil || n != 1 || !slices.Equal(wd.ids, []string{"q_a"}) ||
-		wd.why[0] != "replaced by a card that can also close mission M-3 and says what it recommends" {
-		t.Fatalf("withdrew %d (%v): %v %v", n, err, wd.ids, wd.why)
-	}
-	a.answers = map[string]store.Question{"q_a": {ID: "q_a", Status: "withdrawn"}}
-	if n, err := store.DecideBlocked(ctx, w.rt, read, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	if o, _, _ := w.closedCard(t, "q_a"); o != "withdrawn" || w.state(t, "task", a.cards[0].TaskID) != "blocked" {
-		t.Fatalf("the old card closed %q; its task is %s", o, w.state(t, "task", a.cards[0].TaskID))
-	}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[3].TaskID != a.cards[0].TaskID ||
-		len(a.cards[3].Options) != 3 || !strings.Contains(a.cards[3].Body, "card 2 for this block") {
-		t.Fatalf("asked %d (%v) %+v", n, err, a.cards[len(a.cards)-1])
-	}
 }

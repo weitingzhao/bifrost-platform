@@ -105,37 +105,3 @@ func TestBudgetAutoGrantedBeforeInsideEnvelope(t *testing.T) {
 		t.Fatalf("the claim took %+v; want the check %s", c, check)
 	}
 }
-
-// The money cap stays: a mission past its attempts and hours leases only
-// through a vendor pool with room, and the claim records the pool it passed
-// by at the routing rule's quota stop; with every pool at the stop it leases
-// nothing.
-func TestBudgetPastAttemptsStillStopsAtThePoolCap(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.legacy(t, routingRule(1, -1, 0))
-	w.ready(t, store.Task{})
-	if c := w.claim(t, "h3", time.Hour, cursor); c == nil {
-		t.Fatal("no claim to use the mission's one attempt with")
-	}
-	w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '100 hours',
-	  budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`)
-	w.ready(t, store.Task{})
-	w.reading(t, "claude:owner:weekly", 0.95, time.Hour)
-	w.reading(t, "codex:owner:weekly", 0.5, 6*24*time.Hour)
-	if c := w.claim(t, "h1", store.LeaseTTL, claude); c != nil {
-		t.Fatalf("claude at 95 %% took %+v", c)
-	}
-	c := w.claim(t, "h1", store.LeaseTTL, claude, codex)
-	if c == nil || c.Tool.Executor != "exec:codex" {
-		t.Fatalf("claim = %+v; want codex", c)
-	}
-	if ch := w.choice(t, c); fmt.Sprint(ch["passed_by_quota"]) != "[implementer/exec:claude/anthropic/*]" {
-		t.Fatalf("choice = %v", ch)
-	}
-	w.ready(t, store.Task{})
-	w.reading(t, "codex:owner:weekly", 0.95, time.Hour)
-	if c := w.claim(t, "h2", store.LeaseTTL, claude, codex); c != nil {
-		t.Fatalf("both pools at the stop, %s took the task", c.Tool.Executor)
-	}
-}

@@ -212,19 +212,6 @@ func StartVerificationWith(ctx context.Context, db DB, taskID string, opts Concl
 	return id, accepted, nil
 }
 
-// Conclude uses the result of a verification or review task whose attempt
-// was submitted. A result about the subject's current attempt and round
-// records the verification (verification_recorded) and moves the subject
-// on; any other closes the check and moves nothing. A check of a salvaged
-// result goes by adopt.go: a pass of the check that accepts (its review with
-// precheck verify, else its deterministic check) accepts the lost attempt
-// and cancels the live one; a failure moves nothing. It returns what it did:
-// "review" (a review task was proposed: precheck verify only), "accepted",
-// "rework", "blocked", "closed", or "" when there was nothing to do.
-func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
-	return ConcludeWith(ctx, db, taskID, ConcludeOptions{})
-}
-
 // TestNeedFailFirstVerify is a need a task may carry to show the rework path
 // on STG (T26; the Owner 2026-10-18): where the controller runs with
 // ConcludeOptions.FailFirstVerify (STG only), the task's first deterministic
@@ -556,33 +543,6 @@ func stillChecked(ctx context.Context, tx pgx.Tx, s taskRow, dropped string) (bo
 		// What Conclude requires of a check before it uses its result.
 		if pinned && !spec.salvage && spec.check == c.role && spec.subject == s.id && spec.attempt == latest &&
 			spec.round == int64(sd.round) && checkVersion(spec, commit, sd, vd) && (c.role != "review" || passed) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// droppedPin says whether the Owner chose not to do a check that pins
-// attempt of task: a check is cancelled only on its card (close.go). Its
-// salvaged result is then not checked again (review 428 A1); the pin is read
-// as Conclude reads it (readCheckSpec), so a spec that only mentions the
-// attempt pins nothing (review 430 B1).
-func droppedPin(ctx context.Context, tx pgx.Tx, task, attempt string) (bool, error) {
-	rows, err := tx.Query(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1 AND role IN ('verify','review')
-	  AND state = 'cancelled'`, task)
-	if err != nil {
-		return false, err
-	}
-	specs, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return false, err
-	}
-	for _, id := range specs {
-		spec, pinned, err := readCheckSpec(ctx, tx, id)
-		if err != nil {
-			return false, err
-		}
-		if pinned && spec.subject == task && spec.attempt == attempt {
 			return true, nil
 		}
 	}

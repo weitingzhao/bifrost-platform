@@ -106,81 +106,6 @@ func ignoreNoRows(err error) error {
 	return err
 }
 
-// cardFor reads which card a question is and whether a rule may answer it
-// now, with what it acts on held:
-//   - a blocked card: its task locked, then its mission shared (the kernel's
-//     order); the card still open in the runtime, its task blocked and still
-//     in the mission the card was asked in (review 442 A1: a task moved to a
-//     mission that needs the Owner keeps its old card from the rule);
-//   - a planner's question: its task locked, then its mission shared;
-//   - a mission's card: the mission shared, still awaiting the Owner on this
-//     card;
-//   - a proposal's card: the proposal not decided yet. Nothing is held: a
-//     proposal is decided only on its card's answer (or its withdrawal or
-//     expiry), which the question store gives once.
-//
-// The mission of every card but a proposal's must be active or paused (a
-// mission's own card: awaiting the Owner) and not need the Owner. Under
-// these locks no plan change moves the task and no close ends the mission
-// before the answer is written.
-func cardFor(ctx context.Context, tx pgx.Tx, card RuntimeCard) (cardOn, bool, error) {
-	on, ok, err := cardKind(ctx, tx, card)
-	if err != nil || !ok {
-		return on, false, err
-	}
-	switch on.kind {
-	case CardPlanChange, CardPlanImport, CardRecorderImport:
-		var decided bool
-		var changes []byte
-		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event p JOIN agentrt.event d ON d.event_stream_id = p.event_stream_id
-		    AND d.event_type = 'plan_change_decided' AND (d.body_json->>'proposal_event_id')::bigint = p.event_id
-		  WHERE p.event_type = 'plan_change_proposed' AND p.body_json->>'question_id' = $1),
-		  COALESCE((SELECT p.body_json->'changes' FROM agentrt.event p WHERE p.event_type = 'plan_change_proposed' AND p.body_json->>'question_id' = $1
-		    ORDER BY p.event_id DESC LIMIT 1), '[]'::jsonb)`, card.ID).Scan(&decided, &changes)
-		if err != nil || decided {
-			return on, false, err
-		}
-		if on.kind == CardPlanChange {
-			// What finishes a plan step is the Owner's to adopt (PV2 review
-			// 2026-10-26): a rule never answers a view that binds atoms.
-			var cs []PlanChange
-			if err = json.Unmarshal(changes, &cs); err != nil {
-				return on, false, err
-			}
-			binds, err := adoptsBindings(ctx, tx, cs)
-			return on, err == nil && !binds, err
-		}
-		return on, true, nil
-	case CardMission:
-		var state, needsOwner, asked string
-		err = tx.QueryRow(ctx, `SELECT m.state, COALESCE(m.scope_json->>'needs_owner', ''),
-		    COALESCE((SELECT e.body_json->>'question_id' FROM agentrt.event e WHERE e.mission_id = m.mission_id
-		      AND e.event_type = 'mission_state_changed' ORDER BY e.event_id DESC LIMIT 1), '')
-		  FROM agentrt.mission m WHERE m.mission_id = $1 FOR SHARE OF m`, on.mission).Scan(&state, &needsOwner, &asked)
-		return on, err == nil && state == "awaiting_owner" && asked == card.ID && needsOwner == "", err
-	}
-	t, err := readTask(ctx, tx, on.task, true)
-	if err != nil {
-		return on, false, err
-	}
-	if on.kind == CardBlocked {
-		var open bool
-		if err = tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM agentrt.event c WHERE c.task_id = $1 AND c.event_type = 'owner_wait_closed'
-		  AND c.body_json->>'question_id' = $2)`, on.task, card.ID).Scan(&open); err != nil {
-			return on, false, err
-		}
-		if !open || t.state != "blocked" || t.mission != on.mission {
-			return on, false, nil
-		}
-	}
-	var state, needsOwner string
-	if err = tx.QueryRow(ctx, `SELECT state, COALESCE(scope_json->>'needs_owner', '') FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`,
-		t.mission).Scan(&state, &needsOwner); err != nil {
-		return on, false, err
-	}
-	return on, (state == "active" || state == "paused") && needsOwner == "", nil
-}
-
 // ruleAnswers says whether a card-auto-answer rule in force answers cards of
 // kind, and the card's mission ("" for a proposal's card) does not need the
 // Owner: the card is then asked ByRule (TD-393, the coordinating thread
@@ -299,12 +224,4 @@ func assessmentSaid(st assessState, now time.Time) string {
 		return "no AI assessment came within " + timeoutText()
 	}
 	return "its AI assessment has not come yet"
-}
-
-// waited is how long a card waited, as a note says it.
-func waited(d time.Duration) string {
-	if d < 2*time.Minute {
-		return fmt.Sprintf("%d seconds", int(d/time.Second))
-	}
-	return fmt.Sprintf("%d minutes", int(d/time.Minute))
 }

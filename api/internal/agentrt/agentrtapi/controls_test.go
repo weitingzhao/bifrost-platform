@@ -60,17 +60,6 @@ func nilIfEmpty(s string) any {
 	return s
 }
 
-func hostOf(t *testing.T, hosts map[string]any, id string) map[string]any {
-	t.Helper()
-	for _, h := range hosts["hosts"].([]any) {
-		if m := h.(map[string]any); m["host_id"] == id {
-			return m
-		}
-	}
-	t.Fatalf("no host %s in %v", id, hosts)
-	return nil
-}
-
 // The plan: the roots, a subtree depth first with each step's state, the
 // event it came from and its tasks, and one node in full.
 func TestPlanReads(t *testing.T) {
@@ -235,24 +224,6 @@ func TestStopAgainAfterLift(t *testing.T) {
 	if list := inForce["controls"].([]any); len(list) != 1 || list[0].(map[string]any)["control_id"] != second["control_id"] {
 		t.Fatalf("in force: %v", inForce)
 	}
-}
-
-// readyTask proposes another ready task of M-1 at step R2:1-1.
-func readyTask(t *testing.T, pool *pgxpool.Pool) string {
-	t.Helper()
-	id := store.NewTaskID()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# another\n"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "another", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", id)
-	}))
-	return id
 }
 
 // Review 176 part 2 B2: the tree is depth first across siblings, and a step

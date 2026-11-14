@@ -128,18 +128,6 @@ var (
 	anchor   string
 )
 
-// mains records the repositories whose main a goal read (under mainsMu: the
-// goal tests send concurrent requests); mainAt is the commit main is at;
-// mainFails makes the reads fail, as an unreachable Gitea would; noMain
-// serves without a reader.
-var (
-	mainsMu   sync.Mutex
-	mains     []string
-	mainAt    = commitA
-	mainFails bool
-	noMain    bool
-)
-
 // actionStore, when set, is the API's action store (bus_test.go).
 var actionStore *actions.Store
 

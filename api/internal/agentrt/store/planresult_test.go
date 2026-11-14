@@ -381,61 +381,6 @@ func acceptPlanAndABatchTogether(t *testing.T, report string) {
 	}
 }
 
-// A goal end to end in the store: ProposeGoal writes the mission and its
-// planning task; a retry gets the first answer, also while main cannot be
-// read; once the mission is active, dispatch readies the task for the
-// planner job, claude takes it, and the plan it hands in is recorded.
-func TestGoalToPlan(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	owner := store.Writer{Actor: "owner", Token: "admin"}
-	at := func(commit string, err error) func(context.Context, string) (string, error) {
-		return func(context.Context, string) (string, error) { return commit, err }
-	}
-	goal := store.Goal{Title: "Document the goal route", Text: "Document the goal route", Repos: []string{"bifrost-platform"}, Main: at(commitA, nil)}
-	out, err := store.ProposeGoal(ctx, w.rt, owner, "g1", goal)
-	ok(t, err)
-	mission, plan := out["mission_id"].(string), out["task_id"].(string)
-	if out["mission_state"] != "proposed" || w.state(t, "task", plan) != "proposed" {
-		t.Fatalf("no envelope: %v; the plan is %s", out, w.state(t, "task", plan))
-	}
-	for _, main := range []func(context.Context, string) (string, error){at(commitB, nil), at("", errors.New("gitea is down"))} {
-		goal.Main = main
-		again, err := store.ProposeGoal(ctx, w.rt, owner, "g1", goal)
-		if err != nil || again["task_id"] != plan || again["base_commit"] != commitA {
-			t.Fatalf("a retry: %v %v", again, err)
-		}
-	}
-	goal.Text = "Another goal"
-	if _, err = store.ProposeGoal(ctx, w.rt, owner, "g2", goal); !errors.Is(err, store.ErrNoMain) {
-		t.Fatalf("a new goal while main cannot be read: %v", err)
-	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "active", "test") }))
-	if _, err = store.Dispatch(ctx, w.rt); err != nil || w.state(t, "task", plan) != "ready" {
-		t.Fatalf("dispatch: %v; the plan is %s", err, w.state(t, "task", plan))
-	}
-	var job string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'job' FROM agentrt.event WHERE task_id = $1 AND event_type = 'route_decided'`, plan).Scan(&job))
-	if job != "planner" {
-		t.Fatalf("the plan is routed to %s", job)
-	}
-	w.work(t, plan, goodPlan, "done")
-	var s cards
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); err != nil || did != "accepted" {
-		t.Fatalf("accept: %q %v", did, err)
-	}
-	if _, err = store.Dispatch(ctx, w.rt); err != nil {
-		t.Fatal(err)
-	}
-	// The first is ready at once; the second waits for it.
-	var proposed, ready int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FILTER (WHERE state = 'proposed'), count(*) FILTER (WHERE state = 'ready')
-	  FROM agentrt.task WHERE mission_id = $1 AND role = 'implement'`, mission).Scan(&proposed, &ready))
-	if proposed != 1 || ready != 1 {
-		t.Fatalf("implementation tasks: %d proposed, %d ready", proposed, ready)
-	}
-}
-
 func TestParsePlan(t *testing.T) {
 	t.Parallel()
 	repos := []string{"bifrost-platform"}

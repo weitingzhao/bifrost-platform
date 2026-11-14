@@ -34,14 +34,12 @@ var Catalog = []Row{
 	{Label: "bus", Gates: []Gate{{ID: "T47", Text: "The bus: the outbox resends once after a crash, rebuilds then delivers; actions are kept and expire.",
 		Commands: []Command{{Pkg: "./internal/agentrt/relay/", Tests: []string{"TestCrashBetweenXAddAndMarkResendsOnce", "TestRunRebuildsThenDelivers"}},
 			{Pkg: "./internal/agentrt/actions/", Tests: []string{"TestStoreAppendsReadsAndExpires"}}}}}},
-	{Label: "runtime-kernel", Gates: []Gate{{ID: "T48", Text: "The runtime kernel: fencing and the lease clock, the lease sweep, a result's path, only the listed moves.",
-		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestFenceAndLeaseClock", "TestLeaseSweep", "TestResultPath", "TestOnlyListedMoves"}}}}}},
-	{Label: "dispatch-record", Gates: []Gate{{ID: "T50", Text: "The dispatch record: a route decision replays, and a claim takes only the route.",
-		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestRouteDecisionReplays", "TestClaimTakesOnlyTheRoute"}}}}}},
-	{Label: "progress-in-prod", Gates: []Gate{{ID: "T51", Text: "Progress from the runtime's state: the projection, with or without tasks.",
-		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestProgress", "TestProgressMissionWithoutTasks"}}}}}},
-	{Label: "multi-vendor-routing", Gates: []Gate{{ID: "T52", Text: "Routing across vendors: claims follow the route and its restrictions; a vendor's spent window cools its pool.",
-		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestClaimRouting", "TestRerouteFollowsRestrictions", "TestAVendorReadingOfASpentWindowCoolsUntilItsReset"}}}}}},
+	{Label: "runtime-kernel", Gates: []Gate{{ID: "T48", Text: "The runtime kernel: fencing and the lease clock, a result's path, only the listed moves.",
+		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestFenceAndLeaseClock", "TestResultPath", "TestOnlyListedMoves"}}}}}},
+	{Label: "progress-in-prod", Gates: []Gate{{ID: "T51", Text: "Progress from the runtime's state: a mission without tasks.",
+		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestProgressMissionWithoutTasks"}}}}}},
+	{Label: "multi-vendor-routing", Gates: []Gate{{ID: "T52", Text: "Routing across vendors: a vendor's spent window cools its pool.",
+		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestAVendorReadingOfASpentWindowCoolsUntilItsReset"}}}}}},
 }
 
 // Row is an architecture row's gates; Label is the row's label (its node is

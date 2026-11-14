@@ -3,7 +3,6 @@ package store_test
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,12 +31,6 @@ func ctxOf(t testing.TB) context.Context { return store.CtxOf(t) }
 func freezeClock(t testing.TB, at time.Time) func() {
 	t.Helper()
 	return store.FreezeClock(t, at)
-}
-
-// decisionClock is store.DecisionAt read for ctx, as the clock a controller
-// or a fake takes.
-func decisionClock(ctx context.Context) func() time.Time {
-	return func() time.Time { return store.DecisionAt(ctx) }
 }
 
 func wantErr(t *testing.T, err error, contains string) {
@@ -144,16 +137,6 @@ func newWorld(t *testing.T) *world {
 		return err
 	}))
 	return w
-}
-
-// slowTest skips a test of more than ten seconds unless BIFROST_SLOW_TESTS=1,
-// which the daily full CI run sets (CI-16): it runs once a day, not on every
-// change. A parallel test calls it after t.Parallel().
-func slowTest(t *testing.T) {
-	t.Helper()
-	if os.Getenv("BIFROST_SLOW_TESTS") != "1" {
-		t.Skip("slow: runs in the daily full CI run (BIFROST_SLOW_TESTS=1)")
-	}
 }
 
 func (w *world) task(t *testing.T, mission, step, subject, role string) (string, error) {

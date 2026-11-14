@@ -86,19 +86,6 @@ type candidate struct {
 
 const candidatePage = 100
 
-// ClaimNext leases the oldest ready task of an active mission that one of the
-// host's tools may take, or returns nil. It records the poll on the host (a
-// liveness column) whatever the outcome. Routing in 2.2 is v5 §5.1.2
-// 「分流顺序」②–④: hard capability facts, the core rule and independence
-// from the author; a tool whose account has a pool cooling down is not
-// offered (2.4 slice ①); scores and pace are 2.4 slice ②. Candidates are
-// read in pages until one is taken or none is left, so tasks no tool here may
-// take never hide the ones it may (review 148 B2). A task whose preparation
-// failed in a row is blocked instead, ending this poll without a lease.
-func ClaimNext(ctx context.Context, db DB, r ClaimRequest) (*Claim, error) {
-	return claimNext(ctx, db, r, claimOpts{effects: dispatched})
-}
-
 func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim, error) {
 	for _, tl := range r.Tools {
 		if tl.Executor == "" || tl.Provider == "" {

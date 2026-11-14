@@ -2,19 +2,13 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"slices"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
 // An assessment's report and its record (TD-391; assess.go). The report is
@@ -33,9 +27,6 @@ const (
 	maxUnchecked      = 5
 	maxUncheckedRunes = 200
 )
-
-// Confidences an assessment states.
-var confidences = []string{"high", "medium", "low"}
 
 // approvalOptions are an approval's options as an assessment names them.
 var approvalOptions = []AssessOption{{Key: "approve", Label: "Approve"}, {Key: "reject", Label: "Reject"}}
@@ -110,118 +101,6 @@ func timeoutText() string { return fmt.Sprintf("%d minutes", int(AssessTimeout/t
 // noneInTime is why an assessment past its time has none.
 func noneInTime() string { return "none came within " + timeoutText() }
 
-// cardAssessment reads a card's assessment, its stream held.
-func cardAssessment(ctx context.Context, tx pgx.Tx, question string) (assessState, error) {
-	stream := AssessStream(AssessCard, question)
-	if err := lockStream(ctx, tx, stream); err != nil {
-		return assessState{}, err
-	}
-	return assessStateOf(ctx, tx, stream)
-}
-
-// assessmentOfTask is the stream of the item task's mission assesses, "" for
-// a task of any other mission.
-func assessmentOfTask(ctx context.Context, tx pgx.Tx, t taskRow) (string, error) {
-	var stream string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(scope_json->>'assessment_of', '') FROM agentrt.mission WHERE mission_id = $1`, t.mission).Scan(&stream)
-	return stream, err
-}
-
-// acceptAssessment records the report of a submitted assessment task (t,
-// locked; its submitted attempt's conclusion and report, aerr when it has
-// none): the assessment when it is one, else why there is none; either way
-// the task ends. One that comes after its item's outcome is recorded (none
-// came in time) is not used. It returns "assessed", "unavailable", "late" or
-// "" when there was nothing to do.
-func acceptAssessment(ctx context.Context, tx pgx.Tx, t taskRow, stream, attempt, conclusion, report string, aerr error) (string, error) {
-	if t.state != "submitted" || aerr != nil {
-		return "", nil
-	}
-	if err := lockStream(ctx, tx, stream); err != nil {
-		return "", err
-	}
-	st, err := assessStateOf(ctx, tx, stream)
-	if err != nil {
-		return "", err
-	}
-	if st.done || !st.asked || st.task != t.id {
-		return "late", endAssessmentTask(ctx, tx, t, "its assessment came after "+stream+" had its outcome, or was not its ask")
-	}
-	// Past its time a report is not taken, whoever reaches the stream first
-	// (review 448 A1): the same outcome as EndAssessments'.
-	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return "", err
-	}
-	if st.late(now) {
-		return "unavailable", recordUnavailable(ctx, tx, t, stream, noneInTime())
-	}
-	switch {
-	case conclusion != "done":
-		return "unavailable", recordUnavailable(ctx, tx, t, stream, fmt.Sprintf("its attempt ended %q", conclusion))
-	case report == "":
-		return "unavailable", recordUnavailable(ctx, tx, t, stream, "its attempt handed in nothing")
-	}
-	var body []byte
-	if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, report).Scan(&body); err != nil {
-		return "", err
-	}
-	text := strings.TrimSpace(strings.ToValidUTF8(string(body), "?"))
-	if alerts := seatproto.Alerts(text); len(alerts) > 0 {
-		if err = tellOwnerOfAlerts(ctx, tx, t.mission, t.id, "", "assessing "+stream, alerts); err != nil {
-			return "", err
-		}
-	}
-	a, why := parseAssessment(seatproto.WithoutAlerts(text), st.options, st.refs)
-	if why != "" {
-		return "unavailable", recordUnavailable(ctx, tx, t, stream, "its report is not an assessment: "+why)
-	}
-	var executor string
-	if err = tx.QueryRow(ctx, `SELECT executor_actor_id FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&executor); err != nil {
-		return "", err
-	}
-	a["by"], a["task"], a["report_artifact_id"] = executor, t.id, report
-	noted, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: t.mission, TaskID: t.id,
-		Body: map[string]any{"text": fmt.Sprintf("AI assessment: recommends %s, %s confidence", a["recommended"], a["confidence"]),
-			"assessment": a}})
-	if err != nil {
-		return "", err
-	}
-	// Its reasons are shown beside the card: one that says the Owner
-	// approved is recorded as a spec's or a message's is (T04; review 489
-	// B3). The whole report is read, and the JSON the parser took out of it
-	// as JSON, so an escape in a fenced block hides nothing (review 491 B3).
-	readings := [][]byte{body}
-	if raw, why := jsonOf(seatproto.WithoutAlerts(text)); why == "" {
-		readings = append(readings, []byte(raw))
-	}
-	if err = alertClaimIn(ctx, tx, Event{Stream: stream, MissionID: t.mission, TaskID: t.id}, noted.EventID, "assessment", report,
-		readings...); err != nil {
-		return "", err
-	}
-	return "assessed", moveTask(ctx, tx, "controller", t, "accepted", "assessment recorded on "+stream)
-}
-
-// recordUnavailable records why the item has no assessment and ends its
-// task.
-func recordUnavailable(ctx context.Context, tx pgx.Tx, t taskRow, stream, why string) error {
-	why = oneLineRunes(why, assessFieldRunes)
-	if _, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: t.mission, TaskID: t.id,
-		Body: map[string]any{"text": "AI assessment unavailable: " + why, "unavailable": why}}); err != nil {
-		return err
-	}
-	return endAssessmentTask(ctx, tx, t, "the assessment is unavailable: "+why)
-}
-
-// endAssessmentTask cancels a submitted assessment task whose report is not
-// used, and stops its mission.
-func endAssessmentTask(ctx context.Context, tx pgx.Tx, t taskRow, why string) error {
-	if err := moveTaskBy(ctx, tx, "controller", t, "cancelled", why, closeMoves); err != nil {
-		return err
-	}
-	return stopAssessment(ctx, tx, t.mission, why)
-}
-
 // stopAssessment stops an assessment's mission that has not ended.
 func stopAssessment(ctx context.Context, tx pgx.Tx, mission, why string) error {
 	var state string
@@ -232,127 +111,6 @@ func stopAssessment(ctx context.Context, tx pgx.Tx, mission, why string) error {
 		return nil
 	}
 	return MoveMission(ctx, tx, "controller", mission, "stopped", why)
-}
-
-// assessmentReport is the report's shape; any other field is refused.
-type assessmentReport struct {
-	Recommended string `json:"recommended"`
-	Confidence  string `json:"confidence"`
-	Reasons     []struct {
-		Text     string   `json:"text"`
-		Evidence []string `json:"evidence"`
-	} `json:"reasons"`
-	Unchecked []string `json:"unchecked"`
-}
-
-// parseAssessment reads a report as an assessment of an item with these
-// option keys and refs: the record to keep, or why it is none. A reason
-// whose refs are not all the spec's is dropped; fewer than two good reasons
-// is no assessment.
-func parseAssessment(text string, options []string, refs map[string]any) (map[string]any, string) {
-	raw, why := jsonOf(text)
-	if why != "" {
-		return nil, why
-	}
-	dec := json.NewDecoder(strings.NewReader(raw))
-	dec.DisallowUnknownFields()
-	var r assessmentReport
-	if err := dec.Decode(&r); err != nil {
-		return nil, "not the assessment's shape: " + oneLineRunes(err.Error(), 120)
-	}
-	// One object and nothing after it (review 448 B1): a second, a
-	// correction or a contradiction, is not chosen between.
-	var more json.RawMessage
-	if err := dec.Decode(&more); !errors.Is(err, io.EOF) {
-		return nil, "more than one JSON object"
-	}
-	if !slices.Contains(options, r.Recommended) {
-		return nil, fmt.Sprintf("recommended %q is not one of %v", oneLineRunes(r.Recommended, 40), options)
-	}
-	if !slices.Contains(confidences, r.Confidence) {
-		return nil, fmt.Sprintf("confidence %q is not one of %v", oneLineRunes(r.Confidence, 40), confidences)
-	}
-	if len(r.Reasons) > maxReasons {
-		return nil, fmt.Sprintf("%d reasons; at most %d", len(r.Reasons), maxReasons)
-	}
-	var reasons []any
-	dropped := 0
-	for _, rs := range r.Reasons {
-		said := oneLineRunes(rs.Text, maxReasonRunes+1)
-		var cited []any
-		ok := said != "" && utf8.RuneCountInString(said) <= maxReasonRunes && len(rs.Evidence) >= 1 && len(rs.Evidence) <= maxReasonRefs
-		seen := map[string]bool{}
-		for _, e := range rs.Evidence {
-			ref, found := refs[strings.TrimSpace(e)].(map[string]any)
-			if !found {
-				ok = false
-				break
-			}
-			if !seen[strings.TrimSpace(e)] {
-				seen[strings.TrimSpace(e)] = true
-				cited = append(cited, refRecord(strings.TrimSpace(e), ref))
-			}
-		}
-		if !ok {
-			dropped++
-			continue
-		}
-		reasons = append(reasons, map[string]any{"text": said, "evidence": cited})
-	}
-	if len(reasons) < minReasons {
-		return nil, fmt.Sprintf("%d reasons with evidence from its spec; at least %d (%d dropped)", len(reasons), minReasons, dropped)
-	}
-	if len(r.Unchecked) > maxUnchecked {
-		return nil, fmt.Sprintf("%d unchecked; at most %d", len(r.Unchecked), maxUnchecked)
-	}
-	unchecked := []any{}
-	for _, u := range r.Unchecked {
-		if u = oneLineRunes(u, maxUncheckedRunes); u != "" {
-			unchecked = append(unchecked, u)
-		}
-	}
-	out := map[string]any{"recommended": r.Recommended, "confidence": r.Confidence, "reasons": reasons, "unchecked": unchecked}
-	if dropped > 0 {
-		out["dropped_reasons"] = dropped
-	}
-	return out, ""
-}
-
-// refRecord is a cited ref as recorded: the ref and the record it names.
-func refRecord(ref string, rec map[string]any) map[string]any {
-	out := map[string]any{"ref": ref}
-	for k, v := range rec {
-		out[k] = v
-	}
-	return out
-}
-
-// jsonOf is the JSON object a report holds: the inside of its one ```
-// fence when it has one, else from its first { to its last }. A second
-// fence, or an object outside the one fence, is more than one object
-// (review 450 B1: the first of two fences was taken, the second ignored);
-// why says so.
-func jsonOf(text string) (raw, why string) {
-	if strings.Contains(text, "```") {
-		if strings.Count(text, "```") != 2 {
-			return "", "more than one JSON object"
-		}
-		i := strings.Index(text, "```")
-		j := i + 3 + strings.Index(text[i+3:], "```")
-		inside, outside := text[i+3:j], text[:i]+text[j+3:]
-		if strings.Contains(outside, "{") {
-			return "", "more than one JSON object"
-		}
-		if nl := strings.IndexByte(inside, '\n'); nl >= 0 {
-			inside = inside[nl+1:]
-		}
-		text = inside
-	}
-	i, j := strings.Index(text, "{"), strings.LastIndex(text, "}")
-	if i < 0 || j < i {
-		return "", "no JSON object"
-	}
-	return text[i : j+1], ""
 }
 
 // EndAssessments records unavailable every assessment that can no longer

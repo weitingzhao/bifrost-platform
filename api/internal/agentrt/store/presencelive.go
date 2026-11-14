@@ -1,13 +1,7 @@
 package store
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"strconv"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // When a host counts as alive, and when as taking work (review 526 A1, A1b;
@@ -38,10 +32,6 @@ import (
 // and 15 seconds of margin. TestPruneSilenceCoversAgentdsBudget holds it to
 // those constants.
 const PruneSilence = 2*time.Minute + 30*time.Second + 15*time.Second
-
-// HostPruneStream holds a host's prune rounds: opened when its list hands out
-// branches, closed when it reports or claims again.
-func HostPruneStream(host string) string { return "prune:host:" + host }
 
 // hostLiveJoins join to host h its prune stream's head, as ph.head, and its
 // contact, as hc.at: the later of its claim loop's last call and the freshest
@@ -99,63 +89,4 @@ func nullTime(t time.Time) any {
 		return nil
 	}
 	return t
-}
-
-// TouchHost records a call of host's agentd claim loop other than a claim
-// (asking for and reporting its prune list) as its last poll. It waits for
-// no row: a host row another transaction holds (a claim of the host, which
-// records the poll itself, or a control being set) is passed over. An
-// attempt's calls are not recorded here: their heartbeats are the host's
-// contact as they are (hostLiveJoins).
-func TouchHost(ctx context.Context, db DB, host string) error {
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp()
-		  WHERE host_id = (SELECT host_id FROM agentrt.host WHERE host_id = $1 FOR NO KEY UPDATE SKIP LOCKED)`, host)
-		return err
-	})
-}
-
-// pruneRound reads the head of host's prune stream: whether a round is open.
-func pruneRound(ctx context.Context, tx pgx.Tx, host string) (bool, error) {
-	var head []byte
-	if err := tx.QueryRow(ctx, `SELECT `+headSQL("$1::text"), HostPruneStream(host)).Scan(&head); err != nil || head == nil {
-		return false, err
-	}
-	var h struct {
-		Body struct {
-			Round string `json:"prune_round"`
-		} `json:"body"`
-	}
-	return h.Body.Round == "opened", json.Unmarshal(head, &h)
-}
-
-// OpenPruneRound records that host was handed n attempt branches to delete:
-// it may be silent for PruneSilence from now.
-func OpenPruneRound(ctx context.Context, db DB, host string, n int) error {
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := Append(ctx, tx, Event{Stream: HostPruneStream(host), Type: "note", Actor: "controller", Body: map[string]any{
-			"prune_round": "opened", "text": fmt.Sprintf("Host %s was handed %s to delete; it may be silent for up to %s while it deletes them.",
-				host, plural(n, "1 attempt branch", strconv.Itoa(n)+" attempt branches"), PruneSilence)}})
-		return err
-	})
-}
-
-// ClosePruneRound records that host's open prune round ended (why: it
-// reported, or it claims again); nothing when none is open. The stream is
-// locked before its head is read again, so a round closes once.
-func ClosePruneRound(ctx context.Context, db DB, host, why string) error {
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		if open, err := pruneRound(ctx, tx, host); err != nil || !open {
-			return err
-		}
-		if err := lockStream(ctx, tx, HostPruneStream(host)); err != nil {
-			return err
-		}
-		if open, err := pruneRound(ctx, tx, host); err != nil || !open {
-			return err
-		}
-		_, err := Append(ctx, tx, Event{Stream: HostPruneStream(host), Type: "note", Actor: "controller",
-			Body: map[string]any{"prune_round": "closed", "text": "Host " + host + "'s prune round ended: " + why + "."}})
-		return err
-	})
 }

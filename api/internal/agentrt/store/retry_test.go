@@ -280,51 +280,6 @@ func TestRefusedReportIsRecorded(t *testing.T) {
 	w.chainHolds(t, "host:h1")
 }
 
-// Review 400 A1: a salvage upload of a lost attempt's report is refused while
-// another attempt of the same host hands over. The refusal is the host's: it
-// is named on no attempt, and the other attempt's end tells it as what
-// happened on its host meanwhile.
-func TestARefusedSalvageIsNoOtherAttemptsCause(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	lostTask := w.ready(t, store.Task{})
-	lost := w.claim(t, "h3", -store.Grace-time.Second, codex)
-	if lost == nil || lost.TaskID != lostTask {
-		t.Fatalf("claim = %+v", lost)
-	}
-	_, _, err := store.SweepLeases(ctx, w.rt)
-	ok(t, err)
-	if w.state(t, "attempt", lost.AttemptID) != "lost" {
-		t.Fatal("the attempt was not lost")
-	}
-	// The next attempt of the host, of that task or another.
-	w.ready(t, store.Task{})
-	b := w.claim(t, "h3", store.LeaseTTL, codex)
-	if b == nil || b.AttemptID == lost.AttemptID {
-		t.Fatalf("second claim = %+v", b)
-	}
-	ok(t, store.Start(ctx, w.rt, fence(b, "h3"), "", ""))
-	exit := 0
-	_, err = store.Computed(ctx, w.rt, fence(b, "h3"), &exit, "exit", "done")
-	ok(t, err)
-	_, err = store.RefusedReport(ctx, w.rt, "h3", "report", "sha256:"+strings.Repeat("ef", 32), "local_path")
-	ok(t, err)
-	if n := len(w.hostAlerts(t, "h3")); n != 1 {
-		t.Fatalf("%d refusals on the host", n)
-	}
-	var onAttempts int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'policy_alert' AND attempt_id IS NOT NULL`).Scan(&onAttempts))
-	if onAttempts != 0 {
-		t.Fatalf("%d refusals were put on an attempt", onAttempts)
-	}
-	_, err = store.Ended(ctx, w.rt, b.AttemptID, "h3", "exit", true)
-	ok(t, err)
-	if r := w.lastReason(t, b.TaskID); !strings.Contains(r, "computed but not persisted; meanwhile its host had a report refused by rule local_path") ||
-		strings.Contains(r, "its report was refused") {
-		t.Fatalf("the other attempt's end says %q", r)
-	}
-}
-
 // Review 401 B1: a run longer than a page (failures from before the stop
 // existed) is read whole: an executor whose three failures sit under 64
 // newer ones of another is still passed by, and a break inside the first

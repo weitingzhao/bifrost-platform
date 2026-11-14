@@ -1,8 +1,6 @@
 package store_test
 
 import (
-	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -111,70 +109,6 @@ func TestAVendorReadingOfASpentWindowCoolsUntilItsReset(t *testing.T) {
 	}
 }
 
-func TestARefusalNeverShortensACooldownButTheOwnerMay(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	long, short := time.Now().Add(10*time.Hour).UTC().Truncate(time.Second), time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	// Both attempts run before either is refused: once one is, claude takes nothing more.
-	w.ready(t, store.Task{})
-	w.ready(t, store.Task{})
-	fs := []store.Fence{w.started(t, "h1", claude), w.started(t, "h2", claude)}
-	for i, reset := range []time.Time{long, short} {
-		f := fs[i]
-		_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(1), EndHow: "exit", Conclusion: "failed",
-			Pools: []store.PoolReading{{Pool: "claude:owner:short", Limited: true, ResetsAt: pv(reset)}}})
-		ok(t, err)
-	}
-	if until := w.cooldown(t, "claude:owner:short"); until == nil || !until.Equal(long) {
-		t.Fatalf("cooldown until %v; want the longer %v kept", until, long)
-	}
-	owner := store.Writer{Actor: "owner"}
-	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "r1", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(1.0), ResetsAt: pv(short)})
-	ok(t, err)
-	if until := w.cooldown(t, "claude:owner:short"); until == nil || !until.Equal(short) {
-		t.Fatalf("cooldown until %v; want the Owner's %v", until, short)
-	}
-	// Quota left: the Owner's reading lifts the cooldown, and claude claims again.
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4), ResetsAt: pv(short)})
-	ok(t, err)
-	if until := w.cooldown(t, "claude:owner:short"); until == nil || until.After(time.Now()) {
-		t.Fatalf("cooldown until %v; want lifted", until)
-	}
-	w.ready(t, store.Task{})
-	if c := w.claim(t, "h3", store.LeaseTTL, claude); c == nil {
-		t.Fatal("claude claimed nothing after the Owner lifted its cooldown")
-	}
-	// The same key again is the same answer; a reading the same key does not name is refused.
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4), ResetsAt: pv(short)})
-	ok(t, err)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.5)})
-	is(t, err, store.ErrConflict)
-}
-
-func TestTheOwnerReadingIsChecked(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	owner := store.Writer{Actor: "owner"}
-	reset := time.Now().Add(time.Hour)
-	for name, c := range map[string]struct {
-		w   store.Writer
-		key string
-		r   store.PoolReading
-	}{
-		"no key":          {owner, "", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2)}},
-		"no fraction":     {owner, "k", store.PoolReading{Pool: "claude:owner:weekly"}},
-		"spent, no reset": {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.0)}},
-		"over 1":          {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.5), ResetsAt: &reset}},
-		"not a pool":      {owner, "k", store.PoolReading{Pool: "claude:weekly", UsedFraction: pv(0.2)}},
-		"a refusal":       {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2), Limited: true}},
-		"not the owner":   {store.Writer{Actor: "controller"}, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2)}},
-	} {
-		if _, err := store.RecordOwnerReading(ctx, w.rt, c.w, c.key, c.r); err == nil {
-			t.Errorf("%s: recorded", name)
-		}
-	}
-}
-
 // A report the platform cannot take never fails the ending (as a heartbeat's
 // actions, review 264 A1): another tool's pool, a fraction over 1.
 func TestABadReportIsDroppedAndTheAttemptIsComputed(t *testing.T) {
@@ -234,34 +168,6 @@ func TestComputedWithUsageIsIdempotent(t *testing.T) {
 	is(t, err, store.ErrConflict)
 }
 
-func TestListPoolsShowsPaceAndThisWindowsUsage(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.ready(t, store.Task{})
-	f := w.started(t, "h1", claude)
-	reset := time.Now().Add(48 * time.Hour)
-	_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
-		Usage: &store.Usage{Pool: "claude:owner:weekly", Tokens: pv(int64(900)), USD: pv(1.5)},
-		Pools: []store.PoolReading{{Pool: "claude:owner:weekly", UsedFraction: pv(0.4), ResetsAt: &reset}}})
-	ok(t, err)
-	pools, err := store.ListPools(ctx, w.rt)
-	ok(t, err)
-	if len(pools) != 1 {
-		t.Fatalf("pools = %+v", pools)
-	}
-	p := pools[0]
-	if p.Tool != "claude" || p.Account != "owner" || p.Window != "weekly" || p.Source != "reading" || p.Cooling {
-		t.Fatalf("pool = %+v", p)
-	}
-	// 0.4 used with 48 of 168 hours left: 0.4 − (1 − 48/168) ≈ −0.314.
-	if p.Pace == nil || math.Abs(*p.Pace-(0.4-(1-48.0/168))) > 0.01 {
-		t.Fatalf("pace = %v", p.Pace)
-	}
-	if p.Used["tokens"] != 900 || p.Used["usd"] != 1.5 {
-		t.Fatalf("used = %v", p.Used)
-	}
-}
-
 // Review 274 B6: a refusal handed over after the reset it named cools
 // nothing; one that named a reset past belief counts as naming none.
 func TestARefusalAfterItsResetCoolsNothing(t *testing.T) {
@@ -282,83 +188,5 @@ func TestARefusalAfterItsResetCoolsNothing(t *testing.T) {
 	ok(t, err)
 	if until := w.cooldown(t, "codex:owner:weekly"); until == nil || until.Sub(time.Now()) > 7*time.Hour {
 		t.Fatalf("a refusal with an unbelievable reset cools until %v; want about 6 hours", until)
-	}
-}
-
-// Review 274 B7: the Owner's "spent" with a reset past belief is refused and
-// the cooldown in force stays; only a reading under 1 lifts one.
-func TestTheOwnersSpentReadingNeverLifts(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	owner := store.Writer{Actor: "owner"}
-	tomorrow := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
-	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "a", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.0), ResetsAt: &tomorrow})
-	ok(t, err)
-	far := time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "b", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.0), ResetsAt: &far})
-	is(t, err, store.ErrInvalid)
-	past := time.Now().Add(-time.Hour)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "c", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.5), ResetsAt: &past})
-	is(t, err, store.ErrInvalid)
-	if until := w.cooldown(t, "claude:owner:weekly"); until == nil || !until.Equal(tomorrow) {
-		t.Fatalf("cooldown until %v; want %v kept", until, tomorrow)
-	}
-}
-
-// Review 274 B5: a computed and the Owner's reading of the same new pool at
-// once both commit; neither is chosen as a deadlock victim.
-func TestComputedAndTheOwnersReadingAtOnce(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	pool := w.db.Pool(t, w.db.Runtime)
-	owner := store.Writer{Actor: "owner"}
-	reset := time.Now().Add(48 * time.Hour)
-	for round := 0; round < 5; round++ {
-		w.ready(t, store.Task{})
-		f := w.started(t, fmt.Sprintf("h%d", round+1), cursor)
-		p := "cursor:owner:monthly"
-		errs := make(chan error, 2)
-		go func() {
-			_, err := store.ComputedWith(ctx, pool, f, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
-				Usage: &store.Usage{Pool: p, Tokens: pv(int64(1))}, Pools: []store.PoolReading{{Pool: p, UsedFraction: pv(0.3), ResetsAt: &reset}}})
-			errs <- err
-		}()
-		go func() {
-			_, err := store.RecordOwnerReading(ctx, pool, owner, fmt.Sprintf("r%d", round), store.PoolReading{Pool: p, UsedFraction: pv(0.4), ResetsAt: &reset})
-			errs <- err
-		}()
-		for i := 0; i < 2; i++ {
-			ok(t, <-errs)
-		}
-	}
-}
-
-// Review 285: a new reading with no reset is not shown against a reset that
-// has passed since the reading before; a reset still ahead is kept.
-func TestANewReadingDropsAResetAlreadyPast(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	owner := store.Writer{Actor: "owner"}
-	// Five seconds, for the first reading to be taken before the reset
-	// whatever the tests beside this one do (review 322 A1).
-	soon := time.Now().Add(5 * time.Second).UTC()
-	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "a", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.9), ResetsAt: &soon})
-	ok(t, err)
-	time.Sleep(time.Until(soon) + 500*time.Millisecond)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "b", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.2)})
-	ok(t, err)
-	var resets *time.Time
-	ok(t, w.rt.QueryRow(ctx, `SELECT resets_at FROM agentrt.vendor_pool WHERE vendor_pool_id = 'claude:owner:short'`).Scan(&resets))
-	if resets != nil {
-		t.Fatalf("the new reading keeps the reset %v that has passed", resets)
-	}
-	ahead := time.Now().Add(3 * time.Hour).UTC().Truncate(time.Second)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "c", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.3), ResetsAt: &ahead})
-	ok(t, err)
-	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "d", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4)})
-	ok(t, err)
-	ok(t, w.rt.QueryRow(ctx, `SELECT resets_at FROM agentrt.vendor_pool WHERE vendor_pool_id = 'claude:owner:short'`).Scan(&resets))
-	if resets == nil || !resets.Equal(ahead) {
-		t.Fatalf("a reset still ahead was dropped: %v", resets)
 	}
 }

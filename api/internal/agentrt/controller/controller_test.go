@@ -18,8 +18,6 @@ import (
 
 var ctx = context.Background()
 
-const commitA = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
-
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
@@ -143,55 +141,6 @@ func (w *world) sources() controller.Sources {
 	}
 }
 
-func (w *world) set(f func()) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	f()
-}
-
-// One pass of each loop: the outside records a rule depends on are read and
-// their changes recorded once; a record that cannot be read records nothing;
-// the rule then moves its step.
-func TestPasses(t *testing.T) {
-	pool := setup(t)
-	setRule(t, pool, "R2:1-1", `{"all":[{"approval_executed":16},{"question_answered":{"question":"Q3","option":"A"}},`+
-		`{"ci_succeeded":{"repo":"bifrost-platform","commit":"`+commitA+`"}},`+
-		`{"any":[{"owner_signoff":"x"},{"gates_passed":[{"test":"T19","spec_sha256":"`+strings.Repeat("ab", 32)+`"}],"env":"stg"}]}]}`,
-		[2]string{"approval", "16"}, [2]string{"question", "Q3"})
-	w := &world{approvals: map[int64]string{16: "pending"}, questions: map[string]store.Question{},
-		ci: map[string]string{"bifrost-platform@" + commitA: "Running"}, deploys: map[string]string{"stg": commitA}}
-	c := &controller.Controller{DB: pool, Sources: w.sources()}
-	n, err := c.Facts(ctx)
-	must(t, err)
-	if n != 3 {
-		t.Fatalf("first pass recorded %d; want approval, CI and deployment", n)
-	}
-	if n, err = c.Facts(ctx); err != nil || n != 0 {
-		t.Fatalf("a pass with no change recorded %d (%v)", n, err)
-	}
-	w.set(func() {
-		w.approvals[16] = store.ApprovalExecuted
-		w.questions["Q3"] = store.Question{Status: store.QuestionAnswered, Option: "A", AnsweredBy: "owner", AnsweredAt: "2026-10-14T12:00:00Z"}
-		w.ci["bifrost-platform@"+commitA] = store.CISucceeded
-	})
-	if n, err = c.Facts(ctx); err != nil || n != 3 {
-		t.Fatalf("second pass recorded %d (%v)", n, err)
-	}
-	moved, err := c.Rules(ctx)
-	must(t, err)
-	if moved != 0 {
-		t.Fatal("the rule moved before its sign-off")
-	}
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.SignOff(ctx, tx, "owner", "R2:1-1", "x") }))
-	if moved, err = c.Rules(ctx); err != nil || moved != 1 || stepState(t, pool, "R2:1-1") != "done" {
-		t.Fatalf("rules moved %d (%v)", moved, err)
-	}
-	if moved, err = c.Rules(ctx); err != nil || moved != 0 {
-		t.Fatalf("a done step moved again: %d (%v)", moved, err)
-	}
-	must(t, c.Sweep(ctx))
-}
-
 // Start runs the loops on timers; a pass that panics costs that pass only;
 // cancelling the context stops them.
 func TestStart(t *testing.T) {
@@ -285,53 +234,6 @@ func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
 	}
 }
 
-// Accept also checks salvaged results (T34 case 8): a lost attempt whose
-// result was persisted gets a deterministic verification pinned to it, once.
-func TestAcceptChecksSalvagedResults(t *testing.T) {
-	pool := setup(t)
-	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
-	task, attempt := store.NewTaskID(), store.NewAttemptID()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# the work\n"))
-		if err != nil {
-			return err
-		}
-		report, err := store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("# salvaged\n"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: spec, Effect: "none"}); err != nil {
-			return err
-		}
-		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
-			return err
-		}
-		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: a lost attempt whose result was salvaged"}}); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, host_id, lease_epoch,
-		  lease_expires_at, heartbeat_at, persisted_at, state, report_artifact_id)
-		  VALUES ($1, $2, 1, 'exec:codex', 'h1', nextval('agentrt.lease_epoch_seq'), now() - interval '1 hour', now() - interval '1 hour',
-		  now(), 'lost', $3)`, attempt, task, report)
-		return err
-	}))
-	c := &controller.Controller{DB: pool, Sources: (&world{}).sources()}
-	moved, err := c.Accept(ctx)
-	if err != nil || moved != 1 {
-		t.Fatalf("accept moved %d (%v)", moved, err)
-	}
-	var checks int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'verify' AND state = 'ready'`, task).Scan(&checks))
-	if checks != 1 {
-		t.Fatalf("%d verifications of the salvaged result", checks)
-	}
-	if moved, err = c.Accept(ctx); err != nil || moved != 0 {
-		t.Fatalf("a second pass moved %d (%v)", moved, err)
-	}
-}
-
 // The loops decide plan changes: once the Owner answers a card with the
 // first option, the change lands.
 func TestStartDecidesPlanChanges(t *testing.T) {
@@ -360,120 +262,4 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 			t.Fatal("the loops did not apply the answered change")
 		}
 	}
-}
-
-// W-31 2.4 slice ④: with Briefs the controller leaves the chief of staff the
-// brief of the slot due, and the same pass takes it into a brief; without
-// Briefs (tests, and any controller not wired for them) it leaves nothing.
-func TestAcceptLeavesTheScheduledBrief(t *testing.T) {
-	loc, err := time.LoadLocation(store.BriefZone)
-	must(t, err)
-	at := time.Date(2026, 10, 19, 8, 5, 0, 0, loc)
-	for _, on := range []bool{false, true} {
-		pool := setup(t)
-		c := &controller.Controller{DB: pool, Sources: (&world{}).sources(), Briefs: on, Now: func() time.Time { return at }}
-		if _, err := c.Accept(ctx); err != nil {
-			t.Fatal(err)
-		}
-		var notes, briefs int
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE from_actor_id = 'controller' AND to_actor_id = $1`, store.Seat).Scan(&notes))
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE role = 'brief'`).Scan(&briefs))
-		want := 0
-		if on {
-			want = 1
-		}
-		if notes != want || briefs != want {
-			t.Fatalf("Briefs %v: %d notes, %d briefs", on, notes, briefs)
-		}
-		if _, err := c.Accept(ctx); err != nil {
-			t.Fatal(err)
-		}
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE from_actor_id = 'controller' AND to_actor_id = $1`, store.Seat).Scan(&notes))
-		if notes != want {
-			t.Fatalf("Briefs %v: a second pass left %d notes", on, notes)
-		}
-	}
-}
-
-// Without a question store the pass asks nothing and moves nothing.
-func TestBlockedCardsNeedAQuestionStore(t *testing.T) {
-	pool := setup(t)
-	c := &controller.Controller{DB: pool, Sources: (&world{}).sources()}
-	if n, err := c.BlockedCards(ctx); n != 0 || err != nil {
-		t.Fatalf("%d %v", n, err)
-	}
-}
-
-// 2026-11-06: a ready task of a mission past its hours is neither blocked
-// nor asked about, and its mission's budget is left as it was: a mission's
-// attempts and hours block nothing.
-func TestBlockedCardsLeaveATaskPastItsBudget(t *testing.T) {
-	pool := setup(t)
-	task := store.NewTaskID()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "goal", Goal: "g", Deadline: time.Now().Add(time.Hour),
-			Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}, MaxAttempts: 9, MaxWallHours: 48}); err != nil {
-			return err
-		}
-		if err := store.MoveMission(ctx, tx, "controller", "M-2", "active", "test"); err != nil {
-			return err
-		}
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/plain", []byte("spec"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-2", OffPlanReason: "a goal",
-			Role: "implement", Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform"}); err != nil {
-			return err
-		}
-		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
-			return err
-		}
-		// The mission started 49 hours ago: its 48 are spent.
-		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test"}}); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours' WHERE mission_id = 'M-2'`)
-		return err
-	}))
-	w := &world{questions: map[string]store.Question{}}
-	src := w.sources()
-	var cards []store.Card
-	src.Ask = func(_ context.Context, c store.Card) (string, error) {
-		w.set(func() { cards = append(cards, c) })
-		return "q_8", nil
-	}
-	c := &controller.Controller{DB: pool, Sources: src}
-	var state string
-	must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, task).Scan(&state))
-	for i := 0; i < 2; i++ {
-		if _, err := c.BlockedCards(ctx); err != nil {
-			t.Fatalf("pass %d: %v", i+1, err)
-		}
-		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, task).Scan(&state))
-		if state != "ready" {
-			t.Fatalf("pass %d: the task is %s", i+1, state)
-		}
-	}
-	w.set(func() {
-		if len(cards) != 0 {
-			t.Fatalf("cards %+v", cards)
-		}
-	})
-	var hours int
-	must(t, pool.QueryRow(ctx, `SELECT (budget_json->>'max_wall_hours')::int FROM agentrt.mission WHERE mission_id = 'M-2'`).Scan(&hours))
-	if hours != 48 {
-		t.Fatalf("max_wall_hours %d; want 48", hours)
-	}
-}
-
-// implSpec is an implementation's spec in bifrost-platform as a plan's is
-// (store.ImplementSpec): one a proposal takes (R5:5.7-8).
-func implSpec(t *testing.T) []byte {
-	t.Helper()
-	r := store.Repos["bifrost-platform"]
-	b, err := store.ImplementSpec("t", "t", r, r.Verify, store.HandInChecks(r, nil))
-	must(t, err)
-	return b
 }

@@ -85,13 +85,7 @@ func TestSearchArtifacts(t *testing.T) {
 			Class: "go", Title: "other", SpecArtifact: otherSpec, Effect: "branch", Repo: "bifrost-platform"})
 		return perr
 	}))
-	// A message to the chief of staff becomes a brief: its body is the
-	// brief task's and the brief mission's; a mission's spec is the mission's.
-	ask, err := store.SendMessage(ctx, w.rt, owner, store.Seat, "ask", []byte("Status?"))
-	ok(t, err)
-	brief, briefMission := takeAndReady(t, w, ask)
-	var askBody string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_artifact_id FROM agentrt.message WHERE message_id = $1`, ask).Scan(&askBody))
+	// A mission's spec is the mission's.
 	missionSpec := w.artifact(t, "mission_spec", "# M-2\n")
 	w.legacy(t, `UPDATE agentrt.mission SET spec_artifact_id = '`+missionSpec+`' WHERE mission_id = 'M-2'`)
 	exam := w.artifact(t, "exam", "an answer")
@@ -159,11 +153,6 @@ func TestSearchArtifacts(t *testing.T) {
 	}
 	if got, _ = search(t, w, store.ArtifactQuery{Task: other}); !slices.Equal(got, []string{otherSpec}) {
 		t.Fatalf("M-2's task: %v (a mission's spec is not its task's)", got)
-	}
-	for _, q := range []store.ArtifactQuery{{Task: brief}, {Mission: briefMission}} {
-		if got, _ = search(t, w, q); !slices.Contains(got, askBody) {
-			t.Fatalf("%+v: %v has no message body %s", q, got, askBody)
-		}
 	}
 	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {
 		t.Fatalf("a task of M-1 within M-2: %v", got)

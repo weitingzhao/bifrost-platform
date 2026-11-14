@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
@@ -365,33 +364,4 @@ func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	}
 	pvEvaluate(t, w, dep.Step, "active")
 	pvEvaluate(t, w, s1, "active")
-}
-
-// PV2 review 2026-10-26 S2: a card-auto-answer rule that answers plan changes
-// does not adopt a view binding completion atoms; the same view without
-// bindings it does (the control).
-func TestPV2RuleDoesNotAdoptBindings(t *testing.T) {
-	t.Parallel()
-	for _, binds := range []bool{true, false} {
-		w := newKernelWorld(t)
-		d := pvDocument(t, 1)
-		var artifact string
-		if binds {
-			b := pvBinding(d, s1, "external_verified", "owner_signoff")
-			artifact = pvArtifact(t, w, d, b)
-		} else {
-			artifact = pvArtifact(t, w, d)
-		}
-		signCardAuto(t, w, "30", "[plan_change]")
-		var s cardStore
-		zero := 0
-		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "adopt", root, "adopt the view", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, s.ask)
-		ok(t, err)
-		s.aged(s.order[0], time.Hour)
-		n, err := store.AnswerByRule(ctx, w.rt, s.rule())
-		ok(t, err)
-		if want := map[bool]int{true: 0, false: 1}[binds]; n != want {
-			t.Fatalf("binds %v: the rule answered %d cards; want %d", binds, n, want)
-		}
-	}
 }

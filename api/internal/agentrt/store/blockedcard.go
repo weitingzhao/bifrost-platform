@@ -133,18 +133,6 @@ const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('ac
 const stopOn = `agentrt.control k WHERE k.cleared_at IS NULL AND k.control_kind = 'stop'
     AND ((k.scope = 'task' AND k.scope_ref = t.task_id) OR (k.scope = 'mission' AND k.scope_ref = t.mission_id))`
 
-// TaskStopHeld reports whether an uncleared stop holds the task, its own or
-// its mission's (stopOn): only the Owner lifts one, and while it holds the
-// platform asks him nothing for the task (a landing grant card among them).
-func TaskStopHeld(ctx context.Context, db DB, task string) (bool, error) {
-	var on bool
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task t WHERE t.task_id = $1
-		  AND EXISTS (SELECT 1 FROM `+stopOn+`))`, task).Scan(&on)
-	})
-	return on, err
-}
-
 // AnsweredCard is one of the runtime's cards the Owner answered that the
 // runtime has not acknowledged: an unacknowledged answer counts against the
 // runtime's question quota.

@@ -101,23 +101,6 @@ func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
 	return err
 }
 
-// ackMessageFor records that the receiver took a message into a mission's
-// task (the mail a brief answers), linking the message to them in the same
-// write.
-func ackMessageFor(ctx context.Context, tx pgx.Tx, actor, messageID, mission, task string) error {
-	var to string
-	if err := tx.QueryRow(ctx, `SELECT to_actor_id FROM agentrt.message WHERE message_id = $1 FOR UPDATE`, messageID).Scan(&to); err != nil {
-		return err
-	}
-	if _, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_acked", Actor: actor, MissionID: mission, TaskID: task,
-		Body: map[string]any{"message_id": messageID}}); err != nil {
-		return err
-	}
-	_, err := tx.Exec(ctx, `UPDATE agentrt.message SET acked_at = clock_timestamp(), mission_id = $2, task_id = $3
-	  WHERE message_id = $1 AND acked_at IS NULL`, messageID, mission, task)
-	return err
-}
-
 // SetControl records a stop, pause or drain and broadcasts it. It first takes
 // the lock a claim takes for the same scope (the global advisory lock, the
 // mission, task or host row), so a claim either commits before the control

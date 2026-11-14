@@ -218,19 +218,3 @@ func SetHostSlots(ctx context.Context, db DB, host string, d slots.Decision, rec
 	})
 	return wrote, err
 }
-
-// SlotsInForce is the slots configuration of the concurrency rule in force,
-// as GET /hosts shows it: the rule's version, its policy and parameters, and
-// whether it is elastic (has a slots block); nil when no rule is in force.
-func SlotsInForce(ctx context.Context, db DB) (map[string]any, error) {
-	r, err := RuleInForce(ctx, db, rules.KindConcurrency)
-	if errors.Is(err, errBadRule) {
-		return nil, nil
-	}
-	if err != nil || r == nil {
-		return nil, err
-	}
-	c := slots.ConfigOf(r.Rule)
-	return map[string]any{"rule_version": r.Version, "policy": c.Policy, "elastic": c.Elastic, "params": c.Params.Doc(),
-		"ceiling": slots.Ceiling}, nil
-}

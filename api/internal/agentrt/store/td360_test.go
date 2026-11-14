@@ -1,10 +1,8 @@
 package store_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -69,37 +67,5 @@ func TestPersistRefusesTheBase(t *testing.T) {
 	}
 	_, err = store.Submit(ctx, w.rt, f)
 	ok(t, err)
-	w.chainHolds(t, "mission:M-1")
-}
-
-// TD-360, salvage half: a lost attempt's result whose commit is the task's
-// base is refused as persist refuses it, so no salvage check is proposed.
-func TestSalvageRefusesTheBase(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{BaseCommit: commitA})
-	c := w.claim(t, "h1", -store.Grace-time.Second, codex)
-	if c == nil || c.TaskID != task {
-		t.Fatalf("claim = %+v", c)
-	}
-	_, _, err := store.SweepLeases(ctx, w.rt)
-	ok(t, err)
-	if w.state(t, "attempt", c.AttemptID) != "lost" {
-		t.Fatalf("attempt %s after the sweep", w.state(t, "attempt", c.AttemptID))
-	}
-
-	calls := 0
-	_, err = store.Salvage(ctx, w.rt, c.AttemptID, "h1", store.Result{Report: w.artifact(t, "report", "# salvaged\n"),
-		Ref: c.PushedRef, Commit: commitA}, heads(map[string]string{c.PushedRef: commitA}, &calls))
-	is(t, err, store.ErrState)
-	if !strings.Contains(err.Error(), "changed nothing") {
-		t.Fatalf("the refusal says %q", err)
-	}
-	w.keptNothing(t, c.AttemptID, "h1", "salvage")
-	pending, err := store.PendingSalvaged(ctx, w.rt)
-	ok(t, err)
-	if slices.Contains(pending, c.AttemptID) {
-		t.Fatalf("a refused salvage is pending its check: %v", pending)
-	}
 	w.chainHolds(t, "mission:M-1")
 }

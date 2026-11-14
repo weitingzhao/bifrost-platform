@@ -73,39 +73,6 @@ func TestMovedTaskGetsACardOfItsOwn(t *testing.T) {
 	}
 }
 
-// Review 440 B1: the pass after a close reads every leftover task, past its
-// first page.
-func TestCancelAfterCloseReadsEveryPage(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.goalMission(t, "M-3")
-	a := &asker{}
-	w.closingCard(t, a)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, nil); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	var late []string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		for range 101 {
-			id := store.NewTaskID()
-			if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-3", OffPlanReason: "a goal", Role: "implement",
-				Effect: "branch", Repo: "bifrost-platform", Class: "go", Title: "t", SpecArtifact: w.spec}); err != nil {
-				return err
-			}
-			late = append(late, id)
-		}
-		return nil
-	}))
-	if n, err := store.CancelAfterClose(ctx, w.rt); err != nil || n != 101 {
-		t.Fatalf("cancelled %d (%v); want all 101", n, err)
-	}
-	var left int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE mission_id = 'M-3' AND state <> 'cancelled'`).Scan(&left))
-	if left != 0 {
-		t.Fatalf("%d tasks of M-3 left", left)
-	}
-}
-
 // Review 440 C1: a task committed after the close locked the mission's tasks
 // and before it read them again under the mission's lock is not among those
 // locked: the close starts again and cancels it too.

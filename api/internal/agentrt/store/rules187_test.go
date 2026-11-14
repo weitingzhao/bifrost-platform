@@ -5,9 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -93,31 +90,5 @@ func TestUnreadableRulesGrantNothing(t *testing.T) {
 	  VALUES ('job:test', 2, '{}', `+quote(odd)+`, 'tighten', '`+since+`', '`+until+`')`)
 	if c := w.claim(t, "h2", time.Hour, codex, cursor); c != nil {
 		t.Fatalf("%s claimed under an unreadable job rule (core %s)", c.TaskID, core)
-	}
-}
-
-// R3: until the Owner signs capability-facts, the seed's only facts grant
-// nobody: core work waits; once he signs, it is claimed.
-func TestCoreWaitsForTheSignedFacts(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
-	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h1", "dev"))
-	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h2", "dev"))
-	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
-	ok(t, err)
-	w.jobs(t, "active", "*", claude)
-	core := w.ready(t, store.Task{Core: true})
-	if c := w.claim(t, "h1", time.Hour, claude); c != nil {
-		t.Fatalf("core work %s claimed on the seed's unsigned facts", c.TaskID)
-	}
-	s := signer{t, rptest.NewKey(t)}
-	ok(t, firstErr(s.sign(w, ruleText("capability-facts", 1, rules.Initial, since, until,
-		"facts:\n  - {executor: exec:claude, kind: only, subject: author_core, scope: {core: true}}\n"))))
-	// The controller's reroute pass decides the task's route again.
-	_, err = store.Reroute(ctx, w.rt)
-	ok(t, err)
-	if c := w.claim(t, "h2", time.Hour, claude); c == nil || c.TaskID != core {
-		t.Fatalf("after the Owner signed: %+v; want %s", c, core)
 	}
 }

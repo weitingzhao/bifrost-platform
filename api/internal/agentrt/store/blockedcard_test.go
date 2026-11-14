@@ -235,45 +235,6 @@ func TestBlockedCardFitsTheQuestionStore(t *testing.T) {
 	}
 }
 
-// Review 420 B1: an external task whose attempt ended with its process group
-// not cleared gets no card (the old process may still act); one whose end
-// cleared the group gets a card that says no host takes it yet.
-func TestBlockedExternalNeedsAClearedEnd(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	uncleared := w.ready(t, store.Task{Effect: "external"})
-	e := w.claimExternal(t, "h2", store.LeaseTTL, codex)
-	_, err := store.Ended(ctx, w.rt, e.AttemptID, "h2", "daemon_restart", false)
-	ok(t, err)
-	if e.TaskID != uncleared || w.state(t, "task", uncleared) != "blocked" {
-		t.Fatalf("the external task is %s", w.state(t, "task", uncleared))
-	}
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 0 {
-		t.Fatalf("an uncleared end asked %d (%v)", n, err)
-	}
-	lostTask := w.ready(t, store.Task{Effect: "external"})
-	l := w.claimExternal(t, "h4", -store.Grace-time.Second, codex)
-	_, _, err = store.SweepLeases(ctx, w.rt)
-	ok(t, err)
-	_, err = store.Ended(ctx, w.rt, l.AttemptID, "h4", "host_reboot", false)
-	ok(t, err)
-	if l.TaskID != lostTask || w.state(t, "task", lostTask) != "blocked" {
-		t.Fatalf("the lost external task is %s", w.state(t, "task", lostTask))
-	}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 0 {
-		t.Fatalf("a lost attempt ended uncleared asked %d (%v)", n, err)
-	}
-	cleared := w.ready(t, store.Task{Effect: "external"})
-	c := w.claimExternal(t, "h3", store.LeaseTTL, codex)
-	_, err = store.Ended(ctx, w.rt, c.AttemptID, "h3", "daemon_restart", true)
-	ok(t, err)
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[0].TaskID != cleared ||
-		!strings.Contains(a.cards[0].Body, "where it waits: no host takes external work yet") {
-		t.Fatalf("a cleared end: asked %d (%v) %+v", n, err, a.cards)
-	}
-}
-
 // Review 420 B2: a card is made, and an answer is used, under the mission's
 // lock: a stop waits for them, so neither lands on a mission that stopped
 // in between. Here the card is being asked when the stop comes.

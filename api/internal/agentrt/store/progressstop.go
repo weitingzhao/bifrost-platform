@@ -61,10 +61,6 @@ const withdrawnSQL = ` LEFT JOIN LATERAL (SELECT e.actor_id AS withdrawn_by, COA
     e.at AS withdrawn_at FROM ` + lastCancelEvent + `
     WHERE ` + withdrawal + `) wd ON true `
 
-// withdrawnTask is the condition that task t was withdrawn, as withdrawnSQL
-// reads it.
-const withdrawnTask = `EXISTS (SELECT 1 FROM ` + lastCancelEvent + ` WHERE ` + withdrawal + `)`
-
 // A task whose change is on main (a landed note, RecordLandings in prune.go)
 // reads finished whatever its state: it is not open work, not stopped,
 // blocked or queued, not withdrawn, waits for nothing and adds nothing to an
