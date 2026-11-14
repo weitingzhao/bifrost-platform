@@ -106,7 +106,20 @@ modules:
   - name: console
     kind: node
     root: console
-    needs: ["bifrost-ui:.", "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"]
+    # The last five are the files under api/ the console's tests read
+    # (scripts/ci/console_reads_api.txt; consoleReadsApi.test.ts keeps that
+    # list whole, TestConsoleDeclaresWhatItsTestsReadUnderAPI keeps this one
+    # equal to it). Without them a change to one of those files would leave
+    # the console's keys as they were. Filled in by the CI line on 2026-11-14;
+    # the module's owners may turn them into contracts.
+    needs:
+      - "bifrost-ui:."
+      - "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"
+      - api/internal/questions/testdata/contract
+      - api/internal/approvals/types.go
+      - api/internal/approvals/handler.go
+      - api/internal/mcp/catalog.go
+      - api/internal/server/agent_threads_wire.go
     image: docker.io/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
     template: bifrost-unit-run
     tasks:
