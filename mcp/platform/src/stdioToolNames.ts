@@ -75,9 +75,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_plan_view',
   'register_external_work',
   'record_external_work_event',
-  'get_mission',
-  'list_tasks',
-  'get_task',
   'propose_plan_change',
   'propose_plan_import',
   'post_plan_note',
@@ -88,7 +85,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'send_message',
   'wait_for_messages',
   'ack_messages',
-  'get_attempt_actions',
   // Business issues (W-31 BI-1 slice 2): the crew's tools, registerIssues.ts.
   'file_issue',
   'add_to_issue',

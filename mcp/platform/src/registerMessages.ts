@@ -3,15 +3,13 @@ import { z } from 'zod'
 import { jsonResult } from './platformClient.js'
 import {
   MESSAGE_DATA_NOTE,
-  RUNTIME_DATA_NOTE,
   ackMessages,
-  getAttemptActions,
   sendMessage,
   waitForMessages,
 } from './runtimeTools.js'
 
 /**
- * The inbox and an attempt's actions (W-31 2.3). reg is the server's tool
+ * The inbox (W-31 2.3). reg is the server's tool
  * registration, already scoped to the bridge's focus.
  */
 export function registerMessageTools(reg: McpServer['tool']): void {
@@ -37,12 +35,5 @@ export function registerMessageTools(reg: McpServer['tool']): void {
     'Agent runtime: acknowledge this thread\'s own messages (1 to 100 ids, m_…); acknowledging one twice changes nothing.',
     { message_ids: z.array(z.string()).min(1).max(100) },
     async (input) => jsonResult(await ackMessages(input)),
-  )
-
-  reg(
-    'get_attempt_actions',
-    `Agent runtime: an attempt's actions (a_…), kept 24 hours — files read and edited, commands run and their exit codes; after continues from a previous answer's next, last answers only the newest. ${RUNTIME_DATA_NOTE}`,
-    { attempt_id: z.string(), after: z.string().optional(), last: z.boolean().optional() },
-    async (input) => jsonResult(await getAttemptActions(input)),
   )
 }

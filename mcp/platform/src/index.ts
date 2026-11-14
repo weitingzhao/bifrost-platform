@@ -30,13 +30,10 @@ import {
   STOP_KEY_RULE,
   getArtifact,
   searchArtifacts,
-  getMission,
   getPlan,
   getPlanView, registerExternalWork, recordExternalWorkEvent,
   COMMIT_SHA,
   isRFC3339,
-  getTask,
-  listTasks,
   proposePlanChange,
   putArtifact,
   requestStop,
@@ -704,27 +701,6 @@ if (!allow || allow.has('record_external_work_event')) {
     }).strict(),
   }, async (input) => jsonResult(await recordExternalWorkEvent(input)))
 }
-
-reg(
-  'get_mission',
-  `Agent runtime mission (M-n) with its tasks counted by state. ${RUNTIME_DATA_NOTE}`,
-  { id: z.string() },
-  async ({ id }) => jsonResult(await getMission(id)),
-)
-
-reg(
-  'list_tasks',
-  `Agent runtime tasks, oldest first, at most 500; filter by mission (M-n) and state. ${RUNTIME_DATA_NOTE}`,
-  { mission: z.string().optional(), state: z.string().optional() },
-  async (input) => jsonResult(await listTasks(input)),
-)
-
-reg(
-  'get_task',
-  `Agent runtime task (t_…). ${RUNTIME_DATA_NOTE}`,
-  { id: z.string() },
-  async ({ id }) => jsonResult(await getTask(id)),
-)
 
 registerMessageTools(reg)
 registerPlanImportTools(reg)

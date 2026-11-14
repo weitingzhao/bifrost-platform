@@ -5,8 +5,8 @@ import path from 'node:path'
 import { bifrostSessionId, sessionFellBack } from './sessionId.js'
 import { platformGet, platformGetText, platformSend, platformUpload } from './platformClient.js'
 
-// The agent runtime's tools (design v5 §5.2 「MCP 工具」): reads of the plan,
-// missions, tasks and artifacts, and the writes a thread may make — propose
+// The agent runtime's tools (design v5 §5.2 「MCP 工具」): reads of the plan
+// and artifacts, and the writes a thread may make — propose
 // plan changes, upload an artifact, ask for a stop. Writes are
 // runtime state, not cluster actions: like the question tools they do not go
 // through the approvals write gate, and they refuse when the session id fell
@@ -65,21 +65,6 @@ export async function getPlan(input: { root?: string; node?: string }, d: Runtim
   if (input.node) return note(await d.get(`${BASE}/plan/${id(input.node)}`))
   if (input.root) return note(await d.get(`${BASE}/plan?root=${id(input.root)}`))
   return note(await d.get(`${BASE}/plan`))
-}
-
-export async function getMission(missionId: string, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
-  return note(await d.get(`${BASE}/missions/${id(missionId)}`))
-}
-
-export async function listTasks(input: { mission?: string; state?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
-  const q: string[] = []
-  if (input.mission) q.push(`mission=${id(input.mission)}`)
-  if (input.state) q.push(`state=${id(input.state)}`)
-  return note(await d.get(`${BASE}/tasks${q.length ? `?${q.join('&')}` : ''}`))
-}
-
-export async function getTask(taskId: string, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
-  return note(await d.get(`${BASE}/tasks/${id(taskId)}`))
 }
 
 export const PROPOSAL_KEY_RULE =
@@ -428,22 +413,6 @@ export async function ackMessages(input: { message_ids: string[] }, d: RuntimeDe
   if (refused) return refused
   return d.send('POST', `${BASE}/messages/ack`, { message_ids: input.message_ids })
 }
-
-/**
- * An attempt's actions (a_…), kept 24 hours: files read and edited, commands
- * run and their exit codes. after continues from a previous answer's next;
- * last answers only the newest.
- */
-export async function getAttemptActions(
-  input: { attempt_id: string; after?: string; last?: boolean },
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const q: string[] = []
-  if (input.last) q.push('last=1')
-  else if (input.after) q.push(`after=${encodeURIComponent(input.after)}`)
-  return note(await d.get(`${BASE}/attempts/${id(input.attempt_id)}/actions${q.length ? `?${q.join('&')}` : ''}`))
-}
-
 
 export async function getPlanView(input: { root: string; recent_cursor?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return note(await d.get(`${BASE}/plan-view?root=${id(input.root)}${input.recent_cursor ? `&recent_cursor=${id(input.recent_cursor)}` : ''}`))

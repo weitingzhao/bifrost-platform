@@ -12,11 +12,8 @@ import {
   STOP_KEY_RULE,
   getArtifact,
   searchArtifacts,
-  getMission,
   getPlan,
   getPlanView, registerExternalWork, recordExternalWorkEvent, COMMIT_SHA,
-  getTask,
-  listTasks,
   proposePlanChange,
   proposePlanImport,
   postPlanNote,
@@ -33,7 +30,6 @@ import {
   sendMessage,
   waitForMessages,
   ackMessages,
-  getAttemptActions,
   MESSAGE_DATA_NOTE,
   type RuntimeDeps,
 } from './runtimeTools.js'
@@ -73,10 +69,6 @@ describe('agent runtime reads', () => {
     assert.deepEqual(await getPlan({}, d), { ok: true, note: RUNTIME_DATA_NOTE })
     await getPlan({ root: 'R2' }, d)
     await getPlan({ node: 'R2:1-1', root: 'R2' }, d)
-    await getMission('M-1', d)
-    await listTasks({}, d)
-    await listTasks({ mission: 'M-1', state: 'ready' }, d)
-    await getTask('t_x', d)
     assert.deepEqual(
       calls.map((c) => c.path),
       [
@@ -84,10 +76,6 @@ describe('agent runtime reads', () => {
         '/api/v1/agentrt/plan',
         '/api/v1/agentrt/plan?root=R2',
         '/api/v1/agentrt/plan/R2:1-1',
-        '/api/v1/agentrt/missions/M-1',
-        '/api/v1/agentrt/tasks',
-        '/api/v1/agentrt/tasks?mission=M-1&state=ready',
-        '/api/v1/agentrt/tasks/t_x',
       ],
     )
     const art = await getArtifact('sha256:' + 'cd'.repeat(32), d)
@@ -294,14 +282,14 @@ describe('agent runtime tools are served', () => {
     assert.match(index, /registerPlanImportTools\(reg\)/)
     const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }
   })
 })
 
-describe('messages and actions (W-31 2.3)', () => {
+describe('messages (W-31 2.3)', () => {
   it('send_message posts as this thread and refuses without a session', async () => {
     const { d, calls } = deps()
     await sendMessage({ to: 'seat:chief_of_staff', kind: 'ask', body: 'how is it going?' }, d)
@@ -343,15 +331,11 @@ describe('messages and actions (W-31 2.3)', () => {
     assert.deepEqual(calls, [{ kind: 'get', path: '/api/v1/agentrt/messages?wait=0&limit=5' }])
   })
 
-  it('ack_messages sends the ids; get_attempt_actions reads the stream, after a cursor or only the newest', async () => {
+  it('ack_messages sends the ids and refuses without a session', async () => {
     const { d, calls } = deps()
     await ackMessages({ message_ids: ['m_1', 'm_2'] }, d)
-    await getAttemptActions({ attempt_id: 'a_01M56J5QPAAQQP53KV4MQYCW5Q', after: '1760-0' }, d)
-    await getAttemptActions({ attempt_id: 'a_01M56J5QPAAQQP53KV4MQYCW5Q', last: true }, d)
     assert.deepEqual(calls, [
       { kind: 'send', path: '/api/v1/agentrt/messages/ack', body: { message_ids: ['m_1', 'm_2'] } },
-      { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?after=1760-0' },
-      { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?last=1' },
     ])
     const { d: off, calls: none } = deps({ fellBack: true })
     assert.ok(((await ackMessages({ message_ids: ['m_1'] }, off)) as { error?: string }).error)
