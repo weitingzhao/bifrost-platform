@@ -13,7 +13,7 @@ func TestLandingHardLayersAndEndpoints(t *testing.T) {
 		"api/internal/server/x.go", "console/src/pages/ApprovalsPage.tsx",
 		"mcp/platform/src/x.ts", "config/platform-auth.yaml", "api/internal/statefile/x.go",
 		".gitattributes", "deep/.gitattributes", "deep/Dockerfile.dev", "deep/package.json",
-		"console/src/pwa/new.ts", "console/src/pages/landing-grant/New.tsx",
+		"console/src/pwa/new.ts",
 	} {
 		t.Run(p, func(t *testing.T) {
 			t.Parallel()

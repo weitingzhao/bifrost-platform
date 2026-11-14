@@ -263,11 +263,8 @@ var landingHardConsole = [...]string{
 	"console/src/api/client.ts",
 	"console/src/api/serverContact.ts",
 	"console/src/api/cluster.ts",
-	"console/src/api/landingGrant.ts",
 	"console/src/api/deliveryBoundaries.ts",
 	"console/src/pages/shell/agents/DeliveryBoundaries.tsx",
-	"console/src/pages/landing-grant/",
-	"console/src/pages/shell/progress/LandingAuthorization.tsx",
 	"console/src/lib/shell/consoleRoutes.ts",
 	"console/src/pages/ConsolePage.tsx",
 	"console/src/hooks/PlatformAuthProvider.tsx",
@@ -333,8 +330,6 @@ var landingHardBasenames = [...]string{
 // Entries planned by the design, allowed to be absent until their blocks land.
 var landingHardFuture = [...]string{
 	".github/",
-	"console/src/api/landingGrant.ts",
-	"console/src/pages/landing-grant/",
 }
 
 func inLandingEntries(p string, entries []string) bool {
