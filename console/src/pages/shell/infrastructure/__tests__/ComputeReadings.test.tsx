@@ -67,7 +67,6 @@ describe('compute readings', () => {
     expect(failed.getAttribute('data-status')).toBe('error')
     expect(failed).toHaveTextContent('Could not be read: prometheus: timeout')
     expect(view.container.querySelectorAll('[data-reading="not-measured"]')).toHaveLength(NOT_MEASURED.length)
-    expect(screen.getByRole('link', { name: 'Crew › Capacity and cost' })).toHaveAttribute('href', '#crew?section=capacity')
   })
   it('says so when the readings cannot be loaded, and still names what is not measured', async () => {
     fetchComputeReadings.mockRejectedValue(new Error('compute readings: HTTP 503'))

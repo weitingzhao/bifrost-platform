@@ -73,12 +73,6 @@ export function ComputeReadings() {
               <DenseTableCell className="text-muted-foreground">{row.missing}</DenseTableCell>
             </DenseTableRow>
           ))}
-          <DenseTableRow data-reading="quota">
-            <DenseTableCell>Model quota left at reset, stops for lack of quota</DenseTableCell>
-            <DenseTableCell colSpan={3}>
-              <a href="#crew?section=capacity">Crew › Capacity and cost</a>
-            </DenseTableCell>
-          </DenseTableRow>
         </DenseTableBody>
       </DenseDataTable>
     </OpsSection>
