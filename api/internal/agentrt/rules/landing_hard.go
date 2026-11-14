@@ -189,7 +189,6 @@ var landingStoreOpen = map[string]string{
 	"progresseta.go":          "a mission's ETA in the progress projection; reads only",
 	"progressneeds.go":        "Needs you in the progress projection; reads only",
 	"progressnext.go":         "when the Owner is next needed, in the progress projection",
-	"progresspersist.go":      "what of an attempt is persisted, in the progress projection; reads only",
 	"progressschema.go":       "loop failures and schema state in the progress projection; reads only",
 }
 

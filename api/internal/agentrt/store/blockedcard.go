@@ -134,7 +134,3 @@ func TaskWait(ctx context.Context, db DB, task string) (state string, stopped, f
 	}
 	return state, stopped, err == nil, err
 }
-
-// cardOpen: the card owner_wait_opened o names has not been closed.
-const cardOpen = `NOT EXISTS (SELECT 1 FROM agentrt.event c WHERE c.task_id = o.task_id AND c.event_type = 'owner_wait_closed'
-      AND c.body_json->>'question_id' = o.body_json->>'question_id')`

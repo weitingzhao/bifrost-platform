@@ -109,12 +109,7 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
-	blocked, moreBlocked, err := blockedTaskCards(ctx, tx, now, byQuestion)
-	if err != nil {
-		return nil, err
-	}
-	more = more || moreBlocked
-	for _, c := range append(cards, blocked...) {
+	for _, c := range cards {
 		entries = append(entries, entry{c.at, c.question, c.it})
 	}
 	slices.SortFunc(entries, func(a, b entry) int {
@@ -145,7 +140,7 @@ type missionCard struct {
 // leaving out a card already listed.
 func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
 	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, s.at, s.body_json->>'question_id', COALESCE(s.body_json->>'reason', ''),
-	    (SELECT count(*) FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.state NOT IN ('accepted','rejected','cancelled'))
+	    0
 	  FROM agentrt.mission m
 	  JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.mission_id = m.mission_id
 	    AND e.event_type = 'mission_state_changed' ORDER BY e.event_id DESC LIMIT 1) s ON true
@@ -187,60 +182,6 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 	return cards, more, nil
 }
 
-// blockedTaskCards are the blocked tasks whose card is open, oldest card
-// first, at most the bound (more says there were more), leaving out a card
-// already listed. Each names its task and mission, so the Console's goal card
-// shows it on that goal.
-func blockedTaskCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
-	rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, o.body_json->>'question_id', o.at,
-	    COALESCE(b.body_json->>'reason', ''),
-	    (SELECT count(*) FROM agentrt.task u WHERE u.mission_id = t.mission_id AND u.state NOT IN ('accepted','rejected','cancelled'))
-	  FROM agentrt.event o JOIN agentrt.task t ON t.task_id = o.task_id
-	  LEFT JOIN agentrt.event b ON b.event_id = (o.body_json->>'blocked_event_id')::bigint
-	  WHERE o.event_type = 'owner_wait_opened' AND t.state = 'blocked' AND `+cardOpen+`
-	  ORDER BY o.at, o.event_id LIMIT $1`, pendingChangeLimit+1)
-	if err != nil {
-		return nil, false, err
-	}
-	type row struct {
-		task, mission, title, question, why string
-		at                                  time.Time
-		open                                int
-	}
-	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
-		var c row
-		return c, r.Scan(&c.task, &c.mission, &c.title, &c.question, &c.at, &c.why, &c.open)
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	more := len(list) > pendingChangeLimit
-	if more {
-		list = list[:pendingChangeLimit]
-	}
-	var cards []missionCard
-	for _, c := range list {
-		if _, seen := listed[c.question]; seen {
-			continue
-		}
-		it := map[string]any{"id": "question:" + c.question, "kind": "blocked_task", "ref": c.task, "also_refs": []string{},
-			"task_id": c.task, "mission_id": c.mission,
-			"title": "Blocked in " + c.mission + ": " + firstLine(c.title), "since": c.at.UTC().Format(time.RFC3339Nano),
-			"waiting_min": int64(now.Sub(c.at) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": c.question, "options": blockedOptions(c.mission)},
-			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
-			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
-			"after": "One more round: the controller readies it on its next pass (about 15 seconds), with room in its mission's " +
-				"budget for the round. Do not do it: it is cancelled, and its mission finishes once every other task is accepted; " +
-				"work left with no check of its latest result is blocked and gets a card of its own. Close the mission: every task of " +
-				c.mission + " that has not ended is cancelled, its other cards are withdrawn, and it ends (done when an implementation " +
-				"of it was accepted, else stopped)."}
-		listed[c.question] = it
-		cards = append(cards, missionCard{c.at, c.question, it})
-	}
-	return cards, more, nil
-}
-
 // changeBlocks is what a waiting plan change holds up (SPEC §2.1), from one
 // set: the steps it touches (a node that is a step, or the steps under a
 // node that is an item: an added node's parent, a retitled or re-ruled node,
@@ -250,14 +191,13 @@ func blockedTaskCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[
 // change binds to; its unfinished tasks are those on these steps and the
 // moved ones. Unknown when it touches no mission.
 func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
-	var nodes, tasks, bound []string
+	var nodes, bound []string
 	for _, c := range changes {
 		switch c.Op {
 		case "add_node":
 			nodes = append(nodes, c.Parent)
 		case "move_task":
 			nodes = append(nodes, c.Node)
-			tasks = append(tasks, c.Task)
 		default:
 			nodes = append(nodes, c.Node)
 		}
@@ -268,15 +208,12 @@ func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, er
 		}
 	}
 	var missions []string
-	var open int
+	open := 0 // no task is in work any more (store cut 4, 2026-11-14)
 	err := tx.QueryRow(ctx, `WITH steps AS (SELECT plan_node_id, mission_id FROM agentrt.plan_node WHERE node_kind = 'step'
-	      AND (plan_node_id = ANY($1) OR parent_plan_node_id = ANY($1))),
-	    held AS (SELECT task_id FROM agentrt.task WHERE state NOT IN ('accepted','rejected','cancelled')
-	      AND (plan_node_id IN (SELECT plan_node_id FROM steps) OR task_id = ANY($2)))
+	      AND (plan_node_id = ANY($1) OR parent_plan_node_id = ANY($1)))
 	  SELECT ARRAY(SELECT DISTINCT m FROM (SELECT mission_id FROM steps
-	      UNION ALL SELECT mission_id FROM agentrt.task WHERE task_id = ANY($2) UNION ALL SELECT unnest($3::text[])) x(m)
-	      WHERE m IS NOT NULL ORDER BY 1),
-	    (SELECT count(*) FROM held)`, nodes, tasks, bound).Scan(&missions, &open)
+	      UNION ALL SELECT unnest($2::text[])) x(m)
+	      WHERE m IS NOT NULL ORDER BY 1)`, nodes, bound).Scan(&missions)
 	if err != nil {
 		return nil, err
 	}

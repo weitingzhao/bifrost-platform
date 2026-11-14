@@ -278,16 +278,6 @@ func TestMissionOnACardSaysSo(t *testing.T) {
 			t.Errorf("mission %s: %q; want the question it waits on", m.MissionID, m.Reason)
 		}
 	}
-	held := false
-	for _, it := range doc.NeedsYou.Items {
-		if it["id"] == "question:"+q {
-			blocks, _ := it["blocks"].(map[string]any)
-			held = blocks["unfinished_tasks"] == float64(1)
-		}
-	}
-	if !held {
-		t.Errorf("needs_you %v; want the card holding up its one task", doc.NeedsYou.Items)
-	}
 }
 
 // Review 192 A4: two proposals with the same words make two cards (each card

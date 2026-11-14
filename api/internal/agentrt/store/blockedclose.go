@@ -39,11 +39,3 @@ const (
 	CardCloseKey  = "c"
 	OutcomeClosed = "closed" // the Owner closed the task's mission on its card
 )
-
-// BlockedClose is the third option of a card of a task of mission.
-func BlockedClose(mission string) string { return "Close mission " + mission }
-
-// blockedOptions are a card's options, in the question store's order.
-func blockedOptions(mission string) []string {
-	return []string{BlockedRetry, BlockedDrop, BlockedClose(mission)}
-}

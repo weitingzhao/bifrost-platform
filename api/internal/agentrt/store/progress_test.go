@@ -174,64 +174,6 @@ func TestProgressMissionWithoutTasks(t *testing.T) {
 	}
 }
 
-// Task statuses where two hold at once (SPEC §3.1): the first in the order
-// wins.
-func TestTaskStatusOrder(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
-	fresh, old := now.Add(-time.Second), now.Add(-10*time.Minute)
-	long, short, atBound, pastBound := int64(400), int64(10), int64(150), int64(151)
-	usual := 100 * time.Second
-	live := func(state string, known bool, polled *time.Time, elapsed *int64) *store.ProgressAttempt {
-		return store.LiveForTest("a_1", state, known, polled, elapsed, now)
-	}
-	for name, c := range map[string]struct {
-		in   store.StatusInput
-		want string
-	}{
-		"host lost over stale":          {store.StatusInput{TaskState: "running", Attempt: live("stale", true, &old, &short)}, store.StatusHostLost},
-		"host never polled":             {store.StatusInput{TaskState: "running", Attempt: live("running", true, nil, &short)}, store.StatusHostLost},
-		"unknown host over all":         {store.StatusInput{TaskState: "running", Attempt: live("running", false, nil, &short)}, store.StatusUnknown},
-		"unknown host over stale":       {store.StatusInput{TaskState: "running", Attempt: live("stale", false, nil, &short)}, store.StatusUnknown},
-		"stale over a waiting mission":  {store.StatusInput{TaskState: "running", MissionState: "proposed", Attempt: live("stale", true, &fresh, &short)}, store.StatusMaybeStuck},
-		"waiting owner":                 {store.StatusInput{TaskState: "awaiting_owner"}, store.StatusWaitingOwner},
-		"waiting owner over blocked":    {store.StatusInput{TaskState: "blocked", MissionState: "awaiting_owner"}, store.StatusWaitingOwner},
-		"a proposed mission's task":     {store.StatusInput{TaskState: "ready", MissionState: "proposed"}, store.StatusWaitingOwner},
-		"blocked over working":          {store.StatusInput{TaskState: "paused", Attempt: live("running", true, &fresh, &short)}, store.StatusBlocked},
-		"a paused mission's task":       {store.StatusInput{TaskState: "ready", MissionState: "paused"}, store.StatusBlocked},
-		"working in a paused mission":   {store.StatusInput{TaskState: "running", MissionState: "paused", Attempt: live("running", true, &fresh, &short)}, store.StatusWorking},
-		"slow past 1.5 times":           {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long), Usual: &usual}, store.StatusSlow},
-		"not slow at 1.5 times":         {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &atBound), Usual: &usual}, store.StatusWorking},
-		"slow just past 1.5 times":      {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &pastBound), Usual: &usual}, store.StatusSlow},
-		"not slow without a usual time": {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long)}, store.StatusWorking},
-		"working":                       {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &short), Usual: &usual}, store.StatusWorking},
-		"submitted":                     {store.StatusInput{TaskState: "submitted"}, store.StatusWaitingRole},
-		"rework":                        {store.StatusInput{TaskState: "rework"}, store.StatusWaitingRole},
-		"ready":                         {store.StatusInput{TaskState: "ready"}, store.StatusQueued},
-		"proposed with dependencies":    {store.StatusInput{TaskState: "proposed", WaitingDeps: 2}, store.StatusQueued},
-	} {
-		c.in.Now = now
-		if got, reason := store.TaskStatus(c.in); got != c.want || reason == "" {
-			t.Errorf("%s: %s (%q); want %s", name, got, reason, c.want)
-		}
-	}
-	at := 15 * time.Second
-	if _, reason := store.TaskStatus(store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long), Usual: &at, Now: now}); reason != "running 400 s, usually 15 s" {
-		t.Errorf("a slow task's reason: %q", reason)
-	}
-	if _, reason := store.TaskStatus(store.StatusInput{TaskState: "ready", MissionState: "paused", MissionReason: "budget spent", Now: now}); reason != "the mission is paused: budget spent" {
-		t.Errorf("a paused mission's task's reason: %q", reason)
-	}
-	// A mission shows the first of every two neighbours in the order (§3.2).
-	order := []string{store.StatusHostLost, store.StatusMaybeStuck, store.StatusUnknown, store.StatusWaitingOwner, store.StatusStopped,
-		store.StatusBlocked, store.StatusSlow, store.StatusWorking, store.StatusWaitingRole, store.StatusQueued}
-	for i := 1; i < len(order); i++ {
-		if got := store.WorstForTest(order[i], order[i-1]); got != order[i-1] {
-			t.Errorf("%s and %s show %s; want %s", order[i], order[i-1], got, order[i-1])
-		}
-	}
-}
-
 // Live attempts in start order by time, not by the text of the time (a
 // fraction of a second sorts after the whole second).
 func TestLiveOrder(t *testing.T) {
@@ -249,84 +191,11 @@ func TestLiveOrder(t *testing.T) {
 	}
 }
 
-// Review 181 B3: the recent ended tasks are picked by when they ended, not
-// by updated_at, which a plan change moves: of 21 ended tasks the oldest is
-// not among the 20, even after a later change touches it.
-func TestRecentPicksByEndTime(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	var first string
-	for i := range 21 {
-		task, _ := w.ended(t, "done")
-		if i == 0 {
-			first = task
-		}
-	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
-			Body: map[string]any{"change": "test: touch"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET updated_at = clock_timestamp() WHERE task_id = $1`, first)
-		return err
-	}))
-	doc := w.progress(t)
-	if len(doc.Recent.Tasks) != 20 {
-		t.Fatalf("%d recent tasks; want 20", len(doc.Recent.Tasks))
-	}
-	for _, r := range doc.Recent.Tasks {
-		if r["task_id"] == first {
-			t.Fatal("the oldest ended task is among the recent 20 because a plan change touched it")
-		}
-	}
-}
-
 // sameMoment says a projection time is the database's time t.
 func sameMoment(t *testing.T, got string, want time.Time) bool {
 	t.Helper()
 	at, err := time.Parse(time.RFC3339Nano, got)
 	return err == nil && at.Equal(want)
-}
-
-// Review 184 A4: a wait the mission's state decides starts when the mission
-// came into that state, not when its task came into its own; a paused
-// mission says why, by whom and since when, with tasks or without.
-func TestProgressMissionSince(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	task := w.ready(t, store.Task{})
-	time.Sleep(1100 * time.Millisecond)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.MoveMission(ctx, tx, "controller", "M-1", "paused", "budget spent")
-	}))
-	// A task proposed to M-2 a second after M-2 was: it waits for the Owner
-	// since M-2 was proposed.
-	w.seedProposed(t, "M-2", "")
-	var pausedAt, proposedAt time.Time
-	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FILTER (WHERE mission_id = 'M-1' AND event_type = 'mission_state_changed'),
-	    max(at) FILTER (WHERE mission_id = 'M-2' AND event_type = 'mission_proposed') FROM agentrt.event`).Scan(&pausedAt, &proposedAt))
-	doc := w.progress(t)
-	seen := 0
-	for _, m := range doc.Work.Missions {
-		switch m.MissionID {
-		case "M-1":
-			seen++
-			if m.Status != store.StatusBlocked || m.Reason != "the mission is paused: budget spent" || !sameMoment(t, m.Since, pausedAt) {
-				t.Errorf("M-1 %s %q since %s; want blocked by the pause since %s", m.Status, m.Reason, m.Since, pausedAt)
-			}
-			if len(m.Tasks) != 1 || m.Tasks[0].TaskID != task || !sameMoment(t, m.Tasks[0].Since, pausedAt) {
-				t.Errorf("M-1's task %+v; want %s waiting since the pause, not since it was readied", m.Tasks, task)
-			}
-		case "M-2":
-			seen++
-			if m.Status != store.StatusWaitingOwner || len(m.Tasks) != 1 || !sameMoment(t, m.Since, proposedAt) || !sameMoment(t, m.Tasks[0].Since, proposedAt) {
-				t.Errorf("M-2 %s since %s, tasks %+v; want its task waiting for the Owner since M-2 was proposed at %s", m.Status, m.Since, m.Tasks, proposedAt)
-			}
-		}
-	}
-	if seen != 2 {
-		t.Fatalf("missions %+v", doc.Work.Missions)
-	}
 }
 
 // A paused mission without tasks is blocked by its pause, not idle.
@@ -345,52 +214,6 @@ func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 	}
 }
 
-// Review 184 B3: more tasks ended and attempts failed at one moment than the
-// lists hold: each list is the newest by event, ties of time broken by event
-// id, the same on every read.
-func TestRecentTiesAtOneMoment(t *testing.T) {
-	t.Parallel()
-	ctx := ownClock(t)
-	w := newKernelWorld(t)
-	undo := freezeClock(t, time.Now())
-	defer undo()
-	for range 45 {
-		w.ended(t, "failed")
-	}
-	undo()
-	newest := func(q string) []string {
-		t.Helper()
-		rows, err := w.rt.Query(ctx, q)
-		ok(t, err)
-		var ids []string
-		for rows.Next() {
-			var id string
-			ok(t, rows.Scan(&id))
-			ids = append(ids, id)
-		}
-		ok(t, rows.Err())
-		return ids
-	}
-	wantTasks := newest(`SELECT task_id FROM agentrt.event WHERE event_type = 'task_state_changed' ORDER BY event_id DESC LIMIT 20`)
-	wantFailed := newest(`SELECT attempt_id FROM agentrt.event WHERE event_type = 'attempt_computed' ORDER BY event_id DESC LIMIT 20`)
-	for range 2 {
-		doc := w.progress(t)
-		var tasks, failed []string
-		for _, r := range doc.Recent.Tasks {
-			tasks = append(tasks, fmt.Sprint(r["task_id"]))
-		}
-		for _, r := range doc.Recent.FailedAttempts {
-			failed = append(failed, fmt.Sprint(r["attempt_id"]))
-		}
-		if fmt.Sprint(tasks) != fmt.Sprint(wantTasks) {
-			t.Fatalf("recent tasks\n%v\nwant the newest by event\n%v", tasks, wantTasks)
-		}
-		if fmt.Sprint(failed) != fmt.Sprint(wantFailed) {
-			t.Fatalf("failed attempts\n%v\nwant the newest by event\n%v", failed, wantFailed)
-		}
-	}
-}
-
 // Review 184 B4: what a plan change holds up comes from one set: the steps it
 // touches (an item's are the steps under it), the tasks it moves, and the
 // missions of these and the ones it binds to.
@@ -403,7 +226,7 @@ func TestChangeBlocks(t *testing.T) {
 			MissionID: "M-2", StepKind: "agent", Ordinal: 3, Root: root})
 		return err
 	}))
-	moved := w.ready(t, store.Task{})
+	w.ready(t, store.Task{})
 	w.ready(t, store.Task{})
 	_, err := w.task(t, "M-2", s4, "", "implement")
 	ok(t, err)
@@ -412,13 +235,12 @@ func TestChangeBlocks(t *testing.T) {
 		changes []store.PlanChange
 		want    string
 	}{
-		"retitle an item: the tasks on its steps": {[]store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:3]"},
-		"retitle a step": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1] unfinished_tasks:2]"},
-		"a mission_id a retitle carries binds nothing": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1] unfinished_tasks:2]"},
-		"rebind a step: both missions":                 {[]store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2] unfinished_tasks:2]"},
+		"retitle an item: the tasks on its steps": {[]store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
+		"retitle a step": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1] unfinished_tasks:0]"},
+		"a mission_id a retitle carries binds nothing": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1] unfinished_tasks:0]"},
+		"rebind a step: both missions":                 {[]store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
 		"bind a step with no mission":                  {[]store.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, "map[missions:[M-2] unfinished_tasks:0]"},
-		"move a task: where from and where to":         {[]store.PlanChange{{Op: "move_task", Task: moved, Node: s4}}, "map[missions:[M-1 M-2] unfinished_tasks:2]"},
-		"add a step to an item":                        {[]store.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:3]"},
+		"add a step to an item":                        {[]store.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
 		"add an item to a round: nothing known":        {[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "x"}}, "map[unknown:the change touches no step a mission's work sits on]"},
 	} {
 		got, err := store.ChangeBlocksForTest(ctx, w.rt, c.changes)

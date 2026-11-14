@@ -64,7 +64,7 @@ func nilIfEmpty(s string) any {
 // event it came from and its tasks, and one node in full.
 func TestPlanReads(t *testing.T) {
 	t.Parallel()
-	pool, task := world(t)
+	pool, _ := world(t)
 	s := server(t, pool)
 	code, roots := call(t, s, "viewer", "GET", "plan", nil)
 	if code != http.StatusOK || len(roots["roots"].([]any)) != 1 || roots["roots"].([]any)[0].(map[string]any)["plan_node_id"] != "R2" {
@@ -80,8 +80,9 @@ func TestPlanReads(t *testing.T) {
 		order = append(order, fmt.Sprint(m["plan_node_id"], "@", m["depth"]))
 		if m["plan_node_id"] == "R2:1-1" {
 			ev, _ := m["state_event"].(map[string]any)
+			// The tasks' table is not read any more: the counts are there, empty.
 			counts, _ := m["task_counts"].(map[string]any)
-			if m["state"] != "planned" || ev["event_type"] != "plan_node_created" || counts["ready"] != float64(1) {
+			if m["state"] != "planned" || ev["event_type"] != "plan_node_created" || counts == nil || len(counts) != 0 {
 				t.Errorf("the step: %v", m)
 			}
 		}
@@ -97,7 +98,7 @@ func TestPlanReads(t *testing.T) {
 		t.Fatalf("node: %d %v", code, node)
 	}
 	tasks := node["tasks"].([]any)
-	if len(tasks) != 1 || tasks[0].(map[string]any)["task_id"] != task || len(node["events"].([]any)) == 0 {
+	if len(tasks) != 0 || len(node["events"].([]any)) == 0 {
 		t.Fatalf("node: %v", node)
 	}
 	code, item := call(t, s, "viewer", "GET", "plan/R2:1", nil)
@@ -263,7 +264,7 @@ func TestPlanTreeOrder(t *testing.T) {
 // reads nothing; a read that fails is 503 and nothing else (review 181 B1).
 func TestProgressRoute(t *testing.T) {
 	t.Parallel()
-	pool, task := world(t)
+	pool, _ := world(t)
 	s := server(t, pool)
 	if code, _ := call(t, s, "", "GET", "progress", nil); code != http.StatusUnauthorized {
 		t.Fatalf("no token: %d", code)
@@ -278,7 +279,7 @@ func TestProgressRoute(t *testing.T) {
 		t.Fatalf("work: %v", out["work"])
 	}
 	tasks := missions[0].(map[string]any)["tasks"].([]any)
-	if len(tasks) != 1 || tasks[0].(map[string]any)["task_id"] != task || tasks[0].(map[string]any)["status"] != "queued" {
+	if len(tasks) != 0 { // a mission's tasks are not read any more
 		t.Fatalf("tasks: %v", tasks)
 	}
 	db := agentrttest.Migrated(t)

@@ -3,51 +3,11 @@ package store_test
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
-
-// A stop on a ready task makes it stopped, saying who stopped it, why, by
-// which control and that only the Owner lifts it; without one it is queued
-// as before. A live attempt's lost host or lapsed lease still comes first.
-func TestStoppedViewTaskStatus(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
-	stop := &store.ProgressStop{ControlID: "ctl_1", By: "seat:coordinator", Reason: "wrong branch", Since: now.UTC().Format(time.RFC3339Nano)}
-	want := "stopped by seat:coordinator: wrong branch (control ctl_1); only the Owner lifts it"
-	if status, reason := store.TaskStatus(store.StatusInput{TaskState: "ready", Stop: stop, Now: now}); status != store.StatusStopped || reason != want {
-		t.Errorf("a stopped ready task: %s (%q); want %s (%q)", status, reason, store.StatusStopped, want)
-	}
-	if status, reason := store.TaskStatus(store.StatusInput{TaskState: "ready", Now: now}); status != store.StatusQueued || reason != "ready for a host to claim" {
-		t.Errorf("a ready task: %s (%q); want queued", status, reason)
-	}
-	fresh, old, short := now.Add(-time.Second), now.Add(-10*time.Minute), int64(10)
-	for name, c := range map[string]struct {
-		in   store.StatusInput
-		want string
-	}{
-		"stopped over working":         {store.StatusInput{TaskState: "running", Attempt: store.LiveForTest("a_1", "running", true, &fresh, &short, now)}, store.StatusStopped},
-		"stopped over a waiting owner": {store.StatusInput{TaskState: "awaiting_owner"}, store.StatusStopped},
-		"stopped over blocked":         {store.StatusInput{TaskState: "blocked"}, store.StatusStopped},
-		"host lost over stopped":       {store.StatusInput{TaskState: "running", Attempt: store.LiveForTest("a_1", "running", true, &old, &short, now)}, store.StatusHostLost},
-		"maybe stuck over stopped":     {store.StatusInput{TaskState: "running", Attempt: store.LiveForTest("a_1", "stale", true, &fresh, &short, now)}, store.StatusMaybeStuck},
-		"unknown over stopped":         {store.StatusInput{TaskState: "running", Attempt: store.LiveForTest("a_1", "running", false, nil, &short, now)}, store.StatusUnknown},
-	} {
-		c.in.Stop, c.in.Now = stop, now
-		if got, _ := store.TaskStatus(c.in); got != c.want {
-			t.Errorf("%s: %s; want %s", name, got, c.want)
-		}
-	}
-	if got := store.WorstForTest(store.StatusStopped, store.StatusBlocked, store.StatusQueued); got != store.StatusStopped {
-		t.Errorf("stopped, blocked and queued show %s; want stopped", got)
-	}
-	if got := store.WorstForTest(store.StatusStopped, store.StatusWaitingOwner); got != store.StatusWaitingOwner {
-		t.Errorf("stopped and waiting_owner show %s; want waiting_owner", got)
-	}
-}
 
 // stopWorld is a kernel world with: a ready task under a task stop; a
 // submitted task under a task stop and the verification of it (stopped by
@@ -108,71 +68,6 @@ func generic(t *testing.T, doc map[string]any) map[string]any {
 	var out map[string]any
 	ok(t, json.Unmarshal(raw, &out))
 	return out
-}
-
-// The progress projection: stopped tasks with their stop, the mission
-// whose only open task is stopped waiting on the Owner, and the withdrawn
-// task among the recent ones.
-func TestStoppedViewProgress(t *testing.T) {
-	t.Parallel()
-	w := newStopWorld(t)
-	out, err := store.Progress(ctx, w.rt)
-	ok(t, err)
-	doc := generic(t, out)
-	tasks := map[string]map[string]any{}
-	missions := map[string]map[string]any{}
-	for _, m := range doc["work"].(map[string]any)["missions"].([]any) {
-		m := m.(map[string]any)
-		missions[m["mission_id"].(string)] = m
-		for _, x := range m["tasks"].([]any) {
-			x := x.(map[string]any)
-			tasks[x["task_id"].(string)] = x
-		}
-	}
-	for task, c := range map[string]struct{ control, reason string }{
-		w.stopped: {w.taskStop, "wrong branch"}, w.subject: {w.subjectStop, "its result is in doubt"},
-		w.check: {w.subjectStop, "its result is in doubt"}, w.goal: {w.missionStop, "the goal changed"},
-	} {
-		x := tasks[task]
-		stopped, _ := x["stopped"].(map[string]any)
-		want := "stopped by owner: " + c.reason + " (control " + c.control + "); only the Owner lifts it"
-		if x["status"] != store.StatusStopped || x["reason"] != want || stopped == nil {
-			t.Errorf("task %s: %v (%q), stopped %v; want stopped (%q)", task, x["status"], x["reason"], x["stopped"], want)
-			continue
-		}
-		if stopped["control_id"] != c.control || stopped["by"] != "owner" || stopped["reason"] != c.reason || stopped["since"] == "" ||
-			x["since"] != stopped["since"] {
-			t.Errorf("task %s: stopped %v, since %v", task, stopped, x["since"])
-		}
-	}
-	if x := tasks[w.free]; x["status"] != store.StatusQueued || x["stopped"] != nil {
-		t.Errorf("the task under no stop: %v, stopped %v; want queued", x["status"], x["stopped"])
-	}
-	m3 := missions["M-3"]
-	if m3["status"] != store.StatusStopped || m3["waiting_on"] != "owner" {
-		t.Errorf("M-3: %v waiting on %v; want stopped waiting on owner", m3["status"], m3["waiting_on"])
-	}
-	if eta := m3["eta"].(map[string]any); eta["state"] != "unknown" {
-		t.Errorf("M-3 eta %v; want unknown: a stopped task waits for the Owner", eta)
-	}
-	if m1 := missions["M-1"]; m1["status"] != store.StatusStopped || m1["waiting_on"] != "owner" {
-		t.Errorf("M-1: %v waiting on %v; want stopped waiting on owner over its queued task", m1["status"], m1["waiting_on"])
-	}
-	recent := map[string]map[string]any{}
-	for _, r := range doc["recent"].(map[string]any)["tasks"].([]any) {
-		r := r.(map[string]any)
-		recent[r["task_id"].(string)] = r
-	}
-	if r := recent[w.withdrawn]; r == nil || r["withdrawn_by"] != "thread:s1" || r["withdraw_reason"] != "not needed any more" {
-		t.Errorf("the withdrawn task among the recent: %v", r)
-	}
-	if r := recent[w.cancelled]; r == nil || r["state"] != "cancelled" {
-		t.Errorf("the cancelled task among the recent: %v", r)
-	} else if _, by := r["withdrawn_by"]; by {
-		t.Errorf("the task the controller cancelled reads withdrawn: %v", r)
-	} else if _, why := r["withdraw_reason"]; why {
-		t.Errorf("the task the controller cancelled has a withdraw reason: %v", r)
-	}
 }
 
 // Once its stop is lifted the task is queued again.

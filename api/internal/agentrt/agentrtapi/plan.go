@@ -23,9 +23,10 @@ const stateEvent = `(SELECT jsonb_build_object('event_id', e.event_id, 'event_ty
 	     OR (n.state_event_id IS NULL AND e.plan_node_id = n.plan_node_id AND e.event_type = 'plan_node_created')
 	  ORDER BY e.event_id DESC LIMIT 1)`
 
-// taskCounts is a node's tasks counted by state, as JSON.
-const taskCounts = `COALESCE((SELECT jsonb_object_agg(state, k) FROM (SELECT state, count(*) AS k FROM agentrt.task
-	  WHERE plan_node_id = n.plan_node_id GROUP BY state) s), '{}'::jsonb)`
+// taskCounts was a node's tasks counted by state. No task is proposed any
+// more and the tasks' table is not read (store cut 4, 2026-11-14): the key
+// stays, empty.
+const taskCounts = `'{}'::jsonb`
 
 // signoffs is a step's sign-offs (owner_signoff events: ref, by, at,
 // event_id, oldest first) under "signoffs", merged into its node; a node with
@@ -65,9 +66,7 @@ func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
 	    'children', COALESCE((SELECT jsonb_agg(jsonb_build_object('plan_node_id', c.plan_node_id, 'node_kind', c.node_kind,
 	        'label', c.label, 'title', c.title, 'state', c.state) ORDER BY c.ordinal)
 	      FROM agentrt.plan_node c WHERE c.parent_plan_node_id = n.plan_node_id), '[]'::jsonb),
-	    'tasks', COALESCE((SELECT jsonb_agg(jsonb_build_object('task_id', t.task_id, 'title', t.title, 'role', t.role,
-	        'state', t.state, 'mission_id', t.mission_id) ORDER BY t.created_at, t.task_id)
-	      FROM agentrt.task t WHERE t.plan_node_id = n.plan_node_id), '[]'::jsonb),
+	    'tasks', '[]'::jsonb,
 	    'bindings', COALESCE((SELECT jsonb_agg(jsonb_build_object('kind', b.bound_kind, 'ref', b.bound_ref) ORDER BY b.plan_node_binding_id)
 	      FROM agentrt.plan_node_binding b WHERE b.plan_node_id = n.plan_node_id), '[]'::jsonb),
 	    'events', COALESCE((SELECT jsonb_agg(jsonb_build_object('event_id', e.event_id, 'event_type', e.event_type,

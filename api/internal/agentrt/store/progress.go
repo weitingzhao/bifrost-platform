@@ -99,24 +99,6 @@ type ProgressAttempt struct {
 	taskState         string
 }
 
-// keep records what of a's work is persisted: its result (persisted), its
-// last checkpoint (seq and at, nil for none) and, when its result is not
-// persisted, how long since anything of it was: since that checkpoint, or
-// since it started.
-func (a *ProgressAttempt) keep(persisted bool, seq *int64, at *time.Time, now time.Time) {
-	a.Persisted = persisted
-	a.LastCheckpointSeq = seq
-	since := a.started
-	if at != nil {
-		a.LastCheckpointAt = at.UTC().Format(time.RFC3339Nano)
-		since = *at
-	}
-	if !persisted && !since.IsZero() {
-		s := int64(now.Sub(since) / time.Second)
-		a.UnpersistedForS = &s
-	}
-}
-
 // ProgressTask is an unfinished task of a mission.
 type ProgressTask struct {
 	TaskID               string           `json:"task_id"`
@@ -155,74 +137,6 @@ type StatusInput struct {
 	Now                                                 time.Time
 }
 
-// TaskStatus decides a task's status and its reason (SPEC §3.1). An attempt
-// whose host the runtime does not know is unknown before anything else: what
-// its host does cannot be told.
-func TaskStatus(in StatusInput) (string, string) {
-	if a := in.Attempt; a != nil {
-		switch {
-		case !a.hostKnown:
-			return StatusUnknown, "the attempt names no host the runtime knows"
-		case a.hostPolled == nil && a.hostLost(in.Now):
-			return StatusHostLost, "host " + a.HostID + " has never polled" + notPersisted(a)
-		case a.hostLost(in.Now):
-			return StatusHostLost, "host " + a.HostID + " last polled " + agoWords(in.Now.Sub(*a.hostPolled)) + notPersisted(a)
-		case a.State == "stale":
-			return StatusMaybeStuck, "the lease lapsed and was not renewed" + notPersisted(a)
-		}
-	}
-	switch {
-	case in.Stop != nil:
-		return StatusStopped, stopWords(in.Stop)
-	case in.TaskState == "awaiting_owner":
-		return StatusWaitingOwner, "the task waits for the Owner"
-	case in.MissionState == "proposed" || in.MissionState == "awaiting_owner":
-		return StatusWaitingOwner, "the mission is " + in.MissionState + " and starts nothing until it is authorized"
-	case in.TaskState == "blocked" || in.TaskState == "paused":
-		reason := "the task is " + in.TaskState
-		if in.StateReason != "" {
-			reason += ": " + in.StateReason
-		}
-		return StatusBlocked, reason
-	}
-	if a := in.Attempt; a != nil {
-		if in.Usual != nil && a.ElapsedS != nil && float64(*a.ElapsedS)*float64(time.Second) > SlowFactor*float64(*in.Usual) {
-			return StatusSlow, fmt.Sprintf("running %d s, usually %d s", *a.ElapsedS, int64(*in.Usual/time.Second))
-		}
-		return StatusWorking, "attempt " + a.AttemptID + " on " + a.HostID
-	}
-	if in.MissionState == "paused" {
-		reason := "the mission is paused"
-		if in.MissionReason != "" {
-			reason += ": " + in.MissionReason
-		}
-		return StatusBlocked, reason
-	}
-	switch in.TaskState {
-	case "submitted", "verifying":
-		return StatusWaitingRole, "waits for its verification or review"
-	case "rework":
-		return StatusWaitingRole, "waits for the next round of its implementation"
-	case "proposed":
-		if in.WaitingDeps > 0 {
-			return StatusQueued, fmt.Sprintf("waits for %d dependencies to be accepted", in.WaitingDeps)
-		}
-		return StatusQueued, "waits for the controller to ready it"
-	case "ready":
-		return StatusQueued, "ready for a host to claim"
-	}
-	return StatusUnknown, "state " + in.TaskState + " has no status"
-}
-
-// hostLost says whether the attempt's host is lost at now: as the hosts'
-// document judges it when read with it, else by its last contact alone.
-func (a *ProgressAttempt) hostLost(now time.Time) bool {
-	if a.hostSilent != nil {
-		return *a.hostSilent
-	}
-	return a.hostPolled == nil || now.Sub(*a.hostPolled) > HostLostAfter
-}
-
 // agoWords is how long ago d was, in seconds under a minute and in whole
 // minutes from then on.
 func agoWords(d time.Duration) string {
@@ -234,18 +148,6 @@ func agoWords(d time.Duration) string {
 		unit += "s"
 	}
 	return fmt.Sprintf("%d %s ago", n, unit)
-}
-
-// byMission says the mission's state, not the task's, decided status: the
-// wait then started when the mission came into its state.
-func byMission(status, taskState string) bool {
-	switch status {
-	case StatusWaitingOwner:
-		return taskState != "awaiting_owner"
-	case StatusBlocked:
-		return taskState != "blocked" && taskState != "paused"
-	}
-	return false
 }
 
 // worst is the status most worth seeing among statuses.
@@ -288,14 +190,10 @@ func progressAt(ctx context.Context, db DB, at, since time.Time) (map[string]any
 		nullTime(at)).Scan(&now, &asOf); err != nil {
 		return nil, err
 	}
-	usual, err := usualTimes(ctx, tx, now)
-	if err != nil {
-		return nil, err
-	}
-	live, err := liveAttempts(ctx, tx, now, since)
-	if err != nil {
-		return nil, err
-	}
+	// Nothing runs a task any more (store cut 4, 2026-11-14): no attempt is
+	// live and no usual time is learned. The document keeps its shape; these
+	// parts are empty.
+	usual, live := map[string]usualTime{}, map[string]*ProgressAttempt{}
 	work, next, err := missionsInWork(ctx, tx, now, live, usual)
 	if err != nil {
 		return nil, err
@@ -341,74 +239,6 @@ type rawJSON []byte
 
 func (r rawJSON) MarshalJSON() ([]byte, error) { return r, nil }
 
-// usualTimes reads, per role and task class, the median time from start to
-// submission of the attempts accepted in the window (SPEC §3.3); fewer than
-// UsualMinSamples give none.
-func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]usualTime, error) {
-	rows, err := tx.Query(ctx, `SELECT t.role || '|' || t.task_class,
-	    percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM s.at - a.started_at)), count(*)
-	  FROM agentrt.verification v
-	  JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id
-	  JOIN agentrt.task t ON t.task_id = a.task_id
-	  JOIN LATERAL (SELECT e.at FROM agentrt.event e WHERE e.task_id = a.task_id AND e.event_type = 'attempt_submitted'
-	    AND e.attempt_id = a.attempt_id ORDER BY e.event_id LIMIT 1) s ON true
-	  WHERE v.accepts_attempt AND a.started_at IS NOT NULL AND v.created_at > $1::timestamptz - make_interval(secs => $2)
-	  GROUP BY 1`, now, usualWindow.Seconds())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]usualTime{}
-	for rows.Next() {
-		var key string
-		var median float64
-		var n int
-		if err = rows.Scan(&key, &median, &n); err != nil {
-			return nil, err
-		}
-		if n >= UsualMinSamples {
-			out[key] = usualTime{d: time.Duration(median * float64(time.Second)), n: n}
-		}
-	}
-	return out, rows.Err()
-}
-
-func liveAttempts(ctx context.Context, tx pgx.Tx, now, since time.Time) (map[string]*ProgressAttempt, error) {
-	rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.attempt_no, a.task_id, t.mission_id, COALESCE(a.host_id, ''), h.host_id IS NOT NULL,
-	    h.last_poll_at, `+hostSilentSQL("$4::timestamptz")+`, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at,
-	    a.heartbeat_at, t.role, t.task_class, t.state, a.persisted_at IS NOT NULL, cp.seq, cp.at
-	  FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
-	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id `+hostLiveJoins+`
-	  `+checkpointOf+`
-	  WHERE a.state IN ('leased','running','stale')`, append(livenessArgs(since), now)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]*ProgressAttempt{}
-	for rows.Next() {
-		a := &ProgressAttempt{}
-		var started, checkpoint *time.Time
-		var heartbeat time.Time
-		var persisted bool
-		var seq *int64
-		if err = rows.Scan(&a.AttemptID, &a.AttemptNo, &a.TaskID, &a.MissionID, &a.HostID, &a.hostKnown, &a.hostPolled, &a.hostSilent, &a.Executor,
-			&a.Model, &a.State, &started, &heartbeat, &a.role, &a.class, &a.taskState, &persisted, &seq, &checkpoint); err != nil {
-			return nil, err
-		}
-		if started != nil {
-			a.started = *started
-			a.StartedAt = started.UTC().Format(time.RFC3339Nano)
-			e := int64(now.Sub(*started) / time.Second)
-			a.ElapsedS = &e
-		}
-		a.HeartbeatAgeS = int64(now.Sub(heartbeat) / time.Second)
-		a.keep(persisted, seq, checkpoint, now)
-		out[a.TaskID] = a
-	}
-	return out, rows.Err()
-}
-
 // sortedLive orders live attempts by start time (an attempt not started yet
 // last), then id.
 func sortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
@@ -439,13 +269,6 @@ func sortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
 type usualTime struct {
 	d time.Duration
 	n int
-}
-
-func usualOf(usual map[string]usualTime, role, class string) *time.Duration {
-	if u, ok := usual[role+"|"+class]; ok {
-		return &u.d
-	}
-	return nil
 }
 
 // countDoc is a count by the counting rule, as JSON.
@@ -540,89 +363,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	if err = srows.Err(); err != nil {
 		return nil, nil, err
 	}
-	lost, err := lostAttempts(ctx, tx, ids, now)
-	if err != nil {
-		return nil, nil, err
-	}
-	// The unfinished tasks, with when they came into their state (the event,
-	// not updated_at, which a plan migration moves), why, and the roles of
-	// the unfinished verifications and reviews of them; and the tasks whose
-	// change is on main, unfinished or cancelled, which read finished.
-	trows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, t.role, COALESCE(t.plan_node_id, ''), t.off_plan,
-	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''), `+stopColumns+`, `+landedColumns+`,
-	    ARRAY(SELECT d.depends_on_task_id FROM agentrt.task_dependency d JOIN agentrt.task o ON o.task_id = d.depends_on_task_id
-	      WHERE d.task_id = t.task_id AND o.state <> 'accepted' ORDER BY d.depends_on_task_id),
-	    COALESCE((SELECT a.computed_at IS NOT NULL AND a.persisted_at IS NULL FROM agentrt.attempt a WHERE a.task_id = t.task_id
-	      ORDER BY a.attempt_no DESC LIMIT 1), false),
-	    ARRAY(SELECT DISTINCT c.role FROM agentrt.task c WHERE c.subject_task_id = t.task_id
-	      AND c.state NOT IN ('accepted','rejected','cancelled') ORDER BY c.role)
-	  FROM agentrt.task t
-	  LEFT JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.task_id = t.task_id
-	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true`+stopHolding+landedNote+`
-	  WHERE t.mission_id = ANY($1) AND (t.state NOT IN ('accepted','rejected','cancelled') OR (t.state = 'cancelled' AND landed.commit IS NOT NULL))
-	  ORDER BY t.created_at, t.task_id`, ids)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer trows.Close()
-	for trows.Next() {
-		t := &ProgressTask{}
-		var missionID string
-		var since *time.Time
-		var stop stopScan
-		var landed landedScan
-		if err = trows.Scan(append(append(append([]any{&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
-			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason}, stop.dest()...), landed.dest()...), &t.DependsOn, &t.ComputedNotPersisted, &t.checkers)...); err != nil {
-			return nil, nil, err
-		}
-		m := byID[missionID]
-		t.Since = stamp(since)
-		u := usualOf(usual, t.Role, t.class)
-		if u != nil {
-			s := int64(*u / time.Second)
-			t.UsualS = &s
-		}
-		if t.OnMain = landed.onMain(); t.OnMain != nil {
-			// Nothing of it is waited on: no dependencies, checks, attempt or stop.
-			t.Status, t.Reason, t.DependsOn = StatusFinished, landed.words(), []string{}
-			m.onMain = append(m.onMain, t)
-			continue
-		}
-		t.Stopped = stop.stop(func(at time.Time) string { return stamp(&at) })
-		t.Attempt, t.LostAttempt = live[t.TaskID], lost[t.TaskID]
-		t.Status, t.Reason = TaskStatus(StatusInput{TaskState: t.State, MissionState: m.state, StateReason: t.stateReason,
-			MissionReason: m.stateReason, Attempt: t.Attempt, Stop: t.Stopped, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
-		if t.Status == StatusStopped {
-			t.Since = t.Stopped.Since
-		} else if byMission(t.Status, t.State) {
-			t.Since = m.stateAt
-		}
-		if t.Status == StatusWaitingRole {
-			switch {
-			case t.State == "rework":
-				t.WaitingRoles = []string{t.Role}
-			case len(t.checkers) > 0:
-				t.WaitingRoles = t.checkers
-			default:
-				t.Reason += "; none is proposed yet"
-			}
-		}
-		if t.Attempt != nil {
-			t.Attempt.Status, t.Attempt.Reason = t.Status, t.Reason
-		} else if l := t.LostAttempt; l != nil && !l.Persisted {
-			t.Reason += "; " + l.Reason
-		}
-		m.tasks = append(m.tasks, t)
-	}
-	if err = trows.Err(); err != nil {
-		return nil, nil, err
-	}
-	// A live attempt of a mission not listed still gets its status.
-	for _, a := range live {
-		if a.Status == "" {
-			a.Status, a.Reason = TaskStatus(StatusInput{TaskState: a.taskState, Attempt: a, Usual: usualOf(usual, a.role, a.class), Now: now})
-		}
-	}
+	// A mission's tasks are not read any more: it has none in work.
 	list := make([]any, 0, len(missions))
 	etas := make(map[string]map[string]any, len(missions))
 	for _, m := range missions {

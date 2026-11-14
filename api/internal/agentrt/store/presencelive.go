@@ -34,11 +34,10 @@ import (
 const PruneSilence = 2*time.Minute + 30*time.Second + 15*time.Second
 
 // hostLiveJoins join to host h its prune stream's head, as ph.head, and its
-// contact, as hc.at: the later of its claim loop's last call and the freshest
-// heartbeat of its leased or running attempts (stale ones have stopped).
+// contact, as hc.at: its claim loop's last call (no attempt runs any more
+// to heartbeat for it).
 var hostLiveJoins = `CROSS JOIN LATERAL (SELECT ` + headSQL(`'prune:host:' || h.host_id`) + ` AS head OFFSET 0) ph
-	  CROSS JOIN LATERAL (SELECT GREATEST(h.last_poll_at, (SELECT max(t.heartbeat_at) FROM agentrt.attempt t
-	    WHERE t.host_id = h.host_id AND t.state IN ('leased','running'))) AS at OFFSET 0) hc`
+	  CROSS JOIN LATERAL (SELECT h.last_poll_at AS at OFFSET 0) hc`
 
 // pruneOpenSQL is whether host h's prune round, opened within $3 seconds
 // (PruneSilence), is not closed at now.

@@ -2,7 +2,6 @@ package store
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/infracheck"
 )
@@ -106,21 +105,6 @@ var Repos = map[string]Repo{
 		HandIn: [][]string{{"sh", "-c", infracheck.Check()}},
 		Setup:  infracheck.Setup(""),
 	},
-}
-
-// CheckoutOf says what an implementation task in repo works in, as agentd
-// prepares it: a fresh checkout of repo at the task's base commit and, beside
-// it, the siblings Repos names, each at the head of its ref; nothing else.
-func CheckoutOf(repo string) string {
-	sibs := Repos[repo].Siblings
-	if len(sibs) == 0 {
-		return repo + " alone"
-	}
-	beside := make([]string, 0, len(sibs))
-	for _, s := range sibs {
-		beside = append(beside, "../"+s.Repo+" at the head of its "+s.Ref)
-	}
-	return repo + ", with " + strings.Join(beside, " and ") + " beside it"
 }
 
 // RepoNames are the names of Repos, sorted.

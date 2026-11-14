@@ -67,7 +67,7 @@ func HostsSQL(now string) string {
 	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
 	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
 	    'online', ` + hostOnlineSQL(now) + `,
-	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
+	    'live_attempts', 0,
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
 	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
