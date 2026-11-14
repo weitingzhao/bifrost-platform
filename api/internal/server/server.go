@@ -540,6 +540,9 @@ func (s *Server) Router() http.Handler {
 		// Which modules of a commit run again against a base, from the two
 		// declarations. Read-only; no token, as /evidence/ci (units_scope.go).
 		r.Get("/units/scope", s.handleUnitScope)
+		// How CI is set up for one project, from its own declaration (the
+		// configuration view). Read-only; viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/config", s.handleUnitConfig)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

@@ -64,7 +64,9 @@ var intendedRouteAdditions = map[string][]string{
 	// Stage 3: which modules of a commit run again, read by the in-cluster
 	// task that decides it and holds no platform credential: open like
 	// /evidence/ci (module names and input references of a declaration).
-	"GET /api/v1/units/scope":     {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
+	"GET /api/v1/units/scope": {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
+	// Stage 3: how CI is set up for one project, for the configuration view (read-only).
+	"GET /api/v1/units/config":    {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence": {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
