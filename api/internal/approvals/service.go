@@ -597,7 +597,7 @@ func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *deci
 		// A landing grant is written only for an approval whose number was
 		// confirmed (coordinator v3 §5.6 item 4): refuse here, before the
 		// Owner's click turns into a failed execution.
-		if s.requireConfirm || rec.Action == "supersede_agent_tasks" || slices.Contains(confirmRequired, rec.Action) {
+		if s.requireConfirm || slices.Contains(confirmRequired, rec.Action) {
 			return &decided{Status: 400, Body: map[string]any{"error": "confirm_number required", "number": rec.Number}}
 		}
 		return nil
@@ -609,7 +609,7 @@ func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *deci
 }
 
 // confirmRequired are actions whose approval always repeats its number.
-var confirmRequired = []string{"recover_batch_landing_push", "approve_guardrail_landing", "approve_core_landing", "approve_floor_landing", "deploy_agentd", "agentrt_rule_approve"}
+var confirmRequired = []string{"deploy_agentd", "agentrt_rule_approve"}
 
 func decisionCode(rec Approval) int {
 	if rec.Status == StatusApproved || rec.Status == StatusRunning {

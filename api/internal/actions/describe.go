@@ -67,13 +67,7 @@ var notifySafeKeys = map[string][]string{
 	"delete_finished_jobs":       {"namespace", "names", "label_selector"},
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 	"agentrt_rule_approve":       {"env", "rule_id", "rule_version"},
-	"mark_missions_no_merge":     {"env", "archive_manifest_sha256"},
-	"approve_guardrail_landing":  {"env", "repo", "op", "R", "stg_release"},
-	"recover_batch_landing_push": {"env", "repo", "op", "R", "M0", "grant_id", "ci_run"},
-	"approve_core_landing":       {"env", "repo", "op", "R", "stg_release"},
-	"approve_floor_landing":      {"env", "repo", "op", "R"},
 	"deploy_agentd":              {"env", "host", "commit", "sha256"},
-	"supersede_agent_tasks":      {"env"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -82,9 +76,6 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 	d := Description{KeyParams: keyParams(a, params)}
 	p := func(k string) string { return str(params[k]) }
 	switch a.ID {
-	case "supersede_agent_tasks":
-		d.Env = p("env")
-		d.Summary = "Cancel obsolete tasks using the listed delivered replacements"
 	case "start_pipeline_run":
 		d.Env = "cicd"
 		if ProdPipeline(p("name")) {
@@ -127,14 +118,6 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		if b, ok := asBool(params["force"]); ok && b {
 			d.Summary += " (force)"
 		}
-	case "mark_missions_no_merge":
-		d.Env, d.Summary = p("env"), "Mark done missions no_merge (disposed, not delivered)"
-	case "approve_guardrail_landing":
-		d.Env, d.Summary = p("env"), "Land "+shortRef(p("R"))+" ("+p("op")+") past its soft guardrails"
-	case "approve_core_landing":
-		d.Env, d.Summary = p("env"), "Trusted core change: land "+shortRef(p("R"))+" ("+p("op")+")"
-	case "approve_floor_landing":
-		d.Env, d.Summary = p("env"), "Floor change: land "+shortRef(p("R"))+" ("+p("op")+") on "+p("repo")+" main"
 	case "deploy_agentd":
 		d.Env, d.Summary = p("env"), "Deploy agentd "+shortRef(p("commit"))+" on host "+p("host")+" (sha256 "+p("sha256")+")"
 		if d.KeyParams != nil && d.KeyParams["commit"] != "" {

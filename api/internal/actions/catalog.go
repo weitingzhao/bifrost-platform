@@ -456,61 +456,6 @@ var catalog = []Action{
 		Classify: classifyProbe,
 	},
 	{
-		ID: "mark_missions_no_merge", Tier: TierD,
-		Description: "Mark done missions as disposed, not delivered. Tier D: only the Owner approves on the Console. " +
-			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod) until the cross-environment execution channel exists. missions is an array of {mission_id, expected_version}; " +
-			"reason is 1 to 200 UTF-8 bytes, archive_manifest_sha256 is the archive manifest's lowercase SHA-256. " +
-			"The whole batch commits or rolls back; each change records mission_amended with this approval and bumps the version. " +
-			"Existing equal values are idempotent; different values and non-done missions are refused. Archived evidence must be checked before requesting; branches are not deleted by this action.",
-		Params: []Param{
-			{Name: "env", Type: "string", Required: true, In: "body"},
-			{Name: "missions", Type: "object[]", Required: true, In: "body"},
-			{Name: "reason", Type: "string", Required: true, In: "body"},
-			{Name: "archive_manifest_sha256", Type: "string", Required: true, In: "body"},
-		},
-	},
-	{
-		ID: "approve_guardrail_landing", Tier: TierD,
-		Description: "Grant one waiting landing operation of the agent runtime (a pinned coordinator commit whose only failures are soft guardrails) the push to main by the lander identity. " +
-			"Tier D: only the Owner approves on the Console, with the approval number confirmed. Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release} as handin.sh status prints them: op must be the root's latest operation, waiting for a grant, and material_digest the server's own recomputation of its material (GET /api/v1/agentrt/landing/{op}/material). " +
-			"The approval writes a grant valid 24 hours from the decision; the final gate pushes only if every unwaivable check passes then and the rule in force then fails nothing beyond what was waived. A change under a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) takes approve_core_landing instead. Other former core paths land on a green landing CI. stg_release true also authorizes the commit to go to STG with the B5 batch. " +
-			"The Owner may revoke the grant before the push (POST /api/v1/agentrt/landing/grants/{grant_id}/revoke).",
-		Params: landingGrantParams,
-	},
-	{
-		ID: "recover_batch_landing_push", Tier: TierD,
-		Description: "Recover an unsent approved batch once, preserving its exact candidate, original green CI, grant expiry and STG choice. PROD Console only. Refuses changed main, newer operations, revoked/expired grants and active push fences. The workers rerun the normal final authorization gate; this action never pushes or starts CI.",
-		Params:      []Param{{Name: "env", Type: "string", Required: true}, {Name: "repo", Type: "string", Required: true}, {Name: "op", Type: "string", Required: true}, {Name: "R", Type: "string", Required: true}, {Name: "M0", Type: "string", Required: true}, {Name: "grant_id", Type: "string", Required: true}, {Name: "ci_run", Type: "string", Required: true}},
-	},
-	{
-		ID: "approve_core_landing", Tier: TierD,
-		Description: "Permission path change: grant one waiting landing operation whose commit changes a permission path (landing and grant rules, approvals and the action catalog, identity and routes, migrations, the agent sandbox, supply chain and CI) the push to main by the lander identity; later approvals are handled by the new code. Other former core paths land on a green landing CI. " +
-			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-platform. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. The grant also waives the change's soft failures, is valid 24 hours from the decision, and can be revoked before the push. " +
-			"hard_absolute paths (.env*, .gitmodules, .github/) are never granted.",
-		Params: landingGrantParams,
-	},
-	{
-		ID: "approve_floor_landing", Tier: TierD,
-		Description: "Floor change: grant one waiting bifrost-trade-infra landing operation whose files are all floor-grantable (each matches an entry of infra's floor table, rules.FloorEntry in api/internal/agentrt/rules/landing_infra.go) or a bifrost-platform operation whose files are all floor paths that are not permission paths or open paths (PlatformLandingFloor in rules/landing.go; for example api/internal/testscope/, scripts/ci/), the push to its repository main by agentrt-lander, once, fast-forward only. " +
-			"Tier D: only the Owner approves on the Console, with the approval number confirmed, after checking the commit on Gitea itself (M0...R). Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod), repo bifrost-trade-infra or bifrost-platform. " +
-			"Parameters are exactly {env, repo, task, op, R, material_digest, stg_release}. For bifrost-platform the grant also pins the platform CI run (bifrost-ci-platform), and the final gate checks that pinned run. The grant pins R, M0 and floor_paths: each file's path, the floor entry it matched and the sha256 of its bytes at R (GET /api/v1/agentrt/landing/{op}/material). " +
-			"Just before the push the final gate checks again that the grant is unexpired, unrevoked and unused, main is still M0 and R's only parent, the repository CI (bifrost-ci-infra or bifrost-ci-platform) is green on R, the release window is not held, and M0..R recomputed from Git changes exactly those files with the same sha256 and nothing else; a changed byte, an extra or missing file or a never-grantable path spends the grant and nothing is pushed. " +
-			"Never-grantable paths (rules.LandingHardAbsolute: infra's never table, platform's absolute paths), a k8s file declaring kind: Secret, deletions, renames and more than 5 files or 1500 lines are refused and cannot be granted. " +
-			"The grant is valid 24 hours from the decision, used once, and can be revoked before the push. It writes Git only: a cluster write is separate (an Argo sync of infra main, or apply_manifest for a path Argo does not track).",
-		Params: landingGrantParams,
-	},
-	{
-		ID: "supersede_agent_tasks", Tier: TierD,
-		Description: "Cancel explicitly listed obsolete tasks in PROD after Owner approval. Each entry pins task_id, version, replacement_task_id and commit. The replacement must be an accepted implementation in the same mission/repository with recorded delivery at that commit. The Owner confirms semantic replacement; this does not mark the original patch accepted or landed. Refuses running work, open checks or unfinished dependents. All entries commit atomically, preserving history and stop controls; repeated execution of the same approval is idempotent. No CI or deployment is started.",
-		Params: []Param{
-			{Name: "env", Type: "string", Required: true, In: "body"},
-			{Name: "entries", Type: "array", Required: true, In: "body"},
-			{Name: "reason", Type: "string", Required: true, In: "body"},
-		},
-	},
-	{
 		ID: "agentrt_rule_approve", Tier: TierD,
 		Description: "Approve a capacity change of an agent runtime rule: the proposed next version (rule_proposed) takes effect without the Owner's signature, recorded with this approval (rule_approved). Tier D: only the Owner approves on the Console. " +
 			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod); rule_id, rule_version and text_artifact_id name the draft exactly as rule_proposed recorded it. " +
@@ -556,16 +501,4 @@ func classifyApp(_ context.Context, params map[string]any) Tier {
 		return TierC
 	}
 	return TierB
-}
-
-// landingGrantParams are the landing grant actions' closed parameters
-// (coordinator v3 §5.6 item 1).
-var landingGrantParams = []Param{
-	{Name: "env", Type: "string", Required: true, In: "body"},
-	{Name: "repo", Type: "string", Required: true, In: "body"},
-	{Name: "task", Type: "string", Required: true, In: "body"},
-	{Name: "op", Type: "string", Required: true, In: "body"},
-	{Name: "R", Type: "string", Required: true, In: "body"},
-	{Name: "material_digest", Type: "string", Required: true, In: "body"},
-	{Name: "stg_release", Type: "boolean", Required: true, In: "body"},
 }

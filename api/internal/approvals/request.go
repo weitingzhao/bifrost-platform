@@ -14,7 +14,7 @@ import (
 // awaiting_grant, and deploy_agentd, asked for when an execution host runs
 // another agentd build than PROD's platform commit. Every other action is
 // requested by a person or an agent through POST /approvals.
-var requestable = map[string]bool{"approve_guardrail_landing": true, "approve_core_landing": true, "deploy_agentd": true}
+var requestable = map[string]bool{"deploy_agentd": true}
 
 // RequestError is a request the service refused, with its HTTP status and
 // body as POST /approvals would have answered.
