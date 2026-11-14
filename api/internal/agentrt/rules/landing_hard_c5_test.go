@@ -17,7 +17,6 @@ func TestLandingHardCoreEntryAndDecisionChain(t *testing.T) {
 		{"api/internal/agentrt/store/signals.go", "api/internal/agentrt/store/signals.go", false},
 		{"api/internal/agentrt/store/progressneeds.go", "", false},
 		{"api/internal/agentrt/controller/x.go", "", false},
-		{"api/cmd/agentd/main.go", "api/cmd/agentd/", false},
 		{"api/cmd/agentrt-gate/main.go", "", false},
 		{"console/tsconfig.app.json", "", false},
 		{"console/src/api/questions.ts", "console/src/api/questions.ts", true},

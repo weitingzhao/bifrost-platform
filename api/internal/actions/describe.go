@@ -67,7 +67,6 @@ var notifySafeKeys = map[string][]string{
 	"delete_finished_jobs":       {"namespace", "names", "label_selector"},
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 	"agentrt_rule_approve":       {"env", "rule_id", "rule_version"},
-	"deploy_agentd":              {"env", "host", "commit", "sha256"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -117,11 +116,6 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Summary = verb + " node " + p("name")
 		if b, ok := asBool(params["force"]); ok && b {
 			d.Summary += " (force)"
-		}
-	case "deploy_agentd":
-		d.Env, d.Summary = p("env"), "Deploy agentd "+shortRef(p("commit"))+" on host "+p("host")+" (sha256 "+p("sha256")+")"
-		if d.KeyParams != nil && d.KeyParams["commit"] != "" {
-			d.KeyParams["commit"] = shortRef(p("commit"))
 		}
 	case "agentrt_rule_approve":
 		d.Env, d.Summary = p("env"), describeRuleApprove(ctx, params)

@@ -37,8 +37,6 @@ var landingHardGo = [...]string{
 	// The schema and the agent host.
 	"api/internal/agentrt/migrate/",
 	"api/internal/agentrt/migrations/",
-	"api/internal/agentd/",
-	"api/cmd/agentd/",
 	"api/internal/agentrt/plan/",
 	"api/internal/agentrt/infracheck/",
 	"api/cmd/infracheck/",

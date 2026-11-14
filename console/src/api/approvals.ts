@@ -232,7 +232,7 @@ export async function postApprovalResolve(
 
 // Actions whose approval repeats the card's number: the API refuses their
 // approval without it (approvals service, confirmRequired).
-const CONFIRM_NUMBER_ACTIONS = ['deploy_agentd', 'agentrt_rule_approve'] as const
+const CONFIRM_NUMBER_ACTIONS = ['agentrt_rule_approve'] as const
 export const confirmsNumber = (action: unknown): boolean => CONFIRM_NUMBER_ACTIONS.some(a => a === action)
 
 export async function postApprovalDecision(

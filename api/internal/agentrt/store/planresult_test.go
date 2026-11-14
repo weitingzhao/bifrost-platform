@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -132,105 +131,6 @@ func (s *cards) withdraw(_ context.Context, id, reason string) error {
 	return nil
 }
 
-func TestAcceptPlanRecordsIt(t *testing.T) {
-	t.Parallel()
-	w := planWorld(t)
-	plan := w.handIn(t, goodPlan, "done")
-	if ids, err := store.PendingPlans(ctx, w.rt); err != nil || !slices.Equal(ids, []string{plan}) {
-		t.Fatalf("pending plans %v %v", ids, err)
-	}
-	var s cards
-	did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil)
-	if err != nil || did != "accepted" || w.state(t, "task", plan) != "accepted" {
-		t.Fatalf("accept: %q %v; the plan is %s", did, err, w.state(t, "task", plan))
-	}
-	// The card: the planner's options and default, the duty, the task, a key
-	// the question store takes.
-	if len(s.asked) != 1 || len(s.withdrawn) != 0 {
-		t.Fatalf("cards %v, withdrawn %v", s.asked, s.withdrawn)
-	}
-	c := s.asked[0]
-	if c.Title != "Document the Console too?" || !slices.Equal(c.Options, []string{"Not now", "Yes, a third task"}) || c.Recommended != 1 ||
-		c.OwnerDuty != "goal" || c.TaskID != plan || c.Meanwhile == "" || len(c.Key) != 64 {
-		t.Fatalf("the card %+v", c)
-	}
-	// The tasks: implementations by the seat, on the commit the planner read,
-	// the second after the first; each spec agentd runs carries the
-	// repository's checks first and the plan's own after.
-	rows, err := w.rt.Query(ctx, `SELECT t.task_id, t.title, t.effect_class, t.base_commit, t.created_by_actor_id, t.off_plan_reason,
-	  b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
-	  WHERE t.mission_id = 'M-3' AND t.role = 'implement' ORDER BY t.title`)
-	ok(t, err)
-	type row struct {
-		id, title, effect, base, by, offPlan string
-		spec                                 agentd.TaskSpec
-	}
-	var got []row
-	for rows.Next() {
-		var r row
-		var body []byte
-		ok(t, rows.Scan(&r.id, &r.title, &r.effect, &r.base, &r.by, &r.offPlan, &body))
-		r.spec, err = agentd.ParseSpec(body)
-		ok(t, err)
-		got = append(got, r)
-	}
-	rows.Close()
-	if len(got) != 2 || got[0].title != "Document GoalRepos" {
-		t.Fatalf("tasks %v", got)
-	}
-	defaults := store.Repos["bifrost-platform"].Verify
-	own := [][]string{{"go", "-C", "api", "test", "./internal/agentrt/agentrtapi/"},
-		{"go", "-C", "api", "test", "-run", "TestGoal", "./internal/agentrt/agentrtapi/"}}
-	for _, r := range got {
-		want := slices.Clone(defaults)
-		if r.title == "Document MainHead" {
-			want = append(want, own...)
-		}
-		if r.effect != "branch" || r.base != commitA || r.by != store.Seat || !strings.Contains(r.offPlan, plan) ||
-			!slices.EqualFunc(r.spec.Verify, want, slices.Equal[[]string]) || !strings.Contains(r.spec.Text, "# "+r.title) {
-			t.Fatalf("task %+v", r)
-		}
-	}
-	var dep string
-	ok(t, w.rt.QueryRow(ctx, `SELECT depends_on_task_id FROM agentrt.task_dependency WHERE task_id = $1`, got[0].id).Scan(&dep))
-	if dep != got[1].id {
-		t.Fatalf("Document GoalRepos depends on %s, not on Document MainHead %s", dep, got[1].id)
-	}
-	// The mission, amended by the seat: criteria replaced, scope joined, the
-	// budget lowered and the rest kept.
-	var success, scope, budget map[string]any
-	ok(t, w.rt.QueryRow(ctx, `SELECT success_json, scope_json, budget_json FROM agentrt.mission WHERE mission_id = 'M-3'`).Scan(&success, &scope, &budget))
-	if crit, _ := success["criteria"].([]any); len(crit) != 2 || crit[0] != "the comment says what MainHead reads" {
-		t.Fatalf("success %v", success)
-	}
-	if out, _ := scope["out_of_scope"].([]any); len(out) != 1 || scope["max_action"] != "branch" || scope["repos"] == nil {
-		t.Fatalf("scope %v", scope)
-	}
-	if budget["max_attempts"] != float64(6) || budget["max_wall_hours"] != float64(24) {
-		t.Fatalf("budget %v", budget)
-	}
-	for typ, want := range map[string]int{"mission_amended": 1, "decision_recorded": 2} {
-		var n int
-		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1 AND actor_id = $2 AND task_id = $3`,
-			typ, store.Seat, plan).Scan(&n))
-		if n != want {
-			t.Fatalf("%s by the seat: %d, want %d", typ, n, want)
-		}
-	}
-	var body map[string]any
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json FROM agentrt.event WHERE event_type = 'decision_recorded' ORDER BY event_id LIMIT 1`).Scan(&body))
-	if body["decision"] != "two tasks, not one" || body["dropped"] != "one task" || body["reverse"] != "merge them" {
-		t.Fatalf("the first decision %v", body)
-	}
-	// Used once: another pass finds nothing to do and asks nothing.
-	if did, err = store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, nil); did != "" || err != nil || len(s.asked) != 1 {
-		t.Fatalf("again: %q %v, cards %d", did, err, len(s.asked))
-	}
-	if ids, err := store.PendingPlans(ctx, w.rt); err != nil || len(ids) != 0 {
-		t.Fatalf("pending after: %v %v", ids, err)
-	}
-}
-
 // A planning task on a step: the tasks its plan makes hang on that step, not
 // off the plan, and the plan view counts them there.
 func TestAcceptPlanInheritsItsStep(t *testing.T) {
@@ -294,44 +194,6 @@ func lastReason(t *testing.T, w *world, task string) string {
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
 	  AND body_json->>'to' IN ('rework','blocked') ORDER BY event_id DESC LIMIT 1`, task).Scan(&reason))
 	return reason
-}
-
-// A plan that does not pass goes back for another round: the task is ready
-// again in round 2 with the reason added to its spec, and nothing else is
-// written (review 216 A3).
-func TestAcceptPlanReworks(t *testing.T) {
-	t.Parallel()
-	plan := func(old, new string) string { return strings.Replace(goodPlan, old, new, 1) }
-	for name, c := range map[string]struct {
-		report, conclusion string
-		why                string
-	}{
-		"no block":   {"I could not plan this.", "done", "no ```json block"},
-		"failed":     {goodPlan, "failed", `ended "failed"`},
-		"other repo": {plan(`"repo": "bifrost-platform", "text": "Say which`, `"repo": "bifrost-trade-api", "text": "Say which`), "done", "repo is one of bifrost-platform"},
-		"cycle":      {plan(`"verify": [["go"`, `"depends_on": ["t2"], "verify": [["go"`), "done", "cycle"},
-		"key twice":  {plan(`"mission": {`, `"Tasks": [], "mission": {`), "done", "twice in one object"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			w := planWorld(t)
-			id := w.handIn(t, c.report, c.conclusion)
-			var s cards
-			did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw, nil)
-			if err != nil || did != "rework" || w.state(t, "task", id) != "ready" || !strings.Contains(lastReason(t, w, id), c.why) {
-				t.Fatalf("%q %v; %s: %q", did, err, w.state(t, "task", id), lastReason(t, w, id))
-			}
-			var round int
-			var spec []byte
-			ok(t, w.rt.QueryRow(ctx, `SELECT t.round_no, b.body FROM agentrt.task t JOIN agentrt.artifact_blob b
-			  ON b.artifact_id = t.spec_artifact_id WHERE t.task_id = $1`, id).Scan(&round, &spec))
-			ts, err := agentd.ParseSpec(spec)
-			ok(t, err)
-			if round != 2 || !strings.Contains(ts.Text, "## Round 2") || !strings.Contains(ts.Text, c.why) {
-				t.Fatalf("round %d, spec:\n%s", round, ts.Text)
-			}
-			nothingWritten(t, w)
-		})
-	}
 }
 
 // Round 2 with a plan that passes is used; round 2 refused again blocks the

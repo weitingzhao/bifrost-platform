@@ -8,19 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
-
-// PruneSilence is agentd's prune budget and 15 seconds: a change of agentd's
-// budget fails here until the platform's follows.
-func TestPruneSilenceCoversAgentdsBudget(t *testing.T) {
-	t.Parallel()
-	if store.PruneSilence != agentd.PruneWork+agentd.PruneReport+15*time.Second {
-		t.Fatalf("PruneSilence %v; agentd's prune budget is %v + %v", store.PruneSilence, agentd.PruneWork, agentd.PruneReport)
-	}
-}
 
 // pollAt sets host's last contact to at, as a claim or a call of its agentd
 // at that moment would.

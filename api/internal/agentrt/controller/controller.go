@@ -138,9 +138,6 @@ type Controller struct {
 	// (DiskPages, TD-415); nil: hosts' disk records are not paged.
 	PageOwner func(ctx context.Context, title, body, id string) (string, error)
 	FullCI    *FullCI // the daily full CI (fullci.go); nil runs none
-	// AgentdDeploy proposes deploy_agentd cards (agentddeploy.go); nil
-	// proposes none.
-	AgentdDeploy *AgentdDeploy
 	// PipelineEvery is how often the retained pipeline runs are listed for
 	// the ones that completed (PipelineRecords); zero means
 	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares

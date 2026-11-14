@@ -182,7 +182,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// main through ready/ and the bifrost-land pipeline.
 		s.wirePipelineRecords(c)
 		s.wireFullCI(c)
-		s.wireAgentdDeploy(c)
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})

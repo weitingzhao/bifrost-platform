@@ -1,17 +1,12 @@
 package store_test
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -157,59 +152,5 @@ func TestPlanFixesSlipsAndRefusesOnlyTheUnusable(t *testing.T) {
 		if _, err := store.ParsePlan([]byte(c.report), c.repos); err == nil || !strings.Contains(err.Error(), c.why) {
 			t.Errorf("%s: %v (want %q)", name, err, c.why)
 		}
-	}
-}
-
-// A used plan's fixes reach what it makes and its accepted event names them:
-// a raise of the budget is dropped and the mission keeps its own; the card
-// takes the fixed default; a check not in the form is dropped from the spec;
-// a repository of the goal the text names beside the checkout is in the
-// spec's siblings, at main.
-func TestAcceptPlanNotesItsFixes(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-3", Title: "goal", Goal: "a goal",
-			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform", infra}, Success: []string{store.GoalSuccess},
-			MaxAttempts: 10, MaxWallHours: 24}); err != nil {
-			return err
-		}
-		return store.MoveMission(ctx, tx, "controller", "M-3", "active", "test")
-	}))
-	report := goodPlan
-	for _, r := range [][2]string{{`"max_attempts": 6`, `"max_attempts": 40`}, {`"recommended": 1`, `"recommended": 3`},
-		{`["go", "-C", "api", "test", "./internal/agentrt/agentrtapi/"]`, `["go", "-C", "api", "run", "./payload.go"]`},
-		{`"text": "Say which ref MainHead reads."`, `"text": "Say which ref MainHead reads, as ../bifrost-trade-infra/scripts/main.sh does."`}} {
-		report = strings.Replace(report, r[0], r[1], 1)
-	}
-	plan := w.handIn(t, report, "done")
-	var s cards
-	main := func(context.Context, string) (string, error) { return commitB, nil }
-	if did, err := store.AcceptPlan(ctx, w.rt, plan, s.ask, s.withdraw, main); err != nil || did != "accepted" {
-		t.Fatalf("accept: %q %v", did, err)
-	}
-	var reason, attempts string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
-	  AND body_json->>'to' = 'accepted'`, plan).Scan(&reason))
-	for _, want := range []string{"plan used: 2 tasks", ", fixed: ", "tasks[0].verify[0]: a check is go -C <api> test", "questions[0]: recommended 3 read as 1",
-		"tasks[0]: its text names ../bifrost-trade-infra, added beside its checkout at the head of main",
-		"mission.max_attempts 40 dropped: a plan may only lower the mission's 10"} {
-		if !strings.Contains(reason, want) {
-			t.Errorf("the accepted reason lacks %q: %q", want, reason)
-		}
-	}
-	ok(t, w.rt.QueryRow(ctx, `SELECT budget_json->>'max_attempts' FROM agentrt.mission WHERE mission_id = 'M-3'`).Scan(&attempts))
-	if attempts != "10" || len(s.asked) != 1 || s.asked[0].Recommended != 1 {
-		t.Fatalf("max_attempts %s, cards %+v", attempts, s.asked)
-	}
-	var body []byte
-	ok(t, w.rt.QueryRow(ctx, `SELECT b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
-	  WHERE t.mission_id = 'M-3' AND t.role = 'implement' AND t.title = 'Document MainHead'`).Scan(&body))
-	spec, err := agentd.ParseSpec(body)
-	ok(t, err)
-	want := append(slices.Clone(store.Repos["bifrost-platform"].Verify), []string{"go", "-C", "api", "test", "-run", "TestGoal", "./internal/agentrt/agentrtapi/"})
-	sibs := []agentd.Sibling{{Repo: "bifrost-ui", Ref: "main"}, {Repo: infra, Ref: "main"}}
-	if !slices.EqualFunc(spec.Verify, want, slices.Equal[[]string]) || !slices.Equal(spec.Siblings, sibs) {
-		t.Fatalf("the spec: verify %q, siblings %+v", spec.Verify, spec.Siblings)
 	}
 }

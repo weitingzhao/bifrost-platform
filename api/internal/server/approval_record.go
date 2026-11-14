@@ -69,3 +69,8 @@ func checkGrantRecord(rec approvals.Approval, action, hash, ctxHash string, prod
 	}
 	return nil
 }
+
+// approvalOpenKey is the one-open-request rule of every action that has one.
+func approvalOpenKey(action string, params map[string]any) string {
+	return ruleApproveOpenKey(action, params)
+}

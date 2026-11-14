@@ -44,7 +44,6 @@ modules:
     # it run less often; a package missing from this list that does read
     # outside is the dangerous mistake.
     inputs:
-      api/cmd/agentd: ["."]
       api/cmd/agentrt-plan-import: ["."]
       api/cmd/debtimport: ["."]
       api/cmd/infracheck: ["."]
@@ -53,7 +52,6 @@ modules:
       api/internal/actions: ["."]
       api/internal/actuation: ["."]
       api/internal/actuationpolicy: ["."]
-      api/internal/agentd: ["."]
       api/internal/agentgovernance: ["."]
       api/internal/agentprogress: ["."]
       api/internal/agentrt/agentrtapi: ["."]
@@ -67,7 +65,6 @@ modules:
       api/internal/agentrt/metrics: ["."]
       api/internal/agentrt/planimport: ["."]
       api/internal/agentrt/planview: ["."]
-      api/internal/agentrt/platformcheck: ["."]
       api/internal/agentrt/recorderimport: ["."]
       api/internal/agentrt/rules: ["."]
       api/internal/agentrt/rules/s5check: ["."]

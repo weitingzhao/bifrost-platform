@@ -36,8 +36,6 @@ var Catalog = []Row{
 			{Pkg: "./internal/agentrt/actions/", Tests: []string{"TestStoreAppendsReadsAndExpires"}}}}}},
 	{Label: "runtime-kernel", Gates: []Gate{{ID: "T48", Text: "The runtime kernel: fencing and the lease clock, the lease sweep, a result's path, only the listed moves.",
 		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestFenceAndLeaseClock", "TestLeaseSweep", "TestResultPath", "TestOnlyListedMoves"}}}}}},
-	{Label: "agentd", Gates: []Gate{{ID: "T49", Text: "agentd: it claims through the platform's routes and waits for the platform when it hands over.",
-		Commands: []Command{{Pkg: "./internal/agentd/", Tests: []string{"TestClientPath", "TestHandOverWaitsForThePlatform"}}}}}},
 	{Label: "dispatch-record", Gates: []Gate{{ID: "T50", Text: "The dispatch record: a route decision replays, and a claim takes only the route.",
 		Commands: []Command{{Pkg: "./internal/agentrt/store/", Tests: []string{"TestRouteDecisionReplays", "TestClaimTakesOnlyTheRoute"}}}}}},
 	{Label: "progress-in-prod", Gates: []Gate{{ID: "T51", Text: "Progress from the runtime's state: the projection, with or without tasks.",

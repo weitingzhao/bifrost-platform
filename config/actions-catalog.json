@@ -7,7 +7,6 @@
     "delete_finished_jobs",
     "delete_pipeline_run",
     "delete_pod",
-    "deploy_agentd",
     "drain_node",
     "ensure_kube_prometheus_stack",
     "ensure_kubeconfig_secret",

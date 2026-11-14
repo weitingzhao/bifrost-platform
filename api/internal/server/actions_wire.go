@@ -17,7 +17,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
@@ -212,7 +211,6 @@ func (s *Server) bindActionExecutors() {
 	}
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
-	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	if s.work != nil {
 		svc := s.work.Svc

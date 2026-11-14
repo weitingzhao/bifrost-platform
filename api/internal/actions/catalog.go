@@ -469,22 +469,6 @@ var catalog = []Action{
 		},
 	},
 	{
-		ID: "deploy_agentd", Tier: TierD,
-		Description: "Deploy a pinned agentd build on an execution host. Tier D: only the Owner approves on the Console, with the approval number confirmed. " +
-			"Request and approve on the PROD platform at ops.bifrost.lan; PROD only (env: prod). Parameters are exactly {env, host, commit, sha256}: host is a configured execution host (its ssh target is the platform's configuration, AGENTD_DEPLOY_TARGETS, never the card's), commit the 40-hex platform commit and sha256 the 64-hex sha256 the Gitea agentd package publishes for that commit. " +
-			"The platform proposes this card itself when PROD's platform commit has a published agentd build and the host reports another build; one card per host and commit, none while one is open for the host. " +
-			"The executor, in order: refuses a sha256 that is not the package's .sha256 for the commit; sets the host aside (the Console's set-aside: a drain control) so it claims nothing; waits until no attempt runs on it, at most 30 minutes, past which it sets the host back and fails; " +
-			"runs exactly sudo -n agentd-update <commit> <sha256> as the host's deploy user over ssh (BatchMode); waits until the host's claims report that build, at most 5 minutes; and sets the host back. " +
-			"A failed check after the update runs sudo -n agentd-update --rollback and reports it; if the rollback fails too, the host stays aside for the Owner to lift. " +
-			"Requires the Owner's one-time install of the host helper (agentd-update, with its sudoers entry for the deploy user, and the platform's ssh key) on each host.",
-		Params: []Param{
-			{Name: "env", Type: "string", Required: true, In: "body"},
-			{Name: "host", Type: "string", Required: true, In: "body"},
-			{Name: "commit", Type: "string", Required: true, In: "body"},
-			{Name: "sha256", Type: "string", Required: true, In: "body"},
-		},
-	},
-	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
 		Classify:    classifyOwnerRun,
 		Description: "Approve an exact shell command. Tier D. The platform does not execute it. While D10 is locked, a command that names a no_d10_paths file is tier X and refused. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it. Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead.",
