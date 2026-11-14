@@ -9,6 +9,7 @@ import (
 	"crypto/sha512"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -150,17 +151,20 @@ func (c *ConfigMaps) ConfigMap(_ context.Context, name string) (map[string]strin
 
 // Facts fakes Git, CI, Window and Deployed.
 type Facts struct {
-	Heads    map[string]string
-	Tags     map[string]map[string]string
-	Commits  map[string]bool // "repo@sha"
-	Files    map[string][]string
-	FilesErr error
-	Text     map[string]string   // "repo@ref:path" -> file text
-	Dirs     map[string][]string // "repo@ref:dir" -> file names
-	Green    map[string]bool     // "repo@sha"
-	Window   string
-	Records  map[string]map[string]string
-	Missing  []string
+	Heads   map[string]string
+	Tags    map[string]map[string]string
+	Commits map[string]bool // "repo@sha"
+	Files   map[string][]string
+	// TreeFiles is the complete difference of the two trees, per repo; a
+	// repo without an entry cannot be read.
+	TreeFiles map[string][]string
+	FilesErr  error
+	Text      map[string]string   // "repo@ref:path" -> file text
+	Dirs      map[string][]string // "repo@ref:dir" -> file names
+	Green     map[string]bool     // "repo@sha"
+	Window    string
+	Records   map[string]map[string]string
+	Missing   []string
 }
 
 func (f *Facts) FileAt(_ context.Context, repo, ref, path string) (string, bool, error) {
@@ -205,6 +209,16 @@ func (f *Facts) ChangedFiles(_ context.Context, repo, from, to string) ([]string
 		return nil, f.FilesErr
 	}
 	return f.Files[repo], nil
+}
+
+// TreeChangedFiles is TreeFiles for the repo; without one the complete
+// difference "cannot be read", as a mirror that does not answer.
+func (f *Facts) TreeChangedFiles(_ context.Context, repo, from, to string) ([]string, error) {
+	files, ok := f.TreeFiles[repo]
+	if !ok {
+		return nil, errors.New("no tree listing")
+	}
+	return files, nil
 }
 
 func (f *Facts) Succeeded(_ context.Context, repo, sha string) (bool, error) {

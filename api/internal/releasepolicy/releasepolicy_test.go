@@ -3,6 +3,7 @@ package releasepolicy_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -183,13 +184,26 @@ func TestConditionFailuresWait(t *testing.T) {
 		"record gap":   {func(f *fixture) { f.facts.Missing = []string{"repo-lib"} }, nil, "repo-lib: the newest release record"},
 		"diff error":   {func(f *fixture) { f.facts.FilesErr = errors.New("status 500") }, nil, "cannot read the diff"},
 		"empty diff":   {func(f *fixture) { f.facts.Files["repo-app"] = nil }, nil, "lists no files"},
-		"huge diff": {func(f *fixture) {
-			files := make([]string, 100)
-			for i := range files {
-				files[i] = "docs/page" + string(rune('a'+i%26)) + ".md"
-			}
-			f.facts.Files["repo-app"] = files
-		}, nil, "may be truncated"},
+		// Until 2026-11-14 a diff of 100 files was refused for its size
+		// ("may be truncated"). Large is not the risk; not seeing all of it
+		// is: the complete difference of the trees is read, and a diff whose
+		// complete difference cannot be read is still refused.
+		"huge diff, the complete difference unreadable": {func(f *fixture) {
+			f.facts.Files["repo-app"] = manyFiles(100)
+		}, nil, "the complete difference cannot be read"},
+		// The commits' lists were cut short and the file a rule forbids is
+		// only in the complete difference: 5 of the 7 such releases of
+		// 2026-11-11..14 touched a trust anchor that the size refusal hid.
+		"huge diff, a trust anchor only in the complete difference": {func(f *fixture) {
+			f.facts.Files["repo-app"] = manyFiles(100)
+			f.facts.TreeFiles = map[string][]string{"repo-app": append(manyFiles(150), "internal/releasepolicy/anchor.go")}
+		}, nil, "hits no_trust_anchor_change"},
+		// And the other way: a file changed and changed back is in a commit's
+		// list and not in the difference of the trees; it still counts.
+		"huge diff, a d10 path only in a commit's list": {func(f *fixture) {
+			f.facts.Files["repo-app"] = append(manyFiles(100), "engine/orders/place.go")
+			f.facts.TreeFiles = map[string][]string{"repo-app": manyFiles(150)}
+		}, nil, "hits no_d10_paths"},
 		"branch revision": {func(*fixture) {}, map[string]any{"name": pipeline, "revision": "feature/x", "who": "agent@mac"}, "is not main, a tag"},
 		"stale sha": {func(f *fixture) {
 			f.facts.Commits = map[string]bool{"repo-app@" + rptest.SHA("mid"): true}
@@ -386,4 +400,25 @@ func TestStatusAndMetrics(t *testing.T) {
 	if !strings.Contains(b.String(), "bifrost_release_policy_expires_in_seconds 0\n") {
 		t.Fatalf("metrics after expiry:\n%s", b.String())
 	}
+}
+
+// manyFiles is n paths no rule of the fixture's policy matches.
+func manyFiles(n int) []string {
+	files := make([]string, n)
+	for i := range files {
+		files[i] = fmt.Sprintf("docs/page%03d.md", i)
+	}
+	return files
+}
+
+// A large release whose complete difference is read and breaks no rule is
+// covered: its size alone asks nobody. Origin: 2026-11-14, platform PROD
+// releases 6319a91e..393fe6a2 (177 files) and 554ec329..8770cf06 (144 files)
+// each needed a card for no other reason, and the Owner could see nothing on
+// either.
+func TestALargeDiffReadWholeIsCovered(t *testing.T) {
+	f := newFixture(t)
+	f.facts.Files["repo-app"] = manyFiles(177)
+	f.facts.TreeFiles = map[string][]string{"repo-app": manyFiles(177)}
+	wantAuto(t, f.decide(nil))
 }

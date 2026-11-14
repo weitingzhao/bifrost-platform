@@ -29,6 +29,10 @@ type Git interface {
 	TagCommit(ctx context.Context, repo, tag string) (sha string, found bool, err error)
 	CommitExists(ctx context.Context, repo, sha string) (bool, error)
 	ChangedFiles(ctx context.Context, repo, from, to string) ([]string, error)
+	// TreeChangedFiles is every path whose content differs between the two
+	// commits' whole trees: complete whatever the number of files, where
+	// ChangedFiles (the union of what each commit touched) can be cut short.
+	TreeChangedFiles(ctx context.Context, repo, from, to string) ([]string, error)
 	// FileAt is a file's text at ref; found is false when the path does not exist there.
 	FileAt(ctx context.Context, repo, ref, path string) (text string, found bool, err error)
 	// ListDir lists the file names (not subdirectories) in dir at ref.
@@ -263,13 +267,19 @@ func (d Decision) SHAText() string {
 
 const (
 	releaseAction = "start_pipeline_run"
-	// Gitea caps a compare listing; at this size the list may be cut short,
-	// and a missing file could be the one a rule forbids.
+	// Gitea caps the files it lists for one commit; at this size the union of
+	// the commits' lists may be cut short, and a missing file could be the
+	// one a rule forbids. At or above it the difference of the two whole
+	// trees is read as well, which is complete by construction.
 	compareFileCap = 100
 )
 
-// ComparisonFileCap exposes the same completeness threshold the release gate
-// consumes. At or above this count automatic authorization is refused.
+// ComparisonFileCap is the size at or above which the release gate reads the
+// difference of the two trees beside the commits' own lists. Until
+// 2026-11-14 a diff of this size was refused outright ("may be truncated"):
+// of 52 platform PROD releases in four days 7 reached it, and with the
+// complete difference 5 of those touched a trust anchor, so the list can
+// hide what matters; the other 2 were refused for their size alone.
 func ComparisonFileCap() int { return compareFileCap }
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -602,7 +612,14 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 	case len(files) == 0:
 		return append(reasons, repo+": the diff "+short(old)+".."+short(next)+" lists no files")
 	case len(files) >= compareFileCap:
-		return append(reasons, fmt.Sprintf("%s: the diff %s..%s lists %d files, which may be truncated", repo, short(old), short(next), len(files)))
+		// Large is not a risk; not seeing all of it is. The rules below are
+		// held to the commits' lists and to the complete difference together.
+		whole, err := e.d.Git.TreeChangedFiles(ctx, repo, old, next)
+		if err != nil {
+			return append(reasons, fmt.Sprintf("%s: the diff %s..%s lists %d files and the complete difference cannot be read: %s",
+				repo, short(old), short(next), len(files), errText(err)))
+		}
+		files = unionSorted(files, whole)
 	}
 	for _, rule := range PathRules {
 		if !pol.Enforced(rule) {
@@ -692,4 +709,20 @@ func errText(err error) string {
 		return "empty"
 	}
 	return err.Error()
+}
+
+// unionSorted is the paths of both lists, each once, sorted.
+func unionSorted(a, b []string) []string {
+	seen := map[string]bool{}
+	for _, list := range [][]string{a, b} {
+		for _, f := range list {
+			seen[f] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for f := range seen {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
 }

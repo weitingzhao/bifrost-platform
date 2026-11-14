@@ -215,6 +215,16 @@ func (f PolicyFacts) ChangedFiles(ctx context.Context, repo, from, to string) ([
 	return f.s.changedFilesBetween(ctx, repo, from, to, acc.User, acc.Pass)
 }
 
+// TreeChangedFiles is the complete difference of the two commits' trees
+// (release_policy_tree.go), for a diff whose commit lists may be cut short.
+func (f PolicyFacts) TreeChangedFiles(ctx context.Context, repo, from, to string) ([]string, error) {
+	acc, err := f.s.GiteaAccess(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return f.s.treeFilesBetween(ctx, repo, from, to, acc.User, acc.Pass)
+}
+
 // Succeeded reports whether a ci-* run for repo at sha succeeded. The match
 // is ci_gate.py's: repo from the repo param or the bifrost.io/repo label, and
 // the revision param equal to sha.

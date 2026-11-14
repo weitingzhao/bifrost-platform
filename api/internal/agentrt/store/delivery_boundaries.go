@@ -96,7 +96,7 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 	for id, value := range landing.WaitBoundaries() {
 		out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": "landing." + id, "value": value.Seconds(), "unit": "seconds", "source": "landing.WaitBoundaries (API binary)", "adjustment": "Code change required; no runtime rule consumes this value yet."})
 	}
-	out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": "release.compare_completeness", "value": releasepolicy.ComparisonFileCap(), "unit": "files (at or above refuses automatic approval)", "source": "releasepolicy.ComparisonFileCap", "adjustment": "Completeness safeguard, not the landing file allowance. Requires a code/API evidence change; a larger landing rule does not override it."})
+	out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": "release.compare_completeness", "value": releasepolicy.ComparisonFileCap(), "unit": "files (at or above, the complete difference of the two trees is read as well; unreadable refuses automatic approval)", "source": "releasepolicy.ComparisonFileCap", "adjustment": "Completeness safeguard, not the landing file allowance. Requires a code/API evidence change; a larger landing rule does not override it."})
 	for _, limit := range []struct {
 		id           string
 		value        float64
