@@ -4,7 +4,7 @@ import events from '../__fixtures__/agentrt-events-M-2.stg.json'
 import roadmap from '../__fixtures__/board-roadmap-round-arch.json'
 import task from '../__fixtures__/agentrt-task.stg.json'
 import mission from '../__fixtures__/agentrt-mission.stg.json'
-import { parseRuntimeEvents, parseRuntimeProgress, parseGoalResult, parseRuntimeTask } from '../agentRuntime'
+import { parseRuntimeEvents, parseRuntimeProgress, parseRuntimeTask } from '../agentRuntime'
 import { parseRoadmap } from '../agentProgressBoard'
 import { parseAgentProgress } from '../agentProgress'
 
@@ -49,13 +49,7 @@ describe('agent runtime fixtures', () => {
   it.each([null, undefined, false, 7, 'new', [], {}, { hosts: [null, 2], work: { missions: [{ tasks: [null, {}], eta: false }] }, live: [{}] }])('handles missing or unfamiliar JSON: %j', value => {
     expect(() => parseRuntimeProgress(value)).not.toThrow()
     expect(() => parseRuntimeEvents(value)).not.toThrow()
-    expect(() => parseGoalResult(value)).not.toThrow()
     expect(() => parseRoadmap(value)).not.toThrow()
-  })
-  it('reads a goal\'s repositories, keeping only strings', () => {
-    expect(parseGoalResult({ mission_id: 'M-7', repo: 'bifrost-platform', repos: ['bifrost-platform', 7, 'bifrost-trade-infra'] }))
-      .toMatchObject({ repo: 'bifrost-platform', repos: ['bifrost-platform', 'bifrost-trade-infra'] })
-    expect(parseGoalResult({ mission_id: 'M-8', repo: 'bifrost-platform' }).repos).toEqual([])
   })
   it('does not accept invalid nested plan arrays or numeric strings', () => {
     expect(parseRoadmap({ round: { n: '2', items: [null, { done: '3', steps: [null, {}] }] }, arch: { rows: [null, {}] } }))

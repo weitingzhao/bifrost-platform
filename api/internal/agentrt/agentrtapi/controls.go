@@ -1,12 +1,10 @@
 package agentrtapi
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -136,11 +134,6 @@ func (a *API) control(w http.ResponseWriter, r *http.Request, b controlBody) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-type drainBody struct {
-	IdempotencyKey string `json:"idempotency_key"`
-	Reason         string `json:"reason"`
-}
-
 // liftControl is DELETE /controls/{id}: control_cleared by the Owner.
 func (a *API) liftControl(w http.ResponseWriter, r *http.Request) {
 	out, err := store.LiftControl(r.Context(), a.DB, "owner", chi.URLParam(r, "id"))
@@ -160,66 +153,6 @@ func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
 	    'truncated', COALESCE(max(c.n) > $2, false))
 	  FROM (SELECT x.*, row_number() OVER (ORDER BY x.set_at DESC, x.control_id) AS n FROM agentrt.control x
 	    WHERE $1 OR x.cleared_at IS NULL ORDER BY x.set_at DESC, x.control_id LIMIT $2 + 1) c`, all, listLimit)
-}
-
-// listHosts is GET /hosts: every host with how long since it last polled,
-// whether that counts as online (v5 §5.2: online is not stored, it is read
-// from last_poll_at; W-31 3.5: lost past 30 seconds, store.HostLostAfter),
-// its live attempts, the controls on it, what its latest claim offered,
-// whether its disk is low and whether the controller reports it offline
-// (store.HostsSQL). The document is the progress projection's, at the
-// statement's moment. Each host also carries its slot signals
-// (slot_signals, store.SlotSignals) since signals_since (RFC 3339; absent:
-// store.SlotSignalInterval ago), read in the same transaction.
-func (a *API) listHosts(w http.ResponseWriter, r *http.Request) {
-	var since time.Time
-	if s := r.URL.Query().Get("signals_since"); s != "" {
-		var err error
-		if since, err = time.Parse(time.RFC3339, s); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", "signals_since is an RFC 3339 time")
-			return
-		}
-	}
-	var doc struct {
-		Hosts []map[string]json.RawMessage `json:"hosts"`
-	}
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
-		var raw []byte
-		if err := tx.QueryRow(r.Context(), store.HostsSQL("statement_timestamp()"), store.HostsArgs(a.back())...).Scan(&raw); err != nil {
-			return err
-		}
-		if err := json.Unmarshal(raw, &doc.Hosts); err != nil {
-			return err
-		}
-		signals, err := store.HostsSlotSignals(r.Context(), tx, since)
-		if err != nil {
-			return err
-		}
-		for _, h := range doc.Hosts {
-			var id string
-			if err := json.Unmarshal(h["host_id"], &id); err != nil {
-				return err
-			}
-			if s, ok := signals[id]; ok {
-				if h["slot_signals"], err = json.Marshal(s); err != nil {
-					return err
-				}
-			} else {
-				h["slot_signals"] = json.RawMessage("null")
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	cfg, err := store.SlotsInForce(r.Context(), a.DB)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"hosts": doc.Hosts, "slots": cfg})
 }
 
 // list answers the one JSON document a query returns.

@@ -9,31 +9,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// getPlanTimeline is GET /plan-timeline: a round's steps with their events
-// and cards in one read, or only step node of it when node is given, for
-// the Ops Work page.
-func (a *API) getPlanTimeline(w http.ResponseWriter, r *http.Request) {
-	root := r.URL.Query().Get("root")
-	if root == "" {
-		writeError(w, 400, "bad_request", "root is required")
-		return
-	}
-	out, err := store.ReadRoundTimeline(r.Context(), a.DB, root, r.URL.Query().Get("node"))
-	if err != nil {
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			writeError(w, 404, "not_found", "plan not found")
-		case errors.Is(err, store.ErrInvalid):
-			a.fail(w, err)
-		default:
-			a.logf("plan timeline: %v", err)
-			writeError(w, 503, "unavailable", "plan timeline unavailable")
-		}
-		return
-	}
-	writeJSON(w, 200, out)
-}
-
 // getDelivery is GET /delivery: the delivery stages of one commit an external
 // work handed in, from its recorded pipeline runs and the current PROD
 // release.

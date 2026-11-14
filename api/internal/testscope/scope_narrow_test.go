@@ -128,7 +128,7 @@ func TestGuardOnlySelection(t *testing.T) {
 	put(t, root, dir+"walk_test.go", "package agentrtapi\nimport (\"path/filepath\";\"testing\";_ \"example.org/api/p0\")\nfunc TestWalk(t *testing.T){filepath.WalkDir(\".\",nil)}\nfunc TestAnother(t *testing.T){}\n")
 	put(t, root, dir+"pool_test.go", "package agentrtapi\nimport \"testing\"\nfunc TestPools(t *testing.T){}\n")
 	r := SelectChanges(root, strings.NewReader("M\tapi/p1/p.go"))
-	if r.Scope != "incremental" || r.GuardPackages != pkg || r.GuardRun != "^(TestAnother|TestPools|TestWalk)$" || strings.Contains(r.Packages, pkg) {
+	if r.Scope != "incremental" || r.GuardPackages != pkg || r.GuardRun != "^(TestAnother|TestWalk)$" || strings.Contains(r.Packages, pkg) {
 		t.Fatalf("leaf: %+v", r)
 	}
 	for _, line := range []string{"M\tapi/p0/p.go", "M\tapi/" + dir + "api.go", "M\tapi/" + dir + "testdata/x"} {

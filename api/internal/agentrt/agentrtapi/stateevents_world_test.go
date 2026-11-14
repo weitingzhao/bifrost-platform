@@ -31,7 +31,9 @@ import (
 // The worlds of TestRoutesMoveStateOnlyByEvents and what brings each to its
 // point: each write route's valid request, as its client sends it, checked
 // like every other request.
-var fuzzStages = []string{"base", "running", "submitted", "lost"}
+// The running, submitted and lost stages claimed a task and drove an attempt; they went with the
+// claim and attempt routes (LANE-BIZ-ALIGN, 2026-11-14).
+var fuzzStages = []string{"base"}
 
 const (
 	expectWrites  = "writes"  // its valid request appends events
@@ -42,12 +44,8 @@ const (
 // valid request does. Reads that write are listed too (an exam paper is
 // recorded when it is handed out).
 var routeExpect = map[string]string{
-	"POST claim": expectWrites, "PUT artifacts/{id}": expectWrites,
-	"POST attempts/{id}/start": expectWrites, "POST attempts/{id}/heartbeat": expectAnswers,
-	"POST attempts/{id}/checkpoint": expectWrites, "POST attempts/{id}/computed": expectWrites,
-	"POST attempts/{id}/persist": expectWrites, "POST attempts/{id}/submit": expectWrites,
-	"POST attempts/{id}/salvage": expectWrites, "POST attempts/{id}/ended": expectWrites,
-	"POST goals": expectWrites, "POST pools/{id}/reading": expectWrites,
+	"PUT artifacts/{id}": expectWrites,
+
 	"POST messages": expectWrites, "POST messages/ack": expectWrites,
 	"POST controls": expectWrites, "DELETE controls/{id}": expectWrites,
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
@@ -58,7 +56,7 @@ var routeExpect = map[string]string{
 	// A report names branches the cleanup offered, the attempt branches of
 	// finished tasks: no world here finishes one, so the valid report is the
 	// empty one (TestPruneRoutes records real ones).
-	"GET prunes": expectAnswers, "POST prunes": expectAnswers,
+
 	// Business issues (W-31 BI-1 slice 2, issues_world_test.go): the
 	// crew's writes and an intake client's; reading its updates moves only
 	// how far it was served, without an event.
@@ -168,8 +166,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 			asked++
 			return fmt.Sprintf("q_%d", asked), nil
 		}
-		a.AgentHeads = func(context.Context, string) ([]store.AgentHead, error) { return nil, nil }
-		a.MainResults = func(context.Context, string) (store.OnMain, bool) { return nil, false }
 		a.Now = time.Now
 		a.CheckAssessment = func(_ context.Context, kind, id string) error {
 			if (kind != store.AssessCard && kind != store.AssessApproval) || id != "463" {
@@ -193,78 +189,7 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		f.validIssueRoutes(t, ok, seat)
 		return s
 	}
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	claim := ok("POST claim", "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}})
-	if claim["task_id"] != f.task {
-		t.Fatalf("stage %q: claimed %v", name, claim)
-	}
-	attempt := claim["attempt_id"].(string)
-	fence := func(extra map[string]any) map[string]any {
-		b := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]}
-		for k, v := range extra {
-			b[k] = v
-		}
-		return b
-	}
-	act := func(action string, body map[string]any) {
-		t.Helper()
-		ok("POST attempts/{id}/"+action, "agentd:h1", "POST", "attempts/"+attempt+"/"+action, body)
-	}
-	upload := func(kind string, body []byte) {
-		t.Helper()
-		ok("PUT artifacts/{id}", "agentd:h1", "PUT", "artifacts/"+artifactID(body), body, "X-Artifact-Kind", kind)
-	}
-	report := []byte("# done\nall tests pass\n")
-	act("start", fence(map[string]any{"model_provider": "cursor-mix"}))
-	switch name {
-	case "running":
-		act("heartbeat", fence(nil))
-		tail := []byte("compiling\n")
-		upload("log_tail", tail)
-		act("checkpoint", fence(map[string]any{"checkpoint_seq": 1, "artifacts": []string{artifactID(tail)}}))
-	case "submitted":
-		upload("report", report)
-		act("computed", fence(map[string]any{"exit_code": 0, "end_how": "exit", "conclusion": "done"}))
-		act("persist", fence(map[string]any{"report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt}))
-		act("submit", fence(nil))
-	case "lost":
-		upload("report", report)
-		// The lease lapses past the grace (the fixture's clock: a superuser
-		// moves the expiry back behind the triggers), and the lease loop runs.
-		var db string
-		must(t, f.pool.QueryRow(ctx, `SELECT current_database()`).Scan(&db))
-		admin, err := pgx.Connect(ctx, os.Getenv("AGENTRT_TEST_PG")+" dbname="+db)
-		must(t, err)
-		_, err = admin.Exec(ctx, `SET session_replication_role = replica`)
-		must(t, err)
-		_, err = admin.Exec(ctx, `UPDATE agentrt.attempt SET lease_expires_at = clock_timestamp() - make_interval(secs => $2) WHERE attempt_id = $1`,
-			attempt, (store.Grace + time.Minute).Seconds())
-		must(t, err)
-		must(t, admin.Close(ctx))
-		if _, lost, err := store.SweepLeases(ctx, f.pool); err != nil || lost != 1 {
-			t.Fatalf("stage %q: the sweep took %d lost (%v)", name, lost, err)
-		}
-		act("salvage", map[string]any{"host_id": "h1", "report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})
-		act("ended", map[string]any{"host_id": "h1", "end_how": "lease_lost", "group_cleared": true})
-		// The task is ready again: a second attempt, live, ends with a
-		// restart of agentd: failed, the task released (review 451 A-2).
-		again := ok("POST claim", "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}})
-		if again["task_id"] != f.task || again["attempt_no"] != float64(2) {
-			t.Fatalf("stage %q: claimed again %v", name, again)
-		}
-		second := again["attempt_id"].(string)
-		ok("POST attempts/{id}/start", "agentd:h1", "POST", "attempts/"+second+"/start",
-			map[string]any{"host_id": "h1", "lease_epoch": again["lease_epoch"], "model_provider": "cursor-mix"})
-		ok("POST attempts/{id}/ended", "agentd:h1", "POST", "attempts/"+second+"/ended",
-			map[string]any{"host_id": "h1", "end_how": "daemon_restart", "group_cleared": true})
-		if st := f.snapshot(t)[rowKey{"attempt", second}]; st != "failed" {
-			t.Fatalf("stage %q: the live attempt that ended is %s", name, st)
-		}
-	}
-	want := map[string]string{"running": "running", "submitted": "submitted", "lost": "ready"}[name]
-	if got := f.snapshot(t)[rowKey{"task", f.task}]; got != want {
-		t.Fatalf("stage %q: the task is %s", name, got)
-	}
+	t.Fatalf("unknown stage %q", name)
 	return s
 }
 
@@ -272,7 +197,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 // valid request, in an order in which each finds what it needs.
 func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, caller, method, path string, body any, header ...string) map[string]any, key rptest.Key) {
 	t.Helper()
-	ok("POST goals", "admin", "POST", "goals", map[string]any{"idempotency_key": "v3", "goal": "do this", "repo": "bifrost-platform"})
 	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": store.Seat, "kind": "ask", "body": "status?"})
 	ok("POST messages/ack", "seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []any{msg["message_id"]}})
 	ctl := ok("POST controls", "operator", "POST", "controls", map[string]any{"idempotency_key": "v4", "scope": "host", "scope_ref": "h2",
@@ -315,10 +239,6 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST rules/{rule_id}/proposals", "operator", "POST", "rules/routing:dev/proposals",
 		map[string]any{"idempotency_key": "v8", "text": next("3", "loosen", "95"), "reason": "fuzz"})
 
-	ok("POST pools/{id}/reading", "admin", "POST", "pools/cursor:owner:monthly/reading", map[string]any{"idempotency_key": "v9",
-		"used_fraction": 0.2, "resets_at": time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)})
-	ok("GET prunes", "agentd:h1", "GET", "prunes?host_id=h1", nil)
-	ok("POST prunes", "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": []any{}})
 }
 
 // round sends n bodies to every route from every caller (twice n to a write

@@ -6,12 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -60,103 +58,6 @@ func nilIfEmpty(s string) any {
 		return nil
 	}
 	return s
-}
-
-// Controls: anyone sets, the Owner lifts; a pause stops claims and its lift
-// lets them go on; a drain is a control on the host; bad controls write
-// nothing.
-func TestControlsAndHosts(t *testing.T) {
-	t.Parallel()
-	pool, task := world(t)
-	s := server(t, pool)
-	claimBody := map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}}}
-
-	code, hosts := call(t, s, "viewer", "GET", "hosts", nil)
-	if h1 := hostOf(t, hosts, "h1"); code != http.StatusOK || h1["online"] != false || h1["poll_age_s"] != nil {
-		t.Fatalf("a host that never polled: %d %v", code, hosts)
-	}
-	pause := map[string]any{"idempotency_key": "p1", "scope": "global", "kind": "pause", "reason": "test"}
-	code, set := call(t, s, "viewer", "POST", "controls", pause, session, "s1")
-	if code != http.StatusOK || set["kind"] != "pause" {
-		t.Fatalf("a viewer pauses: %d %v", code, set)
-	}
-	if got, again := call(t, s, "viewer", "POST", "controls", pause, session, "s1"); got != http.StatusOK || again["control_id"] != set["control_id"] {
-		t.Fatalf("a retry: %d %v", got, again)
-	}
-	var by string
-	must(t, pool.QueryRow(ctx, `SELECT set_by_actor_id FROM agentrt.control WHERE control_id = $1`, set["control_id"]).Scan(&by))
-	if by != "thread:s1" {
-		t.Fatalf("set by %s", by)
-	}
-	if got, _ := call(t, s, "agentd:h1", "POST", "claim", claimBody); got != http.StatusNoContent {
-		t.Fatalf("a claim under a global pause: %d", got)
-	}
-	id := set["control_id"].(string)
-	for _, who := range []string{"operator", "viewer", "agentd:h1"} {
-		if got, _ := call(t, s, who, "DELETE", "controls/"+id, nil, session, "s1"); got != http.StatusUnauthorized && got != http.StatusForbidden {
-			t.Fatalf("%s lifted a control: %d", who, got)
-		}
-	}
-	code, listed := call(t, s, "viewer", "GET", "controls", nil)
-	if code != http.StatusOK || len(listed["controls"].([]any)) != 1 {
-		t.Fatalf("controls in force: %d %v", code, listed)
-	}
-	if got, out := call(t, s, "admin", "DELETE", "controls/"+id, nil); got != http.StatusOK || out["cleared"] != true || out["cleared_by"] != "owner" {
-		t.Fatalf("the Owner lifts: %d %v", got, out)
-	}
-	if got, out := call(t, s, "admin", "DELETE", "controls/"+id, nil); got != http.StatusOK || out["cleared"] != false {
-		t.Fatalf("lifted twice: %d %v", got, out)
-	}
-	if got, _ := call(t, s, "admin", "DELETE", "controls/c_nope", nil); got != http.StatusNotFound {
-		t.Fatalf("a control there is not: %d", got)
-	}
-	if got, out := call(t, s, "viewer", "GET", "controls?all=1", nil); got != http.StatusOK || len(out["controls"].([]any)) != 1 {
-		t.Fatalf("every control: %d %v", got, out)
-	} else if got, out := call(t, s, "viewer", "GET", "controls", nil); got != http.StatusOK || len(out["controls"].([]any)) != 0 {
-		t.Fatalf("controls in force after the lift: %d %v", got, out)
-	}
-
-	if got, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody); got != http.StatusOK || claim["task_id"] != task {
-		t.Fatalf("a claim after the lift: %d %v", got, claim)
-	}
-	_, hosts = call(t, s, "viewer", "GET", "hosts", nil)
-	if h1 := hostOf(t, hosts, "h1"); h1["live_attempts"] != float64(1) {
-		t.Fatalf("h1 with its attempt: %v", h1)
-	}
-
-	// An agentd stops its own work, recorded as its host.
-	code, own := call(t, s, "agentd:h1", "POST", "controls", map[string]any{"idempotency_key": "s1", "scope": "task", "scope_ref": task,
-		"kind": "stop", "reason": "the executor misbehaves"})
-	if code != http.StatusOK {
-		t.Fatalf("agentd stops: %d %v", code, own)
-	}
-	must(t, pool.QueryRow(ctx, `SELECT set_by_actor_id FROM agentrt.control WHERE control_id = $1`, own["control_id"]).Scan(&by))
-	if by != "host:h1" {
-		t.Fatalf("set by %s", by)
-	}
-
-	var before int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.control`).Scan(&before))
-	for name, body := range map[string]map[string]any{
-		"no key":         {"scope": "global", "kind": "stop", "reason": "x"},
-		"no reason":      {"idempotency_key": "b1", "scope": "global", "kind": "stop"},
-		"bad scope":      {"idempotency_key": "b2", "scope": "planet", "kind": "stop", "reason": "x"},
-		"drain a task":   {"idempotency_key": "b3", "scope": "task", "scope_ref": task, "kind": "drain", "reason": "x"},
-		"global ref":     {"idempotency_key": "b4", "scope": "global", "scope_ref": "x", "kind": "stop", "reason": "x"},
-		"no ref":         {"idempotency_key": "b5", "scope": "mission", "kind": "stop", "reason": "x"},
-		"missing task":   {"idempotency_key": "b6", "scope": "task", "scope_ref": "t_nope", "kind": "stop", "reason": "x"},
-		"missing host":   {"idempotency_key": "b7", "scope": "host", "scope_ref": "h9", "kind": "pause", "reason": "x"},
-		"missing schema": {"idempotency_key": "b8", "scope": "mission", "scope_ref": "M-9", "kind": "pause", "reason": "x"},
-	} {
-		if got, out := call(t, s, "operator", "POST", "controls", body, session, "s2"); got != http.StatusUnprocessableEntity {
-			t.Errorf("%s: %d %v", name, got, out)
-		}
-	}
-	var after int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.control`).Scan(&after))
-	if after != before {
-		t.Fatalf("refused controls wrote %d", after-before)
-	}
 }
 
 func hostOf(t *testing.T, hosts map[string]any, id string) map[string]any {
@@ -310,80 +211,6 @@ func TestDuplicateUploadChecksWriter(t *testing.T) {
 	}
 }
 
-// Review 176 part 2 B2, narrowed by review 177 B1: what each control does
-// to a claim (a host under it, or any host for the wider scopes, takes no
-// new work; another host still does) and to the heartbeat of a started
-// attempt (only a stop tells it to stop; agentd ending the work on that
-// signal is agentd's test, TestStopAndHardLimit).
-func TestControlMatrix(t *testing.T) {
-	t.Parallel()
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	claimOf := func(host string) map[string]any {
-		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
-	}
-	for _, c := range []struct {
-		scope, kind string
-		stopsWork   bool
-	}{
-		{"global", "stop", true}, {"global", "pause", false},
-		{"mission", "stop", true}, {"mission", "pause", false},
-		{"task", "stop", true}, {"task", "pause", false},
-		{"host", "stop", true}, {"host", "pause", false}, {"host", "drain", false},
-	} {
-		t.Run(c.scope+"-"+c.kind, func(t *testing.T) {
-			pool, task := world(t)
-			s := server(t, pool)
-			for _, h := range []string{"h2", "h3"} {
-				must(t, store.RegisterHost(ctx, pool, "owner", h, "dev"))
-			}
-			code, claim := call(t, s, "agentd:h1", "POST", "claim", claimOf("h1"))
-			if code != http.StatusOK {
-				t.Fatalf("claim: %d %v", code, claim)
-			}
-			attempt := claim["attempt_id"].(string)
-			fence := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"], "model_provider": "cursor-mix"}
-			if got, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/start", fence); got != http.StatusOK {
-				t.Fatalf("start: %d %v", got, out)
-			}
-			second := readyTask(t, pool)
-			set := func(key, ref string) {
-				t.Helper()
-				if got, out := call(t, s, "operator", "POST", "controls", map[string]any{"idempotency_key": key, "scope": c.scope,
-					"scope_ref": ref, "kind": c.kind, "reason": "test"}, session, "s1"); got != http.StatusOK {
-					t.Fatalf("control on %s: %d %v", ref, got, out)
-				}
-			}
-			// Under the control: the running attempt's own scope, and the
-			// one that would hand out the second task.
-			switch c.scope {
-			case "global":
-				set("k1", "")
-			case "mission":
-				set("k1", "M-1")
-			case "task":
-				set("k1", task)
-				set("k2", second)
-			case "host":
-				set("k1", "h1")
-				set("k2", "h2")
-			}
-			if got, _ := call(t, s, "agentd:h2", "POST", "claim", claimOf("h2")); got != http.StatusNoContent {
-				t.Errorf("a claim under a %s %s: %d", c.scope, c.kind, got)
-			}
-			if c.scope == "host" {
-				if got, out := call(t, s, "agentd:h3", "POST", "claim", claimOf("h3")); got != http.StatusOK || out["task_id"] != second {
-					t.Errorf("a host the %s does not name: %d %v", c.kind, got, out)
-				}
-			}
-			got, beat := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat",
-				map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]})
-			if got != http.StatusOK || beat["stop"] != c.stopsWork {
-				t.Errorf("the started attempt's heartbeat under a %s %s: %d %v", c.scope, c.kind, got, beat)
-			}
-		})
-	}
-}
-
 // Review 177 A1: a stop the Owner lifted, asked for again with a new key,
 // is a new stop in force; a retry with the old key is answered with the old
 // (lifted) one.
@@ -426,62 +253,6 @@ func readyTask(t *testing.T, pool *pgxpool.Pool) string {
 		return store.MarkReady(ctx, tx, "controller", id)
 	}))
 	return id
-}
-
-// Review 176 part 2 B2: online is a poll within store.HostLostAfter (30
-// seconds since W-31 3.5); a same key with another control is a conflict; a
-// lift at the same time is recorded once.
-func TestHostsAndControlEdges(t *testing.T) {
-	t.Parallel()
-	pool, _ := world(t)
-	s := server(t, pool)
-	must(t, store.RegisterHost(ctx, pool, "owner", "h2", "dev"))
-	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '29 seconds' WHERE host_id = 'h1'`,
-		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '31 seconds' WHERE host_id = 'h2'`)
-	_, hosts := call(t, s, "viewer", "GET", "hosts", nil)
-	if h1, h2 := hostOf(t, hosts, "h1"), hostOf(t, hosts, "h2"); h1["online"] != true || h2["online"] != false ||
-		h1["reported_offline"] != false || h2["reported_offline"] != true {
-		t.Fatalf("29 and 31 seconds since the last poll: %v %v", h1, h2)
-	}
-	// An API whose runtime routes became ready just now (review 528 A1b): h2,
-	// 31 s silent, is not lost until it stays so 30 s more, on GET /hosts and
-	// on GET /progress alike.
-	back := time.Now()
-	fresh := server(t, pool, func(a *agentrtapi.API) { a.Back = func() time.Time { return back } })
-	_, hosts = call(t, fresh, "viewer", "GET", "hosts", nil)
-	if h2 := hostOf(t, hosts, "h2"); h2["online"] != false || h2["reported_offline"] != false || h2["claiming"] != nil {
-		t.Fatalf("h2 31 s silent, the API just ready: %v", h2)
-	}
-	_, prog := call(t, fresh, "viewer", "GET", "progress", nil)
-	for _, h := range prog["hosts"].([]any) {
-		if h := h.(map[string]any); h["host_id"] == "h2" && h["reported_offline"] != false {
-			t.Fatalf("progress, the API just ready: %v", h)
-		}
-	}
-	body := map[string]any{"idempotency_key": "k", "scope": "global", "kind": "pause", "reason": "one"}
-	_, set := call(t, s, "viewer", "POST", "controls", body, session, "s1")
-	body["reason"] = "two"
-	if code, out := call(t, s, "viewer", "POST", "controls", body, session, "s1"); code != http.StatusConflict || out["error"] != "key_conflict" {
-		t.Fatalf("a key with another control: %d %v", code, out)
-	}
-	id := set["control_id"].(string)
-	lifts := make(chan int, 4)
-	for range 4 {
-		go func() {
-			code, _ := call(t, s, "admin", "DELETE", "controls/"+id, nil)
-			lifts <- code
-		}()
-	}
-	for range 4 {
-		if code := <-lifts; code != http.StatusOK {
-			t.Errorf("a lift: %d", code)
-		}
-	}
-	var n int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'control_cleared' AND body_json->>'control_id' = $1`, id).Scan(&n))
-	if n != 1 {
-		t.Fatalf("%d control_cleared for four lifts at once", n)
-	}
 }
 
 // Review 176 part 2 B2: the tree is depth first across siblings, and a step

@@ -1,5 +1,4 @@
 import { authedFetch, pathSegment } from '@/api/client'
-import { signInSafeError } from '@/lib/signInError'
 
 export const AGENT_RUNTIME_POLL_MS = 5_000
 export type RuntimeRecord = Record<string, unknown>
@@ -115,10 +114,6 @@ export type RuntimeProgress = {
 }
 export type RuntimeEvent = {
   seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
-}
-export type GoalResult = {
-  mission_id: string; mission_state: string; waiting: string; task_id: string; repo: string; repos: string[]; base_commit: string
-  spec_artifact_id: string
 }
 /**
  * The repositories a goal may name: the platform's `store.Repos` (a Go test,
@@ -257,12 +252,6 @@ export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
   return records(v).map(e => ({ seq: number(e.seq), event_type: text(e.event_type), at: text(e.at), actor_id: text(e.actor_id),
     task_id: text(e.task_id), attempt_id: text(e.attempt_id), body_json: record(e.body_json) }))
 }
-export function parseGoalResult(v: unknown): GoalResult {
-  const r = record(v)
-  return { mission_id: text(r.mission_id), mission_state: text(r.mission_state), waiting: text(r.waiting),
-    task_id: text(r.task_id), repo: text(r.repo), repos: strings(r.repos), base_commit: text(r.base_commit),
-    spec_artifact_id: text(r.spec_artifact_id) }
-}
 export async function fetchRuntimeProgress(signal?: AbortSignal): Promise<RuntimeProgress> {
   const r = await authedFetch('Agent runtime', '/api/v1/agentrt/progress', { signal })
   return parseRuntimeProgress(await r.json())
@@ -293,22 +282,4 @@ export async function fetchRuntimeTaskDetail(id: string, signal?: AbortSignal): 
 export async function fetchRuntimeArtifact(id: string, signal?: AbortSignal): Promise<string> {
   const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${pathSegment(id)}`, { signal })
   return r.text()
-}
-async function goalError(prefix: string, response: Response, token = ''): Promise<Error> {
-  let message = `HTTP ${response.status}`
-  try {
-    const r = record(await response.json())
-    message = text(r.message) || text(r.error) || message
-  } catch { /* Non-JSON errors retain the HTTP status. */ }
-  return new Error(signInSafeError(`${prefix}: ${message}`, token, response.status))
-}
-/** A goal of one repository is sent as repo, as before; of several, as repos. */
-export async function submitRuntimeGoal(goal: string, key: string, repos: readonly string[] = ['bifrost-platform']): Promise<GoalResult> {
-  const named = repos.length === 1 ? { repo: repos[0] } : { repos }
-  const r = await authedFetch('Goal', '/api/v1/agentrt/goals', {
-    method: 'POST', body: JSON.stringify({ idempotency_key: key, goal, ...named }),
-  }, goalError)
-  const result = parseGoalResult(await r.json())
-  if (!result.mission_id) throw new Error('Goal: invalid platform response; retry with the same goal.')
-  return result
 }

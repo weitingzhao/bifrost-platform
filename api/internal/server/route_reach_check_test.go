@@ -83,14 +83,10 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/plan-pace": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R6:6.1-2 (AM-2 / AM-4): the delivery readings and their comparison
 	// with a baseline, for every reader, as plan-pace is (read-only).
-	"GET /api/v1/agentrt/metrics/readings": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	"GET /api/v1/agentrt/metrics/compare":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5 phase 2 step 6: the plan's step timeline and the delivery stages,
 	// read-only, for every reader, as plan-view is.
-	"GET /api/v1/agentrt/plan-timeline": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	"GET /api/v1/agentrt/delivery":      {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	"GET /api/v1/agentrt/delivery": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// R5:5.7-8 slice 1: the coordinator pins' share, read-only, every reader.
-	"GET /api/v1/agentrt/pin-share": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// M-368 waves: the list for every reader; opening and closing behind
 	// the same proposers' gate as POST missions (operator, admin and the
 	// trade satellite reach it there too).
@@ -112,7 +108,6 @@ var intendedRouteAdditions = map[string][]string{
 // own observations. Keep the historical snapshot; remove only these exact
 // reporter/proposal pairs, so either restored access or another lost route fails.
 var reporterProposalRemovals = []string{
-	"POST /api/v1/agentrt/goals",
 	"POST /api/v1/agentrt/messages",
 	"POST /api/v1/agentrt/messages/ack",
 	"POST /api/v1/agentrt/plan/proposals",

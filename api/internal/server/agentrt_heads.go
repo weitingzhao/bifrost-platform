@@ -143,35 +143,6 @@ func readAdvertisement(ctx context.Context, access func(context.Context) (delive
 	return body, nil
 }
 
-// giteaAgentHeads reads every attempt branch (refs/heads/agent/…) of
-// <org>/<repo> and the commit it names, from the same advertisement (TD-383:
-// the branches the cleanup may hand out).
-func giteaAgentHeads(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) func(context.Context, string) ([]store.AgentHead, error) {
-	c := *client
-	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	client = &c
-	return func(ctx context.Context, repo string) ([]store.AgentHead, error) {
-		if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
-			return nil, fmt.Errorf("%w: %q is not a repository", store.ErrState, repo)
-		}
-		body, err := readAdvertisement(ctx, access, org, repo, client)
-		if err != nil {
-			return nil, err
-		}
-		refs, err := advertisedRefs(body)
-		if err != nil {
-			return nil, fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
-		}
-		var out []store.AgentHead
-		for name, oid := range refs {
-			if strings.HasPrefix(name, "refs/heads/agent/") {
-				out = append(out, store.AgentHead{Repo: repo, Ref: name, Commit: oid})
-			}
-		}
-		return out, nil
-	}
-}
-
 const (
 	uploadPackAdvertisement = "application/x-git-upload-pack-advertisement"
 	// maxAdvertisement bounds what is read: an agent repository's refs are

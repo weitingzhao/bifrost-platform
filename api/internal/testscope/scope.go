@@ -248,7 +248,7 @@ func testdataReaders(g *graph, data map[string][]string) (map[string]map[string]
 }
 
 // ExplicitGuards supplements guards discovered by scanning test source.
-var ExplicitGuards = map[string][]string{"internal/cluster": {"TestRemovedPrimarySQLHelperStaysGone"}, "internal/agentrt/agentrtapi": {"TestPools"}, "internal/safego": {"TestNoUnguardedGoroutines"}}
+var ExplicitGuards = map[string][]string{"internal/cluster": {"TestRemovedPrimarySQLHelperStaysGone"}, "internal/safego": {"TestNoUnguardedGoroutines"}}
 
 func testNames(f *ast.File) []string {
 	var out []string

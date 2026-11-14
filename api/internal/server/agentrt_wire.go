@@ -42,9 +42,8 @@ var agentrtDatabase = map[string]string{
 
 // agentRuntime is the agent runtime as this process runs it.
 type agentRuntime struct {
-	api           *agentrtapi.API
-	stop          func()
-	materialCache store.GrantMaterialCache
+	api  *agentrtapi.API
+	stop func()
 	// env is AGENTRT_ENV: whose runtime this platform runs.
 	env string
 	// schema is what the platform last read of the database's agentrt
@@ -82,9 +81,8 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), Commits: s.agentRuntimeCommits(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
-		MainResults: s.agentRuntimeMainResults(),
-		DiskFloor:   diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), Commits: s.agentRuntimeCommits(),
+		DiskFloor: diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate(rt.env)
 	if s.releases != nil && s.releases.Service() != nil {

@@ -52,14 +52,8 @@ func TestAgentRuntimeRoutesWithoutDatabase(t *testing.T) {
 		srv.Router().ServeHTTP(rec, req)
 		return rec.Code
 	}
-	if code := do(http.MethodPost, "/api/v1/agentrt/claim", "", `{}`); code != http.StatusUnauthorized {
-		t.Fatalf("anonymous claim: %d, want 401", code)
-	}
-	if code := do(http.MethodPost, "/api/v1/agentrt/claim", "fixture-viewer-agentrt", `{}`); code != http.StatusUnauthorized {
-		t.Fatalf("viewer claim: %d, want 401", code)
-	}
-	if code := do(http.MethodPost, "/api/v1/agentrt/claim", "fixture-agentd-agentrt", `{"host_id":"mac-dev"}`); code != http.StatusServiceUnavailable {
-		t.Fatalf("agentd claim without a database: %d, want 503", code)
+	if code := do(http.MethodGet, "/api/v1/agentrt/progress", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous read: %d, want 401", code)
 	}
 	if code := do(http.MethodGet, "/api/v1/agentrt/whoami", "fixture-viewer-agentrt", ""); code != http.StatusServiceUnavailable {
 		t.Fatalf("whoami without a database: %d, want 503", code)

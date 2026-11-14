@@ -4,7 +4,6 @@ import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import type { MissionEta, RuntimeProgress } from '@/api/agentRuntime'
 import { record, text } from '@/api/agentRuntime'
 import type { RuntimeRound } from '@/api/agentRuntimePlan'
-import type { PoolView } from '@/api/agentRuntimePools'
 import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/alertMapping'
 import type { MappedAlert } from '@/lib/observability/types'
 import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
@@ -268,30 +267,6 @@ export function planRows(round: RuntimeRound | undefined): PlanRow[] {
     const tone: Tone = item.state === 'done' ? 'ok' : item.state === 'todo' ? 'muted' : 'info'
     return { key: item.key, name: item.name, done: item.done ?? 0, total: item.total ?? 0, manual: item.manual ?? 0, stopped: item.stopped ?? 0, tone,
       tag: live ? 'now' : i === firstTodo ? 'next' : '' }
-  })
-}
-
-/** One vendor pool as Work and Progress show it, from GET /agentrt/pools (2.5 G7 A): what was read and when. */
-export type PoolRow = {
-  id: string; name: string; used: number | null; readAt: string | null
-  /** Why the reading is old ("" while it is current): a reading is shown with its time and marked old, never taken as now. */
-  old: string; tone: Tone; cooling: boolean; cooldownUntil: string | null
-}
-
-/** How long a reading is current: a day, or a short window's five hours (store.WindowLength). */
-const READING_CURRENT_MS: Record<PoolView['window'], number> = { short: 5 * 3600_000, weekly: 24 * 3600_000, monthly: 24 * 3600_000 }
-
-export function poolRows(pools: readonly PoolView[], now: number): PoolRow[] {
-  return pools.map(p => {
-    const used = p.used_fraction === null ? null : Math.round(p.used_fraction * 1000) / 10
-    const read = p.measured_at === null ? NaN : Date.parse(p.measured_at)
-    // The ledger's figures are counted here, not read from the vendor; only a reading can be old.
-    const old = used === null || !Number.isFinite(read) ? ''
-      : p.resets_at !== null && Date.parse(p.resets_at) <= now ? 'its window has reset since it was read'
-      : now - read > READING_CURRENT_MS[p.window] ? `read more than ${p.window === 'short' ? '5 hours' : 'a day'} ago` : ''
-    const tone: Tone = p.cooling ? 'fail' : used === null || old ? 'muted' : used >= 90 ? 'fail' : used >= 60 ? 'warn' : 'ok'
-    return { id: p.vendor_pool_id, name: [p.tool, p.window, p.account === 'owner' ? '' : p.account].filter(Boolean).join(' · '), used,
-      readAt: p.measured_at, old, tone, cooling: p.cooling, cooldownUntil: p.cooldown_until }
   })
 }
 

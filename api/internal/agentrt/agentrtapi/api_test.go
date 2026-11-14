@@ -143,16 +143,6 @@ var (
 // actionStore, when set, is the API's action store (bus_test.go).
 var actionStore *actions.Store
 
-// agentHeads, when set, are the attempt branches the API reads, by
-// repository, a nil list for a repository it cannot read; pruneNow, when
-// set, is the cleanup's clock (prune_test.go).
-var (
-	agentHeads map[string][]store.AgentHead
-	slowHeads  map[string]bool // read until the read's time runs out
-	mainRead   store.MainResults
-	pruneNow   func() time.Time
-)
-
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin, two seat tokens (one registered) and the
@@ -230,42 +220,6 @@ intake_tokens:
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
 		}, Anchor: anchor, Actions: actionStore}
-	if agentHeads != nil {
-		heads := agentHeads
-		api.AgentHeads = func(ctx context.Context, repo string) ([]store.AgentHead, error) {
-			if slowHeads[repo] {
-				<-ctx.Done()
-				return nil, ctx.Err()
-			}
-			if hs, ok := heads[repo]; ok && hs == nil {
-				return nil, fmt.Errorf("%s cannot be read", repo)
-			}
-			return heads[repo], nil
-		}
-		api.MainResults = func(ctx context.Context, repo string) (store.OnMain, bool) {
-			if mainRead == nil {
-				return nil, false
-			}
-			return mainRead(ctx, repo)
-		}
-		api.Now = func() time.Time {
-			if pruneNow != nil {
-				return pruneNow()
-			}
-			return time.Now()
-		}
-	}
-	if !noMain {
-		api.MainHead = func(_ context.Context, repo string) (string, error) {
-			mainsMu.Lock()
-			defer mainsMu.Unlock()
-			mains = append(mains, repo)
-			if mainFails {
-				return "", fmt.Errorf("gitea: unreachable")
-			}
-			return mainAt, nil
-		}
-	}
 	for _, f := range with {
 		f(api)
 	}
@@ -310,184 +264,10 @@ func artifactID(body []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// agentd's whole path over HTTP: claim, start, heartbeat, checkpoint,
-// upload, computed, persist, submit; retries answered from the key.
-func TestAgentdPath(t *testing.T) {
-	pool, task := world(t)
-	s := server(t, pool)
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	claimBody := map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}}
-
-	if code, _ := call(t, s, "viewer", "POST", "claim", claimBody); code != http.StatusUnauthorized {
-		t.Fatalf("a viewer claimed: %d", code)
-	}
-	if code, out := call(t, s, "agentd:h2", "POST", "claim", claimBody); code != http.StatusForbidden || out["error"] != "wrong_host" {
-		t.Fatalf("a token of h2 claimed for h1: %d %v", code, out)
-	}
-	for _, half := range []map[string]any{{"executor": "exec:cursor"}, {"provider": "cursor-mix"}} {
-		if code, _ := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1,
-			"tools": []any{half}}); code != http.StatusBadRequest {
-			t.Fatalf("a tool %v was answered %d", half, code)
-		}
-	}
-	status, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody)
-	if status != http.StatusOK || claim["task_id"] != task || claim["base_commit"] != commitA || claim["repo"] != "bifrost-platform" {
-		t.Fatalf("claim: %d %v", status, claim)
-	}
-	attempt := claim["attempt_id"].(string)
-	fence := func(extra map[string]any) map[string]any {
-		b := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]}
-		for k, v := range extra {
-			b[k] = v
-		}
-		return b
-	}
-	for _, step := range []struct {
-		action string
-		body   map[string]any
-	}{
-		{"start", fence(map[string]any{"model_provider": "cursor-mix"})},
-		{"heartbeat", fence(nil)},
-	} {
-		if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body); code != http.StatusOK {
-			t.Fatalf("%s: %d %v", step.action, code, out)
-		}
-	}
-	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat",
-		map[string]any{"host_id": "h1", "lease_epoch": 999}); code != http.StatusConflict || out["error"] != "fenced" {
-		t.Fatalf("an old epoch: %d %v", code, out)
-	}
-	// A heartbeat is h1's contact, not a call of its claim loop (review 527
-	// A3): with its last claim 10 minutes old and its attempt reporting, h1 is
-	// online, takes no work, and is not reported offline.
-	legacy(t, pool, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h1'`)
-	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); code != http.StatusOK {
-		t.Fatalf("heartbeat: %d %v", code, out)
-	}
-	_, beat := call(t, s, "viewer", "GET", "hosts", nil)
-	if h1 := hostOf(t, beat, "h1"); h1["online"] != true || h1["claiming"] != false || h1["reported_offline"] != false ||
-		h1["poll_age_s"].(float64) < 590 {
-		t.Fatalf("h1 heartbeating, its claims 10 minutes old: %v", h1)
-	}
-	for _, field := range []string{"phase", "line"} {
-		if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{field: "x"})); code != http.StatusBadRequest {
-			t.Fatalf("a %s nothing keeps was answered %d", field, code)
-		}
-	}
-
-	report := []byte("# done\nall tests pass\n")
-	leaky := []byte("# done\nsee /Users/someone/work\n")
-	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "report"); code != http.StatusUnprocessableEntity {
-		t.Fatalf("a report with a local path: %d %v", code, out)
-	}
-	if code, _ := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(leaky), report, "X-Artifact-Kind", "report"); code != http.StatusBadRequest {
-		t.Fatalf("a body under another hash: %d", code)
-	}
-	if code, _ := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "task_spec"); code != http.StatusForbidden {
-		t.Fatalf("agentd uploaded a task spec: %d", code)
-	}
-	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "report", "Content-Type", "text/markdown"); code != http.StatusOK {
-		t.Fatalf("upload: %d %v", code, out)
-	}
-	// A3: the first upload of a body is recorded once; uploading it again is not.
-	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "report"); code != http.StatusOK || out["created"] != false {
-		t.Fatalf("a second upload: %d %v", code, out)
-	}
-	var puts int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'artifact_put' AND body_json->>'artifact_id' = $1
-	  AND body_json->>'uploaded_by' = 'agentd:h1' AND actor_id = 'host:h1'`, artifactID(report)).Scan(&puts))
-	if puts != 1 {
-		t.Fatalf("%d artifact_put events for one body", puts)
-	}
-	// A1: raw output H8 lets through cannot take the report's place.
-	log := []byte("compiling in /Users/someone/work\n")
-	if code, _ := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(log), log, "X-Artifact-Kind", "log_tail"); code != http.StatusOK {
-		t.Fatalf("a log tail: %d", code)
-	}
-	exit := 0
-	for _, step := range []struct {
-		action string
-		body   map[string]any
-	}{
-		{"checkpoint", fence(map[string]any{"checkpoint_seq": 1, "artifacts": []string{artifactID(report)}})},
-		{"computed", fence(map[string]any{"exit_code": exit, "end_how": "exit", "conclusion": "done"})},
-	} {
-		if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body); code != http.StatusOK {
-			t.Fatalf("%s: %d %v", step.action, code, out)
-		}
-	}
-	heads = nil
-	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
-		fence(map[string]any{"report": artifactID(log), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})); code != http.StatusConflict || out["error"] != "state" {
-		t.Fatalf("a log tail as the report: %d %v", code, out)
-	}
-	if fmt.Sprint(heads) != fmt.Sprintf("[bifrost-platform|%s]", claim["pushed_ref"]) {
-		t.Fatalf("branch heads read: %v", heads)
-	}
-	// A report stored by another path (not an upload) is scanned when it is bound.
-	var planted string
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		var err error
-		planted, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("# done\nsee C:\\work\n"))
-		return err
-	}))
-	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
-		fence(map[string]any{"report": planted, "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})); code != http.StatusConflict || out["error"] != "state" {
-		t.Fatalf("a report with a local path: %d %v", code, out)
-	}
-	for _, step := range []struct {
-		action string
-		body   map[string]any
-	}{
-		{"persist", fence(map[string]any{"report": artifactID(report), "artifacts": []string{artifactID(log)},
-			"pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})},
-		{"submit", fence(nil)},
-		{"submit", fence(nil)},
-	} {
-		if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body); code != http.StatusOK {
-			t.Fatalf("%s: %d %v", step.action, code, out)
-		}
-	}
-	status, got := call(t, s, "viewer", "GET", "tasks/"+task, nil)
-	if status != http.StatusOK || got["state"] != "submitted" {
-		t.Fatalf("task: %d %v", status, got)
-	}
-	if code, _ := call(t, s, "", "GET", "tasks/"+task, nil); code != http.StatusUnauthorized {
-		t.Fatalf("no token read a task: %d", code)
-	}
-	if code, out := call(t, s, "agentd:h1", "POST", "claim", claimBody); code != http.StatusNoContent {
-		t.Fatalf("an empty queue answered %d %v", code, out)
-	}
-	// What h1 offers is recorded once, whatever the claims (W-31 3.5), and
-	// GET /hosts says it.
-	_, hosts := call(t, s, "viewer", "GET", "hosts", nil)
-	h1 := hostOf(t, hosts, "h1")
-	if offered, _ := h1["offered"].([]any); len(offered) != 1 || offered[0].(map[string]any)["executor"] != "exec:cursor" ||
-		h1["offered_at"] == nil || h1["reported_offline"] != false {
-		t.Fatalf("h1: %v", h1)
-	}
-	var notes int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'offers:host:h1' AND body_json ? 'offered'`).Scan(&notes))
-	if notes != 1 {
-		t.Fatalf("%d records of what h1 offers", notes)
-	}
-	// A claim ends the prune round h1 was in (review 526 A1).
-	must(t, store.OpenPruneRound(ctx, pool, "h1", 1))
-	if code, out := call(t, s, "agentd:h1", "POST", "claim", claimBody); code != http.StatusNoContent {
-		t.Fatalf("a claim: %d %v", code, out)
-	}
-	var round string
-	must(t, pool.QueryRow(ctx, `SELECT body_json->>'prune_round' FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`,
-		store.HostPruneStream("h1")).Scan(&round))
-	if round != "closed" {
-		t.Fatalf("h1's prune round after a claim: %q", round)
-	}
-}
-
 // With no database the routes answer 503 and nothing else happens.
 func TestNotConfigured(t *testing.T) {
 	s := server(t, nil)
-	if code, out := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1"}); code != http.StatusServiceUnavailable {
+	if code, out := call(t, s, "viewer", "GET", "progress", nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("%d %v", code, out)
 	}
 }

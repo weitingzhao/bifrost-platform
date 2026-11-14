@@ -7,7 +7,6 @@
 package agentrtapi
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"sync"
 	"time"
 
@@ -62,21 +60,11 @@ type API struct {
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.
 	Anchor string
-	// MainHead reads a repository's main where agentd clones it, the base of
-	// a goal's task; nil answers POST /goals 503.
-	MainHead MainHead
 	// Actions keeps attempts' actions in redis-agents (W-31 2.3); nil keeps
 	// none: a heartbeat's actions are refused in its answer, the read 503.
 	Actions *actions.Store
-	// AgentHeads reads the attempt branches agentd may be given to delete
-	// (TD-383, prune.go); nil gives none. MainResults reads what a
-	// repository's main holds of the runtime's results; nil keeps the
-	// branches of accepted results that landed. Now is the clock the
-	// cleanup's rule reads,
-	// time.Now when nil.
-	AgentHeads  AgentHeads
-	MainResults store.MainResults
-	Now         func() time.Time
+	// Now is the clock; time.Now when nil.
+	Now func() time.Time
 	// Sessions counts the retained agent sessions by binding for the plan
 	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
 	// leaves it out and says why in the warnings.
@@ -94,14 +82,6 @@ type API struct {
 	Back func() time.Time
 }
 
-// pinReason is PinReason, warn when unset.
-func (a *API) pinReason() store.PinReasonMode {
-	if a.PinReason == "" {
-		return store.PinReasonWarn
-	}
-	return a.PinReason
-}
-
 // back is Back, or the zero time.
 func (a *API) back() time.Time {
 	if a.Back == nil {
@@ -111,14 +91,6 @@ func (a *API) back() time.Time {
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
-
-// claimPollLimit bounds one poll of a claim, which neither the long poll's
-// deadline nor the client cuts (TD-399). From the handler's start, a claim
-// works for at most its wait (25 seconds) and one last poll with the
-// read-back of a failed commit (store.ConfirmLimit): 36 seconds, which
-// leaves agentd's 40-second client timeout 4 for connecting, sending the
-// request and reading the answer. A body read is not bounded here.
-const claimPollLimit = 8 * time.Second
 
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
 // whoami both read them. agentd, whose token is bound to one host, claims,
@@ -160,7 +132,7 @@ func may(name string) []actuation.Role {
 // behind the roles of its ability.
 func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	gate := func(name string) func(http.Handler) http.Handler { return auth.RequireAny(may(name)...) }
-	read, agentd, propose, upload := gate("read"), gate("claim"), gate("propose"), gate("upload")
+	read, propose, upload := gate("read"), gate("propose"), gate("upload")
 	external := propose
 	propose = func(next http.Handler) http.Handler { return external(proposersOnly(next)) }
 	// Authentication first, so an anonymous write is refused as such even
@@ -169,15 +141,10 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	cfg := func(next http.Handler) http.Handler { return a.configured(pathParams(next)) }
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
-		r.With(agentd, cfg).Post("/claim", a.claim)
-		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
-		r.With(agentd, cfg).Get("/prunes", a.prunes)
-		r.With(agentd, cfg).Post("/prunes", a.reportPrunes)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)
-		r.With(propose, cfg).Post("/goals", a.proposeGoal)
 		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)
@@ -189,10 +156,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/events", a.getEvents)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan-view", a.getPlanView)
-		r.With(read, cfg).Get("/plan-timeline", a.getPlanTimeline)
 		r.With(read, cfg).Get("/delivery", a.getDelivery)
 		r.With(read, cfg).Get("/plan-pace", a.getPlanPace)
-		r.With(read, cfg).Get("/pin-share", a.getPinShare)
 		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
 		r.With(external, cfg).Post("/external-work", a.registerExternalWork)
 		r.With(external, cfg).Post("/external-work/{id}/events", a.postExternalEvent)
@@ -209,13 +174,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", a.proposeRule)
 		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
 		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
-		r.With(read, cfg).Get("/hosts", a.listHosts)
 		r.With(read, cfg).Get("/progress", a.progress)
-		r.With(read, cfg).Get("/pools", a.listPools)
-		r.With(read, cfg).Get("/capabilities", a.capabilities)
-		r.With(read, cfg).Get("/metrics/readings", a.metricReadings)
-		r.With(read, cfg).Get("/metrics/compare", a.metricCompare)
-		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
 		// Business issues (W-31 BI-1 slice 2): the crew's routes, for the
 		// issue readers only, and the seven an intake token opens.
 		a.mountIssues(r, auth, cfg)
@@ -263,20 +222,6 @@ func (a *API) configured(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-// boundHost is the host of the calling agentd token; the body must name it.
-func boundHost(w http.ResponseWriter, r *http.Request, named string) bool {
-	host, ok := actuation.AgentdHost(actuation.PrincipalFromContext(r.Context()))
-	if !ok {
-		writeError(w, http.StatusForbidden, "forbidden", "only an agentd token bound to a host may call this")
-		return false
-	}
-	if named != host {
-		writeError(w, http.StatusForbidden, "wrong_host", fmt.Sprintf("the token is bound to host %s, the body names %s", host, named))
-		return false
-	}
-	return true
 }
 
 func (a *API) logf(format string, args ...any) {
@@ -371,396 +316,10 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// hostBody is the part every agentd body carries.
-type hostBody struct {
-	HostID string `json:"host_id"`
-}
-
-type tool struct {
-	Executor string `json:"executor"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-}
-
-type claimRequest struct {
-	hostBody
-	FreeSlots int    `json:"free_slots"`
-	Tools     []tool `json:"tools"`
-	// The free bytes of the volumes the host's root and agentd's root are
-	// on (TD-415); an agentd from before it sends neither.
-	DiskFree *int64 `json:"disk_free_bytes,omitempty"`
-	RootFree *int64 `json:"root_free_bytes,omitempty"`
-	// The agentd build the host runs: its commit, whether the work tree had
-	// changes, and its binary's sha256; an agentd from before it sends none.
-	Build *store.AgentdBuild `json:"build,omitempty"`
-	// The host's headroom (R5 phase 2 step 3b, slotsignals.go): its
-	// one-minute load and cpus, its available and total memory; an agentd
-	// from before it sends none, one that cannot read a field leaves it out.
-	Load1    *float64 `json:"load1,omitempty"`
-	CPUs     *int     `json:"cpus,omitempty"`
-	MemAvail *int64   `json:"mem_avail_bytes,omitempty"`
-	MemTotal *int64   `json:"mem_total_bytes,omitempty"`
-}
-
-// signals is the headroom the request reports, nil when it reports none, or
-// why it cannot be taken.
-func (c claimRequest) signals() (*store.HostSignals, string) {
-	switch {
-	case (c.MemAvail == nil) != (c.MemTotal == nil):
-		return nil, "mem_avail_bytes and mem_total_bytes go together"
-	case c.CPUs != nil && *c.CPUs < 1:
-		return nil, "cpus is at least 1"
-	case c.MemTotal != nil && *c.MemTotal < 1:
-		return nil, "mem_total_bytes is at least 1"
-	case (c.Load1 == nil || c.CPUs == nil) && c.MemTotal == nil:
-		return nil, ""
-	}
-	s := &store.HostSignals{}
-	if c.Load1 != nil && c.CPUs != nil {
-		s.Load1, s.CPUs = *c.Load1, *c.CPUs
-	}
-	if c.MemTotal != nil {
-		s.MemAvail, s.MemTotal = *c.MemAvail, *c.MemTotal
-	}
-	return s, s.Valid()
-}
-
 // GrantedSlotsHeader carries a claim's granted_slots on every answer, the
 // 204 of a long poll that leased nothing included (store.GrantedSlots), so
 // agentd learns its count without a lease.
 const GrantedSlotsHeader = "X-Agentrt-Granted-Slots"
-
-// claim is the long poll for work: it tries until a task is leased or the
-// wait is over (204).
-func (a *API) claim(w http.ResponseWriter, r *http.Request) {
-	entered := time.Now()
-	var req claimRequest
-	if !decode(w, r, &req) || !boundHost(w, r, req.HostID) {
-		return
-	}
-	cr := store.ClaimRequest{HostID: req.HostID, FreeSlots: req.FreeSlots, DiskFloor: a.DiskFloor}
-	switch {
-	case (req.DiskFree == nil) != (req.RootFree == nil):
-		writeError(w, http.StatusBadRequest, "bad_request", "disk_free_bytes and root_free_bytes go together")
-		return
-	case req.DiskFree != nil && (*req.DiskFree < 0 || *req.RootFree < 0):
-		writeError(w, http.StatusBadRequest, "bad_request", "free disk is not negative")
-		return
-	case req.DiskFree != nil:
-		cr.Disk = &store.HostDisk{Host: *req.DiskFree, Root: *req.RootFree}
-	}
-	if req.Build != nil {
-		if err := req.Build.Check(); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", "build is a commit of 40 hex, a sha256 of 64 hex and modified")
-			return
-		}
-	}
-	head := store.Headroom{Load1: req.Load1, CPUs: req.CPUs, MemAvail: req.MemAvail, MemTotal: req.MemTotal}
-	if err := head.Check(); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-		return
-	}
-	sig, why := req.signals()
-	if why != "" {
-		writeError(w, http.StatusBadRequest, "bad_request", why)
-		return
-	}
-	cr.Signals = sig
-	for _, t := range req.Tools {
-		if t.Executor == "" || t.Provider == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
-			return
-		}
-		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
-	}
-	wait, poll := a.ClaimWait, a.ClaimPoll
-	if wait <= 0 || wait > 25*time.Second {
-		wait = 25 * time.Second
-	}
-	if poll <= 0 {
-		poll = time.Second
-	}
-	// The wait counts from the request's start, the host's registration in
-	// it, so the answer comes within the wait and one poll (TD-399).
-	ctx, cancel := context.WithDeadline(r.Context(), entered.Add(wait))
-	defer cancel()
-	// The external host claims only by id (claimpinned.go): refused before
-	// anything is written for it.
-	if err := store.RefuseExternalHost(ctx, a.DB, req.HostID); err != nil {
-		a.fail(w, err)
-		return
-	}
-	// The first valid claim of a token registers the host it is bound to.
-	if err := store.RegisterAgentdHost(ctx, a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
-		a.fail(w, err)
-		return
-	}
-	// Free disk is judged once a request, before its polls (TD-415): a
-	// change is recorded, for the controller to page; below the floor every
-	// poll leases nothing (store.ClaimRequest.Disk).
-	if cr.Disk != nil {
-		if _, err := store.RecordHostDisk(ctx, a.DB, req.HostID, *cr.Disk, a.DiskFloor); err != nil {
-			a.fail(w, err)
-			return
-		}
-	}
-	// The build it runs, likewise once a request and when it changed: the
-	// platform knows which build a host runs before and after a deploy.
-	if req.Build != nil {
-		if _, err := store.RecordHostBuild(ctx, a.DB, req.HostID, *req.Build); err != nil {
-			a.fail(w, err)
-			return
-		}
-	}
-	// Its headroom too, when it moved or its record got old (slotsignals.go).
-	if _, err := store.RecordHostHeadroom(ctx, a.DB, req.HostID, head); err != nil {
-		a.fail(w, err)
-		return
-	}
-	// What the host offers is recorded once a request too, when it changed
-	// (W-31 3.5): the controller judges the executors from it. A host that
-	// claims again has ended the prune round it was in (review 526 A1).
-	if _, err := store.RecordHostOffered(ctx, a.DB, req.HostID, cr.Tools, cr.Disk != nil && cr.Disk.Below(a.DiskFloor)); err != nil {
-		a.fail(w, err)
-		return
-	}
-	if err := store.ClosePruneRound(ctx, a.DB, req.HostID, "it claims again"); err != nil {
-		a.fail(w, err)
-		return
-	}
-	for {
-		if r.Context().Err() != nil {
-			return // the client went away: start no poll for it (one running may still lease it a task)
-		}
-		// Each poll runs to its end under its own bound, and the long poll
-		// stops only between polls (TD-399): cut by the deadline while it
-		// commits, pgx gives up on a commit whose outcome it does not know,
-		// and the claim answered a lease the server rolled back, or 204 for
-		// a poll the server committed. A commit that fails all the same (the
-		// bound, the connection) is read back by the store.
-		pctx, pcancel := context.WithTimeout(context.WithoutCancel(r.Context()), claimPollLimit)
-		cl, err := store.ClaimNext(pctx, a.DB, cr)
-		pcancel()
-		if err != nil {
-			a.fail(w, err)
-			return
-		}
-		if cl != nil {
-			body := map[string]any{
-				"task_id": cl.TaskID, "attempt_id": cl.AttemptID, "attempt_no": cl.AttemptNo, "mission_id": cl.MissionID,
-				"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID, "title": cl.Title,
-				"pushed_ref": cl.PushedRef, "effect_class": cl.Effect, "lease_epoch": cl.Epoch,
-				"lease_expires_at": cl.LeaseExpiresAt, "hard_limit_s": int(cl.HardLimit / time.Second),
-				"tool": tool{Executor: cl.Tool.Executor, Provider: cl.Tool.Provider, Model: cl.Tool.Model},
-			}
-			// What the task's earlier rounds failed (TD-405); an agentd from
-			// before it ignores the field.
-			if len(cl.Failed) > 0 {
-				failed := make([]map[string]any, 0, len(cl.Failed))
-				for _, f := range cl.Failed {
-					failed = append(failed, map[string]any{"method": f.Method, "attempt_no": f.AttemptNo, "artifact_id": f.Evidence})
-				}
-				body["failed_checks"] = failed
-			}
-			// What the attempt a check checks handed in (TD-409); an agentd
-			// from before it ignores the fields.
-			if cl.SubjectReport != "" {
-				body["subject_report_id"] = cl.SubjectReport
-			}
-			if cl.SubjectEffect != "" {
-				body["subject_effect"] = cl.SubjectEffect
-			}
-			// How many attempts the host may hold now, this one included
-			// (elastic slots); an agentd from before it ignores the field.
-			body["granted_slots"] = cl.GrantedSlots
-			w.Header().Set(GrantedSlotsHeader, strconv.Itoa(cl.GrantedSlots))
-			writeJSON(w, http.StatusOK, body)
-			return
-		}
-		select {
-		case <-ctx.Done():
-			a.grantedHeader(w, r.Context(), req.HostID)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		case <-time.After(poll):
-		}
-	}
-}
-
-// grantedHeader sets GrantedSlotsHeader for host on a claim that leased
-// nothing; a count that cannot be read is left out (agentd keeps the one it
-// has) and logged.
-func (a *API) grantedHeader(w http.ResponseWriter, ctx context.Context, host string) {
-	gctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claimPollLimit)
-	defer cancel()
-	n, err := store.GrantedSlots(gctx, a.DB, host)
-	if err != nil {
-		a.logf("agentrt: the granted slots of host %s could not be read: %v", host, err)
-		return
-	}
-	w.Header().Set(GrantedSlotsHeader, strconv.Itoa(n))
-}
-
-// touch records a call of host's agentd claim loop other than a claim as
-// its last poll (store.TouchHost, review 526 A1); one that cannot be
-// recorded is logged, never the call's failure.
-func (a *API) touch(ctx context.Context, host string) {
-	if err := store.TouchHost(ctx, a.DB, host); err != nil && ctx.Err() == nil {
-		a.logf("agentrt: the contact of host %s could not be recorded: %v", host, err)
-	}
-}
-
-// attemptBody holds every field an attempt route takes; each route reads
-// its own. A heartbeat may carry the executor's recent actions (W-31 2.3),
-// kept in redis-agents for 24 hours; any other route that sends them is
-// refused rather than answered as if they were kept (review 156 B1). The
-// phase and last line of v5 §5.2 are not taken: the actions replace them.
-type attemptBody struct {
-	hostBody
-	Epoch         int64    `json:"lease_epoch"`
-	Model         string   `json:"model"`
-	Provider      string   `json:"model_provider"`
-	CheckpointSeq int      `json:"checkpoint_seq"`
-	Artifacts     []string `json:"artifacts"`
-	TooLarge      bool     `json:"too_large"`
-	ExitCode      *int     `json:"exit_code"`
-	EndHow        string   `json:"end_how"`
-	Conclusion    string   `json:"conclusion"`
-	Report        string   `json:"report"`
-	PushedRef     string   `json:"pushed_ref"`
-	PushedCommit  string   `json:"pushed_commit"`
-	GroupCleared  bool     `json:"group_cleared"`
-	// Actions stays raw until the lease is renewed: actions that do not
-	// parse never fail a heartbeat (review 264 A1).
-	Actions json.RawMessage `json:"actions"`
-	// An ending may carry what the attempt used and what its vendor said
-	// about its pools (2.4 slice ①); only computed takes them. They stay raw
-	// until then: a report that does not parse never fails the ending
-	// (review 274 A2).
-	Usage json.RawMessage `json:"usage"`
-	Pools json.RawMessage `json:"pools"`
-	// And how its executor ran the spec's hand-in commands (R5:5.7), raw
-	// until then too.
-	SelfCheck json.RawMessage `json:"self_check"`
-}
-
-func present(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "null" }
-
-// usageReport parses an ending's usage and pool readings, strictly; what does
-// not parse is dropped with the reason.
-func usageReport(b attemptBody) (*store.Usage, []store.PoolReading, string) {
-	var u *store.Usage
-	var pools []store.PoolReading
-	strict := func(raw json.RawMessage, v any) error {
-		dec := json.NewDecoder(bytes.NewReader(raw))
-		dec.DisallowUnknownFields()
-		return dec.Decode(v)
-	}
-	if present(b.Usage) {
-		u = &store.Usage{}
-		if err := strict(b.Usage, u); err != nil {
-			return nil, nil, "usage: " + err.Error()
-		}
-	}
-	if present(b.Pools) {
-		if err := strict(b.Pools, &pools); err != nil {
-			return nil, nil, "pools: " + err.Error()
-		}
-	}
-	return u, pools, ""
-}
-
-// selfCheckReport parses an ending's self-check, strictly and whole; what
-// does not parse is dropped with the reason (store.ComputedWith drops one
-// whose counts cannot be).
-func selfCheckReport(raw json.RawMessage) (*store.SelfCheck, string) {
-	if !present(raw) {
-		return nil, ""
-	}
-	var c struct {
-		Runs, Red, Fixed, Seconds *int
-		LastGreen                 *bool `json:"last_green"`
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&c); err != nil {
-		return nil, "self_check: " + err.Error()
-	}
-	if c.Runs == nil || c.Red == nil || c.Fixed == nil || c.Seconds == nil || c.LastGreen == nil {
-		return nil, "self_check: runs, red, fixed, last_green and seconds are all required"
-	}
-	return &store.SelfCheck{Runs: *c.Runs, Red: *c.Red, Fixed: *c.Fixed, LastGreen: *c.LastGreen, Seconds: *c.Seconds}, ""
-}
-
-func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
-	id, action := chi.URLParam(r, "id"), chi.URLParam(r, "action")
-	var b attemptBody
-	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
-		return
-	}
-	if action != "heartbeat" && len(b.Actions) > 0 && string(b.Actions) != "null" {
-		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
-		return
-	}
-	if action != "computed" && (present(b.Usage) || present(b.Pools)) {
-		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries usage and pool readings")
-		return
-	}
-	if action != "computed" && present(b.SelfCheck) {
-		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries a self_check")
-		return
-	}
-	f := store.Fence{AttemptID: id, HostID: b.HostID, Epoch: b.Epoch}
-	res := store.Result{Report: b.Report, Artifacts: b.Artifacts, Ref: b.PushedRef, Commit: b.PushedCommit}
-	ctx := r.Context()
-	var out map[string]any
-	var err error
-	switch action {
-	case "heartbeat":
-		var beat store.Beat
-		if beat, err = store.Heartbeat(ctx, a.DB, f); err == nil {
-			out = map[string]any{"lease_expires_at": beat.LeaseExpiresAt, "stop": beat.Stop}
-			a.keepActions(ctx, id, b.Actions, out)
-		}
-	case "start":
-		if err = store.Start(ctx, a.DB, f, b.Model, b.Provider); err == nil {
-			out = map[string]any{"started": true}
-		}
-	case "checkpoint":
-		out, err = store.Checkpoint(ctx, a.DB, f, b.CheckpointSeq, b.Artifacts, b.TooLarge)
-	case "computed":
-		u, pools, refused := usageReport(b)
-		sc, scRefused := selfCheckReport(b.SelfCheck)
-		if out, err = store.ComputedWith(ctx, a.DB, f, store.Ending{ExitCode: b.ExitCode, EndHow: b.EndHow, Conclusion: b.Conclusion,
-			Usage: u, Pools: pools, SelfCheck: sc}); err == nil {
-			if refused != "" {
-				out["usage_refused"] = refused
-			}
-			if scRefused != "" {
-				out["self_check_refused"] = scRefused
-			}
-		}
-	case "persist":
-		out, err = store.PersistChecked(ctx, a.DB, f, res, a.Head, a.Commits)
-	case "submit":
-		out, err = store.Submit(ctx, a.DB, f)
-	case "salvage":
-		out, err = store.SalvageChecked(ctx, a.DB, id, b.HostID, res, a.Head, a.Commits)
-	case "ended":
-		out, err = store.Ended(ctx, a.DB, id, b.HostID, b.EndHow, b.GroupCleared)
-	default:
-		writeError(w, http.StatusNotFound, "not_found", "no such attempt route")
-		return
-	}
-	if err != nil {
-		if action == "persist" || action == "salvage" {
-			a.recordHandinRefusal(ctx, "", id, err)
-		}
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
-}
 
 // The artifact kinds agentd may upload: results, not specs or plans.
 var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true, "log_tail": true,
@@ -847,3 +406,7 @@ func (a *API) refuse(w http.ResponseWriter, r *http.Request, host, kind, id, rul
 	}
 	writeError(w, http.StatusUnprocessableEntity, rule, message)
 }
+
+// MainHead reads the commit the main branch of a repository points at. The
+// head release and the evidence reads use the server's reader of this type.
+type MainHead func(ctx context.Context, repo string) (string, error)

@@ -3,15 +3,13 @@ import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
 import { parseMissionEta, parseRuntimeProgress } from '@/api/agentRuntime'
-import { parsePools } from '@/api/agentRuntimePools'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, clockTime, etaBasis, etaLine, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, poolRows, splitAlerts, waitingRow, workNow, yoursCount } from '../ownerModel'
+import { ago, clockTime, etaBasis, etaLine, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, splitAlerts, waitingRow, workNow, yoursCount } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
-import poolsFixture from './fixtures/pools-utc.json'
 
 const alerts = alertsFixture.alerts as TelemetryAlertEntry[]
 const NOW = Date.parse('2026-10-16T20:10:43Z')
@@ -204,29 +202,6 @@ describe('work, plan and quota', () => {
     expect(rows.find(r => r.tag === 'next')?.key).toBe('2.3')
     expect(rows[0]).toMatchObject({ tone: 'ok', done: 3, total: 3 })
     expect(rows[1].tone).toBe('info')
-  })
-  // GET /agentrt/pools as the platform answered (pools-utc.json, review 281), read a day and an hour later.
-  it('gives each pool its last reading and when, and marks a reading old once its window reset or a day went by (2.5 G7 A)', () => {
-    const pools = parsePools(poolsFixture)
-    const at = Date.parse('2026-10-18T20:30:00Z')
-    expect(poolRows(pools, at).map(r => [r.id, r.used, r.old, r.tone, r.cooling])).toEqual([
-      ['claude:owner:short', 100, '', 'fail', true],
-      ['claude:owner:weekly', 20, '', 'ok', false],
-      ['codex:owner:weekly', 50, '', 'ok', false],
-      // A refusal without a figure: nothing read, so nothing old; it cools.
-      ['cursor:owner:monthly', null, '', 'fail', true],
-    ])
-    const later = Date.parse('2026-10-19T21:00:00Z')
-    expect(poolRows(pools, later).map(r => [r.name, r.old, r.tone])).toEqual([
-      ['claude · short', 'its window has reset since it was read', 'fail'],
-      ['claude · weekly', 'read more than a day ago', 'muted'],
-      ['codex · weekly', 'read more than a day ago', 'muted'],
-      ['cursor · monthly', '', 'fail'],
-    ])
-    // A short window's reading is old after its five hours, before a day.
-    const short = { ...pools[0], resets_at: null, cooling: false, cooldown_until: null, used_fraction: 0.3 }
-    expect(poolRows([short], Date.parse(short.measured_at!) + 5 * 3600_000 + 1000)[0]).toMatchObject({ old: 'read more than 5 hours ago', tone: 'muted' })
-    expect(poolRows([short], Date.parse(short.measured_at!) + 4 * 3600_000)[0]).toMatchObject({ old: '', tone: 'ok', name: 'claude · short' })
   })
 })
 

@@ -1,9 +1,7 @@
 package agentrtapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,47 +13,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
-
-// keepActions takes a heartbeat's actions into the attempt's stream (W-31 2.3;
-// Owner 2026-10-18: Redis only, 24 hours). It never fails the heartbeat: the
-// lease is renewed whatever happens to the actions, and the answer says what
-// was kept. Called only after the heartbeat's fence held, so only the
-// leaseholder's actions are kept.
-func (a *API) keepActions(ctx context.Context, attempt string, raw json.RawMessage, out map[string]any) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return
-	}
-	var in []actions.Action
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		out["actions_refused"] = "actions: not a list of actions: " + err.Error()
-		return
-	}
-	if len(in) == 0 {
-		return
-	}
-	if a.Actions == nil {
-		out["actions_refused"] = "this platform keeps no actions (no redis-agents)"
-		return
-	}
-	acts, dropped, err := actions.Normalize(in, time.Now())
-	if err != nil {
-		out["actions_refused"] = err.Error()
-		return
-	}
-	actx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	if err := a.Actions.Append(actx, attempt, acts); err != nil {
-		a.logf("actions of %s not kept: %v", attempt, err)
-		out["actions_refused"] = "not kept: redis-agents did not take them"
-		return
-	}
-	out["actions_kept"] = len(acts)
-	if dropped > 0 {
-		out["actions_dropped"] = dropped
-	}
-}
 
 // attemptActions is an attempt's action stream (GET /attempts/{id}/actions):
 // after= a stream id from a previous answer, limit= 1 to 500 (default 200);

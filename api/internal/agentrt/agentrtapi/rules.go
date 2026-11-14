@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -111,49 +110,4 @@ func (a *API) getRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rule_id": id, "in_force": rule.Doc(), "signed_by": rule.SignedBy})
-}
-
-func (a *API) writeMissionLanding(w http.ResponseWriter, r *http.Request, id string, st store.MissionLandingStatus) {
-	roots := make([]map[string]any, 0, len(st.Roots))
-	for _, x := range st.Roots {
-		root := map[string]any{"repo": x.Repo, "grant_supported": landing.LandingRepos[x.Repo].GrantSupported, "root": x.Root, "op": x.Op, "class": x.Class, "reason": x.Reason,
-			"needs_evidence": x.NeedsEvidence, "card_kind": x.CardKind, "question_id": x.QuestionID, "card_alert": x.CardAlert}
-		if x.STG != nil {
-			root["stg"] = x.STG
-		}
-		if x.Floor != nil {
-			root["floor"] = x.Floor
-		}
-		if x.ApprovalID != "" {
-			root["approval_id"] = x.ApprovalID
-		}
-		if x.Waiting != nil {
-			// Preserve the unknown-main view if the live read is unavailable.
-			x.Waiting.ObserveMain("")
-			root["authorization_wait"] = x.Waiting
-		}
-		if !x.HeldUntil.IsZero() {
-			root["held"] = map[string]any{"until": x.HeldUntil, "question_id": x.HeldQuestion}
-		}
-		if x.CardPending {
-			root["card_pending"] = true
-		}
-		if !x.ParkedSince.IsZero() {
-			parked := map[string]any{"since": x.ParkedSince, "shown": x.Shown}
-			if !x.RetryAt.IsZero() {
-				parked["retry_at"] = x.RetryAt
-			}
-			root["parked"] = parked
-		}
-		roots = append(roots, root)
-	}
-	body := map[string]any{"mission_id": id, "in_scope": st.InScope, "roots": roots, "rule": st.Rule}
-	if st.Round != nil {
-		body["closing_round"] = map[string]any{"round": st.Round.Round, "at": st.Round.At, "until": st.Round.Until, "ops": st.Round.Ops}
-	}
-	if c := st.Closed; c != nil {
-		body["closed"] = map[string]any{"to": c.To, "at": c.At, "rule": c.Rule, "round": c.Round,
-			"delivered": c.Delivered, "disposed": c.Disposed, "briefs": c.Briefs, "roots": c.Roots}
-	}
-	writeJSON(w, http.StatusOK, body)
 }

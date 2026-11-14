@@ -65,7 +65,7 @@ export function DeliveryBoundaries() {
         <details><summary>Hosts and runtime status</summary><pre className="overflow-auto text-xs">{textOf(data.hosts)}</pre></details>
         <details><summary>Vendor quota and measurement times</summary><pre className="overflow-auto text-xs">{textOf(data.pools)}</pre></details>
       </section>}
-      {section === 'configuration' && <DeliveryConfiguration canSubmit={!query.isError && !seat.isError && seat.data?.viewer_env === 'prod'} />}
+      {section === 'configuration' && <DeliveryConfiguration />}
     </>}
   </>
 }

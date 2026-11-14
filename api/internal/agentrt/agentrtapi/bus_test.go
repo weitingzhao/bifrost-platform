@@ -3,14 +3,12 @@ package agentrtapi_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
@@ -83,25 +81,6 @@ func TestHeartbeatKeepsActions(t *testing.T) {
 	}
 	if code, out := c("viewer", "GET", "attempts/not-an-attempt/actions", nil); code != http.StatusUnprocessableEntity {
 		t.Fatalf("a bad attempt id: %d %v", code, out)
-	}
-}
-
-// Without redis-agents the heartbeat keeps working and says no actions are kept.
-func TestHeartbeatWithoutAnActionStore(t *testing.T) {
-	t.Parallel()
-	pool, _ := world(t)
-	s := server(t, pool)
-	c := func(caller, method, path string, body any) (int, map[string]any) {
-		return call(t, s, caller, method, path, body)
-	}
-	attempt, fence := claimOne(t, s, c)
-	acts := []any{map[string]any{"kind": "read", "target": "a.go", "at": time.Now().UTC().Format(time.RFC3339Nano)}}
-	code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
-	if code != http.StatusOK || !strings.Contains(out["actions_refused"].(string), "keeps no actions") {
-		t.Fatalf("heartbeat: %d %v", code, out)
-	}
-	if code, _ := c("viewer", "GET", "attempts/"+attempt+"/actions", nil); code != http.StatusServiceUnavailable {
-		t.Fatalf("read without a store: %d", code)
 	}
 }
 
@@ -234,42 +213,6 @@ func TestHeartbeatRenewsWhateverTheActions(t *testing.T) {
 	}
 	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after=18446744073709551615-0", nil); code != http.StatusOK {
 		t.Errorf("the largest stream id: %d %v", code, out)
-	}
-}
-
-// A Redis that answers nothing costs a heartbeat at most its 2-second budget
-// (review 264 A2): the action store's client honours the request's deadline.
-func TestHeartbeatWithASilentRedis(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	must(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			t.Cleanup(func() { _ = conn.Close() }) // accept, never answer
-		}
-	}()
-	rdb := redis.NewClient(&redis.Options{Addr: ln.Addr().String(), ContextTimeoutEnabled: true})
-	t.Cleanup(func() { _ = rdb.Close() })
-	actionStore = &actions.Store{Redis: rdb, Prefix: "agrt-test-silent:"}
-	t.Cleanup(func() { actionStore = nil })
-	pool, _ := world(t)
-	s := server(t, pool)
-	c := func(caller, method, path string, body any) (int, map[string]any) {
-		return call(t, s, caller, method, path, body)
-	}
-	attempt, fence := claimOne(t, s, c)
-	acts := []any{map[string]any{"kind": "read", "target": "a.go", "at": time.Now().UTC().Format(time.RFC3339Nano)}}
-	start := time.Now()
-	code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
-	if took := time.Since(start); code != http.StatusOK || out["lease_expires_at"] == nil || took > 3500*time.Millisecond {
-		t.Fatalf("a heartbeat against a silent Redis: %d %v after %v", code, out, took)
-	}
-	if !strings.Contains(fmt.Sprint(out["actions_refused"]), "not kept") {
-		t.Fatalf("the answer does not say the actions were not kept: %v", out)
 	}
 }
 

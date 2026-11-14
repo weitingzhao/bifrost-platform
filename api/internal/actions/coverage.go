@@ -62,13 +62,10 @@ func init() {
 		"POST /api/v1/approvals/{id}/heartbeat",
 		"POST /api/v1/approvals/{id}/result",
 	)
-	exempt("agent runtime work queue (design v5 §5.2): a protocol for its own role, agentd, bound to one host; state changes and results are recorded by the store in one transaction; not a cluster write",
-		"POST /api/v1/agentrt/claim",
-		"POST /api/v1/agentrt/attempts/{id}/{action}",
+	exempt("agent runtime artifacts (design v5 §5.2): the store records an upload with its event in one transaction; not a cluster write",
 		"PUT /api/v1/agentrt/artifacts/{id}",
 	)
 	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card; PV1 adopt_plan_view uses the same plan/proposals decision path), a note on an architecture row only adds words beside the tick its done rule decides, a control only stops or pauses work, and only the Owner (admin) lifts one, a withdrawal only cancels the proposer's own tasks that have not started; not a cluster write",
-		"POST /api/v1/agentrt/goals",
 		"POST /api/v1/agentrt/messages",
 		"POST /api/v1/agentrt/messages/ack",
 		"POST /api/v1/agentrt/controls",
@@ -89,12 +86,6 @@ func init() {
 	)
 	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
-	)
-	exempt("agent runtime vendor pools (W-31 2.4 slice ①): the Owner's (admin's) reading of a vendor quota window from its usage page; the store records it with its event in one transaction, and at most it holds work back from that account or lets it through again; not a cluster write",
-		"POST /api/v1/agentrt/pools/{id}/reading",
-	)
-	exempt("agent runtime branch cleanup (TD-383, the Owner's 「分支 B 用 agentd」): an agentd token reports, for the host it is bound to, what it did with the attempt branches it was given (GET /api/v1/agentrt/prunes); the deletion itself is agentd's, with its own Gitea identity, on branches Gitea lets it delete; the store records each outcome as a note in one transaction; not a cluster write",
-		"POST /api/v1/agentrt/prunes",
 	)
 	exempt("agent runtime business issues, the crew's (W-31 BI-1 slice 2, DESIGN-crew-intake §2.2): for the issue readers only (operator and admin tokens on the readers list); runtime state the store writes with its events in one transaction, the database guarding each table; taking an issue makes its mission as POST /missions does (inside the standing envelope, or waiting on the Owner's card), and every other write only records texts, evidence or a display state; not a cluster write",
 		"POST /api/v1/agentrt/issues",
