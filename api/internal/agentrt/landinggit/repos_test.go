@@ -6,35 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
-
-// Serial: constructors read process environment; no remote or credential I/O.
-func TestS6ConstructorsBindClosedRepository(t *testing.T) {
-	for _, key := range []string{UsernameFileEnv, PasswordFileEnv, LanderUsernameFileEnv, LanderPasswordFileEnv} {
-		t.Setenv(key, "/not-read/credential")
-	}
-	for _, repo := range landing.LandingRepoNames() {
-		for _, env := range []string{"stg", "prod"} {
-			var g *Git
-			var err error
-			if env == "stg" {
-				g, err = FromEnv(env, repo)
-			} else {
-				g, err = LanderFromEnv(env, repo)
-			}
-			if err != nil || g.remote != landing.LandingRepos[repo].Remote || g.Repository() != repo {
-				t.Fatal(repo, env, g, err)
-			}
-		}
-	}
-	for _, repo := range []string{"", "bifrost-research", "http://attacker/repo"} {
-		if _, err := LanderFromEnv("prod", repo); err == nil {
-			t.Fatal("accepted", repo)
-		}
-	}
-}
 
 func TestS6InfraDiffUsesSeparateRenameEndpoints(t *testing.T) {
 	t.Parallel()

@@ -24,10 +24,6 @@ const PasswordFileEnv = "AGENTRT_LANDING_PASSWORD_FILE"
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var drillRef = regexp.MustCompile(`^refs/heads/land/stg/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`)
 
-// liveRef is the production landing branch (S3, CUT §2.5 step 4): only the
-// lander identity pushes it.
-var liveRef = regexp.MustCompile(`^refs/heads/land/prod/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`)
-
 // Git has no configurable production remote and no general-purpose push API.
 // The credentials are file paths, never token values in the parent's env.
 type Git struct {
@@ -43,41 +39,9 @@ type Git struct {
 	reader bool
 }
 
-func FromEnv(environment string, repos ...string) (*Git, error) {
-	if environment != "stg" {
-		return nil, errors.New("landing drill requires stg")
-	}
-	u, p := os.Getenv(UsernameFileEnv), os.Getenv(PasswordFileEnv)
-	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
-		return nil, errors.New("landing credential paths must be absolute")
-	}
-	repo, err := selectedRepo(repos)
-	if err != nil {
-		return nil, err
-	}
-	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: u, passwordFile: p, scope: drillRef}, nil
-}
-
 // Lander credentials: the agentrt-lander identity's basic-auth files (S3).
 const LanderUsernameFileEnv = "AGENTRT_LANDER_USERNAME_FILE"
 const LanderPasswordFileEnv = "AGENTRT_LANDER_PASSWORD_FILE"
-
-// LanderFromEnv is the production landing identity: land/prod branches and
-// a fast-forward push of platform main, nothing else (CUT §2.5, §3 S3 ⑫).
-func LanderFromEnv(environment string, repos ...string) (*Git, error) {
-	if environment != "prod" {
-		return nil, errors.New("the lander runs on prod")
-	}
-	u, p := os.Getenv(LanderUsernameFileEnv), os.Getenv(LanderPasswordFileEnv)
-	if !filepath.IsAbs(u) || !filepath.IsAbs(p) {
-		return nil, errors.New("lander credential paths must be absolute")
-	}
-	repo, err := selectedRepo(repos)
-	if err != nil {
-		return nil, err
-	}
-	return &Git{repo: repo.Name, remote: repo.Remote, usernameFile: u, passwordFile: p, scope: liveRef, lander: true}, nil
-}
 
 // ReaderDirEnv names the platform's Gitea reader mount (TD-432): a
 // kubernetes.io/basic-auth Secret (files username and password) of an
@@ -283,13 +247,6 @@ func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
 		return "", errors.New("invalid remote ref response")
 	}
 	return f[0], nil
-}
-func (w *Workspace) Push(ctx context.Context, ref, sha string) error {
-	if !w.git.inScope(ref) || !fullSHA.MatchString(sha) {
-		return errors.New("push outside landing scope")
-	}
-	_, e := w.git.run(ctx, w.dir, true, nil, nil, "push", "--porcelain", "origin", sha+":"+ref)
-	return e
 }
 func (g *Git) Delete(ctx context.Context, ref, sha string) error {
 	// The lander never deletes: a land/prod branch is the record of what

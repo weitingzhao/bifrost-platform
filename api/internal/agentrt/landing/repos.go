@@ -1,8 +1,6 @@
 package landing
 
 import (
-	"strings"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -13,31 +11,6 @@ var LandingRepos = rules.LandingRepositories
 
 func LandingRepoNames() []string     { return rules.LandingRepoNames() }
 func RepoSupported(repo string) bool { return rules.LandingRepoSupported(repo) }
-func RepoStream(stream string) bool {
-	repo, ok := strings.CutPrefix(stream, "landing:")
-	return ok && RepoSupported(repo)
-}
-
-// LiveRepos is AGENTRT_LANDING_LIVE_REPOS, the only live switch: the
-// registered repositories it names, none when it is absent or empty. The
-// former AGENTRT_LANDING_LIVE=on fallback is gone (cleanup wave 2).
-func LiveRepos(lookup func(string) (string, bool)) []string {
-	value, set := lookup("AGENTRT_LANDING_LIVE_REPOS")
-	if !set {
-		return nil
-	}
-	wanted := map[string]bool{}
-	for _, repo := range strings.Split(value, ",") {
-		wanted[strings.TrimSpace(repo)] = true
-	}
-	var out []string
-	for _, repo := range LandingRepoNames() {
-		if wanted[repo] {
-			out = append(out, repo)
-		}
-	}
-	return out
-}
 
 // Repository keeps the original platform-only callers source-compatible.
 // Production multi-repository callers always pass a registry key explicitly.

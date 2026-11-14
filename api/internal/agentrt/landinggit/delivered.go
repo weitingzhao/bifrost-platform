@@ -21,13 +21,6 @@ type ChangeIdentity struct {
 	PatchID, DiffSHA256 string
 }
 
-// SameChange: a and b carry the same change only when both the verbatim
-// patch-id and the raw diff's digest agree (§6 item 2). A result that
-// changes nothing has no patch-id and is never the same as anything.
-func SameChange(a, b ChangeIdentity) bool {
-	return a.PatchID != "" && a.PatchID == b.PatchID && a.DiffSHA256 == b.DiffSHA256
-}
-
 // ErrNotComparable: the two results cannot be compared, and reading them
 // again gives the same answer: a SHA that is not one, a commit that is not
 // one commit on one parent, a diff over the output bound. ErrNotServed is

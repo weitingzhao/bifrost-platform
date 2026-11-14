@@ -129,25 +129,6 @@ func TestInfraGrantBranchAndEntry(t *testing.T) {
 	}
 }
 
-func TestLiveReposNewSettingIsAuthoritative(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		values map[string]string
-		want   []string
-	}{
-		{map[string]string{}, nil},
-		{map[string]string{"AGENTRT_LANDING_LIVE": "on"}, nil},
-		{map[string]string{"AGENTRT_LANDING_LIVE": "on", "AGENTRT_LANDING_LIVE_REPOS": ""}, nil},
-		{map[string]string{"AGENTRT_LANDING_LIVE_REPOS": "bifrost-platform"}, []string{"bifrost-platform"}},
-		{map[string]string{"AGENTRT_LANDING_LIVE_REPOS": "bifrost-trade-infra,bifrost-platform,bifrost-research"}, []string{"bifrost-platform", "bifrost-trade-infra"}},
-	} {
-		got := LiveRepos(func(k string) (string, bool) { v, ok := tc.values[k]; return v, ok })
-		if !reflect.DeepEqual(got, tc.want) {
-			t.Fatalf("T62 %v -> %v", tc.values, got)
-		}
-	}
-}
-
 // (a) A change of floor-grantable paths alone waits for approve_floor_landing
 // where grants are enabled, instead of being refused; without the entry, or
 // with an unwaivable failure beside it, it is refused with its floor paths.

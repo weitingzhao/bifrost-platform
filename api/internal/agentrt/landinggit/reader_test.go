@@ -1,14 +1,12 @@
 package landinggit
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The reader parses its files as delivery/gitea_reader.go does: at most 4096
@@ -51,32 +49,5 @@ func TestReaderCredentialContract(t *testing.T) {
 	lander := &Git{lander: true, usernameFile: user, passwordFile: user}
 	if _, err := lander.header(); err == nil {
 		t.Fatal("lander accepted a trailing newline")
-	}
-}
-
-// Every identity refuses an empty ref before any network (review 713 N-01).
-// Its own test, so a failure here cannot hide the credential contract
-// (review 717 B-2). The lander is the control: it still writes its scope.
-func TestEmptyRefIsOutsideEveryScope(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	sha := strings.Repeat("a", 40)
-	reader := &Git{reader: true, scope: noRef}
-	lander := &Git{lander: true, scope: liveRef}
-	for name, g := range map[string]*Git{"reader": reader, "lander": lander} {
-		w := &Workspace{git: g, dir: t.TempDir()}
-		if err := w.Push(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-			t.Fatalf("%s push to an empty ref: %v", name, err)
-		}
-		if err := g.Delete(ctx, "", sha); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-			t.Fatalf("%s delete of an empty ref: %v", name, err)
-		}
-		if _, err := g.Ref(ctx, ""); err == nil || !strings.Contains(err.Error(), "outside landing scope") {
-			t.Fatalf("%s read of an empty ref: %v", name, err)
-		}
-	}
-	if !lander.inScope("refs/heads/land/prod/t_00000000000000000000000001/1") {
-		t.Fatal("lander control lost its land/prod scope")
 	}
 }

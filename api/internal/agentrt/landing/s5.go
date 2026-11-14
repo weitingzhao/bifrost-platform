@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
@@ -28,17 +27,6 @@ type S5Policy struct {
 }
 
 func S5Hash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
-func S5Digest(v any) (string, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	b, err = canon.Marshal(b)
-	if err != nil {
-		return "", err
-	}
-	return S5Hash(b), nil
-}
 func s5Digest(s string) bool {
 	_, e := hex.DecodeString(s)
 	return len(s) == 64 && strings.ToLower(s) == s && e == nil
@@ -118,66 +106,6 @@ func ClassifyS5PathsAndRelations(f Facts, p S5Policy) PreparationRequirements {
 	return q
 }
 
-// MayPrepareS5 defers only the enrolled change's floor/display. It does not
-// edit Facts, persistent refusals, or daily quota, and cannot authorize main.
-func MayPrepareS5(f Facts, q PreparationRequirements, now time.Time) PrepareDecision {
-	d := PrepareDecision{Requirements: q}
-	if !q.NeedsS5Evidence {
-		d.Decision = EligibleToClaim(f, now)
-		return d
-	}
-	if why, soft := PolicyChecks(f, now); why != "" {
-		d.Decision = refuse(why)
-		return d
-	} else if slices.Contains(soft, rules.LandingCore) {
-		d.Decision = refuse("floor")
-		return d
-	}
-	if len(q.Reasons) > 0 {
-		d.Decision = refuse(q.Reasons[0])
-		return d
-	}
-	if !f.S5Policy.Valid() {
-		d.Decision = refuse("S5_EVIDENCE_MISSING")
-		return d
-	}
-	if why := ValidateS5Review(f, f.S5Review); why != "" {
-		d.Decision = refuse(why)
-		return d
-	}
-	if why := ValidateS5Patch(f, f.S5Patch, f.Operation.R != "" && f.S5Patch.R != "" || f.Operation.Phase == "branch_pushed"); why != "" {
-		d.Decision = refuse(why)
-		return d
-	}
-	d.Decision = eligibleToClaim(f, now, true)
-	return d
-}
-
-// S5AutomaticRoute selects the no-grant lane. A change already requiring
-// the original D lane for core/path/ordinary display failures keeps that
-// lane's preparation and pinned CI. A persisted S5 operation never silently
-// downgrades, including after a checker failure or a rule tightening.
-func S5AutomaticRoute(f Facts) bool {
-	q := ClassifyS5PathsAndRelations(f, f.S5Policy)
-	if !q.NeedsS5Evidence || f.Operation.S5.Required {
-		return q.NeedsS5Evidence
-	}
-	if f.Rule != nil && f.Rule.Landing != nil {
-		soft := rules.LandingSoftRefusals(f.Rule.Landing, f.Repo, f.Changes)
-		if len(rules.S5Refusals(f.Rule.Landing, f.Repo, f.Changes)) > 0 && MayAwaitGrant(f, soft) {
-			return false
-		}
-	}
-	return true
-}
-
-func PreparationDecision(f Facts, now time.Time) Decision {
-	if !S5AutomaticRoute(f) {
-		return EligibleToClaim(f, now)
-	}
-	return MayPrepareS5(f, ClassifyS5PathsAndRelations(f, f.S5Policy), now).Decision
-}
-
 type ReviewBinding struct {
 	Repo                     string `json:"repo"`
 	Task                     string `json:"task"`
@@ -206,45 +134,6 @@ type ReviewBinding struct {
 	Problem string `json:"-"`
 }
 
-func ValidateS5Review(f Facts, b ReviewBinding) string {
-	if b.Problem != "" {
-		return b.Problem
-	}
-	if b.NoReview {
-		return validateS5Acceptance(f, b)
-	}
-	if b.ReviewVerificationID == "" || b.ReviewArtifactID == "" || !s5Digest(b.ReviewArtifactSHA256) {
-		return "S5_REVIEW_MISSING"
-	}
-	if b.ImplementerProvider == "" || b.ReviewerProvider == "" || b.ImplementerExecutor == "" || b.ReviewerExecutor == "" || b.ImplementerProvider == b.ReviewerProvider || b.ImplementerExecutor == b.ReviewerExecutor {
-		return "S5_REVIEW_PROVIDER"
-	}
-	if b.Repo != f.Repo || b.Task != f.Task || b.AcceptedAttempt != f.Attempt || b.ImplementerAttempt != f.Attempt || b.A != f.A || b.Base != f.Base || b.AcceptanceVerificationID == "" || b.ReviewerAttempt == "" || b.ReviewerAttempt == f.Attempt || b.ReviewerTask == "" || b.ReviewerTask == f.Task || b.Verdict != "pass" {
-		return "S5_REVIEW_BINDING"
-	}
-	if b.ReviewedPatchSHA256 != f.S5Patch.SourcePatchSHA256 || b.ReviewedStablePatchID != f.S5Patch.SourceStablePatchID {
-		return "S5_REVIEW_BINDING"
-	}
-	return ""
-}
-
-// validateS5Acceptance binds an attempt accepted with no review: its
-// implementer and acceptance, the result and the patch, with every review
-// field empty.
-func validateS5Acceptance(f Facts, b ReviewBinding) string {
-	if b.ImplementerProvider == "" || b.ImplementerExecutor == "" {
-		return "S5_REVIEW_PROVIDER"
-	}
-	if b.Repo != f.Repo || b.Task != f.Task || b.AcceptedAttempt != f.Attempt || b.ImplementerAttempt != f.Attempt || b.A != f.A || b.Base != f.Base || b.AcceptanceVerificationID == "" ||
-		b.ReviewVerificationID != "" || b.ReviewerTask != "" || b.ReviewerAttempt != "" || b.ReviewArtifactID != "" || b.Verdict != "" {
-		return "S5_REVIEW_BINDING"
-	}
-	if b.ReviewedPatchSHA256 != f.S5Patch.SourcePatchSHA256 || b.ReviewedStablePatchID != f.S5Patch.SourceStablePatchID {
-		return "S5_REVIEW_BINDING"
-	}
-	return ""
-}
-
 type S5PathMode struct {
 	OldPath string `json:"oldPath"`
 	NewPath string `json:"newPath"`
@@ -269,25 +158,6 @@ type PatchEvidence struct {
 	DiffAlgorithmVersion string       `json:"diffAlgorithmVersion"`
 	BaselineTree         string       `json:"baselineTree"`
 	ResultTree           string       `json:"resultTree"`
-}
-
-func ValidateS5Patch(f Facts, p PatchEvidence, replay bool) string {
-	if p.A != f.A || p.Base != f.Base || p.ParentA != f.Base || !s5Digest(p.SourcePatchSHA256) || !ValidSHA(p.SourceStablePatchID) || p.DiffAlgorithmVersion != "git-stable-v1" || len(p.OldNewPathsAndModes) == 0 {
-		return "S5_PATCH_MISMATCH"
-	}
-	paths := make([]S5PathMode, 0, len(f.Changes))
-	for _, c := range f.Changes {
-		paths = append(paths, S5PathMode{c.OldPath, c.NewPath, c.OldMode, c.NewMode, c.Kind, c.Binary})
-	}
-	a, _ := S5Digest(paths)
-	b, _ := S5Digest(p.OldNewPathsAndModes)
-	if a != b {
-		return "S5_PATCH_MISMATCH"
-	}
-	if replay && (p.M0 != f.Operation.M0 || p.R != f.Operation.R || p.ParentR != p.M0 || !p.ReplayMatch || p.SourceStablePatchID != p.ReplayStablePatchID || !s5Digest(p.ReplayPatchSHA256) || !ValidSHA(p.BaselineTree) || !ValidSHA(p.ResultTree)) {
-		return "S5_PATCH_MISMATCH"
-	}
-	return ""
 }
 
 // S5CIKey is the ONLY definition of the complete S5 preparation key (§5.1).
@@ -364,23 +234,4 @@ func (k S5CIKey) RunName() (string, error) {
 		return "", e
 	}
 	return "s5-" + d[:40] + "-g" + strconv.FormatUint(k.Generation, 36), nil
-}
-func NewS5CIKey(f Facts, op string, generation uint64) (S5CIKey, string) {
-	if why := ValidateS5Review(f, f.S5Review); why != "" {
-		return S5CIKey{}, why
-	}
-	if why := ValidateS5Patch(f, f.S5Patch, true); why != "" {
-		return S5CIKey{}, why
-	}
-	if f.Rule == nil || !f.S5Policy.Valid() {
-		return S5CIKey{}, "S5_EVIDENCE_MISSING"
-	}
-	p := f.S5Policy
-	review, _ := S5Digest(f.S5Review)
-	patch, _ := S5Digest(f.S5Patch)
-	k := S5CIKey{2, f.Environment, f.Tenant, f.Repo, f.Task, f.Attempt, op, f.Base, f.A, f.Operation.M0, f.Operation.R, f.S5Patch.BaselineTree, f.S5Patch.ResultTree, p.UISHA, f.Rule.Version, S5RuleDigest(f), p.ProfileDigest, p.CheckerImageDigest, p.ToolchainDigest, p.CallersDigest, p.TypesDigest, p.TestsDigest, review, patch, generation}
-	if !k.Valid() {
-		return S5CIKey{}, "S5_BINDING"
-	}
-	return k, ""
 }

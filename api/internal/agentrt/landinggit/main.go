@@ -20,40 +20,6 @@ type EvidenceReader struct {
 	head string // main's head as fetched when the reader opened
 }
 
-// OpenEvidence makes the workspace, fetches main and checks that its
-// history is complete. On any failure the workspace is removed; on success
-// the caller owns it and must Close it.
-func (g *Git) OpenEvidence(ctx context.Context) (er *EvidenceReader, err error) {
-	dir, err := os.MkdirTemp("", "agentrt-landing-main-")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(dir)
-		}
-	}()
-	if _, err = g.run(ctx, dir, false, nil, nil, "init", "--template=", "."); err != nil {
-		return nil, err
-	}
-	if _, err = g.run(ctx, dir, false, nil, nil, "remote", "add", "origin", g.remote); err != nil {
-		return nil, err
-	}
-	if _, err = g.run(ctx, dir, true, nil, nil, "fetch", "--no-tags", "--no-recurse-submodules", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
-		return nil, err
-	}
-	shallow, err := g.run(ctx, dir, false, nil, nil, "rev-parse", "--is-shallow-repository")
-	if err != nil || strings.TrimSpace(shallow) != "false" {
-		return nil, errors.New("main's history is not complete")
-	}
-	out, err := g.run(ctx, dir, false, nil, nil, "rev-parse", "refs/remotes/origin/main")
-	head := strings.TrimSpace(out)
-	if err != nil || !fullSHA.MatchString(head) {
-		return nil, errors.New("main's head is not readable")
-	}
-	return &EvidenceReader{g: g, dir: dir, head: head}, nil
-}
-
 // Close removes the workspace.
 func (er *EvidenceReader) Close() error { return os.RemoveAll(er.dir) }
 

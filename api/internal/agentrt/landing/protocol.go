@@ -295,19 +295,6 @@ type State struct {
 	Grants map[string][]Interval
 }
 
-func Fold(entries []Entry) (State, error) { return FoldWithGrants(entries, nil) }
-
-// FoldWithGrants folds entries with the grant projection in place (C-5).
-func FoldWithGrants(entries []Entry, grants map[string][]Interval) (State, error) {
-	s := State{Operations: map[string]Operation{}, Reservations: map[string]string{}, Grants: grants}
-	for _, e := range entries {
-		if err := s.Apply(e); err != nil {
-			return State{}, err
-		}
-	}
-	return s, nil
-}
-
 // Check reports whether e would apply to s, without changing s: an answer
 // decides before it appends whether the protocol takes its record, so a
 // refusal is recorded instead of rolling the answer back (CUT §8).
@@ -717,37 +704,6 @@ func (o Operation) Active() bool {
 	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
 }
 
-// HoldsGrantedSlot: the operation holds the slot against a granted landing's
-// final gate (R5 phase 2 #11): only one pushing to main does. One still in CI,
-// waiting for its card, parked, ended, or landed and deploying (#40: a landed
-// change never holds the slot) does not.
-func (o Operation) HoldsGrantedSlot() bool {
-	return o.HoldsSlot() && o.AtMain()
-}
-
-// HoldsSlot: the operation counts toward its repository's landing slot
-// (max_in_flight). Only an active operation not yet recorded landed
-// holds it, through a main push reported ok until reconciliation records it
-// landed (TD-462: the next claim waits for that record). A landed change never
-// holds it, whatever its STG release does (blocked, waiting, sent).
-// 2026-11-06 landed changes waiting on a blocked STG kept the slot and nothing
-// else could land.
-func (o Operation) HoldsSlot() bool {
-	return o.Active() && !o.EverLanded && !strings.HasPrefix(o.Phase, "stg_")
-}
-
-// InFlight counts the root operations other than except that hold the
-// repository's landing slot.
-func (s State) InFlight(except string) int {
-	n := 0
-	for id, o := range s.Operations {
-		if id != except && o.Task != "" && o.HoldsSlot() {
-			n++
-		}
-	}
-	return n
-}
-
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the
 // Owner's retry), and for a root never claimed from its acceptance (TD-447 4).
 const ClaimWindow = 6 * time.Hour
@@ -799,12 +755,6 @@ func neverClaimed(s State, op string) (string, bool) {
 // operation: the next operation must still be able to replay on a new main.
 func (o Operation) BlocksClaim() bool { return o.EverLanded || o.Phase == "failed" && !o.Retried }
 
-// Reservable is checked against the repository state while reserving in the
-// tenant/day stream. A rehearsal never consumes the production quota.
-func (o Operation) Reservable(root string) bool {
-	return o.Task == root && !o.DryRun && (o.Phase == "branch_pushed" || o.Phase == "awaiting_grant")
-}
-
 // AwaitsNext: the root's latest operation ended without ending the root, so
 // its next operation k+1 is due: a replay after discarded, a push main did
 // not fast-forward (main_result{non_ff}), or a failure the Owner retried and
@@ -813,13 +763,6 @@ func (o Operation) Reservable(root string) bool {
 func (s State) AwaitsNext(root string) bool {
 	o, ok := s.Operations[s.LatestOperation(root)]
 	return ok && o.Terminal() && !o.BlocksClaim() && o.Phase != "rehearsed"
-}
-
-// RootPending: the root still has a step to take: its latest operation is
-// live, or AwaitsNext. False for a root never claimed.
-func (s State) RootPending(root string) bool {
-	o, ok := s.Operations[s.LatestOperation(root)]
-	return ok && (!o.Terminal() || s.AwaitsNext(root))
 }
 
 // LatestOperation uses stream claim order, including equal event timestamps.
