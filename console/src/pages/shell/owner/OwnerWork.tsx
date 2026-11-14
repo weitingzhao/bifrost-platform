@@ -5,7 +5,6 @@ import { canonicalQuery, hashNamesSection, scrollAfterShell } from '@/lib/shell/
 import { NeedsCleanupSection } from '../agents/NeedsCleanup'
 import { WorkPlanView } from '../agents/WorkPlanView'
 import { WORK_SECTION_TITLES, useWorkView, type WorkSection } from '../agents/workViewModel'
-import { CheckValuePage } from '../agents/CheckValueTable'
 import { DeliveryBoundaries } from '../agents/DeliveryBoundaries'
 import { ProgressPage } from '../progress/ProgressPage'
 import { Card, Stat } from './OwnerParts'
@@ -79,7 +78,7 @@ function WorkSectionPage({ section, data }: { section: WorkSection; data: OwnerC
       <OwnerRuntimeCards data={data} />
       <OwnerReleaseLane data={data} />
       <ProgressPage planView part="activity" />
-    </> : section === 'check-value' ? <CheckValuePage /> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : <ProgressPage planView part={section} />}
+    </> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : <ProgressPage planView part={section} />}
   </section>
 }
 

@@ -23,7 +23,6 @@ deny	GET /api/v1/agentrt/attempts/{id}
 deny	GET /api/v1/agentrt/attempts/{id}/actions
 deny	POST /api/v1/agentrt/attempts/{id}/{action}
 deny	GET /api/v1/agentrt/capabilities
-deny	GET /api/v1/agentrt/check-value
 deny	POST /api/v1/agentrt/claim
 deny	GET /api/v1/agentrt/controls
 deny	POST /api/v1/agentrt/controls
@@ -59,7 +58,6 @@ deny	POST /api/v1/agentrt/issues/{id}/responses
 deny	POST /api/v1/agentrt/issues/{id}/resume
 deny	POST /api/v1/agentrt/issues/{id}/reviews
 deny	POST /api/v1/agentrt/issues/{id}/take
-deny	GET /api/v1/agentrt/leak-value
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack
