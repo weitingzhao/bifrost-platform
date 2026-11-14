@@ -189,3 +189,8 @@ func TestEveryDeclaredInputExists(t *testing.T) {
 		t.Fatal("found no declared input: this test no longer sees the calls")
 	}
 }
+
+// This package's own test runs scripts/ci/outside_inputs.sh, a file outside the
+// module. 2026-11-14, run ci-platform-p4scj: a commit that changed only that
+// script left this package "(cached)" while rules, cluster and unitscript ran.
+func TestOutsideInputs(t *testing.T) { Declare(t, "scripts") }
