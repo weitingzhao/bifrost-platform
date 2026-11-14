@@ -66,7 +66,9 @@ var intendedRouteAdditions = map[string][]string{
 	// /evidence/ci (module names and input references of a declaration).
 	"GET /api/v1/units/scope": {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
 	// Stage 3: how CI is set up for one project, for the configuration view (read-only).
-	"GET /api/v1/units/config":    {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/units/config": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-14: the daily full CI's notes for the Ops run view (read-only).
+	"GET /api/v1/units/full-ci":   {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence": {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot

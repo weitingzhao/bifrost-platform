@@ -25,6 +25,7 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 	ci.FullScopeParam = param
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
 	c.FullCI = &controller.FullCI{At: at, Runs: ci.FullRuns, Ensure: ci.EnsureFullRun, TestLog: ci.FullRunTestLog,
+		FailedTasks: ci.FullRunFailedTasks, RunModules: ci.RunModules,
 		Main: func(ctx context.Context) (string, error) {
 			g, err := git()
 			if err != nil {

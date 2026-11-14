@@ -2,16 +2,29 @@ package store
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // The daily full CI's records (controller/fullci.go): a note on the
 // controller's stream for the runs a day started, and one for each red run,
-// with the goal it proposed or the open goal of an earlier red with the
-// same failed tests. The Console lists them with the other events; the
-// controller reads them back so a red run is handled once.
+// with the pipeline tasks that failed and the landed commits whose own CI
+// run left a module out. The Console lists them with the other events and
+// through GET /units/full-ci; the controller reads them back so a red run is
+// handled once.
+
+// FullCISuspect is a commit landed since the last green full run whose own
+// CI run left a module out: Run is that CI run and Modules its run-modules
+// result as written (the names of the modules that ran, each between
+// spaces).
+type FullCISuspect struct {
+	Commit  string `json:"commit"`
+	Subject string `json:"subject"`
+	Run     string `json:"run"`
+	Modules string `json:"modules"`
+}
 
 // FullCI is a full_ci note's body.
 type FullCI struct {
@@ -22,29 +35,46 @@ type FullCI struct {
 	Run       string `json:"run,omitempty"`
 	Commit    string `json:"commit,omitempty"`
 	FailedKey string `json:"failed_key,omitempty"`
-	// Mission is the goal's mission the red run proposed; OpenMission and
-	// OpenRun, the open goal of an earlier red with the same failed tests,
-	// when none was proposed for it.
-	Mission     string `json:"mission,omitempty"`
-	OpenMission string `json:"open_mission,omitempty"`
-	OpenRun     string `json:"open_run,omitempty"`
+	// FailedTasks are the pipeline tasks of the red run that failed.
+	FailedTasks []string `json:"failed_tasks,omitempty"`
+	// Suspects are the commits landed since the last green full run whose
+	// own CI run left a module out; Unread counts the landings whose CI run
+	// or its run-modules result could not be read. Unreconciled says why
+	// the landings were not, or not all, looked at; with it, no suspect
+	// does not mean none.
+	Suspects     []FullCISuspect `json:"suspects,omitempty"`
+	Unread       int             `json:"unread,omitempty"`
+	Unreconciled string          `json:"unreconciled,omitempty"`
 }
 
 func (f FullCI) body() map[string]any {
 	b := map[string]any{}
 	if f.Run != "" {
 		b["alert"] = true
-		b["deviation"] = "content_reuse"
 	}
-	if len(f.Started) > 0 {
-		started := make([]any, len(f.Started))
-		for i, s := range f.Started {
-			started[i] = s
+	list := func(key string, values []string) {
+		if len(values) == 0 {
+			return
 		}
-		b["started"] = started
+		out := make([]any, len(values))
+		for i, s := range values {
+			out[i] = s
+		}
+		b[key] = out
 	}
-	for k, v := range map[string]string{"run": f.Run, "commit": f.Commit, "failed_key": f.FailedKey,
-		"mission": f.Mission, "open_mission": f.OpenMission, "open_run": f.OpenRun} {
+	list("started", f.Started)
+	list("failed_tasks", f.FailedTasks)
+	if len(f.Suspects) > 0 {
+		suspects := make([]any, len(f.Suspects))
+		for i, s := range f.Suspects {
+			suspects[i] = map[string]any{"commit": s.Commit, "subject": s.Subject, "run": s.Run, "modules": s.Modules}
+		}
+		b["suspects"] = suspects
+	}
+	if f.Unread > 0 {
+		b["unread"] = f.Unread
+	}
+	for k, v := range map[string]string{"run": f.Run, "commit": f.Commit, "failed_key": f.FailedKey, "unreconciled": f.Unreconciled} {
 		if v != "" {
 			b[k] = v
 		}
@@ -71,23 +101,37 @@ func FullCIRedNoted(ctx context.Context, db DB, run string) (bool, error) {
 	return noted, err
 }
 
-// FullCIOpenGoal is the latest red run with failed tests key whose goal's
-// mission is still open (not done, stopped or expired), and that mission;
-// "" for none.
-func FullCIOpenGoal(ctx context.Context, db DB, key string) (run, mission string, err error) {
-	if key == "" {
-		return "", "", nil
-	}
-	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `SELECT e.body_json->'full_ci'->>'run', m.mission_id FROM agentrt.event e
-		  JOIN agentrt.mission m ON m.mission_id = e.body_json->'full_ci'->>'mission'
-		  WHERE e.event_stream_id = $1 AND e.event_type = 'note' AND e.actor_id = 'controller'
-		    AND e.body_json->'full_ci'->>'failed_key' = $2 AND m.state NOT IN ('done', 'stopped', 'expired')
-		  ORDER BY e.seq DESC LIMIT 1`, ControllerStream, key).Scan(&run, &mission)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+// FullCINote is one full_ci note as recorded: when, its text and its body.
+type FullCINote struct {
+	At   time.Time
+	Text string
+	Body map[string]any
+}
+
+// FullCINotes lists the controller's last limit full_ci notes, newest first.
+func FullCINotes(ctx context.Context, db DB, limit int) ([]FullCINote, error) {
+	out := []FullCINote{}
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		out = out[:0]
+		rows, err := tx.Query(ctx, `SELECT at, COALESCE(body_json->>'text', ''), body_json->'full_ci' FROM agentrt.event
+		  WHERE event_stream_id = $1 AND event_type = 'note' AND actor_id = 'controller' AND body_json ? 'full_ci'
+		  ORDER BY seq DESC LIMIT $2`, ControllerStream, limit)
+		if err != nil {
+			return err
 		}
-		return err
+		defer rows.Close()
+		for rows.Next() {
+			var n FullCINote
+			var body []byte
+			if err := rows.Scan(&n.At, &n.Text, &body); err != nil {
+				return err
+			}
+			if err := json.Unmarshal(body, &n.Body); err != nil {
+				return err
+			}
+			out = append(out, n)
+		}
+		return rows.Err()
 	})
-	return run, mission, err
+	return out, err
 }

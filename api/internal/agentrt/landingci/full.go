@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Full CI (the daily full run): with incremental Go tests per landing
@@ -28,6 +32,12 @@ const (
 	BaseParamName = "base"
 	// fullTestTask is the pipeline task whose log names the failed tests.
 	fullTestTask = "test-api"
+	// changesTask is the pipeline task that decides which modules of the
+	// repository's declaration a run runs, and RunModulesResult its TaskRun
+	// result saying so: "*" for every module, otherwise the names of the
+	// modules that ran, each between spaces (" api repo ").
+	changesTask      = "changes"
+	RunModulesResult = "run-modules"
 )
 
 var fullRunName = regexp.MustCompile(`^ci-full-[0-9a-f]{12}-[0-9]{8}$`)
@@ -117,4 +127,88 @@ func (c *Client) FullRunTestLog(ctx context.Context, run string) (string, error)
 		}
 	}
 	return "", nil
+}
+
+// FullRunFailedTasks names the pipeline tasks of the run's failed TaskRuns
+// (Failure), sorted, each once. A run none of whose TaskRuns failed (a
+// timeout, a cancel) gives none: Failure tells that one by the run itself,
+// which is no pipeline task.
+func (c *Client) FullRunFailedTasks(ctx context.Context, run string) ([]string, error) {
+	f, err := c.Failure(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, t := range f.TaskRuns {
+		if t.PipelineTask != "" {
+			out = append(out, t.PipelineTask)
+		}
+	}
+	sort.Strings(out)
+	return slices.Compact(out), nil
+}
+
+// RunModules reads which modules the CI run of revision ran: among the
+// pipeline's runs of exactly that revision that are not full runs and did not
+// reuse another run's verdict, the newest whose changes TaskRun gives the
+// run-modules result. It returns that
+// run and the result as written but for the newlines around it, so the
+// spaces around a module's name stay ("*" is every module). No such run is
+// "", "", nil. A TaskRun that cannot be read is an error: an older run's
+// answer is not taken for a newer run's.
+func (c *Client) RunModules(ctx context.Context, revision string) (run, modules string, err error) {
+	items, err := c.pipelineRuns(ctx, "bifrost-ci-platform")
+	if err != nil {
+		return "", "", err
+	}
+	var of []unstructured.Unstructured
+	for _, item := range items {
+		params, counts := namedValues(item, "spec", "params")
+		if counts["revision"] != 1 || params["revision"] != revision || item.GetLabels()["bifrost.io/trigger"] == FullCITrigger {
+			continue
+		}
+		// A run that reused another run's verdict (the run of main's push
+		// after a landing) ran nothing itself: its changes task sees a commit
+		// on main and answers "*", which would hide what the landing's own run
+		// left out.
+		if ClaimsReuse(item) {
+			continue
+		}
+		of = append(of, item)
+	}
+	sort.Slice(of, func(i, j int) bool {
+		a, b := of[i].GetCreationTimestamp().Time, of[j].GetCreationTimestamp().Time
+		if !a.Equal(b) {
+			return a.After(b)
+		}
+		return of[i].GetName() > of[j].GetName()
+	})
+	d, err := c.Dynamic()
+	if err != nil {
+		return "", "", err
+	}
+	for _, item := range of {
+		children, _, _ := unstructured.NestedSlice(item.Object, "status", "childReferences")
+		for _, value := range children {
+			child, _ := value.(map[string]any)
+			name, _ := child["name"].(string)
+			if child["kind"] != "TaskRun" || name == "" || child["pipelineTaskName"] != changesTask {
+				continue
+			}
+			task, err := d.Resource(pipelineRunGVR.GroupVersion().WithResource("taskruns")).Namespace(c.namespace()).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return "", "", fmt.Errorf("CI TaskRun %s: %w", name, err)
+			}
+			results, _, _ := unstructured.NestedSlice(task.Object, "status", "results")
+			for _, entry := range results {
+				m, _ := entry.(map[string]any)
+				if m["name"] != RunModulesResult {
+					continue
+				}
+				value, _ := m["value"].(string)
+				return item.GetName(), strings.Trim(value, "\r\n"), nil
+			}
+		}
+	}
+	return "", "", nil
 }

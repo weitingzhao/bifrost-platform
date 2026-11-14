@@ -55,6 +55,10 @@ type agentRuntime struct {
 	// late is the runtime's database as it connects: its routes are ready
 	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
 	late *lateDB
+	// fullCI is the controller's daily full CI once the workers process
+	// has wired it (wireFullCI), for the gauge /metrics serves; nil in a
+	// process that runs no controller, or where the loop is off.
+	fullCI atomic.Pointer[controller.FullCI]
 }
 
 // wireAgentRuntime connects the agent runtime (design v5 §5.2) when
@@ -171,6 +175,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// main through ready/ and the bifrost-land pipeline.
 		s.wirePipelineRecords(c)
 		s.wireFullCI(c)
+		rt.fullCI.Store(c.FullCI)
 		c.PlatformUp, c.PlatformProbe = platformProbe(role, late)
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})

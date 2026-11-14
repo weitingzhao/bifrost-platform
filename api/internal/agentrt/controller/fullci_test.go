@@ -2,11 +2,12 @@ package controller_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
@@ -19,6 +20,8 @@ const (
 	fullMain2 = "2222222222222222222222222222222222222222"
 	fullSTG   = "3333333333333333333333333333333333333333"
 	fullGreen = "4444444444444444444444444444444444444444"
+	fullMid   = "5555555555555555555555555555555555555555"
+	fullOld   = "6666666666666666666666666666666666666666"
 )
 
 // fullCI is a cluster of full runs and a main, in memory.
@@ -28,6 +31,10 @@ type fullCI struct {
 	runs    []landingci.FullRun
 	ensured []string
 	now     time.Time
+	// failedTasks are a run's failed pipeline tasks; modules a landed
+	// commit's CI run and its run-modules (a commit not there has no run).
+	failedTasks map[string][]string
+	modules     map[string][2]string
 }
 
 func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
@@ -65,7 +72,12 @@ func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
 				return nil, nil
 			}
 			return []controller.FullCILanding{{Commit: fullMain, Subject: "feat: the latest landing"},
-				{Commit: "5555555555555555555555555555555555555555", Subject: "fix: an earlier landing"}}, nil
+				{Commit: fullMid, Subject: "fix: an earlier landing"}, {Commit: fullOld, Subject: "chore: the first landing"}}, nil
+		},
+		FailedTasks: func(_ context.Context, run string) ([]string, error) { return f.failedTasks[run], nil },
+		RunModules: func(_ context.Context, revision string) (string, string, error) {
+			m := f.modules[revision]
+			return m[0], m[1], nil
 		},
 	}
 	return c
@@ -163,101 +175,180 @@ func TestFullCISwitchOffAndParam(t *testing.T) {
 	}
 }
 
-func fullGoals(t *testing.T, pool *pgxpool.Pool) []string {
+// fullCIOrigin, for the tests below: 2026-11-14: the daily full CI was the
+// only run that would catch a module wrongly left out of a landing's CI, and
+// a red one reached nobody: a log line, a note, and a goal for a dispatch
+// lane that was being removed; it also named only Go tests.
+
+// missions counts every mission: a red full run creates none.
+func missions(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
-	rows, err := pool.Query(ctx, `SELECT goal FROM agentrt.mission WHERE title LIKE 'Fix the red full CI run %' ORDER BY mission_id`)
+	var n int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.mission`).Scan(&n))
+	return n
+}
+
+// redNotes reads the notes of red run run: their texts and full_ci bodies.
+func redNotes(t *testing.T, pool *pgxpool.Pool, run string) (texts []string, bodies []map[string]any) {
+	t.Helper()
+	rows, err := pool.Query(ctx, `SELECT body_json->>'text', body_json->'full_ci' FROM agentrt.event WHERE event_stream_id = 'controller'
+	  AND event_type = 'note' AND body_json->'full_ci'->>'run' = $1 ORDER BY seq`, run)
 	must(t, err)
 	defer rows.Close()
-	var out []string
 	for rows.Next() {
-		var g string
-		must(t, rows.Scan(&g))
-		out = append(out, g)
+		var text string
+		var body map[string]any
+		must(t, rows.Scan(&text, &body))
+		texts, bodies = append(texts, text), append(bodies, body)
 	}
 	must(t, rows.Err())
-	return out
+	return texts, bodies
 }
 
-func TestFullCIRedProposesOneGoalListingTheLandings(t *testing.T) {
+// Origin: fullCIOrigin. A red run is noted once, with the pipeline tasks
+// that failed (Go or not) and, of the three commits landed since the last
+// green full run, the one whose own CI run ran only some modules: the one
+// that ran all of them ("*") is no suspect, and the one whose CI run cannot
+// be found is counted as unread. No goal or mission is created, and a
+// second pass adds no second note.
+func TestFullCIRedIsNotedOnceWithFailedTasksAndSuspects(t *testing.T) {
 	pool := setup(t)
 	now := at(t, "2026-11-06", "08:00")
+	const red = "ci-full-111111111111-20261106"
 	f := &fullCI{main: fullMain, now: now, runs: []landingci.FullRun{
 		{Name: "ci-full-444444444444-20261105", Revision: fullGreen, Status: "Succeeded", CreatedAt: now.Add(-29 * time.Hour)},
-		{Name: "ci-full-111111111111-20261106", Revision: fullMain, Status: "Failed", CreatedAt: now.Add(-5 * time.Hour),
+		{Name: red, Revision: fullMain, Status: "Failed", CreatedAt: now.Add(-5 * time.Hour),
 			HasFailedTests: true, FailedTests: []string{"TestB", "TestA"}},
-	}}
+	},
+		failedTasks: map[string][]string{red: {"task-one", "task-two"}},
+		modules:     map[string][2]string{fullMain: {"ci-latest", "*"}, fullMid: {"ci-earlier", " api repo "}},
+	}
 	c := f.controller(pool)
+	before := missions(t, pool)
 	if n := pass(t, c); n != 1 {
-		t.Fatal("proposed", n)
+		t.Fatal("noted", n)
 	}
-	pass(t, c)
-	goals := fullGoals(t, pool)
-	if len(goals) != 1 {
-		t.Fatal("goals", len(goals))
+	if n := pass(t, c); n != 0 {
+		t.Fatal("a second pass noted again", n)
 	}
-	for _, want := range []string{"ci-full-111111111111-20261106", fullMain, "- TestA\n- TestB\n", "ci-full-444444444444-20261105 of " + fullGreen,
-		"- " + fullMain + " feat: the latest landing\n", "fix: an earlier landing", "Reproduce the failing tests at main's head", "bisect", "Fix forward, with a test"} {
-		if !strings.Contains(goals[0], want) {
-			t.Fatalf("the goal lacks %q:\n%s", want, goals[0])
+	if after := missions(t, pool); after != before {
+		t.Fatal("a red run created a mission", before, after)
+	}
+	texts, bodies := redNotes(t, pool, red)
+	if len(bodies) != 1 {
+		t.Fatal("notes of the red run:", len(bodies))
+	}
+	b := bodies[0]
+	want := map[string]any{"alert": true, "run": red, "commit": fullMain, "failed_key": "TestA TestB",
+		"failed_tasks": []any{"task-one", "task-two"}, "unread": float64(1),
+		"suspects": []any{map[string]any{"commit": fullMid, "subject": "fix: an earlier landing", "run": "ci-earlier", "modules": " api repo "}}}
+	if !reflect.DeepEqual(b, want) {
+		t.Fatalf("the note's body:\n%v\nwant\n%v", b, want)
+	}
+	for _, part := range []string{red, fullMain, "failed tasks: task-one, task-two", "failed Go tests: TestA, TestB",
+		"1 commit(s) landed since the last green full run ci-full-444444444444-20261105 with a module left out of their own CI run: 55555555 ( api repo )",
+		"the CI run of 1 more could not be read"} {
+		if !strings.Contains(texts[0], part) {
+			t.Fatalf("the note's text lacks %q:\n%s", part, texts[0])
 		}
 	}
-	var noted int
-	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'controller' AND event_type = 'note'
-	  AND body_json->'full_ci'->>'run' = 'ci-full-111111111111-20261106' AND body_json->'full_ci' ? 'mission'
-	  AND body_json->'full_ci'->>'alert' = 'true' AND body_json->'full_ci'->>'deviation' = 'content_reuse'`).Scan(&noted))
-	if noted != 1 {
-		t.Fatal("the note the Console shows:", noted)
-	}
 }
 
-func TestFullCISameFailuresProposeNoneWhileTheGoalIsOpen(t *testing.T) {
+// Origin: fullCIOrigin. Without a green full run before the red one there
+// is no range of landings to look at: the note says the reconciliation was
+// not done and why, and carries no suspect list that would read as "none".
+// Without a reader of the failed tasks, the text says none could be read.
+func TestFullCIRedWithoutAGreenIsUnreconciled(t *testing.T) {
 	pool := setup(t)
 	now := at(t, "2026-11-06", "02:00") // before the day's runs: only the reds count
-	red := func(name, commit string, ago time.Duration, tests ...string) landingci.FullRun {
-		return landingci.FullRun{Name: name, Revision: commit, Status: "Failed", CreatedAt: now.Add(-ago), HasFailedTests: true, FailedTests: tests}
-	}
-	f := &fullCI{main: fullMain, now: now, runs: []landingci.FullRun{red("ci-full-111111111111-20261105", fullMain, 29*time.Hour, "TestA")}}
+	const red = "ci-full-111111111111-20261105"
+	f := &fullCI{main: fullMain, now: now, runs: []landingci.FullRun{
+		{Name: red, Revision: fullMain, Status: "Failed", CreatedAt: now.Add(-29 * time.Hour), HasFailedTests: true},
+	}, modules: map[string][2]string{fullMid: {"ci-earlier", " api repo "}}}
 	c := f.controller(pool)
+	c.FullCI.FailedTasks = nil
 	if n := pass(t, c); n != 1 {
-		t.Fatal("the first red proposed", n)
+		t.Fatal("noted", n)
 	}
-	f.runs = append(f.runs, red("ci-full-222222222222-20261106", fullMain2, 5*time.Hour, "TestA"))
-	if n := pass(t, c); n != 0 || len(fullGoals(t, pool)) != 1 {
-		t.Fatal("a second red with the same failures proposed", n)
+	texts, bodies := redNotes(t, pool, red)
+	if len(bodies) != 1 {
+		t.Fatal("notes of the red run:", len(bodies))
 	}
-	var open string
-	must(t, pool.QueryRow(ctx, `SELECT body_json->'full_ci'->>'open_run' FROM agentrt.event WHERE event_stream_id = 'controller'
-	  AND body_json->'full_ci'->>'run' = 'ci-full-222222222222-20261106'`).Scan(&open))
-	if open != "ci-full-111111111111-20261105" {
-		t.Fatal("the note names", open)
+	b := bodies[0]
+	if b["unreconciled"] != "no full run in the last 14 days was green" || b["suspects"] != nil || b["unread"] != nil || b["failed_tasks"] != nil {
+		t.Fatalf("the note's body: %v", b)
 	}
-	// Other failures are another goal.
-	f.runs = append(f.runs, red("ci-full-333333333333-20261106", fullSTG, 4*time.Hour, "TestB"))
-	if n := pass(t, c); n != 1 {
-		t.Fatal("other failures proposed", n)
+	if !strings.Contains(texts[0], "no failed task could be read") || !strings.Contains(texts[0], "was not reconciled: no full run in the last 14 days was green") {
+		t.Fatal(texts[0])
 	}
-	// Once the first goal is no longer open, the same failures propose again.
-	var first string
-	must(t, pool.QueryRow(ctx, `SELECT mission_id FROM agentrt.mission WHERE title = 'Fix the red full CI run ci-full-111111111111-20261105'`).Scan(&first))
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", first, "stopped", "test") }))
-	f.runs = append(f.runs, red("ci-full-111111111111-20261106", fullMain, 3*time.Hour, "TestA"))
-	if n := pass(t, c); n != 1 || len(fullGoals(t, pool)) != 3 {
-		t.Fatal("after the goal closed", n)
+	// The landings that cannot be read are a reason as well, not "none".
+	f.runs = append([]landingci.FullRun{{Name: "ci-full-444444444444-20261104", Revision: fullGreen, Status: "Succeeded", CreatedAt: now.Add(-50 * time.Hour)}},
+		append(f.runs, landingci.FullRun{Name: "ci-full-222222222222-20261106", Revision: fullMain2, Status: "Failed", CreatedAt: now.Add(-time.Hour)})...)
+	c.FullCI.Landings = func(context.Context, string, string, int) ([]controller.FullCILanding, error) {
+		return nil, errors.New("gitea is away")
+	}
+	pass(t, c)
+	_, bodies = redNotes(t, pool, "ci-full-222222222222-20261106")
+	if len(bodies) != 1 || bodies[0]["suspects"] != nil ||
+		bodies[0]["unreconciled"] != "the landings since ci-full-444444444444-20261104 could not be read: gitea is away" {
+		t.Fatalf("landings that could not be read: %v", bodies)
 	}
 }
 
-func TestFullCIGreenProposesNothing(t *testing.T) {
+// Origin: fullCIOrigin. The gauge the alert rules read is the newest
+// finished full run: a red after a green is red, and a newer run still
+// running does not replace the last finished one. No loop, no answer.
+func TestFullCILatestIsTheNewestFinishedRun(t *testing.T) {
+	pool := setup(t)
+	now := at(t, "2026-11-06", "02:00")
+	f := &fullCI{main: fullMain, now: now, runs: []landingci.FullRun{
+		{Name: "ci-full-444444444444-20261104", Revision: fullGreen, Status: "Succeeded", CreatedAt: now.Add(-50 * time.Hour)},
+	}}
+	c := f.controller(pool)
+	if _, _, ok := c.FullCI.Latest(); ok {
+		t.Fatal("an answer before any pass")
+	}
+	pass(t, c)
+	if name, status, ok := c.FullCI.Latest(); !ok || name != "ci-full-444444444444-20261104" || status != "Succeeded" {
+		t.Fatal(name, status, ok)
+	}
+	f.runs = append(f.runs, landingci.FullRun{Name: "ci-full-111111111111-20261105", Revision: fullMain, Status: "Failed", CreatedAt: now.Add(-26 * time.Hour)})
+	pass(t, c)
+	if name, status, ok := c.FullCI.Latest(); !ok || name != "ci-full-111111111111-20261105" || status != "Failed" {
+		t.Fatal("green then red", name, status, ok)
+	}
+	f.runs = append(f.runs, landingci.FullRun{Name: "ci-full-222222222222-20261106", Revision: fullMain2, Status: "Running", CreatedAt: now.Add(-time.Hour)})
+	pass(t, c)
+	if name, status, ok := c.FullCI.Latest(); !ok || name != "ci-full-111111111111-20261105" || status != "Failed" {
+		t.Fatal("a running run replaced the last finished one", name, status, ok)
+	}
+	var none *controller.FullCI
+	if _, _, ok := none.Latest(); ok {
+		t.Fatal("no loop gave an answer")
+	}
+}
+
+// Origin: fullCIOrigin (the goal a red run proposed is gone; a green run
+// was never to leave a red note or a mission, and still does not).
+func TestFullCIGreenNotesNothing(t *testing.T) {
 	pool := setup(t)
 	now := at(t, "2026-11-06", "08:00")
 	f := &fullCI{main: fullMain, now: now, runs: []landingci.FullRun{
 		{Name: "ci-full-111111111111-20261106", Revision: fullMain, Status: "Succeeded", CreatedAt: now.Add(-5 * time.Hour)},
 		{Name: "ci-full-333333333333-20261106", Revision: fullSTG, Status: "Running", CreatedAt: now.Add(-5 * time.Hour)},
 	}}
-	if n := pass(t, f.controller(pool)); n != 0 || len(fullGoals(t, pool)) != 0 {
-		t.Fatal("a green run proposed", n)
+	before := missions(t, pool)
+	n := pass(t, f.controller(pool))
+	var alerts int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'controller' AND body_json->'full_ci' ? 'alert'`).Scan(&alerts))
+	if n != 0 || alerts != 0 || missions(t, pool) != before {
+		t.Fatal("a green run was noted as red", n, alerts)
 	}
 }
 
+// Origin: R5:5.7-9 (a run without the failed-tests result is read from its
+// test log); 2026-11-14 (fullCIOrigin): the tests are now named in the red
+// run's note, not in a goal.
 func TestFullCIRedReadsTheTestLogWithoutTheResult(t *testing.T) {
 	pool := setup(t)
 	now := at(t, "2026-11-06", "02:00")
@@ -269,10 +360,11 @@ func TestFullCIRedReadsTheTestLogWithoutTheResult(t *testing.T) {
 		return "=== RUN   TestC\n    --- FAIL: TestC/sub (0.01s)\n--- FAIL: TestC (0.02s)\nFAIL\n", nil
 	}
 	if n := pass(t, c); n != 1 {
-		t.Fatal("proposed", n)
+		t.Fatal("noted", n)
 	}
-	if g := fullGoals(t, pool); len(g) != 1 || !strings.Contains(g[0], "(from its test-api log):\n- TestC\n- TestC/sub\n") ||
-		!strings.Contains(g[0], "No full run in the last 14 days was green") {
-		t.Fatal(g)
+	texts, bodies := redNotes(t, pool, "ci-full-111111111111-20261106")
+	if len(bodies) != 1 || bodies[0]["failed_key"] != "TestC TestC/sub" || !strings.Contains(texts[0], "failed Go tests: TestC, TestC/sub") ||
+		bodies[0]["unreconciled"] != "no full run in the last 14 days was green" {
+		t.Fatal(texts, bodies)
 	}
 }

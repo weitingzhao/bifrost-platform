@@ -543,6 +543,10 @@ func (s *Server) Router() http.Handler {
 		// How CI is set up for one project, from its own declaration (the
 		// configuration view). Read-only; viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/config", s.handleUnitConfig)
+		// The daily full CI's notes: the runs started, and for each red one
+		// what failed and which landings left a module out. Read-only; viewer
+		// and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/full-ci", s.handleUnitFullCI)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
