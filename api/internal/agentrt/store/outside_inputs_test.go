@@ -1,0 +1,15 @@
+package store
+
+import (
+	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/outsideinput"
+)
+
+// This package's tests read files outside the Go module, which Go's test cache
+// does not look at again (CI feedback 18, 2026-11-13; see outsideinput). Measured
+// that day with go test's own log of what each test process opened.
+func TestOutsideInputs(t *testing.T) {
+	t.Parallel()
+	outsideinput.Declare(t, "console")
+}

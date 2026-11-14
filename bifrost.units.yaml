@@ -83,6 +83,8 @@ modules:
       api/internal/network: ["."]
       api/internal/notice: ["."]
       api/internal/opscontext: ["."]
+      # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
+      api/internal/outsideinput: ["api", "scripts/ci"]
       api/internal/opsfacts: ["."]
       api/internal/ownerexec: ["."]
       api/internal/patrol: ["."]
