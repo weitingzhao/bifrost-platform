@@ -31,8 +31,12 @@ func newULID(now time.Time) string {
 
 // NewTaskID, NewAttemptID, NewMessageID and NewVerificationID mint ids in the
 // shapes the tables check.
-func NewTaskID() string         { return "t_" + newULID(time.Now()) }
+func NewTaskID() string    { return "t_" + newULID(time.Now()) }
+func NewMessageID() string { return "m_" + newULID(time.Now()) }
+func NewControlID() string { return "c_" + newULID(time.Now()) }
+
+// NewAttemptID and NewVerificationID mint ids in the shapes the tables
+// check. Only test fixtures of several packages use them now: nothing leases
+// or verifies any more (store cut 4, 2026-11-14).
 func NewAttemptID() string      { return "a_" + newULID(time.Now()) }
-func NewMessageID() string      { return "m_" + newULID(time.Now()) }
 func NewVerificationID() string { return "v_" + newULID(time.Now()) }
-func NewControlID() string      { return "c_" + newULID(time.Now()) }

@@ -57,11 +57,8 @@ func (f *fixture) readyTask(t *testing.T) string {
 	var id string
 	f.tx(t, func(tx pgx.Tx) error {
 		id = store.NewTaskID()
-		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", OffPlanReason: "relay test",
-			Role: "implement", Class: "go", Title: "t", SpecArtifact: f.spec, Effect: "branch"}); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", id)
+		return seedReady(ctx, tx, store.Task{ID: id, MissionID: "M-1", OffPlanReason: "relay test",
+			Role: "implement", Class: "go", Title: "t", SpecArtifact: f.spec, Effect: "branch"})
 	})
 	return id
 }

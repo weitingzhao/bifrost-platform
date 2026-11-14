@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -34,10 +33,4 @@ func ReadTuning(ctx context.Context, db DB) (*rules.Tuning, error) {
 		return err
 	})
 	return t, err
-}
-
-// leaseTTL is how long a lease lasts from now: the tuning rule's, or LeaseTTL.
-func leaseTTL(ctx context.Context, tx pgx.Tx) (time.Duration, error) {
-	t, err := tuningIn(ctx, tx)
-	return t.Duration(rules.TuneLeaseTTL), err
 }

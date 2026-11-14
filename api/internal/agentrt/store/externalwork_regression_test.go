@@ -17,7 +17,7 @@ func TestReview596ExternalRegistrationSerializesDevClaim(t *testing.T) {
 	ok(t, err)
 	defer tx.Rollback(ctx)
 	taskID := store.NewTaskID()
-	_, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: taskID, MissionID: "M-2", PlanNode: s2, Role: "implement", Class: "go", Title: "business task", SpecArtifact: w.spec, Effect: "branch"})
+	err = seedTask(ctx, tx, store.Task{ID: taskID, MissionID: "M-2", PlanNode: s2, Role: "implement", Class: "go", Title: "business task", SpecArtifact: w.spec, Effect: "branch"}, "proposed")
 	ok(t, err)
 	conn := w.db.Connect(t, w.db.Runtime)
 	observer := w.db.Connect(t, w.db.Admin)
@@ -84,14 +84,4 @@ func TestReview596CanLinkTaskOnUnboundDevStep(t *testing.T) {
 			is(t, err, store.ErrInvalid)
 		})
 	}
-}
-
-func TestExternalRegistrationRejectsLaterBusinessBinding(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.legacy(t, `UPDATE agentrt.mission SET tenant='business' WHERE mission_id='M-2'`)
-	_, err := store.RegisterExternalWork(ctx, w.rt, wr("thread:dev-first"), store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "dev-first", Artifact: externalSpec(t, w)})
-	ok(t, err)
-	_, err = w.task(t, "M-2", s2, "", "implement")
-	is(t, err, store.ErrInvalid)
 }

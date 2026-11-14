@@ -273,8 +273,8 @@ func TestStepRules(t *testing.T) {
 	elsewhere := store.NewTaskID()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		for id, step := range map[string]string{here: "R2:2.1-5", elsewhere: s1} {
-			if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: step, Role: "implement",
-				Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "branch"}); err != nil {
+			if err := seedTask(ctx, tx, store.Task{ID: id, MissionID: "M-1", PlanNode: step, Role: "implement",
+				Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "branch"}, "proposed"); err != nil {
 				return err
 			}
 		}

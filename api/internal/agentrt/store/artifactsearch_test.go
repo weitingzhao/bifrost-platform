@@ -59,9 +59,8 @@ func TestSearchArtifacts(t *testing.T) {
 	otherSpec := w.artifact(t, "task_spec", "# M-2's task\n")
 	other := store.NewTaskID()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, perr := store.ProposeTask(ctx, tx, "controller", store.Task{ID: other, MissionID: "M-2", OffPlanReason: "test", Role: "implement",
-			Class: "go", Title: "other", SpecArtifact: otherSpec, Effect: "branch", Repo: "bifrost-platform"})
-		return perr
+		return seedTask(ctx, tx, store.Task{ID: other, MissionID: "M-2", OffPlanReason: "test", Role: "implement",
+			Class: "go", Title: "other", SpecArtifact: otherSpec, Effect: "branch", Repo: "bifrost-platform"}, "proposed")
 	}))
 	// A mission's spec is the mission's.
 	missionSpec := w.artifact(t, "mission_spec", "# M-2\n")

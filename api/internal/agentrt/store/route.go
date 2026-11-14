@@ -2,14 +2,9 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"path"
-	"slices"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // Routing in 2.2 (design v5 §5.1.2 「分流顺序」 ①–④; review 142 B5). Each
@@ -44,16 +39,6 @@ func LockCapabilities(ctx context.Context, tx pgx.Tx) error {
 	return err
 }
 
-// jobOfRole is the job of each role. A role with no job (other) is not
-// dispatched.
-var jobOfRole = map[string]string{
-	"plan":      "planner",
-	"implement": "implementer",
-	"verify":    "verifier",
-	"review":    "reviewer",
-	"brief":     "chief_of_staff",
-}
-
 type jobCandidate struct {
 	id, status, executor, provider, pattern string
 	version                                 int
@@ -65,26 +50,6 @@ type ruleRef struct {
 	id      *string
 	version *int
 }
-
-func (r ruleRef) record() any {
-	if r.id == nil {
-		return nil
-	}
-	m := map[string]any{"id": *r.id}
-	if r.version != nil {
-		m["version"] = *r.version
-	}
-	return m
-}
-
-// routeAlgorithm names the hard checks and the input format below; a recorded
-// input of another algorithm is not replayed by this one (review 155 B1).
-// Each change of what the checks decide raises it: every ready task's
-// fingerprint then differs from its last route_decided, and Reroute decides
-// it again under the new checks. 3: agentd's deterministic check verifies
-// core work without holding review_core (W-31 2.4; review 422 A1: a core
-// verification routed to nobody before it would otherwise stay so).
-const routeAlgorithm = 3
 
 // fits reports whether a host's tool is this candidate: same executor, same
 // model provider, and a model the pattern matches.
@@ -107,17 +72,6 @@ type restriction struct {
 	// bound to no rule) it still keeps everyone else out and nobody holds it
 	// (review 186 A2, 187 R2, R3).
 	grants bool
-}
-
-func (f restriction) holds(tl Tool) bool {
-	return f.executor == tl.Executor && (f.provider == nil || *f.provider == tl.Provider)
-}
-
-// priorAttempt is an attempt of a task's subject; a nil provider was never
-// recorded.
-type priorAttempt struct {
-	id, executor string
-	provider     *string
 }
 
 // capabilities are the routing inputs of the Owner's rules: each job's
@@ -206,256 +160,4 @@ func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	}
 	cp.thresholds, cp.scores, err = readCompetence(ctx, tx)
 	return cp, err
-}
-
-// priorAttempts reads the attempts of the given tasks, by task, each by id.
-func priorAttempts(ctx context.Context, tx pgx.Tx, tasks []string) (map[string][]priorAttempt, error) {
-	out := map[string][]priorAttempt{}
-	if len(tasks) == 0 {
-		return out, nil
-	}
-	rows, err := tx.Query(ctx, `SELECT task_id, attempt_id, executor_actor_id, model_provider FROM agentrt.attempt
-	  WHERE task_id = ANY($1) ORDER BY attempt_id`, tasks)
-	if err != nil {
-		return nil, err
-	}
-	var task string
-	var a priorAttempt
-	_, err = pgx.ForEachRow(rows, []any{&task, &a.id, &a.executor, &a.provider}, func() error {
-		out[task] = append(out[task], a)
-		return nil
-	})
-	return out, err
-}
-
-// routeInput is everything a route of one task depends on.
-type routeInput struct {
-	job, core, subject string
-	pin                string // the task's executor pin, "" for none (pin.go)
-	subjectPin         string // the pin of the task it checks: a review of a pinned task goes to PinnedReviewer alone
-	needs              []string
-	candidates         []jobCandidate
-	facts              []restriction // on the task's needs and its core label
-	attempts           []priorAttempt
-	competence         *competence // nil: the tenant's routing rule sets no threshold
-}
-
-// input selects what of the capabilities and the subject's attempts bears on
-// task c. Core work needs author_core, or review_core for a review or a
-// verification.
-func (cp capabilities) input(c candidate, attempts []priorAttempt) routeInput {
-	in := routeInput{job: jobOfRole[c.role], subject: c.subject, pin: c.pin, needs: c.needs, attempts: attempts}
-	if c.core {
-		in.core = "author_core"
-		if c.role == "review" || c.role == "verify" {
-			in.core = "review_core"
-		}
-	}
-	in.candidates = cp.candidates[in.job]
-	if c.role == "review" && c.subjectPin != "" {
-		// A pinned task's review goes to the fixed reviewer of another
-		// provider than the coordinator's (§2.8: Codex, openai, in the
-		// first version), whatever else the job lists; independence from
-		// the subject's attempts is checked as for any review.
-		in.subjectPin = c.subjectPin
-		in.candidates = slices.DeleteFunc(slices.Clone(in.candidates), func(jc jobCandidate) bool {
-			return jc.executor != PinnedReviewer.Executor || jc.provider != PinnedReviewer.Provider
-		})
-	}
-	in.competence = cp.competenceOf(c, in.job, in.candidates)
-	subjects := map[string]bool{in.core: in.core != ""}
-	for _, n := range c.needs {
-		subjects[n] = true
-	}
-	for _, f := range cp.facts {
-		if subjects[f.subject] {
-			in.facts = append(in.facts, f)
-		}
-	}
-	return in
-}
-
-// readInput reads the route input of task c in tx.
-func readInput(ctx context.Context, tx pgx.Tx, c candidate) (routeInput, error) {
-	cp, err := readCapabilities(ctx, tx)
-	if err != nil {
-		return routeInput{}, err
-	}
-	return inputWith(ctx, tx, cp, c)
-}
-
-// inputWith reads the attempts of c's subject and selects c's input from cp.
-func inputWith(ctx context.Context, tx pgx.Tx, cp capabilities, c candidate) (routeInput, error) {
-	var attempts []priorAttempt
-	if c.subject != "" {
-		by, err := priorAttempts(ctx, tx, []string{c.subject})
-		if err != nil {
-			return routeInput{}, err
-		}
-		attempts = by[c.subject]
-	}
-	return cp.input(c, attempts), nil
-}
-
-// exclusion applies the hard checks (②–④) to one tool and returns every one
-// that excludes it, in this order. Restrictions bind whether or not the
-// Owner has signed them yet: a restriction is a tightening, and tightening
-// needs no signature.
-//   - a cannot or must_not fact on any need of the task excludes the tool;
-//   - a need that some executor holds an only fact on is open to holders only;
-//   - core work needs a holder of only author_core, or only review_core for a
-//     review or verification; with no holder nobody may take it. agentd's
-//     deterministic check verifies core work as it verifies any: it runs the
-//     spec's commands and judges nothing, and review_core is about judging
-//     (design v5 5.1.2 ④ gives the review of core work to codex, read-only),
-//     so it needs no holding; any other verifier of core work does;
-//   - a review or verification never goes to an executor or a model provider
-//     that made an attempt of its subject, nor to anyone when an attempt of
-//     the subject has no recorded provider (independence cannot be shown).
-func (in routeInput) exclusion(tl Tool) []string {
-	var reasons []string
-	restricted := false
-	check := in.job == "verifier" && in.core == "review_core" && tl.Executor == "exec:deterministic"
-	onlySubjects, held := map[string]bool{}, map[string]bool{}
-	for _, f := range in.facts {
-		switch f.kind {
-		case "cannot", "must_not":
-			restricted = restricted || f.holds(tl)
-		case "only":
-			onlySubjects[f.subject] = true
-			held[f.subject] = held[f.subject] || (f.grants && f.holds(tl)) || (check && f.subject == in.core)
-		}
-	}
-	if restricted {
-		reasons = append(reasons, "cannot or must_not on a need")
-	}
-	for s := range onlySubjects {
-		if !held[s] {
-			reasons = append(reasons, "a need only others may take")
-			break
-		}
-	}
-	if in.core != "" && !held[in.core] && !check {
-		reasons = append(reasons, "core work needs only "+in.core)
-	}
-	if in.subject != "" {
-		for _, a := range in.attempts {
-			if a.executor == tl.Executor || a.provider == nil || *a.provider == tl.Provider {
-				reasons = append(reasons, "not independent of the subject's attempts")
-				break
-			}
-		}
-	}
-	return reasons
-}
-
-// decide is the route: the candidates in order less those the hard checks
-// and the competence step exclude, and each excluded one with its reasons
-// (and its sample, when the competence step is on).
-func (in routeInput) decide() (route []string, excluded []any) {
-	route = []string{}
-	excluded = []any{}
-	for _, jc := range in.candidates {
-		reasons := append(in.exclusion(Tool{Executor: jc.executor, Provider: jc.provider}), in.unfit(jc)...)
-		if len(reasons) == 0 {
-			route = append(route, jc.id)
-			continue
-		}
-		e := map[string]any{"candidate": jc.id, "reason": reasons[0], "reasons": reasons}
-		if in.competence != nil {
-			s := in.competence.samples[jc.id]
-			e["sample"] = map[string]any{"attempts": s.attempts, "first_pass": s.firstPass}
-		}
-		excluded = append(excluded, e)
-	}
-	return route, excluded
-}
-
-// record is the input as route_decided records it.
-func (in routeInput) record() map[string]any {
-	opt := func(p *string) any {
-		if p == nil {
-			return nil
-		}
-		return *p
-	}
-	cands := []any{}
-	for _, jc := range in.candidates {
-		cands = append(cands, map[string]any{"id": jc.id, "status": jc.status, "executor": jc.executor, "provider": jc.provider,
-			"pattern": jc.pattern, "version": jc.version, "rule": jc.rule.record()})
-	}
-	facts := []any{}
-	for _, f := range in.facts {
-		facts = append(facts, map[string]any{"id": f.id, "executor": f.executor, "provider": opt(f.provider), "kind": f.kind, "subject": f.subject,
-			"rule": f.rule.record(), "grants": f.grants})
-	}
-	attempts := []any{}
-	for _, a := range in.attempts {
-		attempts = append(attempts, map[string]any{"id": a.id, "executor": a.executor, "provider": opt(a.provider)})
-	}
-	needs := []any{}
-	for _, n := range in.needs {
-		needs = append(needs, n)
-	}
-	rec := map[string]any{"algorithm": routeAlgorithm, "job": in.job, "core": in.core, "subject": in.subject, "needs": needs,
-		"candidates": cands, "facts": facts, "attempts": attempts}
-	if in.competence != nil {
-		rec["competence"] = in.competence.record(in.candidates)
-	}
-	if in.pin != "" {
-		// Only a pinned task's: every other route's record, and its
-		// fingerprint, are what they were before pins (0010).
-		rec["executor_pin"] = in.pin
-	}
-	if in.subjectPin != "" {
-		rec["subject_pin"] = in.subjectPin // only a pinned task's review, as executor_pin
-	}
-	return rec
-}
-
-// fingerprint is the sha256 of the canonical record.
-func (in routeInput) fingerprint() (string, error) {
-	doc, err := canon.Encode(in.record())
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(doc)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
-}
-
-// decideRoute records the route of task t (route_decided, with its input and
-// the input's fingerprint) and writes it to route_json. t must be locked.
-func decideRoute(ctx context.Context, tx pgx.Tx, t taskRow) error {
-	c, err := candidateOf(ctx, tx, t.id)
-	if err != nil {
-		return err
-	}
-	in, err := readInput(ctx, tx, c)
-	if err != nil {
-		return err
-	}
-	return writeRoute(ctx, tx, t, in)
-}
-
-func writeRoute(ctx context.Context, tx pgx.Tx, t taskRow, in routeInput) error {
-	fp, err := in.fingerprint()
-	if err != nil {
-		return err
-	}
-	route, excluded := in.decide()
-	job := in.job
-	if job == "" {
-		job = "none"
-	}
-	if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "route_decided", Actor: "controller",
-		MissionID: t.mission, PlanNode: t.step, TaskID: t.id,
-		Body: map[string]any{"job": job, "candidates": route, "excluded": excluded, "inputs": in.record(), "fingerprint": fp}}); err != nil {
-		return err
-	}
-	doc, err := canon.Encode(route)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `UPDATE agentrt.task SET route_json = $2::jsonb WHERE task_id = $1`, t.id, string(doc))
-	return err
 }

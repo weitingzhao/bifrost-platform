@@ -93,11 +93,8 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		if err != nil {
 			return err
 		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", task)
+		return seedTask(ctx, tx, store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
+			Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, "ready")
 	})
 	return pool, task
 }

@@ -32,12 +32,6 @@ func Enqueue(ctx context.Context, tx pgx.Tx, eventID int64, topic string, payloa
 	return err
 }
 
-// MarkReady moves a task to ready (one of the controller's moves) and wakes
-// the hosts.
-func MarkReady(ctx context.Context, tx pgx.Tx, actor, taskID string) error {
-	return MoveTask(ctx, tx, actor, taskID, "ready", "")
-}
-
 // PostMessage stores a message (its body as an artifact, data only) and
 // signals the receiver's mailbox.
 func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte) (string, error) {
@@ -101,10 +95,7 @@ func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
 	return err
 }
 
-// SetControl records a stop, pause or drain and broadcasts it. It first takes
-// the lock a claim takes for the same scope (the global advisory lock, the
-// mission, task or host row), so a claim either commits before the control
-// or sees it (review 148 A2).
+// SetControl records a stop, pause or drain with no token.
 func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRef, kind, reason string) error {
 	return setControl(ctx, tx, actor, "", controlID, scope, scopeRef, kind, reason)
 }

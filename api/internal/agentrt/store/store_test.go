@@ -128,12 +128,7 @@ func newWorld(t *testing.T) *world {
 		if err != nil {
 			return err
 		}
-		r := store.Repos["bifrost-platform"]
-		body, err := store.ImplementSpec("task", "", r, r.Verify, store.HandInChecks(r, nil))
-		if err != nil {
-			return err
-		}
-		w.impl, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", body)
+		w.impl, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", []byte(`{"task":"task"}`))
 		return err
 	}))
 	return w
@@ -149,8 +144,7 @@ func (w *world) task(t *testing.T, mission, step, subject, role string) (string,
 		if step == "" {
 			task.OffPlanReason = "outside the plan"
 		}
-		_, err := store.ProposeTask(ctx, tx, "controller", task)
-		return err
+		return seedTask(ctx, tx, task, "proposed")
 	})
 	return id, err
 }
@@ -336,187 +330,6 @@ func TestPlanNumberingIsFixed(t *testing.T) {
 		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET state = 'done' WHERE plan_node_id = $1`, s2)
 		return err
 	}), "plan_node_state_changed")
-}
-
-// T32: links between the plan and the work are checked by the database.
-func TestPlanLinks(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	_, err := w.task(t, "M-1", item, "", "implement")
-	wantErr(t, err, "must hang on a step")
-	_, err = w.task(t, "M-2", s1, "", "implement")
-	wantErr(t, err, "belongs to M-1")
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	_, err = w.task(t, "M-1", s3, t1, "review")
-	wantErr(t, err, "must sit where its subject")
-	_, err = w.task(t, "M-1", s1, t1, "review")
-	ok(t, err)
-	off, err := w.task(t, "M-1", "", "", "other")
-	ok(t, err)
-	_ = off
-
-	// Rebinding a step that has tasks, and moving a task, need a plan change;
-	// a plan change that leaves a task of another mission on a step rolls back.
-	// An event whose keys match but whose type is not plan_changed.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err = store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_node_retitled", Actor: "controller",
-			PlanNode: s1, MissionID: "M-2", Body: map[string]any{"title": "s1"}}); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = 'M-2' WHERE plan_node_id = $1`, s1)
-		return err
-	}), "authorized plan change")
-	// An event about this step but of the old mission: the key check stops it.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err = store.SetStepState(ctx, tx, "controller", root, s1, "active", "test"); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = 'M-2' WHERE plan_node_id = $1`, s1)
-		return err
-	}), `has mission_id="M-1"`)
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = 'M-2' WHERE plan_node_id = $1`, s1)
-		return err
-	}), "belongs to M-2 but task")
-
-	// A done rule may name only tasks on its step and bound approvals.
-	t2, err := w.task(t, "M-1", s3, "", "implement")
-	ok(t, err)
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = jsonb_build_object('task_accepted', $2::text) WHERE plan_node_id = $1`, s1, t2)
-		return err
-	}), "not on this step")
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = '{"approval_executed":17}' WHERE plan_node_id = $1`, s1)
-		return err
-	}), "not bound to this step")
-	ok(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = jsonb_build_object('task_accepted', $2::text) WHERE plan_node_id = $1`, s1, t1)
-		return err
-	}))
-	// Moving t1 off the step its rule names rolls back too.
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2 WHERE task_id = $1`, t1, s3)
-		return err
-	}), "")
-
-	// Dependencies: a cycle is refused.
-	a, _ := w.task(t, "M-1", s3, "", "implement")
-	b, _ := w.task(t, "M-1", s3, "", "implement")
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.AddDependency(ctx, tx, "controller", "M-1", a, b); return err }))
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.AddDependency(ctx, tx, "controller", "M-1", b, a); return err }), "cycle")
-}
-
-// T32: two transactions inserting A->B and B->A at the same time; the graph
-// lock makes the second see the first. A and B are in different missions,
-// so their events go to different streams and only the graph lock can make
-// the second transaction wait.
-func TestConcurrentDependencyCycle(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	a, err := w.task(t, "M-1", s3, "", "implement")
-	ok(t, err)
-	b, err := w.task(t, "M-2", s2, "", "implement")
-	ok(t, err)
-	other := w.db.Connect(t, w.db.Runtime)
-
-	tx1, err := w.rt.Begin(ctx)
-	ok(t, err)
-	defer func() { _ = tx1.Rollback(ctx) }()
-	_, err = store.AddDependency(ctx, tx1, "controller", "M-1", a, b)
-	ok(t, err)
-	done := make(chan error, 1)
-	go func() {
-		done <- store.InTx(ctx, other, func(tx pgx.Tx) error {
-			_, err := store.AddDependency(ctx, tx, "controller", "M-2", b, a)
-			return err
-		})
-	}()
-	select {
-	case err := <-done:
-		t.Fatalf("second transaction did not wait for the graph lock: %v", err)
-	case <-time.After(300 * time.Millisecond):
-	}
-	ok(t, tx1.Commit(ctx))
-	wantErr(t, <-done, "cycle")
-}
-
-// T32 (review 143): moving a step to another mission while a task of the old
-// mission is being attached to it, in both orders.
-//
-// Two shapes: the step already carries t1, which moves with it (the task
-// update locks the step FOR UPDATE); and an empty unbound step that is only
-// bound (no task moves, so only the step lock taken when a task is attached
-// makes the two wait for each other).
-func TestStepLockSerializesMoveAndAttach(t *testing.T) {
-	t.Parallel()
-	type tc struct {
-		name      string
-		step      string
-		moveTask  bool
-		moveFirst bool
-	}
-	for _, c := range []tc{
-		{"move_first", s1, true, true}, {"attach_first", s1, true, false},
-		{"bind_first", s2, false, true}, {"attach_then_bind", s2, false, false},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			w := newWorld(t)
-			var t1 string
-			if c.moveTask {
-				var err error
-				t1, err = w.task(t, "M-1", c.step, "", "implement")
-				ok(t, err)
-			}
-			other := w.db.Connect(t, w.db.Runtime)
-			moveFirst, step := c.moveFirst, c.step
-
-			move := func(tx pgx.Tx) error {
-				if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
-					MissionID: "M-2", PlanNode: step, Body: map[string]any{"change": "migrate"}}); err != nil {
-					return err
-				}
-				if _, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = 'M-2' WHERE plan_node_id = $1`, step); err != nil {
-					return err
-				}
-				if t1 == "" {
-					return nil
-				}
-				_, err := tx.Exec(ctx, `UPDATE agentrt.task SET mission_id = 'M-2' WHERE task_id = $1`, t1)
-				return err
-			}
-			attach := func(tx pgx.Tx) error {
-				_, err := store.ProposeTask(ctx, tx, "controller", store.Task{MissionID: "M-1", PlanNode: step, Role: "implement",
-					Class: "go", Title: "t2", SpecArtifact: w.spec, Effect: "branch"})
-				return err
-			}
-			first, second := move, attach
-			if !moveFirst {
-				first, second = attach, move
-			}
-			tx1, err := w.rt.Begin(ctx)
-			ok(t, err)
-			defer func() { _ = tx1.Rollback(ctx) }()
-			ok(t, first(tx1))
-			done := make(chan error, 1)
-			go func() { done <- store.InTx(ctx, other, second) }()
-			select {
-			case err := <-done:
-				t.Fatalf("second transaction did not wait for the step lock: %v", err)
-			case <-time.After(300 * time.Millisecond):
-			}
-			ok(t, tx1.Commit(ctx))
-			wantErr(t, <-done, "")
-
-			var bad int
-			ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task t JOIN agentrt.plan_node s ON s.plan_node_id = t.plan_node_id
-			  WHERE s.mission_id IS NOT NULL AND s.mission_id <> t.mission_id`).Scan(&bad))
-			if bad != 0 {
-				t.Fatalf("%d tasks hang on a step of another mission", bad)
-			}
-		})
-	}
 }
 
 // T32: the counting rule over steps read back from the database.

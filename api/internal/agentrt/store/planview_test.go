@@ -196,8 +196,6 @@ func TestPlanViewDevBoundary(t *testing.T) {
 		_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("bad-bind", i), root, "bind", []store.PlanChange{c}, (&asker{}).ask)
 		is(t, err, store.ErrInvalid)
 	}
-	_, err = w.task(t, "M-2", s2, "", "implement")
-	is(t, err, store.ErrInvalid)
 	_, err = store.RegisterExternalWork(ctx, w.rt, wr("thread:ext"), store.ExternalRegistration{Key: "bad", Root: root, Node: s2, RunKey: "bad", Artifact: externalSpec(t, w), Mission: "M-2"})
 	is(t, err, store.ErrInvalid)
 }

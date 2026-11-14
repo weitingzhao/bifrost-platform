@@ -132,19 +132,19 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 				return err
 			}
 			id := store.NewTaskID()
-			if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-				Class: "go", Title: "t " + to, SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}); err != nil {
+			if err = seedTask(ctx, tx, store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
+				Class: "go", Title: "t " + to, SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, "proposed"); err != nil {
 				return err
 			}
 			switch to {
 			case "":
 				return nil
 			case "paused":
-				if err := store.MarkReady(ctx, tx, "controller", id); err != nil {
+				if err := seedMove(ctx, tx, "controller", id, "ready", ""); err != nil {
 					return err
 				}
 			}
-			return store.MoveTask(ctx, tx, "controller", id, to, "test")
+			return seedMove(ctx, tx, "controller", id, to, "test")
 		})
 	}
 	must(t, seedHost(ctx, f.pool, "owner", "h2", "dev"))

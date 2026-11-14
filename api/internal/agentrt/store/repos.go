@@ -1,13 +1,9 @@
 package store
 
 import (
-	"errors"
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/infracheck"
 )
 
@@ -127,12 +123,6 @@ func CheckoutOf(repo string) string {
 	return repo + ", with " + strings.Join(beside, " and ") + " beside it"
 }
 
-// inCheckout says whether a task in repo has name at ../name: one of its
-// siblings.
-func inCheckout(repo, name string) bool {
-	return slices.ContainsFunc(Repos[repo].Siblings, func(s Sibling) bool { return s.Repo == name })
-}
-
 // RepoNames are the names of Repos, sorted.
 func RepoNames() []string {
 	names := make([]string, 0, len(Repos))
@@ -146,125 +136,3 @@ func RepoNames() []string {
 // SpecTimeoutS is how long an implementation task's check may run, all of
 // its commands.
 const SpecTimeoutS = 1500
-
-// noTestDB is what a plan's own check runs under before an executor hands
-// it in: no test database, so the tests that need one skip. agentd's
-// testdb.go sets these for an executor too, with AGENTRT_TEST_REQUIRED=1,
-// which would make those tests fail instead.
-var noTestDB = []string{"env", "AGENTRT_TEST_PG=", "AGENTRT_TEST_REDIS=", "AGENTRT_TEST_REQUIRED=0"}
-
-// HandInChecks are the commands an implementation's executor runs before it
-// hands in: the repository's HandIn first, then each of the plan's own
-// checks (go -C <dir> test ..., as checkTest admits) run without the test
-// databases; no command twice. The full list, the spec's verify, runs on the
-// commit.
-func HandInChecks(repo Repo, own [][]string) [][]string {
-	out := slices.Clone(repo.HandIn)
-	for _, c := range own {
-		if len(c) >= 4 && c[0] == "go" && c[1] == "-C" && c[3] == "test" {
-			c = append(slices.Clone(noTestDB), c...)
-		}
-		if !slices.ContainsFunc(out, func(v []string) bool { return slices.Equal(v, c) }) {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// ImplementSpec is the task spec agentd runs for an implementation: what to
-// do, the house rules and the checks, as canonical JSON (agentd's ParseSpec),
-// with the repository's siblings and setup when it has them. verify holds the
-// repository's own checks first; a plan may add more. handIn is what the
-// executor is told to run before it hands in (HandInChecks); verify is what
-// runs on its commit.
-func ImplementSpec(title, text string, repo Repo, verify, handIn [][]string) ([]byte, error) {
-	if len(verify) == 0 {
-		return nil, errors.New("store: an implementation without checks")
-	}
-	if len(handIn) == 0 {
-		return nil, errors.New("store: an implementation without hand-in checks")
-	}
-	var cmds, setup strings.Builder
-	for _, c := range handIn {
-		cmds.WriteString("    " + shellLine(c) + "\n")
-	}
-	for _, c := range repo.Setup {
-		setup.WriteString("    " + shellLine(c) + "\n")
-	}
-	body := "# " + title + "\n\n" + text + "\n\n---\n" +
-		"This task comes from a goal the Owner typed in the Console. How to hand it in:\n\n" +
-		"- Change what the task needs in this repository and nothing else.\n" +
-		installed(setup.String()) +
-		"- Before you hand in, run from the repository root:\n\n" + cmds.String() + "\n" +
-		"  These are quick checks. Tests that need a database skip here; that is expected.\n" +
-		"  The platform runs the repository's full checks on your commit (the spec's verify): the module's rule tests\n" +
-		"  and the full tests of the Go packages you changed, with their databases, and the Console's checks; a failing one sends the work back.\n" +
-		"- If the task is unclear or too big for one change, do the part you can and say in your report what is left and why.\n" +
-		"- Your report says what you changed, what you ran and how it ended, and what you could not do.\n"
-	list := make([]any, 0, len(verify))
-	for _, c := range verify {
-		args := make([]any, 0, len(c))
-		for _, s := range c {
-			args = append(args, s)
-		}
-		list = append(list, args)
-	}
-	spec := map[string]any{"text": body, "verify": list, "timeout_s": SpecTimeoutS}
-	if len(repo.Setup) > 0 {
-		cmds := make([]any, 0, len(repo.Setup))
-		for _, c := range repo.Setup {
-			args := make([]any, 0, len(c))
-			for _, s := range c {
-				args = append(args, s)
-			}
-			cmds = append(cmds, args)
-		}
-		spec["setup"] = cmds
-	}
-	if len(repo.Siblings) > 0 {
-		sibs := make([]any, 0, len(repo.Siblings))
-		for _, s := range repo.Siblings {
-			sibs = append(sibs, map[string]any{"repo": s.Repo, "ref": s.Ref})
-		}
-		spec["siblings"] = sibs
-	}
-	return canon.Encode(spec)
-}
-
-// installed is the line that tells an executor its dependencies are in place:
-// the setup ran before it started, where it may have no network.
-func installed(setup string) string {
-	if setup == "" {
-		return ""
-	}
-	return "- Dependencies were installed before you started, by:\n\n" + setup + "\n" +
-		"  You may have no network: use what is installed and add no packages.\n"
-}
-
-// shellLine is a command as one line a shell without aliases runs as written
-// (review 331 B1: an alias still rewrites a first word unquoted): an argument
-// with anything but letters, digits and _-./=:@%+, in it is single-quoted, so
-// the infra check's sh -c script reads as one argument; so is a first word a
-// shell would read as an assignment or a reserved word (review 330 B1).
-func shellLine(c []string) string {
-	words := make([]string, len(c))
-	for i, s := range c {
-		if s != "" && strings.TrimFunc(s, shellPlain) == "" && (i > 0 || !strings.Contains(s, "=") && !shellReserved[s]) {
-			words[i] = s
-		} else {
-			words[i] = "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-		}
-	}
-	return strings.Join(words, " ")
-}
-
-// shellPlain is a character a shell reads as part of a word, unquoted.
-func shellPlain(r rune) bool {
-	return r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_-./=:@%+,", r))
-}
-
-// shellReserved are the words POSIX shells (and bash) read as syntax at the
-// start of a command.
-var shellReserved = map[string]bool{"if": true, "then": true, "else": true, "elif": true, "fi": true, "do": true, "done": true,
-	"case": true, "esac": true, "while": true, "until": true, "for": true, "in": true, "function": true, "select": true, "time": true,
-	"coproc": true}

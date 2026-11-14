@@ -27,15 +27,13 @@ func newOnMainWorld(t *testing.T) *onMainWorld {
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test") }))
 	w.stopped = w.world.ready(t, store.Task{MissionID: "M-2", PlanNode: s2})
 	w.stillStopped = w.world.ready(t, store.Task{MissionID: "M-2", PlanNode: s2})
-	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{proposal("c", w.impl)})
-	ok(t, err)
-	w.cancelled = taskIDs(out)["c"]
+	w.cancelled = w.world.seedProposed(t, "M-1", s1)
 	w.missionStop = store.NewControlID()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := store.SetControl(ctx, tx, "owner", w.missionStop, "mission", "M-2", "stop", "stopped by hand"); err != nil {
 			return err
 		}
-		if err := store.MoveTask(ctx, tx, "thread:s1", w.cancelled, "cancelled", "the mission was stopped"); err != nil {
+		if err := seedMove(ctx, tx, "thread:s1", w.cancelled, "cancelled", "the mission was stopped"); err != nil {
 			return err
 		}
 		for _, x := range []struct{ mission, task string }{{"M-1", w.ready}, {"M-2", w.stopped}, {"M-1", w.cancelled}} {

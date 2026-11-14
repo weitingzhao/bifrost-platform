@@ -136,7 +136,7 @@ func TestEventsAcrossStreams(t *testing.T) {
 	if p := page(t, s, fmt.Sprintf("events?limit=500&before_event_id=%d", hole.EventID)); !slices.Equal(ids(p.Events), below) {
 		t.Fatalf("back from the hole %d: %v, want %v", hole.EventID, ids(p.Events), below)
 	}
-	proposals := sortedIDs(t, pool, `event_type IN ('task_proposed', 'mission_proposed', 'actor_registered')`)
+	proposals := sortedIDs(t, pool, `event_type IN ('legacy_imported', 'mission_proposed', 'actor_registered')`)
 	if len(proposals) < 3 || len(proposals) == len(all) {
 		t.Fatalf("the fixture needs proposals among other events: %d of %d", len(proposals), len(all))
 	}
@@ -159,7 +159,7 @@ func TestEventsAcrossStreams(t *testing.T) {
 	for _, c := range []struct {
 		types string
 		want  []int64
-	}{{"", all}, {"&types=task_proposed,mission_proposed,actor_registered", proposals}} {
+	}{{"", all}, {"&types=legacy_imported,mission_proposed,actor_registered", proposals}} {
 		var got []int64
 		p := page(t, s, "events?limit=2"+c.types)
 		for len(p.Events) > 0 {
@@ -177,7 +177,7 @@ func TestEventsAcrossStreams(t *testing.T) {
 	for _, c := range []struct {
 		types string
 		want  []int64
-	}{{"", all}, {"&types=task_proposed,mission_proposed,actor_registered", proposals}} {
+	}{{"", all}, {"&types=legacy_imported,mission_proposed,actor_registered", proposals}} {
 		if got := readAllOn(t, s, "0.0", c.types, 3, c.want); !slices.Equal(got, c.want) {
 			t.Fatalf("on%s = %v, want %v", c.types, got, c.want)
 		}

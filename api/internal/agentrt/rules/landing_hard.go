@@ -125,7 +125,6 @@ var landingStorePermission = map[string]string{
 	"debtlinks.go":         "links debts and ends their edges",
 	"debts.go":             "files debts and their evidence",
 	"debtvocab.go":         "the debt moves each event may make",
-	"dispatch.go":          "readies proposed tasks and decides their route",
 	"eventcursor.go":       "event reads and the events hidden from intake clients",
 	"externalwork.go":      "collector identity and external work bindings",
 	"facts.go":             "records external facts and evaluates steps",

@@ -68,7 +68,7 @@ func newStopWorld(t *testing.T) *stopWorld {
 	w.free = w.ready(t, store.Task{})
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		for _, to := range []string{"leased", "running", "submitted"} {
-			if err := store.MoveTaskForTest(ctx, tx, "controller", w.subject, to); err != nil {
+			if err := seedMove(ctx, tx, "controller", w.subject, to, "test"); err != nil {
 				return err
 			}
 		}
@@ -79,9 +79,7 @@ func newStopWorld(t *testing.T) *stopWorld {
 	ok(t, err)
 	w.goalMission(t, "M-3")
 	w.goal = w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{proposal("w", w.impl)})
-	ok(t, err)
-	w.withdrawn = taskIDs(out)["w"]
+	w.withdrawn = w.seedProposed(t, "M-1", s1)
 	w.cancelled = w.ready(t, store.Task{})
 	w.taskStop, w.subjectStop, w.missionStop = store.NewControlID(), store.NewControlID(), store.NewControlID()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -94,10 +92,10 @@ func newStopWorld(t *testing.T) *stopWorld {
 				return err
 			}
 		}
-		if err := store.MoveTask(ctx, tx, "thread:s1", w.withdrawn, "cancelled", "not needed any more"); err != nil {
+		if err := seedMove(ctx, tx, "thread:s1", w.withdrawn, "cancelled", "not needed any more"); err != nil {
 			return err
 		}
-		return store.MoveTask(ctx, tx, "controller", w.cancelled, "cancelled", "superseded")
+		return seedMove(ctx, tx, "controller", w.cancelled, "cancelled", "superseded")
 	}))
 	return w
 }

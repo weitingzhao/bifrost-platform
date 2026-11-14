@@ -83,7 +83,7 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 	}))
 }
 
-// ready proposes a task, defaults filled in, and moves it to ready.
+// ready is a task, defaults filled in, written as ready (seedTask).
 func (w *world) ready(t *testing.T, task store.Task) string {
 	t.Helper()
 	ctx := ctxOf(t)
@@ -106,12 +106,7 @@ func (w *world) ready(t *testing.T, task store.Task) string {
 		task.Repo = "bifrost-platform"
 	}
 	task.Class, task.Title, task.SpecArtifact = "go", "t", w.spec
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.ProposeTask(ctx, tx, "controller", task); err != nil {
-			return err
-		}
-		return store.MarkReady(ctx, tx, "controller", task.ID)
-	}))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return seedTask(ctx, tx, task, "ready") }))
 	return task.ID
 }
 

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"unicode/utf8"
 )
 
 // Goals (W-31 2.2b, the thin chief of staff; the Owner chose D1 A on
@@ -40,14 +39,3 @@ const GoalSuccess = "the goal's plan is accepted and every task it splits into i
 
 // PlanOffPlanReason is why a goal's tasks are off the plan tree.
 const PlanOffPlanReason = "a goal from the Console, planned by the chief of staff's seat; the runtime has no plan tree yet"
-
-// maxTaskTitle is the longest task title a goal or a plan gives, in runes.
-const maxTaskTitle = 100
-
-// cutRunes cuts s to at most n runes, ending in "…" when cut.
-func cutRunes(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	return string([]rune(s)[:n-1]) + "…"
-}

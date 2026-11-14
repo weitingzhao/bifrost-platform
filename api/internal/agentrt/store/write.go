@@ -140,10 +140,6 @@ type Mission struct {
 // §4.4; the database checks it again at commit, 0009 check_issue_mission).
 const issueWorkPrefix = "BI-"
 
-// defaultHardLimitS is an attempt's hard limit when its task states none: a
-// verification's and a review's always (proposeChecker states none).
-const defaultHardLimitS = 3600
-
 // CreateMission writes mission_proposed and the mission row. A business
 // issue's work id is refused here, on every path (a proposal, a goal, a
 // brief, an assessment, a gate run), but take_issue's.
@@ -293,126 +289,6 @@ type Task struct {
 	// nothing outside this package, and nothing else in it, sets them.
 	pin, viaSession, pinReason string
 	providers                  []string
-}
-
-// ProposeTask writes task_proposed and the task. A task outside the plan
-// carries its reason instead of a step.
-func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended, error) {
-	if t.ID == "" {
-		t.ID = NewTaskID()
-	}
-	body := map[string]any{"title": t.Title, "role": t.Role}
-	if t.Wave != "" {
-		body["wave"] = t.Wave
-	}
-	if t.Urgent {
-		body["urgent"] = true
-	}
-	if t.OffPlanReason != "" {
-		body["off_plan_reason"] = t.OffPlanReason
-	}
-	if t.Core {
-		body["core"] = true
-	}
-	if len(t.Needs) > 0 {
-		body["needs"] = t.Needs
-	}
-	if t.Repo != "" {
-		body["repo"] = t.Repo
-	}
-	if t.BaseCommit != "" {
-		body["base_commit"] = t.BaseCommit
-	}
-	if t.Token != "" {
-		body["token"] = t.Token
-	}
-	if t.pin != "" {
-		body["executor_pin"], body["via_session"], body["providers"] = t.pin, t.viaSession, t.providers
-		if t.pinReason != "" {
-			body["pin_reason"] = t.pinReason
-		}
-	}
-	needs, err := canon.Encode(nonNil(t.Needs))
-	if err != nil {
-		return Appended{}, err
-	}
-	// The locks the insert's guard takes, taken before the event's stream
-	// (review 149 B1): the step, then the subject.
-	if t.PlanNode != "" {
-		if err := checkViewBinding(ctx, tx, t.PlanNode, t.MissionID); err != nil {
-			return Appended{}, err
-		}
-		// A dropped step takes no new work (review 313 A3); read under the
-		// step's lock, so a drop and a new task never interleave.
-		var state *string
-		err = tx.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, t.PlanNode).Scan(&state)
-		switch {
-		case err == nil && state != nil && *state == "dropped":
-			return Appended{}, invalid("step %s is dropped; it takes no new work", t.PlanNode)
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
-			return Appended{}, err
-		}
-	}
-	if t.Subject != "" {
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, t.Subject); err != nil {
-			return Appended{}, err
-		}
-	}
-	ev, err := Append(ctx, tx, Event{Stream: MissionStream(t.MissionID), Type: "task_proposed", Actor: actor,
-		MissionID: t.MissionID, PlanNode: t.PlanNode, TaskID: t.ID, Body: body})
-	if err != nil {
-		return ev, err
-	}
-	limit := int(t.HardLimit / time.Second)
-	if limit <= 0 {
-		limit = defaultHardLimitS
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, off_plan, off_plan_reason,
-	  subject_task_id, role, task_class, title, spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id,
-	  core, needs_json, repo, base_commit, executor_pin)
-	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'proposed',$12,$13,$14,$15::jsonb,$16,$17,$18)`,
-		t.ID, t.MissionID, nullable(t.PlanNode), t.PlanNode == "", nullable(t.OffPlanReason), nullable(t.Subject),
-		t.Role, t.Class, t.Title, t.SpecArtifact, t.Effect, limit, actor,
-		t.Core, string(needs), nullable(t.Repo), nullable(t.BaseCommit), nullable(t.pin))
-	if err != nil {
-		return ev, err
-	}
-	// A spec that says the Owner approved is recorded, and changes nothing
-	// (T04): whatever text another task's product put into it.
-	var spec []byte
-	if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, t.SpecArtifact).Scan(&spec); err != nil {
-		return ev, err
-	}
-	return ev, alertClaim(ctx, tx, Event{Stream: MissionStream(t.MissionID), MissionID: t.MissionID, PlanNode: t.PlanNode, TaskID: t.ID},
-		ev.EventID, "task_spec", t.SpecArtifact, spec)
-}
-
-// AddDependency records that taskID waits for dependsOn. It takes the
-// dependency-graph lock, then the waiting task as Dispatch does (exclusively)
-// and the one waited for, before the event's stream (review 149 B1). Only a
-// proposed task takes a new dependency: once Dispatch has readied it (or
-// holds it to decide) an edge added after would not be seen (review 175 A1).
-func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dependsOn string) (Appended, error) {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000001)`); err != nil {
-		return Appended{}, err
-	}
-	var state string
-	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID).Scan(&state); err != nil {
-		return Appended{}, err
-	}
-	if state != "proposed" {
-		return Appended{}, fmt.Errorf("%w: task %s is %s; a dependency is added only while a task is proposed", ErrState, taskID, state)
-	}
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR KEY SHARE`, dependsOn); err != nil {
-		return Appended{}, err
-	}
-	ev, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "task_dependency_added", Actor: actor,
-		MissionID: missionID, TaskID: taskID, Body: map[string]any{"depends_on_task_id": dependsOn}})
-	if err != nil {
-		return ev, err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO agentrt.task_dependency (task_id, depends_on_task_id) VALUES ($1,$2)`, taskID, dependsOn)
-	return ev, err
 }
 
 // anyMap is m as canonical JSON takes it.

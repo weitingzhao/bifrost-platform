@@ -22,16 +22,6 @@ func FreezeEventClock(at time.Time) func() {
 	return func() { eventClock = time.Now }
 }
 
-// MoveTaskForTest moves a task as the kernel does: the fixture that leases a
-// given task directly (LeaseAttempt) moves it to leased with it.
-func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) error {
-	t, err := readTask(ctx, tx, taskID, true)
-	if err != nil {
-		return err
-	}
-	return moveTask(ctx, tx, actor, t, to, "test")
-}
-
 // LiveForTest is a live attempt as the projection reads one: its state,
 // whether its host is known, when the host last polled, and its elapsed
 // seconds.

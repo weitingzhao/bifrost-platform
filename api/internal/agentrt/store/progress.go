@@ -262,17 +262,17 @@ func worst(statuses []string) string {
 	return statusRank[best]
 }
 
-// Progress computes the projection. A read that fails returns an error and
-// nothing else.
-func Progress(ctx context.Context, db DB) (map[string]any, error) {
-	return progressAt(ctx, db, time.Time{}, time.Time{})
-}
-
 // ProgressSince is Progress for a reader that saw the platform take agentd's
 // calls again at since: a host's silence counts from no earlier
 // (presencelive.go, review 528 A1b).
 func ProgressSince(ctx context.Context, db DB, since time.Time) (map[string]any, error) {
 	return progressAt(ctx, db, time.Time{}, since)
+}
+
+// Progress computes the projection. A read that fails returns an error and
+// nothing else.
+func Progress(ctx context.Context, db DB) (map[string]any, error) {
+	return progressAt(ctx, db, time.Time{}, time.Time{})
 }
 
 // progressAt is the projection at at (zero: the database's clock).

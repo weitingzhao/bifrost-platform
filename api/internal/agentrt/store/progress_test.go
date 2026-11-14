@@ -301,8 +301,7 @@ func TestProgressMissionSince(t *testing.T) {
 	}))
 	// A task proposed to M-2 a second after M-2 was: it waits for the Owner
 	// since M-2 was proposed.
-	_, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.impl))})
-	ok(t, err)
+	w.seedProposed(t, "M-2", "")
 	var pausedAt, proposedAt time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FILTER (WHERE mission_id = 'M-1' AND event_type = 'mission_state_changed'),
 	    max(at) FILTER (WHERE mission_id = 'M-2' AND event_type = 'mission_proposed') FROM agentrt.event`).Scan(&pausedAt, &proposedAt))

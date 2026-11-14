@@ -45,10 +45,6 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	before := w.footprint(t)
 	for name, write := range map[string]func() error{
 		"a mission": func() error { _, e := store.ProposeMission(ctx, w.rt, second, "k2", mission, nil); return e },
-		"tasks": func() error {
-			_, e := store.ProposeTasks(ctx, w.rt, second, "k3", "M-1", []store.TaskProposal{proposal("a", w.impl)})
-			return e
-		},
 		"a plan change": func() error {
 			_, e := store.ProposePlanChange(ctx, w.rt, second, "k4", root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, a.ask)
 			return e

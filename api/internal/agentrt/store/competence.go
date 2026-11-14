@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"path"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -32,16 +31,6 @@ type scoreLine struct {
 	source, executor, provider, model, job, class string
 	core                                          bool
 	attempts, firstPass                           int
-}
-
-// sample is a candidate's summed counts on one kind of task.
-type sample struct{ attempts, firstPass int }
-
-// competence is the route input of step ⑤: the threshold and each
-// candidate's sample.
-type competence struct {
-	threshold
-	samples map[string]sample
 }
 
 // readCompetence reads the thresholds the routing rules in force set, by
@@ -83,62 +72,4 @@ func readCompetence(ctx context.Context, tx pgx.Tx) (map[string]threshold, []sco
 	}
 	bench, err := latestBenchmarks(ctx, tx)
 	return out, append(lines, bench...), err
-}
-
-// competenceOf is task c's step ⑤ input, or nil when its tenant's routing
-// rule sets no threshold.
-func (cp capabilities) competenceOf(c candidate, job string, cands []jobCandidate) *competence {
-	th, ok := cp.thresholds[c.tenant]
-	if !ok {
-		return nil
-	}
-	cm := &competence{threshold: th, samples: map[string]sample{}}
-	for _, jc := range cands {
-		var s sample
-		for _, l := range cp.scores {
-			// A benchmark's classes are languages, not the task classes work is
-			// planned in (goal, test, brief, ...): its samples count for the
-			// job whatever the class (measured 10-18 on PROD and STG).
-			if l.job != job || (l.source != "benchmark" && l.class != c.class) || l.core != c.core || l.executor != jc.executor || l.provider != jc.provider {
-				continue
-			}
-			if ok, err := path.Match(jc.pattern, l.model); ok && err == nil {
-				s.attempts += l.attempts
-				s.firstPass += l.firstPass
-			}
-		}
-		cm.samples[jc.id] = s
-	}
-	return cm
-}
-
-// unfit applies step ⑤ to one candidate and returns why it may not take the
-// task, if it may not.
-func (in routeInput) unfit(jc jobCandidate) []string {
-	cm := in.competence
-	if cm == nil {
-		return nil
-	}
-	s := cm.samples[jc.id]
-	if s.attempts >= cm.minSamples {
-		if Wilson(s.firstPass, s.attempts)*100 < float64(cm.minPercent) {
-			return []string{"below the competence threshold"}
-		}
-		return nil
-	}
-	if jc.status == "probation" && in.core != "" {
-		return []string{"too few samples for core work"}
-	}
-	return nil
-}
-
-// record is the competence input as route_decided records it.
-func (cm *competence) record(cands []jobCandidate) map[string]any {
-	samples := []any{}
-	for _, jc := range cands {
-		s := cm.samples[jc.id]
-		samples = append(samples, map[string]any{"candidate": jc.id, "attempts": s.attempts, "first_pass": s.firstPass})
-	}
-	return map[string]any{"min_score_percent": cm.minPercent, "min_samples": cm.minSamples, "rule": cm.rule.record(),
-		"samples": samples}
 }

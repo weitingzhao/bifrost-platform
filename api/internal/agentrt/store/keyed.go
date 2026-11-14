@@ -12,24 +12,6 @@ import (
 // Idempotency keys: a write's key and request, answered once and the same
 // way on every retry (attempt.go and the proposal routes use them).
 
-// idempotent runs op at most once per key (v5 §5.2 「写入时的隔离检查」 ②).
-// The key is looked up first: the same request gets the stored answer, with
-// no lease check and no pre call, so a retry whose first answer was lost gets
-// that answer even after the attempt stopped being live; a different request
-// gets ErrConflict. Otherwise pre runs outside any transaction (a read of
-// another system), then op runs in a transaction that holds a lock on the key
-// and looks it up again, so concurrent retries of one request run one at a
-// time and the later ones find the first one's answer. A failed op stores
-// nothing.
-func idempotent(ctx context.Context, db DB, actor, route, key string, request any,
-	pre func(context.Context) error, op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
-	sum, err := canon.Sum(request)
-	if err != nil {
-		return nil, err
-	}
-	return keyed(ctx, db, actor+"|"+route+"|"+key, route, sum, nil, pre, op)
-}
-
 // idempotentAs is idempotent for a writer's request: a thread's first
 // answer is given again only to the token its session is held to (TD-370),
 // checked in each transaction that reads the key; the write itself checks it

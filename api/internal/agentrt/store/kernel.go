@@ -143,87 +143,7 @@ var taskMoves = map[string][]string{
 	"paused":         {"ready", "cancelled"},
 }
 
-// controllerMoves are the moves MoveTask accepts: none of them touches a task
-// that has a live attempt or a result under verification.
-var controllerMoves = map[string][]string{
-	"proposed":       {"ready", "awaiting_owner", "blocked", "cancelled"},
-	"awaiting_owner": {"ready", "cancelled"},
-	"ready":          {"paused", "blocked", "cancelled"},
-	"rework":         {"ready", "cancelled"},
-	"blocked":        {"ready", "cancelled"},
-	"paused":         {"ready", "cancelled"},
-}
-
-type taskRow struct {
-	id, mission, step, state, effect, role, class string
-}
-
-func readTask(ctx context.Context, tx pgx.Tx, id string, lock bool) (taskRow, error) {
-	q := `SELECT task_id, mission_id, COALESCE(plan_node_id, ''), state, effect_class, role, task_class FROM agentrt.task WHERE task_id = $1`
-	if lock {
-		q += ` FOR NO KEY UPDATE`
-	}
-	var t taskRow
-	err := tx.QueryRow(ctx, q, id).Scan(&t.id, &t.mission, &t.step, &t.state, &t.effect, &t.role, &t.class)
-	return t, err
-}
-
-// moveTask writes task_state_changed and the new state. t must be locked. A
-// task that becomes ready gets its route (route_decided) and wakes the hosts.
-func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string) error {
-	return moveTaskBy(ctx, tx, actor, t, to, reason, taskMoves)
-}
-
-// moveTaskBy moves a task by the given table of moves (a path with moves of
-// its own, as accepting a salvaged result, keeps them out of taskMoves).
-func moveTaskBy(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string, moves map[string][]string) error {
-	return moveTaskWith(ctx, tx, actor, t, to, reason, moves, false)
-}
-
-func moveTaskWith(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string, moves map[string][]string, failed bool) error {
-	if !slices.Contains(moves[t.state], to) {
-		return fmt.Errorf("%w: task %s %s -> %s", ErrState, t.id, t.state, to)
-	}
-	body := map[string]any{"from": t.state, "to": to}
-	if reason != "" {
-		body["reason"] = reason
-	}
-	if failed {
-		body["failed"] = true
-	}
-	ev, err := Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "task_state_changed", Actor: actor,
-		MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body})
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = $2, version = version + 1, updated_at = clock_timestamp() WHERE task_id = $1`,
-		t.id, to); err != nil {
-		return err
-	}
-	if to == "ready" {
-		if err := decideRoute(ctx, tx, t); err != nil {
-			return err
-		}
-		return Enqueue(ctx, tx, ev.EventID, TopicWake, map[string]any{"kind": "task_ready", "task_id": t.id, "role": t.role, "task_class": t.class})
-	}
-	return nil
-}
-
-// MoveTask makes one of the controller's moves (controllerMoves).
-func MoveTask(ctx context.Context, tx pgx.Tx, actor, taskID, to, reason string) error {
-	t, err := readTask(ctx, tx, taskID, true)
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(controllerMoves[t.state], to) {
-		return fmt.Errorf("%w: task %s %s -> %s is not a controller move", ErrState, t.id, t.state, to)
-	}
-	return moveTask(ctx, tx, actor, t, to, reason)
-}
-
 // Hosts.
-
-func hostActor(hostID string) string { return "host:" + hostID }
 
 // hostKinds are the kinds of host (0010): an Agent host of the cluster's
 // (dev, vm), or the one external host, the coordinator's Mac, which leases
@@ -235,20 +155,3 @@ var hostKinds = []string{"dev", "vm", HostExternal}
 const HostExternal = "external"
 
 // Controls.
-
-type scope struct{ kind, ref string }
-
-// held reports whether a control of one of kinds is set on any of scopes.
-// stop ends running work and stops new work; pause and drain only stop new
-// work (drain is for hosts).
-func held(ctx context.Context, tx pgx.Tx, scopes []scope, kinds ...string) (bool, error) {
-	for _, s := range scopes {
-		var hit bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.control WHERE cleared_at IS NULL
-		  AND control_kind = ANY($3) AND scope = $1 AND scope_ref IS NOT DISTINCT FROM NULLIF($2::text, ''))`,
-			s.kind, s.ref, kinds).Scan(&hit); err != nil || hit {
-			return hit, err
-		}
-	}
-	return false, nil
-}

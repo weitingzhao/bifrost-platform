@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,21 +34,6 @@ const ScoreWindow = 30 * 24 * time.Hour
 
 // ScoresStream is the stream of in-job computations.
 const ScoresStream = "capability_scores"
-
-// wilsonZ is the normal quantile of the Wilson bound (95 %).
-const wilsonZ = 1.96
-
-// Wilson is the lower bound of the Wilson interval of k successes in n.
-func Wilson(k, n int) float64 {
-	if n <= 0 {
-		return 0
-	}
-	p, z, nf := float64(k)/float64(n), wilsonZ, float64(n)
-	d := 1 + z*z/nf
-	c := p + z*z/(2*nf)
-	r := z * math.Sqrt(p*(1-p)/nf+z*z/(4*nf*nf))
-	return math.Max(0, (c-r)/d)
-}
 
 // computation is an in-job computation as its event records it.
 type computation struct {

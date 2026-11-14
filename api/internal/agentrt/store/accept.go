@@ -1,10 +1,6 @@
 package store
 
-import (
-	"context"
-
-	"github.com/jackc/pgx/v5"
-)
+import ()
 
 // Acceptance (design v5 §5.2 控制器「验收编排」; R5:5.7-9, precheck.go). By
 // default (precheck ci) a submitted implementation whose landing runs a CI
@@ -48,32 +44,4 @@ type ConcludeOptions struct {
 	FailFirstVerify bool
 	// Precheck is how an implementation is checked (precheck_mode.go).
 	Precheck Precheck
-}
-
-// Pending lists the tasks the acceptance pass has to look at: submitted
-// implementations, and verification and review tasks with a submitted
-// result.
-func Pending(ctx context.Context, db DB) ([]string, []string, error) {
-	var implementations, checks []string
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT task_id, role FROM agentrt.task WHERE state = 'submitted' AND role IN ('implement','verify','review')
-		  ORDER BY updated_at, task_id`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id, role string
-			if err = rows.Scan(&id, &role); err != nil {
-				return err
-			}
-			if role == "implement" {
-				implementations = append(implementations, id)
-			} else {
-				checks = append(checks, id)
-			}
-		}
-		return rows.Err()
-	})
-	return implementations, checks, err
 }

@@ -60,8 +60,8 @@ func TestConsoleArchFixture(t *testing.T) {
 	task := store.NewTaskID()
 	var attempt string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}); err != nil {
+		if err := seedTask(ctx, tx, store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
+			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}, "proposed"); err != nil {
 			return err
 		}
 		var err error

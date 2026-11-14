@@ -1,13 +1,7 @@
 package store
 
 import (
-	"context"
 	"errors"
-	"fmt"
-
-	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The exact claim of a pinned task (W-31 round 4, core block C-2;
@@ -46,24 +40,4 @@ type PinnedClaimRequest struct {
 	FreeSlots                  int
 	Disk                       *HostDisk
 	DiskFloor                  int64
-}
-
-// entryOf is the entry of pin in the signed standing envelope in force for
-// tenant, when it names host.
-func entryOf(ctx context.Context, tx pgx.Tx, tenant, pin, host string) (rules.ExternalHost, error) {
-	if pin == "" {
-		return rules.ExternalHost{}, fmt.Errorf("%w: the task has no executor pin", ErrNotPinned)
-	}
-	env, err := inForce(ctx, tx, rules.KindEnvelope+":"+tenant)
-	if err != nil {
-		return rules.ExternalHost{}, err
-	}
-	if env == nil || env.SignedBy == "" {
-		return rules.ExternalHost{}, fmt.Errorf("%w: no signed standing-envelope:%s is in force", ErrNotExternal, tenant)
-	}
-	h, ok := env.Envelope.Pinned(pin)
-	if !ok || h.Host != host {
-		return rules.ExternalHost{}, fmt.Errorf("%w: %s v%d names no external host %s for pin %s", ErrNotExternal, env.ID, env.Version, host, pin)
-	}
-	return h, nil
 }
