@@ -42,6 +42,7 @@ import {
 import { registerMessageTools } from './registerMessages.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { registerIssueTools } from './registerIssues.js'
+import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -501,6 +502,53 @@ reg(
     jsonResult(
       await platformGet(`/api/v1/units/plan?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}${inputs ? '&inputs=1' : ''}`),
     ),
+)
+
+// The CI views' data, for the lines and agents that use CI (the Owner,
+// 2026-11-14: CI's users are the lines up and down the ring and CI itself; they
+// use it through these answers, the page is one more reader). Each body is
+// the contract in api/internal/server/testdata/contract/units, compared with
+// what the route computes on every test run.
+const SHA = z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA')
+const REPO = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'a repository name').describe('Repository name as Gitea has it')
+
+reg(
+  'get_unit_scope',
+  'Which modules of one commit CI has to verify again, against a base commit of the same repository (read-only; nothing is started). The answer is computed from the two commits\' own declarations (bifrost.units.yaml): a module whose tasks all keep the keys they had at the base does not run, and the base\'s passing CI run stands for it. Returns {repo, commit, base, declared, modules: [{module, tasks, changed, run, why}], note?, base_run?}. modules[].run is whether the module runs; changed of tasks is how many of its tasks have a key the base does not have; why names what differs, most tasks first: "needs <input>" is a declared input by its reference ("needs other-repo:path" is a path of a pinned repository, "needs ." the whole repository), any other word is a part of the key ("tree" the module\'s own directory, "libs" Go library code it imports, "tests"/"test_files" its tests, "script" the entry script, "image", "new: the base has no such task"). base_run is the CI run whose pass stands for the modules that do not run. EVERYTHING RUNS, and note says why, when: declared is false (the commit has no bifrost.units.yaml: the project is one block); the declaration does not read (note carries the parser\'s reason); no base was given, or the base is the commit itself; the base has no declaration that reads; or the evidence ledger has no passing full CI of the base ("it says none" or "it says Failed"): a base that was red or never verified vouches for nothing. In those cases every listed module has run=true and why repeats the note. A commit or base Gitea does not have is an error, not "everything runs". The first answer after a platform restart can take about 30 seconds.',
+  { repo: REPO, commit: SHA, base: SHA.optional().describe('The commit to compare with, usually the merge base with main; left out, everything runs') },
+  async ({ repo, commit, base }) =>
+    jsonResult(await platformGet(unitScopePath(repo, commit, base))),
+)
+
+reg(
+  'get_unit_config',
+  'How CI is set up for one project, read from the declaration CI itself reads (read-only). Without commit it is main\'s head. Returns {repo, commit, declared, note?, pins: [{repo, commit, tree}], modules: [{name, kind?, root, image?, template?, needs, tasks: [{task, units, shards?}], units, declared_inputs, whole_repository}]}. declared false: the project has no bifrost.units.yaml, it is one block and all of it runs on every change (note says so; modules is empty). declared true with a note and no modules: the declaration does not read, so everything runs; note carries the parser\'s reason. pins are the other repositories this one is tested with, each at a commit. For a module: root is its directory; needs are the inputs of every one of its tasks beside its own directory ("other-repo:path" is a path of a pinned repository); tasks lists each task with how many units it has (a unit is a Go package with tests, or the module itself) and into how many shards the largest is cut; units is the module\'s distinct units; declared_inputs is how many units declare inputs of their own; whole_repository is how many units have the whole repository as their input: those run on every change, whatever it touches, which is why a declared project can still run whole. Not in the answer yet: contracts between modules, which module ships alone, and a module\'s duration. The first answer for a large project after a platform restart can take about 30 seconds.',
+  { repo: REPO, commit: SHA.optional().describe('Left out: the head of main') },
+  async ({ repo, commit }) =>
+    jsonResult(await platformGet(unitConfigPath(repo, commit))),
+)
+
+reg(
+  'get_unit_runs',
+  'The newest CI runs of one project, newest first, read from the runs the cluster still retains (read-only). A project is the value of the bifrost.io/repo label its runs carry; a run that merges a branch is not listed. Returns {repo, as_of, runs: [{name, pipeline, revision, status, trigger?, full, created_at, seconds?, tested_by?, asked, run_modules?, scope_why?, tasks: [{task, status, seconds?, waited?}]}]}. as_of is when the cluster was read; one answer a project is kept for 30 seconds. status is Succeeded, Failed, Running or Unknown; seconds (start to completion) is absent while a run is going. full true: a daily full run, everything runs whatever changed. tested_by set: this run ran nothing itself and stands on that run\'s verdict (the run of main\'s push after a landing); ignore its run_modules, which is what its own check answered about a commit already on main. asked false: the run\'s pipeline does not report which modules ran (never read that as "all" or "none"). asked true: run_modules is "*" when every module ran, otherwise the names of the modules that ran, each between spaces (" api repo " means api and repo ran; the modules not named were left out and the base\'s passing run stands for them); scope_why is the reason as the run wrote it. EVERYTHING RAN ("*") with these reasons: "the platform says every module runs" (every module\'s keys changed, or the platform answered everything for its own reason: see get_unit_scope); "the commit has no declaration: the project is one block"; "the platform gave no scope" (it did not answer in time, e.g. while restarting); "the answer is not one this task reads"; "not asked: the changes against main were not read" (a commit already on main, a full run). tasks: seconds is creation to completion, waited is creation to its first step starting. An empty runs list means no CI run of that project is retained, not that none ever ran.',
+  { repo: REPO, limit: z.number().int().min(1).max(100).optional().describe('Default 30') },
+  async ({ repo, limit }) =>
+    jsonResult(await platformGet(unitRunsPath(repo, limit))),
+)
+
+reg(
+  'get_full_ci',
+  'What the daily full CI recorded: its last 20 notes, newest first (read-only). The daily full run of main is the run that catches a module wrongly left out of a landing\'s own CI. Returns {runs: [{at, text, full_ci}]}. text is the note as written. full_ci.started: the runs a day started (a note that says only that). full_ci.run: a RED full run, of full_ci.commit, with failed_tasks (the pipeline tasks that failed; absent when none could be read), failed_key (the failed Go tests, space separated, when known), suspects: [{commit, subject, run, modules}] (the commits landed since the last green full run whose own CI run left a module out: run is that run, modules its run-modules as written, see get_unit_runs), unread (how many landed commits\' own run could not be read: these are not cleared, they are unknown), unreconciled (why the landings could not be looked at, or not all of them; when it is set an empty suspects list does not mean "none"). A red run with no suspects, no unread and no unreconciled: no landed commit left a module out. Notes written before 2026-11-14 may carry other keys (mission, open_mission, deviation); ignore them. An empty runs list means nothing has been recorded on this platform (the loop runs on PROD only).',
+  {},
+  async () => jsonResult(await platformGet(FULL_CI_PATH)),
+)
+
+reg(
+  'check_full_ci_landings',
+  'What the reconciliation of a red daily full run WOULD name, for two commits you give; it writes nothing and starts nothing (read-only). green is the commit of the last green full run, red the commit of the red one; both on the repository\'s main. Returns {repo, green, red, landings: [{commit, subject, run?, modules?, read, suspect}], suspects, unread, unreconciled?, run?, failed_tasks?}. landings are main\'s first-parent commits after green up to red, newest first, at most 30. For each: read is "ok" (run is the commit\'s own CI run, not one that reused another\'s verdict, and modules its run-modules as written), "no_run" (no run of its own that says which modules ran: unknown, not cleared) or "error" (the run could not be read); suspect is true when its own run left a module out (modules is neither "*" nor empty). suspects and unread count them. unreconciled is set when more than 30 commits landed and only the newest 30 were looked at. With run (a CI run\'s name), failed_tasks names that run\'s pipeline tasks that failed (an empty list: none failed). A green that is not behind red on main\'s first-parent line is an error. Use it to see which landings reached main with a module left out of their own CI, without waiting for a red full run.',
+  { repo: REPO, green: SHA, red: SHA, run: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/).optional().describe('A CI run whose failed tasks to name') },
+  async ({ repo, green, red, run }) =>
+    jsonResult(await platformGet(fullCICheckPath(repo, green, red, run))),
 )
 
 reg(
