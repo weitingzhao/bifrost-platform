@@ -89,19 +89,6 @@ type deployment struct {
 	ref    map[string]any
 }
 
-func (d *deployments) set(env, commit string, ref map[string]any) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.m == nil {
-		d.m = map[string]deployment{}
-	}
-	if commit == "" {
-		delete(d.m, env)
-		return
-	}
-	d.m[env] = deployment{commit, ref}
-}
-
 func (d *deployments) read(_ context.Context, env string) (string, map[string]any, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -326,84 +313,6 @@ func TestStepRules(t *testing.T) {
 	}))
 	if w.evaluate(t, "R2:2.1-6", d) != "" || w.stepState(t, "R2:2.1-6") != "dropped" {
 		t.Fatal("a dropped step moved")
-	}
-	w.chainHolds(t, "plan:"+root)
-}
-
-// T33, store half: a gate counts only for what the environment runs now;
-// a new deployment takes a done step back to active; an unreadable delivery
-// record moves nothing; another test id, spec or environment never counts.
-func TestStandingGate(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	d := &deployments{}
-	spec := strings.Repeat("ab", 32)
-	other := strings.Repeat("cd", 32)
-	gateStep := "R2:2.1-4"
-	w.step(t, gateStep, 3, `{"gates_passed":[{"test":"T19","spec_sha256":"`+spec+`"}],"env":"stg"}`)
-	refA := map[string]any{"run": "deliver-1", "digests": []any{"sha256:aa"}}
-	refB := map[string]any{"run": "deliver-2", "digests": []any{"sha256:bb"}}
-	d.set("stg", commitA, refA)
-	if w.evaluate(t, gateStep, d) != "" {
-		t.Fatal("a gate with no verification moved the step")
-	}
-
-	task := store.NewTaskID()
-	var attempt string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: gateStep, Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}); err != nil {
-			return err
-		}
-		var err error
-		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
-		return err
-	}))
-	gate := func(test, env, commit, specSHA string, ref map[string]any) {
-		t.Helper()
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(test+env+commit+specSHA))
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
-			  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,'gate',$4,$5,'pass',$6,$7,$8,$9)`,
-				store.NewVerificationID(), task, attempt, test, env, ev, commit, ref, specSHA)
-			return err
-		}))
-	}
-	gate("T20", "stg", commitA, spec, refA)
-	gate("T19", "stg", commitA, other, refA)
-	gate("T19", "prod", commitA, spec, refA)
-	gate("T19", "stg", commitB, spec, refA)
-	if w.evaluate(t, gateStep, d) != "" {
-		t.Fatal("another test id, spec, environment or commit counted")
-	}
-	gate("T19", "stg", commitA, spec, refA)
-	if w.evaluate(t, gateStep, d) != "done" {
-		t.Fatal("the matching gate did not move the step")
-	}
-	d.set("stg", "", nil)
-	if w.evaluate(t, gateStep, d) != "" || w.stepState(t, gateStep) != "done" {
-		t.Fatal("an unreadable delivery record moved a done step")
-	}
-	d.set("stg", commitA, refB)
-	if w.evaluate(t, gateStep, d) != "active" {
-		t.Fatal("a new deployment did not take the step back to active")
-	}
-	var cause string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'cause' FROM agentrt.event WHERE event_type = 'plan_node_state_changed' AND plan_node_id = $1
-	  ORDER BY event_id DESC LIMIT 1`, gateStep).Scan(&cause))
-	if cause != "standing_lapsed" {
-		t.Fatalf("cause = %q", cause)
-	}
-	d.set("stg", "", nil)
-	if w.evaluate(t, gateStep, d) != "" {
-		t.Fatal("an unreadable delivery record moved an active step")
-	}
-	d.set("stg", commitA, refA)
-	if w.evaluate(t, gateStep, d) != "done" {
-		t.Fatal("the old deployment back did not count again")
 	}
 	w.chainHolds(t, "plan:"+root)
 }

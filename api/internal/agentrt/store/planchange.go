@@ -369,11 +369,6 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 			}
 		}
 	}
-	for _, c := range changes {
-		if err := gateGuard(ctx, tx, c); err != nil { // gatesplan.go
-			return nil, err
-		}
-	}
 	type newNode struct {
 		id, parent, kind, label, title, stepKind, mission string
 		ordinal                                           int

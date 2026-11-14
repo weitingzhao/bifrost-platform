@@ -87,10 +87,10 @@ func wantTick(t *testing.T, row map[string]any, tick, reason string) {
 	}
 }
 
-// T33 on the page: a gate counts only for what the environment runs as last
-// recorded; nothing recorded is unknown, a new deployment takes the tick
-// away, the old one back gives it back; a row with no rule is unknown.
-func TestArchTickFollowsTheDeployment(t *testing.T) {
+// The coordinator, 2026-11-14: gates are no longer run, so a row whose rule
+// names gates is unknown and says why, whatever any environment runs; a row
+// with no rule is unknown as before.
+func TestArchGatesReadUnknown(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", archGates("stg", "T19", "T20")}, [2]string{"ARCH:gateway", ""},
@@ -103,69 +103,8 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	if rows["ARCH:gateway"]["reason"] != store.ReasonNoGate || rows["ARCH:gateway"]["note"] != nil || rows["ARCH:gateway"]["title"] != "gateway" {
 		t.Fatalf("a row with no rule: %v", rows["ARCH:gateway"])
 	}
-	wantTick(t, rows["ARCH:state-db"], "unknown", "T19, T20: what stg runs is not recorded yet")
-
-	// What SeeDeploy records from a delivery record (server/agentrt_sources.go deployedFrom; review 427 C1).
-	refA := map[string]any{"delivery_run": "bifrost-deliver-platform-1", "images": map[string]any{"platform-api": "sha256:aa", "platform-workers": "sha256:aa"}}
-	refB := map[string]any{"delivery_run": "bifrost-deliver-platform-2", "images": map[string]any{"platform-api": "sha256:bb", "platform-workers": "sha256:bb"}}
-	deploy := func(env string, ref map[string]any) {
-		t.Helper()
-		_, err := store.SeeDeploy(ctx, w.rt, env, deployedIs(commitA, ref))
-		ok(t, err)
-	}
-	deploy("stg", refA)
-	// The rule stops at the first gate that fails: the reason names it.
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): not all passed on stg at 2333e00753f9, the deployment recorded 20")
-
-	task := store.NewTaskID()
-	var attempt string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}); err != nil {
-			return err
-		}
-		var err error
-		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
-		return err
-	}))
-	gate := func(test, env, commit string, ref map[string]any) {
-		t.Helper()
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(test+env+commit+ref["delivery_run"].(string)))
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
-			  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,'gate',$4,$5,'pass',$6,$7,$8,$9)`,
-				store.NewVerificationID(), task, attempt, test, env, ev, commit, ref, archSpec)
-			return err
-		}))
-	}
-	gate("T19", "stg", commitA, refA)
-	gate("T20", "stg", commitB, refA)
-	rows = w.archRows(t)
-	wantTick(t, rows["ARCH:state-db"], "false", "T20 (not dispatched yet): not all passed on stg at 2333e00753f9")
-	// Only T20 fails, so the reason starts with it ("T19, T20: …" or
-	// "T19: …" would name the gate that passed). Not a search for "T19": the
-	// reason carries the deployment's time, and 2026-10-20T19:45:29Z holds
-	// "T19" for an hour every day.
-	if !strings.HasPrefix(rows["ARCH:state-db"]["reason"].(string), "T19 passed, T20 (") {
-		t.Fatalf("a gate that passed is named as failing: %v", rows["ARCH:state-db"]["reason"])
-	}
-	// The same pass in another environment counts for nothing there.
-	wantTick(t, rows["ARCH:prod-only"], "unknown", "T19: what prod runs is not recorded yet")
-	gate("T20", "stg", commitA, refA)
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg at 2333e00753f9")
-	deploy("stg", refB)
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): not all passed on stg")
-	deploy("stg", refA)
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg")
-	// Evaluating changes nothing: the projection only reads.
-	var moved int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE plan_node_id LIKE 'ARCH:%' AND event_type <> 'plan_node_created'`).Scan(&moved))
-	if moved != 0 {
-		t.Fatalf("%d events on the rows after reading the page", moved)
-	}
+	wantTick(t, rows["ARCH:state-db"], "unknown", "T19, T20: "+store.ReasonGatesRetired+" (stg)")
+	wantTick(t, rows["ARCH:prod-only"], "unknown", "T19: "+store.ReasonGatesRetired+" (prod)")
 }
 
 // A rule the row cannot be ticked by says so on the row, and the rest of the
@@ -294,7 +233,7 @@ func TestArchImportBesideTheRound(t *testing.T) {
 		}
 		rows := doc["rows"].([]any)
 		first, second := rows[0].(map[string]any), rows[1].(map[string]any)
-		if first["tick"] != "unknown" || !strings.Contains(first["reason"].(string), "what stg runs is not recorded yet") ||
+		if first["tick"] != "unknown" || !strings.Contains(first["reason"].(string), store.ReasonGatesRetired) ||
 			first["note"].(map[string]any)["text"] != "在正式环境" || second["reason"] != store.ReasonNoGate {
 			t.Fatalf("rows = %v", rows)
 		}
@@ -326,58 +265,6 @@ func TestArchImportRefusesALocalPath(t *testing.T) {
 	}
 }
 
-// Review 427 A1, B1: a deployment recorded without a usable reference (null,
-// not an object, empty) identifies nothing that runs (deploy_seen itself
-// requires a commit):
-// the row is unknown, and says the record is there but does not identify,
-// never "not recorded"; a null reference never matches a pass recorded
-// against {}.
-func TestArchRecordedDeploymentThatIdentifiesNothing(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.arch(t, [2]string{"ARCH:state-db", archGates("prod", "T19")})
-	task := store.NewTaskID()
-	var attempt string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}); err != nil {
-			return err
-		}
-		var err error
-		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
-		if err != nil {
-			return err
-		}
-		ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("T19 against {}"))
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
-		  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,'gate','T19','prod','pass',$4,$5,'{}'::jsonb,$6)`,
-			store.NewVerificationID(), task, attempt, ev, commitA, archSpec)
-		return err
-	}))
-	for _, c := range []struct {
-		name string
-		body map[string]any
-		why  string
-	}{
-		{"a null reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": nil}, "its reference is null"},
-		{"a string reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": "bad"}, "its reference is not an object"},
-		{"an empty reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": map[string]any{}}, "its reference is empty"},
-	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: "deploy:prod", Type: "deploy_seen", Actor: "controller", Body: c.body})
-			return err
-		}))
-		row := w.archRows(t)["ARCH:state-db"]
-		wantTick(t, row, "unknown", "T19: the deployment recorded for prod at ")
-		if !strings.Contains(row["reason"].(string), c.why) || strings.Contains(row["reason"].(string), "not recorded yet") {
-			t.Errorf("%s: reason %q; want it to say %q", c.name, row["reason"], c.why)
-		}
-	}
-}
-
 // Review 427 A2: an architecture row is ticked by gate tests only. A rule
 // that names a fact which stays true once recorded is unknown on the page,
 // and a plan change that would give a row one is refused: when proposed
@@ -400,10 +287,7 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	if len(a.cards) != 0 {
 		t.Fatalf("a refused change reached the Owner: %v", a.cards)
 	}
-	// A gate's spec is stored before a rule names it (TD-397).
-	_, body, sum := gateOf(t, "T21", "TestGrammarIsClosed")
-	w.artifact(t, "task_spec", string(body))
-	out, err := propose("k-gates", gateRule("stg", [2]string{"T21", sum}))
+	out, err := propose("k-gates", gateRule("stg", [2]string{"T21", strings.Repeat("ab", 32)}))
 	ok(t, err)
 	gates := out["question_id"].(string)
 	a.answer(gates, store.QuestionAnswered, store.CardApplyKey)
@@ -425,7 +309,7 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	if d := decided[gates]; d[0] != "applied" {
 		t.Fatalf("a gates rule on an architecture row: %v", d)
 	}
-	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: what stg runs is not recorded yet")
+	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: "+store.ReasonGatesRetired+" (stg)")
 }
 
 // Review 427 C1, 429: the latest note is the one appended last (event_id),
@@ -457,4 +341,13 @@ func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
 	if note == nil || note["text"] != "written second, stamped earlier" {
 		t.Fatalf("the latest note = %v; want the one appended last", note)
 	}
+}
+
+// gateRule is a gates_passed rule of env naming each gate's test and spec.
+func gateRule(env string, gates ...[2]string) string {
+	var list []string
+	for _, g := range gates {
+		list = append(list, `{"test":"`+g[0]+`","spec_sha256":"`+g[1]+`"}`)
+	}
+	return `{"gates_passed":[` + strings.Join(list, ",") + `],"env":"` + env + `"}`
 }

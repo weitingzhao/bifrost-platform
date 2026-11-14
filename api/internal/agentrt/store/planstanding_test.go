@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,10 +76,8 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	}
 	// Not within it (review 313 A2): binding something new, even an
 	// approval long executed; a CI run, a gate, a manual atom; a rule that
-	// holds already; a step with a rule; a step done. A gate's spec is stored
-	// before a rule names it (TD-397).
-	_, gateBody, gateSum := gateOf(t, "T19", "TestGrammarIsClosed")
-	w.artifact(t, "task_spec", string(gateBody))
+	// holds already; a step with a rule; a step done.
+	gateSum := strings.Repeat("ab", 32)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
 			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {

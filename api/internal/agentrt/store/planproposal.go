@@ -170,9 +170,6 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 			}
 			card.ByRule = !binds
 		}
-		if card.Recommended, card.RecommendedWhy, err = gatesRecommend(ctx, tx, root, changes); err != nil {
-			return nil, err
-		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}

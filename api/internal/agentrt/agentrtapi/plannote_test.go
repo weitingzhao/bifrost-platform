@@ -90,7 +90,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 	}
 	got := rows()
 	guard, state := got["ARCH:release-guard"], got["ARCH:state-db"]
-	if guard.Tick != "unknown" || !strings.Contains(guard.Reason, "what prod runs is not recorded yet") || guard.Title != "发布护栏" ||
+	if guard.Tick != "unknown" || !strings.Contains(guard.Reason, store.ReasonGatesRetired) || guard.Title != "发布护栏" ||
 		guard.Note == nil || guard.Note.Text != "在正式环境" || guard.Note.By != "controller" {
 		t.Fatalf("release-guard = %+v", guard)
 	}

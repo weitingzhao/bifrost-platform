@@ -86,7 +86,7 @@ func TestLandingOpenRefusals(t *testing.T) {
 	}
 	open := []string{
 		"api/internal/agentrt/controller/loop.go", "api/internal/agentrt/questioncards/x_test.go", "api/internal/delivery/new.go",
-		"api/cmd/agentrt-gate/main.go", "api/Makefile", "console/vitest.config.ts", "console/tsconfig.json",
+		"api/Makefile", "console/vitest.config.ts", "console/tsconfig.json",
 		"console/tsconfig.node.json", "console/tsconfig.app.json", "api/internal/agentrt/store/progressneeds.go",
 	}
 	for _, p := range open {

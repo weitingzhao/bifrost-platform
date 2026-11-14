@@ -298,29 +298,7 @@ type stepFacts struct {
 	tx        pgx.Tx
 	step      string
 	deployed  Deployed
-	deploys   map[string]deployment
 	err       error
-}
-
-type deployment struct {
-	commit string
-	ref    map[string]any
-	ok     bool
-}
-
-// deployment reads what env runs once per evaluation: every gate of the
-// environment is checked against the same deployment (review 151 A1).
-func (f *stepFacts) deployment(env string) deployment {
-	if d, ok := f.deploys[env]; ok {
-		return d
-	}
-	var d deployment
-	d.commit, d.ref, d.ok = f.deployed(f.ctx, env)
-	if f.deploys == nil {
-		f.deploys = map[string]deployment{}
-	}
-	f.deploys[env] = d
-	return d
 }
 
 func (f *stepFacts) exists(q string, args ...any) bool {
@@ -366,33 +344,12 @@ func (f *stepFacts) ManualRecorded(note string) bool {
 	  AND body_json @> jsonb_build_object('manual', $2::text) AND body_json ? 'evidence')`, f.step, note)
 }
 
-// GatePassed is the standing condition: a passing gate verification of this
-// test and spec whose commit and deploy reference are what env runs now, and
-// whose attempt belongs to its task. What env runs now comes from the
-// delivery record at evaluation time; unreadable is unknown.
+// GatePassed is always unknown: gates ran as tasks of the dispatch lane and
+// left their verdicts as verifications, and nothing runs one any more (the
+// coordinator, 2026-11-14; the last batch ran on 2026-10-22). A rule that
+// names gates still parses; it neither holds nor fails.
 func (f *stepFacts) GatePassed(env, test, specSHA256 string) plan.Tri {
-	if f.err != nil {
-		return plan.Unknown
-	}
-	d := f.deployment(env)
-	if !d.ok {
-		return plan.Unknown
-	}
-	commit := d.commit
-	refDoc, err := canon.Encode(d.ref)
-	if err != nil {
-		return plan.Unknown
-	}
-	if f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.verification v
-	  JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id AND a.task_id = v.task_id
-	  WHERE v.method = 'gate' AND v.check_ref = $1 AND v.verdict = 'pass' AND v.env = $2 AND v.subject_commit = $3
-	    AND v.deploy_ref_json = $4::jsonb AND v.spec_sha256 = $5)`, test, env, commit, string(refDoc), specSHA256) {
-		return plan.True
-	}
-	if f.err != nil {
-		return plan.Unknown
-	}
-	return plan.False
+	return plan.Unknown
 }
 
 // EvaluateStep evaluates a step's done rule and moves the step when the rule

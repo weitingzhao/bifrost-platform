@@ -30,6 +30,10 @@ const ReasonNoGate = "no gate test yet"
 // that stays true once recorded (review 427 A2).
 const ReasonNotGates = "its done rule is not gate tests only"
 
+// ReasonGatesRetired is why a row's gates read unknown: gates ran as tasks
+// of the dispatch lane, and nothing runs one any more (2026-11-14).
+const ReasonGatesRetired = "gates are no longer run"
+
 // archRow is a row of the architecture table as planView read it.
 type archRow struct{ id, title string }
 
@@ -110,15 +114,7 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 		return plan.Unknown.String(), ReasonNotGates, nil
 	}
 	facts := &stepFacts{ctx: ctx, tx: tx, step: id, deployed: deploys.read}
-	var statusErr error
-	seen := &explained{Facts: facts, gates: gates, status: func(env, test, spec string) string {
-		if statusErr != nil {
-			return ""
-		}
-		s, err := gateStatus(ctx, tx, env, deploys.get(env), test, spec)
-		statusErr = err
-		return s
-	}}
+	seen := &explained{Facts: facts, gates: gates}
 	res := rule.Eval(seen)
 	var every string
 	if res.Value == plan.False {
@@ -127,16 +123,13 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 	if facts.err != nil {
 		return "", "", facts.err
 	}
-	if statusErr != nil {
-		return "", "", statusErr
-	}
 	if res.Value == plan.False {
 		return res.Value.String(), every, deploys.err
 	}
 	if deploys.err != nil {
 		return "", "", deploys.err
 	}
-	return res.Value.String(), seen.reason(res.Value, deploys), nil
+	return res.Value.String(), seen.reason(res.Value), nil
 }
 
 // recordedDeploys reads what each environment runs as the controller last
@@ -224,11 +217,8 @@ type explained struct {
 	// gates is the projection's readings of gates, by environment, test and
 	// spec: the deployment they are read against is the projection's.
 	gates map[string]plan.Tri
-	// status is what became of a gate that has not passed (gateStatus); nil
-	// for none.
-	status func(env, test, spec string) string
-	read   map[string]plan.Tri // the gates this evaluation read, by key
-	whats  map[string]string   // and how the reason names each
+	read  map[string]plan.Tri // the gates this evaluation read, by key
+	whats map[string]string   // and how the reason names each
 }
 
 type atomReading struct {
@@ -286,11 +276,6 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 	}
 	e.read[key] = v
 	what := test
-	if v == plan.False && e.status != nil {
-		if s := e.status(env, test, specSHA256); s != "" {
-			what = test + " (" + s + ")"
-		}
-	}
 	e.whats[key] = what
 	e.atoms = append(e.atoms, atomReading{what: what, env: env, value: v})
 	return v
@@ -345,7 +330,7 @@ func (e *explained) everyGate(rule plan.Rule, deploys *recordedDeploys) string {
 // reason names the atoms that read what the rule came to: the gates by
 // environment, with the deployment they were checked against, then the
 // other atoms.
-func (e *explained) reason(value plan.Tri, deploys *recordedDeploys) string {
+func (e *explained) reason(value plan.Tri) string {
 	var parts []string
 	var envs []string
 	tests := map[string][]string{}
@@ -368,21 +353,8 @@ func (e *explained) reason(value plan.Tri, deploys *recordedDeploys) string {
 	}
 	var gates []string
 	for _, env := range envs {
-		list := strings.Join(tests[env], ", ")
-		d := deploys.get(env)
-		at := fmt.Sprintf("%s at %s, the deployment recorded %s", env, short(d.commit), d.at.UTC().Format(time.RFC3339))
-		switch {
-		case value == plan.Unknown && !d.found:
-			gates = append(gates, list+": what "+env+" runs is not recorded yet")
-		case value == plan.Unknown && !d.ok:
-			gates = append(gates, fmt.Sprintf("%s: the deployment recorded for %s at %s does not identify what runs: %s", list, env, d.at.UTC().Format(time.RFC3339), d.invalid))
-		case value == plan.Unknown:
-			gates = append(gates, list+": the deployment recorded for "+env+" cannot be read")
-		case value == plan.True:
-			gates = append(gates, list+" passed on "+at)
-		default:
-			gates = append(gates, list+": no pass on "+at)
-		}
+		// Unknown is the only reading a gate has now (stepFacts.GatePassed).
+		gates = append(gates, strings.Join(tests[env], ", ")+": "+ReasonGatesRetired+" ("+env+")")
 	}
 	return strings.Join(append(gates, parts...), "; ")
 }
