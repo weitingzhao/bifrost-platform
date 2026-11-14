@@ -300,9 +300,11 @@ func TestStepRules(t *testing.T) {
 	if w.evaluate(t, "R2:2.1-5", d) != "" {
 		t.Fatal("a task of another step moved this one")
 	}
+	// The tasks' table is not read any more (store cut 4, 2026-11-14): an
+	// accepted task no longer moves its step.
 	accept(here)
-	if w.evaluate(t, "R2:2.1-5", d) != "done" {
-		t.Fatal("the step's accepted task did not move it")
+	if w.evaluate(t, "R2:2.1-5", d) != "" {
+		t.Fatal("an accepted task moved the step")
 	}
 
 	// A dropped step is not evaluated.

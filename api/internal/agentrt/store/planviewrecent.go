@@ -12,9 +12,8 @@ import (
 // recentScope picks the events Recent changes lists for root $2 (plan stream $1):
 // the plan's own events, its external work except heartbeats (a dispatch run
 // sends one every 30 seconds; they only say it is alive, which the run's own
-// row already shows), landings of its tasks, and plan observations that
-// changed a value.
-const recentScope = `event_stream_id=$1 OR (body_json->'external_work'->>'root'=$2 AND body_json->'external_work'->>'type'<>'heartbeat') OR (event_stream_id LIKE 'landing:%' AND body_json->'landing'->>'op' IN (SELECT e.body_json->'landing'->>'op' FROM agentrt.event e JOIN agentrt.task t ON t.task_id=e.body_json->'landing'->>'task' JOIN agentrt.plan_node step ON step.plan_node_id=t.plan_node_id JOIN agentrt.plan_node item ON item.plan_node_id=step.parent_plan_node_id WHERE e.event_stream_id LIKE 'landing:%' AND item.parent_plan_node_id=$2)) OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true')`
+// row already shows), and plan observations that changed a value.
+const recentScope = `event_stream_id=$1 OR (body_json->'external_work'->>'root'=$2 AND body_json->'external_work'->>'type'<>'heartbeat') OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true')`
 
 type viewRecentCursor struct {
 	Root    string           `json:"root"`

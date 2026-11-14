@@ -286,15 +286,8 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 		return err
 	}
 	if task != "" {
-		var tm, tn string
-		err = tx.QueryRow(ctx, `SELECT mission_id,COALESCE(plan_node_id,'') FROM agentrt.task WHERE task_id=$1 FOR SHARE`, task).Scan(&tm, &tn)
-		if err != nil {
-			return err
-		}
-		if tn != node || mission != "" && tm != mission {
-			return invalid("task belongs to another step or mission")
-		}
-		mission = tm
+		// Nothing proposes a task any more (store cut 4, 2026-11-14).
+		return invalid("external work is not linked to a task any more: register it on its step")
 	}
 	if mission != "" {
 		var tenant string

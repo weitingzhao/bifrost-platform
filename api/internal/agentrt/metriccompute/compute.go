@@ -51,7 +51,7 @@ func compute(ctx context.Context, db store.DB, now time.Time, defs []metrics.Def
 	var facts []fact
 	have := map[string]bool{}
 	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, e := tx.Query(ctx, `SELECT e.event_type,e.event_stream_id,COALESCE(e.task_id,''),COALESCE(t.repo,''),e.at,e.body_json FROM agentrt.event e LEFT JOIN agentrt.task t ON t.task_id=e.task_id WHERE e.event_type IN ('attempt_started','approval_seen','question_seen','pipeline_seen','metric_label_set','task_state_changed') OR (e.event_type='note' AND e.body_json ? 'landing') ORDER BY e.event_id`)
+		rows, e := tx.Query(ctx, `SELECT e.event_type,e.event_stream_id,COALESCE(e.task_id,''),'',e.at,e.body_json FROM agentrt.event e WHERE e.event_type IN ('attempt_started','approval_seen','question_seen','pipeline_seen','metric_label_set','task_state_changed') OR (e.event_type='note' AND e.body_json ? 'landing') ORDER BY e.event_id`)
 		if e != nil {
 			return e
 		}

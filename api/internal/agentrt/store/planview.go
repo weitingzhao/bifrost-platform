@@ -91,7 +91,7 @@ const viewTree = `WITH RECURSIVE tree AS (SELECT plan_node_id FROM agentrt.plan_
 
 func devTree(ctx context.Context, tx pgx.Tx, root string) error {
 	var bad bool
-	err := tx.QueryRow(ctx, viewTree+`SELECT EXISTS(SELECT 1 FROM tree JOIN agentrt.plan_node n USING(plan_node_id) JOIN agentrt.mission m USING(mission_id) WHERE m.tenant<>'dev') OR EXISTS(SELECT 1 FROM tree JOIN agentrt.task t USING(plan_node_id) JOIN agentrt.mission m USING(mission_id) WHERE m.tenant<>'dev')`, root).Scan(&bad)
+	err := tx.QueryRow(ctx, viewTree+`SELECT EXISTS(SELECT 1 FROM tree JOIN agentrt.plan_node n USING(plan_node_id) JOIN agentrt.mission m USING(mission_id) WHERE m.tenant<>'dev')`, root).Scan(&bad)
 	if err != nil {
 		return err
 	}

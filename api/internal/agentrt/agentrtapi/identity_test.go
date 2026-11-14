@@ -380,7 +380,7 @@ func TestBindingAtomicity(t *testing.T) {
 		}
 	})
 	t.Run("linked, still the same work", func(t *testing.T) {
-		pool, task := world(t)
+		pool, _ := world(t)
 		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 			_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "step 2", StepKind: "agent", Ordinal: 2, Root: "R2"})
 			return err
@@ -390,7 +390,7 @@ func TestBindingAtomicity(t *testing.T) {
 		w, _ := register(t, s, "collector:h1", regBody("reg", putSpec(t, s, "collector:h1", "linked"), id))
 		for i, e := range []map[string]any{
 			eventOf("l1", 1, "linked", id, map[string]any{"root": "R2", "plan_node_id": "R2:1-2"}),
-			eventOf("l2", 2, "linked", id, map[string]any{"root": "R2", "plan_node_id": "R2:1-1", "task_id": task}),
+			eventOf("l2", 2, "linked", id, map[string]any{"root": "R2", "plan_node_id": "R2:1-1"}),
 			eventOf("st", 3, "started", id),
 		} {
 			code, out := call(t, s, "collector:h1", "POST", "external-work/"+w+"/events", e)
@@ -400,7 +400,7 @@ func TestBindingAtomicity(t *testing.T) {
 		}
 		got := notes(t, pool, w)
 		last := got[len(got)-1]
-		if len(got) != 4 || last["plan_node_id"] != "R2:1-1" || last["task_id"] != task || last["registrant"] != "thread:collector@h1" ||
+		if len(got) != 4 || last["plan_node_id"] != "R2:1-1" || last["registrant"] != "thread:collector@h1" ||
 			last["host"] != "h1" || last["vendor"] != "claude" || last["session"] != "s-linked" || last["epoch"] != float64(1) || last["state"] != "Running" {
 			t.Fatalf("notes: %v", got)
 		}

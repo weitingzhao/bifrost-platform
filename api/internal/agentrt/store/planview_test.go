@@ -226,11 +226,10 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 	}
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "bad-link", Seq: 2, Type: "linked", Root: "other", Node: s1})
 	is(t, err, store.ErrInvalid)
-	task, err := w.task(t, "M-1", s3, "", "implement")
-	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "cross-step", Seq: 2, Type: "linked", Root: root, Node: s1, Task: task})
+	// A link to a task is refused (store cut 4, 2026-11-14); a link to a step is taken.
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "task-link", Seq: 2, Type: "linked", Root: root, Node: s3, Task: "t_01M5192P0JPMJAP63ZKRPXJ2VV"})
 	is(t, err, store.ErrInvalid)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "link", Seq: 2, Type: "linked", Root: root, Node: s3, Task: task, Mission: "M-1"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "link", Seq: 2, Type: "linked", Root: root, Node: s3, Mission: "M-1"})
 	ok(t, err)
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "cancel", Seq: 3, Type: "cancelled"})
 	ok(t, err)

@@ -17,14 +17,13 @@ import (
 var controlKinds = map[string][]string{
 	"global":  {"stop", "pause"},
 	"mission": {"stop", "pause"},
-	"task":    {"stop", "pause"},
+	"task":    {"stop", "pause"}, // kept for the events already written; no new one is set (RequestControl)
 	"host":    {"stop", "pause", "drain"},
 }
 
 // scopeRows names the row a scope's ref must be.
 var scopeRows = map[string]string{
 	"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1`,
-	"task":    `SELECT 1 FROM agentrt.task WHERE task_id = $1`,
 	"host":    `SELECT 1 FROM agentrt.host WHERE host_id = $1`,
 }
 
@@ -39,6 +38,9 @@ func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind,
 	switch {
 	case !ok:
 		return nil, invalid("scope %q is not global, mission, task or host", scope)
+	case scope == "task":
+		// Nothing runs a task any more (store cut 4, 2026-11-14).
+		return nil, invalid("a control of a task is retired: stop its mission")
 	case !slices.Contains(kinds, kind):
 		return nil, invalid("a %s control is one of %v, not %q", scope, kinds, kind)
 	case reason == "":

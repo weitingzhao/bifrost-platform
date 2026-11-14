@@ -168,18 +168,16 @@ func SearchArtifacts(ctx context.Context, db DB, q ArtifactQuery) ([]ArtifactMet
 	return out, next, nil
 }
 
-// artifactSearch: $1 the kinds (none: any), $2 the task, $3 the mission, $4
+// artifactSearch: the tasks' own tables are not read any more (store cut 4,
+// 2026-11-14): a task's or a mission's records are the messages and events
+// that name it, and a mission's spec. $1 the kinds (none: any), $2 the task, $3 the mission, $4
 // the author, $5 since, $6 and $7 the cursor's time and digest, $8 whether
 // exam artifacts are hidden, $9 the exams' stream, $10 the page and one more.
 // The cursor's time is in microseconds, as created_at is stored.
 const artifactSearch = `WITH tasks AS (
-	    SELECT t.task_id FROM agentrt.task t
-	    WHERE ($2 <> '' OR $3 <> '') AND ($2 = '' OR t.task_id = $2) AND ($3 = '' OR t.mission_id = $3)),
+	    SELECT $2::text AS task_id WHERE $2 <> ''),
 	  named AS (
-	    SELECT t.spec_artifact_id AS id FROM agentrt.task t JOIN tasks USING (task_id)
-	    UNION SELECT a.report_artifact_id FROM agentrt.attempt a JOIN tasks USING (task_id) WHERE a.report_artifact_id IS NOT NULL
-	    UNION SELECT v.evidence_artifact_id FROM agentrt.verification v JOIN tasks USING (task_id)
-	    UNION SELECT m.body_artifact_id FROM agentrt.message m
+	    SELECT m.body_artifact_id AS id FROM agentrt.message m
 	      WHERE m.task_id IN (SELECT task_id FROM tasks) OR ($2 = '' AND $3 <> '' AND m.mission_id = $3)
 	    UNION SELECT s.spec_artifact_id FROM agentrt.mission s WHERE $2 = '' AND $3 <> '' AND s.mission_id = $3 AND s.spec_artifact_id IS NOT NULL
 	    UNION SELECT n.id FROM agentrt.event e

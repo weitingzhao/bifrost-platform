@@ -60,7 +60,7 @@ func TestSearchArtifactsRoute(t *testing.T) {
 	if code, out = call(t, s, "viewer", "GET", "artifacts?kind=handover", nil); code != http.StatusOK || len(ids(out)) != 1 || ids(out)[0] != handover {
 		t.Fatalf("kind handover: %d %v", code, out)
 	}
-	if code, out = call(t, s, "viewer", "GET", "artifacts?task="+task, nil); code != http.StatusOK || len(ids(out)) != 1 {
+	if code, out = call(t, s, "viewer", "GET", "artifacts?task="+task, nil); code != http.StatusOK || len(ids(out)) != 0 { // a task's own records are not read any more
 		t.Fatalf("the task's: %d %v", code, out)
 	}
 	if code, out = call(t, s, "viewer", "GET", "artifacts?limit=1", nil); code != http.StatusOK || len(ids(out)) != 1 || out["next"] == "" {

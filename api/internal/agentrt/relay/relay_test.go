@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -173,7 +172,8 @@ func TestCrashBetweenXAddAndMarkResendsOnce(t *testing.T) {
 // exactly the rebuild sources read from PostgreSQL.
 func TestRebuildQuietFixtureMatchesPostgres(t *testing.T) {
 	f := setup(t)
-	t1, t2 := f.readyTask(t), f.readyTask(t)
+	t1 := f.readyTask(t)
+	f.readyTask(t)
 	msgs := f.post(t, "exec:codex", 3)
 	f.ack(t, msgs[1])
 	f.tx(t, func(tx pgx.Tx) error {
@@ -205,25 +205,10 @@ func TestRebuildQuietFixtureMatchesPostgres(t *testing.T) {
 		t.Fatal("rebuilding flag left behind")
 	}
 
-	wake, _ := f.rc.XRange(ctx, f.pre+"wake", "-", "+").Result()
-	var woken []string
-	for _, m := range wake {
-		woken = append(woken, fmt.Sprint(m.Values["p"]))
-	}
-	sort.Strings(woken)
-	for _, want := range []string{t1, t2} {
-		found := false
-		for _, p := range woken {
-			if strings.Contains(p, want) {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("ready task %s has no wake signal: %v", want, woken)
-		}
-	}
-	if len(wake) != 2 {
-		t.Fatalf("wake has %d entries, want 2", len(wake))
+	// A ready task is not signalled again by a rebuild: nothing takes one any
+	// more, and the tasks' table is not read (store cut 4, 2026-11-14).
+	if wake, _ := f.rc.XRange(ctx, f.pre+"wake", "-", "+").Result(); len(wake) != 0 {
+		t.Fatalf("wake has %d entries after a rebuild, want none", len(wake))
 	}
 
 	mbox, _ := f.rc.XRange(ctx, f.pre+"mbox:exec:codex", "-", "+").Result()

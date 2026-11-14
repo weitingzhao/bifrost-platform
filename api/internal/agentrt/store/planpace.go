@@ -183,31 +183,14 @@ func paceOf(root string, remaining int, moves []paceMove, now time.Time, loc *ti
 	return p
 }
 
-// workSpans are the stretches registered work ran between from and to: each
-// runtime attempt from its start to its end (or its last heartbeat while it
-// runs), and each registered external work from its start (or registration)
+// workSpans are the stretches registered work ran between from and to (no
+// runtime attempt runs any more): each registered external work from its
+// start (or registration)
 // to its end (or last heartbeat), read from the same latest notes plan-view
 // reads.
 func workSpans(ctx context.Context, tx pgx.Tx, from, to time.Time) ([][2]time.Time, error) {
 	var spans [][2]time.Time
-	rows, err := tx.Query(ctx, `SELECT started_at, COALESCE(ended_at, heartbeat_at) FROM agentrt.attempt
-	  WHERE started_at IS NOT NULL AND started_at <= $2 AND COALESCE(ended_at, heartbeat_at) >= $1`, from, to)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var a, b time.Time
-		if err = rows.Scan(&a, &b); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		spans = append(spans, [2]time.Time{a, b})
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	rows, err = tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
+	rows, err := tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
 	  WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id, seq DESC) x`)
 	if err != nil {
 		return nil, err

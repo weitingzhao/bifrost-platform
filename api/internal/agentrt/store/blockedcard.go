@@ -2,11 +2,8 @@ package store
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // A blocked task's decision card (design v5 §5.2 控制器「验收编排」: checks that
@@ -104,11 +101,6 @@ var blockedPage atomic.Int64
 
 func init() { blockedPage.Store(50) }
 
-// stopOn is the uncleared stops (k) that hold task t: its own and its
-// mission's, as held reads controls.
-const stopOn = `agentrt.control k WHERE k.cleared_at IS NULL AND k.control_kind = 'stop'
-    AND ((k.scope = 'task' AND k.scope_ref = t.task_id) OR (k.scope = 'mission' AND k.scope_ref = t.mission_id))`
-
 // AnsweredCard is one of the runtime's cards the Owner answered that the
 // runtime has not acknowledged: an unacknowledged answer counts against the
 // runtime's question quota.
@@ -122,15 +114,9 @@ type AnsweredCard struct {
 	ByRule bool
 }
 
-// TaskWait reads what an answered card's task is now: its state and whether
-// a stop holds it (stopOn); found false when no such task exists.
+// TaskWait was what an answered card's task is now. No task is in work and
+// the tasks' table is not read (store cut 4, 2026-11-14): no such task is
+// found, so an answered card that names one is acknowledged as nobody's.
 func TaskWait(ctx context.Context, db DB, task string) (state string, stopped, found bool, err error) {
-	err = InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT t.state, EXISTS (SELECT 1 FROM `+stopOn+`) FROM agentrt.task t WHERE t.task_id = $1`,
-			task).Scan(&state, &stopped)
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, false, nil
-	}
-	return state, stopped, err == nil, err
+	return "", false, false, nil
 }

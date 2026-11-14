@@ -216,8 +216,6 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 			modes[id] = mode
 		}
 	}
-	var moved, rebound []string
-	from := map[string]string{}
 	for _, c := range changes {
 		switch c.Op {
 		case "add_node":
@@ -237,22 +235,9 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 			want(c.Node, "UPDATE")
 		case "rebind_step":
 			want(c.Node, "UPDATE")
-			rebound = append(rebound, c.Node)
 		case "move_task":
-			want(c.Node, "UPDATE")
-			moved = append(moved, c.Task)
-			var step *string
-			err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, c.Task).Scan(&step)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return invalid("there is no task %s", c.Task)
-			}
-			if err != nil {
-				return err
-			}
-			if step != nil {
-				from[c.Task] = *step
-				want(*step, "UPDATE")
-			}
+			// Nothing proposes or runs a task any more (store cut 4, 2026-11-14).
+			return invalid("move_task is retired: no task is in work to move")
 		}
 	}
 	hook("change read", "")
@@ -278,50 +263,13 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 			return invalid("node %s is in plan %s, not %s", id, in, root)
 		}
 	}
-	// The tasks NOWAIT: Dispatch locks a task before the tasks it depends
-	// on, Conclude a subject before its check, so no one order of task locks
-	// fits them all (review 182 A3); a change that finds one held fails at
-	// once with lock_not_available and is tried again whole.
-	slices.Sort(moved)
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) OR plan_node_id = ANY($2) ORDER BY task_id
-	  FOR NO KEY UPDATE NOWAIT`, moved, rebound); err != nil {
-		return err
-	}
-	// And their subjects, which the task trigger locks FOR SHARE when a
-	// verification or review moves (review 183 A3): taken here, NOWAIT, so
-	// the trigger never waits for one while this holds the moved task.
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id IN (SELECT subject_task_id FROM agentrt.task
-	  WHERE (task_id = ANY($1) OR plan_node_id = ANY($2)) AND subject_task_id IS NOT NULL) ORDER BY task_id FOR SHARE NOWAIT`,
-		moved, rebound); err != nil {
-		return err
-	}
-	// Each moved task is still where it was read (another tree may have
-	// moved it in between; review 182 A2); if not, the step locks taken are
-	// the wrong ones: try again whole.
-	for _, task := range moved {
-		var step *string
-		if err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&step); err != nil {
-			return err
-		}
-		now := ""
-		if step != nil {
-			now = *step
-		}
-		if now != from[task] {
-			return fmt.Errorf("%w: task %s moved from %q to %q while it was locked", errMoved, task, from[task], now)
-		}
-	}
 	return nil
 }
 
-// errMoved: a task a change moves was moved by someone else after it was
-// read; the change is tried again whole.
-var errMoved = errors.New("store: a task moved while the change locked it")
-
-// retryable: a change that met a held row or a moved task; nothing was
+// retryable: a change that met a held row; nothing was
 // written and it may simply be tried again.
 func retryable(err error) bool {
-	return lockNotAvailable(err) || errors.Is(err, errMoved) || deadlocked(err)
+	return lockNotAvailable(err) || deadlocked(err)
 }
 
 // deadlocked: PostgreSQL broke a lock cycle by ending this transaction;
@@ -358,11 +306,6 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 			node = c.Parent
 		}
 		mission := c.MissionID
-		if c.Op == "move_task" {
-			if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id=$1`, c.Task).Scan(&mission); err != nil {
-				return nil, err
-			}
-		}
 		if node != "" && mission != "" {
 			if err := checkViewBinding(ctx, tx, node, mission); err != nil {
 				return nil, err
@@ -452,7 +395,7 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 		case "retitle", "set_done_rule", "rebind_step", "drop_step", "set_marks":
 			q, ref = `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, c.Node
 		case "move_task":
-			q, ref = `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, c.Task
+			return nil, invalid("move_task is retired: no task is in work to move")
 		default:
 			continue
 		}
@@ -528,23 +471,8 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 				}
 			}
 		case "rebind_step":
-			if _, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = $2, version = version + 1 WHERE plan_node_id = $1`,
-				c.Node, c.MissionID); err == nil {
-				_, err = tx.Exec(ctx, `UPDATE agentrt.task SET mission_id = $2, version = version + 1, updated_at = clock_timestamp()
-				  WHERE plan_node_id = $1`, c.Node, c.MissionID)
-			}
-		case "move_task":
-			// Not onto a dropped step (review 313 A3); the step is locked
-			// above.
-			var state *string
-			if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, c.Node).Scan(&state); err == nil &&
-				state != nil && *state == "dropped" {
-				err = invalid("step %s is dropped; no task moves onto it", c.Node)
-			}
-			if err == nil {
-				_, err = tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2, off_plan = false, off_plan_reason = NULL, version = version + 1,
-				  updated_at = clock_timestamp() WHERE task_id = $1`, c.Task, c.Node)
-			}
+			_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET mission_id = $2, version = version + 1 WHERE plan_node_id = $1`,
+				c.Node, c.MissionID)
 		case "set_marks":
 			err = setMarks(ctx, tx, c)
 		}
@@ -576,14 +504,12 @@ func setMarks(ctx context.Context, tx pgx.Tx, c PlanChange) error {
 
 // dropStep moves a step to dropped with its own plan_node_state_changed
 // event, caused by the plan change: it keeps its number and leaves the
-// count. A step with work still open on it is not dropped.
+// count.
 func dropStep(ctx context.Context, tx pgx.Tx, actor, root, step string, cause int64) error {
 	var kind string
 	var state, mission *string
-	var open int
-	err := tx.QueryRow(ctx, `SELECT n.node_kind, n.state, n.mission_id, (SELECT count(*) FROM agentrt.task t WHERE t.plan_node_id = n.plan_node_id
-	    AND t.state NOT IN ('accepted','rejected','cancelled'))
-	  FROM agentrt.plan_node n WHERE n.plan_node_id = $1`, step).Scan(&kind, &state, &mission, &open)
+	err := tx.QueryRow(ctx, `SELECT n.node_kind, n.state, n.mission_id FROM agentrt.plan_node n WHERE n.plan_node_id = $1`,
+		step).Scan(&kind, &state, &mission)
 	switch {
 	case err != nil:
 		return err
@@ -591,8 +517,6 @@ func dropStep(ctx context.Context, tx pgx.Tx, actor, root, step string, cause in
 		return invalid("%s is a %s: only a step is dropped", step, kind)
 	case *state == "dropped":
 		return invalid("step %s is dropped already", step)
-	case open > 0:
-		return invalid("step %s has %d unfinished tasks; cancel them before it is dropped", step, open)
 	}
 	m := ""
 	if mission != nil {

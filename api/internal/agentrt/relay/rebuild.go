@@ -203,18 +203,6 @@ func (r *Relay) read(ctx context.Context) (snapshot, error) {
 		return s, err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT task_id, role, task_class FROM agentrt.task WHERE state = 'ready' ORDER BY created_at, task_id`)
-	if err != nil {
-		return s, err
-	}
-	for rows.Next() {
-		var id, role, class string
-		if err := rows.Scan(&id, &role, &class); err != nil {
-			rows.Close()
-			return s, err
-		}
-		s.ready = append(s.ready, map[string]any{"kind": "task_ready", "task_id": id, "role": role, "task_class": class})
-	}
-	rows.Close()
-	return s, rows.Err()
+	// No task is ready to signal again: nothing proposes one any more.
+	return s, nil
 }

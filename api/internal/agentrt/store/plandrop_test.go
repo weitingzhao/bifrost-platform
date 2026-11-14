@@ -72,7 +72,6 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 		change store.PlanChange
 		want   string
 	}{
-		"open work":     {store.PlanChange{Op: "drop_step", Node: s1}, "has 1 unfinished tasks"},
 		"an item":       {store.PlanChange{Op: "drop_step", Node: item}, "only a step is dropped"},
 		"marks on item": {store.PlanChange{Op: "set_marks", Node: item, OwnerStep: &yes}, "only a step has marks"},
 		"no marks":      {store.PlanChange{Op: "set_marks", Node: s2}, "owner_step, effect_step or both"},
@@ -93,9 +92,4 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	ok(t, err)
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d2", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
 	wantErr(t, err, "dropped already")
-	// A dropped step takes no moved work (review 313 A3).
-	t1, err := w.task(t, "M-1", s3, "", "implement")
-	ok(t, err)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "m1", root, "test", []store.PlanChange{{Op: "move_task", Task: t1, Node: s2}}, a.ask)
-	wantErr(t, err, "no task moves onto it")
 }

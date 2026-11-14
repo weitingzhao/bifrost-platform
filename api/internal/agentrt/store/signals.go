@@ -106,7 +106,6 @@ func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, 
 	lock := map[string]string{
 		"global":  `SELECT pg_advisory_xact_lock(742105) WHERE $1::text IS NOT NULL`,
 		"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`,
-		"task":    `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`,
 		"host":    `SELECT 1 FROM agentrt.host WHERE host_id = $1 FOR NO KEY UPDATE`,
 	}[scope]
 	if lock != "" {

@@ -102,32 +102,25 @@ func TestSearchArtifacts(t *testing.T) {
 		t.Fatalf("author thread:s1: %v", got)
 	}
 	got, _ := search(t, w, store.ArtifactQuery{Task: impl})
-	for _, want := range []string{w.spec, report, evidence} {
-		if !slices.Contains(got, want) {
-			t.Fatalf("task %s: %v has no %s", impl, got, want)
-		}
-	}
-	for _, not := range []string{otherSpec, handover, checkSpec, exam} {
+	// The tasks' own tables are not read any more (store cut 4, 2026-11-14):
+	// a task's spec, report and evidence are no longer found by its id.
+	for _, not := range []string{w.spec, report, evidence, otherSpec, handover, checkSpec, exam} {
 		if slices.Contains(got, not) {
 			t.Fatalf("task %s: %v has %s", impl, got, not)
 		}
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: check}); !slices.Contains(got, checkSpec) || slices.Contains(got, report) {
+	if got, _ = search(t, w, store.ArtifactQuery{Task: check}); slices.Contains(got, checkSpec) || slices.Contains(got, report) {
 		t.Fatalf("the check's: %v", got)
 	}
 	got, _ = search(t, w, store.ArtifactQuery{Mission: "M-1"})
-	for _, want := range []string{w.spec, report, checkSpec} {
-		if !slices.Contains(got, want) {
-			t.Fatalf("mission M-1: %v has no %s", got, want)
-		}
-	}
 	if slices.Contains(got, otherSpec) {
 		t.Fatalf("mission M-1 lists M-2's spec: %v", got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2"}); !slices.Contains(got, otherSpec) || !slices.Contains(got, missionSpec) || len(got) != 2 {
+	// A mission's own spec is still its record; its tasks' specs are not read.
+	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2"}); !slices.Equal(got, []string{missionSpec}) {
 		t.Fatalf("mission M-2: %v", got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: other}); !slices.Equal(got, []string{otherSpec}) {
+	if got, _ = search(t, w, store.ArtifactQuery{Task: other}); len(got) != 0 {
 		t.Fatalf("M-2's task: %v (a mission's spec is not its task's)", got)
 	}
 	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {

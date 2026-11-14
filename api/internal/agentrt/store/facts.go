@@ -311,8 +311,10 @@ func (f *stepFacts) exists(q string, args ...any) bool {
 }
 
 func (f *stepFacts) TaskAccepted(taskID string) bool {
-	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE task_id = $1 AND plan_node_id = $2 AND state = 'accepted')`,
-		taskID, f.step)
+	// No task is accepted any more and the tasks' table is not read (store
+	// cut 4, 2026-11-14). A step that became done by this atom stays done:
+	// a done step without a standing condition is not evaluated again.
+	return false
 }
 
 func (f *stepFacts) ApprovalExecuted(number int64) bool {

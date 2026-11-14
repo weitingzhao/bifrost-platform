@@ -153,7 +153,7 @@ func TestPlanChangeOutside(t *testing.T) {
 		"a step under a round":             {store.PlanChange{Op: "add_node", Parent: root, Kind: "step", StepKind: "agent", Title: "x"}, "cannot sit under"},
 		"a rule naming another step's":     {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"task_accepted":"` + t1 + `"}`)}, "which is not on this step"},
 		"a rule naming an unbound record":  {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"approval_executed":77}`)}, "not bound to this step"},
-		"a task out of the step naming it": {store.PlanChange{Op: "move_task", Task: t1, Node: s3}, "of R2:2.1-1 names task"},
+		"a task out of the step naming it": {store.PlanChange{Op: "move_task", Task: t1, Node: s3}, "move_task is retired"},
 		"a node there is not":              {store.PlanChange{Op: "retitle", Node: "R2:9", Title: "x"}, "there is no"},
 		"a rule that does not parse":       {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"nonsense":1}`)}, "does not parse"},
 		"an op there is not":               {store.PlanChange{Op: "delete", Node: s3}, "one of"},
@@ -228,8 +228,6 @@ func TestPlanDecisions(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
 	propose := func(key string, c store.PlanChange) string {
 		t.Helper()
 		out, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []store.PlanChange{c}, a.ask)
@@ -239,11 +237,14 @@ func TestPlanDecisions(t *testing.T) {
 	applied := propose("k1", store.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"})
 	refused := propose("k2", store.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.3"})
 	expired := propose("k3", store.PlanChange{Op: "retitle", Node: item, Title: "renamed"})
-	failed := propose("k4", store.PlanChange{Op: "move_task", Task: t1, Node: s3})
+	failed := propose("k4", store.PlanChange{Op: "drop_step", Node: s3})
 	open := propose("k5", store.PlanChange{Op: "retitle", Node: root, Title: "round two"})
-	// Before the answer, the step the task leaves comes to name it: moving
-	// it no longer fits.
-	setRule(t, w, s1, `{"task_accepted":"`+t1+`"}`)
+	// Before the answer, the step is dropped by another hand: dropping it
+	// no longer fits.
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := store.SetStepState(ctx, tx, "controller", root, s3, "dropped", "test")
+		return err
+	}))
 	a.answer(applied, store.QuestionAnswered, store.CardApplyKey)
 	a.answer(refused, store.QuestionAnswered, store.CardRefuseKey)
 	a.answer(expired, "expired", "")
@@ -277,8 +278,7 @@ func TestPlanDecisions(t *testing.T) {
 	}
 	if w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.2'`) != 1 ||
 		w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.3'`) != 0 ||
-		w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = $1 AND title = 'renamed'`, item) != 0 ||
-		w.count(t, `SELECT count(*) FROM agentrt.task WHERE task_id = $1 AND plan_node_id = $2`, t1, s1) != 1 {
+		w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = $1 AND title = 'renamed'`, item) != 0 {
 		t.Fatal("the plan does not show the decisions")
 	}
 	if n, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack); err != nil || n != 0 {
@@ -332,16 +332,10 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 	} {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
-	other, err := w.task(t, "M-1", "R3:3.1-1", "", "implement")
-	ok(t, err)
-	mine, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
 	before := w.footprint(t)
 	for name, c := range map[string]store.PlanChange{
 		"retitle a step of another tree":      {Op: "retitle", Node: "R3:3.1-1", Title: "x"},
 		"add under another tree":              {Op: "add_node", Parent: "R3:3.1", Kind: "step", StepKind: "agent", Title: "x"},
-		"move a task of another tree here":    {Op: "move_task", Task: other, Node: s1},
-		"move a task to another tree":         {Op: "move_task", Task: mine, Node: "R3:3.1-1"},
 		"rebind a step of another tree":       {Op: "rebind_step", Node: "R3:3.1-1", MissionID: "M-2"},
 		"set the rule of another tree's step": {Op: "set_done_rule", Node: "R3:3.1-1", Rule: json.RawMessage(`{"owner_signoff":"x"}`)},
 	} {
@@ -508,112 +502,6 @@ func TestPlanDecisionAcks(t *testing.T) {
 	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json->>'text' = $1`,
 		"question "+ids[1]+" is gone from the question store"); n != 1 {
 		t.Fatal("the gone card is not recorded")
-	}
-}
-
-// Review 182 A2: a task another tree moves between the change reading
-// where it is and locking it: the change is tried again and then sees it
-// in the other tree.
-//
-// Serial: it holds the package's test hook (SetHook).
-func TestMoveSeesATaskMovedMeanwhile(t *testing.T) {
-	w := newKernelWorld(t)
-	pool := w.db.Pool(t, w.db.Runtime)
-	for _, n := range []store.PlanNode{
-		{ID: "R3", Kind: "round", Label: "3", Title: "round 3", Ordinal: 1, Root: "R3"},
-		{ID: "R3:3.1", Parent: "R3", Kind: "item", Label: "3.1", Title: "other", Root: "R3"},
-		{ID: "R3:3.1-1", Parent: "R3:3.1", Kind: "step", Label: "3.1-1", Title: "other step", MissionID: "M-1", StepKind: "agent", Root: "R3"},
-	} {
-		ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
-	}
-	task, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	var once sync.Once
-	defer store.SetHook(func(point, _ string) {
-		if point == "change read" {
-			once.Do(func() {
-				ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-					if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R3"), Type: "plan_changed", Actor: "controller",
-						Body: map[string]any{"change": "test: move"}}); aerr != nil {
-						return aerr
-					}
-					_, uerr := tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = 'R3:3.1-1' WHERE task_id = $1`, task)
-					return uerr
-				}))
-			})
-		}
-	})()
-	mine := `SELECT concat_ws(' ', (SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id = 'plan:R2'),
-	  (SELECT count(*) FROM agentrt.idempotency_key))`
-	var before, after string
-	ok(t, w.rt.QueryRow(ctx, mine).Scan(&before))
-	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, (&asker{}).ask)
-	if !errors.Is(err, store.ErrInvalid) || !containsFold(err.Error(), "in plan R3, not R2") {
-		t.Fatalf("a move of a task moved meanwhile: %v", err)
-	}
-	ok(t, w.rt.QueryRow(ctx, mine).Scan(&after))
-	if after != before || w.state(t, "task", task) == "" {
-		t.Fatalf("the refused move left something in R2: %s -> %s", before, after)
-	}
-	var step string
-	ok(t, w.rt.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&step))
-	if step != "R3:3.1-1" {
-		t.Fatalf("the task is on %s; the other tree's move stands", step)
-	}
-}
-
-// Review 182 A3: a change never waits holding tasks: a task held by another
-// transaction (Dispatch, Conclude) makes it try again, and past the tries it
-// is busy with nothing written; a decision meeting it waits for the next
-// pass.
-func TestChangeMeetsAHeldTask(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	pool := w.db.Pool(t, w.db.Runtime)
-	task, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	lock := func() pgx.Tx {
-		tx, herr := pool.Begin(ctx)
-		ok(t, herr)
-		_, herr = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, task)
-		ok(t, herr)
-		return tx
-	}
-	hold := func() pgx.Tx {
-		tx := lock()
-		t.Cleanup(func() { _ = tx.Rollback(ctx) })
-		return tx
-	}
-	a := &asker{}
-	released := releaseLater(t, lock(), 100*time.Millisecond)
-	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, a.ask)
-	ok(t, err)
-	ok(t, released())
-	// Each hold lasts until the call it is for has returned, not for a time
-	// the call might outlast (review 322 A2).
-	held := hold()
-	before := w.footprint(t)
-	is(t, whileHeld(t, "a change", func() error {
-		_, err := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, a.ask)
-		return err
-	}), store.ErrBusy)
-	if after := w.footprint(t); after != before {
-		t.Fatalf("a busy change left something: %s -> %s", before, after)
-	}
-	ok(t, held.Rollback(ctx))
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	held = hold()
-	var n int
-	if derr := whileHeld(t, "a decision", func() error {
-		var err error
-		n, err = store.DecidePlanChanges(ctx, pool, a.question, nil)
-		return err
-	}); derr != nil || n != 0 {
-		t.Fatalf("a decision on a held task: %d %v; want none this pass", n, derr)
-	}
-	ok(t, held.Rollback(ctx))
-	if n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil); derr != nil || n != 1 {
-		t.Fatalf("the next pass: %d %v", n, derr)
 	}
 }
 
