@@ -578,14 +578,6 @@ reg(
 )
 
 reg(
-  'apply_manifest',
-  'Apply a successful manifest plan directly. Existing server approval and policy checks still apply.',
-  { plan_id: z.string().min(1), ...actionTraceFields },
-  async ({ plan_id, reason, unchecked, rollback }) =>
-    jsonResult(await platformPost('/api/v1/actuation/manifests/apply', { plan_id, reason, unchecked, rollback })),
-)
-
-reg(
   'create_job_from_cronjob',
   'Create one Job from a CronJob. Tier follows the actuation policy; denied namespaces are refused.',
   {

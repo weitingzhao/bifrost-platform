@@ -143,7 +143,7 @@ async function consultApproval(action: string, params: Record<string, unknown>):
  * answers 403 "approval required" with the policy's reasons and creates
  * nothing.
  */
-const SERVER_JUDGED_ACTIONS: ReadonlySet<string> = new Set(['start_pipeline_run', 'apply_manifest'])
+const SERVER_JUDGED_ACTIONS: ReadonlySet<string> = new Set(['start_pipeline_run'])
 
 export const APPROVAL_REQUIRED_ERROR = 'approval required'
 

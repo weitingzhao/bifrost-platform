@@ -57,7 +57,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_telemetry_alerts',
   'get_telemetry_targets',
   'plan_manifest',
-  'apply_manifest',
   'create_job_from_cronjob',
   'delete_finished_jobs',
   'run_probe_pod',
