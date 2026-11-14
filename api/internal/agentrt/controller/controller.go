@@ -717,69 +717,30 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
-	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
 	if c.Sources.Plan.History != nil || c.Sources.Plan.Deployed != nil {
 		c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
 			_, err := c.PlanObservations(ctx)
 			return err
 		})
 	}
+	// The old dispatch lane is retired (the Owner 2026-11-13): nothing is
+	// leased, routed, dispatched, accepted, closed or timed any more, hosts
+	// are not watched and no assessment is asked for. What stays in this
+	// pass is what the plan tree, the rules and the business issues need:
+	// the facts their rules read, plan decisions, issue cards, the
+	// acknowledging of used answers, the steps whose work has started, and
+	// the rules themselves.
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		c.readTuning(ctx)
 		_, ferr := c.Facts(ctx)
-		_, gerr := c.Gates(ctx)
-		_, oerr := store.Reroute(ctx, c.DB)
-		_, aerr := c.Accept(ctx)
-		_, berr := c.BlockedCards(ctx)
-		_, derr := store.Dispatch(ctx, c.DB)
-		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
-		_, merr := c.MissionDecisions(ctx)
 		_, ierr := c.IssueCards(ctx)
 		_, qerr := c.ackUsedAnswersDue(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		_, werr := c.Waits(ctx)
-		return errors.Join(ferr, gerr, oerr, aerr, berr, derr, cerr, perr, merr, ierr, qerr, verr, rerr, werr)
+		return errors.Join(ferr, perr, ierr, qerr, verr, rerr)
 	})
-	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
-		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {
-			_, err := c.AnswerByRule(ctx)
-			return err
-		})
-	}
-	if c.Sources.Assessable != nil {
-		c.every(ctx, &wg, "agentrt-assess", AssessEvery, func() error {
-			_, err := c.Assess(ctx)
-			return err
-		})
-	}
-	if c.Sources.MainResults != nil {
-		c.every(ctx, &wg, "agentrt-landings", LandingsEvery, func() error {
-			_, err := c.Landings(ctx)
-			return err
-		})
-	}
-	if c.WatchPresence {
-		c.every(ctx, &wg, "agentrt-presence", PresenceEvery, func() error {
-			_, err := c.Presence(ctx)
-			return err
-		})
-	}
-	c.every(ctx, &wg, "agentrt-slots", SlotsEvery, func() error {
-		_, err := c.Slots(ctx)
-		return err
-	})
-	c.startLeakValue(ctx, &wg)
-	if c.PageOwner != nil {
-		c.every(ctx, &wg, "agentrt-disk-pages", DiskPagesEvery, func() error {
-			_, err := c.DiskPages(ctx)
-			return err
-		})
-	}
-	c.startCheckValue(ctx, &wg)
 	c.startFullCI(ctx, &wg)
-	c.startAgentdDeploy(ctx, &wg)
 	return wg.Wait
 }
 

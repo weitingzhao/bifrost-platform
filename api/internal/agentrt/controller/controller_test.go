@@ -246,40 +246,6 @@ func TestStart(t *testing.T) {
 	}
 }
 
-// The loops dispatch: a task proposed to an active mission becomes ready
-// without anyone moving it.
-func TestStartDispatches(t *testing.T) {
-	pool := setup(t)
-	var spec string
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if err := store.MoveMission(ctx, tx, "controller", "M-1", "active", "test"); err != nil {
-			return err
-		}
-		var err error
-		spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", implSpec(t))
-		return err
-	}))
-	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
-		Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}})
-	must(t, err)
-	task := out["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
-	c := &controller.Controller{DB: pool, Sources: (&world{}).sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
-	run, cancel := context.WithCancel(ctx)
-	wait := c.Start(run)
-	defer wait()
-	defer cancel()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		var s string
-		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, task).Scan(&s))
-		if s == "ready" {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the loops left the task %s", s)
-		}
-	}
-}
-
 // Review 152 B2: a source that does not answer is cut off after the read
 // timeout; the pass goes on and records nothing for it.
 func TestSlowSourceIsCutOff(t *testing.T) {
@@ -396,36 +362,6 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	}
 }
 
-// The loops decide missions on a card: once the Owner answers a mission's
-// card with the first option, the mission is active.
-func TestStartDecidesMissions(t *testing.T) {
-	pool := setup(t)
-	out, err := store.ProposeMission(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1",
-		store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}},
-		func(context.Context, store.Card) (string, error) { return "q_8", nil })
-	must(t, err)
-	if out["state"] != "awaiting_owner" || out["question_id"] != "q_8" {
-		t.Fatalf("proposal: %v", out)
-	}
-	w := &world{questions: map[string]store.Question{"q_8": {ID: "q_8", Status: store.QuestionAnswered, Option: store.CardApplyKey,
-		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
-	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
-	run, cancel := context.WithCancel(ctx)
-	wait := c.Start(run)
-	defer wait()
-	defer cancel()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		var state string
-		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1`, out["mission_id"]).Scan(&state))
-		if state == "active" {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the loops did not start the mission (it is %s)", state)
-		}
-	}
-}
-
 // W-31 2.4 slice ④: with Briefs the controller leaves the chief of staff the
 // brief of the slot due, and the same pass takes it into a brief; without
 // Briefs (tests, and any controller not wired for them) it leaves nothing.
@@ -457,67 +393,6 @@ func TestAcceptLeavesTheScheduledBrief(t *testing.T) {
 			t.Fatalf("Briefs %v: a second pass left %d notes", on, notes)
 		}
 	}
-}
-
-// T26's first run: a blocked task had no way out. The loops give it a card
-// in the pass after it is blocked and act on the answer: here the Owner does
-// not do it, and its mission, which had nothing else, stops.
-func TestStartGivesABlockedTaskACard(t *testing.T) {
-	pool := setup(t)
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "goal", Goal: "g",
-			Deadline: time.Now().Add(time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {
-			return err
-		}
-		return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test")
-	}))
-	task := store.NewTaskID()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/plain", []byte("spec"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-2", OffPlanReason: "a goal",
-			Role: "implement", Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform"}); err != nil {
-			return err
-		}
-		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
-			return err
-		}
-		return store.MoveTask(ctx, tx, "controller", task, "blocked", "test")
-	}))
-	w := &world{questions: map[string]store.Question{}}
-	src := w.sources()
-	var cards []store.Card
-	src.Ask = func(_ context.Context, c store.Card) (string, error) {
-		w.set(func() {
-			cards = append(cards, c)
-			w.questions["q_9"] = store.Question{ID: "q_9", Status: store.QuestionAnswered, Option: store.CardRefuseKey,
-				AnsweredBy: "owner", AnsweredAt: "2026-10-19T20:00:00Z"}
-		})
-		return "q_9", nil
-	}
-	c := &controller.Controller{DB: pool, Sources: src, LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
-	run, cancel := context.WithCancel(ctx)
-	wait := c.Start(run)
-	defer wait()
-	defer cancel()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		var state, mission string
-		must(t, pool.QueryRow(ctx, `SELECT t.state, m.state FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
-		  WHERE t.task_id = $1`, task).Scan(&state, &mission))
-		if state == "cancelled" && mission == "stopped" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the loops left the task %s and its mission %s", state, mission)
-		}
-	}
-	w.set(func() {
-		if len(cards) != 1 || cards[0].TaskID != task {
-			t.Fatalf("cards %+v", cards)
-		}
-	})
 }
 
 // Without a question store the pass asks nothing and moves nothing.
