@@ -89,6 +89,9 @@ func precheck(ctx context.Context, a Approval) string {
 // runPlatform executes a record this process claimed and stores the outcome.
 // The approve handler audits its own call; the retry loop records the events.
 func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []event, error) {
+	if s.BeforeExecution != nil {
+		ctx = s.BeforeExecution(ctx, rec)
+	}
 	lease := rec.Execution.LeaseID
 	started := s.clock()
 	var result any
@@ -122,6 +125,9 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 		result, execErr = actions.Execute(runCtx, rec.Action, rec.Params)
 		close(stop)
 		<-done
+	}
+	if s.AfterExecution != nil {
+		s.AfterExecution(ctx, result, execErr)
 	}
 	return s.finishPlatform(rec.ID, lease, started, result, execErr)
 }

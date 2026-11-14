@@ -124,7 +124,10 @@ type SupplyChainResponse struct {
 }
 
 type StartPipelineRunRequest struct {
-	Revision string `json:"revision"`
+	Reason    string `json:"reason,omitempty"`
+	Unchecked string `json:"unchecked,omitempty"`
+	Rollback  string `json:"rollback,omitempty"`
+	Revision  string `json:"revision"`
 	// Tag is the image tag to build. Only bifrost-deliver-research consumes it
 	// today; other pipelines derive their tag inside the pipeline. Optional —
 	// empty falls back to the pipeline's own default.

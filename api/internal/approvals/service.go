@@ -25,6 +25,9 @@ import (
 // Service stores approvals, runs platform actions on approve, and hands the
 // rest to an executor that claims them.
 type Service struct {
+	// Installed at startup; observers only copy execution materials, never authorize.
+	BeforeExecution func(context.Context, Approval) context.Context
+	AfterExecution  func(context.Context, any, error)
 	// Assessment reads an existing stream for HTTP views only; installed at startup.
 	// List reads are concurrent and must honor the shared context deadline.
 	Assessment  func(context.Context, string) map[string]any

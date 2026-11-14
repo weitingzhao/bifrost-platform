@@ -37,8 +37,10 @@ type Clients struct {
 
 // Service is the executor behind the five actions.
 type Service struct {
-	Policy  *actuationpolicy.Policy
-	Clients Clients
+	// ObserveApply receives the already read plan, including unsuccessful plans.
+	ObserveApply func(context.Context, Summary)
+	Policy       *actuationpolicy.Policy
+	Clients      Clients
 	// Sync fetches the repo mirror and waits for commit before a plan run.
 	// Production wires it to the delivery mirror API. Nil refuses to plan.
 	Sync func(ctx context.Context, repo, commit string) error
@@ -79,6 +81,9 @@ func (s *Service) Plan(ctx context.Context, repo, path, commit string) (string, 
 // Apply starts apply-mode for a successful plan. It does not prune.
 func (s *Service) Apply(ctx context.Context, planID string) (map[string]any, error) {
 	summary, err := s.Summarize(ctx, planID)
+	if s.ObserveApply != nil {
+		s.ObserveApply(ctx, summary)
+	}
 	if err != nil {
 		return nil, err
 	}

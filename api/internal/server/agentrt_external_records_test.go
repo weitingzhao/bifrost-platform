@@ -93,6 +93,31 @@ func TestPipelineRunFact(t *testing.T) {
 	}
 }
 
+func TestLandResultsOptionalAndScoped(t *testing.T) {
+	for _, pipeline := range []string{"bifrost-land", "bifrost-ci-platform"} {
+		run := headRun("land-one", pipeline, time.Now().UTC(), "True", map[string]string{"revision": commitForExternalRecord})
+		run.SetUID("uid-one")
+		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "startTime")
+		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "completionTime")
+		old, ok := pipelineRunFact(run)
+		if !ok || old.LandedCommit != "" || store.CheckExternal("pipeline_seen", old.Body()) != nil {
+			t.Fatalf("legacy: %+v", old)
+		}
+		_ = unstructured.SetNestedSlice(run.Object, []any{map[string]any{"name": "commit", "value": commitForExternalRecord}, map[string]any{"name": "change-ids", "value": "Ione Itwo"}, map[string]any{"name": "outcome", "value": "landed"}}, "status", "results")
+		got, ok := pipelineRunFact(run)
+		if !ok || store.CheckExternal("pipeline_seen", got.Body()) != nil {
+			t.Fatalf("new: %+v", got)
+		}
+		if pipeline == "bifrost-land" {
+			if got.LandedCommit != commitForExternalRecord || got.ChangeIDs != "Ione Itwo" || got.Outcome != "landed" {
+				t.Fatal(got)
+			}
+		} else if got.LandedCommit != "" || got.ChangeIDs != "" || got.Outcome != "" {
+			t.Fatal(got)
+		}
+	}
+}
+
 const commitForExternalRecord = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
 
 func TestExternalRecordQuestionObservationNeverReopensExpired(t *testing.T) {

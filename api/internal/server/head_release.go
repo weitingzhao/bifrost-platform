@@ -374,6 +374,12 @@ func (s *Server) recordHeadDecision(ctx context.Context, d headrelease.Deliverab
 	}
 	slog.Info("head release", "deliverable", out.Deliverable, "action", out.Action, "why", out.Why, "run", out.Run, "record", string(detail))
 	s.audit.RecordDirect(headReleasePrincipal, actuation.RoleOperator, "head_release", "deliverable/"+out.Deliverable, out.Action, string(detail))
+	t := newActionTrace("start_pipeline_run", "system_head", map[string]any{"deliverable": out.Deliverable, "commits": out.Commits})
+	t.Initiator = map[string]any{"internal_principal": headReleasePrincipal, "external_authenticated_requester": traceUnavailable}
+	t.Reason, t.Unchecked, t.Rollback = out.Why, traceUnavailable, traceUnavailable
+	t.Decision = rec
+	t.Result = map[string]any{"action": out.Action, "run": out.Run}
+	s.recordActionTrace(ctx, t)
 }
 
 // headBrought lists the commits to has and from lacks, newest first, each

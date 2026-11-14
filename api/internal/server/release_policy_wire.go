@@ -103,6 +103,9 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 		return false, nil
 	}
 	d := s.releasePolicy.Decide(r.Context(), id, tier, params)
+	if t := traceFrom(r.Context()); t != nil {
+		t.Decision = map[string]any{"mode": "signed_policy", "decision": d}
+	}
 	if !d.Auto {
 		return false, d.Reasons
 	}
@@ -157,6 +160,9 @@ func (s *Server) checkTierBRelease(w http.ResponseWriter, r *http.Request, id st
 		return true
 	}
 	d := s.releasePolicy.Evaluate(ctx, id, params)
+	if t := traceFrom(r.Context()); t != nil {
+		t.Decision = map[string]any{"mode": "direct_tier_b", "decision": d}
+	}
 	if d.PolicyID != "" && s.audit != nil {
 		result := "not covered"
 		if d.Auto {

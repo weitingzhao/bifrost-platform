@@ -97,7 +97,10 @@ func (h *Handler) HandleGetPlan(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleApply(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PlanID string `json:"plan_id"`
+		PlanID    string `json:"plan_id"`
+		Reason    string `json:"reason,omitempty"`
+		Unchecked string `json:"unchecked,omitempty"`
+		Rollback  string `json:"rollback,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, err)

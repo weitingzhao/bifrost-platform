@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { actionTraceFields } from './actionTraceFields.js'
 /**
  * Bifrost Ops Platform MCP server (P5).
  * Proxies platform-api — same routes, Bearer auth, audit on actuation side.
@@ -272,15 +273,17 @@ reg(
   'start_pipeline_run',
   'Start Tekton PipelineRun (operator) and return {ok, action, target, message, run}. The call goes to the run route itself and never creates an approval request. A tier C (PROD) run starts only when the signed release policy covers this exact request; otherwise nothing starts and the answer is {started: false, error: "approval required", action, release_policy: [the policy\'s reasons], note} (ask first with check_release_policy). Pass revision (Gitea tag) to pin deploy version. Pass who (same value as release.sh hold prints) when a release window is open — the server refuses without it. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s. For bifrost-build-research-dagster, pass the same semver: the `-dagster` suffix is appended for you, because both research image lines share one repository and a bare tag would build the Dagster image over the one research-api runs.',
   {
+    ...actionTraceFields,
     name: z.string(),
     revision: z.string().optional(),
     tag: z.string().optional(),
     who: z.string().optional(),
     params: z.record(z.string(), z.string()).optional().describe('Pinned git revisions only: revision or *Revision params the Pipeline declares, each a 40-character lowercase SHA. Source, registry, image and tag are not settable.'),
   },
-  async ({ name, revision, tag, who, params }) =>
+  async ({ name, revision, tag, who, params, reason, unchecked, rollback }) =>
     jsonResult(
       await platformPost(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, {
+        reason, unchecked, rollback,
         revision: revision ?? '',
         ...(tag != null && tag.trim() !== '' ? { tag: tag.trim() } : {}),
         ...(who != null && who.trim() !== '' ? { who: who.trim() } : {}),
@@ -572,6 +575,14 @@ reg(
   },
   async ({ repo, path, commit }) =>
     jsonResult(await platformPost('/api/v1/actuation/manifests/plan', { repo, path, commit })),
+)
+
+reg(
+  'apply_manifest',
+  'Apply a successful manifest plan directly. Existing server approval and policy checks still apply.',
+  { plan_id: z.string().min(1), ...actionTraceFields },
+  async ({ plan_id, reason, unchecked, rollback }) =>
+    jsonResult(await platformPost('/api/v1/actuation/manifests/apply', { plan_id, reason, unchecked, rollback })),
 )
 
 reg(

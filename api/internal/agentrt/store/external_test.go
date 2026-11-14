@@ -83,6 +83,24 @@ func TestExternalFactsIdempotent(t *testing.T) {
 	record("question_seen", qb, 0)
 }
 
+func TestLandResultsCollectionIdempotent(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	at := time.Now().UTC()
+	p := store.PipelineRun{Run: "land-one", UID: "uid-one", Pipeline: "bifrost-land", Kind: "other", Result: "Succeeded", CreatedAt: at, StartedAt: at, CompletedAt: at}
+	for i, want := range []int{1, 0, 1, 0} {
+		if i == 2 {
+			p.LandedCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			p.ChangeIDs = "Ione Itwo"
+			p.Outcome = "landed"
+		}
+		n, err := store.RecordExternal(ctx, w.rt, "pipeline_seen", []map[string]any{p.Body()})
+		if err != nil || n != want {
+			t.Fatalf("pass %d: n=%d err=%v", i, n, err)
+		}
+	}
+}
+
 func TestExternalFactsVocab(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)

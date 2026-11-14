@@ -20,6 +20,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -199,6 +200,16 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		r, _ := value.(map[string]any)
 		v, _ := r["value"].(string)
 		name, _ := r["name"].(string)
+		if f.Pipeline == "bifrost-land" {
+			switch name {
+			case "commit":
+				f.LandedCommit = approvalnotify.Redact(v)
+			case "change-ids":
+				f.ChangeIDs = approvalnotify.Redact(v)
+			case "outcome":
+				f.Outcome = approvalnotify.Redact(v)
+			}
+		}
 		switch name {
 		case "platform-tree":
 			// The tree of the run's own repository: bifrost-ci-infra reports

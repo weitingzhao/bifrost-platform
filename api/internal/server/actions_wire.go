@@ -20,6 +20,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
 // executorContextKey is unexported. An HTTP request cannot construct it, and
@@ -41,6 +42,10 @@ func fromExecutor(ctx context.Context) bool {
 // that marker, only a tier C release covered by the Owner's signed release
 // policy (and no freeze) gets past this gate, and that is audited.
 func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
+	return s.tracedAction(id, s.guardUntraced(id, next))
+}
+
+func (s *Server) guardUntraced(id string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, err := readAndRestore(r)
 		if err != nil {
@@ -58,6 +63,9 @@ func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		tier := act.TierOf(r.Context(), params)
+		if t := traceFrom(r.Context()); t != nil && !fromExecutor(r.Context()) {
+			t.Decision = map[string]any{"tier": tier, "needs_approval": tier.NeedsApproval()}
+		}
 		if fromExecutor(r.Context()) {
 			next(w, r)
 			return
@@ -198,12 +206,21 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) bindActionExecutors() {
+	if s.approvals != nil {
+		s.approvals.BeforeExecution = s.beginApprovalTrace
+		s.approvals.AfterExecution = s.endApprovalTrace
+	}
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
 	actions.RegisterExecutor(agentdeploy.DeployAgentdAction, s.deployAgentd)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	if s.work != nil {
 		svc := s.work.Svc
+		svc.ObserveApply = func(ctx context.Context, summary workactions.Summary) {
+			if t := traceFrom(ctx); t != nil {
+				t.Object = map[string]any{"request": t.Object, "plan_summary": summary}
+			}
+		}
 		actions.RegisterExecutor("apply_manifest", func(ctx context.Context, params map[string]any) (any, error) {
 			out, err := svc.Apply(ctx, text(params["plan_id"]))
 			return out, transientKube(err)

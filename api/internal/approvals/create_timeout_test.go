@@ -85,6 +85,21 @@ func TestCreateTimeoutDoesNotRequeue(t *testing.T) {
 	})
 
 	svc := New(t.TempDir()+"/approvals", nil)
+	type traceKey struct{}
+	var observed Approval
+	var observedErr error
+	var finishes int
+	svc.BeforeExecution = func(ctx context.Context, a Approval) context.Context {
+		observed = a
+		return context.WithValue(ctx, traceKey{}, a.ID)
+	}
+	svc.AfterExecution = func(ctx context.Context, result any, err error) {
+		if ctx.Value(traceKey{}) != observed.ID {
+			t.Error("observer lost execution context")
+		}
+		observedErr = err
+		finishes++
+	}
 	c := svc.create(context.Background(), "s", "apply_manifest", "apply the plan", "", map[string]any{"plan_id": planID})
 	if c.Status != 201 {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
@@ -92,6 +107,9 @@ func TestCreateTimeoutDoesNotRequeue(t *testing.T) {
 	out := svc.approve(context.Background(), c.Approval.ID, "console")
 	if out.Body["status"] != StatusUnknown {
 		t.Fatalf("approve = %d %v", out.Status, out.Body)
+	}
+	if finishes != 1 || observed.ID != c.Approval.ID || observed.Reason != "apply the plan" || observedErr == nil {
+		t.Fatalf("execution observer: finishes=%d approval=%+v error=%v", finishes, observed, observedErr)
 	}
 	errText, _ := out.Body["error"].(string)
 	if !strings.Contains(errText, "needs checking") {

@@ -16,6 +16,7 @@ import (
 // the tree when the run reports it; Scope "" when it does not say): they are
 // read for the evidence ledger (evidence.go) and are not pipeline_seen fields.
 type PipelineRun struct {
+	LandedCommit, ChangeIDs, Outcome                                         string
 	Run, UID, Pipeline, Kind, Result, Repo, Revision, Reason, Tree, TestedBy string
 	CreatedAt, StartedAt, CompletedAt                                        time.Time
 	Scope                                                                    string
@@ -35,7 +36,7 @@ type PipelineRun struct {
 func pipelineSeenBody(p PipelineRun) map[string]any {
 	b := map[string]any{"run": p.Run, "uid": p.UID, "pipeline": p.Pipeline, "kind": p.Kind, "result": p.Result,
 		"created_at": p.CreatedAt.UTC().Format(time.RFC3339), "started_at": p.StartedAt.UTC().Format(time.RFC3339), "completed_at": p.CompletedAt.UTC().Format(time.RFC3339)}
-	for k, v := range map[string]string{"repo": p.Repo, "revision": p.Revision, "reason": p.Reason, "tree": p.Tree, "tested_by": p.TestedBy} {
+	for k, v := range map[string]string{"repo": p.Repo, "revision": p.Revision, "reason": p.Reason, "tree": p.Tree, "tested_by": p.TestedBy, "landed_commit": p.LandedCommit, "change_ids": p.ChangeIDs, "outcome": p.Outcome} {
 		if v != "" {
 			b[k] = v
 		}
