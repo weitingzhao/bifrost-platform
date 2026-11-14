@@ -196,6 +196,19 @@ func TestRunModulesReadsTheNewestRunOfTheRevision(t *testing.T) {
 	if run, modules, err = c.RunModules(context.Background(), factSHA1); err != nil || run != "ci-new" || modules != " api repo " {
 		t.Fatalf("a newer run that reused the landing's: %q %q %v", run, modules, err)
 	}
+	// The same reading for any project: its runs are the ones with its label,
+	// whatever their pipeline. Origin: 2026-11-14, the check route of the
+	// reconciliation takes a repository name; nothing in it is the platform's own.
+	for _, o := range []*unstructured.Unstructured{newRun, reuseRun} {
+		o.SetLabels(map[string]string{repoLabel: "proj"})
+	}
+	c, _ = fakeClient(newRun, newTask, reuseRun, reuseTask, oldRun, oldTask)
+	if run, modules, err = c.RunModulesOf(context.Background(), "proj", factSHA1); err != nil || run != "ci-new" || modules != " api repo " {
+		t.Fatalf("by project: %q %q %v", run, modules, err)
+	}
+	if run, _, err = c.RunModulesOf(context.Background(), "another", factSHA1); err != nil || run != "" {
+		t.Fatalf("another project has no such run: %q %v", run, err)
+	}
 	// Every module: the star is kept as it is.
 	c, _ = fakeClient(oldRun, oldTask)
 	if run, modules, err = c.RunModules(context.Background(), factSHA1); err != nil || run != "ci-old" || modules != "*" {

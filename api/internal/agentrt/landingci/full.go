@@ -161,6 +161,30 @@ func (c *Client) RunModules(ctx context.Context, revision string) (run, modules 
 	if err != nil {
 		return "", "", err
 	}
+	return c.runModulesAmong(ctx, items, revision)
+}
+
+// RunModulesOf is RunModules for any project: the runs are those that carry
+// repo in their bifrost.io/repo label, whatever their pipeline.
+func (c *Client) RunModulesOf(ctx context.Context, repo, revision string) (run, modules string, err error) {
+	res, err := c.resource()
+	if err != nil {
+		return "", "", err
+	}
+	list, err := res.List(ctx, metav1.ListOptions{LabelSelector: repoLabel + "=" + repo})
+	if err != nil {
+		return "", "", err
+	}
+	var items []unstructured.Unstructured
+	for _, item := range list.Items {
+		if item.GetLabels()[repoLabel] == repo { // the tests' fake client ignores the selector
+			items = append(items, item)
+		}
+	}
+	return c.runModulesAmong(ctx, items, revision)
+}
+
+func (c *Client) runModulesAmong(ctx context.Context, items []unstructured.Unstructured, revision string) (run, modules string, err error) {
 	var of []unstructured.Unstructured
 	for _, item := range items {
 		params, counts := namedValues(item, "spec", "params")

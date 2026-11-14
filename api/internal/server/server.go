@@ -549,6 +549,9 @@ func (s *Server) Router() http.Handler {
 		// what failed and which landings left a module out. Read-only; viewer
 		// and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/full-ci", s.handleUnitFullCI)
+		// What the reconciliation of a red full run would name, for two
+		// commits given; it writes nothing. Read-only; viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/full-ci/check", s.handleUnitFullCICheck)
 		// The newest CI runs of one project, for the run view. Read-only;
 		// viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/runs", s.handleUnitRuns)

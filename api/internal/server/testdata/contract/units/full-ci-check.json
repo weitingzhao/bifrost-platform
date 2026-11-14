@@ -1,0 +1,41 @@
+{
+  "repo": "r",
+  "green": "1111111111111111111111111111111111111111",
+  "red": "5555555555555555555555555555555555555555",
+  "landings": [
+    {
+      "commit": "5555555555555555555555555555555555555555",
+      "subject": "five",
+      "run": "ci-5",
+      "modules": " svc repo ",
+      "read": "ok",
+      "suspect": true
+    },
+    {
+      "commit": "4444444444444444444444444444444444444444",
+      "subject": "four",
+      "run": "ci-4",
+      "modules": "*",
+      "read": "ok",
+      "suspect": false
+    },
+    {
+      "commit": "3333333333333333333333333333333333333333",
+      "subject": "three",
+      "read": "no_run",
+      "suspect": false
+    },
+    {
+      "commit": "2222222222222222222222222222222222222222",
+      "subject": "two",
+      "read": "error",
+      "suspect": false
+    }
+  ],
+  "suspects": 1,
+  "unread": 2,
+  "run": "ci-full-x",
+  "failed_tasks": [
+    "test-web"
+  ]
+}
