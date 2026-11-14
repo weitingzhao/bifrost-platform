@@ -537,6 +537,9 @@ func (s *Server) Router() http.Handler {
 		// CI's plan of one commit: its units, their keys, the ledger's word on
 		// each. Read-only; viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/plan", s.handleUnitPlan)
+		// Which modules of a commit run again against a base, from the two
+		// declarations. Read-only; no token, as /evidence/ci (units_scope.go).
+		r.Get("/units/scope", s.handleUnitScope)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

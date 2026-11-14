@@ -60,7 +60,11 @@ var intendedRouteAdditions = map[string][]string{
 	// Head release (2026-11-13): "is my commit released" (read-only).
 	"GET /api/v1/delivery/released": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Stage 2 block 2-B: CI's plan of one commit (read-only).
-	"GET /api/v1/units/plan":      {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/units/plan": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// Stage 3: which modules of a commit run again, read by the in-cluster
+	// task that decides it and holds no platform credential: open like
+	// /evidence/ci (module names and input references of a declaration).
+	"GET /api/v1/units/scope":     {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
 	"POST /api/v1/units/evidence": {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
