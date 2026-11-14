@@ -18,9 +18,17 @@ import (
 // and compared: a path that is in one and not the other, or has another id
 // or another kind, changed. That is complete whatever the number of files.
 //
-// Whatever cannot be established is an error, never a shorter list: a tree
-// the mirror says it truncated, a listing that does not add up to the count
-// it gives, a page that does not read.
+// Whatever cannot be established is an error, never a shorter list: a
+// listing that does not add up to the count the mirror gives, a count or a
+// tree that changes between pages, a page that does not read.
+//
+// The mirror's "truncated" is not read. Gitea 1.21 sets it on every page of
+// a tree with more entries than one page holds, the last page included
+// (agentrt_commit_tree.go reads the same route and says the same), so it
+// tells nothing about whether the pages together are whole; the count does.
+// Read as "cut short" it refused every tree of more than 1,000 entries, which
+// is every tree of this repository (2026-11-14, 1c280b40..6bbcb657, 107
+// files: the first large release after this reading went live).
 //
 // This file is on the policy's trust-anchor path list
 // (api/internal/delivery/release_policy*.go), as the commit walk is.
@@ -40,7 +48,7 @@ type giteaTreeEntry struct {
 // treeListing is every entry of commit's tree by path: "<type> <object id>".
 func (s *Service) treeListing(ctx context.Context, repo, commit, user, pass string) (map[string]string, error) {
 	out := map[string]string{}
-	total := -1
+	total, root := -1, ""
 	for page := 1; page <= treeListMaxPages; page++ {
 		endpoint := fmt.Sprintf("%s/api/v1/repos/%s/%s/git/trees/%s?recursive=true&per_page=%d&page=%d",
 			giteaBaseURL(), giteaOrg, url.PathEscape(repo), url.PathEscape(commit), treeListPageSize, page)
@@ -64,15 +72,12 @@ func (s *Service) treeListing(ctx context.Context, repo, commit, user, pass stri
 			return nil, fmt.Errorf("the tree of %s: unreadable or over %d bytes", shortRef(commit), treeListMaxBody)
 		}
 		var doc struct {
+			SHA        string           `json:"sha"`
 			Tree       []giteaTreeEntry `json:"tree"`
-			Truncated  bool             `json:"truncated"`
 			TotalCount *int             `json:"total_count"`
 		}
 		if err := json.Unmarshal(body, &doc); err != nil {
 			return nil, fmt.Errorf("the tree of %s: json: %w", shortRef(commit), err)
-		}
-		if doc.Truncated {
-			return nil, fmt.Errorf("the mirror truncated the tree of %s", shortRef(commit))
 		}
 		if doc.TotalCount == nil || *doc.TotalCount < 0 {
 			return nil, fmt.Errorf("the tree of %s came without its entry count", shortRef(commit))
@@ -81,6 +86,11 @@ func (s *Service) treeListing(ctx context.Context, repo, commit, user, pass stri
 			return nil, fmt.Errorf("the tree of %s changed its entry count between pages", shortRef(commit))
 		}
 		total = *doc.TotalCount
+		if page == 1 {
+			root = doc.SHA
+		} else if doc.SHA != root {
+			return nil, fmt.Errorf("the tree of %s changed between pages", shortRef(commit))
+		}
 		for _, e := range doc.Tree {
 			path := strings.TrimSpace(e.Path)
 			if path == "" || e.SHA == "" || e.Type == "" {

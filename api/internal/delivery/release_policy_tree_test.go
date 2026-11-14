@@ -14,12 +14,14 @@ import (
 )
 
 // treeMirror serves GET .../git/trees/<sha> the way Gitea 1.21 does: a page
-// of entries, the whole count, and truncated when the mirror cut it.
+// of entries, the whole count, and truncated on every page of a tree that
+// does not fit one page (the last page too). It holds a page to 1,000 entries
+// whatever is asked, as the mirror does.
 type treeMirror struct {
-	trees     map[string][]giteaTreeEntry
-	truncated map[string]bool
-	shortBy   map[string]int // list this many fewer entries than the count says
-	noCount   map[string]bool
+	trees   map[string][]giteaTreeEntry
+	movesAt map[string]int // from this page on the tree answers with another id
+	shortBy map[string]int // list this many fewer entries than the count says
+	noCount map[string]bool
 }
 
 func (m treeMirror) service(t *testing.T) *Service {
@@ -34,10 +36,17 @@ func (m treeMirror) service(t *testing.T) *Service {
 		}
 		per, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		if per <= 0 || per > 1000 {
+			per = 1000
+		}
 		listed := entries[:len(entries)-m.shortBy[sha]]
 		lo := min((page-1)*per, len(listed))
 		hi := min(lo+per, len(listed))
-		doc := map[string]any{"sha": sha, "tree": listed[lo:hi], "truncated": m.truncated[sha], "page": page}
+		root := "root-of-" + sha
+		if at := m.movesAt[sha]; at > 0 && page >= at {
+			root += "-moved"
+		}
+		doc := map[string]any{"sha": root, "tree": listed[lo:hi], "truncated": len(entries) > per, "page": page}
 		if !m.noCount[sha] {
 			doc["total_count"] = len(entries)
 		}
@@ -57,7 +66,9 @@ func blob(path, id string) giteaTreeEntry { return giteaTreeEntry{Path: path, Ty
 // their size alone (6319a91e..393fe6a2, 177 files; 554ec329..8770cf06, 144).
 func TestTreeFilesBetweenIsCompleteAtAnySize(t *testing.T) {
 	var old, next []giteaTreeEntry
-	// 2,500 files over three pages a tree: 300 change, among them one in a
+	// 2,500 files over three pages a tree, each page marked truncated as the
+	// mirror marks them (2026-11-14: read as "cut short", that mark refused
+	// 1c280b40..6bbcb657 and every tree of over 1,000 entries): 300 change, among them one in a
 	// trust-anchor directory; one is removed, one added, one becomes a submodule.
 	for i := 0; i < 2500; i++ {
 		path := fmt.Sprintf("src/dir%02d/f%04d.go", i%50, i)
@@ -93,16 +104,21 @@ func TestTreeFilesBetweenIsCompleteAtAnySize(t *testing.T) {
 // that is silently short is the very thing this reading exists to rule out.
 func TestTreeFilesBetweenFailsRatherThanGuess(t *testing.T) {
 	two := []giteaTreeEntry{blob("a.go", "1"), blob("b.go", "2")}
+	var many []giteaTreeEntry
+	for i := 0; i < 1500; i++ {
+		many = append(many, blob(fmt.Sprintf("m/f%04d.go", i), fmt.Sprintf("%040x", i)))
+	}
 	for name, tc := range map[string]struct {
 		mirror treeMirror
 		want   string
 	}{
-		"the mirror truncated a tree":  {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: two}, truncated: map[string]bool{factSHA1: true}}, "truncated the tree"},
-		"fewer entries than it counts": {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: two}, shortBy: map[string]int{factSHA2: 1}}, "has 2 entries and 1 were listed"},
-		"no entry count":               {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: two}, noCount: map[string]bool{factSHA2: true}}, "without its entry count"},
-		"a commit the mirror lacks":    {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two}}, "status 404"},
-		"an entry without an id":       {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: {blob("a.go", "")}}}, "without a path, a kind or an id"},
-		"a path listed twice":          {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: {blob("a.go", "1"), blob("a.go", "3")}}}, "twice"},
+		"a tree that moves under the reading": {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: many, factSHA1: two}, movesAt: map[string]int{factSHA2: 2}}, "changed between pages"},
+		"a large tree listed short":           {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: many, factSHA1: two}, shortBy: map[string]int{factSHA2: 1}}, "has 1500 entries and 1499 were listed"},
+		"fewer entries than it counts":        {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: two}, shortBy: map[string]int{factSHA2: 1}}, "has 2 entries and 1 were listed"},
+		"no entry count":                      {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: two}, noCount: map[string]bool{factSHA2: true}}, "without its entry count"},
+		"a commit the mirror lacks":           {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two}}, "status 404"},
+		"an entry without an id":              {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: {blob("a.go", "")}}}, "without a path, a kind or an id"},
+		"a path listed twice":                 {treeMirror{trees: map[string][]giteaTreeEntry{factSHA2: two, factSHA1: {blob("a.go", "1"), blob("a.go", "3")}}}, "twice"},
 	} {
 		s := tc.mirror.service(t)
 		files, err := s.treeFilesBetween(context.Background(), "repo-app", factSHA2, factSHA1, "", "")
