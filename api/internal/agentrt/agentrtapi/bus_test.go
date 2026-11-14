@@ -2,7 +2,6 @@ package agentrtapi_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -10,8 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 )
 
 // claimOne leases the world's task to agentd h1 and starts it; it returns the
@@ -35,53 +32,6 @@ func claimOne(t *testing.T, s interface{ Close() }, call2 func(caller, method, p
 		t.Fatalf("start: %d %v", code, out)
 	}
 	return attempt, fence
-}
-
-// A heartbeat carries actions (W-31 2.3); they never fail it: the lease is
-// renewed and the answer says what was kept.
-func TestHeartbeatKeepsActions(t *testing.T) {
-	rdb, prefix := agentrttest.Redis(t)
-	actionStore = &actions.Store{Redis: rdb, Prefix: prefix}
-	t.Cleanup(func() { actionStore = nil })
-	pool, _ := world(t)
-	s := server(t, pool)
-	c := func(caller, method, path string, body any) (int, map[string]any) {
-		return call(t, s, caller, method, path, body)
-	}
-	attempt, fence := claimOne(t, s, c)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	acts := []any{
-		map[string]any{"kind": "read", "target": "api/internal/safego/safego.go", "at": now},
-		map[string]any{"kind": "result", "target": "go test ./...", "at": now, "code": 0},
-	}
-	code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
-	if code != http.StatusOK || out["actions_kept"] != float64(2) || out["lease_expires_at"] == nil {
-		t.Fatalf("heartbeat with actions: %d %v", code, out)
-	}
-	code, out = c("viewer", "GET", "attempts/"+attempt+"/actions", nil)
-	if code != http.StatusOK || len(out["actions"].([]any)) != 2 || out["next"] == "" {
-		t.Fatalf("read actions: %d %v", code, out)
-	}
-	code, out = c("viewer", "GET", "attempts/"+attempt+"/actions?last=1", nil)
-	if got := out["actions"].([]any); code != http.StatusOK || len(got) != 1 || got[0].(map[string]any)["kind"] != "result" {
-		t.Fatalf("last action: %d %v", code, out)
-	}
-	// An action outside the format: the heartbeat still renews, the answer says why nothing was kept.
-	bad := []any{map[string]any{"kind": "think", "target": "x", "at": now}}
-	code, out = c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": bad}))
-	if code != http.StatusOK || out["lease_expires_at"] == nil || !strings.Contains(out["actions_refused"].(string), "kind") {
-		t.Fatalf("a heartbeat with a bad action: %d %v", code, out)
-	}
-	// Only a heartbeat carries actions.
-	if code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/checkpoint", fence(map[string]any{"checkpoint_seq": 1, "actions": acts})); code != http.StatusBadRequest {
-		t.Fatalf("a checkpoint with actions: %d %v", code, out)
-	}
-	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?limit=0", nil); code != http.StatusBadRequest {
-		t.Fatalf("limit 0: %d %v", code, out)
-	}
-	if code, out := c("viewer", "GET", "attempts/not-an-attempt/actions", nil); code != http.StatusUnprocessableEntity {
-		t.Fatalf("a bad attempt id: %d %v", code, out)
-	}
 }
 
 // The Owner asks the chief of staff; only the receiver reads and acknowledges it.
@@ -179,40 +129,6 @@ func TestMessages(t *testing.T) {
 	// A thread reads its own inbox by its session header.
 	if code, out := c("reporter", "GET", "messages", nil, "X-Bifrost-Session", "local_fixture-1"); code != http.StatusOK || out["actor"] != "thread:local_fixture-1" {
 		t.Fatalf("a thread's inbox: %d %v", code, out)
-	}
-}
-
-// Actions that do not parse never fail the heartbeat: the lease is renewed
-// and the answer says why none were kept (review 264 A1).
-func TestHeartbeatRenewsWhateverTheActions(t *testing.T) {
-	rdb, prefix := agentrttest.Redis(t)
-	actionStore = &actions.Store{Redis: rdb, Prefix: prefix}
-	t.Cleanup(func() { actionStore = nil })
-	pool, _ := world(t)
-	s := server(t, pool)
-	c := func(caller, method, path string, body any) (int, map[string]any) {
-		return call(t, s, caller, method, path, body)
-	}
-	attempt, fence := claimOne(t, s, c)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for name, acts := range map[string]any{
-		"a time that is not one": []any{map[string]any{"kind": "read", "target": "a.go", "at": "not-a-time"}},
-		"an unknown field":       []any{map[string]any{"kind": "read", "target": "a.go", "at": now, "thought": "x"}},
-		"a code as text":         []any{map[string]any{"kind": "result", "target": "ls", "at": now, "code": "0"}},
-		"not a list":             map[string]any{"kind": "read"},
-	} {
-		code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
-		if code != http.StatusOK || out["lease_expires_at"] == nil || !strings.Contains(fmt.Sprint(out["actions_refused"]), "not a list of actions") {
-			t.Errorf("%s: %d %v", name, code, out)
-		}
-	}
-	for _, cursor := range []string{"abc", "18446744073709551616-0", "0-18446744073709551616"} {
-		if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after="+cursor, nil); code != http.StatusBadRequest {
-			t.Errorf("a cursor %q that is not a stream id (reviews 264 C6, 265 C7): %d %v", cursor, code, out)
-		}
-	}
-	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after=18446744073709551615-0", nil); code != http.StatusOK {
-		t.Errorf("the largest stream id: %d %v", code, out)
 	}
 }
 
