@@ -1,6 +1,5 @@
 import { authHeaders } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
-import { parseLandingWait, type LandingWait } from '@/api/landingGrant'
 
 export type StgReleaseStatus = {
   batch: string; try: number; phase: string; budget_used: number; budget_gen: number; quarantined: boolean
@@ -23,7 +22,7 @@ export type MissionLandingRoot = {
   held?: { until: string; question_id: string }
   /** A card for the root is prepared and not yet asked. */
   card_pending?: boolean
-  authorization_wait?: LandingWait
+  authorization_wait?: unknown
   stg?: StgReleaseStatus
 }
 export type MissionLanding = {
@@ -58,7 +57,6 @@ function isRoot(v: unknown): v is MissionLandingRoot {
       && (!('retry_at' in v.parked) || time(v.parked.retry_at)) && (!('remind_at' in v.parked) || time(v.parked.remind_at))))
     && (!('held' in v) || (object(v.held) && time(v.held.until) && typeof v.held.question_id === 'string'))
     && (!('card_pending' in v) || typeof v.card_pending === 'boolean')
-    && (!('authorization_wait' in v) || parseLandingWait(v.authorization_wait) !== null)
     && (!('stg' in v) || isStg(v.stg))
 }
 

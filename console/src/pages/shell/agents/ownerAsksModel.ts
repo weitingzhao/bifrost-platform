@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { approvalNumbers } from '@/api/agentRuntimePlan'
 import { fetchApprovalList, isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
-import { isLandingAction } from '@/api/landingGrant'
+import { isLandingAction } from '@/api/landingActions'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { fetchQuestionList, type Question } from '@/api/questions'
 import { isStale, shellRead, SHELL_POLL_MS, type ShellRead } from './moduleDetailModel'

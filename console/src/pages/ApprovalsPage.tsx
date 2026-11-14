@@ -65,9 +65,6 @@ import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { DECISION_AFTER_RELOAD, NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import { approvalOptionLabel } from '@/api/assessment'
-import { isLandingAction } from '@/api/landingGrant'
-import { LandingApprovalEvidence } from '@/pages/landing-grant/LandingApprovalEvidence'
-import { useLandingMaterial } from '@/pages/landing-grant/useLandingMaterial'
 import { AssessmentSection } from '@/pages/question/AssessmentPanel'
 
 function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
@@ -293,23 +290,6 @@ function ApprovalCard({
   onRefresh: () => void
 }) {
   const [reason, setReason] = useState('')
-  const landing = isLandingAction(item.action)
-  const op = typeof item.params?.op === 'string' ? item.params.op : ''
-  const stg = item.params?.stg_release !== false
-  const landingQ = useLandingMaterial(op, stg, isFinished(item), landing)
-  const evidence = landingQ.displayData
-  const matches = typeof item.params?.stg_release === 'boolean' && item.params.env === 'prod'
-    && evidence?.material.material_digest === item.params?.material_digest && evidence?.material.candidate.R === item.params?.R
-    && (item.action !== 'approve_floor_landing' || evidence?.material.candidate.repo === 'bifrost-trade-infra')
-    && evidence?.material.action === item.action && evidence?.material.candidate.task === item.params?.task && evidence?.material.candidate.repo === item.params?.repo
-  const [checkedVersion, setCheckedVersion] = useState('')
-  const version = JSON.stringify([item.id, item.params_hash, evidence?.material.material_digest, evidence?.material.candidate.decision_chain])
-  if (checkedVersion !== '' && checkedVersion !== version) setCheckedVersion('')
-  const checked = checkedVersion === version
-  const landingReady = !landing || (landingQ.confirmed && matches && evidence?.main_known === true && evidence.main_is_M0 && evidence.material.latest
-    && evidence.material.phase === 'awaiting_grant' && evidence.material.problems.length === 0
-    && Number.isSafeInteger(item.number) && item.number! > 0
-    && (item.action !== 'approve_core_landing' || !evidence.material.candidate.decision_chain || checked))
   const pending = item.status === 'pending'
   const canDecide = pending && blocked == null && !busy && !staleBuild
   const waitingForReload = staleBuild && reloadHeld
@@ -318,7 +298,7 @@ function ApprovalCard({
   const trimmed = reason.trim()
   const title = decisionTitle(item)
   const env = decisionEnv(item)
-  const words = landing && !item.drill ? 'approval authorizes this candidate; the landing gate checks again before push' : tierWords(item.tier, item.drill === true)
+  const words = tierWords(item.tier, item.drill === true)
   const { lead, rest } = splitReason(item.reason)
   const chips = workItems(item.reason)
   const command = commandText(item.params)
@@ -346,8 +326,6 @@ function ApprovalCard({
         <h2 className="m-0 break-words text-base font-medium" data-approval-ref>
           {title}
         </h2>
-        {landing && <LandingApprovalEvidence item={item} data={evidence} error={landingQ.isError && !landingQ.waiting || landingQ.isPaused || (!!evidence && !matches) || op === ''} checked={checked} onCheck={value => setCheckedVersion(value ? version : '')} />}
-        {landing && landingQ.waiting && <p role="status">{landingQ.waitingMessage} Approval waits for current material and main confirmation.</p>}
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {env !== '' ? <DenseTag variant="neutral">{env}</DenseTag> : null}
           <DenseTag variant={item.tier === 'D' ? 'danger' : item.tier === 'B' ? 'neutral' : 'warning'}>
@@ -470,12 +448,12 @@ function ApprovalCard({
           </label>
           <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row">
             {/* A drill has no approval to give (v4 §20.5 scenario 9): no button for one; reject closes it. */}
-            {item.drill === true || (item.action === 'approve_floor_landing' && !landingReady) ? null : (
+            {item.drill === true ? null : (
               <ApprovalReviewButton
                 item={item}
                 type="button"
                 className="h-11 w-full sm:w-auto"
-                disabled={!canDecide || !landingReady}
+                disabled={!canDecide}
                 title={blockedReason}
                 aria-describedby={staleBuild ? buildReasonId : undefined}
                 aria-label={sending === 'approve' ? 'Sending…' : `Approve ${item.action}`}

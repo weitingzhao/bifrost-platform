@@ -1,8 +1,6 @@
-import { QueryClientContext, useQueryClient } from '@tanstack/react-query'
-import { useContext, useRef, useState } from 'react'
-import { Button } from '@bifrost/ui'
-import { PlatformAuthContext } from '@/hooks/platformAuthContext'
-import { assessmentLines, assessmentFromSnapshot, assessmentKey, requestAssessment, type AssessmentSnapshot, type Assessment, type AssessmentKind } from '@/api/assessment'
+import { QueryClientContext } from '@tanstack/react-query'
+import { useContext } from 'react'
+import { assessmentLines, assessmentFromSnapshot, type AssessmentSnapshot, type Assessment, type AssessmentKind } from '@/api/assessment'
 import { assessmentError, useAssessment } from '@/pages/question/useAssessment'
 
 // The AI assessment of a card or an approval (TD-391) beside the runtime rule's recommendation, on a
@@ -117,53 +115,21 @@ type SectionProps = {
 }
 
 function LiveSection(props: SectionProps) {
-  const client = useQueryClient()
-  const auth = useContext(PlatformAuthContext)
-  const [requested, setRequested] = useState<Assessment | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const sending = useRef(false)
   const initial = assessmentFromSnapshot(props.snapshot)
   // A fresh item response can carry the result before the assessment poll does.
   const hasFinalSnapshot = initial.state === 'ready' || initial.state === 'unavailable'
-  const q = useAssessment(props.kind, props.id, hasFinalSnapshot ? initial : requested ?? initial)
-  const assessment = hasFinalSnapshot ? initial : q.data ?? requested ?? initial
+  const q = useAssessment(props.kind, props.id, initial)
+  const assessment = hasFinalSnapshot ? initial : q.data ?? initial
   // A failed older poll must not hide a result obtained by either read path.
   const readError = assessment.state === 'ready' || assessment.state === 'unavailable' ? null : assessmentError(q)
-  const ask = async () => {
-    if (sending.current) return
-    sending.current = true
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await requestAssessment(props.kind, props.id)
-      client.setQueryData(assessmentKey(props.kind, props.id), result)
-      setRequested(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed')
-    } finally {
-      sending.current = false
-      setBusy(false)
-    }
-  }
-  const owner = auth?.caps?.role === 'admin' && !auth.capsLoading && !auth.capsError
+  // Assessments are no longer asked for (the Owner 2026-11-13): one already
+  // given is still shown; an item without one shows nothing here.
   return <div className="flex min-w-0 flex-col gap-2">
     <AssessmentPanel assessment={assessment} error={readError} ruleKey={props.ruleKey} label={props.label} />
-    {assessment.state === 'none' ? <section className="flex flex-col items-start gap-2 text-sm">
-      <h3 className="m-0 text-sm font-semibold">AI assessment</h3>
-      <p className="m-0 text-muted-foreground">Off by default. Ask for assessment to get advice on this item.</p>
-      <p className="m-0 text-muted-foreground">Advice only: it answers nothing and approves nothing.</p>
-      <Button type="button" variant="outline" disabled={busy || props.closed || !owner} onClick={() => { void ask() }}>
-        {busy ? 'Requesting…' : 'Ask for assessment'}
-      </Button>
-      {props.closed ? <p className="m-0">Assessment unavailable: this item is no longer open.</p>
-        : !owner ? <p className="m-0">Sign in as Owner to request an assessment.</p> : null}
-    </section> : null}
-    {error != null ? <p role="alert" className="m-0 text-sm text-destructive">{`Could not request assessment: ${error}`}</p> : null}
   </div>
 }
 
-/** A new id remounts local request/error state, so a request never leaks to another card. */
+/** A new id remounts the section, so one item's assessment never shows on another. */
 export function AssessmentSection(props: SectionProps) {
   return useHasQueryClient() ? <LiveSection key={`${props.kind}:${props.id}`} {...props} /> : null
 }

@@ -1,7 +1,6 @@
 import { NEEDS_YOU_HREF, goalHref, hashQueryParam } from '@/lib/shell/consoleRoutes'
 import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
-import { LandingAuthorization } from './LandingAuthorization'
 import { LandingSTG } from './LandingSTG'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -62,7 +61,6 @@ function GoalLanding({ landing, data }: { landing: MissionLanding; data: GoalDat
         <DenseTag size="pill" variant={root.class === 'delivered' ? 'success' : root.class === 'unresolved' ? 'warning' : 'neutral'}>{root.class}</DenseTag>
         <span>{repo === 'bifrost-trade-infra' && root.reason === 'failed:floor' && (root.floor?.soft?.length ?? 0) > 0
           ? 'Outside the infra landing scope. Split the change or have the Owner push it manually.' : landingReason(root.reason)}</span>
-        {repo === 'bifrost-platform' && root.grant_supported !== false && root.op && (root.authorization_wait || root.reason === 'awaiting_grant') && <LandingAuthorization op={root.op} />}
         {root.parked && <span>since <time dateTime={root.parked.since}>{root.parked.since}</time>{root.parked.remind_at && <>, told at <time dateTime={root.parked.remind_at}>{root.parked.remind_at}</time></>}</span>}
         {root.card_alert && <DenseTag size="pill" variant="warning">Answer not confirmed: {root.card_alert}</DenseTag>}
         {root.held && <span>Held on your answer until <time dateTime={root.held.until}>{root.held.until}</time>{root.held.question_id && <> (<a className="underline" href={questionHref(root.held.question_id)}>your answer</a>)</>}</span>}
