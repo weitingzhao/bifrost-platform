@@ -2,13 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { z } from 'zod'
 import { bifrostSessionId, sessionFellBack } from './sessionId.js'
 import { platformGet, platformGetText, platformSend, platformUpload } from './platformClient.js'
 
 // The agent runtime's tools (design v5 §5.2 「MCP 工具」): reads of the plan,
 // missions, tasks and artifacts, and the writes a thread may make — propose
-// a mission and its tasks, upload an artifact, ask for a stop. Writes are
+// plan changes, upload an artifact, ask for a stop. Writes are
 // runtime state, not cluster actions: like the question tools they do not go
 // through the approvals write gate, and they refuse when the session id fell
 // back. The platform records each write as this thread
@@ -83,25 +82,6 @@ export async function getTask(taskId: string, d: RuntimeDeps = defaultRuntimeDep
   return note(await d.get(`${BASE}/tasks/${id(taskId)}`))
 }
 
-export interface ProposedTask {
-  ref: string
-  plan_node_id?: string
-  off_plan_reason?: string
-  subject_task_id?: string
-  role: string
-  task_class: string
-  title: string
-  spec_artifact_id: string
-  effect_class: string
-  repo?: string
-  base_commit?: string
-  core?: boolean
-  needs?: string[]
-  depends_on?: string[]
-  hard_limit_s?: number
-  wave?: string
-}
-
 export const PROPOSAL_KEY_RULE =
   'idempotency_key names this one proposal: reuse it only to retry the same request; proposing the same again (for example after the tasks were cancelled) needs a new key, or the platform answers with the old proposal.'
 
@@ -121,78 +101,6 @@ export function isRFC3339(s: string): boolean {
   if (mo < 1 || mo > 12 || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d) return false
   if (h > 23 || mi > 59 || sec > 59) return false
   return m[9] === undefined || (Number(m[9]) <= 23 && Number(m[10]) <= 59)
-}
-
-// A budget is a Go int on the route; a JS number is exact up to here (review
-// 200 A2).
-const count = () => z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
-
-/** The propose_mission input: what POST /missions decodes (agentrtapi missionBody). */
-export const PROPOSE_MISSION_INPUT = {
-  title: z.string().min(1),
-  goal: z.string().min(1),
-  success: z.array(z.string().min(1)).min(1).describe('Success criteria, none empty'),
-  work_id: z.string().optional().describe('The work it belongs to (W-n, TD-n, …)'),
-  tenant: z.enum(['dev', 'business']).optional(),
-  deadline_at: z
-    .string()
-    .refine(isRFC3339, 'an RFC 3339 date and time, as 2026-10-20T12:00:00-05:00')
-    .optional()
-    .describe('RFC 3339; seven days from now when left out'),
-  repos: z.array(z.string().min(1)).optional(),
-  max_action: z.enum(['none', 'branch']).optional(),
-  budget: z
-    .object({ max_attempts: count(), max_wall_hours: count() })
-    .optional()
-    .describe("Left out: the tenant's budget rule's"),
-  no_merge: z
-    .string()
-    .refine((s) => s.trim() !== '' && new TextEncoder().encode(s.trim()).length <= 200, 'a sentence of up to 200 bytes')
-    .optional()
-    .describe(
-      "Why this mission's accepted results are not to be merged into main: a drill, a benchmark replay, a gate walk. Left out for ordinary work (TD-383)",
-    ),
-  needs_owner: z
-    .string()
-    .refine((s) => s.trim() !== '' && new TextEncoder().encode(s.trim()).length <= 200, 'a sentence of up to 200 bytes')
-    .optional()
-    .describe(
-      "Why this mission's cards wait for the Owner himself, never answered by a card-auto-answer rule: a mission that must wait for him. Walks do not set it; the paths behind his buttons are covered by the Console's tests (TD-393). Left out for ordinary work (TD-390)",
-    ),
-  idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
-}
-
-export type ProposedMission = Omit<z.infer<z.ZodObject<typeof PROPOSE_MISSION_INPUT>>, 'idempotency_key'>
-
-/**
- * Propose a mission. The platform numbers it (M-n); inside the standing
- * envelope in force for its tenant it starts active, otherwise it stays
- * proposed and the answer says why. The key is the caller's, as for tasks.
- */
-export async function proposeMission(
-  input: ProposedMission & { idempotency_key: string },
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const refused = refuseWrite(d)
-  if (refused) return refused
-  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
-  return d.send('POST', `${BASE}/missions`, input)
-}
-
-/**
- * Propose tasks. The key is the caller's, never derived: the same tasks
- * proposed again after the first were cancelled are a new proposal (review
- * 178 A1, as review 177 A1 for stops).
- */
-export async function proposeTasks(
-  input: { mission_id: string; tasks: ProposedTask[]; idempotency_key: string },
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const refused = refuseWrite(d)
-  if (refused) return refused
-  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
-  const route = `${BASE}/missions/${id(input.mission_id)}/tasks`
-  return d.send('POST', route, { idempotency_key: input.idempotency_key, tasks: input.tasks })
 }
 
 export interface PlanChange {
@@ -448,27 +356,6 @@ export async function getArtifact(artifactId: string, d: RuntimeDeps = defaultRu
   return { artifact_id: artifactId, media_type: got.media_type, content: got.text, note: RUNTIME_DATA_NOTE }
 }
 
-export const WITHDRAW_KEY_RULE =
-  'idempotency_key names this one withdrawal: reuse it only to retry the same request; a new withdrawal needs a new key, or the platform answers with the old withdrawal.'
-
-export const WITHDRAW_TASKS_INPUT = {
-  task_ids: z.array(z.string().min(1)).min(1).max(50),
-  reason: z.string().refine((s) => s.trim() !== '', 'reason is required and non-empty'),
-  idempotency_key: z.string().min(1).describe('One key per withdrawal; see the description'),
-}
-
-export async function withdrawTasks(
-  input: z.infer<z.ZodObject<typeof WITHDRAW_TASKS_INPUT>>,
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const refused = refuseWrite(d)
-  if (refused) return refused
-  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: WITHDRAW_KEY_RULE }
-  const parsed = z.object(WITHDRAW_TASKS_INPUT).safeParse(input)
-  if (!parsed.success) return { error: parsed.error.message, hint: 'No request was sent.' }
-  return d.send('POST', `${BASE}/tasks/withdraw`, input)
-}
-
 export const STOP_KEY_RULE =
   'idempotency_key names this one stop: reuse it only to retry the same request; a new stop (for example after the Owner lifted the last one) needs a new key, or the platform answers with the old stop.'
 
@@ -486,37 +373,6 @@ export async function requestStop(
   if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: STOP_KEY_RULE }
   const request = { scope: input.scope, scope_ref: input.scope_ref ?? '', kind: input.kind, reason: input.reason }
   return d.send('POST', `${BASE}/controls`, { ...request, idempotency_key: input.idempotency_key })
-}
-
-export const WAVE_NOTE =
-  'A wave is one repository\'s batch (M-368): tasks proposed with its id (propose_tasks, wave) start from main as usual and, once accepted, are held out of landing; close_wave releases them together and the batch landing lands them once (one landing CI, one card, one push to main, one STG and one PROD release). A red wave sends the blamed member back and holds the others until it is accepted again. Tasks of one wave cannot build on each other\'s unlanded work: put dependent work in the next wave. abandon ends it without landing. Only bifrost-platform takes waves for now.'
-
-/** Open a wave of a repository on its main head. */
-export async function openWave(
-  input: { repo: string; plan_root: string },
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const refused = refuseWrite(d)
-  if (refused) return refused
-  return d.send('POST', `${BASE}/waves`, { repo: input.repo, plan_root: input.plan_root })
-}
-
-/** Close a wave (it lands once) or abandon it (nothing lands). */
-export async function endWave(
-  input: { id: string; action: 'close' | 'abandon' },
-  d: RuntimeDeps = defaultRuntimeDeps(),
-): Promise<unknown> {
-  const refused = refuseWrite(d)
-  if (refused) return refused
-  return d.send('POST', `${BASE}/waves/${id(input.id)}/${input.action === 'abandon' ? 'abandon' : 'close'}`, {})
-}
-
-/** The waves, of one repository or all. */
-export async function listWaves(input: { repo?: string; state?: 'open' | 'closed' | 'abandoned' }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
-  const query: string[] = []
-  if (input.repo) query.push(`repo=${id(input.repo)}`)
-  if (input.state) query.push(`state=${id(input.state)}`)
-  return note(await d.get(`${BASE}/waves${query.length ? `?${query.join('&')}` : ''}`))
 }
 
 export const MESSAGE_DATA_NOTE =

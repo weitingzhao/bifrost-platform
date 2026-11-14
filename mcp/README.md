@@ -48,28 +48,6 @@ Or:
 }
 ```
 
-## Waves (M-368)
-
-The coordinator's wave tools in `mcp/platform` batch work for one repository.
-Only `bifrost-platform` supports waves for now.
-
-- `open_wave` takes `repo` and `plan_root` (for example, `R6`). It opens a wave
-  on the repository's main head and returns its `id`, `n`, and `base`.
-- In `propose_tasks`, set each task's optional `wave` field to that wave id.
-  These tasks start from main as usual. Once accepted, they are held out of
-  landing while the wave is open.
-- `list_waves` takes an optional `repo` filter; omit it to list all waves.
-  It returns `id`, `repo`, `plan_root`, `n`, `base`, and `state`.
-- `close_wave` takes `id` and `action`, either `close` or `abandon`.
-  With `close`, the held members are released together and the batch landing
-  lands them once: one landing CI, one card, one push to main, one STG
-  release, and one PROD release. Close is refused while any member is not yet
-  accepted. If the landing CI is red, the blamed member goes back for rework
-  and the others stay held until it is accepted again.
-  With `abandon`, nothing lands.
-- Tasks in one wave cannot build on each other's unlanded work. Put dependent
-  work in the next wave.
-
 ## API catalog (Console + Agent parity)
 
 | Endpoint | Purpose |

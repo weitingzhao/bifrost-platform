@@ -26,12 +26,8 @@ import {
 import { AUDIT_MAX_LIMIT, REQUESTS_DEFAULT_LIMIT, REQUESTS_MAX_LIMIT, filterAudit } from './readFilters.js'
 import {
   PROPOSAL_KEY_RULE,
-  PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
   STOP_KEY_RULE,
-  WITHDRAW_KEY_RULE,
-  WITHDRAW_TASKS_INPUT,
-  withdrawTasks,
   getArtifact,
   searchArtifacts,
   getMission,
@@ -41,16 +37,10 @@ import {
   isRFC3339,
   getTask,
   listTasks,
-  proposeMission,
   proposePlanChange,
-  proposeTasks,
   putArtifact,
   requestStop,
   whoami,
-  WAVE_NOTE,
-  openWave,
-  endWave,
-  listWaves,
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
@@ -736,43 +726,6 @@ reg(
   async ({ id }) => jsonResult(await getTask(id)),
 )
 
-reg(
-  'propose_mission',
-  `Propose a mission; the platform numbers it (M-n). It names a title, a goal and its success criteria; tenant dev (the default) or business; the repos it works in; max_action none or branch (the default); a budget, or none to take the tenant's budget rule's; no_merge, for a drill, a benchmark replay or a gate walk, says why its accepted results stay off main (the coordinator's merge passes it over); needs_owner, for a mission whose cards must wait for the Owner himself, says why (a card-auto-answer rule, STG only, never answers them; a walk does not set it: the paths behind his buttons are covered by the Console's tests, TD-393). Inside the standing envelope in force for its tenant it starts active; otherwise it waits as awaiting_owner on the Owner's decision card (the answer names question_id) until the Owner starts or stops it, or stays proposed where the platform has no question store; the answer says why. Words a card cannot hold are refused: a title of up to 200 bytes, a goal of up to 1200, at most 10 success criteria of up to 200 bytes each, at most 12 repos; put the details in a document the goal names. Then propose its tasks (propose_tasks). ${PROPOSAL_KEY_RULE}`,
-  PROPOSE_MISSION_INPUT,
-  async (input) => jsonResult(await proposeMission(input)),
-)
-
-reg(
-  'propose_tasks',
-  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). An implement task on a branch has as its spec the JSON task spec store.ImplementSpec builds ({"text", "verify": [[argv...]], "setup": [[argv...]], ...}), with its repository's verify commands and setup; a markdown spec, or one without verify or setup, is refused. depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
-  {
-    mission_id: z.string(),
-    tasks: z.array(
-      z.object({
-        ref: z.string(),
-        plan_node_id: z.string().optional(),
-        off_plan_reason: z.string().optional(),
-        subject_task_id: z.string().optional(),
-        role: z.enum(['plan', 'implement', 'brief', 'other']),
-        task_class: z.string(),
-        title: z.string(),
-        spec_artifact_id: z.string(),
-        effect_class: z.enum(['none', 'branch']),
-        repo: z.string().optional(),
-        base_commit: z.string().optional(),
-        core: z.boolean().optional(),
-        needs: z.array(z.string()).optional(),
-        depends_on: z.array(z.string()).optional(),
-        hard_limit_s: z.number().int().min(0).max(86400).optional(),
-        wave: z.string().optional().describe('The open wave (open_wave) the task belongs to: held when accepted, landed with its wave'),
-      }),
-    ),
-    idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
-  },
-  async (input) => jsonResult(await proposeTasks(input)),
-)
-
 registerMessageTools(reg)
 registerPlanImportTools(reg)
 registerIssueTools(reg)
@@ -840,13 +793,6 @@ reg(
 )
 
 reg(
-  'agentrt_withdraw_tasks',
-  `Cancel tasks this session (or its mission's proposer) proposed, provided no attempt has started. This is not a stop: stop work that has started with request_stop; only the Owner lifts a stop. ${WITHDRAW_KEY_RULE}`,
-  WITHDRAW_TASKS_INPUT,
-  async (input) => jsonResult(await withdrawTasks(input)),
-)
-
-reg(
   'request_stop',
   `Stop or pause agent runtime work: global, a mission (M-n), a task (t_…) or a host. Anyone may set one; only the Owner lifts it. ${STOP_KEY_RULE}`,
   {
@@ -857,36 +803,6 @@ reg(
     idempotency_key: z.string().min(1).describe('One key per stop; see the description'),
   },
   async (input) => jsonResult(await requestStop(input)),
-)
-
-reg(
-  'open_wave',
-  `Open a wave of a repository on its main head; it answers the wave (id, n, base). Propose its tasks with propose_tasks and wave set to the id. ${WAVE_NOTE}`,
-  {
-    repo: z.string().describe('bifrost-platform'),
-    plan_root: z.string().describe('The plan root the wave serves, e.g. R6'),
-  },
-  async (input) => jsonResult(await openWave(input)),
-)
-
-reg(
-  'close_wave',
-  `Close a wave so its members land together once (action close), or abandon it so nothing of it lands (action abandon). Close is refused while a member is not yet accepted. ${WAVE_NOTE}`,
-  {
-    id: z.string(),
-    action: z.enum(['close', 'abandon']),
-  },
-  async (input) => jsonResult(await endWave(input)),
-)
-
-reg(
-  'list_waves',
-  `The waves (id, repo, plan_root, n, base, state), of one repository or all, optionally filtered by state (open, closed, abandoned). ${WAVE_NOTE}`,
-  {
-    repo: z.string().optional(),
-    state: z.enum(['open', 'closed', 'abandoned']).optional(),
-  },
-  async (input) => jsonResult(await listWaves(input)),
 )
 
 } // end platform tools (non-prometheus focus)

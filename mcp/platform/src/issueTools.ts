@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PROPOSE_MISSION_INPUT, RUNTIME_DATA_NOTE, defaultRuntimeDeps, isRFC3339, type RuntimeDeps } from './runtimeTools.js'
+import { RUNTIME_DATA_NOTE, defaultRuntimeDeps, isRFC3339, type RuntimeDeps } from './runtimeTools.js'
 
 // The crew's issue tools (W-31 BI-1 slice 2, DESIGN-crew-intake §2.2): what
 // a local thread works business issues with, on the platform's
@@ -132,9 +132,42 @@ export const REQUEST_OWNER_INPUT = {
   letters: z.number().int().min(2).max(4).optional().describe('design_decision: how many letters the point offers'),
 }
 
-const { work_id: _w, idempotency_key: _k, ...missionFields } = PROPOSE_MISSION_INPUT
-void _w
-void _k
+// A budget is a Go int on the route; a JS number is exact up to here (review
+// 200 A2).
+const count = () => z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+
+/** Mission fields still used when taking a business issue. */
+const missionFields = {
+  title: z.string().min(1),
+  goal: z.string().min(1),
+  success: z.array(z.string().min(1)).min(1).describe('Success criteria, none empty'),
+  tenant: z.enum(['dev', 'business']).optional(),
+  deadline_at: z
+    .string()
+    .refine(isRFC3339, 'an RFC 3339 date and time, as 2026-10-20T12:00:00-05:00')
+    .optional()
+    .describe('RFC 3339; seven days from now when left out'),
+  repos: z.array(z.string().min(1)).optional(),
+  max_action: z.enum(['none', 'branch']).optional(),
+  budget: z
+    .object({ max_attempts: count(), max_wall_hours: count() })
+    .optional()
+    .describe("Left out: the tenant's budget rule's"),
+  no_merge: z
+    .string()
+    .refine((s) => s.trim() !== '' && new TextEncoder().encode(s.trim()).length <= 200, 'a sentence of up to 200 bytes')
+    .optional()
+    .describe(
+      "Why this mission's accepted results are not to be merged into main: a drill, a benchmark replay, a gate walk. Left out for ordinary work (TD-383)",
+    ),
+  needs_owner: z
+    .string()
+    .refine((s) => s.trim() !== '' && new TextEncoder().encode(s.trim()).length <= 200, 'a sentence of up to 200 bytes')
+    .optional()
+    .describe(
+      "Why this mission's cards wait for the Owner himself, never answered by a card-auto-answer rule: a mission that must wait for him. Walks do not set it; the paths behind his buttons are covered by the Console's tests (TD-393). Left out for ordinary work (TD-390)",
+    ),
+}
 
 export const TAKE_ISSUE_INPUT = {
   ...onIssue,
