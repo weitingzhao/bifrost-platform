@@ -207,6 +207,7 @@ deny	GET /api/v1/questions/{id}
 deny	POST /api/v1/questions/{id}/ack
 deny	POST /api/v1/questions/{id}/answer
 deny	POST /api/v1/questions/{id}/withdraw
+deny	GET /api/v1/readings/approvals
 deny	GET /api/v1/release-policy
 deny	PUT /api/v1/release-policy
 deny	POST /api/v1/release-policy/freeze

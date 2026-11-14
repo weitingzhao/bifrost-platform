@@ -15,6 +15,9 @@ api/internal/questions/testdata/contract/
 # tests compare them with what the routes compute on every run
 # (units_contract_test.go); the Console's CI tests read them as their fixtures.
 api/internal/server/testdata/contract/units/
+# The body of /readings/approvals (the approval records counted; Work > CI),
+# kept by the server's test the same way.
+api/internal/server/testdata/contract/readings/
 # approvals.test.ts parses the Go types and the handler's routes.
 api/internal/approvals/types.go
 api/internal/approvals/handler.go

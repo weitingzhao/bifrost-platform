@@ -120,6 +120,7 @@ modules:
       # api side, read by the console's CI tests (Owner, 2026-11-14: CI asks
       # of itself what it asks of the products that run on it).
       - api/internal/server/testdata/contract/units
+      - api/internal/server/testdata/contract/readings
       - api/internal/approvals/types.go
       - api/internal/approvals/handler.go
       - api/internal/mcp/catalog.go

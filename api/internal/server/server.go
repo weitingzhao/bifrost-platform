@@ -555,6 +555,9 @@ func (s *Server) Router() http.Handler {
 		// The newest CI runs of one project, for the run view. Read-only;
 		// viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/runs", s.handleUnitRuns)
+		// What the approval records say, counted by day and requester, each
+		// count with the request numbers behind it. Read-only; viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/approvals", s.handleApprovalReadings)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

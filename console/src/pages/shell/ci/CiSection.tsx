@@ -5,6 +5,7 @@ import { fetchSupplyChain } from '@/api/delivery'
 import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns } from '@/api/units'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
+import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
 import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, configView, fullCiView, runRow } from './ciViewModel'
 
 /*
@@ -248,6 +249,7 @@ export function CiSection() {
         <RunsBlock repos={repos} />
       </>}
       <FullRunBlock />
+      <ApprovalReadingsBlock />
     </section>
   )
 }

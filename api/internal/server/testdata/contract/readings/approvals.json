@@ -1,0 +1,112 @@
+{
+  "as_of": "2026-11-15T05:00:00Z",
+  "zone": "America/Chicago",
+  "retained": 11,
+  "oldest": "2026-11-13T23:00:00Z",
+  "days": [
+    {
+      "day": "2026-11-14",
+      "groups": [
+        {
+          "requester": "line-a",
+          "thread": "line a",
+          "work_ids": [
+            "LANE-a",
+            "TD-9"
+          ],
+          "requests": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "pending": [
+            5
+          ],
+          "rejected": [
+            4
+          ],
+          "expired": [
+            6
+          ],
+          "approved": [
+            1,
+            2,
+            3,
+            7
+          ],
+          "approve_seconds_median": 40,
+          "executed": [
+            1
+          ],
+          "failed": [
+            2
+          ],
+          "unknown": [
+            3
+          ],
+          "waiting": [
+            7
+          ],
+          "drills": [
+            8
+          ]
+        },
+        {
+          "requester": "line-b",
+          "work_ids": [],
+          "requests": [
+            9,
+            10
+          ],
+          "pending": [],
+          "rejected": [],
+          "expired": [
+            9
+          ],
+          "approved": [
+            9,
+            10
+          ],
+          "approve_seconds_median": 30,
+          "executed": [
+            10
+          ],
+          "failed": [],
+          "unknown": [],
+          "waiting": [],
+          "drills": []
+        }
+      ]
+    },
+    {
+      "day": "2026-11-13",
+      "groups": [
+        {
+          "requester": "line-b",
+          "work_ids": [],
+          "requests": [
+            11
+          ],
+          "pending": [],
+          "rejected": [],
+          "expired": [],
+          "approved": [
+            11
+          ],
+          "approve_seconds_median": 5,
+          "executed": [
+            11
+          ],
+          "failed": [],
+          "unknown": [],
+          "waiting": [],
+          "drills": []
+        }
+      ]
+    }
+  ]
+}

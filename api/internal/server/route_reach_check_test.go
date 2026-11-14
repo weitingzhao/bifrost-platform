@@ -72,8 +72,10 @@ var intendedRouteAdditions = map[string][]string{
 	// Stage 3: what the reconciliation would name for two commits (read-only; it writes nothing).
 	"GET /api/v1/units/full-ci/check": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Stage 3: the newest CI runs of one project, for the run view (read-only).
-	"GET /api/v1/units/runs":      {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	"POST /api/v1/units/evidence": {"operator", "admin", "trade-satellite"},
+	"GET /api/v1/units/runs": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-14: the approval records counted, for the Ops page (read-only).
+	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

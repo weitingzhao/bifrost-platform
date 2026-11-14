@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fetchSupplyChain } from '@/api/delivery'
 import type { SupplyChainResponse } from '@/api/deliveryTypes'
+import { fetchApprovalReadings } from '@/api/readings'
 import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns } from '@/api/units'
 import { CiSection } from '../CiSection'
 import { contract } from './contract'
@@ -15,6 +16,7 @@ import { contract } from './contract'
  */
 
 vi.mock('@/api/units', () => ({ fetchUnitsConfig: vi.fn(), fetchUnitsRuns: vi.fn(), fetchFullCi: vi.fn() }))
+vi.mock('@/api/readings', () => ({ fetchApprovalReadings: vi.fn() }))
 vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn() }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 
@@ -28,6 +30,7 @@ function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail
     return over.runs === 'none' || repo !== 'r' ? { ...contract.runsNone(), repo } : contract.runs()
   })
   vi.mocked(fetchFullCi).mockResolvedValue(over.fullCi === 'none' ? contract.fullCiNone() : contract.fullCi())
+  vi.mocked(fetchApprovalReadings).mockResolvedValue(contract.approvalsNone())
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><CiSection /></QueryClientProvider>)
 }
