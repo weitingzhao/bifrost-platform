@@ -56,7 +56,8 @@ modules:
       # which an entry of "api" covers. unitscript runs scripts/ci's scripts
       # and is given scripts and console whole. An entry of "api" is a test
       # that walks the Go tree (a guard); it reruns on any Go change.
-      # agentrt/rules and cluster still walk the whole repository and stay ".".
+      # agentrt/rules still walks the whole repository and stays "."; so does
+      # repoguard, which is one test made for that.
       api/cmd/agentrt-plan-import: ["api/cmd/agentrt-plan-import", "api/internal/agentrt/planimport/testdata"]
       api/cmd/infracheck: ["api/cmd/infracheck", "api/internal/agentrt/infracheck/testdata"]
       api/cmd/platform-api: ["api/cmd/platform-api"]
@@ -79,7 +80,7 @@ modules:
         - "api/internal/config"
         - "config/agent-tasks.yaml"
         - "config/trust-overrides.yaml"
-      api/internal/agentprogress: ["api"]
+      api/internal/agentprogress: ["api/internal/agentprogress"]
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
         - "api/internal/agentrt/planimport/testdata"
@@ -115,9 +116,13 @@ modules:
         - "console/src/api/__fixtures__/agent-threads.generated.json"
       api/internal/approvals: ["api/internal/approvals", "api/internal/config", "config/agent-tasks.yaml"]
       api/internal/checklist: ["api/internal/checklist"]
-      api/internal/cluster: ["."]
+      api/internal/cluster: ["api/internal/cluster"]
+      # Guards that read every Go file of the module, and the walls between
+      # packages (go list -deps); moved here from delivery, questions and
+      # agentprogress so that those are rerun for their own changes.
+      api/internal/codeguard: ["api"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
-      api/internal/delivery: ["api", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:k8s/cicd/tekton"]
+      api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]
       api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]
       api/internal/hostops: ["api/internal/hostops"]
       api/internal/localpath: ["api/internal/localpath"]
@@ -132,7 +137,7 @@ modules:
         - "api/internal/releases"
       api/internal/modtidy: ["api"]
       api/internal/network: ["api/internal/network"]
-      api/internal/notice: ["api"]
+      api/internal/notice: ["api/internal/notice", "api/internal/questions/testdata/canonical/vectors.json"]
       api/internal/opscontext: ["api/internal/opscontext", "config/ops-context.yaml"]
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
       api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
@@ -140,9 +145,11 @@ modules:
       api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/patrol: ["api/internal/patrol", "config/patrol-skills"]
       api/internal/probe: ["api/internal/probe", "config/trade-api-domains.yaml"]
-      api/internal/questions: ["api"]
+      api/internal/questions: ["api/internal/questions", "api/internal/server"]
       api/internal/releasefreeze: ["api/internal/releasefreeze", "bifrost-trade-infra:scripts/release"]
       api/internal/releasepolicy: ["api/internal/releasepolicy"]
+      # The guard that reads every file of the repository (moved from cluster).
+      api/internal/repoguard: ["."]
       api/internal/safego: ["api"]
       api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
       api/internal/server: ["api", "config/agent-tasks.yaml"]

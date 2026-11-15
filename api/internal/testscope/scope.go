@@ -248,7 +248,15 @@ func testdataReaders(g *graph, data map[string][]string) (map[string]map[string]
 }
 
 // ExplicitGuards supplements guards discovered by scanning test source.
-var ExplicitGuards = map[string][]string{"internal/cluster": {"TestRemovedPrimarySQLHelperStaysGone"}, "internal/safego": {"TestNoUnguardedGoroutines"}}
+var ExplicitGuards = map[string][]string{
+	// The whole-repository guard (moved from cluster on 2026-11-14).
+	"internal/repoguard": {"TestRemovedPrimarySQLHelperStaysGone"},
+	"internal/safego":    {"TestNoUnguardedGoroutines"},
+	// The walls between packages run "go list", which the scan of test
+	// source does not see as a walk; their answer changes with any package's
+	// imports, so they run with the guards.
+	"internal/codeguard": {"TestWallsBetweenPackages", "TestWallCheckSeesADependency"},
+}
 
 func testNames(f *ast.File) []string {
 	var out []string

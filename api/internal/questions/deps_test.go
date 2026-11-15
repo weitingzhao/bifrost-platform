@@ -20,22 +20,6 @@ func TestDoesNotDependOnActionsOrApprovals(t *testing.T) {
 	}
 }
 
-func TestThosePackagesDoNotDependOnQuestions(t *testing.T) {
-	for _, pkg := range []string{
-		"./internal/actions/...",
-		"./internal/approvals/...",
-		"./internal/approvalnotify/...",
-		"./internal/releasepolicy/...",
-	} {
-		out := goList(t, "-deps", pkg)
-		for _, line := range strings.Split(out, "\n") {
-			if strings.HasSuffix(line, "/internal/questions") {
-				t.Fatalf("%s depends on questions", pkg)
-			}
-		}
-	}
-}
-
 func TestServerNamesQuestionsOnlyInTheWireFile(t *testing.T) {
 	dir := filepath.Join("..", "server")
 	entries, err := os.ReadDir(dir)

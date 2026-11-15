@@ -1,4 +1,9 @@
-package cluster
+// Package repoguard holds the guards that read every file of the repository:
+// something removed that must not come back anywhere, code, scripts or
+// documents. They live apart from the packages they protect so that those
+// packages' tests are rerun for their own changes, not for every change in
+// the repository (moved from cluster on 2026-11-14).
+package repoguard
 
 import (
 	"bytes"
