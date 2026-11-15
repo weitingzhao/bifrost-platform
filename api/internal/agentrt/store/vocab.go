@@ -1,34 +1,50 @@
 package store
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
-	"sort"
-	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
-// A body field's kind. Values are what canon.Parse or a Go caller produce.
-type kind int
-
-const (
-	kStr  kind = iota // a non-empty string
-	kID               // a non-empty string naming a row (some of a fixed shape: fieldValues)
-	kInt              // an integer
-	kIDs              // a non-empty list of row ids
-	kAny              // any canonical JSON value
-	kBool             // true or false
-	kInts             // a non-empty list of integers (row ids of an identity column)
+// The kinds, fields and value checks of the vocabulary are the event log's
+// (eventlog/vocabulary.go); these are its names as this package writes them.
+type (
+	kind  = eventlog.Kind
+	value = eventlog.Value
 )
 
+// field is one field of a body as this package's tables write it; the
+// declaration hands them to the event log as its Fields (declaredBodies).
 type field struct {
 	name     string
 	kind     kind
 	optional bool
 }
+
+func declaredBodies(in map[string][]field) map[string][]eventlog.Field {
+	out := make(map[string][]eventlog.Field, len(in))
+	for t, spec := range in {
+		fields := make([]eventlog.Field, 0, len(spec))
+		for _, f := range spec {
+			fields = append(fields, eventlog.Field{Name: f.name, Kind: f.kind, Optional: f.optional})
+		}
+		out[t] = fields
+	}
+	return out
+}
+
+const (
+	kStr  = eventlog.Str
+	kID   = eventlog.ID
+	kInt  = eventlog.Int
+	kIDs  = eventlog.IDs
+	kAny  = eventlog.Any
+	kBool = eventlog.Bool
+	kInts = eventlog.Ints
+)
 
 // eventTypes is the closed vocabulary, as the database's event_type_closed
 // constraint has it (migrations 0009, 0013); TestEventTypesAreTheDatabases holds
@@ -45,10 +61,10 @@ var eventTypes = map[string]bool{
 	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true,
 	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true,
 	"owner_signoff": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
-	"host_retired": true, "control_set": true, "control_cleared": true, "rule_proposed": true, "rule_signed": true,
+	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
-	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "message_posted": true,
-	"message_acked": true, "policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
+	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true,
+	"policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
 	"legacy_imported": true, "issue_submitted": true, "issue_added": true, "issue_brief_drafted": true, "issue_asked": true,
 	"issue_answered": true, "issue_classified": true, "issue_design_put": true, "issue_reviewed": true,
 	"issue_owner_decided": true, "issue_priority_set": true, "issue_taken": true, "issue_replied": true,
@@ -70,7 +86,7 @@ var eventTypes = map[string]bool{
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
-func IsEventType(t string) bool { return eventTypes[t] }
+func IsEventType(t string) bool { return eventlog.IsEventType(t) }
 
 // bodies is the closed body of each event type the store writes so far
 // (design v5 §5.1.3): every required field present with a value of its kind,
@@ -116,8 +132,6 @@ var bodies = map[string][]field{
 	"attempt_persisted":       {{"pushed_commit", kStr, true}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}, {"changed_lines", kInt, true}, {"hard", kBool, true}},
 	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}, {"injected", kBool, true}},
 	"artifact_put":            {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
-	"message_posted":          {{"message_id", kID, false}, {"to", kID, false}, {"kind", kStr, false}},
-	"message_acked":           {{"message_id", kID, false}},
 	// policy_alert: a text claiming the Owner's approval (approval_claim, from
 	// a task's spec or a message: the closed phrase it holds), or a line the
 	// chief of staff ended an answer or a plan with (seat_alert, the seat's
@@ -148,8 +162,6 @@ var bodies = map[string][]field{
 	// caused by.
 	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, true}, {"message_id", kID, true},
 		{"line_digest", kStr, true}},
-	"control_set":       {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
-	"control_cleared":   {{"control_id", kID, false}},
 	"pool_cooldown_set": {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
 	"capability_scored": {{"source", kStr, false}, {"rows", kInt, false}, {"samples", kAny, false}, {"xmin", kInt, true}, {"late", kAny, true}, {"expires_at", kStr, true},
 		{"run_id", kStr, true}, {"host", kID, true}, {"executor", kID, true}, {"provider", kStr, true}, {"model", kStr, true}, {"questions", kStr, true}, {"results", kAny, true},
@@ -282,131 +294,69 @@ var bodies = map[string][]field{
 }
 
 func checkBody(eventType string, body map[string]any) error {
-	if eventType == "metrics_computed" {
-		var defs []MetricDefinition
-		if err := strictViewValue(body["definitions"], &defs); err != nil {
-			return invalid("metrics_computed definitions: %v", err)
-		}
-		if defs == nil {
-			return invalid("metrics_computed definitions must be an array")
-		}
-		for _, d := range defs {
-			if !metricIDRE.MatchString(d.ID) || d.Version < 1 || hex64(d.SHA256) != "" {
-				return invalid("invalid metric definition")
-			}
-		}
-	}
+	return eventlog.CheckBody(eventType, body)
+}
 
-	if eventType == "note" {
-		if err := checkViewNote(body); err != nil {
-			return err
-		}
+// The store's declaration: its types, their bodies and values, and the
+// checks a type has of its own. The coordination types are declared apart
+// (coordvocab.go), as each domain's will be when it leaves this package.
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{
+		Types:  keysOf(eventTypes),
+		Bodies: declaredBodies(bodies),
+		Values: fieldValues,
+		WholeValues: map[string]map[string]func(any) string{
+			"note": {"assessment_requested": badAssessmentRequest, "agentd_build": badAgentdBuild},
+			// Only on a pinned task (pin.go): the header the proposal came
+			// with, "" for none; recorded, granting nothing.
+			"task_proposed": {"via_session": badViaSession},
+		},
+		Before: map[string]func(map[string]any) error{
+			"metrics_computed": checkMetricDefinitions,
+			"note":             checkViewNote,
+		},
+		After: map[string]func(map[string]any) error{
+			"policy_alert":      checkPolicyAlert,
+			"wait_limit_passed": checkWaitLimit,
+		},
+		Events: []func(Event) error{checkPlanObservation, retiredRecord},
+	})
+}
+
+func checkMetricDefinitions(body map[string]any) error {
+	var defs []MetricDefinition
+	if err := strictViewValue(body["definitions"], &defs); err != nil {
+		return invalid("metrics_computed definitions: %v", err)
 	}
-	spec, ok := bodies[eventType]
-	if !ok {
-		return fmt.Errorf("store: event type %q has no body defined yet", eventType)
+	if defs == nil {
+		return invalid("metrics_computed definitions must be an array")
 	}
-	allowed := map[string]bool{}
-	for _, f := range spec {
-		allowed[f.name] = true
-		v, present := body[f.name]
-		if !present {
-			if f.optional {
-				continue
-			}
-			return fmt.Errorf("store: %s needs %q", eventType, f.name)
-		}
-		if !ofKind(v, f.kind) {
-			return fmt.Errorf("store: %s field %q has the wrong kind of value", eventType, f.name)
-		}
-		if why := badValue(eventType, f.name, v); why != "" {
-			return invalid("%s field %q %s", eventType, f.name, why)
-		}
-	}
-	var extra []string
-	for k := range body {
-		if !allowed[k] {
-			extra = append(extra, k)
-		}
-	}
-	if len(extra) > 0 {
-		sort.Strings(extra)
-		return fmt.Errorf("store: %s does not take %v", eventType, extra)
-	}
-	if _, named := body["artifact_id"]; eventType == "policy_alert" && !named && body["rule"] != "repeated_failure" &&
-		(body["rule"] != "approval_claim" || body["source"] != "plan_note") {
-		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
-	}
-	if eventType == "wait_limit_passed" {
-		wait, _ := body["wait"].(string)
-		ref, _ := body["ref"].(string)
-		if want := waitRefPrefix[wait]; len(ref) < 2 || ref[:2] != want {
-			return invalid("wait_limit_passed: a %s wait waits on a %s… id, not %q", wait, want, ref)
+	for _, d := range defs {
+		if !metricIDRE.MatchString(d.ID) || d.Version < 1 || hex64(d.SHA256) != "" {
+			return invalid("invalid metric definition")
 		}
 	}
 	return nil
 }
 
-func ofKind(v any, k kind) bool {
-	switch k {
-	case kStr, kID:
-		s, ok := v.(string)
-		return ok && s != ""
-	case kInt:
-		switch n := v.(type) {
-		case int, int32, int64, uint32:
-			return true
-		case json.Number:
-			_, err := n.Int64()
-			return err == nil
-		}
-		return false
-	case kIDs:
-		switch l := v.(type) {
-		case []any:
-			if len(l) == 0 {
-				return false
-			}
-			for _, e := range l {
-				if s, ok := e.(string); !ok || s == "" {
-					return false
-				}
-			}
-			return true
-		case []string:
-			if len(l) == 0 {
-				return false
-			}
-			for _, s := range l {
-				if s == "" {
-					return false
-				}
-			}
-			return true
-		}
-		return false
-	case kBool:
-		_, ok := v.(bool)
-		return ok
-	case kInts:
-		switch l := v.(type) {
-		case []any:
-			if len(l) == 0 {
-				return false
-			}
-			for _, e := range l {
-				if !ofKind(e, kInt) {
-					return false
-				}
-			}
-			return true
-		case []int64:
-			return len(l) > 0
-		}
-		return false
+func checkPolicyAlert(body map[string]any) error {
+	if _, named := body["artifact_id"]; !named && body["rule"] != "repeated_failure" &&
+		(body["rule"] != "approval_claim" || body["source"] != "plan_note") {
+		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
 	}
-	return true
+	return nil
 }
+
+func checkWaitLimit(body map[string]any) error {
+	wait, _ := body["wait"].(string)
+	ref, _ := body["ref"].(string)
+	if want := waitRefPrefix[wait]; len(ref) < 2 || ref[:2] != want {
+		return invalid("wait_limit_passed: a %s wait waits on a %s… id, not %q", wait, want, ref)
+	}
+	return nil
+}
+
+func ofKind(v any, k kind) bool { return eventlog.OfKind(v, k) }
 
 // Values (review 145 B6): what a field may hold beyond its kind. An enum's
 // values are the states and kinds the schema's checks allow (0001_core.sql),
@@ -420,18 +370,8 @@ func ofKind(v any, k kind) bool {
 // attempt's pushed commit and branch), where the row's constraint, which the
 // routes report as such, decides.
 
-// value checks one string of a field; ok is "" or why it is refused.
-type value func(s string) string
-
-// oneOf is an enum.
-func oneOf(vals ...string) value {
-	return func(s string) string {
-		if slices.Contains(vals, s) {
-			return ""
-		}
-		return fmt.Sprintf("is %q, not one of %v", s, vals)
-	}
-}
+// oneOf is an enum (eventlog.OneOf).
+func oneOf(vals ...string) value { return eventlog.OneOf(vals...) }
 
 // statesOf is every state a state machine names.
 func statesOf(moves map[string][]string) []string {
@@ -453,22 +393,10 @@ func keysOf[V any](m map[string]V) []string {
 	return out
 }
 
-// shaped is an id or a reference of a fixed shape.
-func shaped(name string, re *regexp.Regexp) value {
-	return func(s string) string {
-		if re.MatchString(s) {
-			return ""
-		}
-		return fmt.Sprintf("is %q, not %s", s, name)
-	}
-}
+// shaped is an id or a reference of a fixed shape (eventlog.Shaped).
+func shaped(name string, re *regexp.Regexp) value { return eventlog.Shaped(name, re) }
 
-func instant(s string) string {
-	if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
-		return fmt.Sprintf("is %q, not an RFC 3339 instant", s)
-	}
-	return ""
-}
+func instant(s string) string { return eventlog.Instant(s) }
 
 var (
 	ulid        = `[0-9A-HJKMNP-TV-Z]{26}`
@@ -510,8 +438,6 @@ var fieldValues = map[string]map[string]value{
 	"host_slots_set":          {"policy": oneOf(rules.SlotPolicies...)},
 	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", "landing_ci"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
-	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
-	"message_acked":           {"message_id": messageID},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
 		"host_offline", "executor_unavailable", "presence_unjudged", "presence_deferred"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
@@ -520,7 +446,6 @@ var fieldValues = map[string]map[string]value{
 			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase, presenceDeferredPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
-	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},
 	"pool_cooldown_set":        {"until": instant},
 	"capability_scored":        {"source": oneOf("exam", "benchmark", "in_job"), "expires_at": instant, "started_at": instant},
 	"pool_measured":            {"source": oneOf("reading", "exit_text", "owner"), "resets_at": instant},
@@ -586,44 +511,9 @@ var waitRef = shaped("an attempt, task or message id", regexp.MustCompile(`^[atm
 // waitRefPrefix is the id each wait's ref has.
 var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "t_", WaitMessageUnread: "m_"}
 
-// badValue is why v, of its field's kind already, is refused, or "". A list
-// is checked element by element.
-func badValue(eventType, name string, v any) string {
-	if eventType == "note" && name == "assessment_requested" {
-		return badAssessmentRequest(v)
-	}
-	if eventType == "note" && name == "agentd_build" {
-		return badAgentdBuild(v)
-	}
-	if eventType == "task_proposed" && name == "via_session" {
-		// Only on a pinned task (pin.go): the header the proposal came
-		// with, "" for none; recorded, granting nothing.
-		return badViaSession(v)
-	}
-	check, ok := fieldValues[eventType][name]
-	if !ok {
-		return ""
-	}
-	switch t := v.(type) {
-	case string:
-		return check(t)
-	case []string:
-		for _, s := range t {
-			if why := check(s); why != "" {
-				return why
-			}
-		}
-	case []any:
-		for _, e := range t {
-			if s, ok := e.(string); ok {
-				if why := check(s); why != "" {
-					return why
-				}
-			}
-		}
-	}
-	return ""
-}
+// badValue is why v, of its field's kind already, is refused, or ""
+// (eventlog.BadValue).
+func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }
 
 var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
 var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)

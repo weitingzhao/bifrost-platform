@@ -1,8 +1,8 @@
 // Package eventlog is the base every domain of the agent runtime writes
 // through: the append-only event log, its hash chain and clock, and the
 // transaction a state change runs in. It knows no domain: what an event of a
-// type may carry is the vocabulary a domain package registers (Register);
-// with none registered nothing is appended.
+// type may carry is the vocabulary the domain packages declare (Declare,
+// vocabulary.go); with none declared nothing is appended.
 //
 // Every state change goes through Append, the one path that writes an event:
 // the database refuses a state write without an event of the same
@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,15 +46,6 @@ func InTx(ctx context.Context, conn interface {
 	}
 	return tx.Commit(ctx)
 }
-
-// vocabulary is the check every event passes before it is written: the
-// closed set of types and what each may carry. The domain package that owns
-// the vocabulary registers it at start.
-var vocabulary atomic.Pointer[func(Event) error]
-
-// Register installs the vocabulary check. It is called once, from the init
-// of the package that holds the vocabulary.
-func Register(check func(Event) error) { vocabulary.Store(&check) }
 
 // Event is what a caller asks to append. Empty key strings are NULL.
 type Event struct {
@@ -172,11 +162,7 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if ev.Body == nil {
 		ev.Body = map[string]any{}
 	}
-	check := vocabulary.Load()
-	if check == nil {
-		return Appended{}, errors.New("eventlog: no vocabulary is registered; nothing is appended unchecked")
-	}
-	if err := (*check)(ev); err != nil {
+	if err := checkEvent(ev); err != nil {
 		return Appended{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`,

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"strings"
 	"time"
 
@@ -89,15 +90,7 @@ func ProposeUnboundedForTest(ctx context.Context, db DB, w Writer, key string, p
 }
 
 // EventTypesForTest is the closed vocabulary and the types with a body.
-func EventTypesForTest() (vocabulary, written []string) {
-	for t := range eventTypes {
-		vocabulary = append(vocabulary, t)
-	}
-	for t := range bodies {
-		written = append(written, t)
-	}
-	return vocabulary, written
-}
+func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventTypes() }
 
 // BlockedCardWhyForTest is the longest why a card's recommendation has.
 var BlockedCardWhyForTest = strings.Repeat("w", RecommendWhyMax)

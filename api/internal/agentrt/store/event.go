@@ -23,18 +23,15 @@ type (
 
 const timeLayout = eventlog.TimeLayout
 
-// Append writes one event inside tx (eventlog.Append), after the checks this
-// package registers as the vocabulary (init below).
+// Append writes one event inside tx (eventlog.Append), after the checks of
+// the vocabulary this package and the other domains declare (vocab.go).
 func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	return eventlog.Append(ctx, tx, ev)
 }
 
-func init() { eventlog.Register(checkEvent) }
-
-// checkEvent is the vocabulary every event passes before it is written:
-// plan observations are the controller's, retired records are refused, and
-// the body fits its type (vocab.go).
-func checkEvent(ev Event) error {
+// checkPlanObservation holds plan observations and their passes to the
+// controller (the vocabulary asks it of every event: vocab.go).
+func checkPlanObservation(ev Event) error {
 	if raw, ok := ev.Body["plan_observation"]; ok {
 		var n planObservation
 		if err := strictViewValue(raw, &n); err != nil {
@@ -57,10 +54,7 @@ func checkEvent(ev Event) error {
 		}
 	}
 
-	if err := retiredRecord(ev); err != nil {
-		return err
-	}
-	return checkBody(ev.Type, ev.Body)
+	return nil
 }
 
 func lockStream(ctx context.Context, tx pgx.Tx, stream string) error {

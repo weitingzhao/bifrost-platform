@@ -3,8 +3,11 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Each checked field takes a value of its shape and refuses another, as the
@@ -14,6 +17,9 @@ func TestEventFieldValues(t *testing.T) {
 	const ulid = "01M59KGZ56VX9YCCCN9KCR9264"
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
 	covered := map[string]bool{}
+	// The checked fields are the declared sum: this package's tables and the
+	// coordination domain's (coordvocab.go).
+	checked := eventlog.CheckedFields()
 	for _, c := range []struct{ event, field, good, bad string }{
 		{"pipeline_seen", "tree", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bad value"},
 		{"pipeline_seen", "tested_by", "ci-original", "bad value"},
@@ -192,20 +198,21 @@ func TestEventFieldValues(t *testing.T) {
 		if badValue(c.event, c.field, c.bad) == "" {
 			t.Errorf("%s.%s took %q", c.event, c.field, c.bad)
 		}
-		if _, listed := fieldValues[c.event][c.field]; !listed {
+		if !slices.Contains(checked[c.event], c.field) {
 			t.Errorf("%s.%s is not checked", c.event, c.field)
 		}
 	}
 	// Every checked field has its pair above (review 334 B3) and is in its
 	// event's body, so no check sits on a field no event has.
-	for event, fields := range fieldValues {
-		for name := range fields {
+	for event, fields := range checked {
+		for _, name := range fields {
 			if !covered[event+"."+name] {
 				t.Errorf("%s.%s is checked but has no good and bad value here", event, name)
 			}
 			found := false
-			for _, f := range bodies[event] {
-				found = found || f.name == name
+			body, _ := eventlog.BodyOf(event)
+			for _, f := range body {
+				found = found || f.Name == name
 			}
 			if !found {
 				t.Errorf("%s.%s is checked but not in the body", event, name)
