@@ -27,6 +27,9 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { defaultRuntimeDeps, putArtifact, waitForMessages, type RuntimeDeps } from './runtimeTools.js'
+import { presenceBody } from './presence.js'
+
+export { presenceBody }
 
 /** The two settings taken from an MCP config; a token is never among them. */
 export const CONFIG_KEYS = ['PLATFORM_API_URL', 'PLATFORM_TOKEN_ENV_KEY'] as const
@@ -51,10 +54,6 @@ export function settingsFromMcpConfig(
     if (v != null) out[key] = expand(v, env)
   }
   return out
-}
-
-export function presenceBody(session: string): string {
-  return `doorbell: thread:${session} waits for platform messages.\n`
 }
 
 interface Message { message_id?: string; from?: string; kind?: string; body?: string }

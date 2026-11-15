@@ -33,6 +33,7 @@ import {
   getPlan,
   getPlanView, registerExternalWork, recordExternalWorkEvent,
   COMMIT_SHA,
+  defaultRuntimeDeps,
   isRFC3339,
   proposePlanChange,
   putArtifact,
@@ -40,6 +41,7 @@ import {
   whoami,
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
+import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { registerIssueTools } from './registerIssues.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
@@ -834,6 +836,13 @@ reg(
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
+  // Register this thread so others can message it (presence.ts); never blocks or stops the server.
+  const skip = presenceSkip(process.env, bridgeFocus)
+  if (skip === undefined) {
+    void registerPresence(defaultRuntimeDeps()).then((r) => {
+      if (r !== 'registered') console.error(`${SERVER_NAME}: presence ${r}`)
+    })
+  }
 }
 
 main().catch(err => {
