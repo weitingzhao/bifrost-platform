@@ -1,0 +1,21 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "repo-app 6e6577000000 has no Succeeded ci run",
+    "repo-app 6f6c64000000..6e6577000000 hits no_trust_anchor_change: internal/releasepolicy/engine.go (self-checked only with a Succeeded ci run of 6e6577000000 under ci_succeeded)"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "window_held_by_requester"
+  ],
+  "AdditiveDDL": null
+}

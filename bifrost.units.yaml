@@ -146,6 +146,7 @@ modules:
       api/internal/questions: ["api/internal/questions", "api/internal/server"]
       api/internal/releasefreeze: ["api/internal/releasefreeze", "bifrost-trade-infra:scripts/release"]
       api/internal/releasepolicy: ["api/internal/releasepolicy"]
+      api/internal/releasepolicy/mustrefuse: ["api/internal/releasepolicy/mustrefuse"]
       # The guard that reads every file of the repository (moved from cluster).
       api/internal/repoguard: ["."]
       api/internal/safego: ["api"]

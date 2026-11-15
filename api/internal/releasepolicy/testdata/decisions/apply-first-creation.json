@@ -1,0 +1,25 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "",
+  "Who": "",
+  "SHAs": {
+    "repo-ops": "6f70730000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "no previous generation to go back to: cicd/Pipeline/ci (does not exist in the cluster: a first creation)"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "plan_passed",
+    "apply_namespaces",
+    "apply_kinds",
+    "apply_objects",
+    "apply_paths"
+  ],
+  "AdditiveDDL": null,
+  "Plan": "plan-1",
+  "Path": "repo-ops:k8s/cicd/tekton/pipeline-ci.yaml"
+}

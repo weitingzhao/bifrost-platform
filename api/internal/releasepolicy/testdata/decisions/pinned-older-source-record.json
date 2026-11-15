@@ -1,0 +1,25 @@
+{
+  "Auto": true,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-pinned",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000",
+    "repo-lib": "6e65772d6c696200000000000000000000000000"
+  },
+  "Reasons": null,
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-pinned",
+    "window_held_by_requester",
+    "pinned_to:deliver-app-stg",
+    "ci_succeeded",
+    "no_ddl",
+    "no_d10_paths",
+    "no_trust_anchor_change",
+    "owner_only"
+  ],
+  "AdditiveDDL": null
+}

@@ -1,0 +1,27 @@
+{
+  "Auto": true,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": null,
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "window_held_by_requester",
+    "revision",
+    "ci_succeeded",
+    "no_ddl",
+    "no_d10_paths",
+    "trust_anchor_self_checked",
+    "owner_only"
+  ],
+  "AdditiveDDL": null,
+  "SelfCheckedAnchors": [
+    "repo-app@6e6577000000"
+  ]
+}

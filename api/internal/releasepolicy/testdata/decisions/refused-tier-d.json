@@ -1,0 +1,12 @@
+{
+  "Auto": false,
+  "PolicyID": "",
+  "Pipeline": "",
+  "Who": "",
+  "SHAs": {},
+  "Reasons": [
+    "tier D is never auto-approved"
+  ],
+  "Clauses": null,
+  "AdditiveDDL": null
+}

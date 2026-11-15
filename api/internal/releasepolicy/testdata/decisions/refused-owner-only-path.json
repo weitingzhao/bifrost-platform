@@ -1,0 +1,20 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "repo-app 6f6c64000000..6e6577000000 touches owner-only paths: internal/releasepolicy/mustrefuse/cases_test.go (only the Owner changes these)"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "window_held_by_requester"
+  ],
+  "AdditiveDDL": null
+}

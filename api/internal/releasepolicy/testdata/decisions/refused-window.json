@@ -1,0 +1,25 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "release window: held by another session"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "revision",
+    "ci_succeeded",
+    "no_ddl",
+    "no_d10_paths",
+    "no_trust_anchor_change",
+    "owner_only"
+  ],
+  "AdditiveDDL": null
+}

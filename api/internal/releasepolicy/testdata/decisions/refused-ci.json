@@ -1,0 +1,20 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "repo-app 6e6577000000 has no Succeeded ci run"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "window_held_by_requester"
+  ],
+  "AdditiveDDL": null
+}

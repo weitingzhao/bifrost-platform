@@ -1,0 +1,12 @@
+{
+  "Auto": false,
+  "PolicyID": "",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {},
+  "Reasons": [
+    "releases are frozen: frozen by owner at 2026-10-08T11:30:00Z: incident (lift: bifrost-trade-infra/scripts/release/release.sh unfreeze)"
+  ],
+  "Clauses": null,
+  "AdditiveDDL": null
+}

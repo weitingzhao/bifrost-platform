@@ -1,0 +1,253 @@
+{
+  "about": "The policy the must-refuse set is judged under: the signed policy's template.json and paths.json (bifrost-trade-infra agent-config/release-policy, 2026-11-15) with every relaxing field switched on: additive_ddl, trust_anchor_self_checked, trust_anchor_ignore_tests, self_checked_repos, the apply section; and the trust_anchor_reviewed and reviewable_repos the engine no longer reads. The test fills policy_id, signed_at and expires_at and signs it with a throwaway key.",
+  "version": 1,
+  "signed_by": "owner",
+  "valid_days": 90,
+  "allow": [
+    "bifrost-deliver-stg",
+    "bifrost-deliver-platform",
+    "bifrost-deliver-platform-prod",
+    "bifrost-deliver-research",
+    "bifrost-build-research-dagster",
+    "bifrost-build-market-data",
+    "bifrost-build-flex-query",
+    "bifrost-build-ib-gateway"
+  ],
+  "conditions": {
+    "revision": "main-or-tag",
+    "ci_succeeded": true,
+    "window_held_by_requester": true,
+    "no_pending_before_db_steps": true,
+    "no_ddl": true,
+    "additive_ddl": true,
+    "no_d10_paths": true,
+    "no_trust_anchor_change": true,
+    "trust_anchor_ignore_tests": true,
+    "trust_anchor_self_checked": true,
+    "trust_anchor_reviewed": true
+  },
+  "apply": {
+    "namespaces": [
+      "cicd"
+    ],
+    "kinds": [
+      "Pipeline",
+      "Task",
+      "TriggerTemplate",
+      "TriggerBinding",
+      "EventListener"
+    ],
+    "field_manager": "bifrost-applier",
+    "require_previous_generation": true,
+    "exclude_paths": [
+      "k8s/cicd/release-policy/**",
+      "k8s/cicd/tekton/task-release-window.yaml",
+      "k8s/cicd/tekton/apply-manifest/**",
+      "k8s/cicd/tekton/pipeline-deliver-prod.yaml",
+      "k8s/cicd/tekton/pipeline-deliver-platform-prod.yaml"
+    ],
+    "exclude_objects": [
+      "Pipeline/bifrost-deliver-prod",
+      "Pipeline/bifrost-deliver-platform-prod",
+      "Pipeline/bifrost-apply-manifest",
+      "Task/bifrost-release-window",
+      "ConfigMap/bifrost-release-policy",
+      "ConfigMap/bifrost-release-freeze",
+      "ConfigMap/bifrost-actuation-policy",
+      "ConfigMap/bifrost-apply-manifest-check"
+    ]
+  },
+  "limits": {
+    "rolling_24h": "none",
+    "concurrency": 1
+  },
+  "reminders": {
+    "before_expiry_hours": [
+      336,
+      72,
+      24
+    ],
+    "on_blocked_after_expiry": true
+  },
+  "ci_repos": [
+    "bifrost-trade-core",
+    "bifrost-trade-api",
+    "bifrost-trade-worker",
+    "bifrost-trade-frontend",
+    "bifrost-research",
+    "bifrost-platform"
+  ],
+  "db_steps": {
+    "repo": "bifrost-trade-infra",
+    "dir": "scripts/release/db-steps.d",
+    "pipelines": {
+      "bifrost-deliver-stg": "stg",
+      "bifrost-deliver-prod": "prod"
+    }
+  },
+  "pinned": {
+    "bifrost-deliver-prod": {
+      "from": "bifrost-deliver-stg",
+      "params": {
+        "coreRevision": "bifrost-trade-core",
+        "workerRevision": "bifrost-trade-worker",
+        "apiRevision": "bifrost-trade-api",
+        "frontendRevision": "bifrost-trade-frontend",
+        "uiRevision": "bifrost-ui",
+        "infraRevision": "bifrost-trade-infra"
+      }
+    },
+    "bifrost-deliver-platform-prod": {
+      "from": "bifrost-deliver-platform",
+      "params": {
+        "revision": "bifrost-platform",
+        "uiRevision": "bifrost-ui"
+      }
+    }
+  },
+  "paths": {
+    "no_ddl": [
+      {
+        "repo": "*",
+        "paths": [
+          "**/ddl*.py",
+          "**/*_ddl.py",
+          "**/*.sql",
+          "**/db_init*",
+          "**/db-init*",
+          "**/migrations/**",
+          "**/*migration*.py"
+        ]
+      },
+      {
+        "repo": "bifrost-trade-infra",
+        "paths": [
+          "scripts/release/db-steps.d/**"
+        ]
+      },
+      {
+        "repo": "bifrost-research",
+        "paths": [
+          "k8s/jobs/ddl-apply.yaml"
+        ]
+      }
+    ],
+    "no_d10_paths": [
+      {
+        "repo": "bifrost-trade-worker",
+        "paths": [
+          "scripts/run_daemon.py",
+          "src/bifrost_worker/daemon/execution/**",
+          "src/bifrost_worker/daemon/fsm/**",
+          "src/bifrost_worker/daemon/guards/**",
+          "src/bifrost_worker/daemon/strategy/**",
+          "src/bifrost_worker/daemon/app/hedge_flow.py",
+          "src/bifrost_worker/daemon/app/daemon_handlers.py",
+          "src/bifrost_worker/daemon/app/control_heartbeat.py"
+        ]
+      },
+      {
+        "repo": "bifrost-trade-core",
+        "paths": [
+          "src/bifrost_core/ib_operator/**",
+          "src/bifrost_core/core/daemon_flags.py",
+          "src/bifrost_core/persistence/redis_daemon_state.py"
+        ]
+      },
+      {
+        "repo": "bifrost-trade-api",
+        "paths": [
+          "src/bifrost_api/monitor/routers/daemon.py"
+        ]
+      },
+      {
+        "repo": "bifrost-trade-infra",
+        "paths": [
+          "k8s/overlays/stg/daemon-scale-zero.patch.yaml",
+          "k8s/overlays/prod/daemon-observe-safe.patch.yaml",
+          "k8s/overlays/stg/kustomization.yaml",
+          "k8s/overlays/prod/kustomization.yaml",
+          "k8s/base/worker/**"
+        ]
+      },
+      {
+        "repo": "bifrost-platform-plugin",
+        "paths": [
+          "src/bifrost_plugin/ib_gateway/operator.py",
+          "scripts/ib-gateway-set-live.sh",
+          "k8s/redis-ib/**"
+        ]
+      },
+      {
+        "repo": "bifrost-platform",
+        "paths": [
+          "config/ops-context.yaml"
+        ]
+      }
+    ],
+    "no_trust_anchor_change": [
+      {
+        "repo": "bifrost-platform",
+        "paths": [
+          "api/internal/releasepolicy/**",
+          "api/internal/releasefreeze/**",
+          "api/internal/approvals/**",
+          "api/internal/approvalnotify/**",
+          "api/internal/actions/**",
+          "api/internal/server/actions_wire.go",
+          "api/internal/server/release_policy*.go",
+          "api/internal/delivery/release_policy*.go",
+          "api/internal/delivery/release_window.go",
+          "api/internal/delivery/window_store.go",
+          "api/internal/delivery/window_handler.go",
+          "api/internal/delivery/run_window.go",
+          "api/internal/actuationpolicy/**",
+          "api/internal/workactions/**",
+          "config/actuation-policy.yaml",
+          "api/internal/releases/**",
+          "mcp/platform/src/writeGate.ts",
+          "mcp/platform/src/platformClient.ts",
+          "mcp/platform/src/registerApprove.ts"
+        ]
+      },
+      {
+        "repo": "bifrost-trade-infra",
+        "paths": [
+          "agent-config/release-policy/**",
+          "k8s/cicd/tekton/apply-manifest/**",
+          "k8s/components/platform-config/config/actuation-policy.yaml",
+          "k8s/owner-exec/**",
+          "agent-config/scripts/agent-guard/**",
+          "agent-config/claude/auto-mode/**",
+          "scripts/release/release.sh",
+          "scripts/release/lib.sh",
+          "scripts/release/release_policy.py",
+          "scripts/release/ci_gate.py",
+          "scripts/release/freeze_*",
+          "scripts/release/test_freeze_*",
+          "k8s/release-freeze/**",
+          "k8s/cicd/release-policy/**",
+          "k8s/cicd/tekton/task-release-window.yaml",
+          "k8s/platform-rbac/**"
+        ]
+      }
+    ],
+    "owner_only": [
+      {
+        "repo": "bifrost-platform",
+        "paths": [
+          "api/internal/releasepolicy/mustrefuse/**",
+          "api/internal/releasepolicy/anchor.go",
+          "api/internal/releasepolicy/anchor_test.go"
+        ]
+      }
+    ]
+  },
+  "self_checked_repos": [
+    "bifrost-platform"
+  ],
+  "reviewable_repos": [
+    "bifrost-platform",
+    "bifrost-trade-infra"
+  ]
+}

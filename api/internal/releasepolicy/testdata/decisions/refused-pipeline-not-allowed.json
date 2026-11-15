@@ -1,0 +1,16 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-elsewhere",
+  "Who": "agent@mac",
+  "SHAs": {},
+  "Reasons": [
+    "deliver-elsewhere is not in the policy's allow list"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen"
+  ],
+  "AdditiveDDL": null
+}

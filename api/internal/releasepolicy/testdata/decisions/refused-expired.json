@@ -1,0 +1,13 @@
+{
+  "Auto": false,
+  "PolicyID": "",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {},
+  "Reasons": [
+    "policy rp-apply expired at 2027-01-06T11:00:00Z",
+    "sign a policy: bifrost-trade-infra/scripts/release/release.sh policy sign"
+  ],
+  "Clauses": null,
+  "AdditiveDDL": null
+}

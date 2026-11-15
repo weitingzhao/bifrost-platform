@@ -1,0 +1,21 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-pinned",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000",
+    "repo-lib": "6e65772d6c696200000000000000000000000000"
+  },
+  "Reasons": [
+    "repo-app=6e6577000000, repo-lib=6e65772d6c69 was never delivered successfully by deliver-app-stg: none of its newest 1 records shipped them (at most 50 are read); deliver these commits to that environment first"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-pinned",
+    "window_held_by_requester"
+  ],
+  "AdditiveDDL": null
+}

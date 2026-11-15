@@ -1,0 +1,24 @@
+{
+  "Auto": true,
+  "PolicyID": "rp-apply",
+  "Pipeline": "",
+  "Who": "",
+  "SHAs": {
+    "repo-ops": "6f70730000000000000000000000000000000000"
+  },
+  "Reasons": null,
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "plan_passed",
+    "apply_namespaces",
+    "apply_kinds",
+    "apply_objects",
+    "apply_paths",
+    "previous_generation"
+  ],
+  "AdditiveDDL": null,
+  "Plan": "plan-1",
+  "Path": "repo-ops:k8s/cicd/tekton/pipeline-ci.yaml"
+}
