@@ -45,8 +45,18 @@ func run(t *testing.T, dir string, env ...string) outcome {
 	result := t.TempDir()
 	cmd := exec.Command(script(t, "unit-go-test"))
 	cmd.Dir = dir
-	// The module is offline and its own: nothing of the caller's Go settings.
-	cmd.Env = append(os.Environ(), append([]string{"UNIT_RESULT_DIR=" + result, "GOFLAGS=", "GOPROXY=off", "GOWORK=off"}, env...)...)
+	// The module is offline and its own: nothing of the caller's Go settings,
+	// and nothing of a unit task these tests may themselves be running in
+	// (2026-11-14: in the cluster the task's own UNIT_PLAN_ARG reached the
+	// script under test, which then held a throwaway module to this
+	// package's declaration and failed two tests).
+	var inherited []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "UNIT_") {
+			inherited = append(inherited, kv)
+		}
+	}
+	cmd.Env = append(inherited, append([]string{"UNIT_RESULT_DIR=" + result, "GOFLAGS=", "GOPROXY=off", "GOWORK=off"}, env...)...)
 	out, err := cmd.CombinedOutput()
 	o := outcome{}
 	if exit, ok := err.(*exec.ExitError); ok {
@@ -213,6 +223,7 @@ func TestUnitGoTestHoldsReadsToTheDeclaration(t *testing.T) {
 		"declares the file, among others, one a line":                       {inRepo, []string{"console\nconfig/a.yaml"}, false},
 		"declares everything":                                               {inRepo, []string{"."}, false},
 		"no declaration is given: the reads are not looked at":              {inRepo, nil, false},
+		"looks for a file that is not there, declares nothing":              {reader + "\nfunc TestLooks(t *testing.T) { _, _ = os.Stat(\"../../config/absent.yaml\"); _, _ = os.ReadFile(\"../../nowhere/x\") }\n", []string{""}, false},
 		"reads a repository beside this one, declares nothing":              {beside, []string{""}, true},
 		"declares the file of the repository beside it":                     {beside, []string{"other:k.yaml"}, false},
 		"declares the whole repository beside it":                           {beside, []string{"other:"}, false},

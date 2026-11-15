@@ -44,9 +44,12 @@
 # 18: a deleted Console file two Go tests read left main red for 28 minutes
 # behind a green run). Not held to the declaration: go.mod and go.sum (they
 # are in every key); looking at, not opening, a directory above the package
-# or an entry directly in one (how a test finds the repository root). Not
-# seen: what a process the tests start reads; a package that starts one says
-# what it reads by hand.
+# or an entry directly in one (how a test finds the repository root); a path
+# that is not there when the tests are done (a file looked for and not found:
+# 2026-11-14, the first plan run in the cluster turned codehealth red for three
+# places it looks for a script that is in none of them). Not seen: what a
+# process the tests start reads; a package that starts one says what it reads
+# by hand.
 #
 # The tests are split by name: the package's tests sorted, dealt round to the
 # parts, so the parts together are every test once. -count=1: whether a unit
@@ -204,6 +207,8 @@ for line in lines:
         continue
     if op == "stat" and (p in above or os.path.dirname(p) in above):
         continue
+    if not os.path.lexists(p):
+        continue  # looked for and not there: nothing was read, and nothing of the commit can change it
     bad.add(os.path.relpath(p, root) if under(p, root) else os.path.relpath(p, parent).replace(os.sep, ":", 1))
 if not bad:
     print("unit-go-test: every file the tests read outside the package is declared (%d declared)" % len(declared))

@@ -83,7 +83,7 @@ modules:
       api/internal/notice: ["."]
       api/internal/opscontext: ["."]
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
-      api/internal/outsideinput: ["api", "scripts/ci"]
+      api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
       api/internal/opsfacts: ["."]
       api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/patrol: ["."]
