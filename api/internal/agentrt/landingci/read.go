@@ -93,6 +93,11 @@ func (c *Client) pipelineRuns(ctx context.Context, pipeline string) ([]unstructu
 			if name != pipeline {
 				continue
 			}
+			// Kept without the copy of the Pipeline in its status and
+			// without managedFields: neither is read here, and the copy is
+			// most of a run (measured 2026-11-15: 77% of the listed bytes).
+			unstructured.RemoveNestedField(item.Object, "status", "pipelineSpec")
+			unstructured.RemoveNestedField(item.Object, "metadata", "managedFields")
 			items = append(items, item)
 		}
 		continuation = list.GetContinue()
