@@ -1,4 +1,4 @@
--- agentrt 0022: the action record (Owner 2026-11-15: a card is for changing a
+-- agentrt 0024: the action record (Owner 2026-11-15: a card is for changing a
 -- law; every other action is done by the line that owns it and recorded, for
 -- the Owner's review afterwards). One row is one action taken, or refused,
 -- with who did it, what, why, what undoes it and whether that was ready, on
