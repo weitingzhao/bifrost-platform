@@ -219,7 +219,7 @@ func Catalog() []ToolView {
 		tool("create_job_from_cronjob", "Create one Job from a CronJob (tier follows the actuation policy)", "routine", "POST", "/api/v1/actuation/jobs/from-cronjob", "operator", "Agent", true),
 		tool("delete_finished_jobs", "Delete finished Jobs and probe Pods (tier B)", "routine", "POST", "/api/v1/actuation/jobs/delete-finished", "operator", "Agent", true),
 		tool("run_probe_pod", "Run a short-lived probe Job from an allow-listed image", "routine", "POST", "/api/v1/actuation/probes", "operator", "Agent", true),
-		tool("request_action", "Create an approval request and return its id. Does not run the action.", "routine", "POST", "/api/v1/approvals", "operator", "Agent", true),
+		tool("request_action", "Ask for an action: a card for the Owner is created and its id returned, and the action does not run until he approves; an apply_manifest or run_agentrt_migration that the signed release policy covers is run at once instead and the action's own answer returned", "routine", "POST", "/api/v1/approvals", "operator", "Agent", true),
 		tool("get_request", "Read one approval request by id", "read", "GET", "/api/v1/approvals/{id}", "viewer", "Agent", true),
 		tool("list_requests", "List approval requests (pending or all)", "read", "GET", "/api/v1/approvals", "viewer", "Agent", true),
 		tool("wait_for_request", "Poll an approval until it is decided or the timeout elapses", "read", "GET", "/api/v1/approvals/{id}", "viewer", "Agent", true),
