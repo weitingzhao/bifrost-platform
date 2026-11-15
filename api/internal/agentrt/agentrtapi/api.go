@@ -23,7 +23,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -55,9 +54,6 @@ type API struct {
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.
 	Anchor string
-	// Actions keeps attempts' actions in redis-agents (W-31 2.3); nil keeps
-	// none: a heartbeat's actions are refused in its answer, the read 503.
-	Actions *actions.Store
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
 	// Sessions counts the retained agent sessions by binding for the plan
@@ -246,7 +242,7 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "mixed_source_not_supported", err.Error())
 	case errors.Is(err, store.ErrPinNotPermitted):
 		writeError(w, http.StatusUnprocessableEntity, "pin_not_permitted", err.Error())
-	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
+	case errors.Is(err, store.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
 		writeError(w, http.StatusForbidden, "unsigned", err.Error())

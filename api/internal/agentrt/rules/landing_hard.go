@@ -49,7 +49,6 @@ var landingHardGo = [...]string{
 	"api/internal/maintainer/",
 	"api/internal/opscontext/",
 	"api/internal/localpath/",
-	"api/internal/agentrt/actions/",
 	// Signed-rule rows the open test harness inserts; they name the rule
 	// table (TestLandingOpenPathsNameNoPermissionRecord).
 	"api/internal/agentrt/agentrttest/rules.go",
@@ -144,7 +143,6 @@ var landingStorePermission = map[string]string{
 	"recorderimport.go":    "proposes and decides recorder imports",
 	"retry.go":             "failure backoff, holds and handover",
 	"seed.go":              "seeds capability facts",
-	"signals.go":           "forwards to the event log's outbox, and pool cooldowns",
 	"snapshot.go":          "the runtime snapshot and envelope lines planners and exams are given",
 	"waits.go":             "records waits past their limit",
 	"workspaceref.go":      "the artifact kinds that skip the workspace-path scan",
@@ -169,7 +167,6 @@ var landingStoreOpen = map[string]string{
 var landingOpen = map[string]string{
 	"api/internal/agentrt/questioncards/":  "adapts the question service to landing and STG cards; the answers stay the question service's",
 	"api/internal/agentrt/controller/":     "runs the runtime's loops through the store's permission code",
-	"api/internal/agentrt/relay/":          "Redis change signals; PostgreSQL stays the record",
 	"api/internal/agentrt/agentrttest/":    "test database harness",
 	"api/internal/agentrt/planimport/":     "parses the work ledger into an import request; reads and writes nothing",
 	"api/internal/agentrt/planview/":       "validates the offline plan-view artifact; grants nothing",

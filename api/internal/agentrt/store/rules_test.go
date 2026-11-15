@@ -177,37 +177,6 @@ func firstErr(_ map[string]any, err error) error { return err }
 
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
-func jobText(version int, direction, candidates string) string {
-	return ruleText("job:implementer", version, direction, since, until, `tenant: dev
-text: Implement the task's spec on a branch.
-candidates:
-`+candidates)
-}
-
-func candidate(executor, provider, status string) string {
-	return fmt.Sprintf("  - {executor: %s, provider: %s, model_pattern: \"*\", status: %s}\n", executor, provider, status)
-}
-
-func candidates(t *testing.T, w *world) string {
-	t.Helper()
-	var out string
-	ok(t, w.rt.QueryRow(ctx, `SELECT string_agg(executor_actor_id || '/' || model_provider || '=' || status || '@' || rule_version,
-	    ' ' ORDER BY executor_actor_id, model_provider) FROM agentrt.job_candidate WHERE job_id = 'implementer'`).Scan(&out))
-	return out
-}
-
-func factsText(version int, direction, facts string) string {
-	return ruleText("capability-facts", version, direction, since, until, "facts:\n"+facts)
-}
-
-func liveFacts(t *testing.T, w *world) string {
-	t.Helper()
-	var out string
-	ok(t, w.rt.QueryRow(ctx, `SELECT string_agg(executor_actor_id || ':' || fact_kind || ':' || subject || ':' || source_kind ||
-	    COALESCE('@' || rule_version, ''), ' ' ORDER BY executor_actor_id, subject) FROM agentrt.capability_fact WHERE retired_at IS NULL`).Scan(&out))
-	return out
-}
-
 // Check and proposals write nothing that takes effect; a proposal keeps the
 // text and says whether the Owner must sign it.
 func TestRuleCheckAndProposal(t *testing.T) {

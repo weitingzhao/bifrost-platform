@@ -47,18 +47,6 @@ func (r Rule) Explain(f Facts) (n Node, ok bool, unsupported []string) {
 	return explain(r.node, f, nil), true, nil
 }
 
-// ExplainSupported says, from the rule alone and reading nothing, whether
-// Explain covers it, and if not the atoms it names that Explain does not.
-func (r Rule) ExplainSupported() (bool, []string) {
-	if r.node == nil {
-		return false, nil
-	}
-	if out := r.node.unexplained(); len(out) > 0 {
-		return false, out
-	}
-	return true, nil
-}
-
 // Blocking lists what keeps n from true: nothing when it is true; for an
 // all, the blocking of each child that is not true, in rule order; for an
 // any, one OneOf with each branch's blocking.

@@ -230,8 +230,7 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 			return "", err
 		}
 	}
-	return id, eventlog.Enqueue(ctx, tx, ev.EventID, MailboxTopic(to),
-		map[string]any{"message_id": id, "event_id": ev.EventID, "message_kind": kind})
+	return id, nil
 }
 
 // AckMessage records that the receiver handled a message. The ack lives in

@@ -49,9 +49,6 @@ func LimitPendingChangesForTest(n int) func() {
 	return func() { pendingChangeLimit = old }
 }
 
-// WorstForTest is the status a mission shows of its tasks' statuses.
-func WorstForTest(statuses ...string) string { return worst(statuses) }
-
 // ChangeBlocksForTest is what changes would hold up, read in a transaction
 // of their own.
 func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any, error) {
@@ -69,19 +66,6 @@ func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventT
 
 // BlockedCardWhyForTest is the longest why a card's recommendation has.
 var BlockedCardWhyForTest = strings.Repeat("w", RecommendWhyMax)
-
-// BlockedPageForTest sets how many blocked tasks a pass reads at a time and
-// returns the function that restores it.
-func BlockedPageForTest(n int) func() {
-	old := blockedPage.Swap(int64(n))
-	return func() { blockedPage.Store(old) }
-}
-
-// ProgressAtForTest is the projection at at, a host's silence counted from no
-// earlier than since.
-func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {
-	return progressAt(ctx, db, at, since)
-}
 
 // QuestionSeenBodyForTest is the question_seen body of q as read, checked
 // against the event's vocabulary.

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,15 +54,6 @@ func (b *buttonWorld) answer(id, option, text string) {
 	if res := b.rt.svc.Answer(context.Background(), "owner-console", "admin", "admin", id, raw); res.Code != 200 {
 		b.t.Fatalf("answer %s with %s: %d %v", id, option, res.Code, res.Body)
 	}
-}
-
-func (b *buttonWorld) state(table, id string) string {
-	b.t.Helper()
-	var s string
-	if err := b.conn.QueryRow(context.Background(), fmt.Sprintf(`SELECT state FROM agentrt.%[1]s WHERE %[1]s_id = $1`, table), id).Scan(&s); err != nil {
-		b.t.Fatal(err)
-	}
-	return s
 }
 
 func (b *buttonWorld) count(sql string) int {

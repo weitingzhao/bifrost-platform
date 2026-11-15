@@ -65,10 +65,10 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 	read := db.Connect(t, db.Reader)
 	var messages, signals, receipts int
 	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE to_actor_id=$1`, w.Actor).Scan(&messages))
-	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox WHERE topic=$1`, store.MailboxTopic(w.Actor)).Scan(&signals))
+	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox WHERE topic=$1`, "mbox:"+w.Actor).Scan(&signals))
 	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.idempotency_key
 	  WHERE route='thread-conclusion' AND expires_at='infinity' AND created_at<=now()`).Scan(&receipts))
-	if messages != 1 || signals != 1 || receipts != 1 {
+	if messages != 1 || signals != 0 || receipts != 1 {
 		t.Fatalf("messages/signals/receipts=%d/%d/%d", messages, signals, receipts)
 	}
 	// A second terminal state of the same approval is a different conclusion.

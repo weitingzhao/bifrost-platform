@@ -59,7 +59,7 @@ func TestMintedIDsFitTheVocabulary(t *testing.T) {
 	if eventlog.BadValue("message_posted", "message_id", "m_short") == "" {
 		t.Error("a short message id was taken")
 	}
-	if !strings.HasPrefix(NewControlID(), "c_") || MailboxTopic("thread:a") != "mbox:thread:a" {
-		t.Error("a control id or a mailbox topic has another shape")
+	if !strings.HasPrefix(NewControlID(), "c_") {
+		t.Error("a control id has another shape")
 	}
 }

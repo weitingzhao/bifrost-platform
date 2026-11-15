@@ -141,7 +141,7 @@ func Nullable(s string) any {
 // Append writes one event inside tx and names it as this transaction's event
 // (SET LOCAL agentrt.event_id), so the state rows written next in tx pass the
 // database's check. The stream is created on first use. Callers write their
-// state rows after Append and their outbox rows with the returned id.
+// state rows after Append, retaining the returned event id as evidence.
 func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	if ev.Stream == "" || ev.Type == "" || ev.Actor == "" {
 		return Appended{}, errors.New("store: an event needs a stream, a type and an actor")

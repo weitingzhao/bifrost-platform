@@ -13,7 +13,7 @@ func TestLandingHardCoreEntryAndDecisionChain(t *testing.T) {
 	}{
 		{"api/internal/agentrt/store/zz_new.go", "api/internal/agentrt/store/", false},
 		{"api/internal/agentrt/store/sub/x.go", "api/internal/agentrt/store/", false},
-		{"api/internal/agentrt/store/signals.go", "api/internal/agentrt/store/signals.go", false},
+		{"api/internal/agentrt/store/rules.go", "api/internal/agentrt/store/rules.go", false},
 		{"api/internal/agentrt/store/progressneeds.go", "", false},
 		{"api/internal/agentrt/controller/x.go", "", false},
 		{"api/cmd/agentrt-gate/main.go", "", false},

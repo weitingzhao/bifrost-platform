@@ -222,27 +222,27 @@ func TestPlanBindingsAndShapes(t *testing.T) {
 
 }
 
-// T19: a failed commit takes its outbox row with it.
-func TestFailedCommitLeavesNoOutboxRow(t *testing.T) {
+// T19: a failed commit takes its event with it.
+func TestFailedCommitLeavesNoEvent(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	var before int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox`).Scan(&before))
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&before))
 	err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		// The row the event names does not exist: a mission never created (a
 		// task's id is no longer checked, its table is gone since 0020).
-		ev, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+		_, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		if err != nil {
 			return err
 		}
-		return store.Enqueue(ctx, tx, ev.EventID, store.TopicWake, map[string]any{"kind": "task_ready"})
+		return nil
 	})
 	wantErr(t, err, "foreign key")
 	var after int
-	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox`).Scan(&after))
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&after))
 	if after != before {
-		t.Fatalf("outbox went from %d to %d rows after a failed commit", before, after)
+		t.Fatalf("events went from %d to %d rows after a failed commit", before, after)
 	}
 }
 

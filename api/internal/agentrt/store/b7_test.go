@@ -167,54 +167,27 @@ func (h hookedTx) QueryRow(c context.Context, sql string, args ...any) pgx.Row {
 	return h.Tx.QueryRow(c, sql, args...)
 }
 
-// T31, the other way round: every event that signals has exactly one outbox
-// row, on its topic, naming what the event names (a readied task its task, a
-// message its mailbox and message, a control the stop topic), and no outbox
-// row hangs on an event that signals nothing.
-func TestEveryOutboxRowHasItsEventAndBack(t *testing.T) {
+// Relay A, 2026-11-15: messages and controls remain durable without producing
+// unread Redis signals; existing outbox history is left untouched.
+func TestMessagesAndControlsNeedNoRedisOutbox(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
+	before := w.count(t, `SELECT count(*) FROM agentrt.outbox`)
+	var message string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
+		var err error
+		message, err = store.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
 		return err
 	}))
-	w.control(t, store.NewControlID(), "mission", "M-1", "stop")
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.SetCooldown(ctx, tx, "controller", "codex:owner:weekly", "codex", "weekly", time.Now().Add(time.Hour), "test")
-	}))
-	notes(t, w, "quiet", 2)
-	// Every kind of signal is in the fixture (review 334 A3).
-	for kind, q := range map[string]string{
-		"a message":  `SELECT count(*) FROM agentrt.event WHERE event_type = 'message_posted'`,
-		"a control":  `SELECT count(*) FROM agentrt.event WHERE event_type = 'control_set'`,
-		"a cooldown": `SELECT count(*) FROM agentrt.event WHERE event_type = 'pool_cooldown_set'`,
-	} {
-		if w.count(t, q) == 0 {
-			t.Fatalf("the fixture has no %s", kind)
-		}
+	control := store.NewControlID()
+	w.control(t, control, "mission", "M-1", "stop")
+	if n := w.count(t, `SELECT count(*) FROM agentrt.message m JOIN agentrt.event e ON e.event_id=m.event_id WHERE m.message_id=$1 AND e.event_type='message_posted'`, message); n != 1 {
+		t.Fatalf("message/event pairs: %d", n)
 	}
-	// Each signalling event: one row, its topic, its subject.
-	if n := w.count(t, `SELECT count(*) FROM agentrt.event e WHERE
-	    ((e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'ready') OR e.event_type IN ('message_posted', 'control_set', 'pool_cooldown_set'))
-	  AND (SELECT count(*) FROM agentrt.outbox o WHERE o.event_id = e.event_id AND
-	    CASE e.event_type
-	      WHEN 'task_state_changed' THEN o.topic = 'wake' AND o.payload_json->>'task_id' = e.task_id
-	      WHEN 'message_posted' THEN o.topic = 'mbox:' || (e.body_json->>'to') AND o.payload_json->>'message_id' = e.body_json->>'message_id'
-	      WHEN 'control_set' THEN o.topic = 'stop' AND o.payload_json->>'control_id' = e.body_json->>'control_id'
-	      WHEN 'pool_cooldown_set' THEN o.topic = 'cooldown' AND o.payload_json->>'vendor_pool_id' = e.body_json->>'vendor_pool_id'
-	        AND o.payload_json->>'until' = e.body_json->>'until'
-	    END) <> 1`); n != 0 {
-		t.Fatalf("%d signalling events without exactly one matching outbox row", n)
+	if n := w.count(t, `SELECT count(*) FROM agentrt.control WHERE control_id=$1 AND cleared_at IS NULL`, control); n != 1 {
+		t.Fatalf("active controls: %d", n)
 	}
-	// Each outbox row: an event that signals, on the topic it signals.
-	if n := w.count(t, `SELECT count(*) FROM agentrt.outbox o JOIN agentrt.event e ON e.event_id = o.event_id WHERE NOT (
-	    (e.event_type = 'task_state_changed' AND e.body_json->>'to' = 'ready' AND o.topic = 'wake')
-	    OR (e.event_type = 'message_posted' AND o.topic = 'mbox:' || (e.body_json->>'to'))
-	    OR (e.event_type = 'control_set' AND o.topic = 'stop')
-	    OR (e.event_type = 'pool_cooldown_set' AND o.topic = 'cooldown'))`); n != 0 {
-		t.Fatalf("%d outbox rows on an event that signals nothing, or on another topic", n)
-	}
-	if n := w.count(t, `SELECT count(*) FROM agentrt.outbox o LEFT JOIN agentrt.event e ON e.event_id = o.event_id WHERE e.event_id IS NULL`); n != 0 {
-		t.Fatalf("%d outbox rows without their event", n)
+	if after := w.count(t, `SELECT count(*) FROM agentrt.outbox`); after != before {
+		t.Fatalf("outbox changed: %d -> %d", before, after)
 	}
 }

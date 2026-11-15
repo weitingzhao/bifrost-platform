@@ -1,12 +1,8 @@
 package store
 
 import (
-	"context"
 	"regexp"
-	"sort"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // Vendor pools and the budget ledger (design v5 §5.1.2 ⑥; W-31 2.4 slice ①,
@@ -49,26 +45,6 @@ type Usage struct {
 	Pool   string   `json:"pool,omitempty"` // the pool charged
 	Tokens *int64   `json:"tokens,omitempty"`
 	USD    *float64 `json:"usd,omitempty"`
-}
-
-// poolLock is the lock of each pool, keyed by its name: every write of a
-// pool's row or stream takes the locks of all the pools it touches first, in
-// name order, so a computed and the Owner's reading never wait on each other
-// in turn (review 274 B5).
-const poolLock = 742110
-
-func lockPools(ctx context.Context, tx pgx.Tx, ids ...string) error {
-	sorted := append([]string(nil), ids...)
-	sort.Strings(sorted)
-	for i, id := range sorted {
-		if id == "" || i > 0 && id == sorted[i-1] {
-			continue
-		}
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, poolLock, id); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // PoolView is a pool as the quota screen shows it.

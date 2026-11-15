@@ -158,57 +158,6 @@ func TestAgentRuntimeRoutesWaitForTheConnection(t *testing.T) {
 	_ = tx.Rollback(context.Background())
 }
 
-// redis-agents is optional and, when named, must come with its password and a
-// runtime prefix: the relay never writes outside agrt: or agrt-<env>: (W-31 2.3).
-func TestAgentRuntimeRedisFromEnv(t *testing.T) {
-	for _, c := range []struct {
-		addr, prefix, password string
-		wantPrefix, wantErr    string
-	}{
-		{addr: "", wantPrefix: ""},
-		{addr: "redis-agents:6379", password: "fixture-redis-pw", wantPrefix: "agrt:"},
-		{addr: "redis-agents:6379", prefix: "agrt-dev:", password: "fixture-redis-pw", wantPrefix: "agrt-dev:"},
-		{addr: "redis-agents:6379", prefix: "live:", password: "fixture-redis-pw", wantErr: "not a runtime prefix"},
-		{addr: "redis-agents:6379", prefix: "agrt", password: "fixture-redis-pw", wantErr: "not a runtime prefix"},
-		{addr: "redis-agents:6379", wantErr: "AGENTRT_REDIS_PASSWORD is empty"},
-	} {
-		t.Setenv("AGENTRT_REDIS_ADDR", c.addr)
-		t.Setenv("AGENTRT_REDIS_PREFIX", c.prefix)
-		t.Setenv("AGENTRT_REDIS_PASSWORD", c.password)
-		rdb, prefix, err := agentrtRedisFromEnv()
-		switch {
-		case c.wantErr != "":
-			if err == nil || !strings.Contains(err.Error(), c.wantErr) || rdb != nil {
-				t.Errorf("%+v: err %v, client %v", c, err, rdb)
-			}
-		case c.addr == "":
-			if err != nil || rdb != nil {
-				t.Errorf("unset: %v %v", rdb, err)
-			}
-		default:
-			if err != nil || rdb == nil || prefix != c.wantPrefix || rdb.Options().Addr != c.addr || rdb.Options().Password != c.password {
-				t.Errorf("%+v: prefix %q, err %v", c, prefix, err)
-			}
-			if rdb != nil {
-				_ = rdb.Close()
-			}
-		}
-	}
-}
-
-// A request's deadline bounds the client's I/O, or a heartbeat's 2-second
-// budget for actions does not hold against a silent Redis (review 264 A2).
-func TestAgentRuntimeRedisHonoursDeadlines(t *testing.T) {
-	t.Setenv("AGENTRT_REDIS_ADDR", "redis-agents:6379")
-	t.Setenv("AGENTRT_REDIS_PREFIX", "")
-	t.Setenv("AGENTRT_REDIS_PASSWORD", "fixture-redis-pw")
-	rdb, _, err := agentrtRedisFromEnv()
-	if err != nil || !rdb.Options().ContextTimeoutEnabled {
-		t.Fatalf("client %v, err %v: deadlines are not honoured", rdb, err)
-	}
-	_ = rdb.Close()
-}
-
 // TD-392: two processes (platform-api and platform-workers) share the
 // runtime role's connection limit (10 on PROD, 5 on STG and DEV); their pools
 // together stay under it, with room for a restarted process.

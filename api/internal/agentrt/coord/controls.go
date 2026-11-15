@@ -20,7 +20,7 @@ import (
 var controlKinds = map[string][]string{
 	"global":  {"stop", "pause"},
 	"mission": {"stop", "pause"},
-	"task":    {"stop", "pause"}, // kept for the events already written; no new one is set (RequestControl)
+	"task":    {"stop", "pause"},          // kept for the events already written; no new one is set (RequestControl)
 	"host":    {"stop", "pause", "drain"}, // kept for the events already written; no new one is set (RequestControl)
 }
 
@@ -123,7 +123,7 @@ func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, 
 	if token != "" {
 		body["token"] = token
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "control", Type: "control_set", Actor: actor, Body: body})
+	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "control", Type: "control_set", Actor: actor, Body: body})
 	if err != nil {
 		return err
 	}
@@ -131,8 +131,7 @@ func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, 
 	  VALUES ($1,$2,$3,$4,$5,$6)`, controlID, scope, eventlog.Nullable(scopeRef), kind, reason, actor); err != nil {
 		return err
 	}
-	return eventlog.Enqueue(ctx, tx, ev.EventID, eventlog.TopicStop, map[string]any{
-		"control_id": controlID, "scope": scope, "scope_ref": eventlog.Nullable(scopeRef), "control_kind": kind})
+	return nil
 }
 
 // ClearControl lifts a control. Who may clear is the kernel's rule (2.2);

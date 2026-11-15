@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -114,9 +113,6 @@ var (
 	anchor   string
 )
 
-// actionStore, when set, is the API's action store (bus_test.go).
-var actionStore *actions.Store
-
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin, two seat tokens (one registered) and the
@@ -193,7 +189,7 @@ intake_tokens:
 			defer recordMu.Unlock()
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
-		}, Anchor: anchor, Actions: actionStore}
+		}, Anchor: anchor}
 	for _, f := range with {
 		f(api)
 	}

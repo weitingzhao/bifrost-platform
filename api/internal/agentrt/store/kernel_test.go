@@ -106,14 +106,6 @@ func (w *world) waitForN(t *testing.T, fragment string, want int, deadline time.
 	}
 }
 
-func (w *world) state(t *testing.T, table, id string) string {
-	t.Helper()
-	ctx := ctxOf(t)
-	var s string
-	ok(t, w.rt.QueryRow(ctx, fmt.Sprintf(`SELECT state FROM agentrt.%[1]s WHERE %[1]s_id = $1`, table), id).Scan(&s))
-	return s
-}
-
 func (w *world) artifact(t *testing.T, kind, body string) string {
 	t.Helper()
 	ctx := ctxOf(t)

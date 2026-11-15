@@ -22,8 +22,6 @@ const MaxMessageBody = coord.MaxMessageBody
 // Message is a message as its receiver reads it.
 type Message = coord.Message
 
-func MailboxTopic(actor string) string { return coord.MailboxTopic(actor) }
-
 func SendMessage(ctx context.Context, db DB, w Writer, to, kind string, body []byte) (string, error) {
 	return coord.SendMessage(ctx, db, w, to, kind, body)
 }
@@ -58,10 +56,6 @@ func LiftControl(ctx context.Context, db DB, actor, id string) (map[string]any, 
 
 func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRef, kind, reason string) error {
 	return coord.SetControl(ctx, tx, actor, controlID, scope, scopeRef, kind, reason)
-}
-
-func ClearControl(ctx context.Context, tx pgx.Tx, actor, controlID string) error {
-	return coord.ClearControl(ctx, tx, actor, controlID)
 }
 
 func EnsureSeats(ctx context.Context, db DB, configured []string) ([]string, error) {

@@ -188,9 +188,6 @@ func (r Rule) Names(atom string) bool {
 	return ok && r.node != nil && r.node.has(k)
 }
 
-// HasManual reports whether the rule names a manual atom anywhere.
-func (r Rule) HasManual() bool { return r.Names(AtomManual) }
-
 func (n *node) has(k nodeKind) bool {
 	if n.kind == k {
 		return true

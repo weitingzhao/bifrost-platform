@@ -22,9 +22,6 @@ import (
 func NewMessageID() string { return "m_" + eventlog.NewULID(time.Now()) }
 func NewControlID() string { return "c_" + eventlog.NewULID(time.Now()) }
 
-// MailboxTopic is the outbox topic of an actor's mailbox.
-func MailboxTopic(actor string) string { return "mbox:" + actor }
-
 // artifactStore stores a message's body as an artifact and returns its id;
 // claims records a text that claims an approval. Both are the store's and
 // reach this package by registration (Register).
