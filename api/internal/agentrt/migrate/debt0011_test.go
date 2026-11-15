@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 )
@@ -19,60 +17,6 @@ var (
 	debtState  = []string{"debt", "debt_counter", "debt_edge", "debt_ref", "debt_work", "debt_part", "debt_part_order", "debt_decision", "ratchet", "accepted_gap"}
 	debtAppend = []string{"debt_text", "debt_evidence", "debt_evidence_check", "debt_part_landing", "debt_acceptance_run"}
 )
-
-// 0011 grants the runtime role exactly SELECT, INSERT and UPDATE on the
-// debt state tables, SELECT and INSERT on the append-only ones and SELECT
-// alone on the transitions the database records, nothing more, and
-// agent_reader no write at all; in the test cluster the runtime
-// role is a member of neither the migration owner nor another environment's
-// runtime (the clusters' own role matrix is infra's to check).
-func TestDebtTablesGrantExactly(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	db := agentrttest.Migrated(t)
-	admin := db.Connect(t, db.Admin)
-	privileges := func(role, tbl string) []string {
-		t.Helper()
-		rows, err := admin.Query(ctx, `SELECT p FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
-		  WHERE has_table_privilege($1, 'agentrt.' || $2, p) ORDER BY p`, role, tbl)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-	for _, tbl := range append(slices.Clone(debtState), debtAppend...) {
-		want := []string{"INSERT", "SELECT", "UPDATE"}
-		if slices.Contains(debtAppend, tbl) {
-			want = []string{"INSERT", "SELECT"}
-		}
-		if got := privileges("platform_agentrt_dev", tbl); !slices.Equal(got, want) {
-			t.Errorf("platform_agentrt_dev on %s: %v, want %v", tbl, got, want)
-		}
-		for _, p := range privileges("agent_reader", tbl) {
-			if p != "SELECT" {
-				t.Errorf("agent_reader may %s %s", p, tbl)
-			}
-		}
-	}
-	// The transitions are the database's own record: the runtime reads them.
-	if got := privileges("platform_agentrt_dev", "debt_transition"); !slices.Equal(got, []string{"SELECT"}) {
-		t.Errorf("platform_agentrt_dev on debt_transition: %v, want only SELECT", got)
-	}
-	for _, other := range []string{"agentrt_owner_dev", "platform_agentrt_stg", "platform_agentrt_prod"} {
-		var member bool
-		if err := admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1) AND pg_has_role('platform_agentrt_dev', $1, 'MEMBER')`,
-			other).Scan(&member); err != nil {
-			t.Fatal(err)
-		}
-		if member {
-			t.Errorf("platform_agentrt_dev may act as %s", other)
-		}
-	}
-}
 
 // A failure late in 0011 rolls the whole file back: the event vocabulary,
 // the two replaced functions, every new table and the migration record stay

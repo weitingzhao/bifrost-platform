@@ -71,18 +71,6 @@ var eventTypes = map[string]bool{
 	"issue_state_changed": true, "issue_merged": true, "intake_client_set": true, "intake_acked": true,
 	"host_slots_set":   true,
 	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
-	// The debt ledger's types (migration 0011). The store no longer writes
-	// them (the in-database debt ledger was removed 2026-11-14; its tables
-	// are empty); they stay here until a migration takes them out of the
-	// database's constraint.
-	"debt_acceptance_ran": true, "debt_acceptance_reviewed": true, "debt_acceptance_set": true, "debt_auto_closed": true,
-	"debt_decision_set": true, "debt_edge_added": true, "debt_edge_ended": true, "debt_edited": true,
-	"debt_evidence_added": true, "debt_evidence_checked": true, "debt_filed": true, "debt_floor_raised": true,
-	"debt_flow_set": true, "debt_merged": true, "debt_part_landed": true, "debt_part_set": true,
-	"debt_ref_added": true, "debt_ref_ended": true, "debt_reopened": true, "debt_signed_off": true,
-	"debt_signoff_rejected": true, "debt_state_changed": true, "debt_text_added": true, "debt_work_ended": true,
-	"debt_work_linked": true, "gap_accepted": true, "gap_reopened": true, "ratchet_changed": true,
-	"ratchet_registered": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
