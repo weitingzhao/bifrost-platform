@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -74,7 +75,7 @@ func directRecord(ctx context.Context, r *http.Request, act actions.Action, para
 // recordDirect appends the record in the background; the action's answer
 // never waits for it and never changes because of it.
 func (s *Server) recordDirect(r *http.Request, act actions.Action, params map[string]any, law string, status int) {
-	db := s.evidenceDB()
+	db := s.recordDB()
 	if db == nil {
 		slog.Warn("action record not written: the agent runtime database is not connected", "action", act.ID)
 		return
@@ -87,6 +88,14 @@ func (s *Server) recordDirect(r *http.Request, act actions.Action, params map[st
 			slog.Error("action record not written", "action", rec.Action, "seat", rec.Seat, "err", err)
 		}
 	})
+}
+
+// recordDB is the agent runtime's database, nil when it is not connected.
+func (s *Server) recordDB() store.DB {
+	if s.agentRuntime == nil || s.agentRuntime.api == nil {
+		return nil
+	}
+	return s.agentRuntime.api.DB
 }
 
 // statusCapture remembers the status code a handler wrote.
@@ -121,7 +130,7 @@ func (c *statusCapture) Flush() {
 // newest first. since and until are RFC 3339 times. more says the filter
 // matched more than the limit, so a page is never mistaken for the whole.
 func (s *Server) handleRecords(w http.ResponseWriter, r *http.Request) {
-	db := s.evidenceDB()
+	db := s.recordDB()
 	if db == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the action record is not available on this platform"})
 		return

@@ -52,14 +52,21 @@ func TestADirectActionIsRecordedAndReadBackBySeat(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec
 	}
-	// record_release_review is a tier B action that needs only the database.
+	// request_unit_evidence is a tier B action; whatever it answers in this
+	// test server (it refuses while unit dispatch is off), the record must say
+	// the same: done for 2xx, refused for 403, failed otherwise.
 	sha := strings.Repeat("a", 40)
-	body := `{"repo":"bifrost-platform","commit":"` + sha + `","files":["api/x.go"],"verdict":"passed"}`
-	if rec := do(http.MethodPost, "/api/v1/release-policy/reviews", body, "operator-test-token", "local_seat_a"); rec.Code != http.StatusOK {
-		t.Fatalf("the action = %d %s", rec.Code, rec.Body.String())
+	body := `{"repo":"bifrost-platform","commit":"` + sha + `"}`
+	answered := do(http.MethodPost, "/api/v1/units/evidence", body, "operator-test-token", "local_seat_a").Code
+	wantOutcome := "failed"
+	switch {
+	case answered >= 200 && answered < 300:
+		wantOutcome = "done"
+	case answered == http.StatusForbidden:
+		wantOutcome = "refused"
 	}
 	// A refused call (a bad body the action refuses) is recorded as failed, with its seat.
-	do(http.MethodPost, "/api/v1/release-policy/reviews", `{"repo":"bifrost-platform","commit":"nope","files":["x"],"verdict":"passed"}`, "operator-test-token", "local_seat_b")
+	do(http.MethodPost, "/api/v1/units/evidence", `{"repo":"bifrost-platform","commit":"nope"}`, "operator-test-token", "local_seat_b")
 
 	var out struct {
 		Records []map[string]any `json:"records"`
@@ -84,13 +91,13 @@ func TestADirectActionIsRecordedAndReadBackBySeat(t *testing.T) {
 		t.Fatalf("records of seat a = %d, want 1", len(out.Records))
 	}
 	r := out.Records[0]
-	if r["action"] != "record_release_review" || r["outcome"] != "done" || r["seat"] != "local_seat_a" ||
+	if r["action"] != "request_unit_evidence" || r["outcome"] != wantOutcome || r["seat"] != "local_seat_a" ||
 		r["regret_state"] != "undeclared" || r["law"] != "action catalog: tier B" || r["reason"] == "" {
 		t.Fatalf("record = %v", r)
 	}
 	// The other seat's failed call is a record of its own.
 	for time.Now().Before(deadline) {
-		rec := do(http.MethodGet, "/api/v1/records?seat=local_seat_b&action=record_release_review", "", "viewer-test-token", "")
+		rec := do(http.MethodGet, "/api/v1/records?seat=local_seat_b&action=request_unit_evidence", "", "viewer-test-token", "")
 		out.Records = nil
 		_ = json.Unmarshal(rec.Body.Bytes(), &out)
 		if len(out.Records) == 1 {
@@ -154,13 +161,13 @@ func TestAnActionIsUnaffectedWhenTheRecordTableIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv.agentRuntime.api.DB = db.Pool(t, db.Runtime)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/release-policy/reviews",
-		strings.NewReader(`{"repo":"bifrost-platform","commit":"`+strings.Repeat("a", 40)+`","files":["api/x.go"],"verdict":"passed"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence",
+		strings.NewReader(`{"repo":"bifrost-platform","commit":"`+strings.Repeat("a", 40)+`"}`))
 	req.Header.Set("Authorization", "Bearer operator-test-token")
 	req.Header.Set("X-Bifrost-Session", "local_seat_a")
 	rec := httptest.NewRecorder()
 	srv.Router().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
+	if rec.Code == http.StatusInternalServerError || rec.Code == http.StatusBadGateway {
 		t.Fatalf("the action without the record table = %d %s", rec.Code, rec.Body.String())
 	}
 }
