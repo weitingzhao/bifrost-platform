@@ -74,6 +74,33 @@ func RunName(planID string, seq, attempt int) string {
 	return name
 }
 
+// declaredArg is the one more word a task gets from the plan (the template's
+// plan-arg, UNIT_PLAN_ARG to the command): what the unit declares it reads,
+// "declared=" and the references of its needs joined by "+". A command that
+// can hold its reads to a declaration does (scripts/ci/unit-go-test: read and
+// not declared is red); another ignores the word. A declaration that is not a
+// plain token of at most 256 characters is not cut to fit, which would be a
+// shorter declaration than the unit's: the word is "declared-unknown" and the
+// command says its reads were not held to anything.
+func declaredArg(needs any) string {
+	list, _ := needs.([]any)
+	refs := make([]string, 0, len(list))
+	for _, e := range list {
+		doc, _ := e.(map[string]any)
+		ref, ok := doc["ref"].(string)
+		if !ok || ref == "" || strings.ContainsAny(ref, "+ \t\n") {
+			return "declared-unknown"
+		}
+		refs = append(refs, ref)
+	}
+	sort.Strings(refs)
+	arg := "declared=" + strings.Join(refs, "+")
+	if !plainToken.MatchString(arg) {
+		return "declared-unknown"
+	}
+	return arg
+}
+
 // TaskRunFor builds the TaskRun of a job.
 func TaskRunFor(j Job) (map[string]any, error) {
 	if j.Plan == nil {
@@ -119,6 +146,7 @@ func TaskRunFor(j Job) (map[string]any, error) {
 	if roles := text("db_roles"); roles != "" && strings.HasSuffix(template, "-db") {
 		params = append(params, [2]string{"db-roles", roles})
 	}
+	params = append(params, [2]string{"plan-arg", declaredArg(in["needs"])})
 	list := make([]any, 0, len(params))
 	for _, p := range params {
 		if !plainToken.MatchString(p[1]) {

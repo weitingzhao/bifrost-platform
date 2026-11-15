@@ -19,6 +19,10 @@
 #                                       to nothing), the tests' reads are held to it;
 #                                       unset, they are not looked at.
 #   UNIT_REPO_ROOT                      the repository root (default: git's)
+#   UNIT_PLAN_ARG                       the word the platform gives a task: with
+#                                       UNIT_DECLARED unset, "declared=a+b" is the
+#                                       declaration a and b ("declared=" is nothing),
+#                                       "declared-unknown" says it could not be given
 #
 # Results, one file each:
 #   tests         "<expected> <sha256 of the package's whole test list> <ran> <skipped>"
@@ -52,6 +56,12 @@ result="${UNIT_RESULT_DIR:-/unit/result}"
 index="${UNIT_SHARD_INDEX:-0}"
 total="${UNIT_SHARD_TOTAL:-1}"
 mkdir -p "$result" || exit 2
+if [ -z "${UNIT_DECLARED+set}" ]; then
+  case "${UNIT_PLAN_ARG:-}" in
+    declared=*) UNIT_DECLARED="$(printf '%s' "${UNIT_PLAN_ARG#declared=}" | tr '+' ' ')"; export UNIT_DECLARED ;;
+    declared-unknown) echo "unit-go-test: the unit's declaration could not be given to this task; the tests' reads are not held to it" ;;
+  esac
+fi
 : > "$result/failed-tests"
 : > "$result/fail-class"
 : > "$result/tests"

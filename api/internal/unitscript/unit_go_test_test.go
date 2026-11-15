@@ -239,3 +239,25 @@ func TestUnitGoTestUndeclaredReadBesideARedTest(t *testing.T) {
 		t.Fatalf("exit %d, failed-tests %q, fail-class %q", o.exit, o.failedTests, o.failClass)
 	}
 }
+
+// The declaration reaches a task of the cluster as the word the platform
+// gives it (unitexec declaredArg), and UNIT_DECLARED, set by hand, wins.
+func TestUnitGoTestTakesTheDeclarationFromThePlanWord(t *testing.T) {
+	inRepo := reader + "\nfunc TestReadsConfig(t *testing.T) { mustRead(t, \"../../config/a.yaml\") }\n"
+	for name, tc := range map[string]struct {
+		env []string
+		red bool
+	}{
+		"declared= is nothing declared":            {[]string{"UNIT_PLAN_ARG=declared="}, true},
+		"declared=a+b":                             {[]string{"UNIT_PLAN_ARG=declared=console+config"}, false},
+		"declared-unknown: the reads are not held": {[]string{"UNIT_PLAN_ARG=declared-unknown"}, false},
+		"another word is not a declaration":        {[]string{"UNIT_PLAN_ARG=something"}, false},
+		"UNIT_DECLARED set by hand wins":           {[]string{"UNIT_PLAN_ARG=declared=config", "UNIT_DECLARED="}, true},
+	} {
+		root, pkg := repoWithReader(t, inRepo)
+		o := run(t, pkg, append([]string{"UNIT_REPO_ROOT=" + root}, tc.env...)...)
+		if tc.red != (o.exit != 0) || tc.red != strings.Contains(o.failedTests, "pkg.UndeclaredRead") {
+			t.Errorf("%s: exit %d, failed-tests %q; want red=%v", name, o.exit, o.failedTests, tc.red)
+		}
+	}
+}

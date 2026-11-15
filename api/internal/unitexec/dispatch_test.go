@@ -2,6 +2,7 @@ package unitexec
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -50,6 +51,7 @@ func TestTaskRunForIsWhatReceiveReads(t *testing.T) {
 		"workdir":      "bifrost-platform/api/internal/agentrt/store", "command": "/unit/src/bifrost-platform/scripts/ci/unit-go-test",
 		"shard-index": "3", "shard-total": "8", "unit": "api/internal/agentrt/store", "task": "test",
 		"db-roles": "agentrt_owner_dev+agent_reader", "image": job.Task.Inputs["image"].(string),
+		"plan-arg": "declared=", // the plan of this job declares no needs
 	}
 	got := map[string]string{}
 	for _, p := range spec["params"].([]any) {
@@ -141,5 +143,56 @@ func TestTaskRunForNamesAndRefusals(t *testing.T) {
 		if _, err := TaskRunFor(j); err == nil {
 			t.Errorf("%s was dispatched", name)
 		}
+	}
+}
+
+// The unit's declaration goes to its task whole or not at all. Origin:
+// 2026-11-14. unit-go-test holds a package's reads to its declaration (read
+// and not declared is red, CI feedback 18); the cluster admits only a plain
+// token of 256 characters from the platform, and a declaration cut to fit
+// would be a shorter declaration than the unit's, which reads as "the tests
+// read something undeclared" when they did not.
+func TestDeclaredArg(t *testing.T) {
+	ref := func(names ...string) []any {
+		out := []any{}
+		for _, n := range names {
+			out = append(out, map[string]any{"ref": n, "tree": "x"})
+		}
+		return out
+	}
+	long := []string{}
+	for i := 0; i < 20; i++ {
+		long = append(long, fmt.Sprintf("api/internal/some/package%02d/testdata", i))
+	}
+	for name, tc := range map[string]struct {
+		needs any
+		want  string
+	}{
+		"no needs":                        {nil, "declared="},
+		"paths and a pinned repository":   {ref("config", "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run-db.yaml", "api/internal/x/testdata"), "declared=api/internal/x/testdata+bifrost-trade-infra:k8s/cicd/tekton/task-unit-run-db.yaml+config"},
+		"everything":                      {ref("."), "declared=."},
+		"longer than a parameter may be":  {ref(long...), "declared-unknown"},
+		"a reference with the separator":  {ref("a+b"), "declared-unknown"},
+		"a reference that is not a token": {ref("a b"), "declared-unknown"},
+		"an entry without a reference":    {[]any{map[string]any{"tree": "x"}}, "declared-unknown"},
+	} {
+		if got := declaredArg(tc.needs); got != tc.want {
+			t.Errorf("%s: %q, want %q", name, got, tc.want)
+		}
+	}
+	job := testJob()
+	job.Task.Inputs["needs"] = ref("config")
+	obj, err := TaskRunFor(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range obj["spec"].(map[string]any)["params"].([]any) {
+		if m := p.(map[string]any); m["name"] == "plan-arg" {
+			found = m["value"] == "declared=config"
+		}
+	}
+	if !found {
+		t.Errorf("the TaskRun does not carry the declaration: %v", obj["spec"].(map[string]any)["params"])
 	}
 }
