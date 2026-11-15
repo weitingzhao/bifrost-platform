@@ -595,6 +595,9 @@ func (s *Server) Router() http.Handler {
 			// Run the unit tasks of a commit the ledger has no verdict on
 			// (units_dispatch.go); refused while UNIT_DISPATCH is off.
 			r.Post("/units/evidence", s.guard("request_unit_evidence", s.handleUnitEvidenceRequest))
+			// Run this environment's pending agentrt migrations of a commit
+			// (agentrt_migration.go): tier C, on the signed policy or a card.
+			r.Post("/agentrt/migrations/run", s.guard(migrationActionID, s.handleAgentrtMigration))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/network/clients/fixed-ip", s.guard("unifi_client_fixed_ip", s.network.HandleClientFixedIP))

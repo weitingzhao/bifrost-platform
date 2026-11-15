@@ -30,6 +30,7 @@ deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack
 deny	GET /api/v1/agentrt/messages/thread
+deny	POST /api/v1/agentrt/migrations/run
 deny	GET /api/v1/agentrt/plan
 deny	GET /api/v1/agentrt/plan-view
 deny	GET /api/v1/agentrt/plan-pace

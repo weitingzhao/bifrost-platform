@@ -95,8 +95,9 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 			}
 			return s.work.Svc.LiveManagers(ctx, namespace, kind, name)
 		}},
-		StatePath: filepath.Join(dataDir, "release-policy-freeze"),
-		Anchor:    releasepolicy.OwnerKeyFingerprint,
+		Migrations: ownMigrations{s},
+		StatePath:  filepath.Join(dataDir, "release-policy-freeze"),
+		Anchor:     releasepolicy.OwnerKeyFingerprint,
 	})
 	s.approvals.SetAutoApprover(s.releasePolicyApprover())
 	if runsWorkers && releasepolicy.RemindersWanted() {
@@ -136,14 +137,14 @@ func pendingReleases(svc *approvals.Service) int {
 // autoApprove decides a tier C direct call on the signed policy and audits an
 // approval. false means the call keeps needing a manual approval; reasons say why.
 func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, params map[string]any) (bool, []string) {
-	if s.releasePolicy == nil || (id != "start_pipeline_run" && id != "apply_manifest") {
+	if s.releasePolicy == nil || (id != "start_pipeline_run" && id != "apply_manifest" && id != migrationActionID) {
 		return false, nil
 	}
 	d := s.releasePolicy.Decide(r.Context(), id, tier, params)
-	if id == "apply_manifest" && d.PolicyID == "" {
-		// No signed policy judges applies (the engine names a policy id only
-		// when one has an apply section): the answer is the one from before
-		// the section existed, without reasons.
+	if id != "start_pipeline_run" && d.PolicyID == "" {
+		// No signed policy judges applies or migrations (the engine names a
+		// policy id only when one has an apply section, or ddl_reversible):
+		// the answer is the one from before they existed, without reasons.
 		return false, nil
 	}
 	if t := traceFrom(r.Context()); t != nil {
@@ -157,6 +158,9 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 		if id == "apply_manifest" {
 			target = d.Plan
 		}
+		if id == migrationActionID {
+			target = text(params["commit"])
+		}
 		s.audit.Record(r, "release_policy.auto_approve", id+" "+target, "approved",
 			"auto-approved "+decisionDetail(r, d))
 	}
@@ -167,6 +171,9 @@ func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
 	out := fmt.Sprintf("policy_id=%s requester=%s sha=%s clauses=%s", d.PolicyID, policyRequester(r), d.SHAText(), d.ClauseText())
 	if len(d.AdditiveDDL) > 0 {
 		out += " additive_ddl=" + strings.Join(d.AdditiveDDL, ",")
+	}
+	if len(d.ReversibleDDL) > 0 {
+		out += " ddl_reversible=" + strings.Join(d.ReversibleDDL, ",")
 	}
 	if len(d.SelfCheckedAnchors) > 0 {
 		out += " trust_anchor_self_checked=" + strings.Join(d.SelfCheckedAnchors, ",")
@@ -238,6 +245,7 @@ type policyCheck struct {
 	Clauses       []string          `json:"clauses"`
 	SHAs          map[string]string `json:"shas"`
 	AdditiveDDL   []string          `json:"additive_ddl,omitempty"`
+	ReversibleDDL []string          `json:"ddl_reversible,omitempty"`
 	Outcome       string            `json:"outcome"`
 }
 
@@ -302,7 +310,7 @@ func (s *Server) handleReleasePolicyCheck(w http.ResponseWriter, r *http.Request
 	}
 	out := policyCheck{
 		Action: id, Pipeline: name, Tier: tier, NeedsApproval: tier.NeedsApproval(), Covered: d.Auto,
-		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL,
+		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL, ReversibleDDL: d.ReversibleDDL,
 	}
 	if out.Reasons == nil {
 		out.Reasons = []string{}

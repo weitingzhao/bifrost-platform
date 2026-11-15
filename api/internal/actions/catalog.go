@@ -170,6 +170,14 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "run_agentrt_migration", Tier: TierC,
+		Description: "Run, on this platform's own environment, the agentrt migrations of a commit that its database has not applied. The platform creates the environment's migration Job (bifrost-trade-infra k8s/agentrt-migrate/<env>/job.yaml at main) with the api image the source environment's successful delivery of that commit built, waits for it, and returns {job, applied, already_current}; nothing is created when the database is already current for the commit. Tier C. The signed release policy covers it (ddl_reversible) when the commit was delivered to the source environment and every pending migration file is new and cannot destroy rows; otherwise the Owner approves the card and the platform runs it.",
+		Method:      "POST", Pattern: "/api/v1/agentrt/migrations/run",
+		Params: []Param{
+			{Name: "commit", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "delete_pipeline_run", Tier: TierB,
 		Description: "Delete a terminal Tekton PipelineRun. Tier B; call the endpoint directly.",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/runs/{id}",

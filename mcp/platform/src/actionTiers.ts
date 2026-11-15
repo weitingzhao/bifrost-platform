@@ -191,6 +191,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body) => asRecord(body),
   },
   {
+    action: 'run_agentrt_migration',
+    method: 'POST',
+    pattern: /^\/api\/v1\/agentrt\/migrations\/run$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'sync_mirrors',
     method: 'POST',
     pattern: /^\/api\/v1\/delivery\/mirrors\/sync$/,

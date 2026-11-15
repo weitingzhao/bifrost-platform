@@ -73,6 +73,17 @@ func NewService(configDir string, clients Clients) *Service {
 // tekton.dev/pipeline label): its lane, environment and whether it deploys.
 func (s *Service) RuleOf(pipeline string) (Rule, bool) { return s.rules.Match("", pipeline) }
 
+// PipelineOf is the pipeline whose runs deploy lane to env, by the rule that
+// names it; ok is false when no deploying rule with a pipeline does.
+func (s *Service) PipelineOf(lane, env string) (string, bool) {
+	for _, r := range s.rules.Rules {
+		if r.Deploys && r.Lane == lane && r.Env == env && r.Match.Pipeline != "" {
+			return r.Match.Pipeline, true
+		}
+	}
+	return "", false
+}
+
 // Enabled: there are rules to record by.
 func (s *Service) Enabled() bool { return len(s.rules.Rules) > 0 }
 

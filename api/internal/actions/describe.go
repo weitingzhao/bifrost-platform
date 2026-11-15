@@ -41,6 +41,7 @@ var notifySafeKeys = map[string][]string{
 	"sync_mirrors":               {"repos"},
 	"delete_pipeline_run":        {"id", "ns"},
 	"request_unit_evidence":      {"repo", "commit"},
+	"run_agentrt_migration":      {"commit"},
 	"gitops_sync_app":            {"name"},
 	"gitops_rollback_app":        {"name", "revision"},
 	"rollout_restart_deployment": {"namespace", "kind", "name"},
@@ -155,6 +156,9 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = "nodes", "Weekend rolling reboot of the k3s nodes"
 	case "apply_manifest":
 		d.Env, d.Summary = describeApply(ctx, p("plan_id"))
+	case "run_agentrt_migration":
+		d.Env = "platform"
+		d.Summary = "Run the platform's pending database migrations of " + orDefault(shortRef(p("commit")), "a commit")
 	case "create_job_from_cronjob":
 		d.Env = p("namespace")
 		d.Summary = "Create a Job from CronJob " + p("namespace") + "/" + p("cronjob")

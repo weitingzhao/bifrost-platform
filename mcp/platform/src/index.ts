@@ -590,6 +590,15 @@ reg(
 )
 
 reg(
+  'run_agentrt_migration',
+  'Have the platform run, on its own environment, the agentrt migrations of one commit that its database has not applied (operator, tier C). The platform creates the environment\'s migration Job (bifrost-trade-infra k8s/agentrt-migrate/<env>/job.yaml at main) with the api image the source environment\'s successful delivery of that commit built, waits for it (up to five minutes) and returns {env, commit, job, namespace, image, pending, applied: [migration numbers], already_current}. already_current: true means the database had every migration of the commit and nothing was created. The signed release policy covers the call when the commit was delivered to the source environment (STG before PROD) and every pending migration file is new and cannot destroy rows; otherwise this returns an approval request for the Owner, and the platform runs the migration once he approves it. Run it before the release that needs the migration: the PROD pipeline refuses a build whose migrations are not applied.',
+  {
+    commit: z.string().regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA'),
+  },
+  async ({ commit }) => jsonResult(await platformPost('/api/v1/agentrt/migrations/run', { commit })),
+)
+
+reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},
