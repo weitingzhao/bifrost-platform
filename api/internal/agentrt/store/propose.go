@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -21,7 +22,7 @@ import (
 
 // ErrInvalid: the request breaks a rule of its own (a field missing or out
 // of range, a writer that may not write); nothing was written.
-var ErrInvalid = errors.New("store: invalid request")
+var ErrInvalid = eventlog.ErrInvalid
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))

@@ -18,8 +18,7 @@ func SetHook(f func(point, arg string)) func() {
 // FreezeEventClock makes every event written from now on carry the time at,
 // and returns the function that undoes it.
 func FreezeEventClock(at time.Time) func() {
-	eventClock = func() time.Time { return at }
-	return func() { eventClock = time.Now }
+	return SetEventClock(func() time.Time { return at })
 }
 
 // LiveForTest is a live attempt as the projection reads one: its state,

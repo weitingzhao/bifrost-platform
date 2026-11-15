@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // The kernel: the state machine of missions, tasks and attempts that the
@@ -57,10 +58,8 @@ var (
 	ErrState = errors.New("store: not allowed in the current state")
 )
 
-// DB is what the kernel needs: a pool or a connection.
-type DB interface {
-	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
-}
+// DB is what the kernel needs: a pool or a connection (eventlog.DB).
+type DB = eventlog.DB
 
 // testHook, set only by tests, runs at named points so a test can hold a
 // call there and observe or race it.

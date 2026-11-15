@@ -13,23 +13,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// InTx runs fn in one transaction and commits it; any error rolls back.
+// InTx runs fn in one transaction and commits it; any error rolls back
+// (eventlog.InTx).
 func InTx(ctx context.Context, conn interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }, fn func(pgx.Tx) error) error {
-	// The database refuses state writes under any other isolation level:
-	// its locks rely on each statement reading what was committed before it.
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return eventlog.InTx(ctx, conn, fn)
 }
 
 // MissionStream and PlanStream name the event streams of a mission and of a

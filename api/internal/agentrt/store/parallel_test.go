@@ -249,7 +249,7 @@ func TestInsideClock(t *testing.T) {
 // or the variables themselves from a test inside the package), the check a
 // test replaces to sign an S5 rule, and the process's environment and
 // working directory.
-var serialOnly = []string{"SetHook", "FreezeEventClock", "LimitPendingChangesForTest", "DecidePageForTest",
+var serialOnly = []string{"SetHook", "FreezeEventClock", "SetEventClock", "LimitPendingChangesForTest", "DecidePageForTest",
 	"testHook", "eventClock", "pendingChangeLimit", "decidePageSize", "S5SigningReady", "Setenv", "Unsetenv", "Chdir"}
 
 // parallelProblems reads the test files of the package (store_test, and

@@ -1,0 +1,316 @@
+// Package eventlog is the base every domain of the agent runtime writes
+// through: the append-only event log, its hash chain and clock, and the
+// transaction a state change runs in. It knows no domain: what an event of a
+// type may carry is the vocabulary a domain package registers (Register);
+// with none registered nothing is appended.
+//
+// Every state change goes through Append, the one path that writes an event:
+// the database refuses a state write without an event of the same
+// transaction (migrations 0002).
+package eventlog
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+	"sync/atomic"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+)
+
+// ErrInvalid: the request breaks a rule of its own (a field missing or out
+// of range, a writer that may not write); nothing was written.
+var ErrInvalid = errors.New("store: invalid request")
+
+// DB is what a write needs: a pool or a connection.
+type DB interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}
+
+// InTx runs fn in one transaction and commits it; any error rolls back.
+func InTx(ctx context.Context, conn interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}, fn func(pgx.Tx) error) error {
+	// The database refuses state writes under any other isolation level:
+	// its locks rely on each statement reading what was committed before it.
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// vocabulary is the check every event passes before it is written: the
+// closed set of types and what each may carry. The domain package that owns
+// the vocabulary registers it at start.
+var vocabulary atomic.Pointer[func(Event) error]
+
+// Register installs the vocabulary check. It is called once, from the init
+// of the package that holds the vocabulary.
+func Register(check func(Event) error) { vocabulary.Store(&check) }
+
+// Event is what a caller asks to append. Empty key strings are NULL.
+type Event struct {
+	Stream    string
+	Type      string
+	Actor     string
+	MissionID string
+	PlanNode  string
+	TaskID    string
+	AttemptID string
+	Cause     int64 // 0 = none
+	Body      map[string]any
+}
+
+// Appended is the stored form, as the hash covers it.
+type Appended struct {
+	EventID int64
+	Seq     int64
+	SHA256  string
+	At      time.Time
+}
+
+// TimeLayout is the layout of an event's time and of the instants in its body.
+const TimeLayout = "2006-01-02T15:04:05.000000Z"
+
+// envelope is the object hashed for an event: the recorder's canonical JSON
+// of the envelope fields and the body.
+func envelope(ev Event, seq int64, prev string, at time.Time) map[string]any {
+	opt := func(s string) any {
+		if s == "" {
+			return nil
+		}
+		return s
+	}
+	var cause any
+	if ev.Cause != 0 {
+		cause = ev.Cause
+	}
+	return map[string]any{
+		"v":              1,
+		"stream":         ev.Stream,
+		"seq":            seq,
+		"type":           ev.Type,
+		"by":             ev.Actor,
+		"at":             at.UTC().Format(TimeLayout),
+		"prev_sha256":    prev,
+		"mission_id":     opt(ev.MissionID),
+		"plan_node_id":   opt(ev.PlanNode),
+		"task_id":        opt(ev.TaskID),
+		"attempt_id":     opt(ev.AttemptID),
+		"cause_event_id": cause,
+		"body":           ev.Body,
+	}
+}
+
+// eventClock is the process's event clock: the wall clock, except while a
+// test that has no clock of its own has frozen it (FreezeEventClock,
+// SetEventClock). An event's time is read through eventNow, which asks the
+// context first.
+var eventClock = time.Now
+
+type eventClockKey struct{}
+
+// WithEventClock returns a context whose events and decisions are timed by
+// clock, not by the process's event clock: Append and DecisionAt under it
+// read clock. A test gives itself one and moves time while its neighbours
+// run, each on its own; nothing in the platform calls it, so the platform's
+// contexts carry none and read the wall clock.
+func WithEventClock(ctx context.Context, clock func() time.Time) context.Context {
+	return context.WithValue(ctx, eventClockKey{}, clock)
+}
+
+// Now is the event clock read for ctx: the clock ctx carries
+// (WithEventClock), the process's otherwise.
+func Now(ctx context.Context) time.Time {
+	if clock, ok := ctx.Value(eventClockKey{}).(func() time.Time); ok {
+		return clock()
+	}
+	return eventClock()
+}
+
+// DecisionAt is the time a locked decision is taken at (CUT §9 v2): the
+// event clock, read once the gate holds its locks and again after any slow
+// read it makes under them. It is the clock the gate's records are written
+// with (Append), so what is decided and what is recorded agree; a test moves
+// time by freezing this clock, not by passing a later now. The pass's own now
+// only schedules: which candidates run, whether a retry_at is due. It is read
+// for ctx (Now), as Append reads it: the context the decision's records
+// are written under.
+//
+// The wall clock is trusted to move forward: a step back (NTP) may let a
+// window that ended look open again for that pass. Not guarded; the ledger
+// records it (review 656 B-R2).
+func DecisionAt(ctx context.Context) time.Time {
+	return Now(ctx).UTC().Truncate(time.Microsecond)
+}
+
+// Nullable is s, or NULL for the empty string.
+func Nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// Append writes one event inside tx and names it as this transaction's event
+// (SET LOCAL agentrt.event_id), so the state rows written next in tx pass the
+// database's check. The stream is created on first use. Callers write their
+// state rows after Append and their outbox rows with the returned id.
+func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
+	if ev.Stream == "" || ev.Type == "" || ev.Actor == "" {
+		return Appended{}, errors.New("store: an event needs a stream, a type and an actor")
+	}
+	if ev.Body == nil {
+		ev.Body = map[string]any{}
+	}
+	check := vocabulary.Load()
+	if check == nil {
+		return Appended{}, errors.New("eventlog: no vocabulary is registered; nothing is appended unchecked")
+	}
+	if err := (*check)(ev); err != nil {
+		return Appended{}, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+		ev.Stream); err != nil {
+		return Appended{}, err
+	}
+	var lastSeq int64
+	var lastSHA string
+	if err := tx.QueryRow(ctx, `SELECT last_seq, last_sha256 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`,
+		ev.Stream).Scan(&lastSeq, &lastSHA); err != nil {
+		return Appended{}, err
+	}
+	at := Now(ctx).UTC().Truncate(time.Microsecond)
+	seq := lastSeq + 1
+	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
+	if err != nil {
+		return Appended{}, fmt.Errorf("store: %s body: %w", ev.Type, err)
+	}
+	body, err := canon.Encode(ev.Body)
+	if err != nil {
+		return Appended{}, err
+	}
+	var cause any
+	if ev.Cause != 0 {
+		cause = ev.Cause
+	}
+	var id int64
+	if err := tx.QueryRow(ctx, `INSERT INTO agentrt.event
+	  (event_stream_id, seq, event_type, actor_id, mission_id, plan_node_id, task_id, attempt_id,
+	   cause_event_id, body_json, prev_sha256, sha256, at)
+	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13) RETURNING event_id`,
+		ev.Stream, seq, ev.Type, ev.Actor, Nullable(ev.MissionID), Nullable(ev.PlanNode), Nullable(ev.TaskID),
+		Nullable(ev.AttemptID), cause, string(body), lastSHA, sum, at).Scan(&id); err != nil {
+		return Appended{}, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('agentrt.event_id', $1, true)`, strconv.FormatInt(id, 10)); err != nil {
+		return Appended{}, err
+	}
+	return Appended{EventID: id, Seq: seq, SHA256: sum, At: at}, nil
+}
+
+// LockStream takes the lock Append takes on a stream's head, making the
+// stream when it is new: a caller that must check something at the moment
+// its event is written takes it first and checks after (review 313 A4).
+func LockStream(ctx context.Context, tx pgx.Tx, stream string) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`, stream); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, stream)
+	return err
+}
+
+// ChainBreak names the first event of a stream whose hash or link is wrong.
+type ChainBreak struct {
+	Stream string
+	Seq    int64
+	Reason string
+}
+
+func (b *ChainBreak) Error() string {
+	return fmt.Sprintf("store: stream %s breaks at seq %d: %s", b.Stream, b.Seq, b.Reason)
+}
+
+// VerifyStream recomputes every hash of a stream from the stored rows and
+// checks each link, seq continuity and the head (T20, T23b).
+// It reads the events and the head in one repeatable-read snapshot, so a
+// write committed meanwhile is not reported as a break (review 144 B3).
+func VerifyStream(ctx context.Context, db interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}, stream string) (int64, error) {
+	q, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = q.Rollback(context.WithoutCancel(ctx)) }()
+	rows, err := q.Query(ctx, `SELECT seq, event_type, actor_id, COALESCE(mission_id,''), COALESCE(plan_node_id,''),
+	  COALESCE(task_id,''), COALESCE(attempt_id,''), COALESCE(cause_event_id,0), body_json::text, prev_sha256, sha256, at
+	  FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq`, stream)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var want int64 = 1
+	prev := ""
+	for rows.Next() {
+		var ev Event
+		var seq int64
+		var bodyText, prevSHA, sha string
+		var at time.Time
+		ev.Stream = stream
+		if err := rows.Scan(&seq, &ev.Type, &ev.Actor, &ev.MissionID, &ev.PlanNode, &ev.TaskID, &ev.AttemptID,
+			&ev.Cause, &bodyText, &prevSHA, &sha, &at); err != nil {
+			return 0, err
+		}
+		if seq != want {
+			return 0, &ChainBreak{stream, seq, fmt.Sprintf("expected seq %d", want)}
+		}
+		if prevSHA != prev {
+			return 0, &ChainBreak{stream, seq, "prev_sha256 does not match the previous event"}
+		}
+		body, err := canon.Parse([]byte(bodyText))
+		if err != nil {
+			return 0, &ChainBreak{stream, seq, "body is not canonical JSON: " + err.Error()}
+		}
+		ev.Body, _ = body.(map[string]any)
+		sum, err := canon.Sum(envelope(ev, seq, prevSHA, at))
+		if err != nil {
+			return 0, &ChainBreak{stream, seq, err.Error()}
+		}
+		if sum != sha {
+			return 0, &ChainBreak{stream, seq, "sha256 does not match the stored event"}
+		}
+		prev = sha
+		want++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	var lastSeq int64
+	var lastSHA string
+	if err := q.QueryRow(ctx, `SELECT last_seq, last_sha256 FROM agentrt.event_stream WHERE event_stream_id = $1`,
+		stream).Scan(&lastSeq, &lastSHA); err != nil {
+		return 0, err
+	}
+	if lastSeq != want-1 || lastSHA != prev {
+		return 0, &ChainBreak{stream, lastSeq, "stream head does not match its last event"}
+	}
+	return want - 1, nil
+}
+
+// SetEventClock makes the event clock read clock until the returned function
+// restores the wall clock. Tests of other packages move time with it, as
+// this package's own tests do (FreezeEventClock); nothing else calls it.
+func SetEventClock(clock func() time.Time) func() {
+	eventClock = clock
+	return func() { eventClock = time.Now }
+}
