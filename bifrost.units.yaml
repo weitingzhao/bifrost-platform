@@ -44,17 +44,28 @@ modules:
     # it run less often; a package missing from this list that does read
     # outside is the dangerous mistake.
     inputs:
-      # Narrowed 2026-11-14 (biz-align, first batch): a package whose entry is
-      # its own directory was run with scripts/ci/unit-go-test holding its
-      # reads to an empty declaration, and read nothing outside itself. It
-      # stays listed because the search that built this list matches it.
-      api/cmd/agentrt-plan-import: ["."]
-      api/cmd/infracheck: ["."]
+      # Narrowed 2026-11-14 (biz-align, two batches): each entry that is not
+      # "." was run with scripts/ci/unit-go-test holding the package's reads
+      # to exactly what the entry lists beyond its own directory, and passed.
+      # An entry of only its own directory read nothing outside itself; it
+      # stays listed because the search that built this list matches it. None
+      # of them runs a command that reads the repository.
+      api/cmd/agentrt-plan-import: ["api/cmd/agentrt-plan-import", "api/internal/agentrt/planimport/testdata"]
+      api/cmd/infracheck: ["api/cmd/infracheck", "api/internal/agentrt/infracheck/testdata"]
       api/cmd/platform-api: ["."]
       api/internal/actions: ["."]
-      api/internal/actuation: ["."]
-      api/internal/actuationpolicy: ["."]
-      api/internal/agentgovernance: ["."]
+      api/internal/actuation: ["api/internal/actuation"]
+      api/internal/actuationpolicy:
+        - "api/internal/actuationpolicy"
+        - "api/internal/actions"
+        - "api/internal/delivery"
+        - "api/internal/workactions"
+        - "config/actuation-policy.yaml"
+      api/internal/agentgovernance:
+        - "api/internal/agentgovernance"
+        - "api/internal/config"
+        - "config/agent-tasks.yaml"
+        - "config/trust-overrides.yaml"
       api/internal/agentprogress: ["."]
       api/internal/agentrt/agentrtapi: ["."]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
@@ -63,38 +74,53 @@ modules:
       api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
       api/internal/agentrt/landinggit: ["."]
       api/internal/agentrt/metrics: ["api/internal/agentrt/metrics"]
-      api/internal/agentrt/planimport: ["."]
-      api/internal/agentrt/planview: ["."]
-      api/internal/agentrt/recorderimport: ["."]
+      api/internal/agentrt/planimport:
+        - "api/internal/agentrt/planimport"
+        - "console/src/api/__fixtures__/agentrt-plan-imported.testdb.json"
+        - "console/src/api/__fixtures__/agentrt-plan-moved.testdb.json"
+        - "console/src/api/__fixtures__/agentrt-plan-view.go.json"
+      api/internal/agentrt/planview: ["api/internal/agentrt/planview"]
+      api/internal/agentrt/recorderimport: ["api/internal/agentrt/recorderimport"]
       api/internal/agentrt/rules: ["."]
       api/internal/agentrt/store: ["."]
-      api/internal/agentthreads: ["."]
+      api/internal/agentthreads:
+        - "api/internal/agentthreads"
+        - "console/src/api/__fixtures__/agent-threads-sessions.generated.json"
+        - "console/src/api/__fixtures__/agent-threads.generated.json"
       api/internal/approvals: ["."]
       api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["."]
-      api/internal/config: ["."]
+      api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["."]
       api/internal/devsession: ["."]
-      api/internal/hostops: ["."]
-      api/internal/localpath: ["."]
-      api/internal/maintainer: ["."]
+      api/internal/hostops: ["api/internal/hostops"]
+      api/internal/localpath: ["api/internal/localpath"]
+      api/internal/maintainer:
+        - "api/internal/maintainer"
+        - "api/internal/agentthreads"
+        - "api/internal/checklist"
+        - "api/internal/cluster"
+        - "api/internal/ibgateway"
+        - "api/internal/patrol"
+        - "api/internal/releasepolicy"
+        - "api/internal/releases"
       api/internal/modtidy: ["."]
       api/internal/network: ["."]
       api/internal/notice: ["."]
-      api/internal/opscontext: ["."]
+      api/internal/opscontext: ["api/internal/opscontext", "config/ops-context.yaml"]
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
       api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
-      api/internal/opsfacts: ["."]
+      api/internal/opsfacts: ["api/internal/opsfacts"]
       api/internal/ownerexec: ["api/internal/ownerexec"]
-      api/internal/patrol: ["."]
-      api/internal/probe: ["."]
+      api/internal/patrol: ["api/internal/patrol", "config/patrol-skills"]
+      api/internal/probe: ["api/internal/probe", "config/trade-api-domains.yaml"]
       api/internal/questions: ["."]
       api/internal/releasefreeze: ["."]
       api/internal/releasepolicy: ["."]
       api/internal/safego: ["."]
-      api/internal/selfhealth: ["."]
+      api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
       api/internal/server: ["."]
-      api/internal/statefile: ["."]
+      api/internal/statefile: ["api/internal/statefile"]
       api/internal/storedurability: ["."]
       api/internal/testscope: ["."]
       api/internal/unitscript: ["."]
