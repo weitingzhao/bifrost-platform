@@ -74,9 +74,6 @@ func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option
 			return applied{res: fail(http.StatusForbidden, "a rule answers only its own runtime's questions", nil)}
 		case q.Status != StatusOpen:
 			return applied{res: fail(http.StatusConflict, "not open", map[string]any{"status": q.Status})}
-		case q.businessIssueCard():
-			// The Owner's alone, with or without why (issuecard.go).
-			return applied{res: fail(http.StatusConflict, issueCardNoRule, nil)}
 		case option == q.Recommended && option != "":
 		case strings.TrimSpace(why) == "":
 			return applied{res: fail(http.StatusConflict, "a rule answers with the option the question recommends, or says why it takes another", nil)}

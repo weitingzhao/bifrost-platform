@@ -236,35 +236,6 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 	return false, nil
 }
 
-// boundedAsk is Sources.Ask with the per-read timeout: a card that is not
-// made in time is an error, and the plan waits for the next pass.
-func (c *Controller) boundedAsk() store.Ask {
-	if c.Sources.Ask == nil {
-		return nil
-	}
-	return func(ctx context.Context, card store.Card) (string, error) {
-		type r struct {
-			id  string
-			err error
-		}
-		x := bounded(c, ctx, func(ctx context.Context) r { id, err := c.Sources.Ask(ctx, card); return r{id, err} })
-		if x.id == "" && x.err == nil {
-			return "", errors.New("the question store did not answer in time")
-		}
-		return x.id, x.err
-	}
-}
-
-// boundedWithdraw is Sources.Withdraw with the per-read timeout.
-func (c *Controller) boundedWithdraw() store.Withdraw {
-	if c.Sources.Withdraw == nil {
-		return nil
-	}
-	return func(ctx context.Context, id, reason string) error {
-		return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Withdraw(ctx, id, reason) })
-	}
-}
-
 // CardRuleEvery is how often the cards are answered by rule: a loop of its
 // own, so a slow question store never holds up dispatch. Every second
 // (TD-402, the coordinating thread 2026-10-21; TD-393's 「循环每 5 秒」 ran it
@@ -299,17 +270,6 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	return store.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
-}
-
-// IssueCards is one pass over the Owner's cards on business issues: an
-// answer he gave on the Console becomes the issue's evidence, the level of a
-// priority he took on is asked, and a card the issue moved past is withdrawn
-// (store.DecideIssueCards, W-31 BI-1 slice 2).
-func (c *Controller) IssueCards(ctx context.Context) (int, error) {
-	if c.Sources.Question == nil {
-		return 0, nil
-	}
-	return store.DecideIssueCards(ctx, c.DB, c.question, c.boundedAsk(), c.boundedWithdraw(), c.ack())
 }
 
 // question reads a question with the per-read timeout.
@@ -424,17 +384,15 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	// The old dispatch lane is retired (the Owner 2026-11-13): nothing is
 	// leased, routed, dispatched, accepted, closed or timed any more, hosts
 	// are not watched and no assessment is asked for. What stays in this
-	// pass is what the plan tree, the rules and the business issues need:
-	// the facts their rules read, plan decisions, issue cards, the
-	// acknowledging of used answers, and the rules themselves.
+	// pass is what the plan tree and the rules need: the facts their rules
+	// read, plan decisions, the acknowledging of used answers, and the rules themselves.
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		c.readTuning(ctx)
 		_, ferr := c.Facts(ctx)
 		_, perr := c.PlanDecisions(ctx)
-		_, ierr := c.IssueCards(ctx)
 		_, qerr := c.ackUsedAnswersDue(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, perr, ierr, qerr, rerr)
+		return errors.Join(ferr, perr, qerr, rerr)
 	})
 	c.startFullCI(ctx, &wg)
 	return wg.Wait

@@ -116,17 +116,6 @@ func parseAnswer(raw []byte, q Question) (option, text, channel string, err erro
 	if opt != "" && opt != "none" && !hasOption(q, opt) {
 		return "", "", "", fieldErr("option", "option is invalid")
 	}
-	if q.businessIssueCard() {
-		// One of its options and nothing else (issuecard.go), whatever
-		// allow_text says; before the checks below, which ask for text.
-		if text != "" {
-			return "", "", "", fieldErr("text", issueCardNoText)
-		}
-		if opt == "" || opt == "none" {
-			return "", "", "", fieldErr("option", issueCardNoNone)
-		}
-		return opt, "", channel, nil
-	}
 	if opt == "" && text == "" {
 		return "", "", "", fieldErr("option", "option or text is required")
 	}
@@ -171,11 +160,6 @@ func (s *Service) Withdraw(ctx context.Context, session, principal, role, ref st
 		}
 		q.Status = StatusWithdrawn
 		kept := reason
-		if q.businessIssueCard() {
-			// Withdrawn, but with the fixed reason, never the caller's
-			// (issuecard.go).
-			kept = issueCardWithdrawn
-		}
 		q.Withdrawal = &Withdrawal{Session: session, Principal: c.principal, At: now, Reason: kept}
 		doc.Questions[i] = q
 		return applied{

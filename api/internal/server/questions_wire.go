@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/go-chi/chi/v5"
 
@@ -163,9 +164,6 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 				req["urgency"] = card.Urgency
 			}
 		}
-		// A business issue's card (W-31 BI-1 slice 2, store/issuecard.go):
-		// its number as the work id, so the question store takes options
-		// only on it, and its page as the link.
 		if card.WorkID != "" {
 			req["work_id"] = card.WorkID
 			if card.Link != "" {
@@ -249,9 +247,6 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		}
 		cards := make([]store.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
-			if questions.BusinessIssueCard(q) {
-				continue // the Owner's alone: no rule answers it (DESIGN-crew-intake §5.3)
-			}
 			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
 			for _, o := range q.Options {
 				c.Options = append(c.Options, o.Key)
@@ -262,47 +257,6 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 			cards = append(cards, c)
 		}
 		return cards, nil
-	}
-}
-
-// agentRuntimeOpenCards lists the runtime's open cards as their
-// assessments read them (TD-391): title, body, options with their details,
-// the option each recommends; by RuleCards, which writes nothing. nil without
-// a question store.
-func (rt *questionRuntime) agentRuntimeOpenCards() func(context.Context) ([]store.AssessItem, error) {
-	if rt == nil || rt.svc == nil || rt.reads == nil {
-		return nil
-	}
-	return func(ctx context.Context) ([]store.AssessItem, error) {
-		type r struct {
-			qs  []questions.Question
-			err error
-		}
-		x, ok, err := within(ctx, rt.reads, func() (r, bool, error) {
-			qs, err := rt.svc.RuleCards(agentRuntimeRequester)
-			return r{qs, err}, true, nil
-		})
-		if err != nil || !ok {
-			return nil, fmt.Errorf("the question store did not answer: %v", err)
-		}
-		if x.err != nil {
-			return nil, x.err
-		}
-		var items []store.AssessItem
-		for _, q := range x.qs {
-			// A business issue's card is not assessed (DESIGN-crew-intake
-			// §5.3): nothing of it becomes an assessment's task_spec.
-			if q.Status != questions.StatusOpen || questions.BusinessIssueCard(q) {
-				continue
-			}
-			it := store.AssessItem{Kind: store.AssessCard, ID: q.ID, Title: q.Title, Body: q.Body, Recommended: q.Recommended,
-				TaskID: q.TaskID, CreatedAt: q.CreatedAt}
-			for _, o := range q.Options {
-				it.Options = append(it.Options, store.AssessOption{Key: o.Key, Label: o.Label, Detail: o.Detail})
-			}
-			items = append(items, it)
-		}
-		return items, nil
 	}
 }
 
@@ -434,7 +388,7 @@ func (rt *questionRuntime) checkAssessmentCard(ctx context.Context, id string) e
 	if q.Status != questions.StatusOpen || !time.Now().Before(q.ExpiresAt) {
 		return fmt.Errorf("%w: question is %s or expired; assessment requires an open question", store.ErrState, q.Status)
 	}
-	if q.Requester != agentRuntimeRequester || questions.BusinessIssueCard(q) {
+	if q.Requester != agentRuntimeRequester {
 		return fmt.Errorf("%w: assessments are available for runtime decision cards only", store.ErrState)
 	}
 	return nil

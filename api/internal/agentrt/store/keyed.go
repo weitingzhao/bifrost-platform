@@ -15,8 +15,3 @@ func idempotentAs(ctx context.Context, db DB, w Writer, route, key string, reque
 	pre func(context.Context) error, op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
 	return actor.IdempotentAs(ctx, db, w, route, key, request, pre, op)
 }
-
-func idempotentHeld(ctx context.Context, db DB, w Writer, route, key string, request any, held func(pgx.Tx) error,
-	op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
-	return actor.IdempotentHeld(ctx, db, w, route, key, request, held, op)
-}

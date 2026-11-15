@@ -304,24 +304,6 @@ func IdempotentAs(ctx context.Context, db eventlog.DB, w Writer, route, key stri
 	return keyed(ctx, db, w.Actor+"|"+route+"|"+key, route, sum, func(tx pgx.Tx) error { return HoldsSessionTx(ctx, tx, w) }, pre, op)
 }
 
-// IdempotentHeld is IdempotentAs with one more check, made first in every
-// transaction that reads the key, before a stored answer is given again: an
-// intake client's scope (its products, the issues it sees; DESIGN-crew-intake
-// §2.1: a replay passes the identity checks a write does).
-func IdempotentHeld(ctx context.Context, db eventlog.DB, w Writer, route, key string, request any, held func(pgx.Tx) error,
-	op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
-	sum, err := canon.Sum(request)
-	if err != nil {
-		return nil, err
-	}
-	return keyed(ctx, db, w.Actor+"|"+route+"|"+key, route, sum, func(tx pgx.Tx) error {
-		if err := HoldsSessionTx(ctx, tx, w); err != nil {
-			return err
-		}
-		return held(tx)
-	}, nil, op)
-}
-
 func keyed(ctx context.Context, db eventlog.DB, id, route, sum string, holds func(pgx.Tx) error,
 	pre func(context.Context) error, op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
 	lookup := func(tx pgx.Tx) (map[string]any, bool, error) {

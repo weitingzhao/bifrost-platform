@@ -36,7 +36,7 @@ describe('P1 reference reachability', () => {
 
   it('keeps the four-entry shell, entity links and the separate Market Data blueprint', () => {
     expect(ENTRY_ROUTE_IDS).toEqual(['command', 'crew', 'work', 'services', 'system'])
-    for (const hash of ['work?goal=M-143&task=t_test', 'approvals?id=ap-1', 'questions?id=q_0123456789abcdef', 'issue?id=BI-1', 'records?tab=work']) {
+    for (const hash of ['work?goal=M-143&task=t_test', 'approvals?id=ap-1', 'questions?id=q_0123456789abcdef', 'records?tab=work']) {
       expect(resolveConsoleHash(hash).canonical).toBe(`#${hash}`)
     }
     expect(resolveConsoleHash('data').canonical).toBe('#data')

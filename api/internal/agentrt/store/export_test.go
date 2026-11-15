@@ -97,19 +97,6 @@ func BlockedPageForTest(n int) func() {
 	return func() { blockedPage.Store(old) }
 }
 
-// ProposeIssueMissionForTest proposes a mission as take_issue would (its
-// work id an issue's, outside the dev envelope) but passing ask, which
-// take_issue never does: askMission refuses a BI- mission's card (review
-// 522 A1).
-func ProposeIssueMissionForTest(ctx context.Context, tx pgx.Tx, w Writer, workID string, ask Ask) (map[string]any, error) {
-	p, err := MissionProposal{WorkID: workID, Title: "t", Goal: "g", Success: []string{"s"}, MaxAttempts: 100, MaxWallHours: 48,
-		issueTake: true}.check()
-	if err != nil {
-		return nil, err
-	}
-	return proposeMissionTx(ctx, tx, w, p, "k-ask", ask)
-}
-
 // ProgressAtForTest is the projection at at, a host's silence counted from no
 // earlier than since.
 func ProgressAtForTest(ctx context.Context, db DB, at, since time.Time) (map[string]any, error) {

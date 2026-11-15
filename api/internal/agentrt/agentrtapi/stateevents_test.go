@@ -53,7 +53,7 @@ import (
 func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 	t.Parallel()
 	routes := walkRoutes(t)
-	if len(routes) < 40 {
+	if len(routes) < 25 {
 		t.Fatalf("walked %d routes; the walk found less than Mount serves", len(routes))
 	}
 	seed, n := int64(20261020), 3

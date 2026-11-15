@@ -59,7 +59,7 @@ func TestCollectorDerivation(t *testing.T) {
 			r.Header.Set(agentrtapi.SessionHeader, c.header)
 		}
 		r = r.WithContext(actuation.WithPrincipal(r.Context(), c.p))
-		w, a, _, werr, aerr, _ := agentrtapi.WritersForTest(r)
+		w, a, werr, aerr := agentrtapi.WritersForTest(r)
 		if (c.writer == "") != (werr != nil) || w.Actor != c.writer && werr == nil || (c.actor == "") != (aerr != nil) || a.Actor != c.actor && aerr == nil {
 			t.Errorf("%+v with %q: writer %q %v, actor %q %v; want %q, %q", c.p, c.header, w.Actor, werr, a.Actor, aerr, c.writer, c.actor)
 		}

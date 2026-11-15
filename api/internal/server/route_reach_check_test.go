@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 )
 
 // The full-route test of DESIGN-crew-intake §5.2 (B3), on every route the
@@ -30,10 +28,6 @@ import (
 //
 // With ROUTE_REACH_OUT set, the old roles' reach is written there instead of
 // checked (run on a base commit to remake the file).
-
-// issueReaderRoutes are the crew's issue routes the readers list opens
-// (agentrtapi/issues.go).
-var issueReaderRoutes = regexp.MustCompile(`^(GET|POST) /api/v1/agentrt/issues(/merge|/\{id\}(/(additions|responses|brief|classification|design|reviews|close-checks|owner-cards|take|replies|close|park|resume|reopen))?)?$`)
 
 var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"}
 
@@ -141,23 +135,12 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	for _, r := range reach[""] {
 		anon[r] = true
 	}
-	intake := agentrtapi.IntakeRoutes()
-	if len(intake) != 7 {
-		t.Fatalf("the intake routes are %d, not the design's seven: %v", len(intake), intake)
-	}
+	// The intake routes were removed with business issues (the Owner
+	// 2026-11-15); an intake token, where one is still configured, gets
+	// through to nothing an anonymous caller does not.
 	for _, r := range reach["intake:dots-p2"] {
-		if !anon[r] && !slices.Contains(intake, r) {
+		if !anon[r] {
 			t.Errorf("an intake token gets through to %s, which an anonymous caller does not", r)
-		}
-	}
-	for _, r := range intake {
-		if !slices.Contains(reach["intake:dots-p2"], r) {
-			t.Errorf("an intake token does not reach its own %s", r)
-		}
-		for _, p := range oldPrincipals {
-			if slices.Contains(reach[p], r) {
-				t.Errorf("%q reaches the intake route %s", p, r)
-			}
 		}
 	}
 
@@ -209,7 +192,7 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 			}
 		}
 		for _, r := range now {
-			if !slices.Contains(then, r) && !(issueReaderRoutes.MatchString(r) && (p == "operator" || p == "admin")) {
+			if !slices.Contains(then, r) {
 				t.Errorf("%q reaches %s, which it did not on the base commit", p, r)
 			}
 		}
@@ -217,15 +200,6 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 			if !slices.Contains(now, r) {
 				t.Errorf("%q no longer reaches %s", p, r)
 			}
-		}
-		readers := 0
-		for _, r := range now {
-			if issueReaderRoutes.MatchString(r) {
-				readers++
-			}
-		}
-		if want := map[bool]int{true: 18, false: 0}[p == "operator" || p == "admin"]; readers != want {
-			t.Errorf("%q reaches %d of the crew's issue routes, want %d", p, readers, want)
 		}
 	}
 	t.Logf("%d routes reached by an intake token (%d by an anonymous caller)", len(reach["intake:dots-p2"]), len(reach[""]))

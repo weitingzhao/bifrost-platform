@@ -44,7 +44,6 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
-import { registerIssueTools } from './registerIssues.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
@@ -797,7 +796,6 @@ reg(
   async () => jsonResult(await releaseReleaseWindow()),
 )
 registerPlanImportTools(reg)
-registerIssueTools(reg)
 
 reg(
   'propose_plan_change',

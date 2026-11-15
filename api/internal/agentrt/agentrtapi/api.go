@@ -165,10 +165,6 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
 		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
 		r.With(read, cfg).Get("/progress", a.progress)
-		// Business issues (W-31 BI-1 slice 2): the crew's routes, for the
-		// issue readers only, and the seven an intake token opens.
-		a.mountIssues(r, auth, cfg)
-		a.mountIntake(r, auth, cfg)
 	})
 }
 

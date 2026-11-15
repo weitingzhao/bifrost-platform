@@ -455,42 +455,7 @@ var fieldValues = map[string]map[string]value{
 	"legacy_imported": {"digest": fingerprint},
 	"wait_limit_passed": {"wait": oneOf(WaitAttemptRunning, WaitTaskReady, WaitMessageUnread), "ref": waitRef, "since": instant,
 		"basis": oneOf(basisTaskUsual, basisHistoryUsual, basisFloor)},
-	"issue_submitted": {"issue_id": issueRef, "product": productKey, "kind": oneOf(issueKinds...), "channel": oneOf(textChannels...),
-		"served_person": personRef},
-	"issue_added":         {"issue_id": issueRef, "channel": oneOf(textChannels...)},
-	"issue_brief_drafted": {"issue_id": issueRef, "brief_sha256": hex64},
-	"issue_asked": {"issue_id": issueRef, "purpose": oneOf(askPurposes...), "brief_sha256": hex64,
-		"env": oneOf("dev", "stg", "prod")},
-	"issue_answered": {"issue_id": issueRef, "verdict": oneOf(askVerdicts...), "channel": oneOf(textChannels...),
-		"person": personRef},
-	"issue_classified": {"issue_id": issueRef, "risk_class": oneOf(riskClasses...), "category": oneOf(issueCategories...),
-		"brief_sha256": hex64, "seat_report": artifactID},
-	"issue_design_put": {"issue_id": issueRef, "design_sha256": hex64},
-	"issue_reviewed": {"issue_id": issueRef, "check_kind": oneOf(checkReview, checkClose), "result": oneOf("pass", "fix", "supports", "does_not"),
-		"brief_sha256": hex64, "design_sha256": hex64, "seat_report": artifactID},
-	"issue_owner_decided": {"issue_id": issueRef, "decision": decisionKey, "brief_sha256": hex64, "design_sha256": hex64},
-	"issue_priority_set":  {"issue_id": issueRef, "priority": oneOf(priorities...), "brief_sha256": hex64},
-	"issue_taken": {"issue_id": issueRef, "brief_sha256": hex64, "design_sha256": hex64, "risk_class": oneOf(riskClasses...),
-		"mission_state": oneOf("proposed", "awaiting_owner", "active"), "exception": oneOf(rules.IntakeFaultSmall)},
-	"issue_replied": {"issue_id": issueRef},
-	"issue_state_changed": {"issue_id": issueRef, "change": oneOf(issueChanges...), "from": oneOf(issueStates...),
-		"to": oneOf(issueStates...), "conclusion": oneOf(conclusions...), "purpose": oneOf(RequestablePurposes...),
-		"decision": decisionKey, "brief_sha256": hex64, "design_sha256": hex64},
-	"issue_merged":      {"issue_id": issueRef, "into": issueRef, "merged_from": issueRef, "risk_class": oneOf(riskClasses...)},
-	"intake_client_set": {"change": oneOf("person", "client", "revoke"), "intake_client_id": intakeAgentRef, "person_id": personRef},
-	"intake_acked":      {"intake_client_id": intakeAgentRef, "cursor": cursorRef},
 }
-
-// The shapes of the issue events' ids and keys (migrations 0009).
-var (
-	issueRef       = shaped("an issue id (BI-<n>)", issueIDRE)
-	personRef      = shaped("a person (person:<name>)", regexp.MustCompile(`^person:[a-z0-9-]{1,32}$`))
-	intakeAgentRef = shaped("an intake client (agent:<name>)", agentIDRE)
-	productKey     = shaped("a product key", productRE)
-	hex64          = shaped("a sha256 (64 hex)", regexp.MustCompile(`^[0-9a-f]{64}$`))
-	decisionKey    = shaped("a decision (D<n> or review_dispute)", regexp.MustCompile(`^(D[1-9][0-9]*|review_dispute)$`))
-	cursorRef      = shaped("a cursor (<txid>.<event_id>)", regexp.MustCompile(`^[0-9]+\.[0-9]+$`))
-)
 
 // waitRef is what a wait waits on: an attempt, a task or a message
 // (checkBody holds it to its wait).
@@ -502,6 +467,15 @@ var waitRefPrefix = map[string]string{WaitAttemptRunning: "a_", WaitTaskReady: "
 // badValue is why v, of its field's kind already, is refused, or ""
 // (eventlog.BadValue).
 func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }
+
+// hex64 is a sha256 as 64 hex characters.
+var hex64 = shaped("a sha256 (64 hex)", regexp.MustCompile(`^[0-9a-f]{64}$`))
+
+// commitRE is a full commit id; artifactIDRE an artifact's id.
+var (
+	commitRE     = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	artifactIDRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+)
 
 var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
 var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)

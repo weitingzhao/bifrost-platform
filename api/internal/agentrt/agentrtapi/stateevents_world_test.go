@@ -57,17 +57,6 @@ var routeExpect = map[string]string{
 	// finished tasks: no world here finishes one, so the valid report is the
 	// empty one (TestPruneRoutes records real ones).
 
-	// Business issues (W-31 BI-1 slice 2, issues_world_test.go): the
-	// crew's writes and an intake client's; reading its updates moves only
-	// how far it was served, without an event.
-	"POST issues": expectWrites, "POST issues/merge": expectWrites, "POST issues/{id}/additions": expectWrites,
-	"POST issues/{id}/responses": expectWrites, "POST issues/{id}/brief": expectWrites, "POST issues/{id}/classification": expectWrites,
-	"POST issues/{id}/design": expectWrites, "POST issues/{id}/reviews": expectWrites, "POST issues/{id}/close-checks": expectWrites,
-	"POST issues/{id}/owner-cards": expectWrites, "POST issues/{id}/take": expectWrites, "POST issues/{id}/replies": expectWrites,
-	"POST issues/{id}/close": expectWrites, "POST issues/{id}/park": expectWrites, "POST issues/{id}/resume": expectWrites,
-	"POST issues/{id}/reopen": expectWrites,
-	"POST intake/issues":      expectWrites, "POST intake/issues/{id}/additions": expectWrites, "POST intake/issues/{id}/responses": expectWrites,
-	"POST intake/updates": expectAnswers,
 }
 
 var fuzzAttemptActions = []string{"heartbeat", "start", "checkpoint", "computed", "persist", "submit", "salvage", "ended"}
@@ -161,10 +150,8 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		return out
 	}
 
-	seat := issueFixture(t, f.pool)
 	if name == "base" {
 		f.validRoutes(t, s, ok, key)
-		f.validIssueRoutes(t, ok, seat)
 		return s
 	}
 	t.Fatalf("unknown stage %q", name)
@@ -356,8 +343,7 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 				pool = []string{"463", "closed"}
 			} else {
 				pool = f.ids(t, map[string]string{"attempts": idsAttempts, "missions": idsMissions, "tasks": idsTasks, "plan": idsNodes,
-					"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`,
-					"issues": `SELECT issue_id FROM agentrt.issue ORDER BY substr(issue_id, 4)::int`}[parts[i-1]])
+					"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`}[parts[i-1]])
 			}
 		}
 		// The world's ids three times over: most requests name a real row.
@@ -511,18 +497,6 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 		return map[string]any{"idempotency_key": key, "used_fraction": 0.5, "resets_at": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}
 	case rt.pattern == "prunes":
 		return map[string]any{"host_id": host, "results": []any{}}
-	case rt.pattern == "intake/issues" || rt.pattern == "issues":
-		return map[string]any{"idempotency_key": key, "product": "screening", "kind": f.pick([]string{"complaint", "request", "proposal"}),
-			"on_behalf_of": f.pick([]string{"person:p2", store.OwnerPerson, "self"}), "title": "fuzz",
-			"person_words": []any{map[string]any{"text": "fuzz words"}}, "agent_reading": "fuzz", "channel": f.pick([]string{"thread", "owner_relay", ""})}
-	case rt.pattern == "intake/updates":
-		cursor := f.pick([]string{"", "0.0", "1.1", "x"})
-		return map[string]any{"cursor": cursor, "ack_cursor": f.pick([]string{"", cursor}), "limit": f.r.Intn(4)}
-	case strings.HasPrefix(rt.pattern, "issues/{id}/") || strings.HasPrefix(rt.pattern, "intake/issues/{id}/"):
-		var version int
-		_ = f.pool.QueryRow(ctx, `SELECT version FROM agentrt.issue WHERE issue_id = $1`, strings.Split(path, "/")[len(strings.Split(rt.pattern, "/"))-2]).Scan(&version)
-		return map[string]any{"idempotency_key": key, "expected_version": version, "purpose": f.pick([]string{"priority", "confirm_brief", "reply"}),
-			"text": "fuzz", "agent_reading": "fuzz", "reason": "fuzz"}
 	}
 	return map[string]any{"idempotency_key": key, "reason": "fuzz"}
 }

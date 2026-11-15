@@ -39,8 +39,6 @@ const ThreadsPerDay = actor.ThreadsPerDay
 
 func ThreadActor(session string) (string, error) { return actor.ThreadActor(session) }
 
-func holdsToken(ctx context.Context, tx pgx.Tx, w Writer) error { return actor.HoldsToken(ctx, tx, w) }
-
 func holdsSessionTx(ctx context.Context, tx pgx.Tx, w Writer) error {
 	return actor.HoldsSessionTx(ctx, tx, w)
 }
@@ -60,12 +58,9 @@ func ActorKind(ctx context.Context, tx pgx.Tx, a string) (string, error) {
 }
 
 // What only this package knows, registered with the actor package: the
-// binding of an external agent's token (intake.go) and the day's limit of
-// new threads where the tuning rule sets it.
+// day's limit of new threads where the tuning rule sets it. No holder of an
+// agent's token is registered, so the actor package refuses every agent.
 func init() {
-	// holdsWriter (intake.go) is the hold of an agent's token to its intake
-	// client; the actor package asks it for agents only.
-	actor.RegisterAgentHolder(holdsWriter)
 	actor.RegisterThreadLimit(func(ctx context.Context, tx pgx.Tx) (int, error) {
 		tune, err := tuningIn(ctx, tx)
 		if err != nil {
@@ -99,8 +94,7 @@ type MissionProposal struct {
 	// assesses (assess.go, TD-391); no route sets it.
 	assessmentOf string
 	// gateRun is a batch of gate tasks (gates.go, TD-397); no route sets it.
-	gateRun   map[string]any
-	issueTake bool // take_issue's mission for its issue, the only one a BI- work id may have (issuetake.go); no route sets it
+	gateRun map[string]any
 }
 
 // DefaultMissionDays is how long a mission runs when the proposal names no
@@ -236,7 +230,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
 		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, NeedsOwner: p.NeedsOwner, AssessmentOf: p.assessmentOf,
-		GateRun: p.gateRun, Token: w.Token, issueTake: p.issueTake}); err != nil {
+		GateRun: p.gateRun, Token: w.Token}); err != nil {
 		return nil, err
 	}
 	inside, why := envelopeFit(env, p)
