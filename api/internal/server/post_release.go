@@ -337,7 +337,8 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 	return func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, postReleasePass)
 		defer cancel()
-		items, err := s.delivery.PipelineRunObservations(ctx)
+		// Only this pipeline's runs are read (delivery.PipelineRunsOf has why).
+		items, err := s.delivery.PipelineRunsOf(ctx, pipeline)
 		if err != nil {
 			return err
 		}

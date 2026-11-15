@@ -8,10 +8,28 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // PipelineRunObservations lists every retained cicd run, without a label filter.
 func (s *Service) PipelineRunObservations(ctx context.Context) ([]unstructured.Unstructured, error) {
+	return s.pipelineRuns(ctx, "")
+}
+
+// PipelineRunsOf lists the retained runs of one pipeline, by the label
+// Tekton puts on every run of a named pipeline. A loop that follows one
+// pipeline reads this and not every run: on 2026-11-14 the cluster kept 1073
+// runs (32 MB as JSON), 113 of them (1.2 MB) of the pipeline the post-release
+// check follows, and reading all of them every 30 s took the STG workers past
+// their 512Mi limit three times in four minutes.
+func (s *Service) PipelineRunsOf(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+	if errs := validation.IsValidLabelValue(pipeline); pipeline == "" || len(errs) > 0 {
+		return nil, fmt.Errorf("pipeline %q is not a label value", pipeline)
+	}
+	return s.pipelineRuns(ctx, "tekton.dev/pipeline="+pipeline)
+}
+
+func (s *Service) pipelineRuns(ctx context.Context, selector string) ([]unstructured.Unstructured, error) {
 	ctx, cancel := stgContext(ctx)
 	defer cancel()
 	dyn, err := s.buildDynamicClient()
@@ -19,7 +37,7 @@ func (s *Service) PipelineRunObservations(ctx context.Context) ([]unstructured.U
 		return nil, err
 	}
 	var out []unstructured.Unstructured
-	options := metav1.ListOptions{Limit: 100}
+	options := metav1.ListOptions{Limit: 100, LabelSelector: selector}
 	seen := map[string]bool{}
 	for {
 		page, err := dyn.Resource(pipelineRunGVR).Namespace("cicd").List(ctx, options)
@@ -41,6 +59,11 @@ func (s *Service) PipelineRunObservations(ctx context.Context) ([]unstructured.U
 // PipelineRunObservations exposes the service's retained runs to runtime wiring.
 func (h *Handler) PipelineRunObservations(ctx context.Context) ([]unstructured.Unstructured, error) {
 	return h.svc.PipelineRunObservations(ctx)
+}
+
+// PipelineRunsOf exposes the service's read of one pipeline's runs to wiring.
+func (h *Handler) PipelineRunsOf(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+	return h.svc.PipelineRunsOf(ctx, pipeline)
 }
 
 // FailedTask is a task of a run that failed: its pipeline task name, the
