@@ -467,7 +467,7 @@ var catalog = []Action{
 		ID: "agentrt_rule_approve", Tier: TierD,
 		Description: "Approve a capacity change of an agent runtime rule: the proposed next version (rule_proposed) takes effect without the Owner's signature, recorded with this approval (rule_approved). Tier D: only the Owner approves on the Console. " +
 			"Request and approve on the PROD platform at ops.bifrost.lan. PROD only (env: prod); rule_id, rule_version and text_artifact_id name the draft exactly as rule_proposed recorded it. " +
-			"Refused when created unless the draft exists, is the rule's next version and changes only capacity fields within their ceilings: concurrency per_host and its slots block, budget:<tenant>, landing:<tenant> limits and repo limits except max_in_flight, intake-gates max_live_per_product and routing quota_stop_percent; anything else, including the validity, still needs the Owner's signature. " +
+			"Refused when created unless the draft exists, is the rule's next version and changes only capacity fields within their ceilings: the values of the tuning rule (the rule kinds of the dispatch lane, which also had such fields, were retired on 2026-11-15); anything else, including the validity, still needs the Owner's signature. " +
 			"The card shows each changed field's old and new value. One open request per rule_id. The executor checks the draft again under the rule's lock; the same approval again is idempotent.",
 		Params: []Param{
 			{Name: "env", Type: "string", Required: true, In: "body"},
