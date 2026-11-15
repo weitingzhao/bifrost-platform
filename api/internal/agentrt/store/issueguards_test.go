@@ -296,7 +296,7 @@ func TestIssueGuardMatrix(t *testing.T) {
 			"risk_class": "small", "category": "fault", "brief_sha256": bC.BriefSHA256, "seat_report": notBrief}), []string{`INSERT INTO agentrt.issue_check
 			(issue_check_id, issue_id, check_kind, brief_sha256, result, category, seat_artifact_id, created_by_actor_id) OVERRIDING SYSTEM VALUE
 			VALUES (9720, '` + C + `', 'classification', '` + bC.BriefSHA256 + `', 'small', 'fault', '` + notBrief + `', '` + crew + `')`}}},
-			"report of a brief task"},
+			"a seat's answer is a report"},
 		{"a seat's check of an unanswered ask", []guardStep{{ie(B, "issue_reviewed", crew, "", map[string]any{"check_id": 9721,
 			"check_kind": "close_check", "result": "supports", "brief_sha256": bB}), []string{`INSERT INTO agentrt.issue_check (issue_check_id, issue_id,
 			check_kind, brief_sha256, result, seat_artifact_id, ask_id, created_by_actor_id) OVERRIDING SYSTEM VALUE VALUES (9721, '` + B +

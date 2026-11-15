@@ -108,9 +108,9 @@ func keyFor(rt fuzzRoute, path string) string {
 	return rt.method + " " + rt.pattern
 }
 
-// stage builds a world (world's, plus missions M-2 proposed and M-3 paused,
-// tasks of M-1 blocked, paused and proposed, host h2), serves it, and brings
-// it to its point.
+// stage builds a world (world's, plus missions M-2 proposed and M-3 paused
+// and host h2; no task has a row since 0020), serves it, and brings it to
+// its point.
 func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	t.Helper()
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, f.pool, fn)) }
@@ -125,28 +125,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		}
 		return store.MoveMission(ctx, tx, "controller", "M-3", "paused", "test")
 	})
-	for _, to := range []string{"blocked", "paused", ""} {
-		tx(func(tx pgx.Tx) error {
-			spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task "+to+"\n"))
-			if err != nil {
-				return err
-			}
-			id := store.NewTaskID()
-			if err = seedTask(ctx, tx, store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-				Class: "go", Title: "t " + to, SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, "proposed"); err != nil {
-				return err
-			}
-			switch to {
-			case "":
-				return nil
-			case "paused":
-				if err := seedMove(ctx, tx, "controller", id, "ready", ""); err != nil {
-					return err
-				}
-			}
-			return seedMove(ctx, tx, "controller", id, to, "test")
-		})
-	}
 	must(t, seedHost(ctx, f.pool, "owner", "h2", "dev"))
 	chiefJob(t, f.pool)
 
@@ -345,8 +323,8 @@ func walkRoutes(t *testing.T) []fuzzRoute {
 // Ids of the world in the order the world made them (a seed then names the
 // same rows every run): rows by the event that created them, the rest by id.
 const (
-	idsTasks    = `SELECT task_id FROM agentrt.task x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.task_id = x.task_id), task_id`
-	idsAttempts = `SELECT attempt_id FROM agentrt.attempt x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.attempt_id = x.attempt_id), attempt_id`
+	idsTasks    = `SELECT 't_01M5192P0JPMJAP63ZKRPXJ2VV'::text` // no task has a row since 0020: an id no row answers to
+	idsAttempts = `SELECT 'a_01M5192P0JPMJAP63ZKRPXJ2VV'::text`
 	idsMissions = `SELECT mission_id FROM agentrt.mission ORDER BY length(mission_id), mission_id`
 	idsNodes    = `SELECT plan_node_id FROM agentrt.plan_node x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.plan_node_id = x.plan_node_id), plan_node_id`
 	idsControls = `SELECT control_id FROM agentrt.control x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.body_json->>'control_id' = x.control_id), control_id`
@@ -481,15 +459,6 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 		return map[string]any{}
 	case rt.pattern == "claim":
 		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
-	case strings.HasPrefix(rt.pattern, "attempts/"):
-		var epoch int64
-		var ref string
-		_ = f.pool.QueryRow(ctx, `SELECT lease_epoch, COALESCE(pushed_ref, '') FROM agentrt.attempt WHERE attempt_id = $1`,
-			strings.Split(path, "/")[1]).Scan(&epoch, &ref)
-		return map[string]any{"host_id": host, "lease_epoch": epoch, "model_provider": "cursor-mix", "checkpoint_seq": 1 + f.r.Intn(3),
-			"artifacts": []string{f.pick(arts)}, "exit_code": 0, "end_how": f.pick([]string{"exit", "daemon_restart", "lease_lost"}),
-			"conclusion": f.pick([]string{"done", "failed"}), "report": f.pick(arts), "pushed_ref": ref, "pushed_commit": pushedAt,
-			"group_cleared": true}
 	case rt.pattern == "missions":
 		return map[string]any{"idempotency_key": key, "title": "m", "goal": "g", "success": []string{"it works"},
 			"budget": map[string]any{"max_attempts": 4, "max_wall_hours": 2}}

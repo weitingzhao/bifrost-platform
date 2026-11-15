@@ -12,82 +12,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// ended seeds a finished task of M-1 on s1 with its attempts, as the runtime
-// leaves them: each attempt's rows, its computed and submitted events, a
-// verification accepting the last attempt when the task is accepted, and the
-// event that ended the task. outcomes are the attempts' conclusions, the
-// last one deciding the task (done: accepted, failed: rejected).
-func (w *world) ended(t *testing.T, outcomes ...string) (string, []string) {
-	t.Helper()
-	final := "accepted"
-	if outcomes[len(outcomes)-1] == "failed" {
-		final = "rejected"
-	}
-	return w.endedAs(t, final, outcomes...)
-}
-
-// endedAs is ended with the task's end given: a task rejected after an
-// attempt that ended done (its verification failed) has no attempt
-// accepted.
-func (w *world) endedAs(t *testing.T, final string, outcomes ...string) (string, []string) {
-	t.Helper()
-	ctx := ctxOf(t)
-	task := store.NewTaskID()
-	var attempts []string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: an ended task"}}); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, role, task_class, title, spec_artifact_id,
-		  effect_class, state, hard_limit_s, created_by_actor_id) VALUES ($1, 'M-1', $2, 'implement', 'go', 'ended', $3, 'branch', $4, 3600, 'controller')`,
-			task, s1, w.spec, final); err != nil {
-			return err
-		}
-		legacy := func() error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-				Body: map[string]any{"source": "test: an ended task"}})
-			return err
-		}
-		for i, outcome := range outcomes {
-			a := store.NewAttemptID()
-			attempts = append(attempts, a)
-			if err := legacy(); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch,
-			  lease_expires_at, heartbeat_at, state, started_at, computed_at, persisted_at, ended_at, conclusion)
-			  VALUES ($1, $2, $3, 'exec:codex', nextval('agentrt.lease_epoch_seq'), now(), now(), 'finished',
-			    clock_timestamp() - interval '100 seconds', clock_timestamp(), clock_timestamp(), clock_timestamp(), $4)`, a, task, i+1, outcome); err != nil {
-				return err
-			}
-			for _, ev := range []store.Event{
-				{Type: "attempt_computed", Body: map[string]any{"end_how": "exit", "conclusion": outcome}},
-				{Type: "attempt_submitted", Body: map[string]any{}},
-			} {
-				ev.Stream, ev.Actor, ev.MissionID, ev.TaskID, ev.AttemptID = "mission:M-1", "controller", "M-1", task, a
-				if _, err := store.Append(ctx, tx, ev); err != nil {
-					return err
-				}
-			}
-		}
-		if final == "accepted" {
-			if err := legacy(); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
-			  evidence_artifact_id, accepts_attempt) VALUES ($1, $2, $3, 'deterministic', 'pass', $4, true)`,
-				store.NewVerificationID(), task, attempts[len(attempts)-1], w.spec); err != nil {
-				return err
-			}
-		}
-		_, err := store.Append(ctx, tx, store.Event{Stream: "mission:M-1", Type: "task_state_changed", Actor: "controller", MissionID: "M-1",
-			TaskID: task, Body: map[string]any{"from": "verifying", "to": final}})
-		return err
-	}))
-	return task, attempts
-}
-
 type progressDoc struct {
 	AsOf     int64 `json:"as_of_event_id"`
 	NeedsYou struct {
@@ -226,11 +150,6 @@ func TestChangeBlocks(t *testing.T) {
 			MissionID: "M-2", StepKind: "agent", Ordinal: 3, Root: root})
 		return err
 	}))
-	w.ready(t, store.Task{})
-	w.ready(t, store.Task{})
-	_, err := w.task(t, "M-2", s4, "", "implement")
-	ok(t, err)
-	w.ended(t, "done") // an ended task on s1 holds nothing up
 	for name, c := range map[string]struct {
 		changes []store.PlanChange
 		want    string

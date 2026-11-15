@@ -33,7 +33,7 @@ func (w *world) footprint(t *testing.T) string {
 	  (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event), (SELECT count(*) FROM agentrt.event_stream),
 	  (SELECT string_agg(event_stream_id || '=' || last_seq || ':' || last_sha256, ',' ORDER BY event_stream_id) FROM agentrt.event_stream),
 	  (SELECT count(*) FROM agentrt.outbox), (SELECT count(*) FROM agentrt.idempotency_key), (SELECT count(*) FROM agentrt.mission),
-	  (SELECT count(*) FROM agentrt.task), (SELECT count(*) FROM agentrt.task_dependency), (SELECT count(*) FROM agentrt.control),
+	  (SELECT count(*) FROM agentrt.control),
 	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob))`).Scan(&s))
 	return s
 }

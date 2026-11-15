@@ -87,16 +87,8 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		}
 		return nil
 	})
-	task := store.NewTaskID()
-	tx(func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
-		if err != nil {
-			return err
-		}
-		return seedTask(ctx, tx, store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}, "ready")
-	})
-	return pool, task
+	// A task id no row answers to: the tasks' table is gone (0020).
+	return pool, store.NewTaskID()
 }
 
 // Tokens of the fixture auth file, by caller name.

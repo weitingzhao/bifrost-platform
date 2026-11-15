@@ -42,26 +42,9 @@ func TestSearchArtifacts(t *testing.T) {
 	thread := wr("thread:s1")
 	handover, _, err := store.UploadArtifact(ctx, w.rt, thread, "handover", "text/markdown", []byte("# handover\nwhat I judged"))
 	ok(t, err)
-	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
-	// The rows a round left (the dispatch lane is retired): the
-	// implementation's attempt with its report, a check task with a spec of
-	// its own, and the check's verdict with its evidence.
-	var attempt, check string
-	w.seeded(t, func(tx pgx.Tx) {
-		attempt = seedAttempt(t, tx, impl, "h1", cursor, "done", commitA)
-		check = seedCheck(t, tx, impl, attempt, "verify", "h2", deterministic, "pass", false)
-	})
-	var report, checkSpec, evidence string
-	ok(t, w.rt.QueryRow(ctx, `SELECT report_artifact_id FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&report))
-	ok(t, w.rt.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, check).Scan(&checkSpec))
-	ok(t, w.rt.QueryRow(ctx, `SELECT evidence_artifact_id FROM agentrt.verification WHERE task_id = $1`, impl).Scan(&evidence))
-	// A task of M-2 with a spec of its own.
-	otherSpec := w.artifact(t, "task_spec", "# M-2's task\n")
-	other := store.NewTaskID()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return seedTask(ctx, tx, store.Task{ID: other, MissionID: "M-2", OffPlanReason: "test", Role: "implement",
-			Class: "go", Title: "other", SpecArtifact: otherSpec, Effect: "branch", Repo: "bifrost-platform"}, "proposed")
-	}))
+	// No task has rows any more (0020): a task id finds nothing of its own.
+	impl := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
+	report := w.artifact(t, "report", "a report")
 	// A mission's spec is the mission's.
 	missionSpec := w.artifact(t, "mission_spec", "# M-2\n")
 	w.legacy(t, `UPDATE agentrt.mission SET spec_artifact_id = '`+missionSpec+`' WHERE mission_id = 'M-2'`)
@@ -101,27 +84,16 @@ func TestSearchArtifacts(t *testing.T) {
 	if got, _ := search(t, w, store.ArtifactQuery{Author: "thread:s1"}); !slices.Equal(got, []string{handover}) {
 		t.Fatalf("author thread:s1: %v", got)
 	}
-	got, _ := search(t, w, store.ArtifactQuery{Task: impl})
-	// The tasks' own tables are not read any more (store cut 4, 2026-11-14):
-	// a task's spec, report and evidence are no longer found by its id.
-	for _, not := range []string{w.spec, report, evidence, otherSpec, handover, checkSpec, exam} {
-		if slices.Contains(got, not) {
-			t.Fatalf("task %s: %v has %s", impl, got, not)
-		}
+	if got, _ := search(t, w, store.ArtifactQuery{Task: impl}); len(got) != 0 {
+		t.Fatalf("task %s: %v", impl, got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: check}); slices.Contains(got, checkSpec) || slices.Contains(got, report) {
-		t.Fatalf("the check's: %v", got)
-	}
-	got, _ = search(t, w, store.ArtifactQuery{Mission: "M-1"})
-	if slices.Contains(got, otherSpec) {
-		t.Fatalf("mission M-1 lists M-2's spec: %v", got)
+	got, _ := search(t, w, store.ArtifactQuery{Mission: "M-1"})
+	if slices.Contains(got, report) || slices.Contains(got, handover) {
+		t.Fatalf("mission M-1 lists artifacts no record of it names: %v", got)
 	}
 	// A mission's own spec is still its record; its tasks' specs are not read.
 	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2"}); !slices.Equal(got, []string{missionSpec}) {
 		t.Fatalf("mission M-2: %v", got)
-	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: other}); len(got) != 0 {
-		t.Fatalf("M-2's task: %v (a mission's spec is not its task's)", got)
 	}
 	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {
 		t.Fatalf("a task of M-1 within M-2: %v", got)

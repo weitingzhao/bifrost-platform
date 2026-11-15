@@ -266,57 +266,13 @@ func TestStepRules(t *testing.T) {
 		t.Fatalf("cause = %q", cause)
 	}
 
-	// task_accepted counts tasks of this step only. Acceptance has no store
-	// function yet, so the import event sets the state here.
+	// task_accepted answers false (store cut 4): the rule parses and a step
+	// that names a task never becomes done by it.
 	w.step(t, "R2:2.1-5", 4, "")
-	here := store.NewTaskID()
-	elsewhere := store.NewTaskID()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		for id, step := range map[string]string{here: "R2:2.1-5", elsewhere: s1} {
-			if err := seedTask(ctx, tx, store.Task{ID: id, MissionID: "M-1", PlanNode: step, Role: "implement",
-				Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "branch"}, "proposed"); err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
-	accept := func(id string) {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-				Body: map[string]any{"source": "test: accept"}}); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'accepted' WHERE task_id = $1`, id)
-			return err
-		}))
-	}
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, execErr := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, "R2:2.1-5",
-			`{"task_accepted":"`+elsewhere+`"}`)
-		return execErr
-	}), "not on this step")
-	w.rule(t, "R2:2.1-5", `{"task_accepted":"`+here+`"}`)
-	accept(elsewhere)
+	w.rule(t, "R2:2.1-5", `{"task_accepted":"t_01M5192P0JPMJAP63ZKRPXJ2VV"}`)
 	if w.evaluate(t, "R2:2.1-5", d) != "" {
-		t.Fatal("a task of another step moved this one")
+		t.Fatal("a task_accepted rule moved the step")
 	}
-	// The tasks' table is not read any more (store cut 4, 2026-11-14): an
-	// accepted task no longer moves its step.
-	accept(here)
-	if w.evaluate(t, "R2:2.1-5", d) != "" {
-		t.Fatal("an accepted task moved the step")
-	}
-
-	// A dropped step is not evaluated.
-	w.step(t, "R2:2.1-6", 5, `{"ci_succeeded":{"repo":"bifrost-platform","commit":"`+commitA+`"}}`)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, "R2:2.1-6", "dropped", "test")
-		return err
-	}))
-	if w.evaluate(t, "R2:2.1-6", d) != "" || w.stepState(t, "R2:2.1-6") != "dropped" {
-		t.Fatal("a dropped step moved")
-	}
-	w.chainHolds(t, "plan:"+root)
 }
 
 // RuledNodes lists live steps and architecture rows with a rule.

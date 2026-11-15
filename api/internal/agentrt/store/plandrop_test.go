@@ -65,8 +65,6 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	a := &asker{}
-	_, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
 	yes := true
 	for name, c := range map[string]struct {
 		change store.PlanChange

@@ -83,33 +83,6 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 	}))
 }
 
-// ready is a task, defaults filled in, written as ready (seedTask).
-func (w *world) ready(t *testing.T, task store.Task) string {
-	t.Helper()
-	ctx := ctxOf(t)
-	if task.ID == "" {
-		task.ID = store.NewTaskID()
-	}
-	if task.MissionID == "" {
-		task.MissionID = "M-1"
-	}
-	if task.PlanNode == "" && task.OffPlanReason == "" {
-		task.PlanNode = s1
-	}
-	if task.Role == "" {
-		task.Role = "implement"
-	}
-	if task.Effect == "" {
-		task.Effect = "branch"
-	}
-	if task.Repo == "" {
-		task.Repo = "bifrost-platform"
-	}
-	task.Class, task.Title, task.SpecArtifact = "go", "t", w.spec
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return seedTask(ctx, tx, task, "ready") }))
-	return task.ID
-}
-
 // waitFor returns once a backend of this database waits for a lock in a
 // statement containing fragment, and fails the test if that has not happened
 // by the deadline: a race the test means to stage did not happen.

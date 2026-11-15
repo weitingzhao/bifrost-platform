@@ -142,16 +142,14 @@ func TestPlanChangeOutside(t *testing.T) {
 	if after := w.footprint(t); after == before {
 		t.Fatal("the proposal was not recorded")
 	}
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	setRule(t, w, s1, `{"task_accepted":"`+t1+`"}`)
+	// A task id no row answers to: the tasks' table is gone (0020).
+	t1 := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	before = w.footprint(t)
 	for name, c := range map[string]struct {
 		change store.PlanChange
 		has    string
 	}{
 		"a step under a round":             {store.PlanChange{Op: "add_node", Parent: root, Kind: "step", StepKind: "agent", Title: "x"}, "cannot sit under"},
-		"a rule naming another step's":     {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"task_accepted":"` + t1 + `"}`)}, "which is not on this step"},
 		"a rule naming an unbound record":  {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"approval_executed":77}`)}, "not bound to this step"},
 		"a task out of the step naming it": {store.PlanChange{Op: "move_task", Task: t1, Node: s3}, "move_task is retired"},
 		"a node there is not":              {store.PlanChange{Op: "retitle", Node: "R2:9", Title: "x"}, "there is no"},
@@ -204,20 +202,6 @@ func indexFold(s, sub string) int {
 		}
 	}
 	return -1
-}
-
-// setRule gives a step a done rule with a plan change (the fixture of the
-// controller tests).
-func setRule(t *testing.T, w *world, step, rule string) {
-	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
-			Body: map[string]any{"change": "test"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, step, rule)
-		return err
-	}))
 }
 
 // The Owner's answer decides: apply lands the change under the decision;

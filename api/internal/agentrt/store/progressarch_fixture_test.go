@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -57,29 +56,6 @@ func TestConsoleArchFixture(t *testing.T) {
 	ref := map[string]any{"delivery_run": "bifrost-deliver-platform-1792461534", "images": map[string]any{"platform-api": "sha256:aa", "platform-workers": "sha256:aa"}}
 	_, err := store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, ref))
 	ok(t, err)
-	task := store.NewTaskID()
-	var attempt string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if err := seedTask(ctx, tx, store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}, "proposed"); err != nil {
-			return err
-		}
-		var err error
-		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
-		return err
-	}))
-	for _, test := range []string{"T19", "T20"} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(test))
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
-			  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,'gate',$4,'stg','pass',$5,$6,$7,$8)`,
-				store.NewVerificationID(), task, attempt, test, ev, commitA, ref, archSpec)
-			return err
-		}))
-	}
 	_, err = store.PostPlanNote(ctx, w.rt, store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}, "n1", "ARCH:state-db", "PROD 与 STG 都在用；PROD 重建演练还欠")
 	ok(t, err)
 	_, err = store.PostPlanNote(ctx, w.rt, owner, "n2", "ARCH:gateway", "还没有：模型直连厂商")

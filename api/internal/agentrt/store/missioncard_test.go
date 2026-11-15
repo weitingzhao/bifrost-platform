@@ -271,7 +271,6 @@ func TestMissionOnACardSaysSo(t *testing.T) {
 	a := &asker{}
 	id, q := proposeOutside(t, w, a.ask, "a")
 	bare, bq := proposeOutside(t, w, a.ask, "b")
-	w.seedProposed(t, id, "")
 	doc := w.progress(t)
 	for _, m := range doc.Work.Missions {
 		if (m.MissionID == id && !strings.Contains(m.Reason, "question "+q)) || (m.MissionID == bare && !strings.Contains(m.Reason, "question "+bq)) {

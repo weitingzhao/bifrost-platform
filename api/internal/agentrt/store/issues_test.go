@@ -122,18 +122,19 @@ func (iw *issueWorld) putRule(t *testing.T, text string) {
 // role is brief), written as the import writes old rows.
 func (iw *issueWorld) report(t *testing.T, role string) string {
 	t.Helper()
+	// Since 0020 a seat's answer is checked to be a report, no longer the
+	// report of a brief task (the tasks' tables are gone): the brief's is an
+	// artifact of kind report, any other role's one of another kind.
+	kind := "report"
+	if role != "brief" {
+		kind = "other"
+	}
 	var id string
 	ok(t, store.InTx(ctx, iw.rt, func(tx pgx.Tx) error {
 		var err error
-		id, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("seat answer "+store.NewTaskID()))
+		id, err = store.PutArtifact(ctx, tx, "controller", kind, "text/markdown", []byte("seat answer "+store.NewTaskID()))
 		return err
 	}))
-	task, att := store.NewTaskID(), store.NewAttemptID()
-	iw.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.task (task_id, mission_id, off_plan, off_plan_reason, role, task_class, title,
-	  spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id)
-	  VALUES ('%s', 'M-1', true, 'a seat brief', '%s', 'brief', 'seat brief', '%s', 'none', 'accepted', 60, 'controller')`, task, role, iw.spec),
-		fmt.Sprintf(`INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch, lease_expires_at,
-	  heartbeat_at, state, report_artifact_id) VALUES ('%s', '%s', 1, 'exec:claude', 1, now(), now(), 'finished', '%s')`, att, task, id))
 	return id
 }
 
@@ -422,7 +423,7 @@ func TestIssueTakeNeedsEvidence(t *testing.T) {
 	wantIs(t, err, store.ErrInvalid, "not by a rule")
 	_, err = store.ClassifyIssue(ctx, iw.rt, iw.crew, iw.key(), store.IssueClassification{IssueID: id, ExpectedVersion: iw.state(t, id).Version,
 		RiskClass: "small", Category: "fault", SeatReport: iw.report(t, "implement")})
-	wantErr(t, err, "report of a brief task")
+	wantErr(t, err, "a seat's answer is a report")
 	// The database holds a priority to the Owner's writers, whatever the store
 	// does: a thread's row is refused.
 	wantErr(t, iw.issueEvent(t, id, "issue_priority_set", "thread:crew-1", map[string]any{"check_id": 9999, "priority": "p1",

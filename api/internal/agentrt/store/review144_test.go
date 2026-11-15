@@ -70,16 +70,9 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 		_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ('seat:x', 'seat', 'x')`)
 		return err
 	}), "does not write agentrt.actor")
-	// A plan change that moves nothing but changes a task's state.
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err = tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready' WHERE task_id = $1`, t1)
-		return err
-	}), "changes nothing else")
 	// The owner cannot delete or truncate state rows.
 	owner := w.db.Connect(t, w.db.Owner)
-	_, err = owner.Exec(ctx, `DELETE FROM agentrt.control WHERE control_id = 'c-2'`)
+	_, err := owner.Exec(ctx, `DELETE FROM agentrt.control WHERE control_id = 'c-2'`)
 	wantErr(t, err, "end by state")
 	_, err = owner.Exec(ctx, `TRUNCATE agentrt.control`)
 	wantErr(t, err, "")
@@ -87,100 +80,17 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.AckMessage(ctx, tx, "exec:codex", m2) }))
 }
 
-// Review 144 A5: an attempt keeps its task and its result once written; an
-// accepting verification needs a persisted result.
-func TestAttemptKeepsItsResult(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	t2, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	var a1, a2 string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		var err error
-		if a1, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
-			return err
-		}
-		a2, _, err = seedLease(ctx, tx, "controller", "M-1", t2, "exec:codex", "", 1, time.Minute)
-		return err
-	}))
-	persist := func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "attempt_persisted", Actor: "controller",
-			TaskID: t1, AttemptID: a1, Body: map[string]any{"pushed_commit": "2333e00753f91c74c8b2f4d693a803f8e89e7892"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), pushed_ref = 'refs/heads/agent/t/a1',
-		  pushed_commit = '2333e00753f91c74c8b2f4d693a803f8e89e7892' WHERE attempt_id = $1`, a1)
-		return err
-	}
-	ok(t, store.InTx(ctx, w.rt, persist))
-	for q, want := range map[string]string{
-		`UPDATE agentrt.attempt SET persisted_at = NULL WHERE attempt_id = $1`:             "written once",
-		`UPDATE agentrt.attempt SET pushed_commit = repeat('a', 40) WHERE attempt_id = $1`: "written once",
-		`UPDATE agentrt.attempt SET attempt_no = 7 WHERE attempt_id = $1`:                  "keeps its task",
-	} {
-		wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "attempt_persisted", Actor: "controller",
-				TaskID: t1, AttemptID: a1, Body: map[string]any{"pushed_commit": "2333e00753f91c74c8b2f4d693a803f8e89e7892"}}); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, q, a1)
-			return err
-		}), want)
-	}
-	evidence := func(tx pgx.Tx) (string, error) {
-		return store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("ok"))
-	}
-	verify := func(task, attempt string) error {
-		return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			ev, err := evidence(tx)
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
-			  evidence_artifact_id, accepts_attempt) VALUES ($1,$2,$3,'deterministic','pass',$4,true)`,
-				store.NewVerificationID(), task, attempt, ev)
-			return err
-		})
-	}
-	wantErr(t, verify(t2, a2), "before its result is persisted")
-	wantErr(t, verify(t2, a1), "is not an attempt of task")
-	ok(t, verify(t1, a1))
-	wantErr(t, verify(t1, a1), "verification_one_accept")
-}
-
-// T23a for all nine append-only tables, by the owner (the runtime role is
+// T23a for all eight append-only tables, by the owner (the runtime role is
 // stopped earlier by missing privileges, which proves less).
 func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	var a1 string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		var err error
-		if a1, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, time.Minute); err != nil {
-			return err
-		}
-		if _, err = store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "attempt_persisted", Actor: "controller",
-			TaskID: t1, AttemptID: a1, Body: map[string]any{"pushed_commit": "2333e00753f91c74c8b2f4d693a803f8e89e7892"}}); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp() WHERE attempt_id = $1`, a1); err != nil {
-			return err
-		}
-		ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("ok"))
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict, evidence_artifact_id)
-		  VALUES ($1,$2,$3,'deterministic','pass',$4)`, store.NewVerificationID(), t1, a1, ev); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.budget_ledger (attempt_id, unit, amount, measured) VALUES ($1, 'wall_s', 12, true)`, a1)
-		return err
-	}))
+	// The budget ledger's row names an attempt id no row answers to: the
+	// attempts' table is gone since 0020 and the column is unconstrained.
+	w.seeded(t, func(tx pgx.Tx) {
+		_, err := tx.Exec(ctx, `INSERT INTO agentrt.budget_ledger (attempt_id, unit, amount, measured) VALUES ('a_01M5192P0JPMJAP63ZKRPXJ2VV', 'wall_s', 12, true)`)
+		ok(t, err)
+	})
 	ok(t, planChange(w, func(tx pgx.Tx) error {
 		var id int64
 		if err := tx.QueryRow(ctx, `SELECT current_setting('agentrt.event_id')::bigint`).Scan(&id); err != nil {
@@ -211,7 +121,7 @@ func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 		  VALUES ('s1','exec:codex','openai','m','1','implementer','go',false,'exam', now() - interval '1 day', now(), 1,1,1,0,0.5,$1)`, ev.EventID)
 		return err
 	}))
-	for _, tbl := range []string{"event", "artifact", "artifact_blob", "verification", "budget_ledger",
+	for _, tbl := range []string{"event", "artifact", "artifact_blob", "budget_ledger",
 		"capability_score", "rule", "plan_node_binding", "schema_migration"} {
 		var n int
 		ok(t, owner.QueryRow(ctx, `SELECT count(*) FROM agentrt.`+tbl).Scan(&n))
@@ -231,8 +141,6 @@ func firstColumn(tbl string) string {
 		return "event_type"
 	case "artifact", "artifact_blob":
 		return "artifact_id"
-	case "verification":
-		return "verdict"
 	case "budget_ledger":
 		return "unit"
 	case "capability_score":
@@ -312,16 +220,6 @@ func TestPlanBindingsAndShapes(t *testing.T) {
 		return err
 	}))
 
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	ok(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = jsonb_build_object('task_accepted', $2::text) WHERE plan_node_id = $1`, s1, t1)
-		return err
-	}))
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2 WHERE task_id = $1`, t1, s3)
-		return err
-	}), "names task")
 }
 
 // T19: a failed commit takes its outbox row with it.
@@ -331,8 +229,10 @@ func TestFailedCommitLeavesNoOutboxRow(t *testing.T) {
 	var before int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox`).Scan(&before))
 	err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		ev, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_proposed", Actor: "controller",
-			MissionID: "M-1", TaskID: store.NewTaskID(), Body: map[string]any{"title": "never created", "role": "other"}})
+		// The row the event names does not exist: a mission never created (a
+		// task's id is no longer checked, its table is gone since 0020).
+		ev, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		if err != nil {
 			return err
 		}

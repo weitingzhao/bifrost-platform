@@ -43,16 +43,14 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	}
 	// No rule in force: the Owner's card.
 	w := newWorld(t)
-	t2, err := w.task(t, "M-2", s2, "", "implement")
-	ok(t, err)
+	// A task id no row answers to: the tasks' table is gone (0020).
+	t2 := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	if out := setRule(w, "k0", s2, `{"task_accepted":"`+t2+`"}`); out["decision"] != "" {
 		t.Fatalf("without the rule: %v", out)
 	}
 
 	w = newWorld(t)
 	putPlanStanding(t, w, true, false)
-	t2, err = w.task(t, "M-2", s2, "", "implement")
-	ok(t, err)
 	// Approvals 16 and 18 and question Q1 bound to s3 by a change the Owner
 	// applied, with no rule yet.
 	out := setRule(w, "b0", s3, `{}`, store.Binding{Kind: "approval", Ref: "16"}, store.Binding{Kind: "approval", Ref: "18"},
@@ -61,7 +59,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
 	}
 	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	_, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 
 	// Within it: the first rule of a step not done, naming its own task.
@@ -135,8 +133,7 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 			  effective_at, expires_at) VALUES ('plan-standing', 1, $1, $2, 'initial', 'test', 'test', '2026-01-01T00:00:00Z', $3)`,
 				string(body), text, expires)
 			ok(t, err)
-			t2, err := w.task(t, "M-2", s2, "", "implement")
-			ok(t, err)
+			t2 := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 			// Separate connections: the write waits on one, the test polls
 			// on another, and another transaction holds the plan stream's
 			// head.

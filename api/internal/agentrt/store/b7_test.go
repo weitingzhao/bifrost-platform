@@ -174,14 +174,11 @@ func (h hookedTx) QueryRow(c context.Context, sql string, args ...any) pgx.Row {
 func TestEveryOutboxRowHasItsEventAndBack(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	a := w.ready(t, store.Task{})
-	_ = w.ready(t, store.Task{})
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return seedMove(ctx, tx, "controller", a, "cancelled", "test") }))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
 		return err
 	}))
-	w.control(t, store.NewControlID(), "task", a, "stop")
+	w.control(t, store.NewControlID(), "mission", "M-1", "stop")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		return store.SetCooldown(ctx, tx, "controller", "codex:owner:weekly", "codex", "weekly", time.Now().Add(time.Hour), "test")
 	}))

@@ -134,21 +134,6 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
-func (w *world) task(t *testing.T, mission, step, subject, role string) (string, error) {
-	t.Helper()
-	ctx := ctxOf(t)
-	id := store.NewTaskID()
-	err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		task := store.Task{ID: id, MissionID: mission, PlanNode: step, Subject: subject, Role: role,
-			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "branch"}
-		if step == "" {
-			task.OffPlanReason = "outside the plan"
-		}
-		return seedTask(ctx, tx, task, "proposed")
-	})
-	return id, err
-}
-
 func (w *world) lastSeq(t *testing.T, stream string) int64 {
 	t.Helper()
 	ctx := ctxOf(t)
@@ -168,17 +153,12 @@ func TestSeedAndFirstCreation(t *testing.T) {
 	if again {
 		t.Fatal("seed ran twice")
 	}
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
-		return err
-	}))
-
+	// The row an event names must exist: a mission never created (a task's
+	// id is no longer checked, its table is gone since 0020).
 	before := w.lastSeq(t, store.MissionStream("M-1"))
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err = store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_proposed", Actor: "controller",
-			MissionID: "M-1", TaskID: store.NewTaskID(), Body: map[string]any{"title": "never created", "role": "other"}})
+		_, err = store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		return err
 	})
 	wantErr(t, err, "violates foreign key")
@@ -196,13 +176,10 @@ func TestSeedAndFirstCreation(t *testing.T) {
 func TestIdentitiesAndTheEventRule(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	t1, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
-	var attempt string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		attempt, _, err = seedLease(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
-		return err
-	}))
+	var err error
+	// The state row of the examples below is a mission and the liveness row
+	// a host: the tasks' and attempts' tables are gone since 0020.
+	w.seeded(t, func(tx pgx.Tx) { seedHost(t, tx, "h1") })
 
 	exec := func(c *pgx.Conn, q string, args ...any) error { _, err = c.Exec(ctx, q, args...); return err }
 
@@ -218,39 +195,36 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	wantErr(t, exec(w.rt, `DROP TABLE agentrt.event`), "must be owner")
 
 	// A state row without an event of this transaction.
-	wantErr(t, exec(w.rt, `UPDATE agentrt.task SET state = 'ready' WHERE task_id = $1`, t1), "needs SET LOCAL agentrt.event_id")
+	wantErr(t, exec(w.rt, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`), "needs SET LOCAL agentrt.event_id")
 	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err = tx.Exec(ctx, `SELECT set_config('agentrt.event_id', '1', true)`)
 		ok(t, err)
-		_, err = tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready' WHERE task_id = $1`, t1)
+		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`)
 		return err
 	}), "was not written by this transaction")
-	// An event of this transaction about another task.
-	other, err := w.task(t, "M-1", s1, "", "implement")
-	ok(t, err)
+	// An event of this transaction about another mission.
 	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_state_changed", Actor: "controller",
-			MissionID: "M-1", PlanNode: s1, TaskID: other, Body: map[string]any{"from": "proposed", "to": "ready"}}); err != nil {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+			MissionID: "M-1", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready' WHERE task_id = $1`, t1)
+		_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`)
 		return err
-	}), "task_id")
+	}), "mission_id")
 	// With its own event it goes through.
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_state_changed", Actor: "controller",
-			MissionID: "M-1", PlanNode: s1, TaskID: t1, Body: map[string]any{"from": "proposed", "to": "ready"}}); err != nil {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-2"), Type: "mission_state_changed", Actor: "controller",
+			MissionID: "M-2", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready', version = version + 1 WHERE task_id = $1`, t1)
+		_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active', version = version + 1 WHERE mission_id = 'M-2'`)
 		return err
 	}))
 
-	// Liveness columns: alone, without an event; the lease only forward;
-	// together with another column, an event again.
-	ok(t, exec(w.rt, `UPDATE agentrt.attempt SET heartbeat_at = clock_timestamp(), lease_expires_at = lease_expires_at + interval '30 seconds' WHERE attempt_id = $1`, attempt))
-	wantErr(t, exec(w.rt, `UPDATE agentrt.attempt SET lease_expires_at = lease_expires_at - interval '1 second' WHERE attempt_id = $1`, attempt), "only moves forward")
-	wantErr(t, exec(w.rt, `UPDATE agentrt.attempt SET heartbeat_at = clock_timestamp(), state = 'running' WHERE attempt_id = $1`, attempt), "needs SET LOCAL")
+	// Liveness columns: alone, without an event; together with another
+	// column, an event again.
+	ok(t, exec(w.rt, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = 'h1'`))
+	wantErr(t, exec(w.rt, `UPDATE agentrt.host SET last_poll_at = clock_timestamp(), state = 'paused' WHERE host_id = 'h1'`), "needs SET LOCAL")
 
 	// The reader reads and does nothing else; another environment's identity
 	// does not get in.
@@ -258,7 +232,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	var n int
 	ok(t, reader.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&n))
 	wantErr(t, exec(reader, `INSERT INTO agentrt.control (control_id, scope, control_kind, reason, set_by_actor_id) VALUES ('c', 'global', 'stop', 'x', 'owner')`), "permission denied")
-	wantErr(t, exec(reader, `UPDATE agentrt.task SET title = 'x'`), "permission denied")
+	wantErr(t, exec(reader, `UPDATE agentrt.mission SET title = 'x'`), "permission denied")
 	if _, err := pgx.Connect(ctx, w.db.Foreign); err == nil {
 		t.Fatal("platform_agentrt_stg connected to a dev database")
 	} else if !strings.Contains(err.Error(), "permission denied") {

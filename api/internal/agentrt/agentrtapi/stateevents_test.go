@@ -286,10 +286,8 @@ func liveness(t *testing.T, f *stateFuzz) map[string][]string {
 // snapshot is the state of every row of the four state tables.
 func (f *stateFuzz) snapshot(t *testing.T) map[rowKey]string {
 	t.Helper()
-	rows, err := f.pool.Query(ctx, `SELECT 'task', task_id, state FROM agentrt.task
-	  UNION ALL SELECT 'mission', mission_id, state FROM agentrt.mission
-	  UNION ALL SELECT 'plan_node', plan_node_id, COALESCE(state, '') FROM agentrt.plan_node
-	  UNION ALL SELECT 'attempt', attempt_id, state FROM agentrt.attempt`)
+	rows, err := f.pool.Query(ctx, `SELECT 'mission', mission_id, state FROM agentrt.mission
+	  UNION ALL SELECT 'plan_node', plan_node_id, COALESCE(state, '') FROM agentrt.plan_node`)
 	must(t, err)
 	defer rows.Close()
 	out := map[rowKey]string{}

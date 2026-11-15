@@ -65,23 +65,8 @@ func issueFixture(t *testing.T, pool *pgxpool.Pool) string {
 			Body: map[string]any{"source": "test: a seat's brief"}}); err != nil {
 			return err
 		}
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# seat brief "+store.NewTaskID()))
-		if err != nil {
-			return err
-		}
+		var err error
 		report, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("seat answer "+store.NewTaskID()))
-		if err != nil {
-			return err
-		}
-		task := store.NewTaskID()
-		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, off_plan, off_plan_reason, role, task_class, title,
-		    spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id)
-		  VALUES ($1, 'M-1', true, 'a seat brief', 'brief', 'brief', 'seat brief', $2, 'none', 'accepted', 60, 'controller')`, task, spec); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch, lease_expires_at,
-		    heartbeat_at, state, report_artifact_id) VALUES ($1, $2, 1, 'exec:claude', 1, now(), now(), 'finished', $3)`,
-			store.NewAttemptID(), task, report)
 		return err
 	}))
 	return report
