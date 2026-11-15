@@ -143,7 +143,10 @@ async function consultApproval(action: string, params: Record<string, unknown>):
  * answers 403 "approval required" with the policy's reasons and creates
  * nothing.
  */
-const SERVER_JUDGED_ACTIONS: ReadonlySet<string> = new Set(['start_pipeline_run'])
+// apply_manifest (2026-11-15): since the policy's apply clause was signed the
+// consult answers "call directly" for a covered plan and would create a card
+// reading "mcp:apply_manifest" for any other; no tool reached the apply route.
+const SERVER_JUDGED_ACTIONS: ReadonlySet<string> = new Set(['start_pipeline_run', 'apply_manifest'])
 
 export const APPROVAL_REQUIRED_ERROR = 'approval required'
 

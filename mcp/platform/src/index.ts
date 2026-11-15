@@ -650,6 +650,17 @@ reg(
 )
 
 reg(
+  'apply_manifest',
+  'Apply the objects of one plan (the plan_id plan_manifest returned) and return {apply_run, tier}. The call goes to the apply route itself and never creates an approval request. A tier C or D plan is applied only when the signed release policy covers it (the namespace, kinds and paths the policy lists, every object last applied by the platform\'s applier); otherwise nothing is applied and the answer is {started: false, error: "approval required", action, release_policy: [the policy\'s reasons], note}: create the request yourself with request_action (action apply_manifest, params {plan_id}). Read the plan\'s diff first (get_delivery_run_logs on the plan id).',
+  {
+    ...actionTraceFields,
+    plan_id: z.string().describe('The plan_id plan_manifest returned'),
+  },
+  async ({ plan_id, reason, unchecked, rollback }) =>
+    jsonResult(await platformPost('/api/v1/actuation/manifests/apply', { plan_id, reason, unchecked, rollback })),
+)
+
+reg(
   'create_job_from_cronjob',
   'Create one Job from a CronJob. Tier follows the actuation policy; denied namespaces are refused.',
   {

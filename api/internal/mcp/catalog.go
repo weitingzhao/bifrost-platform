@@ -215,6 +215,7 @@ func Catalog() []ToolView {
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
 
 		tool("plan_manifest", "Render a git path and return a plan id (tier B)", "routine", "POST", "/api/v1/actuation/manifests/plan", "operator", "Agent", true),
+		tool("apply_manifest", "Apply the objects of one plan; tier C or D only when the signed release policy covers it", "confirm", "POST", "/api/v1/actuation/manifests/apply", "operator", "Agent", true),
 		tool("create_job_from_cronjob", "Create one Job from a CronJob (tier follows the actuation policy)", "routine", "POST", "/api/v1/actuation/jobs/from-cronjob", "operator", "Agent", true),
 		tool("delete_finished_jobs", "Delete finished Jobs and probe Pods (tier B)", "routine", "POST", "/api/v1/actuation/jobs/delete-finished", "operator", "Agent", true),
 		tool("run_probe_pod", "Run a short-lived probe Job from an allow-listed image", "routine", "POST", "/api/v1/actuation/probes", "operator", "Agent", true),
