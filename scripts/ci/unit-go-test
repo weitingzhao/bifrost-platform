@@ -10,6 +10,15 @@
 #   UNIT_PG_DSN, UNIT_REDIS_URL         the throwaway database and Redis, if any
 #   UNIT_CACHE                          a directory kept between runs, if any
 #   UNIT_RESULT_DIR                     where the results go (default /unit/result)
+#   UNIT_DECLARED                       what the package declares it reads beyond its
+#                                       own directory, one entry a line or separated
+#                                       by spaces, as its inputs in bifrost.units.yaml
+#                                       are written: a path from the repository root,
+#                                       "other-repo:path" for a repository checked out
+#                                       beside this one, "." for everything. Set (even
+#                                       to nothing), the tests' reads are held to it;
+#                                       unset, they are not looked at.
+#   UNIT_REPO_ROOT                      the repository root (default: git's)
 #
 # Results, one file each:
 #   tests         "<expected> <sha256 of the package's whole test list> <ran> <skipped>"
@@ -20,6 +29,20 @@
 #                 test did (it did not compile, or the test program died);
 #                 empty when it passed
 # The exit code is go test's: 0 only when every test of the part passed.
+#
+# Read and not declared is red. With UNIT_DECLARED set, the test program logs
+# every file it opens or looks at (go's own -test.testlogfile). A file inside
+# the repository, or a repository beside it, that is outside the package's
+# directory and under no declared entry fails the unit: failed-tests gains
+# "<package>.UndeclaredRead", fail-class is test, the files are printed. A
+# declaration that leaves out a file the tests read means the file can change
+# and the tests are not run again, and nobody is told (2026-11-13, CI feedback
+# 18: a deleted Console file two Go tests read left main red for 28 minutes
+# behind a green run). Not held to the declaration: go.mod and go.sum (they
+# are in every key); looking at, not opening, a directory above the package
+# or an entry directly in one (how a test finds the repository root). Not
+# seen: what a process the tests start reads; a package that starts one says
+# what it reads by hand.
 #
 # The tests are split by name: the package's tests sorted, dealt round to the
 # parts, so the parts together are every test once. -count=1: whether a unit
@@ -66,11 +89,16 @@ if [ "$expected" -eq 0 ]; then
 fi
 
 status=0
+if [ -n "${UNIT_DECLARED+set}" ]; then
+  set -- "-test.testlogfile=$tmp/reads"
+else
+  set --
+fi
 if [ "$total" -eq 1 ]; then
-  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" . > "$tmp/events" 2> "$tmp/stderr" || status=$?
+  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" . "$@" > "$tmp/events" 2> "$tmp/stderr" || status=$?
 else
   run="^($(paste -sd'|' "$tmp/mine"))\$"
-  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" -run "$run" . > "$tmp/events" 2> "$tmp/stderr" || status=$?
+  go test -json -count=1 -timeout="${UNIT_GO_TEST_TIMEOUT:-1800s}" -run "$run" . "$@" > "$tmp/events" 2> "$tmp/stderr" || status=$?
 fi
 cat "$tmp/stderr" >&2
 
@@ -114,4 +142,76 @@ print("unit-go-test: %s tests of this part, %d ran, %d skipped, %d failed; exit 
 if failed:
     print("Failing tests: " + ",".join(sorted(failed)))
 PY
+
+if [ -n "${UNIT_DECLARED+set}" ]; then
+  root="${UNIT_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
+  if [ -z "$root" ] || [ ! -d "$root" ]; then
+    echo "unit-go-test: UNIT_DECLARED is set and the repository root is not known (UNIT_REPO_ROOT, or a git checkout)" >&2
+    printf build > "$result/fail-class"
+    exit 2
+  fi
+  python3 - "$tmp/reads" "$root" "$result" "$(go list . 2>/dev/null)" <<'PY' || status=1
+import os, sys
+log, root, result, pkg = sys.argv[1:5]
+real = os.path.realpath
+root, here = real(root), real(os.getcwd())
+parent = os.path.dirname(root)
+declared = os.environ.get("UNIT_DECLARED", "").split()
+if "." in declared:
+    print("unit-go-test: the package declares it reads everything; its reads are not held to anything")
+    sys.exit(0)
+allowed = []
+for entry in declared:
+    repo, sep, path = entry.partition(":")
+    allowed.append(os.path.normpath(os.path.join(parent, repo, path)) if sep else os.path.normpath(os.path.join(root, entry)))
+above = set()
+d = here
+while True:
+    above.add(d)
+    if d == root or os.path.dirname(d) == d:
+        break
+    d = os.path.dirname(d)
+under = lambda p, base: p == base or p.startswith(base + os.sep)
+cwd, bad = here, set()
+try:
+    lines = open(log, errors="replace").read().splitlines()
+except OSError:
+    lines = []
+for line in lines:
+    op, _, arg = line.partition(" ")
+    if op == "chdir":
+        cwd = os.path.normpath(os.path.join(cwd, arg))
+        continue
+    if op not in ("open", "stat") or not arg:
+        continue
+    p = os.path.normpath(os.path.join(cwd, arg))
+    p = os.path.join(real(os.path.dirname(p)), os.path.basename(p))
+    if under(p, here) or not under(p, parent) or any(under(p, a) for a in allowed):
+        continue
+    if not under(p, root) and os.path.dirname(p) == parent and op == "stat":
+        continue  # looking at which repositories are beside this one
+    if under(p, root) and os.path.basename(p) in ("go.mod", "go.sum"):
+        continue
+    if op == "stat" and (p in above or os.path.dirname(p) in above):
+        continue
+    bad.add(os.path.relpath(p, root) if under(p, root) else os.path.relpath(p, parent).replace(os.sep, ":", 1))
+if not bad:
+    print("unit-go-test: every file the tests read outside the package is declared (%d declared)" % len(declared))
+    sys.exit(0)
+print("unit-go-test: read and not declared (%d): the package's inputs in bifrost.units.yaml leave these out," % len(bad))
+print("so a change to one of them would not run these tests again:")
+for p in sorted(bad)[:60]:
+    print("  " + p)
+if len(bad) > 60:
+    print("  … and %d more" % (len(bad) - 60))
+name = (pkg or "package") + ".UndeclaredRead"
+old = open(result + "/failed-tests").read()
+if name not in old.split(","):
+    with open(result + "/failed-tests", "w") as fh:
+        fh.write((old + "," if old else "") + name)
+with open(result + "/fail-class", "w") as fh:
+    fh.write("test")
+sys.exit(1)
+PY
+fi
 exit "$status"

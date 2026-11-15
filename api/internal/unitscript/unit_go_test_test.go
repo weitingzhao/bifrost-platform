@@ -139,3 +139,103 @@ func TestUnitGoTestResults(t *testing.T) {
 		t.Fatalf("120 failed tests: %d bytes, class %q, tests %q", len(long.failedTests), long.failClass, long.tests)
 	}
 }
+
+// repoWithReader lays out a repository (root/), a repository beside it
+// (other/), and one Go package two levels down whose tests read what the
+// test file says.
+func repoWithReader(t *testing.T, test string) (root, pkg string) {
+	t.Helper()
+	top := t.TempDir()
+	root, pkg = filepath.Join(top, "root"), filepath.Join(top, "root", "mod", "pkg")
+	for name, body := range map[string]string{
+		"root/config/a.yaml":            "a: 1\n",
+		"root/mod/go.mod":               "module example.com/um\n\ngo 1.25\n",
+		"root/mod/pkg/testdata/own.txt": "own\n",
+		"root/mod/pkg/a_test.go":        test,
+		"other/k.yaml":                  "k: 1\n",
+	} {
+		p := filepath.Join(top, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root, pkg
+}
+
+const reader = `package pkg
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func mustRead(t *testing.T, p string) {
+	if _, err := os.ReadFile(p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// How a test finds the repository root: looking, not opening.
+func TestFindsRoot(t *testing.T) {
+	d, _ := os.Getwd()
+	for i := 0; i < 3; i++ {
+		_, _ = os.Stat(filepath.Join(d, "go.mod"))
+		_, _ = os.Stat(filepath.Join(d, ".git"))
+		d = filepath.Dir(d)
+	}
+	mustRead(t, "testdata/own.txt")
+	mustRead(t, "../go.mod")
+}
+`
+
+// Read and not declared is red. Origin: 2026-11-13, CI feedback 18. Commit
+// 5f1e5df2 deleted Console files two Go tests read; nothing said those tests
+// read them, so its CI was green and main stayed red for 28 minutes. Since
+// 2026-11-14 the 51 packages declared as reading the whole repository are to
+// be narrowed one by one: a narrowed declaration that leaves out a file the
+// tests read is that same hole, and this is what closes it.
+func TestUnitGoTestHoldsReadsToTheDeclaration(t *testing.T) {
+	inRepo := reader + "\nfunc TestReadsConfig(t *testing.T) { mustRead(t, \"../../config/a.yaml\") }\n"
+	beside := reader + "\nfunc TestReadsBeside(t *testing.T) { mustRead(t, \"../../../other/k.yaml\") }\n"
+	for name, tc := range map[string]struct {
+		test     string
+		declared []string // nil: UNIT_DECLARED unset
+		red      bool
+	}{
+		"reads only its own directory and finds the root, declares nothing": {reader, []string{""}, false},
+		"reads a file of the repository, declares nothing":                  {inRepo, []string{""}, true},
+		"declares another directory":                                        {inRepo, []string{"console"}, true},
+		"declares the directory":                                            {inRepo, []string{"config"}, false},
+		"declares the file, among others, one a line":                       {inRepo, []string{"console\nconfig/a.yaml"}, false},
+		"declares everything":                                               {inRepo, []string{"."}, false},
+		"no declaration is given: the reads are not looked at":              {inRepo, nil, false},
+		"reads a repository beside this one, declares nothing":              {beside, []string{""}, true},
+		"declares the file of the repository beside it":                     {beside, []string{"other:k.yaml"}, false},
+		"declares the whole repository beside it":                           {beside, []string{"other:"}, false},
+	} {
+		root, pkg := repoWithReader(t, tc.test)
+		env := []string{"UNIT_REPO_ROOT=" + root}
+		if tc.declared != nil {
+			env = append(env, "UNIT_DECLARED="+tc.declared[0])
+		}
+		o := run(t, pkg, env...)
+		undeclared := strings.Contains(o.failedTests, "example.com/um/pkg.UndeclaredRead")
+		if tc.red != (o.exit != 0) || tc.red != undeclared || tc.red != (o.failClass == "test") {
+			t.Errorf("%s: exit %d, failed-tests %q, fail-class %q; want red=%v", name, o.exit, o.failedTests, o.failClass, tc.red)
+		}
+	}
+}
+
+// A red test stays in failed-tests beside the undeclared read, and the unit
+// is red once.
+func TestUnitGoTestUndeclaredReadBesideARedTest(t *testing.T) {
+	root, pkg := repoWithReader(t, reader+"\nfunc TestReadsConfig(t *testing.T) { mustRead(t, \"../../config/a.yaml\"); t.Fatal(\"red\") }\n")
+	o := run(t, pkg, "UNIT_REPO_ROOT="+root, "UNIT_DECLARED=")
+	if o.exit == 0 || o.failClass != "test" || !strings.Contains(o.failedTests, "pkg.TestReadsConfig") || !strings.Contains(o.failedTests, "pkg.UndeclaredRead") {
+		t.Fatalf("exit %d, failed-tests %q, fail-class %q", o.exit, o.failedTests, o.failClass)
+	}
+}
