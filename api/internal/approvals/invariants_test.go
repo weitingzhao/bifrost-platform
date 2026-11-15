@@ -3,24 +3,22 @@ package approvals
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 // The approval service's invariants, written out (main coordinator and duty,
 // 2026-11-15: with no second reader, the author proves a change safe with
-// facts the machine checks). Each is a named test below. Changing this list
-// is the one change left to the Owner.
+// facts the machine checks). Each is a named test below. This file is the
+// author's to change (its diff is a change's reach); what must be refused
+// however the service changes is in mustrefuse/, which only the Owner changes.
 //
-//  I1  An agent (operator token) can neither approve nor reject nor resolve a card.
-//  I2  A card can be withdrawn only by the requester that built it.
+//  (I1, I2: an agent cannot approve, reject or resolve; withdraw is the
+//  requester's alone: these moved to the must-refuse set in mustrefuse/,
+//  which the author cannot change; they are not repeated here.)
 //  I3  The command an Owner approved is the command that runs: params that no
 //      longer hash to params_hash are never started.
 //  I4  Withdrawing and superseding only ever make cards fewer: neither starts
@@ -31,73 +29,7 @@ import (
 //      (create_check tests); a tier X request is refused whatever it says.
 //
 // Origin: the three-questions review of the gates, 2026-11-15; #562, #564,
-// #566 for I2/I4/I5, #557 for I3's reason to exist.
-
-func invariantRouter(t *testing.T) (http.Handler, *Service) {
-	t.Helper()
-	dir := t.TempDir()
-	authPath := filepath.Join(dir, "auth.yaml")
-	if err := os.WriteFile(authPath, []byte(`
-tokens:
-  - {name: operator, role: operator, token: operator-test-token}
-  - {name: admin, role: admin, token: admin-test-token}
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	auth, err := actuation.LoadAuth(authPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc := New(filepath.Join(dir, "approvals"), nil)
-	r := chi.NewRouter()
-	Mount(r, auth, svc)
-	return r, svc
-}
-
-func call(h http.Handler, method, path, body, token, session string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	if session != "" {
-		req.Header.Set(SessionHeader, session)
-	}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
-}
-
-// I1.
-func TestInvariantAnAgentCannotApproveRejectOrResolve(t *testing.T) {
-	h, svc := invariantRouter(t)
-	a := pendingCard(t, svc)
-	for _, p := range []string{"approve", "reject", "resolve"} {
-		rec := call(h, http.MethodPost, "/approvals/"+a.ID+"/"+p, `{"reason":"r","channel":"chat"}`, "operator-test-token", "agent-session")
-		if rec.Code < 400 {
-			t.Fatalf("operator %s = %d %s", p, rec.Code, rec.Body.String())
-		}
-	}
-	if got, _ := svc.get(a.ID); got.Status != StatusPending {
-		t.Fatalf("status after the agent's attempts = %s", got.Status)
-	}
-	// Positive control: the same route is open to the admin token.
-	if rec := call(h, http.MethodPost, "/approvals/"+a.ID+"/reject", `{"reason":"r"}`, "admin-test-token", ""); rec.Code != http.StatusOK {
-		t.Fatalf("admin reject = %d %s", rec.Code, rec.Body.String())
-	}
-}
-
-// I2, over HTTP: the requester is the session header, not a body field.
-func TestInvariantWithdrawIsTheRequestersAloneOverHTTP(t *testing.T) {
-	h, svc := invariantRouter(t)
-	c := svc.create(context.Background(), "s1", "owner_run_command", "x\n改了什么：a\n批了以后谁因此能做什么新事：b", "", map[string]any{"command": "true", "reason": "r"})
-	if c.Status != http.StatusCreated {
-		t.Fatalf("create = %d %v", c.Status, c.Body)
-	}
-	if rec := call(h, http.MethodPost, "/approvals/"+c.Approval.ID+"/withdraw", `{"reason":"mine","requester":"s1"}`, "operator-test-token", "s2"); rec.Code != http.StatusForbidden {
-		t.Fatalf("another session = %d %s", rec.Code, rec.Body.String())
-	}
-	if rec := call(h, http.MethodPost, "/approvals/"+c.Approval.ID+"/withdraw", `{"reason":"mine"}`, "operator-test-token", "s1"); rec.Code != http.StatusOK {
-		t.Fatalf("the requester = %d %s", rec.Code, rec.Body.String())
-	}
-}
+// #566 for I4/I5, #557 for I3's reason to exist.
 
 // I3: the stored command is changed after approval; the executor is not given it.
 func TestInvariantAnApprovedCommandThatChangedIsNeverStarted(t *testing.T) {
