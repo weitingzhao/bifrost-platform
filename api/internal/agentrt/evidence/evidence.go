@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"regexp"
 	"sort"
 	"time"
@@ -39,8 +39,27 @@ const (
 	EvidenceScopeUnknown = "unknown"
 )
 
-// RepoAt is the store's: a pipeline run records its inputs as these.
-type RepoAt = store.RepoAt
+// RepoAt is a repository at a commit, with that commit's git tree.
+type RepoAt struct {
+	Repo   string `json:"repo"`
+	Commit string `json:"commit,omitempty"`
+	Tree   string `json:"tree,omitempty"`
+}
+
+// Run is what RunEvidence reads of a completed pipeline run: the fields of
+// the store's PipelineRun that say what ran, on what, and how it ended. The
+// one conversion is controller.EvidenceRun; a field added here is added
+// there (TestEvidenceRunCarriesEveryField).
+type Run struct {
+	Kind, Repo, Run, UID, Pipeline string
+	Result, Reason, Scope          string
+	TestedBy                       string
+	CompletedAt                    time.Time
+	Inputs                         []RepoAt
+	Audit                          bool
+	FailedTasks, FailedTests       []string
+	FailClass                      string
+}
 
 // EvidenceRow is one row of the ledger.
 type EvidenceRow struct {
@@ -74,15 +93,15 @@ var gitObject = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // another commit has the same key.
 func EvidenceInputs(task, repo, tree string, beside []RepoAt) (map[string]any, string, error) {
 	if task == "" || repo == "" || !gitObject.MatchString(tree) {
-		return nil, "", fmt.Errorf("%w: evidence inputs need a task, a repository and its tree", store.ErrInvalid)
+		return nil, "", fmt.Errorf("%w: evidence inputs need a task, a repository and its tree", eventlog.ErrInvalid)
 	}
 	with := map[string]any{}
 	for _, b := range beside {
 		if b.Repo == "" || b.Repo == repo || !gitObject.MatchString(b.Tree) {
-			return nil, "", fmt.Errorf("%w: evidence inputs: %q beside %s has no tree", store.ErrInvalid, b.Repo, repo)
+			return nil, "", fmt.Errorf("%w: evidence inputs: %q beside %s has no tree", eventlog.ErrInvalid, b.Repo, repo)
 		}
 		if _, twice := with[b.Repo]; twice {
-			return nil, "", fmt.Errorf("%w: evidence inputs name %s twice", store.ErrInvalid, b.Repo)
+			return nil, "", fmt.Errorf("%w: evidence inputs name %s twice", eventlog.ErrInvalid, b.Repo)
 		}
 		with[b.Repo] = b.Tree
 	}
@@ -98,7 +117,7 @@ func EvidenceInputs(task, repo, tree string, beside []RepoAt) (map[string]any, s
 // not say what it tested: its own commit and tree, and a tree for every
 // repository it reports beside it. The caller fills in trees the run did not
 // report before it asks.
-func RunEvidence(p store.PipelineRun) (EvidenceRow, bool, error) {
+func RunEvidence(p Run) (EvidenceRow, bool, error) {
 	if p.Kind != "ci" || p.Repo == "" || p.Run == "" || p.UID == "" || len(p.Inputs) == 0 {
 		return EvidenceRow{}, false, nil
 	}
@@ -192,7 +211,7 @@ func RunEvidence(p store.PipelineRun) (EvidenceRow, bool, error) {
 
 // RecordEvidence appends rows and returns how many were new: a row the ledger
 // already has (the same run, unit, task, key and result) is left as it is.
-func RecordEvidence(ctx context.Context, db store.DB, rows []EvidenceRow) (int, error) {
+func RecordEvidence(ctx context.Context, db eventlog.DB, rows []EvidenceRow) (int, error) {
 	if len(rows) == 0 {
 		return 0, nil
 	}
@@ -209,7 +228,7 @@ func RecordEvidence(ctx context.Context, db store.DB, rows []EvidenceRow) (int, 
 	})
 	// One transaction a row: a row the table refuses does not hold back the others.
 	for _, e := range rows {
-		err := store.InTx(ctx, db, func(tx pgx.Tx) error {
+		err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 			const insert = `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
 			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`
 			// The row itself first: a run already in the ledger writes nothing
@@ -292,9 +311,9 @@ func EvidenceVerdict(rows []EvidenceRow) string {
 
 const evidenceColumns = `evidence_id, repo, unit, task, input_key, result, scope, inputs::text, statement::text, commit_sha, run_name, run_uid, recorded_at`
 
-func evidenceQuery(ctx context.Context, db store.DB, sql string, args ...any) ([]EvidenceRow, error) {
+func evidenceQuery(ctx context.Context, db eventlog.DB, sql string, args ...any) ([]EvidenceRow, error) {
 	out := []EvidenceRow{}
-	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		out = out[:0]
 		rows, err := tx.Query(ctx, sql, args...)
 		if err != nil {
@@ -318,7 +337,7 @@ func evidenceQuery(ctx context.Context, db store.DB, sql string, args ...any) ([
 // EvidenceTasks is the newest row of each task the ledger has for a unit of
 // a repository: which tasks give evidence for it, and what each used beside
 // the repository the last time it ran.
-func EvidenceTasks(ctx context.Context, db store.DB, repo, unit string) ([]EvidenceRow, error) {
+func EvidenceTasks(ctx context.Context, db eventlog.DB, repo, unit string) ([]EvidenceRow, error) {
 	if unit == EvidenceUnitRepo {
 		// The repository's CI pipelines, not the tasks of the unit a plan
 		// names "repo" (see ciRunRows).
@@ -347,20 +366,20 @@ const fullPassesFirst = `(result = 'passed' AND scope = 'full') DESC`
 // EvidenceCIByCommit is the rows the CI pipelines' runs recorded for a
 // commit, its full passes first and newest first within each: what says
 // whether the commit's CI passed.
-func EvidenceCIByCommit(ctx context.Context, db store.DB, repo, commit string, limit int) ([]EvidenceRow, error) {
+func EvidenceCIByCommit(ctx context.Context, db eventlog.DB, repo, commit string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND commit_sha = $2 AND `+ciRunRows+` ORDER BY `+fullPassesFirst+`, evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
 
 // EvidenceByKey is the rows of one key, oldest first.
-func EvidenceByKey(ctx context.Context, db store.DB, repo, unit, task, key string) ([]EvidenceRow, error) {
+func EvidenceByKey(ctx context.Context, db eventlog.DB, repo, unit, task, key string) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND unit = $2 AND task = $3 AND input_key = $4 ORDER BY evidence_id`, repo, unit, task, key)
 }
 
 // EvidenceByCommit is the newest rows recorded for a commit of a repository,
 // whatever their key, newest first.
-func EvidenceByCommit(ctx context.Context, db store.DB, repo, commit string, limit int) ([]EvidenceRow, error) {
+func EvidenceByCommit(ctx context.Context, db eventlog.DB, repo, commit string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND commit_sha = $2 ORDER BY evidence_id DESC LIMIT $3`, repo, commit, limit)
 }
@@ -368,12 +387,12 @@ func EvidenceByCommit(ctx context.Context, db store.DB, repo, commit string, lim
 // EvidenceByTree is the newest rows the CI pipelines' runs recorded for a git
 // tree of a repository, under whatever commit and whatever was beside it,
 // newest first.
-func EvidenceByTree(ctx context.Context, db store.DB, repo, tree string, limit int) ([]EvidenceRow, error) {
+func EvidenceByTree(ctx context.Context, db eventlog.DB, repo, tree string, limit int) ([]EvidenceRow, error) {
 	return evidenceQuery(ctx, db, `SELECT `+evidenceColumns+` FROM agentrt.evidence
 	  WHERE repo = $1 AND `+ciRunRows+` AND inputs->>'tree' = $2 ORDER BY `+fullPassesFirst+`, evidence_id DESC LIMIT $3`, repo, tree, limit)
 }
 
-// The classes of a failed run (store.PipelineRun.FailClass).
+// The classes of a failed run (Run.FailClass).
 const (
 	FailClassTest  = "test"
 	FailClassBuild = "build"

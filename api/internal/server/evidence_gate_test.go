@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -47,7 +48,7 @@ func TestLedgerCI(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, Audit: audit, CompletedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}, {Repo: "bifrost-ui", Commit: h("2"), Tree: h("f")}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
@@ -136,7 +137,7 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
 			Scope: "full", CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
@@ -188,7 +189,7 @@ func TestLedgerCIBookkeeping(t *testing.T) {
 		t.Helper()
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
 			Scope: "full", Audit: audit, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}

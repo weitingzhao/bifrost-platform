@@ -9,6 +9,7 @@ import (
 
 	"encoding/json"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -45,7 +46,7 @@ func TestCompareEvidence(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: "Succeeded", Reason: "Succeeded",
 			Repo: "bifrost-platform", Scope: scope, CompletedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]}, {Repo: "bifrost-ui", Commit: ui, Tree: trees["bifrost-ui@"+ui]}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
@@ -108,7 +109,7 @@ func TestCompareEvidenceFollowsTheGate(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result,
 			Repo: "bifrost-platform", Scope: "full", Audit: audit, CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]}, {Repo: "bifrost-ui", Commit: h("3"), Tree: h("0")}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}

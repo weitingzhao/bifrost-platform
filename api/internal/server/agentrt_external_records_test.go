@@ -385,7 +385,7 @@ func TestAPipelineRunWithABadScopeIsNotAFullRun(t *testing.T) {
 		"not a string":             {[]any{map[string]any{"name": "api-scope", "value": []any{"full"}}}, false},
 		"named twice":              {[]any{map[string]any{"name": "api-scope", "value": "full"}, map[string]any{"name": "api-scope", "value": "console"}}, false},
 	} {
-		_, is, err := evidence.RunEvidence(fact(append(append([]any{}, own...), tc.scope...)...))
+		_, is, err := evidence.RunEvidence(controller.EvidenceRun(fact(append(append([]any{}, own...), tc.scope...)...)))
 		if err != nil || is != tc.evidence {
 			t.Errorf("%s: evidence %v, %v; want %v", name, is, err, tc.evidence)
 		}

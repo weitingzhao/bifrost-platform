@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -59,7 +60,7 @@ func TestCommitEvidence(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]},
 				{Repo: "bifrost-ui", Commit: mains["bifrost-ui"], Tree: trees["bifrost-ui@"+mains["bifrost-ui"]]}}}
-		e, is, err := evidence.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s is no evidence: %v", name, err)
 		}

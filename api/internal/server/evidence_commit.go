@@ -86,7 +86,7 @@ func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context,
 			return out, fmt.Errorf("evidence %d: inputs: %w", last.ID, err)
 		}
 		t := evidenceTask{Task: last.Task, Beside: []evidenceInput{}}
-		var beside []store.RepoAt
+		var beside []evidence.RepoAt
 		for name := range doc.Beside {
 			h, ok := heads[name]
 			if !ok {
@@ -100,7 +100,7 @@ func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context,
 				heads[name] = h
 			}
 			t.Beside = append(t.Beside, h)
-			beside = append(beside, store.RepoAt{Repo: name, Tree: h.Tree})
+			beside = append(beside, evidence.RepoAt{Repo: name, Tree: h.Tree})
 		}
 		sort.Slice(t.Beside, func(i, j int) bool { return t.Beside[i].Repo < t.Beside[j].Repo })
 		inputs, key, err := evidence.EvidenceInputs(last.Task, repo, out.Tree, beside)

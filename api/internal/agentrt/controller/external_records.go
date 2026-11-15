@@ -231,7 +231,20 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 		}
 		p.FailedTasks, p.FailedTests, p.FailClass = r.tasks, r.tests, r.class
 	}
-	return evidence.RunEvidence(p)
+	return evidence.RunEvidence(EvidenceRun(p))
+}
+
+// EvidenceRun is the store's record of a pipeline run as the evidence ledger
+// reads it (evidence.Run). It is the one conversion between the two: every
+// field of evidence.Run is set here (TestEvidenceRunCarriesEveryField).
+func EvidenceRun(p store.PipelineRun) evidence.Run {
+	var inputs []evidence.RepoAt
+	for _, in := range p.Inputs {
+		inputs = append(inputs, evidence.RepoAt(in))
+	}
+	return evidence.Run{Kind: p.Kind, Repo: p.Repo, Run: p.Run, UID: p.UID, Pipeline: p.Pipeline,
+		Result: p.Result, Reason: p.Reason, Scope: p.Scope, TestedBy: p.TestedBy, CompletedAt: p.CompletedAt,
+		Inputs: inputs, Audit: p.Audit, FailedTasks: p.FailedTasks, FailedTests: p.FailedTests, FailClass: p.FailClass}
 }
 
 func recordList[T any](c *Controller, ctx context.Context, kind string, list func(context.Context) ([]T, error), body func(T) (map[string]any, error)) (int, error) {

@@ -81,10 +81,10 @@ func TestPipelineRecordsWritesEvidence(t *testing.T) {
 		}
 	}
 	_, key, err := evidence.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("c"),
-		[]store.RepoAt{{Repo: "bifrost-ui", Tree: sha("f")}, {Repo: "bifrost-trade-infra", Tree: sha("e")}})
+		[]evidence.RepoAt{{Repo: "bifrost-ui", Tree: sha("f")}, {Repo: "bifrost-trade-infra", Tree: sha("e")}})
 	must(t, err)
 	_, redKey, err := evidence.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("9"),
-		[]store.RepoAt{{Repo: "bifrost-trade-infra", Tree: sha("e")}, {Repo: "bifrost-ui", Tree: sha("f")}})
+		[]evidence.RepoAt{{Repo: "bifrost-trade-infra", Tree: sha("e")}, {Repo: "bifrost-ui", Tree: sha("f")}})
 	must(t, err)
 	want := map[string]evidenceRow{
 		"ci-platform-green":     {"ci-platform-green", key, "passed", "full", sha("a")},

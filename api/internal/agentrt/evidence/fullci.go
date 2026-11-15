@@ -3,7 +3,7 @@ package evidence
 import (
 	"context"
 	"encoding/json"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +15,11 @@ import (
 // run left a module out. The Console lists them with the other events and
 // through GET /units/full-ci; the controller reads them back so a red run is
 // handled once.
+
+// ControllerStream is the controller's own stream, where the notes of the
+// daily full CI are written. It is the store's ControllerStream
+// (controller.TestEvidenceWritesToTheControllerStream).
+const ControllerStream = "controller"
 
 // FullCISuspect is a commit landed since the last green full run whose own
 // CI run left a module out: Run is that CI run and Modules its run-modules
@@ -84,20 +89,20 @@ func (f FullCI) body() map[string]any {
 }
 
 // NoteFullCI records text and f on the controller's stream.
-func NoteFullCI(ctx context.Context, db store.DB, text string, f FullCI) error {
-	return store.InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := store.Append(ctx, tx, store.Event{Stream: store.ControllerStream, Type: "note", Actor: "controller",
+func NoteFullCI(ctx context.Context, db eventlog.DB, text string, f FullCI) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "note", Actor: "controller",
 			Body: map[string]any{"text": text, "full_ci": f.body()}})
 		return err
 	})
 }
 
 // FullCIRedNoted says whether red run run has its note.
-func FullCIRedNoted(ctx context.Context, db store.DB, run string) (bool, error) {
+func FullCIRedNoted(ctx context.Context, db eventlog.DB, run string) (bool, error) {
 	var noted bool
-	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND actor_id = 'controller' AND body_json->'full_ci'->>'run' = $2)`, store.ControllerStream, run).Scan(&noted)
+		  AND actor_id = 'controller' AND body_json->'full_ci'->>'run' = $2)`, ControllerStream, run).Scan(&noted)
 	})
 	return noted, err
 }
@@ -110,13 +115,13 @@ type FullCINote struct {
 }
 
 // FullCINotes lists the controller's last limit full_ci notes, newest first.
-func FullCINotes(ctx context.Context, db store.DB, limit int) ([]FullCINote, error) {
+func FullCINotes(ctx context.Context, db eventlog.DB, limit int) ([]FullCINote, error) {
 	out := []FullCINote{}
-	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		out = out[:0]
 		rows, err := tx.Query(ctx, `SELECT at, COALESCE(body_json->>'text', ''), body_json->'full_ci' FROM agentrt.event
 		  WHERE event_stream_id = $1 AND event_type = 'note' AND actor_id = 'controller' AND body_json ? 'full_ci'
-		  ORDER BY seq DESC LIMIT $2`, store.ControllerStream, limit)
+		  ORDER BY seq DESC LIMIT $2`, ControllerStream, limit)
 		if err != nil {
 			return err
 		}
