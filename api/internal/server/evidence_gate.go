@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
@@ -64,23 +65,23 @@ func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (st
 // (an incremental or a console run) counts as well when no full run failed
 // after it, as the push to main reads CI (ci_gate.py without --require-full).
 func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
-	verdict := func(ctx context.Context, d store.DB, rows []store.EvidenceRow) (string, string, error) {
+	verdict := func(ctx context.Context, d store.DB, rows []evidence.EvidenceRow) (string, string, error) {
 		failed, part := "", ""
 		for _, row := range rows { // newest first
 			switch {
-			case row.Result == store.EvidencePassed && row.Scope != store.EvidenceScopeFull:
+			case row.Result == evidence.EvidencePassed && row.Scope != evidence.EvidenceScopeFull:
 				if part == "" && failed == "" {
 					part = row.RunName
 				}
-			case row.Result == store.EvidencePassed && row.Scope == store.EvidenceScopeFull:
-				same, err := store.EvidenceByKey(ctx, d, row.Repo, row.Unit, row.Task, row.InputKey)
+			case row.Result == evidence.EvidencePassed && row.Scope == evidence.EvidenceScopeFull:
+				same, err := evidence.EvidenceByKey(ctx, d, row.Repo, row.Unit, row.Task, row.InputKey)
 				if err != nil {
 					return "", "", err
 				}
-				if store.EvidenceVerdict(same) == store.EvidenceGreen {
+				if evidence.EvidenceVerdict(same) == evidence.EvidenceGreen {
 					return delivery.CISucceeded, row.RunName, nil
 				}
-			case row.Result == store.EvidenceFailed && failed == "":
+			case row.Result == evidence.EvidenceFailed && failed == "":
 				failed = row.RunName
 			}
 		}
@@ -99,7 +100,7 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 		if d == nil {
 			return "", "", errors.New("the evidence ledger is not connected")
 		}
-		rows, err := store.EvidenceCIByCommit(ctx, d, repo, sha, 50)
+		rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, sha, 50)
 		if err != nil {
 			return "", "", err
 		}
@@ -111,7 +112,7 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 		if err != nil {
 			return "", "", nil
 		}
-		if rows, err = store.EvidenceByTree(ctx, d, repo, t, 50); err != nil {
+		if rows, err = evidence.EvidenceByTree(ctx, d, repo, t, 50); err != nil {
 			return "", "", err
 		}
 		return verdict(ctx, d, rows)

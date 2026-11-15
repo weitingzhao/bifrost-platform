@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -72,7 +73,7 @@ func (w *headWorld) CI(ctx context.Context, repo, commit string) (string, string
 	if d == nil {
 		return "", "", nil, errors.New("the evidence ledger is not connected")
 	}
-	rows, err := store.EvidenceCIByCommit(ctx, d, repo, commit, 50)
+	rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, commit, 50)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -87,7 +88,7 @@ func (w *headWorld) CI(ctx context.Context, repo, commit string) (string, string
 
 // besideOf reads, from the row of the run, the commits its statement names
 // for the other repositories.
-func besideOf(rows []store.EvidenceRow, repo, run string) (map[string]string, bool) {
+func besideOf(rows []evidence.EvidenceRow, repo, run string) (map[string]string, bool) {
 	for _, row := range rows {
 		if row.RunName != run {
 			continue

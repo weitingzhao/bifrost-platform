@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
@@ -225,7 +226,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 			// value, a value that is not a string, or the result named
 			// twice is not "everything" but a run nothing can be said of.
 			if _, isString := r["value"].(string); !isString || v == "" || scopeSeen {
-				f.Scope = store.EvidenceScopeUnknown
+				f.Scope = evidence.EvidenceScopeUnknown
 			} else {
 				f.Scope = v
 			}
@@ -386,9 +387,9 @@ func runFailure(failed []delivery.FailedTask) (tasks, tests []string, class stri
 	sort.Strings(tests)
 	switch {
 	case len(tests) > 0:
-		class = store.FailClassTest
+		class = evidence.FailClassTest
 	case names:
-		class = store.FailClassBuild
+		class = evidence.FailClassBuild
 	}
 	return tasks, tests, class
 }

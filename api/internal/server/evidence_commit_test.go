@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -58,35 +59,35 @@ func TestCommitEvidence(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]},
 				{Repo: "bifrost-ui", Commit: mains["bifrost-ui"], Tree: trees["bifrost-ui@"+mains["bifrost-ui"]]}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s is no evidence: %v", name, err)
 		}
-		if n, err := store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil || n != 1 {
+		if n, err := evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil || n != 1 {
 			t.Fatalf("record %s: %d %v", name, n, err)
 		}
 	}
-	ask(h("a"), store.EvidenceNone, 0, 0) // an empty ledger
+	ask(h("a"), evidence.EvidenceNone, 0, 0) // an empty ledger
 
 	record("ci-1", h("d"), "Failed", "Failed", "")
-	ask(h("d"), store.EvidenceRed, 1, 1)
-	ask(h("a"), store.EvidenceNone, 0, 0)
+	ask(h("d"), evidence.EvidenceRed, 1, 1)
+	ask(h("a"), evidence.EvidenceNone, 0, 0)
 
 	record("ci-2", h("a"), "Succeeded", "Succeeded", "incremental")
-	ask(h("a"), store.EvidenceNone, 1, 1) // only part of it was tested
+	ask(h("a"), evidence.EvidenceNone, 1, 1) // only part of it was tested
 
 	record("ci-3", h("a"), "Succeeded", "Succeeded", "full")
-	out := ask(h("a"), store.EvidenceGreen, 2, 2)
+	out := ask(h("a"), evidence.EvidenceGreen, 2, 2)
 	if len(out.Tasks) != 1 || out.Tasks[0].Task != "bifrost-ci-platform" || len(out.Tasks[0].Beside) != 1 || out.Tasks[0].Beside[0].Commit != h("2") || out.Tree != h("c") {
 		t.Fatalf("answer: %+v", out)
 	}
-	ask(h("b"), store.EvidenceGreen, 2, 0) // the same tree under another commit
+	ask(h("b"), evidence.EvidenceGreen, 2, 0) // the same tree under another commit
 
 	record("ci-4", h("d"), "Succeeded", "Succeeded", "full")
-	ask(h("d"), store.EvidenceGreen, 2, 2) // a full pass after the failure
+	ask(h("d"), evidence.EvidenceGreen, 2, 2) // a full pass after the failure
 
 	mains["bifrost-ui"] = h("3") // ui's main moved: the key changed, the commit's rows remain
-	ask(h("a"), store.EvidenceNone, 0, 2)
+	ask(h("a"), evidence.EvidenceNone, 0, 2)
 
 	if _, err := commitEvidence(ctx, pool, tree, main, "bifrost-platform", h("5")); err == nil {
 		t.Fatal("a commit Gitea does not have was answered")

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
@@ -98,7 +98,7 @@ func TestUnitPlanFromGitea(t *testing.T) {
 		}
 	}
 	wantRoot, _ := gitTreeID(root)
-	if plan.Tree != wantRoot || len(plan.Units) != 2 || plan.ToRun != 2 || plan.Counts[store.EvidenceNone] != 2 {
+	if plan.Tree != wantRoot || len(plan.Units) != 2 || plan.ToRun != 2 || plan.Counts[evidence.EvidenceNone] != 2 {
 		t.Fatalf("plan: tree %s (want %s), %+v", plan.Tree, wantRoot, plan)
 	}
 	var test unitPlanTask
@@ -117,7 +117,7 @@ func TestUnitPlanFromGitea(t *testing.T) {
 	  VALUES ('r','api/a','test',$1,'passed','full',$2::jsonb,'{}',$3,'unit-1','uid-1')`, test.Key, string(inputs), commit); err != nil {
 		t.Fatal(err)
 	}
-	if plan, err = unitPlan(ctx, pool, g.tree, "r", commit, false); err != nil || plan.ToRun != 1 || plan.Counts[store.EvidenceGreen] != 1 {
+	if plan, err = unitPlan(ctx, pool, g.tree, "r", commit, false); err != nil || plan.ToRun != 1 || plan.Counts[evidence.EvidenceGreen] != 1 {
 		t.Fatalf("after a pass: %+v %v", plan, err)
 	}
 	if blobReads != reads {

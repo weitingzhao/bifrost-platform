@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -150,11 +151,11 @@ func advanceUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unit
 		}
 		first := seq
 		seq += parts
-		rows, err := store.EvidenceByKey(ctx, db, repo, u.Unit, u.Task, u.Key)
+		rows, err := evidence.EvidenceByKey(ctx, db, repo, u.Unit, u.Task, u.Key)
 		if err != nil {
 			return out, err
 		}
-		if store.EvidenceVerdict(rows) != store.EvidenceNone {
+		if evidence.EvidenceVerdict(rows) != evidence.EvidenceNone {
 			continue
 		}
 		out.ToRun++
@@ -164,13 +165,13 @@ func advanceUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unit
 			retry := false
 			if tr, ok := byName[unitexec.RunName(out.Plan, job.Seq, 1)]; ok {
 				row, done, rerr := unitexec.Receive(tr)
-				if rerr != nil || !done || row.Class != store.UnitRunInfra {
+				if rerr != nil || !done || row.Class != evidence.UnitRunInfra {
 					out.Present++
 					continue
 				}
 				second := unitexec.RunName(out.Plan, job.Seq, 2)
 				if tr2, ok := byName[second]; ok {
-					if row2, done2, rerr2 := unitexec.Receive(tr2); rerr2 == nil && done2 && row2.Class == store.UnitRunInfra {
+					if row2, done2, rerr2 := unitexec.Receive(tr2); rerr2 == nil && done2 && row2.Class == evidence.UnitRunInfra {
 						out.Lost = append(out.Lost, second)
 					} else {
 						out.Present++
@@ -224,7 +225,7 @@ type unitReceiver struct {
 // and the retry of a lost run get started without anyone asking again. (A
 // commit all of whose runs were put off has no run to be seen by, and waits
 // for the next request: the route's answer says how many were put off.)
-func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unitCluster, advance func(ctx context.Context, repo, commit, tier string) error, now time.Time) (recorded, evidence int, err error) {
+func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unitCluster, advance func(ctx context.Context, repo, commit, tier string) error, now time.Time) (recorded, written int, err error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.settled == nil {
@@ -235,7 +236,7 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		return 0, 0, err
 	}
 	type group struct {
-		rows   []store.UnitRun
+		rows   []evidence.UnitRun
 		latest time.Time
 		tier   string
 	}
@@ -257,10 +258,10 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 			g.latest = *tr.Metadata.CreationTimestamp
 		}
 		if !done {
-			g.rows = append(g.rows, store.UnitRun{ShardIndex: row.ShardIndex, ShardTotal: row.ShardTotal, Attempt: row.Attempt, Class: "running", RunName: row.RunName})
+			g.rows = append(g.rows, evidence.UnitRun{ShardIndex: row.ShardIndex, ShardTotal: row.ShardTotal, Attempt: row.Attempt, Class: "running", RunName: row.RunName})
 			continue
 		}
-		wrote, werr := store.RecordUnitRun(ctx, db, row)
+		wrote, werr := evidence.RecordUnitRun(ctx, db, row)
 		if werr != nil {
 			errs = append(errs, fmt.Sprintf("unit run %s: %v", row.RunName, werr))
 			continue
@@ -294,7 +295,7 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		if u.settled[key] {
 			continue
 		}
-		var finished []store.UnitRun
+		var finished []evidence.UnitRun
 		pending := false
 		for _, r := range g.rows {
 			if r.Class == "running" {
@@ -305,7 +306,7 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		}
 		s := unitexec.Settle(finished)
 		head := s.Head
-		if s.Verdict == "" || s.Verdict == store.UnitRunPassed && pending {
+		if s.Verdict == "" || s.Verdict == evidence.UnitRunPassed && pending {
 			continue
 		}
 		// A task the ledger already has a verdict on needs nothing more: the
@@ -313,10 +314,10 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		// because the plan of a commit is the dear part (after a restart
 		// every retained run is unsettled; PROD 2026-11-13: one plan a task
 		// made a pass take minutes, and nothing was started meanwhile).
-		if before, lerr := store.EvidenceByKey(ctx, db, head.Repo, head.Unit, head.Task, head.InputKey); lerr != nil {
+		if before, lerr := evidence.EvidenceByKey(ctx, db, head.Repo, head.Unit, head.Task, head.InputKey); lerr != nil {
 			errs = append(errs, lerr.Error())
 			continue
-		} else if store.EvidenceVerdict(before) != store.EvidenceNone {
+		} else if evidence.EvidenceVerdict(before) != evidence.EvidenceNone {
 			u.settled[key] = true
 			continue
 		}
@@ -355,19 +356,19 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 		if head.CompletedAt != nil {
 			completed = *head.CompletedAt
 		}
-		row, eerr := store.UnitEvidenceRow(store.UnitEvidence{Repo: head.Repo, Unit: head.Unit, Task: head.Task, InputKey: head.InputKey, Inputs: inputs,
-			Passed: s.Verdict == store.UnitRunPassed, Commit: head.CommitSHA, Tree: plan.Tree, RunName: head.RunName, RunUID: head.RunUID,
+		row, eerr := evidence.UnitEvidenceRow(evidence.UnitEvidence{Repo: head.Repo, Unit: head.Unit, Task: head.Task, InputKey: head.InputKey, Inputs: inputs,
+			Passed: s.Verdict == evidence.UnitRunPassed, Commit: head.CommitSHA, Tree: plan.Tree, RunName: head.RunName, RunUID: head.RunUID,
 			CompletedAt: completed, FailedTests: s.FailedTests, FailClass: s.FailClass, Runs: s.Runs})
 		if eerr != nil {
 			errs = append(errs, eerr.Error())
 			continue
 		}
-		n, werr := store.RecordEvidence(ctx, db, []store.EvidenceRow{row})
+		n, werr := evidence.RecordEvidence(ctx, db, []evidence.EvidenceRow{row})
 		if werr != nil {
 			errs = append(errs, werr.Error())
 			continue
 		}
-		evidence += n
+		written += n
 		u.settled[key] = true
 	}
 	if advance != nil {
@@ -384,7 +385,7 @@ func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unit
 	if len(errs) > 0 {
 		err = fmt.Errorf("units: %s", strings.Join(errs, "; "))
 	}
-	return recorded, evidence, err
+	return recorded, written, err
 }
 
 // deliveryUnitCluster is unitCluster over the delivery service.
@@ -466,9 +467,9 @@ func (s *Server) unitRunsSource() func(context.Context) error {
 				return err
 			}
 		}
-		recorded, evidence, err := recv.receiveUnits(ctx, db, trees, cl, advance, time.Now())
-		if recorded > 0 || evidence > 0 {
-			slog.Info("units: recorded finished unit tasks", "runs", recorded, "evidence", evidence)
+		recorded, written, err := recv.receiveUnits(ctx, db, trees, cl, advance, time.Now())
+		if recorded > 0 || written > 0 {
+			slog.Info("units: recorded finished unit tasks", "runs", recorded, "evidence", written)
 		}
 		return err
 	}

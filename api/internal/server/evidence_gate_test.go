@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -46,11 +47,11 @@ func TestLedgerCI(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, Audit: audit, CompletedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}, {Repo: "bifrost-ui", Commit: h("2"), Tree: h("f")}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
-		if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil {
+		if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -121,12 +122,12 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		row, err := store.UnitEvidenceRow(store.UnitEvidence{Repo: "bifrost-platform", Unit: unit, Task: task, InputKey: unitplan.Hash(inputs), Inputs: raw,
+		row, err := evidence.UnitEvidenceRow(evidence.UnitEvidence{Repo: "bifrost-platform", Unit: unit, Task: task, InputKey: unitplan.Hash(inputs), Inputs: raw,
 			Passed: true, Commit: commit, Tree: h("c"), RunName: run, RunUID: "uid-" + run, CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if n, err := store.RecordEvidence(ctx, pool, []store.EvidenceRow{row}); err != nil || n != 1 {
+		if n, err := evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{row}); err != nil || n != 1 {
 			t.Fatalf("unit row %s: %d %v", run, n, err)
 		}
 	}
@@ -135,11 +136,11 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
 			Scope: "full", CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
-		if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil {
+		if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -183,19 +184,19 @@ func TestLedgerCIBookkeeping(t *testing.T) {
 	db := agentrttest.Migrated(t)
 	pool := db.Pool(t, db.Runtime)
 	h := func(c string) string { return strings.Repeat(c, 40) }
-	run := func(name, commit, tree, result string, audit bool, at time.Time) store.EvidenceRow {
+	run := func(name, commit, tree, result string, audit bool, at time.Time) evidence.EvidenceRow {
 		t.Helper()
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
 			Scope: "full", Audit: audit, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
 		return e
 	}
-	write := func(rows ...store.EvidenceRow) {
+	write := func(rows ...evidence.EvidenceRow) {
 		t.Helper()
-		if _, err := store.RecordEvidence(ctx, pool, rows); err != nil {
+		if _, err := evidence.RecordEvidence(ctx, pool, rows); err != nil {
 			t.Fatal(err)
 		}
 	}

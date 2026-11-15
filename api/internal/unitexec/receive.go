@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 )
 
 // What a unit TaskRun carries about itself (landing stage 2 §4.0). The unit's
@@ -88,9 +88,9 @@ var (
 // Receive reads a unit TaskRun into the row that records it. done is false
 // while the run has not finished. An error is a run that is not a unit
 // task's, or that names itself wrongly: nothing is recorded for it.
-func Receive(tr TaskRun) (row store.UnitRun, done bool, err error) {
+func Receive(tr TaskRun) (row evidence.UnitRun, done bool, err error) {
 	labels, ann := tr.Metadata.Labels, tr.Metadata.Annotations
-	row = store.UnitRun{
+	row = evidence.UnitRun{
 		Plan: labels[LabelPlan], Repo: labels[LabelRepo], Task: labels[LabelTask],
 		Unit: ann[AnnotationUnit], InputKey: ann[AnnotationKey],
 		RunName: tr.Metadata.Name, RunUID: tr.Metadata.UID,
@@ -134,15 +134,15 @@ func Receive(tr TaskRun) (row store.UnitRun, done bool, err error) {
 	_, judged := results["fail-class"]
 	switch {
 	case status == "True":
-		row.Class = store.UnitRunPassed
+		row.Class = evidence.UnitRunPassed
 	case reason == "Failed" && judged && results["fail-class"] == "test":
-		row.Class = store.UnitRunTest
+		row.Class = evidence.UnitRunTest
 	case reason == "Failed" && judged && results["fail-class"] == "build":
-		row.Class = store.UnitRunBuild
+		row.Class = evidence.UnitRunBuild
 	default:
-		row.Class = store.UnitRunInfra
+		row.Class = evidence.UnitRunInfra
 	}
-	if row.Class == store.UnitRunInfra {
+	if row.Class == evidence.UnitRunInfra {
 		// Nothing the run reported is taken: it did not judge the content,
 		// and a run that never started reports step times that are not its own.
 		return row, true, nil
@@ -189,8 +189,8 @@ func Receive(tr TaskRun) (row store.UnitRun, done bool, err error) {
 	}
 	// A pass is a pass of the tests it was to run: one that reports a count
 	// which does not add up judged something else, and is not taken as one.
-	if row.Class == store.UnitRunPassed && row.TestsExpected != nil && *row.TestsRan+*row.TestsSkipped != *row.TestsExpected {
-		row.Class = store.UnitRunInfra
+	if row.Class == evidence.UnitRunPassed && row.TestsExpected != nil && *row.TestsRan+*row.TestsSkipped != *row.TestsExpected {
+		row.Class = evidence.UnitRunInfra
 		row.Message = cut(fmt.Sprintf("the run passed, but ran %d and skipped %d of %d tests", *row.TestsRan, *row.TestsSkipped, *row.TestsExpected), messageMax)
 	}
 	return row, true, nil

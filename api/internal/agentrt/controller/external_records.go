@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -141,7 +142,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 	// is tried again within PipelineFullEvery. It is written beside the
 	// pipeline_seen records and changes nothing about them.
 	evidenced := make(map[string]bool, len(byKey))
-	var rows []store.EvidenceRow
+	var rows []evidence.EvidenceRow
 	var rowKeys []string
 	for key := range byKey {
 		if m.evidenced[key] {
@@ -166,7 +167,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 		rows, rowKeys = append(rows, e), append(rowKeys, key)
 	}
 	if len(rows) > 0 {
-		if _, err := store.RecordEvidence(ctx, c.DB, rows); err != nil {
+		if _, err := evidence.RecordEvidence(ctx, c.DB, rows); err != nil {
 			errs = append(errs, err)
 		} else {
 			for _, key := range rowKeys {
@@ -178,12 +179,12 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 	return n, errors.Join(errs...)
 }
 
-// runEvidence is the evidence a completed run is (store.RunEvidence), after
+// runEvidence is the evidence a completed run is (evidence.RunEvidence), after
 // reading from Sources.CommitTree the tree of each commit the run reports
 // without one.
-func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.PipelineRun) (store.EvidenceRow, bool, error) {
+func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.PipelineRun) (evidence.EvidenceRow, bool, error) {
 	if p.Kind != "ci" || len(p.Inputs) == 0 {
-		return store.EvidenceRow{}, false, nil
+		return evidence.EvidenceRow{}, false, nil
 	}
 	inputs := append([]store.RepoAt(nil), p.Inputs...)
 	for i, in := range inputs {
@@ -191,7 +192,7 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 			continue
 		}
 		if c.Sources.CommitTree == nil {
-			return store.EvidenceRow{}, false, nil
+			return evidence.EvidenceRow{}, false, nil
 		}
 		at := in.Repo + "@" + in.Commit
 		tree, ok := m.trees[at]
@@ -205,7 +206,7 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 				return result{tree, err}
 			})
 			if r.err != nil {
-				return store.EvidenceRow{}, false, r.err
+				return evidence.EvidenceRow{}, false, r.err
 			}
 			if m.trees == nil {
 				m.trees = map[string]string{}
@@ -226,11 +227,11 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 			return result{tasks, tests, class, err}
 		})
 		if r.err != nil {
-			return store.EvidenceRow{}, false, r.err
+			return evidence.EvidenceRow{}, false, r.err
 		}
 		p.FailedTasks, p.FailedTests, p.FailClass = r.tasks, r.tests, r.class
 	}
-	return store.RunEvidence(p)
+	return evidence.RunEvidence(p)
 }
 
 func recordList[T any](c *Controller, ctx context.Context, kind string, list func(context.Context) ([]T, error), body func(T) (map[string]any, error)) (int, error) {

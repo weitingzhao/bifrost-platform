@@ -11,6 +11,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
+// RepoAt is a repository at a commit, with that commit's git tree.
+type RepoAt struct {
+	Repo   string `json:"repo"`
+	Commit string `json:"commit,omitempty"`
+	Tree   string `json:"tree,omitempty"`
+}
+
 // PipelineRun is a completed external pipeline run. Scope and Inputs are what
 // a CI run says it tested (the repositories it used, each at a commit, with
 // the tree when the run reports it; Scope "" when it does not say): they are

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -232,7 +233,7 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 	f.pending = left
 	if len(names) > 0 {
 		text := "Full CI started: " + strings.Join(names, ", ") + "."
-		if err := store.NoteFullCI(ctx, c.DB, text, store.FullCI{Started: names}); err != nil {
+		if err := evidence.NoteFullCI(ctx, c.DB, text, evidence.FullCI{Started: names}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -240,7 +241,7 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 }
 
 // fullCIReds handles each red run not handled yet, oldest first: each is
-// noted once (store.FullCIRedNoted), with what failed and the landings that
+// noted once (evidence.FullCIRedNoted), with what failed and the landings that
 // left a module out.
 func (c *Controller) fullCIReds(ctx context.Context, f *FullCI, runs []landingci.FullRun) (int, error) {
 	noted := 0
@@ -263,7 +264,7 @@ func (c *Controller) fullCIReds(ctx context.Context, f *FullCI, runs []landingci
 }
 
 func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullRun, before []landingci.FullRun) (bool, error) {
-	if noted, err := store.FullCIRedNoted(ctx, c.DB, r.Name); err != nil || noted {
+	if noted, err := evidence.FullCIRedNoted(ctx, c.DB, r.Name); err != nil || noted {
 		return false, err
 	}
 	failed := r.FailedTests
@@ -279,7 +280,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 		failed = failedInLog(log)
 	}
 	failed = slices.Compact(slices.Sorted(slices.Values(failed)))
-	note := store.FullCI{Run: r.Name, Commit: r.Revision, FailedKey: strings.Join(failed, " ")}
+	note := evidence.FullCI{Run: r.Name, Commit: r.Revision, FailedKey: strings.Join(failed, " ")}
 	if f.FailedTasks != nil {
 		tasks, err := f.FailedTasks(ctx, r.Name)
 		if err != nil {
@@ -300,7 +301,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 		tasks = "failed tasks: " + strings.Join(note.FailedTasks, ", ")
 	}
 	c.logf("agentrt-full-ci: ALERT full CI run %s of %s is red; %s", r.Name, r.Revision, tasks)
-	return true, store.NoteFullCI(ctx, c.DB, fullCIRedText(note, failed, green), note)
+	return true, evidence.NoteFullCI(ctx, c.DB, fullCIRedText(note, failed, green), note)
 }
 
 // fullCIReconcile looks, for red run r, at the commits landed since the
@@ -309,7 +310,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 // whose CI run or result cannot be read is counted in unread. When the
 // landings cannot be looked at, or not all of them, unreconciled says why,
 // so that no suspect is not read as none.
-func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci.FullRun, green *landingci.FullRun) (suspects []store.FullCISuspect, unread int, unreconciled string) {
+func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci.FullRun, green *landingci.FullRun) (suspects []evidence.FullCISuspect, unread int, unreconciled string) {
 	switch {
 	case green == nil:
 		return nil, 0, fmt.Sprintf("no full run in the last %d days was green", int(fullCIWindow.Hours()/24))
@@ -335,7 +336,7 @@ func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci
 		case run == "":
 			unread++
 		case modules != "" && strings.TrimSpace(modules) != "*":
-			suspects = append(suspects, store.FullCISuspect{Commit: l.Commit, Subject: l.Subject, Run: run, Modules: modules})
+			suspects = append(suspects, evidence.FullCISuspect{Commit: l.Commit, Subject: l.Subject, Run: run, Modules: modules})
 		}
 	}
 	return suspects, unread, unreconciled
@@ -344,7 +345,7 @@ func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci
 // fullCIRedText is a red run's note: the run and its commit, the failed
 // tasks, the failed Go tests when known, and the landings since the last
 // green full run that left a module out of their own CI run.
-func fullCIRedText(n store.FullCI, failed []string, green *landingci.FullRun) string {
+func fullCIRedText(n evidence.FullCI, failed []string, green *landingci.FullRun) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Full CI run %s of %s ended red; ", n.Run, n.Commit)
 	if len(n.FailedTasks) > 0 {

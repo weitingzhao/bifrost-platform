@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 )
 
 // GET /api/v1/units/full-ci is what the daily full CI recorded
@@ -25,7 +25,7 @@ func (s *Server) handleUnitFullCI(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	notes, err := store.FullCINotes(ctx, s.agentRuntime.api.DB, unitFullCINotes)
+	notes, err := evidence.FullCINotes(ctx, s.agentRuntime.api.DB, unitFullCINotes)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -34,7 +34,7 @@ func (s *Server) handleUnitFullCI(w http.ResponseWriter, r *http.Request) {
 }
 
 // unitFullCIAnswer is the route's body for the notes read.
-func unitFullCIAnswer(notes []store.FullCINote) map[string]any {
+func unitFullCIAnswer(notes []evidence.FullCINote) map[string]any {
 	runs := make([]map[string]any, len(notes))
 	for i, n := range notes {
 		runs[i] = map[string]any{"at": n.At.UTC().Format(time.RFC3339), "text": n.Text, "full_ci": n.Body}

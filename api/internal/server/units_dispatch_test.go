@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -139,16 +139,16 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		_, err := advanceUnits(ctx, pool, trees, cl, cfg, repo, commit, tier)
 		return err
 	}
-	if recorded, evidence, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || evidence != 0 {
-		t.Fatalf("a run still going was recorded: %d %d %v", recorded, evidence, err)
+	if recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
+		t.Fatalf("a run still going was recorded: %d %d %v", recorded, written, err)
 	}
 
 	// The cluster loses the run; the receiving pass records it and has the
 	// commit advanced: the one retry starts.
 	cl.finish(t, name, "False", "TaskRunImagePullFailed", nil)
-	recorded, evidence, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
-	if err != nil || recorded != 1 || evidence != 0 {
-		t.Fatalf("after the lost run: %d %d %v", recorded, evidence, err)
+	recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
+	if err != nil || recorded != 1 || written != 0 {
+		t.Fatalf("after the lost run: %d %d %v", recorded, written, err)
 	}
 	retry := name + "-r2"
 	if cl.runs[retry] == nil || len(cl.runs) != 2 {
@@ -158,16 +158,16 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 	// The retry passes.
 	cl.finish(t, retry, "True", "Succeeded", map[string]string{"exit-code": "0", "duration-seconds": "3", "fail-class": "", "failed-tests": "",
 		"tests": "1 " + strings.Repeat("a", 64) + " 1 0"})
-	recorded, evidence, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
-	if err != nil || recorded != 1 || evidence != 1 {
-		t.Fatalf("after the pass: %d %d %v", recorded, evidence, err)
+	recorded, written, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
+	if err != nil || recorded != 1 || written != 1 {
+		t.Fatalf("after the pass: %d %d %v", recorded, written, err)
 	}
 	plan, err := unitPlan(ctx, pool, trees, "r", commit, false)
-	if err != nil || plan.Counts[store.EvidenceGreen] != 1 || plan.ToRun != 1 {
+	if err != nil || plan.Counts[evidence.EvidenceGreen] != 1 || plan.ToRun != 1 {
 		t.Fatalf("the ledger after the pass: %+v %v", plan.Counts, err)
 	}
-	if recorded, evidence, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || evidence != 0 {
-		t.Fatalf("the same runs seen again wrote %d %d: %v", recorded, evidence, err)
+	if recorded, written, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
+		t.Fatalf("the same runs seen again wrote %d %d: %v", recorded, written, err)
 	}
 	// While the commit's newest run is young the pass advances it (that is
 	// how runs put off for want of room get started); once it is old, no more.
@@ -190,8 +190,8 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		planReads++
 		return trees(ctx, repo, commit)
 	}
-	if recorded, evidence, err = (&unitReceiver{}).receiveUnits(ctx, pool, countingTrees, cl, nil, time.Now()); err != nil || recorded != 0 || evidence != 0 || planReads != 0 {
-		t.Fatalf("after a restart the same runs wrote %d %d and read %d trees: %v", recorded, evidence, planReads, err)
+	if recorded, written, err = (&unitReceiver{}).receiveUnits(ctx, pool, countingTrees, cl, nil, time.Now()); err != nil || recorded != 0 || written != 0 || planReads != 0 {
+		t.Fatalf("after a restart the same runs wrote %d %d and read %d trees: %v", recorded, written, planReads, err)
 	}
 	last, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", commit, "branch")
 	if err != nil || last.ToRun != 1 || len(last.Created) != 0 || len(cl.runs) != 2 {
@@ -218,11 +218,11 @@ func TestUnitsRedLostAndCapacity(t *testing.T) {
 	cl.finish(t, step.Created[0], "False", "Failed", map[string]string{"exit-code": "1", "fail-class": "test", "failed-tests": "example.com/m/a.TestA",
 		"tests": "1 " + strings.Repeat("a", 64) + " 1 0"})
 	recv := &unitReceiver{}
-	if recorded, evidence, err := recv.receiveUnits(ctx, pool, trees, cl, nil, time.Now()); err != nil || recorded != 1 || evidence != 1 {
-		t.Fatalf("the red run: %d %d %v", recorded, evidence, err)
+	if recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, nil, time.Now()); err != nil || recorded != 1 || written != 1 {
+		t.Fatalf("the red run: %d %d %v", recorded, written, err)
 	}
 	plan, err := unitPlan(ctx, pool, trees, "r", red, false)
-	if err != nil || plan.Counts[store.EvidenceRed] != 1 {
+	if err != nil || plan.Counts[evidence.EvidenceRed] != 1 {
 		t.Fatalf("the ledger after the red run: %+v %v", plan.Counts, err)
 	}
 	var statement string
@@ -249,8 +249,8 @@ func TestUnitsRedLostAndCapacity(t *testing.T) {
 	if err != nil || len(step3.Lost) != 1 || len(lost.runs) != 2 {
 		t.Fatalf("lost twice: %+v %v", step3, err)
 	}
-	if recorded, evidence, err := (&unitReceiver{}).receiveUnits(ctx, pool2, trees, lost, nil, time.Now()); err != nil || recorded != 2 || evidence != 0 {
-		t.Fatalf("two lost runs: %d %d %v", recorded, evidence, err)
+	if recorded, written, err := (&unitReceiver{}).receiveUnits(ctx, pool2, trees, lost, nil, time.Now()); err != nil || recorded != 2 || written != 0 {
+		t.Fatalf("two lost runs: %d %d %v", recorded, written, err)
 	}
 
 	// Capacity: another commit's run is going and MaxRunning is 1.

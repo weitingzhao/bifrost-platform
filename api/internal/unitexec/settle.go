@@ -3,16 +3,16 @@ package unitexec
 import (
 	"sort"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 )
 
 // Settled is what the runs of one unit task on one content add up to.
 type Settled struct {
-	// Verdict is store.UnitRunPassed, "failed", or "" while the content is
+	// Verdict is evidence.UnitRunPassed, "failed", or "" while the content is
 	// not judged yet: a part is missing, still running, or was lost.
 	Verdict string
 	// Head is the run the ledger row is written under: the first part's.
-	Head store.UnitRun
+	Head evidence.UnitRun
 	// FailClass is test when a part had a red test, else build.
 	FailClass   string
 	FailedTests []string
@@ -30,9 +30,9 @@ const SettledFailed = "failed"
 // task and key). For each part the latest attempt counts. A red part makes
 // the task failed whatever the others did. It passed when every part did
 // and the parts agree on the list of tests they cut their share from.
-func Settle(runs []store.UnitRun) Settled {
+func Settle(runs []evidence.UnitRun) Settled {
 	var out Settled
-	latest := map[int]store.UnitRun{}
+	latest := map[int]evidence.UnitRun{}
 	total := 0
 	for _, r := range runs {
 		if r.ShardTotal > total {
@@ -65,7 +65,7 @@ func Settle(runs []store.UnitRun) Settled {
 		}
 		out.Runs = append(out.Runs, r.RunName)
 		switch r.Class {
-		case store.UnitRunPassed:
+		case evidence.UnitRunPassed:
 			passed++
 			sha := ""
 			if r.TestsListSHA != nil {
@@ -76,8 +76,8 @@ func Settle(runs []store.UnitRun) Settled {
 			} else if sha != listSHA {
 				agree = false
 			}
-		case store.UnitRunTest, store.UnitRunBuild:
-			if !red || r.Class == store.UnitRunTest && out.FailClass != store.UnitRunTest {
+		case evidence.UnitRunTest, evidence.UnitRunBuild:
+			if !red || r.Class == evidence.UnitRunTest && out.FailClass != evidence.UnitRunTest {
 				out.FailClass = r.Class
 			}
 			if !red {
@@ -103,7 +103,7 @@ func Settle(runs []store.UnitRun) Settled {
 	case red:
 		out.Verdict = SettledFailed
 	case passed == total && len(latest) == total && agree:
-		out.Verdict = store.UnitRunPassed
+		out.Verdict = evidence.UnitRunPassed
 	}
 	return out
 }

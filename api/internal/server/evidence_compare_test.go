@@ -9,6 +9,7 @@ import (
 
 	"encoding/json"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -44,11 +45,11 @@ func TestCompareEvidence(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: "Succeeded", Reason: "Succeeded",
 			Repo: "bifrost-platform", Scope: scope, CompletedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]}, {Repo: "bifrost-ui", Commit: ui, Tree: trees["bifrost-ui@"+ui]}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
-		if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil {
+		if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -107,11 +108,11 @@ func TestCompareEvidenceFollowsTheGate(t *testing.T) {
 		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result,
 			Repo: "bifrost-platform", Scope: "full", Audit: audit, CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
 			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]}, {Repo: "bifrost-ui", Commit: h("3"), Tree: h("0")}}}
-		e, is, err := store.RunEvidence(p)
+		e, is, err := evidence.RunEvidence(p)
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
 		}
-		if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{e}); err != nil {
+		if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -121,12 +122,12 @@ func TestCompareEvidenceFollowsTheGate(t *testing.T) {
 	// 9: its whole CI never ran; one unit task of it passed.
 	inputs := map[string]any{"v": 2, "repo": "bifrost-platform", "unit": "api/internal/x", "task": "test"}
 	raw, _ := json.Marshal(inputs)
-	row, err := store.UnitEvidenceRow(store.UnitEvidence{Repo: "bifrost-platform", Unit: "api/internal/x", Task: "test", InputKey: unitplan.Hash(inputs), Inputs: raw,
+	row, err := evidence.UnitEvidenceRow(evidence.UnitEvidence{Repo: "bifrost-platform", Unit: "api/internal/x", Task: "test", InputKey: unitplan.Hash(inputs), Inputs: raw,
 		Passed: true, Commit: h("9"), Tree: h("2"), RunName: "unit-1", RunUID: "uid-unit-1", CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.RecordEvidence(ctx, pool, []store.EvidenceRow{row}); err != nil {
+	if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{row}); err != nil {
 		t.Fatal(err)
 	}
 	index := map[string]delivery.CIOutcome{

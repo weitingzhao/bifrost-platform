@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
@@ -112,7 +113,7 @@ func compareEvidence(ctx context.Context, db store.DB, index map[string]delivery
 			continue
 		}
 		c.Gate, c.AsTested = gate, gate == delivery.CISucceeded
-		oldGreen, newGreen := o.Status == delivery.CISucceeded, answer.Verdict == store.EvidenceGreen
+		oldGreen, newGreen := o.Status == delivery.CISucceeded, answer.Verdict == evidence.EvidenceGreen
 		switch {
 		case oldGreen == newGreen:
 			c.Class = "agree"

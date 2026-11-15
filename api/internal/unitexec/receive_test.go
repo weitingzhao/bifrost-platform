@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 )
 
 // realRuns are the four TaskRuns the cluster returned on 2026-11-13 (less
@@ -64,10 +64,10 @@ func TestReceiveTheFourRealRuns(t *testing.T) {
 		failed                       []string
 		shard, total, run            int
 	}{
-		"pass":      {store.UnitRunPassed, "Succeeded", 0, 169, 169, 0, nil, 0, 8, 39},
-		"test-red":  {store.UnitRunTest, "Failed", 1, 5, 5, 0, []string{"github.com/weitingzhao/bifrost-platform/api/internal/unitplan.TestProbeRed"}, 0, 1, 2},
-		"build-red": {store.UnitRunBuild, "Failed", 1, -1, -1, -1, nil, 0, 1, 0},
-		"bad-image": {store.UnitRunInfra, "TaskRunImagePullFailed", -1, -1, -1, -1, nil, 0, 1, -1},
+		"pass":      {evidence.UnitRunPassed, "Succeeded", 0, 169, 169, 0, nil, 0, 8, 39},
+		"test-red":  {evidence.UnitRunTest, "Failed", 1, 5, 5, 0, []string{"github.com/weitingzhao/bifrost-platform/api/internal/unitplan.TestProbeRed"}, 0, 1, 2},
+		"build-red": {evidence.UnitRunBuild, "Failed", 1, -1, -1, -1, nil, 0, 1, 0},
+		"bad-image": {evidence.UnitRunInfra, "TaskRunImagePullFailed", -1, -1, -1, -1, nil, 0, 1, -1},
 	} {
 		row, done, err := Receive(runs[name])
 		if err != nil || !done {
@@ -88,7 +88,7 @@ func TestReceiveTheFourRealRuns(t *testing.T) {
 		if row.CommitSHA != "9e3b11168949bc110db7106bdb03cd099f927142" || row.RunUID == "" || row.CompletedAt == nil {
 			t.Errorf("%s: commit %s, uid %q, completed %v", name, row.CommitSHA, row.RunUID, row.CompletedAt)
 		}
-		if infra := row.Class == store.UnitRunInfra; infra != (row.QueuedSeconds == nil && row.FetchSeconds == nil) {
+		if infra := row.Class == evidence.UnitRunInfra; infra != (row.QueuedSeconds == nil && row.FetchSeconds == nil) {
 			t.Errorf("%s: an infra run takes no step times, a judged run takes them: queued %v fetch %v", name, row.QueuedSeconds, row.FetchSeconds)
 		}
 	}
@@ -121,13 +121,13 @@ func TestReceiveTakesOnlyTheRunsOwnWord(t *testing.T) {
 		run   TaskRun
 		class string
 	}{
-		"failed with no fail-class result": {edit("test-red", func(tr *TaskRun) { tr.Status.Results = nil }), store.UnitRunInfra},
-		"failed with an empty fail-class":  {edit("test-red", func(tr *TaskRun) { setResult(tr, "fail-class", "") }), store.UnitRunInfra},
-		"failed with another fail-class":   {edit("test-red", func(tr *TaskRun) { setResult(tr, "fail-class", "oom") }), store.UnitRunInfra},
-		"a timeout that says test":         {edit("test-red", func(tr *TaskRun) { tr.Status.Conditions[0].Reason = "TaskRunTimeout" }), store.UnitRunInfra},
-		"a pass whose counts do not add":   {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "169 "+strings.Repeat("a", 64)+" 160 0") }), store.UnitRunInfra},
-		"a pass with skipped tests":        {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "169 "+strings.Repeat("a", 64)+" 160 9") }), store.UnitRunPassed},
-		"a pass with no tests result":      {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "") }), store.UnitRunPassed},
+		"failed with no fail-class result": {edit("test-red", func(tr *TaskRun) { tr.Status.Results = nil }), evidence.UnitRunInfra},
+		"failed with an empty fail-class":  {edit("test-red", func(tr *TaskRun) { setResult(tr, "fail-class", "") }), evidence.UnitRunInfra},
+		"failed with another fail-class":   {edit("test-red", func(tr *TaskRun) { setResult(tr, "fail-class", "oom") }), evidence.UnitRunInfra},
+		"a timeout that says test":         {edit("test-red", func(tr *TaskRun) { tr.Status.Conditions[0].Reason = "TaskRunTimeout" }), evidence.UnitRunInfra},
+		"a pass whose counts do not add":   {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "169 "+strings.Repeat("a", 64)+" 160 0") }), evidence.UnitRunInfra},
+		"a pass with skipped tests":        {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "169 "+strings.Repeat("a", 64)+" 160 9") }), evidence.UnitRunPassed},
+		"a pass with no tests result":      {edit("pass", func(tr *TaskRun) { setResult(tr, "tests", "") }), evidence.UnitRunPassed},
 	} {
 		row, done, err := Receive(tc.run)
 		if err != nil || !done || row.Class != tc.class {
@@ -171,22 +171,22 @@ func TestReceivedRunsAreRecordedOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i, want := range []bool{true, false} {
-			wrote, err := store.RecordUnitRun(ctx, pool, row)
+			wrote, err := evidence.RecordUnitRun(ctx, pool, row)
 			if err != nil || wrote != want {
 				t.Fatalf("%s, time %d: wrote %v, %v", name, i, wrote, err)
 			}
 		}
 	}
 	key := strings.Repeat("ab", 32)
-	got, err := store.UnitRunsByKey(ctx, pool, "bifrost-platform", "api/internal/unitplan", "test", key, 10)
+	got, err := evidence.UnitRunsByKey(ctx, pool, "bifrost-platform", "api/internal/unitplan", "test", key, 10)
 	if err != nil || len(got) != 3 {
 		t.Fatalf("%d rows, %v", len(got), err)
 	}
-	classes := map[string]store.UnitRun{}
+	classes := map[string]evidence.UnitRun{}
 	for _, r := range got {
 		classes[r.Class] = r
 	}
-	red, infra := classes[store.UnitRunTest], classes[store.UnitRunInfra]
+	red, infra := classes[evidence.UnitRunTest], classes[evidence.UnitRunInfra]
 	if len(red.FailedTests) != 1 || red.TestsListSHA == nil || red.StartedAt == nil || red.CompletedAt.Sub(*red.StartedAt) != 8*time.Second {
 		t.Errorf("the red row: %+v", red)
 	}

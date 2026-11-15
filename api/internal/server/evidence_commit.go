@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -20,7 +21,7 @@ import (
 // For each task the ledger has for the repository it computes the key the
 // task would have for this commit now: the commit's git tree, and the tree
 // of the main head of every repository the task last used beside it. The
-// rows of that key give the verdict (store.EvidenceVerdict): green, red, or
+// rows of that key give the verdict (evidence.EvidenceVerdict): green, red, or
 // none. none is not red: nothing ran on these inputs, or only part of the
 // repository was tested; the caller starts a CI run, it does not refuse.
 // The commit's own rows are returned as well, whatever their key, so a
@@ -34,12 +35,12 @@ type evidenceInput struct {
 }
 
 type evidenceTask struct {
-	Task     string              `json:"task"`
-	Verdict  string              `json:"verdict"`
-	InputKey string              `json:"input_key"`
-	Inputs   json.RawMessage     `json:"inputs"`
-	Beside   []evidenceInput     `json:"beside"`
-	Rows     []store.EvidenceRow `json:"rows"`
+	Task     string                 `json:"task"`
+	Verdict  string                 `json:"verdict"`
+	InputKey string                 `json:"input_key"`
+	Inputs   json.RawMessage        `json:"inputs"`
+	Beside   []evidenceInput        `json:"beside"`
+	Rows     []evidence.EvidenceRow `json:"rows"`
 }
 
 type evidenceAnswer struct {
@@ -52,22 +53,22 @@ type evidenceAnswer struct {
 	Tasks   []evidenceTask `json:"tasks"`
 	// CommitRows is what was recorded for this commit, newest first, with
 	// the inputs each run had then.
-	CommitRows []store.EvidenceRow `json:"commit_rows"`
+	CommitRows []evidence.EvidenceRow `json:"commit_rows"`
 }
 
 // commitEvidence reads the ledger for one commit. tree reads a commit's git
 // tree and main a repository's main head; both are Gitea's.
 func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context, string, string) (string, error),
 	main func(context.Context, string) (string, error), repo, commit string) (evidenceAnswer, error) {
-	out := evidenceAnswer{Repo: repo, Commit: commit, Unit: store.EvidenceUnitRepo, Verdict: store.EvidenceNone, Tasks: []evidenceTask{}}
+	out := evidenceAnswer{Repo: repo, Commit: commit, Unit: evidence.EvidenceUnitRepo, Verdict: evidence.EvidenceNone, Tasks: []evidenceTask{}}
 	var err error
 	if out.Tree, err = tree(ctx, repo, commit); err != nil {
 		return out, err
 	}
-	if out.CommitRows, err = store.EvidenceByCommit(ctx, db, repo, commit, 20); err != nil {
+	if out.CommitRows, err = evidence.EvidenceByCommit(ctx, db, repo, commit, 20); err != nil {
 		return out, err
 	}
-	tasks, err := store.EvidenceTasks(ctx, db, repo, out.Unit)
+	tasks, err := evidence.EvidenceTasks(ctx, db, repo, out.Unit)
 	if err != nil {
 		return out, err
 	}
@@ -102,7 +103,7 @@ func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context,
 			beside = append(beside, store.RepoAt{Repo: name, Tree: h.Tree})
 		}
 		sort.Slice(t.Beside, func(i, j int) bool { return t.Beside[i].Repo < t.Beside[j].Repo })
-		inputs, key, err := store.EvidenceInputs(last.Task, repo, out.Tree, beside)
+		inputs, key, err := evidence.EvidenceInputs(last.Task, repo, out.Tree, beside)
 		if err != nil {
 			return out, err
 		}
@@ -110,18 +111,18 @@ func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context,
 		if t.Inputs, err = json.Marshal(inputs); err != nil {
 			return out, err
 		}
-		if t.Rows, err = store.EvidenceByKey(ctx, db, repo, out.Unit, last.Task, key); err != nil {
+		if t.Rows, err = evidence.EvidenceByKey(ctx, db, repo, out.Unit, last.Task, key); err != nil {
 			return out, err
 		}
-		t.Verdict = store.EvidenceVerdict(t.Rows)
+		t.Verdict = evidence.EvidenceVerdict(t.Rows)
 		verdicts[t.Verdict]++
 		out.Tasks = append(out.Tasks, t)
 	}
 	switch {
-	case verdicts[store.EvidenceRed] > 0:
-		out.Verdict, out.Reason = store.EvidenceRed, "a task failed on these inputs and none passed in full since"
-	case verdicts[store.EvidenceGreen] == len(out.Tasks):
-		out.Verdict, out.Reason = store.EvidenceGreen, "every task passed in full on these inputs"
+	case verdicts[evidence.EvidenceRed] > 0:
+		out.Verdict, out.Reason = evidence.EvidenceRed, "a task failed on these inputs and none passed in full since"
+	case verdicts[evidence.EvidenceGreen] == len(out.Tasks):
+		out.Verdict, out.Reason = evidence.EvidenceGreen, "every task passed in full on these inputs"
 	case len(out.CommitRows) > 0:
 		out.Reason = "no full pass on these inputs; the commit's own rows were recorded with other inputs or a narrower scope (commit_rows)"
 	default:

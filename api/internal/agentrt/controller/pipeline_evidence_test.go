@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -79,10 +80,10 @@ func TestPipelineRecordsWritesEvidence(t *testing.T) {
 			t.Fatalf("pass %d: %v", pass, err)
 		}
 	}
-	_, key, err := store.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("c"),
+	_, key, err := evidence.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("c"),
 		[]store.RepoAt{{Repo: "bifrost-ui", Tree: sha("f")}, {Repo: "bifrost-trade-infra", Tree: sha("e")}})
 	must(t, err)
-	_, redKey, err := store.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("9"),
+	_, redKey, err := evidence.EvidenceInputs("bifrost-ci-platform", "bifrost-platform", sha("9"),
 		[]store.RepoAt{{Repo: "bifrost-trade-infra", Tree: sha("e")}, {Repo: "bifrost-ui", Tree: sha("f")}})
 	must(t, err)
 	want := map[string]evidenceRow{
@@ -201,9 +202,9 @@ func TestPipelineRecordsFailedRunSaysWhatFailed(t *testing.T) {
 			case fail:
 				return nil, nil, "", away
 			case run == "ci-platform-red":
-				return []string{"test-api"}, []string{"pkg/a.TestOne", "pkg/b.TestTwo"}, store.FailClassTest, nil
+				return []string{"test-api"}, []string{"pkg/a.TestOne", "pkg/b.TestTwo"}, evidence.FailClassTest, nil
 			}
-			return []string{"test-api"}, nil, store.FailClassBuild, nil
+			return []string{"test-api"}, nil, evidence.FailClassBuild, nil
 		}}}
 	if _, err := c.PipelineRecords(ctx); !errors.Is(err, away) {
 		t.Fatalf("first pass: %v", err)

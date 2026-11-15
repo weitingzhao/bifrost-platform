@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -164,16 +165,16 @@ func unitPlan(ctx context.Context, db store.DB, trees func(ctx context.Context, 
 	}
 	out := unitPlanAnswer{Repo: repo, Commit: commit, Tree: plan.Tree, Pins: plan.Pins, Units: make([]unitPlanTask, 0, len(plan.Units)), Counts: map[string]int{}}
 	for _, u := range plan.Units {
-		rows, err := store.EvidenceByKey(ctx, db, repo, u.Unit, u.Task, u.Key)
+		rows, err := evidence.EvidenceByKey(ctx, db, repo, u.Unit, u.Task, u.Key)
 		if err != nil {
 			return unitPlanAnswer{}, err
 		}
-		task := unitPlanTask{Unit: u.Unit, Task: u.Task, Module: u.Module, Key: u.Key, Shards: u.Shards, Verdict: store.EvidenceVerdict(rows)}
+		task := unitPlanTask{Unit: u.Unit, Task: u.Task, Module: u.Module, Key: u.Key, Shards: u.Shards, Verdict: evidence.EvidenceVerdict(rows)}
 		if withInputs {
 			task.Inputs = u.Inputs
 		}
 		out.Counts[task.Verdict]++
-		if task.Verdict != store.EvidenceGreen {
+		if task.Verdict != evidence.EvidenceGreen {
 			out.ToRun++
 		}
 		out.Units = append(out.Units, task)

@@ -1,4 +1,4 @@
-package store
+package evidence
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,9 +57,9 @@ type UnitRun struct {
 
 // RecordUnitRun appends the run; a TaskRun already recorded writes nothing
 // and reports false.
-func RecordUnitRun(ctx context.Context, db DB, r UnitRun) (bool, error) {
+func RecordUnitRun(ctx context.Context, db store.DB, r UnitRun) (bool, error) {
 	wrote := false
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
 		failed := r.FailedTests
 		if failed == nil {
 			failed = []string{}
@@ -79,9 +80,9 @@ func RecordUnitRun(ctx context.Context, db DB, r UnitRun) (bool, error) {
 
 // UnitRunsByKey returns the runs of one unit task on one content, oldest
 // first, at most limit.
-func UnitRunsByKey(ctx context.Context, db DB, repo, unit, task, key string, limit int) ([]UnitRun, error) {
+func UnitRunsByKey(ctx context.Context, db store.DB, repo, unit, task, key string, limit int) ([]UnitRun, error) {
 	var out []UnitRun
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := store.InTx(ctx, db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT plan, repo, unit, task, input_key, commit_sha, shard_index, shard_total, attempt, class, reason, message,
 		    exit_code, failed_tests, failed_tests_cut, tests_expected, tests_ran, tests_skipped, tests_list_sha,
 		    queued_seconds, fetch_seconds, run_seconds, node, run_name, run_uid, started_at, completed_at

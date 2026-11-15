@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,7 @@ const pgdsvStatement = `{"_type": "https://in-toto.io/Statement/v1", "subject": 
  {"name": "bifrost-ui", "digest": {"gitTree": "c6b1e24ea050585db898fc8780731ce50a32f10f", "gitCommit": "c83f40b40e65e52f8592ec6b73c5f6987c116e93"}}]}`
 
 func TestBesideIsTheCommitsOfTheRowTheVerdictRestsOn(t *testing.T) {
-	rows := []store.EvidenceRow{
+	rows := []evidence.EvidenceRow{
 		// The other passing row of the same commit ran beside another infra
 		// commit (ci-platform-5d6bb, cf70db50): it is not the verdict's row.
 		{RunName: "ci-platform-5d6bb", Statement: json.RawMessage(`{"subject": [{"name": "bifrost-trade-infra", "digest": {"gitCommit": "cf70db500403b0b03a34842062ef5813b1153cff"}}]}`)},
