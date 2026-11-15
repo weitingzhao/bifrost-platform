@@ -5,6 +5,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { RunTimingDetail, READ_BUTTON } from './RunTimingDetail'
 import { TimingTrends } from './TimingTrends'
+import { TimingBudget } from './TimingBudget'
 import { elapsed, reusedBy, runCommit, secondsText } from './timingModel'
 
 const pipelines = [
@@ -55,8 +56,6 @@ export function PlatformTimings() {
     {selected && pipeline !== 'bifrost-ci-platform' && runCommit(selected) && <button className={READ_BUTTON} onClick={()=>{setFocusCommit(runCommit(selected));setPicked('');setLookup('');setPipeline('bifrost-ci-platform')}}>Inspect CI for this commit</button>}
     {selected && <RunTimingDetail key={selected.name} run={selected} />}
     {pipeline === 'bifrost-ci-platform' && query.data && <TimingTrends runs={runs} onPick={pick} />}
-    <OpsSection title="Designed vs actual" description="Reserved for the CI lane’s time accounting." bodyPadding="compact">
-      <p className="m-0 text-sm text-muted-foreground">Awaiting the benchmark time budget. Designed time, comparable actual time, and variance will appear here when that accounting is supplied. No estimate is filled in.</p>
-    </OpsSection>
+    <TimingBudget />
   </>
 }
