@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -51,7 +51,7 @@ var (
 	// epoch, an attempt that is no longer live, or past expiry plus grace).
 	ErrFenced = errors.New("store: this attempt's lease is not yours")
 	// ErrConflict: an idempotency key reused with a different request.
-	ErrConflict = errors.New("store: idempotency key reused with a different request")
+	ErrConflict = actor.ErrConflict
 	// ErrInGrace: salvage refused because the lease may still be renewed.
 	ErrInGrace = errors.New("store: the attempt is still within its grace period")
 	// ErrState: the operation does not fit the current state.
@@ -65,7 +65,7 @@ type DB = eventlog.DB
 // call there and observe or race it.
 // It is loaded atomically: a test may remove it while a call it staged on
 // another goroutine still passes a hook point.
-var testHook atomic.Pointer[func(point, arg string)]
+var testHook = &actor.TestHook
 
 func hook(point, arg string) {
 	if f := testHook.Load(); f != nil {

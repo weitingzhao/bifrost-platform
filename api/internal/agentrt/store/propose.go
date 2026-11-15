@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
@@ -28,214 +28,53 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }
 
-// threadSession is what a thread names itself by: the X-Bifrost-Session
-// header the questions routes already take.
-var threadSession = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+// The writer of a request, its checks and a thread's registration are the
+// actor package's (the base every domain's write routes call); these are its
+// names as this package has always written them.
+type Writer = actor.Writer
 
-// ThreadActor is the actor of the thread with that session id.
-func ThreadActor(session string) (string, error) {
-	if !threadSession.MatchString(session) {
-		return "", invalid("X-Bifrost-Session %q is not a session id", session)
-	}
-	return "thread:" + session, nil
-}
+var ErrNotYours = actor.ErrNotYours
 
-// Writer is who a write is recorded as (Actor) and the token that made it
-// (Token, the principal's name). A thread names itself, so its registration
-// keeps the token that first wrote as it (review 175 B3), and only that
-// token may write as it or read its mail afterwards (TD-370). Relayed is a
-// write the runtime makes for the actor from what it sent before (a brief
-// answering its mail), not a request: no token is held to the session.
-type Writer struct {
-	Actor, Token string
-	Relayed      bool
-	// Host is the host a host-bound writer is bound to: a collector,
-	// thread:collector@<Host> (R5:5.5-12 §1.4). Its external work carries a
-	// session identity and records the host; any other writer's has neither.
-	Host string
-}
+const ThreadsPerDay = actor.ThreadsPerDay
 
-// ErrNotYours: a thread's session is another token's (TD-370); nothing was
-// written or read.
-var ErrNotYours = errors.New("store: the session is another token's")
+func ThreadActor(session string) (string, error) { return actor.ThreadActor(session) }
 
-// registeredBy starts the note of a thread's registration, which names the
-// token after it; registrations before the token had a field of its own
-// (2026-10-19) are read by it.
-const registeredBy = "first write of a thread, by token "
+func holdsToken(ctx context.Context, tx pgx.Tx, w Writer) error { return actor.HoldsToken(ctx, tx, w) }
 
-// holdsToken checks the writer of a registered thread against the token its
-// registration names: a session is the token's that first wrote as it, so
-// another token cannot write as the thread or read its mail (TD-370). A
-// relayed write is the runtime's own and is not held.
-func holdsToken(ctx context.Context, tx pgx.Tx, w Writer) error {
-	if w.Relayed {
-		return nil
-	}
-	var token, note string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(body_json->>'token', ''), COALESCE(body_json->>'note', '') FROM agentrt.event
-	  WHERE event_stream_id = 'system' AND event_type = 'actor_registered' AND body_json->'actors' ? $1
-	  ORDER BY event_id LIMIT 1`, w.Actor).Scan(&token, &note)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if t, ok := strings.CutPrefix(note, registeredBy); token == "" && ok {
-		token = t
-	}
-	switch {
-	case token == "":
-		return fmt.Errorf("%w: %s names no token that registered it, so no token may act as it; a new session can", ErrNotYours, w.Actor)
-	case token != w.Token:
-		return fmt.Errorf("%w: %s was registered by another token; a thread writes and reads its mail with the token it first wrote with",
-			ErrNotYours, w.Actor)
-	}
-	return nil
-}
-
-// holdsSessionTx is the check a thread's write makes (CheckWriter: not
-// retired, of its kind, its session held to its token), for a read of its
-// mail or a replay of its key, which make no write: a thread not registered
-// yet holds nothing here, nor does any other actor. It takes the thread's
-// writer lock first and keeps it to the end of the transaction, so a first
-// write registering the session cannot commit between this check and the
-// read after it (review 320 A2, A3): the read sees the session as it was
-// checked. Its callers take no lock a writer waits on while holding the
-// writer's lock: a key's lock comes before it, as in a write.
 func holdsSessionTx(ctx context.Context, tx pgx.Tx, w Writer) error {
-	if k := kindOf(w.Actor); k != "thread" && k != "agent" {
-		return nil
-	}
-	if err := writerLock(ctx, tx, w.Actor); err != nil {
-		return err
-	}
-	_, err := CheckWriter(ctx, tx, w)
-	hook("held", w.Actor)
-	return err
+	return actor.HoldsSessionTx(ctx, tx, w)
 }
 
-// kindOf is the kind of actor a name says it is ("" when it says none).
-func kindOf(actor string) string {
-	switch {
-	case actor == "owner", actor == "controller":
-		return actor
-	case strings.HasPrefix(actor, "thread:"):
-		return "thread"
-	case strings.HasPrefix(actor, "seat:"):
-		return "seat"
-	case strings.HasPrefix(actor, "host:"):
-		return "host"
-	case strings.HasPrefix(actor, "exec:"):
-		return "executor"
-	case strings.HasPrefix(actor, "agent:"):
-		return "agent" // an external agent bringing issues (0009; holdsWriter, intake.go)
-	}
-	return ""
-}
+func kindOf(a string) string { return actor.KindOf(a) }
 
-// ThreadsPerDay bounds how many threads proposals and uploads register in a
-// day: a session is what a caller says it is, so without a bound any token
-// could grow the actor table and the system stream without end (review 175
-// B3). Controls are not bounded: anyone authenticated may stop or pause
-// (v5 §5.2), and a new session must not find that taken by proposals
-// (review 176 part 2 A1); each control is a row of its own anyway.
-const ThreadsPerDay = 200
-
-// CheckWriter checks a writer without writing: its actor is of the kind its
-// name says and not retired, and a thread's writer holds its session
-// (holdsToken; ErrNotYours). It reports whether the actor is registered; a
-// thread that is not is fine (its first write registers it), any other
-// actor that is not is ErrInvalid.
 func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
-	want := kindOf(w.Actor)
-	if want == "" {
-		return false, invalid("%q is not an actor name", w.Actor)
-	}
-	var kind string
-	var retired bool
-	err := tx.QueryRow(ctx, `SELECT actor_kind, retired_at IS NOT NULL FROM agentrt.actor WHERE actor_id = $1`, w.Actor).Scan(&kind, &retired)
-	switch {
-	case err == nil && retired:
-		return true, invalid("actor %s is retired", w.Actor)
-	case err == nil && kind != want:
-		return true, invalid("actor %s is a %s, not a %s", w.Actor, kind, want)
-	case err == nil && (want == "thread" || want == "agent"):
-		return true, holdsWriter(ctx, tx, w)
-	case err == nil:
-		return true, nil
-	case !errors.Is(err, pgx.ErrNoRows):
-		return false, err
-	case want != "thread":
-		return false, invalid("actor %s is not registered", w.Actor)
-	}
-	return false, nil
+	return actor.CheckWriter(ctx, tx, w)
 }
 
-// writerLock serializes the writes of one actor (and its registration). It
-// touches no row and no stream, so a transaction may take it before any other
-// lock (review 187 R1); taking it again later in the same transaction is a
-// no-op.
-func writerLock(ctx context.Context, tx pgx.Tx, actor string) error {
-	if kindOf(actor) == "" {
-		return nil
-	}
-	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, actor)
-	return err
-}
+func writerLock(ctx context.Context, tx pgx.Tx, a string) error { return actor.Lock(ctx, tx, a) }
 
-// ensureWriter checks the writer in the caller's transaction and registers a
-// thread the first time it writes: actor_registered by the controller,
-// naming the token. Every write route calls it before any lock of the rows
-// it writes (review 176 A1): its locks are the writer's own, then, for a
-// registration, the registration lock and the system stream. bounded holds
-// a registration to ThreadsPerDay.
 func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error {
-	if err := writerLock(ctx, tx, w.Actor); err != nil {
-		return err
-	}
-	registered, err := CheckWriter(ctx, tx, w)
-	if err != nil || registered {
-		return err
-	}
-	// One registration at a time, so the count below is the count when it
-	// commits (review 176 B1).
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742109)`); err != nil {
-		return err
-	}
-	if bounded {
-		var recent int
-		if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'
-		  AND created_at > clock_timestamp() - interval '24 hours'`).Scan(&recent); err != nil {
-			return err
-		}
-		hook("counted", w.Actor)
+	return actor.Ensure(ctx, tx, w, bounded)
+}
+
+func ActorKind(ctx context.Context, tx pgx.Tx, a string) (string, error) {
+	return actor.ActorKind(ctx, tx, a)
+}
+
+// What only this package knows, registered with the actor package: the
+// binding of an external agent's token (intake.go) and the day's limit of
+// new threads where the tuning rule sets it.
+func init() {
+	// holdsWriter (intake.go) is the hold of an agent's token to its intake
+	// client; the actor package asks it for agents only.
+	actor.RegisterAgentHolder(holdsWriter)
+	actor.RegisterThreadLimit(func(ctx context.Context, tx pgx.Tx) (int, error) {
 		tune, err := tuningIn(ctx, tx)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		if recent >= tune.Int(rules.TuneThreadsPerDay) {
-			return invalid("%d threads were registered in the last day, the most there may be; %s must wait", recent, w.Actor)
-		}
-	}
-	// The registration names the token the session is held to (TD-370); a
-	// relayed write holds it to none.
-	body := map[string]any{"actors": []string{w.Actor}, "note": registeredBy + w.Token, "token": w.Token}
-	if w.Relayed {
-		body = map[string]any{"actors": []string{w.Actor}, "note": "first write of a thread, relayed by the runtime (" + w.Token + ")"}
-	}
-	if _, err = Append(ctx, tx, Event{Stream: "system", Type: "actor_registered", Actor: "controller", Body: body}); err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'thread', $2)`,
-		w.Actor, fmt.Sprintf("Thread %s (first written by token %s)", w.Actor[len("thread:"):], w.Token))
-	return err
-}
-
-// ActorKind is the kind of a registered actor that is not retired;
-// pgx.ErrNoRows when there is none.
-func ActorKind(ctx context.Context, tx pgx.Tx, actor string) (string, error) {
-	var kind string
-	err := tx.QueryRow(ctx, `SELECT actor_kind FROM agentrt.actor WHERE actor_id = $1 AND retired_at IS NULL`, actor).Scan(&kind)
-	return kind, err
+		return tune.Int(rules.TuneThreadsPerDay), nil
+	})
 }
 
 // MissionProposal is a mission a thread or seat proposes (POST /missions).

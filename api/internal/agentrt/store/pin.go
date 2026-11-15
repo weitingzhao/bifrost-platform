@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 )
 
 // Executor pins (W-31 round 4, core blocks C-0 and C-1; bifrost-trade-infra
@@ -58,7 +60,7 @@ func badViaSession(v any) string {
 	switch {
 	case !ok:
 		return "is not a string"
-	case s != "" && !threadSession.MatchString(s):
+	case s != "" && !actor.IsSession(s):
 		return fmt.Sprintf("is %q, not a session id", s)
 	}
 	return ""
