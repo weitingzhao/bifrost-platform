@@ -44,6 +44,10 @@ modules:
     # it run less often; a package missing from this list that does read
     # outside is the dangerous mistake.
     inputs:
+      # Narrowed 2026-11-14 (biz-align, first batch): a package whose entry is
+      # its own directory was run with scripts/ci/unit-go-test holding its
+      # reads to an empty declaration, and read nothing outside itself. It
+      # stays listed because the search that built this list matches it.
       api/cmd/agentrt-plan-import: ["."]
       api/cmd/infracheck: ["."]
       api/cmd/platform-api: ["."]
@@ -53,12 +57,12 @@ modules:
       api/internal/agentgovernance: ["."]
       api/internal/agentprogress: ["."]
       api/internal/agentrt/agentrtapi: ["."]
-      api/internal/agentrt/canon: ["."]
+      api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["."]
-      api/internal/agentrt/landing: ["."]
-      api/internal/agentrt/landingci: ["."]
+      api/internal/agentrt/landing: ["api/internal/agentrt/landing"]
+      api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
       api/internal/agentrt/landinggit: ["."]
-      api/internal/agentrt/metrics: ["."]
+      api/internal/agentrt/metrics: ["api/internal/agentrt/metrics"]
       api/internal/agentrt/planimport: ["."]
       api/internal/agentrt/planview: ["."]
       api/internal/agentrt/recorderimport: ["."]
@@ -66,7 +70,7 @@ modules:
       api/internal/agentrt/store: ["."]
       api/internal/agentthreads: ["."]
       api/internal/approvals: ["."]
-      api/internal/checklist: ["."]
+      api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["."]
       api/internal/config: ["."]
       api/internal/delivery: ["."]
@@ -81,7 +85,7 @@ modules:
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
       api/internal/outsideinput: ["api", "scripts/ci"]
       api/internal/opsfacts: ["."]
-      api/internal/ownerexec: ["."]
+      api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/patrol: ["."]
       api/internal/probe: ["."]
       api/internal/questions: ["."]
