@@ -116,6 +116,23 @@ func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status,
 	_ = l.persistLocked()
 }
 
+// Has reports whether this log holds a record of the action on the target.
+// It reads what was loaded and recorded by this process: a loop that records
+// once per subject asks it after a restart instead of recording again.
+func (l *AuditLog) Has(action, target string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.records {
+		if r.Action == action && r.Target == target {
+			return true
+		}
+	}
+	return false
+}
+
 type AuditAppendRequest struct {
 	Actor  string `json:"actor"`
 	Action string `json:"action"`
