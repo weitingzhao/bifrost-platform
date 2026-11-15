@@ -26,7 +26,11 @@ CREATE TABLE agentrt.action_record (
   target text NOT NULL DEFAULT '' CHECK (length(target) <= 500),
   reason text NOT NULL CHECK (reason <> '' AND length(reason) <= 4000),
   regret text NOT NULL CHECK (length(regret) <= 2000),
-  regret_state text NOT NULL CHECK (regret_state IN ('ready','not_ready','none_needed')),
+  -- ready: prepared and verified by the machine; declared: the caller wrote
+  -- what undoes it, nobody verified it; undeclared: the caller wrote nothing
+  -- (a state of the first phase, which only records); not_ready: needed and
+  -- not prepared (the action is then refused); none_needed: nothing to undo.
+  regret_state text NOT NULL CHECK (regret_state IN ('ready','declared','undeclared','not_ready','none_needed')),
   law text NOT NULL CHECK (law <> '' AND length(law) <= 200),
   outcome text NOT NULL CHECK (outcome IN ('done','refused','failed')),
   check_result text NOT NULL DEFAULT '' CHECK (length(check_result) <= 2000),
@@ -37,7 +41,7 @@ CREATE TABLE agentrt.action_record (
   recorded_at timestamptz NOT NULL DEFAULT now(),
   -- No regret prepared, no action done: such a case is recorded as refused.
   CONSTRAINT action_record_no_done_without_regret CHECK (NOT (outcome = 'done' AND regret_state = 'not_ready')),
-  CONSTRAINT action_record_ready_says_what CHECK (regret_state <> 'ready' OR regret <> '')
+  CONSTRAINT action_record_ready_says_what CHECK (regret_state NOT IN ('ready','declared') OR regret <> '')
 );
 CREATE INDEX action_record_seat_idx ON agentrt.action_record (seat, record_id DESC);
 CREATE INDEX action_record_law_idx ON agentrt.action_record (law, record_id DESC);

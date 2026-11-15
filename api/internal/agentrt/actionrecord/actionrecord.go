@@ -20,7 +20,9 @@ import (
 )
 
 const (
-	RegretReady      = "ready"
+	RegretReady      = "ready"      // prepared and verified by the machine
+	RegretDeclared   = "declared"   // the caller wrote what undoes it; nobody verified it
+	RegretUndeclared = "undeclared" // the caller wrote nothing (first phase: record only)
 	RegretNotReady   = "not_ready"
 	RegretNoneNeeded = "none_needed"
 
@@ -98,12 +100,13 @@ func Normalize(r Record, redact Redactor) (Record, error) {
 		return r, fmt.Errorf("%w: a record says why", ErrInvalid)
 	case r.Law == "":
 		return r, fmt.Errorf("%w: a record names the law it rested on", ErrInvalid)
-	case r.RegretState != RegretReady && r.RegretState != RegretNotReady && r.RegretState != RegretNoneNeeded:
-		return r, fmt.Errorf("%w: regret_state is ready, not_ready or none_needed", ErrInvalid)
+	case r.RegretState != RegretReady && r.RegretState != RegretDeclared && r.RegretState != RegretUndeclared &&
+		r.RegretState != RegretNotReady && r.RegretState != RegretNoneNeeded:
+		return r, fmt.Errorf("%w: regret_state is ready, declared, undeclared, not_ready or none_needed", ErrInvalid)
 	case r.Outcome != OutcomeDone && r.Outcome != OutcomeRefused && r.Outcome != OutcomeFailed:
 		return r, fmt.Errorf("%w: outcome is done, refused or failed", ErrInvalid)
-	case r.RegretState == RegretReady && r.Regret == "":
-		return r, fmt.Errorf("%w: a ready regret says what it is", ErrInvalid)
+	case (r.RegretState == RegretReady || r.RegretState == RegretDeclared) && r.Regret == "":
+		return r, fmt.Errorf("%w: a ready or declared regret says what it is", ErrInvalid)
 	case r.Outcome == OutcomeDone && r.RegretState == RegretNotReady:
 		// The rule of the new definition: no regret prepared, no action done.
 		return r, fmt.Errorf("%w: an action is not done without its regret ready; record it as refused", ErrInvalid)

@@ -561,6 +561,9 @@ func (s *Server) Router() http.Handler {
 		// What the approval records say, counted by day and requester, each
 		// count with the request numbers behind it. Read-only; viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/approvals", s.handleApprovalReadings)
+		// The action record (action_record.go): what was done, by whom, why and on
+		// which law, newest first, by seat, law, action and time. Read-only.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/records", s.handleRecords)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)

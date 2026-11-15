@@ -73,6 +73,8 @@ var intendedRouteAdditions = map[string][]string{
 	// Owner 2026-11-15: the platform runs its own environment's migrations
 	// (tier C: on the signed policy or an approved card; the guard decides).
 	"POST /api/v1/agentrt/migrations/run": {"operator", "admin", "trade-satellite"},
+	// 2026-11-15: the action record, read by seat, law and day (read-only).
+	"GET /api/v1/records": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15: a requester takes back its own card before it runs (narrows only).
 	"POST /api/v1/approvals/{id}/withdraw": {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
