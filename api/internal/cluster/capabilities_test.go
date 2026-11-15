@@ -37,26 +37,3 @@ func TestNodeCapabilitiesEmpty(t *testing.T) {
 		t.Fatalf("expected nil, got %+v", caps)
 	}
 }
-
-func TestHasCapability(t *testing.T) {
-	labels := map[string]string{"storage.nfs/client": "true"}
-	if !HasCapability(labels, "nfs-client") {
-		t.Fatal("expected nfs-client")
-	}
-	if HasCapability(labels, "gpu-pool") {
-		t.Fatal("unexpected gpu-pool")
-	}
-}
-
-func TestCapabilityIDsSorted(t *testing.T) {
-	ids := capabilityIDs(map[string]string{
-		"workload":           "gpu",
-		"accelerator":        "nvidia",
-	})
-	if len(ids) != 2 {
-		t.Fatalf("got %v", ids)
-	}
-	if ids[0] != "gpu-nvidia" || ids[1] != "gpu-pool" {
-		t.Fatalf("order: got %v", ids)
-	}
-}

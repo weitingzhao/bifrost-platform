@@ -1,10 +1,5 @@
 package cluster
 
-import (
-	"sort"
-	"strings"
-)
-
 // NodeCapabilityView is a human-readable node capability derived from Kubernetes labels.
 type NodeCapabilityView struct {
 	ID       string `json:"id"`
@@ -223,30 +218,4 @@ func nodeCapabilities(labels map[string]string) []NodeCapabilityView {
 		})
 	}
 	return out
-}
-
-func capabilityIDs(labels map[string]string) []string {
-	caps := nodeCapabilities(labels)
-	if len(caps) == 0 {
-		return nil
-	}
-	ids := make([]string, len(caps))
-	for i, c := range caps {
-		ids[i] = c.ID
-	}
-	sort.Strings(ids)
-	return ids
-}
-
-func HasCapability(labels map[string]string, id string) bool {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false
-	}
-	for _, c := range nodeCapabilities(labels) {
-		if c.ID == id {
-			return true
-		}
-	}
-	return false
 }
