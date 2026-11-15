@@ -114,6 +114,7 @@ modules:
         - "console/src/api/__fixtures__/agent-threads-sessions.generated.json"
         - "console/src/api/__fixtures__/agent-threads.generated.json"
       api/internal/approvals: ["api/internal/approvals", "api/internal/config", "config/agent-tasks.yaml"]
+      api/internal/approvals/mustrefuse: ["api/internal/approvals/mustrefuse"]
       api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["api/internal/cluster"]
       # Guards that read every Go file of the module, and the walls between
