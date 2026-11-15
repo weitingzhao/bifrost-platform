@@ -91,6 +91,9 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'wait_for_messages',
   'read_message',
   'ack_messages',
+  'get_release_window',
+  'hold_release_window',
+  'release_release_window',
   // Business issues (W-31 BI-1 slice 2): the crew's tools, registerIssues.ts.
   'file_issue',
   'add_to_issue',

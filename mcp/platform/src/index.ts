@@ -41,6 +41,7 @@ import {
   whoami,
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
+import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { registerIssueTools } from './registerIssues.js'
@@ -753,6 +754,34 @@ if (!allow || allow.has('record_external_work_event')) {
 }
 
 registerMessageTools(reg)
+
+reg(
+  'get_release_window',
+  'Release window: who holds it, until when, and who is queued behind (position, waited, until).',
+  {},
+  async () => jsonResult(await getReleaseWindow()),
+)
+
+reg(
+  'hold_release_window',
+  'Take the release window as this session, or queue for it (queue defaults to true): a live holder answers 202 with your position, and thread:<this session> gets window.your_turn when it is reserved for you (about 2 minutes: call this again to take it). what: comma-separated repo names. resume: one line you will act on then. Release with release_release_window when done.',
+  {
+    what: z.string().min(1),
+    reason: z.string().max(256).optional(),
+    ttl_minutes: z.number().int().min(1).max(60).optional(),
+    queue: z.boolean().optional(),
+    queue_minutes: z.number().int().min(1).max(120).optional(),
+    resume: z.string().max(256).optional(),
+  },
+  async (input) => jsonResult(await holdReleaseWindow(input)),
+)
+
+reg(
+  'release_release_window',
+  'Give back the release window this session holds (or a reservation made for it); the next in queue is reserved and notified.',
+  {},
+  async () => jsonResult(await releaseReleaseWindow()),
+)
 registerPlanImportTools(reg)
 registerIssueTools(reg)
 
