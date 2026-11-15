@@ -170,6 +170,18 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "record_release_review", Tier: TierB,
+		Description: "Record that the calling thread read the listed files of a repository at one commit, and whether they passed. The reviewer is the caller's session, not a parameter. The signed release policy reads these records for a release that changes a trust anchor: it needs a passed record for exactly the released commit, by a session that wrote none of those changes, listing every changed trust-anchor file. Appends one row to the evidence ledger. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/release-policy/reviews",
+		Params: []Param{
+			{Name: "repo", Type: "string", Required: true, In: "body"},
+			{Name: "commit", Type: "string", Required: true, In: "body"},
+			{Name: "files", Type: "string[]", Required: true, In: "body"},
+			{Name: "verdict", Type: "string", Required: true, In: "body"},
+			{Name: "not_read", Type: "string", In: "body"},
+		},
+	},
+	{
 		ID: "delete_pipeline_run", Tier: TierB,
 		Description: "Delete a terminal Tekton PipelineRun. Tier B; call the endpoint directly.",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/runs/{id}",

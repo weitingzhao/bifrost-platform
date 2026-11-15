@@ -211,6 +211,7 @@ deny	GET /api/v1/readings/approvals
 deny	GET /api/v1/release-policy
 deny	PUT /api/v1/release-policy
 deny	POST /api/v1/release-policy/freeze
+deny	POST /api/v1/release-policy/reviews
 deny	POST /api/v1/release-policy/unfreeze
 deny	GET /api/v1/releases
 deny	GET /api/v1/releases/running-images

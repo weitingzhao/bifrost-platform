@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
+	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
 const releasePolicyCheckInterval = time.Hour
@@ -58,8 +60,16 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 		CI:         facts,
 		Window:     facts,
 		Deployed:   recordDeployed{svc: releasesSvc},
-		StatePath:  filepath.Join(dataDir, "release-policy-freeze"),
-		Anchor:     releasepolicy.OwnerKeyFingerprint,
+		Plans: policyPlans{summarize: func(ctx context.Context, planID string) (workactions.Summary, error) {
+			if s.work == nil || s.work.Svc == nil {
+				return workactions.Summary{}, errors.New("the manifest actions are not wired")
+			}
+			return s.work.Svc.Summarize(ctx, planID)
+		}},
+		History:   policyHistory{facts: facts},
+		Reviews:   policyReviews{db: s.evidenceDB},
+		StatePath: filepath.Join(dataDir, "release-policy-freeze"),
+		Anchor:    releasepolicy.OwnerKeyFingerprint,
 	})
 	s.approvals.SetAutoApprover(s.releasePolicyApprover())
 	if runsWorkers && releasepolicy.RemindersWanted() {
@@ -99,10 +109,16 @@ func pendingReleases(svc *approvals.Service) int {
 // autoApprove decides a tier C direct call on the signed policy and audits an
 // approval. false means the call keeps needing a manual approval; reasons say why.
 func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, params map[string]any) (bool, []string) {
-	if s.releasePolicy == nil || id != "start_pipeline_run" {
+	if s.releasePolicy == nil || (id != "start_pipeline_run" && id != "apply_manifest") {
 		return false, nil
 	}
 	d := s.releasePolicy.Decide(r.Context(), id, tier, params)
+	if id == "apply_manifest" && d.PolicyID == "" {
+		// No signed policy judges applies (the engine names a policy id only
+		// when one has an apply section): the answer is the one from before
+		// the section existed, without reasons.
+		return false, nil
+	}
 	if t := traceFrom(r.Context()); t != nil {
 		t.Decision = map[string]any{"mode": "signed_policy", "decision": d}
 	}
@@ -110,7 +126,11 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 		return false, d.Reasons
 	}
 	if s.audit != nil {
-		s.audit.Record(r, "release_policy.auto_approve", id+" "+d.Pipeline, "approved",
+		target := d.Pipeline
+		if id == "apply_manifest" {
+			target = d.Plan
+		}
+		s.audit.Record(r, "release_policy.auto_approve", id+" "+target, "approved",
 			"auto-approved "+decisionDetail(r, d))
 	}
 	return true, nil
@@ -120,6 +140,12 @@ func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
 	out := fmt.Sprintf("policy_id=%s requester=%s sha=%s clauses=%s", d.PolicyID, policyRequester(r), d.SHAText(), d.ClauseText())
 	if len(d.AdditiveDDL) > 0 {
 		out += " additive_ddl=" + strings.Join(d.AdditiveDDL, ",")
+	}
+	if d.Path != "" {
+		out += " path=" + d.Path
+	}
+	if len(d.ReviewedAnchors) > 0 {
+		out += " trust_anchor_review=" + strings.Join(d.ReviewedAnchors, ",")
 	}
 	if len(d.Reasons) > 0 {
 		out += " reasons=" + strings.Join(d.Reasons, "; ")

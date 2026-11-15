@@ -41,6 +41,7 @@ var notifySafeKeys = map[string][]string{
 	"sync_mirrors":               {"repos"},
 	"delete_pipeline_run":        {"id", "ns"},
 	"request_unit_evidence":      {"repo", "commit"},
+	"record_release_review":      {"repo", "commit", "verdict"},
 	"gitops_sync_app":            {"name"},
 	"gitops_rollback_app":        {"name", "revision"},
 	"rollout_restart_deployment": {"namespace", "kind", "name"},

@@ -76,6 +76,9 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},
+	// 2026-11-15: a thread records that it read files of a commit, for the
+	// release policy's trust-anchor review (tier B, like units/evidence).
+	"POST /api/v1/release-policy/reviews": {"operator", "admin", "trade-satellite"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

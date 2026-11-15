@@ -185,6 +185,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body, query) => withQuery(asRecord(body), query, ['who', 'force']),
   },
   {
+    action: 'record_release_review',
+    method: 'POST',
+    pattern: /^\/api\/v1\/release-policy\/reviews$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'request_unit_evidence',
     method: 'POST',
     pattern: /^\/api\/v1\/units\/evidence$/,
