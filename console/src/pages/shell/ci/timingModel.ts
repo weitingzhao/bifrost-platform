@@ -60,8 +60,19 @@ export type SlowTiming = { name: string; seconds: number; kind: 'Package' | 'Tes
 export function slowTimings(log: string, run: string): SlowTiming[] {
   // Tekton keeps only log tails. Never turn missing/cached timings into zero.
   const rows: SlowTiming[] = []
+  const cachedPackages = new Set<string>()
   for (const raw of log.split('\n')) {
     const line = raw.split('\u001b').map(part => part.replace(/^\[[0-9;]*m/, '')).join('')
+    if (line.startsWith('{')) {
+      try {
+        const event = JSON.parse(line) as { Action?: string; Package?: string; Test?: string; Elapsed?: number; Output?: string }
+        if (event.Package && event.Output?.includes('(cached)')) cachedPackages.add(event.Package)
+        if (event.Package && (event.Action === 'pass' || event.Action === 'fail') && typeof event.Elapsed === 'number' && Number.isFinite(event.Elapsed) && event.Elapsed >= 0) {
+          rows.push({ name:event.Test ? `${event.Package} · ${event.Test}` : event.Package, seconds:event.Elapsed, kind:event.Test ? 'Test' : 'Package', run })
+        }
+      } catch { /* A partial log line is not a timing. */ }
+      continue
+    }
     const go = line.match(/^ok\s+(\S+)\s+(\d+(?:\.\d+)?)s(?:\s|$)/)
     const test = line.match(/^(?:--- (?:PASS|FAIL): (.+?) \((\d+(?:\.\d+)?)s\))/)
     const vitest = line.match(/[✓✔×❯]\s+(.+?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)m?s\s*$/)
@@ -69,7 +80,7 @@ export function slowTimings(log: string, run: string): SlowTiming[] {
     else if (test) rows.push({ name:test[1], seconds:Number(test[2]), kind:'Test', run })
     else if (vitest) rows.push({ name:vitest[1], seconds:Number(vitest[2]) / (line.trim().endsWith('ms') ? 1000 : 1), kind:'Test', run })
   }
-  return rows.sort((a,b) => b.seconds-a.seconds)
+  return rows.filter(row => ![...cachedPackages].some(pkg => row.name === pkg || row.name.startsWith(`${pkg} · `))).sort((a,b) => b.seconds-a.seconds)
 }
 export function scopeBaseFromLog(log: string): string | null {
   return log.match(/against main \(merge base ([a-f0-9]{40})\)/)?.[1] ?? null

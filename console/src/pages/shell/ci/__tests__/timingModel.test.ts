@@ -30,3 +30,18 @@ describe('observed CI timing',()=>{
     expect(slowTimings('(no pods yet — PipelineRun may still be starting)','ci-one')).toEqual([])
   })
 })
+// Origin: real ci-platform-5stn2 log read, 2026-11-15: scoped Go tests use
+// JSON events, not plain "ok ... Ns". Ignoring them hid the slow backend.
+it('reads Go JSON package and test durations without counting cached replays',()=>{
+  const lines=[
+    {Action:'pass',Package:'p/server',Test:'TestRoute',Elapsed:20.4},
+    {Action:'pass',Package:'p/server',Elapsed:34.7},
+    {Action:'pass',Package:'p/cached',Test:'TestOld',Elapsed:80},
+    {Action:'output',Package:'p/cached',Output:'ok p/cached (cached)\n'},
+    {Action:'pass',Package:'p/cached',Elapsed:0},
+    {Action:'skip',Package:'p/skipped',Elapsed:0},
+  ].map(e=>JSON.stringify(e)).join('\n')
+  expect(slowTimings(lines+'\n{"partial"','ci-one').map(r=>[r.kind,r.name,r.seconds])).toEqual([
+    ['Package','p/server',34.7],['Test','p/server · TestRoute',20.4],
+  ])
+})

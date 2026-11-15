@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { fetchCompare, fetchPipelineRunLogs } from '@/api/delivery'
 import type { TimingRun } from '@/api/ciTimings'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -7,22 +7,29 @@ import { READ_BUTTON } from './RunTimingDetail'
 import { beforeTests, changeKind, CHANGE_KINDS, elapsed, median, reusedBy, runCommit, secondsText, slowTimings, trendRuns } from './timingModel'
 
 /** Bound concurrent reads so a long history never starts a request per row at once. */
-async function readChanges(commits: string[]) {
+async function readChanges(commits: string[], client: QueryClient) {
   const out: Record<string,string[] | undefined> = {}
   let next = 0
   await Promise.all(Array.from({length:3}, async () => {
     while (next < commits.length) {
       const sha = commits[next++]
-      try { const data = await fetchCompare('bifrost-platform', `${sha}^`, sha); if (data.reachability === 'ok') out[sha] = data.files } catch { /* Unknown stays unknown. */ }
+      try {
+        out[sha] = await client.fetchQuery({ queryKey:['ci-commit-paths',sha], staleTime:Infinity, retry:false, queryFn:async () => {
+          const data = await fetchCompare('bifrost-platform', `${sha}^`, sha)
+          if (data.reachability !== 'ok') throw new Error(data.detail || 'Changed paths unavailable')
+          return data.files
+        } })
+      } catch { /* Unknown stays unknown. */ }
     }
   }))
   return out
 }
 
 export function TimingTrends({ runs, onPick }: { runs: TimingRun[]; onPick: (name:string) => void }) {
+  const client = useQueryClient()
   const own = trendRuns(runs).slice(0,30)
   const commits = own.map(runCommit)
-  const changes = useQuery({ queryKey:['ci-timing-changes',...commits], queryFn:() => readChanges(commits), staleTime:5*60_000, enabled:commits.length>0 })
+  const changes = useQuery({ queryKey:['ci-timing-changes',...commits], queryFn:() => readChanges(commits, client), staleTime:5*60_000, enabled:commits.length>0 })
   const [logsEnabled,setLogsEnabled] = useState(false)
   const sample = own.slice(0,5)
   const logs = useQueries({ queries:sample.map(run => ({ queryKey:['ci-timing-logs',run.name], queryFn:() => fetchPipelineRunLogs(run.name,'cicd'), staleTime:60_000, enabled:logsEnabled, retry:false })) })
