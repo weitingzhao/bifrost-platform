@@ -31,7 +31,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	w := newKernelWorld(t)
 	first := store.Writer{Actor: "thread:s", Token: "first"}
 	second := store.Writer{Actor: "thread:s", Token: "second"}
-	_, err := store.ProposeMission(ctx, w.rt, first, "k1", mission, nil)
+	_, err := proposeForSession(ctx, w.rt, first, "k1")
 	ok(t, err)
 	_, _, err = store.UploadArtifact(ctx, w.rt, first, "task_spec", "text/plain", []byte("a spec"))
 	ok(t, err)
@@ -44,7 +44,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	a := &asker{}
 	before := w.footprint(t)
 	for name, write := range map[string]func() error{
-		"a mission": func() error { _, e := store.ProposeMission(ctx, w.rt, second, "k2", mission, nil); return e },
+		"a rule proposal": func() error { _, e := proposeForSession(ctx, w.rt, second, "k2"); return e },
 		"a plan change": func() error {
 			_, e := store.ProposePlanChange(ctx, w.rt, second, "k4", root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, a.ask)
 			return e
@@ -67,7 +67,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			_, _, e := store.UploadArtifact(ctx, w.rt, second, "task_spec", "text/plain", []byte("a spec"))
 			return e
 		},
-		"a replay of its key": func() error { _, e := store.ProposeMission(ctx, w.rt, second, "k1", mission, nil); return e },
+		"a replay of its key": func() error { _, e := proposeForSession(ctx, w.rt, second, "k1"); return e },
 		"whoami's check":      func() error { return checkWriter(w, second) },
 	} {
 		if e := write(); !errors.Is(e, store.ErrNotYours) {
@@ -120,11 +120,11 @@ func TestSessionOfAnOlderRegistration(t *testing.T) {
 	register("thread:old", map[string]any{"actors": []string{"thread:old"}, "note": "first write of a thread, by token first"})
 	register("thread:bare", map[string]any{"actors": []string{"thread:bare"}, "note": "imported"})
 	ok(t, checkWriter(w, store.Writer{Actor: "thread:old", Token: "first"}))
-	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "first"}, "k1", mission, nil)
+	_, err := proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "first"}, "k1")
 	ok(t, err)
-	_, err = store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "second"}, "k2", mission, nil)
+	_, err = proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "second"}, "k2")
 	is(t, err, store.ErrNotYours)
-	_, err = store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:bare", Token: "first"}, "k1", mission, nil)
+	_, err = proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:bare", Token: "first"}, "k1")
 	is(t, err, store.ErrNotYours)
 	w.legacy(t, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ('thread:legacy', 'thread', 'no event')`)
 	is(t, checkWriter(w, store.Writer{Actor: "thread:legacy", Token: "first"}), store.ErrNotYours)
@@ -145,7 +145,7 @@ func TestSessionFirstWriteAtOnce(t *testing.T) {
 			wg.Add(1)
 			go func(i int, token string) {
 				defer wg.Done()
-				_, errs[i] = store.ProposeMission(context.Background(), pool, store.Writer{Actor: actor, Token: token}, "k", mission, nil)
+				_, errs[i] = proposeForSession(context.Background(), pool, store.Writer{Actor: actor, Token: token}, "k")
 			}(i, token)
 		}
 		wg.Wait()
@@ -191,13 +191,13 @@ func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 	held, release := pauseHeld(t, first.Actor)
 	replay := make(chan error, 1)
 	go func() {
-		_, err := store.ProposeMission(context.Background(), pool, second, "k", mission, nil)
+		_, err := proposeForSession(context.Background(), pool, second, "k")
 		replay <- err
 	}()
 	<-held
 	wrote := make(chan error, 1)
 	go func() {
-		_, err := store.ProposeMission(context.Background(), pool, first, "k", mission, nil)
+		_, err := proposeForSession(context.Background(), pool, first, "k")
 		wrote <- err
 	}()
 	var errs []error
@@ -244,7 +244,7 @@ func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 	wrote := make(chan error, 1)
 	go func() {
 		bg := context.Background()
-		if _, err := store.ProposeMission(bg, pool, first, "k", mission, nil); err != nil {
+		if _, err := proposeForSession(bg, pool, first, "k"); err != nil {
 			wrote <- err
 			return
 		}

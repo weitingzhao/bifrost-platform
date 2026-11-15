@@ -3,8 +3,6 @@ package store
 import (
 	"fmt"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 )
 
@@ -25,7 +23,7 @@ import (
 // Task, which have no pin to set: only PinnedTask has.
 
 // ExecutorPins are the pins there are (0010 task_executor_pin_check).
-var ExecutorPins = []string{rules.PinCoordinator}
+var ExecutorPins = []string{"external:coordinator"}
 
 // ErrPinNotPermitted: a pinned task the writer may not propose; nothing of
 // the batch was written. It is an ErrInvalid.

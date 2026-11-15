@@ -93,16 +93,6 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 		out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": "landing." + id, "value": value.Seconds(), "unit": "seconds", "source": "landing.WaitBoundaries (API binary)", "adjustment": "Code change required; no runtime rule consumes this value yet."})
 	}
 	out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": "release.compare_completeness", "value": releasepolicy.ComparisonFileCap(), "unit": "files (at or above, the complete difference of the two trees is read as well; unreadable refuses automatic approval)", "source": "releasepolicy.ComparisonFileCap", "adjustment": "Completeness safeguard, not the landing file allowance. Requires a code/API evidence change; a larger landing rule does not override it."})
-	for _, limit := range []struct {
-		id           string
-		value        float64
-		unit, source string
-	}{
-		{"proposal.attempt_hard_limit", MaxHardLimit.Seconds(), "seconds", "store.MaxHardLimit"},
-		{"proposal.default_mission_days", DefaultMissionDays, "days", "store.DefaultMissionDays (explicit proposal deadline overrides this default)"},
-	} {
-		out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": limit.id, "value": limit.value, "unit": limit.unit, "source": limit.source, "adjustment": "Code-defined bound or default; changing a different rule cannot bypass this consumer."})
-	}
 	sort.Slice(out.CodeLimits, func(i, j int) bool {
 		return out.CodeLimits[i]["boundary_id"].(string) < out.CodeLimits[j]["boundary_id"].(string)
 	})

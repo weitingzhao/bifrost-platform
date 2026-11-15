@@ -129,6 +129,12 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	return map[string]any{"count": len(items), "items": items, "truncated": truncated}, nil
 }
 
+// Historical mission cards retain their original option labels.
+const (
+	MissionStart    = "Start the mission"
+	MissionNotStart = "Do not start it"
+)
+
 type missionCard struct {
 	at       time.Time
 	question string

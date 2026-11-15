@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -329,50 +328,10 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 		if err = allow(prev, why); err != nil {
 			return err
 		}
-		if err = knownNames(ctx, tx, r); err != nil {
-			return err
-		}
 		out, err = insertRule(ctx, tx, w, r, text, rec)
 		return err
 	})
 	return out, err
-}
-
-// knownNames refuses a rule naming an executor or host the runtime has not
-// registered (proposal §2: only registered ones count).
-func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
-	var executors, hosts []string
-	switch r.Kind {
-	case rules.KindEnvelope:
-		executors = r.Envelope.Executors
-		// A signed external entry may name its host before the first claim
-		// registers it. All other hosts still have to be known.
-		for _, host := range r.Envelope.Hosts {
-			if !slices.ContainsFunc(r.Envelope.ExternalHosts, func(h rules.ExternalHost) bool { return h.Host == host }) {
-				hosts = append(hosts, host)
-			}
-		}
-
-	}
-	if len(executors) == 0 && len(hosts) == 0 {
-		// Every kind still written names neither: nothing to look up.
-		return nil
-	}
-	var unknown []string
-	if err := tx.QueryRow(ctx, `SELECT ARRAY(SELECT x FROM unnest($1::text[]) x
-	    WHERE NOT EXISTS (SELECT 1 FROM agentrt.actor a WHERE a.actor_id = x AND a.actor_kind = 'executor')
-	  UNION ALL SELECT h FROM unnest($2::text[]) h WHERE NOT EXISTS (SELECT 1 FROM agentrt.host o WHERE o.host_id = h))`,
-		executors, hosts).Scan(&unknown); err != nil {
-		return err
-	}
-	if len(unknown) > 0 {
-		slices.Sort(unknown)
-		return invalid("the rule names executors or hosts the runtime has not registered: %v", slices.Compact(unknown))
-	}
-	if r.Kind == rules.KindEnvelope {
-		return knownExternalHosts(ctx, tx, r.Envelope.ExternalHosts)
-	}
-	return nil
 }
 
 func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []byte, rec ruleRecord) (map[string]any, error) {
@@ -487,34 +446,4 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		return map[string]any{"rule_id": id, "rule_version": r.Version, "text_artifact_id": art, "event_id": ev.EventID,
 			"needs_signature": why != nil}, nil
 	})
-}
-
-// knownExternalHosts refuses an envelope whose external host is registered
-// as a host of another kind, whose proposer is not a registered seat or
-// whose executor is not a registered executor (pin.go): an entry never
-// names an ordinary host, nor a seat or executor that is not there. A host
-// not registered yet may be named (the claim that first hears from it
-// registers it).
-func knownExternalHosts(ctx context.Context, tx pgx.Tx, hosts []rules.ExternalHost) error {
-	for _, h := range hosts {
-		for _, tool := range h.Tools() {
-			var other, seat, executor bool
-			if err := tx.QueryRow(ctx, `SELECT
-		    EXISTS (SELECT 1 FROM agentrt.host WHERE host_id = $1 AND host_kind <> $4),
-		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $2 AND actor_kind = 'seat' AND retired_at IS NULL),
-		    EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $3 AND actor_kind = 'executor')`,
-				h.Host, h.Proposer, tool.Executor, HostExternal).Scan(&other, &seat, &executor); err != nil {
-				return err
-			}
-			switch {
-			case other:
-				return invalid("external host %s is registered as a host of another kind", h.Host)
-			case !seat:
-				return invalid("external host %s: its proposer %s is not a registered seat", h.Host, h.Proposer)
-			case !executor:
-				return invalid("external host %s: its executor %s is not registered", h.Host, tool.Executor)
-			}
-		}
-	}
-	return nil
 }

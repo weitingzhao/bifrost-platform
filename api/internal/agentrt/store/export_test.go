@@ -64,26 +64,6 @@ func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any,
 	return out, err
 }
 
-// DecidePageForTest lowers how many waiting missions a decision pass reads
-// at a time, and returns the function that restores it.
-func DecidePageForTest(n int) func() {
-	old := decidePageSize
-	decidePageSize = n
-	return func() { decidePageSize = old }
-}
-
-// ProposeUnboundedForTest proposes a mission as a platform before the
-// proposal bounds did (review 320 A1): the same key and request, no bounds.
-func ProposeUnboundedForTest(ctx context.Context, db DB, w Writer, key string, p MissionProposal) (map[string]any, error) {
-	p, err := p.check()
-	if err != nil {
-		return nil, err
-	}
-	return idempotentAs(ctx, db, w, "missions", key, p.request(), nil, func(tx pgx.Tx) (map[string]any, error) {
-		return proposeMissionTx(ctx, tx, w, p, key, nil)
-	})
-}
-
 // EventTypesForTest is the closed vocabulary and the types with a body.
 func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventTypes() }
 

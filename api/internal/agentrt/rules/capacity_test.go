@@ -45,9 +45,6 @@ func TestCapacityOnly(t *testing.T) {
 		"tuning capacity":             {tuning, loosened(t, tuning, "assess_per_pass: 5", "assess_per_pass: 6"), true},
 		"nothing changes":             {tuning, loosened(t, tuning, "", ""), false},
 		"tuning validity":             {tuning, loosened(t, tuning, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
-		"budget mission up":           {budget, loosened(t, budget, "max_attempts: 40", "max_attempts: 80"), true},
-		"budget hard limit up":        {budget, loosened(t, budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 7200"), true},
-		"budget states auto_grant":    {budget, loosened(t, budget, "attempt_hard_limit_s: 3600\n", "attempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 60, max_wall_hours: 24}\n"), true},
 		"landing limits up":           {capacityLanding, loosened(t, capacityLanding, "max_landings_per_day: 5", "max_landings_per_day: 9"), true},
 		"landing repo limit up":       {capacityLanding, loosened(t, capacityLanding, "max_files: 8", "max_files: 12"), true},
 		"landing global in flight up": {capacityLanding, loosened(t, capacityLanding, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2"), true},
@@ -57,7 +54,6 @@ func TestCapacityOnly(t *testing.T) {
 		"landing changes max_batch": {loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), strings.Replace(loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 2000\n"), "rule_version: 2", "rule_version: 3", 1), true},
 		"landing drops max_batch":   {loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), strings.Replace(loosened(t, capacityLanding, "", ""), "rule_version: 2", "rule_version: 3", 1), true},
 		"landing allow grows":       {capacityLanding, loosened(t, capacityLanding, `["console/src/pages/**/*.tsx"]`, `["console/src/pages/**/*.tsx", "api/**"]`), false},
-		"an envelope's budget":      {envelope, loosened(t, envelope, "max_attempts: 40", "max_attempts: 80"), false},
 	} {
 		err := rules.CapacityOnly(parse(t, c.prev), parse(t, c.next))
 		if (err == nil) != c.card {
@@ -78,7 +74,7 @@ func TestCapacityOnlyChanges(t *testing.T) {
 	if len(changes) != 1 || changes[0].Field != "repos[bifrost-platform].limits.max_files" || changes[0].Old != 8 || changes[0].New != 12 {
 		t.Fatalf("changes = %+v", changes)
 	}
-	if err = rules.CapacityOnly(parse(t, tuning), parse(t, budget)); err == nil {
+	if err = rules.CapacityOnly(parse(t, tuning), parse(t, capacityLanding)); err == nil {
 		t.Fatal("two different rules compare")
 	}
 }

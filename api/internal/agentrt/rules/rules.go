@@ -25,8 +25,6 @@ const Namespace = "bifrost-agentrt-rule"
 
 // The kinds of rule, by the rule_id's first part.
 const (
-	KindEnvelope = "standing-envelope"
-	KindBudget   = "budget"
 	KindPlan     = "plan-standing"
 	KindCardAuto = "card-auto-answer"
 )
@@ -35,7 +33,7 @@ const (
 // a blocked task's card (store/blockedcard.go), a planner's question
 // (store/planresult.go), a plan change's, a plan import's and a recorder
 // import's card (planproposal.go, planimportcard.go, recorderimport.go), and
-// a mission's card outside the standing envelope (missiondecide.go). TD-393
+// historical mission cards. TD-393
 // (the Owner 2026-10-20 「STG 上所有种类的运行时卡都归规则管」) added all but the
 // first two; a rule answers a card with its recommendation, or with the
 // option that changes nothing when it has none or its AI assessment differs
@@ -58,27 +56,7 @@ const (
 	Tighten = "tighten"
 )
 
-// Capacity defaults: what a mission, an attempt and a host get where no rule
-// tunes them (R5 phase 2 step 3b). They are not bounds: the signed rule
-// decides, up to the ceilings below.
-const (
-	DefaultMissionAttempts  = 1000
-	DefaultMissionWallHours = 720
-	DefaultAttemptLimitS    = 86400
-)
-
-// Sanity ceilings a rule may not pass, whatever the Owner signs: far past
-// any capacity meant, they only refuse a value that is a mistake.
-const (
-	MissionAttemptsCeiling  = 10000
-	MissionWallHoursCeiling = 8760          // a year
-	AttemptLimitSCeiling    = 7 * 24 * 3600 // a week
-)
-
-var (
-	tenants = []string{"dev", "business"}
-	actions = []string{"none", "branch"} // weakest first; C-class actions are never in an envelope
-)
+var tenants = []string{"dev", "business"}
 
 // Header is the five fields the signature covers, written at the top of
 // every rule and compared with the row's columns.
@@ -89,46 +67,6 @@ type Header struct {
 	Effective time.Time
 	Expires   time.Time
 }
-
-// Budget is a mission's budget.
-type Budget struct {
-	MaxAttempts  int `json:"max_attempts"`
-	MaxWallHours int `json:"max_wall_hours"`
-}
-
-// Envelope is a standing authorization: a mission inside it starts without
-// the Owner.
-type Envelope struct {
-	Tenant    string
-	MaxAction string
-	Budget    Budget
-	Executors []string
-	Hosts     []string
-	// ExternalHosts: the external hosts a pinned task may go to, sorted by
-	// host, nil for none (envelope_hosts.go).
-	ExternalHosts []ExternalHost
-}
-
-// BudgetRule is a tenant's default mission budget and an attempt's hard time
-// limit.
-type BudgetRule struct {
-	Tenant          string
-	Mission         Budget
-	AttemptLimitSec int
-	// AutoGrant is how far the platform grew an over-budget mission's
-	// budget on its own (auto_grant; AutoGrantDefault when the rule states
-	// none). A mission's attempts and hours cap nothing any more
-	// (2026-11-06), so the runtime reads it no longer; it is still parsed,
-	// so the rules signed with it keep their canonical doc.
-	AutoGrant Budget
-	// AutoGrantStated says the rule stated auto_grant; only then is it in
-	// the rule's doc, so a rule without it keeps its canonical doc.
-	AutoGrantStated bool
-}
-
-// AutoGrantDefault is the auto_grant of a budget rule that states none: 10
-// rounds of 3 attempts, and a day (unused by the runtime, see AutoGrant).
-var AutoGrantDefault = Budget{MaxAttempts: 30, MaxWallHours: 24}
 
 // PlanStanding is what the plan's standing authorization adds to its two
 // built-in cases (a step added to an item in progress, the title of a step
@@ -164,8 +102,6 @@ type CardAuto struct {
 type Rule struct {
 	Header
 	Kind     string
-	Envelope *Envelope
-	Budget   *BudgetRule
 	Plan     *PlanStanding
 	CardAuto *CardAuto
 	Landing  *Landing
@@ -177,7 +113,7 @@ type Rule struct {
 func KindOf(id string) (kind, arg string, err error) {
 	kind, arg, _ = strings.Cut(id, ":")
 	switch kind {
-	case KindEnvelope, KindBudget, KindLanding:
+	case KindLanding:
 		if slices.Contains(tenants, arg) {
 			return kind, arg, nil
 		}
@@ -186,7 +122,7 @@ func KindOf(id string) (kind, arg string, err error) {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, budget:<tenant>, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -228,10 +164,6 @@ func Parse(text []byte) (Rule, error) {
 	switch kind {
 	case KindLanding:
 		err = r.landing(o, arg)
-	case KindEnvelope:
-		err = r.envelope(o, arg)
-	case KindBudget:
-		err = r.budget(o, arg)
 	case KindPlan:
 		err = r.plan(o)
 	case KindCardAuto:
@@ -251,51 +183,6 @@ func tenant(o *object, want string) (string, error) {
 		err = fmt.Errorf("tenant is %q, the rule_id's", want)
 	}
 	return t, err
-}
-
-func budgetOf(o *object, key string) (Budget, error) {
-	b, err := o.object(key)
-	if err != nil {
-		return Budget{}, err
-	}
-	var out Budget
-	if out.MaxAttempts, err = b.integer("max_attempts", 1, MissionAttemptsCeiling); err != nil {
-		return Budget{}, err
-	}
-	if out.MaxWallHours, err = b.integer("max_wall_hours", 1, MissionWallHoursCeiling); err != nil {
-		return Budget{}, err
-	}
-	return out, b.done()
-}
-
-func (r *Rule) envelope(o *object, arg string) error {
-	e := &Envelope{}
-	var err error
-	if e.Tenant, err = tenant(o, arg); err != nil {
-		return err
-	}
-	if e.MaxAction, err = o.str("max_action", false); err != nil {
-		return err
-	}
-	if !slices.Contains(actions, e.MaxAction) {
-		return fmt.Errorf("max_action is none or branch, not %q: anything more is never standing", e.MaxAction)
-	}
-	if e.Budget, err = budgetOf(o, "budget"); err != nil {
-		return err
-	}
-	if e.Executors, err = o.strings("executors", false); err != nil {
-		return err
-	}
-	if e.Hosts, err = o.strings("hosts", false); err != nil {
-		return err
-	}
-	slices.Sort(e.Executors)
-	slices.Sort(e.Hosts)
-	if err = e.externalHosts(o); err != nil {
-		return err
-	}
-	r.Envelope = e
-	return nil
 }
 
 // cardAuto reads a card-auto-answer rule: after_seconds (or, as the first
@@ -368,41 +255,6 @@ func (r *Rule) plan(o *object) error {
 	return nil
 }
 
-func (r *Rule) budget(o *object, arg string) error {
-	b := &BudgetRule{}
-	var err error
-	if b.Tenant, err = tenant(o, arg); err != nil {
-		return err
-	}
-	if b.Mission, err = budgetOf(o, "mission"); err != nil {
-		return err
-	}
-	if b.AttemptLimitSec, err = o.integer("attempt_hard_limit_s", 60, AttemptLimitSCeiling); err != nil {
-		return err
-	}
-	b.AutoGrant = AutoGrantDefault
-	if n, err := o.node("auto_grant", true); err != nil {
-		return err
-	} else if n != nil {
-		a, err := o.object("auto_grant")
-		if err != nil {
-			return err
-		}
-		if b.AutoGrant.MaxAttempts, err = a.integer("max_attempts", 0, MissionAttemptsCeiling); err != nil {
-			return err
-		}
-		if b.AutoGrant.MaxWallHours, err = a.integer("max_wall_hours", 0, MissionWallHoursCeiling); err != nil {
-			return err
-		}
-		if err = a.done(); err != nil {
-			return err
-		}
-		b.AutoGrantStated = true
-	}
-	r.Budget = b
-	return nil
-}
-
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func anyList(s []string) []any {
@@ -421,20 +273,6 @@ func (r Rule) Doc() map[string]any {
 	case KindLanding:
 		for k, v := range r.Landing.doc() {
 			doc[k] = v
-		}
-	case KindEnvelope:
-		e := r.Envelope
-		doc["tenant"], doc["max_action"], doc["executors"], doc["hosts"] = e.Tenant, e.MaxAction, anyList(e.Executors), anyList(e.Hosts)
-		doc["budget"] = map[string]any{"max_attempts": e.Budget.MaxAttempts, "max_wall_hours": e.Budget.MaxWallHours}
-		if hosts := e.externalHostsDoc(); hosts != nil {
-			doc["external_hosts"] = hosts
-		}
-	case KindBudget:
-		b := r.Budget
-		doc["tenant"], doc["attempt_hard_limit_s"] = b.Tenant, b.AttemptLimitSec
-		doc["mission"] = map[string]any{"max_attempts": b.Mission.MaxAttempts, "max_wall_hours": b.Mission.MaxWallHours}
-		if b.AutoGrantStated {
-			doc["auto_grant"] = map[string]any{"max_attempts": b.AutoGrant.MaxAttempts, "max_wall_hours": b.AutoGrant.MaxWallHours}
 		}
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease

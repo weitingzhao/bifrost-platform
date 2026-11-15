@@ -25,10 +25,6 @@ func capacityField(kind string) func(path string) bool {
 	switch kind {
 	case KindTuning:
 		return func(p string) bool { return strings.HasPrefix(p, "values.") }
-	case KindBudget:
-		return func(p string) bool {
-			return p == "attempt_hard_limit_s" || strings.HasPrefix(p, "mission.") || strings.HasPrefix(p, "auto_grant.")
-		}
 	case KindLanding:
 		return func(p string) bool {
 			switch p {
@@ -44,15 +40,6 @@ func capacityField(kind string) func(path string) bool {
 		}
 	}
 	return nil
-}
-
-// capacityCeilings are the bounds a capacity field may not pass on a card,
-// by path: the same bounds the parser holds a signed rule to, checked again
-// here so a card never relies on the parser alone.
-var capacityCeilings = map[string]map[string]int{
-	KindBudget: {"mission.max_attempts": MissionAttemptsCeiling, "mission.max_wall_hours": MissionWallHoursCeiling,
-		"auto_grant.max_attempts": MissionAttemptsCeiling, "auto_grant.max_wall_hours": MissionWallHoursCeiling,
-		"attempt_hard_limit_s": AttemptLimitSCeiling},
 }
 
 // headerOnly are the doc keys a version always or may change whatever it
@@ -173,7 +160,6 @@ func CapacityOnly(prev, next Rule) error {
 	if len(changes) == 0 {
 		return errors.New("it changes no capacity field")
 	}
-	ceilings := capacityCeilings[next.Kind]
 	for _, c := range changes {
 		if c.New == nil {
 			continue
@@ -188,9 +174,6 @@ func CapacityOnly(prev, next Rule) error {
 		}
 		if n < 0 {
 			return fmt.Errorf("%s is %d, below zero", c.Field, n)
-		}
-		if limit, bounded := ceilings[c.Field]; bounded && n > limit {
-			return fmt.Errorf("%s is %d, above its ceiling %d", c.Field, n, limit)
 		}
 	}
 	return nil

@@ -256,37 +256,6 @@ func TestOwnerButtonPaths(t *testing.T) {
 		t.Errorf("the applied change: R9:1-1 is bound to %s (%v)", bound, err)
 	}
 
-	group()
-	// Missions outside the standing envelope: a starts, b and "none of
-	// these" do not.
-	missions := map[string]string{}
-	for _, option := range []string{"a", "b", "none"} {
-		out, err := store.ProposeMission(ctx, b.conn, thread, "mission-"+option,
-			store.MissionProposal{Title: "a mission " + option, Goal: "g", Success: []string{"done"}}, ask)
-		if err != nil {
-			t.Fatal(err)
-		}
-		id, _ := out["mission_id"].(string)
-		q, _ := out["question_id"].(string)
-		missions[option] = id
-		words := ""
-		if option == "none" {
-			words = "not this week"
-		}
-		if option == "a" {
-			keep("mission", q)
-		}
-		b.answer(q, option, words)
-	}
-	if n, err := store.DecideMissions(ctx, b.conn, question, ack); err != nil || n != 3 {
-		t.Fatalf("missions decided %d (%v)", n, err)
-	}
-	for option, want := range map[string]string{"a": "active", "b": "stopped", "none": "stopped"} {
-		if got := b.state("mission", missions[option]); got != want {
-			t.Errorf("mission card answered %s: %s; want %s", option, got, want)
-		}
-	}
-
 	if os.Getenv("CONSOLE_QUESTION_FIXTURE_WRITE") == "1" {
 		raw, err := json.MarshalIndent(fixture, "", "  ")
 		if err != nil {

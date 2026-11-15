@@ -84,8 +84,6 @@ var landingStorePermission = map[string]string{
 	"nomerge*":             "no-merge marks that hold a commit back from landing",
 	"rules.go":             "stores and reads the Owner's signed rules",
 	"envelope.go":          "a task's envelope: what its attempt may touch",
-	"missiondecide.go":     "applies the Owner's answers on mission cards",
-	"proposebounds.go":     "the bounds an agent's proposal must keep",
 	"propose.go":           "agents' proposals of missions and tasks",
 	"signoff.go":           "records the Owner's sign-off on a step",
 	"acceptancesignoff.go": "an acceptance sign-off makes a step done",
