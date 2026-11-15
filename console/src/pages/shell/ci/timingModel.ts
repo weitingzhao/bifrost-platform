@@ -17,7 +17,7 @@ export function beforeTests(run: TimingRun): number | null {
   if (reusedBy(run)) return null
   const starts = run.tasks.filter(t => /^test-(api|console)/.test(t.task) && !run.skipped.includes(t.task))
     .filter(t => t.task !== 'test-console' || consoleState(run) !== 'Skipped by scope')
-    .map(firstStep).filter((s): s is string => !!s).sort()
+    .map(t => t.created_at).filter((s): s is string => !!s).sort()
   return seconds(run.start_time, starts[0])
 }
 export function scopeResult(run: TimingRun, name: string): string | undefined {

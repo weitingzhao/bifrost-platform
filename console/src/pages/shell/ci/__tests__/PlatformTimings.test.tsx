@@ -18,7 +18,7 @@ it('shows source scope and timing and reads logs only on request',async()=>{
   vi.mocked(fetchCompare).mockResolvedValue({files:['api/a.go'],reachability:'ok'} as Awaited<ReturnType<typeof fetchCompare>>)
   vi.mocked(fetchPipelineRunLogs).mockResolvedValue({logs:'ok\tp/store\t47.1s'} as Awaited<ReturnType<typeof fetchPipelineRunLogs>>)
   renderPage()
-  expect(await screen.findByText('internal/server internal/mcp')).toBeInTheDocument()
+  expect((await screen.findAllByText('internal/server internal/mcp'))[0]).toBeInTheDocument()
   expect(screen.getByText('Skipped by scope')).toBeInTheDocument()
   expect(screen.getByText('35s')).toBeInTheDocument()
   expect(screen.getByText('Designed vs actual')).toBeInTheDocument()
@@ -41,4 +41,18 @@ it('explains a successful empty history without fabricating durations',async()=>
   renderPage()
   expect(await screen.findByText(/No run retained in this window/)).toBeInTheDocument()
   expect(screen.queryByText('0s')).toBeNull()
+})
+// Origin: relay F sample read, 2026-11-15: merge/delivery records do not
+// select test scope. Follow their resolved commit to its CI, never invent scope.
+it('follows a delivery commit to its CI scope',async()=>{
+  vi.mocked(fetchCITimings).mockImplementation(async pipeline=>({as_of:'2026-11-15T20:04:00Z',retained:1,limit:60,runs:[{...timingRun(),name:pipeline==='bifrost-ci-platform'?'ci-one':'delivery-one',pipeline}]}))
+  vi.mocked(fetchCompare).mockResolvedValue({files:['api/a.go'],reachability:'ok'} as Awaited<ReturnType<typeof fetchCompare>>)
+  renderPage()
+  await screen.findByText('Selected run')
+  fireEvent.click(screen.getByRole('button',{name:'STG delivery'}))
+  expect(await screen.findByText(/This pipeline does not select test scope/)).toBeInTheDocument()
+  expect(screen.queryByText('API scope actually tested')).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'Inspect CI for this commit'}))
+  expect(await screen.findByText('API scope actually tested')).toBeInTheDocument()
+  expect(screen.getByText(/1 matching runs loaded/)).toBeInTheDocument()
 })

@@ -30,16 +30,16 @@ export function TimingTrends({ runs, onPick }: { runs: TimingRun[]; onPick: (nam
   const unknown = own.filter(r => changeKind(changes.data?.[runCommit(r)]) === 'Unknown').length
   return <>
     <OpsSection title="Recent CI timing by change" description="One latest successful own CI run per commit (up to 30). Changed paths against that commit’s first parent: api/ = backend, console/ = console. Shared/root changes are separate. These are measured runs, not scope-replay estimates." bodyPadding="compact">
-      <p className="m-0 mb-3 text-xs text-muted-foreground">{`${runs.filter(r=>!!reusedBy(r)).length} reused runs excluded · daily full runs and failures excluded · ${unknown} unclassified${changes.isFetching ? ' (reading changed paths…)' : ''}. Before test steps includes startup and scope selection, ending when the first test container starts.`}</p>
+      <p className="m-0 mb-3 text-xs text-muted-foreground">{`${runs.filter(r=>!!reusedBy(r)).length} reused runs excluded · daily full runs and failures excluded · ${unknown} unclassified${changes.isFetching ? ' (reading changed paths…)' : ''}. Before test tasks includes scope selection, ending when the first test TaskRun is created; task startup is shown separately in the run details.`}</p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{CHANGE_KINDS.map(kind => {
         const points = own.filter(r => changeKind(changes.data?.[runCommit(r)]) === kind).reverse()
         const totals = points.map(elapsed).filter((n):n is number=>n!=null)
         const waits = points.map(beforeTests).filter((n):n is number=>n!=null)
         const max = Math.max(1,...totals)
-        return <div key={kind} className="min-w-0 rounded border border-[var(--border)] p-3">
+        return <div key={kind} className="min-w-0 rounded bg-[var(--card-fill)] p-3">
           <div className="flex flex-wrap justify-between gap-1 text-xs font-medium"><span>{kind}</span><span>{points.length} commits</span></div>
           <p className="my-2 font-mono text-lg">{secondsText(median(totals))}<span className="ml-2 text-xs text-muted-foreground">median CI</span></p>
-          <p className="m-0 text-xs text-muted-foreground">{secondsText(median(waits))} before test steps ({waits.length} measured)</p>
+          <p className="m-0 text-xs text-muted-foreground">{secondsText(median(waits))} before test tasks ({waits.length} measured)</p>
           {points.length > 0 && <svg className="my-2 h-12 w-full" viewBox="0 0 240 48" role="img" aria-label={`${kind} elapsed seconds, oldest to newest: ${totals.join(', ')}`} preserveAspectRatio="none">
             <polyline fill="none" stroke="var(--primary)" strokeWidth="2" points={totals.map((n,i)=>`${totals.length===1?120:4+i*232/(totals.length-1)},${44-n/max*40}`).join(' ')} />
             {totals.map((n,i)=><circle key={i} cx={totals.length===1?120:4+i*232/(totals.length-1)} cy={44-n/max*40} r="2" fill="var(--primary)" />)}
