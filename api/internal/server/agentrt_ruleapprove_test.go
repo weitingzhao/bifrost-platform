@@ -132,8 +132,19 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if again := request(art); again.Code != http.StatusConflict || !strings.Contains(again.Body.String(), "open_request") {
-		t.Fatalf("a second open request for the rule: %d %s", again.Code, again.Body.String())
+	// Origin: #562 (2026-11-14). A second request for the same rule from the
+	// same requester replaces its unrun card: the old one ends rejected as
+	// superseded, and the rule still has one open card.
+	again := request(art)
+	if again.Code != http.StatusCreated {
+		t.Fatalf("a replacing request for the rule: %d %s", again.Code, again.Body.String())
+	}
+	old := do(http.MethodGet, "/api/v1/approvals/"+created.ID, "", "viewer-test-token")
+	if old.Code != http.StatusOK || !strings.Contains(old.Body.String(), `"status":"rejected"`) {
+		t.Fatalf("the replaced card: %d %s", old.Code, old.Body.String())
+	}
+	if err := json.Unmarshal(again.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := actions.Execute(ctx, RuleApproveAction, map[string]any{"env": "prod", "rule_id": "concurrency", "rule_version": 2, "text_artifact_id": art}); err == nil {
 		t.Fatal("the executor ran without an approval")
