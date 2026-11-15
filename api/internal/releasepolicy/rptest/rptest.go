@@ -240,6 +240,33 @@ func (f *Facts) Deployed(_ context.Context, pipeline string) (map[string]string,
 	return f.Records[pipeline], f.Missing, nil
 }
 
+// LiveManager is one managedFields entry of a fake cluster object.
+type LiveManager struct{ Manager, Operation string }
+
+// Live is a fake cluster for the policy's read of an object's field
+// managers: Objects is keyed "namespace/Kind/name"; an object without an
+// entry does not exist. Err fails the read of that key. Asked collects the
+// keys read.
+type Live struct {
+	mu      sync.Mutex
+	Objects map[string][]LiveManager
+	Err     map[string]error
+	Asked   []string
+}
+
+// Read is the fake's answer for one object.
+func (l *Live) Read(namespace, kind, name string) ([]LiveManager, bool, error) {
+	key := namespace + "/" + kind + "/" + name
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.Asked = append(l.Asked, key)
+	if err := l.Err[key]; err != nil {
+		return nil, false, err
+	}
+	m, ok := l.Objects[key]
+	return m, ok, nil
+}
+
 // SHA builds a 40-character hex commit id from a short seed.
 func SHA(seed string) string {
 	out := []byte(fmt.Sprintf("%x", seed))

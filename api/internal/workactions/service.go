@@ -133,12 +133,6 @@ type Object struct {
 	Name      string `json:"name"`
 	Tier      string `json:"tier"`
 	Ownership string `json:"ownership,omitempty"`
-	// AppliedBefore is the plan's own word that the object exists in the
-	// cluster and the applier already manages fields of it. Ownership "ssa"
-	// does not say that: a new object plans as "ssa" too. The release policy
-	// covers an apply only when every object carries it; a plan that does not
-	// report it is read as "cannot tell".
-	AppliedBefore bool `json:"applied_before,omitempty"`
 }
 
 // Summary is what an approval card shows for a plan.
@@ -153,6 +147,69 @@ type Summary struct {
 	Path       string
 	Commit     string
 	Logs       string
+}
+
+// ManagedBy is one entry of an object's metadata.managedFields.
+type ManagedBy struct{ Manager, Operation string }
+
+// LiveManagers reads the cluster's copy of one object the applier may write
+// and returns its managedFields entries; found is false when the object
+// does not exist. The release policy asks it whether the applier applied an
+// object before: a plan's ownership does not say (a new object plans as
+// "ssa" too). The kind must be one the allow-list names for the namespace;
+// the group's preferred version is asked of the cluster.
+func (s *Service) LiveManagers(ctx context.Context, namespace, kind, name string) ([]ManagedBy, bool, error) {
+	list := s.Policy.Apply.Resources
+	if namespace == s.Policy.Delivery.Namespace {
+		list = s.Policy.Apply.CicdResources
+	}
+	var res *actuationpolicy.Resource
+	for i := range list {
+		if list[i].Kind == kind {
+			res = &list[i]
+			break
+		}
+	}
+	if res == nil || res.Resource == "" || namespace == "" || name == "" {
+		return nil, false, fmt.Errorf("kind %s is not one the applier writes in %s", kind, namespace)
+	}
+	version := "v1"
+	if res.Group != "" {
+		cs, err := s.Clients.Kube()
+		if err != nil {
+			return nil, false, err
+		}
+		groups, err := cs.Discovery().ServerGroups()
+		if err != nil {
+			return nil, false, err
+		}
+		version = ""
+		for _, g := range groups.Groups {
+			if g.Name == res.Group {
+				version = g.PreferredVersion.Version
+			}
+		}
+		if version == "" {
+			return nil, false, fmt.Errorf("the cluster does not serve %s", res.Group)
+		}
+	}
+	dyn, err := s.Clients.Dynamic()
+	if err != nil {
+		return nil, false, err
+	}
+	gvr := schema.GroupVersionResource{Group: res.Group, Version: version, Resource: res.Resource}
+	obj, err := dyn.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	var out []ManagedBy
+	for _, m := range obj.GetManagedFields() {
+		out = append(out, ManagedBy{Manager: m.Manager, Operation: string(m.Operation)})
+	}
+	return out, true, nil
 }
 
 // Summarize reads a plan PipelineRun. Ready is false until it succeeds.

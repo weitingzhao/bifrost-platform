@@ -69,6 +69,13 @@ type ApplyRules struct {
 	Namespaces   []string `yaml:"namespaces"`
 	Kinds        []string `yaml:"kinds"`
 	ExcludePaths []string `yaml:"exclude_paths"`
+	// ExcludeObjects are "Kind/name": an object the policy never covers,
+	// whatever file rendered it.
+	ExcludeObjects []string `yaml:"exclude_objects"`
+	// FieldManager is the field manager the applier applies with. An object
+	// has a previous generation when the cluster's copy of it carries an
+	// Apply entry of this manager. Empty, the section covers nothing.
+	FieldManager string `yaml:"field_manager"`
 	// RequirePreviousGeneration must be true for the section to cover
 	// anything: the way back from an apply is the same path at an earlier
 	// commit, and that exists only for an object the applier applied before.

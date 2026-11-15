@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // A signed policy may cover apply_manifest (its apply section, Owner
 // 2026-11-14): a tier C apply whose every object is a kind and namespace the
-// section names, that the applier applied before, from a path the section
-// does not exclude. The way back from such an apply is the same path at an
+// section names, that the applier applied before (the cluster's copy of it
+// carries the applier's field manager, read when the request is judged),
+// from a path the section does not exclude. The way back from such an apply is the same path at an
 // earlier commit of main, which the same rule covers. A policy without the
 // section covers no apply, as before it existed.
 
@@ -34,14 +36,49 @@ type ApplyPlan struct {
 	Objects            []ApplyObject
 }
 
-// ApplyObject is one rendered object. AppliedBefore is true only when the
-// plan itself says the object exists in the cluster with the applier as a
-// manager of it; a plan that does not say is read as "cannot tell", which
-// is not covered.
+// ApplyObject is one rendered object. Its ownership does not say whether the
+// object exists: a new object plans as "ssa" too.
 type ApplyObject struct {
 	Namespace, Kind, Name string
 	Ownership             string
-	AppliedBefore         bool
+}
+
+// Live reads the cluster's own copy of an object.
+type Live interface {
+	// Managers is the entries of the object's metadata.managedFields, read
+	// with a GET of the object itself. found is false when it does not exist.
+	Managers(ctx context.Context, namespace, kind, name string) (managers []FieldManager, found bool, err error)
+}
+
+// FieldManager is one managedFields entry: who, and by which operation.
+type FieldManager struct{ Manager, Operation string }
+
+const (
+	// maxApplyObjects bounds the live reads one decision makes; a larger
+	// plan is the Owner's to look at.
+	maxApplyObjects = 50
+	// liveReadTimeout bounds each of those reads.
+	liveReadTimeout = 5 * time.Second
+)
+
+// previousGeneration is "" when the cluster's copy of o exists and carries
+// an Apply entry of the applier's field manager; otherwise why not.
+func (e *Engine) previousGeneration(ctx context.Context, o ApplyObject, manager string) string {
+	ctx, cancel := context.WithTimeout(ctx, liveReadTimeout)
+	defer cancel()
+	managers, found, err := e.d.Live.Managers(ctx, o.Namespace, o.Kind, o.Name)
+	switch {
+	case err != nil:
+		return "cannot be read from the cluster: " + err.Error()
+	case !found:
+		return "does not exist in the cluster: a first creation"
+	}
+	for _, m := range managers {
+		if m.Manager == manager && m.Operation == "Apply" {
+			return ""
+		}
+	}
+	return "exists, but " + manager + " has not applied it"
 }
 
 // evaluateApply judges one apply_manifest request. Without an apply section
@@ -71,12 +108,17 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 		d.Reasons = []string{"the policy's apply section does not set require_previous_generation, so it covers nothing"}
 		return d
 	}
+	manager := strings.TrimSpace(rules.FieldManager)
+	if manager == "" {
+		d.Reasons = []string{"the policy's apply section names no field_manager, so it covers nothing"}
+		return d
+	}
 	if d.Plan == "" {
 		d.Reasons = []string{"the request names no plan"}
 		return d
 	}
-	if e.d.Plans == nil {
-		d.Reasons = []string{"no reader for plans"}
+	if e.d.Plans == nil || e.d.Live == nil {
+		d.Reasons = []string{"no reader for plans or for the cluster's objects"}
 		return d
 	}
 	plan, err := e.d.Plans.ApplyPlan(ctx, d.Plan)
@@ -98,17 +140,28 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 		return d
 	}
 
-	var place, previous []string
+	if len(plan.Objects) > maxApplyObjects {
+		d.Reasons = []string{fmt.Sprintf("plan %s lists %d objects, too many to check (more than %d)", d.Plan, len(plan.Objects), maxApplyObjects)}
+		return d
+	}
+
+	var place, excluded, previous []string
 	for _, o := range plan.Objects {
 		name := o.Namespace + "/" + o.Kind + "/" + o.Name
-		if !contains(rules.Namespaces, o.Namespace) || !contains(rules.Kinds, o.Kind) {
-			place = append(place, name)
+		if contains(rules.ExcludeObjects, o.Kind+"/"+o.Name) {
+			excluded = append(excluded, name)
 		}
-		switch {
-		case o.Ownership != ownershipApplied:
+		if !contains(rules.Namespaces, o.Namespace) || !contains(rules.Kinds, o.Kind) {
+			// Not read from the cluster: the policy names no such object.
+			place = append(place, name)
+			continue
+		}
+		if o.Ownership != ownershipApplied {
 			previous = append(previous, fmt.Sprintf("%s (ownership %q)", name, o.Ownership))
-		case !o.AppliedBefore:
-			previous = append(previous, name+" (the plan does not say the applier applied it before)")
+			continue
+		}
+		if why := e.previousGeneration(ctx, o, manager); why != "" {
+			previous = append(previous, name+" ("+why+")")
 		}
 	}
 	var reasons []string
@@ -116,6 +169,11 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 		reasons = append(reasons, "outside the policy's apply namespaces and kinds: "+listed(place))
 	} else {
 		d.Clauses = append(d.Clauses, "apply_namespaces", "apply_kinds")
+	}
+	if len(excluded) > 0 {
+		reasons = append(reasons, "excluded by the policy whatever renders it: "+listed(excluded))
+	} else {
+		d.Clauses = append(d.Clauses, "apply_objects")
 	}
 	if hit := excludedBy(plan.Path, rules.ExcludePaths); hit != "" {
 		reasons = append(reasons, "path "+plan.Path+" is excluded by the policy ("+hit+")")

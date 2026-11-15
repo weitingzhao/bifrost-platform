@@ -24,8 +24,8 @@ import (
 // applyHarness is the policy harness with a plan source: one plan of one
 // Pipeline in cicd that the applier applied before. withSection signs a
 // policy that has an apply section; without it the policy is the one the
-// harness always signed.
-func applyHarness(t *testing.T, withSection bool) (*policyHarness, *workactions.Summary) {
+// harness always signed. live is the cluster's copy of that Pipeline.
+func applyHarness(t *testing.T, withSection bool) (*policyHarness, *rptest.Live) {
 	t.Helper()
 	h := newPolicyHarness(t)
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
@@ -33,15 +33,16 @@ func applyHarness(t *testing.T, withSection bool) (*policyHarness, *workactions.
 		text := rptest.PolicyTextWith("rp-apply", now.Add(-time.Hour), 90, func(doc map[string]any) {
 			doc["apply"] = map[string]any{
 				"namespaces": []string{"cicd"}, "kinds": []string{"Pipeline", "Task"},
-				"exclude_paths": []string{"k8s/cicd/release-policy/**"}, "require_previous_generation": true,
+				"exclude_paths": []string{"k8s/cicd/release-policy/**"}, "field_manager": "the-applier", "require_previous_generation": true,
 			}
 		}, policyPipeline)
 		h.cms.Set(releasepolicy.PolicyConfigMap, map[string]string{"policy.yaml": text, "policy.sig": h.key.Sign(t, []byte(text), releasepolicy.NamespacePolicy)})
 	}
 	plan := &workactions.Summary{
 		Ready: true, Policy: "pass", Repo: "repo-ops", Path: "k8s/cicd/tekton/pipeline-ci.yaml", Commit: rptest.SHA("ops"),
-		Objects: []workactions.Object{{Namespace: "cicd", Kind: "Pipeline", Name: "ci", Ownership: "ssa", AppliedBefore: true}},
+		Objects: []workactions.Object{{Namespace: "cicd", Kind: "Pipeline", Name: "ci", Ownership: "ssa"}},
 	}
+	live := &rptest.Live{Objects: map[string][]rptest.LiveManager{"cicd/Pipeline/ci": {{Manager: "the-applier", Operation: "Apply"}}}}
 	h.srv.releasePolicy = releasepolicy.New(releasepolicy.Deps{
 		ConfigMaps: h.cms, Writer: rptest.Writer{CMs: h.cms}, Git: h.facts, CI: h.facts, Window: h.facts, Deployed: h.facts,
 		Plans: policyPlans{summarize: func(_ context.Context, id string) (workactions.Summary, error) {
@@ -50,10 +51,18 @@ func applyHarness(t *testing.T, withSection bool) (*policyHarness, *workactions.
 			}
 			return *plan, nil
 		}},
+		Live: policyLive{managers: func(_ context.Context, namespace, kind, name string) ([]workactions.ManagedBy, bool, error) {
+			list, found, err := live.Read(namespace, kind, name)
+			out := make([]workactions.ManagedBy, 0, len(list))
+			for _, m := range list {
+				out = append(out, workactions.ManagedBy{Manager: m.Manager, Operation: m.Operation})
+			}
+			return out, found, err
+		}},
 		Anchor: h.key.Fingerprint, Now: func() time.Time { return now },
 	})
 	h.srv.approvals.SetAutoApprover(h.srv.releasePolicyApprover())
-	return h, plan
+	return h, live
 }
 
 func (h *policyHarness) directApply(t *testing.T) *httptest.ResponseRecorder {
@@ -82,18 +91,18 @@ func (h *policyHarness) createApply(t *testing.T) *httptest.ResponseRecorder {
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. A tier C apply the signed
 // policy covers runs on the direct call and is audited as a release is; the
 // approval route answers "call directly". The same apply of an object the
-// plan does not say was applied before keeps the card.
+// cluster does not have keeps the card.
 func TestPolicyCoversADirectApplyAndAudits(t *testing.T) {
 	if tier := mustAction(t, "apply_manifest").TierOf(context.Background(), map[string]any{"plan_id": "plan-1"}); tier != actions.TierC {
 		t.Skipf("apply_manifest classifies as %s here, not C", tier)
 	}
-	h, plan := applyHarness(t, true)
+	h, live := applyHarness(t, true)
 	rec := h.directApply(t)
 	if rec.Code != http.StatusAccepted || h.hits != 1 {
 		t.Fatalf("direct = %d hits=%d %s", rec.Code, h.hits, rec.Body.String())
 	}
 	want := "auto-approved policy_id=rp-apply requester=sess-rp sha=repo-ops=" + rptest.SHA("ops") +
-		" clauses=signature,unexpired,not_frozen,plan_passed,apply_namespaces,apply_kinds,apply_paths,previous_generation path=repo-ops:k8s/cicd/tekton/pipeline-ci.yaml"
+		" clauses=signature,unexpired,not_frozen,plan_passed,apply_namespaces,apply_kinds,apply_objects,apply_paths,previous_generation path=repo-ops:k8s/cicd/tekton/pipeline-ci.yaml"
 	if a := h.auditText(t); !strings.Contains(a, want) || !strings.Contains(a, "release_policy.auto_approve") || !strings.Contains(a, "apply_manifest plan-1") {
 		t.Fatalf("audit lacks %q:\n%s", want, a)
 	}
@@ -104,8 +113,8 @@ func TestPolicyCoversADirectApplyAndAudits(t *testing.T) {
 		t.Fatalf("create = %d %s", c.Code, c.Body.String())
 	}
 
-	// One thing wrong: the plan does not say the object was applied before.
-	plan.Objects[0].AppliedBefore = false
+	// One thing wrong: the cluster has no such object, so this is a first creation.
+	delete(live.Objects, "cicd/Pipeline/ci")
 	rec = h.directApply(t)
 	if rec.Code != http.StatusForbidden || h.hits != 1 || !strings.Contains(rec.Body.String(), "no previous generation to go back to") {
 		t.Fatalf("a new object: direct = %d hits=%d %s", rec.Code, h.hits, rec.Body.String())

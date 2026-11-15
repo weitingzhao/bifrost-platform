@@ -66,6 +66,12 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 			}
 			return s.work.Svc.Summarize(ctx, planID)
 		}},
+		Live: policyLive{managers: func(ctx context.Context, namespace, kind, name string) ([]workactions.ManagedBy, bool, error) {
+			if s.work == nil || s.work.Svc == nil {
+				return nil, false, errors.New("the manifest actions are not wired")
+			}
+			return s.work.Svc.LiveManagers(ctx, namespace, kind, name)
+		}},
 		History:   policyHistory{facts: facts},
 		Reviews:   policyReviews{db: s.evidenceDB},
 		StatePath: filepath.Join(dataDir, "release-policy-freeze"),

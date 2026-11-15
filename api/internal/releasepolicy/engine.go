@@ -57,9 +57,9 @@ type Deployed interface {
 }
 
 // Deps are the engine's inputs. StatePath is a statefile path for the newest
-// freeze seen; empty keeps it in memory only. Plans, History and Reviews are
-// read only for what a policy's newer sections switch on (apply.go,
-// review.go); nil, those sections cover nothing.
+// freeze seen; empty keeps it in memory only. Plans, Live, History and
+// Reviews are read only for what a policy's newer sections switch on
+// (apply.go, review.go); nil, those sections cover nothing.
 type Deps struct {
 	ConfigMaps ConfigMaps
 	Writer     ConfigMapWriter
@@ -68,6 +68,7 @@ type Deps struct {
 	Window     Window
 	Deployed   Deployed
 	Plans      Plans
+	Live       Live
 	History    History
 	Reviews    Reviews
 	StatePath  string

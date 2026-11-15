@@ -40,10 +40,31 @@ func (p policyPlans) ApplyPlan(ctx context.Context, planID string) (releasepolic
 	out := releasepolicy.ApplyPlan{Ready: sum.Ready, Policy: sum.Policy, Repo: sum.Repo, Path: sum.Path, Commit: sum.Commit}
 	for _, o := range sum.Objects {
 		out.Objects = append(out.Objects, releasepolicy.ApplyObject{
-			Namespace: o.Namespace, Kind: o.Kind, Name: o.Name, Ownership: o.Ownership, AppliedBefore: o.AppliedBefore,
+			Namespace: o.Namespace, Kind: o.Kind, Name: o.Name, Ownership: o.Ownership,
 		})
 	}
 	return out, nil
+}
+
+// policyLive reads an object's field managers through the service that
+// knows which kinds the applier writes.
+type policyLive struct {
+	managers func(ctx context.Context, namespace, kind, name string) ([]workactions.ManagedBy, bool, error)
+}
+
+func (p policyLive) Managers(ctx context.Context, namespace, kind, name string) ([]releasepolicy.FieldManager, bool, error) {
+	if p.managers == nil {
+		return nil, false, errors.New("the manifest actions are not wired")
+	}
+	list, found, err := p.managers(ctx, namespace, kind, name)
+	if err != nil || !found {
+		return nil, false, err
+	}
+	out := make([]releasepolicy.FieldManager, 0, len(list))
+	for _, m := range list {
+		out = append(out, releasepolicy.FieldManager{Manager: m.Manager, Operation: m.Operation})
+	}
+	return out, true, nil
 }
 
 // policyHistory lists a release's commits from the mirror.
