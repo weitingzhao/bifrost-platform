@@ -71,8 +71,6 @@ func Tightens(prev, next Rule) error {
 		if p, n := prev.Routing.Competence, next.Routing.Competence; (p == nil) != (n == nil) || (p != nil && *p != *n) {
 			return errors.New("the competence threshold changes")
 		}
-	case KindIntake:
-		return intakeTightens(prev.Intake, next.Intake)
 	default:
 		// A kind with no comparison here cannot be shown to tighten: it
 		// needs the Owner's signature, never an unsigned "tighten" (§4.6;

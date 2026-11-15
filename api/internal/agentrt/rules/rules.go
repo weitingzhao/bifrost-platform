@@ -227,10 +227,7 @@ type Rule struct {
 	Routing  *Routing
 	Plan     *PlanStanding
 	CardAuto *CardAuto
-	Intake   *IntakeGates
 	Landing  *Landing
-	// DebtProjects is a debt-projects rule's part (debt.go).
-	DebtProjects *DebtProjects
 	// Tuning is a tuning rule's part (tuning.go).
 	Tuning *Tuning
 }
@@ -247,12 +244,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindIntake, KindDebtProjects, KindTuning:
+	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindTuning:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, intake-gates, debt-projects, tuning, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -314,10 +311,6 @@ func Parse(text []byte) (Rule, error) {
 		err = r.plan(o)
 	case KindCardAuto:
 		err = r.cardAuto(o)
-	case KindIntake:
-		err = r.intake(o)
-	case KindDebtProjects:
-		err = r.debtProjects(o)
 	case KindTuning:
 		err = r.tuning(o)
 	}
@@ -702,14 +695,6 @@ func (r Rule) Doc() map[string]any {
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
 		if c := r.Routing.Competence; c != nil {
 			doc["min_score_percent"], doc["min_samples"] = c.MinScorePercent, c.MinSamples
-		}
-	case KindIntake:
-		for k, v := range r.Intake.doc() {
-			doc[k] = v
-		}
-	case KindDebtProjects:
-		for k, v := range r.DebtProjects.doc() {
-			doc[k] = v
 		}
 	case KindTuning:
 		for k, v := range r.Tuning.doc() {

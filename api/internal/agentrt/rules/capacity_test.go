@@ -53,8 +53,6 @@ func TestCapacityOnly(t *testing.T) {
 		"budget states auto_grant":    {budget, loosened(t, budget, "attempt_hard_limit_s: 3600\n", "attempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 60, max_wall_hours: 24}\n"), true},
 		"routing quota up":            {routing, loosened(t, routing, "quota_stop_percent: 90", "quota_stop_percent: 95"), true},
 		"routing competence":          {routing, loosened(t, routing, "quota_stop_percent: 90\n", "quota_stop_percent: 90\nmin_score_percent: 50\nmin_samples: 3\n"), false},
-		"intake max live up":          {intake, loosened(t, intake, "max_live_per_product: 1", "max_live_per_product: 4"), true},
-		"intake drops an exception":   {intake, loosened(t, intake, "[fault_small, answer_only]", "[answer_only]"), false},
 		"landing limits up":           {capacityLanding, loosened(t, capacityLanding, "max_landings_per_day: 5", "max_landings_per_day: 9"), true},
 		"landing repo limit up":       {capacityLanding, loosened(t, capacityLanding, "max_files: 8", "max_files: 12"), true},
 		"landing global in flight up": {capacityLanding, loosened(t, capacityLanding, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2"), true},

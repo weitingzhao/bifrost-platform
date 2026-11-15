@@ -16,7 +16,7 @@ import (
 // instead of his signature (store.ApproveRule). The capacity fields are
 // concurrency's per_host and slots block, all of budget:<tenant>,
 // landing:<tenant>'s limits (legacy max_batch included) and repo limits,
-// intake-gates' max_live_per_product and routing's quota_stop_percent.
+// routing's quota_stop_percent.
 // Everything else stays signed.
 
 // CapacityChange is one capacity field a version changes: its path in the
@@ -53,8 +53,6 @@ func capacityField(kind string) func(path string) bool {
 			return strings.HasPrefix(p, "repos[") &&
 				(strings.HasSuffix(p, "].limits.max_files") || strings.HasSuffix(p, "].limits.max_changed_lines") || strings.HasSuffix(p, "].limits.max_in_flight"))
 		}
-	case KindIntake:
-		return func(p string) bool { return p == "max_live_per_product" }
 	case KindRouting:
 		return func(p string) bool { return p == "quota_stop_percent" }
 	}
@@ -69,7 +67,6 @@ var capacityCeilings = map[string]map[string]int{
 	KindBudget: {"mission.max_attempts": MissionAttemptsCeiling, "mission.max_wall_hours": MissionWallHoursCeiling,
 		"auto_grant.max_attempts": MissionAttemptsCeiling, "auto_grant.max_wall_hours": MissionWallHoursCeiling,
 		"attempt_hard_limit_s": AttemptLimitSCeiling},
-	KindIntake:  {"max_live_per_product": LivePerProductCeiling},
 	KindRouting: {"quota_stop_percent": 100},
 }
 
