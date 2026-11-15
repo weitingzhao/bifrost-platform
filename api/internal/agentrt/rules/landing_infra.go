@@ -230,36 +230,3 @@ func LandingChangeKindViolation(repo string, changes []LandingChange) (string, b
 	}
 	return "", false
 }
-
-// PolicyFloorDetail preserves the first failing infra layer for audit/UI.
-func PolicyFloorDetail(l *Landing, repo string, changes []LandingChange) map[string]any {
-	if why, bad := LandingStructuralViolation(repo, changes); bad {
-		return map[string]any{"structural": why}
-	}
-	if why, bad := LandingAbsoluteViolation(repo, changes); bad {
-		return map[string]any{"hard": why}
-	}
-	if why, bad := LandingContentViolation(repo, changes); bad {
-		return map[string]any{"secret": strings.TrimPrefix(why, "secret: ")}
-	}
-	if why, bad := LandingChangeKindViolation(repo, changes); bad {
-		return map[string]any{"change_kind": why}
-	}
-	soft := LandingSoftRefusals(l, repo, changes)
-	if len(soft) == 0 {
-		return nil
-	}
-	items := make([]string, len(soft))
-	for i, s := range soft {
-		items[i] = string(s)
-	}
-	detail := map[string]any{"soft": items, "grant_supported": GrantSupported(repo)}
-	if fp := FloorPaths(repo, changes); len(fp) > 0 {
-		paths := make([]any, len(fp))
-		for i, e := range fp {
-			paths[i] = map[string]any{"path": e[0], "entry": e[1]}
-		}
-		detail["floor_paths"] = paths
-	}
-	return detail
-}

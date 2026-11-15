@@ -4,15 +4,8 @@ import (
 	"errors"
 )
 
-// The exact claim of a pinned task (W-31 round 4, core block C-2;
-// DESIGN-coordinator-landing-v3-2026-10-29.md §2.4, §2.6). The external host
-// the signed standing envelope names for a pin leases that pin's tasks by
-// id, one at a time, and nothing else; an ordinary claim never reads a
-// pinned task (claim.go) and the external host never makes one. Only the
-// source of the candidate differs from ClaimNext: every other judgement is
-// claimIn's, the same code. The host is registered as the external host by
-// its first exact claim, and only while a signed envelope in force names it
-// (an agentd claim never registers a host an envelope names: kernel.go).
+// Historical pinned-claim shapes and errors. The dispatch claim routes and
+// standing-envelope executor selection have been retired.
 
 var (
 	// ErrExternalHost: the external host called an ordinary claim, or an

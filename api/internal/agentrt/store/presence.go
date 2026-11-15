@@ -6,26 +6,8 @@ import (
 	"time"
 )
 
-// Presence (W-31 round 3, 3.5; CUT-online-status-2026-10-23 option A: the
-// Owner's 「主机掉线或执行者不可用，Console 和参谋长简报 1 分钟内说出来」). A
-// host is online while its last poll is at most HostLostAfter old; what it
-// offers, and whether its free disk is below the floor, is what its latest
-// claim said (RecordHostOffered: a note when that changed, no table or
-// column). From those, the controls, the accounts' pools and the jobs'
-// candidates, an executor is available when some candidate of it may take
-// work now: a host that is online, active, under no stop, pause or drain and
-// with room on disk offers a tool the candidate fits, and its account neither
-// cools down nor reads at its tenant's quota stop. GET /hosts and GET
-// /progress read the hosts' document (HostsSQL), and Progress and the
-// controller's presence pass (presencepass.go) read the same view
-// (readPresence), so the Console and the Owner's conversation say the same
-// thing.
-//
-// Each kind of presence record of one host or executor has a stream of its
-// own (review 526 B2), so its latest state is the stream's last event, read
-// through the stream's head (headSQL): two index probes, whatever else the
-// runtime has recorded and however long ago the state was set. Nothing else
-// is written to these streams.
+// Historical host and executor shapes remain for event validation and
+// compatibility. The dispatch presence view and controller are retired.
 
 // headSQL is the SQL of the last event of the stream the SQL expression
 // stream names, as one jsonb value {"type", "at", "body"}, NULL while the

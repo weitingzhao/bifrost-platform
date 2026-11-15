@@ -38,12 +38,8 @@ const (
 var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked,
 	StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued}
 
-// HostLostAfter is how long since its last poll a host counts as lost: 30
-// seconds (W-31 round 3, 3.5: 「主机掉线或执行者不可用，Console 和参谋长简报 1
-// 分钟内说出来」; CUT-online-status-2026-10-23 option A). A host's claim polls
-// about every second within its long poll, and agentd sleeps 15 seconds after
-// a claim that failed, so 30 seconds holds one such failure (T24 had 3
-// minutes).
+// HostLostAfter retains the historical display threshold. The progress
+// projection now returns no dispatch hosts or live attempts.
 const HostLostAfter = 30 * time.Second
 
 // SlowFactor: a working attempt is slow past this many times the usual.
@@ -150,9 +146,8 @@ func worst(statuses []string) string {
 	return statusRank[best]
 }
 
-// ProgressSince is Progress for a reader that saw the platform take agentd's
-// calls again at since: a host's silence counts from no earlier
-// (presencelive.go, review 528 A1b).
+// ProgressSince retains the progress reader signature; dispatch host
+// presence is no longer computed in this projection.
 func ProgressSince(ctx context.Context, db DB, since time.Time) (map[string]any, error) {
 	return progressAt(ctx, db, time.Time{}, since)
 }

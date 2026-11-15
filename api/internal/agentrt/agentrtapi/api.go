@@ -1,9 +1,5 @@
-// Package agentrtapi is the HTTP face of the agent runtime's kernel (design
-// v5 §5.2 「路由草图」, /api/v1/agentrt/…): the routes agentd calls to claim
-// work and hand results over, artifact upload and download, and reads. Every
-// write route maps to one store function, which writes the state it changes
-// and its events in one transaction (a heartbeat only renews the lease, a
-// liveness column, without an event); there is no route that sets a state.
+// Package agentrtapi serves plans, rules, evidence, artifacts and coordination.
+// Dispatch claim, lease and result-handoff routes have been retired.
 package agentrtapi
 
 import (
@@ -38,12 +34,10 @@ type API struct {
 	// Commits reads a pushed commit, for a pinned task's result
 	// (store.CommitFacts); without it such a result answers 503.
 	Commits store.CommitReader
-	// ClaimWait is how long a claim waits for work (long poll; v5: at most
-	// 25 seconds, as the approvals executor); ClaimPoll how often it looks.
+	// ClaimWait and ClaimPoll retain legacy configuration fields. No dispatch
+	// claim route runs a long poll now.
 	ClaimWait, ClaimPoll time.Duration
-	// DiskFloor is the free disk below which a host is given no new work
-	// (TD-415; 0: store.DefaultDiskFloor); the controller pages the Owner of
-	// a host going below or back above (store.DiskPage).
+	// DiskFloor retains the historical disk boundary configuration.
 	DiskFloor int64
 	Logf      func(format string, args ...any)
 	// Ask creates the Owner's decision card for a plan change outside the
@@ -66,10 +60,8 @@ type API struct {
 	// PinReason is what an implement task pinned to the coordinator without
 	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
 	PinReason store.PinReasonMode
-	// Back is when this API's runtime routes became ready, the server's
-	// record of it: GET /hosts and /progress count a host's silence from no
-	// earlier, the API taking agentd's calls only since then (review 528
-	// A1b). nil counts from the host's contact alone.
+	// Back records when runtime routes became ready. Progress retains this
+	// input for compatibility but no longer computes dispatch host presence.
 	Back func() time.Time
 }
 
@@ -83,17 +75,9 @@ func (a *API) back() time.Time {
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
-// abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
-// whoami both read them. agentd, whose token is bound to one host, claims,
-// keeps its leases and hands results over; operator threads, seats and
-// the Owner (admin) propose missions, tasks and rules
-// (and hand in a rule the Owner signed: the signature is the authority); they
-// and agentd upload artifacts. A plain reporter only registers external work,
-// uploads its description and appends its own observations (reporter.go).
-// Anyone authenticated reads and may stop, pause,
-// drain or tighten a rule; operators and the Owner drain hosts; only the Owner
-// lifts a control, reads a vendor pool by hand, signs a step off and requests
-// an assessment. The assess ability requests advice, not an answer or approval.
+// abilities describe the roles exposed by Mount and whoami. Historical
+// ability names remain for compatibility; they do not restore retired routes.
+// The assess ability requests advice, not an answer or approval.
 var abilities = []struct {
 	name  string
 	roles []actuation.Role

@@ -4,19 +4,8 @@ import (
 	"time"
 )
 
-// A host's free disk (TD-415 layer 2; the Owner 2026-10-21 「agentd 心跳带剩余
-// 磁盘，低于下限不派新活并告警，尝试结束后清工作目录」). agentd's claim, the
-// host's heartbeat (design v5 §5.2: the long poll replaced the host
-// heartbeat route), carries the free bytes of the volume the host's root is
-// on and of the one its AGENTD_ROOT is on. Below the floor on either the
-// claim leases nothing, as for a host with no free slot, and the poll still
-// counts as the host's liveness; the platform records a policy_alert (rule
-// disk_low) on the host's stream when a claim first reports it below, and a
-// note when one reports it at or above again, once each way. Each record is
-// paged to the Owner by the controller (DiskPages), which marks it paged
-// once the relay took it or has no target, and tries again later when it
-// failed (review 497 A4). A claim with neither field (an agentd from before
-// this) is not judged.
+// Historical dispatch disk values retained for event and boundary readers.
+// Claims no longer allocate work or page the Owner on disk changes.
 
 // DefaultDiskFloor is the floor when the platform's configuration names none:
 // 15 GiB, below which a test database, a Go build or a clone can fail.

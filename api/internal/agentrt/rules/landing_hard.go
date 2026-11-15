@@ -90,7 +90,6 @@ var landingStorePermission = map[string]string{
 	"cardkinds.go":         "card kinds and the answers each accepts",
 	"claim.go":             "a host claiming a task's attempt",
 	"repos.go":             "the repositories a mission may write",
-	"core.go":              "store primitives every write goes through",
 	"examstream.go":        "names the stream of the removed exams, whose artifacts stay hidden from Agent hosts",
 	"event.go":             "the append-only event log and its checks",
 	"write.go":             "writer identity and idempotent writes",
