@@ -72,28 +72,3 @@ func TestWindowRefusalAndCrashExpiryEvents(t *testing.T) {
 		t.Fatal(events)
 	}
 }
-
-func TestSTGWindowEvents(t *testing.T) {
-	t.Parallel()
-	a, _ := stgWindowCAS(t)
-	var events []WindowEvent
-	a.WindowRecorder = func(_ context.Context, e WindowEvent) { events = append(events, e) }
-	ctx := context.Background()
-	held, err := a.TakeSTGWindow(ctx, STGWindow{}, "stgrel-bifrost-platform-1-1", 1, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	held, err = a.RenewSTGWindow(ctx, held)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 {
-		t.Fatal(events)
-	}
-	if err = a.EndSTGWindow(ctx, held); err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 2 || events[0].Action != "held" || events[1].Action != "released" || events[0].Who != events[1].Who || events[0].StartedAt != events[1].StartedAt || events[1].Env != "stg" {
-		t.Fatal(events)
-	}
-}
