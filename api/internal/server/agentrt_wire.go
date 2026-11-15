@@ -112,6 +112,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	rt.api.DB, rt.api.Back, rt.late = late, late.Back, late
 	s.wireThreadInbox(late)
 	s.wireWindowNotices(late)
+	if s.delivery != nil && role.RunsWorkers() {
+		s.delivery.EnableWindowQueueAdvance()
+	}
 	if s.delivery != nil {
 		s.delivery.BindWindowRecorder(s.recordWindowEvent)
 	}

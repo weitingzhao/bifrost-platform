@@ -19,7 +19,11 @@ type WindowSender func(ctx context.Context, key, to, body string) error
 // get messages. Keys already sent are skipped here; the sender's store is the
 // durable dedup across processes. A failed send is retried on the next tick.
 type windowNotifier struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// advance: this process advances the queue. Only one process per
+	// platform should (the workers role): each keeps its own dedup, so two
+	// advancers sent window.your_turn twice (2026-11-14 PROD e2e test).
+	advance bool
 	send    WindowSender
 	sent    map[string]time.Time
 	pending []windowNotice
@@ -97,7 +101,22 @@ func windowEnvelope(ns string, m windowNotice) string {
 }
 
 // advanceWindowQueueOnce runs one advancer step and sends its notices.
+// EnableWindowQueueAdvance makes this process advance the release window
+// queue (reserve for the head, drop timed-out entries, send notices). The
+// server enables it in the workers role only.
+func (h *Handler) EnableWindowQueueAdvance() {
+	h.notices.mu.Lock()
+	defer h.notices.mu.Unlock()
+	h.notices.advance = true
+}
+
 func (h *Handler) advanceWindowQueueOnce() error {
+	h.notices.mu.Lock()
+	advance := h.notices.advance
+	h.notices.mu.Unlock()
+	if !advance {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cs, _, err := h.svc.cluster.KubernetesClient()

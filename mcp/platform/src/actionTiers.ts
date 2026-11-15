@@ -182,7 +182,7 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     action: 'release_window_release',
     method: 'DELETE',
     pattern: /^\/api\/v1\/delivery\/release-window$/,
-    paramsFrom: (_m, body, query) => withQuery(asRecord(body), query, ['force']),
+    paramsFrom: (_m, body, query) => withQuery(asRecord(body), query, ['who', 'force']),
   },
   {
     action: 'request_unit_evidence',

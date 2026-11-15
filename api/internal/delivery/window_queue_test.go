@@ -370,3 +370,32 @@ func TestRunWindowUnaffectedByQueue(t *testing.T) {
 		t.Fatalf("run end dropped the queue: %+v", r)
 	}
 }
+
+// 2026-11-14 PROD e2e test: the api and the workers process both advanced the
+// queue and window.your_turn reached the head twice (05:33:08 and 05:33:12).
+// Only a process that enabled it advances.
+func TestOnlyAnEnabledProcessAdvances(t *testing.T) {
+	h, cs := queueHandler(t)
+	var sent []string
+	h.SetWindowNotifier(func(_ context.Context, key, to, _ string) error {
+		sent = append(sent, key+">"+to)
+		return nil
+	})
+	now := time.Now().UTC()
+	hold(t, cs, "alice", now.Add(-5*time.Minute+time.Second)) // 5-minute ttl: free in a second
+	queueUp(t, cs, "bob", "thread:local_bob", 30, now)
+	time.Sleep(1500 * time.Millisecond)
+	if err := h.advanceWindowQueueOnce(); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 0 || rawWindow(t, cs).Reserved != nil {
+		t.Fatalf("a process that did not enable advancing reserved or sent: %v", sent)
+	}
+	h.EnableWindowQueueAdvance()
+	if err := h.advanceWindowQueueOnce(); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 1 || rawWindow(t, cs).Reserved == nil {
+		t.Fatalf("the enabled process should reserve for bob and send once, sent=%v", sent)
+	}
+}

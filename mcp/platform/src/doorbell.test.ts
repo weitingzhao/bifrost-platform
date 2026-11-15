@@ -84,3 +84,24 @@ test('only the URL and the token key name are taken from an MCP config', () => {
   assert.equal(settingsFromMcpConfig(text, 'bifrost-platform', { PLATFORM_URL: 'http://h:1' }).PLATFORM_API_URL, 'http://h:1')
   assert.throws(() => settingsFromMcpConfig(text, 'nope', {}), /no server nope/)
 })
+
+test('a platform restart is waited out; a refusal is not', async () => {
+  // Origin: 2026-11-14 23:32, the doorbell exited on "fetch failed" while the
+  // PROD rollout of card #566 replaced the platform api pod.
+  let calls = 0
+  const f = fake([])
+  f.io.deps.get = async () => {
+    calls++
+    if (calls <= 2) throw new TypeError('fetch failed')
+    return { actor: 'thread:local_test', messages: [{ message_id: 'm_9', from: 'controller', kind: 'note', body: '{}' }] }
+  }
+  const slept: number[] = []
+  f.io.sleep = async (ms) => { slept.push(ms); f.advance(ms) }
+  assert.equal(await ring({ minutes: 1, register: false }, f.io), 0)
+  assert.equal(slept.length, 2)
+  assert.ok(f.lines.some((l) => /platform unreachable/.test(l)))
+  const g = fake([])
+  g.io.deps.get = async () => { throw new Error('GET /api/v1/agentrt/messages: HTTP 401 unauthorized') }
+  g.io.sleep = async () => {}
+  await assert.rejects(ring({ minutes: 1, register: false }, g.io), /401/)
+})

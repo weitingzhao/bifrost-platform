@@ -62,7 +62,22 @@ export interface DoorbellIO {
   deps: RuntimeDeps
   out: (line: string) => void
   now: () => number
+  /** Waits between retries after a transient failure; tests pass a fake. */
+  sleep?: (ms: number) => Promise<void>
 }
+
+/**
+ * A failure worth waiting out: the platform restarting (every platform
+ * release restarts it; 2026-11-14 the doorbell exited on "fetch failed" while
+ * the PROD rollout replaced the api pod) or answering 5xx meanwhile. Anything
+ * else (401, 403, 422) is the caller's to fix and ends the run.
+ */
+export function transient(err: unknown): boolean {
+  const text = err instanceof Error ? `${err.message} ${String((err as { cause?: unknown }).cause ?? '')}` : String(err)
+  return /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|other side closed|HTTP 50[0-4]\b/.test(text)
+}
+
+const RETRY_MS = 5000
 
 /** One run: register, then wait until a message or the deadline. Returns the exit code. */
 export async function ring(opts: { minutes: number; register: boolean }, io: DoorbellIO): Promise<number> {
@@ -70,23 +85,30 @@ export async function ring(opts: { minutes: number; register: boolean }, io: Doo
   if (deps.fellBack()) {
     throw new Error('no session id: set CLAUDE_CODE_HOST_SESSION_ID (or run inside a harness session)')
   }
-  if (opts.register) {
-    const put = (await putArtifact({ kind: 'report', content: presenceBody(deps.session()), media_type: 'text/plain' }, deps)) as
-      | { error?: unknown }
-      | undefined
-    if (put?.error) throw new Error(`register: ${JSON.stringify(put).slice(0, 300)}`)
-  }
+  const sleep = io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const end = now() + opts.minutes * 60_000
+  let registered = !opts.register
   for (;;) {
     const left = Math.floor((end - now()) / 1000)
     if (left <= 0) {
       out(`doorbell: no message by the deadline (${new Date(now()).toISOString()})`)
       return 2
     }
-    const got = (await waitForMessages({ timeout_seconds: Math.min(600, left) }, deps)) as {
-      actor?: string
-      messages?: Message[]
-      error?: unknown
+    let got: { actor?: string; messages?: Message[]; error?: unknown }
+    try {
+      if (!registered) {
+        const put = (await putArtifact({ kind: 'report', content: presenceBody(deps.session()), media_type: 'text/plain' }, deps)) as
+          | { error?: unknown }
+          | undefined
+        if (put?.error) throw new Error(`register: ${JSON.stringify(put).slice(0, 300)}`)
+        registered = true
+      }
+      got = (await waitForMessages({ timeout_seconds: Math.min(600, left) }, deps)) as typeof got
+    } catch (err) {
+      if (!transient(err)) throw err
+      out(`doorbell: platform unreachable (${err instanceof Error ? err.message.slice(0, 120) : String(err)}); retrying`)
+      await sleep(Math.min(RETRY_MS, Math.max(0, end - now())))
+      continue
     }
     if (got.error) throw new Error(JSON.stringify(got).slice(0, 300))
     const msgs = got.messages ?? []
