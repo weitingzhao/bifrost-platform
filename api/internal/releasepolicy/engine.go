@@ -57,7 +57,9 @@ type Deployed interface {
 }
 
 // Deps are the engine's inputs. StatePath is a statefile path for the newest
-// freeze seen; empty keeps it in memory only.
+// freeze seen; empty keeps it in memory only. Plans, History and Reviews are
+// read only for what a policy's newer sections switch on (apply.go,
+// review.go); nil, those sections cover nothing.
 type Deps struct {
 	ConfigMaps ConfigMaps
 	Writer     ConfigMapWriter
@@ -65,6 +67,9 @@ type Deps struct {
 	CI         CI
 	Window     Window
 	Deployed   Deployed
+	Plans      Plans
+	History    History
+	Reviews    Reviews
 	StatePath  string
 	Anchor     string
 	Now        func() time.Time
@@ -225,6 +230,12 @@ type Decision struct {
 	Reasons     []string
 	Clauses     []string
 	AdditiveDDL []string
+	// Plan and Path name what an apply_manifest decision judged.
+	Plan string `json:",omitempty"`
+	Path string `json:",omitempty"`
+	// ReviewedAnchors names each trust-anchor change that passed on a review
+	// record: "repo@commit by reviewer".
+	ReviewedAnchors []string `json:",omitempty"`
 }
 
 // ClauseText is the audit's clauses= value.
@@ -321,6 +332,9 @@ func (e *Engine) Decide(ctx context.Context, actionID string, tier actions.Tier,
 // would have covered them.
 func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[string]any) Decision {
 	d := Decision{SHAs: map[string]string{}}
+	if actionID == applyAction {
+		return e.evaluateApply(ctx, params)
+	}
 	if actionID != releaseAction {
 		d.Reasons = []string{actionID + " is not a release; the policy covers " + releaseAction + " only"}
 		return d
@@ -391,6 +405,10 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 			}
 			if rule == "no_ddl" && len(d.AdditiveDDL) > 0 {
 				d.Clauses = append(d.Clauses, "additive_ddl")
+				continue
+			}
+			if rule == "no_trust_anchor_change" && len(d.ReviewedAnchors) > 0 {
+				d.Clauses = append(d.Clauses, "trust_anchor_reviewed")
 				continue
 			}
 			d.Clauses = append(d.Clauses, rule)
@@ -606,6 +624,8 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 		}
 	}
 	files, err := e.d.Git.ChangedFiles(ctx, repo, old, next)
+	// cut: the commits' own file lists may be cut short (see compareFileCap).
+	cut := len(files) >= compareFileCap
 	switch {
 	case err != nil:
 		return append(reasons, repo+": cannot read the diff "+short(old)+".."+short(next)+": "+err.Error())
@@ -637,6 +657,22 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 			}
 			reasons = append(reasons, fmt.Sprintf("%s %s..%s changes DDL that is not additive-only (tier D, ask the Owner): %s",
 				repo, short(old), short(next), why))
+			continue
+		}
+		if rule == "no_trust_anchor_change" && pol.TrustAnchorReviewed() && contains(pol.ReviewableRepos, repo) {
+			need := hits
+			if pol.TrustAnchorIgnoreTests() {
+				need = withoutTests(hits)
+			}
+			if len(need) == 0 {
+				continue
+			}
+			reviewer, why := e.anchorReview(ctx, repo, old, next, need, cut)
+			if why == "" {
+				d.ReviewedAnchors = append(d.ReviewedAnchors, repo+"@"+short(next)+" by "+reviewer)
+				continue
+			}
+			reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s", repo, short(old), short(next), rule, why))
 			continue
 		}
 		shown := hits

@@ -56,6 +56,23 @@ type Policy struct {
 	DBSteps    DBSteps               `yaml:"db_steps"`
 	Pinned     Pinned                `yaml:"pinned"`
 	Paths      map[string][]PathRule `yaml:"paths"`
+	// Apply and ReviewableRepos are absent from a policy signed before
+	// 2026-11-15; absent, the policy covers no apply_manifest and a
+	// trust-anchor hit is refused as before.
+	Apply           *ApplyRules `yaml:"apply"`
+	ReviewableRepos []string    `yaml:"reviewable_repos"`
+}
+
+// ApplyRules says which apply_manifest plans the policy covers (apply.go).
+// Every list is an allow-list: an empty one covers nothing.
+type ApplyRules struct {
+	Namespaces   []string `yaml:"namespaces"`
+	Kinds        []string `yaml:"kinds"`
+	ExcludePaths []string `yaml:"exclude_paths"`
+	// RequirePreviousGeneration must be true for the section to cover
+	// anything: the way back from an apply is the same path at an earlier
+	// commit, and that exists only for an object the applier applied before.
+	RequirePreviousGeneration bool `yaml:"require_previous_generation"`
 }
 
 // Pinned covers pipelines that ship the commits named in their params rather
@@ -91,6 +108,22 @@ type DBSteps struct {
 // adds (ADR §5, 2026-10-08 revision). It is off unless the policy says true.
 func (p *Policy) AdditiveDDL() bool {
 	v, ok := p.Conditions["additive_ddl"].(bool)
+	return ok && v
+}
+
+// TrustAnchorReviewed reports whether a no_trust_anchor_change hit in a
+// reviewable repo may pass on an independent review record (review.go). It is
+// off unless the policy says true.
+func (p *Policy) TrustAnchorReviewed() bool {
+	v, ok := p.Conditions["trust_anchor_reviewed"].(bool)
+	return ok && v
+}
+
+// TrustAnchorIgnoreTests reports whether test files are left out of the
+// trust-anchor files a review must cover. Off unless the policy says true,
+// and read only where TrustAnchorReviewed applies.
+func (p *Policy) TrustAnchorIgnoreTests() bool {
+	v, ok := p.Conditions["trust_anchor_ignore_tests"].(bool)
 	return ok && v
 }
 

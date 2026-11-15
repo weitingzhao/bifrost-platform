@@ -133,6 +133,12 @@ type Object struct {
 	Name      string `json:"name"`
 	Tier      string `json:"tier"`
 	Ownership string `json:"ownership,omitempty"`
+	// AppliedBefore is the plan's own word that the object exists in the
+	// cluster and the applier already manages fields of it. Ownership "ssa"
+	// does not say that: a new object plans as "ssa" too. The release policy
+	// covers an apply only when every object carries it; a plan that does not
+	// report it is read as "cannot tell".
+	AppliedBefore bool `json:"applied_before,omitempty"`
 }
 
 // Summary is what an approval card shows for a plan.

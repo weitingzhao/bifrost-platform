@@ -67,6 +67,12 @@ func (k Key) AllowedSigners() string {
 // PolicyText renders a policy the way release.sh policy sign does
 // (canonical JSON), with invented path rules.
 func PolicyText(id string, signedAt time.Time, days int, allow ...string) string {
+	return PolicyTextWith(id, signedAt, days, nil, allow...)
+}
+
+// PolicyTextWith is PolicyText after edit has changed the document: for a
+// policy with sections or conditions PolicyText does not write.
+func PolicyTextWith(id string, signedAt time.Time, days int, edit func(doc map[string]any), allow ...string) string {
 	doc := map[string]any{
 		"version":    1,
 		"policy_id":  id,
@@ -104,6 +110,9 @@ func PolicyText(id string, signedAt time.Time, days int, allow ...string) string
 				{"repo": "repo-app", "paths": []string{"internal/releasepolicy/**"}},
 			},
 		},
+	}
+	if edit != nil {
+		edit(doc)
 	}
 	raw, _ := json.MarshalIndent(doc, "", "  ")
 	return string(raw) + "\n"
