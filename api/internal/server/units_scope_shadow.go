@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -44,6 +45,33 @@ const (
 	unitScopeShadowPending = 16
 )
 
+// The audit record of a shadowed run (GET /api/v1/audit, action
+// unit_scope_shadow): status missed when a failing package was among those
+// the scope would have skipped, else ok; detail is the log line as JSON.
+const (
+	unitScopeShadowPrincipal = "unit-scope-shadow"
+	unitScopeShadowAction    = "unit_scope_shadow"
+)
+
+// shadowRecord turns the log line's key and value pairs into the record.
+func shadowRecord(line []any) (status, detail string) {
+	doc := map[string]any{}
+	for i := 0; i+1 < len(line); i += 2 {
+		if key, ok := line[i].(string); ok {
+			doc[key] = line[i+1]
+		}
+	}
+	status = "ok"
+	if missed, ok := doc["missed"].([]string); ok && len(missed) > 0 {
+		status = "missed"
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return status, fmt.Sprint(line...)
+	}
+	return status, string(raw)
+}
+
 type unitScopeShadow struct {
 	repo, pipeline string
 	// scope is the run's commit against its base, and that base.
@@ -53,7 +81,11 @@ type unitScopeShadow struct {
 	known func(ctx context.Context, repo, commit, uid string) (bool, error)
 	// start runs one computation off the caller's pass.
 	start func(fn func())
-	log   *slog.Logger
+	// record keeps the line where it outlives the process: the audit log.
+	// The workers are replaced at every release of the environment, and
+	// with them their log (2026-11-15: three lines read, then none).
+	record func(run, status, detail string)
+	log    *slog.Logger
 
 	mu      sync.Mutex
 	seen    map[string]bool // run uid: told in this process
@@ -97,6 +129,9 @@ func (s *Server) unitScopeShadowSource() func(context.Context, store.PipelineRun
 			return false, err
 		},
 		start: func(fn func()) { safego.Go("unit-scope-shadow", fn) },
+		record: func(run, status, detail string) {
+			s.audit.RecordDirect(unitScopeShadowPrincipal, actuation.RoleOperator, unitScopeShadowAction, "run/"+run, status, detail)
+		},
 	}
 	return sh.observe
 }
@@ -200,7 +235,12 @@ func (u *unitScopeShadow) observe(ctx context.Context, p store.PipelineRun) {
 			u.logger().Warn("unit scope shadow", "run", p.Run, "revision", commit, "error", err.Error())
 			return
 		}
-		u.logger().Info("unit scope shadow", shadowLine(p, commit, scope)...)
+		line := shadowLine(p, commit, scope)
+		u.logger().Info("unit scope shadow", line...)
+		if u.record != nil {
+			status, detail := shadowRecord(line)
+			u.record(p.Run, status, detail)
+		}
 	})
 }
 

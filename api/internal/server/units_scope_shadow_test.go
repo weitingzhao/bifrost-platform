@@ -238,3 +238,19 @@ func TestShadowTestOfUnit(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-15, the shadow line lived only in the workers' log, and the
+// workers are replaced at every release of the environment: three lines were
+// read, then none. The line is also kept as an audit record, with the status
+// that says whether a failing package was among the skipped ones.
+func TestShadowRecordKeepsTheLineAndNamesAMiss(t *testing.T) {
+	status, detail := shadowRecord([]any{"run", "ci-1", "would_run", 3, "total", 9, "missed", []string{}, "failed_unnamed", false})
+	if status != "ok" || !strings.Contains(detail, `"run":"ci-1"`) || !strings.Contains(detail, `"would_run":3`) {
+		t.Fatalf("status=%q detail=%s", status, detail)
+	}
+	// The positive control: a failing package the scope would have skipped.
+	status, detail = shadowRecord([]any{"run", "ci-2", "missed", []string{"svc/d"}})
+	if status != "missed" || !strings.Contains(detail, `"missed":["svc/d"]`) {
+		t.Fatalf("status=%q detail=%s", status, detail)
+	}
+}
