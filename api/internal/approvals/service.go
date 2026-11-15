@@ -635,6 +635,7 @@ func decisionBody(rec Approval) map[string]any {
 		}
 		if e := rec.Execution; e != nil {
 			body["deadline"] = e.Deadline
+			body["attempts"] = e.Attempts
 			if e.LastRefusal != "" {
 				body["last_refusal"] = e.LastRefusal
 				body["next_attempt_at"] = e.NextAttemptAt

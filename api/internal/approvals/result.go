@@ -3,11 +3,13 @@ package approvals
 import (
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
@@ -126,6 +128,21 @@ func (s *Service) result(ref string, in resultInput) decided {
 			rec = a
 			return nil
 		}
+		if tempfail(&a, in) {
+			wait := s.tempfailLimit()
+			cutoff := tempfailCutoff(a, wait)
+			if now.Before(cutoff) {
+				requeue(&a, fmt.Sprintf("等空档（命令退出 75，已试 %d 次，最多再等到 %s）", e.Attempts, cutoff.Format("15:04:05 UTC")), now)
+				if e.NextAttemptAt.After(cutoff) {
+					e.NextAttemptAt = cutoff
+				}
+				evs = append(evs, event{"approval.queue", a.ID, StatusApproved, fmt.Sprintf("attempt=%d exit=75 waiting_for_slot", e.Attempts)})
+				doc.put(a)
+				rec = a
+				return nil
+			}
+			in.Error = fmt.Sprintf("等空档超时：批准后等了 %d 分钟、试了 %d 次，命令每次都退出 75（现在不行）", int(wait/time.Minute), e.Attempts)
+		}
 		e.FinishedAt = now
 		e.DurationMS = in.DurationMS
 		if e.DurationMS == 0 && !e.StartedAt.IsZero() {
@@ -213,3 +230,33 @@ func oneLine(s string) string {
 // Redact masks common secret shapes before a tail or a clip can cut the
 // marker off. The patterns live in notice.
 func Redact(s string) string { return notice.Redact(s) }
+
+// ExitTempFail is the exit code (EX_TEMPFAIL) a host or owner command ends
+// with to say: not now, and this run wrote nothing. See OWNER_RUN_CARDS.md.
+const ExitTempFail = 75
+
+// defaultTempfailWait is how long after approval a card may keep waiting for
+// a slot (Owner 2026-11-14: a decided card may run up to 30 minutes late).
+const defaultTempfailWait = 30 * time.Minute
+
+func tempfail(a *Approval, in resultInput) bool {
+	return a.Runner != actions.RunnerPlatform && in.ExitCode != nil && *in.ExitCode == ExitTempFail && strings.TrimSpace(in.Error) == ""
+}
+
+// tempfailLimit reads APPROVAL_TEMPFAIL_WAIT_MINUTES (1-240); anything else is 30.
+func (s *Service) tempfailLimit() time.Duration {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("APPROVAL_TEMPFAIL_WAIT_MINUTES"))); err == nil && n >= 1 && n <= 240 {
+		return time.Duration(n) * time.Minute
+	}
+	return defaultTempfailWait
+}
+
+// tempfailCutoff is approval time plus the wait, never past the card's
+// execution deadline.
+func tempfailCutoff(a Approval, wait time.Duration) time.Time {
+	c := a.DecidedAt.Add(wait)
+	if e := a.Execution; e != nil && !e.Deadline.IsZero() && e.Deadline.Before(c) {
+		c = e.Deadline
+	}
+	return c
+}

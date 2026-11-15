@@ -471,7 +471,7 @@ var catalog = []Action{
 	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
 		Classify:    classifyOwnerRun,
-		Description: "Approve an exact shell command. Tier D. The platform does not execute it. While D10 is locked, a command that names a no_d10_paths file is tier X and refused. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it. Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead.",
+		Description: "Approve an exact shell command. Tier D. The platform does not execute it. While D10 is locked, a command that names a no_d10_paths file is tier X and refused. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it. Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead. Exit code 75 means \"not now, wrote nothing\": the card goes back to the queue and reruns on backoff for up to 30 minutes after the decision (never past its deadline), then fails with a wait-timeout error. Exit 75 only if this run has written nothing; after any write, exit with another code. Any other non-zero exit fails the card (see OWNER_RUN_CARDS.md in the approvals package).",
 		Params: []Param{
 			{Name: "command", Type: "string", Required: true, In: "body"},
 			{Name: "reason", Type: "string", Required: true, In: "body"},
