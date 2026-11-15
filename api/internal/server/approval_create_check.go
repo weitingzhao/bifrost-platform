@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-
 )
 
 // approvalCreateCheck runs before an approval row is written: a pipeline run
