@@ -1,0 +1,38 @@
+{
+  "repo": "r",
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "declared": true,
+  "modules": [
+    {
+      "module": "svc",
+      "tasks": 4,
+      "changed": 4,
+      "run": true,
+      "why": [
+        "the base has no declaration that reads: unitplan: r@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb has no bifrost.units.yaml: unitplan: \"bifrost.units.yaml\" is not a file of this tree: file does not exist"
+      ],
+      "run_units": [
+        "svc/a",
+        "svc/b",
+        "svc/c",
+        "svc/d"
+      ],
+      "same_units": []
+    },
+    {
+      "module": "web",
+      "tasks": 1,
+      "changed": 1,
+      "run": true,
+      "why": [
+        "the base has no declaration that reads: unitplan: r@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb has no bifrost.units.yaml: unitplan: \"bifrost.units.yaml\" is not a file of this tree: file does not exist"
+      ],
+      "run_units": [
+        "web"
+      ],
+      "same_units": []
+    }
+  ],
+  "note": "the base has no declaration that reads: unitplan: r@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb has no bifrost.units.yaml: unitplan: \"bifrost.units.yaml\" is not a file of this tree: file does not exist"
+}

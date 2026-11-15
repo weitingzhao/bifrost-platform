@@ -1,0 +1,38 @@
+{
+  "repo": "r",
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "declared": true,
+  "modules": [
+    {
+      "module": "svc",
+      "tasks": 4,
+      "changed": 3,
+      "run": true,
+      "why": [
+        "lib (2 of 4 tasks)",
+        "needs docs/c.md (1 of 4 tasks)"
+      ],
+      "run_units": [
+        "svc/a",
+        "svc/b",
+        "svc/c"
+      ],
+      "same_units": [
+        "svc/d"
+      ]
+    },
+    {
+      "module": "web",
+      "tasks": 1,
+      "changed": 0,
+      "run": false,
+      "why": [],
+      "run_units": [],
+      "same_units": [
+        "web"
+      ]
+    }
+  ],
+  "base_run": "ci-1"
+}

@@ -88,3 +88,82 @@ func TestScopeOfWhatCannotBeCompared(t *testing.T) {
 		t.Fatalf("no declaration: %+v", none)
 	}
 }
+
+// Which units of a module run, beside which modules: the same two plans, read
+// one unit at a time. The manifest names a module "svc" and one "web": no
+// name the platform's own repository uses is needed for the answer.
+// Origin: main coordinator 2026-11-14: backend skip by package goes shadow
+// first; a failing package the scope would skip is the miss this looks for.
+func TestScopeByUnit(t *testing.T) {
+	const manifest = `version: 1
+modules:
+  - name: svc
+    kind: go
+    root: svc
+    tasks: {test: {per: package}}
+    inputs:
+      svc/d: ["docs/d.md"]
+      svc/e: ["."]
+  - name: web
+    kind: node
+    root: web
+    tasks: {test: {}, build: {}}
+`
+	files := func() map[string]string {
+		return map[string]string{ManifestPath: manifest, "svc/go.mod": goMod, "svc/go.sum": "sum-1\n",
+			"svc/a/a.go": "package a\n\nimport _ \"example.com/m/b\"\n", "svc/a/a_test.go": "package a\n",
+			"svc/b/b.go": "package b\n", "svc/b/b_test.go": "package b\n",
+			"svc/c/c.go": "package c\n", "svc/c/c_test.go": "package c\n",
+			"svc/d/d.go": "package d\n", "svc/d/d_test.go": "package d\n",
+			"svc/e/e.go": "package e\n", "svc/e/e_test.go": "package e\n",
+			"docs/d.md": "d", "docs/other.md": "o", "web/index.ts": "1"}
+	}
+	line := func(s Scope) string {
+		var out []string
+		for _, m := range s.Modules {
+			out = append(out, fmt.Sprintf("%s run[%s] same[%s]", m.Module, strings.Join(m.RunUnits, " "), strings.Join(m.SameUnits, " ")))
+		}
+		return strings.Join(out, " | ")
+	}
+	base := scopePlan(t, strings.Repeat("b", 40), files(), nil)
+	for _, tc := range []struct {
+		name   string
+		change func(f map[string]string)
+		want   string
+	}{
+		// svc/e declares "." (the whole repository): it runs on every change, and only on a change.
+		{"nothing", func(map[string]string) {}, "svc run[] same[svc/a svc/b svc/c svc/d svc/e] | web run[] same[web]"},
+		{"a file of a package another imports", func(f map[string]string) { f["svc/b/b.go"] += "// x\n" },
+			"svc run[svc/a svc/b svc/e] same[svc/c svc/d] | web run[] same[web]"},
+		{"a file of a package nothing imports", func(f map[string]string) { f["svc/c/c.go"] += "// x\n" },
+			"svc run[svc/c svc/e] same[svc/a svc/b svc/d] | web run[] same[web]"},
+		{"a file a package lists in inputs", func(f map[string]string) { f["docs/d.md"] = "d2" },
+			"svc run[svc/d svc/e] same[svc/a svc/b svc/c] | web run[] same[web]"},
+		{"a file no package lists", func(f map[string]string) { f["docs/other.md"] = "o2" },
+			"svc run[svc/e] same[svc/a svc/b svc/c svc/d] | web run[] same[web]"},
+		{"go.mod", func(f map[string]string) { f["svc/go.mod"] = goMod + "// x\n" },
+			"svc run[svc/a svc/b svc/c svc/d svc/e] same[] | web run[] same[web]"},
+		// A unit with two tasks is named once.
+		{"the other module", func(f map[string]string) { f["web/index.ts"] = "2" },
+			"svc run[svc/e] same[svc/a svc/b svc/c svc/d] | web run[web] same[]"},
+		{"a new package", func(f map[string]string) { f["svc/n/n.go"], f["svc/n/n_test.go"] = "package n\n", "package n\n" },
+			"svc run[svc/e svc/n] same[svc/a svc/b svc/c svc/d] | web run[] same[web]"},
+	} {
+		f := files()
+		tc.change(f)
+		got := Compare(base, scopePlan(t, strings.Repeat("c", 40), f, nil))
+		if line(got) != tc.want {
+			t.Errorf("%s: %s, want %s", tc.name, line(got), tc.want)
+		}
+		for _, m := range got.Modules {
+			if m.Run != (len(m.RunUnits) > 0) || m.RunUnits == nil || m.SameUnits == nil {
+				t.Errorf("%s: %s run=%v with units %v / %v", tc.name, m.Module, m.Run, m.RunUnits, m.SameUnits)
+			}
+		}
+	}
+	// What cannot be compared (an unreadable base, no base) runs whole by unit too, with the reason.
+	whole := WholeProject("r", strings.Repeat("c", 40), "", "the base has no declaration that reads", true, base)
+	if line(whole) != "svc run[svc/a svc/b svc/c svc/d svc/e] same[] | web run[web] same[]" || whole.Note == "" {
+		t.Errorf("whole: %s note %q", line(whole), whole.Note)
+	}
+}

@@ -35,6 +35,13 @@ type ModuleScope struct {
 	// ("needs other-repo:path"), or a part of the key ("tree", "libs",
 	// "script"); at most whyLimit of them.
 	Why []string `json:"why"`
+	// RunUnits and SameUnits are the module's units by name, sorted: a unit
+	// runs when one of its tasks has a key the base's plan does not have, and
+	// is the same when all of them keep the base's keys. Their lengths are
+	// the counts. Module-level Run is what CI acts on; these say what a run
+	// by unit would be.
+	RunUnits  []string `json:"run_units"`
+	SameUnits []string `json:"same_units"`
 }
 
 const whyLimit = 5
@@ -47,15 +54,19 @@ func WholeProject(repo, commit, base, note string, declared bool, head *Plan) Sc
 		return s
 	}
 	count := map[string]int{}
+	units := map[string]map[string]bool{}
 	var order []string
 	for _, u := range head.Units {
 		if count[u.Module] == 0 {
 			order = append(order, u.Module)
+			units[u.Module] = map[string]bool{}
 		}
 		count[u.Module]++
+		units[u.Module][u.Unit] = true
 	}
 	for _, m := range order {
-		s.Modules = append(s.Modules, ModuleScope{Module: m, Tasks: count[m], Changed: count[m], Run: true, Why: []string{note}})
+		s.Modules = append(s.Modules, ModuleScope{Module: m, Tasks: count[m], Changed: count[m], Run: true, Why: []string{note},
+			RunUnits: sortedKeys(units[m]), SameUnits: []string{}})
 	}
 	return s
 }
@@ -70,22 +81,27 @@ func Compare(base, head *Plan) Scope {
 	type tally struct {
 		scope   ModuleScope
 		reasons map[string]int
+		units   map[string]bool // unit -> one of its tasks changed
 	}
 	byModule := map[string]*tally{}
 	var order []string
 	for _, u := range head.Units {
 		t := byModule[u.Module]
 		if t == nil {
-			t = &tally{scope: ModuleScope{Module: u.Module}, reasons: map[string]int{}}
+			t = &tally{scope: ModuleScope{Module: u.Module, RunUnits: []string{}, SameUnits: []string{}}, reasons: map[string]int{}, units: map[string]bool{}}
 			byModule[u.Module] = t
 			order = append(order, u.Module)
 		}
 		t.scope.Tasks++
+		if _, seen := t.units[u.Unit]; !seen {
+			t.units[u.Unit] = false
+		}
 		old, had := was[u.Unit+"\x00"+u.Task]
 		if had && old.Key == u.Key {
 			continue
 		}
 		t.scope.Changed++
+		t.units[u.Unit] = true
 		if !had {
 			t.reasons["new: the base has no such task"]++
 			continue
@@ -97,6 +113,13 @@ func Compare(base, head *Plan) Scope {
 	for _, m := range order {
 		t := byModule[m]
 		t.scope.Run = t.scope.Changed > 0
+		for _, u := range sortedKeys(t.units) {
+			if t.units[u] {
+				t.scope.RunUnits = append(t.scope.RunUnits, u)
+			} else {
+				t.scope.SameUnits = append(t.scope.SameUnits, u)
+			}
+		}
 		names := make([]string, 0, len(t.reasons))
 		for r := range t.reasons {
 			names = append(names, r)

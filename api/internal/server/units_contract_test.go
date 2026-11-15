@@ -159,3 +159,53 @@ func TestUnitsContractFullCI(t *testing.T) {
 	}
 	unitsContract(t, "full-ci.json", unitFullCIAnswer(read))
 }
+
+// The scope route's body: the modules that run, and under each the units
+// that run and those whose keys are the base's (run_units, same_units).
+// Origin: main coordinator 2026-11-14: backend skip by package goes shadow
+// first; a failing package the scope would skip is the miss this looks for.
+// The module-level fields are what CI acts on and are as they were.
+func TestUnitsContractScope(t *testing.T) {
+	t.Parallel()
+	const manifest = `version: 1
+modules:
+  - name: svc
+    kind: go
+    root: svc
+    tasks: {test: {per: package}}
+    inputs:
+      svc/c: ["docs/c.md"]
+  - name: web
+    kind: node
+    root: web
+    tasks: {test: {}}
+`
+	base := map[string]string{"bifrost.units.yaml": manifest, "svc/go.mod": "module example.com/m\n\ngo 1.25\n",
+		"svc/a/a.go": "package a\n\nimport _ \"example.com/m/b\"\n", "svc/a/a_test.go": "package a\n",
+		"svc/b/b.go": "package b\n", "svc/b/b_test.go": "package b\n",
+		"svc/c/c.go": "package c\n", "svc/c/c_test.go": "package c\n",
+		"svc/d/d.go": "package d\n", "svc/d/d_test.go": "package d\n", "docs/c.md": "c", "web/index.ts": "1"}
+	head := map[string]string{}
+	for k, v := range base {
+		head[k] = v
+	}
+	head["svc/b/b.go"], head["docs/c.md"] = "package b\n\nconst B = 1\n", "c2"
+	b, c := strings.Repeat("b", 40), strings.Repeat("c", 40)
+	trees := scopeTrees(t, map[string]map[string]string{b: base, c: head})
+	passed := func(context.Context, string, string) (string, string, error) { return "Succeeded", "ci-1", nil }
+	got, err := unitScope(context.Background(), trees, passed, "r", c, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A package's own change runs it and its importer; a file a package lists runs that package; the rest are the base's.
+	if m := got.Modules[0]; strings.Join(m.RunUnits, " ") != "svc/a svc/b svc/c" || strings.Join(m.SameUnits, " ") != "svc/d" {
+		t.Errorf("svc: run %v same %v", m.RunUnits, m.SameUnits)
+	}
+	unitsContract(t, "scope.json", got)
+	// An unreadable base: every unit runs, with the reason.
+	whole, err := unitScope(context.Background(), scopeTrees(t, map[string]map[string]string{b: {"x": "1"}, c: head}), passed, "r", c, b)
+	if err != nil || whole.Note == "" || strings.Join(whole.Modules[0].RunUnits, " ") != "svc/a svc/b svc/c svc/d" || len(whole.Modules[0].SameUnits) != 0 {
+		t.Fatalf("whole: %+v %v", whole, err)
+	}
+	unitsContract(t, "scope-whole.json", whole)
+}
