@@ -14,11 +14,11 @@ const (
 type AuthStatus string
 
 const (
-	AuthOK       AuthStatus = "ok"
-	AuthMissing  AuthStatus = "missing"
-	AuthInvalid  AuthStatus = "invalid"
-	AuthSkipped  AuthStatus = "skipped"
-	AuthBlocked  AuthStatus = "blocked"
+	AuthOK      AuthStatus = "ok"
+	AuthMissing AuthStatus = "missing"
+	AuthInvalid AuthStatus = "invalid"
+	AuthSkipped AuthStatus = "skipped"
+	AuthBlocked AuthStatus = "blocked"
 )
 
 type Principal struct {

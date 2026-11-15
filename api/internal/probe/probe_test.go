@@ -11,7 +11,7 @@ import (
 
 func TestClassifyHTTP(t *testing.T) {
 	tests := []struct {
-		code     int
+		code      int
 		wantReach Reachability
 	}{
 		{200, ReachOK},

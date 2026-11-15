@@ -234,7 +234,7 @@ func (p *Prober) probeCapabilities(ctx context.Context, url, token string, env c
 			ID: "ops-capabilities", Category: "trade_auth",
 			Reachability: ReachFail, Auth: auth,
 			AuthorizationLevel: "L0",
-			Detail: fmt.Sprintf("HTTP %d", resp.StatusCode), URL: url,
+			Detail:             fmt.Sprintf("HTTP %d", resp.StatusCode), URL: url,
 		}
 	}
 

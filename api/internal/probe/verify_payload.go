@@ -28,22 +28,22 @@ type DatastoreComponentView struct {
 
 // EnvPayloadVerification is the structured verify_payload result for one environment.
 type EnvPayloadVerification struct {
-	Environment   string                 `json:"environment"`
-	Label         string                 `json:"label"`
-	Classification PayloadClassification `json:"classification"`
-	Postgres      DatastoreComponentView `json:"postgres"`
-	Redis         DatastoreComponentView `json:"redis"`
-	HTTPFailures  []string               `json:"http_failures"`
-	Detail        string                 `json:"detail"`
+	Environment    string                 `json:"environment"`
+	Label          string                 `json:"label"`
+	Classification PayloadClassification  `json:"classification"`
+	Postgres       DatastoreComponentView `json:"postgres"`
+	Redis          DatastoreComponentView `json:"redis"`
+	HTTPFailures   []string               `json:"http_failures"`
+	Detail         string                 `json:"detail"`
 }
 
 // VerifyPayloadSummary rolls up counts across environments.
 type VerifyPayloadSummary struct {
-	Overall          PayloadClassification `json:"overall"`
-	ProbeDriftCount  int                   `json:"probe_drift_count"`
-	DataLayerCount   int                   `json:"data_layer_count"`
-	HTTPFailCount    int                   `json:"http_fail_count"`
-	NominalCount     int                   `json:"nominal_count"`
+	Overall         PayloadClassification `json:"overall"`
+	ProbeDriftCount int                   `json:"probe_drift_count"`
+	DataLayerCount  int                   `json:"data_layer_count"`
+	HTTPFailCount   int                   `json:"http_fail_count"`
+	NominalCount    int                   `json:"nominal_count"`
 }
 
 // VerifyPayloadResponse is returned by GET /api/v1/mission/verify-payload.

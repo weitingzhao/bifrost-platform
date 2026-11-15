@@ -30,23 +30,23 @@ type TradeEnvSnapshot struct {
 
 // PostFixVerification is the autonomous-loop verdict after remediation.
 type PostFixVerification struct {
-	Passed                        bool   `json:"passed"`
-	MissionMatrixNominal          bool   `json:"mission_matrix_nominal"`
-	DatastoreVerificationNominal  bool   `json:"datastore_verification_nominal"`
-	ProbeDriftRemaining           bool   `json:"probe_drift_remaining"`
-	Detail                        string `json:"detail"`
-	AgentGuidance                 string `json:"agent_guidance"`
+	Passed                       bool   `json:"passed"`
+	MissionMatrixNominal         bool   `json:"mission_matrix_nominal"`
+	DatastoreVerificationNominal bool   `json:"datastore_verification_nominal"`
+	ProbeDriftRemaining          bool   `json:"probe_drift_remaining"`
+	Detail                       string `json:"detail"`
+	AgentGuidance                string `json:"agent_guidance"`
 }
 
 // VerifyMissionSnapshotResponse is returned by GET /api/v1/mission/verify-snapshot.
 type VerifyMissionSnapshotResponse struct {
-	GeneratedAt         time.Time              `json:"generated_at"`
-	TradeDev            TradeEnvSnapshot       `json:"trade_dev"`
-	TradeStg            TradeEnvSnapshot       `json:"trade_stg"`
-	TradeProd           TradeEnvSnapshot       `json:"trade_prod"`
-	PayloadOverall      MissionSignal          `json:"payload_overall"`
-	PayloadVerification VerifyPayloadResponse  `json:"payload_verification"`
-	PostFixVerification PostFixVerification    `json:"post_fix_verification"`
+	GeneratedAt         time.Time             `json:"generated_at"`
+	TradeDev            TradeEnvSnapshot      `json:"trade_dev"`
+	TradeStg            TradeEnvSnapshot      `json:"trade_stg"`
+	TradeProd           TradeEnvSnapshot      `json:"trade_prod"`
+	PayloadOverall      MissionSignal         `json:"payload_overall"`
+	PayloadVerification VerifyPayloadResponse `json:"payload_verification"`
+	PostFixVerification PostFixVerification   `json:"post_fix_verification"`
 }
 
 func countsTowardTradeReadiness(t Target) bool {
