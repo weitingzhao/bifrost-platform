@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
 
 type ExternalDescription struct {
@@ -69,41 +70,9 @@ type ExternalEvent struct {
 	Session string `json:"session,omitempty"`
 	Epoch   int64  `json:"epoch,omitempty"`
 }
-type externalNote struct {
-	V     int    `json:"v"`
-	Kind  string `json:"kind"`
-	ID    string `json:"external_work_id"`
-	Actor string `json:"registrant"`
-	// A collector's work only (§1.4): the host the server writes from the
-	// collector's token, and the identity it was registered with. A note
-	// without them is any other registrant's, or a collector's from before.
-	Host               string   `json:"host,omitempty"`
-	Vendor             string   `json:"vendor,omitempty"`
-	Session            string   `json:"session,omitempty"`
-	Epoch              int64    `json:"epoch,omitempty"`
-	Sidebar            string   `json:"sidebar,omitempty"`
-	Root               string   `json:"root"`
-	Node               string   `json:"plan_node_id"`
-	RunKey             string   `json:"source_run_key"`
-	Artifact           string   `json:"artifact_id"`
-	Mission            string   `json:"mission_id,omitempty"`
-	Task               string   `json:"task_id,omitempty"`
-	Seq                int64    `json:"seq"`
-	Type               string   `json:"type"`
-	State              string   `json:"state"`
-	RequestDigest      string   `json:"request_digest"`
-	RegistrationDigest string   `json:"registration_digest"`
-	ObservedAt         string   `json:"observed_at,omitempty"`
-	RegisteredAt       string   `json:"registered_at"`
-	SourceStartedAt    string   `json:"source_started_at,omitempty"`
-	StartedAt          string   `json:"started_at,omitempty"`
-	HeartbeatAt        string   `json:"heartbeat_at"`
-	EndedAt            string   `json:"ended_at,omitempty"`
-	ReportPathDigest   string   `json:"report_path_digest,omitempty"`
-	ReportDigest       string   `json:"report_digest,omitempty"`
-	Commits            []string `json:"commit_shas,omitempty"`
-	ExitCode           *int     `json:"exit_code,omitempty"`
-}
+
+// Keep validation methods local while the record shape belongs to its domain.
+type externalNote workregistration.Note
 
 // CollectorActorPrefix starts a collector's actor, thread:collector@<host>
 // (actuation.CollectorActorPrefix; agentrtapi's tests hold the two equal).
@@ -670,43 +639,6 @@ func ReadOwnExternalWork(ctx context.Context, db DB, id, actor string) (map[stri
 		return nil
 	})
 	return out, err
-}
-
-// ExternalIdentity is one external work's latest record as a session's
-// binding reads it (R5:5.5-12 §3.1): a collector's work, with the host and
-// session identity it was registered with (a record naming an identity but
-// no host has Host "").
-type ExternalIdentity struct {
-	ID, Root, Node, State, Host, Vendor, Session string
-	Epoch                                        int64
-}
-
-// ExternalIdentities lists every external work whose record names a session
-// identity, its latest note each: the plan view's query shape (one read-only
-// snapshot, the latest note of each stream).
-func ExternalIdentities(ctx context.Context, db DB) ([]ExternalIdentity, error) {
-	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	rows, err := tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
-	  WHERE event_type='note' AND body_json ? 'external_work' AND event_stream_id LIKE 'external-work:%' ORDER BY event_stream_id,seq DESC) x
-	  WHERE body ? 'vendor' ORDER BY body->>'external_work_id'`)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ExternalIdentity, error) {
-		var raw []byte
-		var n externalNote
-		if err := r.Scan(&raw); err != nil {
-			return ExternalIdentity{}, err
-		}
-		if err := json.Unmarshal(raw, &n); err != nil {
-			return ExternalIdentity{}, err
-		}
-		return ExternalIdentity{ID: n.ID, Root: n.Root, Node: n.Node, State: n.State, Host: n.Host, Vendor: n.Vendor, Session: n.Session, Epoch: n.Epoch}, nil
-	})
 }
 
 // ReadExternalWork supports crash recovery. It is read-only and exposes only

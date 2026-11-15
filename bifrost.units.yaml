@@ -97,6 +97,7 @@ modules:
         - "console/src/api/__fixtures__/agentrt-plan-moved.testdb.json"
         - "console/src/api/__fixtures__/agentrt-plan-view.go.json"
       api/internal/agentrt/planpace: ["api/internal/agentrt/planpace"]
+      api/internal/agentrt/workregistration: ["api/internal/agentrt/workregistration"]
       api/internal/agentrt/planview: ["api/internal/agentrt/planview"]
       api/internal/agentrt/recorderimport: ["api/internal/agentrt/recorderimport"]
       api/internal/agentrt/rules: ["."]

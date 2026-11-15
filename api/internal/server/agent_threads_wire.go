@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -45,7 +45,7 @@ func (s *Server) wireSessionBindings() {
 		if late, ok := db.(agentrtapi.Ready); ok && !late.Ready() {
 			return nil, errors.New("the agent runtime database is not connected yet")
 		}
-		ids, err := store.ExternalIdentities(ctx, db)
+		ids, err := workregistration.Identities(ctx, db)
 		if err != nil {
 			return nil, err
 		}
