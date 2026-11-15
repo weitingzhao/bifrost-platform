@@ -1,0 +1,20 @@
+create: execution card with both lines => 201 card pending
+create: execution card with no lines => 400 the reason must have a line starting with each o
+create: execution card, only the first line => 400 the reason must have a line starting with each o
+create: command uses --raw => 400 the command uses --raw, which the execution port
+create: dry-run=client => 400 the command uses --dry-run=client; a trial run o
+create: dry-run=server => 201 card pending
+create: own kubeconfig => 400 the command names its own connection (--kubeconf
+create: DROP not named in the reason => 400 the command contains DROP and the reason does no
+create: DROP named in the reason => 201 card pending
+create: drill with no lines => 201 card pending
+create: unknown action => 404 unknown action
+create: no reason => 400 reason is required
+withdraw: another session => 403
+withdraw: no reason => 400
+withdraw: the requester, pending => 200
+withdraw: again => 409
+withdraw: approved, unclaimed => 200
+withdraw: claimed and running => 409
+supersede: same requester replaces its pending card => 201 card pending
+supersede: another requester is refused => 409 open_request: another request for the same subje
