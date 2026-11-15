@@ -45,7 +45,6 @@ modules:
     # outside is the dangerous mistake.
     inputs:
       api/cmd/agentrt-plan-import: ["."]
-      api/cmd/debtimport: ["."]
       api/cmd/infracheck: ["."]
       api/cmd/platform-api: ["."]
       api/internal/actions: ["."]
@@ -55,7 +54,6 @@ modules:
       api/internal/agentprogress: ["."]
       api/internal/agentrt/agentrtapi: ["."]
       api/internal/agentrt/canon: ["."]
-      api/internal/agentrt/debtimport: ["."]
       api/internal/agentrt/infracheck: ["."]
       api/internal/agentrt/landing: ["."]
       api/internal/agentrt/landingci: ["."]
