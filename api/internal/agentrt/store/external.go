@@ -176,10 +176,3 @@ func (q Question) Body() (map[string]any, error) {
 	b, _, err := questionSeenBody(q.ID, q)
 	return b, err
 }
-
-// RecordCIReuse records an accepted reuse once across readers and retries.
-// reused_run and reused_uid identify the original green run.
-func RecordCIReuse(ctx context.Context, db DB, repo, revision, tree, run, uid string) (bool, error) {
-	body := map[string]any{"repo": repo, "revision": revision, "tree": tree, "reused_run": run, "reused_uid": uid}
-	return seen(ctx, db, "ci_reused", body, func(context.Context) (map[string]any, bool, error) { return body, true, nil })
-}
