@@ -27,9 +27,32 @@ func releasePolicyNotice(title, message string) approvalnotify.Message {
 	return approvalnotify.Message{Title: title, Message: message, Kind: "release_policy"}
 }
 
-// recordDeployed takes the deployed commits from the newest release record
-// of the pipeline (releases.Service.List is newest first).
+// recordDeployed reads the release records of a pipeline
+// (releases.Service.List is newest first).
 type recordDeployed struct{ svc *releases.Service }
+
+// Shipped is every retained record of the pipeline. Each one succeeded: the
+// recorder writes a record only for a run that did (releases.Service.Tick).
+func (d recordDeployed) Shipped(ctx context.Context, pipeline string) ([]releasepolicy.Shipment, error) {
+	recs, err := d.svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []releasepolicy.Shipment
+	for _, r := range recs {
+		if r.Pipeline != pipeline {
+			continue
+		}
+		repos := make(map[string]string, len(r.Repos))
+		for name, b := range r.Repos {
+			repos[name] = b.SHA
+		}
+		out = append(out, releasepolicy.Shipment{Repos: repos, Succeeded: true})
+	}
+	return out, nil
+}
+
+// Deployed takes the deployed commits from the newest record.
 
 func (d recordDeployed) Deployed(ctx context.Context, pipeline string) (map[string]string, []string, error) {
 	recs, err := d.svc.List(ctx)

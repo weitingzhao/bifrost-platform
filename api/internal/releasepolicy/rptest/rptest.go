@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // Key is a throwaway signing key and its SHA256 fingerprint.
@@ -174,6 +176,9 @@ type Facts struct {
 	Window    string
 	Records   map[string]map[string]string
 	Missing   []string
+	// Older is a pipeline's release records before the newest (Records),
+	// newest first.
+	Older map[string][]releasepolicy.Shipment
 }
 
 func (f *Facts) FileAt(_ context.Context, repo, ref, path string) (string, bool, error) {
@@ -238,6 +243,15 @@ func (f *Facts) HeldBy(context.Context, string, string) string { return f.Window
 
 func (f *Facts) Deployed(_ context.Context, pipeline string) (map[string]string, []string, error) {
 	return f.Records[pipeline], f.Missing, nil
+}
+
+// Shipped is the pipeline's newest record, succeeded, then its Older ones.
+func (f *Facts) Shipped(_ context.Context, pipeline string) ([]releasepolicy.Shipment, error) {
+	var out []releasepolicy.Shipment
+	if newest, ok := f.Records[pipeline]; ok {
+		out = append(out, releasepolicy.Shipment{Repos: newest, Succeeded: true})
+	}
+	return append(out, f.Older[pipeline]...), nil
 }
 
 // LiveManager is one managedFields entry of a fake cluster object.

@@ -92,12 +92,77 @@ func TestPinnedReleaseMustShipWhatTheSourceShipped(t *testing.T) {
 	if d := f.decide(normalised); !d.Auto || d.SHAText() != "repo-app="+newSHA+",repo-lib="+newLib {
 		t.Fatalf("normalised params: auto = %v sha = %s reasons = %v", d.Auto, d.SHAText(), d.Reasons)
 	}
-	wantWait(t, f.decide(pinned(rptest.SHA("other"), newLib)), "is not what the newest deliver-app-stg record shipped")
+	wantWait(t, f.decide(pinned(rptest.SHA("other"), newLib)), "was never delivered successfully by deliver-app-stg")
 	wantWait(t, f.decide(pinned(newSHA, "main")), "repo-lib: pinned revision main is not a full commit id")
 	wantWait(t, f.decide(map[string]any{"name": "deliver-pinned", "revision": newLib, "who": "agent@mac"}), "repo-app: the request pins no commit for it")
 	wantWait(t, f.decide(map[string]any{"name": "deliver-pinned", "who": "agent@mac"}), "names none")
 	f.facts.Green = nil
 	wantWait(t, f.decide(pinned(newSHA, newLib)), "no Succeeded ci run")
+}
+
+// Owner 2026-11-15: a card must not go stale because STG moved on (#568
+// waited 5h31m and every lane stopped). A pinned release is vouched for by
+// any successful record of the source pipeline that shipped exactly its
+// commits, not by the newest record alone.
+func TestPinnedReleaseIsVouchedForByAnySuccessfulSourceRecord(t *testing.T) {
+	oldSHA, newSHA := rptest.SHA("old"), rptest.SHA("new")
+	oldLib, newLib := rptest.SHA("old-lib"), rptest.SHA("new-lib")
+	shipped := map[string]string{"repo-app": newSHA, "repo-lib": newLib}
+	later := map[string]string{"repo-app": rptest.SHA("later"), "repo-lib": newLib}
+	world := func(t *testing.T, newest map[string]string, older ...releasepolicy.Shipment) *fixture {
+		f := newFixture(t)
+		f.signPolicy(t, f.key, rptest.PolicyText("rp-pinned", now.Add(-time.Hour), 90, "deliver-pinned"))
+		f.facts.Records["deliver-pinned"] = map[string]string{"repo-app": oldSHA, "repo-lib": oldLib}
+		if newest != nil {
+			f.facts.Records["deliver-app-stg"] = newest
+		}
+		f.facts.Older = map[string][]releasepolicy.Shipment{"deliver-app-stg": older}
+		f.facts.Green["repo-lib@"+newLib] = true
+		f.facts.Files["repo-lib"] = []string{"lib/util.go"}
+		return f
+	}
+	request := map[string]any{"name": "deliver-pinned", "revision": newLib, "who": "agent@mac", "params": map[string]any{"appRevision": newSHA}}
+	never := "repo-app=" + newSHA[:12] + ", repo-lib=" + newLib[:12] + " was never delivered successfully by deliver-app-stg"
+
+	t.Run("the newest record shipped them: covered, as before", func(t *testing.T) {
+		wantAuto(t, world(t, shipped).decide(request))
+	})
+	t.Run("an older successful record shipped them and the source has moved on: covered", func(t *testing.T) {
+		d := world(t, later, releasepolicy.Shipment{Repos: shipped, Succeeded: true}).decide(request)
+		wantAuto(t, d)
+		if !strings.Contains(d.ClauseText(), "pinned_to:deliver-app-stg") {
+			t.Fatalf("clauses = %s", d.ClauseText())
+		}
+	})
+	t.Run("no record shipped them: refused", func(t *testing.T) {
+		wantWait(t, world(t, later, releasepolicy.Shipment{Repos: map[string]string{"repo-app": oldSHA, "repo-lib": oldLib}, Succeeded: true}).decide(request), never)
+	})
+	t.Run("the source has no record at all: refused", func(t *testing.T) {
+		wantWait(t, world(t, nil).decide(request), never)
+	})
+	t.Run("the record that shipped them did not succeed: refused", func(t *testing.T) {
+		wantWait(t, world(t, later, releasepolicy.Shipment{Repos: shipped}).decide(request),
+			"the deliver-app-stg record that shipped repo-app="+newSHA[:12]+", repo-lib="+newLib[:12]+" did not succeed")
+	})
+	// The commits must have shipped together: one record per repo vouches for neither.
+	t.Run("each commit shipped, but never in one record: refused", func(t *testing.T) {
+		wantWait(t, world(t, later, releasepolicy.Shipment{Repos: map[string]string{"repo-app": newSHA, "repo-lib": oldLib}, Succeeded: true}).decide(request), never)
+	})
+	// The bound: the newest 50 records are read. A match at the 50th counts,
+	// one at the 51st does not.
+	fill := func(n int) []releasepolicy.Shipment {
+		out := make([]releasepolicy.Shipment, n)
+		for i := range out {
+			out[i] = releasepolicy.Shipment{Repos: later, Succeeded: true}
+		}
+		return append(out, releasepolicy.Shipment{Repos: shipped, Succeeded: true})
+	}
+	t.Run("a match at the last record read: covered", func(t *testing.T) {
+		wantAuto(t, world(t, later, fill(48)...).decide(request))
+	})
+	t.Run("a match beyond the records read: refused", func(t *testing.T) {
+		wantWait(t, world(t, later, fill(49)...).decide(request), "none of its newest 50 records shipped them")
+	})
 }
 
 func TestEvaluateCoversTierBWithoutTheTierRule(t *testing.T) {

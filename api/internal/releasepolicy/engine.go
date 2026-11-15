@@ -50,10 +50,20 @@ type Window interface {
 	HeldBy(ctx context.Context, pipeline, who string) string
 }
 
-// Deployed returns the commits the newest release record of pipeline shipped,
-// and the repos that record could not resolve.
+// Deployed reads the release records of a pipeline.
 type Deployed interface {
+	// Deployed returns the commits the newest release record of pipeline
+	// shipped, and the repos that record could not resolve.
 	Deployed(ctx context.Context, pipeline string) (repos map[string]string, missing []string, err error)
+	// Shipped lists the retained release records of pipeline, newest first.
+	Shipped(ctx context.Context, pipeline string) ([]Shipment, error)
+}
+
+// Shipment is one release record: the commit it shipped of each repo, and
+// whether its run succeeded.
+type Shipment struct {
+	Repos     map[string]string
+	Succeeded bool
 }
 
 // Deps are the engine's inputs. StatePath is a statefile path for the newest
@@ -535,9 +545,52 @@ func (e *Engine) diffReasons(ctx context.Context, pol *Policy, d *Decision, revi
 	return reasons
 }
 
-// pinnedReasons checks a pipeline that ships the commits in its params: each
-// must be what the newest record of the source pipeline shipped, and the CI
-// and path rules run from the newest record of this pipeline to those commits.
+// maxSourceRecords bounds how far back a pinned release looks for the source
+// record that shipped its commits.
+const maxSourceRecords = 50
+
+// deliveredBy is "" when one of the newest maxSourceRecords records of the
+// source pipeline succeeded and shipped exactly the pinned commits, all of
+// them in the same record; otherwise why not. It need not be the newest
+// record: the source environment moving on does not take back a delivery
+// that succeeded (Owner 2026-11-15; the PROD pipeline's own source check
+// reads the same way).
+func (e *Engine) deliveredBy(ctx context.Context, from string, pinned map[string]string) string {
+	records, err := e.d.Deployed.Shipped(ctx, from)
+	if err != nil {
+		return "release records of " + from + ": " + err.Error()
+	}
+	if len(records) > maxSourceRecords {
+		records = records[:maxSourceRecords]
+	}
+	failed := false
+	for _, rec := range records {
+		same := true
+		for repo, sha := range pinned {
+			same = same && rec.Repos[repo] == sha
+		}
+		if same && rec.Succeeded {
+			return ""
+		}
+		failed = failed || same
+	}
+	names := make([]string, 0, len(pinned))
+	for repo, sha := range pinned {
+		names = append(names, repo+"="+short(sha))
+	}
+	sort.Strings(names)
+	what := strings.Join(names, ", ")
+	if failed {
+		return fmt.Sprintf("the %s record that shipped %s did not succeed: deliver these commits to that environment successfully first", from, what)
+	}
+	return fmt.Sprintf("%s was never delivered successfully by %s: none of its newest %d records shipped them (at most %d are read); deliver these commits to that environment first",
+		what, from, len(records), maxSourceRecords)
+}
+
+// pinnedReasons checks a pipeline that ships the commits in its params: some
+// successful record of the source pipeline must have shipped exactly those
+// commits, and the CI and path rules run from the newest record of this
+// pipeline to them.
 func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pin PinnedPipeline, params map[string]any) []string {
 	if e.d.Deployed == nil || e.d.Git == nil {
 		return []string{"no reader for deployed commits or Gitea"}
@@ -559,10 +612,6 @@ func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pi
 	if len(pinned) == 0 {
 		return []string{d.Pipeline + " ships pinned commits, and the request names none"}
 	}
-	source, _, err := e.d.Deployed.Deployed(ctx, from)
-	if err != nil {
-		return []string{"deployed commits for " + from + ": " + err.Error()}
-	}
 	deployed, missing, err := e.d.Deployed.Deployed(ctx, d.Pipeline)
 	if err != nil {
 		return []string{"deployed commits for " + d.Pipeline + ": " + err.Error()}
@@ -579,17 +628,24 @@ func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pi
 		repos = append(repos, r)
 	}
 	sort.Strings(repos)
+	whole := true
 	for _, repo := range repos {
+		d.SHAs[repo] = pinned[repo]
+		if !fullSHA.MatchString(pinned[repo]) {
+			reasons = append(reasons, repo+": pinned revision "+pinned[repo]+" is not a full commit id")
+			whole = false
+		}
+	}
+	if whole {
+		if why := e.deliveredBy(ctx, from, pinned); why != "" {
+			reasons, whole = append(reasons, why), false
+		}
+	}
+	for _, repo := range repos {
+		if !whole {
+			break // nothing vouches for these commits; their diffs are not read
+		}
 		next := pinned[repo]
-		d.SHAs[repo] = next
-		if !fullSHA.MatchString(next) {
-			reasons = append(reasons, repo+": pinned revision "+next+" is not a full commit id")
-			continue
-		}
-		if source[repo] != next {
-			reasons = append(reasons, fmt.Sprintf("%s: pinned %s is not what the newest %s record shipped (%s)", repo, short(next), from, orQ(short(source[repo]))))
-			continue
-		}
 		old := deployed[repo]
 		if old == "" {
 			reasons = append(reasons, repo+": the newest release record has no commit for it")
