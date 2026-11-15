@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -126,18 +125,8 @@ type Mission struct {
 	Token                   string         // the token that proposed it, when a route did (review 176 B2)
 }
 
-// issueWorkPrefix started a business issue's work id (BI-<n>). Business
-// issues were removed (the Owner 2026-11-15) and nothing makes such a mission
-// any more; the prefix stays refused while the database's check does (0009
-// check_issue_mission).
-const issueWorkPrefix = "BI-"
-
-// CreateMission writes mission_proposed and the mission row. A business
-// issue's work id is refused here, on every path.
+// CreateMission writes mission_proposed and the mission row.
 func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
-	if strings.HasPrefix(m.WorkID, issueWorkPrefix) {
-		return Appended{}, invalid("work id %s is a business issue's: business issues were removed", m.WorkID)
-	}
 	if m.Tenant == "" {
 		m.Tenant = "dev"
 	}

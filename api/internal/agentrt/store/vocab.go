@@ -65,10 +65,7 @@ var eventTypes = map[string]bool{
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true,
 	"policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
-	"legacy_imported": true, "issue_submitted": true, "issue_added": true, "issue_brief_drafted": true, "issue_asked": true,
-	"issue_answered": true, "issue_classified": true, "issue_design_put": true, "issue_reviewed": true,
-	"issue_owner_decided": true, "issue_priority_set": true, "issue_taken": true, "issue_replied": true,
-	"issue_state_changed": true, "issue_merged": true, "intake_client_set": true, "intake_acked": true,
+	"legacy_imported":  true,
 	"host_slots_set":   true,
 	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
 }
@@ -194,8 +191,8 @@ var bodies = map[string][]field{
 		{"landed_via", kStr, true}, {"matched_by", kStr, true}, {"landed_result", kStr, true}, {"landed_repo", kStr, true}, {"landed_tip", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
 		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
-		// card: on an issue's stream, the runtime's record of an Owner's
-		// card on it (issuecard.go): opened or settled, ids and enums only.
+		// card: kept for the notes already written; business issues, which
+		// wrote it, were removed (0022).
 		{"card", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
 		{"leak_value", kAny, true},
 		// full_ci: on the controller's stream, the daily full CI runs started
@@ -235,50 +232,6 @@ var bodies = map[string][]field{
 	"wait_limit_passed": {{"wait", kStr, false}, {"ref", kID, false}, {"since", kStr, false}, {"limit_s", kInt, false},
 		{"basis", kStr, false}, {"waited_s", kInt, false}, {"calls", kID, false}, {"usual_s", kInt, true}},
 	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}, {"by", kStr, true}},
-	// The issue events (migrations 0009; DESIGN-crew-intake-2026-10-22.md
-	// §4.3): ids, enums and hashes, never text. A text is named by its id
-	// (text_id, text_ids), never by the keys artifact search follows
-	// (artifact_id, text_artifact_id, artifacts, evidence); a seat's report,
-	// which is an artifact, by seat_report. Each names the issue its stream
-	// is about (issue_id) and the rows it writes, by the ids the store takes
-	// from their sequences first (issues.go).
-	"issue_submitted": {{"issue_id", kID, false}, {"product", kStr, false}, {"kind", kStr, false}, {"channel", kStr, false},
-		{"text_ids", kInts, false}, {"served_person", kID, true}},
-	"issue_added":         {{"issue_id", kID, false}, {"channel", kStr, false}, {"text_ids", kInts, false}},
-	"issue_brief_drafted": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"brief_sha256", kStr, false}, {"ask_id", kInt, false}},
-	"issue_asked": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"ask_id", kInt, false}, {"purpose", kStr, false},
-		{"brief_sha256", kStr, true}, {"commitment", kInt, true}, {"env", kStr, true}},
-	"issue_answered": {{"issue_id", kID, false}, {"ask_id", kInt, false}, {"text_ids", kInts, false}, {"verdict", kStr, false},
-		{"channel", kStr, false}, {"person", kID, false}, {"question_id", kID, true}},
-	"issue_classified": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"risk_class", kStr, false}, {"category", kStr, false},
-		{"brief_sha256", kStr, false}, {"seat_report", kID, false}, {"text_id", kInt, true}},
-	"issue_design_put": {{"issue_id", kID, false}, {"text_id", kInt, false}, {"design_sha256", kStr, false}, {"decisions", kAny, true}},
-	"issue_reviewed": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"check_kind", kStr, false}, {"result", kStr, false},
-		{"brief_sha256", kStr, false}, {"design_sha256", kStr, true}, {"text_id", kInt, true}, {"round", kInt, true},
-		{"reviewer_tool", kStr, true}, {"author_tool", kStr, true}, {"checked_ask", kInt, true}, {"seat_report", kID, true}},
-	"issue_owner_decided": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"decision", kStr, false}, {"option", kStr, false},
-		{"brief_sha256", kStr, false}, {"design_sha256", kStr, false}, {"question_id", kID, true}, {"answered_by", kStr, true},
-		{"channel", kStr, true}},
-	"issue_priority_set": {{"issue_id", kID, false}, {"check_id", kInt, false}, {"priority", kStr, false}, {"brief_sha256", kStr, false},
-		{"question_id", kID, true}, {"answered_by", kStr, true}, {"channel", kStr, true}},
-	"issue_taken": {{"issue_id", kID, false}, {"commitment", kInt, false}, {"brief_sha256", kStr, false}, {"design_sha256", kStr, true},
-		{"rule_id", kID, false}, {"rule_version", kInt, false}, {"risk_class", kStr, false}, {"mission_state", kStr, false},
-		{"live", kInt, false}, {"limit", kInt, false}, {"exception", kStr, true}, {"text_id", kInt, true}, {"question_id", kID, true}},
-	"issue_replied": {{"issue_id", kID, false}, {"text_id", kInt, false}},
-	// issue_state_changed: change says what (park, resume, reopen, close,
-	// supersede, ask_owner); from and to the display states; a close names
-	// its conclusion and the ask it rests on (basis_ask); ask_ids are the
-	// asks it supersedes, all of one mission (the envelope's), so one event
-	// per mission (issues.go supersede). ask_owner names the Owner's card it
-	// opened (question_id), its purpose, the point (decision), the versions
-	// it is bound to and, for a brief's confirmation, its ask (basis_ask).
-	"issue_state_changed": {{"issue_id", kID, false}, {"change", kStr, false}, {"from", kStr, true}, {"to", kStr, true},
-		{"conclusion", kStr, true}, {"basis_ask", kInt, true}, {"text_id", kInt, true}, {"ask_ids", kInts, true},
-		{"question_id", kID, true}, {"purpose", kStr, true}, {"decision", kStr, true}, {"brief_sha256", kStr, true},
-		{"design_sha256", kStr, true}},
-	"issue_merged":      {{"issue_id", kID, false}, {"into", kID, true}, {"merged_from", kID, true}, {"risk_class", kStr, true}},
-	"intake_client_set": {{"change", kStr, false}, {"intake_client_id", kID, true}, {"person_id", kID, true}},
-	"intake_acked":      {{"intake_client_id", kID, false}, {"cursor", kStr, false}},
 }
 
 func checkBody(eventType string, body map[string]any) error {
