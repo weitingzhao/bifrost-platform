@@ -698,6 +698,16 @@ reg(
 )
 
 reg(
+  'withdraw_request',
+  'Withdraw an approval card THIS thread built, before an executor has claimed it (a card built wrong or made moot; the Owner should not be asked to reject it). reason is required. The card ends rejected with a reason that starts "withdrawn by requester". It only narrows: it cannot approve or run anything, another thread\'s card is refused, and a card already running or run is refused. Returns {id, status, withdrawn}.',
+  {
+    id: z.string().describe('Approval id (appr_…) or number (57 or #57)'),
+    reason: z.string().min(1).max(500).describe('Why the card is taken back, one line'),
+  },
+  async ({ id, reason }) => jsonResult(await platformPost(`/api/v1/approvals/${encodeURIComponent(id)}/withdraw`, { reason })),
+)
+
+reg(
   'get_request',
   'Read one approval request by id (appr_…) or number (57 or #57)',
   { id: z.string() },

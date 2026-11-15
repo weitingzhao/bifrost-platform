@@ -67,6 +67,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'delete_finished_jobs',
   'run_probe_pod',
   'request_action',
+  'withdraw_request',
   'get_request',
   'list_requests',
   'wait_for_request',

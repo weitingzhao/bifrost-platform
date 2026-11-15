@@ -31,6 +31,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(actuation.RoleOperator))
 		r.Post("/approvals", svc.HandleCreate)
+		r.Post("/approvals/{id}/withdraw", svc.HandleWithdraw)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(actuation.RoleAdmin))

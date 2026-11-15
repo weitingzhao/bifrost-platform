@@ -58,6 +58,7 @@ func init() {
 		"POST /api/v1/approvals/{id}/approve",
 		"POST /api/v1/approvals/{id}/reject",
 		"POST /api/v1/approvals/{id}/resolve",
+		"POST /api/v1/approvals/{id}/withdraw",
 		"POST /api/v1/approvals/claim",
 		"POST /api/v1/approvals/{id}/heartbeat",
 		"POST /api/v1/approvals/{id}/result",
