@@ -60,12 +60,12 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 	if newest == nil {
 		return Record{}, ErrNoDeployment
 	}
-	runs, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+	runs, err := listRuns(ctx, dyn, ns)
 	if err != nil {
 		return Record{}, err
 	}
-	for i := range runs.Items {
-		run := &runs.Items[i]
+	for i := range runs {
+		run := &runs[i]
 		rule, ok := s.rules.Match(run.GetName(), run.GetLabels()["tekton.dev/pipeline"])
 		if !ok || !rule.Deploys || rule.Lane != lane || rule.Env != env || run.GetName() == newest.Run {
 			continue

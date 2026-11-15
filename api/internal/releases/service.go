@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -164,14 +165,14 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		have[cms.Items[i].Name] = &cms.Items[i]
 	}
 
-	runs, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+	runs, err := listRuns(ctx, dyn, ns)
 	if err != nil {
 		res.Errors = append(res.Errors, "list runs: "+err.Error())
 		return res
 	}
-	res.Runs = len(runs.Items)
-	for i := range runs.Items {
-		run := &runs.Items[i]
+	res.Runs = len(runs)
+	for i := range runs {
+		run := &runs[i]
 		rule, ok := s.rules.Match(run.GetName(), run.GetLabels()["tekton.dev/pipeline"])
 		if !ok {
 			continue
@@ -288,4 +289,35 @@ func (s *Service) Status() Status {
 	st.LastTick = s.last
 	s.mu.Unlock()
 	return st
+}
+
+// listRuns lists a namespace's PipelineRuns page by page, each without the
+// copy of the Pipeline Tekton keeps in its status and without managedFields.
+// Neither is read here (a record's pinned clones come from spec, its task
+// results from the TaskRuns), and the copy is most of a run: measured
+// 2026-11-15 on 1182 retained runs it is 77% of the listed bytes, and the
+// workers that hold these lists were OOMKilled at 512Mi in STG.
+func listRuns(ctx context.Context, dyn dynamic.Interface, ns string) ([]unstructured.Unstructured, error) {
+	var out []unstructured.Unstructured
+	options := metav1.ListOptions{Limit: 100}
+	seen := map[string]bool{}
+	for {
+		page, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, options)
+		if err != nil {
+			return nil, err
+		}
+		for i := range page.Items {
+			unstructured.RemoveNestedField(page.Items[i].Object, "status", "pipelineSpec")
+			unstructured.RemoveNestedField(page.Items[i].Object, "metadata", "managedFields")
+		}
+		out = append(out, page.Items...)
+		options.Continue = page.GetContinue()
+		if options.Continue == "" {
+			return out, nil
+		}
+		if seen[options.Continue] {
+			return nil, fmt.Errorf("pipeline run pagination repeated a cursor")
+		}
+		seen[options.Continue] = true
+	}
 }
