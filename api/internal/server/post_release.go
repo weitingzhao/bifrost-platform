@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -58,6 +59,12 @@ const (
 // postReleaseDeployments are the workloads the pipeline delivers (infra
 // k8s/base-platform/manifest.yaml).
 var postReleaseDeployments = []string{"platform-api", "platform-workers", "platform-console"}
+
+// postReleaseHealthDeployments are the ones whose pods run this binary and
+// answer /health on postReleaseHealthPort themselves (the api and the workers
+// are the same image under two roles; the console serves pages). Each of
+// their pods is asked for its own contained panics.
+var postReleaseHealthDeployments = map[string]bool{"platform-api": true, "platform-workers": true}
 
 func postReleaseOn() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(postReleaseEnv)), "observe")
@@ -205,6 +212,9 @@ func postPodOf(deployment string, p corev1.Pod) (postrelease.Pod, bool) {
 		return postrelease.Pod{}, false
 	}
 	out := postrelease.Pod{Deployment: deployment, Name: p.Name, Phase: string(p.Status.Phase)}
+	if postReleaseHealthDeployments[deployment] && p.Status.PodIP != "" {
+		out.HealthURL = "http://" + net.JoinHostPort(p.Status.PodIP, strconv.Itoa(postReleaseHealthPort)) + "/health"
+	}
 	for _, cs := range p.Status.ContainerStatuses {
 		c := postrelease.Container{Name: cs.Name, Ready: cs.Ready, Restarts: int(cs.RestartCount)}
 		for _, t := range []*corev1.ContainerStateTerminated{cs.LastTerminationState.Terminated, cs.State.Terminated} {
@@ -223,7 +233,16 @@ func (w *postWorld) Health(ctx context.Context) (int, []byte, error) {
 	if w.healthURL == "" {
 		return 0, nil, fmt.Errorf("%w: this process knows no namespace of its own", postrelease.ErrNoReading)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.healthURL, nil)
+	return postGet(ctx, w.healthURL)
+}
+
+// PodHealth is one GET of one pod's own /health.
+func (w *postWorld) PodHealth(ctx context.Context, pod postrelease.Pod) (int, []byte, error) {
+	return postGet(ctx, pod.HealthURL)
+}
+
+func postGet(ctx context.Context, target string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return 0, nil, fmt.Errorf("%w: %v", postrelease.ErrNoReading, err)
 	}

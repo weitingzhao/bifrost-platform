@@ -30,18 +30,38 @@ type fakeWorld struct {
 	healthHangs bool
 	trial       Trial
 	trialErr    error
+	// podBody is what a pod's own health URL answers, by Deployment; a
+	// Deployment not named answers goodHealth. podErr fails the reading.
+	podBody map[string]string
+	podErr  map[string]error
 }
 
 func goodWorld() *fakeWorld {
 	pod := func(deployment string) Pod {
-		return Pod{Deployment: deployment, Name: deployment + "-7c9f-x2x4z", Phase: "Running",
+		p := Pod{Deployment: deployment, Name: deployment + "-7c9f-x2x4z", Phase: "Running",
 			Containers: []Container{{Name: "main", Ready: true}}}
+		// The console serves pages, not the health reading.
+		if deployment != "console" {
+			p.HealthURL = "http://" + deployment + ".pod:8780/health"
+		}
+		return p
 	}
 	return &fakeWorld{
 		pods:   []Pod{pod("api"), pod("workers"), pod("console")},
 		status: 200, body: goodHealth,
-		trial: Trial{PolicyID: "policy-1", Reasons: []string{"PROD already runs this commit"}},
+		trial:   Trial{PolicyID: "policy-1", Reasons: []string{"PROD already runs this commit"}},
+		podBody: map[string]string{}, podErr: map[string]error{},
 	}
+}
+
+func (w *fakeWorld) PodHealth(_ context.Context, p Pod) (int, []byte, error) {
+	if err := w.podErr[p.Deployment]; err != nil {
+		return 0, nil, err
+	}
+	if body, ok := w.podBody[p.Deployment]; ok {
+		return 200, []byte(body), nil
+	}
+	return 200, []byte(goodHealth), nil
 }
 
 func (w *fakeWorld) Pods(context.Context, []string) ([]Pod, error) { return w.pods, w.podsErr }
@@ -140,11 +160,11 @@ func TestOneBadReadingFailsAndNamesItsItem(t *testing.T) {
 		},
 		{
 			// health: incident #63, 2026-11-11: an API that does not answer
-			// in time. schema and panics come from the same answer and are
-			// left unread, not failed.
+			// in time. schema comes from the same answer and is left unread,
+			// not failed.
 			name: "health does not answer in time", item: ItemHealth,
 			bad:     func(w *fakeWorld) { w.healthErr = context.DeadlineExceeded },
-			unknown: []string{ItemSchema, ItemPanics},
+			unknown: []string{ItemSchema},
 		},
 		{
 			// schema: TD-411. Migrations not applied: the API starts but
@@ -159,7 +179,16 @@ func TestOneBadReadingFailsAndNamesItsItem(t *testing.T) {
 			// counted in /health; a worker died mid-flight while status is ok.
 			name: "a panic was contained", item: ItemPanics,
 			bad: func(w *fakeWorld) {
-				w.body = `{"status":"ok","agentrt_schema":"current","contained_panics":1}`
+				w.podBody["api"] = `{"status":"ok","agentrt_schema":"current","contained_panics":1}`
+			},
+		},
+		{
+			// panics: ruling 2026-11-14 on the check's first version, which
+			// read one replica behind the Service and never the workers,
+			// where the loops a contained panic stops run.
+			name: "a panic was contained in the workers", item: ItemPanics,
+			bad: func(w *fakeWorld) {
+				w.podBody["workers"] = `{"status":"ok","contained_panics":2}`
 			},
 		},
 		{
@@ -245,7 +274,7 @@ func TestReadingNotTakenIsUnknown(t *testing.T) {
 			// the platform's identity may read the pods was not verified).
 			name:    "the pods cannot be listed",
 			bad:     func(w *fakeWorld) { w.podsErr = errors.New("pods is forbidden") },
-			unknown: []string{ItemRestarts, ItemReady},
+			unknown: []string{ItemRestarts, ItemReady, ItemPanics},
 		},
 		{
 			// restarts and ready (ruling 2026-11-14): a Deployment with no
@@ -255,11 +284,11 @@ func TestReadingNotTakenIsUnknown(t *testing.T) {
 			unknown: []string{ItemRestarts, ItemReady},
 		},
 		{
-			// health, schema, panics (incident #63, TD-411, safego 2026-11-03):
-			// a process with no health URL to read has read nothing.
+			// health, schema (incident #63, TD-411): a process with no
+			// health URL to read has read nothing.
 			name:    "health cannot be read at all",
 			bad:     func(w *fakeWorld) { w.healthErr = notWired },
-			unknown: []string{ItemHealth, ItemSchema, ItemPanics},
+			unknown: []string{ItemHealth, ItemSchema},
 		},
 		{
 			// schema (TD-411): a health answer without the field says nothing
@@ -270,8 +299,25 @@ func TestReadingNotTakenIsUnknown(t *testing.T) {
 		},
 		{
 			// panics (safego, 2026-11-03): no count is not a count of zero.
-			name:    "health has no contained_panics",
-			bad:     func(w *fakeWorld) { w.body = `{"status":"ok","agentrt_schema":"current"}` },
+			name:    "a pod's health has no contained_panics",
+			bad:     func(w *fakeWorld) { w.podBody["workers"] = `{"status":"ok"}` },
+			unknown: []string{ItemPanics},
+		},
+		{
+			// panics (ruling 2026-11-14): a pod that was not reached was not
+			// read; zero in the others is not zero in all.
+			name:    "one pod's health cannot be reached",
+			bad:     func(w *fakeWorld) { w.podErr["workers"] = errors.New("dial tcp: connection refused") },
+			unknown: []string{ItemPanics},
+		},
+		{
+			// panics (ruling 2026-11-14): with no pod to ask, nothing was read.
+			name: "no pod answers a health reading",
+			bad: func(w *fakeWorld) {
+				for i := range w.pods {
+					w.pods[i].HealthURL = ""
+				}
+			},
 			unknown: []string{ItemPanics},
 		},
 		{
@@ -319,7 +365,7 @@ func TestFailedWinsOverUnknown(t *testing.T) {
 	w.body = `{"status":"ok","agentrt_schema":"behind","contained_panics":0}`
 	v := judge(w)
 	if v.Verdict != Failed || !reflect.DeepEqual(v.Failed, []string{ItemSchema}) ||
-		!reflect.DeepEqual(v.Unknown, []string{ItemRestarts, ItemReady}) {
+		!reflect.DeepEqual(v.Unknown, []string{ItemRestarts, ItemReady, ItemPanics}) {
 		t.Fatalf("verdict = %+v", v)
 	}
 }

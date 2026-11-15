@@ -62,6 +62,9 @@ type Pod struct {
 	Name       string
 	Phase      string
 	Containers []Container
+	// HealthURL is where this pod itself answers the health reading; empty
+	// for a pod that serves none.
+	HealthURL string
 }
 
 // Trial is the release policy's answer to a read-only trial.
@@ -77,6 +80,8 @@ type World interface {
 	Pods(ctx context.Context, deployments []string) ([]Pod, error)
 	// Health is one GET of the health URL: the status and the body.
 	Health(ctx context.Context) (status int, body []byte, err error)
+	// PodHealth is one GET of one pod's own health URL.
+	PodHealth(ctx context.Context, pod Pod) (status int, body []byte, err error)
 	// PolicyTrial asks the release policy, read-only, about the run's commit.
 	PolicyTrial(ctx context.Context, run Run) (Trial, error)
 }
@@ -126,8 +131,10 @@ type Verdict struct {
 // Judge takes the readings once and judges the run.
 func Judge(ctx context.Context, w World, run Run, deployments []string) Verdict {
 	v := Verdict{Run: run}
-	v.Items = append(v.Items, pods(ctx, w, run, deployments)...)
+	list, err := w.Pods(ctx, deployments)
+	v.Items = append(v.Items, pods(list, err, run, deployments)...)
 	v.Items = append(v.Items, health(ctx, w)...)
+	v.Items = append(v.Items, panics(ctx, w, list, err))
 	v.Items = append(v.Items, policy(ctx, w, run))
 	for _, it := range v.Items {
 		switch it.State {
@@ -149,11 +156,10 @@ func Judge(ctx context.Context, w World, run Run, deployments []string) Verdict 
 }
 
 // pods judges restarts and ready from one listing.
-func pods(ctx context.Context, w World, run Run, deployments []string) []Item {
+func pods(list []Pod, err error, run Run, deployments []string) []Item {
 	both := func(state, reading string) []Item {
 		return []Item{{ItemRestarts, state, reading}, {ItemReady, state, reading}}
 	}
-	list, err := w.Pods(ctx, deployments)
 	if err != nil {
 		return both(Unknown, "the pods could not be listed: "+err.Error())
 	}
@@ -205,10 +211,10 @@ func pods(ctx context.Context, w World, run Run, deployments []string) []Item {
 	return []Item{restarts, ready}
 }
 
-// health judges health, schema and panics from one GET.
+// health judges health and schema from one GET of the Service.
 func health(ctx context.Context, w World) []Item {
 	items := func(h Item, rest, why string) []Item {
-		return []Item{h, {ItemSchema, rest, why}, {ItemPanics, rest, why}}
+		return []Item{h, {ItemSchema, rest, why}}
 	}
 	ctx, cancel := context.WithTimeout(ctx, HealthTimeout)
 	defer cancel()
@@ -237,19 +243,66 @@ func health(ctx context.Context, w World) []Item {
 			schema.State = Pass
 		}
 	}
-	panics := Item{ItemPanics, Unknown, "health has no contained_panics"}
-	if raw, ok := doc["contained_panics"]; ok {
-		n, isNumber := raw.(float64)
+	return []Item{h, schema}
+}
+
+// panics judges the contained panics of every pod that answers a health
+// reading, each asked itself. One GET of the Service reaches one replica of
+// one Deployment, and a count of zero there says nothing of the others: the
+// loops that a contained panic stops run in the workers (ruling 2026-11-14).
+// A pod that could not be read leaves the item unknown; a count above zero
+// anywhere fails it.
+func panics(ctx context.Context, w World, list []Pod, listErr error) Item {
+	if listErr != nil {
+		return Item{ItemPanics, Unknown, "the pods could not be listed: " + listErr.Error()}
+	}
+	var asked, bad, unread []string
+	for _, p := range list {
+		if p.HealthURL == "" {
+			continue
+		}
+		asked = append(asked, p.Name)
+		n, why := podPanics(ctx, w, p)
 		switch {
-		case !isNumber:
-			panics.Reading = fmt.Sprintf("contained_panics is not a number: %v", raw)
-		case n == 0:
-			panics.State, panics.Reading = Pass, "contained_panics 0"
-		default:
-			panics.State, panics.Reading = Fail, fmt.Sprintf("contained_panics %v", n)
+		case why != "":
+			unread = append(unread, p.Name+": "+why)
+		case n != 0:
+			bad = append(bad, fmt.Sprintf("%s contained_panics %v", p.Name, n))
 		}
 	}
-	return []Item{h, schema, panics}
+	sort.Strings(asked)
+	switch {
+	case len(bad) > 0:
+		return Item{ItemPanics, Fail, strings.Join(append(bad, unread...), "; ")}
+	case len(asked) == 0:
+		return Item{ItemPanics, Unknown, "no pod answers a health reading"}
+	case len(unread) > 0:
+		return Item{ItemPanics, Unknown, strings.Join(unread, "; ")}
+	}
+	return Item{ItemPanics, Pass, fmt.Sprintf("contained_panics 0 in %d pods (%s)", len(asked), strings.Join(asked, ", "))}
+}
+
+// podPanics reads one pod's count, or says why it could not.
+func podPanics(ctx context.Context, w World, p Pod) (float64, string) {
+	ctx, cancel := context.WithTimeout(ctx, HealthTimeout)
+	defer cancel()
+	status, body, err := w.PodHealth(ctx, p)
+	if err != nil {
+		return 0, err.Error()
+	}
+	var doc map[string]any
+	if json.Unmarshal(body, &doc) != nil || doc == nil {
+		return 0, fmt.Sprintf("HTTP %d, not a JSON object", status)
+	}
+	raw, ok := doc["contained_panics"]
+	if !ok {
+		return 0, "health has no contained_panics"
+	}
+	n, isNumber := raw.(float64)
+	if !isNumber {
+		return 0, fmt.Sprintf("contained_panics is not a number: %v", raw)
+	}
+	return n, ""
 }
 
 // policy judges that the release policy still answers. Covered or not is

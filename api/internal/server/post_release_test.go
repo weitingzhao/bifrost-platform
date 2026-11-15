@@ -148,6 +148,20 @@ func TestPostPodOfReadsTheLatestExit(t *testing.T) {
 	if c := pod.Containers[2]; !c.Terminated.IsZero() {
 		t.Fatalf("quiet = %+v", c)
 	}
+	// Each pod of the api and the workers is asked for its own contained
+	// panics at its own address; the console is not (ruling 2026-11-14: the
+	// first version read one replica behind the Service, never the workers).
+	if pod.HealthURL != "" {
+		t.Fatalf("a pod with no address has a health URL: %q", pod.HealthURL)
+	}
+	p.Status.PodIP = "10.42.8.4"
+	for deployment, want := range map[string]string{
+		"platform-api": "http://10.42.8.4:8780/health", "platform-workers": "http://10.42.8.4:8780/health", "platform-console": "",
+	} {
+		if got, _ := postPodOf(deployment, p); got.HealthURL != want {
+			t.Fatalf("%s health URL = %q, want %q", deployment, got.HealthURL, want)
+		}
+	}
 	p.DeletionTimestamp = &later
 	if _, ok := postPodOf("platform-api", p); ok {
 		t.Fatal("a pod being deleted was read")
