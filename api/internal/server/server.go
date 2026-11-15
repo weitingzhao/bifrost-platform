@@ -595,8 +595,6 @@ func (s *Server) Router() http.Handler {
 			// Run the unit tasks of a commit the ledger has no verdict on
 			// (units_dispatch.go); refused while UNIT_DISPATCH is off.
 			r.Post("/units/evidence", s.guard("request_unit_evidence", s.handleUnitEvidenceRequest))
-			// A thread records that it read files of a commit (release_policy_sources.go).
-			r.Post("/release-policy/reviews", s.guard("record_release_review", s.handleRecordReleaseReview))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/network/clients/fixed-ip", s.guard("unifi_client_fixed_ip", s.network.HandleClientFixedIP))

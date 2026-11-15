@@ -53,10 +53,7 @@ func changedFilesMaxCommits() int {
 }
 
 type giteaListedCommit struct {
-	SHA    string `json:"sha"`
-	Commit struct {
-		Message string `json:"message"`
-	} `json:"commit"`
+	SHA string `json:"sha"`
 	// Files is a pointer so a commit listed without its files (files=false,
 	// or a server that does not know the parameter) is told from one that
 	// touched nothing.
@@ -116,40 +113,12 @@ func (s *Service) listGiteaCommits(ctx context.Context, repo, sha, not string, p
 // changedFilesBetween lists the paths touched by the commits to has and from
 // lacks, sorted. from must be an ancestor of to.
 func (s *Service) changedFilesBetween(ctx context.Context, repo, from, to, user, pass string) ([]string, error) {
-	commits, err := s.commitsBetween(ctx, repo, from, to, user, pass)
-	if err != nil {
-		return nil, err
-	}
-	seen := map[string]bool{}
-	for _, c := range commits {
-		for _, name := range c.Files {
-			seen[name] = true
-		}
-	}
-	files := make([]string, 0, len(seen))
-	for name := range seen {
-		files = append(files, name)
-	}
-	sort.Strings(files)
-	return files, nil
-}
-
-// RangeCommit is one commit of a range as the mirror lists it: its id, its
-// whole message and the files it says it touched.
-type RangeCommit struct {
-	SHA, Message string
-	Files        []string
-}
-
-// commitsBetween is the commits to has and from lacks, newest first. from
-// must be an ancestor of to; from == to is no commits.
-func (s *Service) commitsBetween(ctx context.Context, repo, from, to, user, pass string) ([]RangeCommit, error) {
 	from, to = strings.TrimSpace(from), strings.TrimSpace(to)
 	if repo == "" || from == "" || to == "" {
 		return nil, fmt.Errorf("repo, from and to are required")
 	}
 	if from == to {
-		return []RangeCommit{}, nil
+		return []string{}, nil
 	}
 	// The old side must have nothing the new side lacks. A rollback, or two
 	// histories that diverged, has no forward list of commits to read.
@@ -162,7 +131,7 @@ func (s *Service) commitsBetween(ctx context.Context, repo, from, to, user, pass
 	}
 
 	maxCommits := changedFilesMaxCommits()
-	out := []RangeCommit{}
+	seen := map[string]bool{}
 	walked, want := 0, -1
 	for page := 1; ; page++ {
 		commits, total, err := s.listGiteaCommits(ctx, repo, to, from, page, changedFilesPageSize, user, pass)
@@ -186,13 +155,11 @@ func (s *Service) commitsBetween(ctx context.Context, repo, from, to, user, pass
 			if c.Files == nil {
 				return nil, fmt.Errorf("the mirror listed %s without its files", shortRef(sha))
 			}
-			rc := RangeCommit{SHA: sha, Message: c.Commit.Message}
 			for _, f := range *c.Files {
 				if name := strings.TrimSpace(f.Filename); name != "" {
-					rc.Files = append(rc.Files, name)
+					seen[name] = true
 				}
 			}
-			out = append(out, rc)
 			walked++
 			if walked > maxCommits {
 				return nil, fmt.Errorf("more than %d commits between %s and %s", maxCommits, shortRef(from), shortRef(to))
@@ -208,7 +175,12 @@ func (s *Service) commitsBetween(ctx context.Context, repo, from, to, user, pass
 	if want >= 0 && want != walked {
 		return nil, fmt.Errorf("the mirror counts %d commits between %s and %s and listed %d", want, shortRef(from), shortRef(to), walked)
 	}
-	return out, nil
+	files := make([]string, 0, len(seen))
+	for name := range seen {
+		files = append(files, name)
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 func shortRef(ref string) string {

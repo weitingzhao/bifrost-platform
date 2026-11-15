@@ -590,20 +590,6 @@ reg(
 )
 
 reg(
-  'record_release_review',
-  'Record that THIS thread read the listed files of a repository at one commit, and whether they passed (operator, tier B). The reviewer is this thread\'s session; it is not a parameter. The signed release policy reads these records when a release changes a trust anchor: it needs a passed record for exactly the released commit, from a thread that wrote none of those changes (no Claude-Session trailer of its own on the commits that touch them), whose files list every changed trust-anchor file. List only files you read whole at that commit; say in not_read what you left out. A failed verdict holds the release until the same thread records again. Returns {recorded, repo, commit, reviewer, verdict, files}.',
-  {
-    repo: REPO,
-    commit: SHA,
-    files: z.array(z.string().min(1).max(500)).min(1).max(500).describe('Repository-relative paths read whole at that commit'),
-    verdict: z.enum(['passed', 'failed']),
-    not_read: z.string().max(4000).optional().describe('What of the change was not read, in your own words'),
-  },
-  async ({ repo, commit, files, verdict, not_read }) =>
-    jsonResult(await platformPost('/api/v1/release-policy/reviews', { repo, commit, files, verdict, not_read: not_read ?? '' })),
-)
-
-reg(
   'get_code_health',
   'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
   {},

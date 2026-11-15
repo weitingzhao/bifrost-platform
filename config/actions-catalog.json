@@ -22,7 +22,6 @@
     "owner_run_command",
     "plan_manifest",
     "poweroff_compute_node",
-    "record_release_review",
     "release_freeze",
     "release_policy_install",
     "release_unfreeze",

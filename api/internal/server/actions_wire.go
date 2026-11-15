@@ -318,10 +318,6 @@ func (s *Server) bindActionExecutors() {
 		func(map[string]any) string { return "/api/v1/units/evidence" },
 		nil, fields("repo", "commit"), s.handleUnitEvidenceRequest)
 
-	reg("record_release_review", http.MethodPost,
-		func(map[string]any) string { return "/api/v1/release-policy/reviews" },
-		nil, fields("repo", "commit", "files", "verdict", "not_read"), s.handleRecordReleaseReview)
-
 	reg("delete_pipeline_run", http.MethodDelete,
 		func(p map[string]any) string {
 			u := "/api/v1/delivery/runs/" + url.PathEscape(text(p["id"]))

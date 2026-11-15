@@ -18,8 +18,7 @@ import (
 type fakeCommit struct {
 	sha     string
 	files   []string
-	noFiles bool   // listed without a files key at all
-	message string // the commit's whole message, when a test reads it
+	noFiles bool // listed without a files key at all
 }
 
 // commitRanges answers GET .../commits the way Gitea 1.21 does: the key is
@@ -47,9 +46,6 @@ func (cr commitRanges) serve(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, hi-lo)
 	for _, c := range commits[lo:hi] {
 		m := map[string]any{"sha": c.sha}
-		if c.message != "" {
-			m["commit"] = map[string]any{"message": c.message}
-		}
 		if !c.noFiles {
 			files := make([]map[string]string, 0, len(c.files))
 			for _, f := range c.files {

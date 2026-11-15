@@ -215,17 +215,6 @@ func (f PolicyFacts) ChangedFiles(ctx context.Context, repo, from, to string) ([
 	return f.s.changedFilesBetween(ctx, repo, from, to, acc.User, acc.Pass)
 }
 
-// CommitsBetween is the commits to has and from lacks, each with its message
-// and the files it says it touched (release_policy_diff.go): what the release
-// policy reads to name who wrote a change. It fails as ChangedFiles does.
-func (f PolicyFacts) CommitsBetween(ctx context.Context, repo, from, to string) ([]RangeCommit, error) {
-	acc, err := f.s.GiteaAccess(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return f.s.commitsBetween(ctx, repo, from, to, acc.User, acc.Pass)
-}
-
 // TreeChangedFiles is the complete difference of the two commits' trees
 // (release_policy_tree.go), for a diff whose commit lists may be cut short.
 func (f PolicyFacts) TreeChangedFiles(ctx context.Context, repo, from, to string) ([]string, error) {

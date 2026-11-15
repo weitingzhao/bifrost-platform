@@ -95,8 +95,6 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 			}
 			return s.work.Svc.LiveManagers(ctx, namespace, kind, name)
 		}},
-		History:   policyHistory{facts: facts},
-		Reviews:   policyReviews{db: s.evidenceDB},
 		StatePath: filepath.Join(dataDir, "release-policy-freeze"),
 		Anchor:    releasepolicy.OwnerKeyFingerprint,
 	})
@@ -170,11 +168,11 @@ func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
 	if len(d.AdditiveDDL) > 0 {
 		out += " additive_ddl=" + strings.Join(d.AdditiveDDL, ",")
 	}
+	if len(d.SelfCheckedAnchors) > 0 {
+		out += " trust_anchor_self_checked=" + strings.Join(d.SelfCheckedAnchors, ",")
+	}
 	if d.Path != "" {
 		out += " path=" + d.Path
-	}
-	if len(d.ReviewedAnchors) > 0 {
-		out += " trust_anchor_review=" + strings.Join(d.ReviewedAnchors, ",")
 	}
 	if len(d.Reasons) > 0 {
 		out += " reasons=" + strings.Join(d.Reasons, "; ")

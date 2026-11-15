@@ -67,9 +67,8 @@ type Shipment struct {
 }
 
 // Deps are the engine's inputs. StatePath is a statefile path for the newest
-// freeze seen; empty keeps it in memory only. Plans, Live, History and
-// Reviews are read only for what a policy's newer sections switch on
-// (apply.go, review.go); nil, those sections cover nothing.
+// freeze seen; empty keeps it in memory only. Plans and Live are read only
+// for a policy's apply section (apply.go); nil, it covers nothing.
 type Deps struct {
 	ConfigMaps ConfigMaps
 	Writer     ConfigMapWriter
@@ -79,8 +78,6 @@ type Deps struct {
 	Deployed   Deployed
 	Plans      Plans
 	Live       Live
-	History    History
-	Reviews    Reviews
 	StatePath  string
 	Anchor     string
 	Now        func() time.Time
@@ -244,9 +241,9 @@ type Decision struct {
 	// Plan and Path name what an apply_manifest decision judged.
 	Plan string `json:",omitempty"`
 	Path string `json:",omitempty"`
-	// ReviewedAnchors names each trust-anchor change that passed on a review
-	// record: "repo@commit by reviewer".
-	ReviewedAnchors []string `json:",omitempty"`
+	// SelfCheckedAnchors names each trust-anchor change that passed on the
+	// author's own machine facts (trust_anchor_self_checked): "repo@commit".
+	SelfCheckedAnchors []string `json:",omitempty"`
 }
 
 // ClauseText is the audit's clauses= value.
@@ -418,11 +415,14 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 				d.Clauses = append(d.Clauses, "additive_ddl")
 				continue
 			}
-			if rule == "no_trust_anchor_change" && len(d.ReviewedAnchors) > 0 {
-				d.Clauses = append(d.Clauses, "trust_anchor_reviewed")
+			if rule == "no_trust_anchor_change" && len(d.SelfCheckedAnchors) > 0 {
+				d.Clauses = append(d.Clauses, "trust_anchor_self_checked")
 				continue
 			}
 			d.Clauses = append(d.Clauses, rule)
+		}
+		if len(pol.Paths[ownerOnly]) > 0 {
+			d.Clauses = append(d.Clauses, ownerOnly)
 		}
 	}
 	d.Reasons = reasons
@@ -671,6 +671,8 @@ func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pi
 
 func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo, old, next string) []string {
 	var reasons []string
+	// ciHeld: the ci_succeeded clause was checked for this commit and holds.
+	ciHeld := false
 	if pol.Enforced("ci_succeeded") && contains(pol.CIRepos, repo) {
 		if e.d.CI == nil {
 			reasons = append(reasons, repo+": no CI reader")
@@ -678,11 +680,11 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 			reasons = append(reasons, repo+": cannot read CI runs: "+err.Error())
 		} else if !ok {
 			reasons = append(reasons, repo+" "+short(next)+" has no Succeeded ci run")
+		} else {
+			ciHeld = true
 		}
 	}
 	files, err := e.d.Git.ChangedFiles(ctx, repo, old, next)
-	// cut: the commits' own file lists may be cut short (see compareFileCap).
-	cut := len(files) >= compareFileCap
 	switch {
 	case err != nil:
 		return append(reasons, repo+": cannot read the diff "+short(old)+".."+short(next)+": "+err.Error())
@@ -697,6 +699,14 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 				repo, short(old), short(next), len(files), errText(err)))
 		}
 		files = unionSorted(files, whole)
+	}
+	// Owner-only paths are held against every changed file, test files too,
+	// and no condition switches them off: they are what the author of a
+	// change to the judge is checked against.
+	owner := RuleHits(pol.Paths, ownerOnly, repo, files)
+	if len(owner) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%s %s..%s touches owner-only paths: %s (only the Owner changes these)",
+			repo, short(old), short(next), listed(owner)))
 	}
 	for _, rule := range PathRules {
 		if !pol.Enforced(rule) {
@@ -716,30 +726,42 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 				repo, short(old), short(next), why))
 			continue
 		}
-		if rule == "no_trust_anchor_change" && pol.TrustAnchorReviewed() && contains(pol.ReviewableRepos, repo) {
-			need := hits
+		if rule == "no_trust_anchor_change" && pol.TrustAnchorSelfChecked() && contains(pol.SelfCheckedRepos, repo) {
+			// The author proves the change with machine facts: the commit's
+			// CI, which runs the must-refuse set and the decision snapshots,
+			// succeeded, and the diff leaves the owner-only paths alone.
 			if pol.TrustAnchorIgnoreTests() {
-				need = withoutTests(hits)
+				hits = withoutTests(hits)
 			}
-			if len(need) == 0 {
+			switch {
+			case len(hits) == 0, len(owner) > 0: // nothing to prove, or refused above
+				continue
+			case ciHeld:
+				d.SelfCheckedAnchors = append(d.SelfCheckedAnchors, repo+"@"+short(next))
 				continue
 			}
-			reviewer, why := e.anchorReview(ctx, repo, old, next, need, cut)
-			if why == "" {
-				d.ReviewedAnchors = append(d.ReviewedAnchors, repo+"@"+short(next)+" by "+reviewer)
-				continue
-			}
-			reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s", repo, short(old), short(next), rule, why))
+			reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s (self-checked only with a Succeeded ci run of %s under ci_succeeded)",
+				repo, short(old), short(next), rule, listed(hits), short(next)))
 			continue
 		}
-		shown := hits
-		more := ""
-		if len(hits) > 5 {
-			shown, more = hits[:5], fmt.Sprintf(" (+%d more)", len(hits)-5)
-		}
-		reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s%s", repo, short(old), short(next), rule, strings.Join(shown, ", "), more))
+		reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s", repo, short(old), short(next), rule, listed(hits)))
 	}
 	return reasons
+}
+
+// isTestFile: a Go test file, or anything under a testdata directory.
+func isTestFile(path string) bool {
+	return strings.HasSuffix(path, "_test.go") || strings.HasPrefix(path, "testdata/") || strings.Contains(path, "/testdata/")
+}
+
+func withoutTests(files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		if !isTestFile(f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // maxDDLFiles bounds the per-file reads one decision makes.

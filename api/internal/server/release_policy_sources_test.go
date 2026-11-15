@@ -11,10 +11,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -158,81 +154,4 @@ func mustAction(t *testing.T, id string) actions.Action {
 		t.Fatalf("%s is not in the catalog", id)
 	}
 	return act
-}
-
-func reviewRequest(session, body string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/release-policy/reviews", strings.NewReader(body))
-	if session != "" {
-		req.Header.Set(approvals.SessionHeader, session)
-	}
-	return req
-}
-
-// Owner 2026-11-14: approval cards for changes that have a way back; design
-// ci-speed/owner-off-the-loop-rules.md §3 class 3. The review route takes a
-// repository, a full commit, files and a verdict, records the caller's
-// session as the reviewer whatever the body says, and what it recorded is
-// what the release policy's source reads back.
-func TestRecordReleaseReview(t *testing.T) {
-	t.Parallel()
-	commit := strings.Repeat("a", 40)
-	good := `{"repo":"bifrost-platform","commit":"` + commit + `","files":["api/a.go","api/b.go"],"verdict":"passed","not_read":"the tests","reviewer":"local_forged"}`
-	for name, tc := range map[string]struct{ session, body string }{
-		"no body":          {"local_r", ``},
-		"a branch":         {"local_r", `{"repo":"bifrost-platform","commit":"main","files":["a"],"verdict":"passed"}`},
-		"not a repo":       {"local_r", `{"repo":"../x","commit":"` + commit + `","files":["a"],"verdict":"passed"}`},
-		"unknown verdict":  {"local_r", `{"repo":"r","commit":"` + commit + `","files":["a"],"verdict":"ok"}`},
-		"no files":         {"local_r", `{"repo":"r","commit":"` + commit + `","files":[],"verdict":"passed"}`},
-		"an absolute path": {"local_r", `{"repo":"r","commit":"` + commit + `","files":["/etc/x"],"verdict":"passed"}`},
-		"no session":       {"", good},
-		"not a session id": {"two words", good},
-	} {
-		w := httptest.NewRecorder()
-		(&Server{}).handleRecordReleaseReview(w, reviewRequest(tc.session, tc.body))
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("%s: %d %s", name, w.Code, w.Body.String())
-		}
-	}
-	w := httptest.NewRecorder()
-	(&Server{}).handleRecordReleaseReview(w, reviewRequest("local_r", good))
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("a platform with no ledger answered %d", w.Code)
-	}
-
-	db := agentrttest.Migrated(t)
-	pool := db.Pool(t, db.Runtime)
-	srv := &Server{agentRuntime: &agentRuntime{api: &agentrtapi.API{DB: pool}}}
-	w = httptest.NewRecorder()
-	srv.handleRecordReleaseReview(w, reviewRequest("local_r", good))
-	var out map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &out)
-	if w.Code != http.StatusOK || out["reviewer"] != "local_r" || out["verdict"] != "passed" {
-		t.Fatalf("record = %d %s", w.Code, w.Body.String())
-	}
-	// The same thread failing it afterwards is a second, newer record.
-	w = httptest.NewRecorder()
-	srv.handleRecordReleaseReview(w, reviewRequest("local_r", strings.Replace(good, `"passed"`, `"failed"`, 1)))
-	if w.Code != http.StatusOK {
-		t.Fatalf("second record = %d %s", w.Code, w.Body.String())
-	}
-	got, err := policyReviews{db: func() store.DB { return pool }}.Reviews(context.Background(), "bifrost-platform", commit)
-	if err != nil || len(got) != 2 {
-		t.Fatalf("reviews = %+v err %v", got, err)
-	}
-	if got[0].Reviewer != "local_r" || !got[0].Passed || strings.Join(got[0].Files, ",") != "api/a.go,api/b.go" || got[0].NotRead != "the tests" || got[1].Passed {
-		t.Fatalf("reviews = %+v", got)
-	}
-	// Another commit, and another repository, have none.
-	for _, at := range [][2]string{{"bifrost-platform", strings.Repeat("b", 40)}, {"bifrost-ui", commit}} {
-		if rows, err := evidence.Reviews(context.Background(), pool, at[0], at[1]); err != nil || len(rows) != 0 {
-			t.Fatalf("%s@%s: %+v err %v", at[0], at[1], rows, err)
-		}
-	}
-	// A review is not a CI verdict: the ledger's answer for the commit is none.
-	if status, run, err := ledgerCI(func() store.DB { return pool }, nil)(context.Background(), "bifrost-platform", commit); err != nil || status != "" || run != "" {
-		t.Fatalf("ledgerCI after a passed review = %q %q %v", status, run, err)
-	}
-	if _, err := (policyReviews{db: func() store.DB { return nil }}).Reviews(context.Background(), "bifrost-platform", commit); err == nil {
-		t.Fatal("a ledger that is not connected read as no reviews")
-	}
 }

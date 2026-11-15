@@ -35,6 +35,11 @@ const (
 // PathRules are the diff conditions, named as in the policy's conditions map.
 var PathRules = []string{"no_ddl", "no_d10_paths", "no_trust_anchor_change"}
 
+// ownerOnly is the path group no condition relaxes or switches off: a diff
+// that touches one of its paths waits for the Owner. A policy without the
+// group has no such paths.
+const ownerOnly = "owner_only"
+
 const clockSkew = 5 * time.Minute
 
 // PathRule is one entry of paths.json rules: globs that apply to a repo or "*".
@@ -56,11 +61,11 @@ type Policy struct {
 	DBSteps    DBSteps               `yaml:"db_steps"`
 	Pinned     Pinned                `yaml:"pinned"`
 	Paths      map[string][]PathRule `yaml:"paths"`
-	// Apply and ReviewableRepos are absent from a policy signed before
+	// Apply and SelfCheckedRepos are absent from a policy signed before
 	// 2026-11-15; absent, the policy covers no apply_manifest and a
 	// trust-anchor hit is refused as before.
-	Apply           *ApplyRules `yaml:"apply"`
-	ReviewableRepos []string    `yaml:"reviewable_repos"`
+	Apply            *ApplyRules `yaml:"apply"`
+	SelfCheckedRepos []string    `yaml:"self_checked_repos"`
 }
 
 // ApplyRules says which apply_manifest plans the policy covers (apply.go).
@@ -118,17 +123,21 @@ func (p *Policy) AdditiveDDL() bool {
 	return ok && v
 }
 
-// TrustAnchorReviewed reports whether a no_trust_anchor_change hit in a
-// reviewable repo may pass on an independent review record (review.go). It is
-// off unless the policy says true.
-func (p *Policy) TrustAnchorReviewed() bool {
-	v, ok := p.Conditions["trust_anchor_reviewed"].(bool)
+// TrustAnchorSelfChecked reports whether a no_trust_anchor_change hit in a
+// self-checked repo may pass when the commit's CI succeeded and the diff
+// touches no owner-only path (Owner 2026-11-15: a second reader adds no new
+// fact; the author proves a change to the judge with machine facts). It is
+// off unless the policy says true. The trust_anchor_reviewed and
+// reviewable_repos of a policy signed on 2026-11-15 are no longer read.
+func (p *Policy) TrustAnchorSelfChecked() bool {
+	v, ok := p.Conditions["trust_anchor_self_checked"].(bool)
 	return ok && v
 }
 
 // TrustAnchorIgnoreTests reports whether test files are left out of the
-// trust-anchor files a review must cover. Off unless the policy says true,
-// and read only where TrustAnchorReviewed applies.
+// trust-anchor hits of a self-checked repo. Off unless the policy says true,
+// and read only where TrustAnchorSelfChecked applies. It never hides an
+// owner-only path.
 func (p *Policy) TrustAnchorIgnoreTests() bool {
 	v, ok := p.Conditions["trust_anchor_ignore_tests"].(bool)
 	return ok && v
