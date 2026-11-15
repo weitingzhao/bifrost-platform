@@ -108,10 +108,6 @@ func (s *Service) giteaReaderConfigured(ctx context.Context) bool {
 // outside this package (the agentd package's .sha256, deploy_agentd).
 func GiteaReaderFromEnv(ctx context.Context) (string, string, error) { return giteaReaderFromEnv(ctx) }
 
-// GiteaBaseURL is the Gitea API base the platform reads (GITEA_BASE, else
-// the in-cluster service).
-func GiteaBaseURL() string { return giteaBaseURL() }
-
 // AgentdPackageReaderFromEnv reads only the dedicated package-read mount.
 // Missing credentials never fall back to the repository reader or publisher.
 func AgentdPackageReaderFromEnv(context.Context) (string, string, error) {

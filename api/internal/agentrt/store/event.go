@@ -71,15 +71,11 @@ func WithEventClock(ctx context.Context, clock func() time.Time) context.Context
 	return eventlog.WithEventClock(ctx, clock)
 }
 
-func DecisionAt(ctx context.Context) time.Time { return eventlog.DecisionAt(ctx) }
-
 func VerifyStream(ctx context.Context, db interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }, stream string) (int64, error) {
 	return eventlog.VerifyStream(ctx, db, stream)
 }
-
-func SetEventClock(clock func() time.Time) func() { return eventlog.SetEventClock(clock) }
 
 // retiredNoteFields are the records of the landing lane, the B5 STG release
 // and the platform's waves. Their writers were removed on 2026-11-14

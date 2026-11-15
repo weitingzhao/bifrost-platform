@@ -5,7 +5,6 @@ package landing
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -43,11 +42,6 @@ var reasons = []string{"stale", "conflict", "ci_failed", "ci_red", "floor", "lim
 // written before still read, so streams that hold them fold; no new record
 // may carry one (store's append check refuses it).
 var RetiredReasons = []string{"overlap", "patch_changed", "main_red"}
-
-// Retired says whether r carries a retired reason.
-func Retired(r Record) bool {
-	return slices.Contains(RetiredReasons, r.String("why"))
-}
 
 // ci_seen includes the evidence needed by the final gate. stg_snapshot keeps
 // retry backoff across restarts. These fields make §2.4's shorthand explicit.
@@ -293,19 +287,6 @@ type State struct {
 	// before the fold, so every record is checked against the same W that
 	// was in force when it was appended (intervals are clipped to time).
 	Grants map[string][]Interval
-}
-
-// Check reports whether e would apply to s, without changing s: an answer
-// decides before it appends whether the protocol takes its record, so a
-// refusal is recorded instead of rolling the answer back (CUT §8).
-func (s State) Check(e Entry) error {
-	c := State{EnabledAt: s.EnabledAt, EnabledVersion: s.EnabledVersion, STGEnabledAt: s.STGEnabledAt, LiveAt: s.LiveAt, Grants: s.Grants,
-		Retries: maps.Clone(s.Retries), Reservations: maps.Clone(s.Reservations), Operations: make(map[string]Operation, len(s.Operations))}
-	for k, o := range s.Operations {
-		o.Digests = maps.Clone(o.Digests)
-		c.Operations[k] = o
-	}
-	return c.Apply(e)
 }
 
 func (s *State) Apply(e Entry) error {
@@ -698,10 +679,6 @@ func (o Operation) EndsAtBound() bool {
 // (TD-447 2). A recoverer must exist before S3 writes these phases.
 func (o Operation) AtMain() bool {
 	return o.Phase == "main_intent" || o.Phase == "main_result" && o.Outcome != "non_ff"
-}
-
-func (o Operation) Active() bool {
-	return o.Phase != "" && o.Phase != "parked" && o.Phase != "awaiting_grant" && !o.Terminal()
 }
 
 // ClaimWindow is a root's wall-clock budget: from its first claim (or the

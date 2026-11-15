@@ -182,17 +182,6 @@ func (q Question) terminalAt() time.Time {
 	return q.CreatedAt
 }
 
-func (q Question) ordinary(now time.Time) bool {
-	switch q.Status {
-	case StatusOpen:
-		return false
-	case StatusAnswered, StatusWithdrawn, StatusExpired:
-		return !q.protected(now)
-	default:
-		return false
-	}
-}
-
 func numberLabel(n int) string {
 	return "Q" + itoa(n)
 }

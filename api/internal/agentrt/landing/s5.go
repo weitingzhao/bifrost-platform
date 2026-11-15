@@ -31,14 +31,6 @@ func s5Digest(s string) bool {
 	_, e := hex.DecodeString(s)
 	return len(s) == 64 && strings.ToLower(s) == s && e == nil
 }
-func (p S5Policy) Valid() bool {
-	for _, d := range []string{p.ProfileDigest, p.ToolchainDigest, p.CallersDigest, p.TypesDigest, p.TestsDigest} {
-		if !s5Digest(d) {
-			return false
-		}
-	}
-	return builtImage(p.CheckerImageDigest) && ValidSHA(p.UISHA)
-}
 
 // builtImage refuses the all-zero UNBUILT placeholder digest.
 func builtImage(d string) bool {

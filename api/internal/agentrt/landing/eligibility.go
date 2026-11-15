@@ -247,12 +247,6 @@ func touchesOpen(f Facts) bool {
 	}
 	return false
 }
-
-// GrantSupported: some grant can reach repo's waiting operations (the two
-// platform grants, or approve_floor_landing).
-func GrantSupported(repo string) bool {
-	return rules.GrantSupported(repo) || rules.FloorGrantSupported(repo)
-}
 func EligibleToDeploy(f Facts, now time.Time) Decision {
 	if !modeOK(f) || f.Mode != "live" || f.Operation.DryRun {
 		return refuse("mode")

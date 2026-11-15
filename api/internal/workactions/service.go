@@ -4,8 +4,6 @@ package workactions
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -717,10 +715,4 @@ func condition(obj *unstructured.Unstructured, want string) bool {
 		}
 	}
 	return false
-}
-
-// CommandSHA256 is the hash owner-run.sh compares.
-func CommandSHA256(command string) string {
-	sum := sha256.Sum256([]byte(command))
-	return hex.EncodeToString(sum[:])
 }

@@ -2,9 +2,10 @@ package store
 
 import (
 	"context"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -14,12 +15,6 @@ import (
 func SetHook(f func(point, arg string)) func() {
 	testHook.Store(&f)
 	return func() { testHook.Store(nil) }
-}
-
-// FreezeEventClock makes every event written from now on carry the time at,
-// and returns the function that undoes it.
-func FreezeEventClock(at time.Time) func() {
-	return SetEventClock(func() time.Time { return at })
 }
 
 // LiveForTest is a live attempt as the projection reads one: its state,

@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -206,37 +205,3 @@ func infraNameStatus(raw string) ([]rules.LandingChange, error) {
 
 // revertLine is git's revert line, of a commit ("X.") or of a merge ("X, reversing").
 var revertLine = regexp.MustCompile(`(?m)^This reverts commit ([0-9a-f]{40})(?:\.\s*$|,\s)`)
-
-// History scans complete local history, preserving both ever-present and
-// currently-effective evidence. It never calls the effective-only MainResults.
-func (w *Workspace) History(ctx context.Context, task, a, snapshot string) (landing.MainHistory, error) {
-	unknown := landing.MainHistory{State: landing.Unknown}
-	if !fullSHA.MatchString(a) {
-		return unknown, errors.New("invalid accepted SHA")
-	}
-	tip := "refs/remotes/origin/main"
-	if snapshot != "" {
-		if !fullSHA.MatchString(snapshot) {
-			return unknown, errors.New("invalid snapshot SHA")
-		}
-		tip = snapshot
-	}
-	shallow, e := w.local(ctx, "rev-parse", "--is-shallow-repository")
-	if e != nil || strings.TrimSpace(shallow) != "false" {
-		return unknown, errors.New("incomplete history")
-	}
-	msg, e := w.local(ctx, "show", "-s", "--format=%B", a)
-	if e != nil {
-		return unknown, e
-	}
-	log, e := w.local(ctx, "log", "--topo-order", "--format=%H%x00%P%x00%B%x00", tip, "--")
-	if e != nil {
-		return unknown, e
-	}
-	parts := strings.Split(log, "\x00")
-	commits := []HistoryCommit{}
-	for i := 0; i+2 < len(parts); i += 3 {
-		commits = append(commits, HistoryCommit{SHA: strings.TrimSpace(parts[i]), Parents: strings.Fields(parts[i+1]), Message: parts[i+2]})
-	}
-	return EvaluateHistory(task, a, msg, commits, true)
-}

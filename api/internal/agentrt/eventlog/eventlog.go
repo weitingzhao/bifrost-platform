@@ -130,22 +130,6 @@ func Now(ctx context.Context) time.Time {
 	return eventClock()
 }
 
-// DecisionAt is the time a locked decision is taken at (CUT §9 v2): the
-// event clock, read once the gate holds its locks and again after any slow
-// read it makes under them. It is the clock the gate's records are written
-// with (Append), so what is decided and what is recorded agree; a test moves
-// time by freezing this clock, not by passing a later now. The pass's own now
-// only schedules: which candidates run, whether a retry_at is due. It is read
-// for ctx (Now), as Append reads it: the context the decision's records
-// are written under.
-//
-// The wall clock is trusted to move forward: a step back (NTP) may let a
-// window that ended look open again for that pass. Not guarded; the ledger
-// records it (review 656 B-R2).
-func DecisionAt(ctx context.Context) time.Time {
-	return Now(ctx).UTC().Truncate(time.Microsecond)
-}
-
 // Nullable is s, or NULL for the empty string.
 func Nullable(s string) any {
 	if s == "" {
@@ -294,12 +278,4 @@ func VerifyStream(ctx context.Context, db interface {
 		return 0, &ChainBreak{stream, lastSeq, "stream head does not match its last event"}
 	}
 	return want - 1, nil
-}
-
-// SetEventClock makes the event clock read clock until the returned function
-// restores the wall clock. Tests of other packages move time with it, as
-// this package's own tests do (FreezeEventClock); nothing else calls it.
-func SetEventClock(clock func() time.Time) func() {
-	eventClock = clock
-	return func() { eventClock = time.Now }
 }

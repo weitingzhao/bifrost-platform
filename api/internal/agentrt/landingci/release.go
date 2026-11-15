@@ -1,7 +1,6 @@
 package landingci
 
 import (
-	"fmt"
 	"reflect"
 	"time"
 
@@ -50,31 +49,6 @@ const (
 	// An incremental run tested the API packages its change reaches (R5:5.7-1).
 	APIScopeIncremental = "incremental"
 )
-
-// fullScope: a run's results say it tested the whole API.
-func fullScope(results map[string]string) bool {
-	scope, named := results[APIScopeResult]
-	return !named || scope == APIScopeFull
-}
-
-// releaseScope: the results vouch for P at STG, as a full run or as an
-// incremental one, independently of the daily audit.
-func (e ReleaseEvidence) releaseScope(results map[string]string) bool {
-	return fullScope(results) || results[APIScopeResult] == APIScopeIncremental
-}
-
-// Record is the closed ci_accepted.ci shape consumed by B5-a. Never turn an
-// unsuccessful observation into a record just because it carries old results.
-func (e ReleaseEvidence) Record() (map[string]any, error) {
-	if e.Status != "Succeeded" || e.Reason != "" || !e.releaseScope(e.Results) || e.Run == "" || e.UID == "" || e.CreatedAt.IsZero() || e.ReadAt.Before(e.CreatedAt) || e.PipelineRef != "bifrost-ci-platform" || e.RepoURL != PlatformRepoURL || e.PlatformCommit != e.R || !fullSHA.MatchString(e.PlatformCommit) || !fullSHA.MatchString(e.UICommit) || !fullSHA.MatchString(e.InfraCommit) {
-		return nil, fmt.Errorf("release CI is not accepted evidence")
-	}
-	record := map[string]any{"name": e.Run, "uid": e.UID, "created_at": e.CreatedAt.UTC().Format(time.RFC3339Nano), "platform_commit": e.PlatformCommit, "ui_commit": e.UICommit, "infra_commit": e.InfraCommit, "pipeline_ref": e.PipelineRef, "repo_url": e.RepoURL, "read_at": e.ReadAt.UTC().Format(time.RFC3339Nano)}
-	if e.TestedBy != "" {
-		record["tested_by"] = e.TestedBy
-	}
-	return record, nil
-}
 
 // emptyResultAllowed are the results a green run may leave empty: no failed
 // tests, a full run's empty package list and store pattern, and a scope with

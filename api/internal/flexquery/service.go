@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -296,26 +295,6 @@ func (s *Service) fetchPluginJSON(ctx context.Context, pluginPath string) ([]byt
 	return clientset.CoreV1().Services(pluginNamespace).ProxyGet(
 		"http", apiServiceName, apiServicePort, rawPath, nil,
 	).DoRaw(ctx)
-}
-
-func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
-	var rows []FreshnessInfo
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "|")
-		if len(parts) < 4 {
-			continue
-		}
-		dim := strings.TrimSpace(parts[0])
-		lastRaw := strings.TrimSpace(parts[1])
-		rowsWritten, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
-		status := strings.TrimSpace(parts[3])
-		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, status, now))
-	}
-	return rows
 }
 
 // parseFreshnessJSON reads dimensions[] from GET /flex/coverage/freshness.

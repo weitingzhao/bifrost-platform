@@ -1,7 +1,6 @@
 package store
 
 import (
-	"math"
 	"time"
 )
 
@@ -40,27 +39,6 @@ type Headroom struct {
 	MemAvail *int64     `json:"mem_avail_bytes,omitempty"`
 	MemTotal *int64     `json:"mem_total_bytes,omitempty"`
 	At       *time.Time `json:"at,omitempty"`
-}
-
-// Empty says whether the claim carried none of it.
-func (h Headroom) Empty() bool {
-	return h.Load1 == nil && h.CPUs == nil && h.MemAvail == nil && h.MemTotal == nil
-}
-
-// Check refuses what no host can report: a negative or not finite load, no
-// cpu, negative memory, more available than in total.
-func (h Headroom) Check() error {
-	switch {
-	case h.Load1 != nil && (math.IsNaN(*h.Load1) || math.IsInf(*h.Load1, 0) || *h.Load1 < 0):
-		return invalid("load1 is a load, not negative")
-	case h.CPUs != nil && *h.CPUs < 1:
-		return invalid("cpus is at least 1")
-	case (h.MemAvail == nil) != (h.MemTotal == nil):
-		return invalid("mem_avail_bytes and mem_total_bytes go together")
-	case h.MemAvail != nil && (*h.MemAvail < 0 || *h.MemTotal <= 0 || *h.MemAvail > *h.MemTotal):
-		return invalid("memory available is between 0 and the total, and the total is more than 0")
-	}
-	return nil
 }
 
 // PoolRefusals are the rate-limit refusals of one vendor pool (tool:account,

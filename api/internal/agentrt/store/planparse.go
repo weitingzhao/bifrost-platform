@@ -70,9 +70,6 @@ type PlannedTask struct {
 	Siblings []string `json:"-"`
 }
 
-// IsCore says whether a checked task is core work.
-func (t PlannedTask) IsCore() bool { return string(t.Core) == "true" }
-
 // PlannedQuestion is a decision card for the Owner.
 type PlannedQuestion struct {
 	Question    string   `json:"question"`

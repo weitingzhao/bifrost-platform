@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"io"
 	"os"
 	"os/exec"
@@ -16,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
 const UsernameFileEnv = "AGENTRT_LANDING_USERNAME_FILE"
@@ -208,28 +209,8 @@ func (g *Git) Open(ctx context.Context, commit string) (w *Workspace, err error)
 	return w, nil
 }
 
-// Fetch brings commits into the workspace in one fetch: a batch replays
-// several results in one workspace, each on the one before.
-func (w *Workspace) Fetch(ctx context.Context, commits ...string) error {
-	if len(commits) == 0 {
-		return nil
-	}
-	for _, commit := range commits {
-		if !fullSHA.MatchString(commit) {
-			return errors.New("invalid commit SHA")
-		}
-	}
-	args := append([]string{"fetch", "--no-tags", "--no-recurse-submodules", "origin"}, commits...)
-	_, err := w.git.run(ctx, w.dir, true, nil, nil, args...)
-	return err
-}
-
 func (w *Workspace) local(ctx context.Context, args ...string) (string, error) {
 	return w.git.run(ctx, w.dir, false, nil, nil, args...)
-}
-func (w *Workspace) Main(ctx context.Context) (string, error) {
-	s, e := w.local(ctx, "rev-parse", "refs/remotes/origin/main")
-	return strings.TrimSpace(s), e
 }
 func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
 	if ref != "refs/heads/main" && !g.inScope(ref) {
@@ -247,36 +228,6 @@ func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
 		return "", errors.New("invalid remote ref response")
 	}
 	return f[0], nil
-}
-func (g *Git) Delete(ctx context.Context, ref, sha string) error {
-	// The lander never deletes: a land/prod branch is the record of what
-	// was pushed to main (B-05).
-	if g.lander || !g.inScope(ref) || !fullSHA.MatchString(sha) {
-		return errors.New("delete outside landing scope")
-	}
-	// A crash after deletion is already complete. A race after this read is
-	// still protected by the atomic lease below.
-	tip, err := g.Ref(ctx, ref)
-	if err != nil {
-		return err
-	}
-	if tip == "" {
-		return nil
-	}
-	if tip != sha {
-		return errors.New("branch no longer belongs to operation")
-	}
-	// Empty temporary repo: no candidate config; lease is the atomic SHA fence.
-	dir, e := os.MkdirTemp("", "agentrt-landing-prune-")
-	if e != nil {
-		return e
-	}
-	defer os.RemoveAll(dir)
-	if _, e = g.run(ctx, dir, false, nil, nil, "init", "--template=", "."); e != nil {
-		return e
-	}
-	_, e = g.run(ctx, dir, true, nil, nil, "push", "--porcelain", "--force-with-lease="+ref+":"+sha, g.remote, ":"+ref)
-	return e
 }
 
 // Repository is bound at construction, never supplied by a task or URL.

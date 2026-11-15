@@ -107,7 +107,6 @@ var landingStorePermission = map[string]string{
 	"alerts.go":            "records policy alerts and tells the Owner of them",
 	"artifactsearch.go":    "artifact search; hides exam artifacts from Agent hosts",
 	"assess.go":            "assessments, including whether a signed rule already answers an item",
-	"assessaccept.go":      "takes an assessment's answer to an Owner card",
 	"assessrequest.go":     "starts and ends assessment requests",
 	"attempt.go":           "an attempt's fenced start, heartbeat, checkpoint and result",
 	"benchmark.go":         "benchmark runs that scores and routing read",

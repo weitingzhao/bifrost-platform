@@ -452,13 +452,6 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-func joinDetail(head, err string) string {
-	if strings.TrimSpace(err) == "" {
-		return head
-	}
-	return head + ": " + err
-}
-
 type argoAppView struct {
 	Name      string             `json:"name"`
 	Sync      string             `json:"sync_status"`

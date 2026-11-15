@@ -379,11 +379,6 @@ func (a *autopilotDispatcher) rolloutRestart(ctx context.Context, namespace, nam
 	return action, status, err
 }
 
-func (a *autopilotDispatcher) triggerCnpgBackup(ctx context.Context) (string, int, error) {
-	status, err := a.doRequest(ctx, http.MethodPost, "/api/v1/cluster/postgres/backup", []byte(`{}`))
-	return "trigger_cnpg_backup", status, err
-}
-
 func shouldThrottleFix(itemID string) bool {
 	return itemID != "db-backup-fresh"
 }

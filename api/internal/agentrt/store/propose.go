@@ -51,8 +51,6 @@ func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
 	return actor.CheckWriter(ctx, tx, w)
 }
 
-func writerLock(ctx context.Context, tx pgx.Tx, a string) error { return actor.Lock(ctx, tx, a) }
-
 func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error {
 	return actor.Ensure(ctx, tx, w, bounded)
 }

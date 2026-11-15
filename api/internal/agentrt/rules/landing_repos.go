@@ -2,7 +2,6 @@ package rules
 
 import (
 	"regexp"
-	"slices"
 )
 
 // LandingRepository is the closed transport/policy registry. It lives below
@@ -34,15 +33,6 @@ var LandingRepositories = map[string]LandingRepository{
 		CIResults: map[string]string{"revision": "infra-commit", "base": "base-commit", "platform": "platform-commit", "tools": "tools-from", "policy": "doc-policy", "purpose": "purpose"},
 		Siblings:  []string{"bifrost-platform"}, GrantSupported: false, FloorGrantSupported: true,
 	},
-}
-
-func LandingRepoNames() []string {
-	names := make([]string, 0, len(LandingRepositories))
-	for name := range LandingRepositories {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	return names
 }
 
 func LandingRepoSupported(repo string) bool { _, ok := LandingRepositories[repo]; return ok }

@@ -1,8 +1,6 @@
 package store
 
 import (
-	"slices"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/infracheck"
 )
 
@@ -105,16 +103,6 @@ var Repos = map[string]Repo{
 		HandIn: [][]string{{"sh", "-c", infracheck.Check()}},
 		Setup:  infracheck.Setup(""),
 	},
-}
-
-// RepoNames are the names of Repos, sorted.
-func RepoNames() []string {
-	names := make([]string, 0, len(Repos))
-	for n := range Repos {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	return names
 }
 
 // SpecTimeoutS is how long an implementation task's check may run, all of

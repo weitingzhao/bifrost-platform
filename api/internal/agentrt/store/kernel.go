@@ -75,11 +75,6 @@ func hook(point, arg string) {
 
 func timeText(t time.Time) string { return t.UTC().Truncate(time.Microsecond).Format(timeLayout) }
 
-// AttemptRef is the only branch an attempt may push to.
-func AttemptRef(taskID string, n int) string {
-	return fmt.Sprintf("refs/heads/agent/%s/a%d", taskID, n)
-}
-
 // Missions.
 
 var missionMoves = map[string][]string{
