@@ -18,7 +18,7 @@ func TestEventFieldValues(t *testing.T) {
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
 	covered := map[string]bool{}
 	// The checked fields are the declared sum: this package's tables and the
-	// coordination domain's (coordvocab.go).
+	// coordination domain's (package coord).
 	checked := eventlog.CheckedFields()
 	for _, c := range []struct{ event, field, good, bad string }{
 		{"pipeline_seen", "tree", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bad value"},

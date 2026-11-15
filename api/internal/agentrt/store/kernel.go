@@ -55,7 +55,7 @@ var (
 	// ErrInGrace: salvage refused because the lease may still be renewed.
 	ErrInGrace = errors.New("store: the attempt is still within its grace period")
 	// ErrState: the operation does not fit the current state.
-	ErrState = errors.New("store: not allowed in the current state")
+	ErrState = eventlog.ErrState
 )
 
 // DB is what the kernel needs: a pool or a connection (eventlog.DB).

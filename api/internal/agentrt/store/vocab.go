@@ -286,8 +286,8 @@ func checkBody(eventType string, body map[string]any) error {
 }
 
 // The store's declaration: its types, their bodies and values, and the
-// checks a type has of its own. The coordination types are declared apart
-// (coordvocab.go), as each domain's will be when it leaves this package.
+// checks a type has of its own. The coordination types are declared by
+// package coord, which took them with it; each domain's will go the same way.
 func init() {
 	eventlog.Declare(eventlog.Vocabulary{
 		Types:  keysOf(eventTypes),

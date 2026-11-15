@@ -25,6 +25,9 @@ import (
 // of range, a writer that may not write); nothing was written.
 var ErrInvalid = errors.New("store: invalid request")
 
+// ErrState: the operation does not fit the current state.
+var ErrState = errors.New("store: not allowed in the current state")
+
 // DB is what a write needs: a pool or a connection.
 type DB interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
