@@ -288,15 +288,35 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	openKey := s.openKey
 	s.mu.Unlock()
 	var open Approval
+	var superseded []Approval
 	err = s.store.update(func(doc *file) error {
+		superseded = nil
 		if openKey != nil && !in.Drill {
 			if key := openKey(act.ID, norm); key != "" {
+				var older []Approval
 				for _, a := range doc.Approvals {
 					if a.open() && !a.Drill && openKey(a.Action, a.Params) == key {
-						open = a
-						return errOpenRequest
+						// Its own requester may replace a card nobody has run
+						// (origin #562: a card built wrong could not be
+						// replaced, the Owner had to reject it). Anyone
+						// else's card, or one already claimed, still blocks.
+						if !supersedable(a, requester) {
+							open = a
+							return errOpenRequest
+						}
+						older = append(older, a)
 					}
 				}
+				rec.Number = doc.nextNumber()
+				for _, a := range older {
+					a.Status = StatusRejected
+					a.RejectReason = fmt.Sprintf("%s#%d", supersededPrefix, rec.Number)
+					a.DecidedAt = now
+					doc.put(a)
+					superseded = append(superseded, a)
+				}
+				doc.put(rec)
+				return nil
 			}
 		}
 		rec.Number = doc.nextNumber()
@@ -309,6 +329,13 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	}
 	if err != nil {
 		return fail(500, "store approvals: "+err.Error())
+	}
+	if len(superseded) > 0 {
+		evs := make([]event, 0, len(superseded))
+		for _, a := range superseded {
+			evs = append(evs, event{"approval.supersede", a.ID, StatusRejected, fmt.Sprintf("by #%d", rec.Number)})
+		}
+		s.record(nil, evs)
 	}
 	return createResult{Approval: rec, Status: 201}
 }

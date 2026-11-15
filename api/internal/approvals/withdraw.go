@@ -15,7 +15,20 @@ import (
 // that starts "withdrawn by requester", so every reader, notice and the
 // state machine see the status they already know.
 
-const withdrawnPrefix = "withdrawn by requester: "
+const (
+	withdrawnPrefix  = "withdrawn by requester: "
+	supersededPrefix = "superseded by "
+)
+
+// supersedable: a newer card of the same subject may take the place of a
+// card its own requester built, while nobody has decided it or an executor
+// has not yet claimed it. Like a withdrawal it only ever narrows.
+func supersedable(a Approval, requester string) bool {
+	if a.Requester == "" || a.Requester != requester {
+		return false
+	}
+	return a.Status == StatusPending || (a.Status == StatusApproved && !hasBeenClaimed(a))
+}
 
 // withdraw closes ref as withdrawn when caller built it and it has not been
 // claimed. A card the Owner approved but that no executor has leased yet
