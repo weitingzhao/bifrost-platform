@@ -89,14 +89,13 @@ func TestRecordsAreAppendOnlyAndReadBackBySeatAndLaw(t *testing.T) {
 	if _, err = actionrecord.Insert(ctx, runtime, b, nil); err != nil {
 		t.Fatal(err)
 	}
-	// A correction names the record it corrects.
-	fix := a
-	fix.CorrectionOf, fix.CheckResult = id1, "pod was not ready after all"
-	if _, err = actionrecord.Insert(ctx, runtime, fix, nil); err != nil {
+	again := a
+	again.CheckResult = "pod was not ready after all"
+	if _, err = actionrecord.Insert(ctx, runtime, again, nil); err != nil {
 		t.Fatal(err)
 	}
 	bySeat, more, err := actionrecord.List(ctx, runtime, actionrecord.Filter{Seat: "local_a"})
-	if err != nil || more || len(bySeat) != 2 || bySeat[0].CorrectionOf != id1 {
+	if err != nil || more || len(bySeat) != 2 || bySeat[0].CheckResult != again.CheckResult || bySeat[1].ID != id1 {
 		t.Fatalf("by seat: %d more=%v err=%v %+v", len(bySeat), more, err, bySeat)
 	}
 	byLaw, _, err := actionrecord.List(ctx, runtime, actionrecord.Filter{Law: "OWNER_LAW row 7"})

@@ -24,7 +24,6 @@ const (
 	RegretDeclared   = "declared"   // the caller wrote what undoes it; nobody verified it
 	RegretUndeclared = "undeclared" // the caller wrote nothing (first phase: record only)
 	RegretNotReady   = "not_ready"
-	RegretNoneNeeded = "none_needed"
 
 	OutcomeDone    = "done"
 	OutcomeRefused = "refused"
@@ -47,15 +46,12 @@ type Record struct {
 	Outcome string // done, refused, failed
 	// CheckResult is what was checked after; NotVerified what was not.
 	CheckResult, NotVerified string
-	ParamsHash, ApprovalRef  string
-	// CorrectionOf is the record this one corrects, 0 for none.
-	CorrectionOf int64
+	ParamsHash               string
 }
 
 var (
 	actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,99}$`)
 	hashText   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	refText    = regexp.MustCompile(`^[A-Za-z0-9_#-]{1,64}$`)
 )
 
 // ErrInvalid wraps every refusal of a record that does not read as one.
@@ -101,8 +97,8 @@ func Normalize(r Record, redact Redactor) (Record, error) {
 	case r.Law == "":
 		return r, fmt.Errorf("%w: a record names the law it rested on", ErrInvalid)
 	case r.RegretState != RegretReady && r.RegretState != RegretDeclared && r.RegretState != RegretUndeclared &&
-		r.RegretState != RegretNotReady && r.RegretState != RegretNoneNeeded:
-		return r, fmt.Errorf("%w: regret_state is ready, declared, undeclared, not_ready or none_needed", ErrInvalid)
+		r.RegretState != RegretNotReady:
+		return r, fmt.Errorf("%w: regret_state is ready, declared, undeclared or not_ready", ErrInvalid)
 	case r.Outcome != OutcomeDone && r.Outcome != OutcomeRefused && r.Outcome != OutcomeFailed:
 		return r, fmt.Errorf("%w: outcome is done, refused or failed", ErrInvalid)
 	case (r.RegretState == RegretReady || r.RegretState == RegretDeclared) && r.Regret == "":
@@ -112,8 +108,6 @@ func Normalize(r Record, redact Redactor) (Record, error) {
 		return r, fmt.Errorf("%w: an action is not done without its regret ready; record it as refused", ErrInvalid)
 	case r.ParamsHash != "" && !hashText.MatchString(r.ParamsHash):
 		return r, fmt.Errorf("%w: params_hash is a sha256", ErrInvalid)
-	case r.ApprovalRef != "" && !refText.MatchString(r.ApprovalRef):
-		return r, fmt.Errorf("%w: approval_ref is a card id or number", ErrInvalid)
 	}
 	return r, nil
 }
@@ -127,10 +121,10 @@ func Insert(ctx context.Context, db eventlog.DB, r Record, redact Redactor) (int
 	var id int64
 	err = eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `INSERT INTO agentrt.action_record
-		  (seat, action, target, reason, regret, regret_state, law, outcome, check_result, not_verified, params_hash, approval_ref, correction_of)
-		  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13::bigint,0)) RETURNING record_id`,
+		  (seat, action, target, reason, regret, regret_state, law, outcome, check_result, not_verified, params_hash)
+		  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,'')) RETURNING record_id`,
 			r.Seat, r.Action, r.Target, r.Reason, r.Regret, r.RegretState, r.Law, r.Outcome, r.CheckResult, r.NotVerified,
-			r.ParamsHash, r.ApprovalRef, r.CorrectionOf).Scan(&id)
+			r.ParamsHash).Scan(&id)
 	})
 	return id, err
 }
@@ -155,7 +149,7 @@ func List(ctx context.Context, db eventlog.DB, f Filter) (records []Record, more
 	err = eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		records = records[:0]
 		rows, qerr := tx.Query(ctx, `SELECT record_id, recorded_at, seat, action, target, reason, regret, regret_state, law, outcome,
-		    check_result, not_verified, COALESCE(params_hash,''), COALESCE(approval_ref,''), COALESCE(correction_of,0)
+		    check_result, not_verified, COALESCE(params_hash,'')
 		  FROM agentrt.action_record
 		  WHERE ($1 = '' OR seat = $1) AND ($2 = '' OR law = $2) AND ($3 = '' OR action = $3)
 		    AND ($4::timestamptz IS NULL OR recorded_at >= $4) AND ($5::timestamptz IS NULL OR recorded_at < $5)
@@ -168,7 +162,7 @@ func List(ctx context.Context, db eventlog.DB, f Filter) (records []Record, more
 		for rows.Next() {
 			var r Record
 			if qerr = rows.Scan(&r.ID, &r.At, &r.Seat, &r.Action, &r.Target, &r.Reason, &r.Regret, &r.RegretState, &r.Law, &r.Outcome,
-				&r.CheckResult, &r.NotVerified, &r.ParamsHash, &r.ApprovalRef, &r.CorrectionOf); qerr != nil {
+				&r.CheckResult, &r.NotVerified, &r.ParamsHash); qerr != nil {
 				return qerr
 			}
 			records = append(records, r)

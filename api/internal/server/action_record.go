@@ -159,7 +159,6 @@ func (s *Server) handleRecords(w http.ResponseWriter, r *http.Request) {
 			"id": rec.ID, "at": rec.At, "seat": rec.Seat, "action": rec.Action, "target": rec.Target, "reason": rec.Reason,
 			"regret": rec.Regret, "regret_state": rec.RegretState, "law": rec.Law, "outcome": rec.Outcome,
 			"check_result": rec.CheckResult, "not_verified": rec.NotVerified, "params_hash": rec.ParamsHash,
-			"approval_ref": rec.ApprovalRef, "correction_of": rec.CorrectionOf,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"records": out, "returned": len(out), "more": more})

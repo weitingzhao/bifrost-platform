@@ -8,8 +8,7 @@
 -- a commit and a content hash and its result column is passed/failed, while an
 -- action has neither a commit nor a pass/fail, and a refusal is a row too.
 --
--- Only the platform writes. The table is append only (0002's forbid_change): a
--- correction is a new row that names the old one in correction_of. Nothing
+-- Only the platform writes. The table is append only (0002's forbid_change). Nothing
 -- decides by a record; it is read by seat, by day and by law.
 --
 -- Upgrading: run this before the platform that writes records. An older
@@ -29,15 +28,13 @@ CREATE TABLE agentrt.action_record (
   -- ready: prepared and verified by the machine; declared: the caller wrote
   -- what undoes it, nobody verified it; undeclared: the caller wrote nothing
   -- (a state of the first phase, which only records); not_ready: needed and
-  -- not prepared (the action is then refused); none_needed: nothing to undo.
-  regret_state text NOT NULL CHECK (regret_state IN ('ready','declared','undeclared','not_ready','none_needed')),
+  -- not prepared (the action is then refused).
+  regret_state text NOT NULL CHECK (regret_state IN ('ready','declared','undeclared','not_ready')),
   law text NOT NULL CHECK (law <> '' AND length(law) <= 200),
   outcome text NOT NULL CHECK (outcome IN ('done','refused','failed')),
   check_result text NOT NULL DEFAULT '' CHECK (length(check_result) <= 2000),
   not_verified text NOT NULL DEFAULT '' CHECK (length(not_verified) <= 2000),
   params_hash text CHECK (params_hash ~ '^[0-9a-f]{64}$'),
-  approval_ref text CHECK (approval_ref ~ '^[A-Za-z0-9_#-]{1,64}$'),
-  correction_of bigint REFERENCES agentrt.action_record (record_id),
   recorded_at timestamptz NOT NULL DEFAULT now(),
   -- No regret prepared, no action done: such a case is recorded as refused.
   CONSTRAINT action_record_no_done_without_regret CHECK (NOT (outcome = 'done' AND regret_state = 'not_ready')),
