@@ -12,6 +12,15 @@ import (
 )
 
 // PipelineRunObservations lists every retained cicd run, without a label filter.
+//
+// The runs are observations, not evidence: each comes without the copy of
+// the Pipeline definition Tekton keeps in its status (status.pipelineSpec)
+// and without metadata.managedFields. What a loop reads of a run is its
+// reference, params, conditions, times and results. Measured 2026-11-15 on
+// 1182 retained runs: the copy is 77% of the bytes (14.1 of 18.3 MB), and the
+// workers, which list every run each 30 s, peaked at 640Mi in PROD and were
+// OOMKilled at a 512Mi limit in STG. A reader that needs the executed
+// Pipeline (the STG release evidence) gets the run itself, not this list.
 func (s *Service) PipelineRunObservations(ctx context.Context) ([]unstructured.Unstructured, error) {
 	return s.pipelineRuns(ctx, "")
 }
@@ -44,6 +53,9 @@ func (s *Service) pipelineRuns(ctx context.Context, selector string) ([]unstruct
 		if err != nil {
 			return nil, err
 		}
+		for i := range page.Items {
+			slimObservation(&page.Items[i])
+		}
 		out = append(out, page.Items...)
 		options.Continue = page.GetContinue()
 		if options.Continue == "" {
@@ -54,6 +66,13 @@ func (s *Service) pipelineRuns(ctx context.Context, selector string) ([]unstruct
 		}
 		seen[options.Continue] = true
 	}
+}
+
+// slimObservation drops from a listed run what no observer reads and what
+// makes up most of it (PipelineRunObservations has the measurement).
+func slimObservation(run *unstructured.Unstructured) {
+	unstructured.RemoveNestedField(run.Object, "status", "pipelineSpec")
+	unstructured.RemoveNestedField(run.Object, "metadata", "managedFields")
 }
 
 // PipelineRunObservations exposes the service's retained runs to runtime wiring.
