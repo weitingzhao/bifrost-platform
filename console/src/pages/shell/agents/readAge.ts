@@ -28,7 +28,7 @@ export function answeredWords(at: number, now: number): string {
 export const progressOld = (at: number, now: number) => isStale({ state: 'ok', data: null, at }, SHELL_POLL_MS.progress, now)
 
 /** GET /plan answered at `at` is old by now: more than twice its 15 s poll. */
-export const PLAN_TREE_OLD_MS = 2 * AGENT_PROGRESS_POLL_MS
+const PLAN_TREE_OLD_MS = 2 * AGENT_PROGRESS_POLL_MS
 export const planTreeOld = (at: number, now: number) => now - at > PLAN_TREE_OLD_MS
 
 /**

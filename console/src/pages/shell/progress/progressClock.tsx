@@ -28,7 +28,7 @@ export function Tick({ text, className }: { text: (nowMs: number) => string | nu
 }
 
 /** A span in words: seconds under a minute, minutes under an hour, then hours and minutes. */
-export function duration(seconds: number): string {
+function duration(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds))
   return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`
 }

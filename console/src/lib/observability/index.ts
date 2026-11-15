@@ -6,12 +6,4 @@ export * from './attentionMute'
 export * from './dashboardCatalog'
 export * from './grafanaUrlBuilder'
 export * from './verdictAggregation'
-export {
-  buildObservabilityViewModel,
-  buildScrapeTargetsRollup,
-  sortScrapeTargets,
-  shortMetricsPath,
-  type ObservabilityViewModelInput,
-  type BusHealthInput,
-  type TelemetryTargetLike,
-} from './observabilityViewModel'
+export { buildObservabilityViewModel, shortMetricsPath, type ObservabilityViewModelInput, type BusHealthInput, type TelemetryTargetLike } from './observabilityViewModel';

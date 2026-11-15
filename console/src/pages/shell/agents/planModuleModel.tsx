@@ -18,7 +18,7 @@ import { planNodeHref } from './usePlanSnapshot'
  */
 export type CellState = 'done' | 'active' | 'waiting' | 'held' | 'idle' | 'yours' | 'planned' | 'stopped' | 'active-unknown' | 'unknown'
 /** How a cell's state is read aloud ("Step 4.1-3: done"); spokenState says the derived ones whole. */
-export const cellWords: Record<CellState, string> = {
+const cellWords: Record<CellState, string> = {
   done: 'done', active: 'in progress', waiting: 'waiting on you', held: 'active, held', idle: 'active, nothing running now', yours: 'yours', planned: 'not started',
   stopped: 'stopped', 'active-unknown': 'active, what runs on it now is Unknown', unknown: 'unknown',
 }
@@ -205,7 +205,7 @@ function ruleLine(rule: unknown, depth: number): RuleLine {
   return { text: `Rule not recognised · ${key}` }
 }
 /** A done rule in words; [] for the empty rule {} (no condition: the step moves only by a recorded event). */
-export function ruleWords(rule: unknown): RuleLine[] {
+function ruleWords(rule: unknown): RuleLine[] {
   if (isRecord(rule) && Object.keys(rule).length === 0) return []
   return [ruleLine(rule, 0)]
 }
@@ -230,7 +230,7 @@ export function ruleSentence(lines: RuleLine[]): string {
 const isEmptyRule = (rule: unknown) => isRecord(rule) && Object.keys(rule).length === 0
 
 /** The cell's state: the controller's, an active step's by what it has now. */
-export function shownState(step: ControllerState, now: StepNow | null): CellState {
+function shownState(step: ControllerState, now: StepNow | null): CellState {
   if (step === null) return 'unknown'
   if (step !== 'active') return step
   const kind = (now ?? NOT_JUDGED).kind
@@ -277,7 +277,7 @@ function laneWords(node: PlanNode) {
 }
 
 /** What a step links to: its goal, the requests and questions its done rule waits on, and its place in the plan. */
-export function stepLinks(view: PlanSnapshot, step: PlanNode): StepLink[] {
+function stepLinks(view: PlanSnapshot, step: PlanNode): StepLink[] {
   const links: StepLink[] = []
   if (step.mission_id) links.push({ kind: 'goal', href: goalHref(step.mission_id), text: `Goal ${step.mission_id}` })
   for (const n of approvalNumbers(step.done_rule_json)) links.push({ kind: 'approval', href: approvalHref(String(n)), text: `Request #${n}` })

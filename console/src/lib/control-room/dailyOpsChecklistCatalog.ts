@@ -633,7 +633,7 @@ export type ChecklistProjectionContractViolation = {
  * - an item after a same-group sibling with null idPattern is fully shadowed → must project
  * - boardProjection shape must be complete when present
  */
-export function checklistBoardProjectionViolations(): ChecklistProjectionContractViolation[] {
+function checklistBoardProjectionViolations(): ChecklistProjectionContractViolation[] {
   const violations: ChecklistProjectionContractViolation[] = []
   /** First item id per group that uses a null idPattern (matches entire group). */
   const nullPatternOwner = new Map<FleetStandardGroup, string>()

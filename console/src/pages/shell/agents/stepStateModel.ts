@@ -69,7 +69,7 @@ function unverifiedWork(step: PlanNode, { view }: RunContext): Unverified[] {
 }
 
 /** One active step, judged at ctx; old is viewOldReason's answer ('' when the read is now); asks, the shell's lists. */
-export function judgeStep(step: PlanNode, ctx: RunContext, old: string, asks?: OwnerAsks): StepNow {
+function judgeStep(step: PlanNode, ctx: RunContext, old: string, asks?: OwnerAsks): StepNow {
   if (old) return { kind: 'unknown', why: [old], queued: [], held: [], waiting: [] }
   const now = judgeNow(step, ctx, asks), unverified = unverifiedWork(step, ctx)
   return unverified.length > 0 ? { ...now, unverified } : now

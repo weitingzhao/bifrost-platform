@@ -15,7 +15,7 @@ import {
   type DomainGrafanaLink,
 } from '@/pages/observability/observabilityFormat'
 
-export function GapSummaryText({
+function GapSummaryText({
   summary,
   className,
 }: {

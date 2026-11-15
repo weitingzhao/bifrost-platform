@@ -18,7 +18,7 @@ export const CONTROL_ROOM_BAY_IDS = [
 
 export type ControlRoomBayId = (typeof CONTROL_ROOM_BAY_IDS)[number]
 
-export const CONTROL_ROOM_BAY_DOM_PREFIX = 'cr-'
+const CONTROL_ROOM_BAY_DOM_PREFIX = 'cr-'
 
 export function controlRoomBayDomId(id: ControlRoomBayId): string {
   return `${CONTROL_ROOM_BAY_DOM_PREFIX}${id}`
@@ -192,13 +192,13 @@ export function worstBayScanSignal(bays: readonly ControlRoomBaySignal[]): Signa
 }
 
 /** localStorage key for bay expand preference (legacy per-bay; still written for Multi). */
-export function controlRoomBayStorageKey(id: ControlRoomBayId): string {
+function controlRoomBayStorageKey(id: ControlRoomBayId): string {
   return `bifrost_control_room_bay_${id}_open`
 }
 
 export type ControlRoomExpandMode = 'single' | 'multi'
 
-export const CONTROL_ROOM_EXPAND_MODE_STORAGE_KEY = 'bifrost_control_room_expand_mode'
+const CONTROL_ROOM_EXPAND_MODE_STORAGE_KEY = 'bifrost_control_room_expand_mode'
 
 export function controlRoomExpandModeStorageKey(): string {
   return CONTROL_ROOM_EXPAND_MODE_STORAGE_KEY

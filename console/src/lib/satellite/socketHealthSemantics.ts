@@ -31,7 +31,7 @@ export type BusEnvId = TradeEnv | 'dev-local'
 
 export const SOCKET_TRADE_ENVS: TradeEnv[] = ['dev', 'stg', 'prod']
 
-export const SOCKET_MATRIX_ENVS: BusEnvId[] = ['dev', 'stg', 'prod', 'dev-local']
+const SOCKET_MATRIX_ENVS: BusEnvId[] = ['dev', 'stg', 'prod', 'dev-local']
 
 export const SOCKET_MATRIX_LABELS: Record<BusEnvId, string> = {
   dev: 'K3s Dev',
@@ -125,7 +125,7 @@ function isIbExecutionArmGapOnly(blockReasons: string[]): boolean {
 }
 
 /** Trading daemon row — uses monitor.daemon + ops ingest + socket bus, not system-wide health rollup. */
-export function classifyTradingDaemon(
+function classifyTradingDaemon(
   env: TradeEnv,
   ingest?: SatelliteBusIngestService,
   daemon?: SatelliteBusMonitorDaemon,
@@ -274,7 +274,7 @@ export function classifyTradingDaemon(
 }
 
 /** Classify platform IB gateway aggregate (Rocket socket bus). */
-export function classifyPlatformIbGateway(
+function classifyPlatformIbGateway(
   component: SatelliteBusSocketComponent | undefined,
 ): SocketHealthRow {
   const raw = component?.raw
@@ -407,7 +407,7 @@ export function buildSocketHealthRows(
   return { rocket, trade }
 }
 
-export function summarizeSocketHealth(
+function summarizeSocketHealth(
   rows: SocketHealthRow[],
 ): { signal: Signal; headline: string; attention: number } {
   const required = rows.filter(r => r.required === 'required')

@@ -59,7 +59,7 @@ export const TRADE_ENV_OPTIONS = [
 
 export type TradeEnv = (typeof TRADE_ENV_OPTIONS)[number]['value']
 
-export const TRADE_NS: Record<TradeEnv, string> = {
+const TRADE_NS: Record<TradeEnv, string> = {
   dev: 'bifrost-dev',
   stg: 'bifrost-stg',
   prod: 'bifrost-prod',

@@ -7,11 +7,11 @@ import type { FullCiNote, FullCiNotes, UnitsConfig, UnitsModule, UnitsPin, Units
 
 /** The two columns the platform does not answer yet: said, not left blank and not guessed. */
 export const NOT_DECLARED_YET = 'not declared yet'
-export const UNDECLARED_TEXT = 'Not declared: everything runs'
-export const UNREADABLE_TEXT = 'Declaration does not read'
+const UNDECLARED_TEXT = 'Not declared: everything runs'
+const UNREADABLE_TEXT = 'Declaration does not read'
 export const NO_RUNS_TEXT = 'No CI run of this project is retained'
 export const NO_FULL_RUN_TEXT = 'No full run has been recorded yet'
-export const NO_SUSPECT_TEXT = 'No landed commit left a module out'
+const NO_SUSPECT_TEXT = 'No landed commit left a module out'
 
 const sha8 = (commit: string | undefined) => (commit ?? '').trim().slice(0, 8)
 
@@ -20,17 +20,17 @@ const sha8 = (commit: string | undefined) => (commit ?? '').trim().slice(0, 8)
 export type ConfigState = 'declared' | 'undeclared' | 'unreadable'
 
 /** declared false: no declaration. declared true with a note and no module: the declaration does not read. */
-export function configState(config: UnitsConfig): ConfigState {
+function configState(config: UnitsConfig): ConfigState {
   if (!config.declared) return 'undeclared'
   return (config.note ?? '') !== '' && config.modules.length === 0 ? 'unreadable' : 'declared'
 }
 
-export const CONFIG_STATE_TEXT: Record<ConfigState, string> = {
+const CONFIG_STATE_TEXT: Record<ConfigState, string> = {
   declared: 'declared', undeclared: UNDECLARED_TEXT, unreadable: UNREADABLE_TEXT,
 }
 
 /** The repositories this one is tested with, each at its commit. */
-export const pinsText = (pins: UnitsPin[]) => pins.map(pin => `${pin.repo}@${sha8(pin.commit)}`).join(', ')
+const pinsText = (pins: UnitsPin[]) => pins.map(pin => `${pin.repo}@${sha8(pin.commit)}`).join(', ')
 
 export type ConfigModuleRow = {
   name: string
@@ -46,7 +46,7 @@ export type ConfigModuleRow = {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-export function moduleRow(module: UnitsModule): ConfigModuleRow {
+function moduleRow(module: UnitsModule): ConfigModuleRow {
   return {
     name: module.name,
     kind: module.kind ?? '—',
@@ -100,7 +100,7 @@ export function runKindText(run: Pick<UnitsRun, 'full' | 'tested_by'>): string {
 }
 
 export type StatusVariant = 'success' | 'danger' | 'info' | 'neutral'
-export const statusVariant = (status: string): StatusVariant =>
+const statusVariant = (status: string): StatusVariant =>
   status === 'Succeeded' ? 'success' : status === 'Failed' ? 'danger' : status === 'Running' ? 'info' : 'neutral'
 
 /** 215 → "3m 35s". */
@@ -175,7 +175,7 @@ export type FullCiRow = {
   suspects: string[]
 }
 
-export function fullCiRow(note: FullCiNote): FullCiRow {
+function fullCiRow(note: FullCiNote): FullCiRow {
   const detail = note.full_ci ?? {}
   const red = typeof detail.run === 'string' && detail.run !== ''
   if (!red) return { at: note.at, text: note.text, red, failedTasks: [], suspects: [] }

@@ -13,7 +13,7 @@ import type { DenseTagVariant } from '@bifrost/ui'
 export type TradeEnvId = 'dev' | 'stg' | 'prod'
 
 /** DenseTag / chip variant for env identity. */
-export const TRADE_ENV_TAG_VARIANT: Record<TradeEnvId, DenseTagVariant> = {
+const TRADE_ENV_TAG_VARIANT: Record<TradeEnvId, DenseTagVariant> = {
   dev: 'info',
   stg: 'warning',
   prod: 'danger',
@@ -23,7 +23,7 @@ export const TRADE_ENV_TAG_VARIANT: Record<TradeEnvId, DenseTagVariant> = {
  * Selected-state classes for Trade NS SegmentControl buttons.
  * Idle state stays muted (segment idle); only the active env is tinted.
  */
-export const TRADE_ENV_SEGMENT_ACTIVE: Record<TradeEnvId, string> = {
+const TRADE_ENV_SEGMENT_ACTIVE: Record<TradeEnvId, string> = {
   dev:
     'bg-sky-500/15 text-sky-800 dark:text-sky-300 font-semibold shadow-sm z-[1] ring-1 ring-inset ring-sky-500/45',
   stg:
@@ -43,4 +43,3 @@ export function tradeEnvTagVariant(env: TradeEnvId): DenseTagVariant {
 export function tradeEnvSegmentActiveClass(env: TradeEnvId): string {
   return TRADE_ENV_SEGMENT_ACTIVE[env]
 }
-

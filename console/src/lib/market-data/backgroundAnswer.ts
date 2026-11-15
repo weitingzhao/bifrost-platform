@@ -22,7 +22,7 @@ export function isComputing(answer: unknown): boolean {
   return (answer as BackgroundAnswer | null | undefined)?.computing === true;
 }
 
-export function ageSec(answer: unknown): number | null {
+function ageSec(answer: unknown): number | null {
   const v = (answer as BackgroundAnswer | null | undefined)?.age_sec;
   return typeof v === "number" ? v : null;
 }

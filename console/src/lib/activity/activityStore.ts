@@ -200,7 +200,7 @@ export function __resetActivityStoreForTests(): void {
   emit()
 }
 
-export function useActivityEvents(): ActivityEvent[] {
+function useActivityEvents(): ActivityEvent[] {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 

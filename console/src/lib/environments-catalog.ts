@@ -11,7 +11,7 @@ import type { DenseTagVariant } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 
 export const CATALOG_VERSION = '2026-06-29-ai-compute-strategy'
-export const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
+const CATALOG_SOURCE = 'console/src/lib/environments-catalog.ts'
 
 /** True when spine meta.catalog_version matches this catalog (CI: check_spine_catalog.sh). */
 export function isCatalogVersionSynced(ctx?: OpsContextResponse): boolean {
@@ -60,7 +60,7 @@ export type PlatformPhase = {
   deliverables: string
 }
 
-export const PLATFORM_PORTS = {
+const PLATFORM_PORTS = {
   platformApi: 8780,
   platformConsole: 5180,
   tradeFrontend: 5173,
@@ -74,7 +74,7 @@ export const PLATFORM_PORTS = {
  * When IPs/ports change, update config/environments.yaml first; keep this table in sync for pack text.
  * Do not treat this as a writable registration surface.
  */
-export const TRADE_ENVIRONMENTS = [
+const TRADE_ENVIRONMENTS = [
   {
     id: 'dev',
     label: 'Development',
@@ -203,7 +203,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
   },
 ]
 
-export const FLOW_ROWS: FlowRow[] = [
+const FLOW_ROWS: FlowRow[] = [
   {
     path: 'Application (trade stack)',
     stage: 'Development',
@@ -339,7 +339,7 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   },
 ]
 
-export const PLATFORM_PHASES: PlatformPhase[] = [
+const PLATFORM_PHASES: PlatformPhase[] = [
   {
     id: 'A',
     label: 'Gate',
@@ -360,7 +360,7 @@ export const PLATFORM_PHASES: PlatformPhase[] = [
   },
 ]
 
-export const AUTHORIZATION_LEVELS = [
+const AUTHORIZATION_LEVELS = [
   { level: 'L0', behavior: 'Read-only probes (matrix, topology, cluster, logs)' },
   {
     level: 'L1',
@@ -459,7 +459,7 @@ export function formatSpineContextSection(
 }
 
 /** Static catalog without milestone narrative (spine is authoritative). */
-export function buildStaticCatalogContext(): string {
+function buildStaticCatalogContext(): string {
   const lines: string[] = [
     '# Bifrost Ops — Environments & Architecture Context',
     `# Catalog version: ${CATALOG_VERSION} · source: ${CATALOG_SOURCE}`,

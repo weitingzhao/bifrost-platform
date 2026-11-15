@@ -66,7 +66,7 @@ const ICON_BY_COMPONENT: Record<string, SimpleIcon | undefined> = {
   celery: siCelery,
 }
 
-export const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
+const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
   postgres: {
     id: 'postgres',
     label: 'PostgreSQL',
@@ -243,7 +243,7 @@ export const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
 }
 
 /** Default infra component icon per SCOPE tag (right panel group headers). */
-export const SCOPE_DEFAULT_COMPONENT: Partial<Record<ScopeTag, string>> = {
+const SCOPE_DEFAULT_COMPONENT: Partial<Record<ScopeTag, string>> = {
   PLATFORM: 'platform',
   'TRADE-API': 'fastapi',
   INFRA: 'nginx',

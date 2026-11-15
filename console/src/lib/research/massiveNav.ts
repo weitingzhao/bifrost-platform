@@ -6,8 +6,8 @@
 import { writeMdSearchParams } from '@/components/market-data/quality/mdNavParams'
 import type { MarketDataReadinessRollup } from '@/api/satelliteBusTypes'
 
-export const MASSIVE_MANAGE_TAB = 'market-data-manage'
-export const FLEX_MANAGE_TAB = 'flex-query-manage'
+const MASSIVE_MANAGE_TAB = 'market-data-manage'
+const FLEX_MANAGE_TAB = 'flex-query-manage'
 
 /** Full URL for Open Massive (HusbandryStrip / new-tab fallback). */
 export function massiveReadinessHref(): string {
@@ -15,11 +15,11 @@ export function massiveReadinessHref(): string {
 }
 
 /** Full URL for Massive Ingest (queue dashboard). */
-export function massiveIngestHref(): string {
+function massiveIngestHref(): string {
   return '/?tab=ingest#market-data-manage'
 }
 
-export function flexManageHref(): string {
+function flexManageHref(): string {
   return '/#flex-query-manage'
 }
 

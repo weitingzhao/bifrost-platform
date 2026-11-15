@@ -2,24 +2,24 @@ import type { PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { signInSafeError } from '@/lib/signInError'
 
 /** Shown while the same capabilities read the top-right badge uses is still in flight. */
-export const SIGN_IN_CHECKING = 'Checking your sign-in…'
+const SIGN_IN_CHECKING = 'Checking your sign-in…'
 
 /**
  * The capabilities read failed. This is not "signed out" and not "admin", whatever role was read before it.
  * The page reads again on its own (PlatformAuthProvider), so the sentence says so.
  */
-export const SIGN_IN_UNREADABLE =
+const SIGN_IN_UNREADABLE =
   'Could not read your sign-in. Retrying automatically; decisions stay unavailable until it can be read.'
 
 export const SIGN_IN_ABSENT = 'Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'
 
-export const SIGN_IN_UNRECOGNIZED =
+const SIGN_IN_UNRECOGNIZED =
   'This sign-in was not recognized. Sign in at the top right with the admin token to decide.'
 
 export const SIGN_IN_OPERATOR =
   'Signed in as operator, not admin. Sign in at the top right with the admin token to decide.'
 
-export const SIGN_IN_NOT_ADMIN =
+const SIGN_IN_NOT_ADMIN =
   'This sign-in is not an admin. Sign in at the top right with the admin token to decide.'
 
 export const DECISION_REJECTED =

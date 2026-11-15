@@ -2,9 +2,9 @@ import type { ActivityEvent } from '@/lib/activity/activityTypes'
 import { setSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 
 /** Workload name to highlight on Satellite Bus (e.g. account-sync). */
-export const SATELLITE_BUS_WORKLOAD_FOCUS_KEY = 'bifrost.satelliteBus.workloadFocus'
+const SATELLITE_BUS_WORKLOAD_FOCUS_KEY = 'bifrost.satelliteBus.workloadFocus'
 /** Prefill Trade NS segment when Activity deep-links into Bus Status. */
-export const SATELLITE_BUS_TRADE_ENV_FOCUS_KEY = 'bifrost.satelliteBus.tradeEnvFocus'
+const SATELLITE_BUS_TRADE_ENV_FOCUS_KEY = 'bifrost.satelliteBus.tradeEnvFocus'
 
 export type SatelliteBusTradeEnvFocus = 'dev' | 'stg' | 'prod'
 
@@ -34,7 +34,7 @@ export function workloadToRuntimeConsumerId(workload: string | undefined): strin
   return workload
 }
 
-export function setSatelliteBusWorkloadFocus(workload: string | undefined): void {
+function setSatelliteBusWorkloadFocus(workload: string | undefined): void {
   if (workload == null || workload === '') {
     sessionStorage.removeItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY)
     return
@@ -51,7 +51,7 @@ export function clearSatelliteBusWorkloadFocus(): void {
   sessionStorage.removeItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY)
 }
 
-export function setSatelliteBusTradeEnvFocus(env: SatelliteBusTradeEnvFocus | undefined): void {
+function setSatelliteBusTradeEnvFocus(env: SatelliteBusTradeEnvFocus | undefined): void {
   if (env == null) {
     sessionStorage.removeItem(SATELLITE_BUS_TRADE_ENV_FOCUS_KEY)
     return

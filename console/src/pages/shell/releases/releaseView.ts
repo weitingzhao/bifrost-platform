@@ -308,7 +308,7 @@ export function releaseWindowView(input: {
 }
 
 /** Approval actions that ship or roll back a release. */
-export const RELEASE_APPROVAL_ACTIONS: ReadonlySet<string> = new Set([
+const RELEASE_APPROVAL_ACTIONS: ReadonlySet<string> = new Set([
   'start_pipeline_run',
   'gitops_sync_app',
   'gitops_rollback_app',

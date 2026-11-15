@@ -131,7 +131,7 @@ export function actuationOriginLabel(origin: ActuationOrigin): string {
   return 'System'
 }
 
-export function filterAuditByCategory(
+function filterAuditByCategory(
   records: AuditRecord[],
   category: ActuationCategory,
 ): AuditRecord[] {
@@ -139,7 +139,7 @@ export function filterAuditByCategory(
   return records.filter(r => actuationCategory(r.action) === category)
 }
 
-export function filterAuditByOrigin(
+function filterAuditByOrigin(
   records: AuditRecord[],
   origin: ActuationOrigin | 'all',
 ): AuditRecord[] {
@@ -171,4 +171,3 @@ export function formatMigrateWaveAuditLabel(record: AuditRecord): string {
 export function isMigrateWaveAudit(record: AuditRecord): boolean {
   return record.action.startsWith('migratewave.')
 }
-

@@ -31,7 +31,7 @@ type CriticalProcessSpec = {
  * Critical Processes catalog — exact names only (no loose regex).
  * IB Ingestor / Operator / Account Agent resolve to `data/ib-gateway` after Plugin cutover.
  */
-export const CRITICAL_PROCESS_SPECS: readonly CriticalProcessSpec[] = [
+const CRITICAL_PROCESS_SPECS: readonly CriticalProcessSpec[] = [
   { label: 'GsTrading daemon', tradeNames: ['daemon'] },
   {
     label: 'IB Ingestor',

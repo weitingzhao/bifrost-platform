@@ -25,7 +25,7 @@ export const STALE_AFTER_SECONDS = 5 * 60
 export const GENERATION_SKEW_SECONDS = 2 * 60
 
 /** Hosts a published link may open. http and https only. */
-export const TRUSTED_PROGRESS_HOSTS = ['ops.bifrost.lan'] as const
+const TRUSTED_PROGRESS_HOSTS = ['ops.bifrost.lan'] as const
 
 export type ProgressLevel = 'run' | 'slow' | 'bad' | 'idle'
 
@@ -418,7 +418,7 @@ export async function fetchAgentProgress(): Promise<AgentProgressResponse> {
 }
 
 /** `45s`, `12m`, `1h 05m`, `2d 3h`. */
-export function formatDuration(seconds: number): string {
+function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
@@ -436,7 +436,7 @@ export function formatLocalTime(unixSeconds: number): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-export function ageSeconds(fromUnix: number, nowMs: number): number {
+function ageSeconds(fromUnix: number, nowMs: number): number {
   if (!Number.isFinite(fromUnix) || fromUnix <= 0) return 0
   return Math.max(0, Math.floor(nowMs / 1000 - fromUnix))
 }
@@ -446,7 +446,7 @@ export function waitingLine(sinceUnix: number, nowMs: number): string {
   return `waiting ${formatDuration(ageSeconds(sinceUnix, nowMs))}`
 }
 
-export function publishedAgeSeconds(receivedAt: string, fallback: number, nowMs: number): number {
+function publishedAgeSeconds(receivedAt: string, fallback: number, nowMs: number): number {
   const at = Date.parse(receivedAt)
   if (!Number.isFinite(at)) return Math.max(0, Math.floor(fallback))
   return Math.max(0, Math.floor((nowMs - at) / 1000))

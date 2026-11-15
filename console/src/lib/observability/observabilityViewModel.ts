@@ -30,9 +30,7 @@ import {
   METRIC_TO_SIGNAL,
   OBSERVABILITY_DOMAIN_ORDER,
   SIGNAL_REGISTRY,
-  SIGNAL_STALE_MS,
   TARGET_DOMAIN_HINTS,
-  TRADE_NS,
   getSignalDef,
 } from './signalRegistry'
 import {
@@ -316,7 +314,7 @@ function scrapeSortRank(t: ScrapeTargetView): number {
 }
 
 /** Unexpected issues first; standby expected-off after real downs. */
-export function sortScrapeTargets(targets: ScrapeTargetView[]): ScrapeTargetView[] {
+function sortScrapeTargets(targets: ScrapeTargetView[]): ScrapeTargetView[] {
   return [...targets].sort((a, b) => {
     const hr = scrapeSortRank(a) - scrapeSortRank(b)
     if (hr !== 0) return hr
@@ -349,7 +347,7 @@ function isStandbyScrapeTarget(t: ScrapeTargetView, standbyNodes: StandbyNodeRef
 }
 
 /** UI rollup for Selected Domain → Scrape targets (aligned with rocket.scrape-targets verdict). */
-export function buildScrapeTargetsRollup(targets: ScrapeTargetView[]): ScrapeTargetsRollup {
+function buildScrapeTargetsRollup(targets: ScrapeTargetView[]): ScrapeTargetsRollup {
   if (targets.length === 0) {
     return { quiet: true, label: 'None mapped / Prometheus unavailable' }
   }
@@ -1040,5 +1038,3 @@ export function buildObservabilityViewModel(
     grafanaBaseUrl: grafanaBase,
   }
 }
-
-export { SIGNAL_STALE_MS, TRADE_NS }

@@ -199,7 +199,7 @@ export function resolveIbClientStandard(
  * Socket-quality gate for Vendor IB: Redis "connected" alone is not enough.
  * Aligns with api/internal/ibgateway assessSocketFeedQuality.
  */
-export function assessIbGatewaySocketQuality(
+function assessIbGatewaySocketQuality(
   ib: IbGatewayStatusResponse,
   nowMs: number = Date.now(),
 ): { signal: FleetCellSignal; reason: string } {
@@ -299,7 +299,7 @@ export function assessIbGatewaySocketQuality(
 }
 
 /** Empty / missing account snapshot while claiming connected → ghost TWS API client. */
-export function assessAccountSnapshotQuality(
+function assessAccountSnapshotQuality(
   raw: string | undefined,
   nowMs: number,
 ): { signal: FleetCellSignal; reason: string } | null {
@@ -382,5 +382,3 @@ function inUSEquityRTH(nowMs: number): boolean {
   const mins = hour * 60 + minute
   return mins >= 9 * 60 + 30 && mins < 16 * 60
 }
-
-

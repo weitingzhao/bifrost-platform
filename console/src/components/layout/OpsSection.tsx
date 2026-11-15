@@ -46,7 +46,7 @@ const bodyPaddingClass: Record<OpsSectionBodyPadding, string> = {
   default: 'px-3 py-3',
 }
 
-export function OpsSectionTitle({ children, className }: { children: ReactNode; className?: string }) {
+function OpsSectionTitle({ children, className }: { children: ReactNode; className?: string }) {
   return <h3 className={cn('ops-section-title', className)}>{children}</h3>
 }
 

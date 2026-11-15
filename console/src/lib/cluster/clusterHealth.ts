@@ -14,7 +14,7 @@ export function podReachability(phase: string): Reachability {
   }
 }
 
-export function summarizeCluster(summary: ClusterSummary | undefined): {
+function summarizeCluster(summary: ClusterSummary | undefined): {
   reach: Reachability
   label: string
 } {

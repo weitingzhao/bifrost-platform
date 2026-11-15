@@ -8,7 +8,7 @@ import {
 } from '@/api/researchEngine'
 import { buildSlotScheduleIndex } from '@/lib/market-data/slotScheduler'
 
-export const ORCHESTRATION_STATUS_QUERY_KEY = [
+const ORCHESTRATION_STATUS_QUERY_KEY = [
   'research',
   'orchestration',
   'status',

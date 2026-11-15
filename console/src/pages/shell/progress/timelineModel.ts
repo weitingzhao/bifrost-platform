@@ -108,7 +108,7 @@ export function eventRow(e: RuntimeEventRow, titles: Map<string, string>): Timel
   }
 }
 
-export function releaseRow(r: ReleaseRecord): TimelineRow {
+function releaseRow(r: ReleaseRecord): TimelineRow {
   const repos = Object.entries(r.repos ?? {}).map(([repo, build]) => `${repo}@${text(build?.sha).slice(0, 7)}`).join(', ')
   return { key: `r${r.run}`, at: r.completed_at, kind: 'release', label: 'Release', text: `${r.lane || r.pipeline} ${text(r.env).toUpperCase()}`,
     detail: repos, mission: '', order: 0 }

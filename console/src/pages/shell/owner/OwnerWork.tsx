@@ -80,7 +80,7 @@ function WorkSectionPage({ section, data }: { section: WorkSection; data: OwnerC
 }
 
 /** Work → Activity: the coordinator's latest note, from its mailbox. */
-export function OwnerRuntimeCards({ data }: { data: OwnerConsoleData }) {
+function OwnerRuntimeCards({ data }: { data: OwnerConsoleData }) {
   return <div className="flex min-w-0 flex-col gap-3">
     <Card label="Coordinator" title="Coordinator">
       <CoordinatorNote view={data.coordinator} now={data.now} />

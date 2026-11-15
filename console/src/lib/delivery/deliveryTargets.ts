@@ -27,7 +27,7 @@ export type DeliveryTargetConfig = {
   actuateDescription: string
 }
 
-export const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
+const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
   {
     id: 'trade-stg',
     label: 'Bifrost Trade STG',

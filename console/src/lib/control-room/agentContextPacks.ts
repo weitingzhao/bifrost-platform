@@ -23,7 +23,7 @@ function modeLine(mode: AgentMode): string {
   return `Mode: ${mode}`
 }
 
-export function buildProductPack(ctx?: OpsContextResponse): string {
+function buildProductPack(ctx?: OpsContextResponse): string {
   const lines: string[] = [modeLine('Product'), '', '## Discipline', PHASE1_DISCIPLINE, '']
   if (ctx != null) {
     lines.push('## Focus (spine)', `- headline: ${ctx.focus.headline}`)
@@ -93,7 +93,7 @@ const FLYWHEEL_B_CHECKS = [
   'Owner sign-off chain',
 ] as const
 
-export function buildPromotePack(ctx: OpsContextResponse, matrices: MatrixResponse[]): string {
+function buildPromotePack(ctx: OpsContextResponse, matrices: MatrixResponse[]): string {
   const ops = buildOpsPack(ctx, matrices)
   const status = evaluatePromoteStatus(ctx, matrices)
   const fails = prodFailingTargetIds(matrices)
@@ -119,7 +119,7 @@ export function buildPromotePack(ctx: OpsContextResponse, matrices: MatrixRespon
   return [modeLine('Promote'), '', ops, '', checklist].join('\n')
 }
 
-export function buildScopedMilestonePack(
+function buildScopedMilestonePack(
   ctx: OpsContextResponse,
   milestoneId: string,
   matrices: MatrixResponse[],
@@ -141,7 +141,7 @@ export function buildFullCatalogPack(ctx?: OpsContextResponse): string {
 
 export type SuggestedMode = AgentMode
 
-export function suggestAgentMode(
+function suggestAgentMode(
   ctx: OpsContextResponse | undefined,
   selectionMilestoneId?: string | null,
   selectionBayId?: string | null,
@@ -155,7 +155,7 @@ export function suggestAgentMode(
   return 'Product'
 }
 
-export const STARTER_PROMPTS: Record<AgentMode, string> = {
+const STARTER_PROMPTS: Record<AgentMode, string> = {
   Product:
     'Mode: Product. Task: migrate one frontend page with Dense UI; Legacy API only. No infra or API backend changes.',
   Ops: 'Mode: Ops. Task: read spine + prod matrix; list blockers. No trade-frontend page edits.',

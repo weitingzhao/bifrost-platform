@@ -1,8 +1,8 @@
 import type { IngestQueueKindCount, IngestScheduleSlot } from '@/api/marketDataPlugin'
 import { iterCronFiresUtc } from '@/lib/patrol/cronSchedule'
 
-export const SWIMLANE_PAST_MS = 24 * 60 * 60 * 1000
-export const SWIMLANE_FUTURE_MS = 6 * 60 * 60 * 1000
+const SWIMLANE_PAST_MS = 24 * 60 * 60 * 1000
+const SWIMLANE_FUTURE_MS = 6 * 60 * 60 * 1000
 
 export function resolveHorizon(
   nowMs: number,
@@ -120,7 +120,7 @@ export function slotAdherenceBucket(
   return 'other'
 }
 
-export function slotMatchesAdherenceFilter(
+function slotMatchesAdherenceFilter(
   slot: IngestScheduleSlot,
   filter: ScheduleAdherenceFilter,
 ): boolean {

@@ -44,7 +44,7 @@ export type ResearchEngineAgentPackSnapshot = {
 }
 
 /** Feature table → owning Dagster job (not Cron). */
-export const RESEARCH_SIGNAL_OWNERS: Record<
+const RESEARCH_SIGNAL_OWNERS: Record<
   string,
   { table: string; schedule: string; job: string; note: string }
 > = {

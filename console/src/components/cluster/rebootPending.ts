@@ -4,7 +4,7 @@ export type RebootSample = {
 }
 
 /** Unix mtime seconds → UTC calendar date. Null when the sample is not a real mtime. */
-export function formatRebootSince(seconds: number): string | null {
+function formatRebootSince(seconds: number): string | null {
   if (!Number.isFinite(seconds) || seconds <= 0) return null
   const date = new Date(seconds * 1000)
   if (Number.isNaN(date.getTime())) return null

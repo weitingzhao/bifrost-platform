@@ -18,7 +18,7 @@ export function seconds(from?: string, to?: string): number | null {
 export const secondsText = (n: number | null) => n == null ? 'Not recorded' : `${Number(n.toFixed(1))}s`
 export const elapsed = (run: TimingRun) => seconds(run.start_time, run.completion_time)
 export const taskSeconds = (task: TimingTask) => seconds(task.created_at, task.finished_at)
-export const firstStep = (task: TimingTask) => task.steps.map(s => s.started_at).filter((s): s is string => !!s).sort()[0]
+const firstStep = (task: TimingTask) => task.steps.map(s => s.started_at).filter((s): s is string => !!s).sort()[0]
 export const taskWait = (task: TimingTask) => seconds(task.created_at, firstStep(task))
 export function beforeTests(run: TimingRun): number | null {
   if (reusedBy(run)) return null

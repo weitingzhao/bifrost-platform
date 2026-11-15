@@ -5,7 +5,7 @@ import { fetchPlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
 /** How many changes show before "Show n more" (Design v3.6 WorkPage). */
 const FIRST_SHOWN = 8
 /** How many changes the plan view returns per page (store/planviewrecent.go: LIMIT 21, the 21st only says there are more). */
-export const RECENT_PAGE = 20
+const RECENT_PAGE = 20
 const caps = 'text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground'
 const mono = 'font-mono text-xs text-muted-foreground'
 

@@ -33,7 +33,7 @@ export function assessmentStream(kind: AssessmentKind, id: string): string {
  * Where a cited record opens: a commit or a ledger item in Gitea (a new tab), a runtime event on its
  * goal's card, an approval on its request page. null for a record this Console cannot place.
  */
-export function refHref(r: Record<string, unknown>, gitea = resolveOpsToolUrl('gitea')): { href: string | null; external: boolean } {
+function refHref(r: Record<string, unknown>, gitea = resolveOpsToolUrl('gitea')): { href: string | null; external: boolean } {
   const org = text(r.org)
   const repo = text(r.repo)
   switch (text(r.kind)) {
@@ -106,6 +106,3 @@ export function parseAssessmentStream(value: unknown): Assessment {
 
 /** Snapshot carried by the ordinary approval/question read, never persisted in its material. */
 export type AssessmentSnapshot = { events?: unknown; error?: string }
-
-
-

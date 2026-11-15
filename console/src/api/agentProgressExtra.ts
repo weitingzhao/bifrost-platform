@@ -7,7 +7,7 @@ export type ProgressApproval = {
 }
 
 /** A published request id. Anything else is not a Console request. */
-export const APPROVAL_ID_PATTERN = /^appr_[0-9a-f]{16}$/
+const APPROVAL_ID_PATTERN = /^appr_[0-9a-f]{16}$/
 
 export function isApprovalId(id: string | undefined): id is string {
   return typeof id === 'string' && APPROVAL_ID_PATTERN.test(id)

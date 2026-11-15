@@ -35,7 +35,7 @@ export function formatSignedDelta(delta: number): string {
   return `Δ ${sign}${Math.abs(delta).toLocaleString()}`
 }
 
-export function formatCheckAge(atMs: number, nowMs: number): string {
+function formatCheckAge(atMs: number, nowMs: number): string {
   const sec = Math.max(0, Math.round((nowMs - atMs) / 1000))
   if (sec < 60) return `${sec}s ago`
   if (sec < 3600) return `${Math.floor(sec / 60)}m ago`

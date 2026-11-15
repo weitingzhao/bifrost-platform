@@ -27,7 +27,7 @@ import {
 
 export type BusHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
 
-export const BUS_HEALTH_LABELS: Record<BusHealth, string> = {
+const BUS_HEALTH_LABELS: Record<BusHealth, string> = {
   healthy: 'HEALTHY',
   degraded: 'DEGRADED',
   unavailable: 'UNAVAILABLE',

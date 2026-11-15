@@ -16,7 +16,7 @@ function declared(
 }
 
 /** Depth kinds that name a plan boundary rather than a target to reach. */
-export const BOUNDARY_KINDS = new Set([
+const BOUNDARY_KINDS = new Set([
   "current_only",
   "catalogue",
   "forward_only",
@@ -254,7 +254,7 @@ export function explainBreadth(d: DatasetDimensions): AxisExplain {
   };
 }
 
-export function explainDepth(d: DatasetDimensions): AxisExplain {
+function explainDepth(d: DatasetDimensions): AxisExplain {
   const v = depthVerdict(d);
   const t = d.depth.target;
   if (!d.depth.measured) {
@@ -335,7 +335,7 @@ export function explainFreshness(d: DatasetDimensions): AxisExplain {
   };
 }
 
-export function explainContinuity(d: DatasetDimensions): AxisExplain {
+function explainContinuity(d: DatasetDimensions): AxisExplain {
   const v = continuityVerdict(d);
   const c = d.continuity;
   if (!c?.measured) {

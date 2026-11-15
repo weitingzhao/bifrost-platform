@@ -1,7 +1,7 @@
 /** Workload explorer — flat category tabs. Storage tab uses `storageServiceCatalog` service chips instead of namespace chips. */
 export type NsFilterType = 'trade' | 'platform' | 'storage' | 'gpu' | 'cicd' | 'infra' | 'all'
 
-export const NS_FILTER_GROUPS: Record<Exclude<NsFilterType, 'all'>, string[]> = {
+const NS_FILTER_GROUPS: Record<Exclude<NsFilterType, 'all'>, string[]> = {
   trade: ['bifrost-dev', 'bifrost-stg', 'bifrost-prod'],
   platform: ['bifrost-platform-stg'],
   storage: ['cnpg-system', 'data', 'data-warehouse'],
@@ -25,7 +25,7 @@ export const NS_FILTER_LABELS: Record<Exclude<NsFilterType, 'all'>, string> = {
 }
 
 /** Operator-facing labels on namespace chips (≠ K8s namespace name). */
-export const NS_DISPLAY_LABELS: Record<string, string> = {
+const NS_DISPLAY_LABELS: Record<string, string> = {
   'bifrost-dev': 'trade-dev',
   'bifrost-stg': 'trade-stg',
   'bifrost-prod': 'trade-prod',

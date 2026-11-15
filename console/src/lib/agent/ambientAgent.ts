@@ -25,7 +25,7 @@ export type AmbientAgentShellProps = {
   onExpandAgentDock?: () => void
 }
 
-export function isAmbientAgentTerminal(
+function isAmbientAgentTerminal(
   status: AmbientAgentJob['status'] | null | undefined,
 ): boolean {
   return status === 'done' || status === 'failed' || status === 'cancelled'

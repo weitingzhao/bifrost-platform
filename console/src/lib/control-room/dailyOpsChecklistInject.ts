@@ -99,7 +99,7 @@ function buildVirtualStandard(
 /**
  * Inject checklist-only virtual standards into cells (mutates copies).
  */
-export function injectChecklistVirtualStandards(
+function injectChecklistVirtualStandards(
   cells: FleetCell[],
   checklistSignals?: ChecklistSignalPaint[],
 ): FleetCell[] {

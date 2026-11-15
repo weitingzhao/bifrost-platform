@@ -26,7 +26,7 @@ export function clearLegacyApprovalToken(): void {
 export const APPROVAL_HISTORY_LIMIT = 50
 
 /** A hung approvals read is an error after this long. */
-export const APPROVAL_READ_DEADLINE_MS = 15_000
+const APPROVAL_READ_DEADLINE_MS = 15_000
 
 async function runWithDeadline<T>(
   ms: number,

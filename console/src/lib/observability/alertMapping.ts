@@ -324,7 +324,7 @@ function annotationBlob(alert: MappedAlert): string {
 }
 
 /** True when this alert is expected kube-prometheus/k3s catalog noise. */
-export function isExpectedNeutralAlert(alert: MappedAlert): boolean {
+function isExpectedNeutralAlert(alert: MappedAlert): boolean {
   if (alert.standbyNeutral) return false
   if (K3S_UNSCRAPED_CONTROL_PLANE.test(alert.name)) {
     return /disappeared from Prometheus target discovery/i.test(annotationBlob(alert))

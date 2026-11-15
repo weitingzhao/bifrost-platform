@@ -25,7 +25,7 @@ const TARGET_SCOPE_RULES: Array<{ match: (id: string) => boolean; tag: ScopeTag 
   { match: id => id === 'redis', tag: 'REDIS' },
 ]
 
-export function matrixTargetToScopeTag(targetId: string): ScopeTag | null {
+function matrixTargetToScopeTag(targetId: string): ScopeTag | null {
   for (const rule of TARGET_SCOPE_RULES) {
     if (rule.match(targetId)) return rule.tag
   }

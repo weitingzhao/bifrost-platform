@@ -20,7 +20,7 @@ const object = <S extends Record<string, Parser<unknown>>>(shape: S): Parser<{ [
 const timestamp: Parser<string> = (v, p) => { const s = str(v, p); return Number.isFinite(Date.parse(s)) ? s : invalid(p) }
 
 /** store.DeliveryStageOrder: the seven stages, always all and in this order. */
-export const DELIVERY_ORDER = ['handed_in', 'landing_ci', 'owner_wait', 'on_main', 'stg', 'prod_release', 'on_prod'] as const
+const DELIVERY_ORDER = ['handed_in', 'landing_ci', 'owner_wait', 'on_main', 'stg', 'prod_release', 'on_prod'] as const
 const stage = object({
   stage: one(...DELIVERY_ORDER), state: one('done', 'current', 'not_reached', 'unknown'),
   entered_at: optional(timestamp), left_at: optional(timestamp), actor: optional(str), actor_role: optional(one('executor', 'approver', 'pusher', 'releaser')),
@@ -57,7 +57,7 @@ async function fetchDelivery(query: { commit: string }, signal?: AbortSignal): P
 export const fetchCommitDelivery = (commit: string, signal?: AbortSignal) => fetchDelivery({ commit }, signal)
 
 /** One stage of a commit's way to PROD: reached at a time, not reached, or Unknown and why. */
-export const COMMIT_STAGES = ['handed_in', 'ci', 'on_stg', 'on_prod'] as const
+const COMMIT_STAGES = ['handed_in', 'ci', 'on_stg', 'on_prod'] as const
 export type CommitStage = typeof COMMIT_STAGES[number]
 export type StageReading = { stage: CommitStage } & ({ state: 'reached'; at: string } | { state: 'not_reached'; reason?: string } | { state: 'unknown'; reason: string })
 

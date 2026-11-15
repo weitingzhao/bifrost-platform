@@ -16,7 +16,7 @@ export type BayDefinition = {
   externalUrlEnv?: string
 }
 
-export const BAY_REGISTRY: BayDefinition[] = [
+const BAY_REGISTRY: BayDefinition[] = [
   {
     id: 'bay_fe_migration',
     label: 'FE migration',

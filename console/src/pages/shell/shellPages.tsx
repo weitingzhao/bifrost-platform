@@ -4,7 +4,7 @@ export { DataPage } from './data/DataPage'
 
 export { IbPage } from './ib/IbPage'
 
-export { NeedsYouPage } from './needs-you/NeedsYouPage'
+import './needs-you/NeedsYouPage'
 
 export { OwnerConsolePage } from './owner/OwnerConsolePage'
 
@@ -12,6 +12,6 @@ export { ReleasesPage } from './releases/ReleasesPage'
 
 export { InfrastructurePage } from './infrastructure/InfrastructurePage'
 
-export { ProgressPage } from './progress/ProgressPage'
+import './progress/ProgressPage'
 
 export { RecordsPage } from './records/RecordsPage'

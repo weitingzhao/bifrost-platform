@@ -2,7 +2,7 @@ import { useSystemVerdict } from '@/hooks/useShellStatusLine'
 import { VERDICT_DOT_COLOR, type SystemVerdict } from '@/lib/shell/shellStatusLine'
 
 /** The header's sentence, in page body. `showCauses` lists every red and yellow item under it. */
-export function SystemVerdictView({
+function SystemVerdictView({
   verdict,
   showCauses = false,
   link = false,

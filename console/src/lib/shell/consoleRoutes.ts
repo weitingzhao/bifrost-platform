@@ -50,7 +50,7 @@ export const NEEDS_YOU_ROUTE: ShellRouteId = 'command'
 export const WAITING_SECTION = 'waiting'
 
 /** The section of Work that holds the goal cards (what was the top of the Progress page). */
-export const GOALS_SECTION = 'goals'
+const GOALS_SECTION = 'goals'
 
 /** Every waiting item, in full: Command, at its waiting section. */
 export const NEEDS_YOU_HREF = `#${NEEDS_YOU_ROUTE}?section=${WAITING_SECTION}`
@@ -65,13 +65,13 @@ export function goalHref(id?: string, task?: string): string {
 export const MORE_ROUTE = 'more'
 
 /** The request page. Phone notifications link here (`#approvals?id=<id>`). */
-export const APPROVAL_ROUTE = 'approvals'
+const APPROVAL_ROUTE = 'approvals'
 
 /** The question page. Phone notifications link here (`#questions?id=q_…`). */
-export const QUESTION_ROUTE = 'questions'
+const QUESTION_ROUTE = 'questions'
 
 /** Server question ids. Anything else is not requested. */
-export const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
+const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
 
 /** Tabs that used to be real pages. `dev-sessions` stays a local-only route. */
 export const FORMER_CONSOLE_TABS = [
@@ -223,7 +223,7 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
 }
 
 /** The former one-page Owner Console's tabs (`#owner?tab=`) and the entry each became. */
-export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
+const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
   all: 'command',
   you: 'command',
   chief: 'command',
@@ -233,7 +233,7 @@ export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
 }
 
 /** The section or Records tab a legacy hash lands on. */
-export const LEGACY_HASH_QUERY: Record<string, string> = {
+const LEGACY_HASH_QUERY: Record<string, string> = {
   chief: 'section=owner-chief',
   'satellite-health': 'section=applications',
   'satellite-telemetry': 'section=applications',

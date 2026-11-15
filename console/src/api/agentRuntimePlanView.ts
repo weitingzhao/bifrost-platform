@@ -28,7 +28,7 @@ export function boardState(state: string): string {
 }
 
 /** The manual atom an imported done step's rule names (planimport.ManualAtom). */
-export const manualAtom = (stepId: string) => `imported from the work ledger: ${stepId}`
+const manualAtom = (stepId: string) => `imported from the work ledger: ${stepId}`
 
 const SOURCE_PREFIX = 'plan-import '
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/

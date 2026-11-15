@@ -20,7 +20,7 @@ export type BuildFleetSnapshotWithChecklistInput = BuildFleetSnapshotInput & {
 }
 
 /** Recompute verdict after injecting checklist virtual standards. */
-export function finalizeFleetSnapshot(
+function finalizeFleetSnapshot(
   fleet: FleetSnapshot,
   checklistSignals?: ChecklistSignalPaint[],
 ): FleetSnapshot {

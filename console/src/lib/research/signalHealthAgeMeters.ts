@@ -39,7 +39,7 @@ export function freshnessStatusTone(status: string | null | undefined): AgeMeter
   return 'neutral'
 }
 
-export function freshnessStatusBucket(status: string | null | undefined): FreshnessStatusBucket {
+function freshnessStatusBucket(status: string | null | undefined): FreshnessStatusBucket {
   const s = (status ?? '').toLowerCase()
   if (s === 'fresh') return 'fresh'
   if (s === 'stale' || s === 'missing') return 'stale'

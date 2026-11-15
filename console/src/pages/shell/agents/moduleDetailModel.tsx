@@ -106,7 +106,7 @@ function touched(e: RecentEvent): string[] {
 
 /** One open card of GET /progress needs_you (store/progressneeds.go): its question and its title. */
 export type NeedsYouCard = { question: string; title: string }
-export function needsYouCards(progress: ShellRead<RuntimeProgress>): { cards: Map<string, NeedsYouCard>; truncated: boolean } | null {
+function needsYouCards(progress: ShellRead<RuntimeProgress>): { cards: Map<string, NeedsYouCard>; truncated: boolean } | null {
   if (progress.state !== 'ok') return null
   const cards = new Map<string, NeedsYouCard>()
   for (const it of records(progress.data.needs_you.items)) {

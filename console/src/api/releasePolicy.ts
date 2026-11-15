@@ -19,10 +19,10 @@ export type ReleasePolicyStatus = {
 }
 
 /** Yellow from this many hours before expiry (the first phone reminder, 14 days). */
-export const RELEASE_POLICY_WARN_HOURS = 14 * 24
+const RELEASE_POLICY_WARN_HOURS = 14 * 24
 
 /** ADR §5 reminder schedule, used when the status names none: 14, 3 and 1 days. */
-export const DEFAULT_REMINDER_HOURS = [RELEASE_POLICY_WARN_HOURS, 3 * 24, 24]
+const DEFAULT_REMINDER_HOURS = [RELEASE_POLICY_WARN_HOURS, 3 * 24, 24]
 
 /** Reminder windows ("14d", "36h", as the platform labels them) in hours, largest first. */
 export function reminderHours(windows: readonly string[] | undefined): number[] {

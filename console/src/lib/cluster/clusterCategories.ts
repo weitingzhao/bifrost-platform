@@ -1,4 +1,4 @@
-export const INFRASTRUCTURE_CATEGORIES = [
+const INFRASTRUCTURE_CATEGORIES = [
   'nodes',
   'workloads',
   'governance',
@@ -8,7 +8,7 @@ export const INFRASTRUCTURE_CATEGORIES = [
 export type InfrastructureCategory = (typeof INFRASTRUCTURE_CATEGORIES)[number]
 
 /** Known application-stack domain ids from platform-api service readiness. */
-export const APPLICATION_DOMAIN_IDS = [
+const APPLICATION_DOMAIN_IDS = [
   'database',
   'redis',
   'gpu',
@@ -33,7 +33,7 @@ export type ClusterCategory =
 
 export type ClusterDimension = 'application' | 'infrastructure' | 'facility'
 
-export const CLUSTER_CATEGORY_PARAM = 'category'
+const CLUSTER_CATEGORY_PARAM = 'category'
 
 /** Default facility category when deep-linking from legacy `#placement`. */
 export const DEFAULT_FACILITY_CATEGORY: FacilityCategory = 'node_pools'
@@ -96,7 +96,7 @@ export function isFacilityCategory(value: string): value is FacilityCategory {
   return (FACILITY_CATEGORIES as readonly string[]).includes(value)
 }
 
-export function isClusterCategory(value: string | null | undefined): value is ClusterCategory {
+function isClusterCategory(value: string | null | undefined): value is ClusterCategory {
   if (value == null || value === '') return false
   return (
     isInfrastructureCategory(value) ||

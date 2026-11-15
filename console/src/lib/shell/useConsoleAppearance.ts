@@ -22,7 +22,7 @@ function save(key: string, value: string) {
   try { window.localStorage.setItem(key, value) } catch { /* A private session can still change its appearance. */ }
 }
 
-export function applyAppearance(appearance: Appearance, style: VisualStyle): boolean {
+function applyAppearance(appearance: Appearance, style: VisualStyle): boolean {
   const dark = appearance === 'dark' || (appearance === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true)
   document.documentElement.classList.toggle('dark', dark)
   document.documentElement.dataset.opsTheme = dark ? 'dark' : 'light'

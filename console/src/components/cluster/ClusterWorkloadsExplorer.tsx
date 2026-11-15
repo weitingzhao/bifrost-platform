@@ -68,12 +68,7 @@ import {
 } from '@/lib/cluster/storageServiceCatalog'
 
 export type { NsFilterType } from '@/lib/cluster/namespaceCatalog'
-export {
-  DEPRECATED_NAMESPACES,
-  NS_DISPLAY_LABELS,
-  NS_FILTER_GROUPS,
-  NS_GROUPS,
-} from '@/lib/cluster/namespaceCatalog'
+export { DEPRECATED_NAMESPACES } from '@/lib/cluster/namespaceCatalog';
 
 function segmentTab(icon: ReactNode, label: string) {
   return (

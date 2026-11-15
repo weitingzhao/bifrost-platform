@@ -23,7 +23,7 @@ export function decisionTitle(item: Pick<ApprovalItem, 'number' | 'summary' | 'a
 }
 
 /** What a drill's tier means: nothing, it is never approved. */
-export const DRILL_WORDS = 'a drill: nothing runs, and it cannot be approved'
+const DRILL_WORDS = 'a drill: nothing runs, and it cannot be approved'
 
 /** What the tier letter means, in plain words; for a drill, that nothing runs. */
 export function tierWords(tier: string, drill = false): string {

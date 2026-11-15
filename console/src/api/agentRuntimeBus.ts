@@ -21,7 +21,7 @@ export function parseChiefThread(value: unknown): ChiefThread {
   })) }
 }
 /** What the message routes answer a browser not signed in as the Owner (400, 401, 403). */
-export const SIGN_IN_REFUSED = 'Connect with the Owner token to talk to the chief of staff.'
+const SIGN_IN_REFUSED = 'Connect with the Owner token to talk to the chief of staff.'
 export const COORDINATOR_SIGN_IN = 'Connect with the Owner token to read the coordinator’s notes.'
 /**
  * The coordinating thread (2.5 G3): it tells the Owner what it is doing and what is next as a note

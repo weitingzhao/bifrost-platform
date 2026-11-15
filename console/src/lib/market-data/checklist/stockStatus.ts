@@ -2,7 +2,7 @@ import { STOCK_CHECKLIST_ROWS } from './stockChecklistRows'
 import type { ChecklistRow, CapabilityGroup } from './types'
 import { CAPABILITY_GROUP_ORDER } from './types'
 
-export { shortServiceLabel, checklistEffectiveStatusLabel } from './displayHelpers'
+import './displayHelpers'
 
 export function groupedStockChecklistRows(): { group: CapabilityGroup; rows: ChecklistRow[] }[] {
   return CAPABILITY_GROUP_ORDER.map(g => ({

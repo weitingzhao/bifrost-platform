@@ -5,7 +5,7 @@ import { StepBadge } from '@/pages/shell/agents/StepText'
 import { PLAN_SECTION_HREF, planStepLine } from '@/pages/shell/progress/progressPart'
 
 /** Each plan step a request is the approval for, as a link to the plan (v4 §20.5 scenario 10). Nothing for none. */
-export function PlanStepLinks({ steps, className = '' }: { steps: readonly ApprovalStep[]; className?: string }) {
+function PlanStepLinks({ steps, className = '' }: { steps: readonly ApprovalStep[]; className?: string }) {
   return <>{steps.map(step => (
     // The step's number as a badge and one line of its title, as on the plan (the Owner 2026-10-21); the link's name
     // stays the whole line, with the item.

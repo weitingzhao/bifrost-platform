@@ -15,12 +15,12 @@ const SCHEDULED_WINDOW_MS = 12 * 60 * 60 * 1000
 /** Align with platform/plugin weekend freshness (72h Sat/Sun/Mon-before-22UTC). */
 const SESSION_GAP_MAX_AGE_MS = 72 * 60 * 60 * 1000
 
-export function utcToday(now = new Date()): string {
+function utcToday(now = new Date()): string {
   return now.toISOString().slice(0, 10)
 }
 
 /** Sat/Sun, or Monday before UTC 22:00 (next Cron/Dagster EOD window). */
-export function isWeekendGapWindow(now = new Date()): boolean {
+function isWeekendGapWindow(now = new Date()): boolean {
   const day = now.getUTCDay() // 0 Sun … 6 Sat
   const hour = now.getUTCHours()
   return day === 0 || day === 6 || (day === 1 && hour < 22)

@@ -2,7 +2,7 @@ import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTa
 import { OpsSection } from '@/components/layout/OpsSection'
 import { shortSha, type AttentionRun, type ReleaseWindowView } from '@/pages/shell/releases/releaseView'
 
-export const NO_RUN_IN_PROGRESS = 'No run in flight, and every failed run has a later success.'
+const NO_RUN_IN_PROGRESS = 'No run in flight, and every failed run has a later success.'
 
 export type ReleaseInProgressProps = {
   window: ReleaseWindowView

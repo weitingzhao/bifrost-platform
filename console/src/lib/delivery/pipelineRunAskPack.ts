@@ -29,7 +29,7 @@ export interface PipelineRunAskContext {
   acceptanceHint: string
 }
 
-export const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
+const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
   task:
     'Diagnose and fix this failed Tekton PipelineRun for Bifrost STG K3s rollout.',
   milestonesTitle: 'Phase B STG v2',
@@ -267,7 +267,7 @@ function runStartedAt(run: DeliveryPipelineRunView): number | null {
   return null
 }
 
-export function comparePipelineRuns(
+function comparePipelineRuns(
   a: DeliveryPipelineRunView,
   b: DeliveryPipelineRunView,
   key: PipelineRunSortKey,

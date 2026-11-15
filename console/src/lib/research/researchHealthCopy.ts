@@ -175,7 +175,7 @@ function researchOlapRollup(
   return worse(product, batch)
 }
 
-export function buildResearchHealthLayers(
+function buildResearchHealthLayers(
   input: ResearchHealthCopyInput,
 ): ResearchHealthLayerView[] {
   const market = norm(input.marketVerdict)

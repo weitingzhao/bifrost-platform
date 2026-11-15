@@ -14,9 +14,9 @@ import { containsSignInData, signInSafeError } from '@/lib/signInError'
  * send the fixed label below. That header is self-reported, so a record can
  * name the same session. The page and the row do not use `mine`.
  */
-export const QUESTION_SESSION = 'owner-console'
+const QUESTION_SESSION = 'owner-console'
 
-export const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
+const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
 
 const QUESTION_STATUSES = ['open', 'answered', 'withdrawn', 'expired'] as const
 
@@ -177,7 +177,7 @@ function parseRead(value: unknown): QuestionRead | undefined | QuestionFailure {
 }
 
 /** An answer object from a question or from a 409 body. Wrong types fail. */
-export function parseQuestionAnswer(value: unknown): QuestionAnswer | QuestionFailure {
+function parseQuestionAnswer(value: unknown): QuestionAnswer | QuestionFailure {
   if (!isRecord(value)) return fail('questions: answer is not a record')
   const by = requiredString(value, 'by')
   if (isFailure(by)) return by
@@ -455,7 +455,7 @@ export type PostedAnswer = {
  * `answer-response.json` is not a full question. It carries the id, the status,
  * and the answer that was stored.
  */
-export function parsePostedAnswer(value: unknown): { ok: true; posted: PostedAnswer } | QuestionFailure {
+function parsePostedAnswer(value: unknown): { ok: true; posted: PostedAnswer } | QuestionFailure {
   if (!isRecord(value)) return fail('questions: answer response is not an object')
   if (typeof value.id !== 'string' || !QUESTION_ID_PATTERN.test(value.id)) {
     return fail('questions: id is not a question id')

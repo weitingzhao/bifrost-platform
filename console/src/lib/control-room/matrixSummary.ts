@@ -47,7 +47,7 @@ export function summarizeMatrix(m: MatrixResponse): MatrixSummary {
  * - `trade_write` / auth=blocked — Platform L0 must not probe write paths (R-DV3)
  * - `ops-capabilities` with auth=skipped — optional token not configured (not a failure)
  */
-export function countsTowardTradeReadiness(t: Target): boolean {
+function countsTowardTradeReadiness(t: Target): boolean {
   if (t.category === 'trade_write') return false
   if (t.auth === 'blocked') return false
   if (t.id === 'ops-capabilities' && t.auth === 'skipped') return false
@@ -85,7 +85,7 @@ export function getProdMatrix(matrices: MatrixResponse[]): MatrixResponse | unde
   return matrices.find(m => m.environment === 'prod')
 }
 
-export function prodMatrixHealthy(matrices: MatrixResponse[]): boolean {
+function prodMatrixHealthy(matrices: MatrixResponse[]): boolean {
   const prod = getProdMatrix(matrices)
   if (!prod) return false
   return prod.targets.every(
@@ -98,7 +98,7 @@ export function prodMatrixHealthy(matrices: MatrixResponse[]): boolean {
   )
 }
 
-export function hasProdFailures(matrices: MatrixResponse[]): boolean {
+function hasProdFailures(matrices: MatrixResponse[]): boolean {
   const prod = getProdMatrix(matrices)
   if (!prod) return true
   return prod.targets.some(
@@ -106,7 +106,7 @@ export function hasProdFailures(matrices: MatrixResponse[]): boolean {
   )
 }
 
-export function filterTargetsForBay(bay: BayDefinition, matrices: MatrixResponse[]): Target[] {
+function filterTargetsForBay(bay: BayDefinition, matrices: MatrixResponse[]): Target[] {
   const envs = bay.prodOnly ? matrices.filter(m => m.environment === 'prod') : matrices
   const out: Target[] = []
   for (const m of envs) {
@@ -233,7 +233,7 @@ export type StgReleaseStatus = StgDeliverStatus & {
 }
 
 /** STG deliver track — independent of prod matrix / D1 cutover (see DeliveryReleaseWorkflowPanel). */
-export function evaluateStgDeliverStatus(
+function evaluateStgDeliverStatus(
   stgSmoke?: { targets?: { id: string; reachability?: Reachability }[]; reachability?: Reachability },
   lastDeliverSucceeded = false,
 ): StgDeliverStatus {

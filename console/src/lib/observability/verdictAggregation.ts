@@ -21,7 +21,7 @@ import {
   classifyAttentionSignal,
 } from './attentionRemediationCatalog'
 import { verdictAffectingAlerts } from './alertMapping'
-import { OBSERVABILITY_DOMAIN_ORDER, SIGNAL_STALE_MS } from './signalRegistry'
+import { SIGNAL_STALE_MS } from './signalRegistry'
 import type {
   AttentionItem,
   DomainHealth,
@@ -128,7 +128,7 @@ export function signalToGap(s: EvaluatedSignal): SignalGap {
   }
 }
 
-export function emptyGapSummary(): GapSummary {
+function emptyGapSummary(): GapSummary {
   return { ok: 0, fail: 0, blind: 0, byDesign: 0, total: 0 }
 }
 
@@ -499,5 +499,3 @@ export function buildAttentionItems(
 export function emptyDomainCounts(): Record<ObservabilityVerdict, number> {
   return { healthy: 0, degraded: 0, critical: 0, unknown: 0, not_observed: 0 }
 }
-
-export { OBSERVABILITY_DOMAIN_ORDER, SIGNAL_STALE_MS }

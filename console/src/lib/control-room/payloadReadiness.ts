@@ -28,7 +28,7 @@ export type PayloadReadinessRowDef = {
   mapMode: PayloadMapMode
 }
 
-export const PAYLOAD_READINESS_ROWS: PayloadReadinessRowDef[] = [
+const PAYLOAD_READINESS_ROWS: PayloadReadinessRowDef[] = [
   {
     id: 'daemon',
     label: 'Daemon',

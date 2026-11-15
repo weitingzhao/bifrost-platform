@@ -8,7 +8,7 @@ import { serverFetch } from '@/api/serverContact'
 const RUN_PATH = '/api/owner-exec/run'
 const HEALTH_PATH = '/api/owner-exec/health'
 
-export class OwnerExecError extends Error {
+class OwnerExecError extends Error {
   constructor(
     message: string,
     readonly status: number,

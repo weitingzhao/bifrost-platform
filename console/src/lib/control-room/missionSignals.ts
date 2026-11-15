@@ -86,7 +86,7 @@ function smokeSignalFromCounts(smoke: { ok: number; total: number; allOk: boolea
   return 'degraded'
 }
 
-export function releaseSignal(supply?: SupplyChainResponse, stg?: StgSmokeResponse): ModuleState {
+function releaseSignal(supply?: SupplyChainResponse, stg?: StgSmokeResponse): ModuleState {
   if (!supply) return { signal: 'unknown', value: '…', detail: 'Release: probing' }
   if (supply.reachability === 'fail') {
     return { signal: 'fail', value: 'down', detail: 'Delivery pipeline unreachable' }
@@ -227,7 +227,7 @@ export type MissionDegradationItem = {
   detail: string
 }
 
-export function collectRocketDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
+function collectRocketDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
   const modules: Array<{ id: string; state: ModuleState }> = [
     { id: 'Infra', state: snap.infra },
     { id: 'Release', state: snap.release },
@@ -244,7 +244,7 @@ export function collectRocketDegradationItems(snap: MissionSnapshot): MissionDeg
     }))
 }
 
-export function collectPayloadDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
+function collectPayloadDegradationItems(snap: MissionSnapshot): MissionDegradationItem[] {
   const out: MissionDegradationItem[] = []
   if (snap.tradeDev.signal !== 'ok') {
     out.push({

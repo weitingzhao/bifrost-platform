@@ -22,7 +22,7 @@ import {
 import { cellKey } from '@/lib/control-room/fleetSnapshot/nav'
 import { moduleToCellSignal, unavailableCell } from '@/lib/control-room/fleetSnapshot/cellHelpers'
 
-export function backupFreshStandard(
+function backupFreshStandard(
   backup?: ClusterPostgresBackupStatusResponse,
 ): FleetStandard {
   if (backup == null) {

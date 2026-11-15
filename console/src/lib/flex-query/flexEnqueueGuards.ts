@@ -4,7 +4,7 @@
 
 import type { FlexIngestJob, FlexQueueSummary } from '@/api/flexQueryPlugin'
 
-export const FLEX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000
+const FLEX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000
 
 export type FlexEnqueueBlockReason =
   | { code: 'running'; message: string }

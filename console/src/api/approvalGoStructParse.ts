@@ -4,7 +4,7 @@
  */
 
 /** Conservative floor — real Approval has ~15 fields; avoids tying tests to exact count. */
-export const APPROVAL_JSON_TAG_COUNT_LOWER_BOUND = 9
+const APPROVAL_JSON_TAG_COUNT_LOWER_BOUND = 9
 
 const APPROVAL_STRUCT_HEAD = /type Approval struct \{/
 

@@ -74,12 +74,12 @@ export function liveNow(view: PlanSnapshot, rows: ModuleRow[], opts: { failed: s
 }
 
 /** "for 12 min" from a start; '' when none is known. */
-export function sinceText(since: LiveSince | null, now: number): string {
+function sinceText(since: LiveSince | null, now: number): string {
   return since ? `for ${sinceWords(since.at, now)}` : ''
 }
 
 /** "External work running (codex)", with "(+1 more)" when the step has other reasons. */
-export const liveWhat = (step: LiveStep) => `${step.what}${step.others > 0 ? ` (+${step.others} more)` : ''}`
+const liveWhat = (step: LiveStep) => `${step.what}${step.others > 0 ? ` (+${step.others} more)` : ''}`
 /** What a live cell says aloud: what runs, no clock in it (a duration would change while it is read). */
 export const liveSpoken = (step: LiveStep) => `live now: ${liveWhat(step)}`
 /** "5.8-2 · External work running (codex) · for 12 min": a line of the Now line. */

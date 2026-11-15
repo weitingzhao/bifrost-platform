@@ -5,7 +5,7 @@ export interface DeploymentGroup {
   pods: ClusterWorkload[]
 }
 
-export function podOwnedByDeployment(podName: string, deploymentName: string): boolean {
+function podOwnedByDeployment(podName: string, deploymentName: string): boolean {
   return podName === deploymentName || podName.startsWith(`${deploymentName}-`)
 }
 

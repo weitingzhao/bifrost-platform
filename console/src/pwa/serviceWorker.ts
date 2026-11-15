@@ -1,4 +1,4 @@
-export const SERVICE_WORKER_URL = '/sw.js'
+const SERVICE_WORKER_URL = '/sw.js'
 
 /**
  * Registers the home-screen app's service worker (offline shell; web push mounts

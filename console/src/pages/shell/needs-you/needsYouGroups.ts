@@ -8,16 +8,16 @@ export const TERMINAL_NOT_RUN = 'Approved. It has not run yet.'
 /** A pending drill's row: nothing runs and there is nothing to approve (v4 §20.3 rule 8). */
 export const DRILL_LINE = 'Drill · nothing runs, nothing to approve'
 
-export const CHECK_SAY_WHAT_HAPPENED = 'Open it and say what happened.'
+const CHECK_SAY_WHAT_HAPPENED = 'Open it and say what happened.'
 
 export const EARLIER_NOTIFICATIONS =
   'Notifications you received earlier are under Recently handled.'
 
 /** Closed approvals and recovered threads stay visible for a day after the push. */
-export const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000
+const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /** The handled block lists at most this many closed approvals. Threads are separate. */
-export const RECENT_APPROVAL_LIMIT = 10
+const RECENT_APPROVAL_LIMIT = 10
 
 export type NeedsYouGroups = {
   decide: ApprovalItem[]
@@ -33,7 +33,7 @@ export type HandledRow =
   | { kind: 'question'; id: string; line: string; at: number }
 
 /** An unread answer stays in the "not reported" line until this age, then the seven-day line. */
-export const UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
+const UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 
 /** The Answer group shows this many open questions before `Show N more`. */
 export const ANSWER_PREVIEW = 5
@@ -192,7 +192,7 @@ function threadLabel(thread: Pick<AgentThread, 'title' | 'thread'>): string {
 }
 
 /** A push went out, and the thread is no longer the silent row. */
-export function handledThreadLine(thread: Pick<AgentThread, 'title' | 'thread' | 'status' | 'event'>): string {
+function handledThreadLine(thread: Pick<AgentThread, 'title' | 'thread' | 'status' | 'event'>): string {
   const label = threadLabel(thread)
   if (thread.status === 'idle' || thread.event === 'turn_end') {
     return `${label} was silent; its turn ended`
@@ -219,7 +219,7 @@ function terminalInstant(question: Question): number | null {
 }
 
 /** One line, no option and no text. Same day window as a closed approval. */
-export function handledQuestionLine(question: Question): string | null {
+function handledQuestionLine(question: Question): string | null {
   const label = questionNumberLabel(question.number)
   if (question.status === 'answered') return `${label} answered`
   if (question.status === 'expired') return `${label} expired with no answer`

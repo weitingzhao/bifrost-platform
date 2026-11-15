@@ -94,7 +94,7 @@ export async function triggerDataClone(body: {
  * Selective clone refused because tables outside the selection reference the selected ones
  * (TRUNCATE would have to empty them). `missingTables` is what to add to `tables`.
  */
-export class DataCloneRefusedError extends Error {
+class DataCloneRefusedError extends Error {
   readonly missingTables: string[]
 
   constructor(message: string, missingTables: string[]) {
@@ -231,4 +231,3 @@ export async function fetchAudit(): Promise<AuditResponse> {
   if (!r.ok) throw new Error(`audit: HTTP ${r.status}`)
   return r.json() as Promise<AuditResponse>
 }
-

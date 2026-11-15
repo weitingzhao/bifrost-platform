@@ -69,7 +69,7 @@ export type ApprovalRow = {
  * An approved request that then expired was approved and came to nothing: it counts under Approved and under Bought
  * nothing. Only an expired request nobody approved is Not approved.
  */
-export function groupCells(group: ApprovalReadingsGroup) {
+function groupCells(group: ApprovalReadingsGroup) {
   const approved = new Set(group.approved)
   return {
     requests: numbersCell(group.requests),

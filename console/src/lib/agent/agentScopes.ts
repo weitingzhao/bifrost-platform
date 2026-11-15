@@ -2,11 +2,11 @@
 
 export const DELIVER_STG_RECOVER_SCOPE = 'deliver-stg-recover'
 export const TRADE_RELEASE_FIX_SCOPE = 'trade-release-fix'
-export const GITOPS_CONFIG_REPAIR_SCOPE = 'gitops-config-repair'
+const GITOPS_CONFIG_REPAIR_SCOPE = 'gitops-config-repair'
 export const DEFECT_PATTERN_REMEDIATE_SCOPE = 'defect-pattern-remediate'
 export const STALE_PIPELINE_TRIAGE_SCOPE = 'stale-pipeline-triage'
 export const PLATFORM_SELF_HEALTH_RECOVER_SCOPE = 'platform-self-health-recover'
-export const REGISTRY_PULL_RECOVER_SCOPE = 'registry-pull-recover'
+const REGISTRY_PULL_RECOVER_SCOPE = 'registry-pull-recover'
 /** AI Check on Daily Ops Checklist (prober) — not Operator Plane Fix / fleet cell Fix. */
 export const DAILY_OPS_CHECKLIST_RUN_SCOPE = 'daily-ops-checklist-run'
 /** Engineer git dirty — propose commit / stash with operator approval. */
@@ -14,11 +14,11 @@ export const GIT_DIRTY_REMEDIATE_SCOPE = 'git-dirty-remediate'
 /** CNPG barman backup freshness — repair WAL object store + trigger Backup CR when >48h stale. */
 export const DATA_LAYER_BACKUP_SCOPE = 'data-layer-backup'
 /** Owner-gated Full clone bifrost_prod → bifrost_dev only (TCC Refresh DEV ledger). */
-export const DATA_LAYER_CLONE_SCOPE = 'data-layer-clone'
+const DATA_LAYER_CLONE_SCOPE = 'data-layer-clone'
 /** Cluster page AI Auto-Check — fleet + ops triage (default K8s SRE prompt + enriched context). */
-export const CLUSTER_ISSUES_FULL_AUTO_SCOPE = 'cluster_issues_full_auto'
+const CLUSTER_ISSUES_FULL_AUTO_SCOPE = 'cluster_issues_full_auto'
 /** Engineer Operator Plane — agent bridge on the Mac minis. */
-export const OPERATOR_PLANE_REMEDIATE_SCOPE = 'operator-plane-remediate'
+const OPERATOR_PLANE_REMEDIATE_SCOPE = 'operator-plane-remediate'
 
 /** Maps cluster triage playbookId → remediation scope for one-click Fix. */
 export const PLAYBOOK_ID_TO_SCOPE: Record<string, string> = {

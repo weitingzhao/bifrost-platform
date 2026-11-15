@@ -7,7 +7,7 @@ import { StepSignoffControls } from './StepSignoffs'
 
 const CLOSED = new Set(['done', 'stopped', 'dropped'])
 /** As Work → Sign-offs says it of a row listed as last read. */
-export const STEP_SIGNOFF_REFRESH = 'Refresh the plan before signing.'
+const STEP_SIGNOFF_REFRESH = 'Refresh the plan before signing.'
 
 /**
  * On the step card, under "Done when": the step's Sign off, where the Owner reads what it waits on (11-05: he opened a

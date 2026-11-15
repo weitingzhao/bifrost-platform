@@ -8,11 +8,11 @@
 
 import type { CodeHealthMetricDto } from '@/api/codeHealth'
 
-export const BASELINES_ENV_PATH =
+const BASELINES_ENV_PATH =
   'bifrost-trade-infra/agent-config/scripts/code-health/baselines.env'
 
 /** Fallback when an older report lacked baseline_var (pre–Wave 5.1 scan). */
-export const BASELINE_VAR_BY_METRIC_ID: Record<string, string> = {
+const BASELINE_VAR_BY_METRIC_ID: Record<string, string> = {
   'code.duplication.satellite': 'DUP_FUNCS_FRONTEND_BASELINE',
   'code.duplication.research': 'DUP_FUNCS_RESEARCH_BASELINE',
   'code.duplication.satellite.trade-api': 'DUP_FUNCS_TRADE_API_BASELINE',

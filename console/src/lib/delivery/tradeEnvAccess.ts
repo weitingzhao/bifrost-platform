@@ -10,7 +10,7 @@
  * IP gateways resolve through TRADE_INGRESS_VIP.
  */
 
-export const TRADE_INGRESS_VIP: string | null = '192.168.10.100'
+const TRADE_INGRESS_VIP: string | null = '192.168.10.100'
 
 export type TradeEnvTier = 'DEV' | 'STG' | 'PROD'
 

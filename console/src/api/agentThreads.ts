@@ -120,7 +120,7 @@ export type AgentThreadsResponse = {
 }
 
 /** A capacity refusal counts toward Needs You only while it is younger than one hour. */
-export const CAPACITY_REFUSAL_WINDOW_MS = 60 * 60 * 1000
+const CAPACITY_REFUSAL_WINDOW_MS = 60 * 60 * 1000
 
 /** Present tense while the last refusal is still inside the hour. The count is the stored counter, not a thread row. */
 export function capacityRefusalText(count: number, at: string): string {

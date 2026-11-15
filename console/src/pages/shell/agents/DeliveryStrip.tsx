@@ -32,7 +32,7 @@ export function CommitStageStrip({ commit, read }: { commit: string; read: Deliv
  * place that shows it, read again each minute until the commit is on PROD. A failed read shows each stage Unknown,
  * with why on hover; a commit the platform cannot name (404) none reached.
  */
-export function CommitDeliveryStrip({ commit }: { commit: string }) {
+function CommitDeliveryStrip({ commit }: { commit: string }) {
   const q = useQuery({ queryKey: ['agentrt-delivery-commit', commit], queryFn: ({ signal }) => fetchCommitDelivery(commit, signal),
     staleTime: DELIVERY_POLL_MS, refetchInterval: query => deliverySettled(query.state.data) ? false : DELIVERY_POLL_MS, retry: false })
   if (q.data) return <CommitStageStrip commit={commit} read={q.data} />

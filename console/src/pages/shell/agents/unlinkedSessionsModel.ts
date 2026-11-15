@@ -47,7 +47,7 @@ export function compareInstant(a: string, b: string): number {
 }
 
 /** A session's stable identity (§3.1): an old client's session is its thread id, epoch 0. */
-export function sessionKey(t: Pick<AgentThread, 'host' | 'vendor' | 'thread' | 'session' | 'epoch'>): string {
+function sessionKey(t: Pick<AgentThread, 'host' | 'vendor' | 'thread' | 'session' | 'epoch'>): string {
   return `${t.host}/${t.vendor}/${t.session ?? t.thread}/${t.epoch ?? 0}`
 }
 
@@ -76,14 +76,14 @@ const CLIENT_WORDS: Record<string, string> = {
 }
 
 /** An answer with no binding at all: the platform is a version that does not judge sessions yet (before R5:5.5-12 P-c2). */
-export const NO_BINDING_WORDS = 'No binding in this answer: the platform is a version that does not judge sessions'
+const NO_BINDING_WORDS = 'No binding in this answer: the platform is a version that does not judge sessions'
 
 /**
  * Why a session is not linked, in words: no binding at all said as such (never as "no registration"); the server's
  * note; the client's own reason; a binding Unknown without a note as Unknown; and only a confirmed unlinked as none
  * recorded.
  */
-export function unlinkedReason(t: AgentThread): string {
+function unlinkedReason(t: AgentThread): string {
   if (!t.binding) return NO_BINDING_WORDS
   if (t.server_note && NOTE_WORDS[t.server_note]) return NOTE_WORDS[t.server_note]
   const reason = t.client_bind?.reason

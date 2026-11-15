@@ -81,7 +81,7 @@ function tradeApiEnv(ctx: ReadinessChipContext): ChipNavigation['apiEnv'] {
 }
 
 /** Primary drill-down when operator clicks a readiness chip (ok or not). */
-export function primaryChipNavigation(
+function primaryChipNavigation(
   chipLabel: string,
   ctx: ReadinessChipContext,
 ): ChipNavigation | null {
@@ -268,9 +268,9 @@ export function readinessChipFixActions(
   return actions
 }
 
-export const SATELLITE_BUS_FOCUS_KEY = 'bifrost.satelliteBus.focus'
-export const SATELLITE_API_ENV_KEY = 'bifrost.satelliteApi.env'
-export const SATELLITE_HEALTH_SECTION_KEY = 'bifrost.satelliteHealth.section'
+const SATELLITE_BUS_FOCUS_KEY = 'bifrost.satelliteBus.focus'
+const SATELLITE_API_ENV_KEY = 'bifrost.satelliteApi.env'
+const SATELLITE_HEALTH_SECTION_KEY = 'bifrost.satelliteHealth.section'
 
 export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | undefined): void {
   if (focus == null) {
@@ -280,7 +280,7 @@ export function setSatelliteBusFocus(focus: ReadinessChipAction['busFocus'] | un
   sessionStorage.setItem(SATELLITE_BUS_FOCUS_KEY, focus)
 }
 
-export function peekSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
+function peekSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null {
   const raw = sessionStorage.getItem(SATELLITE_BUS_FOCUS_KEY)
   if (
     raw === 'rocket' ||
@@ -297,7 +297,7 @@ export function peekSatelliteBusFocus(): ReadinessChipAction['busFocus'] | null 
   return null
 }
 
-export function clearSatelliteBusFocus(): void {
+function clearSatelliteBusFocus(): void {
   sessionStorage.removeItem(SATELLITE_BUS_FOCUS_KEY)
 }
 

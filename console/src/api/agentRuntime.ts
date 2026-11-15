@@ -133,7 +133,7 @@ export function parseRuntimeTask(v: unknown): RuntimeTask {
   if (typeof r.computed_not_persisted === 'boolean') task.computed_not_persisted = r.computed_not_persisted
   return task
 }
-export function parseRuntimeAttempt(v: unknown): RuntimeAttempt {
+function parseRuntimeAttempt(v: unknown): RuntimeAttempt {
   const a = record(v)
   return { attempt_id: text(a.attempt_id), attempt_no: number(a.attempt_no), task_id: text(a.task_id),
     mission_id: text(a.mission_id), host_id: text(a.host_id), executor: text(a.executor), model: text(a.model),
@@ -147,7 +147,7 @@ const count = (v: unknown): v is number => typeof v === 'number' && Number.isInt
  * An estimate whose times or basis do not read is unknown, not a guess (v4 §20.3): a basis with no
  * task class, or with no samples behind its usual time, is not read as another basis (review 411 C2).
  */
-export function parseMissionEta(v: unknown): MissionEta {
+function parseMissionEta(v: unknown): MissionEta {
   const r = record(v), reason = text(r.reason)
   if (r.state !== 'estimated') return { state: 'unknown', reason: reason || 'the runtime gave no estimate' }
   const basis = Array.isArray(r.basis) ? r.basis.map(record) : []
@@ -170,7 +170,7 @@ function parseOwnerNextCandidate(v: unknown): OwnerNextCandidate | null {
     state: timed ? 'estimated' : 'unknown', ...(timed ? { earliest, latest } : {}),
     reason: text(c.reason) || (c.state === 'estimated' ? 'its time does not read' : ''), after: strings(c.after), ready: timed && c.ready === true }
 }
-export function parseOwnerNext(v: unknown): OwnerNext | undefined {
+function parseOwnerNext(v: unknown): OwnerNext | undefined {
   if (v === undefined) return undefined
   const r = record(v)
   const candidates = records(r.candidates).map(parseOwnerNextCandidate).filter((c): c is OwnerNextCandidate => c !== null)
@@ -213,7 +213,7 @@ function presenceSwitch<K extends 'presence_unjudged' | 'presence_deferred'>(key
   if (v === null) return { [key]: null } as Partial<Record<K, null>>
   return { [key]: { since: text(record(v).since), why: text(record(v).why) } } as Partial<Record<K, { since: string; why: string }>>
 }
-export function parseRuntimeHost(v: unknown): RuntimeHost {
+function parseRuntimeHost(v: unknown): RuntimeHost {
   const h = record(v)
   const host: RuntimeHost = { host_id: text(h.host_id), state: text(h.state),
     online: typeof h.online === 'boolean' ? h.online : undefined, poll_age_s: number(h.poll_age_s),
@@ -235,7 +235,7 @@ export function parseRuntimeHost(v: unknown): RuntimeHost {
   return host
 }
 const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const
-export function parseRuntimeSchema(v: unknown): RuntimeSchema {
+function parseRuntimeSchema(v: unknown): RuntimeSchema {
   const r = record(v)
   const known = (SCHEMA_STATES as readonly string[]).includes(text(r.state))
   return { state: v === undefined ? 'unread' : known ? text(r.state) as RuntimeSchema['state'] : 'unknown',

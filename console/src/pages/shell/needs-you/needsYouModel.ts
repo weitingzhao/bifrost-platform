@@ -10,8 +10,8 @@ export type NeedsYouCount =
   | { state: 'known'; count: number }
 
 /** Decide and sign-off rows turn yellow after 7 days and red after 14. Approvals expire in 24h. */
-export const WAIT_YELLOW_DAYS = 7
-export const WAIT_RED_DAYS = 14
+const WAIT_YELLOW_DAYS = 7
+const WAIT_RED_DAYS = 14
 
 export type WaitTone = 'normal' | 'yellow' | 'red'
 

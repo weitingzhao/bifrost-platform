@@ -68,7 +68,7 @@ export function parseStaticLogText(text: string): StaticLogLine[] {
   })
 }
 
-export function staticLogMatchesFilter(level: StaticLogLevel, filter: StaticLogLevelFilter): boolean {
+function staticLogMatchesFilter(level: StaticLogLevel, filter: StaticLogLevelFilter): boolean {
   if (filter === 'ALL') return true
   if (filter === 'ALERTS') return level === 'ERROR' || level === 'WARN'
   return level === filter

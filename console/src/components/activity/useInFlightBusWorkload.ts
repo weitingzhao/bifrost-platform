@@ -5,7 +5,7 @@ import {
 } from '@/lib/activity/activityPageFocus'
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
 
-export function matchesNamespace(ev: ActivityEvent, namespace: string): boolean {
+function matchesNamespace(ev: ActivityEvent, namespace: string): boolean {
   if (ev.linkTo != null && ev.linkTo !== 'satellite-bus') return false
   if (ev.kind !== 'actuation') return false
   const { namespace: ns } = parseActivityTarget(ev.target)

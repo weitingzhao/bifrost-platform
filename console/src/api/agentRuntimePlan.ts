@@ -64,10 +64,10 @@ export type RuntimeArchRow = { id: string; title: string; tick: ArchTick; reason
 export type RuntimeArchTable = { id: string; title: string; rows: RuntimeArchRow[] }
 
 /** The reason of a row with no done rule (store.ReasonNoGate). */
-export const REASON_NO_GATE = 'no gate test yet'
+const REASON_NO_GATE = 'no gate test yet'
 
 /** The architecture root (planimport.ArchRootID). */
-export const ARCH_ROOT = 'ARCH'
+const ARCH_ROOT = 'ARCH'
 
 /**
  * The architecture table from GET /progress's plan: the arch_root with its rows, each ticked by its done rule
@@ -116,7 +116,7 @@ export function currentRound(plan: unknown): string {
   const rounds = planRounds(plan)
   return rounds.length > 0 ? rounds[rounds.length - 1] : PLAN_ROOT
 }
-export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
+const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
 
 /** GET /plan?root=: the answer, or not found when the runtime holds no such root (the plan is not imported). */
 export type PlanAnswer = { found: false } | { found: true; doc: unknown }
@@ -152,7 +152,7 @@ export function parsePlanRequest(value: unknown, root: string): PlanRequest {
 }
 
 /** The events GET /events?stream= answers a page with: its fixed LIMIT (agentrtapi getEvents). */
-export const PLAN_STREAM_PAGE = 500
+const PLAN_STREAM_PAGE = 500
 /** How many full pages of the plan's stream are read for its import head. */
 export const IMPORT_HEAD_PAGES = 20
 /**
@@ -345,13 +345,13 @@ export function plainTitle(title: string): string {
 }
 
 /** A step's number: its node id without the round's prefix (R2:2.4-1 → 2.4-1). */
-export function stepNumber(node: string): string {
+function stepNumber(node: string): string {
   const i = node.indexOf(':')
   return i < 0 ? node : node.slice(i + 1)
 }
 
 /** Step numbers in the plan's order: 2.4-1 before 2.4-2, 2.9-1 before 2.10-1, 2.2-6 before 2.2b-1. */
-export const byStepNumber = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true })
+const byStepNumber = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true })
 
 /** A step waiting on the Owner's sign-off: its number, its plain title, and the refs of its rule not signed yet. */
 export type SignoffWait = { node: string; label: string; title: string; state: string; refs: string[]; named: boolean }

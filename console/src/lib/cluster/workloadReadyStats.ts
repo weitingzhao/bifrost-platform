@@ -14,13 +14,13 @@ export type NamespaceReadyStats = {
   deploymentTotal: number
 }
 
-export function parseReady(ready: string): ReadyCount {
+function parseReady(ready: string): ReadyCount {
   const match = ready.match(/^(\d+)\/(\d+)$/)
   if (match == null) return { actual: 0, planned: 0 }
   return { actual: Number(match[1]), planned: Number(match[2]) }
 }
 
-export function mergeReadyCounts(counts: ReadyCount[]): ReadyCount {
+function mergeReadyCounts(counts: ReadyCount[]): ReadyCount {
   return counts.reduce(
     (acc, count) => ({
       actual: acc.actual + count.actual,
@@ -39,14 +39,14 @@ function podReadyCount(pod: ClusterWorkload): ReadyCount {
   return parseReady(pod.ready)
 }
 
-export function isDeploymentReady(deployment: ClusterWorkload): boolean {
+function isDeploymentReady(deployment: ClusterWorkload): boolean {
   if (deployment.kind !== 'Deployment') return false
   const ready = parseReady(deployment.ready)
   if (ready.planned === 0) return deployment.reachability === 'ok'
   return deployment.reachability === 'ok' && ready.actual >= ready.planned
 }
 
-export function readyTone(count: ReadyCount, anyUnhealthy = false): ReadyTone {
+function readyTone(count: ReadyCount, anyUnhealthy = false): ReadyTone {
   if (count.planned === 0) return 'idle'
   if (anyUnhealthy || (count.actual === 0 && count.planned > 0)) return 'fail'
   if (count.actual >= count.planned) return 'ok'

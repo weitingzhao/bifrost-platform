@@ -31,7 +31,7 @@ interface FacilityPanelProps {
   onOpenDelivery?: () => void
 }
 
-export function ClusterFacilityPoolsPanel({ placement, isLoading }: FacilityPanelProps) {
+function ClusterFacilityPoolsPanel({ placement, isLoading }: FacilityPanelProps) {
   const pools = placement?.pools ?? []
   return (
     <div className="flex flex-col gap-3">
@@ -87,7 +87,7 @@ export function ClusterFacilityPoolsPanel({ placement, isLoading }: FacilityPane
   )
 }
 
-export function ClusterFacilityPolicyPanel({
+function ClusterFacilityPolicyPanel({
   placement,
   isLoading,
   onSelectNodes,
@@ -194,7 +194,7 @@ export function ClusterFacilityPolicyPanel({
   )
 }
 
-export function ClusterFacilityCiPanel({
+function ClusterFacilityCiPanel({
   placement,
   onOpenDelivery,
 }: FacilityPanelProps) {

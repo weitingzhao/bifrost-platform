@@ -1,7 +1,7 @@
 import type { AuditRecord } from '@/api/auditTypes'
 
 /** How many decisions the section lists and sums, newest first. */
-export const POLICY_DECISION_LIMIT = 10
+const POLICY_DECISION_LIMIT = 10
 
 /** The two audit actions the release policy writes when it judges a run request (api/internal/server/release_policy_wire.go). */
 const CHECK = 'release_policy.check'

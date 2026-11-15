@@ -1,9 +1,9 @@
 import type { IngestJob } from '@/api/marketDataPlugin'
 
 /** Running longer than this is unusual for a single ingest job. */
-export const RUNNING_LONG_SEC = 8 * 60
+const RUNNING_LONG_SEC = 8 * 60
 /** No heartbeat while running — past this, treat as likely stuck / dead worker. */
-export const RUNNING_STALE_SEC = 20 * 60
+const RUNNING_STALE_SEC = 20 * 60
 
 export type RunningFreshness = 'live' | 'long' | 'stale' | 'unknown'
 

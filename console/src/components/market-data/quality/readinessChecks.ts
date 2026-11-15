@@ -24,7 +24,7 @@ export type ReadinessCheck = {
   detail: string
 }
 
-export const READINESS_THRESHOLDS = {
+const READINESS_THRESHOLDS = {
   universeMin: 5000,
   snapshotCoveragePct: 95,
   /** Actionable vendor gaps only (snapshot_close > 0). */
@@ -40,7 +40,7 @@ export const READINESS_THRESHOLDS = {
 } as const
 
 /** Actionable vendor gap: real snapshot price vs bar divergence (not zero-close SPACs). */
-export function isActionableVendorGap(row: {
+function isActionableVendorGap(row: {
   snapshot_close?: number | null
   reason?: string
 }): boolean {

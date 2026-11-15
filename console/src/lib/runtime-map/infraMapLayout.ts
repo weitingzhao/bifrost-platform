@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react'
 import type { TopologyEdge, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 
-export const INFRA_MAP_CELL_W = 200
-export const INFRA_MAP_CELL_H = 172
-export const INFRA_MAP_PAD_X = 24
-export const INFRA_MAP_PAD_Y = 24
+const INFRA_MAP_CELL_W = 200
+const INFRA_MAP_CELL_H = 172
+const INFRA_MAP_PAD_X = 24
+const INFRA_MAP_PAD_Y = 24
 
 export type LayoutMode = 'grid' | 'dataPath'
 
@@ -83,7 +83,7 @@ export function buildInfraMapLayout(
   return { viewBox: { width, height }, nodeLayout, mode }
 }
 
-export function nodeAnchorPoint(
+function nodeAnchorPoint(
   from: NodeRect,
   to: NodeRect,
 ): { x: number; y: number } {
@@ -109,7 +109,7 @@ export function pipePath(
   return pipePathOrthogonal(from, to)
 }
 
-export function pipePathOrthogonal(from: NodeRect, to: NodeRect): string {
+function pipePathOrthogonal(from: NodeRect, to: NodeRect): string {
   const a = nodeAnchorPoint(from, to)
   const b = nodeAnchorPoint(to, from)
   const midX = (a.x + b.x) / 2
@@ -154,7 +154,7 @@ export function localEdgesForNode(
   return edges.filter(e => e.from === nodeId && e.to === nodeId)
 }
 
-export function pct(value: number, total: number): string {
+function pct(value: number, total: number): string {
   return `${(value / total) * 100}%`
 }
 

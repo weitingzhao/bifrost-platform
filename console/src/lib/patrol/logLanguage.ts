@@ -2,7 +2,7 @@ import type { AgentDialogueLanguage } from '@/lib/agent/agentDialogueLanguage'
 
 export type PatrolOutputLanguage = AgentDialogueLanguage
 
-export const PATROL_OUTPUT_LANG_STORAGE_KEY = 'bifrost.patrol.outputLang'
+const PATROL_OUTPUT_LANG_STORAGE_KEY = 'bifrost.patrol.outputLang'
 export const DEFAULT_PATROL_OUTPUT_LANGUAGE: PatrolOutputLanguage = 'zh'
 
 export function readPatrolOutputLanguage(): PatrolOutputLanguage {

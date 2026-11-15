@@ -3,7 +3,7 @@ import type { ChecklistRow, CapabilityGroup } from './types'
 import { CAPABILITY_GROUP_ORDER } from './types'
 
 /** Shared REST capabilities shown under Coverage → Common. */
-export const MARKET_DATA_COMMON_CAP_IDS = ['technical-indicators', 'market-ops'] as const
+const MARKET_DATA_COMMON_CAP_IDS = ['technical-indicators', 'market-ops'] as const
 const COMMON_CAP_ID_SET = new Set<string>(MARKET_DATA_COMMON_CAP_IDS)
 
 export function optionFeedChecklistRows(): ChecklistRow[] {

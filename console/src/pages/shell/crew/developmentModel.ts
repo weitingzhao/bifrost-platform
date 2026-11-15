@@ -2,7 +2,7 @@ import type { RuntimeProgress } from '@/api/agentRuntime'
 import type { PlanRead } from '../agents/useRuntimePlan'
 
 /** A display freshness limit, not a qualification or authorization rule. */
-export const DEVELOPMENT_FRESH_MS = 120_000
+const DEVELOPMENT_FRESH_MS = 120_000
 export const DEVELOPMENT_REVIEW = '2026-10-24 21:15 CDT'
 export const R4_HREF = '#work?section=plan&round=R4'
 export const CAPABILITY_LADDER = [

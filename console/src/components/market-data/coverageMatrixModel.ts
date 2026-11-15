@@ -134,7 +134,7 @@ export type MatrixCell = {
   worst: AxisVerdict | null;
 };
 
-export function axesOf(d: DatasetDimensions, changes?: ChangeIndex): AxisCell[] {
+function axesOf(d: DatasetDimensions, changes?: ChangeIndex): AxisCell[] {
   const moved = (axis: string) => changes?.get(`${d.dataset}|${axis}`) ?? null;
   return [
     { axis: "breadth", verdict: breadthVerdict(d), progress: null, stalled: null, change: moved("breadth") },
