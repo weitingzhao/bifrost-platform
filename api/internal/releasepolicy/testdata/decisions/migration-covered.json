@@ -1,0 +1,22 @@
+{
+  "Auto": true,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-pinned",
+  "Who": "",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": null,
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-pinned",
+    "pinned_to:deliver-app-stg",
+    "ddl_reversible"
+  ],
+  "AdditiveDDL": null,
+  "ReversibleDDL": [
+    "repo-app:db/migrations/0002_notes.sql"
+  ]
+}

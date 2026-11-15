@@ -68,7 +68,8 @@ type Shipment struct {
 
 // Deps are the engine's inputs. StatePath is a statefile path for the newest
 // freeze seen; empty keeps it in memory only. Plans and Live are read only
-// for a policy's apply section (apply.go); nil, it covers nothing.
+// for a policy's apply section (apply.go); nil, it covers nothing. Migrations
+// is read only for run_agentrt_migration (migrationaction.go), the same way.
 type Deps struct {
 	ConfigMaps ConfigMaps
 	Writer     ConfigMapWriter
@@ -78,6 +79,7 @@ type Deps struct {
 	Deployed   Deployed
 	Plans      Plans
 	Live       Live
+	Migrations Migrations
 	StatePath  string
 	Anchor     string
 	Now        func() time.Time
@@ -241,6 +243,9 @@ type Decision struct {
 	// Plan and Path name what an apply_manifest decision judged.
 	Plan string `json:",omitempty"`
 	Path string `json:",omitempty"`
+	// ReversibleDDL names each new migration file that passed as one that
+	// cannot destroy rows (ddl_reversible): "repo:path".
+	ReversibleDDL []string `json:",omitempty"`
 	// SelfCheckedAnchors names each trust-anchor change that passed on the
 	// author's own machine facts (trust_anchor_self_checked): "repo@commit".
 	SelfCheckedAnchors []string `json:",omitempty"`
@@ -343,6 +348,9 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 	if actionID == applyAction {
 		return e.evaluateApply(ctx, params)
 	}
+	if actionID == migrationAction {
+		return e.evaluateMigration(ctx, params)
+	}
 	if actionID != releaseAction {
 		d.Reasons = []string{actionID + " is not a release; the policy covers " + releaseAction + " only"}
 		return d
@@ -411,8 +419,13 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 			if !pol.Enforced(rule) {
 				continue
 			}
-			if rule == "no_ddl" && len(d.AdditiveDDL) > 0 {
-				d.Clauses = append(d.Clauses, "additive_ddl")
+			if rule == "no_ddl" && len(d.ReversibleDDL)+len(d.AdditiveDDL) > 0 {
+				if len(d.ReversibleDDL) > 0 {
+					d.Clauses = append(d.Clauses, "ddl_reversible")
+				}
+				if len(d.AdditiveDDL) > 0 {
+					d.Clauses = append(d.Clauses, "additive_ddl")
+				}
 				continue
 			}
 			if rule == "no_trust_anchor_change" && len(d.SelfCheckedAnchors) > 0 {
@@ -716,6 +729,24 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 		if len(hits) == 0 {
 			continue
 		}
+		if rule == "no_ddl" && pol.DDLReversible() {
+			// Files under ddl_reversible_paths are judged by statement kind
+			// and by being new, and by nothing else: the additive check
+			// below would pass a changed file and what it does not know.
+			if mine := pol.reversiblePaths(repo, hits); len(mine) > 0 {
+				if why := e.reversibleDDL(ctx, repo, old, next, mine); why != "" {
+					reasons = append(reasons, fmt.Sprintf("%s %s..%s carries a migration that is not a new file that cannot destroy rows (ask the Owner): %s",
+						repo, short(old), short(next), why))
+				} else {
+					for _, path := range mine {
+						d.ReversibleDDL = append(d.ReversibleDDL, repo+":"+path)
+					}
+				}
+				if hits = without(hits, mine); len(hits) == 0 {
+					continue
+				}
+			}
+		}
 		if rule == "no_ddl" && pol.AdditiveDDL() {
 			additive, why := e.additiveDDL(ctx, repo, old, next, hits)
 			if why == "" {
@@ -792,6 +823,47 @@ func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits [
 		out = append(out, repo+":"+path)
 	}
 	return out, ""
+}
+
+// reversibleDDL is "" when every file is new between old and next (it does
+// not exist at old) and in the class ClassifyMigration names; otherwise why
+// not, naming the file and the statement kind. A migration that exists at
+// old is changed or deleted, and an applied migration never changes.
+func (e *Engine) reversibleDDL(ctx context.Context, repo, old, next string, files []string) string {
+	if len(files) > maxDDLFiles {
+		return fmt.Sprintf("%d migration files, more than the %d this check reads", len(files), maxDDLFiles)
+	}
+	for _, path := range files {
+		_, existed, err := e.d.Git.FileAt(ctx, repo, old, path)
+		if err != nil {
+			return path + ": cannot read at " + short(old) + ": " + err.Error()
+		}
+		if existed {
+			return path + " exists at " + short(old) + ": it is changed or deleted, and only a new migration file is in the class"
+		}
+		text, found, err := e.d.Git.FileAt(ctx, repo, next, path)
+		if err != nil {
+			return path + ": cannot read at " + short(next) + ": " + err.Error()
+		}
+		if !found {
+			return path + " does not exist at " + short(next)
+		}
+		if ok, why := ClassifyMigration(text); !ok {
+			return path + ": " + why
+		}
+	}
+	return ""
+}
+
+// without is list less the entries of drop.
+func without(list, drop []string) []string {
+	out := make([]string, 0, len(list))
+	for _, f := range list {
+		if !contains(drop, f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func str(v any) string {

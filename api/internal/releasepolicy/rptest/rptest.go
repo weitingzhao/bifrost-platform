@@ -289,3 +289,20 @@ func SHA(seed string) string {
 	}
 	return string(out[:40])
 }
+
+// Migrations is a fake of what a platform knows of its own environment's
+// migrations. A zero value fails the read.
+type Migrations struct {
+	State releasepolicy.OwnMigrations
+	Err   error
+}
+
+func (m *Migrations) Own(context.Context) (releasepolicy.OwnMigrations, error) {
+	if m.Err != nil {
+		return releasepolicy.OwnMigrations{}, m.Err
+	}
+	if m.State.Pipeline == "" {
+		return releasepolicy.OwnMigrations{}, errors.New("this environment's migrations are not read")
+	}
+	return m.State, nil
+}

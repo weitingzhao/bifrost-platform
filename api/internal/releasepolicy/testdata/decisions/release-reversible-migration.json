@@ -1,0 +1,27 @@
+{
+  "Auto": true,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-app-prod",
+  "Who": "agent@mac",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": null,
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-app-prod",
+    "window_held_by_requester",
+    "revision",
+    "ci_succeeded",
+    "ddl_reversible",
+    "no_d10_paths",
+    "no_trust_anchor_change",
+    "owner_only"
+  ],
+  "AdditiveDDL": null,
+  "ReversibleDDL": [
+    "repo-app:db/migrations/0002_notes.sql"
+  ]
+}

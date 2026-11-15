@@ -66,6 +66,11 @@ type Policy struct {
 	// trust-anchor hit is refused as before.
 	Apply            *ApplyRules `yaml:"apply"`
 	SelfCheckedRepos []string    `yaml:"self_checked_repos"`
+	// DDLReversiblePaths are the migration files the ddl_reversible condition
+	// may let through, per repo, in the shape of a path rule. Absent (every
+	// policy signed before 2026-11-15), no file is one, whatever the
+	// condition says.
+	DDLReversiblePaths []PathRule `yaml:"ddl_reversible_paths"`
 }
 
 // ApplyRules says which apply_manifest plans the policy covers (apply.go).
@@ -121,6 +126,21 @@ type DBSteps struct {
 func (p *Policy) AdditiveDDL() bool {
 	v, ok := p.Conditions["additive_ddl"].(bool)
 	return ok && v
+}
+
+// DDLReversible reports whether a migration that cannot destroy rows may
+// pass without the Owner (Owner 2026-11-15): a no_ddl hit on a file under
+// ddl_reversible_paths that is new and whose every statement is of the class
+// ClassifyMigration names, and run_agentrt_migration for such files. It is
+// off unless the policy says true; then both wait for the Owner as before.
+func (p *Policy) DDLReversible() bool {
+	v, ok := p.Conditions["ddl_reversible"].(bool)
+	return ok && v
+}
+
+// reversiblePaths lists the files of repo that are under ddl_reversible_paths.
+func (p *Policy) reversiblePaths(repo string, files []string) []string {
+	return RuleHits(map[string][]PathRule{"": p.DDLReversiblePaths}, "", repo, files)
 }
 
 // TrustAnchorSelfChecked reports whether a no_trust_anchor_change hit in a

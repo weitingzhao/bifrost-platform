@@ -63,8 +63,17 @@ func snapshotCases() []snapshotCase {
 				world(f)
 			}}
 	}
+	migration := func(name string, world func(f *applyFixture)) snapshotCase {
+		return snapshotCase{name: name, world: world, action: "run_agentrt_migration", tier: actions.TierC, params: map[string]any{"commit": rptest.SHA("new")}}
+	}
 	return []snapshotCase{
 		release("release-covered", nil),
+		release("release-reversible-migration", func(f *applyFixture) { migrationWorld(f, inClassSQL) }),
+		release("refused-migration-drop-table", func(f *applyFixture) { migrationWorld(f, "DROP TABLE orders;\n") }),
+		migration("migration-covered", func(f *applyFixture) { migrationWorld(f, inClassSQL) }),
+		migration("migration-not-covered", func(f *applyFixture) {
+			migrationWorld(f, "CREATE TABLE notes (id int);\nDROP TABLE orders;\n")
+		}),
 		release("release-self-checked-trust-anchor", files("docs/readme.md", anchorFile)),
 		release("release-additive-ddl", func(f *applyFixture) {
 			f.facts.Files["repo-app"] = []string{"db/ddl_orders.py"}
@@ -121,7 +130,7 @@ func TestDecisionSnapshots(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newApplyFixture(t, func(doc map[string]any) {
 				selfChecked(doc)
-				doc["allow"] = []string{pipeline, "deliver-pinned"}
+				reversible(doc)
 			})
 			if tc.world != nil {
 				tc.world(f)

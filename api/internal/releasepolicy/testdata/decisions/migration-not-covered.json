@@ -1,0 +1,20 @@
+{
+  "Auto": false,
+  "PolicyID": "rp-apply",
+  "Pipeline": "deliver-pinned",
+  "Who": "",
+  "SHAs": {
+    "repo-app": "6e65770000000000000000000000000000000000"
+  },
+  "Reasons": [
+    "repo-app 6f6c64000000..6e6577000000 has a pending migration that is not a new file that cannot destroy rows (ask the Owner): db/migrations/0002_notes.sql: statement 2: DROP TABLE is not a statement of the class"
+  ],
+  "Clauses": [
+    "signature",
+    "unexpired",
+    "not_frozen",
+    "allow:deliver-pinned",
+    "pinned_to:deliver-app-stg"
+  ],
+  "AdditiveDDL": null
+}

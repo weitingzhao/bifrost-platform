@@ -61,13 +61,15 @@ type applyFixture struct {
 	*fixture
 	plans fakePlans
 	live  *rptest.Live
+	// migs is what the platform knows of its own migrations; zero, the read fails.
+	migs *rptest.Migrations
 }
 
 // newApplyFixture: the fixture's policy with an apply section, and one plan
 // of one Pipeline in cicd that the applier applied before.
 func newApplyFixture(t *testing.T, edit func(doc map[string]any)) *applyFixture {
 	t.Helper()
-	f := &applyFixture{fixture: newFixture(t), plans: fakePlans{}, live: &rptest.Live{
+	f := &applyFixture{fixture: newFixture(t), plans: fakePlans{}, migs: &rptest.Migrations{}, live: &rptest.Live{
 		Objects: map[string][]rptest.LiveManager{"cicd/Pipeline/ci": applied}, Err: map[string]error{},
 	}}
 	f.signPolicy(t, f.key, rptest.PolicyTextWith("rp-apply", now.Add(-time.Hour), 90, func(doc map[string]any) {
@@ -82,7 +84,7 @@ func newApplyFixture(t *testing.T, edit func(doc map[string]any)) *applyFixture 
 	}
 	f.eng = releasepolicy.New(releasepolicy.Deps{
 		ConfigMaps: f.cms, Writer: rptest.Writer{CMs: f.cms}, Git: f.facts, CI: f.facts, Window: f.facts, Deployed: f.facts,
-		Plans: f.plans, Live: liveSource{f.live}, Anchor: f.key.Fingerprint, Now: func() time.Time { return f.clock },
+		Plans: f.plans, Live: liveSource{f.live}, Migrations: f.migs, Anchor: f.key.Fingerprint, Now: func() time.Time { return f.clock },
 	})
 	return f
 }
