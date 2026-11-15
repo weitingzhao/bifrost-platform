@@ -13,7 +13,7 @@ import (
 )
 
 // database0020 is a database migrated to 0020, its owner's connection, and
-// every migration file.
+// every migration file; the tests below run them through 0021 (files[:21]).
 func database0020(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 	t.Helper()
 	ctx := context.Background()
@@ -84,7 +84,7 @@ func TestUpgradeTo0021DropsTheDebtLedger(t *testing.T) {
 	if err := conn.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&events0); err != nil {
 		t.Fatal(err)
 	}
-	applied, err := migrate.RunFiles(ctx, conn, "dev", files)
+	applied, err := migrate.RunFiles(ctx, conn, "dev", files[:21])
 	if err != nil || !slices.Equal(applied, []int{21}) {
 		t.Fatalf("0021 on an empty ledger: applied %v, %v", applied, err)
 	}
@@ -151,7 +151,7 @@ func TestUpgradeTo0021RefusesAUsedLedger(t *testing.T) {
 			if _, err := admin.Exec(ctx, `SET session_replication_role = replica; `+c.put); err != nil {
 				t.Fatalf("putting the row there: %v", err)
 			}
-			applied, err := migrate.RunFiles(ctx, conn, "dev", files)
+			applied, err := migrate.RunFiles(ctx, conn, "dev", files[:21])
 			if err == nil || !strings.Contains(err.Error(), c.want) || len(applied) != 0 {
 				t.Fatalf("0021 on a used ledger: applied %v, %v", applied, err)
 			}
@@ -166,7 +166,7 @@ func TestUpgradeTo0021RefusesAUsedLedger(t *testing.T) {
 			if _, err = admin.Exec(ctx, c.take); err != nil {
 				t.Fatalf("taking the row away: %v", err)
 			}
-			if applied, err = migrate.RunFiles(ctx, conn, "dev", files); err != nil || !slices.Equal(applied, []int{21}) {
+			if applied, err = migrate.RunFiles(ctx, conn, "dev", files[:21]); err != nil || !slices.Equal(applied, []int{21}) {
 				t.Fatalf("0021 once the ledger is empty again: applied %v, %v", applied, err)
 			}
 		})
