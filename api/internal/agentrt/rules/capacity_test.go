@@ -43,16 +43,11 @@ func TestCapacityOnly(t *testing.T) {
 		card       bool
 	}{
 		"tuning capacity":             {tuning, loosened(t, tuning, "assess_per_pass: 5", "assess_per_pass: 6"), true},
+		"nothing changes":             {tuning, loosened(t, tuning, "", ""), false},
 		"tuning validity":             {tuning, loosened(t, tuning, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
-		"per_host up":                 {concurrency, loosened(t, concurrency, "per_host: 1", "per_host: 3"), true},
-		"per_host down":               {concurrency, loosened(t, concurrency, "per_host: 1", "per_host: 0"), true},
-		"nothing changes":             {concurrency, loosened(t, concurrency, "", ""), false},
-		"expiring later":              {concurrency, loosened(t, concurrency, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
 		"budget mission up":           {budget, loosened(t, budget, "max_attempts: 40", "max_attempts: 80"), true},
 		"budget hard limit up":        {budget, loosened(t, budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 7200"), true},
 		"budget states auto_grant":    {budget, loosened(t, budget, "attempt_hard_limit_s: 3600\n", "attempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 60, max_wall_hours: 24}\n"), true},
-		"routing quota up":            {routing, loosened(t, routing, "quota_stop_percent: 90", "quota_stop_percent: 95"), true},
-		"routing competence":          {routing, loosened(t, routing, "quota_stop_percent: 90\n", "quota_stop_percent: 90\nmin_score_percent: 50\nmin_samples: 3\n"), false},
 		"landing limits up":           {capacityLanding, loosened(t, capacityLanding, "max_landings_per_day: 5", "max_landings_per_day: 9"), true},
 		"landing repo limit up":       {capacityLanding, loosened(t, capacityLanding, "max_files: 8", "max_files: 12"), true},
 		"landing global in flight up": {capacityLanding, loosened(t, capacityLanding, "max_in_flight_per_repo: 1", "max_in_flight_per_repo: 2"), true},
@@ -84,12 +79,7 @@ func TestCapacityOnlyChanges(t *testing.T) {
 	if len(changes) != 1 || changes[0].Field != "repos[bifrost-platform].limits.max_files" || changes[0].Old != 8 || changes[0].New != 12 {
 		t.Fatalf("changes = %+v", changes)
 	}
-	next = parse(t, loosened(t, routing, "quota_stop_percent: 90\n", "quota_stop_percent: 95\nmin_score_percent: 50\nmin_samples: 3\n"))
-	err = rules.CapacityOnly(parse(t, routing), next)
-	if err == nil || !strings.Contains(err.Error(), "min_samples") || !strings.Contains(err.Error(), "min_score_percent") {
-		t.Fatalf("CapacityOnly = %v, want the competence fields named", err)
-	}
-	if err = rules.CapacityOnly(parse(t, concurrency), parse(t, budget)); err == nil {
+	if err = rules.CapacityOnly(parse(t, tuning), parse(t, budget)); err == nil {
 		t.Fatal("two different rules compare")
 	}
 }

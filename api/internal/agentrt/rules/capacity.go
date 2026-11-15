@@ -10,15 +10,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
-// Capacity changes (R5 phase 2 step 3b; the Owner 2026-11-06 Q5 A): a rule
-// version whose only changes are capacity fields may take effect on the
-// Owner's approval of an agentrt_rule_approve card on the PROD Console
-// instead of his signature (store.ApproveRule). The capacity fields are
-// concurrency's per_host and slots block, all of budget:<tenant>,
-// landing:<tenant>'s limits (legacy max_batch included) and repo limits,
-// routing's quota_stop_percent.
-// Everything else stays signed.
-
 // CapacityChange is one capacity field a version changes: its path in the
 // rule's doc (a landing repo's fields under repos[<repo>]), and its value
 // before and after; nil where the version before or after does not state it.
@@ -34,8 +25,6 @@ func capacityField(kind string) func(path string) bool {
 	switch kind {
 	case KindTuning:
 		return func(p string) bool { return strings.HasPrefix(p, "values.") }
-	case KindConcurrency:
-		return func(p string) bool { return p == "per_host" || p == "slots" || strings.HasPrefix(p, "slots.") }
 	case KindBudget:
 		return func(p string) bool {
 			return p == "attempt_hard_limit_s" || strings.HasPrefix(p, "mission.") || strings.HasPrefix(p, "auto_grant.")
@@ -53,8 +42,6 @@ func capacityField(kind string) func(path string) bool {
 			return strings.HasPrefix(p, "repos[") &&
 				(strings.HasSuffix(p, "].limits.max_files") || strings.HasSuffix(p, "].limits.max_changed_lines") || strings.HasSuffix(p, "].limits.max_in_flight"))
 		}
-	case KindRouting:
-		return func(p string) bool { return p == "quota_stop_percent" }
 	}
 	return nil
 }
@@ -63,11 +50,9 @@ func capacityField(kind string) func(path string) bool {
 // by path: the same bounds the parser holds a signed rule to, checked again
 // here so a card never relies on the parser alone.
 var capacityCeilings = map[string]map[string]int{
-	KindConcurrency: {"per_host": PerHostCeiling},
 	KindBudget: {"mission.max_attempts": MissionAttemptsCeiling, "mission.max_wall_hours": MissionWallHoursCeiling,
 		"auto_grant.max_attempts": MissionAttemptsCeiling, "auto_grant.max_wall_hours": MissionWallHoursCeiling,
 		"attempt_hard_limit_s": AttemptLimitSCeiling},
-	KindRouting: {"quota_stop_percent": 100},
 }
 
 // headerOnly are the doc keys a version always or may change whatever it
@@ -195,7 +180,7 @@ func CapacityOnly(prev, next Rule) error {
 		}
 		n, ok := c.New.(int)
 		if !ok {
-			// slots and other blocks are bounded by their parser.
+			// Non-integer fields are bounded by their parser.
 			continue
 		}
 		if next.Kind == KindLanding && (c.Field == "limits.max_in_flight_per_repo" || strings.HasSuffix(c.Field, "].limits.max_in_flight")) && (n < 1 || n > LandingInFlightCeiling) {

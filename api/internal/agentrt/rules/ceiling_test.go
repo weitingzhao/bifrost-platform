@@ -11,12 +11,6 @@ import (
 // R5 phase 2 step 3b: the capacity caps are defaults now, and a signed rule
 // goes past them up to the sanity ceilings, not one past.
 func TestCapacityCeilings(t *testing.T) {
-	for _, n := range []int{rules.DefaultPerHost + 1, rules.PerHostCeiling} {
-		r := parse(t, strings.Replace(concurrency, "per_host: 1", fmt.Sprintf("per_host: %d", n), 1))
-		if r.PerHost == nil || *r.PerHost != n {
-			t.Errorf("per_host %d: %v", n, r.PerHost)
-		}
-	}
 	r := parse(t, strings.Replace(strings.Replace(budget, "mission: {max_attempts: 40, max_wall_hours: 48}",
 		fmt.Sprintf("mission: {max_attempts: %d, max_wall_hours: %d}", rules.MissionAttemptsCeiling, rules.MissionWallHoursCeiling), 1),
 		"attempt_hard_limit_s: 3600", fmt.Sprintf("attempt_hard_limit_s: %d", rules.AttemptLimitSCeiling), 1))

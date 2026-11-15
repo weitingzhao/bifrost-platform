@@ -7,16 +7,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 )
 
-// TestFixtureRule: the concurrency row the tests insert reads as the rule it
-// says (its text and body_json agree), so a fixture cannot drift from the
-// parser.
+// TestFixtureRule checks the still-parsed fixture rows against their bodies.
 func TestFixtureRule(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	r := inForce(t, w, "concurrency", time.Now())
-	if r == nil || *r.PerHost != 1 {
-		t.Fatalf("the fixture rule reads as %+v", r)
-	}
 	if b := inForce(t, w, "budget:dev", time.Now()); b == nil || b.Budget.Mission.MaxAttempts != 1000 || b.Budget.AttemptLimitSec != 86400 {
 		t.Fatalf("the fixture budget reads as %+v", b)
 	}

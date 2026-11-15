@@ -25,8 +25,7 @@ budget:
 executors: [exec:deterministic, exec:codex]
 hosts: [mbp-dev]
 `)
-	concurrency = text("concurrency", "per_host: 1\n")
-	budget      = text("budget:dev", `tenant: dev
+	budget = text("budget:dev", `tenant: dev
 mission: {max_attempts: 40, max_wall_hours: 48}
 attempt_hard_limit_s: 3600
 `)
@@ -53,10 +52,6 @@ candidates:
     subject: frontend
     scope: {repo: bifrost-trade-frontend}
 `)
-	routing = text("routing:dev", `tenant: dev
-order: [capability, quota]
-quota_stop_percent: 90
-`)
 )
 
 func parse(t *testing.T, s string) rules.Rule {
@@ -73,13 +68,10 @@ func TestParseEachKind(t *testing.T) {
 	for name, c := range map[string]struct {
 		text, kind, body string
 	}{
-		"envelope":                 {envelope, rules.KindEnvelope, `{"budget":{"max_attempts":40,"max_wall_hours":48},"direction":"initial","effective_at":"2026-10-15T00:00:00Z","executors":["exec:codex","exec:deterministic"],"expires_at":"2027-01-15T00:00:00Z","hosts":["mbp-dev"],"max_action":"branch","rule_id":"standing-envelope:dev","rule_version":1,"tenant":"dev"}`},
-		"concurrency":              {concurrency, rules.KindConcurrency, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","per_host":1,"rule_id":"concurrency","rule_version":1}`},
-		"budget":                   {budget, rules.KindBudget, `{"attempt_hard_limit_s":3600,"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","mission":{"max_attempts":40,"max_wall_hours":48},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}`},
-		"job":                      {job, rules.KindJob, `{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"},{"executor":"exec:cursor","model_pattern":"*","provider":"cursor-mix","status":"probation"}],"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","rule_id":"job:implementer","rule_version":1,"tenant":"dev","text":"Implement the task's spec on a branch.\n"}`},
-		"facts":                    {facts, rules.KindFacts, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","facts":[{"executor":"exec:codex","kind":"cannot","subject":"docker"},{"executor":"exec:cursor","kind":"prefer","provider":"cursor-mix","scope":{"repo":"bifrost-trade-frontend"},"subject":"frontend"}],"rule_id":"capability-facts","rule_version":1}`},
-		"routing":                  {routing, rules.KindRouting, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","order":["capability","quota"],"quota_stop_percent":90,"rule_id":"routing:dev","rule_version":1,"tenant":"dev"}`},
-		"routing with a threshold": {routing + "min_score_percent: 60\nmin_samples: 8\n", rules.KindRouting, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","min_samples":8,"min_score_percent":60,"order":["capability","quota"],"quota_stop_percent":90,"rule_id":"routing:dev","rule_version":1,"tenant":"dev"}`},
+		"envelope": {envelope, rules.KindEnvelope, `{"budget":{"max_attempts":40,"max_wall_hours":48},"direction":"initial","effective_at":"2026-10-15T00:00:00Z","executors":["exec:codex","exec:deterministic"],"expires_at":"2027-01-15T00:00:00Z","hosts":["mbp-dev"],"max_action":"branch","rule_id":"standing-envelope:dev","rule_version":1,"tenant":"dev"}`},
+		"budget":   {budget, rules.KindBudget, `{"attempt_hard_limit_s":3600,"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","mission":{"max_attempts":40,"max_wall_hours":48},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}`},
+		"job":      {job, rules.KindJob, `{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"},{"executor":"exec:cursor","model_pattern":"*","provider":"cursor-mix","status":"probation"}],"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","rule_id":"job:implementer","rule_version":1,"tenant":"dev","text":"Implement the task's spec on a branch.\n"}`},
+		"facts":    {facts, rules.KindFacts, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","facts":[{"executor":"exec:codex","kind":"cannot","subject":"docker"},{"executor":"exec:cursor","kind":"prefer","provider":"cursor-mix","scope":{"repo":"bifrost-trade-frontend"},"subject":"frontend"}],"rule_id":"capability-facts","rule_version":1}`},
 	} {
 		r := parse(t, c.text)
 		body, err := r.BodyJSON()
@@ -101,30 +93,23 @@ func TestParseRefuses(t *testing.T) {
 		"an anchor":                  strings.Replace(envelope, "budget:\n", "budget: &b\n", 1),
 		"an alias":                   strings.Replace(budget, "mission: {max_attempts: 40, max_wall_hours: 48}", "mission: &m {max_attempts: 40, max_wall_hours: 48}\nother: *m", 1),
 		"a merge key":                strings.Replace(budget, "mission: {max_attempts: 40, max_wall_hours: 48}", "mission:\n  <<: {max_attempts: 40}\n  max_wall_hours: 48", 1),
-		"an explicit tag":            strings.Replace(concurrency, "per_host: 1", "per_host: !!int 1", 1),
-		"a second document":          concurrency + "---\nper_host: 1\n",
-		"a key given twice":          concurrency + "per_host: 0\n",
-		"a number as a string":       strings.Replace(concurrency, "per_host: 1", `per_host: "1"`, 1),
+		"an explicit tag":            strings.Replace(tuning, "assess_per_pass: 5", "assess_per_pass: !!int 5", 1),
+		"a second document":          tuning + "---\nassess_per_pass: 5\n",
+		"a key given twice":          tuning + "  assess_per_pass: 4\n",
+		"a number as a string":       strings.Replace(tuning, "assess_per_pass: 5", `assess_per_pass: "5"`, 1),
 		"a number not in decimal":    strings.Replace(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 0xE10", 1),
 		"a number with a sign":       strings.Replace(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: +3600", 1),
 		"a string as a number":       strings.Replace(envelope, "max_action: branch", "max_action: 7", 1),
-		"a time without its offset":  strings.Replace(concurrency, "2026-10-15T00:00:00Z", "2026-10-15 00:00:00", 1),
-		"a time with a fraction":     strings.Replace(concurrency, "2026-10-15T00:00:00Z", "2026-10-15T00:00:00.5Z", 1),
-		"version 2 marked initial":   strings.Replace(concurrency, "rule_version: 1", "rule_version: 2", 1),
-		"version 1 marked loosen":    strings.Replace(concurrency, "direction: initial", "direction: loosen", 1),
-		"an unknown direction":       strings.Replace(concurrency, "direction: initial", "direction: sideways", 1),
-		"expiring before it starts":  strings.Replace(concurrency, "2027-01-15T00:00:00Z", "2026-10-14T00:00:00Z", 1),
+		"a time without its offset":  strings.Replace(tuning, "2026-10-15T00:00:00Z", "2026-10-15 00:00:00", 1),
+		"a time with a fraction":     strings.Replace(tuning, "2026-10-15T00:00:00Z", "2026-10-15T00:00:00.5Z", 1),
+		"version 2 marked initial":   strings.Replace(tuning, "rule_version: 1", "rule_version: 2", 1),
+		"version 1 marked loosen":    strings.Replace(tuning, "direction: initial", "direction: loosen", 1),
+		"an unknown direction":       strings.Replace(tuning, "direction: initial", "direction: sideways", 1),
+		"expiring before it starts":  strings.Replace(tuning, "2027-01-15T00:00:00Z", "2026-10-14T00:00:00Z", 1),
 		"another tenant in the body": strings.Replace(envelope, "tenant: dev", "tenant: business", 1),
-		"an unknown kind":            text("visibility", "per_host: 1\n"),
+		"an unknown kind":            text("visibility", "assess_per_pass: 5\n"),
 		"a tenant nobody has":        text("budget:prod", "tenant: prod\n"),
 		"a C-class action":           strings.Replace(envelope, "max_action: branch", "max_action: release", 1),
-		"past the per_host ceiling":  strings.Replace(concurrency, "per_host: 1", "per_host: 33", 1),
-		"quota before capability":    strings.Replace(routing, "[capability, quota]", "[quota, capability]", 1),
-		"a score without samples":    routing + "min_score_percent: 60\n",
-		"samples without a score":    routing + "min_samples: 8\n",
-		"a score above 100":          routing + "min_score_percent: 101\nmin_samples: 8\n",
-		"no samples":                 routing + "min_score_percent: 60\nmin_samples: 0\n",
-		"a score as a fraction":      routing + "min_score_percent: 0.6\nmin_samples: 8\n",
 		"a budget past its bound":    strings.Replace(envelope, "max_attempts: 40", "max_attempts: 100000", 1),
 		"no executors":               strings.Replace(envelope, "executors: [exec:deterministic, exec:codex]\n", "", 1),
 		"an executor twice":          strings.Replace(envelope, "[exec:deterministic, exec:codex]", "[exec:codex, exec:codex]", 1),
@@ -132,10 +117,10 @@ func TestParseRefuses(t *testing.T) {
 		"a candidate twice":          strings.Replace(job, "exec:cursor\n    provider: cursor-mix", "exec:codex\n    provider: openai", 1),
 		"a fact kind unknown":        strings.Replace(facts, "kind: prefer", "kind: maybe", 1),
 		"an empty brief":             strings.Replace(job, "text: |\n  Implement the task's spec on a branch.\n", "text: \"  \"\n", 1),
-		"a list where a value goes":  strings.Replace(concurrency, "per_host: 1", "per_host: [1]", 1),
-		"a sequence at the top":      "- rule_id: concurrency\n",
+		"a list where a value goes":  strings.Replace(tuning, "assess_per_pass: 5", "assess_per_pass: [5]", 1),
+		"a sequence at the top":      "- rule_id: tuning\n",
 		"nothing":                    "",
-		"text past the limit":        concurrency + "# " + strings.Repeat("x", rules.MaxText) + "\n",
+		"text past the limit":        tuning + "# " + strings.Repeat("x", rules.MaxText) + "\n",
 	} {
 		_, err := rules.Parse([]byte(s))
 		if err == nil {
@@ -172,8 +157,6 @@ func TestTightens(t *testing.T) {
 		"expiring later":            {envelope, next(envelope, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
 		"expiring sooner":           {envelope, next(envelope, "2027-01-15T00:00:00Z", "2026-12-15T00:00:00Z"), true},
 		"starting earlier":          {envelope, next(envelope, "2026-10-15T00:00:00Z", "2026-10-01T00:00:00Z"), false},
-		"no concurrency":            {concurrency, next(concurrency, "per_host: 1", "per_host: 0"), true},
-		"concurrency back up":       {next(concurrency, "per_host: 1", "per_host: 0"), strings.Replace(next(concurrency, "", ""), "rule_version: 2", "rule_version: 3", 1), false},
 		"a shorter attempt limit":   {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 1800"), true},
 		"a longer attempt limit":    {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 7200"), false},
 		"a candidate demoted":       {job, next(job, "status: active", "status: demoted"), true},
@@ -186,12 +169,7 @@ func TestTightens(t *testing.T) {
 		"a fact added that prefers": {facts, next(facts, "facts:\n", "facts:\n  - executor: exec:claude\n    kind: prefer\n    subject: go\n"), false},
 		"a fact dropped":            {facts, next(facts, "  - executor: exec:codex\n    kind: cannot\n    subject: docker\n", ""), false},
 		"a fact's scope changed":    {facts, next(facts, "repo: bifrost-trade-frontend", "repo: bifrost-platform"), false},
-		"a lower quota stop":        {routing, next(routing, "quota_stop_percent: 90", "quota_stop_percent: 80"), true},
-		"a higher quota stop":       {routing, next(routing, "quota_stop_percent: 90", "quota_stop_percent: 95"), false},
-		"a threshold added":         {routing, next(routing+"min_score_percent: 60\nmin_samples: 8\n", "", ""), false},
-		"a threshold raised":        {routing + "min_score_percent: 60\nmin_samples: 8\n", next(routing+"min_score_percent: 60\nmin_samples: 8\n", "min_score_percent: 60", "min_score_percent: 70"), false},
-		"a threshold kept":          {routing + "min_score_percent: 60\nmin_samples: 8\n", next(routing+"min_score_percent: 60\nmin_samples: 8\n", "quota_stop_percent: 90", "quota_stop_percent: 80"), true},
-		"a different rule":          {concurrency, strings.Replace(next(budget, "", ""), "", "", 1), false},
+		"a different rule":          {tuning, strings.Replace(next(budget, "", ""), "", "", 1), false},
 	} {
 		err := rules.Tightens(parse(t, c.prev), parse(t, c.next))
 		if (err == nil) != c.tighter {

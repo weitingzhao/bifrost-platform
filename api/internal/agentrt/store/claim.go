@@ -13,22 +13,6 @@ type Tool struct {
 	Model    string // may be empty until the executor starts
 }
 
-// ClaimRequest is a host's poll for work.
-type ClaimRequest struct {
-	HostID    string
-	FreeSlots int
-	Tools     []Tool // in the host's order of preference
-	// Disk is the free disk the host reports, nil when it reports none (an
-	// agentd from before TD-415); below DiskFloor (0: DefaultDiskFloor) the
-	// claim leases nothing, as with no free slot (hostdisk.go).
-	Disk      *HostDisk
-	DiskFloor int64
-	// Signals is the headroom the host reports, nil when it reports none (an
-	// agentd from before elastic slots); kept for the slots pass
-	// (hostslots.go).
-	Signals *HostSignals
-}
-
 // Claim is a leased attempt and what agentd needs to run it.
 type Claim struct {
 	Title                                                                                 string // optional task title for the hand-in commit

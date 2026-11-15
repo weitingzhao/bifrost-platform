@@ -27,8 +27,6 @@ func Tightens(prev, next Rule) error {
 		return landingTightens(prev.Landing, next.Landing)
 	case KindEnvelope:
 		return envelopeTightens(prev.Envelope, next.Envelope)
-	case KindConcurrency:
-		return slotsTighten(prev, next)
 	case KindBudget:
 		p, n := prev.Budget, next.Budget
 		if err := budgetTightens(p.Mission, n.Mission); err != nil {
@@ -62,15 +60,6 @@ func Tightens(prev, next Rule) error {
 			return errors.New("an AI assessment may choose the option again")
 		}
 		return subset(next.CardAuto.Kinds, prev.CardAuto.Kinds, "kinds")
-	case KindRouting:
-		if next.Routing.QuotaStopPercent > prev.Routing.QuotaStopPercent {
-			return errors.New("quota_stop_percent goes up")
-		}
-		// A threshold excludes some candidates and, by its sample count,
-		// spares others: any change of it is the Owner's to sign.
-		if p, n := prev.Routing.Competence, next.Routing.Competence; (p == nil) != (n == nil) || (p != nil && *p != *n) {
-			return errors.New("the competence threshold changes")
-		}
 	default:
 		// A kind with no comparison here cannot be shown to tighten: it
 		// needs the Owner's signature, never an unsigned "tighten" (§4.6;

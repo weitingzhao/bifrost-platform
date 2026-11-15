@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The kinds, fields and value checks of the vocabulary are the event log's
@@ -376,7 +375,7 @@ var fieldValues = map[string]map[string]value{
 	"attempt_cancelled":       {"accepted_attempt": attemptID},
 	"host_registered":         {"host_kind": oneOf(hostKinds...)},
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
-	"host_slots_set":          {"policy": oneOf(rules.SlotPolicies...)},
+	"host_slots_set":          {"policy": oneOf("aimd", "fixed")},
 	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", "landing_ci"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",

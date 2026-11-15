@@ -28,14 +28,12 @@ const Namespace = "bifrost-agentrt-rule"
 
 // The kinds of rule, by the rule_id's first part.
 const (
-	KindEnvelope    = "standing-envelope"
-	KindConcurrency = "concurrency"
-	KindBudget      = "budget"
-	KindJob         = "job"
-	KindFacts       = "capability-facts"
-	KindRouting     = "routing"
-	KindPlan        = "plan-standing"
-	KindCardAuto    = "card-auto-answer"
+	KindEnvelope = "standing-envelope"
+	KindBudget   = "budget"
+	KindJob      = "job"
+	KindFacts    = "capability-facts"
+	KindPlan     = "plan-standing"
+	KindCardAuto = "card-auto-answer"
 )
 
 // The kinds of card a card-auto-answer rule may list (store/cardauto.go):
@@ -72,9 +70,6 @@ const (
 	DefaultMissionAttempts  = 1000
 	DefaultMissionWallHours = 720
 	DefaultAttemptLimitS    = 86400
-	// DefaultPerHost is three live attempts a host (W-31 2.4 slice ③); how
-	// many run is the signed per_host.
-	DefaultPerHost = 3
 )
 
 // Sanity ceilings a rule may not pass, whatever the Owner signs: far past
@@ -83,17 +78,15 @@ const (
 	MissionAttemptsCeiling  = 10000
 	MissionWallHoursCeiling = 8760          // a year
 	AttemptLimitSCeiling    = 7 * 24 * 3600 // a week
-	PerHostCeiling          = 32
 	maxJobText              = 16 << 10
 )
 
 var (
-	tenants    = []string{"dev", "business"}
-	actions    = []string{"none", "branch"} // weakest first; C-class actions are never in an envelope
-	statuses   = []string{"retired", "demoted", "qualifying", "probation", "active"}
-	factKinds  = []string{"cannot", "must_not", "only", "prefer"}
-	routeOrder = []string{"capability", "quota"}
-	jobID      = regexp.MustCompile(`^[a-z][a-z_]{1,39}$`)
+	tenants   = []string{"dev", "business"}
+	actions   = []string{"none", "branch"} // weakest first; C-class actions are never in an envelope
+	statuses  = []string{"retired", "demoted", "qualifying", "probation", "active"}
+	factKinds = []string{"cannot", "must_not", "only", "prefer"}
+	jobID     = regexp.MustCompile(`^[a-z][a-z_]{1,39}$`)
 )
 
 // Header is the five fields the signature covers, written at the top of
@@ -164,24 +157,6 @@ type Fact struct {
 	Scope                             map[string]any
 }
 
-// Routing is the order routing decides in, how full a vendor pool may be
-// before it takes no more work (a percentage of its window) and, when the
-// rule sets one, the competence threshold.
-type Routing struct {
-	Tenant           string
-	Order            []string
-	QuotaStopPercent int
-	Competence       *Competence
-}
-
-// Competence is routing's step ⑤ (design v5 §5.1.2): a candidate whose
-// in-job score over at least MinSamples attempts of the task's kind is below
-// MinScorePercent is not routed to, and one on probation with fewer takes no
-// core work. A rule without it routes as before.
-type Competence struct {
-	MinScorePercent, MinSamples int
-}
-
 // PlanStanding is what the plan's standing authorization adds to its two
 // built-in cases (a step added to an item in progress, the title of a step
 // not started; store/planchange.go): DoneRules lets a done rule be set on a
@@ -217,14 +192,9 @@ type Rule struct {
 	Header
 	Kind     string
 	Envelope *Envelope
-	PerHost  *int
-	// Slots is a concurrency rule's slots block, nil when it has none
-	// (slots.go).
-	Slots    *Slots
 	Budget   *BudgetRule
 	Job      *Job
 	Facts    []Fact
-	Routing  *Routing
 	Plan     *PlanStanding
 	CardAuto *CardAuto
 	Landing  *Landing
@@ -236,7 +206,7 @@ type Rule struct {
 func KindOf(id string) (kind, arg string, err error) {
 	kind, arg, _ = strings.Cut(id, ":")
 	switch kind {
-	case KindEnvelope, KindBudget, KindRouting, KindLanding:
+	case KindEnvelope, KindBudget, KindLanding:
 		if slices.Contains(tenants, arg) {
 			return kind, arg, nil
 		}
@@ -244,12 +214,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts, KindPlan, KindCardAuto, KindTuning:
+	case KindFacts, KindPlan, KindCardAuto, KindTuning:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, budget:<tenant>, job:<job>, capability-facts, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -293,20 +263,12 @@ func Parse(text []byte) (Rule, error) {
 		err = r.landing(o, arg)
 	case KindEnvelope:
 		err = r.envelope(o, arg)
-	case KindConcurrency:
-		var n int
-		if n, err = o.integer("per_host", 0, PerHostCeiling); err == nil {
-			r.PerHost = &n
-			err = r.slots(o)
-		}
 	case KindBudget:
 		err = r.budget(o, arg)
 	case KindJob:
 		err = r.job(o, arg)
 	case KindFacts:
 		err = r.facts(o)
-	case KindRouting:
-		err = r.routing(o, arg)
 	case KindPlan:
 		err = r.plan(o)
 	case KindCardAuto:
@@ -584,40 +546,6 @@ func (r *Rule) facts(o *object) error {
 // key is a fact's identity: who, under which provider, what kind, about what.
 func (f Fact) key() string { return f.Executor + "|" + f.Provider + "|" + f.Kind + "|" + f.Subject }
 
-func (r *Rule) routing(o *object, arg string) error {
-	rt := &Routing{}
-	var err error
-	if rt.Tenant, err = tenant(o, arg); err != nil {
-		return err
-	}
-	if rt.Order, err = o.strings("order", false); err != nil {
-		return err
-	}
-	if !slices.Equal(rt.Order, routeOrder) {
-		return fmt.Errorf("order is %v: capability first, quota second (Owner 2026-10-13)", routeOrder)
-	}
-	if rt.QuotaStopPercent, err = o.integer("quota_stop_percent", 1, 100); err != nil {
-		return err
-	}
-	_, score := o.fields["min_score_percent"]
-	_, samples := o.fields["min_samples"]
-	switch {
-	case score && samples:
-		c := &Competence{}
-		if c.MinScorePercent, err = o.integer("min_score_percent", 0, 100); err != nil {
-			return err
-		}
-		if c.MinSamples, err = o.integer("min_samples", 1, 10000); err != nil {
-			return err
-		}
-		rt.Competence = c
-	case score || samples:
-		return fmt.Errorf("%s: min_score_percent and min_samples go together", o.where)
-	}
-	r.Routing = rt
-	return nil
-}
-
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func anyList(s []string) []any {
@@ -643,11 +571,6 @@ func (r Rule) Doc() map[string]any {
 		doc["budget"] = map[string]any{"max_attempts": e.Budget.MaxAttempts, "max_wall_hours": e.Budget.MaxWallHours}
 		if hosts := e.externalHostsDoc(); hosts != nil {
 			doc["external_hosts"] = hosts
-		}
-	case KindConcurrency:
-		doc["per_host"] = *r.PerHost
-		if r.Slots != nil {
-			doc["slots"] = r.Slots.doc()
 		}
 	case KindBudget:
 		b := r.Budget
@@ -690,11 +613,6 @@ func (r Rule) Doc() map[string]any {
 		doc["kinds"] = anyList(r.CardAuto.Kinds)
 		if r.CardAuto.AssessmentVeto {
 			doc["assessment"] = CardAssessmentVeto
-		}
-	case KindRouting:
-		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
-		if c := r.Routing.Competence; c != nil {
-			doc["min_score_percent"], doc["min_samples"] = c.MinScorePercent, c.MinSamples
 		}
 	case KindTuning:
 		for k, v := range r.Tuning.doc() {
