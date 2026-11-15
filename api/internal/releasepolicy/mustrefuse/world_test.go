@@ -9,6 +9,8 @@ package mustrefuse_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -31,6 +33,15 @@ const (
 	requester = "local_requester"
 	planID    = "plan-1"
 	applier   = "bifrost-applier"
+
+	// The platform's migrations: 0001 is applied on PROD and in the build
+	// PROD runs; 0002 is new in the commit being released.
+	migrations     = "api/internal/agentrt/migrations"
+	appliedFile    = migrations + "/0001_core.sql"
+	newFile        = migrations + "/0002_notes.sql"
+	appliedSQL     = "CREATE TABLE agentrt.task (task_id text PRIMARY KEY);\n"
+	reversibleSQL  = "CREATE TABLE agentrt.note (note_id bigint PRIMARY KEY);\n"
+	reversibleCase = "Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs)"
 )
 
 var (
@@ -43,7 +54,7 @@ var (
 func before(repo string) string { return rptest.SHA("o" + repo[len("bifrost-"):]) }
 func after(repo string) string  { return rptest.SHA("n" + repo[len("bifrost-"):]) }
 
-// request is one of the four requests the set starts from. Each is covered
+// request is one of the five requests the set starts from. Each is covered
 // in an untouched world (TestTheStartingRequestsAreCovered), so a case's
 // refusal comes from what the case changed.
 type request int
@@ -53,6 +64,9 @@ const (
 	releasePlatform
 	releasePlatformProd
 	applyPlan
+	// runMigration asks the PROD platform to run the migrations of the
+	// commit STG delivered (run_agentrt_migration).
+	runMigration
 )
 
 // world is everything the engine reads, in the state where all four
@@ -64,6 +78,7 @@ type world struct {
 	facts  *rptest.Facts
 	plan   releasepolicy.ApplyPlan
 	live   *rptest.Live
+	migs   *rptest.Migrations
 	clock  time.Time
 	tier   actions.Tier
 	params map[string]any // set by a case to ask something else than its starting request
@@ -93,6 +108,16 @@ func newWorld(t *testing.T) *world {
 	for _, repo := range stgRepos {
 		w.facts.Records[stg][repo] = before(repo)
 	}
+	// The platform's own migrations, as PROD reads them: it runs the build
+	// before, has applied 0001, and the commit STG delivered adds 0002.
+	sum := sha256.Sum256([]byte(appliedSQL))
+	w.migs = &rptest.Migrations{State: releasepolicy.OwnMigrations{
+		Pipeline: platformProd, Repo: platform, Dir: migrations, Applied: map[int]string{1: hex.EncodeToString(sum[:])},
+	}}
+	w.facts.Dirs[platform+"@"+after(platform)+":"+migrations] = []string{"0001_core.sql", "0002_notes.sql", "embed.go"}
+	w.facts.Text[platform+"@"+before(platform)+":"+appliedFile] = appliedSQL
+	w.facts.Text[platform+"@"+after(platform)+":"+appliedFile] = appliedSQL
+	w.facts.Text[platform+"@"+after(platform)+":"+newFile] = reversibleSQL
 	w.plan = releasepolicy.ApplyPlan{
 		Ready: true, Policy: "pass", Repo: infra, Path: "k8s/cicd/tekton/pipeline-ci-platform.yaml", Commit: after(infra),
 		Objects: []releasepolicy.ApplyObject{{Namespace: "cicd", Kind: "Pipeline", Name: "bifrost-ci-platform", Ownership: "ssa"}},
@@ -147,6 +172,13 @@ func (w *world) migration(was, is string) {
 	}
 }
 
+// platformMigration makes the platform's release carry the new migration
+// 0002 with the text sql; run_agentrt_migration reads the same file.
+func (w *world) platformMigration(sql string) {
+	w.facts.Files[platform] = []string{newFile}
+	w.facts.Text[platform+"@"+after(platform)+":"+newFile] = sql
+}
+
 type plans struct{ w *world }
 
 func (p plans) ApplyPlan(_ context.Context, id string) (releasepolicy.ApplyPlan, error) {
@@ -171,7 +203,7 @@ func (s live) Managers(_ context.Context, namespace, kind, name string) ([]relea
 func (w *world) decide(r request) releasepolicy.Decision {
 	eng := releasepolicy.New(releasepolicy.Deps{
 		ConfigMaps: w.cms, Writer: rptest.Writer{CMs: w.cms}, Git: w.facts, CI: w.facts, Window: w.facts, Deployed: w.facts,
-		Plans: plans{w}, Live: live{w.live}, Anchor: w.key.Fingerprint, Now: func() time.Time { return w.clock },
+		Plans: plans{w}, Live: live{w.live}, Migrations: w.migs, Anchor: w.key.Fingerprint, Now: func() time.Time { return w.clock },
 	})
 	action, params := "start_pipeline_run", map[string]any{"revision": "main", "who": requester}
 	switch r {
@@ -184,6 +216,8 @@ func (w *world) decide(r request) releasepolicy.Decision {
 		params["params"] = map[string]string{"uiRevision": after(ui)}
 	case applyPlan:
 		action, params = "apply_manifest", map[string]any{"plan_id": planID}
+	case runMigration:
+		action, params = "run_agentrt_migration", map[string]any{"commit": after(platform)}
 	}
 	if w.params != nil {
 		params = w.params

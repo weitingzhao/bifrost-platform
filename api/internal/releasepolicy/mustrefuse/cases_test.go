@@ -12,7 +12,7 @@ import (
 
 // caseCount is how many cases the set has. Cases are added, with this
 // number; a case is never dropped to make a change pass.
-const caseCount = 40
+const caseCount = 49
 
 // mustRefuse is one request the engine must refuse: the starting request,
 // what is wrong with it, and words its refusal must carry. origin says where
@@ -65,6 +65,32 @@ var cases = []mustRefuse{
 		func(w *world) { w.migration("CREATE TABLE orders (id bigint);\n", "CREATE TABLE orders (id text);\n") }, "removes or rewrites"},
 	{"ddl: a migration deleted", tierD, releaseStg,
 		func(w *world) { w.migration("CREATE TABLE orders (id bigint);\n", "") }, "is deleted"},
+
+	// Migrations of the platform's own database, with ddl_reversible on: only
+	// a new file whose every statement cannot destroy rows passes.
+	{"reversible: a DO block", reversibleCase, releasePlatformProd,
+		func(w *world) { w.platformMigration("DO $$ BEGIN DELETE FROM agentrt.task; END $$;\n") }, newFile + ": statement 1: DO is not a statement of the class"},
+	{"reversible: CASCADE", reversibleCase, releasePlatformProd,
+		func(w *world) { w.platformMigration(reversibleSQL + "DROP VIEW agentrt.task_view CASCADE;\n") }, "statement 2: DROP VIEW with CASCADE"},
+	{"reversible: a bare DROP TABLE", reversibleCase, releasePlatformProd,
+		func(w *world) { w.platformMigration("DROP TABLE agentrt.task;\n") }, "statement 1: DROP TABLE is not a statement of the class"},
+	{"reversible: DROP COLUMN", reversibleCase, releasePlatformProd,
+		func(w *world) { w.platformMigration("ALTER TABLE agentrt.task DROP COLUMN title;\n") }, "statement 1: ALTER TABLE DROP COLUMN"},
+	{"reversible: INSERT", reversibleCase, releasePlatformProd,
+		func(w *world) { w.platformMigration("INSERT INTO agentrt.task VALUES ('t');\n") }, "statement 1: INSERT is not a statement of the class"},
+	{"reversible: an existing migration edited to add an allowed statement", reversibleCase, releasePlatformProd,
+		func(w *world) {
+			w.facts.Files[platform] = []string{appliedFile}
+			w.facts.Text[platform+"@"+after(platform)+":"+appliedFile] = appliedSQL + "ALTER TABLE agentrt.task ADD COLUMN note text;\n"
+		}, appliedFile + " exists at " + before(platform)[:12] + ": it is changed or deleted, and only a new migration file is in the class"},
+	{"reversible: a migration outside ddl_reversible_paths, another repo's .sql", reversibleCase, releaseStg,
+		func(w *world) { w.migration("", "DROP FUNCTION old_fn();\n") }, "not additive-only (tier D, ask the Owner)"},
+	{"migration: a commit never delivered to the source environment", reversibleCase, runMigration,
+		func(w *world) { w.facts.Older = nil }, "was never delivered successfully by " + platformStg},
+	{"migration: one pending file out of the class", reversibleCase, runMigration,
+		func(w *world) {
+			w.platformMigration(reversibleSQL + "TRUNCATE agentrt.task;\n")
+		}, "has a pending migration that is not a new file that cannot destroy rows (ask the Owner): " + newFile + ": statement 2: TRUNCATE is not a statement of the class"},
 
 	// Pipelines the policy does not allow.
 	{"allow: Trade PROD", "W-42: Trade PROD is not in the allow list; it ships on a card", releasePlatformProd,

@@ -45,7 +45,7 @@ func TestNoCaseIsDropped(t *testing.T) {
 // and a trust-anchor change of the self-checked repo with CI green is too,
 // so the policy the cases run under really is the relaxed one.
 func TestTheStartingRequestsAreCovered(t *testing.T) {
-	for name, r := range map[string]request{"Trade STG": releaseStg, "platform STG": releasePlatform, "platform PROD": releasePlatformProd, "apply": applyPlan} {
+	for name, r := range map[string]request{"Trade STG": releaseStg, "platform STG": releasePlatform, "platform PROD": releasePlatformProd, "apply": applyPlan, "migration": runMigration} {
 		if d := newWorld(t).decide(r); !d.Auto {
 			t.Errorf("%s: not covered: %q", name, d.Reasons)
 		}
@@ -54,6 +54,11 @@ func TestTheStartingRequestsAreCovered(t *testing.T) {
 	w.facts.Files[platform] = []string{"api/internal/releasepolicy/engine.go", "api/internal/releasepolicy/engine_test.go"}
 	if d := w.decide(releasePlatform); !d.Auto || !strings.Contains(d.ClauseText(), "trust_anchor_self_checked") {
 		t.Errorf("a self-checked trust-anchor change: auto = %v clauses = %s reasons = %q", d.Auto, d.ClauseText(), d.Reasons)
+	}
+	w = newWorld(t)
+	w.platformMigration(reversibleSQL)
+	if d := w.decide(releasePlatformProd); !d.Auto || !strings.Contains(d.ClauseText(), "ddl_reversible") {
+		t.Errorf("a new migration that cannot destroy rows: auto = %v clauses = %s reasons = %q", d.Auto, d.ClauseText(), d.Reasons)
 	}
 	w = newWorld(t)
 	w.migration("CREATE TABLE orders (id bigint);\n", "CREATE TABLE orders (id bigint);\nALTER TABLE orders ADD COLUMN note text;\n")

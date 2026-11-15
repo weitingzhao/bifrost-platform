@@ -1,5 +1,5 @@
 {
-  "about": "The policy the must-refuse set is judged under: the signed policy's template.json and paths.json (bifrost-trade-infra agent-config/release-policy, 2026-11-15) with every relaxing field switched on: additive_ddl, trust_anchor_self_checked, trust_anchor_ignore_tests, self_checked_repos, the apply section; and the trust_anchor_reviewed and reviewable_repos the engine no longer reads. The test fills policy_id, signed_at and expires_at and signs it with a throwaway key.",
+  "about": "The policy the must-refuse set is judged under: the signed policy's template.json and paths.json (bifrost-trade-infra agent-config/release-policy, 2026-11-15) with every relaxing field switched on: additive_ddl, ddl_reversible with ddl_reversible_paths, trust_anchor_self_checked, trust_anchor_ignore_tests, self_checked_repos, the apply section; and the trust_anchor_reviewed and reviewable_repos the engine no longer reads. The test fills policy_id, signed_at and expires_at and signs it with a throwaway key.",
   "version": 1,
   "signed_by": "owner",
   "valid_days": 90,
@@ -20,6 +20,7 @@
     "no_pending_before_db_steps": true,
     "no_ddl": true,
     "additive_ddl": true,
+    "ddl_reversible": true,
     "no_d10_paths": true,
     "no_trust_anchor_change": true,
     "trust_anchor_ignore_tests": true,
@@ -245,6 +246,14 @@
   },
   "self_checked_repos": [
     "bifrost-platform"
+  ],
+  "ddl_reversible_paths": [
+    {
+      "repo": "bifrost-platform",
+      "paths": [
+        "api/internal/agentrt/migrations/*.sql"
+      ]
+    }
   ],
   "reviewable_repos": [
     "bifrost-platform",
