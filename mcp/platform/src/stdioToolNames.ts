@@ -89,6 +89,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'request_stop',
   'send_message',
   'wait_for_messages',
+  'read_message',
   'ack_messages',
   // Business issues (W-31 BI-1 slice 2): the crew's tools, registerIssues.ts.
   'file_issue',
