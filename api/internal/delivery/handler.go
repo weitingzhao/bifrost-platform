@@ -22,6 +22,7 @@ type Handler struct {
 	svc               *Service
 	audit             *actuation.AuditLog
 	onPipelineStarted PipelineStartedHook
+	notices           windowNotifier // window_notify.go
 }
 
 // NewHandlerForTest builds a handler around an existing service.

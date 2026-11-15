@@ -25,6 +25,15 @@ type runWindow struct {
 	ns, who  string
 	version  string
 	recorder WindowRecorder
+	// lease and queueRev are of the record this lease last read or wrote. A
+	// newer version that is a queue-only write (same lease, a new QueueRev,
+	// window_queue.go) is not a fence; any other newer version still is.
+	lease    string
+	queueRev int
+}
+
+func leaseKey(r windowRecord) string {
+	return strings.Join([]string{r.Who, r.What, r.Env, r.StartedAt, r.ExpiresAt, r.EndedAt, r.Reason}, "\x00")
 }
 
 func (s *Service) takeRunWindow(ctx context.Context, pipeline, run string) (*runWindow, error) {
@@ -50,7 +59,7 @@ func (s *Service) takeRunWindow(ctx context.Context, pipeline, run string) (*run
 	if !ok || r.Who != who {
 		return nil, &WindowChanged{}
 	}
-	return &runWindow{cs: cs, ns: ns, who: who, version: cm.ResourceVersion, recorder: s.windowRecorder}, nil
+	return &runWindow{cs: cs, ns: ns, who: who, version: cm.ResourceVersion, recorder: s.windowRecorder, lease: leaseKey(r), queueRev: r.QueueRev}, nil
 }
 
 func (w *runWindow) update(ctx context.Context, end bool) error {
@@ -60,7 +69,8 @@ func (w *runWindow) update(ctx context.Context, end bool) error {
 		return err
 	}
 	r, ok := parseWindowCM(cm)
-	if !ok || cm.ResourceVersion != w.version || r.Who != w.who || !r.live(time.Now().UTC()) {
+	moved := cm.ResourceVersion != w.version && (w.lease == "" || leaseKey(r) != w.lease || r.QueueRev == w.queueRev)
+	if !ok || moved || r.Who != w.who || !r.live(time.Now().UTC()) {
 		return &WindowChanged{}
 	}
 	expires := time.Now().UTC()
@@ -80,6 +90,7 @@ func (w *runWindow) update(ctx context.Context, end bool) error {
 	cm, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
 	if err == nil {
 		w.version = cm.ResourceVersion
+		w.lease, w.queueRev = leaseKey(r), r.QueueRev
 		if end {
 			recordWindow(windowContext(ctx, w.recorder), w.ns, "released", previous, r.ExpiresAt, "")
 		}
@@ -194,6 +205,11 @@ func (h *Handler) recoverRunWindowTicks(ctx context.Context, ticks <-chan time.T
 				failures = 0
 			}
 		}
+		// The queue advancer shares the tick; its failures never touch the
+		// run-window failure budget (window_queue.go).
+		if err := h.advanceWindowQueueOnce(); err != nil {
+			slog.Warn("release window queue advance failed", "err", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -281,7 +297,7 @@ func recoverRunWindow(ctx context.Context, cs kubernetes.Interface, res dynamic.
 			return nil, "run has a recent renewal", nil
 		}
 	}
-	w := &runWindow{cs: cs, ns: ns, who: r.Who, version: cm.ResourceVersion, recorder: recorder}
+	w := &runWindow{cs: cs, ns: ns, who: r.Who, version: cm.ResourceVersion, recorder: recorder, lease: leaseKey(r), queueRev: r.QueueRev}
 	// Immediate observation also releases a terminal run at startup. Its CAS
 	// fences competing recoveries/old pods: only one version can advance.
 	ended, err := w.observe(ctx, res, name)

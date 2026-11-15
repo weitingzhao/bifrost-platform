@@ -64,6 +64,13 @@ type windowRecord struct {
 	ExpiresAt string `json:"expires_at,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 	EndedAt   string `json:"ended_at,omitempty"`
+	// Queue, Reserved and Renewals: window_queue.go. A release or an expiry
+	// keeps the queue; only the queue's own writes change it.
+	Queue    []queueEntry `json:"queue,omitempty"`
+	Reserved *queueEntry  `json:"reserved,omitempty"`
+	Renewals int          `json:"renewals,omitempty"`
+	// QueueRev counts queue-only writes; a run lease is not fenced by one.
+	QueueRev int `json:"queue_rev,omitempty"`
 }
 
 type windowInput struct {
@@ -72,6 +79,11 @@ type windowInput struct {
 	Reason     string
 	Env        string
 	TTLMinutes int
+	// Queue asks to wait behind a live holder instead of a 409.
+	Queue        bool
+	Thread       string
+	Resume       string
+	QueueMinutes int
 }
 
 func (r windowRecord) asMap() map[string]any {
@@ -105,7 +117,7 @@ func validateWindowInput(in windowInput) (windowInput, error) {
 	if in.TTLMinutes < 1 || in.TTLMinutes > windowTTLMax {
 		return in, fmt.Errorf("ttl_minutes must be between 1 and %d", windowTTLMax)
 	}
-	return in, nil
+	return validateQueueInput(in)
 }
 
 func windowEnv(reason string) string {
@@ -123,12 +135,19 @@ func putReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns string, i
 		return windowRecord{}, err
 	}
 	var last error
-	for attempt := 0; attempt < 5; attempt++ {
+	attempts := 5
+	if in.Queue {
+		attempts = 20 // every concurrent enqueue is a conflict for the others
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
 		rec, err := writeReleaseWindowOnce(ctx, cs, ns, in, now)
 		if err == nil {
 			return rec, nil
 		}
 		if _, held := err.(*WindowHeld); held {
+			return windowRecord{}, err
+		}
+		if _, queued := err.(*WindowQueued); queued {
 			return windowRecord{}, err
 		}
 		if apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err) {
@@ -163,42 +182,57 @@ func writeReleaseWindowOnce(ctx context.Context, cs kubernetes.Interface, ns str
 		StartedAt: now.UTC().Format(time.RFC3339),
 		ExpiresAt: now.UTC().Add(time.Duration(in.TTLMinutes) * time.Minute).Format(time.RFC3339),
 		Reason:    in.Reason,
+		Queue:     removeQueued(current.Queue, in.Who),
 	}
-	if current.live(now) {
-		if current.Who != in.Who {
-			recordWindow(ctx, ns, "refused", next, "", current.Who)
-			return windowRecord{}, &WindowHeld{Who: current.Who, What: current.What, StartedAt: current.StartedAt, ExpiresAt: current.ExpiresAt}
+	if in.Reason == "reserved" {
+		next.Reason = ""
+	}
+	live := current.live(now)
+	if !live {
+		// A free window belongs to the queue head first: reserve it for the
+		// head here too, so no caller slips in before the advancer's tick.
+		if head, ok := queueHead(current.Queue, now); ok && head.Who != in.Who {
+			reserved := current
+			reserveHead(&reserved, now, loadWindowQueueConfig().Reserve)
+			current, live = reserved, true
+			if !in.Queue {
+				if err := writeWindowCM(ctx, cs, ns, cm, reserved); err != nil {
+					return windowRecord{}, err
+				}
+			}
 		}
+	}
+	if live && current.Who != in.Who {
+		if in.Queue {
+			queued := current
+			pos, err := enqueue(&queued, in, now)
+			if err != nil {
+				return windowRecord{}, err
+			}
+			if err := writeWindowCM(ctx, cs, ns, cm, queued); err != nil {
+				return windowRecord{}, err
+			}
+			return windowRecord{}, &WindowQueued{Position: pos, Holder: queued, Queue: queued.Queue}
+		}
+		recordWindow(ctx, ns, "refused", next, "", current.Who)
+		return windowRecord{}, &WindowHeld{Who: current.Who, What: current.What, StartedAt: current.StartedAt, ExpiresAt: current.ExpiresAt}
+	}
+	claimed := live && current.Reserved != nil
+	if live && !claimed {
 		next.StartedAt = current.StartedAt
 		if next.StartedAt == "" {
 			next.StartedAt = now.UTC().Format(time.RFC3339)
 		}
+		next.Renewals = current.Renewals + 1
 	}
-	body, err := json.Marshal(next)
-	if err != nil {
-		return windowRecord{}, err
+	var target *corev1.ConfigMap
+	if !missing {
+		target = cm
 	}
-	if missing {
-		_, err = cms.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: ns},
-			Data:       map[string]string{releaseWindowDataKey: string(body)},
-		}, metav1.CreateOptions{})
-		if err == nil {
-			recordWindowExpiry(ctx, ns, current, now)
-			if !current.live(now) {
-				recordWindow(ctx, ns, "held", next, "", "")
-			}
-		}
-		return next, err
-	}
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-	cm.Data[releaseWindowDataKey] = string(body)
-	_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
+	err = writeWindowCM(ctx, cs, ns, target, next)
 	if err == nil {
 		recordWindowExpiry(ctx, ns, current, now)
-		if !current.live(now) {
+		if !live || claimed {
 			recordWindow(ctx, ns, "held", next, "", "")
 		}
 	}
@@ -252,6 +286,7 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 		rec = windowRecord{Who: strings.TrimSpace(who), Reason: "cleared"}
 	}
 	previous := rec
+	rec.Reserved = nil // a reservation given back is not a missed turn
 	rec.ExpiresAt = now.UTC().Format(time.RFC3339)
 	rec.EndedAt = rec.ExpiresAt
 	body, err := json.Marshal(rec)

@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -178,7 +179,7 @@ func TestApprovedRequesterWindow514(t *testing.T) {
 	}
 	createdContractRun(t, dyn)
 	after, live, err := getReleaseWindow(ctx, cs, "cicd", time.Now().UTC())
-	if err != nil || !live || after != before {
+	if err != nil || !live || !reflect.DeepEqual(after, before) {
 		t.Fatalf("session window changed: %+v %v", after, err)
 	}
 }

@@ -82,6 +82,9 @@ func (a *STGReleaseAdapter) TakeSTGWindow(ctx context.Context, old STGWindow, wh
 		previous, _ := parseWindowCM(old.cm)
 		r.StartedAt = previous.StartedAt
 	}
+	if previous, ok := parseWindowCM(old.cm); ok {
+		r.Queue = previous.Queue // the queue outlives every holder (window_queue.go)
+	}
 	next, err := a.writeSTGWindow(ctx, old, r)
 	if err == nil && !old.Live(now) {
 		previous, _ := parseWindowCM(old.cm)

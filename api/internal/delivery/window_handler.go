@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (h *Handler) HandleGetReleaseWindow(w http.ResponseWriter, r *http.Request) {
@@ -18,11 +20,16 @@ func (h *Handler) HandleGetReleaseWindow(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	if !open {
-		writeJSON(w, http.StatusOK, map[string]any{"open": false})
-		return
+	now := time.Now().UTC()
+	out := map[string]any{"open": open}
+	if open {
+		out["window"] = rec
+		out["holder"] = viewHolder(rec, now)
+	} else if cm, gerr := cs.CoreV1().ConfigMaps(h.svc.PipelinesNamespace()).Get(r.Context(), releaseWindowConfigMap, metav1.GetOptions{}); gerr == nil {
+		rec, _ = parseWindowCM(cm) // a free window still shows who waits
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"open": true, "window": rec})
+	out["queue"] = viewQueue(rec.Queue, now)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) HandlePutReleaseWindow(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +39,11 @@ func (h *Handler) HandlePutReleaseWindow(w http.ResponseWriter, r *http.Request)
 		Reason     string `json:"reason"`
 		TTLMinutes int    `json:"ttl_minutes"`
 		Env        string `json:"env"`
+		// Queue (window_queue.go): wait behind a live holder; 202 instead of 409.
+		Queue        bool   `json:"queue"`
+		Thread       string `json:"thread"`
+		Resume       string `json:"resume"`
+		QueueMinutes int    `json:"queue_minutes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -44,8 +56,18 @@ func (h *Handler) HandlePutReleaseWindow(w http.ResponseWriter, r *http.Request)
 	}
 	rec, err := putReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), windowInput{
 		What: body.What, Who: body.Who, Reason: body.Reason, Env: body.Env, TTLMinutes: body.TTLMinutes,
+		Queue: body.Queue, Thread: body.Thread, Resume: body.Resume, QueueMinutes: body.QueueMinutes,
 	}, time.Now().UTC())
 	if err != nil {
+		if queued, ok := err.(*WindowQueued); ok {
+			if h.audit != nil {
+				h.audit.Record(r, "delivery.release_window.queue", body.Who, "ok", body.What)
+			}
+			now := time.Now().UTC()
+			writeJSON(w, http.StatusAccepted, map[string]any{"open": false, "queued": true, "position": queued.Position,
+				"holder": viewHolder(queued.Holder, now), "queue": viewQueue(queued.Queue, now)})
+			return
+		}
 		if held, ok := err.(*WindowHeld); ok {
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error": "release window held by someone else",
