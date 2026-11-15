@@ -373,6 +373,17 @@ func TestATrustAnchorReviewWithOneThingWrongWaits(t *testing.T) {
 			f.history.commits = append(f.history.commits, releasepolicy.Commit{SHA: rptest.SHA("co"), Message: "fix\n\nClaude-Session: local_other\n", Files: []string{anchorFile}})
 			f.setReviews(releasepolicy.Review{Reviewer: "local_other", Files: []string{anchorFile}, Passed: true})
 		}, want: "the reviewer local_other is an author"},
+		// Origin: independent review of 4bf04932 (2026-11-15), finding A. The
+		// same session spelled in another case, or with words after the id on
+		// its trailer line, is still the author.
+		"review by the author spelled in another case": {world: func(f *reviewFixture) {
+			f.history.commits = append(f.history.commits, releasepolicy.Commit{SHA: rptest.SHA("co"), Message: "fix\n\nClaude-Session: local_Other\n", Files: []string{anchorFile}})
+			f.setReviews(releasepolicy.Review{Reviewer: "LOCAL_OTHER", Files: []string{anchorFile}, Passed: true})
+		}, want: "the reviewer local_other is an author"},
+		"review by the author whose trailer carries more than the id": {world: func(f *reviewFixture) {
+			f.history.commits = append(f.history.commits, releasepolicy.Commit{SHA: rptest.SHA("co"), Message: "fix\n\nClaude-Session: local_other (resumed)\n", Files: []string{anchorFile}})
+			f.setReviews(releasepolicy.Review{Reviewer: "local_other", Files: []string{anchorFile}, Passed: true})
+		}, want: "the reviewer local_other is an author"},
 		// Every value of the trailer is an author, not the first alone.
 		"review by a second session of one commit": {world: func(f *reviewFixture) {
 			f.history.commits[0].Message += "Claude-Session: " + reviewer + "\n"

@@ -54,6 +54,19 @@ func SessionTrailers(message string) []string {
 	return out
 }
 
+// sessionID is the form two session ids are compared in: the first word,
+// lower case. A trailer line may carry more after the id, and the header a
+// reviewer is known by may spell the same id in another case; neither makes
+// the same session two people (independent review of 4bf04932, 2026-11-15,
+// finding A).
+func sessionID(s string) string {
+	f := strings.Fields(s)
+	if len(f) == 0 {
+		return ""
+	}
+	return strings.ToLower(f[0])
+}
+
 // isTestFile: a Go test file, or anything under a testdata directory.
 func isTestFile(path string) bool {
 	return strings.HasSuffix(path, "_test.go") || strings.HasPrefix(path, "testdata/") || strings.Contains(path, "/testdata/")
@@ -104,7 +117,7 @@ func (e *Engine) anchorReview(ctx context.Context, repo, old, next string, need 
 			return "", "commit " + short(c.SHA) + " touches a trust anchor and has no Claude-Session trailer"
 		}
 		for _, s := range sessions {
-			authors[s] = true
+			authors[sessionID(s)] = true
 		}
 	}
 	if !cut {
@@ -123,7 +136,7 @@ func (e *Engine) anchorReview(ctx context.Context, repo, old, next string, need 
 	// A reviewer's newest record is their verdict.
 	newest := map[string]Review{}
 	for _, r := range rows {
-		if who := strings.TrimSpace(r.Reviewer); who != "" {
+		if who := sessionID(r.Reviewer); who != "" {
 			newest[who] = r
 		}
 	}
