@@ -153,7 +153,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 		if evidenced[key] || sent[key] == "" || held[key] == "" {
 			continue
 		}
-		e, is, err := c.runEvidence(ctx, m, p)
+		e, is, err := c.runEvidence(ctx, m, &p)
 		if err != nil {
 			// A tree could not be read: the rest wait for the next full pass
 			// rather than each wait out a read of its own.
@@ -165,6 +165,11 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 			continue
 		}
 		rows, rowKeys = append(rows, e), append(rowKeys, key)
+		if c.Sources.RunEvidenced != nil {
+			// Before the row is written: the reader can still ask the ledger
+			// whether it knew the run.
+			c.Sources.RunEvidenced(ctx, p)
+		}
 	}
 	if len(rows) > 0 {
 		if _, err := evidence.RecordEvidence(ctx, c.DB, rows); err != nil {
@@ -181,8 +186,8 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 
 // runEvidence is the evidence a completed run is (evidence.RunEvidence), after
 // reading from Sources.CommitTree the tree of each commit the run reports
-// without one.
-func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.PipelineRun) (evidence.EvidenceRow, bool, error) {
+// without one. The trees and what a failed run failed on are written to p.
+func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p *store.PipelineRun) (evidence.EvidenceRow, bool, error) {
 	if p.Kind != "ci" || len(p.Inputs) == 0 {
 		return evidence.EvidenceRow{}, false, nil
 	}
@@ -231,7 +236,7 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p store.P
 		}
 		p.FailedTasks, p.FailedTests, p.FailClass = r.tasks, r.tests, r.class
 	}
-	return evidence.RunEvidence(EvidenceRun(p))
+	return evidence.RunEvidence(EvidenceRun(*p))
 }
 
 // EvidenceRun is the store's record of a pipeline run as the evidence ledger

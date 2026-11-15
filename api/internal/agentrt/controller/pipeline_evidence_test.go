@@ -247,3 +247,51 @@ func TestPipelineRecordsFailedRunSaysWhatFailed(t *testing.T) {
 		t.Fatalf("rows: %v", got)
 	}
 }
+
+// RunEvidenced is told a run that is evidence once, however many passes list
+// it, with what it failed on; a reused and a cancelled run are not told.
+// Origin: main coordinator 2026-11-14: backend skip by package goes shadow
+// first; a failing package the scope would skip is the miss this looks for.
+// The reader hangs on the runs the pass already has in hand: on 2026-11-14 a
+// new loop listed every PipelineRun each pass and the STG workers were
+// OOMKilled at 512Mi, so nothing here lists the cluster again.
+func TestPipelineRecordsTellsEvidencedRunsOnce(t *testing.T) {
+	t.Parallel()
+	pool := setup(t)
+	red := ciRun("ci-platform-red", sha("d"), sha("9"))
+	red.Result, red.Reason = "Failed", "Failed"
+	reused := ciRun("ci-platform-reused", sha("a"), sha("c"))
+	reused.TestedBy = "ci-platform-green"
+	cancelled := ciRun("ci-platform-cancelled", sha("a"), sha("c"))
+	cancelled.Result, cancelled.Reason = "Failed", "Cancelled"
+	runs := []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, reused, cancelled, completedRun("deliver-1")}
+	lists := 0
+	told := map[string]int{}
+	var redTests []string
+	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
+		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { lists++; return runs, nil },
+		CommitTree:   func(context.Context, string, string) (string, error) { return sha("e"), nil },
+		RunFailure: func(context.Context, string) ([]string, []string, string, error) {
+			return []string{"test-api"}, []string{"example.com/m/a.TestA"}, evidence.FailClassTest, nil
+		},
+		RunEvidenced: func(_ context.Context, p store.PipelineRun) {
+			told[p.Run]++
+			if p.Run == "ci-platform-red" {
+				redTests = p.FailedTests
+			}
+			if p.Inputs[0].Tree == "" || p.Inputs[1].Tree == "" {
+				t.Errorf("%s was told without its trees: %+v", p.Run, p.Inputs)
+			}
+		}}}
+	for pass := 0; pass < 3; pass++ {
+		if _, err := c.PipelineRecords(ctx); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+	}
+	if len(told) != 2 || told["ci-platform-green"] != 1 || told["ci-platform-red"] != 1 || strings.Join(redTests, " ") != "example.com/m/a.TestA" {
+		t.Fatalf("told %v, the red run's tests %v", told, redTests)
+	}
+	if lists != 3 {
+		t.Fatalf("the runs were listed %d times in 3 passes: telling a run must not list again", lists)
+	}
+}

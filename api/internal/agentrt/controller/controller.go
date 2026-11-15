@@ -37,6 +37,13 @@ type Sources struct {
 	// tasks, the tests they name and the class (store.PipelineRun's fields),
 	// for its evidence row; nil: the row says only that it failed.
 	RunFailure func(ctx context.Context, run string) (tasks, tests []string, class string, err error)
+	// RunEvidenced is told each completed run that is evidence, with its
+	// trees and what it failed on, just before its row goes to the ledger:
+	// once a run in this process unless the write fails (it is then told
+	// again within PipelineFullEvery), and again after a restart, when the
+	// ledger already has the run. It is called inside the pass and must
+	// return at once; nil tells no one.
+	RunEvidenced func(ctx context.Context, p store.PipelineRun)
 	// UnitRuns records the unit tasks that finished and settles what they
 	// add up to (server: receiveUnits); nil: this platform runs no units.
 	UnitRuns func(ctx context.Context) error
