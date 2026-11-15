@@ -230,13 +230,6 @@ func (g *Git) Ref(ctx context.Context, ref string) (string, error) {
 	return f[0], nil
 }
 
-// Repository is bound at construction, never supplied by a task or URL.
-func (g *Git) Repository() string {
-	if g.repo == "" {
-		return "bifrost-platform"
-	}
-	return g.repo
-}
 func selectedRepo(repos []string) (landing.LandingRepo, error) {
 	name := "bifrost-platform"
 	if len(repos) == 1 {
