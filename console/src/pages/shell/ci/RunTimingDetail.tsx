@@ -4,7 +4,7 @@ import { DenseTag } from '@bifrost/ui'
 import { fetchPipelineRunLogs } from '@/api/delivery'
 import type { TimingRun, TimingTask } from '@/api/ciTimings'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { beforeTests, consoleState, elapsed, result, reusedBy, runCommit, scopeBaseFromLog, scopeResult, seconds, secondsText, slowTimings, taskSeconds, taskWait } from './timingModel'
+import { beforeTests, consoleState, elapsed, result, reusedBy, runCommit, runStatus, scopeBaseFromLog, scopeResult, seconds, secondsText, slowTimings, taskSeconds, taskWait } from './timingModel'
 
 export const READ_BUTTON = 'min-h-11 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 text-sm font-medium hover:bg-[var(--accent)]'
 const missing = 'Not recorded; older runs may predate this result'
@@ -63,7 +63,7 @@ export function RunTimingDetail({ run }: { run: TimingRun }) {
     ] as [string,string][] : []),
   ]
   return <OpsSection title="Selected run" description={run.name} bodyPadding="none">
-    <div className="px-3 py-2"><DenseTag variant={run.status === 'Succeeded' ? 'success' : run.status === 'Failed' ? 'danger' : 'neutral'}>{run.status}</DenseTag></div>
+    <div className="px-3 py-2"><DenseTag variant={runStatus(run) === 'Succeeded' ? 'success' : runStatus(run) === 'Failed' ? 'danger' : 'neutral'}>{runStatus(run)}</DenseTag></div>
     <dl className="grid min-w-0 gap-x-6 gap-y-3 px-3 pb-3 text-xs sm:grid-cols-2">{facts.map(([label,value]) => <div key={label} className="min-w-0"><dt className="font-medium">{label}</dt><dd className="m-0 mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-muted-foreground">{value}</dd></div>)}</dl>
     {!isCI && <p className="m-0 px-3 py-2 text-xs text-muted-foreground">This pipeline does not select test scope. Inspect the CI of the same commit for package selection and test reuse.</p>}
     {run.results.length > 0 && <details className="px-3 py-2 text-xs"><summary className="cursor-pointer py-2">Pipeline results</summary><dl className="space-y-2">{run.results.map(r => <div key={r.name}><dt className="font-medium">{r.name}</dt><dd className="m-0 whitespace-pre-wrap break-all text-muted-foreground">{r.value || '(empty)'}</dd></div>)}</dl></details>}

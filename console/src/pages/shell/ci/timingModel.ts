@@ -2,6 +2,13 @@ import type { TimingResult, TimingRun, TimingTask } from '@/api/ciTimings'
 
 export const result = (results: TimingResult[], name: string) => results.find(r => r.name === name)?.value
 export const runCommit = (run: TimingRun) => result(run.results, 'platform-commit') || result(run.results, 'commit') || run.revision || ''
+// The delivery read API exposes Tekton's Succeeded condition, not its reason.
+export function runStatus(run: TimingRun): string {
+  if (run.status === 'True') return 'Succeeded'
+  if (run.status === 'False') return 'Failed'
+  if (run.status === 'Unknown' && run.reason === 'Running') return 'Running'
+  return run.status
+}
 export const reusedBy = (run: TimingRun) => result(run.results, 'tested-by') || ''
 export function seconds(from?: string, to?: string): number | null {
   if (!from || !to) return null
@@ -52,7 +59,7 @@ export function trendRuns(runs: TimingRun[]): TimingRun[] {
   const seen = new Set<string>()
   return runs.filter(run => {
     const commit = runCommit(run)
-    if (run.status !== 'Succeeded' || reusedBy(run) || run.trigger === 'agentrt-full-ci' || run.name.startsWith('ci-full-') || elapsed(run) == null || !commit || seen.has(commit)) return false
+    if (runStatus(run) !== 'Succeeded' || reusedBy(run) || run.trigger === 'agentrt-full-ci' || run.name.startsWith('ci-full-') || elapsed(run) == null || !commit || seen.has(commit)) return false
     seen.add(commit); return true
   })
 }

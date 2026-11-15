@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { timingRun } from './timingFixture'
-import { beforeTests, changeKind, consoleState, elapsed, scopeBaseFromLog, seconds, slowTimings, trendRuns } from '../timingModel'
+import { beforeTests, changeKind, consoleState, elapsed, runStatus, scopeBaseFromLog, seconds, slowTimings, trendRuns } from '../timingModel'
 
 // Origin: benchmark 1999f61b (2026-11-15): 32 s changes, 35 s before tests,
 // overlapping test tasks, and a backend file that also requires console tests.
@@ -44,4 +44,17 @@ it('reads Go JSON package and test durations without counting cached replays',()
   expect(slowTimings(lines+'\n{"partial"','ci-one').map(r=>[r.kind,r.name,r.seconds])).toEqual([
     ['Package','p/server',34.7],['Test','p/server · TestRoute',20.4],
   ])
+})
+
+// Origin: STG browser verification, 2026-11-15: successful runs appeared as
+// "True" and every live sample was excluded from trends; fixtures used "Succeeded".
+it('includes Tekton success conditions and excludes unsuccessful conditions',()=>{
+  const run = {...timingRun(), status:'True', reason:'Succeeded'}
+  expect(runStatus(run)).toBe('Succeeded')
+  expect(trendRuns([run])).toEqual([run])
+  for (const status of ['False','Unknown']) {
+    expect(trendRuns([{...run,status}])).toEqual([])
+  }
+  expect(runStatus({...run,status:'Unknown',reason:'Running'})).toBe('Running')
+  expect(runStatus({...run,status:'False',reason:'Cancelled'})).toBe('Failed')
 })

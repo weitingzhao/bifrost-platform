@@ -6,7 +6,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { RunTimingDetail, READ_BUTTON } from './RunTimingDetail'
 import { TimingTrends } from './TimingTrends'
 import { TimingBudget } from './TimingBudget'
-import { elapsed, reusedBy, runCommit, secondsText } from './timingModel'
+import { elapsed, reusedBy, runCommit, runStatus, secondsText } from './timingModel'
 
 const pipelines = [
   ['bifrost-ci-platform','CI'], ['bifrost-land','Merge'],
@@ -41,7 +41,7 @@ export function PlatformTimings() {
         <p className="text-xs text-muted-foreground">{`${runs.length} runs in this window · ${query.data.runs.length} loaded / ${query.data.retained} retained · read ${query.data.as_of}`}</p>
         {runs.length ? <label className="grid min-w-0 gap-1 text-xs">Run<select className={`${control} w-full min-w-0`} value={lookup ? '' : selected?.name ?? ''} onChange={e=>pick(e.target.value)}>
           {lookup && <option value="">Run name lookup</option>}
-          {runs.map(run=><option key={run.name} value={run.name}>{run.created_at.slice(5,16).replace('T',' ')}Z · {runCommit(run).slice(0,8)} · {run.status} · {secondsText(elapsed(run))}{reusedBy(run)?' · reused':''} · {run.name}</option>)}
+          {runs.map(run=><option key={run.name} value={run.name}>{run.created_at.slice(5,16).replace('T',' ')}Z · {runCommit(run).slice(0,8)} · {runStatus(run)} · {secondsText(elapsed(run))}{reusedBy(run)?' · reused':''} · {run.name}</option>)}
         </select></label> : <p className="text-sm">No run retained in this window. Older runs outside retention are unavailable.</p>}
       </>}
       <form className="mt-3 flex min-w-0 flex-wrap items-end gap-2" onSubmit={e=>{e.preventDefault();setLookup(typed.trim())}}>
