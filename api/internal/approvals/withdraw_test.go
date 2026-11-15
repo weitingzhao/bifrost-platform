@@ -15,7 +15,7 @@ import (
 
 func pendingCard(t *testing.T, svc *Service) Approval {
 	t.Helper()
-	c := svc.create(context.Background(), "s", "owner_run_command", "delete a ConfigMap", "", map[string]any{
+	c := svc.create(context.Background(), "s", "owner_run_command", "r\n改了什么：测试\n批了以后谁因此能做什么新事：无", "", map[string]any{
 		"command": "kubectl -n cicd delete configmap x", "reason": "TD-290 remove retired ConfigMap\nmore",
 	})
 	if c.Status != http.StatusCreated {

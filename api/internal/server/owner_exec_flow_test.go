@@ -80,7 +80,7 @@ func (f *ownerExecFlow) card(command string) map[string]any {
 	status, created := f.call(http.MethodPost, "/api/v1/approvals", "operator", map[string]any{
 		"action": "owner_run_command",
 		"params": map[string]any{"command": command, "reason": "owner-exec flow test"},
-		"reason": "owner-exec flow test",
+		"reason": "owner-exec flow test\n改了什么：测试\n批了以后谁因此能做什么新事：无",
 	})
 	if status != http.StatusCreated && status != http.StatusOK && status != http.StatusAccepted {
 		f.t.Fatalf("create card: %d %v", status, created)

@@ -230,6 +230,15 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 			}
 		}
 	case actions.TierD:
+		// After the tier check, so a tier X refusal (D10 paths) is still the
+		// answer it was. A drill is shown, never approved, so it carries no
+		// Owner decision to protect.
+		if act.ID == "owner_run_command" && !in.Drill {
+			command, _ := norm["command"].(string)
+			if problem := ownerRunProblem(command, reason); problem != "" {
+				return fail(400, problem)
+			}
+		}
 	default:
 		return fail(400, "action cannot be requested")
 	}

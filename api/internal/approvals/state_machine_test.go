@@ -174,7 +174,7 @@ func TestNumbersSurvivePruning(t *testing.T) {
 
 func approveOwnerRun(t *testing.T, svc *Service) Approval {
 	t.Helper()
-	c := svc.create(context.Background(), "s", "owner_run_command", "delete a ConfigMap", "", map[string]any{
+	c := svc.create(context.Background(), "s", "owner_run_command", "r\n改了什么：测试\n批了以后谁因此能做什么新事：无", "", map[string]any{
 		"command": "kubectl -n cicd delete configmap x", "reason": "TD-290 remove retired ConfigMap\nmore",
 	})
 	if c.Status != http.StatusCreated {
@@ -547,7 +547,7 @@ func TestListOpenAndNumberLookup(t *testing.T) {
 func TestRunnerParamAndWorkLabels(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	res := svc.createWith(context.Background(), createInput{
-		Requester: "s", Action: "owner_run_command", Reason: "r",
+		Requester: "s", Action: "owner_run_command", Reason: "r\n改了什么：测试\n批了以后谁因此能做什么新事：无",
 		Params: map[string]any{"command": "true", "reason": "r", "runner": "system"},
 		Thread: "W-48 S0-0a", WorkID: "W-48",
 	})
@@ -642,7 +642,7 @@ tokens:
 		r.ServeHTTP(rec, req)
 		return rec
 	}
-	created := do(http.MethodPost, "/approvals", `{"action":"owner_run_command","params":{"command":"true","reason":"probe","runner":"host"},"reason":"probe","work_id":"W-48"}`, "operator-test-token")
+	created := do(http.MethodPost, "/approvals", `{"action":"owner_run_command","params":{"command":"true","reason":"probe","runner":"host"},"reason":"probe\n改了什么：测试\n批了以后谁因此能做什么新事：无","work_id":"W-48"}`, "operator-test-token")
 	if created.Code != http.StatusCreated || !strings.Contains(created.Body.String(), `"number":1`) || !strings.Contains(created.Body.String(), `"runner":"host"`) {
 		t.Fatalf("create = %d %s", created.Code, created.Body.String())
 	}

@@ -20,7 +20,7 @@ func TestHumanApprovalHome(t *testing.T) {
 				{Action: "owner_run_command", Params: map[string]any{"command": "true", "reason": "test", "rollback": "none"}},
 				{Action: "cordon_node", Params: map[string]any{"name": "n1"}, Drill: true},
 			} {
-				in.Requester, in.Reason = "test", "test home"
+				in.Requester, in.Reason = "test", "test home\n改了什么：测试\n批了以后谁因此能做什么新事：无"
 				got := svc.createWith(context.Background(), in)
 				if env == "prod" {
 					if got.Status != http.StatusCreated {
