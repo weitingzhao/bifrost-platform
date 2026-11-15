@@ -1,41 +1,13 @@
 import { serverFetch } from '@/api/serverContact'
-import type { AllMatricesResponse, EnvironmentSummary, MatrixResponse, SelfHealthResponse, TopologyResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from './matrixTypes'
+import type { AllMatricesResponse, MatrixResponse, SelfHealthResponse, TopologyResponse } from './matrixTypes'
 import type { AllSatelliteBusDeepResponse, SatelliteBusDeepResponse } from './satelliteBusTypes'
 import type { OpsContextResponse } from './opsContextTypes'
-
-export async function fetchEnvironments(): Promise<EnvironmentSummary[]> {
-  const r = await serverFetch('/api/v1/environments')
-  if (!r.ok) throw new Error(`environments: HTTP ${r.status}`)
-  const data = (await r.json()) as { environments: EnvironmentSummary[] }
-  return data.environments
-}
 
 export async function fetchMatrix(env?: string): Promise<MatrixResponse | AllMatricesResponse> {
   const url = env ? `/api/v1/matrix?env=${encodeURIComponent(env)}` : '/api/v1/matrix'
   const r = await serverFetch(url)
   if (!r.ok) throw new Error(`matrix: HTTP ${r.status}`)
   return r.json() as Promise<MatrixResponse | AllMatricesResponse>
-}
-
-export async function fetchVerifyPayload(): Promise<VerifyPayloadResponse> {
-  const r = await serverFetch('/api/v1/mission/verify-payload')
-  if (!r.ok) throw new Error(`verify-payload: HTTP ${r.status}`)
-  return r.json() as Promise<VerifyPayloadResponse>
-}
-
-export async function fetchVerifyMissionSnapshot(): Promise<VerifyMissionSnapshotResponse> {
-  const r = await serverFetch('/api/v1/mission/verify-snapshot')
-  if (!r.ok) throw new Error(`verify-snapshot: HTTP ${r.status}`)
-  return r.json() as Promise<VerifyMissionSnapshotResponse>
-}
-
-export async function fetchPlatformHealth(): Promise<boolean> {
-  try {
-    const r = await serverFetch('/health')
-    return r.ok
-  } catch {
-    return false
-  }
 }
 
 export function isAllMatrices(

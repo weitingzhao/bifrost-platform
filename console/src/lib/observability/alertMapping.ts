@@ -352,10 +352,3 @@ export function verdictAffectingAlerts(alerts: MappedAlert[]): MappedAlert[] {
       (a.severity === 'critical' || a.severity === 'warning'),
   )
 }
-
-export function firingDurationMs(activeAt: string | undefined, nowMs: number): number | null {
-  if (activeAt == null || activeAt === '') return null
-  const t = Date.parse(activeAt)
-  if (Number.isNaN(t)) return null
-  return Math.max(0, nowMs - t)
-}

@@ -200,10 +200,6 @@ export type ControlRoomExpandMode = 'single' | 'multi'
 
 const CONTROL_ROOM_EXPAND_MODE_STORAGE_KEY = 'bifrost_control_room_expand_mode'
 
-export function controlRoomExpandModeStorageKey(): string {
-  return CONTROL_ROOM_EXPAND_MODE_STORAGE_KEY
-}
-
 export function loadControlRoomExpandMode(
   storage: Pick<Storage, 'getItem'> = localStorage,
 ): ControlRoomExpandMode {

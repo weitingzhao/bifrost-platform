@@ -921,40 +921,6 @@ export type AnalyticsListResponse = {
   [key: string]: unknown
 }
 
-export function fetchAnalyticsMaxPain(params?: { symbol?: string; lookback_days?: number }) {
-  const q = new URLSearchParams()
-  if (params?.symbol) q.set('symbol', params.symbol)
-  if (params?.lookback_days != null) q.set('lookback_days', String(params.lookback_days))
-  const qs = q.toString()
-  return proxyGet<AnalyticsListResponse>(`/market/analytics/max-pain${qs ? `?${qs}` : ''}`)
-}
-
-export function fetchAnalyticsAtmIv(params?: { symbol?: string; lookback_days?: number }) {
-  const q = new URLSearchParams()
-  if (params?.symbol) q.set('symbol', params.symbol)
-  if (params?.lookback_days != null) q.set('lookback_days', String(params.lookback_days))
-  const qs = q.toString()
-  return proxyGet<AnalyticsListResponse>(`/market/analytics/atm-iv${qs ? `?${qs}` : ''}`)
-}
-
-export function fetchAnalyticsPcr(params?: { symbol?: string; lookback_days?: number }) {
-  const q = new URLSearchParams()
-  if (params?.symbol) q.set('symbol', params.symbol)
-  if (params?.lookback_days != null) q.set('lookback_days', String(params.lookback_days))
-  const qs = q.toString()
-  return proxyGet<AnalyticsListResponse>(`/market/analytics/pcr${qs ? `?${qs}` : ''}`)
-}
-
-export function fetchAnalyticsIvPercentile(params?: { symbol?: string; lookback_days?: number }) {
-  const q = new URLSearchParams()
-  if (params?.symbol) q.set('symbol', params.symbol)
-  if (params?.lookback_days != null) q.set('lookback_days', String(params.lookback_days))
-  const qs = q.toString()
-  return proxyGet<AnalyticsListResponse>(
-    `/market/analytics/iv-percentile${qs ? `?${qs}` : ''}`,
-  )
-}
-
 /** Generic JSON probe against any Plugin /market/* GET path. */
 export async function probeMarketPath(
   pluginPath: string,

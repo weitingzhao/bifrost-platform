@@ -86,16 +86,3 @@ export function buildNodeObservedStateRows(
 
   return rows
 }
-
-export function procedureStepStatusLabel(status: 'done' | 'current' | 'pending' | 'blocked'): string {
-  switch (status) {
-    case 'done':
-      return 'Done'
-    case 'current':
-      return 'Next'
-    case 'blocked':
-      return 'Blocked'
-    default:
-      return 'Pending'
-  }
-}

@@ -1,12 +1,7 @@
 import type { Reachability } from '@/api/matrixTypes'
-import type {
-  SatelliteBusDeepResponse,
-  SatelliteBusIngestService,
-  SatelliteBusMonitorDaemon,
-  SatelliteBusSocketComponent,
-} from '@/api/satelliteBusTypes'
-import type { Signal } from '@/lib/control-room/missionSignals'
-import { worst } from '@/lib/control-room/missionSignals'
+import type { SatelliteBusIngestService, SatelliteBusMonitorDaemon, SatelliteBusSocketComponent } from '@/api/satelliteBusTypes'
+
+import '@/lib/control-room/missionSignals'
 
 export type SocketHealthLayer = 'rocket' | 'trade'
 
@@ -29,8 +24,6 @@ export type TradeEnvId = TradeEnv
 /** Matrix columns: K3s dev (cluster pull) + Mac thin-client (satellite-probe-bridge). */
 export type BusEnvId = TradeEnv | 'dev-local'
 
-export const SOCKET_TRADE_ENVS: TradeEnv[] = ['dev', 'stg', 'prod']
-
 const SOCKET_MATRIX_ENVS: BusEnvId[] = ['dev', 'stg', 'prod', 'dev-local']
 
 export const SOCKET_MATRIX_LABELS: Record<BusEnvId, string> = {
@@ -46,12 +39,6 @@ export const SOCKET_TRADE_NS: Record<TradeEnv, string> = {
   prod: 'bifrost-prod',
 }
 
-const GENERIC_PROBE_DETAILS = new Set([
-  'Parsed monitor schema v9 subset',
-  'Deep bus semantics from trade monitor/ops APIs',
-  'Deep bus semantics via satellite-probe-bridge',
-])
-
 function rawBool(raw: Record<string, unknown> | undefined, key: string): boolean | undefined {
   const v = raw?.[key]
   if (typeof v === 'boolean') return v
@@ -61,27 +48,6 @@ function rawBool(raw: Record<string, unknown> | undefined, key: string): boolean
 function rawStr(raw: Record<string, unknown> | undefined, key: string): string {
   const v = raw?.[key]
   return typeof v === 'string' ? v.trim() : ''
-}
-
-function policyEnv(env: BusEnvId): TradeEnv {
-  return env === 'dev-local' ? 'dev' : env
-}
-
-export function formatBusProbeDetail(bus: SatelliteBusDeepResponse): string | undefined {
-  const reasons = bus.monitor?.health?.block_reasons ?? []
-  if (reasons.length > 0) {
-    const lamp = bus.monitor?.health?.status_lamp ?? '?'
-    return `health lamp=${lamp}: ${reasons.join(', ')}`
-  }
-  for (const candidate of [bus.detail, bus.monitor?.detail, bus.ingest?.detail]) {
-    if (candidate == null || candidate.trim() === '') continue
-    if (GENERIC_PROBE_DETAILS.has(candidate.trim())) continue
-    return candidate.trim()
-  }
-  if (bus.reachability === 'fail' || bus.reachability === 'unknown') {
-    return `bus-deep ${bus.reachability}`
-  }
-  return undefined
 }
 
 function ingestById(
@@ -407,31 +373,6 @@ export function buildSocketHealthRows(
   return { rocket, trade }
 }
 
-function summarizeSocketHealth(
-  rows: SocketHealthRow[],
-): { signal: Signal; headline: string; attention: number } {
-  const required = rows.filter(r => r.required === 'required')
-  const policyOff = rows.filter(r => r.required === 'policy-off').length
-  const attention = required.filter(r => r.reach === 'fail' || r.reach === 'degraded').length
-  const ok = required.filter(r => r.reach === 'ok').length
-
-  let signal: Signal = 'ok'
-  if (required.some(r => r.reach === 'fail')) signal = 'fail'
-  else if (attention > 0) signal = 'degraded'
-  else if (required.length === 0) signal = 'unknown'
-
-  const parts: string[] = []
-  if (required.length > 0) parts.push(`${ok}/${required.length} required ok`)
-  if (policyOff > 0) parts.push(`${policyOff} policy-off`)
-  if (attention > 0) parts.push(`${attention} need attention`)
-
-  return {
-    signal,
-    headline: parts.length > 0 ? parts.join(' · ') : 'No socket rows',
-    attention,
-  }
-}
-
 export type SocketHealthEnvCell = {
   reach: Reachability
   reachLabel: string
@@ -474,34 +415,6 @@ function reachRank(reach: Reachability): number {
   }
 }
 
-function applyProbeDetail(cell: SocketHealthEnvCell, probeDetail?: string): SocketHealthEnvCell {
-  if (cell.reach !== 'unknown' && cell.detail !== 'Not probed' && cell.detail !== '—') {
-    return cell
-  }
-  if (probeDetail == null || probeDetail.trim() === '') {
-    return cell
-  }
-  return {
-    ...cell,
-    reach: cell.reach === 'unknown' ? 'fail' : cell.reach,
-    reachLabel: cell.reach === 'unknown' ? 'fail' : cell.reachLabel,
-    detail: probeDetail,
-  }
-}
-
-function rowToCell(row: SocketHealthRow): SocketHealthEnvCell {
-  return {
-    reach: row.reach,
-    reachLabel: row.reachLabel,
-    required: row.required,
-    detail: row.detail,
-  }
-}
-
-function emptyCell(): SocketHealthEnvCell {
-  return { reach: 'unknown', reachLabel: 'unknown', required: 'optional', detail: 'Not probed' }
-}
-
 /**
  * Compare · DRIFT buckets — intentional observe / D10 scale-zero must not diverge
  * from each other (STG expected-off vs DEV/PROD observe is policy, not drift).
@@ -538,13 +451,6 @@ export function computeEnvDiverges(
   return buckets.size > 1
 }
 
-const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean }[] = [
-  { id: 'ib_ingestor', label: 'IB Ingestor' },
-  { id: 'ib_account_agent', label: 'IB Account Agent' },
-  { id: 'ib_operator', label: 'IB Operator' },
-  { id: 'trading_engine', label: 'Trading daemon', includeDaemon: true },
-]
-
 /** Rocket bus is cluster-shared; pick best reach across envs (not first env). */
 export function resolveSharedRocketRow(
   buses: Partial<Record<BusEnvId, BusSocketSlice>>,
@@ -565,89 +471,4 @@ export function resolveSharedRocketRow(
   }
 
   return best ?? classifyPlatformIbGateway(undefined)
-}
-
-export function buildSocketHealthMatrix(
-  buses: Partial<Record<BusEnvId, BusSocketSlice>>,
-): { rocket: SocketHealthRow; tradeRows: SocketHealthMatrixRow[] } {
-  const rocket = resolveSharedRocketRow(buses)
-
-  const tradeRows: SocketHealthMatrixRow[] = TRADE_CONSUMER_DEFS.map(def => {
-    const cells: Record<'dev' | 'stg' | 'prod' | 'local', SocketHealthEnvCell> = {
-      dev: emptyCell(),
-      stg: emptyCell(),
-      prod: emptyCell(),
-      local: emptyCell(),
-    }
-
-    for (const env of SOCKET_MATRIX_ENVS) {
-      const slice = buses[env]
-      if (slice == null) continue
-      const built = buildSocketHealthRows(slice.socket, policyEnv(env), slice.ingest, slice.daemon)
-      const match = built.trade.find(r => r.id === def.id)
-      const key = matrixCellKey(env)
-      if (match != null) {
-        cells[key] = rowToCell(match)
-      } else if (def.id !== 'trading_engine' && slice.probeDetail != null) {
-        cells[key] = applyProbeDetail(emptyCell(), slice.probeDetail)
-      }
-    }
-
-    const envDiverges = computeEnvDiverges(cells)
-
-    return {
-      id: def.id,
-      label: def.label,
-      dev: cells.dev,
-      stg: cells.stg,
-      prod: cells.prod,
-      local: cells.local,
-      envDiverges,
-    }
-  }).filter(row => {
-    const anyPresent = SOCKET_MATRIX_ENVS.some(
-      e => row[matrixCellKey(e)].required !== 'optional' || row[matrixCellKey(e)].reach !== 'unknown',
-    )
-    return anyPresent
-  })
-
-  return { rocket, tradeRows }
-}
-
-export function summarizeSocketHealthAllEnvs(
-  matrix: { rocket: SocketHealthRow; tradeRows: SocketHealthMatrixRow[] },
-): { signal: Signal; headline: string; attention: number } {
-  const envParts: string[] = []
-  let attention = 0
-  const envSignals: Signal[] = []
-
-  for (const env of SOCKET_MATRIX_ENVS) {
-    const rows: SocketHealthRow[] = [
-      matrix.rocket,
-      ...matrix.tradeRows.map(r => ({
-        id: r.id,
-        label: r.label,
-        layer: 'trade' as const,
-        required: r[matrixCellKey(env)].required,
-        reach: r[matrixCellKey(env)].reach,
-        reachLabel: r[matrixCellKey(env)].reachLabel,
-        detail: r[matrixCellKey(env)].detail,
-      })),
-    ]
-    const summary = summarizeSocketHealth(rows)
-    envSignals.push(summary.signal)
-    const short = SOCKET_MATRIX_LABELS[env]
-    if (summary.attention > 0) {
-      attention += summary.attention
-      envParts.push(`${short} ${summary.headline}`)
-    } else {
-      envParts.push(`${short} ok`)
-    }
-  }
-
-  return {
-    signal: worst(...envSignals),
-    headline: envParts.join(' · '),
-    attention,
-  }
 }

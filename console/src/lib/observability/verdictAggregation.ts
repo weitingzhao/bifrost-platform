@@ -73,10 +73,6 @@ export function domainProbeability(
   return 'runtime'
 }
 
-export function isReferenceDomain(domain: DomainHealth): boolean {
-  return domain.probeability === 'reference'
-}
-
 const VERDICT_RANK: Record<ObservabilityVerdict, number> = {
   critical: 5,
   degraded: 4,
@@ -494,8 +490,4 @@ export function buildAttentionItems(
 
   const rank = { critical: 0, warning: 1, info: 2, unknown: 3 }
   return items.sort((a, b) => rank[a.severity] - rank[b.severity])
-}
-
-export function emptyDomainCounts(): Record<ObservabilityVerdict, number> {
-  return { healthy: 0, degraded: 0, critical: 0, unknown: 0, not_observed: 0 }
 }

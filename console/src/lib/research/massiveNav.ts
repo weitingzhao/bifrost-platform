@@ -14,11 +14,6 @@ export function massiveReadinessHref(): string {
   return '/?tab=coverage&panel=readiness#market-data-manage'
 }
 
-/** Full URL for Massive Ingest (queue dashboard). */
-function massiveIngestHref(): string {
-  return '/?tab=ingest#market-data-manage'
-}
-
 function flexManageHref(): string {
   return '/#flex-query-manage'
 }
@@ -31,16 +26,6 @@ export function openMassiveReadiness(onNavigate?: (tabId: string) => void): void
     return
   }
   window.location.assign(massiveReadinessHref())
-}
-
-/** In-app navigate: Massive → Ingest (shell Queue pulse deep link). */
-export function openMassiveIngest(onNavigate?: (tabId: string) => void): void {
-  writeMdSearchParams({ tab: 'ingest', panel: null })
-  if (onNavigate != null) {
-    onNavigate(MASSIVE_MANAGE_TAB)
-    return
-  }
-  window.location.assign(massiveIngestHref())
 }
 
 export function openFlexManage(onNavigate?: (tabId: string) => void): void {

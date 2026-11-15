@@ -47,9 +47,3 @@ export function getNamespacePlacementSummary(namespace: string): NamespacePlacem
     requiredSelectors: rules.map(r => r.requiredSelector),
   }
 }
-
-/** Primary arch chip for namespace rail — first distinct ideal arch. */
-export function getNamespacePrimaryIdealArch(namespace: string): string | undefined {
-  const { idealArchs } = getNamespacePlacementSummary(namespace)
-  return idealArchs[0]
-}

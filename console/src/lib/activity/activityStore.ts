@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   ACTIVITY_DROPDOWN_MAX,
   ACTIVITY_INFLIGHT_STALE_MS,
@@ -231,21 +231,4 @@ export function useActivityFeed(): {
       inFlightCount,
     }
   }, [all, tick])
-}
-
-export function useActivityActions() {
-  const upsert = useCallback((input: UpsertActivityInput) => upsertActivity(input), [])
-  const updatePhase = useCallback(
-    (
-      id: string,
-      phase: ActivityPhase,
-      patch?: Partial<
-        Pick<ActivityEvent, 'detail' | 'settledOutcome' | 'title' | 'linkTo' | 'target'>
-      >,
-    ) => updateActivityPhase(id, phase, patch),
-    [],
-  )
-  const dismiss = useCallback((id: string) => dismissActivity(id), [])
-  const dismissInFlight = useCallback(() => dismissAllInFlight(), [])
-  return { upsert, updatePhase, dismiss, dismissInFlight }
 }

@@ -485,13 +485,6 @@ export async function postQuestionAnswer(id: string, option: string, text: strin
   return parsed.posted
 }
 
-/** A fetch that never produced an HTTP response: timeout, abort, or a dropped connection. */
-export function isLostResponse(err: unknown): boolean {
-  if (err instanceof QuestionHttpError) return false
-  if (err instanceof TypeError) return true
-  return err instanceof DOMException && err.name === 'AbortError'
-}
-
 const LINK_BASE = 'https://ops.bifrost.lan/'
 
 /** WHATWG parse. A hash or a relative link is resolved on the console host so the fragment is real. */

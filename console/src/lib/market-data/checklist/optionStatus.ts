@@ -14,12 +14,6 @@ export function commonFeedChecklistRows(): ChecklistRow[] {
   return OPTION_CHECKLIST_ROWS.filter(r => COMMON_CAP_ID_SET.has(r.id))
 }
 
-export function shortServiceLabel(row: ChecklistRow): string {
-  const s = row.service.trim()
-  if (s.length <= 22) return s
-  return `${s.slice(0, 20)}…`
-}
-
 export function groupedOptionFeedChecklistRows(): {
   group: CapabilityGroup
   rows: ChecklistRow[]

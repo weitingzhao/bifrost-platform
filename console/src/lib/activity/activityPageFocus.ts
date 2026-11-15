@@ -1,10 +1,5 @@
 import type { ActivityEvent } from '@/lib/activity/activityTypes'
-import { setSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
-
-/** Workload name to highlight on Satellite Bus (e.g. account-sync). */
-const SATELLITE_BUS_WORKLOAD_FOCUS_KEY = 'bifrost.satelliteBus.workloadFocus'
-/** Prefill Trade NS segment when Activity deep-links into Bus Status. */
-const SATELLITE_BUS_TRADE_ENV_FOCUS_KEY = 'bifrost.satelliteBus.tradeEnvFocus'
+import '@/lib/task-mode/readinessChipActions'
 
 export type SatelliteBusTradeEnvFocus = 'dev' | 'stg' | 'prod'
 
@@ -32,53 +27,6 @@ export function workloadToRuntimeConsumerId(workload: string | undefined): strin
   if (workload === 'account-sync') return 'account-sync'
   if (workload === 'daemon') return 'trading_engine'
   return workload
-}
-
-function setSatelliteBusWorkloadFocus(workload: string | undefined): void {
-  if (workload == null || workload === '') {
-    sessionStorage.removeItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY)
-    return
-  }
-  sessionStorage.setItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY, workload)
-}
-
-export function peekSatelliteBusWorkloadFocus(): string | null {
-  const raw = sessionStorage.getItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY)
-  return raw != null && raw !== '' ? raw : null
-}
-
-export function clearSatelliteBusWorkloadFocus(): void {
-  sessionStorage.removeItem(SATELLITE_BUS_WORKLOAD_FOCUS_KEY)
-}
-
-function setSatelliteBusTradeEnvFocus(env: SatelliteBusTradeEnvFocus | undefined): void {
-  if (env == null) {
-    sessionStorage.removeItem(SATELLITE_BUS_TRADE_ENV_FOCUS_KEY)
-    return
-  }
-  sessionStorage.setItem(SATELLITE_BUS_TRADE_ENV_FOCUS_KEY, env)
-}
-
-export function peekSatelliteBusTradeEnvFocus(): SatelliteBusTradeEnvFocus | null {
-  const raw = sessionStorage.getItem(SATELLITE_BUS_TRADE_ENV_FOCUS_KEY)
-  if (raw === 'dev' || raw === 'stg' || raw === 'prod') return raw
-  return null
-}
-
-export function clearSatelliteBusTradeEnvFocus(): void {
-  sessionStorage.removeItem(SATELLITE_BUS_TRADE_ENV_FOCUS_KEY)
-}
-
-/**
- * Before navigating to satellite-bus from Activity: set section + workload + Trade NS.
- * Page consumes these on mount / data ready.
- */
-export function prepareSatelliteBusActivityFocus(ev: ActivityEvent): void {
-  const { namespace, workload } = parseActivityTarget(ev.target)
-  const env = tradeEnvFromNamespace(namespace)
-  if (env != null) setSatelliteBusTradeEnvFocus(env)
-  setSatelliteBusFocus('operate')
-  if (workload != null) setSatelliteBusWorkloadFocus(workload)
 }
 
 export function isActivityInFlight(ev: ActivityEvent): boolean {

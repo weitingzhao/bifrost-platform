@@ -19,8 +19,3 @@ export function setPlatformOperatorToken(token: string): void {
     window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
   }
 }
-
-export function clearPlatformOperatorTokenOverride(): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
-}

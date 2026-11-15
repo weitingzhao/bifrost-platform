@@ -6,7 +6,6 @@
 export const SIGNAL_HEALTH_FRESH_SLA_HOURS = 36
 /** Align with Massive / Research API weekend window (Sat/Sun/Mon-before-22:00 UTC). */
 export const SIGNAL_HEALTH_WEEKEND_SLA_HOURS = 72
-export const SIGNAL_HEALTH_STALE_CAP_HOURS = 168
 
 /** Sat/Sun, or Monday before UTC 22:00 (next Dagster trading_day window). */
 export function freshnessSlaHours(now = new Date()): number {

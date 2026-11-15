@@ -3,9 +3,7 @@
  * (same truth as TCC Fleet Desk). No independent matrix/L0-blocked path.
  */
 
-import type { MatrixResponse } from '@/api/matrixTypes'
-import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { evaluatePromoteStatus, type PromoteStatus } from '@/lib/control-room/matrixSummary'
+import { type PromoteStatus } from '@/lib/control-room/matrixSummary'
 import { type Signal } from '@/lib/control-room/missionSignals'
 import type {
   FleetCell,
@@ -65,8 +63,6 @@ const PAYLOAD_READINESS_ROWS: PayloadReadinessRowDef[] = [
     mapMode: 'runtime-map',
   },
 ]
-
-export const PAYLOAD_READINESS_ENVS: FleetEnvColumn[] = ['dev', 'stg', 'prod']
 
 export type EnvReadinessCell = {
   signal: Signal
@@ -236,49 +232,4 @@ export function projectPayloadReadinessRows(fleet: FleetSnapshot): PayloadReadin
       envDiverges: envDiverges([dev, stg, prod]),
     }
   })
-}
-
-export function countEnvDivergences(rows: PayloadReadinessRow[]): number {
-  return rows.filter(r => r.envDiverges).length
-}
-
-export function buildPayloadCouplingSummary(
-  context: OpsContextResponse | undefined,
-  matrices: MatrixResponse[],
-): PayloadCouplingSummary | null {
-  if (context == null) return null
-  const promote = evaluatePromoteStatus(context, matrices)
-  const lamp: Signal = promote.ready
-    ? 'ok'
-    : promote.blockedByDecision || promote.prodFails
-      ? 'fail'
-      : 'degraded'
-
-  if (promote.ready) {
-    return {
-      promote,
-      lamp,
-      headline: 'Coupling gate open',
-      detail: 'Prod matrix healthy and release gate pass — Flywheel A may promote when Owner approves.',
-    }
-  }
-
-  const primaryReason = promote.reasons[0] ?? 'Promote blocked'
-  return {
-    promote,
-    lamp,
-    headline: 'Coupling gate blocked',
-    detail: primaryReason,
-  }
-}
-
-/** Display label for readiness cell (shared UI). */
-export function payloadReadinessStatusLabel(signal: Signal): string {
-  return signal === 'ok'
-    ? 'NOMINAL'
-    : signal === 'degraded'
-      ? 'CAUTION'
-      : signal === 'fail'
-        ? 'CRITICAL'
-        : 'PROBING'
 }

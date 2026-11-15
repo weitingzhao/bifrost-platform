@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
-import { fetchPlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
+import { fetchPlanSnapshot } from '@/api/planSnapshot'
 import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { roundsRead, type RoundsRead } from './planRoundModel'
 
@@ -39,12 +39,6 @@ export function usePlanAddress(): PlanAddress {
 export function usePlanSnapshot(root: string | null, enabled = true) {
   return useQuery({ enabled: enabled && root !== null, queryKey: ['agent-runtime-plan-view', root ?? ''], queryFn: ({ signal }) => fetchPlanSnapshot(root ?? '', signal),
     refetchInterval: 15_000, retry: false })
-}
-
-/** The plan has settled for a deep link: its snapshot answered, or no round can be read (Unknown, or none held). */
-export function planSettled(plan: PlanAddress, snapshot: UseQueryResult<PlanSnapshot>): boolean {
-  if (plan.root === null) return plan.rounds.state !== 'reading'
-  return !snapshot.isPending || snapshot.isPaused
 }
 
 export function planNodeHref(root: string, node = '') {

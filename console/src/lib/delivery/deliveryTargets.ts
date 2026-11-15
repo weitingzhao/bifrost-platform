@@ -109,8 +109,6 @@ const DELIVERY_TARGETS: DeliveryTargetConfig[] = [
   },
 ]
 
-export const DEFAULT_DELIVERY_TARGET: DeliveryTargetId = 'trade-stg'
-
 export function deliveryTargetById(id: DeliveryTargetId): DeliveryTargetConfig {
   return DELIVERY_TARGETS.find(t => t.id === id) ?? DELIVERY_TARGETS[0]
 }

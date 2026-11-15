@@ -58,12 +58,6 @@ export async function fetchPatrolSkills(): Promise<PatrolSkillsResponse> {
   return r.json() as Promise<PatrolSkillsResponse>
 }
 
-export async function fetchPatrolSkill(id: string): Promise<PatrolSkill> {
-  const r = await serverFetch(`/api/v1/patrol/skills/${encodeURIComponent(id)}`)
-  if (!r.ok) throw new Error(`patrol skill: HTTP ${r.status}`)
-  return r.json() as Promise<PatrolSkill>
-}
-
 export async function fetchPatrolRuns(limit = 50): Promise<PatrolRunsResponse> {
   const r = await serverFetch(`/api/v1/patrol/runs?limit=${limit}`)
   if (!r.ok) throw new Error(`patrol runs: HTTP ${r.status}`)

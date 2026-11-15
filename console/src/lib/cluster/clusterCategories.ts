@@ -35,9 +35,6 @@ export type ClusterDimension = 'application' | 'infrastructure' | 'facility'
 
 const CLUSTER_CATEGORY_PARAM = 'category'
 
-/** Default facility category when deep-linking from legacy `#placement`. */
-export const DEFAULT_FACILITY_CATEGORY: FacilityCategory = 'node_pools'
-
 export const INFRASTRUCTURE_CATEGORY_LABELS: Record<InfrastructureCategory, string> = {
   nodes: 'Nodes',
   workloads: 'Workloads',

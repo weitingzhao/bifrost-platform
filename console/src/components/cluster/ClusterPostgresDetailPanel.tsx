@@ -114,14 +114,6 @@ function PostgresLanAccessSection({ lan }: { lan: ClusterPostgresStatusResponse[
   )
 }
 
-/**
- * @deprecated Use DataFreshnessPanel. Kept as a direct-module compatibility export; it renders
- * the same panel, so selective-clone groups come from the app's data probe here too.
- */
-export function DataFreshnessSection({ canAdmin }: { canAdmin: boolean }) {
-  return <DataFreshnessPanel canAdmin={canAdmin} title="Data Freshness" />
-}
-
 export function ClusterPostgresDetailPanel({
   postgres,
   postgresLoading,

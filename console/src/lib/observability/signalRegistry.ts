@@ -14,10 +14,6 @@ import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { SYSTEM_DOMAINS } from '@/lib/architecture/systemDomainCatalog'
 import type { SignalDef } from './types'
 
-export const OBSERVABILITY_REGISTRY_VERSION = '2026-07-21'
-export const OBSERVABILITY_REGISTRY_SOURCE =
-  'console/src/lib/observability/signalRegistry.ts'
-
 /** Stale threshold for freshness (5 minutes). */
 export const SIGNAL_STALE_MS = 5 * 60_000
 
@@ -300,16 +296,6 @@ const BY_ID = Object.fromEntries(SIGNAL_REGISTRY.map(s => [s.id, s])) as Record<
 
 export function getSignalDef(id: string): SignalDef | undefined {
   return BY_ID[id]
-}
-
-export function signalsForDomain(domain: SystemDomainId): SignalDef[] {
-  return SIGNAL_REGISTRY.filter(s => s.domain === domain)
-}
-
-export function requiredSignals(domain?: SystemDomainId): SignalDef[] {
-  return SIGNAL_REGISTRY.filter(
-    s => s.role === 'required' && (domain == null || s.domain === domain),
-  )
 }
 
 /**

@@ -9,18 +9,3 @@ export const EXPECTED_DOCKERFILE_CONFIGMAPS = [
 ] as const
 
 export type DeliverStgPhaseStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
-
-export function phaseStatusVariant(
-  status: DeliverStgPhaseStatus,
-): 'success' | 'warning' | 'danger' | 'neutral' {
-  switch (status) {
-    case 'succeeded':
-      return 'success'
-    case 'running':
-      return 'warning'
-    case 'failed':
-      return 'danger'
-    default:
-      return 'neutral'
-  }
-}

@@ -73,14 +73,6 @@ export function resolveTradeFrontendUrls(
   }
 }
 
-/** Single preferred URL (Fleet Viewer seat). */
-export function resolveTradeFrontendUrl(
-  preferred: TradeFrontendEnv,
-  env: ImportMetaEnv = import.meta.env,
-): string {
-  return resolveTradeFrontendUrls(env)[preferred]
-}
-
 /** Chip / link colors — align with --color-env-* tokens in index.css. */
 export function tradeEnvChipClass(
   env: TradeFrontendEnv,

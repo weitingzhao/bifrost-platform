@@ -1,9 +1,9 @@
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { ClusterSummary } from '@/api/clusterTypes'
-import type { MatrixResponse, Reachability, SelfHealthResponse, VerifyPayloadResponse } from '@/api/matrixTypes'
+import type { MatrixResponse, Reachability, SelfHealthResponse } from '@/api/matrixTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { bridgeRunners } from '@/lib/agent/macHostRole'
-import { formatVerifyPayloadGuidance } from '@/lib/control-room/payloadVerification'
+import '@/lib/control-room/payloadVerification'
 import { tradeReadinessTargets } from '@/lib/control-room/matrixSummary'
 import { formatPipelineRunStatus, isPipelineRunFailed } from '@/lib/delivery/pipelineRunAskPack'
 
@@ -22,40 +22,7 @@ export function worst(...signals: Signal[]): Signal {
   return 'ok'
 }
 
-export function signalColor(s: Signal): string {
-  switch (s) {
-    case 'ok':
-      return 'var(--color-lamp-green)'
-    case 'degraded':
-      return 'var(--color-lamp-yellow)'
-    case 'fail':
-      return 'var(--color-lamp-red)'
-    default:
-      return 'var(--muted-foreground)'
-  }
-}
-
 export type MissionStatus = 'NOMINAL' | 'CAUTION' | 'CRITICAL' | 'PROBING'
-
-export function missionStatus(s: Signal): MissionStatus {
-  if (s === 'ok') return 'NOMINAL'
-  if (s === 'degraded') return 'CAUTION'
-  if (s === 'fail') return 'CRITICAL'
-  return 'PROBING'
-}
-
-export function missionStatusColor(status: MissionStatus): string {
-  switch (status) {
-    case 'NOMINAL':
-      return 'var(--color-lamp-green)'
-    case 'CAUTION':
-      return 'var(--color-lamp-yellow)'
-    case 'CRITICAL':
-      return 'var(--color-lamp-red)'
-    default:
-      return 'var(--muted-foreground)'
-  }
-}
 
 /* ── Rocket subsystem signals ── */
 
@@ -289,74 +256,6 @@ export function missionDegradationSummary(
   if (critical > 0) parts.push(`${critical} critical`)
   if (caution > 0) parts.push(`${caution} caution`)
   return `${filtered.length} issue${filtered.length === 1 ? '' : 's'} (${parts.join(', ')})`
-}
-
-/**
- * Generate a structured diagnostic prompt from the current mission snapshot.
- * Returns null when the mission is NOMINAL (nothing to fix).
- */
-export function buildDiagnosticPrompt(
-  snap: MissionSnapshot,
-  verify?: VerifyPayloadResponse,
-): string | null {
-  if (snap.missionOverall === 'ok') return null
-
-  const lines: string[] = []
-  const mission = missionStatus(snap.missionOverall)
-  lines.push(`Mission status: ${mission}.`)
-  lines.push('', 'Run verify_payload (MCP) or GET /api/v1/mission/verify-payload before fixing datastore targets.')
-
-  const rocketIssues: string[] = []
-  const releaseIssues: string[] = []
-  const infraIssues: string[] = []
-  const modules: Array<{ name: string; state: ModuleState }> = [
-    { name: 'Infra', state: snap.infra },
-    { name: 'Release', state: snap.release },
-    { name: 'Control', state: snap.control },
-    { name: 'Agent', state: snap.agent },
-  ]
-  for (const m of modules) {
-    if (m.state.signal === 'ok') continue
-    const line = `- ${m.name} (${m.state.signal}): ${m.state.detail}`
-    if (m.name === 'Release' || m.state.detail.toLowerCase().includes('deliver')) {
-      releaseIssues.push(line)
-    } else if (m.name === 'Infra' || m.state.detail.toLowerCase().includes('pod')) {
-      infraIssues.push(line)
-    } else {
-      rocketIssues.push(line)
-    }
-  }
-  if (releaseIssues.length > 0) {
-    lines.push('', 'Release / delivery pipeline (Tekton — not a K8s node problem):')
-    lines.push(...releaseIssues)
-    if (snap.release.value === 'stale-fail') {
-      lines.push(
-        '- Hint: STG smoke green + deliver-stg failed → use playbook deliver-stg-recover (fix PipelineRun / GitOps, then rerun).',
-      )
-    }
-  }
-  if (infraIssues.length > 0) {
-    lines.push('', 'Cluster / infra (K8s):')
-    lines.push(...infraIssues)
-  }
-  if (rocketIssues.length > 0) {
-    lines.push('', 'Rocket subsystem (control plane):')
-    lines.push(...rocketIssues)
-  }
-
-  const payloadIssues: string[] = []
-  if (snap.tradeDev.signal !== 'ok') payloadIssues.push(`- Trade dev (${snap.tradeDev.signal}): ${snap.tradeDev.detail}`)
-  if (snap.tradeStg.signal !== 'ok') payloadIssues.push(`- Trade stg (${snap.tradeStg.signal}): ${snap.tradeStg.detail}`)
-  if (snap.tradeProd.signal !== 'ok') payloadIssues.push(`- Trade prod (${snap.tradeProd.signal}): ${snap.tradeProd.detail}`)
-  if (payloadIssues.length > 0) {
-    lines.push('', 'Payload issues:')
-    lines.push(...payloadIssues)
-  }
-
-  lines.push('', 'Diagnose root causes for the issues above and propose remediation steps. For read-only checks, proceed automatically. For destructive actions, request operator approval first.')
-  lines.push('', 'Before closing the job, call verify_mission_snapshot (MCP) and confirm post_fix_verification.passed is true.')
-  lines.push(...formatVerifyPayloadGuidance(verify))
-  return lines.join('\n')
 }
 
 export function buildMissionSnapshot(input: {

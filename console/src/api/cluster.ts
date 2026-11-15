@@ -1,26 +1,8 @@
 import { serverFetch } from '@/api/serverContact'
 import type { AuditResponse } from './auditTypes'
 import type { AuthCapabilities } from './matrixTypes'
-import type {
-  ClusterEventsResponse,
-  ClusterGovernanceResponse,
-  ClusterMetricsResponse,
-  ClusterNamespacesResponse,
-  ClusterNodesResponse,
-  ClusterObservabilityResponse,
-  ClusterPlacementResponse,
-  ClusterPostgresBackupStatusResponse,
-  ClusterPostgresStatusResponse,
-  ClusterRedisStatusResponse,
-  ClusterServiceReadinessResponse,
-  ClusterSummary,
-  ClusterWorkloadsResponse,
-  DataCloneJob,
-  DataCloneSchedule,
-  DataFreshnessResponse,
-  NodePowerResponse,
-} from './clusterTypes'
-import { authHeaders, authedFetch, operatorToken, parseError } from './client'
+import type { ClusterEventsResponse, ClusterGovernanceResponse, ClusterMetricsResponse, ClusterNamespacesResponse, ClusterNodesResponse, ClusterObservabilityResponse, ClusterPlacementResponse, ClusterPostgresBackupStatusResponse, ClusterPostgresStatusResponse, ClusterRedisStatusResponse, ClusterServiceReadinessResponse, ClusterSummary, ClusterWorkloadsResponse, DataCloneSchedule, DataFreshnessResponse, NodePowerResponse } from './clusterTypes'
+import { operatorToken } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
   const r = await serverFetch('/api/v1/cluster')
@@ -64,70 +46,9 @@ export async function fetchDataFreshness(): Promise<DataFreshnessResponse> {
   return r.json() as Promise<DataFreshnessResponse>
 }
 
-export async function triggerDataClone(body: {
-  source?: string
-  targets?: string[]
-  mode?: 'full' | 'selective'
-  tables?: string[]
-  confirmation_token: string
-  confirm: boolean
-}): Promise<DataCloneJob> {
-  const r = await serverFetch('/api/v1/cluster/data-clone', {
-    method: 'POST',
-    headers: authHeaders(true),
-    body: JSON.stringify(body),
-  })
-  if (r.status === 409) {
-    const refusal = (await r
-      .clone()
-      .json()
-      .catch(() => null)) as { error?: string; missing_tables?: string[] } | null
-    if (refusal?.missing_tables != null && refusal.missing_tables.length > 0) {
-      throw new DataCloneRefusedError(`data-clone: ${refusal.error ?? 'refused'}`, refusal.missing_tables)
-    }
-  }
-  if (!r.ok) throw await parseError('data-clone', r)
-  return r.json() as Promise<DataCloneJob>
-}
-
-/**
- * Selective clone refused because tables outside the selection reference the selected ones
- * (TRUNCATE would have to empty them). `missingTables` is what to add to `tables`.
- */
-class DataCloneRefusedError extends Error {
-  readonly missingTables: string[]
-
-  constructor(message: string, missingTables: string[]) {
-    super(message)
-    this.name = 'DataCloneRefusedError'
-    this.missingTables = missingTables
-  }
-}
-
-export async function fetchDataCloneStatus(id: string): Promise<DataCloneJob> {
-  const r = await serverFetch(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)
-  if (!r.ok) throw new Error(`data-clone status: HTTP ${r.status}`)
-  return r.json() as Promise<DataCloneJob>
-}
-
 export async function fetchDataCloneSchedule(): Promise<DataCloneSchedule> {
   const r = await serverFetch('/api/v1/cluster/data-clone/schedule')
   if (!r.ok) throw new Error(`data-clone schedule: HTTP ${r.status}`)
-  return r.json() as Promise<DataCloneSchedule>
-}
-
-export async function updateDataCloneSchedule(body: {
-  enabled?: boolean
-  interval?: string
-  source?: string
-  targets?: string[]
-  mode?: string
-  tables?: string[]
-}): Promise<DataCloneSchedule> {
-  const r = await authedFetch('data-clone-schedule', '/api/v1/cluster/data-clone/schedule', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
   return r.json() as Promise<DataCloneSchedule>
 }
 

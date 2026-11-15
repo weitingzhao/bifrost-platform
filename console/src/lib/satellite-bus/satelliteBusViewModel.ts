@@ -50,21 +50,6 @@ export function busHealthToReach(health: BusHealth): Reachability {
   }
 }
 
-export function busNodeHealthToReach(health: BusNodeHealth): Reachability {
-  switch (health) {
-    case 'ok':
-      return 'ok'
-    case 'degraded':
-      return 'degraded'
-    case 'fail':
-      return 'fail'
-    case 'expected-off':
-      return 'ok'
-    default:
-      return 'degraded'
-  }
-}
-
 export type BusPathNodeId = 'gateway' | 'redis-ib' | 'consumers' | 'namespace'
 
 export type BusScopeLabel = 'SHARED' | 'ALL ENVS' | 'SELECTED'

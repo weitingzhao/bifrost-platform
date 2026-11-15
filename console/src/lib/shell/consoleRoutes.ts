@@ -39,8 +39,6 @@ export const SHELL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.map(item => it
 
 export const ENTRY_ROUTE_IDS: readonly EntryRouteId[] = ['command', 'crew', 'work', 'services', 'system']
 
-export const DETAIL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.filter(item => item.group === 'detail').map(item => item.id)
-
 export const HOME_ROUTE: ShellRouteId = 'command'
 
 /** Every waiting item, on Command. A request or question link without an id lands here. */

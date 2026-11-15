@@ -197,16 +197,3 @@ export function wizardStepsForFlow(
 export function currentWizardStep(steps: NodeWizardStep[]): NodeWizardStep | undefined {
   return steps.find(s => s.status === 'current' || s.status === 'blocked')
 }
-
-export function stepStatusLamp(status: WizardStepStatus): 'ok' | 'degraded' | 'fail' | 'unknown' {
-  switch (status) {
-    case 'done':
-      return 'ok'
-    case 'current':
-      return 'degraded'
-    case 'blocked':
-      return 'fail'
-    default:
-      return 'unknown'
-  }
-}

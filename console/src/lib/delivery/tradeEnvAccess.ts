@@ -56,10 +56,3 @@ export const TRADE_ENV_ACCESS: readonly TradeEnvAccess[] = TRADE_ENV_DEFS.map(de
     ingressHost: def.ingressHost,
   }
 })
-
-/** Hostname URLs on Traefik :80 (after UniFi DNS or /etc/hosts). */
-export const TRADE_HOSTNAME_GATEWAYS = TRADE_ENV_DEFS.filter(d => d.ingressHost).map(
-  d => `https://${d.ingressHost}/`,
-)
-
-export const TRADE_INGRESS_USES_VIP = TRADE_INGRESS_VIP !== null

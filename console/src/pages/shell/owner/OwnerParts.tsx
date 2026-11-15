@@ -18,12 +18,6 @@ export function Card({ title, more, children, label, accent = false }: {
   </section>
 }
 
-/** Work outside the plan (v5 §5.1.1: Progress marks it "off plan"), with why in its text: no hover needed on a phone (review 471 B3). */
-export function OffPlanMark({ label = 'Off plan', reasons }: { label?: string; reasons: readonly string[] }) {
-  const why = [...new Set(reasons.filter(Boolean))].join('; ')
-  return <span data-off-plan className="min-w-0 text-xs [overflow-wrap:anywhere]"><strong className="rounded-full bg-[var(--control-fill)] px-2">{label}</strong> {why || 'no reason given'}</span>
-}
-
 export function Bar({ percent, tone }: { percent: number; tone: Tone }) {
   const width = Math.max(0, Math.min(100, Math.round(percent)))
   return <div className="h-2 overflow-hidden rounded-full bg-[var(--control-fill)]" role="presentation">

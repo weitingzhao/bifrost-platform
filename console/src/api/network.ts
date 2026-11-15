@@ -5,19 +5,7 @@ import type {
   IbGatewayStatusResponse,
   MarketDataStatusResponse,
 } from './satelliteBusTypes'
-import type {
-  NetworkAnomaliesResponse,
-  NetworkAuditResponse,
-  NetworkBandwidthResponse,
-  NetworkClientsResponse,
-  NetworkDevicesResponse,
-  NetworkFirewallApplyResponse,
-  NetworkHealthResponse,
-  NetworkPoliciesResponse,
-  NetworkSlaResponse,
-  NetworkStatusResponse,
-  NetworkZonesResponse,
-} from './networkTypes'
+import type { NetworkAnomaliesResponse, NetworkAuditResponse, NetworkClientsResponse, NetworkDevicesResponse, NetworkSlaResponse, NetworkStatusResponse } from './networkTypes'
 import { authedFetch } from './client'
 
 async function fetchNetworkJson<T>(path: string): Promise<T> {
@@ -65,28 +53,12 @@ export async function fetchNetworkClients(): Promise<NetworkClientsResponse> {
   return fetchNetworkJson('/api/v1/network/clients')
 }
 
-export async function fetchNetworkHealth(): Promise<NetworkHealthResponse> {
-  return fetchNetworkJson('/api/v1/network/health')
-}
-
-export async function fetchNetworkBandwidth(): Promise<NetworkBandwidthResponse> {
-  return fetchNetworkJson('/api/v1/network/bandwidth')
-}
-
 export async function fetchNetworkAnomalies(): Promise<NetworkAnomaliesResponse> {
   return fetchNetworkJson('/api/v1/network/anomalies')
 }
 
 export async function fetchNetworkSla(): Promise<NetworkSlaResponse> {
   return fetchNetworkJson('/api/v1/network/sla')
-}
-
-export async function fetchNetworkZones(): Promise<NetworkZonesResponse> {
-  return fetchNetworkJson('/api/v1/network/zones')
-}
-
-export async function fetchNetworkPolicies(): Promise<NetworkPoliciesResponse> {
-  return fetchNetworkJson('/api/v1/network/policies')
 }
 
 export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
@@ -146,15 +118,5 @@ export async function postIbGatewayControl(
     body: JSON.stringify(body),
   })
   return r.json() as Promise<IbGatewayControlResponse>
-}
-
-export async function postNetworkFirewallApply(body: {
-  include_default_deny?: boolean
-} = {}): Promise<NetworkFirewallApplyResponse> {
-  const r = await authedFetch('network firewall apply', '/api/v1/network/firewall/apply', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-  return r.json() as Promise<NetworkFirewallApplyResponse>
 }
 

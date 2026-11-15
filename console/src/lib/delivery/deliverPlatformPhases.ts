@@ -16,13 +16,3 @@ export const PLATFORM_PROD_URLS = {
   console: 'https://ops.bifrost.lan/',
   apiHealth: 'http://192.168.10.73:30876/health',
 } as const
-
-export const PLATFORM_GITOPS_PHASE1_ITEMS = [
-  'Gitea mirror includes bifrost-platform',
-  'Dockerfile.platform-api-stg + platform-console-stg',
-  'k8s/base-platform + overlays/platform-stg + overlays/platform-prod',
-  'Argo Application bifrost-platform-stg + bifrost-platform-prod',
-  'Tekton pipeline bifrost-deliver-platform + bifrost-deliver-platform-prod',
-  'make k3s-deliver-platform + sync-platform-k8s-config',
-  'Ops Console Launch Rocket page (Rocket → Launch Rocket)',
-] as const

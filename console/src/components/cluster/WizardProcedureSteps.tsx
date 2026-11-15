@@ -108,8 +108,3 @@ export function WizardProcedureSteps({ steps, flowLabel }: WizardProcedureStepsP
     </section>
   )
 }
-
-/** @deprecated Use WizardProcedureSteps — kept for gradual import migration */
-export function WizardStepsList({ steps }: { steps: NodeWizardStep[] }) {
-  return <WizardProcedureSteps steps={steps} />
-}

@@ -436,33 +436,10 @@ export function formatLocalTime(unixSeconds: number): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-function ageSeconds(fromUnix: number, nowMs: number): number {
-  if (!Number.isFinite(fromUnix) || fromUnix <= 0) return 0
-  return Math.max(0, Math.floor(nowMs / 1000 - fromUnix))
-}
-
-export function waitingLine(sinceUnix: number, nowMs: number): string {
-  if (!(sinceUnix > 0)) return 'waiting'
-  return `waiting ${formatDuration(ageSeconds(sinceUnix, nowMs))}`
-}
-
 function publishedAgeSeconds(receivedAt: string, fallback: number, nowMs: number): number {
   const at = Date.parse(receivedAt)
   if (!Number.isFinite(at)) return Math.max(0, Math.floor(fallback))
   return Math.max(0, Math.floor((nowMs - at) / 1000))
-}
-
-export function staleSentence(age: number): string {
-  return `Progress was last published ${formatDuration(age)} ago. The coordinating thread may be offline.`
-}
-
-export function computedAgeLine(at: number, nowMs: number): string {
-  return `computed ${formatDuration(ageSeconds(at, nowMs))} ago`
-}
-
-export function skewSentence(at: number, nowMs: number): string {
-  const delta = Math.abs(Math.floor(nowMs / 1000 - at))
-  return `The published progress was computed ${formatDuration(delta)} ago; it may not reflect the present.`
 }
 
 /** True when the publication is older than 5 minutes on this clock. */
@@ -484,45 +461,6 @@ export function generationIsSkewed(at: number | undefined, receivedAt: string, n
   return at - nowMs / 1000 > GENERATION_SKEW_SECONDS
 }
 
-export function stepStateLabel(state: string | undefined, needsOwner: boolean | undefined): string {
-  if (needsOwner === true && (state === 'running' || state === 'gap')) return 'waiting for you'
-  if (needsOwner === true && state === 'waiting') return 'not your turn yet'
-  switch (state) {
-    case 'running':
-      return 'running'
-    case 'slow':
-      return 'slower than usual'
-    case 'quiet':
-      return 'may be stuck'
-    case 'dead':
-      return 'process gone'
-    case 'failed':
-      return 'failed'
-    case 'done':
-      return 'done'
-    case 'gap':
-      return 'waiting for the coordinator'
-    case 'waiting':
-      return 'not started'
-    default:
-      return state != null && state.trim() !== '' ? state : 'unknown'
-  }
-}
-
-export function elapsedLine(
-  step: Pick<ProgressStep, 'started' | 'ended' | 'usual_min'>,
-  nowMs: number,
-): string | null {
-  const started = step.started ?? 0
-  if (!(started > 0)) return null
-  const ended = step.ended ?? 0
-  const end = ended > 0 ? ended : nowMs / 1000
-  const elapsed = Math.max(0, Math.floor(end - started))
-  const usual = step.usual_min ?? 0
-  const usualText = Number.isFinite(usual) ? String(usual) : '0'
-  return `elapsed ${formatDuration(elapsed)} of usual ${usualText} min`
-}
-
 export function expectationLine(step: Pick<ProgressStep, 'overdue' | 'eta_end' | 'eta_start'>): string | null {
   const overdue = step.overdue ?? 0
   if (overdue > 0) return `late by ${formatDuration(overdue)}`
@@ -532,50 +470,12 @@ export function expectationLine(step: Pick<ProgressStep, 'overdue' | 'eta_end' |
   return `expected ${formatLocalTime(at)}`
 }
 
-export function lastOutputLine(step: Pick<ProgressStep, 'state' | 'last'>, nowMs: number): string | null {
-  if (step.state !== 'running' && step.state !== 'slow') return null
-  const last = step.last ?? 0
-  if (!(last > 0)) return null
-  return `last output ${formatDuration(ageSeconds(last, nowMs))} ago`
-}
-
-const ACTIVE_STATES = new Set(['running', 'slow', 'quiet', 'dead', 'waiting'])
-
-export function activeStepText(step: ProgressStep): string {
-  if (!ACTIVE_STATES.has(step.state ?? '') && step.needs_owner !== true) return ''
-  const text = (step.note ?? '').trim() || (step.doing ?? '').trim()
-  if (text === '') return ''
-  const name = (step.name ?? '').trim()
-  return name === '' ? text : `${name}: ${text}`
-}
-
-export function nextLine(next: ProgressNext | null | undefined): string {
-  const name = next?.name?.trim() ?? ''
-  if (name === '') return ''
-  const at = next?.at ?? 0
-  if (at > 0) return `Next: ${name} · expected ${formatLocalTime(at)}`
-  return `Next: ${name}`
-}
-
 export function ownerNextLine(next: OwnerNext): string {
   const name = next.name?.trim() ?? ''
   if (name === '') return ''
   const at = next.at ?? 0
   if (at > 0) return `${name} · expected around ${formatLocalTime(at)}`
   return name
-}
-
-export function coordinatorLine(c: ProgressCoordinator, nowMs: number): string {
-  const state = c.state?.trim() ?? ''
-  const note = c.note?.trim() ?? ''
-  const parts = [state, note].filter(part => part !== '')
-  let line = parts.join(' — ')
-  const at = c.at ?? 0
-  if (at > 0) {
-    const ago = `${formatDuration(ageSeconds(at, nowMs))} ago`
-    line = line === '' ? ago : `${line} · ${ago}`
-  }
-  return line
 }
 
 export type ActionLinkView =

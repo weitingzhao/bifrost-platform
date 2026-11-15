@@ -1,31 +1,19 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { fetchChecklistSignals } from '@/api/checklist'
-import { fetchCluster, fetchClusterPostgresBackupStatus } from '@/api/cluster'
-import { fetchSupplyChain } from '@/api/delivery'
-import { fetchStgSmoke } from '@/api/promote'
-import {
-  fetchSelfHealth,
-  fetchMatrix,
-  fetchSatelliteBusDeep,
-  isAllMatrices,
-  isAllSatelliteBusDeep,
-} from '@/api/core'
+import 'react'
+import '@tanstack/react-query'
+import '@/api/checklist'
+import '@/api/cluster'
+import '@/api/delivery'
+import '@/api/promote'
+import '@/api/core'
 import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
-import { fetchAgentBridge } from '@/api/agentOps'
-import { fetchIbGatewayStatus } from '@/api/network'
-import type { MatrixResponse } from '@/api/matrixTypes'
-import { buildFleetSnapshot } from '@/lib/control-room/buildFleetSnapshot'
-import {
-  normalizeViewerEnv,
-  type FleetSnapshot,
-  type FleetViewerEnv,
-} from '@/lib/control-room/fleetSnapshot'
-import { buildMissionSnapshot, type MissionSnapshot } from '@/lib/control-room/missionSignals'
-import type { BusEnvId } from '@/lib/satellite/socketHealthSemantics'
-import { indexSatelliteBuses } from '@/lib/satellite-bus/satelliteBusNavSignal'
+import '@/api/agentOps'
+import '@/api/network'
 
-const REFETCH = 20_000
+import '@/lib/control-room/buildFleetSnapshot'
+import { type FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
+import '@/lib/control-room/missionSignals'
+
+import '@/lib/satellite-bus/satelliteBusNavSignal'
 
 /**
  * Mac seat readiness for Engineer row (not a board column).
@@ -43,155 +31,4 @@ export function resolveGroundBridgeReady(
 /** True when any bus-deep env reports daemon ib_not_connected (D10 observe gap). */
 export function resolveDaemonIbObserve(buses: SatelliteBusDeepResponse[]): boolean {
   return buses.some(b => b.monitor?.daemon?.block_reasons?.includes('ib_not_connected') === true)
-}
-
-export function useFleetSnapshot(): {
-  fleet: FleetSnapshot
-  snapshot: MissionSnapshot
-  matrices: MatrixResponse[]
-  busesByEnv: Partial<Record<BusEnvId, SatelliteBusDeepResponse>>
-  busDeepLoading: boolean
-  viewerEnv: FleetViewerEnv
-  /** True until self-health returns viewer_env (avoid wrong seat badge flash). */
-  viewerEnvLoading: boolean
-  dataUpdatedAt: number
-  isLoading: boolean
-} {
-  const clusterQ = useQuery({ queryKey: ['cockpit', 'cluster'], queryFn: fetchCluster, refetchInterval: REFETCH })
-  const backupQ = useQuery({
-    queryKey: ['cockpit', 'postgres-backup'],
-    queryFn: fetchClusterPostgresBackupStatus,
-    refetchInterval: REFETCH,
-  })
-  const checklistQ = useQuery({
-    queryKey: ['cockpit', 'checklist-signals'],
-    queryFn: fetchChecklistSignals,
-    refetchInterval: REFETCH,
-  })
-  const supplyQ = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain, refetchInterval: REFETCH })
-  const stgQ = useQuery({ queryKey: ['cockpit', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: REFETCH })
-  const selfQ = useQuery({ queryKey: ['cockpit', 'self-health'], queryFn: fetchSelfHealth, refetchInterval: REFETCH })
-  const bridgeQ = useQuery({ queryKey: ['cockpit', 'bridge'], queryFn: fetchAgentBridge, refetchInterval: REFETCH })
-  const matrixQ = useQuery({ queryKey: ['cockpit', 'matrix'], queryFn: () => fetchMatrix(), refetchInterval: REFETCH })
-  const ibGatewayQ = useQuery({
-    queryKey: ['cockpit', 'ib-gateway'],
-    queryFn: fetchIbGatewayStatus,
-    refetchInterval: REFETCH,
-  })
-  const busDeepQ = useQuery({
-    queryKey: ['cockpit', 'bus-deep-all'],
-    queryFn: () => fetchSatelliteBusDeep(),
-    refetchInterval: REFETCH,
-    staleTime: 15_000,
-  })
-
-  const matrices = useMemo((): MatrixResponse[] => {
-    const data = matrixQ.data
-    if (!data) return []
-    return isAllMatrices(data) ? data.matrices : [data]
-  }, [matrixQ.data])
-
-  const busesByEnv = useMemo(
-    () => indexSatelliteBuses(busDeepQ.data),
-    [busDeepQ.data],
-  )
-
-  const daemonIbObserve = useMemo(() => {
-    const data = busDeepQ.data
-    if (data == null) return false
-    const buses: SatelliteBusDeepResponse[] = isAllSatelliteBusDeep(data)
-      ? data.buses
-      : [data]
-    return resolveDaemonIbObserve(buses)
-  }, [busDeepQ.data])
-
-  // Avoid DEV→PROD badge flash: wait for self-health payload before showing a seat label.
-  const viewerEnvLoading = selfQ.data == null
-
-  const viewerEnv = useMemo(
-    () => normalizeViewerEnv(selfQ.data?.viewer_env ?? import.meta.env.VITE_OPS_VIEWER_ENV),
-    [selfQ.data?.viewer_env],
-  )
-
-  const groundBridgeReady = useMemo(
-    () => resolveGroundBridgeReady(viewerEnv, bridgeQ.data?.satellite_probe_bridge?.status),
-    [viewerEnv, bridgeQ.data?.satellite_probe_bridge?.status],
-  )
-
-  const fleet = useMemo(
-    () =>
-      buildFleetSnapshot({
-        viewerEnv,
-        cluster: clusterQ.data,
-        supply: supplyQ.data,
-        stg: stgQ.data,
-        self: selfQ.data,
-        bridge: bridgeQ.data,
-        matrices,
-        groundBridgeReady,
-        ibGateway: ibGatewayQ.data,
-        daemonIbObserve,
-        postgresBackup: backupQ.data,
-        checklistSignals: checklistQ.data?.signals,
-      }),
-    [
-      viewerEnv,
-      clusterQ.data,
-      supplyQ.data,
-      stgQ.data,
-      selfQ.data,
-      bridgeQ.data,
-      matrices,
-      groundBridgeReady,
-      ibGatewayQ.data,
-      daemonIbObserve,
-      backupQ.data,
-      checklistQ.data?.signals,
-    ],
-  )
-
-  const snapshot = useMemo(
-    () =>
-      buildMissionSnapshot({
-        cluster: clusterQ.data,
-        supply: supplyQ.data,
-        stg: stgQ.data,
-        self: selfQ.data,
-        bridge: bridgeQ.data,
-        matrices,
-      }),
-    [clusterQ.data, supplyQ.data, stgQ.data, selfQ.data, bridgeQ.data, matrices],
-  )
-
-  const isLoading =
-    clusterQ.isLoading ||
-    supplyQ.isLoading ||
-    stgQ.isLoading ||
-    selfQ.isLoading ||
-    bridgeQ.isLoading ||
-    matrixQ.isLoading ||
-    ibGatewayQ.isLoading
-
-  const dataUpdatedAt = Math.max(
-    clusterQ.dataUpdatedAt,
-    supplyQ.dataUpdatedAt,
-    stgQ.dataUpdatedAt,
-    selfQ.dataUpdatedAt,
-    bridgeQ.dataUpdatedAt,
-    matrixQ.dataUpdatedAt,
-    ibGatewayQ.dataUpdatedAt,
-    busDeepQ.dataUpdatedAt,
-  )
-
-  return {
-    fleet,
-    snapshot,
-    matrices,
-    busesByEnv,
-    busDeepLoading: busDeepQ.isLoading && busDeepQ.data == null,
-    viewerEnv,
-    viewerEnvLoading,
-    dataUpdatedAt,
-    isLoading,
-  }
 }

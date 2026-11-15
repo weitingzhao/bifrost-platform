@@ -41,8 +41,6 @@ export const TONE_COLOR: Record<Tone, string> = {
   unknown: 'var(--color-lamp-gray)',
 }
 
-
-
 /** Alerts only the Owner can clear (Owner 2026-10-16: the TWS login is his alone). */
 const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string }> = {
   BifrostIBGatewayDisconnected: labels => ({
@@ -208,9 +206,6 @@ export function lastReadWords(readAt: number | null, openedAt: number, now: numb
 
 /** A reason followed by more of the sentence: its own full stop dropped. */
 export const reasonText = (reason: string): string => reason.replace(/\.+$/, '')
-
-/** A read's last answer time from React Query: none before its first answer. */
-export const answeredAt = (updatedAt: number): number | null => (updatedAt > 0 ? updatedAt : null)
 
 /** When the runtime was last read, or when this page began waiting for it. */
 export function runtimeUnreadLine(readAt: number | null, openedAt: number, now: number): string {

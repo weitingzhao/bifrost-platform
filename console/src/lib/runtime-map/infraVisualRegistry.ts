@@ -296,10 +296,6 @@ export function getIconPath(componentId: string): string | undefined {
   return ICON_BY_COMPONENT[componentId]?.path
 }
 
-export function scopeTagForComponent(componentId: string): ScopeTag | undefined {
-  return INFRA_COMPONENTS[componentId]?.scopeTag
-}
-
 export function componentIdForScopeTag(tag: ScopeTag): string {
   return SCOPE_DEFAULT_COMPONENT[tag] ?? 'generic'
 }
@@ -467,9 +463,4 @@ export function chipIdsMatchingTarget(
     }
   }
   return ids
-}
-
-/** @deprecated use getComponentVisual */
-export function getComponentDef(componentId: string): InfraComponentVisual {
-  return getComponentVisual(componentId)
 }

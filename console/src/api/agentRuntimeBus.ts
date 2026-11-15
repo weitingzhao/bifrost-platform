@@ -49,7 +49,6 @@ export function setGlobalStop(reason: string) {
 export async function liftControl(id: string) {
   await authedFetch('Control', `/api/v1/agentrt/controls/${encodeURIComponent(id)}`, { method: 'DELETE' }, busError)
 }
-export const messageBytes = (body: string) => new TextEncoder().encode(body).length
 export type CoordinatorNote = { body: string; at: string }
 /** How many of the latest messages between the Owner and the coordinating thread are read for its note. */
 export const COORDINATOR_WINDOW = 50

@@ -28,16 +28,6 @@ export function getAffectedNodeIds(
     .map(n => n.id)
 }
 
-export function getAffectedNodeLabels(
-  topology: TopologyResponse | undefined,
-  targetId: string,
-): string[] {
-  if (!topology) return []
-  return topology.nodes
-    .filter(n => n.matrix_services?.some(s => s.id === targetId))
-    .map(n => n.label)
-}
-
 export function sortTargetsByReachability(targets: Target[]): Target[] {
   return [...targets].sort(
     (a, b) =>

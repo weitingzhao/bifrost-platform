@@ -10,11 +10,6 @@ const NS_FILTER_GROUPS: Record<Exclude<NsFilterType, 'all'>, string[]> = {
   infra: ['kube-system', 'monitoring'],
 }
 
-/** @deprecated alias */
-export const NS_SUB_GROUPS = NS_FILTER_GROUPS
-/** @deprecated alias */
-export const NS_GROUPS = NS_FILTER_GROUPS
-
 export const NS_FILTER_LABELS: Record<Exclude<NsFilterType, 'all'>, string> = {
   trade: 'Trade',
   platform: 'Platform',
