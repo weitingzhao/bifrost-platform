@@ -88,29 +88,66 @@ var deliverResearchPhaseDefs = []struct {
 	{ID: "verify", Label: "Verify", Tasks: []string{"verify-research"}},
 }
 
-func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string) []PipelinePhaseView {
+// aggregatePhasesForPipeline groups a run's tasks into the pipeline's phases.
+// runTasks is what this run itself runs (its status.pipelineSpec): a task the
+// table names and the run does not have is left out of its phase, and a phase
+// left with no task is not shown. nil means the run has not said yet, and the
+// table is taken whole.
+func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string, runTasks map[string]bool) []PipelinePhaseView {
 	switch pipelineName {
 	case "bifrost-deliver-stg":
-		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
+		return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus, runTasks)
 	case "bifrost-deliver-platform":
-		return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus)
+		return aggregateDeliverPhases(deliverPlatformPhaseDefs, taskStatus, runTasks)
 	case "bifrost-deliver-platform-prod":
-		return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
+		return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus, runTasks)
 	case "bifrost-deliver-research":
-		return aggregateDeliverPhases(deliverResearchPhaseDefs, taskStatus)
+		return aggregateDeliverPhases(deliverResearchPhaseDefs, taskStatus, runTasks)
 	default:
 		return []PipelinePhaseView{}
 	}
+}
+
+// pipelineRunTaskNames is the tasks (finally tasks included) of the pipeline
+// spec the run resolved; nil until Tekton has recorded it.
+func pipelineRunTaskNames(run *unstructured.Unstructured) map[string]bool {
+	var out map[string]bool
+	for _, field := range []string{"tasks", "finally"} {
+		items, _, _ := unstructured.NestedSlice(run.Object, "status", "pipelineSpec", field)
+		for _, it := range items {
+			if m, ok := it.(map[string]any); ok {
+				if name, ok := m["name"].(string); ok && name != "" {
+					if out == nil {
+						out = map[string]bool{}
+					}
+					out[name] = true
+				}
+			}
+		}
+	}
+	return out
 }
 
 func aggregateDeliverPhases(defs []struct {
 	ID    string
 	Label string
 	Tasks []string
-}, taskStatus map[string]string) []PipelinePhaseView {
+}, taskStatus map[string]string, runTasks map[string]bool) []PipelinePhaseView {
 	out := make([]PipelinePhaseView, 0, len(defs))
 	for _, def := range defs {
-		status, detail := aggregatePhaseStatus(def.Tasks, taskStatus)
+		tasks := def.Tasks
+		if runTasks != nil {
+			tasks = make([]string, 0, len(def.Tasks))
+			for _, t := range def.Tasks {
+				if runTasks[t] {
+					tasks = append(tasks, t)
+				}
+			}
+			if len(tasks) == 0 {
+				continue
+			}
+		}
+		status, detail := aggregatePhaseStatus(tasks, taskStatus)
 		out = append(out, PipelinePhaseView{
 			ID:     def.ID,
 			Label:  def.Label,
@@ -122,11 +159,11 @@ func aggregateDeliverPhases(defs []struct {
 }
 
 func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus)
+	return aggregateDeliverPhases(deliverStgPhaseDefs, taskStatus, nil)
 }
 
 func aggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus)
+	return aggregateDeliverPhases(deliverPlatformProdPhaseDefs, taskStatus, nil)
 }
 
 func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
@@ -250,6 +287,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	}
 
 	skippedTasks := []string{}
+	var runTasks map[string]bool
 	if run, getErr := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, runName, metav1.GetOptions{}); getErr == nil {
 		if ref, ok, _ := unstructured.NestedString(run.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 			pipelineName = ref
@@ -261,8 +299,9 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		out.Pipeline = pipelineName
 		out.Results = pipelineRunResults(run)
 		skippedTasks = pipelineRunSkippedTasks(run)
+		runTasks = pipelineRunTaskNames(run)
 	}
-	out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{})
+	out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{}, runTasks)
 
 	list, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", runName),
@@ -315,7 +354,7 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
 
-	out.Phases = aggregatePhasesForPipeline(pipelineName, taskStatus)
+	out.Phases = aggregatePhasesForPipeline(pipelineName, taskStatus, runTasks)
 	out.Tasks = tasks
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))
