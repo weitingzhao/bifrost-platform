@@ -48,12 +48,25 @@ modules:
       # "." was run with scripts/ci/unit-go-test holding the package's reads
       # to exactly what the entry lists beyond its own directory, and passed.
       # An entry of only its own directory read nothing outside itself; it
-      # stays listed because the search that built this list matches it. None
-      # of them runs a command that reads the repository.
+      # stays listed because the search that built this list matches it.
+      # The check does not see what a child process reads, so the tests that
+      # run one were read (third batch): they re-run their own test binary,
+      # run git or ssh-keygen in a temporary directory, run scripts their
+      # own code generates, or run "go list" / "go mod tidy" inside api/,
+      # which an entry of "api" covers. unitscript runs scripts/ci's scripts
+      # and is given scripts and console whole. An entry of "api" is a test
+      # that walks the Go tree (a guard); it reruns on any Go change.
+      # agentrt/rules and cluster still walk the whole repository and stay ".".
       api/cmd/agentrt-plan-import: ["api/cmd/agentrt-plan-import", "api/internal/agentrt/planimport/testdata"]
       api/cmd/infracheck: ["api/cmd/infracheck", "api/internal/agentrt/infracheck/testdata"]
-      api/cmd/platform-api: ["."]
-      api/internal/actions: ["."]
+      api/cmd/platform-api: ["api/cmd/platform-api"]
+      api/internal/actions:
+        - "api/internal/actions"
+        - "api/internal/config"
+        - "api/internal/server"
+        - "config/actions-catalog.json"
+        - "config/actuation-policy.yaml"
+        - "config/agent-tasks.yaml"
       api/internal/actuation: ["api/internal/actuation"]
       api/internal/actuationpolicy:
         - "api/internal/actuationpolicy"
@@ -66,13 +79,18 @@ modules:
         - "api/internal/config"
         - "config/agent-tasks.yaml"
         - "config/trust-overrides.yaml"
-      api/internal/agentprogress: ["."]
-      api/internal/agentrt/agentrtapi: ["."]
+      api/internal/agentprogress: ["api"]
+      api/internal/agentrt/agentrtapi:
+        - "api/internal/agentrt/agentrtapi"
+        - "api/internal/agentrt/planimport/testdata"
+        - "api/internal/agentrt/planview/testdata"
+        - "api/internal/agentrt/store"
+        - "console/src/api/agentRuntime.ts"
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
-      api/internal/agentrt/infracheck: ["."]
+      api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]
       api/internal/agentrt/landing: ["api/internal/agentrt/landing"]
       api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
-      api/internal/agentrt/landinggit: ["."]
+      api/internal/agentrt/landinggit: ["api/internal/agentrt/landinggit"]
       api/internal/agentrt/metrics: ["api/internal/agentrt/metrics"]
       api/internal/agentrt/planimport:
         - "api/internal/agentrt/planimport"
@@ -82,17 +100,25 @@ modules:
       api/internal/agentrt/planview: ["api/internal/agentrt/planview"]
       api/internal/agentrt/recorderimport: ["api/internal/agentrt/recorderimport"]
       api/internal/agentrt/rules: ["."]
-      api/internal/agentrt/store: ["."]
+      api/internal/agentrt/store:
+        - "api/internal/agentrt/store"
+        - "api/internal/agentrt/controller"
+        - "api/internal/agentrt/migrations"
+        - "api/internal/agentrt/planimport/testdata"
+        - "api/internal/agentrt/planview/testdata"
+        - "api/internal/delivery/testdata"
+        - "api/internal/server"
+        - "console/src/api/__fixtures__"
       api/internal/agentthreads:
         - "api/internal/agentthreads"
         - "console/src/api/__fixtures__/agent-threads-sessions.generated.json"
         - "console/src/api/__fixtures__/agent-threads.generated.json"
-      api/internal/approvals: ["."]
+      api/internal/approvals: ["api/internal/approvals", "api/internal/config", "config/agent-tasks.yaml"]
       api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["."]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
-      api/internal/delivery: ["."]
-      api/internal/devsession: ["."]
+      api/internal/delivery: ["api", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:k8s/cicd/tekton"]
+      api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]
       api/internal/hostops: ["api/internal/hostops"]
       api/internal/localpath: ["api/internal/localpath"]
       api/internal/maintainer:
@@ -104,9 +130,9 @@ modules:
         - "api/internal/patrol"
         - "api/internal/releasepolicy"
         - "api/internal/releases"
-      api/internal/modtidy: ["."]
-      api/internal/network: ["."]
-      api/internal/notice: ["."]
+      api/internal/modtidy: ["api"]
+      api/internal/network: ["api/internal/network"]
+      api/internal/notice: ["api"]
       api/internal/opscontext: ["api/internal/opscontext", "config/ops-context.yaml"]
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
       api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
@@ -114,19 +140,19 @@ modules:
       api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/patrol: ["api/internal/patrol", "config/patrol-skills"]
       api/internal/probe: ["api/internal/probe", "config/trade-api-domains.yaml"]
-      api/internal/questions: ["."]
-      api/internal/releasefreeze: ["."]
-      api/internal/releasepolicy: ["."]
-      api/internal/safego: ["."]
+      api/internal/questions: ["api"]
+      api/internal/releasefreeze: ["api/internal/releasefreeze", "bifrost-trade-infra:scripts/release"]
+      api/internal/releasepolicy: ["api/internal/releasepolicy"]
+      api/internal/safego: ["api"]
       api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
-      api/internal/server: ["."]
+      api/internal/server: ["api", "config/agent-tasks.yaml"]
       api/internal/statefile: ["api/internal/statefile"]
-      api/internal/storedurability: ["."]
-      api/internal/testscope: ["."]
-      api/internal/unitscript: ["."]
+      api/internal/storedurability: ["api"]
+      api/internal/testscope: ["api"]
+      api/internal/unitscript: ["api", "scripts", "bifrost.units.yaml", "console"]
       # Reads only its own testdata (four real TaskRuns) and the test database.
       api/internal/unitexec: ["api/internal/unitexec/testdata"]
-      api/internal/tradevocab: ["."]
+      api/internal/tradevocab: ["api"]
 
   - name: console
     kind: node
