@@ -188,6 +188,7 @@ deny	POST /api/v1/questions/{id}/withdraw
 deny	GET /api/v1/readings/approvals
 deny	GET /api/v1/release-policy
 deny	PUT /api/v1/release-policy
+deny	PUT /api/v1/release-policy/candidate
 deny	POST /api/v1/release-policy/freeze
 deny	POST /api/v1/release-policy/unfreeze
 deny	GET /api/v1/releases

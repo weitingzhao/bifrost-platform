@@ -2,6 +2,8 @@ package releasepolicy_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -186,4 +188,56 @@ func TestFreezeRefusedWithoutTrustAnchor(t *testing.T) {
 			t.Fatalf("remembered freeze = %q (%v)", got, err)
 		}
 	})
+}
+
+// Origin: 2026-11-15, TD-576: the Owner signs from his phone through a card
+// whose command names only the sha256 of the text; the text waits here.
+// Staging must not change what is in force, and must refuse what the card's
+// command (which does not go through Install) could not be allowed to sign.
+func TestStageKeepsACandidateBesideThePolicyInForce(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	before := f.eng.Status(ctx)
+	if !before.Valid || before.Candidate != nil {
+		t.Fatalf("fixture: valid=%v candidate=%v", before.Valid, before.Candidate)
+	}
+	next := rptest.PolicyText("rp-next", f.clock, 90, pipeline, "bifrost-deliver-stg")
+	st, err := f.eng.Stage(ctx, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(next))
+	if st.Candidate == nil || st.Candidate.PolicyID != "rp-next" || st.Candidate.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Fatalf("candidate = %+v", st.Candidate)
+	}
+	if !st.Valid || st.PolicyID != before.PolicyID || len(st.Allow) != len(before.Allow) {
+		t.Fatalf("staging changed the policy in force: %+v", st)
+	}
+	cm, _, _ := f.cms.ConfigMap(ctx, releasepolicy.PolicyConfigMap)
+	if cm[releasepolicy.CandidateKey] != next {
+		t.Fatal("the stored candidate is not the bytes that were staged")
+	}
+
+	// What the card's command does: the candidate, signed, takes the place.
+	cm["policy.yaml"], cm["policy.sig"] = next, f.key.Sign(t, []byte(next), releasepolicy.NamespacePolicy)
+	delete(cm, releasepolicy.CandidateKey)
+	f.cms.Set(releasepolicy.PolicyConfigMap, cm)
+	if after := f.eng.Status(ctx); !after.Valid || after.PolicyID != "rp-next" || after.Candidate != nil {
+		t.Fatalf("after signing: %+v", after)
+	}
+
+	for name, text := range map[string]string{
+		"dated before the installed one": rptest.PolicyText("rp-old", f.clock.Add(-48*time.Hour), 90, pipeline),
+		"dated in the future":            rptest.PolicyText("rp-future", f.clock.Add(time.Hour), 90, pipeline),
+		"already expired":                rptest.PolicyText("rp-expired", f.clock.Add(-100*24*time.Hour), 1, pipeline),
+		"allows nothing":                 rptest.PolicyText("rp-empty", f.clock, 90),
+		"not a policy":                   "{",
+	} {
+		if _, err := f.eng.Stage(ctx, text); !errors.Is(err, releasepolicy.ErrRefused) {
+			t.Errorf("%s: err = %v, want a refusal", name, err)
+		}
+	}
+	if st := f.eng.Status(ctx); st.PolicyID != "rp-next" || st.Candidate != nil {
+		t.Fatalf("a refused candidate was stored: %+v", st)
+	}
 }

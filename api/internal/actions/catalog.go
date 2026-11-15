@@ -134,6 +134,14 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "release_policy_stage", Tier: TierB,
+		Description: "Keep a release policy text for the Owner to sign (release.sh policy stage): it is stored beside the signed policy as a candidate and answers with its sha256. It has no authority; the signed policy stays in force until a signature over the candidate replaces it. Refused when the text could not become a valid policy or is dated before the installed one. Tier B.",
+		Method:      "PUT", Pattern: "/api/v1/release-policy/candidate",
+		Params: []Param{
+			{Name: "policy_yaml", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "release_freeze", Tier: TierB,
 		Description: "Freeze releases: tier B release starts are refused and nothing is auto-approved until a signed unfreeze. Anyone may tighten. Tier B.",
 		Method:      "POST", Pattern: "/api/v1/release-policy/freeze",

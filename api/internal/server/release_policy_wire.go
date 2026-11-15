@@ -97,7 +97,7 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 		}},
 		Migrations: ownMigrations{s},
 		StatePath:  filepath.Join(dataDir, "release-policy-freeze"),
-		Anchor:     releasepolicy.OwnerKeyFingerprint,
+		Anchor:     releasepolicy.PolicyAnchors(),
 	})
 	s.approvals.SetAutoApprover(s.releasePolicyApprover())
 	if runsWorkers && releasepolicy.RemindersWanted() {
@@ -349,6 +349,14 @@ func (s *Server) handleReleasePolicyInstall(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.releasePolicy.HandleInstall(s.auditRecorder())(w, r)
+}
+
+func (s *Server) handleReleasePolicyStage(w http.ResponseWriter, r *http.Request) {
+	if s.releasePolicy == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "release policy not wired"})
+		return
+	}
+	s.releasePolicy.HandleStage(s.auditRecorder())(w, r)
 }
 
 func (s *Server) handleReleaseFreeze(w http.ResponseWriter, r *http.Request) {

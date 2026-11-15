@@ -32,6 +32,21 @@ func (e *Engine) HandleInstall(audit Audit) http.HandlerFunc {
 	}
 }
 
+// HandleStage serves PUT /api/v1/release-policy/candidate {policy_yaml}.
+func (e *Engine) HandleStage(audit Audit) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			PolicyYAML string `json:"policy_yaml"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		e.respond(w, r, audit, "release_policy.stage", PolicyID(body.PolicyYAML), func(ctx context.Context) (Status, error) {
+			return e.Stage(ctx, body.PolicyYAML)
+		})
+	}
+}
+
 // HandleFreeze serves POST /api/v1/release-policy/freeze {who, reason}.
 func (e *Engine) HandleFreeze(audit Audit) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

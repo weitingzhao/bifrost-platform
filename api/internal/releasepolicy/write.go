@@ -2,6 +2,8 @@ package releasepolicy
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -55,6 +57,82 @@ func (e *Engine) Install(ctx context.Context, policyText, sig string) (Status, e
 		"policy.yaml": policyText,
 		"policy.sig":  sig,
 	}); err != nil {
+		return Status{}, err
+	}
+	return e.Status(ctx), nil
+}
+
+// CandidateKey is where a policy that waits for a signature is kept: a key
+// of the policy ConfigMap itself, beside the signed policy.yaml and
+// policy.sig, which it leaves as they are. Nothing judges by it.
+const CandidateKey = "candidate.yaml"
+
+// Candidate is a policy text that waits for a signature.
+type Candidate struct {
+	PolicyID  string `json:"policy_id"`
+	SHA256    string `json:"sha256"`
+	SignedAt  string `json:"signed_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+func candidateOf(text string) *Candidate {
+	if text == "" {
+		return nil
+	}
+	sum := sha256.Sum256([]byte(text))
+	c := &Candidate{SHA256: hex.EncodeToString(sum[:])}
+	var p Policy
+	if yaml.Unmarshal([]byte(text), &p) == nil {
+		c.PolicyID, c.SignedAt, c.ExpiresAt = p.PolicyID, p.SignedAt, p.ExpiresAt
+	}
+	return c
+}
+
+// Stage keeps a policy text for the Owner to sign from where the signing key
+// is (TD-576: a card he approves with his one-time code signs the bytes whose
+// sha256 the card names, with the key in the cluster). Staging gives the text
+// no authority: the signed policy stays in force until a signature over the
+// candidate is put in its place. A text that could not become a valid policy
+// is refused here, and so is one dated before the installed policy, which
+// Install would refuse and the card's command does not go through Install.
+func (e *Engine) Stage(ctx context.Context, policyText string) (Status, error) {
+	if e.d.Writer == nil {
+		return Status{}, errors.New("no ConfigMap writer")
+	}
+	now := e.d.Now()
+	var p Policy
+	if err := yaml.Unmarshal([]byte(policyText), &p); err != nil {
+		return Status{}, refused("the candidate does not parse: %v", err)
+	}
+	signed, err1 := time.Parse(time.RFC3339, p.SignedAt)
+	expires, err2 := time.Parse(time.RFC3339, p.ExpiresAt)
+	switch {
+	case strings.TrimSpace(p.PolicyID) == "":
+		return Status{}, refused("the candidate has no policy_id")
+	case p.Version != 1:
+		return Status{}, refused("candidate version %d is not 1", p.Version)
+	case err1 != nil || err2 != nil:
+		return Status{}, refused("the candidate has no signed_at / expires_at")
+	case signed.After(now.Add(clockSkew)):
+		return Status{}, refused("candidate signed_at %s is in the future", p.SignedAt)
+	case !expires.After(now):
+		return Status{}, refused("candidate %s expired at %s", p.PolicyID, p.ExpiresAt)
+	case len(p.Allow) == 0:
+		return Status{}, refused("the candidate allows no pipeline")
+	}
+	cur, _, err := e.read(ctx, PolicyConfigMap)
+	if err != nil {
+		return Status{}, fmt.Errorf("read the installed policy: %w", err)
+	}
+	if old := evaluatePolicy(cur, true, nil, e.d.Anchor, now); old.policy != nil && !old.signedAt.IsZero() && signed.Before(old.signedAt) {
+		return Status{}, refused("candidate %s is dated %s, before the installed %s (%s)", p.PolicyID, p.SignedAt, old.policy.PolicyID, old.policy.SignedAt)
+	}
+	data := map[string]string{}
+	for k, v := range cur {
+		data[k] = v
+	}
+	data[CandidateKey] = policyText
+	if err := e.d.Writer.WriteConfigMap(ctx, PolicyConfigMap, data); err != nil {
 		return Status{}, err
 	}
 	return e.Status(ctx), nil

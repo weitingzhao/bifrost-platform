@@ -24,6 +24,7 @@
     "poweroff_compute_node",
     "release_freeze",
     "release_policy_install",
+    "release_policy_stage",
     "release_unfreeze",
     "release_window_hold",
     "release_window_release",

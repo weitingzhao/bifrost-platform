@@ -422,3 +422,34 @@ func TestALargeDiffReadWholeIsCovered(t *testing.T) {
 	f.facts.TreeFiles = map[string][]string{"repo-app": manyFiles(177)}
 	wantAuto(t, f.decide(nil))
 }
+
+// Origin: 2026-11-15, TD-576: a second key (generated in the cluster by a
+// code-approved card) may sign a release policy. A policy signed by either
+// listed key is valid; one signed by a key that is not listed is not, and
+// that is the control: listing two keys must not mean "any key".
+func TestAPolicySignedByEitherListedKeyIsValid(t *testing.T) {
+	f := newFixture(t)
+	second, stranger := rptest.NewKey(t), rptest.NewKey(t)
+	text := rptest.PolicyText("rp-second", f.clock.Add(-time.Minute), 90, pipeline)
+	both := f.engine(f.key.Fingerprint + " " + second.Fingerprint)
+
+	f.signPolicy(t, second, text)
+	if st := both.Status(context.Background()); !st.Valid {
+		t.Fatalf("signed by the second listed key: %v", st.Reasons)
+	}
+	if st := f.eng.Status(context.Background()); st.Valid {
+		t.Fatal("the engine that lists only the first key accepted the second key's signature")
+	}
+	f.signPolicy(t, f.key, text)
+	if st := both.Status(context.Background()); !st.Valid {
+		t.Fatalf("signed by the first listed key: %v", st.Reasons)
+	}
+	f.signPolicy(t, stranger, text)
+	st := both.Status(context.Background())
+	if st.Valid {
+		t.Fatal("control: a key that is not listed signed a valid policy")
+	}
+	if len(st.Reasons) == 0 || !strings.Contains(strings.Join(st.Reasons, "; "), "not the compiled-in Owner key") {
+		t.Fatalf("reasons = %v", st.Reasons)
+	}
+}

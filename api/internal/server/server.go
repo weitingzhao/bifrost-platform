@@ -589,6 +589,7 @@ func (s *Server) Router() http.Handler {
 			r.Put("/delivery/release-window", s.guard("release_window_hold", s.delivery.HandlePutReleaseWindow))
 			r.Delete("/delivery/release-window", s.guard("release_window_release", s.delivery.HandleDeleteReleaseWindow))
 			r.Put("/release-policy", s.guard("release_policy_install", s.handleReleasePolicyInstall))
+			r.Put("/release-policy/candidate", s.guard("release_policy_stage", s.handleReleasePolicyStage))
 			r.Post("/release-policy/freeze", s.guard("release_freeze", s.handleReleaseFreeze))
 			r.Post("/release-policy/unfreeze", s.guard("release_unfreeze", s.handleReleaseUnfreeze))
 			r.Post("/delivery/mirrors/sync", s.guard("sync_mirrors", s.delivery.HandleSyncMirrors))

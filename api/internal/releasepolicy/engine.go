@@ -115,9 +115,12 @@ type Status struct {
 	FrozenAt         string   `json:"frozen_at,omitempty"`
 	ReminderWindows  []string `json:"reminder_windows"`
 	Anchor           string   `json:"anchor_fingerprint"`
-	SignCommand      string   `json:"sign_command"`
-	UnfreezeCommand  string   `json:"unfreeze_command"`
-	CheckedAt        string   `json:"checked_at"`
+	// Candidate is a policy text that waits for a signature (Stage); it has
+	// no authority.
+	Candidate       *Candidate `json:"candidate,omitempty"`
+	SignCommand     string     `json:"sign_command"`
+	UnfreezeCommand string     `json:"unfreeze_command"`
+	CheckedAt       string     `json:"checked_at"`
 
 	policy *Policy
 }
@@ -136,6 +139,7 @@ func (e *Engine) Status(ctx context.Context) Status {
 	pdata, pfound, perr := e.read(ctx, PolicyConfigMap)
 	ev := evaluatePolicy(pdata, pfound, perr, e.d.Anchor, now)
 	st.Valid = ev.valid
+	st.Candidate = candidateOf(pdata[CandidateKey])
 	st.Reasons = append(st.Reasons, ev.reasons...)
 	if ev.policy != nil {
 		st.policy = ev.policy

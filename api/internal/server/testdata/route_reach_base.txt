@@ -521,6 +521,7 @@ operator	PUT /api/v1/lineage/thread-title
 operator	PUT /api/v1/lineage/transcript-title
 operator	PUT /api/v1/patrol/skills/{id}/enable
 operator	PUT /api/v1/release-policy
+operator	PUT /api/v1/release-policy/candidate
 admin	DELETE /api/v1/agentrt/controls/{id}
 admin	DELETE /api/v1/cluster/workloads/pods/{namespace}/{name}
 admin	DELETE /api/v1/delivery/release-window
@@ -715,6 +716,7 @@ admin	PUT /api/v1/lineage/thread-title
 admin	PUT /api/v1/lineage/transcript-title
 admin	PUT /api/v1/patrol/skills/{id}/enable
 admin	PUT /api/v1/release-policy
+admin	PUT /api/v1/release-policy/candidate
 trade-satellite	DELETE /api/v1/cluster/workloads/pods/{namespace}/{name}
 trade-satellite	DELETE /api/v1/delivery/release-window
 trade-satellite	DELETE /api/v1/delivery/runs/{id}
@@ -892,6 +894,7 @@ trade-satellite	PUT /api/v1/lineage/thread-title
 trade-satellite	PUT /api/v1/lineage/transcript-title
 trade-satellite	PUT /api/v1/patrol/skills/{id}/enable
 trade-satellite	PUT /api/v1/release-policy
+trade-satellite	PUT /api/v1/release-policy/candidate
 agentd:h1	GET /api/v1/actions
 agentd:h1	GET /api/v1/actuation/manifests/plans/{id}
 agentd:h1	GET /api/v1/agent/bridge
