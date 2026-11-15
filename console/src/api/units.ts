@@ -98,3 +98,16 @@ export async function fetchFullCi(signal?: AbortSignal): Promise<FullCiNotes> {
   }
   return value as unknown as FullCiNotes
 }
+
+/** A declaration/evidence view at an exact commit, not a historical execution trace. */
+export type UnitsPlan = {
+  repo: string; commit: string
+  units: { unit: string; task: string; module: string; input_key: string; verdict: string; inputs?: Record<string, unknown> }[]
+}
+export async function fetchUnitsPlan(repo: string, commit: string, signal?: AbortSignal): Promise<UnitsPlan> {
+  const value: unknown = await (await authedFetch('CI unit inputs', `/api/v1/units/plan?${new URLSearchParams({ repo, commit, inputs: '1' })}`, { signal })).json()
+  if (!record(value) || !Array.isArray(value.units) || !value.units.every(u => record(u) && typeof u.unit === 'string' && typeof u.module === 'string' && typeof u.task === 'string')) {
+    throw new Error('CI unit inputs: incomplete answer')
+  }
+  return value as UnitsPlan
+}

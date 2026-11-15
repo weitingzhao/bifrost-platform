@@ -22,7 +22,7 @@ export function PlatformTimings() {
   const [typed,setTyped] = useState('')
   const [lookup,setLookup] = useState('')
   const query = useQuery({ queryKey:['ci-timings',pipeline], queryFn:({signal})=>fetchCITimings(pipeline,undefined,signal), staleTime:30_000, refetchInterval:30_000 })
-  const direct = useQuery({ queryKey:['ci-timing-run',pipeline,lookup], queryFn:({signal})=>fetchCITimings(pipeline,lookup,signal), enabled:!!lookup, retry:false, staleTime:30_000 })
+  const direct = useQuery({ queryKey:['ci-timing-run',pipeline,lookup], queryFn:({signal})=>fetchCITimings(pipeline,lookup,signal), enabled:!!lookup, retry:false, staleTime:30_000, refetchInterval:30_000 })
   const cutoff = Date.parse(query.data?.as_of ?? '') - hours*3600_000
   const runs = (query.data?.runs ?? []).filter(r=>Date.parse(r.created_at)>=cutoff)
   const matching = focusCommit ? runs.filter(r=>runCommit(r)===focusCommit) : runs

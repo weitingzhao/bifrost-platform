@@ -1,13 +1,14 @@
 import { Fragment, useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import { fetchSupplyChain } from '@/api/delivery'
-import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns } from '@/api/units'
+import { fetchFullCi, fetchUnitsRuns } from '@/api/units'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
 import { PlatformTimings } from './PlatformTimings'
+import { ModuleExplorer } from './ModuleExplorer'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
-import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, configView, fullCiView, runRow } from './ciViewModel'
+import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow } from './ciViewModel'
 
 /*
  * Work > CI (read-only): what each project declares for CI, the CI runs retained for one project, and what the daily
@@ -17,102 +18,12 @@ import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, configView, fullCiView, runRow } from '
 
 const errorText = (error: unknown): string | null => (error == null ? null : error instanceof Error ? error.message : String(error))
 const MUTED = 'text-[var(--muted-foreground)]'
-const CONFIG_COLUMNS = ['Module', 'Kind', 'Root', 'Tasks', 'Units', 'Reads', 'Runs on every change', 'Contracts', 'Ships alone'] as const
-
 function Unread({ what, error, unknown }: { what: string; error: string; unknown: string }) {
   return <p role="alert" className="m-0 text-[var(--destructive)]">{`${what} could not be read: ${error}. ${unknown}`}</p>
 }
 
-function ConfigurationBlock({ repos }: { repos: string[] }) {
-  const configs = useQueries({
-    queries: repos.map(repo => ({
-      queryKey: ['units', 'config', repo],
-      queryFn: ({ signal }: { signal: AbortSignal }) => fetchUnitsConfig(repo, signal),
-      // The first answer for a large project can take about 30 s after a platform restart; each row waits on its own.
-      staleTime: 5 * 60_000,
-    })),
-  })
-  return (
-    <OpsSection
-      title="Configuration"
-      description="What each project declares for CI at its main's head: its modules, the tasks of each, and what each reads beside its own tree. A unit whose declared input is the whole repository runs on every change."
-      bodyPadding="none"
-      overflow="visible"
-      bodyClassName="ops-section-body--table"
-    >
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            {CONFIG_COLUMNS.map(column => <DenseTableHead key={column}>{column}</DenseTableHead>)}
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {repos.map((repo, index) => {
-            const query = configs[index]
-            const error = errorText(query?.error)
-            const view = query?.data != null ? configView(query.data) : null
-            return (
-              <Fragment key={repo}>
-                <DenseTableRow data-testid={`ci-config-project-${repo}`}>
-                  <DenseTableCell colSpan={CONFIG_COLUMNS.length} className="font-medium">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span>{repo}</span>
-                      {view != null && (
-                        <DenseTag variant={view.state === 'declared' ? 'success' : view.state === 'unreadable' ? 'warning' : 'neutral'}>{view.stateText}</DenseTag>
-                      )}
-                      {view != null && view.pins !== '' && (
-                        <span className={`font-mono-tabular font-normal ${MUTED}`}>{`tested with ${view.pins}`}</span>
-                      )}
-                      {view == null && error == null && <span className={`font-normal ${MUTED}`}>Reading…</span>}
-                    </span>
-                  </DenseTableCell>
-                </DenseTableRow>
-                {view == null && error != null && (
-                  <DenseTableRow>
-                    <DenseTableCell colSpan={CONFIG_COLUMNS.length} className="whitespace-normal">
-                      <span role="alert" className="text-[var(--destructive)]">
-                        {`The configuration could not be read: ${error}. What this project declares is not known.`}
-                      </span>
-                    </DenseTableCell>
-                  </DenseTableRow>
-                )}
-                {view != null && view.note !== '' && (
-                  <DenseTableRow>
-                    <DenseTableCell colSpan={CONFIG_COLUMNS.length} className={`whitespace-normal ${view.state === 'unreadable' ? 'text-[var(--destructive)]' : MUTED}`}>
-                      {view.state === 'unreadable' ? <span role="alert">{view.note}</span> : view.note}
-                    </DenseTableCell>
-                  </DenseTableRow>
-                )}
-                {view != null && view.state === 'declared' && view.modules.length === 0 && (
-                  <DenseTableRow>
-                    <DenseTableCell colSpan={CONFIG_COLUMNS.length} className={MUTED}>The declaration lists no module</DenseTableCell>
-                  </DenseTableRow>
-                )}
-                {view?.modules.map(module => (
-                  <DenseTableRow key={module.name} data-testid={`ci-config-module-${repo}-${module.name}`}>
-                    <DenseTableCell className="font-mono-tabular">{module.name}</DenseTableCell>
-                    <DenseTableCell>{module.kind}</DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular">{module.root}</DenseTableCell>
-                    <DenseTableCell>{module.tasks}</DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular">{module.units}</DenseTableCell>
-                    <DenseTableCell className="max-w-[260px] truncate font-mono-tabular" title={module.reads}>{module.reads}</DenseTableCell>
-                    <DenseTableCell>{module.everyChange}</DenseTableCell>
-                    <DenseTableCell className={MUTED}>{module.contracts}</DenseTableCell>
-                    <DenseTableCell className={MUTED}>{module.shipsAlone}</DenseTableCell>
-                  </DenseTableRow>
-                ))}
-              </Fragment>
-            )
-          })}
-        </DenseTableBody>
-      </DenseDataTable>
-    </OpsSection>
-  )
-}
-
 function RunsBlock({ repos }: { repos: string[] }) {
-  const [picked, setPicked] = useState<string | null>(null)
-  const repo = picked != null && repos.includes(picked) ? picked : repos[0]
+  const repo = repos[0]
   const runs = useQuery({
     queryKey: ['units', 'runs', repo],
     queryFn: ({ signal }) => fetchUnitsRuns(repo, signal),
@@ -120,23 +31,11 @@ function RunsBlock({ repos }: { repos: string[] }) {
   })
   const error = errorText(runs.error)
   const rows = runs.data?.runs.map(runRow)
-  const picker = (
-    <label className="flex items-center gap-2 text-[var(--text-dense-meta)]">
-      <span className={`font-medium ${MUTED}`}>Project</span>
-      <select
-        className="h-8 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
-        value={repo}
-        onChange={event => setPicked(event.target.value)}
-      >
-        {repos.map(name => <option key={name} value={name}>{name}</option>)}
-      </select>
-    </label>
-  )
   const description = `The CI runs the cluster still retains for one project, newest first: what each ran, why, and how long each task took.${
     runs.data != null ? ` Read ${formatInstant(runs.data.as_of)}; kept up to 30 s.` : ''}`
   if (error != null || rows == null) {
     return (
-      <OpsSection title="Runs" description={description} actions={picker} bodyPadding="compact">
+      <OpsSection title="Runs" description={description}  bodyPadding="compact">
         {error != null
           ? <Unread what={`The CI runs of ${repo}`} error={error} unknown="Which runs are retained, and what they ran, is not known." />
           : <p className={`m-0 ${MUTED}`}>Loading…</p>}
@@ -145,13 +44,13 @@ function RunsBlock({ repos }: { repos: string[] }) {
   }
   if (rows.length === 0) {
     return (
-      <OpsSection title="Runs" description={description} actions={picker} bodyPadding="compact">
+      <OpsSection title="Runs" description={description}  bodyPadding="compact">
         <p className={`m-0 ${MUTED}`}>{NO_RUNS_TEXT}</p>
       </OpsSection>
     )
   }
   return (
-    <OpsSection title="Runs" description={description} actions={picker} bodyPadding="none" overflow="visible" bodyClassName="ops-section-body--table">
+    <OpsSection title="Runs" description={description}  bodyPadding="none" overflow="visible" bodyClassName="ops-section-body--table">
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -232,10 +131,17 @@ export function CiSection() {
   // The projects the platform tracks: the same read the cockpit keeps.
   const projects = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain })
   const repos = projects.data?.tracked_repos
+  const [pickedRepo, setPickedRepo] = useState('')
+  const repo = repos?.includes(pickedRepo) ? pickedRepo : repos?.includes('bifrost-platform') ? 'bifrost-platform' : repos?.[0]
   const error = errorText(projects.error)
   return (
     <section aria-label="CI" className="flex min-w-0 flex-col gap-3">
-      <PlatformTimings />
+      {repos && repo && <label className="flex flex-wrap items-center gap-3 px-3 text-sm">Project
+        <select aria-label="Project" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={repo} onChange={e => setPickedRepo(e.target.value)}>{repos.map(name => <option key={name}>{name}</option>)}</select>
+        <span className="text-xs text-muted-foreground">Repository → module → task. Configuration and runs follow this selection.</span>
+      </label>}
+      {repo && <ModuleExplorer key={repo} repo={repo} />}
+      {repo === 'bifrost-platform' && <PlatformTimings />}
       {repos == null ? (
         <OpsSection title="Configuration and runs" description="What each project declares for CI, and the CI runs retained for it." bodyPadding="compact">
           {error != null
@@ -247,8 +153,7 @@ export function CiSection() {
           <p className={`m-0 ${MUTED}`}>The platform tracks no project</p>
         </OpsSection>
       ) : <>
-        <ConfigurationBlock repos={repos} />
-        <RunsBlock repos={repos} />
+        {repo && <RunsBlock key={repo} repos={[repo]} />}
       </>}
       <FullRunBlock />
       <ApprovalReadingsBlock />

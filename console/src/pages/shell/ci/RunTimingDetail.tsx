@@ -11,7 +11,7 @@ const missing = 'Not recorded; older runs may predate this result'
 
 function TaskTiming({ task, start, total }: { task: TimingTask; start?: string; total: number | null }) {
   const offset = seconds(start, task.created_at), duration = taskSeconds(task)
-  const span = total != null && total > 0 ? total : 1
+  const span = total != null && total > 0 ? total : null
   return <details className="min-w-0 border-b border-[var(--table-rule)] px-3 py-2">
     <summary className="cursor-pointer list-none">
       <span className="flex min-h-8 flex-wrap items-center justify-between gap-2">
@@ -19,7 +19,7 @@ function TaskTiming({ task, start, total }: { task: TimingTask; start?: string; 
         <span className="font-mono text-xs">{secondsText(duration)} · {task.status}</span>
       </span>
       <div className="my-1 h-2 overflow-hidden rounded bg-[var(--muted)]" aria-hidden="true">
-        {duration != null && offset != null && <div className={`h-2 rounded ${task.status === 'failed' ? 'bg-[var(--destructive)]' : 'bg-[var(--primary)]'}`} style={{ marginLeft:`${Math.min(100, offset/span*100)}%`, width:`${Math.max(.5, Math.min(100, duration/span*100))}%` }} />}
+        {duration != null && offset != null && span != null && <div className={`h-2 rounded ${task.status === 'failed' ? 'bg-[var(--destructive)]' : 'bg-[var(--primary)]'}`} style={{ marginLeft:`${Math.min(100, offset/span*100)}%`, width:`${Math.max(.5, Math.min(100, duration/span*100))}%` }} />}
       </div>
       <span className="text-xs text-muted-foreground">{`Starts +${secondsText(offset)} · before first step ${secondsText(taskWait(task))}`}</span>
     </summary>
@@ -44,6 +44,7 @@ export function RunTimingDetail({ run }: { run: TimingRun }) {
   const changes = run.tasks.find(t => t.task === 'changes')
   const reuse = reusedBy(run), base = scopeResult(run,'base-commit')
   const isCI = run.pipeline === 'bifrost-ci-platform'
+  const active = run.tasks.filter(t => ['running', 'pending'].includes(t.status.toLowerCase()))
   const facts: [string,string][] = [
     ['Commit', runCommit(run) || 'Not recorded'],
     ['Total elapsed', secondsText(elapsed(run))],
@@ -63,6 +64,12 @@ export function RunTimingDetail({ run }: { run: TimingRun }) {
     ] as [string,string][] : []),
   ]
   return <OpsSection title="Selected run" description={run.name} bodyPadding="none">
+    {active.length > 0 && <div role="status" className="m-3 rounded border border-[var(--table-rule)] p-3">
+      <strong className="text-sm">In progress · {active.length} active tasks</strong>
+      <ul className="mb-0 space-y-2 pl-5 text-sm">{active.map(t => <li key={t.name}><span className="font-medium">{t.task}</span> · {t.status}
+        {t.steps.filter(step => ['running', 'waiting', 'pending'].includes(step.status.toLowerCase())).map(step => <span key={step.name} className="ml-2 break-all">→ {step.name}: {step.status}</span>)}
+      </li>)}</ul><p className="mb-0 text-xs text-muted-foreground">Refreshes every 30 seconds. Parallel tasks may run together; no completion percentage is inferred.</p>
+    </div>}
     <div className="px-3 py-2"><DenseTag variant={runStatus(run) === 'Succeeded' ? 'success' : runStatus(run) === 'Failed' ? 'danger' : 'neutral'}>{runStatus(run)}</DenseTag></div>
     <dl className="grid min-w-0 gap-x-6 gap-y-3 px-3 pb-3 text-xs sm:grid-cols-2">{facts.map(([label,value]) => <div key={label} className="min-w-0"><dt className="font-medium">{label}</dt><dd className="m-0 mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-muted-foreground">{value}</dd></div>)}</dl>
     {!isCI && <p className="m-0 px-3 py-2 text-xs text-muted-foreground">This pipeline does not select test scope. Inspect the CI of the same commit for package selection and test reuse.</p>}

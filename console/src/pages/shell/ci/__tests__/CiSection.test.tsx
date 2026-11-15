@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { fetchSupplyChain } from '@/api/delivery'
 import type { SupplyChainResponse } from '@/api/deliveryTypes'
 import { fetchApprovalReadings } from '@/api/readings'
-import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns } from '@/api/units'
+import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns, fetchUnitsPlan } from '@/api/units'
 import { CiSection } from '../CiSection'
 import { contract } from './contract'
 
@@ -16,7 +16,7 @@ import { contract } from './contract'
  */
 
 vi.mock('../PlatformTimings', () => ({ PlatformTimings: () => null }))
-vi.mock('@/api/units', () => ({ fetchUnitsConfig: vi.fn(), fetchUnitsRuns: vi.fn(), fetchFullCi: vi.fn() }))
+vi.mock('@/api/units', () => ({ fetchUnitsConfig: vi.fn(), fetchUnitsRuns: vi.fn(), fetchFullCi: vi.fn(), fetchUnitsPlan: vi.fn() }))
 vi.mock('@/api/readings', () => ({ fetchApprovalReadings: vi.fn() }))
 vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn() }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
@@ -39,6 +39,8 @@ function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail
 // Origin: as above — a project with no declaration says that all of it runs, and shows no module row.
 it('an undeclared project shows "Not declared: everything runs" and its note', async () => {
   setup()
+  await screen.findByTestId('ci-config-project-r')
+  fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'plain' } })
   const project = await screen.findByTestId('ci-config-project-plain')
   expect(await within(project).findByText('Not declared: everything runs')).toBeInTheDocument()
   expect(screen.getByText(contract.configUndeclared().note!)).toBeInTheDocument()
@@ -54,7 +56,7 @@ it('a declared project shows its pins and one row per module', async () => {
   expect(within(row).getAllByText('not declared yet')).toHaveLength(2)
   expect(screen.getByTestId('ci-config-project-r')).toHaveTextContent('tested with lib@11111111')
   expect(screen.getByTestId('ci-config-module-r-web')).toHaveTextContent('svc/a/a.go, lib:.')
-  expect(vi.mocked(fetchUnitsConfig).mock.calls.map(call => call[0]).sort()).toEqual(['plain', 'r'])
+  expect(vi.mocked(fetchUnitsConfig).mock.calls.map(call => call[0]).sort()).toEqual(['r'])
 })
 
 // Origin: as above — the first project's runs are drawn as the route answered them.
@@ -114,4 +116,20 @@ it('a failed read of the project list is an alert, and the full run is still dra
   expect(screen.queryByRole('columnheader', { name: 'Module' })).toBeNull()
   expect(await screen.findByText('1 more could not be read')).toBeInTheDocument()
   expect(fetchUnitsConfig).not.toHaveBeenCalled()
+})
+
+// Origin: Owner 2026-11-15 could see repositories but not their units/dependencies.
+// Inputs must be fetched for the displayed config commit, not guessed from the latest run.
+it('explores units on demand and clears the context when selecting another repo', async () => {
+  setup()
+  vi.mocked(fetchUnitsPlan).mockResolvedValue({repo:'r', commit:contract.configDeclared().commit, units:[{unit:'svc/a', task:'test', module:'svc', input_key:'key-a', verdict:'green', inputs:{reads:['lib:.']}}]})
+  await screen.findByTestId('ci-config-module-r-svc')
+  expect(fetchUnitsPlan).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name:'Explore unit inputs' }))
+  expect(await screen.findByText('svc/a · test')).toBeInTheDocument()
+  expect(vi.mocked(fetchUnitsPlan).mock.calls[0].slice(0,2)).toEqual(['r', contract.configDeclared().commit])
+  fireEvent.change(screen.getByRole('combobox', { name:'Project' }), {target:{value:'plain'}})
+  expect(await screen.findByTestId('ci-config-project-plain')).toBeInTheDocument()
+  expect(screen.queryByText('svc/a · test')).toBeNull()
+  expect(screen.queryByTestId('ci-config-project-r')).toBeNull()
 })

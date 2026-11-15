@@ -56,3 +56,19 @@ it('follows a delivery commit to its CI scope',async()=>{
   expect(await screen.findByText('API scope actually tested')).toBeInTheDocument()
   expect(screen.getByText(/1 matching runs loaded/)).toBeInTheDocument()
 })
+
+// Origin: Owner 2026-11-15 could not identify the live step; completed tasks
+// previously filled the timeline while a run had no final duration.
+it('surfaces all parallel active steps without inventing a progress percentage', async () => {
+  const run = {...timingRun(), status:'Unknown', reason:'Running', completion_time:undefined, tasks:[
+    {name:'api', task:'test-api', status:'running', results:[], steps:[{name:'test',status:'running'}]},
+    {name:'console', task:'test-console', status:'pending', results:[], steps:[{name:'prepare',status:'waiting'}]},
+  ]}
+  vi.mocked(fetchCITimings).mockResolvedValue({as_of:'2026-11-15T20:04:00Z',retained:1,limit:60,runs:[run]})
+  renderPage()
+  const status = await screen.findByRole('status')
+  expect(status).toHaveTextContent('2 active tasks')
+  expect(status).toHaveTextContent('test: running')
+  expect(status).toHaveTextContent('prepare: waiting')
+  expect(status).toHaveTextContent('no completion percentage is inferred')
+})
