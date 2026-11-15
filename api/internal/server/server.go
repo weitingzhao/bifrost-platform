@@ -570,6 +570,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/pipelines/{name}/timings", s.delivery.HandlePipelineTimings)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/release-window", s.delivery.HandleGetReleaseWindow)
 		// One read of a repository's release situation (release_context_wire.go):
 		// read-only, viewer and above.

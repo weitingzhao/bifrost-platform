@@ -37,7 +37,9 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
-	"GET /api/v1/ops/facts/system": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
+	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/ops/facts/system":                  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Wave 2b (2026-11-12): a trial of the release policy on one run request,
 	// for the readers the release window's own GET has (read-only: it starts
 	// nothing, creates no approval, writes no audit record).

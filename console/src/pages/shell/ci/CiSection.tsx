@@ -5,6 +5,7 @@ import { fetchSupplyChain } from '@/api/delivery'
 import { fetchFullCi, fetchUnitsConfig, fetchUnitsRuns } from '@/api/units'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
+import { PlatformTimings } from './PlatformTimings'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
 import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, configView, fullCiView, runRow } from './ciViewModel'
 
@@ -234,6 +235,7 @@ export function CiSection() {
   const error = errorText(projects.error)
   return (
     <section aria-label="CI" className="flex min-w-0 flex-col gap-3">
+      <PlatformTimings />
       {repos == null ? (
         <OpsSection title="Configuration and runs" description="What each project declares for CI, and the CI runs retained for it." bodyPadding="compact">
           {error != null

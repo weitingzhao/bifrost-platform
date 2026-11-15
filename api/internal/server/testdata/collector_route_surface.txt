@@ -111,6 +111,7 @@ deny	GET /api/v1/delivery/pipelines/{name}/policy-check
 deny	GET /api/v1/delivery/pipelines/{name}/preflight
 deny	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 deny	GET /api/v1/delivery/pipelines/{name}/runs
+deny	GET /api/v1/delivery/pipelines/{name}/timings
 deny	POST /api/v1/delivery/pipelines/{name}/runs
 deny	DELETE /api/v1/delivery/release-window
 deny	GET /api/v1/delivery/release-window

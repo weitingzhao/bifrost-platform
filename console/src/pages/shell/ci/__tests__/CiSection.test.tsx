@@ -15,6 +15,7 @@ import { contract } from './contract'
  * its back end keeps (api/internal/server/testdata/contract/units), not against the back end's source.
  */
 
+vi.mock('../PlatformTimings', () => ({ PlatformTimings: () => null }))
 vi.mock('@/api/units', () => ({ fetchUnitsConfig: vi.fn(), fetchUnitsRuns: vi.fn(), fetchFullCi: vi.fn() }))
 vi.mock('@/api/readings', () => ({ fetchApprovalReadings: vi.fn() }))
 vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn() }))
