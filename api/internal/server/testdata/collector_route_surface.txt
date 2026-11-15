@@ -102,6 +102,7 @@ deny	POST /api/v1/code-health/rescan
 deny	GET /api/v1/context
 deny	GET /api/v1/data-husbandry
 deny	GET /api/v1/delivery/compare
+deny	GET /api/v1/delivery/context
 deny	GET /api/v1/delivery/dev/smoke
 deny	POST /api/v1/delivery/mirrors/sync
 deny	GET /api/v1/delivery/pipelines

@@ -46,6 +46,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_trust_matrix',
   'get_stg_smoke',
   'get_delivery_revisions',
+  'get_release_context',
   'get_commit_lineage',
   'get_checklist_signals',
   'get_commit_evidence',

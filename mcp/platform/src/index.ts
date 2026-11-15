@@ -446,6 +446,32 @@ reg(
 )
 
 reg(
+  'get_release_context',
+  'One read of the live release situation of one repository (read-only; nothing is started or written): ' +
+    'what STG and PROD run (release records), main\'s head on the Gitea mirror, whether main is ahead of STG, ' +
+    'PipelineRuns of the repo not finished (CI, landing, delivery), approvals still pending that concern it, ' +
+    'the release window as stored (holder and queue), the latest time the Owner decided an approval or answered a question ' +
+    '(only that time; it says nothing about whether the Owner is around), and the release lessons not yet made machine checks. ' +
+    'Returns {schema, repo, commit?, as_of, facts: {stg, prod, main, main_ahead_of_stg, runs_in_flight, pending_approvals, window, owner_last_action, lessons}, verdicts?}. ' +
+    'Every fact is {value, read_at, source, error?}: each is read on its own with a timeout, and one that cannot be read now is value null with error set ' +
+    '(an unsettled STG included) instead of an older value. With commit, verdicts {commit_is_stg, main_ahead_of_commit, others_in_flight} are each {value: true|false|null, why}. ' +
+    'Unknown repo answers 400.',
+  {
+    repo: z.string().describe('Repository name, e.g. bifrost-platform'),
+    commit: z
+      .string()
+      .regex(/^[0-9a-f]{40}$/, 'a 40-character lowercase git SHA')
+      .optional()
+      .describe('Commit to judge (adds verdicts)'),
+  },
+  async ({ repo, commit }) => {
+    const q = new URLSearchParams({ repo })
+    if (commit) q.set('commit', commit)
+    return jsonResult(await platformGet(`/api/v1/delivery/context?${q.toString()}`))
+  },
+)
+
+reg(
   'get_commit_lineage',
   'Agent threads and the commits they stamped across all repos (Claude-Session / Claude-Transcript / Change-Id trailers). ' +
     'Filter by session (local_…) to see what a thread landed, or by change_id to check whether a change reached main ' +

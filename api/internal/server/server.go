@@ -565,6 +565,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/release-window", s.delivery.HandleGetReleaseWindow)
+		// One read of a repository's release situation (release_context_wire.go):
+		// read-only, viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/context", s.handleReleaseContext)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/actuation/manifests/plans/{id}", s.handlePlanGet)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)

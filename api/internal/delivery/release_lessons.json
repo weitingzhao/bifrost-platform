@@ -1,0 +1,90 @@
+[
+  {
+    "id": "L-536",
+    "repos": [],
+    "cards": ["#536", "#537", "#541"],
+    "what": "2026-11-14: execution cards were approved and then failed within milliseconds (localhost:8080, admission refusals) because the command carried no cluster connection flags and did not fit the executor's admission policy (v3).",
+    "check": "Lint the card's command text (kubectl must carry its connection flags) and show the executor's admission policy when the card is built.",
+    "source": "casebook 2026-11-14 (#536, #537, #541)"
+  },
+  {
+    "id": "L-547",
+    "repos": [],
+    "cards": ["#547"],
+    "what": "2026-11-14: cleaning four retired Tekton definitions in cicd was approved but the executor shell container hit its 1Gi limit (OOMKilled) and wrote nothing.",
+    "check": "A command that lists objects must page and bound its output; the card page shows the executor's memory limit.",
+    "source": "casebook 2026-11-14 13:3x"
+  },
+  {
+    "id": "L-550",
+    "repos": [],
+    "cards": ["#550"],
+    "what": "2026-11-14: a cleanup card reported FAIL with changed=0 although the objects were gone: the dry run used kubectl delete --raw, which really deleted.",
+    "check": "Lint refuses --raw in card commands; a dry run may only be --dry-run=server.",
+    "source": "casebook 2026-11-14 15:39"
+  },
+  {
+    "id": "L-553",
+    "repos": ["bifrost-platform"],
+    "cards": ["#553"],
+    "what": "2026-11-14: platform PROD release to 1399e532 carried a table-dropping migration; the card said migrations run with the release, but PROD migrations do not, and the run was refused at the migration check (approved for nothing).",
+    "check": "Refuse a release card when the PROD schema version is below the migration files in the diff, and point to the migration Job (infra k8s/agentrt-migrate/README.md).",
+    "source": "casebook 2026-11-14 18:45, 19:00"
+  },
+  {
+    "id": "L-557",
+    "repos": [],
+    "cards": ["#557"],
+    "what": "2026-11-14: a Tekton soft-affinity card was approved while the release window was held; its preflight answered 'release window held' and wrote nothing.",
+    "check": "Card commands that need a free window or no run in flight wait for it with a bound (done in #560); the card page shows who holds the window.",
+    "source": "casebook 2026-11-14 22:11"
+  },
+  {
+    "id": "L-561",
+    "repos": [],
+    "cards": ["#560", "#561"],
+    "what": "2026-11-14: the same soft-affinity card was built twice (#560 new, #561 old).",
+    "check": "Refuse to build a card when an open card of the same kind exists for the same repo or object, or mark the older one superseded.",
+    "source": "casebook 2026-11-14 22:33"
+  },
+  {
+    "id": "L-562",
+    "repos": ["bifrost-platform"],
+    "cards": ["#562", "#563"],
+    "what": "2026-11-14: a platform PROD card showed '@ main' with only the pipeline name in key_params, while the platform took a revision nested in params; the right commit ran, and #563 released it a second time.",
+    "check": "The card face shows the revision the run will use; the parameter shape is fixed to a top-level revision.",
+    "source": "casebook 2026-11-14 23:01, follow-up 2026-11-15"
+  },
+  {
+    "id": "L-564",
+    "repos": ["bifrost-platform"],
+    "cards": ["#564", "#565", "#566"],
+    "what": "2026-11-14/15: platform PROD cards pinned a commit that soon was no longer the one STG ran, so pinned_to failed; three cards were built in a row.",
+    "check": "When a release card is built: the revision equals what STG runs, main is not ahead of STG, and no ci/landing run is in flight; once STG moves on, pending release cards are marked stale.",
+    "source": "casebook (#564-#566), ledger card table"
+  },
+  {
+    "id": "L-528",
+    "repos": [],
+    "cards": ["#528", "#533"],
+    "what": "2026-11-13/14: the Owner approved cards within 61 seconds, before the draft reached duty and before the number reached the coordinator; #528 was approved by mistake.",
+    "check": "A card needs a 'draft checked' record before it is built, or a machine-enforced minimum time between creation and approvability.",
+    "source": "casebook 2026-11-13, 2026-11-14"
+  },
+  {
+    "id": "L-workers-oom",
+    "repos": ["bifrost-platform"],
+    "cards": [],
+    "what": "2026-11-14: a switch turned on in STG platform-workers read all 1073 retained runs (32 MB) and the pod was killed at its new 512Mi limit for 11 minutes.",
+    "check": "Before turning on a new switch, measure its peak under the same limit; a card that changes a workload's limit names who is changing that workload's function.",
+    "source": "casebook 2026-11-14 22:21, follow-up 22:21-22:32"
+  },
+  {
+    "id": "L-559",
+    "repos": [],
+    "cards": ["#559"],
+    "what": "2026-11-14: a decoupling card was built before duty answered the draft review.",
+    "check": "Same as L-528: a 'draft checked' record before the card is built.",
+    "source": "decisions.md 2026-11-14 22:2x"
+  }
+]

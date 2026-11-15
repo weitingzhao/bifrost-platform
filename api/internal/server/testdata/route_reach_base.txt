@@ -139,6 +139,7 @@ viewer	GET /api/v1/code-health
 viewer	GET /api/v1/context
 viewer	GET /api/v1/data-husbandry
 viewer	GET /api/v1/delivery/compare
+viewer	GET /api/v1/delivery/context
 viewer	GET /api/v1/delivery/dev/smoke
 viewer	GET /api/v1/delivery/pipelines
 viewer	GET /api/v1/delivery/pipelines/{name}/preflight
@@ -256,6 +257,7 @@ reporter	GET /api/v1/code-health
 reporter	GET /api/v1/context
 reporter	GET /api/v1/data-husbandry
 reporter	GET /api/v1/delivery/compare
+reporter	GET /api/v1/delivery/context
 reporter	GET /api/v1/delivery/dev/smoke
 reporter	GET /api/v1/delivery/pipelines
 reporter	GET /api/v1/delivery/pipelines/{name}/preflight
@@ -394,6 +396,7 @@ operator	GET /api/v1/code-health
 operator	GET /api/v1/context
 operator	GET /api/v1/data-husbandry
 operator	GET /api/v1/delivery/compare
+operator	GET /api/v1/delivery/context
 operator	GET /api/v1/delivery/dev/smoke
 operator	GET /api/v1/delivery/pipelines
 operator	GET /api/v1/delivery/pipelines/{name}/preflight
@@ -571,6 +574,7 @@ admin	GET /api/v1/code-health
 admin	GET /api/v1/context
 admin	GET /api/v1/data-husbandry
 admin	GET /api/v1/delivery/compare
+admin	GET /api/v1/delivery/context
 admin	GET /api/v1/delivery/dev/smoke
 admin	GET /api/v1/delivery/pipelines
 admin	GET /api/v1/delivery/pipelines/{name}/preflight
@@ -763,6 +767,7 @@ trade-satellite	GET /api/v1/code-health
 trade-satellite	GET /api/v1/context
 trade-satellite	GET /api/v1/data-husbandry
 trade-satellite	GET /api/v1/delivery/compare
+trade-satellite	GET /api/v1/delivery/context
 trade-satellite	GET /api/v1/delivery/dev/smoke
 trade-satellite	GET /api/v1/delivery/pipelines
 trade-satellite	GET /api/v1/delivery/pipelines/{name}/preflight

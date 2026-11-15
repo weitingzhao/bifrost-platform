@@ -69,6 +69,10 @@ func NewService(configDir string, clients Clients) *Service {
 		now: func() time.Time { return time.Now().UTC() }, kick: make(chan struct{}, 1)}
 }
 
+// RuleOf is the release rule of a pipeline (a pipelineRef run's
+// tekton.dev/pipeline label): its lane, environment and whether it deploys.
+func (s *Service) RuleOf(pipeline string) (Rule, bool) { return s.rules.Match("", pipeline) }
+
 // Enabled: there are rules to record by.
 func (s *Service) Enabled() bool { return len(s.rules.Rules) > 0 }
 
