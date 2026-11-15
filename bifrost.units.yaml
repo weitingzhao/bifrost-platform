@@ -89,7 +89,6 @@ modules:
         - "console/src/api/agentRuntime.ts"
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]
-      api/internal/agentrt/landing: ["api/internal/agentrt/landing"]
       api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
       api/internal/agentrt/landinggit: ["api/internal/agentrt/landinggit"]
       api/internal/agentrt/planimport:
