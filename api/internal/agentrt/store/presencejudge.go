@@ -1,11 +1,7 @@
 package store
 
 import (
-	"context"
-	"encoding/json"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // When host presence cannot be judged, or its judgment is deferred (the
@@ -47,47 +43,3 @@ const (
 	presenceUnjudgedPhrase = "host presence cannot be judged"
 	presenceDeferredPhrase = "host presence judgment is deferred"
 )
-
-// switchOpen reads the head of a switch's stream: an open alert, with when it
-// was recorded and its text.
-func switchOpen(ctx context.Context, tx pgx.Tx, stream string) (bool, time.Time, string, error) {
-	var head []byte
-	if err := tx.QueryRow(ctx, `SELECT `+headSQL("$1::text"), stream).Scan(&head); err != nil || head == nil {
-		return false, time.Time{}, "", err
-	}
-	var h struct {
-		Type string    `json:"type"`
-		At   time.Time `json:"at"`
-		Body struct {
-			Artifact string `json:"artifact_id"`
-		} `json:"body"`
-	}
-	if err := json.Unmarshal(head, &h); err != nil || h.Type != "policy_alert" {
-		return false, time.Time{}, "", err
-	}
-	var text []byte
-	if err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, h.Body.Artifact).Scan(&text); err != nil {
-		return false, time.Time{}, "", err
-	}
-	return true, h.At, string(text), nil
-}
-
-// switchView is GET /progress's view of a switch: since when it is on and
-// why, nil while it is off.
-func switchView(ctx context.Context, tx pgx.Tx, stream string) (map[string]any, error) {
-	open, at, why, err := switchOpen(ctx, tx, stream)
-	if err != nil || !open {
-		return nil, err
-	}
-	return map[string]any{"since": at.UTC().Format(time.RFC3339Nano), "why": why}, nil
-}
-
-// unjudgedView and deferredView are GET /progress's presence_unjudged and
-// presence_deferred.
-func unjudgedView(ctx context.Context, tx pgx.Tx) (map[string]any, error) {
-	return switchView(ctx, tx, PresenceStream)
-}
-
-func deferredView(ctx context.Context, tx pgx.Tx) (map[string]any, error) {
-	return switchView(ctx, tx, DeferredStream)
-}

@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"time"
 
@@ -137,19 +136,6 @@ type StatusInput struct {
 	Now                                                 time.Time
 }
 
-// agoWords is how long ago d was, in seconds under a minute and in whole
-// minutes from then on.
-func agoWords(d time.Duration) string {
-	n, unit := int(d/time.Minute), "minute"
-	if d < time.Minute {
-		n, unit = int(d/time.Second), "second"
-	}
-	if n != 1 {
-		unit += "s"
-	}
-	return fmt.Sprintf("%d %s ago", n, unit)
-}
-
 // worst is the status most worth seeing among statuses.
 func worst(statuses []string) string {
 	best := len(statusRank)
@@ -206,12 +192,10 @@ func progressAt(ctx context.Context, db DB, at, since time.Time) (map[string]any
 	if err != nil {
 		return nil, err
 	}
-	// The hosts, and the executors and jobs presence judges from them
-	// (presence.go), at the projection's moment.
-	pr, err := readPresence(ctx, tx, now, since)
-	if err != nil {
-		return nil, err
-	}
+	// The dispatch hosts are retired (2026-11-15): nothing reads agentrt.host
+	// here any more. The key stays on the wire, as an empty list, for a
+	// Console from before this.
+	pr := struct{ doc []byte }{doc: []byte("[]")}
 	recent, err := recentView(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -231,7 +215,7 @@ func progressAt(ctx context.Context, db DB, at, since time.Time) (map[string]any
 	}
 	return map[string]any{"generated_at": now.UTC().Format(time.RFC3339Nano), "as_of_event_id": asOf, "needs_you": needs,
 		"work": work, "owner_next": next, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(pr.doc), "controls": rawJSON(controls), "recent": recent,
-		"controller_alerts": alerts, "schema": schema, "executors": pr.executors, "jobs_without_executor": pr.unserved, "presence_unjudged": pr.unjudged, "presence_deferred": pr.deferred}, nil
+		"controller_alerts": alerts, "schema": schema}, nil
 }
 
 // rawJSON is a document the database built, passed through as it is.

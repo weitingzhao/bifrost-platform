@@ -12,8 +12,11 @@ import (
 
 const ruleApproval = "appr_0123456789abcdef"
 
-func concurrencyText(version int, direction, expires string, perHost int) string {
-	return ruleText("concurrency", version, direction, since, expires, fmt.Sprintf("per_host: %d\n", perHost))
+// tuningText is a tuning rule that sets one value: the sample a capacity
+// card changes. It stands where the concurrency rule stood until the
+// dispatch kinds were retired (2026-11-15).
+func tuningText(version int, direction, expires string, failures int) string {
+	return ruleText("tuning", version, direction, since, expires, fmt.Sprintf("values: {failures_to_alert: %d}\n", failures))
 }
 
 // A capacity change approved on a card (Q1 A): a proposed draft that is the
@@ -25,18 +28,18 @@ func TestApproveRule(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
-	_, err := s.sign(w, concurrencyText(1, rules.Initial, until, 1))
+	_, err := s.sign(w, tuningText(1, rules.Initial, until, 2))
 	ok(t, err)
 	propose := func(key, text string) string {
 		t.Helper()
-		out, err := store.ProposeRule(ctx, w.rt, wr("thread:s1"), key, "concurrency", []byte(text), "more slots")
+		out, err := store.ProposeRule(ctx, w.rt, wr("thread:s1"), key, "tuning", []byte(text), "alert later")
 		ok(t, err)
 		return out["text_artifact_id"].(string)
 	}
 	owner := store.Writer{Actor: "owner"}
 
-	later := propose("later", concurrencyText(2, rules.Loosen, "2027-03-01T00:00:00Z", 2))
-	a := store.RuleApproval{RuleID: "concurrency", Version: 2, TextArtifactID: later, ID: ruleApproval}
+	later := propose("later", tuningText(2, rules.Loosen, "2027-03-01T00:00:00Z", 3))
+	a := store.RuleApproval{RuleID: "tuning", Version: 2, TextArtifactID: later, ID: ruleApproval}
 	if _, err := store.CheckRuleApproval(ctx, w.rt, a); !errors.Is(err, store.ErrUnsigned) {
 		t.Fatalf("a draft that expires later: %v; want refused as needing a signature", err)
 	}
@@ -44,14 +47,14 @@ func TestApproveRule(t *testing.T) {
 		t.Fatalf("approved a draft that expires later: %v", err)
 	}
 
-	art := propose("up", concurrencyText(2, rules.Loosen, until, 3))
+	art := propose("up", tuningText(2, rules.Loosen, until, 5))
 	a.TextArtifactID = art
-	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "concurrency", Version: 3, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
+	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 3, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
 		t.Fatalf("a version never proposed: %v", err)
 	}
 	check, err := store.CheckRuleApproval(ctx, w.rt, a)
 	ok(t, err)
-	if check.PreviousVersion != 1 || len(check.Changes) != 1 || check.Changes[0].Field != "per_host" || check.Changes[0].Old != 1 || check.Changes[0].New != 3 {
+	if check.PreviousVersion != 1 || len(check.Changes) != 1 || check.Changes[0].Field != "values.failures_to_alert" || check.Changes[0].Old != 2 || check.Changes[0].New != 5 {
 		t.Fatalf("the card shows %+v", check)
 	}
 	out, err := store.ApproveRule(ctx, w.rt, owner, a)
@@ -59,10 +62,10 @@ func TestApproveRule(t *testing.T) {
 	if out["rule_version"] != 2 || out["approval_id"] != ruleApproval || out["signed"] != false {
 		t.Fatalf("approved %v", out)
 	}
-	if r := inForce(t, w, "concurrency", at("2026-11-01T00:00:00Z")); r == nil || r.Version != 2 || *r.PerHost != 3 {
+	if r := inForce(t, w, "tuning", at("2026-11-01T00:00:00Z")); r == nil || r.Version != 2 || r.Tuning.Values["failures_to_alert"] != 5 {
 		t.Fatalf("in force after the card: %+v", r)
 	}
-	if n := w.count(t, `SELECT count(*) FROM agentrt.rule WHERE rule_id = 'concurrency' AND rule_version = 2 AND approval_id = $1
+	if n := w.count(t, `SELECT count(*) FROM agentrt.rule WHERE rule_id = 'tuning' AND rule_version = 2 AND approval_id = $1
 	    AND signature IS NULL`, ruleApproval); n != 1 {
 		t.Fatalf("%d rows carry the approval", n)
 	}
@@ -80,12 +83,12 @@ func TestApproveRule(t *testing.T) {
 		t.Fatalf("another approval of a written version: %v", err)
 	}
 	// A draft of a version already passed is not the next.
-	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "concurrency", Version: 2, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
+	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 2, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
 		t.Fatalf("a draft of a written version: %v", err)
 	}
 	// The table holds the rule: neither tighten, signed nor approved is refused.
 	if _, err := w.rt.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
-	    VALUES ('concurrency', 9, '{}', '', 'loosen', now(), now() + interval '1 day')`); err == nil {
+	    VALUES ('tuning', 9, '{}', '', 'loosen', now(), now() + interval '1 day')`); err == nil {
 		t.Fatal("a loosening with neither a signature nor an approval was stored")
 	}
 }

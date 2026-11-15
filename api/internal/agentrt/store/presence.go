@@ -1,15 +1,9 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
-	"strconv"
-	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // Presence (W-31 round 3, 3.5; CUT-online-status-2026-10-23 option A: the
@@ -44,51 +38,6 @@ func headSQL(stream string) string {
 	    WHERE e.event_stream_id = ` + stream + ` AND e.seq = (SELECT s.last_seq FROM agentrt.event_stream s WHERE s.event_stream_id = ` + stream + `))`
 }
 
-// HostsSQL is the hosts document at the moment the SQL expression now names,
-// with $1–$3 livenessArgs: GET /hosts and the projection both read it, so a
-// host is online in one exactly when it is in the other, and lost when
-// TaskStatus has it lost (presencelive.go). Each host also carries what its
-// latest claim offered (offered, null until one is recorded, with
-// offered_at) and whether its free disk was then below the floor
-// (disk_low), whether it is deleting attempt branches it was handed
-// (pruning), its last contact (contact_at), whether it takes work
-// (claiming: true, false, or null while
-// not known yet; review 527 A3), the agentd build its claims last reported
-// (build, null until one is recorded, with build_at: when its claims
-// started reporting that build; its latest claim is last_poll_at), and whether the controller reports it
-// offline (reported_offline: lost, active, not the external host, and no
-// stop or drain on it or on every host). The external host (0010) polls
-// only when the coordinator hands work in, so its silence is no news. Elastic
-// slots (hostslots.go) add the count the slots pass recorded
-// (effective_slots, null while none is), the headroom of its latest claim
-// that sent one (the row's signals_json) and its latest moves, newest first
-// (slot_moves: at, policy, old, new, reason; at most SlotMovesShown).
-func HostsSQL(now string) string {
-	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
-	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
-	    'online', ` + hostOnlineSQL(now) + `,
-	    'live_attempts', 0,
-	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
-	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb),
-	    'offered', o.head->'body'->'offered', 'offered_at', o.head->'at', 'disk_low', COALESCE((o.head->'body'->>'disk_below')::boolean, false),
-	    'build', b.head->'body'->'agentd_build', 'build_at', b.head->'at',
-	    'pruning', ` + pruneOpenSQL(now) + `, 'contact_at', hc.at,
-	    'claiming', CASE WHEN ` + hostClaimingSQL(now) + ` THEN true WHEN ` + hostClaimLostSQL(now) + ` THEN false END,
-	    'reported_offline', h.state = 'active' AND h.host_kind <> 'external' AND ` + hostSilentSQL(now) + `
-	      AND NOT EXISTS (SELECT 1 FROM agentrt.control c WHERE c.cleared_at IS NULL AND c.control_kind IN ('stop','drain')
-	        AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))),
-	    'effective_slots', h.capacity_json->'effective_slots',
-	    'slot_moves', COALESCE((SELECT jsonb_agg(jsonb_build_object('at', m.at, 'policy', m.body_json->'policy', 'old', m.body_json->'old',
-	      'new', m.body_json->'new', 'reason', m.body_json->'reason') ORDER BY m.seq DESC)
-	      FROM (SELECT e.seq, e.at, e.body_json FROM agentrt.event e WHERE e.event_stream_id = 'host:' || h.host_id
-	        AND e.event_type = 'host_slots_set' ORDER BY e.seq DESC LIMIT ` + strconv.Itoa(SlotMovesShown) + `) m), '[]'::jsonb))
-	  ORDER BY h.host_id), '[]'::jsonb)
-	  FROM agentrt.host h
-	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'offers:host:' || h.host_id`) + ` AS head OFFSET 0) o
-	  CROSS JOIN LATERAL (SELECT ` + headSQL(`'build:host:' || h.host_id`) + ` AS head OFFSET 0) b
-	  ` + hostLiveJoins
-}
-
 // Offer is a tool a host offers, as its claim named it and its stream records
 // it.
 type Offer struct {
@@ -96,8 +45,6 @@ type Offer struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
 }
-
-func (o Offer) tool() Tool { return Tool{Executor: o.Executor, Provider: o.Provider, Model: o.Model} }
 
 // AgentdBuild is the build of agentd a host runs, as its claims report it: the
 // commit it was built from, whether the work tree had changes then, and the
@@ -162,37 +109,6 @@ type HostPresence struct {
 	} `json:"controls"`
 }
 
-// held names the control that keeps work from the host, "" for none.
-func (h HostPresence) held() string {
-	for _, k := range []string{"stop", "pause", "drain"} {
-		for _, c := range h.Controls {
-			if c.Kind == k {
-				return k
-			}
-		}
-	}
-	return ""
-}
-
-// usable is a host that takes work now: its claim loop calls (alive alone
-// is not enough: review 527 A3), it is active, under no stop, pause or drain,
-// with room on disk, and not the external host.
-func (h HostPresence) usable() bool {
-	return !h.external() && h.Claiming != nil && *h.Claiming && h.State == "active" && h.held() == "" && !h.DiskLow
-}
-
-// external is the external host (0010): it leases only the tasks pinned
-// to it, when the coordinator hands one in, so it is neither watched (its
-// silence is no news) nor a host that makes any job's executor available.
-func (h HostPresence) external() bool { return h.HostKind == HostExternal }
-
-// waited is a host whose claim loop is silent but not known to have stopped
-// yet: its silence is counted from the reader's start (review 526 A1b). What
-// it can take is not known.
-func (h HostPresence) waited() bool {
-	return !h.external() && h.Claiming == nil && h.State == "active" && h.held() == "" && !h.DiskLow
-}
-
 // ExecutorPresence is an executor some job's candidate names: whether it is
 // available (nil: not known, while a host that could take work has not said
 // what it offers), why, the hosts that offer it now, and the jobs it is a
@@ -220,273 +136,10 @@ type presence struct {
 	deferred  map[string]any
 }
 
-// readPresence reads the view at now (zero: the database's clock), a host's
-// silence counted from no earlier than since (zero: its last contact).
-func readPresence(ctx context.Context, tx pgx.Tx, now, since time.Time) (presence, error) {
-	p := presence{now: now}
-	if p.now.IsZero() {
-		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p.now); err != nil {
-			return p, err
-		}
-	}
-	if err := tx.QueryRow(ctx, HostsSQL("$4::timestamptz"), append(livenessArgs(since), p.now)...).Scan(&p.doc); err != nil {
-		return p, err
-	}
-	if err := json.Unmarshal(p.doc, &p.hosts); err != nil {
-		return p, err
-	}
-	cp, err := readCapabilities(ctx, tx)
-	if err != nil {
-		return p, err
-	}
-	rows, err := tx.Query(ctx, `SELECT job_id, tenant FROM agentrt.job`)
-	if err != nil {
-		return p, err
-	}
-	tenants := map[string]string{}
-	var job, tenant string
-	if _, err = pgx.ForEachRow(rows, []any{&job, &tenant}, func() error { tenants[job] = tenant; return nil }); err != nil {
-		return p, err
-	}
-	cooling := map[string]time.Time{}
-	rows, err = tx.Query(ctx, `SELECT vendor_pool_id, cooldown_until FROM agentrt.vendor_pool WHERE cooldown_until > $1`, p.now)
-	if err != nil {
-		return p, err
-	}
-	var pool string
-	var until time.Time
-	if _, err = pgx.ForEachRow(rows, []any{&pool, &until}, func() error {
-		if tool, account, _, ok := ParsePool(pool); ok && account == DefaultAccount && until.After(cooling[tool]) {
-			cooling[tool] = until
-		}
-		return nil
-	}); err != nil {
-		return p, err
-	}
-	quota, err := quotaByTool(ctx, tx)
-	if err != nil {
-		return p, err
-	}
-	stops := map[string]float64{}
-	for _, t := range tenants {
-		if _, seen := stops[t]; !seen {
-			if stops[t], err = quotaStop(ctx, tx, t); err != nil {
-				return p, err
-			}
-		}
-	}
-	p.executors, p.unserved, p.unknown = judgeExecutors(p.hosts, cp.candidates, tenants, cooling, quota, stops)
-	if p.unjudged, err = unjudgedView(ctx, tx); err != nil {
-		return p, err
-	}
-	p.deferred, err = deferredView(ctx, tx)
-	return p, err
-}
-
 // judged is a candidate judged: available or not (nil: not known), why, and
 // the usable hosts that offer a tool it fits.
 type judged struct {
 	ok    *bool
 	why   []string
 	hosts []string
-}
-
-func yes() *bool { t := true; return &t }
-func no() *bool  { f := false; return &f }
-
-// rank orders judgements: not available 0, not known 1, available 2.
-func rank(ok *bool) int {
-	switch {
-	case ok == nil:
-		return 1
-	case *ok:
-		return 2
-	}
-	return 0
-}
-
-// judgeExecutors judges each candidate of each job, then each executor (the
-// best of its candidates: available over not known over not) and each job
-// (unserved when every candidate of it is known not to be available, not
-// known when none is known available and some is not known).
-func judgeExecutors(hosts []HostPresence, cands map[string][]jobCandidate, tenants map[string]string, cooling map[string]time.Time,
-	quota map[string][]poolQuota, stops map[string]float64) ([]ExecutorPresence, []string, []string) {
-	type acc struct {
-		e      ExecutorPresence
-		judged []judged
-	}
-	byExec := map[string]*acc{}
-	jobs := make([]string, 0, len(cands))
-	for j := range cands {
-		jobs = append(jobs, j)
-	}
-	slices.Sort(jobs)
-	unserved, unknown := []string{}, []string{}
-	for _, j := range jobs {
-		best := -1
-		for _, jc := range cands[j] {
-			a := byExec[jc.executor]
-			if a == nil {
-				a = &acc{e: ExecutorPresence{Executor: jc.executor, Hosts: []string{}, Jobs: []string{}}}
-				byExec[jc.executor] = a
-			}
-			if !slices.Contains(a.e.Jobs, j) {
-				a.e.Jobs = append(a.e.Jobs, j)
-			}
-			jd := judgeCandidate(jc, hosts, tenants[j], cooling, quota, stops)
-			a.judged = append(a.judged, jd)
-			best = max(best, rank(jd.ok))
-		}
-		switch best {
-		case 0:
-			unserved = append(unserved, j)
-		case 1:
-			unknown = append(unknown, j)
-		}
-	}
-	out := make([]ExecutorPresence, 0, len(byExec))
-	for _, a := range byExec {
-		e := a.e
-		var why []string
-		add := func(ws []string) {
-			for _, w := range ws {
-				if !slices.Contains(why, w) {
-					why = append(why, w)
-				}
-			}
-		}
-		// The best judgement of its candidates: available (2) over not
-		// known (1) over not (0); why is that of the candidates judged so.
-		best := 0
-		for _, jd := range a.judged {
-			for _, h := range jd.hosts {
-				if !slices.Contains(e.Hosts, h) {
-					e.Hosts = append(e.Hosts, h)
-				}
-			}
-			best = max(best, rank(jd.ok))
-		}
-		for _, jd := range a.judged {
-			if rank(jd.ok) == best {
-				add(jd.why)
-			}
-		}
-		e.Available = [](*bool){no(), nil, yes()}[best]
-		slices.Sort(e.Hosts)
-		e.Why = strings.Join(why, "; ")
-		if e.Available != nil && *e.Available {
-			e.Why = "offered by " + strings.Join(e.Hosts, ", ")
-		}
-		out = append(out, e)
-	}
-	slices.SortFunc(out, func(a, b ExecutorPresence) int { return strings.Compare(a.Executor, b.Executor) })
-	return out, unserved, unknown
-}
-
-// judgeCandidate judges one candidate of a job of tenant: its account's
-// cooldown and quota stop, as a claim reads them (claim.go, pick.go), then
-// the usable hosts' offers.
-func judgeCandidate(jc jobCandidate, hosts []HostPresence, tenant string, cooling map[string]time.Time, quota map[string][]poolQuota,
-	stops map[string]float64) judged {
-	tool := toolOf(jc.executor)
-	var why []string
-	stop, ruled := stops[tenant]
-	if !ruled {
-		stop = 1
-	}
-	// A cooldown is the account's spent window: its reading at the stop is
-	// the same news. A reading at the stop holds work back only while it is
-	// recent (quotaAt), and says when it was measured.
-	switch q := quotaAt(quota[tool], stop); {
-	case !cooling[tool].IsZero():
-		why = append(why, fmt.Sprintf("the %s account's pools cool down until %s", tool, cooling[tool].UTC().Format(time.RFC3339)))
-	case q.read && q.used >= stop && stop >= 1:
-		why = append(why, fmt.Sprintf("its pool is spent: it reads %.0f%% used, %s", q.used*100, q.measuredWords()))
-	case q.read && q.used >= stop:
-		why = append(why, fmt.Sprintf("its pool reads %.0f%% used, at or past the %s tenant's quota stop of %.0f%%, %s", q.used*100, tenant,
-			stop*100, q.measuredWords()))
-	}
-	var by, unknown []string
-	for _, h := range hosts {
-		fits := h.Offered == nil
-		for _, o := range offeredBy(h) {
-			fits = fits || jc.fits(o.tool())
-		}
-		switch {
-		case h.usable() && h.Offered != nil && fits:
-			by = append(by, h.HostID)
-		case (h.usable() || h.waited()) && fits:
-			unknown = append(unknown, h.HostID)
-		}
-	}
-	switch {
-	case len(why) > 0:
-		return judged{ok: no(), why: why, hosts: by}
-	case len(by) > 0:
-		return judged{ok: yes(), hosts: by}
-	case len(unknown) > 0:
-		return judged{why: []string{"not known yet: " + strings.Join(unknown, ", ") + " (a host not yet heard from since the platform " +
-			"started, or whose claim has not said what it offers) may offer it"}}
-	}
-	return judged{ok: no(), why: notOffered(jc, hosts)}
-}
-
-// notOffered says why no host that could take work offers a tool jc fits:
-// for each host whose latest claim offered its executor, what keeps it from
-// work or that its model does not fit; or that no host offers it.
-func notOffered(jc jobCandidate, hosts []HostPresence) []string {
-	var why []string
-	for _, h := range hosts {
-		if h.Offered == nil {
-			continue
-		}
-		var models []string
-		fits := false
-		for _, o := range *h.Offered {
-			if o.Executor == jc.executor {
-				models = append(models, o.Provider+" "+cmpOr(o.Model, "(no model named)"))
-				fits = fits || jc.fits(o.tool())
-			}
-		}
-		if len(models) == 0 {
-			continue
-		}
-		who := "host " + h.HostID + " offers it but "
-		switch {
-		case !fits:
-			why = append(why, fmt.Sprintf("host %s offers it as %s, which its candidate (%s, model %s) does not fit", h.HostID,
-				strings.Join(models, " and "), jc.provider, jc.pattern))
-		case h.LastPollAt == nil:
-			why = append(why, who+"has never polled")
-		case !h.Online:
-			why = append(why, who+"has not polled since "+h.LastPollAt.UTC().Format(time.RFC3339))
-		case h.Claiming != nil && !*h.Claiming:
-			why = append(why, who+"has not claimed work since "+h.LastPollAt.UTC().Format(time.RFC3339)+
-				" (it is alive: its attempts still report)")
-		case h.State != "active":
-			why = append(why, who+"is "+h.State)
-		case h.held() != "":
-			why = append(why, who+"a "+h.held()+" is in force on it")
-		case h.DiskLow:
-			why = append(why, who+"its free disk is below the floor")
-		}
-	}
-	if len(why) == 0 {
-		return []string{"no host offers it (a host offers what its AGENTD_TOOLS say)"}
-	}
-	return why
-}
-
-func offeredBy(h HostPresence) []Offer {
-	if h.Offered == nil {
-		return nil
-	}
-	return *h.Offered
-}
-
-func cmpOr(s, or string) string {
-	if s == "" {
-		return or
-	}
-	return s
 }

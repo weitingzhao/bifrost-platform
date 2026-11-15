@@ -21,13 +21,12 @@ var controlKinds = map[string][]string{
 	"global":  {"stop", "pause"},
 	"mission": {"stop", "pause"},
 	"task":    {"stop", "pause"}, // kept for the events already written; no new one is set (RequestControl)
-	"host":    {"stop", "pause", "drain"},
+	"host":    {"stop", "pause", "drain"}, // kept for the events already written; no new one is set (RequestControl)
 }
 
 // scopeRows names the row a scope's ref must be.
 var scopeRows = map[string]string{
 	"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1`,
-	"host":    `SELECT 1 FROM agentrt.host WHERE host_id = $1`,
 }
 
 // RequestControl sets a control (SetControl) with a new id, after checking
@@ -44,6 +43,10 @@ func RequestControl(ctx context.Context, db eventlog.DB, w writer.Writer, key, s
 	case scope == "task":
 		// Nothing runs a task any more (store cut 4, 2026-11-14).
 		return nil, eventlog.Invalid("a control of a task is retired: stop its mission")
+	case scope == "host":
+		// No host takes work any more (the dispatch lane, retired 2026-11-13;
+		// measured 2026-11-15: no host control in force on PROD).
+		return nil, eventlog.Invalid("a control of a host is retired: no host takes work")
 	case !slices.Contains(kinds, kind):
 		return nil, eventlog.Invalid("a %s control is one of %v, not %q", scope, kinds, kind)
 	case reason == "":
@@ -107,7 +110,6 @@ func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, 
 	lock := map[string]string{
 		"global":  `SELECT pg_advisory_xact_lock(742105) WHERE $1::text IS NOT NULL`,
 		"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`,
-		"host":    `SELECT 1 FROM agentrt.host WHERE host_id = $1 FOR NO KEY UPDATE`,
 	}[scope]
 	if lock != "" {
 		if _, err := tx.Exec(ctx, lock, scopeRef); err != nil {

@@ -6,14 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 func proposeOutside(t *testing.T, w *world, ask store.Ask, key string) (string, string) {
@@ -111,74 +108,6 @@ func TestMissionCard(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("needs_you %v; want the open mission card", doc.NeedsYou.Items)
-	}
-}
-
-// Inside the standing envelope a mission starts at once and no card is
-// asked, with a question store or without; outside it the same platform
-// asks.
-func TestMissionInsideTheEnvelopeAsksNobody(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	s := signer{t, rptest.NewKey(t)}
-	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1"))))
-	ok(t, firstErr(s.sign(w, ruleText("budget:dev", 2, rules.Tighten, since, until,
-		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n"))))
-	a := &asker{}
-	in, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "in", store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}}, a.ask)
-	ok(t, err)
-	if in["state"] != "active" || in["question_id"] != nil || len(a.cards) != 0 {
-		t.Fatalf("inside: %v, %d cards", in, len(a.cards))
-	}
-	out, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "out",
-		store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}, MaxAttempts: 41, MaxWallHours: 10}, a.ask)
-	ok(t, err)
-	if out["state"] != "awaiting_owner" || len(a.cards) != 1 || !strings.Contains(fmt.Sprint(out["waiting"]), "above the envelope's") {
-		t.Fatalf("outside: %v, %d cards", out, len(a.cards))
-	}
-	if !strings.Contains(a.cards[0].Body, "Budget: 41 attempts, 10 hours") {
-		t.Errorf("the card does not show the budget asked: %s", a.cards[0].Body)
-	}
-}
-
-// Reviews 190 A1, 192 A1: the card says nothing a retry could change, so the
-// same proposal under the same key makes the same card whatever number the
-// mission gets and whatever the budget rule says by then.
-func TestMissionCardDoesNotNameTheNumber(t *testing.T) {
-	t.Parallel()
-	cards := map[string]store.Card{}
-	for _, extra := range []int{0, 1} {
-		w := newKernelWorld(t)
-		for i := range extra {
-			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-				_, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: fmt.Sprintf("M-%d", 3+i), Title: "x", Goal: "g",
-					Deadline: time.Now().Add(7 * 24 * time.Hour)})
-				return err
-			}))
-			// And the default budget the proposal would get has changed
-			// (review 192 A1).
-			_, err := store.TightenRule(ctx, w.rt, wr("thread:s9"), "budget:dev", []byte(ruleText("budget:dev", 2, rules.Tighten, since, until,
-				"tenant: dev\nmission: {max_attempts: 500, max_wall_hours: 300}\nattempt_hard_limit_s: 3600\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n")))
-			ok(t, err)
-		}
-		a := &asker{}
-		id, _ := proposeOutside(t, w, a.ask, "k")
-		cards[id] = a.cards[0]
-	}
-	if len(cards) != 2 {
-		t.Fatalf("the two proposals got the same number: %v", cards)
-	}
-	var first *store.Card
-	for id, c := range cards {
-		if strings.Contains(c.Title+c.Body, id) || strings.Contains(c.Body, "500") {
-			t.Errorf("card names %s or the rule's budget: %+v", id, c)
-		}
-		if first == nil {
-			c := c
-			first = &c
-		} else if first.Key != c.Key || first.Title != c.Title || first.Body != c.Body {
-			t.Errorf("two cards for one proposal and key:\n%+v\n%+v", *first, c)
-		}
 	}
 }
 

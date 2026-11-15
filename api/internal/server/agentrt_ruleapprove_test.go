@@ -65,7 +65,7 @@ func TestRuleApproveRequestRefuses(t *testing.T) {
 	}
 }
 
-// Q1 A, Q2 A on the real path: a seat proposes the next concurrency
+// Q1 A, Q2 A on the real path: a seat proposes the next tuning
 // version; a draft that also moves its validity is refused when the card is
 // requested; the capacity-only draft makes a tier D card whose summary shows
 // the old and new value, a second request for the same rule is refused while
@@ -88,14 +88,14 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	conn := db.Connect(t, db.Runtime)
-	if _, err := conn.Exec(ctx, agentrttest.ConcurrencyRule); err != nil {
+	if _, err := conn.Exec(ctx, agentrttest.TuningRule); err != nil {
 		t.Fatal(err)
 	}
 	srv.agentRuntime.api.DB = conn
 	draft := func(key, expires string, perHost int) string {
 		t.Helper()
-		text := fmt.Sprintf("rule_id: concurrency\nrule_version: 2\ndirection: loosen\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: %s\nper_host: %d\n", expires, perHost)
-		out, err := store.ProposeRule(ctx, conn, store.Writer{Actor: "thread:s1", Token: "operator"}, key, "concurrency", []byte(text), "more slots")
+		text := fmt.Sprintf("rule_id: tuning\nrule_version: 2\ndirection: loosen\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: %s\nvalues: {failures_to_alert: %d}\n", expires, perHost)
+		out, err := store.ProposeRule(ctx, conn, store.Writer{Actor: "thread:s1", Token: "operator"}, key, "tuning", []byte(text), "alert later")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -113,17 +113,17 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 	}
 	request := func(art string) *httptest.ResponseRecorder {
 		t.Helper()
-		body, _ := json.Marshal(map[string]any{"action": RuleApproveAction, "reason": "two more slots a host",
-			"params": map[string]any{"env": "prod", "rule_id": "concurrency", "rule_version": 2, "text_artifact_id": art}})
+		body, _ := json.Marshal(map[string]any{"action": RuleApproveAction, "reason": "alert after more failures",
+			"params": map[string]any{"env": "prod", "rule_id": "tuning", "rule_version": 2, "text_artifact_id": art}})
 		return do(http.MethodPost, "/api/v1/approvals", string(body), "operator-test-token")
 	}
 
-	if rec := request(draft("later", "2100-02-01T00:00:00Z", 3)); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "expires_at") {
+	if rec := request(draft("later", "2100-02-01T00:00:00Z", 5)); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "expires_at") {
 		t.Fatalf("a draft that moves its validity: %d %s", rec.Code, rec.Body.String())
 	}
-	art := draft("up", "2100-01-01T00:00:00Z", 3)
+	art := draft("up", "2100-01-01T00:00:00Z", 5)
 	rec := request(art)
-	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"tier":"D"`) || !strings.Contains(rec.Body.String(), "per_host 1 → 3") {
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"tier":"D"`) || !strings.Contains(rec.Body.String(), "failures_to_alert 2 → 5") {
 		t.Fatalf("request = %d %s", rec.Code, rec.Body.String())
 	}
 	var created struct {
@@ -146,7 +146,7 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 	if err := json.Unmarshal(again.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := actions.Execute(ctx, RuleApproveAction, map[string]any{"env": "prod", "rule_id": "concurrency", "rule_version": 2, "text_artifact_id": art}); err == nil {
+	if _, err := actions.Execute(ctx, RuleApproveAction, map[string]any{"env": "prod", "rule_id": "tuning", "rule_version": 2, "text_artifact_id": art}); err == nil {
 		t.Fatal("the executor ran without an approval")
 	}
 	get := do(http.MethodGet, "/api/v1/approvals/"+created.ID, "", "viewer-test-token")
@@ -165,9 +165,9 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 		t.Fatalf("approve = %s", out)
 	}
 	var perHost, events int
-	if err := conn.QueryRow(ctx, `SELECT (body_json->>'per_host')::int, (SELECT count(*) FROM agentrt.event WHERE event_type = 'rule_approved'
-	    AND body_json->>'approval_id' = $1) FROM agentrt.rule WHERE rule_id = 'concurrency' AND rule_version = 2 AND approval_id = $1`,
-		created.ID).Scan(&perHost, &events); err != nil || perHost != 3 || events != 1 {
-		t.Fatalf("version 2: per_host %d, %d events (%v)", perHost, events, err)
+	if err := conn.QueryRow(ctx, `SELECT (body_json->'values'->>'failures_to_alert')::int, (SELECT count(*) FROM agentrt.event WHERE event_type = 'rule_approved'
+	    AND body_json->>'approval_id' = $1) FROM agentrt.rule WHERE rule_id = 'tuning' AND rule_version = 2 AND approval_id = $1`,
+		created.ID).Scan(&perHost, &events); err != nil || perHost != 5 || events != 1 {
+		t.Fatalf("version 2: failures_to_alert %d, %d events (%v)", perHost, events, err)
 	}
 }

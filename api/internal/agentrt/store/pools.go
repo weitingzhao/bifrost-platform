@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -52,18 +51,6 @@ type Usage struct {
 	USD    *float64 `json:"usd,omitempty"`
 }
 
-// ParsePool splits a pool id into its tool, account and window.
-func ParsePool(id string) (tool, account, window string, ok bool) {
-	m := poolRE.FindStringSubmatch(id)
-	if m == nil {
-		return "", "", "", false
-	}
-	return m[1], m[2], m[3], true
-}
-
-// toolOf is the tool part of an executor's actor id: exec:codex is codex.
-func toolOf(executor string) string { return strings.TrimPrefix(executor, "exec:") }
-
 // poolLock is the lock of each pool, keyed by its name: every write of a
 // pool's row or stream takes the locks of all the pools it touches first, in
 // name order, so a computed and the Owner's reading never wait on each other
@@ -99,69 +86,4 @@ type PoolView struct {
 	Pace          *float64           `json:"pace"` // used fraction less the fraction of the window gone
 	Used          map[string]float64 `json:"used"` // the ledger since the window began, by unit
 	Since         time.Time          `json:"used_since"`
-}
-
-func listPools(ctx context.Context, tx pgx.Tx) ([]PoolView, error) {
-	var out []PoolView
-	err := func() error {
-		var now time.Time
-		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-			return err
-		}
-		rows, err := tx.Query(ctx, `SELECT vendor_pool_id, used_fraction::float8, resets_at, measured_at,
-		  COALESCE(measure_source, ''), cooldown_until FROM agentrt.vendor_pool ORDER BY vendor_pool_id`)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var v PoolView
-			if err = rows.Scan(&v.ID, &v.UsedFraction, &v.ResetsAt, &v.MeasuredAt, &v.Source, &v.CooldownUntil); err != nil {
-				rows.Close()
-				return err
-			}
-			var ok bool
-			if v.Tool, v.Account, v.Window, ok = ParsePool(v.ID); !ok {
-				continue
-			}
-			v.Cooling = v.CooldownUntil != nil && v.CooldownUntil.After(now)
-			length := WindowLength[v.Window]
-			v.Since = now.Add(-length)
-			if v.ResetsAt != nil && v.ResetsAt.After(now) && v.ResetsAt.Sub(now) <= length {
-				v.Since = v.ResetsAt.Add(-length)
-				if v.UsedFraction != nil {
-					gone := 1 - float64(v.ResetsAt.Sub(now))/float64(length)
-					pace := *v.UsedFraction - gone
-					v.Pace = &pace
-				}
-			}
-			out = append(out, v)
-		}
-		rows.Close()
-		if err = rows.Err(); err != nil {
-			return err
-		}
-		for i := range out {
-			out[i].Used = map[string]float64{}
-			r, err := tx.Query(ctx, `SELECT unit, sum(amount)::float8 FROM agentrt.budget_ledger
-			  WHERE vendor_pool_id = $1 AND at >= $2 GROUP BY unit`, out[i].ID, out[i].Since)
-			if err != nil {
-				return err
-			}
-			for r.Next() {
-				var unit string
-				var sum float64
-				if err = r.Scan(&unit, &sum); err != nil {
-					r.Close()
-					return err
-				}
-				out[i].Used[unit] = sum
-			}
-			r.Close()
-			if err = r.Err(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}()
-	return out, err
 }

@@ -9,7 +9,7 @@ import { DeliveryConfiguration } from './DeliveryConfiguration'
 const field = 'w-full rounded border border-[var(--table-rule)] bg-transparent p-2 text-sm'
 const button = 'min-h-11 rounded border border-[var(--table-rule)] px-3 text-sm disabled:opacity-50'
 const cell = 'border-b border-[var(--table-rule)] p-2 text-left align-top text-sm'
-const sections = [['rules', 'Rules & allowances'], ['configuration', 'CI configuration'], ['resources', 'Resources & quota'], ['limits', 'Code limits']] as const
+const sections = [['rules', 'Rules & allowances'], ['configuration', 'CI configuration'], ['limits', 'Code limits']] as const
 type Section = typeof sections[number][0]
 const ruleLabel = (id: string) => {
   if (id.startsWith('job:')) return `Role · ${id.slice(4).replaceAll('_', ' ')}`
@@ -52,18 +52,9 @@ export function DeliveryBoundaries() {
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Setting', 'Effective', 'Default', 'Allowed range', 'Source / consumer'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.tuning.map(value => <tr key={value.key}><th className={cell}>{value.key}</th><td className={cell}>{value.value} {value.unit}</td><td className={cell}>{value.default}</td><td className={cell}>{value.min}–{value.max}</td><td className={cell}>{value.source}<br />{value.consumer}</td></tr>)}</tbody></table></div>
         <button className={button} onClick={() => select('tuning')} disabled={query.isError}>Edit tuning rule</button>
       </section>
-      <section className="panel-elevated p-3" aria-label="Landing limits"><h3>Landing capacity</h3><p>Size limits are not in effect. Repository capacity overrides are included.</p><ObservationTable rows={data.landing} columns={['repo', 'rule_id', 'rule_version', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight']} /></section>
       </>}
       {section === 'limits' && <section className="panel-elevated p-3" aria-label="Code limits"><h3>Limits not yet controlled by rules</h3><p>These values come from this API binary. A separately deployed workers version has not been verified by this snapshot. Editing another rule cannot override them.</p>
         <div className="overflow-x-auto"><table className="w-full"><thead><tr>{['Boundary', 'Value', 'Source', 'How it changes'].map(label => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{data.code_limits.map(limit => <tr key={limit.boundary_id}><th className={cell}>{limit.boundary_id}</th><td className={cell}>{limit.value} {limit.unit}</td><td className={cell}>{limit.source}</td><td className={cell}>{limit.adjustment}</td></tr>)}</tbody></table></div>
-      </section>}
-      {section === 'resources' && <section className="panel-elevated p-3" aria-label="Resource observations"><h3>Resource observations</h3><p>Measurements retain their original timestamps. Missing measurements are unknown.</p>
-        <ObservationTable rows={data.hosts} columns={['host_id', 'host_kind', 'state', 'live_attempts', 'projected_slot_limit', 'signal_state', 'last_poll_at']} />
-        <p className="text-xs">The projected slot limit is the platform grant calculation, not the host process’s actual free slots. External coordination hosts do not use the ordinary claim loop.</p>
-        <ObservationTable rows={data.pools} columns={['vendor_pool_id', 'used_fraction', 'measured_at', 'resets_at', 'cooling', 'cooldown_until']} />
-        <p className="text-xs">Quota fractions are the last reported measurements, not live usage. The runtime applies freshness and cooldown checks when selecting work.</p>
-        <details><summary>Hosts and runtime status</summary><pre className="overflow-auto text-xs">{textOf(data.hosts)}</pre></details>
-        <details><summary>Vendor quota and measurement times</summary><pre className="overflow-auto text-xs">{textOf(data.pools)}</pre></details>
       </section>}
       {section === 'configuration' && <DeliveryConfiguration />}
     </>}

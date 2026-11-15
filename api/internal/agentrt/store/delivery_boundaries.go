@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/slots"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
@@ -41,7 +40,7 @@ type DeliveryBoundaries struct {
 	Tuning     []BoundaryValue  `json:"tuning"`
 	Landing    []map[string]any `json:"landing"`
 	Hosts      json.RawMessage  `json:"hosts"`
-	Pools      []PoolView       `json:"pools"`
+	Pools      []map[string]any `json:"pools"`
 	DiskFloor  int64            `json:"disk_floor_bytes"`
 	Unknown    []string         `json:"unknown"`
 	CodeLimits []map[string]any `json:"code_limits"`
@@ -64,9 +63,6 @@ func boundaryRule(id string, current, latest *StoredRule, now time.Time) Boundar
 		if !latest.Expires.After(now) {
 			v.Notes = append(v.Notes, "The latest version has expired. Review its expiry before proposing a replacement.")
 		}
-		if latest.Kind == rules.KindBudget {
-			v.Notes = append(v.Notes, "Mission max_attempts, max_wall_hours and auto_grant are retained for compatibility; they no longer cap mission execution. attempt_hard_limit_s is still consumed.")
-		}
 	}
 	if id == rules.KindTuning && latest == nil {
 		v.Status = "code_defaults"
@@ -84,7 +80,7 @@ func boundaryRule(id string, current, latest *StoredRule, now time.Time) Boundar
 // It calls the same CurrentRule parser and effective-value helpers as consumers.
 // Repeatable read keeps versions and their derived values in one DB snapshot.
 func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availableSince time.Time) (DeliveryBoundaries, error) {
-	out := DeliveryBoundaries{Rules: []BoundaryRule{}, Tuning: []BoundaryValue{}, Landing: []map[string]any{}, Pools: []PoolView{}, DiskFloor: diskFloor,
+	out := DeliveryBoundaries{Rules: []BoundaryRule{}, Tuning: []BoundaryValue{}, Landing: []map[string]any{}, Hosts: json.RawMessage("[]"), Pools: []map[string]any{}, DiskFloor: diskFloor,
 		Unknown: []string{
 			"This is a policy snapshot, not authorization for a particular task or release. Task-specific grants, checks and release windows remain authoritative.",
 			"Current disk free space and the agentd process settings are not persisted in host telemetry; disk alerts do not establish a current measurement.",
@@ -104,8 +100,6 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 	}{
 		{"proposal.attempt_hard_limit", MaxHardLimit.Seconds(), "seconds", "store.MaxHardLimit"},
 		{"proposal.default_mission_days", DefaultMissionDays, "days", "store.DefaultMissionDays (explicit proposal deadline overrides this default)"},
-		{"host.signal_freshness", SignalsFresh.Seconds(), "seconds", "store.SignalsFresh"},
-		{"host.slot_ceiling", rules.PerHostCeiling, "slots", "rules.PerHostCeiling"},
 	} {
 		out.CodeLimits = append(out.CodeLimits, map[string]any{"boundary_id": limit.id, "value": limit.value, "unit": limit.unit, "source": limit.source, "adjustment": "Code-defined bound or default; changing a different rule cannot bypass this consumer."})
 	}
@@ -138,8 +132,14 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 		return out, err
 	}
 	var tuning *rules.Tuning
-	var concurrency *StoredRule
 	for _, id := range ids {
+		if rules.Retired(id) {
+			// Signed history of a kind nothing reads any more: named, never
+			// parsed, so a row of it cannot fail this view.
+			out.Rules = append(out.Rules, BoundaryRule{ID: id, Status: "retired",
+				Notes: []string{"This rule kind was retired with the dispatch lane (2026-11-15). Its signed versions stay in the record; nothing reads them."}})
+			continue
+		}
 		current, e := CurrentRule(ctx, tx, id, out.AsOf)
 		if e != nil {
 			return out, e
@@ -155,12 +155,6 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 		if current.Tuning != nil {
 			tuning = current.Tuning
 		}
-		if current.Kind == rules.KindConcurrency {
-			concurrency = current
-		}
-		if current.Landing != nil {
-			out.Landing = append(out.Landing, landingBoundaryRows(current.Rule)...)
-		}
 	}
 	for _, k := range rules.TuningKeys() {
 		source := "code_default"
@@ -171,14 +165,7 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 		}
 		out.Tuning = append(out.Tuning, BoundaryValue{k.Name, tuning.Int(k.Name), k.Default, k.Min, k.Ceiling, k.Unit, source, k.ReadBy})
 	}
-	if err = tx.QueryRow(ctx, HostsSQL("transaction_timestamp()"), HostsArgs(availableSince)...).Scan(&out.Hosts); err != nil {
-		return out, err
-	}
-	if out.Hosts, err = boundaryHosts(out.Hosts, concurrency, out.AsOf); err != nil {
-		return out, err
-	}
-	out.Pools, err = listPools(ctx, tx)
-	return out, err
+	return out, nil
 }
 
 func landingBoundaryRows(rule rules.Rule) []map[string]any {
@@ -195,41 +182,4 @@ func landingBoundaryRows(rule rules.Rule) []map[string]any {
 			"source":        "rules.Landing.CheckedLimits", "note": "Size limits are not in effect. This is not a task authorization."})
 	}
 	return rows
-}
-
-func boundaryHosts(raw json.RawMessage, concurrency *StoredRule, now time.Time) (json.RawMessage, error) {
-	var hosts []map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &hosts); err != nil {
-		return nil, err
-	}
-	for _, host := range hosts {
-		var capacity struct {
-			Slots     *int `json:"slots"`
-			Effective *int `json:"effective_slots"`
-		}
-		if err := json.Unmarshal(host["capacity_json"], &capacity); err != nil {
-			return nil, err
-		}
-		stated := rules.PerHostCeiling
-		if capacity.Slots != nil {
-			stated = *capacity.Slots
-		}
-		granted := 0
-		if concurrency != nil {
-			granted = grantOf(slots.ConfigOf(concurrency.Rule), stated, capacity.Effective)
-		}
-		host["projected_slot_limit"], _ = json.Marshal(granted)
-		var signal struct {
-			At time.Time `json:"at"`
-		}
-		state := "unknown"
-		if json.Unmarshal(host["signals_json"], &signal) == nil && !signal.At.IsZero() {
-			state = "stale"
-			if !signal.At.Before(now.Add(-SignalsFresh)) {
-				state = "fresh"
-			}
-		}
-		host["signal_state"], _ = json.Marshal(state)
-	}
-	return json.Marshal(hosts)
 }

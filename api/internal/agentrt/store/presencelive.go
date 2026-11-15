@@ -39,49 +39,6 @@ const PruneSilence = 2*time.Minute + 30*time.Second + 15*time.Second
 var hostLiveJoins = `CROSS JOIN LATERAL (SELECT ` + headSQL(`'prune:host:' || h.host_id`) + ` AS head OFFSET 0) ph
 	  CROSS JOIN LATERAL (SELECT h.last_poll_at AS at OFFSET 0) hc`
 
-// pruneOpenSQL is whether host h's prune round, opened within $3 seconds
-// (PruneSilence), is not closed at now.
-func pruneOpenSQL(now string) string {
-	return `COALESCE(ph.head->'body'->>'prune_round' = 'opened' AND ` + now + ` - (ph.head->>'at')::timestamptz <= make_interval(secs => $3), false)`
-}
-
-// hostOnlineSQL is whether host h is alive at now: its contact within $1
-// seconds (HostLostAfter), or its prune round open.
-func hostOnlineSQL(now string) string {
-	return `(COALESCE(` + now + ` - hc.at <= make_interval(secs => $1), false) OR ` + pruneOpenSQL(now) + `)`
-}
-
-// hostClaimingSQL is whether host h takes work at now: its claim loop's last
-// call within $1 seconds, or its prune round open.
-func hostClaimingSQL(now string) string {
-	return `(COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false) OR ` + pruneOpenSQL(now) + `)`
-}
-
-// hostSilentSQL is whether host h is lost at now: not alive, and silent past
-// $1 seconds counted from the later of its contact and $2 (when the platform
-// could take agentd's calls again, as the reader saw it; NULL for none).
-func hostSilentSQL(now string) string {
-	return `(NOT ` + hostOnlineSQL(now) + `
-	    AND COALESCE(` + now + ` - GREATEST(hc.at, $2::timestamptz) > make_interval(secs => $1), true))`
-}
-
-// hostClaimLostSQL is whether host h is known not to take work at now: not
-// claiming, its claim loop silent past $1 seconds counted as hostSilentSQL
-// counts. Neither this nor claiming: not known yet.
-func hostClaimLostSQL(now string) string {
-	return `(NOT ` + hostClaimingSQL(now) + `
-	    AND COALESCE(` + now + ` - GREATEST(h.last_poll_at, $2::timestamptz) > make_interval(secs => $1), true))`
-}
-
-// livenessArgs are $1–$3 of the SQL above.
-func livenessArgs(since time.Time) []any {
-	return []any{HostLostAfter.Seconds(), nullTime(since), PruneSilence.Seconds()}
-}
-
-// HostsArgs are $1–$3 of HostsSQL for a reader that saw the platform take
-// agentd's calls again at since (zero: no such moment).
-func HostsArgs(since time.Time) []any { return livenessArgs(since) }
-
 // nullTime is t, or SQL NULL for the zero time.
 func nullTime(t time.Time) any {
 	if t.IsZero() {

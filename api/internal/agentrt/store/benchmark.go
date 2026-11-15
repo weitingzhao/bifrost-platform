@@ -1,12 +1,8 @@
 package store
 
 import (
-	"context"
 	"regexp"
-	"sort"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // Benchmark runs (design v5 §5.1.2 「能力怎么量」 ③; W-31 2.4 slice ⑤; the
@@ -59,51 +55,3 @@ type BenchmarkRun struct {
 var (
 	sha256RE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
-
-// latestBenchmarks is, for each executor, provider and model, the samples of
-// the run that started last within the last BenchmarkWindow: a run handed in
-// late does not stand for a newer one (review 287 B12). A run is recorded
-// after it started, so the stream read back one window has every run that
-// started within it.
-func latestBenchmarks(ctx context.Context, tx pgx.Tx) ([]scoreLine, error) {
-	var now time.Time
-	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return nil, err
-	}
-	rows, err := tx.Query(ctx, `SELECT body_json FROM agentrt.event WHERE event_stream_id = $1 AND at >= $2 ORDER BY seq`,
-		BenchmarksStream, now.Add(-BenchmarkWindow))
-	if err != nil {
-		return nil, err
-	}
-	bodies, err := pgx.CollectRows(rows, pgx.RowTo[map[string]any])
-	if err != nil {
-		return nil, err
-	}
-	type pick struct {
-		started time.Time
-		body    map[string]any
-	}
-	latest := map[string]pick{}
-	for _, b := range bodies {
-		s, _ := b["started_at"].(string)
-		started, perr := time.Parse(time.RFC3339Nano, s)
-		if perr != nil || started.Before(now.Add(-BenchmarkWindow)) {
-			continue
-		}
-		str := func(k string) string { v, _ := b[k].(string); return v }
-		k := str("executor") + "|" + str("provider") + "|" + str("model")
-		if p, ok := latest[k]; !ok || started.After(p.started) {
-			latest[k] = pick{started, b}
-		}
-	}
-	keys := make([]string, 0, len(latest))
-	for k := range latest {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var out []scoreLine
-	for _, k := range keys {
-		out = append(out, samplesOf(latest[k].body)...)
-	}
-	return out, nil
-}

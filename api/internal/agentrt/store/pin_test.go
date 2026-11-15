@@ -1,16 +1,11 @@
 package store_test
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 // Executor pins (W-31 round 4, core blocks C-0 and C-1;
@@ -62,35 +57,4 @@ func TestOnlyPinnedTaskCarriesAPin(t *testing.T) {
 	if _, ok := reflect.TypeOf(store.PinnedTask{}).FieldByName("ExecutorPin"); !ok {
 		t.Fatal("PinnedTask has no ExecutorPin")
 	}
-}
-
-// An envelope's external host entry names what is there: never a host
-// registered as another kind, nor a seat or executor not registered. A host
-// not registered yet may be named. Refusals first, each one change from the
-// envelope that signs, which comes last.
-func TestEnvelopeEntryNamesWhatIsThere(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
-			Body: map[string]any{"actors": []string{coordinatorSeat}, "note": "test: the coordinator's seat"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'seat', 'Coordinator seat')`,
-			coordinatorSeat)
-		return err
-	}))
-	s := signer{t, rptest.NewKey(t)}
-	text := strings.Replace(pinEnvelope(1, rules.Initial, true), "hosts: [h1, coordinator-mbp]", "hosts: [h1]", 1)
-	for name, edit := range map[string][3]string{
-		"an ordinary host":      {"host: coordinator-mbp", "host: h2", "registered as a host of another kind"},
-		"a seat not registered": {"proposer: seat:coordinator", "proposer: seat:nobody", "not a registered seat"},
-		"an executor not there": {"executor: exec:claude", "executor: exec:gemini", "not registered"},
-	} {
-		_, err := s.sign(w, strings.Replace(text, edit[0], edit[1], 1))
-		if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), edit[2]) {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-	ok(t, firstErr(s.sign(w, text)))
 }

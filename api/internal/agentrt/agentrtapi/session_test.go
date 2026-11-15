@@ -22,7 +22,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		}
 		return call(t, s, caller, method, path, body, session, "s1")
 	}
-	first := map[string]any{"idempotency_key": "k1", "scope": "host", "scope_ref": "h1", "kind": "pause", "reason": "the first write of the session"}
+	first := map[string]any{"idempotency_key": "k1", "scope": "mission", "scope_ref": "M-1", "kind": "pause", "reason": "the first write of the session"}
 	if code, out := as("operator", "POST", "controls", first); code != http.StatusOK {
 		t.Fatalf("the first write registers the session: %d %v", code, out)
 	}
@@ -55,9 +55,9 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		"its mail":             {"proposer", "GET", "messages", nil},
 		"its mail by agentd":   {"agentd:h1", "GET", "messages", nil},
 		"its mail by a viewer": {"viewer", "GET", "messages", nil},
-		"a rule proposal": {"proposer", "POST", "rules/routing:dev/proposals", map[string]any{"idempotency_key": "k7", "reason": "test",
-			"text": "rule_id: routing:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
-				"tenant: dev\norder: [capability, quota]\nquota_stop_percent: 90\n"}},
+		"a rule proposal": {"proposer", "POST", "rules/card-auto-answer/proposals", map[string]any{"idempotency_key": "k7", "reason": "test",
+			"text": "rule_id: card-auto-answer\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
+				"after_seconds: 600\nkinds: [blocked]\n"}},
 	} {
 		code, out := as(c.caller, c.method, c.path, c.body)
 		if code != http.StatusForbidden || out["error"] != "not_yours" {
@@ -74,7 +74,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	if code, out := as("operator", "POST", "messages/ack", map[string]any{"message_ids": []any{msg}}); code != http.StatusOK {
 		t.Fatalf("its own acknowledgement: %d %v", code, out)
 	}
-	if code, out := as("operator", "POST", "controls", first); code != http.StatusOK || out["scope_ref"] != "h1" {
+	if code, out := as("operator", "POST", "controls", first); code != http.StatusOK || out["scope_ref"] != "M-1" {
 		t.Fatalf("its own replay: %d %v", code, out)
 	}
 	// Another session of the second token is its own thread.

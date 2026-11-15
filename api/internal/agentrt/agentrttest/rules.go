@@ -30,6 +30,15 @@ const devBudgetRow = `('budget:dev', 1,
     E'rule_id: budget:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 86400\nauto_grant: {max_attempts: 0, max_wall_hours: 0}\n',
     'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
 
+// TuningRule is a tuning rule that sets one value (failures_to_alert: 2), as
+// if the Owner had signed it: the version a capacity card's draft follows.
+// It stands where ConcurrencyRule stood for those tests until the dispatch
+// kinds were retired (2026-11-15).
+const TuningRule = ruleInsert + `('tuning', 1,
+    '{"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","rule_id":"tuning","rule_version":1,"values":{"failures_to_alert":2}}',
+    E'rule_id: tuning\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\nvalues: {failures_to_alert: 2}\n',
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z') ON CONFLICT DO NOTHING`
+
 // TestJobRule is the job rule the test fixtures' candidates belong to
 // (job:test): routing counts a candidate only while its rule is in force and
 // reads.

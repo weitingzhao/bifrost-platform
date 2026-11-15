@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -18,7 +19,7 @@ func TestDeliveryBoundariesVersionsAndPreview(t *testing.T) {
 	past := now.Add(-time.Hour).Format(time.RFC3339)
 	future := now.Add(time.Hour).Format(time.RFC3339)
 	expires := now.Add(24 * time.Hour).Format(time.RFC3339)
-	_, err := s.sign(w, ruleText("concurrency", 1, rules.Initial, past, expires, "per_host: 3\n"))
+	_, err := w.rt.Exec(ctx, agentrttest.ConcurrencyRule)
 	ok(t, err)
 	doc, err := store.ReadDeliveryBoundaries(ctx, w.rt, 0, time.Time{})
 	ok(t, err)
@@ -30,9 +31,25 @@ func TestDeliveryBoundariesVersionsAndPreview(t *testing.T) {
 			t.Fatalf("default: %+v", v)
 		}
 	}
-	var row store.BoundaryRule
+	// 2026-11-15: a rule of a kind retired with the dispatch lane is named
+	// and never parsed. One is put there as the Owner once signed it; before
+	// this, one row of such a kind that no longer parsed failed the whole view.
+	retired := false
 	for _, r := range doc.Rules {
 		if r.ID == "concurrency" {
+			retired = r.Status == "retired" && r.Current == nil && r.Latest == nil
+		}
+	}
+	if !retired {
+		t.Fatalf("the retired concurrency rule is not listed as retired: %+v", doc.Rules)
+	}
+	_, err = s.sign(w, ruleText("tuning", 1, rules.Initial, past, expires, "values: {failures_to_alert: 3}\n"))
+	ok(t, err)
+	doc, err = store.ReadDeliveryBoundaries(ctx, w.rt, 0, time.Time{})
+	ok(t, err)
+	var row store.BoundaryRule
+	for _, r := range doc.Rules {
+		if r.ID == "tuning" {
 			row = r
 		}
 	}
@@ -40,10 +57,10 @@ func TestDeliveryBoundariesVersionsAndPreview(t *testing.T) {
 		t.Fatalf("versions: %+v", row)
 	}
 	// The UI's JSON draft must parse identically to the rule's YAML text.
-	row.Draft["per_host"] = 5
+	row.Draft["values"] = map[string]any{"failures_to_alert": 5}
 	b, err := json.Marshal(row.Draft)
 	ok(t, err)
-	preview, err := store.CheckRule(ctx, w.rt, "concurrency", b)
+	preview, err := store.CheckRule(ctx, w.rt, "tuning", b)
 	ok(t, err)
 	if preview["apply_via"] != "capacity_approval" {
 		t.Fatalf("capacity: %v", preview)
@@ -51,46 +68,32 @@ func TestDeliveryBoundariesVersionsAndPreview(t *testing.T) {
 	row.Draft["expires_at"] = now.Add(48 * time.Hour).Format(time.RFC3339)
 	b, err = json.Marshal(row.Draft)
 	ok(t, err)
-	preview, err = store.CheckRule(ctx, w.rt, "concurrency", b)
+	preview, err = store.CheckRule(ctx, w.rt, "tuning", b)
 	ok(t, err)
 	if preview["apply_via"] != "signature" {
 		t.Fatalf("authority: %v", preview)
 	}
-	_, err = s.sign(w, ruleText("concurrency", 2, rules.Loosen, future, expires, "per_host: 5\n"))
+	_, err = s.sign(w, ruleText("tuning", 2, rules.Loosen, future, expires, "values: {failures_to_alert: 5}\n"))
 	ok(t, err)
 	doc, err = store.ReadDeliveryBoundaries(ctx, w.rt, 12345, time.Time{})
 	ok(t, err)
 	for _, r := range doc.Rules {
-		if r.ID == "concurrency" {
+		if r.ID == "tuning" {
 			row = r
 		}
 	}
 	if row.Current["rule_version"] != 1 || row.Latest["rule_version"] != 2 || row.Draft["rule_version"] != 3 || doc.DiskFloor != 12345 {
 		t.Fatalf("scheduled version is not effective: %+v", row)
 	}
-	_, err = store.CheckRule(ctx, w.rt, "concurrency", b)
+	_, err = store.CheckRule(ctx, w.rt, "tuning", b)
 	wantErr(t, err, "at version 2")
-	_, err = s.sign(w, ruleText("concurrency", 3, rules.Loosen, past, now.Add(-time.Minute).Format(time.RFC3339), "per_host: 5\n"))
+	_, err = s.sign(w, ruleText("tuning", 3, rules.Loosen, past, now.Add(-time.Minute).Format(time.RFC3339), "values: {failures_to_alert: 5}\n"))
 	ok(t, err)
 	doc, err = store.ReadDeliveryBoundaries(ctx, w.rt, 0, time.Time{})
 	ok(t, err)
 	for _, r := range doc.Rules {
-		if r.ID == "concurrency" && (r.Current != nil || r.Status != "not_in_force") {
+		if r.ID == "tuning" && (r.Current != nil || r.Status != "not_in_force") {
 			t.Fatalf("expired rule fell back: %+v", r)
 		}
-	}
-	landing := ruleText("landing:dev", 1, rules.Initial, past, expires, `tenant: dev
-repos:
-  - repo: bifrost-trade-infra
-    allow: ["agent-config/work/multi-agent/REPORT-*.md"]
-    deny: []
-    stg_release: none
-limits: {max_files: 100, max_changed_lines: 3000, max_landings_per_day: 100, max_in_flight_per_repo: 1}
-`)
-	preview, err = store.CheckRule(ctx, w.rt, "landing:dev", []byte(landing))
-	ok(t, err)
-	effects := preview["proposed_landing_effects"].([]map[string]any)
-	if len(effects) != 1 || effects[0]["configured_changed_lines"] != 3000 || effects[0]["max_changed_lines"] != 0 || effects[0]["code_clamped"] != false {
-		t.Fatalf("preview hid downstream clamp: %v", effects)
 	}
 }

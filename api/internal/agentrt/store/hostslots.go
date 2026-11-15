@@ -36,18 +36,6 @@ type HostSignals struct {
 // agentd sends none now (an agentd from before them, or a host gone quiet).
 const SignalsFresh = 2 * time.Minute
 
-func grantOf(c slots.Config, stated int, effective *int) int {
-	n := min(stated, c.Params.Max)
-	if !c.Elastic {
-		return max(n, 0)
-	}
-	e := c.Params.Start
-	if effective != nil {
-		e = *effective
-	}
-	return max(min(n, slots.Clamp(e, c.Params.Min, c.Params.Max)), 0)
-}
-
 // SlotMovesShown is how many of a host's latest moves the hosts document
 // shows (HostsSQL).
 const SlotMovesShown = 10

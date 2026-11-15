@@ -164,7 +164,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	t.Helper()
 	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": store.Seat, "kind": "ask", "body": "status?"})
 	ok("POST messages/ack", "seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []any{msg["message_id"]}})
-	ctl := ok("POST controls", "operator", "POST", "controls", map[string]any{"idempotency_key": "v4", "scope": "host", "scope_ref": "h2",
+	ctl := ok("POST controls", "operator", "POST", "controls", map[string]any{"idempotency_key": "v4", "scope": "mission", "scope_ref": "M-1",
 		"kind": "pause", "reason": "fuzz"})
 	ok("DELETE controls/{id}", "admin", "DELETE", "controls/"+fmt.Sprint(ctl["control_id"]), nil)
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6", "root": "R2", "reason": "fuzz",
@@ -192,17 +192,17 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST plan/{id}/notes", "operator", "POST", "plan/ARCH:state-db/notes", map[string]any{"idempotency_key": "v7", "text": "in use on STG"})
 	ok("POST plan/{id}/signoff", "admin", "POST", "plan/R2:1-1/signoff", map[string]any{"ref": "fuzz"})
 
-	v1 := "rule_id: routing:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
-		"tenant: dev\norder: [capability, quota]\nquota_stop_percent: 90\n"
+	v1 := "rule_id: card-auto-answer\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\n" +
+		"after_seconds: 600\nkinds: [blocked]\n"
 	next := func(version, direction, percent string) string {
 		return strings.NewReplacer("rule_version: 1", "rule_version: "+version, "direction: initial", "direction: "+direction,
-			"quota_stop_percent: 90", "quota_stop_percent: "+percent).Replace(v1)
+			"after_seconds: 600", "after_seconds: "+percent).Replace(v1)
 	}
-	ok("POST rules/{rule_id}/check", "viewer", "POST", "rules/routing:dev/check", map[string]any{"text": v1})
-	ok("POST rules/{rule_id}/sign", "admin", "POST", "rules/routing:dev/sign", map[string]any{"text": v1, "signature": key.Sign(t, []byte(v1), rules.Namespace)})
-	ok("POST rules/{rule_id}/tighten", "agentd:h1", "POST", "rules/routing:dev/tighten", map[string]any{"text": next("2", "tighten", "80")})
-	ok("POST rules/{rule_id}/proposals", "operator", "POST", "rules/routing:dev/proposals",
-		map[string]any{"idempotency_key": "v8", "text": next("3", "loosen", "95"), "reason": "fuzz"})
+	ok("POST rules/{rule_id}/check", "viewer", "POST", "rules/card-auto-answer/check", map[string]any{"text": v1})
+	ok("POST rules/{rule_id}/sign", "admin", "POST", "rules/card-auto-answer/sign", map[string]any{"text": v1, "signature": key.Sign(t, []byte(v1), rules.Namespace)})
+	ok("POST rules/{rule_id}/tighten", "agentd:h1", "POST", "rules/card-auto-answer/tighten", map[string]any{"text": next("2", "tighten", "900")})
+	ok("POST rules/{rule_id}/proposals", "operator", "POST", "rules/card-auto-answer/proposals",
+		map[string]any{"idempotency_key": "v8", "text": next("3", "loosen", "300"), "reason": "fuzz"})
 
 }
 
@@ -335,7 +335,7 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 		case "{action}":
 			pool = slices.Concat(fuzzAttemptActions, fuzzAttemptActions, []string{"accept", "state", "cancel", "lost"})
 		case "{rule_id}":
-			pool = []string{"standing-envelope:dev", "job:implementer", "capability-facts", "card-auto-answer", "routing:dev", "x"}
+			pool = []string{"standing-envelope:dev", "job:implementer", "capability-facts", "card-auto-answer", "plan-standing", "tuning", "x"}
 		case "{job}":
 			pool = []string{"chief_of_staff", "implementer", "x"}
 		default:

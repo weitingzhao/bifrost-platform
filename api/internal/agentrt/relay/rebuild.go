@@ -185,23 +185,8 @@ func (r *Relay) read(ctx context.Context) (snapshot, error) {
 		return s, err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT vendor_pool_id, cooldown_until FROM agentrt.vendor_pool
-	  WHERE cooldown_until > now() ORDER BY vendor_pool_id`)
-	if err != nil {
-		return s, err
-	}
-	for rows.Next() {
-		var c snapCooldown
-		if err = rows.Scan(&c.pool, &c.until); err != nil {
-			rows.Close()
-			return s, err
-		}
-		s.cooldowns = append(s.cooldowns, c)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return s, err
-	}
+	// No pool cools down any more: nothing measures or charges one (the
+	// dispatch lane, retired 2026-11-13).
 
 	// No task is ready to signal again: nothing proposes one any more.
 	return s, nil

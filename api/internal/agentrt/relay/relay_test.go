@@ -234,8 +234,11 @@ func TestRebuildQuietFixtureMatchesPostgres(t *testing.T) {
 	if len(stop) != 1 || !strings.Contains(fmt.Sprint(stop[0].Values["p"]), "c-1") {
 		t.Fatalf("stop stream %v, want only c-1", stop)
 	}
-	if ttl, _ := f.rc.PTTL(ctx, f.pre+"cooldown:codex:plan").Result(); ttl <= 0 || ttl > 10*time.Minute {
-		t.Fatalf("cooldown ttl %v", ttl)
+	// No cooldown is rebuilt: nothing measures or charges a pool any more
+	// (the dispatch lane, retired 2026-11-13; 2026-11-15 the rebuild stopped
+	// reading agentrt.vendor_pool).
+	if n, _ := f.rc.Exists(ctx, f.pre+"cooldown:codex:plan").Result(); n != 0 {
+		t.Fatal("a cooldown was rebuilt")
 	}
 }
 

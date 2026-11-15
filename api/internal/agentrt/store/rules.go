@@ -131,6 +131,9 @@ func effectiveRule(ctx context.Context, q interface {
 
 // ruleRequest parses a rule's text for the route that names id.
 func ruleRequest(id string, text []byte) (rules.Rule, error) {
+	if rules.Retired(id) {
+		return rules.Rule{}, invalid("rule %s is of a kind retired with the dispatch lane: it is no longer checked, proposed, signed or tightened", id)
+	}
 	r, err := rules.Parse(text)
 	if err != nil {
 		return rules.Rule{}, invalid("%v", err)
@@ -380,6 +383,10 @@ func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
 			executors = append(executors, f.Executor)
 		}
 	}
+	if len(executors) == 0 && len(hosts) == 0 {
+		// Every kind still written names neither: nothing to look up.
+		return nil
+	}
 	var unknown []string
 	if err := tx.QueryRow(ctx, `SELECT ARRAY(SELECT x FROM unnest($1::text[]) x
 	    WHERE NOT EXISTS (SELECT 1 FROM agentrt.actor a WHERE a.actor_id = x AND a.actor_kind = 'executor')
@@ -464,6 +471,9 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 // RuleInForce is CurrentRule at the database's clock, in a read-only
 // transaction of its own.
 func RuleInForce(ctx context.Context, db DB, id string) (*StoredRule, error) {
+	if rules.Retired(id) {
+		return nil, invalid("rule %s is of a kind retired with the dispatch lane; its signed versions stay in the record and nothing reads them", id)
+	}
 	var out *StoredRule
 	err := readOnly(ctx, db, func(tx pgx.Tx) error {
 		var now time.Time
