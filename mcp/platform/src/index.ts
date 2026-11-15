@@ -565,6 +565,27 @@ reg(
 )
 
 reg(
+  'list_records',
+  'The action record, newest first (read-only): every direct call of a catalogued action is recorded when it ends, for the Owner\'s review by seat, law and day. Returns {records: [{id, at, seat, action, target, reason, regret, regret_state, law, outcome, check_result, not_verified, params_hash}], returned, more}. seat is the calling session or principal; law names what the action rested on ("action catalog: tier B", "signed release policy"); outcome is done, refused (403) or failed. regret_state: ready (machine-verified), declared (the caller wrote what undoes it, unverified), undeclared (the caller wrote nothing), not_ready. reason "(the caller gave no reason)" means the call carried no reason. more true: the filter matched more than limit (default 100, max 1000), so the page is not the whole. since and until are RFC 3339 times. An answer of 503 means the record is not available on this platform; an empty list means no matching call was recorded since the record began.',
+  {
+    seat: z.string().max(128).optional(),
+    law: z.string().max(200).optional(),
+    action: z.string().max(100).optional(),
+    since: z.string().max(40).optional().describe('RFC 3339'),
+    until: z.string().max(40).optional().describe('RFC 3339'),
+    limit: z.number().int().min(1).max(1000).optional().describe('Default 100'),
+  },
+  async ({ seat, law, action, since, until, limit }) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries({ seat, law, action, since, until, limit })) {
+      if (v !== undefined && v !== '') q.set(k, String(v))
+    }
+    const qs = q.toString()
+    return jsonResult(await platformGet('/api/v1/records' + (qs ? '?' + qs : '')))
+  },
+)
+
+reg(
   'get_full_ci',
   'What the daily full CI recorded: its last 20 notes, newest first (read-only). The daily full run of main is the run that catches a module wrongly left out of a landing\'s own CI. Returns {runs: [{at, text, full_ci}]}. text is the note as written. full_ci.started: the runs a day started (a note that says only that). full_ci.run: a RED full run, of full_ci.commit, with failed_tasks (the pipeline tasks that failed; absent when none could be read), failed_key (the failed Go tests, space separated, when known), suspects: [{commit, subject, run, modules}] (the commits landed since the last green full run whose own CI run left a module out: run is that run, modules its run-modules as written, see get_unit_runs), unread (how many landed commits\' own run could not be read: these are not cleared, they are unknown), unreconciled (why the landings could not be looked at, or not all of them; when it is set an empty suspects list does not mean "none"). A red run with no suspects, no unread and no unreconciled: no landed commit left a module out. Notes written before 2026-11-14 may carry other keys (mission, open_mission, deviation); ignore them. An empty runs list means nothing has been recorded on this platform (the loop runs on PROD only).',
   {},
