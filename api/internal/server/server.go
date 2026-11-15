@@ -401,6 +401,9 @@ func (s *Server) Router() http.Handler {
 	r.Use(s.httpMetrics.middleware(r))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// A request for an action the signed policy covers is run, not answered
+	// "call directly" (covered_request.go).
+	r.Use(coveredRequestRuns(r))
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},
