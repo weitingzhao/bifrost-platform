@@ -58,7 +58,6 @@ func TestCapacityOnly(t *testing.T) {
 		"landing drops max_batch":   {loosened(t, capacityLanding, "max_in_flight_per_repo: 1\n", "max_in_flight_per_repo: 1\n  max_batch: 24\n"), strings.Replace(loosened(t, capacityLanding, "", ""), "rule_version: 2", "rule_version: 3", 1), true},
 		"landing allow grows":       {capacityLanding, loosened(t, capacityLanding, `["console/src/pages/**/*.tsx"]`, `["console/src/pages/**/*.tsx", "api/**"]`), false},
 		"an envelope's budget":      {envelope, loosened(t, envelope, "max_attempts: 40", "max_attempts: 80"), false},
-		"a job":                     {job, loosened(t, job, "status: probation", "status: active"), false},
 	} {
 		err := rules.CapacityOnly(parse(t, c.prev), parse(t, c.next))
 		if (err == nil) != c.card {

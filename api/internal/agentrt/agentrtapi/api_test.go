@@ -68,9 +68,6 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 	_, ferr := pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, ferr)
 	tx(func(tx pgx.Tx) error {
-		if err := store.LockCapabilities(ctx, tx); err != nil {
-			return err
-		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: jobs"}}); err != nil {
 			return err

@@ -304,34 +304,12 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 	rec ruleRecord) (map[string]any, error) {
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		// The writer first, registration and all: a control holds the
-		// writer's lock, and a new thread's control the registration lock and
-		// the system stream, and then waits for a host row a claim holds while
-		// it waits for the capability lock; so nothing a rule write waits for
-		// after taking the capability lock may be held by them (review 187
-		// R1, 188 R1). Its events go to the rule's own stream, never the
-		// system one. Then the capability lock, as every write of candidates
-		// or facts (route.go): a claim reads every rule it acts on under it
-		// shared, so it sees a rule and the rows it writes whole, before or
-		// after (review 186 A1).
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
-			return err
-		}
-		if err := LockCapabilities(ctx, tx); err != nil {
 			return err
 		}
 		hook("rule locked", r.ID)
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, ruleLock, r.ID); err != nil {
 			return err
-		}
-		// The rows a job or capability-facts rule writes take effect when
-		// written, so such a rule may not wait to take effect (review 186 A2).
-		var now time.Time
-		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-			return err
-		}
-		if (r.Kind == rules.KindJob || r.Kind == rules.KindFacts) && r.Effective.After(now) {
-			return invalid("a %s rule takes effect when it is written: effective_at %s is in the future", r.Kind, r.Effective.Format(time.RFC3339))
 		}
 		if rec.approval != nil {
 			done, err := rec.approval.done(ctx, tx, r)
@@ -374,14 +352,7 @@ func knownNames(ctx context.Context, tx pgx.Tx, r rules.Rule) error {
 				hosts = append(hosts, host)
 			}
 		}
-	case rules.KindJob:
-		for _, c := range r.Job.Candidates {
-			executors = append(executors, c.Executor)
-		}
-	case rules.KindFacts:
-		for _, f := range r.Facts {
-			executors = append(executors, f.Executor)
-		}
+
 	}
 	if len(executors) == 0 && len(hosts) == 0 {
 		// Every kind still written names neither: nothing to look up.
@@ -418,17 +389,7 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	case !signed:
 		eventType = "rule_tightened"
 	}
-	plan, err := planRows(ctx, tx, r, signed, r.Direction == rules.Tighten)
-	if err != nil {
-		return nil, err
-	}
 	evBody := map[string]any{"rule_id": r.ID, "rule_version": r.Version}
-	if signed && len(plan.jobs) > 0 {
-		evBody["job_ids"], evBody["job_candidate_ids"] = plan.jobs, plan.candidateIDs()
-	}
-	if len(plan.factIDs()) > 0 {
-		evBody["capability_facts"] = plan.factIDs()
-	}
 	var approvalID *string
 	if a := rec.approval; a != nil {
 		evBody["approval_id"], evBody["text_artifact_id"], evBody["changes"] = a.ID, a.TextArtifactID, capacityDoc(a.changes)
@@ -450,9 +411,6 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 			r.ID, r.Version, string(body), string(text), r.Direction, r.Effective, r.Expires, w.Actor, *approvalID)
 	}
 	if err != nil {
-		return nil, err
-	}
-	if err = plan.write(ctx, tx, w, r, signed); err != nil {
 		return nil, err
 	}
 	var doc any

@@ -29,29 +29,6 @@ hosts: [mbp-dev]
 mission: {max_attempts: 40, max_wall_hours: 48}
 attempt_hard_limit_s: 3600
 `)
-	job = text("job:implementer", `tenant: dev
-text: |
-  Implement the task's spec on a branch.
-candidates:
-  - executor: exec:codex
-    provider: openai
-    model_pattern: "*"
-    status: active
-  - executor: exec:cursor
-    provider: cursor-mix
-    model_pattern: "*"
-    status: probation
-`)
-	facts = text("capability-facts", `facts:
-  - executor: exec:codex
-    kind: cannot
-    subject: docker
-  - executor: exec:cursor
-    provider: cursor-mix
-    kind: prefer
-    subject: frontend
-    scope: {repo: bifrost-trade-frontend}
-`)
 )
 
 func parse(t *testing.T, s string) rules.Rule {
@@ -70,8 +47,6 @@ func TestParseEachKind(t *testing.T) {
 	}{
 		"envelope": {envelope, rules.KindEnvelope, `{"budget":{"max_attempts":40,"max_wall_hours":48},"direction":"initial","effective_at":"2026-10-15T00:00:00Z","executors":["exec:codex","exec:deterministic"],"expires_at":"2027-01-15T00:00:00Z","hosts":["mbp-dev"],"max_action":"branch","rule_id":"standing-envelope:dev","rule_version":1,"tenant":"dev"}`},
 		"budget":   {budget, rules.KindBudget, `{"attempt_hard_limit_s":3600,"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","mission":{"max_attempts":40,"max_wall_hours":48},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}`},
-		"job":      {job, rules.KindJob, `{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"},{"executor":"exec:cursor","model_pattern":"*","provider":"cursor-mix","status":"probation"}],"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","rule_id":"job:implementer","rule_version":1,"tenant":"dev","text":"Implement the task's spec on a branch.\n"}`},
-		"facts":    {facts, rules.KindFacts, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","facts":[{"executor":"exec:codex","kind":"cannot","subject":"docker"},{"executor":"exec:cursor","kind":"prefer","provider":"cursor-mix","scope":{"repo":"bifrost-trade-frontend"},"subject":"frontend"}],"rule_id":"capability-facts","rule_version":1}`},
 	} {
 		r := parse(t, c.text)
 		body, err := r.BodyJSON()
@@ -113,10 +88,6 @@ func TestParseRefuses(t *testing.T) {
 		"a budget past its bound":    strings.Replace(envelope, "max_attempts: 40", "max_attempts: 100000", 1),
 		"no executors":               strings.Replace(envelope, "executors: [exec:deterministic, exec:codex]\n", "", 1),
 		"an executor twice":          strings.Replace(envelope, "[exec:deterministic, exec:codex]", "[exec:codex, exec:codex]", 1),
-		"a candidate status unknown": strings.Replace(job, "status: probation", "status: trusted", 1),
-		"a candidate twice":          strings.Replace(job, "exec:cursor\n    provider: cursor-mix", "exec:codex\n    provider: openai", 1),
-		"a fact kind unknown":        strings.Replace(facts, "kind: prefer", "kind: maybe", 1),
-		"an empty brief":             strings.Replace(job, "text: |\n  Implement the task's spec on a branch.\n", "text: \"  \"\n", 1),
 		"a list where a value goes":  strings.Replace(tuning, "assess_per_pass: 5", "assess_per_pass: [5]", 1),
 		"a sequence at the top":      "- rule_id: tuning\n",
 		"nothing":                    "",
@@ -147,29 +118,19 @@ func TestTightens(t *testing.T) {
 		prev, next string
 		tighter    bool
 	}{
-		"the same rule again":       {envelope, next(envelope, "", ""), true},
-		"a smaller budget":          {envelope, next(envelope, "max_attempts: 40", "max_attempts: 20"), true},
-		"a larger budget":           {envelope, next(envelope, "max_attempts: 40", "max_attempts: 41"), false},
-		"one executor fewer":        {envelope, next(envelope, "[exec:deterministic, exec:codex]", "[exec:codex]"), true},
-		"another executor":          {envelope, next(envelope, "[exec:deterministic, exec:codex]", "[exec:codex, exec:claude]"), false},
-		"another host":              {envelope, next(envelope, "[mbp-dev]", "[mbp-dev, mini]"), false},
-		"no action at all":          {envelope, next(envelope, "max_action: branch", "max_action: none"), true},
-		"expiring later":            {envelope, next(envelope, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
-		"expiring sooner":           {envelope, next(envelope, "2027-01-15T00:00:00Z", "2026-12-15T00:00:00Z"), true},
-		"starting earlier":          {envelope, next(envelope, "2026-10-15T00:00:00Z", "2026-10-01T00:00:00Z"), false},
-		"a shorter attempt limit":   {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 1800"), true},
-		"a longer attempt limit":    {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 7200"), false},
-		"a candidate demoted":       {job, next(job, "status: active", "status: demoted"), true},
-		"a candidate left out":      {job, next(job, "  - executor: exec:cursor\n    provider: cursor-mix\n    model_pattern: \"*\"\n    status: probation\n", ""), true},
-		"a candidate promoted":      {job, next(job, "status: probation", "status: active"), false},
-		"a new candidate":           {job, next(job, "model_pattern: \"*\"\n    status: probation", "model_pattern: \"gpt-*\"\n    status: probation"), false},
-		"the brief rewritten":       {job, next(job, "Implement the task's spec", "Implement anything"), false},
-		"another tenant":            {job, next(job, "tenant: dev", "tenant: business"), false},
-		"a fact added that forbids": {facts, next(facts, "facts:\n", "facts:\n  - executor: exec:claude\n    kind: must_not\n    subject: release\n"), true},
-		"a fact added that prefers": {facts, next(facts, "facts:\n", "facts:\n  - executor: exec:claude\n    kind: prefer\n    subject: go\n"), false},
-		"a fact dropped":            {facts, next(facts, "  - executor: exec:codex\n    kind: cannot\n    subject: docker\n", ""), false},
-		"a fact's scope changed":    {facts, next(facts, "repo: bifrost-trade-frontend", "repo: bifrost-platform"), false},
-		"a different rule":          {tuning, strings.Replace(next(budget, "", ""), "", "", 1), false},
+		"the same rule again":     {envelope, next(envelope, "", ""), true},
+		"a smaller budget":        {envelope, next(envelope, "max_attempts: 40", "max_attempts: 20"), true},
+		"a larger budget":         {envelope, next(envelope, "max_attempts: 40", "max_attempts: 41"), false},
+		"one executor fewer":      {envelope, next(envelope, "[exec:deterministic, exec:codex]", "[exec:codex]"), true},
+		"another executor":        {envelope, next(envelope, "[exec:deterministic, exec:codex]", "[exec:codex, exec:claude]"), false},
+		"another host":            {envelope, next(envelope, "[mbp-dev]", "[mbp-dev, mini]"), false},
+		"no action at all":        {envelope, next(envelope, "max_action: branch", "max_action: none"), true},
+		"expiring later":          {envelope, next(envelope, "2027-01-15T00:00:00Z", "2027-02-15T00:00:00Z"), false},
+		"expiring sooner":         {envelope, next(envelope, "2027-01-15T00:00:00Z", "2026-12-15T00:00:00Z"), true},
+		"starting earlier":        {envelope, next(envelope, "2026-10-15T00:00:00Z", "2026-10-01T00:00:00Z"), false},
+		"a shorter attempt limit": {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 1800"), true},
+		"a longer attempt limit":  {budget, next(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 7200"), false},
+		"a different rule":        {tuning, strings.Replace(next(budget, "", ""), "", "", 1), false},
 	} {
 		err := rules.Tightens(parse(t, c.prev), parse(t, c.next))
 		if (err == nil) != c.tighter {

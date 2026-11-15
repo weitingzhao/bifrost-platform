@@ -11,12 +11,9 @@ package rules
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
@@ -30,8 +27,6 @@ const Namespace = "bifrost-agentrt-rule"
 const (
 	KindEnvelope = "standing-envelope"
 	KindBudget   = "budget"
-	KindJob      = "job"
-	KindFacts    = "capability-facts"
 	KindPlan     = "plan-standing"
 	KindCardAuto = "card-auto-answer"
 )
@@ -78,15 +73,11 @@ const (
 	MissionAttemptsCeiling  = 10000
 	MissionWallHoursCeiling = 8760          // a year
 	AttemptLimitSCeiling    = 7 * 24 * 3600 // a week
-	maxJobText              = 16 << 10
 )
 
 var (
-	tenants   = []string{"dev", "business"}
-	actions   = []string{"none", "branch"} // weakest first; C-class actions are never in an envelope
-	statuses  = []string{"retired", "demoted", "qualifying", "probation", "active"}
-	factKinds = []string{"cannot", "must_not", "only", "prefer"}
-	jobID     = regexp.MustCompile(`^[a-z][a-z_]{1,39}$`)
+	tenants = []string{"dev", "business"}
+	actions = []string{"none", "branch"} // weakest first; C-class actions are never in an envelope
 )
 
 // Header is the five fields the signature covers, written at the top of
@@ -139,24 +130,6 @@ type BudgetRule struct {
 // rounds of 3 attempts, and a day (unused by the runtime, see AutoGrant).
 var AutoGrantDefault = Budget{MaxAttempts: 30, MaxWallHours: 24}
 
-// Candidate is one executor and model a job may route to.
-type Candidate struct {
-	Executor, Provider, ModelPattern, Status string
-}
-
-// Job is a job's brief and its candidates.
-type Job struct {
-	JobID, Tenant, Text string
-	Candidates          []Candidate
-}
-
-// Fact is a capability fact the Owner states. A scope value is a string or
-// true / false.
-type Fact struct {
-	Executor, Provider, Kind, Subject string
-	Scope                             map[string]any
-}
-
 // PlanStanding is what the plan's standing authorization adds to its two
 // built-in cases (a step added to an item in progress, the title of a step
 // not started; store/planchange.go): DoneRules lets a done rule be set on a
@@ -193,8 +166,6 @@ type Rule struct {
 	Kind     string
 	Envelope *Envelope
 	Budget   *BudgetRule
-	Job      *Job
-	Facts    []Fact
 	Plan     *PlanStanding
 	CardAuto *CardAuto
 	Landing  *Landing
@@ -210,16 +181,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if slices.Contains(tenants, arg) {
 			return kind, arg, nil
 		}
-	case KindJob:
-		if jobID.MatchString(arg) {
-			return kind, arg, nil
-		}
-	case KindFacts, KindPlan, KindCardAuto, KindTuning:
+	case KindPlan, KindCardAuto, KindTuning:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, budget:<tenant>, job:<job>, capability-facts, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, budget:<tenant>, plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -265,10 +232,6 @@ func Parse(text []byte) (Rule, error) {
 		err = r.envelope(o, arg)
 	case KindBudget:
 		err = r.budget(o, arg)
-	case KindJob:
-		err = r.job(o, arg)
-	case KindFacts:
-		err = r.facts(o)
 	case KindPlan:
 		err = r.plan(o)
 	case KindCardAuto:
@@ -440,112 +403,6 @@ func (r *Rule) budget(o *object, arg string) error {
 	return nil
 }
 
-func (r *Rule) job(o *object, arg string) error {
-	j := &Job{JobID: arg}
-	var err error
-	if j.Tenant, err = o.str("tenant", false); err != nil {
-		return err
-	}
-	if !slices.Contains(tenants, j.Tenant) {
-		return fmt.Errorf("tenant is dev or business, not %q", j.Tenant)
-	}
-	if j.Text, err = o.str("text", false); err != nil {
-		return err
-	}
-	if strings.TrimSpace(j.Text) == "" || len(j.Text) > maxJobText {
-		return fmt.Errorf("text is the brief, not empty and at most %d bytes", maxJobText)
-	}
-	seen := map[string]bool{}
-	err = o.list("candidates", false, func(n *yaml.Node, where string) error {
-		c, cerr := mapping(n, where)
-		if cerr != nil {
-			return cerr
-		}
-		var cand Candidate
-		if cand.Executor, cerr = c.str("executor", false); cerr != nil {
-			return cerr
-		}
-		if cand.Provider, cerr = c.str("provider", false); cerr != nil {
-			return cerr
-		}
-		if cand.ModelPattern, cerr = c.str("model_pattern", false); cerr != nil {
-			return cerr
-		}
-		if cand.Status, cerr = c.str("status", false); cerr != nil {
-			return cerr
-		}
-		if cand.Executor == "" || cand.Provider == "" || cand.ModelPattern == "" || !slices.Contains(statuses, cand.Status) {
-			return fmt.Errorf("%s: executor, provider and model_pattern are not empty; status is one of %v", where, statuses)
-		}
-		if seen[cand.key()] {
-			return fmt.Errorf("%s: this candidate is listed twice", where)
-		}
-		seen[cand.key()] = true
-		j.Candidates = append(j.Candidates, cand)
-		return c.done()
-	})
-	if err != nil {
-		return err
-	}
-	slices.SortFunc(j.Candidates, func(a, b Candidate) int { return strings.Compare(a.key(), b.key()) })
-	r.Job = j
-	return nil
-}
-
-func (c Candidate) key() string { return c.Executor + "|" + c.Provider + "|" + c.ModelPattern }
-
-func (r *Rule) facts(o *object) error {
-	seen := map[string]bool{}
-	r.Facts = []Fact{}
-	err := o.list("facts", false, func(n *yaml.Node, where string) error {
-		f, err := mapping(n, where)
-		if err != nil {
-			return err
-		}
-		var fact Fact
-		if fact.Executor, err = f.str("executor", false); err != nil {
-			return err
-		}
-		if fact.Provider, err = f.str("provider", true); err != nil {
-			return err
-		}
-		if fact.Kind, err = f.str("kind", false); err != nil {
-			return err
-		}
-		if fact.Subject, err = f.str("subject", false); err != nil {
-			return err
-		}
-		if fact.Executor == "" || fact.Subject == "" || !slices.Contains(factKinds, fact.Kind) {
-			return fmt.Errorf("%s: executor and subject are not empty; kind is one of %v", where, factKinds)
-		}
-		if scope, err := f.node("scope", true); err != nil {
-			return err
-		} else if scope != nil {
-			s, err := mapping(scope, where+".scope")
-			if err != nil {
-				return err
-			}
-			fact.Scope = map[string]any{}
-			for _, k := range s.order {
-				if fact.Scope[k], err = s.flag(k); err != nil {
-					return err
-				}
-			}
-		}
-		if seen[fact.key()] {
-			return fmt.Errorf("%s: this fact is listed twice", where)
-		}
-		seen[fact.key()] = true
-		r.Facts = append(r.Facts, fact)
-		return f.done()
-	})
-	slices.SortFunc(r.Facts, func(a, b Fact) int { return strings.Compare(a.key(), b.key()) })
-	return err
-}
-
-// key is a fact's identity: who, under which provider, what kind, about what.
-func (f Fact) key() string { return f.Executor + "|" + f.Provider + "|" + f.Kind + "|" + f.Subject }
-
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func anyList(s []string) []any {
@@ -579,29 +436,6 @@ func (r Rule) Doc() map[string]any {
 		if b.AutoGrantStated {
 			doc["auto_grant"] = map[string]any{"max_attempts": b.AutoGrant.MaxAttempts, "max_wall_hours": b.AutoGrant.MaxWallHours}
 		}
-	case KindJob:
-		cands := make([]any, 0, len(r.Job.Candidates))
-		for _, c := range r.Job.Candidates {
-			cands = append(cands, map[string]any{"executor": c.Executor, "provider": c.Provider, "model_pattern": c.ModelPattern, "status": c.Status})
-		}
-		doc["tenant"], doc["text"], doc["candidates"] = r.Job.Tenant, r.Job.Text, cands
-	case KindFacts:
-		facts := make([]any, 0, len(r.Facts))
-		for _, f := range r.Facts {
-			fd := map[string]any{"executor": f.Executor, "kind": f.Kind, "subject": f.Subject}
-			if f.Provider != "" {
-				fd["provider"] = f.Provider
-			}
-			if f.Scope != nil {
-				scope := map[string]any{}
-				for k, v := range f.Scope {
-					scope[k] = v
-				}
-				fd["scope"] = scope
-			}
-			facts = append(facts, fd)
-		}
-		doc["facts"] = facts
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
 	case KindCardAuto:

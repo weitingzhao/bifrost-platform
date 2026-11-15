@@ -3,7 +3,6 @@ package rules
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 )
 
@@ -40,10 +39,6 @@ func Tightens(prev, next Rule) error {
 		if n.AutoGrant.MaxAttempts > p.AutoGrant.MaxAttempts || n.AutoGrant.MaxWallHours > p.AutoGrant.MaxWallHours {
 			return errors.New("auto_grant goes up")
 		}
-	case KindJob:
-		return jobTightens(prev.Job, next.Job)
-	case KindFacts:
-		return factsTighten(prev.Facts, next.Facts)
 	case KindPlan:
 		// Each grant only goes from true to false.
 		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease {
@@ -99,53 +94,4 @@ func envelopeTightens(p, n *Envelope) error {
 		return err
 	}
 	return externalHostsTighten(p.ExternalHosts, n.ExternalHosts)
-}
-
-// jobTightens: the brief unchanged, no new candidate, none higher in status.
-// A candidate left out counts as retired.
-func jobTightens(p, n *Job) error {
-	if n.Tenant != p.Tenant {
-		return errors.New("the tenant changes")
-	}
-	if n.Text != p.Text {
-		return errors.New("the brief changes, which is not shown to be tighter")
-	}
-	before := map[string]string{}
-	for _, c := range p.Candidates {
-		before[c.key()] = c.Status
-	}
-	for _, c := range n.Candidates {
-		was, ok := before[c.key()]
-		if !ok {
-			return fmt.Errorf("candidate %s is new", c.key())
-		}
-		if slices.Index(statuses, c.Status) > slices.Index(statuses, was) {
-			return fmt.Errorf("candidate %s goes from %s up to %s", c.key(), was, c.Status)
-		}
-	}
-	return nil
-}
-
-// factsTighten: every fact stays as it was; new ones only forbid.
-func factsTighten(p, n []Fact) error {
-	now := map[string]Fact{}
-	for _, f := range n {
-		now[f.key()] = f
-	}
-	for _, f := range p {
-		g, ok := now[f.key()]
-		if !ok {
-			return fmt.Errorf("fact %s is dropped", f.key())
-		}
-		if !maps.Equal(f.Scope, g.Scope) {
-			return fmt.Errorf("fact %s changes its scope", f.key())
-		}
-		delete(now, f.key())
-	}
-	for k, f := range now {
-		if f.Kind != "cannot" && f.Kind != "must_not" {
-			return fmt.Errorf("new fact %s is %s: only cannot and must_not tighten", k, f.Kind)
-		}
-	}
-	return nil
 }

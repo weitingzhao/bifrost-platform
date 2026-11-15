@@ -353,6 +353,9 @@ var (
 	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost", prepareFailed}
 )
 
+// candidateStatus preserves the vocabulary of historical dispatch events.
+var candidateStatus = []string{"retired", "demoted", "qualifying", "probation", "active"}
+
 // fieldValues are the checked fields, by event type and field.
 var fieldValues = map[string]map[string]value{
 	"metrics_computed":        {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},

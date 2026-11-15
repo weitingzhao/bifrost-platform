@@ -56,9 +56,6 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 	t.Helper()
 	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if err := store.LockCapabilities(ctx, tx); err != nil {
-			return err
-		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: jobs and candidates"}}); err != nil {
 			return err
