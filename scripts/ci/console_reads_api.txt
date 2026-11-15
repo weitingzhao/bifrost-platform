@@ -1,7 +1,9 @@
-# Files under api/ that the Console's tests read. A change that touches only
-# api/ and none of these does not run the Console's type-check, lint, tests and
-# build in CI (task changes of bifrost-ci-platform, result console-scope); a
-# change to any other path outside api/ always runs them.
+# Files under api/ that the Console's tests read. The console module of
+# bifrost.units.yaml declares each of them as a need (manifest_guard_test.go
+# holds the two lists together), and the platform's scope answer decides from
+# that declaration whether a commit runs the Console's type-check, lint, tests
+# and build in CI (task changes of bifrost-ci-platform, result run-modules;
+# the step test-console leaves itself out when console is not among them).
 #
 # One path per line; a line ending in / is a directory and everything under it.
 # The Console test consoleReadsApi.test.ts fails when a Console test reads a file
