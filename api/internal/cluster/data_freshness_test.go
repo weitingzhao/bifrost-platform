@@ -25,50 +25,16 @@ func TestFreshnessVerdictFromLag(t *testing.T) {
 	}
 }
 
-func TestFreshnessBadgeLevel(t *testing.T) {
-	d := func(v float64) *float64 { return &v }
-	cases := []struct {
-		days    *float64
-		verdict string
-		want    string
-	}{
-		{d(0), "fresh", "green"},
-		{d(1), "fresh", "green"},
-		{d(5), "aging", "yellow"},
-		{d(10), "stale", "red"},
-		{nil, "unknown", "unknown"},
-		{d(51), "reference", "reference"}, // wall age must not drive badge for prod
-		{nil, "reference", "reference"},
-	}
-	for _, tc := range cases {
-		if got := FreshnessBadgeLevel(tc.days, tc.verdict); got != tc.want {
-			t.Errorf("badge(%v,%s)=%s want %s", tc.days, tc.verdict, got, tc.want)
-		}
-	}
-}
-
 func TestFreshnessLagSemantics(t *testing.T) {
 	// lag=0 → fresh (even if wall age would be huge)
 	if got := freshnessVerdictFromLag(0); got != "fresh" {
 		t.Fatalf("lag=0 → fresh, got %s", got)
 	}
-	if got := FreshnessBadgeLevel(ptrFloat(0), "fresh"); got != "green" {
-		t.Fatalf("lag=0 badge green, got %s", got)
-	}
 	// lag=5 → aging / yellow (aligned with badge)
 	if got := freshnessVerdictFromLag(5); got != "aging" {
 		t.Fatalf("lag=5 → aging, got %s", got)
 	}
-	if got := FreshnessBadgeLevel(ptrFloat(5), "aging"); got != "yellow" {
-		t.Fatalf("lag=5 badge yellow, got %s", got)
-	}
-	// prod reference is not scored by wall age
-	if got := FreshnessBadgeLevel(ptrFloat(51), "reference"); got != "reference" {
-		t.Fatalf("prod reference badge, got %s", got)
-	}
 }
-
-func ptrFloat(v float64) *float64 { return &v }
 
 func TestParsePostgresTimestamp(t *testing.T) {
 	ts, err := parsePostgresTimestamp("2026-07-20 12:00:00+00")

@@ -5,22 +5,8 @@ import (
 	"time"
 )
 
-// Benchmark runs (design v5 §5.1.2 「能力怎么量」 ③; W-31 2.4 slice ⑤; the
-// Owner 2026-10-18: run on the agent host, judge by the fix's own tests, the
-// host hands the result in). A host's agentd runs the question set with one
-// executor (agentd bench): for each question it first checks the question
-// stands on this host (the fix passes its tests, the code before it with the
-// fix's tests does not), then has the executor make the change the fix's
-// commit message describes on the code before it, puts the fix's tests over
-// what the executor wrote and runs them. The platform runs nothing again: it
-// takes the result on the host's identity, as it takes a usage report.
-//
-// A run is a capability_scored event on its own stream with each question's
-// outcome and the samples by task class, and one capability_score row per
-// class (source benchmark, job implementer, not core). Routing's competence
-// step adds, to the in-job samples, those of the latest run of each executor,
-// provider and model in the last BenchmarkWindow (competence.go). A run is
-// recorded once: handing it in again returns the first record.
+// Historical benchmark event shapes and validators. Host-driven benchmarks
+// and competence-based dispatch are retired; stored events retain these names.
 
 // BenchmarksStream is the stream of benchmark runs.
 const BenchmarksStream = "capability_benchmarks"

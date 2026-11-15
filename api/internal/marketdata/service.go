@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -420,56 +419,6 @@ func (s *Service) fetchPluginJSON(ctx context.Context, pluginPath string) ([]byt
 	return clientset.CoreV1().Services(pluginNamespace).ProxyGet(
 		"http", apiServiceName, apiServicePort, rawPath, nil,
 	).DoRaw(ctx)
-}
-
-func parseReadinessRollupOutput(out string) *ReadinessRollup {
-	// Legacy Trade SQL pipe parser retained for older unit fixtures; prefer Plugin JSON path.
-	line := strings.TrimSpace(out)
-	if line == "" {
-		return nil
-	}
-	parts := strings.Split(line, "|")
-	if len(parts) < 4 {
-		return nil
-	}
-	universe, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-	covered, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-	gapCount, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
-	asOf := strings.TrimSpace(parts[3])
-	if err1 != nil || err2 != nil || err3 != nil {
-		return nil
-	}
-	if asOf == "" || strings.EqualFold(asOf, "null") {
-		return nil
-	}
-	return &ReadinessRollup{
-		Universe:        universe,
-		SnapshotRows:    covered,
-		SnapshotCovered: covered,
-		VendorGapCount:  &gapCount,
-		AsOf:            asOf,
-		Source:          "legacy",
-	}
-}
-
-func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
-	var rows []FreshnessInfo
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "|")
-		if len(parts) < 4 {
-			continue
-		}
-		dim := strings.TrimSpace(parts[0])
-		lastRaw := strings.TrimSpace(parts[1])
-		rowsWritten, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
-		status := strings.TrimSpace(parts[3])
-		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, status, now))
-	}
-	return rows
 }
 
 // parseFreshnessJSON reads the freshness array of GET /market/coverage/freshness

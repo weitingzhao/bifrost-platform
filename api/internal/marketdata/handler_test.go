@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -101,10 +100,13 @@ func TestStatusProbesBothPools(t *testing.T) {
 	}
 }
 
-func TestParseFreshnessOutput(t *testing.T) {
+func TestParseFreshnessJSON(t *testing.T) {
 	now := time.Date(2024, 6, 20, 18, 0, 0, 0, time.UTC) // Thursday
-	out := "stock_daily|2024-06-20 17:00:00+00|42|ok\noption_snapshot|2024-06-18 17:00:00+00|5|ok\n"
-	rows := parseFreshnessOutput(out, now)
+	out := `{"freshness":[{"dimension":"stock_daily","last_run_at":"2024-06-20 17:00:00+00","rows_written":42,"status":"ok"},{"dimension":"option_snapshot","last_run_at":"2024-06-18 17:00:00+00","rows_written":5,"status":"ok"}]}`
+	rows, err := parseFreshnessJSON([]byte(out), now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(rows) != 2 {
 		t.Fatalf("rows=%d", len(rows))
 	}
@@ -119,13 +121,15 @@ func TestParseFreshnessOutput(t *testing.T) {
 func TestParseFreshnessWeekendAllowanceAndVoidDims(t *testing.T) {
 	// Monday before EOD — Friday night snapshot (~33h) must stay ok under weekend allowance.
 	now := time.Date(2026, 8, 31, 14, 30, 0, 0, time.UTC)
-	out := strings.Join([]string{
-		"option_snapshot|2026-08-30 05:31:00+00|50|ok",
-		"option_open_interest|2026-08-30 05:31:00+00|50|ok",
-		"ratios|2026-08-26 22:47:00+00|1|ok",
-		"short_interest|2026-08-26 22:47:00+00|1|ok",
-	}, "\n")
-	rows := parseFreshnessOutput(out, now)
+	out := `{"freshness":[
+{"dimension":"option_snapshot","last_run_at":"2026-08-30 05:31:00+00","rows_written":50,"status":"ok"},
+{"dimension":"option_open_interest","last_run_at":"2026-08-30 05:31:00+00","rows_written":50,"status":"ok"},
+{"dimension":"ratios","last_run_at":"2026-08-26 22:47:00+00","rows_written":1,"status":"ok"},
+{"dimension":"short_interest","last_run_at":"2026-08-26 22:47:00+00","rows_written":1,"status":"ok"}]}`
+	rows, err := parseFreshnessJSON([]byte(out), now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(rows) != 4 {
 		t.Fatalf("rows=%d", len(rows))
 	}
@@ -207,22 +211,6 @@ func TestHandleStatusWithoutCluster(t *testing.T) {
 	}
 	if body.ReadinessRollup != nil {
 		t.Fatalf("readiness_rollup=%+v want nil without cluster", body.ReadinessRollup)
-	}
-}
-
-func TestParseReadinessRollupOutput(t *testing.T) {
-	r := parseReadinessRollupOutput("1200|980|118|2026-08-01\n")
-	if r == nil {
-		t.Fatal("expected rollup")
-	}
-	if r.Universe != 1200 || r.SnapshotCovered != 980 || r.VendorGapCount == nil || *r.VendorGapCount != 118 || r.AsOf != "2026-08-01" {
-		t.Fatalf("unexpected rollup: %+v", r)
-	}
-	if parseReadinessRollupOutput("") != nil {
-		t.Fatal("empty should be nil")
-	}
-	if parseReadinessRollupOutput("bad|row") != nil {
-		t.Fatal("short row should be nil")
 	}
 }
 

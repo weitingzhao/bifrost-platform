@@ -214,29 +214,6 @@ func freshnessVerdictFromLag(lagDays float64) string {
 	}
 }
 
-// FreshnessBadgeLevel maps lag (preferred) to Console badge colors.
-// days should be lag_vs_prod_days for non-prod; reference/unknown return dedicated levels.
-func FreshnessBadgeLevel(days *float64, verdict string) string {
-	switch verdict {
-	case "unknown":
-		return "unknown"
-	case "reference":
-		return "reference"
-	}
-	if days == nil {
-		return "unknown"
-	}
-	d := *days
-	switch {
-	case d < freshnessFreshDays:
-		return "green"
-	case d < freshnessStaleDays:
-		return "yellow"
-	default:
-		return "red"
-	}
-}
-
 func (s *Service) resolveCNPGPrimary(ctx context.Context) (string, error) {
 	if s != nil && s.primaryOverride != "" {
 		return s.primaryOverride, nil
