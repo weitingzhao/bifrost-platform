@@ -194,7 +194,6 @@ var landingOpen = map[string]string{
 	"api/internal/agentrt/planimport/":     "parses the work ledger into an import request; reads and writes nothing",
 	"api/internal/agentrt/planview/":       "validates the offline plan-view artifact; grants nothing",
 	"api/internal/agentrt/recorderimport/": "checks and masks recorder logs for import",
-	"api/internal/agentrt/seatproto/":      "the seat protocol's duties and answer lines",
 	"api/internal/questions/":              "stores Owner questions; an answer authorizes nothing",
 	"api/internal/cluster/":                "cluster reads and data clone",
 	"api/internal/placement/":              "workload placement reads",

@@ -92,7 +92,6 @@ modules:
       api/internal/agentrt/landing: ["api/internal/agentrt/landing"]
       api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
       api/internal/agentrt/landinggit: ["api/internal/agentrt/landinggit"]
-      api/internal/agentrt/metrics: ["api/internal/agentrt/metrics"]
       api/internal/agentrt/planimport:
         - "api/internal/agentrt/planimport"
         - "console/src/api/__fixtures__/agentrt-plan-imported.testdb.json"
@@ -124,7 +123,6 @@ modules:
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]
       api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]
-      api/internal/hostops: ["api/internal/hostops"]
       api/internal/localpath: ["api/internal/localpath"]
       api/internal/maintainer:
         - "api/internal/maintainer"
