@@ -80,6 +80,8 @@ modules:
         - "api/internal/config"
         - "config/agent-tasks.yaml"
         - "config/trust-overrides.yaml"
+      # CI configuration read model, independent of HTTP wiring.
+      api/internal/ciconfig: ["api/internal/ciconfig"]
       api/internal/agentprogress: ["api/internal/agentprogress"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.
       api/internal/httpmetrics: ["api/internal/httpmetrics"]
@@ -161,7 +163,7 @@ modules:
       api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
       # Read-only Owner statistics share the exact Console contract, not the server tree.
       api/internal/approvalreadings: ["api/internal/approvalreadings", "api/internal/server/testdata/contract/readings"]
-      api/internal/server: ["api", "config/agent-tasks.yaml"]
+      api/internal/server: ["api", "config/agent-tasks.yaml", "config/domain-ownership.json"]
       api/internal/statefile: ["api/internal/statefile"]
       api/internal/storedurability: ["api"]
       api/internal/testscope: ["api"]

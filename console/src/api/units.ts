@@ -23,7 +23,18 @@ export type UnitsModule = {
   /** Units whose declared input is the whole repository: they run on every change. */
   whole_repository: number
 }
+export type DomainPackage = {
+  path: string; module: string; domains: string[]; status: string; basis: string
+  imports: string[]; test_imports: string[]; tasks: string[]; inputs: string[]
+}
+export type DomainMap = {
+  source: string; domains: { id: string; name: string; source: string }[]
+  shared_tasks: { unit: string; task: string; module: string }[]
+  packages: DomainPackage[]; inventory_complete: boolean; unresolved: number
+}
 export type UnitsConfig = {
+  domains?: DomainMap
+  domain_note?: string
   repo: string
   commit: string
   declared: boolean

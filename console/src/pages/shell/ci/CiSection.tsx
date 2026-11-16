@@ -7,6 +7,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
 import { PlatformTimings } from './PlatformTimings'
 import { ModuleExplorer } from './ModuleExplorer'
+import { DomainMapView } from './DomainMapView'
 import { CommitJourney } from './CommitJourney'
 import { TimingBudget } from './TimingBudget'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
@@ -167,7 +168,7 @@ export function CiSection() {
           <h2 className="my-1 break-all text-lg font-semibold">{repo}{selectedModule ? ` / ${selectedModule}` : ''}</h2>
           <p className="m-0 text-sm text-muted-foreground">Project → module → CI run → delivery timeline. One selected attempt drives the details below.</p>
         </header>
-        <div className="rounded-lg border border-[var(--table-rule)] px-3 py-2 text-sm"><strong>Business domains: mapping not connected</strong><p className="mb-0 mt-1 text-xs text-muted-foreground">The CI configuration does not yet provide the foundation’s business-domain ownership map. The groups below are technical execution modules, not business domains.</p></div>
+        <DomainMapView key={repo} config={config.data} module={selectedModule} error={config.error?.message} />
         <div role="group" aria-label="Module" className="flex flex-wrap items-start gap-4 rounded-lg bg-[var(--card-fill)] p-3">
           <p className="m-0 w-full text-sm font-medium">CI execution modules{config.data?.declared ? ` · ${config.data.modules.length} configured` : ''}</p>
           {!!config.data?.modules.length && <ScopeChip name="All modules" detail={`${config.data.modules.length} modules`} selected={!selectedModule} onClick={() => pickModule('')} />}

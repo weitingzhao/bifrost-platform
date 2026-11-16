@@ -82,6 +82,14 @@ modules:
 		t.Fatalf("declared: %+v %v", declared, err)
 	}
 	unitsContract(t, "config-declared.json", declared)
+	files["config/domain-ownership.json"] = `{"version":1,"source":"contract fixture","domains":[{"id":"plan","name":"Planning","source":"planning charter"},{"id":"foundation","name":"Foundation","source":"default ruling"}],"default":{"domains":["foundation"],"status":"default-maintainer","basis":"default ruling"},"packages":{"svc/a":{"domains":["plan"],"status":"assigned","basis":"planning charter"}}}`
+	mapped, err := unitConfig(context.Background(), func(ctx context.Context, _, commit string) (*unitplan.Tree, error) { return trees(ctx, "r", commit) }, "r", c)
+	if err != nil || mapped.Domains == nil || mapped.DomainNote != "" {
+		t.Fatalf("mapping: %+v %v", mapped, err)
+	}
+	unitsContract(t, "config-domains.json", mapped)
+	delete(files, "config/domain-ownership.json")
+
 	delete(files, "bifrost.units.yaml")
 	undeclared, err := unitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c)
 	if err != nil || undeclared.Declared {

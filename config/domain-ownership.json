@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "source": "Bifrost domain charters and overlap rulings, 2026-11-15; references are shared-note identifiers, not URLs",
+  "domains": [
+    {
+      "id": "foundation",
+      "name": "Foundation",
+      "source": "domains/0-foundation-decouple/charter.md"
+    },
+    {
+      "id": "plan",
+      "name": "Demand & planning",
+      "source": "domains/1-plan/charter.md"
+    },
+    {
+      "id": "lineage",
+      "name": "Work registration & lineage",
+      "source": "domains/2-lineage/charter.md"
+    },
+    {
+      "id": "verification",
+      "name": "Merge & verification",
+      "source": "domains/3-4-verify-release-ci/charter.md"
+    },
+    {
+      "id": "delivery",
+      "name": "Delivery",
+      "source": "domains/3-4-verify-release-ci/charter.md"
+    },
+    {
+      "id": "owner",
+      "name": "Owner decisions",
+      "source": "domains/5-owner/charter.md"
+    },
+    {
+      "id": "compute",
+      "name": "Compute",
+      "source": "domains/6-compute/charter.md"
+    },
+    {
+      "id": "tenant",
+      "name": "Tenant integration",
+      "source": "domains/7-tenant/charter.md"
+    },
+    {
+      "id": "coordination",
+      "name": "Seats & communication",
+      "source": "domains/8-2-comm-desk/charter.md"
+    }
+  ],
+  "default": {
+    "domains": [
+      "foundation"
+    ],
+    "status": "default-maintainer",
+    "basis": "2026-11-15 overlap ruling: unclaimed platform code maintained by foundation; business responsibility not yet reviewed"
+  },
+  "packages": {
+    "api/internal/agentrt/eventlog": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "foundation charter and verified extraction"
+    },
+    "api/internal/agentrt/actor": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "foundation charter and verified extraction"
+    },
+    "api/internal/httpmetrics": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "foundation charter and verified extraction"
+    },
+    "api/internal/agentrt/plan": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "planning charter and verified extraction"
+    },
+    "api/internal/agentrt/planview": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "planning charter and verified extraction"
+    },
+    "api/internal/agentrt/planpace": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "planning charter and verified extraction"
+    },
+    "api/internal/agentrt/planimport": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "planning charter and verified extraction"
+    },
+    "api/internal/lineage": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "lineage charter and verified extraction"
+    },
+    "api/internal/agentthreads": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "lineage charter and verified extraction"
+    },
+    "api/internal/agentrt/workregistration": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "lineage charter and verified extraction"
+    },
+    "api/internal/unitplan": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/unitexec": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/testscope": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/outsideinput": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/unitscript": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/agentrt/evidence": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/agentrt/landingci": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/agentrt/rules": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/ciconfig": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; configuration is read-only"
+    },
+    "api/internal/releasepolicy": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "CI charter and delivery read-model extraction"
+    },
+    "api/internal/postrelease": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "CI charter and delivery read-model extraction"
+    },
+    "api/internal/agentrt/deliveryview": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "CI charter and delivery read-model extraction"
+    },
+    "api/internal/approvals": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/questions": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/approvalnotify": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/approvalhome": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/approvalreadings": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/ownerexec": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/agentrt/coord": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "adopted coordination domain; foundation remains interim maintainer"
+    },
+    "api/internal/threadinbox": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "adopted coordination domain; foundation remains interim maintainer"
+    },
+    "api/internal/marketdata": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "provisional",
+      "basis": "tenant charter explicitly marks package ownership as proposed"
+    },
+    "api/internal/flexquery": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "provisional",
+      "basis": "tenant charter explicitly marks package ownership as proposed"
+    },
+    "api/internal/research": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "provisional",
+      "basis": "tenant charter explicitly marks package ownership as proposed"
+    },
+    "api/internal/tradeagent": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "provisional",
+      "basis": "tenant charter explicitly marks package ownership as proposed"
+    },
+    "api/internal/ibgateway": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "provisional",
+      "basis": "tenant charter explicitly marks package ownership as proposed"
+    },
+    "api/internal/agentrt/store": {
+      "domains": [
+        "foundation",
+        "plan",
+        "lineage",
+        "verification",
+        "delivery",
+        "owner",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "remaining mixed responsibilities; extraction incomplete"
+    },
+    "api/internal/server": {
+      "domains": [
+        "foundation",
+        "plan",
+        "lineage",
+        "verification",
+        "delivery",
+        "owner",
+        "compute",
+        "tenant",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "HTTP wiring and remaining mixed read logic"
+    },
+    "api/internal/agentrt/agentrtapi": {
+      "domains": [
+        "plan",
+        "lineage",
+        "verification",
+        "delivery",
+        "owner",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "shared HTTP surface"
+    },
+    "api/internal/agentrt/controller": {
+      "domains": [
+        "foundation",
+        "lineage",
+        "verification",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "shared controller wiring"
+    },
+    "api/internal/delivery": {
+      "domains": [
+        "delivery",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "CI charter plus window_queue/window_notify ownership ruling"
+    }
+  }
+}

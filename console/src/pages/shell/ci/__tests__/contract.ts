@@ -13,6 +13,7 @@ const readingsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const read = <T,>(name: string, from: string = dir): T => JSON.parse(fs.readFileSync(path.join(from, name), 'utf8')) as T
 
 export const contract = {
+  configDomains: () => read<UnitsConfig>('config-domains.json'),
   configDeclared: () => read<UnitsConfig>('config-declared.json'),
   configUndeclared: () => read<UnitsConfig>('config-undeclared.json'),
   runs: () => read<UnitsRuns>('runs.json'),
