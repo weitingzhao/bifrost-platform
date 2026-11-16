@@ -532,7 +532,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged."
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions."
     },
     "api/internal/modtidy": {
       "domains": [
@@ -889,7 +889,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; includes complete Deployment and node-capability coverage projections. Governance and service-readiness callers retain all queries and decision wiring; unchanged thresholds, no execution or permission decisions. Complete pod CPU rank/limit and Kubernetes Event timestamp projection extracted unchanged; filter/auth/execution remain callers. Whole Pod workload projection retains caller age/phase mapping; no node/launch decision moved. Layer-B monitoring catalog, ordered workload matching, missing/planned component and aggregate display move as a complete observation slice; install switches, URL exposure conditions, clients and phase mapping remain in cluster. Generic service dependency status/finalization and Deployment health display extracted; tenant application mapping remains in Tenant appreadings."
+      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; includes complete Deployment and node-capability coverage projections. Governance and service-readiness callers retain all queries and decision wiring; unchanged thresholds, no execution or permission decisions. Complete pod CPU rank/limit and Kubernetes Event timestamp projection extracted unchanged; filter/auth/execution remain callers. Whole Pod workload projection retains caller age/phase mapping; no node/launch decision moved. Layer-B monitoring catalog, ordered workload matching, missing/planned component and aggregate display move as a complete observation slice; install switches, URL exposure conditions, clients and phase mapping remain in cluster. Only final service-readiness display rollup extracted. Shared standby/finalization and Deployment health predicates remain byte-for-byte in cluster because Workers D10 and PROD health readers share them; Tenant receives these original callbacks."
     },
     "api/internal/netobservations": {
       "domains": [
@@ -910,7 +910,7 @@
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 complete read-only application readiness projection: tenant namespace/gateway/frontend/four-API display, observed generic infrastructure dependencies injected. No actions, D10 workers or authorization moved."
+      "basis": "2026-11-16 complete read-only application readiness projection: tenant namespace/gateway/frontend/four-API display, observed generic infrastructure dependencies injected. No actions, D10 workers or authorization moved; original health/finalization callbacks are injected, never reimplemented."
     }
   },
   "frontend": {

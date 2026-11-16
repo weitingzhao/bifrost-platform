@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -203,12 +204,7 @@ type RefPreflightResponse struct {
 	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
-type PipelinePhaseView struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Detail string `json:"detail,omitempty"`
-}
+type PipelinePhaseView = cirunview.PipelinePhaseView
 
 type PipelineTaskRunView struct {
 	PipelineTask string `json:"pipeline_task"`

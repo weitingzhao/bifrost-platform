@@ -12,6 +12,8 @@ import (
 type ServiceDependencyView = resourceview.ServiceDependencyView
 type ServiceDomainView = resourceview.ServiceDomainView
 type Snapshot struct {
+	Finalize                       func(string, string, []ServiceDependencyView, string) ServiceDomainView
+	DeploymentReach                func(*appsv1.Deployment) (probe.Reachability, string)
 	Deployments                    map[string]appsv1.Deployment
 	IngressRoutes                  map[string]bool
 	Environments                   []config.AppEnv
@@ -80,7 +82,7 @@ func EvalApplicationsDomain(snap Snapshot) ServiceDomainView {
 	// Edge is Traefik IngressRoute trade-gateway per Trade NS (not per-NS nginx).
 	for _, env := range snap.Environments {
 		deps = append(deps, IngressRouteDep(snap, env.Namespace, "trade-gateway", "Trade gateway ("+env.ID+")"))
-		deps = append(deps, deploymentDep(snap.Deployments, env.Namespace, "frontend", "Trade frontend ("+env.ID+")"))
+		deps = append(deps, deploymentDep(snap.Deployments, snap.DeploymentReach, env.Namespace, "frontend", "Trade frontend ("+env.ID+")"))
 		apiReady, apiDetail := CountReadyDeployments(snap, env.Namespace, "api-")
 		deps = append(deps, ServiceDependencyView{
 			ID: "apis-" + env.ID, Label: "FastAPI services (" + env.ID + ")",
@@ -88,14 +90,14 @@ func EvalApplicationsDomain(snap Snapshot) ServiceDomainView {
 			Detail:       apiDetail,
 		})
 	}
-	return resourceview.FinalizeDomain("applications", "General applications", deps, "amd64 Trade stack · Traefik trade-gateway · frontend · 4 API pods (Phase B)")
+	return snap.Finalize("applications", "General applications", deps, "amd64 Trade stack · Traefik trade-gateway · frontend · 4 API pods (Phase B)")
 }
-func deploymentDep(deployments map[string]appsv1.Deployment, ns, name, label string) ServiceDependencyView {
+func deploymentDep(deployments map[string]appsv1.Deployment, reachOf func(*appsv1.Deployment) (probe.Reachability, string), ns, name, label string) ServiceDependencyView {
 	key := ns + "/" + name
 	d, ok := deployments[key]
 	if !ok {
 		return ServiceDependencyView{ID: "workload-" + name, Label: label, Reachability: probe.ReachDegraded, Detail: "not deployed in " + ns}
 	}
-	reach, detail := resourceview.DeploymentReach(&d)
+	reach, detail := reachOf(&d)
 	return ServiceDependencyView{ID: "workload-" + ns + "-" + name, Label: label, Reachability: reach, Detail: detail}
 }

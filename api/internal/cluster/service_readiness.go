@@ -414,13 +414,56 @@ type deployRef struct {
 }
 
 func finalizeDomain(id, label string, deps []ServiceDependencyView, purpose string) ServiceDomainView {
-	return resourceview.FinalizeDomain(id, label, deps, purpose)
+	status, reach, summary := domainStatusFromDeps(deps)
+	if summary == "" {
+		summary = purpose
+	}
+	return ServiceDomainView{
+		ID: id, Label: label, Status: status, Reachability: reach, Summary: summary, Dependencies: deps,
+	}
 }
 
-func dependencyIsStandby(d ServiceDependencyView) bool { return resourceview.DependencyIsStandby(d) }
+func dependencyIsStandby(d ServiceDependencyView) bool {
+	lower := strings.ToLower(d.Detail)
+	standbyText := strings.Contains(lower, "standby") ||
+		strings.Contains(lower, "scaled to zero") ||
+		strings.Contains(lower, "retired wave 5")
+	if !standbyText {
+		return false
+	}
+	// Standby deps may be ReachOK (expected off) or ReachDegraded (legacy scaled-to-zero).
+	return d.Reachability == probe.ReachOK || d.Reachability == probe.ReachDegraded || d.Reachability == probe.ReachUnknown
+}
 
 func domainStatusFromDeps(deps []ServiceDependencyView) (status string, reach probe.Reachability, summary string) {
-	return resourceview.DomainStatusFromDeps(deps)
+	fail := 0
+	realDegraded := 0
+	standby := 0
+	var gaps []string
+	for _, d := range deps {
+		if dependencyIsStandby(d) {
+			standby++
+			continue
+		}
+		switch d.Reachability {
+		case probe.ReachFail:
+			fail++
+			gaps = append(gaps, d.Label)
+		case probe.ReachDegraded:
+			realDegraded++
+		}
+	}
+	switch {
+	case fail > 0:
+		return "unavailable", probe.ReachFail, fmt.Sprintf("Blocked: %s", strings.Join(gaps, ", "))
+	case realDegraded > 0:
+		return "partial", probe.ReachDegraded, fmt.Sprintf("%d dependency gap(s)", realDegraded)
+	case standby > 0:
+		// Product formula: standby + no demand → status standby + reachability ok.
+		return "standby", probe.ReachOK, "Standby — no demand"
+	default:
+		return "ready", probe.ReachOK, "All dependencies satisfied"
+	}
 }
 
 func aggregateServiceReadiness(domains []ServiceDomainView) (probe.Reachability, string) {
@@ -706,7 +749,23 @@ func firstReadyDeployment(snap readinessSnapshot, refs []deployRef) *ServiceDepe
 }
 
 func deploymentReach(d *appsv1.Deployment) (probe.Reachability, string) {
-	return resourceview.DeploymentReach(d)
+	desired := d.Status.Replicas
+	if desired == 0 && d.Spec.Replicas != nil {
+		desired = *d.Spec.Replicas
+	}
+	if desired == 0 {
+		return probe.ReachDegraded, "scaled to zero (standby)"
+	}
+	ready := d.Status.ReadyReplicas
+	detail := fmt.Sprintf("ready %d/%d", ready, desired)
+	switch {
+	case ready >= desired:
+		return probe.ReachOK, detail
+	case ready > 0:
+		return probe.ReachDegraded, detail
+	default:
+		return probe.ReachFail, detail
+	}
 }
 
 func findDeploymentByPrefix(snap readinessSnapshot, namespace, prefix string) *appsv1.Deployment {
@@ -761,5 +820,5 @@ func (snap readinessSnapshot) appDeployRefs(name string) []deployRef {
 }
 
 func tenantReadinessInput(snap readinessSnapshot) appreadings.Snapshot {
-	return appreadings.Snapshot{Deployments: snap.deployments, IngressRoutes: snap.ingressRoutes, Environments: snap.appEnvs, Schedulable: schedulableAnyDep(snap, "Schedulable nodes"), IngressController: deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller")}
+	return appreadings.Snapshot{Deployments: snap.deployments, IngressRoutes: snap.ingressRoutes, Environments: snap.appEnvs, Schedulable: schedulableAnyDep(snap, "Schedulable nodes"), IngressController: deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"), DeploymentReach: deploymentReach, Finalize: finalizeDomain}
 }
