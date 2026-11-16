@@ -1472,15 +1472,23 @@
         "console/src/domains/foundation/control-room/ControlRoomAttentionStrip.tsx",
         "console/src/domains/foundation/control-room/ControlRoomBay.tsx",
         "console/src/domains/foundation/control-room/ControlRoomBayCards.tsx",
+        "console/src/domains/foundation/control-room/ControlRoomPage.tsx",
         "console/src/domains/foundation/control-room/ControlRoomVerdictStrip.tsx",
         "console/src/domains/foundation/control-room/__tests__/ControlRoomBay.test.tsx",
+        "console/src/domains/foundation/control-room/__tests__/ControlRoomPage.test.tsx",
         "console/src/domains/foundation/control-room/__tests__/ControlRoomVerdictStrip.test.tsx"
       ],
       "imports": [
+        "console/src/api/opsContextTypes.ts",
         "console/src/components/layout",
+        "console/src/domains/foundation/mission",
+        "console/src/domains/foundation/network",
+        "console/src/hooks/useNetworkLiveProbe.ts",
         "console/src/lib/control-room"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/pages/ControlRoomPage.tsx"
+      ],
       "external_imports": [
         "@bifrost/ui",
         "@testing-library/react",
@@ -2999,17 +3007,10 @@
         "console/src/pages/ControlRoomPage.tsx"
       ],
       "imports": [
-        "console/src/api/opsContextTypes.ts",
-        "console/src/domains/foundation/control-room",
-        "console/src/domains/foundation/mission",
-        "console/src/domains/foundation/network",
-        "console/src/hooks/useNetworkLiveProbe.ts",
-        "console/src/lib/control-room"
+        "console/src/domains/foundation/control-room"
       ],
       "test_imports": [],
-      "external_imports": [
-        "react"
-      ],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []

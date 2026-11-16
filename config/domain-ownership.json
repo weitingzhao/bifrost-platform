@@ -1891,12 +1891,10 @@
       },
       "console/src/pages/ControlRoomPage.tsx": {
         "domains": [
-          "plan",
-          "coordination",
-          "compute"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed Foundation read-only page composition; implementation moved whole to Foundation/control-room, this path is a compatibility export only. Existing readers and all execution/auth code unchanged."
       },
       "console/src/components/activity": {
         "domains": [
